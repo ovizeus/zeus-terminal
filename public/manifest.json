@@ -1,0 +1,24 @@
+{
+    "name": "ZeuS Terminal",
+    "short_name": "ZeuS",
+    "description": "Professional crypto liquidation terminal",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#0a0f16",
+    "theme_color": "#0a0f16",
+    "orientation": "portrait-primary",
+    "icons": [
+        {
+            "src": "assets/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "assets/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any maskable"
+        }
+    ]
+}

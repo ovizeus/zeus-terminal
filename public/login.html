@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zeus Terminal — Secure Gateway</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        :root {
+            --bg: #060a10;
+            --card: #0b1120;
+            --border: #12253a;
+            --cyan: #00afff;
+            --green: #00ff88;
+            --red: #ff4455;
+            --yellow: #f0c040;
+            --dim: #3a4a5a;
+            --text: #d0d8e0;
+            --muted: #556677
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            min-height: 100vh;
+            overflow-x: hidden;
+            position: relative
+        }
+
+        /* ─── Animated Grid Background ─── */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden
+        }
+
+        .bg-grid::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: linear-gradient(rgba(0, 175, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 175, 255, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            animation: gridDrift 20s linear infinite
+        }
+
+        .bg-grid::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 800px;
+            height: 800px;
+            transform: translate(-50%, -50%);
+            background: radial-gradient(ellipse, rgba(0, 175, 255, 0.06) 0%, transparent 70%);
+            animation: pulseGlow 4s ease-in-out infinite alternate
+        }
+
+        @keyframes gridDrift {
+            from {
+                transform: translate(0, 0)
+            }
+
+            to {
+                transform: translate(60px, 60px)
+            }
+        }
+
+        @keyframes pulseGlow {
+            from {
+                opacity: 0.5
+            }
+
+            to {
+                opacity: 1
+            }
+        }
+
+        /* ─── Floating Particles ─── */
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none
+        }
+
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: var(--cyan);
+            border-radius: 50%;
+            opacity: 0;
+            animation: floatUp linear infinite
+        }
+
+        @keyframes floatUp {
+            0% {
+                opacity: 0;
+                transform: translateY(100vh) scale(0)
+            }
+
+            10% {
+                opacity: 0.6
+            }
+
+            90% {
+                opacity: 0.3
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateY(-10vh) scale(1)
+            }
+        }
+
+        /* ─── Page Layout ─── */
+        .page {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px
+        }
+
+        /* ─── Top Bar ─── */
+        .top-bar {
+            width: 100%;
+            max-width: 1100px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            margin-bottom: 20px;
+            opacity: 0.7
+        }
+
+        .top-bar .sys-info {
+            font-size: 10px;
+            font-family: 'Courier New', monospace;
+            color: var(--dim);
+            display: flex;
+            gap: 16px
+        }
+
+        .top-bar .sys-info span {
+            display: flex;
+            align-items: center;
+            gap: 4px
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+            display: inline-block;
+            animation: blink 2s ease-in-out infinite
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: 0.4
+            }
+        }
+
+        /* ─── Market Ticker Strip ─── */
+        .ticker-strip {
+            width: 100%;
+            max-width: 1100px;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            justify-content: center
+        }
+
+        .tick {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 200px;
+            flex: 1;
+            max-width: 260px;
+            transition: border-color 0.3s
+        }
+
+        .tick:hover {
+            border-color: rgba(0, 175, 255, 0.3)
+        }
+
+        .tick-icon {
+            font-size: 18px
+        }
+
+        .tick-pair {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: 0.5px
+        }
+
+        .tick-price {
+            font-size: 16px;
+            font-weight: 700;
+            font-family: 'Courier New', monospace;
+            color: #fff;
+            margin-top: 1px
+        }
+
+        .tick-change {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: auto;
+            font-family: 'Courier New', monospace
+        }
+
+        .tick-change.up {
+            color: var(--green);
+            background: rgba(0, 255, 136, 0.1)
+        }
+
+        .tick-change.down {
+            color: var(--red);
+            background: rgba(255, 68, 85, 0.1)
+        }
+
+        .tick-spark {
+            display: flex;
+            align-items: flex-end;
+            gap: 1px;
+            height: 20px;
+            margin-left: auto
+        }
+
+        .tick-spark .bar {
+            width: 3px;
+            border-radius: 1px;
+            transition: height 0.3s
+        }
+
+        /* ─── Main Content ─── */
+        .main-row {
+            display: flex;
+            gap: 24px;
+            width: 100%;
+            max-width: 1100px;
+            align-items: flex-start;
+            justify-content: center;
+            flex-wrap: wrap
+        }
+
+        /* ─── Login Card ─── */
+        .login-container {
+            background: linear-gradient(160deg, #0c1525 0%, #101c30 100%);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 36px 32px;
+            width: 380px;
+            max-width: 92vw;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 80px rgba(0, 175, 255, 0.04);
+            position: relative;
+            overflow: hidden
+        }
+
+        .login-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--cyan), var(--green), transparent);
+            opacity: 0.6
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 28px
+        }
+
+        .logo-icon {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 6px;
+            display: block;
+            border-radius: 50%;
+            object-fit: cover;
+            object-position: center;
+            filter: drop-shadow(0 0 18px rgba(119, 119, 255, 0.4))
+        }
+
+        .logo .t1 {
+            font-family: 'Cinzel', serif;
+            font-size: 22px;
+            font-weight: 900;
+            color: #e8d090;
+            text-shadow: 0 0 18px #f0c04077;
+            letter-spacing: 4px;
+            margin-top: 2px
+        }
+
+        .logo .t2 {
+            font-size: 9px;
+            letter-spacing: 3px;
+            color: var(--dim);
+            margin-top: 2px;
+            text-transform: uppercase
+        }
+
+        .form-group {
+            margin-bottom: 18px
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 10px;
+            color: var(--muted);
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 11px 14px;
+            background: #080e18;
+            border: 1px solid #182838;
+            border-radius: 8px;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+            font-family: inherit
+        }
+
+        .form-group input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 2px rgba(0, 175, 255, 0.12)
+        }
+
+        .form-group input::placeholder {
+            color: #283040
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            letter-spacing: 1px;
+            transition: all 0.2s;
+            font-family: inherit
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--cyan), #0088cc);
+            color: #fff;
+            margin-top: 6px;
+            position: relative;
+            overflow: hidden
+        }
+
+        .btn-primary::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.5s
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 24px rgba(0, 175, 255, 0.3)
+        }
+
+        .btn-primary:hover::after {
+            left: 100%
+        }
+
+        .btn-primary:active {
+            transform: translateY(0)
+        }
+
+        .error-msg {
+            background: rgba(255, 50, 50, 0.08);
+            border: 1px solid rgba(255, 50, 50, 0.25);
+            color: var(--red);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 14px;
+            display: none
+        }
+
+        .toggle-link {
+            text-align: center;
+            margin-top: 18px;
+            font-size: 12px;
+            color: var(--muted)
+        }
+
+        .toggle-link a {
+            color: var(--cyan);
+            text-decoration: none;
+            cursor: pointer;
+            font-weight: 600
+        }
+
+        .toggle-link a:hover {
+            text-decoration: underline
+        }
+
+        .register-fields {
+            display: none
+        }
+
+        .register-fields.active {
+            display: block
+        }
+
+        .pending-msg {
+            background: rgba(240, 192, 64, 0.08);
+            border: 1px solid rgba(240, 192, 64, 0.25);
+            color: var(--yellow);
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            text-align: center;
+            display: none;
+            line-height: 1.5
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0)
+            }
+
+            20%,
+            60% {
+                transform: translateX(-6px)
+            }
+
+            40%,
+            80% {
+                transform: translateX(6px)
+            }
+        }
+
+        .shake {
+            animation: shake 0.4s ease
+        }
+
+        /* ─── 2FA Code Step ─── */
+        .code-step {
+            display: none;
+            text-align: center
+        }
+
+        .code-step .code-msg {
+            color: var(--green);
+            font-size: 13px;
+            margin-bottom: 18px;
+            line-height: 1.5
+        }
+
+        .code-input {
+            width: 180px;
+            padding: 14px;
+            background: #080e18;
+            border: 2px solid rgba(0, 175, 255, 0.25);
+            border-radius: 8px;
+            color: var(--green);
+            font-size: 28px;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 8px;
+            outline: none;
+            transition: border-color 0.2s;
+            font-family: 'Courier New', monospace
+        }
+
+        .code-input:focus {
+            border-color: var(--cyan);
+            box-shadow: 0 0 0 3px rgba(0, 175, 255, 0.12)
+        }
+
+        .code-timer {
+            color: var(--muted);
+            font-size: 11px;
+            margin-top: 12px
+        }
+
+        .code-resend {
+            margin-top: 12px
+        }
+
+        .code-resend a {
+            color: var(--cyan);
+            font-size: 12px;
+            text-decoration: none;
+            cursor: pointer
+        }
+
+        .code-resend a:hover {
+            text-decoration: underline
+        }
+
+        /* ─── Admin Panel ─── */
+        .admin-panel {
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid var(--border);
+            display: none
+        }
+
+        .admin-panel h3 {
+            font-size: 10px;
+            color: var(--cyan);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            font-weight: 700
+        }
+
+        .user-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            background: #080e18;
+            border: 1px solid #182838;
+            border-radius: 6px;
+            margin-bottom: 5px;
+            font-size: 12px
+        }
+
+        .user-row .email {
+            color: #ccc;
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis
+        }
+
+        .user-row .badge {
+            font-size: 9px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 8px;
+            font-weight: 700;
+            letter-spacing: 0.5px
+        }
+
+        .badge-admin {
+            background: #00afff15;
+            color: var(--cyan);
+            border: 1px solid #00afff33
+        }
+
+        .badge-approved {
+            background: #00ff8815;
+            color: var(--green);
+            border: 1px solid #00ff8833
+        }
+
+        .badge-pending {
+            background: #f0c04015;
+            color: var(--yellow);
+            border: 1px solid #f0c04033
+        }
+
+        .user-actions {
+            display: flex;
+            gap: 4px;
+            margin-left: 8px
+        }
+
+        .user-actions button {
+            font-size: 9px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: inherit
+        }
+
+        .btn-approve {
+            background: #00ff8833;
+            color: var(--green)
+        }
+
+        .btn-approve:hover {
+            background: #00ff8855
+        }
+
+        .btn-delete {
+            background: #ff444433;
+            color: var(--red)
+        }
+
+        .btn-delete:hover {
+            background: #ff444455
+        }
+
+        .no-pending {
+            color: #445;
+            font-size: 11px;
+            text-align: center;
+            padding: 12px
+        }
+
+        /* ─── Feature Cards (right side) ─── */
+        .features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 320px;
+            max-width: 92vw
+        }
+
+        .feat-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px 18px;
+            transition: border-color 0.3s, transform 0.2s
+        }
+
+        .feat-card:hover {
+            border-color: rgba(0, 175, 255, 0.25);
+            transform: translateY(-1px)
+        }
+
+        .feat-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px
+        }
+
+        .feat-icon {
+            font-size: 18px;
+            width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            background: rgba(0, 175, 255, 0.08);
+            border: 1px solid rgba(0, 175, 255, 0.15)
+        }
+
+        .feat-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: #e0e8f0
+        }
+
+        .feat-status {
+            font-size: 9px;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-weight: 700;
+            margin-left: auto;
+            letter-spacing: 0.5px
+        }
+
+        .feat-status.online {
+            color: var(--green);
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.2)
+        }
+
+        .feat-status.armed {
+            color: var(--cyan);
+            background: rgba(0, 175, 255, 0.1);
+            border: 1px solid rgba(0, 175, 255, 0.2)
+        }
+
+        .feat-desc {
+            font-size: 11px;
+            color: var(--muted);
+            line-height: 1.5
+        }
+
+        .feat-bar {
+            display: flex;
+            gap: 2px;
+            margin-top: 8px;
+            height: 4px;
+            align-items: flex-end
+        }
+
+        .feat-bar span {
+            flex: 1;
+            border-radius: 2px;
+            height: 100%;
+            transition: opacity 0.3s
+        }
+
+        /* ─── Footer ─── */
+        .footer {
+            width: 100%;
+            max-width: 1100px;
+            margin-top: 32px;
+            padding: 16px 0;
+            border-top: 1px solid #0e1a28;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px
+        }
+
+        .footer-left {
+            font-size: 10px;
+            color: #334;
+            letter-spacing: 1px
+        }
+
+        .footer-right {
+            display: flex;
+            gap: 16px;
+            font-size: 10px;
+            color: #334
+        }
+
+        .footer-right span {
+            display: flex;
+            align-items: center;
+            gap: 4px
+        }
+
+        /* ─── Responsive ─── */
+        @media(max-width:800px) {
+            .main-row {
+                flex-direction: column;
+                align-items: center
+            }
+
+            .features {
+                width: 380px;
+                max-width: 92vw
+            }
+
+            .ticker-strip {
+                gap: 6px
+            }
+
+            .tick {
+                min-width: 150px;
+                padding: 8px 12px
+            }
+        }
+
+        @media(max-width:420px) {
+            .login-container {
+                padding: 28px 22px
+            }
+
+            .tick {
+                min-width: 100%;
+                max-width: 100%
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Animated Background -->
+    <div class="bg-grid"></div>
+    <div class="particles" id="particles"></div>
+
+    <div class="page">
+        <!-- Top System Bar -->
+        <div class="top-bar">
+            <div class="sys-info">
+                <span><span class="status-dot"></span> SYSTEM ONLINE</span>
+                <span>v1.22</span>
+                <span id="sysTime">--:--:--</span>
+            </div>
+            <div class="sys-info">
+                <span>LATENCY <span id="sysLatency">--</span>ms</span>
+                <span>NODE EU-WEST</span>
+            </div>
+        </div>
+
+        <!-- Market Ticker Strip -->
+        <div class="ticker-strip" id="tickerStrip">
+            <div class="tick" id="tickBTC">
+                <div>
+                    <div class="tick-pair">BTC / USDT</div>
+                    <div class="tick-price" id="pBTC">--</div>
+                </div>
+                <div class="tick-spark" id="sparkBTC"></div>
+                <div class="tick-change up" id="cBTC">--</div>
+            </div>
+            <div class="tick" id="tickETH">
+                <div>
+                    <div class="tick-pair">ETH / USDT</div>
+                    <div class="tick-price" id="pETH">--</div>
+                </div>
+                <div class="tick-spark" id="sparkETH"></div>
+                <div class="tick-change up" id="cETH">--</div>
+            </div>
+            <div class="tick" id="tickSOL">
+                <div>
+                    <div class="tick-pair">SOL / USDT</div>
+                    <div class="tick-price" id="pSOL">--</div>
+                </div>
+                <div class="tick-spark" id="sparkSOL"></div>
+                <div class="tick-change up" id="cSOL">--</div>
+            </div>
+            <div class="tick" id="tickBNB">
+                <div>
+                    <div class="tick-pair">BNB / USDT</div>
+                    <div class="tick-price" id="pBNB">--</div>
+                </div>
+                <div class="tick-spark" id="sparkBNB"></div>
+                <div class="tick-change up" id="cBNB">--</div>
+            </div>
+        </div>
+
+        <!-- Main Row: Login + Features -->
+        <div class="main-row">
+            <!-- Login Card -->
+            <div class="login-container" id="loginBox">
+                <div class="logo">
+                    <img class="logo-icon" src="/assets/logo-zeus.jpg" alt="Zeus">
+                    <div class="t1">ZEU'S</div>
+                    <div class="t2">TRADING TERMINAL</div>
+                </div>
+
+                <div class="error-msg" id="errorMsg"></div>
+
+                <form id="authForm" autocomplete="on">
+                    <div class="form-group">
+                        <label>Email</label>
+                        <input type="email" id="email" placeholder="you@example.com" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="password" placeholder="••••••••" required
+                            autocomplete="current-password">
+                    </div>
+                    <div class="register-fields" id="registerFields">
+                        <div class="form-group">
+                            <label>Confirm Password</label>
+                            <input type="password" id="confirmPassword" placeholder="••••••••"
+                                autocomplete="new-password">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">AUTHENTICATE</button>
+                </form>
+
+                <div class="code-step" id="codeStep">
+                    <div class="code-msg">📧 Verification code sent to your email.<br>Enter the 6-digit code:</div>
+                    <input type="text" class="code-input" id="codeInput" maxlength="6" inputmode="numeric"
+                        pattern="[0-9]*" placeholder="------" autocomplete="one-time-code">
+                    <div class="code-timer" id="codeTimer">Code expires in 5:00</div>
+                    <button class="btn btn-primary" id="verifyBtn" onclick="verifyCode()"
+                        style="margin-top:14px">VERIFY</button>
+                    <div class="code-resend" id="codeResend">
+                        <a onclick="resendCode()">↻ Resend code</a> &nbsp;|&nbsp; <a onclick="backToLogin()">← Back</a>
+                    </div>
+                </div>
+
+                <div class="toggle-link" id="toggleWrap">
+                    <span id="toggleText">Don't have an account?</span>
+                    <a id="toggleLink" onclick="toggleMode()">Create one</a>
+                </div>
+
+                <div class="pending-msg" id="pendingMsg">
+                    ⏳ Account created successfully!<br>
+                    Waiting for administrator approval.
+                </div>
+
+                <div class="admin-panel" id="adminPanel">
+                    <h3>👑 Admin — User Management</h3>
+                    <div id="usersList"></div>
+                </div>
+            </div>
+
+            <!-- Feature Cards -->
+            <div class="features">
+                <div class="feat-card">
+                    <div class="feat-head">
+                        <div class="feat-icon">📡</div>
+                        <span class="feat-label">Live Market Pulse</span>
+                        <span class="feat-status online">LIVE</span>
+                    </div>
+                    <div class="feat-desc">Real-time order flow, depth analysis, and multi-timeframe market structure —
+                        always on.</div>
+                    <div class="feat-bar" id="pulseBar"></div>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-head">
+                        <div class="feat-icon"
+                            style="background:rgba(0,255,136,0.08);border-color:rgba(0,255,136,0.15)">🧠</div>
+                        <span class="feat-label">Signal Engine</span>
+                        <span class="feat-status armed">ARMED</span>
+                    </div>
+                    <div class="feat-desc">Multi-layer AI signal fusion — confluence scoring, regime detection, and
+                        adaptive entry timing.</div>
+                    <div class="feat-bar" id="signalBar"></div>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-head">
+                        <div class="feat-icon"
+                            style="background:rgba(255,68,85,0.08);border-color:rgba(255,68,85,0.15)">🛡️</div>
+                        <span class="feat-label">Risk Control</span>
+                        <span class="feat-status online">ACTIVE</span>
+                    </div>
+                    <div class="feat-desc">Server-side position guards, leverage limits, daily loss caps, and automated
+                        risk enforcement.</div>
+                </div>
+                <div class="feat-card">
+                    <div class="feat-head">
+                        <div class="feat-icon"
+                            style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.15)">🔐</div>
+                        <span class="feat-label">Secure Access</span>
+                        <span class="feat-status armed">2FA</span>
+                    </div>
+                    <div class="feat-desc">AES-256 encrypted keys, per-user exchange isolation, 2FA verification, and
+                        full audit trail.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <div class="footer-left">ZEUS TERMINAL &copy; 2026 — PRIVATE ACCESS ONLY</div>
+            <div class="footer-right">
+                <span><span class="status-dot" style="width:5px;height:5px"></span> WebSocket</span>
+                <span>TLS 1.3</span>
+                <span>Hetzner EU</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ─── Particles ─── */
+        (function initParticles() {
+            const c = document.getElementById('particles');
+            for (let i = 0; i < 20; i++) {
+                const p = document.createElement('div');
+                p.className = 'particle';
+                p.style.left = Math.random() * 100 + '%';
+                p.style.animationDuration = (8 + Math.random() * 12) + 's';
+                p.style.animationDelay = Math.random() * 10 + 's';
+                p.style.width = p.style.height = (1 + Math.random() * 2) + 'px';
+                c.appendChild(p);
+            }
+        })();
+
+        /* ─── System Clock ─── */
+        setInterval(() => {
+            const d = new Date();
+            document.getElementById('sysTime').textContent = d.toLocaleTimeString('en-GB');
+        }, 1000);
+
+        /* ─── Latency Ping ─── */
+        (async function pingLatency() {
+            try {
+                const t = performance.now();
+                await fetch('/auth/me', { method: 'HEAD', cache: 'no-store' }).catch(() => { });
+                const ms = Math.round(performance.now() - t);
+                document.getElementById('sysLatency').textContent = ms;
+            } catch (_) { }
+            setTimeout(pingLatency, 8000);
+        })();
+
+        /* ─── Live Market Tickers ─── */
+        const PAIRS = [
+            { sym: 'btcusdt', id: 'BTC', dec: 1 },
+            { sym: 'ethusdt', id: 'ETH', dec: 2 },
+            { sym: 'solusdt', id: 'SOL', dec: 2 },
+            { sym: 'bnbusdt', id: 'BNB', dec: 2 }
+        ];
+        const sparkData = { BTC: [], ETH: [], SOL: [], BNB: [] };
+
+        function renderSpark(id, data) {
+            const el = document.getElementById('spark' + id);
+            if (!el) return;
+            const max = Math.max(...data), min = Math.min(...data), range = max - min || 1;
+            el.innerHTML = data.slice(-15).map(v => {
+                const h = 4 + ((v - min) / range) * 16;
+                const color = v >= data[data.length - 1] ? 'var(--green)' : 'var(--cyan)';
+                return '<div class="bar" style="height:' + h + 'px;background:' + color + ';opacity:0.7"></div>';
+            }).join('');
+        }
+
+        function connectTickers() {
+            const streams = PAIRS.map(p => p.sym + '@ticker').join('/');
+            const ws = new WebSocket('wss://fstream.binance.com/stream?streams=' + streams);
+            ws.onmessage = function (e) {
+                try {
+                    const msg = JSON.parse(e.data);
+                    const d = msg.data;
+                    if (!d || !d.s) return;
+                    const pair = PAIRS.find(p => p.sym === d.s.toLowerCase());
+                    if (!pair) return;
+                    const price = parseFloat(d.c);
+                    const change = parseFloat(d.P);
+                    const pEl = document.getElementById('p' + pair.id);
+                    const cEl = document.getElementById('c' + pair.id);
+                    if (pEl) pEl.textContent = price.toLocaleString('en-US', { minimumFractionDigits: pair.dec, maximumFractionDigits: pair.dec });
+                    if (cEl) { cEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%'; cEl.className = 'tick-change ' + (change >= 0 ? 'up' : 'down'); }
+                    sparkData[pair.id].push(price);
+                    if (sparkData[pair.id].length > 30) sparkData[pair.id].shift();
+                    renderSpark(pair.id, sparkData[pair.id]);
+                } catch (_) { }
+            };
+            ws.onclose = function () { setTimeout(connectTickers, 3000); };
+            ws.onerror = function () { ws.close(); };
+        }
+        connectTickers();
+
+        /* ─── Feature Bar Animations ─── */
+        function animBars(id, count, colors) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.innerHTML = '';
+            for (let i = 0; i < count; i++) {
+                const s = document.createElement('span');
+                s.style.background = colors[i % colors.length];
+                s.style.opacity = (0.3 + Math.random() * 0.6).toFixed(2);
+                s.style.height = (40 + Math.random() * 60) + '%';
+                el.appendChild(s);
+            }
+        }
+        animBars('pulseBar', 20, ['var(--cyan)', 'var(--green)']);
+        animBars('signalBar', 20, ['var(--green)', 'var(--cyan)', 'var(--yellow)']);
+        setInterval(() => { animBars('pulseBar', 20, ['var(--cyan)', 'var(--green)']); animBars('signalBar', 20, ['var(--green)', 'var(--cyan)', 'var(--yellow)']); }, 3000);
+
+        /* ═════════════ AUTH LOGIC ═════════════ */
+        let isRegister = false;
+        let pendingEmail = '';
+        let pendingPassword = '';
+        let codeTimerInterval = null;
+
+        function toggleMode() {
+            isRegister = !isRegister;
+            document.getElementById('registerFields').classList.toggle('active', isRegister);
+            document.getElementById('submitBtn').textContent = isRegister ? 'CREATE ACCOUNT' : 'AUTHENTICATE';
+            document.getElementById('toggleText').textContent = isRegister ? 'Already have an account?' : "Don't have an account?";
+            document.getElementById('toggleLink').textContent = isRegister ? 'Login' : 'Create one';
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('pendingMsg').style.display = 'none';
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('errorMsg');
+            el.textContent = msg;
+            el.style.display = 'block';
+            document.getElementById('pendingMsg').style.display = 'none';
+            document.getElementById('loginBox').classList.add('shake');
+            setTimeout(() => document.getElementById('loginBox').classList.remove('shake'), 400);
+        }
+
+        function showCodeStep() {
+            document.getElementById('authForm').style.display = 'none';
+            document.getElementById('toggleWrap').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('codeStep').style.display = 'block';
+            document.getElementById('codeInput').value = '';
+            document.getElementById('codeInput').focus();
+            startCodeTimer();
+        }
+
+        function backToLogin() {
+            document.getElementById('codeStep').style.display = 'none';
+            document.getElementById('authForm').style.display = 'block';
+            document.getElementById('toggleWrap').style.display = 'block';
+            document.getElementById('errorMsg').style.display = 'none';
+            if (codeTimerInterval) clearInterval(codeTimerInterval);
+        }
+
+        function startCodeTimer() {
+            if (codeTimerInterval) clearInterval(codeTimerInterval);
+            let seconds = 300;
+            const el = document.getElementById('codeTimer');
+            codeTimerInterval = setInterval(() => {
+                seconds--;
+                if (seconds <= 0) {
+                    clearInterval(codeTimerInterval);
+                    el.textContent = 'Code expired';
+                    el.style.color = 'var(--red)';
+                    return;
+                }
+                const m = Math.floor(seconds / 60);
+                const s = seconds % 60;
+                el.textContent = 'Code expires in ' + m + ':' + String(s).padStart(2, '0');
+                el.style.color = seconds < 60 ? 'var(--yellow)' : 'var(--muted)';
+            }, 1000);
+        }
+
+        async function verifyCode() {
+            const code = document.getElementById('codeInput').value.trim();
+            if (code.length !== 6) { showError('Enter the 6-digit code'); return; }
+            const btn = document.getElementById('verifyBtn');
+            btn.disabled = true; btn.textContent = '...';
+            try {
+                const res = await fetch('/auth/verify-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: pendingEmail, code })
+                });
+                const data = await res.json();
+                if (res.ok) { window.location.href = '/'; }
+                else { showError(data.error || 'Invalid code'); }
+            } catch (err) { showError('Connection error'); }
+            finally { btn.disabled = false; btn.textContent = 'VERIFY'; }
+        }
+
+        async function resendCode() {
+            if (!pendingEmail || !pendingPassword) return;
+            try {
+                const res = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: pendingEmail, password: pendingPassword })
+                });
+                const data = await res.json();
+                if (res.ok && data.needsCode) {
+                    document.getElementById('errorMsg').style.display = 'none';
+                    startCodeTimer();
+                    document.getElementById('codeInput').value = '';
+                    document.getElementById('codeInput').focus();
+                } else { showError(data.error || 'Failed to resend'); }
+            } catch (e) { showError('Connection error'); }
+        }
+
+        document.getElementById('codeInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') verifyCode();
+        });
+
+        document.getElementById('authForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+            const btn = document.getElementById('submitBtn');
+
+            if (isRegister) {
+                const confirm = document.getElementById('confirmPassword').value;
+                if (password !== confirm) { showError('Passwords do not match'); return; }
+                if (password.length < 6) { showError('Password must be at least 6 characters'); return; }
+            }
+
+            btn.disabled = true; btn.textContent = '...';
+            try {
+                const endpoint = isRegister ? '/auth/register' : '/auth/login';
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    if (data.pending) {
+                        document.getElementById('errorMsg').style.display = 'none';
+                        document.getElementById('pendingMsg').style.display = 'block';
+                        document.getElementById('authForm').style.display = 'none';
+                        document.getElementById('toggleWrap').style.display = 'none';
+                    } else if (data.needsCode) {
+                        pendingEmail = email;
+                        pendingPassword = password;
+                        showCodeStep();
+                    } else { window.location.href = '/'; }
+                } else { showError(data.error || 'Unknown error'); }
+            } catch (err) { showError('Connection error'); }
+            finally { btn.disabled = false; btn.textContent = isRegister ? 'CREATE ACCOUNT' : 'AUTHENTICATE'; }
+        });
+
+        /* ─── Admin Panel ─── */
+        async function checkAdmin() {
+            try {
+                const res = await fetch('/auth/me');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.role === 'admin') {
+                    document.getElementById('authForm').style.display = 'none';
+                    document.querySelector('.toggle-link').style.display = 'none';
+                    document.getElementById('adminPanel').style.display = 'block';
+                    document.querySelector('.logo .t2').textContent = 'Logged in as ' + data.email;
+                    loadUsers();
+                } else if (data.ok) {
+                    window.location.href = '/';
+                }
+            } catch (e) { /* not logged in */ }
+        }
+
+        async function loadUsers() {
+            try {
+                const res = await fetch('/auth/admin/users');
+                const data = await res.json();
+                if (!data.ok) return;
+                const container = document.getElementById('usersList');
+                container.innerHTML = '';
+                data.users.forEach(u => {
+                    const row = document.createElement('div');
+                    row.className = 'user-row';
+                    let badge = '';
+                    if (u.role === 'admin') badge = '<span class="badge badge-admin">ADMIN</span>';
+                    else if (u.approved) badge = '<span class="badge badge-approved">APPROVED</span>';
+                    else badge = '<span class="badge badge-pending">PENDING</span>';
+                    let actions = '';
+                    if (u.role !== 'admin') {
+                        if (!u.approved) actions += '<button class="btn-approve" onclick="approveUser(\'' + u.email + '\')">✓ APPROVE</button>';
+                        actions += '<button class="btn-delete" onclick="deleteUser(\'' + u.email + '\')">✕ DELETE</button>';
+                    }
+                    row.innerHTML = '<span class="email">' + u.email + '</span>' + badge + (actions ? '<div class="user-actions">' + actions + '</div>' : '');
+                    container.appendChild(row);
+                });
+                if (data.users.length <= 1) container.innerHTML += '<div class="no-pending">No other users registered</div>';
+            } catch (e) { console.error('Failed to load users:', e); }
+        }
+
+        async function approveUser(email) {
+            if (!confirm('Approve user ' + email + '?')) return;
+            try {
+                const res = await fetch('/auth/admin/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+                if (res.ok) loadUsers();
+            } catch (e) { alert('Error'); }
+        }
+
+        async function deleteUser(email) {
+            if (!confirm('Delete user ' + email + '?')) return;
+            try {
+                const res = await fetch('/auth/admin/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+                if (res.ok) loadUsers();
+            } catch (e) { alert('Error'); }
+        }
+
+        checkAdmin();
+    </script>
+</body>
+
+</html>

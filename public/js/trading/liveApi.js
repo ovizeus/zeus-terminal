@@ -1,0 +1,388 @@
+// Zeus Terminal — Live API client (frontend)
+// Fetch wrappers for server-side trading proxy
+// These functions are only called when AT.mode === 'live'
+'use strict';
+
+const _LIVE_API_BASE = '';  // Same origin
+var _LIVE_API_TOKEN = ''; // Set from UI config panel or env
+
+// Set the auth token (called from config/bootstrap)
+function liveApiSetToken(token) { _LIVE_API_TOKEN = token || ''; }
+
+// Build headers with auth
+function _liveApiHeaders(extra) {
+  var h = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
+  if (_LIVE_API_TOKEN) h['Authorization'] = 'Bearer ' + _LIVE_API_TOKEN;
+  return h;
+}
+
+// Fetch with 15s timeout — prevents UI freeze if server hangs
+function _liveApiFetch(url, opts) {
+  var _opts = Object.assign({}, opts || {});
+  if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+    _opts.signal = AbortSignal.timeout(15000);
+  }
+  return fetch(url, _opts);
+}
+
+// ─── Error handler — user-facing toast + atLog for all backend failures ───
+function _liveApiError(err, context) {
+  const msg = (err && err.message) ? err.message : String(err);
+  const prefix = context ? ('[' + context + '] ') : '';
+  // User-visible alerts
+  if (typeof toast === 'function') toast('🔴 LIVE API: ' + prefix + msg);
+  if (typeof atLog === 'function') atLog('warn', '🔴 LIVE API FAIL: ' + prefix + msg);
+  console.error('[liveApi]', context, msg);
+}
+
+// ─── Shared response parser — handles 403, 429, 4xx, 5xx consistently ───
+async function _liveApiParse(res, context) {
+  let data;
+  try { data = await res.json(); } catch (_) { data = {}; }
+  if (!res.ok) {
+    let reason = data.error || res.statusText || 'Unknown error';
+    if (res.status === 403) reason = '🔒 ' + reason;
+    if (res.status === 429) reason = '⏱️ Rate limit — asteapta 1 minut';
+    if (res.status === 400) reason = '⚠️ Validare: ' + reason;
+    const err = new Error(reason);
+    err.status = res.status;
+    _liveApiError(err, context);
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * Check server trading status and risk config.
+ */
+async function liveApiStatus() {
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/status', { headers: _liveApiHeaders() });
+  return _liveApiParse(res, 'status');
+}
+
+/**
+ * Get account balance from exchange (via backend proxy).
+ */
+async function liveApiGetBalance() {
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/balance', { headers: _liveApiHeaders() });
+  return _liveApiParse(res, 'balance');
+}
+
+/**
+ * Get open positions from exchange (via backend proxy).
+ */
+async function liveApiGetPositions() {
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/positions', { headers: _liveApiHeaders() });
+  return _liveApiParse(res, 'positions');
+}
+
+/**
+ * Place an order through the backend proxy.
+ * @param {object} params - {symbol, side, type, quantity, price?, leverage?}
+ * @returns {Promise<object>} - {orderId, status, avgPrice, executedQty}
+ */
+async function liveApiPlaceOrder(params) {
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify(params),
+  });
+  const result = await _liveApiParse(res, 'order/place');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('AT', '[LIVE ORDER FILL] ' + (params.symbol || '') + ' ' + (params.side || '') + ' orderId=' + (result.orderId || '') + ' qty=' + (result.executedQty || params.quantity || '') + ' avgPrice=' + (result.avgPrice || ''));
+  return result;
+}
+
+/**
+ * Cancel an open order through the backend proxy.
+ * @param {string} symbol
+ * @param {string|number} orderId
+ */
+async function liveApiCancelOrder(symbol, orderId) {
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/cancel', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({ symbol: symbol, orderId: orderId }),
+  });
+  return _liveApiParse(res, 'order/cancel');
+}
+
+/**
+ * Set leverage for a symbol through the backend proxy.
+ * @param {string} symbol
+ * @param {number} leverage
+ */
+async function liveApiSetLeverage(symbol, leverage) {
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/leverage', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({ symbol: symbol, leverage: leverage }),
+  });
+  return _liveApiParse(res, 'leverage');
+}
+
+/**
+ * Close a live position by placing an opposite-side MARKET order.
+ * @param {object} pos - position object with {sym, side, qty, orderId?}
+ * @returns {Promise<object>} - Binance fill response
+ */
+async function liveApiClosePosition(pos) {
+  const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
+  const result = await liveApiPlaceOrder({
+    symbol: pos.sym,
+    side: closeSide,
+    type: 'MARKET',
+    quantity: String(pos.qty),
+    closePosition: true,
+  });
+  if (typeof ZLOG !== 'undefined') ZLOG.push('AT', '[LIVE CLOSE CONFIRMED] ' + pos.sym + ' ' + pos.side + ' orderId=' + (result.orderId || ''));
+  return result;
+}
+
+/**
+ * Sync live state from backend: balance + positions.
+ * Updates TP.liveBalance and TP.livePositions from exchange reality.
+ * Called on reconnect, refresh, and periodically.
+ */
+async function liveApiSyncState() {
+  try {
+    const [bal, positions] = await Promise.all([
+      liveApiGetBalance(),
+      liveApiGetPositions(),
+    ]);
+    // Update balance
+    TP.liveBalance = bal.totalBalance || 0;
+    TP.liveAvailableBalance = bal.availableBalance || 0;
+    TP.liveUnrealizedPnL = bal.unrealizedPnL || 0;
+    // [P0-B6] Merge exchange data into existing positions to preserve runtime DSL state
+    var _existingById = {};
+    if (Array.isArray(TP.livePositions)) {
+      TP.livePositions.forEach(function (pos) { if (pos && pos.id) _existingById[pos.id] = pos; });
+    }
+    // [FIX C3] Detect positions closed on exchange — account before rebuild
+    var _newIds = {};
+    positions.forEach(function (p) { _newIds[p.symbol + '_' + p.side] = true; });
+    Object.keys(_existingById).forEach(function (eid) {
+      if (!_newIds[eid]) {
+        var gone = _existingById[eid];
+        // [FIX SYNC-C1] Before declaring gone, check if exchange still has it by sym+side
+        // AT positions use numeric orderId as key, exchange returns symbol_side — formats differ
+        var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '');
+        if (_newIds[_goneSymSide]) return; // Still on exchange, just different key format
+        if (typeof ZLOG !== 'undefined') ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side });
+        // Clean DSL state for vanished position
+        if (typeof DSL !== 'undefined' && DSL.positions) delete DSL.positions[String(gone.id)];
+        if (typeof DSL !== 'undefined' && DSL._attachedIds) DSL._attachedIds.delete(String(gone.id));
+        // [FIX R6] Journal entry for exchange-closed position — use last known price, not entry
+        if (typeof addTradeToJournal === 'function') {
+          var _exitPrice = (typeof getSymPrice === 'function') ? getSymPrice(gone) : 0;
+          if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry; // ultimate fallback
+          var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0;
+          addTradeToJournal({ id: gone.id, time: (typeof fmtNow === 'function' ? fmtNow() : new Date().toISOString()), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE' });
+        }
+      }
+    });
+    TP.livePositions = positions.map(function (p) {
+      var id = p.symbol + '_' + p.side;
+      var existing = _existingById[id];
+      // [FIX H1] Fallback: match by sym+side when existing pos has different ID (e.g., AT orderId)
+      if (!existing) {
+        for (var _ek in _existingById) {
+          var _ep = _existingById[_ek];
+          if (_ep && _ep.sym === p.symbol && _ep.side === p.side) { existing = _ep; break; }
+        }
+      }
+      // Exchange-source fields (always update from reality)
+      // [FIX R7] Preserve original ID if existing pos has one (AT orderId), re-attach DSL
+      var _origId = (existing && existing.id) ? existing.id : id;
+      var fresh = {
+        id: _origId,
+        sym: p.symbol,
+        side: p.side,
+        size: p.size * p.entryPrice,
+        qty: p.size,
+        entry: p.entryPrice,
+        lev: p.leverage,
+        pnl: p.unrealizedPnL,
+        liqPrice: p.liquidationPrice || 0,
+        isLive: true,
+        fromExchange: true,
+      };
+      if (existing) {
+        // [FIX R7] If ID changed (e.g. orderId → sym_side), re-attach DSL state
+        if (String(existing.id) !== String(fresh.id) && typeof DSL !== 'undefined') {
+          if (DSL.positions && DSL.positions[String(existing.id)]) {
+            DSL.positions[String(fresh.id)] = DSL.positions[String(existing.id)];
+            delete DSL.positions[String(existing.id)];
+          }
+          if (DSL._attachedIds) {
+            DSL._attachedIds.delete(String(existing.id));
+            DSL._attachedIds.add(String(fresh.id));
+          }
+        }
+        // Preserve runtime state from prior sync/open
+        fresh.autoTrade = existing.autoTrade;
+        fresh.controlMode = existing.controlMode || 'auto';
+        fresh.brainModeAtOpen = existing.brainModeAtOpen || 'auto';
+        fresh.dslParams = existing.dslParams || {
+          openDslPct: parseFloat(el('dslActivatePct')?.value) || 40,
+          pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
+          pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
+          impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+        };
+        fresh.dslAdaptiveState = existing.dslAdaptiveState || 'calm';
+        fresh.dslHistory = existing.dslHistory || [];
+      } else {
+        // New position from exchange — init with safe defaults
+        // [FIX H2] Default to user-controlled, not auto — unknown positions shouldn't be auto-managed
+        fresh.autoTrade = false;
+        fresh.controlMode = 'user';
+        fresh.brainModeAtOpen = 'user';
+        fresh.dslParams = {
+          openDslPct: parseFloat(el('dslActivatePct')?.value) || 40,
+          pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
+          pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
+          impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+        };
+        fresh.dslAdaptiveState = 'calm';
+        fresh.dslHistory = [];
+        // [FIX H3] Notify system of new exchange position (DSL attach, brain hooks)
+        if (typeof onPositionOpened === 'function') {
+          setTimeout(function () { onPositionOpened(fresh, 'exchange-sync'); }, 0);
+        }
+      }
+      return fresh;
+    });
+    // Update UI
+    if (typeof updateLiveBalance === 'function') updateLiveBalance();
+    if (typeof renderLivePositions === 'function') renderLivePositions();
+    // [PATCH P2-7] Only log on state change to prevent ZLOG spam every sync interval
+    var _syncKey = (+bal.totalBalance || 0).toFixed(2) + '|' + positions.length;
+    if (typeof liveApiSyncState._prevSnap === 'undefined') liveApiSyncState._prevSnap = '';
+    if (_syncKey !== liveApiSyncState._prevSnap) {
+      liveApiSyncState._prevSnap = _syncKey;
+      if (typeof ZLOG !== 'undefined') ZLOG.push('INFO', '[SYNC] balance=$' + (+bal.totalBalance || 0).toFixed(2) + ' positions=' + positions.length);
+    }
+    return { balance: bal, positions: positions };
+  } catch (err) {
+    _liveApiError(err, 'syncState');
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ARES Live Order Adapter — Separate order routing for ARES autonomous trader
+// All orders tagged with ARES_ prefix via newClientOrderId for identification
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _aresOrderSeq = 0;
+function _aresClientOrderId() {
+  _aresOrderSeq = (_aresOrderSeq + 1) % 10000;
+  return 'ARES_' + Date.now() + '_' + _aresOrderSeq + String(Math.floor(Math.random() * 99)).padStart(2, '0');
+}
+
+/**
+ * Place an ARES live market order (entry).
+ * @param {object} params - {symbol, side:'BUY'|'SELL', quantity, leverage}
+ * @returns {Promise<object>} - {orderId, status, avgPrice, executedQty, symbol, side, type}
+ */
+async function aresPlaceOrder(params) {
+  const cid = _aresClientOrderId();
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({
+      symbol: params.symbol,
+      side: params.side,
+      type: 'MARKET',
+      quantity: String(params.quantity),
+      leverage: params.leverage,
+      newClientOrderId: cid,
+      referencePrice: params.referencePrice || 0,
+    }),
+  });
+  const result = await _liveApiParse(res, 'ARES order/place');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('ARES', '[ARES LIVE ORDER] ' + params.symbol + ' ' + params.side + ' qty=' + params.quantity + ' lev=' + params.leverage + 'x orderId=' + (result.orderId || '') + ' cid=' + cid);
+  result._aresClientOrderId = cid;
+  return result;
+}
+
+/**
+ * Set exchange-level SL (STOP_MARKET) for ARES position.
+ * @param {object} params - {symbol, side:'BUY'|'SELL' (position side), quantity, stopPrice}
+ */
+async function aresSetStopLoss(params) {
+  const closeSide = params.side === 'BUY' || params.side === 'LONG' ? 'SELL' : 'BUY';
+  const cid = _aresClientOrderId();
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({
+      symbol: params.symbol,
+      side: closeSide,
+      type: 'STOP_MARKET',
+      quantity: String(params.quantity),
+      stopPrice: params.stopPrice,
+      newClientOrderId: cid,
+    }),
+  });
+  const result = await _liveApiParse(res, 'ARES SL');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('ARES', '[ARES SL SET] ' + params.symbol + ' stopPrice=' + params.stopPrice + ' orderId=' + (result.orderId || ''));
+  return result;
+}
+
+/**
+ * Set exchange-level TP (TAKE_PROFIT_MARKET) for ARES position.
+ * @param {object} params - {symbol, side:'BUY'|'SELL' (position side), quantity, stopPrice}
+ */
+async function aresSetTakeProfit(params) {
+  const closeSide = params.side === 'BUY' || params.side === 'LONG' ? 'SELL' : 'BUY';
+  const cid = _aresClientOrderId();
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({
+      symbol: params.symbol,
+      side: closeSide,
+      type: 'TAKE_PROFIT_MARKET',
+      quantity: String(params.quantity),
+      stopPrice: params.stopPrice,
+      newClientOrderId: cid,
+    }),
+  });
+  const result = await _liveApiParse(res, 'ARES TP');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('ARES', '[ARES TP SET] ' + params.symbol + ' stopPrice=' + params.stopPrice + ' orderId=' + (result.orderId || ''));
+  return result;
+}
+
+/**
+ * Close an ARES position by placing opposite-side MARKET order (reduce-only).
+ * @param {object} pos - {symbol, side:'LONG'|'SHORT', qty}
+ */
+async function aresClosePosition(pos) {
+  const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
+  const cid = _aresClientOrderId();
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({
+      symbol: pos.symbol || pos.sym,
+      side: closeSide,
+      type: 'MARKET',
+      quantity: String(pos.qty),
+      newClientOrderId: cid,
+      closePosition: true,
+    }),
+  });
+  const result = await _liveApiParse(res, 'ARES close');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('ARES', '[ARES CLOSE] ' + (pos.symbol || pos.sym) + ' ' + pos.side + ' qty=' + pos.qty + ' orderId=' + (result.orderId || ''));
+  return result;
+}
+
+/**
+ * Cancel exchange-level SL/TP orders for ARES position.
+ * @param {string} symbol
+ * @param {string|number} orderId
+ */
+async function aresCancelOrder(symbol, orderId) {
+  return liveApiCancelOrder(symbol, orderId);
+}
