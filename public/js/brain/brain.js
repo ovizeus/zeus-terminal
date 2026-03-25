@@ -112,7 +112,7 @@ function updateBrainArc(score) {
 
 // Brain state machine
 function updateBrainState() {
-  // ✅ FIX: Calculeaza scorul direct, nu citeste din DOM (poate fi stale)
+  // FIX: Calculeaza scorul direct, nu citeste din DOM (poate fi stale)
   calcConfluenceScore();
   const score = (typeof BM !== 'undefined' ? BM.confluenceScore : 0) || 0; // [FIX v85.1 F3] din memorie
   const bulls = S.signalData?.bullCount || 0;
@@ -157,8 +157,8 @@ function updateBrainState() {
   // State badge
   const badge = el('brainStateBadge');
   if (badge) {
-    const labels = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: '⚡ READY', blocked: '⛔ BLOCKED', trading: '🔴 TRADING' };
-    badge.textContent = labels[state] || state.toUpperCase();
+    const labels = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: _ZI.bolt + ' READY', blocked: _ZI.noent + ' BLOCKED', trading: _ZI.dRed + ' TRADING' };
+    badge.innerHTML = labels[state] || state.toUpperCase();
     badge.className = 'brain-state-badge ' + state;
   }
 
@@ -168,9 +168,9 @@ function updateBrainState() {
   // Regime badge
   const regime = detectMarketRegime(S.klines || []);
   const regimeBadge = el('brainRegimeBadge');
-  const regimeLabels = { trend: '📈 TREND', range: '📊 RANGE', volatile: '⚡ VOLATIL', unknown: '⏳ LOADING' };
+  const regimeLabels = { trend: _ZI.tup + ' TREND', range: _ZI.chart + ' RANGE', volatile: _ZI.bolt + ' VOLATIL', unknown: _ZI.clock + ' LOADING' };
   if (regimeBadge) {
-    regimeBadge.textContent = regimeLabels[regime] || regime;
+    regimeBadge.innerHTML = regimeLabels[regime] || regime;
     regimeBadge.className = 'brain-regime ' + regime;
   }
 
@@ -214,11 +214,11 @@ function runBrainUpdate() {
     const prevState = BRAIN._prevState;
     if (BRAIN.state !== prevState) {
       const msgs = {
-        scanning: '🔍 Scanez piata... astept semnale',
-        analyzing: '🧮 Semnal detectat — verific confluenta',
-        ready: '✅ Toate conditiile OK — gata de intrare',
-        blocked: '⛔ Kill switch activ — suspendat',
-        trading: '🔴 Pozitie activa — monitorizez TP/SL'
+        scanning: _ZI.mag + ' Scanez piata... astept semnale',
+        analyzing: _ZI.ruler + ' Semnal detectat — verific confluenta',
+        ready: _ZI.ok + ' Toate conditiile OK — gata de intrare',
+        blocked: _ZI.noent + ' Kill switch activ — suspendat',
+        trading: _ZI.dRed + ' Pozitie activa — monitorizez TP/SL'
       };
       brainThink(BRAIN.state === 'ready' ? 'ok' : BRAIN.state === 'blocked' ? 'bad' : 'info',
         msgs[BRAIN.state] || BRAIN.state);
@@ -229,11 +229,11 @@ function runBrainUpdate() {
 // [runBrainUpdate loop managed in startApp — single instance]
 
 // ===================================================================
-// 🧠 END ZEUS BRAIN
+// END ZEUS BRAIN
 // ===================================================================
 
 // ===================================================================
-// 🚀 GRAND UPDATE — Brain Modes, Gates, Entry Score, Risk Rails
+// GRAND UPDATE — Brain Modes, Gates, Entry Score, Risk Rails
 // ===================================================================
 
 // ── BRAIN MODE STATE ─────────────────────────────────────────────
@@ -241,13 +241,14 @@ function runBrainUpdate() {
 
 // ══════════════════════════════════════════════════════════════════
 // SINGLE SOURCE OF TRUTH
-// S.mode / S.profile / S.runMode / S.dsl.* are canonical.
+// S.mode / S.profile / S.dsl.* are canonical.
 // BM.* = read-only mirror. Engine reads S.* only.
-// UI buttons → call setMode()/setProfile()/setRunMode() only.
+// UI buttons → call setMode()/setProfile() only.
+// AT.enabled is the sole command for brain scan + execution (no more S.runMode).
 // ══════════════════════════════════════════════════════════════════
 S.mode = (S.mode && S.mode !== 'manual') ? S.mode : 'assist';
 S.profile = S.profile || 'fast';
-S.runMode = S.runMode || false;
+// [B2] S.runMode REMOVED — AT.enabled is sole command
 S.tz = 'Europe/Bucharest';
 if (!S.dsl) S.dsl = { active: false, state: 'OFF', pivotL: 1.2, pivotR: 1.4, impulseV: 70, openDsl: 50 };
 S.assistArmed = S.assistArmed || false;   // ASSIST mode: must arm before DSL executes
@@ -262,13 +263,15 @@ S.assistArmed = S.assistArmed || false;   // ASSIST mode: must arm before DSL ex
 function armAssist() {
   ARM_ASSIST.armed = true; ARM_ASSIST.ts = Date.now();
   S.assistArmed = true;
-  brainThink('ok', '🔒 ARM ASSIST activ');
+  brainThink('ok', _ZI.lock + ' ARM ASSIST activ');
   if (typeof _syncDslAssistUI === 'function') _syncDslAssistUI();
+  if (typeof _usScheduleSave === 'function') _usScheduleSave();
 }
 function disarmAssist() {
   ARM_ASSIST.armed = false; ARM_ASSIST.ts = 0;
   S.assistArmed = false;
   if (typeof _syncDslAssistUI === 'function') _syncDslAssistUI();
+  if (typeof _usScheduleSave === 'function') _usScheduleSave();
 }
 function isArmAssistValid() {
   return !!ARM_ASSIST.armed;
@@ -335,7 +338,7 @@ function syncBrainFromState() {
   // Mirror to BM (read-only; engine uses S.*)
   BM.mode = mode;
   BM.profile = prof;
-  BM.runMode = S.runMode;
+  // [B2] BM.runMode removed — AT.enabled is sole command
 
   // Radio buttons — exact one active (no more manual)
   _setRadio(['bmode-assist', 'bmode-auto'], 'bmode-' + mode, 'znc-mbtn', 'act-' + mode);
@@ -347,9 +350,7 @@ function syncBrainFromState() {
     _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + dslMode, 'znc-dbtn', 'act-dsl-' + dslMode);
   }
 
-  // Run btn (exclusive ON/OFF)
-  const runBtn = el('runModeBtn');
-  if (runBtn) { runBtn.textContent = S.runMode ? 'ON' : 'OFF'; runBtn.className = 'znc-run' + (S.runMode ? ' on' : ''); }
+  // [B2] RUN button removed — AT ON/OFF is the single command
   // Extra safety: ensure no leftover classes on mode/profile buttons
   document.querySelectorAll('.znc-mbtn').forEach(b => {
     const id = b.id; if (id && id !== 'bmode-manual') b.className = 'znc-mbtn' + (id === 'bmode-' + S.mode ? ' act-' + S.mode : '');
@@ -415,7 +416,7 @@ function _applyModeSwitch(mode) {
   if (mode === 'assist') { armAssist(); }
   else { disarmAssist(); }
   if (typeof ZLOG !== 'undefined') ZLOG.push('INFO', '[BRAIN] mode=' + prev + '→' + mode, { prev: prev, next: mode });
-  brainThink('info', `🔧 Mode → ${S.mode.toUpperCase()}`);
+  brainThink('info', _ZI.bolt + ` Mode → ${S.mode.toUpperCase()}`);
   syncBrainFromState();
   setTimeout(renderBrainCockpit, 30);
   dslUpdateBanner();
@@ -447,21 +448,13 @@ function setBrainMode(mode) { setMode(mode); }
 
 function setProfile(profile) {
   S.profile = profile.toLowerCase();
-  brainThink('info', `📊 Profile → ${S.profile.toUpperCase()} | Trig:${PROFILE_TF[S.profile]?.trigger || '?'}`);
+  brainThink('info', _ZI.chart + ` Profile → ${S.profile.toUpperCase()} | Trig:${PROFILE_TF[S.profile]?.trigger || '?'}`);
   syncBrainFromState();
   setTimeout(renderBrainCockpit, 30);
   if (typeof _usScheduleSave === 'function') _usScheduleSave(); // persist profile
 }
 
-function setRunMode(on) {
-  S.runMode = !!on;
-  syncBrainFromState();
-}
-function toggleRunMode() {
-  setRunMode(!S.runMode);
-  brainThink(S.runMode ? 'ok' : 'info',
-    S.runMode ? '🚀 RUN ON — Brain scan/analysis active' : '⏸ RUN OFF — scan paused, AT idle');
-}
+// [B2] setRunMode / toggleRunMode REMOVED — AT.enabled is sole command
 
 // ── DSL MODE SETTER ──────────────────────────────────────────────
 function setDslMode(mode) {
@@ -470,8 +463,8 @@ function setDslMode(mode) {
   if (!valid.includes(mode)) return;
   DSL.mode = mode;
   try { localStorage.setItem('zeus_dsl_mode', mode); } catch (_) { }
-  const labels = { atr: '📡 ATR', fast: '⚡ FAST', swing: '🌊 SWING', defensive: '🛡 DEF', tp: '🎯 TP' };
-  brainThink('info', '🔧 DSL Mode → ' + (labels[mode] || mode.toUpperCase()));
+  const labels = { atr: _ZI.plug + ' ATR', fast: _ZI.bolt + ' FAST', swing: _ZI.wave + ' SWING', defensive: _ZI.sh + ' DEF', tp: _ZI.tgt + ' TP' };
+  brainThink('info', _ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()));
   _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + mode, 'znc-dbtn', 'act-dsl-' + mode);
 }
 
@@ -718,16 +711,17 @@ function computeGates(dir) {
   const oiConfirm = oiChange > 0.05;
 
   // Risk limits
-  const maxDay = parseInt(el('rrMaxDay')?.value) || 5;
-  const maxConc = parseInt(el('rrMaxConcurrent')?.value) || 3;
-  const dailyDD = parseFloat(el('rrDailyDD')?.value) || 5;
-  const lossLim = parseInt(el('rrLossStreak')?.value) || 3;
-  const concurrent = (TP.demoPositions || []).filter(p => p.autoTrade && !p.closed).length;
+  const maxDay = parseInt(el('atMaxDay')?.value) || 5;
+  const maxConc = (typeof TC !== 'undefined' && TC.maxPos) || 3;
+  const lossLim = parseInt(el('atLossStreak')?.value) || 3;
+  // [RISK RAILS FIX] Count positions per AT.mode (not always demo)
+  const _rrPosList = (typeof AT !== 'undefined' && AT.mode === 'live') ? (TP.livePositions || []) : (TP.demoPositions || []);
+  const concurrent = _rrPosList.filter(p => p.autoTrade && !p.closed).length;
+  // [RISK RAILS] DD removed from client gate — server kill switch is sole authority
   const riskOk = !BM.protectMode &&
     BM.dailyTrades < maxDay &&
     concurrent < maxConc &&
-    BM.lossStreak < lossLim &&
-    BM.dailyPnL > -(dailyDD / 100 * (TP.demoBalance || 1000));
+    BM.lossStreak < lossLim;
 
   const gates = {
     regime: regime === 'trend' || regime === 'breakout' ? 'ok' : regime === 'range' ? 'wait' : 'fail',
@@ -974,7 +968,7 @@ function updateNewsShield() {
   BM.macroEvents.forEach(ev => {
     const diff = ev.time - now;
     if (diff > 0 && diff < 30 * 60 * 1000) {
-      macroMsg = `⚠ ${ev.name} in ${Math.ceil(diff / 60000)}m`;
+      macroMsg = `${ev.name} in ${Math.ceil(diff / 60000)}m`;
       BM.newsRisk = 'high';
     }
   });
@@ -989,7 +983,7 @@ function updateNewsShield() {
   const macroCd = el('macroCd');
 
   if (badge) { badge.textContent = BM.newsRisk.toUpperCase(); badge.className = 'news-risk-badge ' + BM.newsRisk; }
-  if (headline) headline.textContent = macroMsg || (BM.newsRisk === 'high' ? '⚡ High volatility detected — caution' : 'No significant news detected');
+  if (headline) headline.textContent = macroMsg || (BM.newsRisk === 'high' ? 'High volatility detected — caution' : 'No significant news detected');
   if (macroCd) macroCd.textContent = macroMsg;
 }
 
@@ -997,28 +991,23 @@ function updateNewsShield() {
 // PROTECT = only: execution risk, news HIGH, REAL risk limit breach
 // NOT: session off, regime unstable (those are BLOCK/WAIT only)
 function checkProtectMode() {
-  const dailyDD = parseFloat(el('rrDailyDD')?.value) || 5;
-  const lossLim = parseInt(el('rrLossStreak')?.value) || 3;
-  const maxDay = parseInt(el('rrMaxDay')?.value) || 5;
-  const _realPnL = +(AT.realizedDailyPnL) || 0;
+  const lossLim = parseInt(el('atLossStreak')?.value) || 3;
+  const maxDay = parseInt(el('atMaxDay')?.value) || 5;
   const _closedToday = +(AT.closedTradesToday) || 0;
-  const bal = +(AT.mode === 'demo' ? TP.demoBalance : 10000) || 10000;
 
   let reason = null;
   // Loss streak — only if we actually have closed trades
   if (_closedToday > 0 && BM.lossStreak >= lossLim)
-    reason = `⛔ PROTECT: ${lossLim} CONSECUTIVE LOSSES (${_closedToday} trades)`;
+    reason = `PROTECT: ${lossLim} CONSECUTIVE LOSSES (${_closedToday} trades)`;
   // Max daily trades
   if (BM.dailyTrades >= maxDay)
-    reason = `⛔ PROTECT: MAX TRADES/DAY (${BM.dailyTrades}/${maxDay})`;
-  // Daily DD — only if realized, not unrealized equity swing
-  if (_closedToday > 0 && Number.isFinite(_realPnL) && _realPnL < -(dailyDD / 100 * bal))
-    reason = `⛔ PROTECT: DAILY DD ${_realPnL.toFixed(2)}$ >= ${dailyDD}%`;
+    reason = `PROTECT: MAX TRADES/DAY (${BM.dailyTrades}/${maxDay})`;
+  // [RISK RAILS] Daily DD condition REMOVED — server kill switch is sole authority
   // News HIGH — block not protect (keep compatible but only in auto)
   if (BM.newsRisk === 'high' && (S.mode || 'assist') === 'auto')
-    reason = `⛔ PROTECT: NEWS HIGH — volatilitate extremă`;
+    reason = `PROTECT: NEWS HIGH — volatilitate extremă`;
   // Kill switch — only if already triggered legitimately
-  if (AT.killTriggered) reason = '⛔ BLOCKED: KILL SWITCH';
+  if (AT.killTriggered) reason = 'BLOCKED: KILL SWITCH';
 
   if (reason && !BM.protectMode) {
     BM.protectMode = true;
@@ -1042,8 +1031,8 @@ function resetProtectMode() {
   BM.lossStreak = 0;
   const banner = el('protectBanner');
   if (banner) banner.className = 'protect-banner';
-  brainThink('ok', '✅ Protect mode resetat manual');
-  toast('✅ Protect mode resetat');
+  brainThink('ok', _ZI.ok + ' Protect mode resetat manual');
+  toast('Protect mode resetat', 0, _ZI.ok);
 }
 
 // ── DSL TELEMETRY UPDATE ──────────────────────────────────────────
@@ -1099,7 +1088,7 @@ function updateDSLTelemetry() {
 function showExecCinematic(side, sym) {
   const banner = document.createElement('div');
   banner.className = 'exec-banner' + (side === 'SHORT' ? ' short' : '');
-  banner.textContent = `⚡ ZEUS EXECUTION: ${side} ${sym}`;
+  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`;
   document.body.appendChild(banner);
   setTimeout(() => { try { document.body.removeChild(banner); } catch (_) { } }, 3000);
 }
@@ -1157,13 +1146,15 @@ function checkAntiFakeout(klines, dir) {
 
 // Safety gates
 function computeSafetyGates(dir) {
-  const maxDay = parseInt(el('rrMaxDay')?.value) || 5;
-  const maxConc = parseInt(el('rrMaxConcurrent')?.value) || 3;
-  const dailyDD = parseFloat(el('rrDailyDD')?.value) || 5;
-  const lossLim = parseInt(el('rrLossStreak')?.value) || 3;
-  const concurrent = (TP.demoPositions || []).filter(p => p.autoTrade && !p.closed).length;
-  const hasOpposite = (TP.demoPositions || []).some(p => p.autoTrade && !p.closed && p.side !== (dir === 'long' ? 'LONG' : 'SHORT'));
-  const riskOk = !BM.protectMode && BM.dailyTrades < maxDay && concurrent < maxConc && BM.lossStreak < lossLim && BM.dailyPnL > -(dailyDD / 100 * (TP.demoBalance || 1000));
+  const maxDay = parseInt(el('atMaxDay')?.value) || 5;
+  const maxConc = (typeof TC !== 'undefined' && TC.maxPos) || 3;
+  const lossLim = parseInt(el('atLossStreak')?.value) || 3;
+  // [RISK RAILS FIX] Count positions per AT.mode
+  const _sgPosList = (typeof AT !== 'undefined' && AT.mode === 'live') ? (TP.livePositions || []) : (TP.demoPositions || []);
+  const concurrent = _sgPosList.filter(p => p.autoTrade && !p.closed).length;
+  const hasOpposite = _sgPosList.some(p => p.autoTrade && !p.closed && p.side !== (dir === 'long' ? 'LONG' : 'SHORT'));
+  // [RISK RAILS] DD removed from client gate — server kill switch is sole authority
+  const riskOk = !BM.protectMode && BM.dailyTrades < maxDay && concurrent < maxConc && BM.lossStreak < lossLim;
   const h = new Date().getUTCHours();
   // C: Session gate only applies when session filter checkbox is ON
   const sessionFilterEnabled = el('dhfEnabled')?.checked !== false;  // default ON
@@ -1335,12 +1326,12 @@ function renderBrainCockpit() {
   // 4. Safety gates
   const safety = computeSafetyGates(dir);
   const safetyPass = allSafetyPass(safety);
-  // ✅ FIX v118: cache pentru renderCircuitBrain (nu mai citește DOM)
+  // FIX v118: cache pentru renderCircuitBrain (nu mai citește DOM)
   BRAIN._safetyCache = safety;
 
   // 5. Context gates
   const ctx = computeContextGates(dir, klines);
-  // ✅ FIX v118: cache pentru renderCircuitBrain
+  // FIX v118: cache pentru renderCircuitBrain
   BRAIN._ctxCache = ctx;
 
   // 6. Entry score
@@ -1354,6 +1345,228 @@ function renderBrainCockpit() {
 
   // 6b. Market Atmosphere (aggregator — reads all existing signals)
   computeMarketAtmosphere();
+
+  // 6c. WHY ENGINE NARRATOR — builds S.why from all existing brain data
+  (function buildWhyNarrative() {
+    try {
+      const _whyReasons = [];
+      const _whyRisks = [];
+      const _dir = dir; // 'long' or 'short'
+      const _isLong = _dir === 'long';
+      const _regime = BRAIN.regime || 'unknown';
+      const _regConf = BRAIN.regimeConfidence || 0;
+      const _atrPct = BRAIN.regimeAtrPct || 0;
+      const _rsi5m = S.rsi?.['5m'] || 50;
+      const _rsi1h = S.rsi?.['1h'] || 50;
+      const _ofi = BRAIN.ofi?.blendBuy || 50;
+      const _sw = BM.sweep || {};
+      const _fr = S.fr || 0;
+      const _oi = S.oi || 0;
+      const _oiPrev = S.oiPrev || _oi;
+      const _oiDelta = _oiPrev > 0 ? ((_oi - _oiPrev) / _oiPrev * 100) : 0;
+      const _atmo = BM.atmosphere || {};
+      const _sigs = S.signalData || {};
+      const _bulls = _sigs.bullCount || 0;
+      const _bears = _sigs.bearCount || 0;
+      const _sigTotal = _bulls + _bears;
+      const _gates = BM.gates || {};
+
+      // ── WHY REASONS (bullish/bearish confirmation) ──
+      // Regime
+      if (_regime === 'trend' || _regime === 'breakout') {
+        _whyReasons.push(_regime === 'trend'
+          ? 'Trend regime (conf ' + _regConf + '%) — directional move active'
+          : 'Breakout regime — expansion detected');
+      }
+      // Sweep + Reclaim
+      if (_sw.type !== 'none' && _sw.reclaim) {
+        const _swDir = _sw.type === 'below' ? 'sub suport' : 'peste rezistență';
+        _whyReasons.push('Liquidity sweep ' + _swDir + ' → reclaimed' + (_sw.displacement ? ' + displacement' : ''));
+      } else if (_sw.type !== 'none') {
+        _whyReasons.push('Liquidity sweep detectat (' + _sw.type + ')' + (_sw.liqDist ? ' — wick ' + _sw.liqDist + '%' : ''));
+      }
+      // Orderflow
+      if ((_isLong && _ofi > 57) || (!_isLong && _ofi < 43)) {
+        _whyReasons.push('Orderflow ' + (_isLong ? 'bullish' : 'bearish') + ' (' + _ofi.toFixed(0) + '% buy bias)');
+      }
+      // OI change
+      if (Math.abs(_oiDelta) > 0.1) {
+        const _oiDir = _oiDelta > 0 ? 'increasing' : 'decreasing';
+        _whyReasons.push('OI ' + _oiDir + ' ' + Math.abs(_oiDelta).toFixed(1) + '% → ' + (_oiDelta > 0 ? 'fresh positions entering' : 'positions closing'));
+      }
+      // RSI
+      if (_isLong && _rsi5m > 40 && _rsi5m < 70) {
+        _whyReasons.push('RSI 5m ' + _rsi5m.toFixed(0) + (_rsi5m < 50 ? ' — oversold bounce zone' : ' — bullish momentum'));
+      } else if (!_isLong && _rsi5m > 30 && _rsi5m < 60) {
+        _whyReasons.push('RSI 5m ' + _rsi5m.toFixed(0) + (_rsi5m > 50 ? ' — overbought fade zone' : ' — bearish momentum'));
+      }
+      // Signal confluence
+      if (_sigTotal >= 2) {
+        const _dominant = _bulls >= _bears ? _bulls : _bears;
+        _whyReasons.push(_dominant + '/' + _sigTotal + ' signals ' + (_bulls >= _bears ? 'bullish' : 'bearish') + ' aligned');
+      }
+      // MTF alignment
+      if (_gates.mtf === 'ok') {
+        const _1h = BM.mtf?.['1h'] || '?';
+        const _4h = BM.mtf?.['4h'] || '?';
+        _whyReasons.push('MTF aligned: 1h ' + _1h + ' + 4h ' + _4h);
+      }
+      // Volume confirm
+      if (_gates.volume === 'ok') {
+        _whyReasons.push('Volume confirming — above baseline');
+      }
+      // Funding rate as reason
+      if ((_isLong && _fr < -0.0001) || (!_isLong && _fr > 0.0001)) {
+        _whyReasons.push('Funding rate ' + (_fr * 100).toFixed(3) + '% — ' + (_isLong ? 'shorts paying longs' : 'longs paying shorts'));
+      }
+
+      // ── RISK FACTORS ──
+      // ATR volatility
+      if (_atrPct > 1.5) {
+        _whyRisks.push('Volatility ' + (_atrPct > 2.5 ? 'extreme' : 'high') + ' (ATR ' + _atrPct.toFixed(1) + '%) — wider stops needed');
+      }
+      // Opposing orderflow
+      if ((_isLong && _ofi < 45) || (!_isLong && _ofi > 55)) {
+        _whyRisks.push('Orderflow ' + (_isLong ? 'bearish' : 'bullish') + ' divergence (' + _ofi.toFixed(0) + '%)');
+      }
+      // RSI extremes
+      if (_rsi5m > 75) {
+        _whyRisks.push('RSI overbought (' + _rsi5m.toFixed(0) + ') — reversal risk');
+      } else if (_rsi5m < 25) {
+        _whyRisks.push('RSI oversold (' + _rsi5m.toFixed(0) + ') — bounce risk');
+      }
+      // Funding against direction
+      if ((_isLong && _fr > 0.0003) || (!_isLong && _fr < -0.0003)) {
+        _whyRisks.push('Funding rate against direction (' + (_fr * 100).toFixed(3) + '%)');
+      }
+      // News risk
+      if (BM.newsRisk === 'high') {
+        _whyRisks.push('High news/macro risk active');
+      } else if (BM.newsRisk === 'med') {
+        _whyRisks.push('Medium news risk — caution advised');
+      }
+      // Trap risk from atmosphere
+      if (_atmo.category === 'trap_risk') {
+        _whyRisks.push('Trap risk detected — fakeout probability elevated');
+      }
+      // Session warning
+      if (_gates.session !== 'ok') {
+        _whyRisks.push('Outside optimal session hours');
+      }
+      // Regime against trade
+      if (_regime === 'range') {
+        _whyRisks.push('Range regime — breakout signals less reliable');
+      } else if (_regime === 'panic' || _regime === 'chaos') {
+        _whyRisks.push('Chaotic regime — signals may be noisy');
+      }
+      // OI decreasing (liquidation drain)
+      if (_oiDelta < -0.3) {
+        _whyRisks.push('OI dropping ' + Math.abs(_oiDelta).toFixed(1) + '% — deleveraging in progress');
+      }
+      // MTF misaligned
+      if (_gates.mtf === 'fail') {
+        _whyRisks.push('MTF misaligned against direction');
+      }
+
+      // ARIA pattern in reasons
+      const _aria = (typeof ARIA_STATE !== 'undefined' && ARIA_STATE.pattern) ? ARIA_STATE.pattern : null;
+      if (_aria && _aria.conf > 50) {
+        const _ariaAligned = (_aria.dir === 'bull' && _isLong) || (_aria.dir === 'bear' && !_isLong);
+        if (_ariaAligned) _whyReasons.push('ARIA pattern: ' + _aria.name + ' (' + _aria.conf + '%) aligned');
+        else _whyRisks.push('ARIA pattern: ' + _aria.name + ' (' + _aria.dir + ') opposes direction');
+      }
+
+      // ── Determine state from score + reasons ──
+      const _score = BM.entryScore || 0;
+      const _whyState = _score >= (BM.profile === 'fast' ? 65 : 75) ? 'READY'
+        : _score >= 50 ? 'ANALYZING'
+          : _whyReasons.length === 0 ? 'SCANNING'
+            : 'WAIT';
+
+      // Build combined reasons display
+      const _combined = [];
+      _whyReasons.slice(0, 4).forEach(function (r) { _combined.push('[OK] ' + r); });
+      _whyRisks.slice(0, 3).forEach(function (r) { _combined.push('[!] ' + r); });
+      if (_combined.length === 0) _combined.push('Scanning market...');
+
+      S.why = { state: _whyState, reasons: _combined, whyList: _whyReasons, riskList: _whyRisks, dir: _dir, score: _score, ts: Date.now() };
+    } catch (_whyErr) {
+      S.why = { state: 'WAIT', reasons: ['—'], whyList: [], riskList: [], dir: dir, score: 0, ts: Date.now() };
+    }
+  })();
+
+  // 6d. ADAPTIVE SHIELD — Market Danger Score (0-100)
+  (function computeDangerScore() {
+    try {
+      const _db = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 };
+      // Volatility component (0-25) — ATR% severity
+      const _atrP = BRAIN.regimeAtrPct || 0;
+      _db.volatility = _atrP > 3.0 ? 25 : _atrP > 2.0 ? 18 : _atrP > 1.5 ? 12 : _atrP > 1.0 ? 6 : 0;
+      // Volume anomaly component (0-20) — recent volume spike vs baseline
+      const _kl = S.klines || [];
+      if (_kl.length >= 20) {
+        const _r5 = _kl.slice(-5).reduce((a, k) => a + (k.volume || 0), 0) / 5;
+        const _b15 = _kl.slice(-20, -5).reduce((a, k) => a + (k.volume || 0), 0) / 15;
+        const _vRatio = _b15 > 0 ? _r5 / _b15 : 1;
+        _db.volume = _vRatio > 3.0 ? 20 : _vRatio > 2.0 ? 14 : _vRatio > 1.5 ? 8 : 0;
+      }
+      // Funding rate spike component (0-20)
+      const _frAbs = Math.abs(S.fr || 0);
+      _db.funding = _frAbs > 0.002 ? 20 : _frAbs > 0.001 ? 14 : _frAbs > 0.0005 ? 7 : 0;
+      // Liquidation cascade component (0-20) — trap rate from liq cycle
+      const _tr = BM.liqCycle?.trapRate;
+      _db.liquidations = typeof _tr === 'number' ? Math.round(_tr * 20) : 0;
+      // Spread/regime chaos component (0-15)
+      const _reg = BRAIN.regime || 'unknown';
+      _db.spread = (_reg === 'panic' || _reg === 'chaos') ? 15
+        : _reg === 'range' ? 8
+          : BM.atmosphere?.category === 'trap_risk' ? 10 : 0;
+      // Sum all components (0-100)
+      BM.danger = Math.min(100, _db.volatility + _db.spread + _db.liquidations + _db.volume + _db.funding);
+      BM.dangerBreakdown = _db;
+    } catch (_de) { BM.danger = 0; }
+  })();
+
+  // 6e. CONVICTION SCORE (0-100) — how confident Brain is in the current direction
+  (function computeConvictionScore() {
+    try {
+      let _cv = 0;
+      // Gate score contribution (0-40) — entry score normalized
+      const _es = BM.entryScore || 0;
+      _cv += Math.min(40, _es * 0.4);
+      // Atmosphere confidence (0-15)
+      const _ac = BM.atmosphere?.confidence || 0;
+      _cv += Math.min(15, _ac * 0.15);
+      // ARIA pattern match (0-15) — aligned pattern boosts conviction
+      const _ap = (typeof ARIA_STATE !== 'undefined' && ARIA_STATE.pattern) ? ARIA_STATE.pattern : null;
+      if (_ap && _ap.conf > 50) {
+        const _aligned = (_ap.dir === 'bull' && dir === 'long') || (_ap.dir === 'bear' && dir === 'short');
+        _cv += _aligned ? Math.min(15, _ap.conf * 0.15) : -5;
+      }
+      // MTF alignment (0-15)
+      const _1h = BM.mtf?.['1h'] || 'neut';
+      const _4h = BM.mtf?.['4h'] || 'neut';
+      const _mtfDir = dir === 'long' ? 'bull' : 'bear';
+      if (_1h === _mtfDir) _cv += 7;
+      if (_4h === _mtfDir) _cv += 8;
+      // Orderflow alignment (0-10)
+      const _ofi = BRAIN.ofi?.blendBuy || 50;
+      if ((dir === 'long' && _ofi > 57) || (dir === 'short' && _ofi < 43)) _cv += 10;
+      else if ((dir === 'long' && _ofi < 43) || (dir === 'short' && _ofi > 57)) _cv -= 5;
+      // Signal consensus (0-5)
+      const _sd = S.signalData || {};
+      const _bul = _sd.bullCount || 0, _ber = _sd.bearCount || 0;
+      if ((dir === 'long' && _bul > _ber) || (dir === 'short' && _ber > _bul)) _cv += 5;
+      // Clamp 0-100
+      BM.conviction = Math.max(0, Math.min(100, Math.round(_cv)));
+      // Compute sizing multiplier from conviction + danger
+      // Conviction: <40%=skip(0.0), 40-60%=half(0.5), 60-80%=normal(1.0), >80%=full(1.0)
+      // Danger: >80=pause(0.0), 60-80=reduce(0.6), 40-60=caution(0.85), <40=normal(1.0)
+      let _cMult = BM.conviction >= 60 ? 1.0 : BM.conviction >= 40 ? 0.5 : 0.0;
+      let _dMult = BM.danger >= 80 ? 0.0 : BM.danger >= 60 ? 0.6 : BM.danger >= 40 ? 0.85 : 1.0;
+      BM.convictionMult = Math.round((_cMult * _dMult) * 100) / 100;
+    } catch (_ce) { BM.conviction = 0; BM.convictionMult = 1.0; }
+  })();
 
   // 7. News + chaos
   updateNewsShield();
@@ -1461,8 +1674,8 @@ function renderBrainCockpit() {
 
   // ── STATE / ARM BADGES ──
   const badge = el('brainStateBadge');
-  const stLabels = { scanning: 'SCANNING', analyzing: 'ANALYZING', armed: '⚡ ARMED', trading: '🔴 TRADING', protect: '🛡 PROTECT', blocked: '⛔ BLOCKED' };
-  if (badge) { badge.textContent = stLabels[state] || state.toUpperCase(); badge.className = 'znc-state ' + state; }
+  const stLabels = { scanning: 'SCANNING', analyzing: 'ANALYZING', armed: _ZI.bolt + ' ARMED', trading: _ZI.dRed + ' TRADING', protect: _ZI.sh + ' PROTECT', blocked: _ZI.noent + ' BLOCKED' };
+  if (badge) { badge.innerHTML = stLabels[state] || state.toUpperCase(); badge.className = 'znc-state ' + state; }
   const armBadge = el('zncArmBadge');
   if (armBadge) {
     const armTxt = isArmed ? 'ARMED' : BM.protectMode ? 'PROTECT' : hasPos ? 'TRADING' : 'SCANNING';
@@ -1479,10 +1692,10 @@ function renderBrainCockpit() {
   }
 
   // ── REGIME BADGES ──
-  const regLabels = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ⚙', panic: 'PANIC 🔥', unknown: '—' };
+  const regLabels = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + _ZI.hex, panic: 'PANIC ' + _ZI.fire, unknown: '—' };
   [el('brainRegimeBadge'), el('brainRegimeBadge2')].forEach(b => {
     if (!b) return;
-    b.textContent = regLabels[BRAIN.regime] || BRAIN.regime;
+    b.innerHTML = regLabels[BRAIN.regime] || BRAIN.regime;
     b.className = 'znc-regime-val ' + (BRAIN.regime || 'unknown');
   });
   const rd = el('zncRegimeDetail');
@@ -1495,7 +1708,7 @@ function renderBrainCockpit() {
   const _card = (cardId, titleId, subId, t, s, cls) => {
     const ca = el(cardId), ti = el(titleId), si = el(subId);
     if (ca) ca.className = 'znc-card ' + cls;
-    if (ti) ti.textContent = t;
+    if (ti) ti.innerHTML = t;
     if (si) si.textContent = s;
   };
   _card('card-flow', 'card-flow-t', 'card-flow-s', 'Flow ' + (ctx.flow ? 'CONFIRM' : 'WEAK'), 'Delta ' + (delta >= 0 ? '+' : '') + delta, ctx.flow ? 'ok' : 'fail');
@@ -1510,7 +1723,7 @@ function renderBrainCockpit() {
   const aLabel = (atmos.category || 'NEUTRAL').toUpperCase().replace('_', ' ');
   const aAllow = atmos.allowEntry !== false ? 'ALLOW' : 'BLOCK';
   const aSub = aAllow + ' · conf:' + (atmos.confidence || 0) + ' · ×' + (atmos.sizeMultiplier != null ? atmos.sizeMultiplier : '?');
-  _card('card-atmos', 'card-atmos-t', 'card-atmos-s', '⚡ ' + aLabel, aSub, aCls);
+  _card('card-atmos', 'card-atmos-t', 'card-atmos-s', _ZI.bolt + ' ' + aLabel, aSub, aCls);
   // Chaos shimmer CSS
   const orbWrap = el('zncOrbWrap');
   if (orbWrap) orbWrap.style.animation = chaos > 80 ? 'zHeat .15s infinite' : '';
@@ -1655,7 +1868,7 @@ function renderBrainCockpit() {
     if (stateEl) stateEl.textContent = strength > 0 ? qfState : '—';
   })();
 
-  // ── WHY ENGINE DISPLAY (pure display — S.why set by trade engine) ──
+  // ── WHY ENGINE DISPLAY (pure display — S.why set by brain narrator) ──
   (function renderWhyEngine() {
     const stateEl = el('bw-state');
     const reasonsEl = el('bw-reasons');
@@ -1663,23 +1876,30 @@ function renderBrainCockpit() {
 
     const why = S.why;
     const whyState = (why?.state || 'WAIT').toUpperCase();
-    const reasons = Array.isArray(why?.reasons) && why.reasons.length
-      ? why.reasons
-      : ['—'];
+    const whyList = Array.isArray(why?.whyList) ? why.whyList : [];
+    const riskList = Array.isArray(why?.riskList) ? why.riskList : [];
 
     // State → css class
-    const stateCls = whyState === 'EXECUTED' ? 'executed'
+    const stateCls = whyState === 'READY' ? 'executed'
       : whyState === 'BLOCKED' ? 'blocked'
-        : 'wait';
+        : whyState === 'ANALYZING' ? 'analyzing'
+          : 'wait';
 
-    stateEl.textContent = whyState;
+    stateEl.textContent = whyState + (why?.dir ? ' (' + why.dir.toUpperCase() + ')' : '');
     stateEl.className = 'bw-state ' + stateCls;
 
     if (reasonsEl) {
-      reasonsEl.innerHTML = reasons
-        .slice(0, 6)   // cap at 6 lines — no DOM bloat
-        .map(r => '<span>' + String(r).replace(/</g, '&lt;') + '</span>')
-        .join('');
+      let html = '';
+      if (whyList.length > 0) {
+        html += '<div class="bw-section-label why-label">WHY:</div>';
+        html += whyList.slice(0, 4).map(function (r) { return '<span class="bw-why">' + _ZI.ok + ' ' + String(r).replace(/</g, '&lt;') + '</span>'; }).join('');
+      }
+      if (riskList.length > 0) {
+        html += '<div class="bw-section-label risk-label">RISK:</div>';
+        html += riskList.slice(0, 3).map(function (r) { return '<span class="bw-risk">' + _ZI.w + ' ' + String(r).replace(/</g, '&lt;') + '</span>'; }).join('');
+      }
+      if (!html) html = '<span>Scanning market...</span>';
+      reasonsEl.innerHTML = html;
     }
   })();
 
@@ -1874,7 +2094,7 @@ function _brainSafeSet(elId, val, attr = 'textContent') {
 }
 
 
-// ✅ FIX v118: getBrainViewSnapshot() — sursă unică de adevăr pentru Brain HUD
+// FIX v118: getBrainViewSnapshot() — sursă unică de adevăr pentru Brain HUD
 // Citește EXCLUSIV din BM/AT/S/_SAFETY — zero DOM reads.
 // Dacă un câmp nu există încă, returnează '—' (nu 0, nu fake).
 function getBrainViewSnapshot() {
@@ -1886,7 +2106,7 @@ function getBrainViewSnapshot() {
 
   const mode = (_s.mode || 'assist').toUpperCase();
   const profile = (_s.profile || 'fast').toUpperCase();
-  const runMode = !!_s.runMode;
+  const runMode = !!(typeof AT !== 'undefined' && AT.enabled);
 
   // Data feed — aceeași sursă ca bannerul
   const price = _s.price || 0;
@@ -1966,7 +2186,7 @@ function renderCircuitBrain() {
 
   // ── 1. GATES summary ──
   try {
-    // ✅ FIX v118: citim din BRAIN._safetyCache (real state), NU din DOM LED class-uri
+    // FIX v118: citim din BRAIN._safetyCache (real state), NU din DOM LED class-uri
     const _sf = (typeof BRAIN !== 'undefined' && BRAIN._safetyCache) ? BRAIN._safetyCache : null;
     const _cx = (typeof BRAIN !== 'undefined' && BRAIN._ctxCache) ? BRAIN._ctxCache : null;
     let gOk = 0, gTotal = 0;
@@ -1995,9 +2215,9 @@ function renderCircuitBrain() {
 
   // ── 2. REGIME ──
   try {
-    // ✅ FIX v118: citim din BRAIN.regime (real state), NU din DOM text
+    // FIX v118: citim din BRAIN.regime (real state), NU din DOM text
     const _reg = (typeof BRAIN !== 'undefined' && BRAIN.regime) ? BRAIN.regime : null;
-    const regLabels = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ⚙', panic: 'PANIC 🔥', unknown: '—' };
+    const regLabels = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE', panic: 'PANIC', unknown: '—' };
     const regTxt = _reg ? (regLabels[_reg] || _reg.toUpperCase()) : '—';
     const regCls = _reg
       ? ({ trend: 'ok', range: 'neutral', breakout: 'ok', squeeze: 'warn', panic: 'bad', unknown: 'neutral' }[_reg] || 'neutral')
@@ -2032,7 +2252,7 @@ function renderCircuitBrain() {
 
   // ── 4. RISK RAILS (cooldown, kill, protect) ──
   try {
-    // ✅ FIX v118: cooldown din calcul real, NU din cdEl.textContent (DOM)
+    // FIX v118: cooldown din calcul real, NU din cdEl.textContent (DOM)
     const kill = (typeof AT !== 'undefined' && AT.killTriggered);
     const prot = (typeof BM !== 'undefined' && BM.protectMode);
     const cdMs = (typeof _getCooldownMs === 'function') ? _getCooldownMs() : 0;
@@ -2046,7 +2266,7 @@ function renderCircuitBrain() {
 
   // ── 5. DATA FEED ──
   try {
-    // ✅ FIX v118: aceeași sursă ca bannerul de feed (S.bnbOk/S.bybOk/S.dataStalled/_SAFETY.isReconnecting)
+    // FIX v118: aceeași sursă ca bannerul de feed (S.bnbOk/S.bybOk/S.dataStalled/_SAFETY.isReconnecting)
     // S.reconnecting era NICIODATĂ setat — fix: folosim _SAFETY.isReconnecting
     const price = (typeof S !== 'undefined' && S.price) ? S.price : 0;
     const stall = (typeof S !== 'undefined' && S.dataStalled) || (typeof _SAFETY !== 'undefined' && _SAFETY.dataStalled);
@@ -2061,11 +2281,11 @@ function renderCircuitBrain() {
 
   // ── 6. AUTO-TRADE ──
   try {
-    // ✅ FIX v118: citim din BRAIN.state + S.mode + S.profile (real state), NU din DOM
+    // FIX v118: citim din BRAIN.state + S.mode + S.profile (real state), NU din DOM
     const _brState = (typeof BRAIN !== 'undefined' && BRAIN.state) ? BRAIN.state : 'scanning';
     const _mode = (typeof S !== 'undefined' && S.mode) ? S.mode.toUpperCase() : 'MANUAL';
     const _prof = (typeof S !== 'undefined' && S.profile) ? S.profile.toUpperCase() : 'FAST';
-    const stLabels = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: '⚡ARMED', trading: '🔴TRADE', protect: '🛡PROT', blocked: '⛔BLOCK' };
+    const stLabels = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: 'ARMED', trading: 'TRADE', protect: 'PROT', blocked: 'BLOCK' };
     const armTxt = (stLabels[_brState] || _brState.toUpperCase()).slice(0, 8);
     const armCls = (_brState === 'ready' || _brState === 'armed') ? 'ok'
       : _brState === 'trading' ? 'ok'
@@ -2133,7 +2353,7 @@ function runGrandUpdate() {
   // [PATCH MODE-SWITCH] Skip cockpit rebuild while mode switch modal is open
   if (window.__brainModeSwitching) return;
   renderBrainCockpit();
-  // ✅ FIX v118: renderCircuitBrain era apelat O SINGURĂ DATĂ la parse time — acum se refreshează la fiecare ciclu
+  // FIX v118: renderCircuitBrain era apelat O SINGURĂ DATĂ la parse time — acum se refreshează la fiecare ciclu
   try { renderCircuitBrain(); } catch (_) { }
 }
 
@@ -2187,7 +2407,7 @@ function _initBrainCockpit() {
 
 // Track trade stats for protect mode — hook into closeDemoPos
 
-// ✅ FIX v118: Reset automat la schimbare de zi (24h)
+// FIX v118: Reset automat la schimbare de zi (24h)
 
 
 // ─── Market Regime Detection ─────────────────────────────────
@@ -2244,8 +2464,9 @@ function detectMarketRegime(klines) {
   // BRAIN.regime = regime;  // REMOVED — single writer: detectRegimeEnhanced
   // [FIX R8] REMOVED — confidence now written by detectRegimeEnhanced only
   // BRAIN.regimeConfidence = confidence;  // REMOVED — single writer
-  BRAIN.regimeSlope = slope20;
-  BRAIN.regimeAtrPct = atrPct;
+  // [FIX #36] REMOVED duplicate writes — regimeSlope/regimeAtrPct already set by detectRegimeEnhanced
+  // BRAIN.regimeSlope = slope20;  // REMOVED — single writer: detectRegimeEnhanced
+  // BRAIN.regimeAtrPct = atrPct;  // REMOVED — single writer: detectRegimeEnhanced
   // BM.regime = regime;  // REMOVED — single writer: detectRegimeEnhanced
   return regime;
 }
@@ -2295,7 +2516,7 @@ function adaptAutoTradeParams() {
   if (BRAIN._lastAdaptTs && now - BRAIN._lastAdaptTs < 300000) return;
   BRAIN._lastAdaptTs = now;
 
-  const recentTrades = (TP.journal || []).filter(t => t.reason?.includes('AUTO')).slice(0, 6);
+  const recentTrades = (TP.journal || []).filter(t => t.reason?.includes('AUTO')).slice(-6);
   if (recentTrades.length < 3) return;
 
   const wins = recentTrades.filter(t => t.pnl > 0).length;
@@ -2303,8 +2524,8 @@ function adaptAutoTradeParams() {
   const wr = wins / recentTrades.length;
 
   const regime = BRAIN.regime;
-  let newSL = parseFloat(el('atSL')?.value) || 1.5;
-  let newSize = parseFloat(el('atSize')?.value) || 200;
+  let newSL = (typeof TC !== 'undefined' && Number.isFinite(TC.slPct)) ? TC.slPct : (parseFloat(el('atSL')?.value) || 1.5);
+  let newSize = (typeof TC !== 'undefined' && Number.isFinite(TC.size)) ? TC.size : (parseFloat(el('atSize')?.value) || 200);
   let adapted = false;
   let reason = '';
 
@@ -2313,31 +2534,33 @@ function adaptAutoTradeParams() {
     newSL = Math.max(0.8, newSL * 0.85);
     newSize = Math.max(50, newSize * 0.75);
     adapted = true;
-    reason = `📉 3 pierderi consecutive → SL redus la ${newSL.toFixed(1)}%, Size redus la $${Math.round(newSize)}`;
+    reason = `3 pierderi consecutive → SL redus la ${newSL.toFixed(1)}%, Size redus la $${Math.round(newSize)}`;
   }
   // If winning streak — slightly increase size
   else if (wins >= 4 && wr >= 0.7) {
     newSize = Math.min(1000, newSize * 1.15);
     adapted = true;
-    reason = `📈 Win streak ${wins}/${recentTrades.length} → Size crescut la $${Math.round(newSize)}`;
+    reason = `Win streak ${wins}/${recentTrades.length} → Size crescut la $${Math.round(newSize)}`;
   }
 
-  // Regime adjustment
-  if (regime === 'volatile') {
+  // Regime adjustment (only widen SL if not in loss-protection mode)
+  if (regime === 'volatile' && losses < 3) {
     newSL = Math.max(newSL, 2.5); // wider SL in volatile market
     adapted = true;
-    reason = (reason ? reason + ' | ' : '') + '⚡ Piata volatila → SL extins la ' + newSL.toFixed(1) + '%';
+    reason = (reason ? reason + ' | ' : '') + 'Piata volatila → SL extins la ' + newSL.toFixed(1) + '%';
   } else if (regime === 'range') {
     newSL = Math.min(newSL, 1.0); // tighter SL in range
     adapted = true;
-    reason = (reason ? reason + ' | ' : '') + '📊 Range → SL strans la ' + newSL.toFixed(1) + '%';
+    reason = (reason ? reason + ' | ' : '') + 'Range → SL strans la ' + newSL.toFixed(1) + '%';
   }
 
   if (adapted) {
     const slEl = el('atSL'); if (slEl) slEl.value = newSL.toFixed(1);
     const sizeEl = el('atSize'); if (sizeEl) sizeEl.value = Math.round(newSize);
     BRAIN.adaptParams = { sl: newSL, size: newSize, adjustCount: (BRAIN.adaptParams.adjustCount || 0) + 1 };
-    brainThink('trade', `🔧 ADAPTAT: ${reason}`);
-    atLog('info', `🔧 Parametri adaptati: ${reason}`);
+    // [P1] Sync adapted values back to TC
+    if (typeof TC !== 'undefined') { TC.slPct = newSL; TC.size = newSize; }
+    brainThink('trade', _ZI.bolt + ` ADAPTAT: ${reason}`);
+    atLog('info', `[ADAPT] Parametri adaptati: ${reason}`);
   }
 }

@@ -204,6 +204,9 @@ const RegimeEngine = (function () {
                 notes: notes,
             };
 
+            // [P0.4] Decision log — regime snapshot
+            if (typeof DLog !== 'undefined') DLog.record('regime', { regime: regime, confidence: confidence, trendBias: trendBias, volatilityState: volatilityState, trapRisk: trapRisk });
+
             // ── ZLOG on regime transition only ──
             if (_prevRegime !== null && _prevRegime !== regime) {
                 if (typeof ZLOG !== 'undefined') {

@@ -70,6 +70,8 @@ function computePredatorState() {
     if (ns !== PREDATOR.state) { PREDATOR.since = Date.now(); }
     PREDATOR.state = ns;
     PREDATOR.reason = nr;
+    // [P0.4] Decision log — predator state
+    if (typeof DLog !== 'undefined') DLog.record('predator', { state: ns, reason: nr, vol: volRegime, streak: lossStreak, risk: riskState, mtf: alignScore, cscore: cscore });
 
     // [p19 UI] Update PREDATOR HUD pills
     try {
@@ -121,7 +123,7 @@ function attachConfirmClose(btn, callback) {
     btn.getAttribute('data-id') ||
     btn.getAttribute('data-close-id') ||
     btn.getAttribute('data-partial-id') ||
-    btn.id; // ✅ fallback pentru butoane gen closeAllBtn
+    btn.id; // fallback pentru butoane gen closeAllBtn
   if (!posId) return;
 
   // Restore visual state if already pending (button rebuilt by _demoTick)
@@ -196,7 +198,7 @@ function _resetCloseBtn(btn) {
     btn.style.borderColor = '#ff4466';
     btn.style.color = '#ff4466';
   } else if (btn.id === 'closeAllBtn') {
-    // ✅ Restaurare text pentru CLOSE ALL (identificat prin btn.id fallback)
+    // Restaurare text pentru CLOSE ALL (identificat prin btn.id fallback)
     btn.innerHTML = '✕ CLOSE ALL';
     btn.style.background = '#2a0010';
     btn.style.borderColor = '#ff4466';

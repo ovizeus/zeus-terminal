@@ -5,26 +5,36 @@
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
+// In-memory session activity tracker (userId → lastActiveMs)
+const _activity = new Map();
+const INACTIVITY_TIMEOUT_MS = parseInt(process.env.SESSION_INACTIVITY_MIN, 10) * 60000 || 4 * 3600000; // default 4h
+
 function createSessionAuth(jwtSecret) {
     return function sessionAuth(req, res, next) {
         // Public paths — no auth required
         const publicPaths = [
             '/login.html',
+            '/privacy.html',
+            '/terms.html',
+            '/cookies.html',
+            '/support.html',
+            '/robots.txt',
             '/auth/',
             '/sw.js',
             '/manifest.json',
-            '/assets/icon-192.png',
-            '/assets/icon-512.png',
-            '/assets/logo-zeus.jpg'
+            '/assets/',
+            '/css/',
+            '/js/'
         ];
 
-        const isPublic = publicPaths.some(p => req.path.startsWith(p) || req.path === p);
+        const isPublic = publicPaths.some(p => req.path.startsWith(p));
         if (isPublic) return next();
 
-        // Allow internal server requests (reconciliation, etc.) from localhost
+        // Allow internal server requests (reconciliation, etc.) from localhost — limited paths only
         const ip = req.ip || req.connection.remoteAddress || '';
         const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-        if (isLocal && req.path.startsWith('/api/')) return next();
+        const localSafePaths = ['/api/status', '/api/metrics', '/api/health', '/api/migration/flags', '/api/dashboard', '/api/sd/health'];
+        if (isLocal && localSafePaths.some(p => req.path === p)) return next();
 
         // Check JWT cookie
         const token = req.cookies && req.cookies.zeus_token;
@@ -37,7 +47,7 @@ function createSessionAuth(jwtSecret) {
         }
 
         try {
-            const decoded = jwt.verify(token, jwtSecret);
+            const decoded = jwt.verify(token, jwtSecret, { algorithms: ['HS256'] });
             req.user = decoded;
 
             // Ensure req.user.id exists (resolve from DB for legacy tokens without id)
@@ -49,8 +59,44 @@ function createSessionAuth(jwtSecret) {
                 } catch (_) { /* DB not ready yet */ }
             }
 
+            // Check user status — block banned/disabled accounts even with valid token
+            // Also verify token_version for session invalidation on password change
+            if (req.user.id) {
+                try {
+                    const db = require('../services/database');
+                    const fresh = db.findUserById(req.user.id);
+                    if (!fresh || fresh.status !== 'active') {
+                        res.clearCookie('zeus_token', { path: '/' });
+                        if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Account suspended' });
+                        return res.redirect('/login.html');
+                    }
+                    // Reject tokens issued before password change
+                    if (decoded.tokenVersion != null && fresh.token_version != null && decoded.tokenVersion !== fresh.token_version) {
+                        res.clearCookie('zeus_token', { path: '/' });
+                        if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired. Please log in again.' });
+                        return res.redirect('/login.html');
+                    }
+                } catch (dbErr) {
+                    console.error('[SESSION] DB check failed:', dbErr.message);
+                    if (req.path.startsWith('/api/')) return res.status(503).json({ error: 'Service temporarily unavailable' });
+                    return res.redirect('/login.html');
+                }
+            }
+
             // Also allow /auth/admin/* for logged-in admin (even from login page context)
             if (req.path.startsWith('/auth/admin/')) return next();
+
+            // Inactivity timeout check
+            if (req.user.id) {
+                const last = _activity.get(req.user.id);
+                if (last && (Date.now() - last) > INACTIVITY_TIMEOUT_MS) {
+                    _activity.delete(req.user.id);
+                    res.clearCookie('zeus_token', { path: '/' });
+                    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired due to inactivity' });
+                    return res.redirect('/login.html');
+                }
+                _activity.set(req.user.id, Date.now());
+            }
 
             next();
         } catch (err) {

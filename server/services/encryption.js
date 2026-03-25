@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const ALGO = 'aes-256-gcm';
 const IV_LEN = 16;
 const TAG_LEN = 16;
+const KEY_VERSION = 'v1';
 
 // Master key from env — must be 64-char hex (32 bytes)
 function _getKey() {
@@ -18,9 +19,9 @@ function _getKey() {
 }
 
 /**
- * Encrypt plaintext to base64 string: iv:ciphertext:authTag
+ * Encrypt plaintext to versioned string: v1:iv:ciphertext:authTag
  * @param {string} text - plaintext to encrypt
- * @returns {string} - base64-encoded "iv:encrypted:tag"
+ * @returns {string} - "v1:iv.hex:encrypted.hex:tag.hex"
  */
 function encrypt(text) {
     const key = _getKey();
@@ -29,22 +30,34 @@ function encrypt(text) {
     let encrypted = cipher.update(text, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     const tag = cipher.getAuthTag();
-    // Store as: iv.hex:encrypted.hex:tag.hex
-    return iv.toString('hex') + ':' + encrypted + ':' + tag.toString('hex');
+    return KEY_VERSION + ':' + iv.toString('hex') + ':' + encrypted + ':' + tag.toString('hex');
 }
 
 /**
- * Decrypt a string produced by encrypt()
- * @param {string} data - "iv:encrypted:tag" hex string
+ * Decrypt a string produced by encrypt().
+ * Supports both versioned ("v1:iv:encrypted:tag") and legacy ("iv:encrypted:tag") formats.
+ * @param {string} data - encrypted string
  * @returns {string} - original plaintext
  */
 function decrypt(data) {
     const key = _getKey();
     const parts = data.split(':');
-    if (parts.length !== 3) throw new Error('Invalid encrypted data format');
-    const iv = Buffer.from(parts[0], 'hex');
-    const encrypted = parts[1];
-    const tag = Buffer.from(parts[2], 'hex');
+    let iv, encrypted, tag;
+
+    if (parts.length === 4 && parts[0] === KEY_VERSION) {
+        // Versioned format: v1:iv:encrypted:tag
+        iv = Buffer.from(parts[1], 'hex');
+        encrypted = parts[2];
+        tag = Buffer.from(parts[3], 'hex');
+    } else if (parts.length === 3) {
+        // Legacy format: iv:encrypted:tag
+        iv = Buffer.from(parts[0], 'hex');
+        encrypted = parts[1];
+        tag = Buffer.from(parts[2], 'hex');
+    } else {
+        throw new Error('Invalid encrypted data format');
+    }
+
     const decipher = crypto.createDecipheriv(ALGO, key, iv);
     decipher.setAuthTag(tag);
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');

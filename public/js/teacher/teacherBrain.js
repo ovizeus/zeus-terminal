@@ -485,7 +485,7 @@ function teacherAutoSize(profile, equity, ind) {
 
   // Reduce risk in high drawdown
   if (equity.currentDDPct > 10) riskPct = 0.5;
-  if (equity.currentDDPct > 5) riskPct = 0.75;
+  else if (equity.currentDDPct > 5) riskPct = 0.75;
 
   // ATR-adaptive SL: if ATR suggests wider stop, scale SL up (max 2x profile default)
   var slPct = profile.slPct;

@@ -2,7 +2,8 @@
 // DOM helpers & safe setters — used everywhere
 'use strict';
 
-const el = id => document.getElementById(id);
+// [P1] DOM-safe: returns null in headless (server) environment
+const el = (typeof document !== 'undefined') ? (id => document.getElementById(id)) : (() => null);
 // [FIX v85 B4] Helper pentru setare text sigură — previne erori de referință nulă
 function safeSetText(id, val) { const e = el(id); if (e) e.textContent = val; }
 function safeSetHTML(id, val) { const e = el(id); if (e) e.innerHTML = val; }

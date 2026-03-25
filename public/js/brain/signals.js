@@ -18,10 +18,10 @@ function renderSignals(signals, bullCount, bearCount) {
     if (total >= 3) {
       const isBull = bullCount >= bearCount;
       mega.innerHTML = `<div class="mega-sig ${isBull ? 'bull' : 'bear'}">
-        <span class="mega-sig-ico">${isBull ? '🚀' : '🔻'}</span>
+        <span class="mega-sig-ico">${isBull ? _ZI.tup : _ZI.drop}</span>
         <div class="mega-sig-txt">
           <div class="mega-type">${isBull ? 'SEMNAL BULLISH' : 'SEMNAL BEARISH'} (${isBull ? bullCount : bearCount}/${total})</div>
-          <div class="mega-det">${isBull ? bullCount : bearCount} indicatori aliniati · Confluenta ${isBull ? bullCount : bearCount >= 4 ? 'PUTERNICA' : 'MEDIE'}</div>
+          <div class="mega-det">${isBull ? bullCount : bearCount} indicatori aliniati · Confluenta ${(isBull ? bullCount : bearCount) >= 4 ? 'PUTERNICA' : 'MEDIE'}</div>
         </div>
       </div>`;
     } else {

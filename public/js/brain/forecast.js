@@ -108,6 +108,8 @@ function _qebDetectClimax(bars) {
 // Detects trend→range or trend→reversal using BRAIN.regime history.
 // Returns {from, to, conf} or null.
 var _qebLastRegime = null;
+// [S2B1-T1] Reset forecast state on symbol change — called from setSymbol()
+function resetForecast() { _qebLastRegime = null; }
 function _qebDetectRegimeFlip() {
   try {
     var cur = (typeof BRAIN !== 'undefined') ? BRAIN.regime : null;
@@ -321,7 +323,7 @@ function applyQuantumExit(pos) {
 function _qebNotify(action, reason, pos) {
   try {
     var sym = pos ? (pos.sym || S.symbol || 'BTC') : (S.symbol || 'BTC');
-    var msg = '🧠 QEB [' + sym + '] ' + action + ': ' + reason;
+    var msg = 'QEB [' + sym + '] ' + action + ': ' + reason;
     if (typeof ncAdd === 'function') ncAdd('warning', 'qexit', msg);
     if (typeof devLog === 'function') devLog(msg, action.includes('EMERGENCY') ? 'error' : 'warning');
   } catch (e) { /* silent */ }
@@ -443,9 +445,9 @@ function _qebUpdateRiskUI() {
     if (advEl) {
       var smartOn = USER_SETTINGS && USER_SETTINGS.autoTrade &&
         USER_SETTINGS.autoTrade.smartExitEnabled === true;
-      advEl.textContent = smartOn
-        ? '⚡ Smart Exit ENABLED — emergency actions may execute.'
-        : '👁 Advisory mode — enable Smart Exit in Settings Hub to allow auto-exec.';
+      advEl.innerHTML = smartOn
+        ? _ZI.bolt + ' Smart Exit ENABLED — emergency actions may execute.'
+        : _ZI.eye + ' Advisory mode — enable Smart Exit in Settings Hub to allow auto-exec.';
       advEl.style.color = smartOn ? '#f0c040' : '#556677';
     }
   } catch (e) { /* silent */ }
@@ -552,7 +554,7 @@ function updateScenarioData() {
       : (S.magnets && S.magnets.below && S.magnets.below[0]
         ? '$' + fPFn(S.magnets.below[0].price)
         : 'next support');
-    var primary = (isBull ? '📈 Bullish' : '📉 Bearish')
+    var primary = (isBull ? _ZI.tup + ' Bullish' : _ZI.drop + ' Bearish')
       + ' — ' + regime.toUpperCase() + ' regime'
       + (regConf > 0 ? ' (' + regConf + '% conf)' : '')
       + '. Target: ' + nearTarget + '.';
@@ -566,7 +568,7 @@ function updateScenarioData() {
         ? '$' + fPFn(S.magnets.above[0].price)
         : 'nearby resistance');
     var altConf = Math.max(10, Math.round(100 - prob));
-    var alternate = (isBull ? '📉 Bear reversal' : '📈 Bull reversal')
+    var alternate = (isBull ? _ZI.drop + ' Bear reversal' : _ZI.tup + ' Bull reversal')
       + ' scenario (' + altConf + '% alt conf)'
       + '. Watch ' + altTarget + ' for early signs.';
 
@@ -619,15 +621,15 @@ function updateScenarioUI() {
 
     el.innerHTML =
       '<div class="sc-block primary">'
-      + '<div class="sc-label primary">🟢 PRIMARY <span class="sc-conf ' + probCls + '">' + probStr + '% prob</span></div>'
+      + '<div class="sc-label primary">' + _ZI.dGrn + ' PRIMARY <span class="sc-conf ' + probCls + '">' + probStr + '% prob</span></div>'
       + '<div class="sc-text">' + sc.primary + '</div>'
       + '</div>'
       + '<div class="sc-block alternate">'
-      + '<div class="sc-label alternate">🟡 ALTERNATE</div>'
+      + '<div class="sc-label alternate">' + _ZI.dYlw + ' ALTERNATE</div>'
       + '<div class="sc-text">' + sc.alternate + '</div>'
       + '</div>'
       + '<div class="sc-block failure">'
-      + '<div class="sc-label failure">⚠️ INVALIDATION</div>'
+      + '<div class="sc-label failure">' + _ZI.w + ' INVALIDATION</div>'
       + '<div class="sc-text">' + sc.failure + '</div>'
       + '</div>';
 

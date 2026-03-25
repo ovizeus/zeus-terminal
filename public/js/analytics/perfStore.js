@@ -20,6 +20,8 @@ function savePerfToStorage() {
         if (typeof _safeLocalStorageSet === 'function') {
             _safeLocalStorageSet(_PERF_STORAGE_KEY, payload);
         }
+        if (typeof _ucMarkDirty === 'function') _ucMarkDirty('perfStats');
+        if (typeof _userCtxPush === 'function') _userCtxPush();
     } catch (e) {
         console.warn('[perfStore] save failed:', e.message);
     }

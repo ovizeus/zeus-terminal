@@ -293,29 +293,31 @@
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // ── GATES badge (top) ──
+        // ── GATES badge (top-left) ──
         ctx.font = '700 11px "Orbitron","Share Tech Mono",monospace';
-        ctx.textAlign = 'center';
+        ctx.textAlign = 'left';
         ctx.fillStyle = _gatesOpen >= _gatesTotal ? '#39ff14' : _gatesOpen >= _gatesTotal - 2 ? '#f0c040' : '#ff3355';
         ctx.shadowColor = ctx.fillStyle;
         ctx.shadowBlur = 6;
-        ctx.fillText('GATES ' + _gatesOpen + '/' + _gatesTotal, cx, cy - maxR - 28);
+        ctx.fillText('GATES ' + _gatesOpen + '/' + _gatesTotal, cx - maxR, cy - maxR - 28);
         ctx.shadowBlur = 0;
 
-        // ── Direction MODE badge (bottom) ──
+        // ── Direction MODE badge (bottom-left) ──
         var modeLabel = _direction === 'LONG' ? 'LONG MODE' : _direction === 'SHORT' ? 'SHORT MODE' : 'SCANNING';
         var modeColor = _direction === 'LONG' ? '#39ff14' : _direction === 'SHORT' ? '#ff3355' : '#f0c040';
         ctx.font = '700 12px "Orbitron","Share Tech Mono",monospace';
+        ctx.textAlign = 'left';
         ctx.fillStyle = modeColor;
         ctx.shadowColor = modeColor;
         ctx.shadowBlur = 8;
-        ctx.fillText(modeLabel, cx, cy + maxR + 30);
+        ctx.fillText(modeLabel, cx - maxR, cy + maxR + 30);
         ctx.shadowBlur = 0;
 
-        // Sub-label: confluence score
+        // Sub-label: confluence score (bottom-right, same line as mode)
         ctx.font = '600 9px "Orbitron","Share Tech Mono",monospace';
-        ctx.fillStyle = 'rgba(180,220,240,0.55)';
-        ctx.fillText('CONFLUENCE ' + Math.round(_displayConf), cx, cy + maxR + 44);
+        ctx.textAlign = 'right';
+        ctx.fillStyle = 'rgba(180,220,240,0.78)';
+        ctx.fillText('CONFLUENCE ' + Math.round(_displayConf), cx + maxR, cy + maxR + 30);
     }
 
     // ══════════════════════════════════════════════════════
@@ -419,10 +421,18 @@
         var barW = maxR * 1.4;
         var barH = 6;
         var barX = cx - barW / 2;
-        var barY = cy + maxR + 14;
+        var barY = cy + maxR + 4;
+
+        // Separator line above bar
+        ctx.strokeStyle = 'rgba(80,160,255,0.30)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(barX, barY - 2);
+        ctx.lineTo(barX + barW, barY - 2);
+        ctx.stroke();
 
         // Background
-        ctx.fillStyle = 'rgba(40,60,80,0.35)';
+        ctx.fillStyle = 'rgba(60,100,140,0.55)';
         _roundRect(ctx, barX, barY, barW, barH, 3);
         ctx.fill();
 

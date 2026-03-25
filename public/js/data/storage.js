@@ -64,12 +64,14 @@ function loadJournalFromStorage() {
 function exportJournalCSV() {
   if (!TP.journal.length) { toast('No trades to export'); return; }
   const hdr = 'Time,Side,Symbol,Entry,Exit,PnL,Leverage,Reason\n';
-  const rows = TP.journal.map(t => `${t.time},${t.side},${t.sym || S.symbol.replace('USDT', '')},${t.entry},${t.exit},${t.pnl.toFixed(2)},${t.lev || '—'},${t.reason || 'Manual'}`).join('\n');
+  // CSV injection guard: prefix cells starting with =, +, -, @ with single quote
+  function csvSafe(v) { const s = String(v || ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s; }
+  const rows = TP.journal.map(t => `${csvSafe(t.time)},${csvSafe(t.side)},${csvSafe(t.sym || S.symbol.replace('USDT', ''))},${t.entry},${t.exit},${t.pnl.toFixed(2)},${csvSafe(t.lev || '—')},${csvSafe(t.reason || 'Manual')}`).join('\n');
   const csv = hdr + rows;
   const blob = new Blob([csv], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `zeus_journal_${new Date().toISOString().slice(0, 10)}.csv`;
-  a.click(); toast('✅ Journal exported!');
+  a.click(); toast('Journal exported!', 0, _ZI.ok);
 }
 
 

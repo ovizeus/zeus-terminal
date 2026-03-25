@@ -17,6 +17,8 @@ const PM = (function () {
   function _save(records) {
     try { _safeLocalStorageSet(KEY, records.slice(0, MAX_REC)); }
     catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('postmortem');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
 
   // ── Calcul ATR simplu pe klines locale (nu modifica S.atr) ───────
@@ -181,7 +183,7 @@ const PM = (function () {
     const betterLate = lateEntry.find(l => l && l.tpHit && !l.slHit);
     if (betterLate)
       parts.push(`Intrare +${lateEntry.indexOf(betterLate) + 1} lumânări ar fi prins TP`);
-    return parts.length ? parts.join(' · ') : (pnl >= 0 ? '✅ Execuție conformă' : '—');
+    return parts.length ? parts.join(' · ') : (pnl >= 0 ? 'Execuție conformă' : '—');
   }
 
   // ── Statistici agregate cu decay temporal ────────────────────────
@@ -286,15 +288,18 @@ function PM_render() {
 (function _pmInjectCSS() {
   const s = document.createElement('style');
   s.textContent = `
-  #pm-strip { background:#020810; border-bottom:1px solid #f0c04018; }
-  #pm-strip-bar { display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:30px;cursor:pointer;user-select:none;gap:8px; }
-  #pm-strip-bar:hover { background:#f0c04006; }
-  #pm-strip-title { font-size:13px;font-weight:700;letter-spacing:2px;color:#f0c040;text-shadow:0 0 12px #f0c04099,0 0 24px #f0c04044;display:flex;align-items:center;gap:5px; }
-  #pm-strip-chev { font-size:12px;color:#f0c04066;transition:transform .25s; }
+  #pm-strip { background:transparent; border-bottom:none; margin:3px 6px; }
+  #pm-strip-bar { display:flex;align-items:center;justify-content:space-between;padding:0;min-height:44px;cursor:pointer;user-select:none;gap:0;transition:border-color .25s,box-shadow .25s;background:none;border:none;border-radius:10px;opacity:1;position:relative;overflow:hidden; }
+  #pm-strip-bar:hover { }
+  #pm-strip-title { font-size:13px;font-weight:700;letter-spacing:2px;color:#f0c040;display:flex;align-items:center;gap:5px; }
+  #pm-strip-stat { display:none; }
+  #pm-strip-chev { font-size:8px;color:#f0c04044;transition:transform .25s;flex-shrink:0;opacity:.35; }
   #pm-strip-panel { max-height:0;overflow:hidden;transition:max-height .3s ease; }
   #pm-strip.open #pm-strip-panel { max-height:400px; }
   #pm-strip.open #pm-strip-chev { transform:rotate(180deg); }
-  #pm-panel-body { background:#010508; }
+  #pm-strip.open #pm-strip-bar { opacity:1; }
+  #pm-strip.open #pm-strip-stat { display:inline; }
+  #pm-panel-body { background:#010508;border-top:1px solid #f0c04015;border-radius:0 0 10px 10px;margin:2px 8px 0; }
   `;
   document.head.appendChild(s);
 })();
@@ -310,10 +315,13 @@ function initPMPanel() {
   panel.id = 'pm-strip';
   panel.innerHTML = `
     <div id="pm-strip-bar" onclick="this.closest('#pm-strip').classList.toggle('open');PM_render()">
-      <div id="pm-strip-title"><span>🔬</span><span>POST-MORTEM</span></div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span id="pm-strip-stat" style="font-size:11px;color:#f0c04066;letter-spacing:.5px"></span>
-        <span id="pm-strip-chev">▼</span>
+      <div class="v6-accent"><div class="v6-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="6"/><line x1="12" y1="16" x2="12" y2="22"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="10" y1="8" x2="10" y2="12"/><line x1="14" y1="8" x2="14" y2="12"/></svg></div><span class="v6-lbl">POST<br>MORT</span></div>
+      <div class="v6-content">
+        <div id="pm-strip-title"><span>POST-MORTEM</span></div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="pm-strip-stat" style="font-size:11px;color:#f0c04066;letter-spacing:.5px"></span>
+          <span id="pm-strip-chev">▼</span>
+        </div>
       </div>
     </div>
     <div id="pm-strip-panel">
@@ -375,7 +383,7 @@ function _pmCheckRegimeTransition() {
 
     if (score >= 80) {
       if (typeof BlockReason !== 'undefined' && !BlockReason.get())
-        BlockReason.set('REGIME_TRANSITION', `⚠️ Tranziție regim iminentă (scor ${score}) — intrări blocate`);
+        BlockReason.set('REGIME_TRANSITION', `Tranziție regim iminentă (scor ${score}) — intrări blocate`);
     } else if (score >= 60) {
       if (typeof atLog === 'function') atLog('warn', `[RegimeWatch] Alertă tranziție regim — scor ${score}`);
     } else {
@@ -403,14 +411,14 @@ const ARES = (function () {
 
   // ── Stări posibile ────────────────────────────────────────────────────────
   const STATES = {
-    DETERMINED: { id: 'DETERMINED', color: '#00d9ff', glow: '#00d9ff', label: 'DETERMINED', emoji: '⚡' },
-    RESILIENT: { id: 'RESILIENT', color: '#00ff88', glow: '#00ff88', label: 'RESILIENT', emoji: '🔄' },
-    FOCUSED: { id: 'FOCUSED', color: '#f0c040', glow: '#f0c040', label: 'FOCUSED', emoji: '🎯' },
-    STRATEGIC: { id: 'STRATEGIC', color: '#aa44ff', glow: '#aa44ff', label: 'STRATEGIC', emoji: '♟️' },
-    MOMENTUM: { id: 'MOMENTUM', color: '#00ff44', glow: '#00ff44', label: 'MOMENTUM', emoji: '🚀' },
-    FRUSTRATED: { id: 'FRUSTRATED', color: '#ff8800', glow: '#ff8800', label: 'FRUSTRATED', emoji: '😤' },
-    DEFENSIVE: { id: 'DEFENSIVE', color: '#ff3355', glow: '#ff3355', label: 'DEFENSIVE', emoji: '🛡️' },
-    REVENGE_GUARD: { id: 'REVENGE_GUARD', color: '#ff0044', glow: '#ff0044', label: 'REVENGE GUARD', emoji: '🚫' },
+    DETERMINED: { id: 'DETERMINED', color: '#00d9ff', glow: '#00d9ff', label: 'DETERMINED', emoji: _ZI.bolt },
+    RESILIENT: { id: 'RESILIENT', color: '#00ff88', glow: '#00ff88', label: 'RESILIENT', emoji: _ZI.rfsh },
+    FOCUSED: { id: 'FOCUSED', color: '#f0c040', glow: '#f0c040', label: 'FOCUSED', emoji: _ZI.tgt },
+    STRATEGIC: { id: 'STRATEGIC', color: '#aa44ff', glow: '#aa44ff', label: 'STRATEGIC', emoji: _ZI.hex },
+    MOMENTUM: { id: 'MOMENTUM', color: '#00ff44', glow: '#00ff44', label: 'MOMENTUM', emoji: _ZI.tup },
+    FRUSTRATED: { id: 'FRUSTRATED', color: '#ff8800', glow: '#ff8800', label: 'FRUSTRATED', emoji: _ZI.w },
+    DEFENSIVE: { id: 'DEFENSIVE', color: '#ff3355', glow: '#ff3355', label: 'DEFENSIVE', emoji: _ZI.sh },
+    REVENGE_GUARD: { id: 'REVENGE_GUARD', color: '#ff0044', glow: '#ff0044', label: 'REVENGE GUARD', emoji: _ZI.noent },
   };
 
   // ══════════════════════════════════════════════════════════════════════
@@ -437,6 +445,8 @@ const ARES = (function () {
     function _save() {
       recalc(); // always enforce before save
       try { localStorage.setItem(WK, JSON.stringify(_w)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aresData');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
     // run once on load to fix any stale state
     recalc();
@@ -529,6 +539,8 @@ const ARES = (function () {
     } catch (_) { }
     function _savePositions() {
       try { localStorage.setItem(POS_LS_KEY, JSON.stringify(_positions)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aresData');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
 
     function _makeClientId() {
@@ -703,6 +715,8 @@ const ARES = (function () {
         totalAresLosses: _state.totalAresLosses,
       }));
     } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aresData');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
 
   // ── Utilities ─────────────────────────────────────────────────────────────
@@ -877,7 +891,7 @@ const ARES = (function () {
     const thoughts = [];
 
     // Analiza regime
-    thoughts.push(`Regime scan → ${regime || 'undefined'}${regime.includes('STRONG') ? ' ✓ high conviction' : regime === 'RANGE' ? ' ⚠ low conviction' : ''}`);
+    thoughts.push(`Regime scan → ${regime || 'undefined'}${regime.includes('STRONG') ? ' ✓ high conviction' : regime === 'RANGE' ? ' ! low conviction' : ''}`);
 
     // Entry score
     if (es > 0) thoughts.push(`Entry score ${es} / 100 → ${es >= 70 ? 'ABOVE threshold' : es >= 55 ? 'marginal' : 'BELOW threshold — caution'}`);
@@ -914,7 +928,7 @@ const ARES = (function () {
     try {
       // One-shot reconciliation on first tick
       if (!_reconciled) _reconcile();
-      // ✅ FIX v118: Reset automat la schimbare de zi
+      // FIX v118: Reset automat la schimbare de zi
       if (typeof _bmResetDailyIfNeeded === 'function') _bmResetDailyIfNeeded();
       const balance = _balance();
       const traj = _calcTrajectory(balance);
@@ -938,8 +952,25 @@ const ARES = (function () {
       try {
         const ksActive = (typeof AT !== 'undefined') && (AT.killTriggered || AT.killSwitch);
         if (ksActive && ARES_POSITIONS.getOpen().length > 0) {
-          ARES_POSITIONS.closeAll();
-          _push('⛔ KILL-SWITCH: All ARES positions closed');
+          // [ZT-AUD-003] Route live positions through exchange close, virtual positions through memory close
+          let markPrice = 0;
+          try { if (typeof S !== 'undefined' && S.price) markPrice = S.price; } catch (_) { }
+          const openPos = ARES_POSITIONS.getOpen();
+          let liveClosed = 0, virtualClosed = 0;
+          for (const pos of openPos) {
+            if (pos.isLive && typeof ARES_MONITOR !== 'undefined' && ARES_MONITOR.closeLivePosition) {
+              try {
+                ARES_MONITOR.closeLivePosition(pos, markPrice || pos.markPrice || 0, 'kill_switch');
+                liveClosed++;
+              } catch (ksErr) {
+                _push('[KILL] Live close failed for ' + (pos.symbol || 'pos') + ' — ' + (ksErr.message || ksErr));
+              }
+            } else {
+              ARES_POSITIONS.closePosition(pos.id);
+              virtualClosed++;
+            }
+          }
+          _push('[KILL] ARES positions closed (live=' + liveClosed + ' virtual=' + virtualClosed + ')');
         }
       } catch (_) { }
 
@@ -1339,6 +1370,7 @@ window.ARES_DECISION = (function () {
   function recordTrade() {
     _lastTradeTs = Date.now();
     try { localStorage.setItem('ARES_LAST_TRADE_TS', String(_lastTradeTs)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aresData');
   }
   function getLastDecision() { return _lastDecision; }
 
@@ -1358,6 +1390,8 @@ window.ARES_JOURNAL = (function () {
 
   function _save() {
     try { localStorage.setItem(LS_KEY, JSON.stringify(_journal)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aresData');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
 
   /**
@@ -1970,16 +2004,19 @@ const ARES_MIND = (function () {
   const s = document.createElement('style');
   s.textContent = `
   /* ══ ARES Strip Banner ══ */
-  #ares-strip { background:#00050f; border-bottom:1px solid #0080ff20; position:relative; }
-  #ares-strip-bar { display:flex;align-items:center;justify-content:space-between;padding:0 10px;height:36px;cursor:pointer;user-select:none;gap:8px;background:linear-gradient(90deg,#00060f 0%,#000d1f 50%,#00060f 100%); }
-  #ares-strip-bar:hover { background:linear-gradient(90deg,#000a18,#001428 50%,#000a18 100%); }
-  #ares-strip-title { font-size:13px;font-weight:900;letter-spacing:4px;color:#00d9ff;text-shadow:0 0 16px #00d9ffdd,0 0 32px #00d9ff88,0 0 60px #0080ff44;display:flex;align-items:center;gap:6px;font-family:monospace; }
-  #ares-strip-badge { font-size:11px;padding:2px 7px;border-radius:2px;letter-spacing:1px;font-weight:700;border:1px solid currentColor;font-family:monospace;box-shadow:0 0 8px currentColor; }
-  #ares-strip-conf { font-size:11px;color:#0080ffaa;letter-spacing:1px;font-family:monospace; }
-  #ares-strip-chev { font-size:12px;color:#00d9ff55;transition:transform .3s; }
+  #ares-strip { background:transparent; border-bottom:none; margin:3px 6px; position:relative; }
+  #ares-strip-bar { display:flex;align-items:center;justify-content:space-between;padding:0;min-height:44px;cursor:pointer;user-select:none;gap:0;transition:border-color .25s,box-shadow .25s;background:none;border:none;border-radius:10px;opacity:1;position:relative;overflow:hidden; }
+  #ares-strip-bar:hover { }
+  #ares-strip-title { font-size:13px;font-weight:700;letter-spacing:2px;color:#00d9ff;display:flex;align-items:center;gap:6px;font-family:monospace; }
+  #ares-strip-badge { font-size:11px;padding:2px 6px;border-radius:999px;letter-spacing:1px;font-weight:700;border:1px solid currentColor;font-family:monospace;box-shadow:0 0 8px currentColor; }
+  /* UI-2 closed: hide conf+imm+emotion */
+  #ares-strip-conf,#ares-imm-span,#ares-emotion-span { display:none; }
+  #ares-strip.open #ares-strip-conf,#ares-strip.open #ares-imm-span,#ares-strip.open #ares-emotion-span { display:inline; }
+  #ares-strip-chev { font-size:8px;color:#00d9ff44;transition:transform .25s;flex-shrink:0;opacity:.35; }
   #ares-strip-panel { max-height:0;overflow:hidden;transition:max-height .5s cubic-bezier(.4,0,.2,1); }
   #ares-strip.open #ares-strip-panel { max-height:900px; }
   #ares-strip.open #ares-strip-chev { transform:rotate(180deg); }
+  #ares-strip.open #ares-strip-bar { opacity:1; }
 
   /* ══ ARES Main Panel ══ */
   #ares-panel { background:linear-gradient(180deg,#00050f 0%,#000818 60%,#000d20 100%);padding:0;font-family:monospace;position:relative;overflow:hidden; }
@@ -2109,7 +2146,7 @@ function _aresRender() {
     // Update badge in header
     const badge = document.getElementById('ares-strip-badge');
     if (badge) {
-      badge.textContent = st.current.emoji + ' ' + st.current.label;
+      badge.innerHTML = st.current.emoji + ' ' + st.current.label;
       badge.style.color = col;
       badge.style.borderColor = col + '88';
       badge.style.textShadow = `0 0 10px ${glow}`;
@@ -2154,7 +2191,7 @@ function _aresRender() {
         const isWounded = (st.current.id === 'DEFENSIVE' || st.current.id === 'REVENGE_GUARD') && st.consecutiveLoss >= 3;
         if (isWounded) {
           woundEl.style.display = 'block';
-          woundEl.textContent = '⚠ MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced';
+          woundEl.innerHTML = _ZI.w + ' MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced';
         } else {
           woundEl.style.display = 'none';
         }
@@ -2168,7 +2205,7 @@ function _aresRender() {
       if (woundEl && bal < 5 && bal >= 0) {
         woundEl.style.display = 'block';
         woundEl.style.color = '#ff0044';
-        woundEl.textContent = '💀 MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.';
+        woundEl.innerHTML = _ZI.skull + ' MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.';
       }
     } catch (_) { }
 
@@ -2181,11 +2218,11 @@ function _aresRender() {
           if (lastDec.shouldTrade) {
             decEl.style.display = 'block';
             decEl.style.color = '#00ff88';
-            decEl.textContent = '✅ DECISION: ' + lastDec.side + ' — ' + lastDec.reasons.slice(0, 3).join(' · ');
+            decEl.innerHTML = _ZI.ok + ' DECISION: ' + lastDec.side + ' — ' + lastDec.reasons.slice(0, 3).join(' · ');
           } else {
             decEl.style.display = 'block';
             decEl.style.color = '#ff8800';
-            decEl.textContent = '⏸ BLOCKED: ' + lastDec.reasons.slice(0, 2).join(' · ');
+            decEl.innerHTML = _ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).join(' · ');
           }
         }
       }
@@ -3540,18 +3577,20 @@ function initARES() {
   wrap.id = 'ares-strip';
   wrap.innerHTML = `
     <div id="ares-strip-bar" onclick="this.closest('#ares-strip').classList.toggle('open');_aresRender()">
-      <div id="ares-strip-title">
-        <span style="font-size:11px">⬡</span>
-        <span>ARES</span>
-        <span style="font-size:11px;color:#00d9ff44;letter-spacing:1px">NEURAL COMMAND</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span id="ares-strip-badge" style="color:#00d9ff;border-color:#00d9ff88">⚡ DETERMINED</span>
-        <span id="ares-strip-conf" style="font-size:11px;color:#00d9ff66">CONF —%</span><span id="ares-imm-span"> · IMM —%</span><span id="ares-emotion-span"></span>
-        <span id="ares-strip-chev">▼</span>
+      <div class="v6-accent"><div class="v6-ico"><svg viewBox="0 0 24 24"><polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="8"/><line x1="22" y1="8.5" x2="16" y2="12"/><line x1="12" y1="22" x2="12" y2="16"/><line x1="2" y1="8.5" x2="8" y2="12"/></svg></div><span class="v6-lbl">ARES</span></div>
+      <div class="v6-content">
+        <div id="ares-strip-title">
+          <span>ARES</span>
+          <span style="font-size:11px;color:#00d9ff44;letter-spacing:1px">NEURAL COMMAND</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span id="ares-strip-badge" style="color:#00d9ff;border-color:#00d9ff88">${_ZI.bolt} DETERMINED</span>
+          <span id="ares-strip-conf" style="font-size:11px;color:#00d9ff66">CONF —%</span><span id="ares-imm-span"> · IMM —%</span><span id="ares-emotion-span"></span>
+          <span id="ares-strip-chev">▼</span>
+        </div>
       </div>
     </div>
-    <div id="ares-wound-line">⚠ —</div>
+    <div id="ares-wound-line">${_ZI.w} —</div>
     <div id="ares-decision-line" style="display:none;font-size:12px;padding:2px 8px;font-family:monospace;"></div>
     <div id="ares-strip-panel">
       <div id="ares-panel">
@@ -3684,6 +3723,10 @@ function _demoTick() {
     checkDemoPositionsSLTP();
     renderDemoPositions();
   }
+  // Check demo pending limit orders for fill
+  if (typeof checkPendingOrders === 'function') checkPendingOrders();
+  // Render pending orders (live distance update)
+  if (typeof renderPendingOrders === 'function') renderPendingOrders();
 }
 // BUG7 FIX: API keys in session variables ONLY — never persisted to localStorage
 // [MOVED TO TOP] API_KEY
@@ -3691,12 +3734,12 @@ function _demoTick() {
 
 function connectLiveAPI() {
   var st = el('apiStatus');
-  if (st) { st.innerHTML = '⏳ Se verifică conexiunea exchange...'; st.style.color = 'var(--yel)'; }
+  if (st) { st.innerHTML = _ZI.timer + ' Se verifică conexiunea exchange...'; st.style.color = 'var(--yel)'; }
   // Check user's exchange connection status via backend
   fetch('/api/exchange/status', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (data) {
     if (!data.ok || !data.connected) {
       if (st) {
-        st.innerHTML = '⚠️ Nicio conexiune exchange configurată.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">⚙️ Configurează în Settings → Exchange API</span>';
+        st.innerHTML = _ZI.w + ' Nicio conexiune exchange configurată.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configurează în Settings → Exchange API</span>';
         st.style.color = '#f0c040';
       }
       return;
@@ -3706,7 +3749,7 @@ function connectLiveAPI() {
     var mode = data.mode || 'live';
     TP.liveConnected = true; TP.liveExchange = exchange;
     if (st) {
-      st.innerHTML = '✅ <b>' + exchange.toUpperCase() + '</b> — ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' · Last verified: ' + (data.lastVerified || 'N/A') + '</span>';
+      st.innerHTML = _ZI.ok + ' <b>' + exchange.toUpperCase() + '</b> — ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' · Last verified: ' + (data.lastVerified || 'N/A') + '</span>';
       st.style.color = 'var(--grn)';
     }
     var form = el('liveOrderForm'); if (form) form.style.display = 'block';
@@ -3714,20 +3757,20 @@ function connectLiveAPI() {
     // Sync balance + positions
     if (typeof liveApiSyncState === 'function') liveApiSyncState();
   }).catch(function (err) {
-    if (st) { st.innerHTML = '❌ Backend unreachable: ' + (err.message || err); st.style.color = 'var(--red)'; }
+    if (st) { st.innerHTML = _ZI.x + ' Backend unreachable: ' + (err.message || err); st.style.color = 'var(--red)'; }
   });
 }
 // FIX 13: LIVE TRADING — now wired to backend proxy
 // [FIX A6] DISABLED — this function created orphan live orders (not tracked in TP.livePositions).
 // Use the standard live trading path (autoTrade.js → liveApi.js) instead.
 function placeLiveOrder() {
-  toast('❌ placeLiveOrder disabled — use standard Live Trading panel');
-  if (typeof atLog === 'function') atLog('warn', '⛔ placeLiveOrder is disabled (orphan order path — use Live Trading panel)');
+  toast('placeLiveOrder disabled — use standard Live Trading panel', 0, _ZI.x);
+  if (typeof atLog === 'function') atLog('warn', '[BLOCK] placeLiveOrder is disabled (orphan order path — use Live Trading panel)');
   return;
 }
 function connectLiveExchange() {
   // Alias kept for any onclick references
-  toast('🔴 LIVE TRADING DEZACTIVAT — backend necesar.');
+  toast('LIVE TRADING DEZACTIVAT — backend necesar.', 0, _ZI.dRed);
 }
 function loadSavedAPI() {
   // Exchange keys are now managed server-side (Settings → Exchange API)
@@ -3762,9 +3805,14 @@ function openIndPanel() {
   const body = document.getElementById('indPanelBody');
   if (!ov || !pan || !body) return;
 
-  // Build indicator list
+  // Build indicator list — active indicators first
   body.innerHTML = '';
-  INDICATORS.forEach(ind => {
+  var _sorted = INDICATORS.slice().sort(function (a, b) {
+    var aOn = S.activeInds[a.id] ? 1 : 0;
+    var bOn = S.activeInds[b.id] ? 1 : 0;
+    return bOn - aOn; // active first
+  });
+  _sorted.forEach(ind => {
     const on = !!S.activeInds[ind.id];
     const row = document.createElement('div');
     row.className = 'ind-row';
@@ -3777,7 +3825,7 @@ function openIndPanel() {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <span class="ind-gear" onclick="event.stopPropagation();openIndSettings('${ind.id}')" title="Settings">⚙️</span>
+        <span class="ind-gear" onclick="event.stopPropagation();openIndSettings('${ind.id}')" title="Settings">${_ZI.bolt}</span>
         <div class="ind-toggle ${on ? 'on' : ''}" onclick="toggleInd('${ind.id}',this)">
           <div class="ind-toggle-dot"></div>
         </div>
@@ -3804,7 +3852,9 @@ function toggleInd(id, toggleEl) {
   if (S.activeInds[id] && typeof renderChart === 'function') renderChart();
   renderActBar();
   toast(S.activeInds[id] ? INDICATORS.find(i => i.id === id)?.name + ' ON' : INDICATORS.find(i => i.id === id)?.name + ' OFF');
-  _usScheduleSave();  // [US] persist indicator visibility
+  // Save + IMMEDIATE push to server (explicit user action)
+  if (typeof _usSave === 'function') _usSave();
+  if (typeof _userCtxPushNow === 'function') _userCtxPushNow();
 }
 
 function applyIndVisibility(id, visible) {
@@ -3903,7 +3953,7 @@ function openIndSettings(id) {
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type'
   };
-  let html = `<div class="ind-set-title">${ind ? ind.ico : '⚙️'} ${ind ? ind.name : id.toUpperCase()} Settings</div>`;
+  let html = `<div class="ind-set-title">${ind ? ind.ico : _ZI.bolt} ${ind ? ind.name : id.toUpperCase()} Settings</div>`;
   for (const [key, val] of Object.entries(cfg)) {
     if (key === 'levels' || key === 'type') continue;
     html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="1" max="500" step="any" class="ind-set-input"></div>`;
@@ -3932,12 +3982,15 @@ function applyIndSettings(id) {
     if (inp) { const v = parseFloat(inp.value); if (isFinite(v) && v > 0) cfg[key] = v; }
   }
   closeIndSettings();
+  // Persist + sync indicator settings cross-device
+  if (typeof _indSettingsSave === 'function') _indSettingsSave();
+  if (typeof _userCtxPush === 'function') _userCtxPush();
   // Re-render the indicator with new settings
   if (S.activeInds[id]) {
     if (typeof renderChart === 'function') renderChart();
     applyIndVisibility(id, true);
   }
-  toast('⚙️ ' + id.toUpperCase() + ' settings updated');
+  toast(id.toUpperCase() + ' settings updated', 0, _ZI.bolt);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -4342,8 +4395,10 @@ function getIndColor(id) {
 
 function deactivateInd(id) {
   S.activeInds[id] = false;
+  S.indicators[id] = false; // [FIX] sync both dicts
   applyIndVisibility(id, false);
   renderActBar();
+  if (typeof _usSave === 'function') _usSave();
 }
 
 function toggleActBar() {
@@ -4554,8 +4609,8 @@ function runSignalScan() {
   // Play sound if strong signal
   if ((bullCount >= 3 || bearCount >= 3) && S.alerts?.enabled) {
     playAlertSound();
-    if (bullCount >= 3) sendAlert('🚀 SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan');
-    if (bearCount >= 3) sendAlert('🔻 SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan');
+    if (bullCount >= 3) sendAlert('SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan');
+    if (bearCount >= 3) sendAlert('SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan');
   }
 
   // [SR] Înregistrăm semnalele puternice individuale (STRONG BULL/BEAR din scan)
@@ -4616,7 +4671,7 @@ function generateDeepDive() {
 
     const secRegime = `
 <div class="dd-section">
-  <div class="dd-title">📈 REGIME</div>
+  <div class="dd-title">${_ZI.chart} REGIME</div>
   <div class="dd-body">
     <span class="dd-badge ${regCls}">${regLabel}</span>${confStr}${atrStr}
   </div>
@@ -4648,7 +4703,7 @@ function generateDeepDive() {
 
       secLiq = `
 <div class="dd-section">
-  <div class="dd-title">🧲 LIQUIDITY</div>
+  <div class="dd-title">${_ZI.mag} LIQUIDITY</div>
   <div class="dd-body">
     Bias: <span class="${biasCls}">${biasLbl}</span><br>
     Nearest above: ${aboveStr}<br>
@@ -4658,7 +4713,7 @@ function generateDeepDive() {
     } catch (_) {
       secLiq = `
 <div class="dd-section">
-  <div class="dd-title">🧲 LIQUIDITY</div>
+  <div class="dd-title">${_ZI.mag} LIQUIDITY</div>
   <div class="dd-body"><span class="dd-hl-dim">Scanning magnets...</span></div>
 </div>`;
     }
@@ -4719,7 +4774,7 @@ function generateDeepDive() {
 
       secInd = `
 <div class="dd-section">
-  <div class="dd-title">📊 INDICATORS</div>
+  <div class="dd-title">${_ZI.ruler} INDICATORS</div>
   <div class="dd-body">
     RSI 5m: <span class="${rsiCls(rsi5m)}">${rsi5m.toFixed(0)}</span> <span class="dd-hl-dim">(${rsiLbl(rsi5m)})</span>
     · 1h: <span class="${rsiCls(rsi1h)}">${rsi1h.toFixed(0)}</span>
@@ -4732,7 +4787,7 @@ function generateDeepDive() {
     } catch (_) {
       secInd = `
 <div class="dd-section">
-  <div class="dd-title">📊 INDICATORS</div>
+  <div class="dd-title">${_ZI.ruler} INDICATORS</div>
   <div class="dd-body"><span class="dd-hl-dim">Calculating...</span></div>
 </div>`;
     }
@@ -4777,13 +4832,13 @@ function generateDeepDive() {
 
       secConc = `
 <div class="dd-section">
-  <div class="dd-title">🔮 CONCLUSION</div>
+  <div class="dd-title">${_ZI.brain} CONCLUSION</div>
   <div class="dd-body"><span class="${verdictCls}">${verdict}</span></div>
 </div>`;
     } catch (_) {
       secConc = `
 <div class="dd-section">
-  <div class="dd-title">🔮 CONCLUSION</div>
+  <div class="dd-title">${_ZI.brain} CONCLUSION</div>
   <div class="dd-body"><span class="dd-hl-dim">Analyzing...</span></div>
 </div>`;
     }
@@ -4811,13 +4866,13 @@ function generateDeepDive() {
 
       secInval = `
 <div class="dd-section">
-  <div class="dd-title">⚠️ INVALIDATION</div>
+  <div class="dd-title">${_ZI.w} INVALIDATION</div>
   <div class="dd-body">${invalStr}</div>
 </div>`;
     } catch (_) {
       secInval = `
 <div class="dd-section">
-  <div class="dd-title">⚠️ INVALIDATION</div>
+  <div class="dd-title">${_ZI.w} INVALIDATION</div>
   <div class="dd-body"><span class="dd-hl-dim">—</span></div>
 </div>`;
     }

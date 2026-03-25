@@ -37,7 +37,7 @@ function onPositionOpened(pos, source) {
     if (typeof renderBrainCockpit === 'function') {
       try { setTimeout(renderBrainCockpit, 0); } catch (_) { }
     }
-    atLog('info', '🎯 DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']');
+    atLog('info', '[DSL] DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']');
     if (typeof aubBBSnapshot === 'function') aubBBSnapshot('DSL_ATTACH', { sym: pos.sym, side: pos.side, source });
   } catch (e) {
     console.warn('[DSL attach failed]', e);
@@ -62,14 +62,14 @@ function onTradeExecuted(pos) {
     : `<div class="zeus-exec-sim">SIMULATION</div>`;
 
   const html = `
-    <div class="zeus-exec-label">⚡ ZEUS EXECUTION</div>
-    <div class="zeus-exec-title">${dir} ${sym}</div>
+    <div class="zeus-exec-label">${_ZI.bolt} ZEUS EXECUTION</div>
+    <div class="zeus-exec-title">${typeof escHtml === 'function' ? escHtml(dir) : dir} ${typeof escHtml === 'function' ? escHtml(sym) : sym}</div>
     <div class="zeus-exec-info">
-      ${mode} · SCORE: ${score}<br>
-      SIGNAL TF: ${tf1} / ${tf2}<br>
+      ${typeof escHtml === 'function' ? escHtml(mode) : mode} · SCORE: ${typeof escHtml === 'function' ? escHtml(String(score)) : score}<br>
+      SIGNAL TF: ${typeof escHtml === 'function' ? escHtml(tf1) : tf1} / ${typeof escHtml === 'function' ? escHtml(tf2) : tf2}<br>
       PRICE: $${price}
     </div>
-    <div class="zeus-exec-corner">ENGINE: ${mode}</div>
+    <div class="zeus-exec-corner">ENGINE: ${typeof escHtml === 'function' ? escHtml(mode) : mode}</div>
     ${simTag}`;
 
   _queueExecOverlay(html, 'entry', 2500);
@@ -103,11 +103,11 @@ function onTradeClosed(result) {
 
   const html = `
     <div class="zeus-exec-label">ZEUS EXIT</div>
-    <div class="zeus-exec-title">${sym} CLOSED</div>
+    <div class="zeus-exec-title">${typeof escHtml === 'function' ? escHtml(sym) : sym} CLOSED</div>
     <div class="zeus-exec-sub">${pnlStr} · ${pctStr}</div>
     <div class="zeus-exec-info">
-      Duration: ${dur}<br>
-      Reason: ${reason.toUpperCase()}
+      Duration: ${typeof escHtml === 'function' ? escHtml(dur) : dur}<br>
+      Reason: ${typeof escHtml === 'function' ? escHtml(reason.toUpperCase()) : reason.toUpperCase()}
     </div>
     ${simTag}`;
 
@@ -136,7 +136,7 @@ function triggerExecCinematic(side, sym) {
   // Banner
   const banner = document.createElement('div');
   banner.className = 'exec-banner' + (side === 'SHORT' ? ' short' : '');
-  banner.textContent = `⚡ ZEUS EXECUTION: ${side} ${sym}`;
+  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`;
   document.body.appendChild(banner);
   setTimeout(() => { try { document.body.removeChild(banner); } catch (_) { } }, 3200);
 

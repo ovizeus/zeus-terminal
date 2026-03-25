@@ -429,7 +429,7 @@ function _teacherRenderStats() {
       html += _statCard('OOS PF', _tNum(cv.pfOOS, 2));
       html += '</div>';
       if (cv.overfitDetected) {
-        html += '<div style="font-size:13px;color:#ff9800;padding:3px 0">⚠ OVERFIT DETECTED — IS-OOS gap too large</div>';
+        html += '<div style="font-size:13px;color:#ff9800;padding:3px 0">' + _ZI.w + ' OVERFIT DETECTED — IS-OOS gap too large</div>';
       }
     }
   }

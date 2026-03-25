@@ -318,7 +318,7 @@
             if (typeof AT0.disable === 'function') AT0.disable('ZT_TEL_FATAL');
             else AT0.enabled = false;
             try { if (typeof ZLOG !== 'undefined') ZLOG.push('FATAL', 'AT_SUSPENDED_DUE_TO_FATAL — ' + String(msg || '').substring(0, 100), { moduleHint, snap }); } catch (_) { }
-            try { if (typeof atLog === 'function') atLog('warn', '🚨 AT SUSPENDED — FATAL error in ' + moduleHint); } catch (_) { }
+            try { if (typeof atLog === 'function') atLog('warn', '[FATAL] AT SUSPENDED — FATAL error in ' + moduleHint); } catch (_) { }
           }
         } catch (_) { }
       }
@@ -648,7 +648,7 @@
       if (instAct && !_prevInstAct && typeof ZLOG !== 'undefined') {
         ZLOG.push(
           'AT',
-          '[OF v121] ⚡ instAct z=' + z.toFixed(2) +
+          '[OF v121] instAct z=' + z.toFixed(2) +
           ' delta=' + delta.toFixed(4) +
           ' deltaPct=' + deltaPct.toFixed(1) + '%' +
           ' sym=' + (window.OF.sym || '?'),
@@ -1467,25 +1467,19 @@
   (function _css() {
     const s = document.createElement('style');
     s.textContent = `
-#of-hud{position:fixed;top:96px;right:8px;
-  min-width:320px;max-width:320px;width:320px;
-  z-index:999999;
-  border-radius:14px;padding:10px 12px;
+#of-hud{position:relative;width:100%;
+  border-radius:0;padding:10px 12px;
   backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  background:rgba(10,12,18,0.82);
-  border:1px solid rgba(0,255,160,0.22);
-  box-shadow:0 0 12px rgba(0,255,160,0.10);
+  background:transparent;
+  border:none;
+  box-shadow:none;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;
   pointer-events:auto;color:#ccc;cursor:pointer;transition:opacity .2s;
-  transform:translateZ(0);backface-visibility:hidden;will-change:transform;
+  transform:translateZ(0);backface-visibility:hidden;
   overflow:hidden;contain:layout style;}
 #of-hud *{transform:translateZ(0);}
 #of-hud.hidden{display:none}
-#of-hud .hdr{display:flex;justify-content:space-between;align-items:center;
-  margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid rgba(0,255,160,0.12);}
-#of-hud .hdr-title{font-size:13px;letter-spacing:3px;color:rgba(0,255,160,0.8);font-weight:700;}
-#of-hud .hdr-close{font-size:11px;color:#555;cursor:pointer;padding:0 4px;}
-#of-hud .hdr-close:hover{color:#ff4466;}
+#of-hud .hdr{display:none;}
 #of-hud .row{display:flex;gap:6px;flex-wrap:nowrap;align-items:center;
   margin:2px 0;min-height:26px;overflow:hidden;}
 #of-hud .lbl{font-size:12px;color:#556;letter-spacing:1px;
@@ -1499,10 +1493,6 @@
 #of-hud .active{color:#00b4ff;border-color:rgba(0,180,255,0.35);box-shadow:0 0 8px rgba(0,180,255,0.15);}
 #of-hud .muted{color:#445;border-color:rgba(255,255,255,0.06);}
 #of-hud .expand-hint{font-size:12px;color:#334;text-align:center;margin-top:4px;}
-#of-hud .grip{font-size:10px;color:rgba(0,255,160,0.35);cursor:grab;padding:0 5px 0 0;user-select:none;letter-spacing:-1px;}
-#of-hud.dragging{opacity:0.78;cursor:grabbing;}
-#of-hud.dragging *{user-select:none;pointer-events:none;}
-#of-hud.snap-glow{box-shadow:0 0 20px rgba(0,255,160,0.40),0 0 6px rgba(0,255,160,0.5);}
 #of-hud .sim{color:#cc88ff;border-color:rgba(180,100,255,0.35);box-shadow:0 0 6px rgba(180,100,255,0.18);}
 #of-hud .dbg-on{color:#ff9900;border-color:rgba(255,153,0,0.4);box-shadow:0 0 6px rgba(255,153,0,0.18);}
 #of-hud .idle{color:#445;border-color:rgba(255,255,255,0.06);background:rgba(0,0,0,0.2);}
@@ -1718,7 +1708,7 @@
     const hdr = _mk('div', 'hdr', _hudEl);
     hdr.id = 'of-hud-grip';
     _mk('span', 'grip', hdr).textContent = '⋮⋮';
-    _mk('span', 'hdr-title', hdr).textContent = 'OF TELEMETRY';
+    _mk('span', 'hdr-title', hdr).textContent = 'FLOW';
     const closeBtn = _mk('span', 'hdr-close', hdr);
     closeBtn.textContent = '✕';
     closeBtn.onclick = function (e) { e.stopPropagation(); window.ofHudToggle && window.ofHudToggle(); };
@@ -2103,8 +2093,8 @@
       const mm = d.mmTrap || {};
       const da = mm.dir === 1 ? '▲' : mm.dir === -1 ? '▼' : '';
       let ms, mc;
-      if (mm.fired) { ms = '🕷 FIRE' + da; mc = 'mm-fire'; }
-      else if (mm.armed) { ms = '⚡ ARMED' + da; mc = 'mm-armed'; }
+      if (mm.fired) { ms = 'FIRE' + da; mc = 'mm-fire'; }
+      else if (mm.armed) { ms = 'ARMED' + da; mc = 'mm-armed'; }
       else { ms = 'IDLE'; mc = 'idle'; }
       _sc(_dom.mmtrapState, ms, mc);
       _sw(_dom.mmtrapLevel, mm.level ? 'lvl ' + Number(mm.level).toFixed(2) : '', 'muted', !!(mm.level));
@@ -2268,6 +2258,8 @@
     if (e.target.classList.contains('hdr-close')) return;
     _state.expanded = !_state.expanded;
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ofHud');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
     _render();
   }
 
@@ -2293,6 +2285,8 @@
     _state.debug = !_state.debug;
     _state.debugUntil = _state.debug ? Date.now() + 60000 : 0;
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ofHud');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
     _render();
     console.log('[HUD] DBG mode', _state.debug ? 'ON (60s)' : 'OFF');
   };
@@ -2338,6 +2332,8 @@
       anc.style.cursor = 'pointer';
       anc.style.opacity = '1';
       try { localStorage.setItem(ANCH_POS_KEY, String(parseInt(anc.style.left))); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ofHud');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     });
   }
 
@@ -2407,6 +2403,8 @@
     const r = _hudEl.getBoundingClientRect();
     const pos = { top: r.top, left: r.left };
     try { localStorage.setItem(POS_KEY, JSON.stringify(pos)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ofHud');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
     console.log('[HUD] pos saved', pos);
   }
 
@@ -2440,13 +2438,16 @@
     _hudEl.id = 'of-hud';
     _hudEl.addEventListener('pointerdown', _onPointerDown);
     _hudEl.addEventListener('pointerup', _onPointerUp);
-    document.body.appendChild(_hudEl);
+    var mount = document.getElementById('flow-panel-body') || document.body;
+    mount.appendChild(_hudEl);
   }
 
-  // ── Public toggle ─────────────────────────────────────────────────
+  // ── Public toggle (kept for backward compat — now just expand/collapse) ─
   window.ofHudToggle = function () {
     _state.visible = !_state.visible;
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ofHud');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
     if (!_hudEl) _create();
     _hudEl.classList.toggle('hidden', !_state.visible);
     if (_state.visible) {
@@ -2455,48 +2456,39 @@
     } else {
       Intervals.clear('of_hud'); _interval = null;
     }
-    // Console sanity log with bounding rect
-    const cs = window.getComputedStyle(_hudEl);
-    const rect = _hudEl.getBoundingClientRect();
-    console.log('[HUD] mount', {
-      exists: !!_hudEl, z: cs.zIndex,
-      display: cs.display, rect: { top: rect.top, right: rect.right, w: rect.width, h: rect.height },
-      visible: _state.visible, expanded: _state.expanded
-    });
+  };
+
+  // ── FLOW panel expand/collapse (called from panel header onclick) ──
+  window.flowPanelToggle = function () {
+    var panel = document.getElementById('flow-panel');
+    if (!panel) return;
+    var isCollapsed = panel.classList.contains('collapsed');
+    panel.classList.toggle('collapsed', !isCollapsed);
+    panel.classList.toggle('expanded', isCollapsed);
+    var chev = document.getElementById('flow-panel-chev');
+    if (chev) chev.textContent = isCollapsed ? '▲' : '▼';
+    // Ensure HUD is running when expanded
+    if (isCollapsed) {
+      _state.visible = true;
+      try { localStorage.setItem(LS_KEY, JSON.stringify(_state)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ofHud');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
+      if (!_hudEl) _create();
+      _hudEl.classList.remove('hidden');
+      if (!_interval) _interval = Intervals.set('of_hud', _render, 1000);
+      _render();
+    }
   };
 
   // ── Init ──────────────────────────────────────────────────────────
   function _init() {
-    // ── Always-visible anchor badge ───────────────────────────────
-    if (!document.getElementById('of-hud-anchor')) {
-      const anchor = document.createElement('div');
-      anchor.id = 'of-hud-anchor';
-      anchor.title = 'Toggle OF Telemetry HUD';
-      anchor.innerHTML = 'OF';
-      anchor.style.cssText = [
-        'position:fixed', 'top:56px', 'right:8px', 'z-index:9999999',
-        'width:28px', 'height:18px', 'border-radius:6px',
-        'background:rgba(0,255,160,0.12)', 'border:1px solid rgba(0,255,160,0.45)',
-        'box-shadow:0 0 10px rgba(0,255,160,0.25)',
-        'color:#00ffa0', 'font-size:12px', 'font-family:monospace', 'font-weight:700',
-        'letter-spacing:1px', 'cursor:pointer', 'pointer-events:auto',
-        'display:flex', 'align-items:center', 'justify-content:center',
-      ].join(';');
-      anchor.addEventListener('click', function (e) { if (!_anchDragging) { e.stopPropagation(); window.ofHudToggle(); } });
-      document.body.appendChild(anchor);
-      _initAnchorDrag(anchor);
-    }
     _create();
-    const _savedPos = _loadPos();
-    if (_savedPos) _applyPos(_hudEl, _savedPos);
-    if (_state.visible) {
-      _hudEl.classList.remove('hidden');
-      _interval = Intervals.set('of_hud', _render, 1000);
-      _render();
-    } else {
-      _hudEl.classList.add('hidden');
-    }
-    try { if (typeof ZLOG !== 'undefined') ZLOG.push('INFO', '[OF HUD v2] ready — ofHudToggle() | OF_DEBUG_SNAPSHOT()'); } catch (_) { }
+    // Always start visible — panel is inline, not a popup
+    _state.visible = true;
+    _hudEl.classList.remove('hidden');
+    _interval = Intervals.set('of_hud', _render, 1000);
+    _render();
+    try { if (typeof ZLOG !== 'undefined') ZLOG.push('INFO', '[OF HUD v2] ready — FLOW panel mounted'); } catch (_) { }
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _init);
@@ -2569,13 +2561,13 @@
       let cls, label;
       if (!alive) {
         cls = 'dead';
-        label = 'OF:DEAD';
+        label = 'FLOW:DEAD';
       } else if (tps < RATE_OK) {
         cls = 'thin';
-        label = 'OF:THIN';
+        label = 'FLOW:THIN';
       } else {
         cls = 'ok';
-        label = 'OF:OK';
+        label = 'FLOW:OK';
       }
 
       el.className = 'of-badge ' + cls;
@@ -3169,7 +3161,7 @@
             try {
               if (typeof ZLOG !== 'undefined')
                 ZLOG.push('AT',
-                  '[OF MMTRAP] 🕷️ FIRE dir=' + (tmm.dir === 1 ? 'UP' : 'DOWN') +
+                  '[OF MMTRAP] FIRE dir=' + (tmm.dir === 1 ? 'UP' : 'DOWN') +
                   ' level=' + tmm.level.toFixed(2) +
                   ' reason=' + tmm.reason +
                   ' biasNow=' + biasNow.toFixed(3),
@@ -3392,9 +3384,9 @@
 
         let stateChip;
         if (mm.fired) {
-          stateChip = '<span class="chip mm-fire">🕷 FIRE' + dirArrow + '</span>';
+          stateChip = '<span class="chip mm-fire">' + _ZI.spider + ' FIRE' + dirArrow + '</span>';
         } else if (mm.armed) {
-          stateChip = '<span class="chip mm-armed">⚡ ARMED' + dirArrow + '</span>';
+          stateChip = '<span class="chip mm-armed">' + _ZI.bolt + ' ARMED' + dirArrow + '</span>';
         } else {
           stateChip = '<span class="chip idle">IDLE</span>';
         }

@@ -204,7 +204,7 @@ function _updateWhyBlocked(code, text) {
   // Degraded feeds override — show even when not in BlockReason
   if (_isDegradedOnly() && !code) {
     const feeds = [..._SAFETY.degradedFeeds].join(',');
-    pill.textContent = '⚠ DEGRADED: ' + feeds;
+    pill.innerHTML = _ZI.w + ' DEGRADED: ' + feeds;
     pill.className = 'degraded';
     pill.style.display = 'block';
     return;
@@ -218,34 +218,35 @@ function _updateWhyBlocked(code, text) {
 
   // Map code → pill class + compact label
   let cls = 'blocked';
-  let label = '⛔ ' + (text || code);
+  let label = _ZI.noent + ' ' + (text || code);
+  let useHtml = true;
 
   if (code === 'SAFETY_FAIL') {
     // Distinguish sub-reasons
-    if (text && text.includes('session')) { cls = 'session'; label = '⏱ Session FAIL — outside hours'; }
-    else if (text && text.includes('regime')) { cls = 'regime'; label = '⚠ Regime UNSTABLE'; }
-    else if (text && text.includes('cooldown')) { cls = 'cooldown'; label = '⏳ Cooldown — wait...'; }
-    else { cls = 'blocked'; label = '⛔ Safety: ' + (text || 'FAIL'); }
+    if (text && text.includes('session')) { cls = 'session'; label = _ZI.timer + ' Session FAIL — outside hours'; }
+    else if (text && text.includes('regime')) { cls = 'regime'; label = _ZI.w + ' Regime UNSTABLE'; }
+    else if (text && text.includes('cooldown')) { cls = 'cooldown'; label = _ZI.clock + ' Cooldown — wait...'; }
+    else { cls = 'blocked'; label = _ZI.noent + ' Safety: ' + (text || 'FAIL'); }
   } else if (code === 'DATA_STALL') {
-    cls = 'degraded'; label = '⚠ Data stalled';
+    cls = 'degraded'; label = _ZI.w + ' Data stalled';
   } else if (code === 'KILL' || code === 'KILL_SWITCH') {
-    cls = 'blocked'; label = '🔴 Kill switch activ';
+    cls = 'blocked'; label = _ZI.dRed + ' Kill switch activ';
   } else if (code === 'PROTECT' || code === 'PROTECT_MODE') {
-    cls = 'blocked'; label = '🛡 Protect mode';
+    cls = 'blocked'; label = _ZI.sh + ' Protect mode';
   } else if (code === 'TRIGGER_FAIL') {
-    cls = 'regime'; label = '⚡ Trigger neatins';
+    cls = 'regime'; label = _ZI.bolt + ' Trigger neatins';
   } else if (code === 'FAKEOUT') {
-    cls = 'regime'; label = '🚫 Anti-fakeout';
+    cls = 'regime'; label = _ZI.noent + ' Anti-fakeout';
   }
 
   // Cooldown: add live countdown if applicable
   if (cls === 'cooldown') {
     const cdMs = Math.max(0, _getCooldownMs() - (Date.now() - (AT.lastTradeTs || 0)));
     const cdMin = Math.ceil(cdMs / 60000);
-    label = '⏳ Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...');
+    label = _ZI.clock + ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...');
   }
 
-  pill.textContent = label;
+  pill.innerHTML = label;
   pill.className = cls;
   pill.style.display = 'block';
 }
@@ -260,7 +261,7 @@ async function runMultiSymbolScan() {
   const scanSyms = getActiveMscanSyms();
   try {
     const tbody = el('mscanBody');
-    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">⚡ SCANEZ ${scanSyms.length} SIMBOLURI...</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">${_ZI.bolt} SCANEZ ${scanSyms.length} SIMBOLURI...</td></tr>`;
 
     let opps = 0;
     const results = [];
@@ -343,7 +344,7 @@ function renderMscanTable(results, opps) {
 
     let actionHtml = '';
     if (r.alreadyOpen) {
-      actionHtml = `<div style="font-size:11px;color:#aa44ff">🔴 IN POZ</div>`;
+      actionHtml = `<div style="font-size:11px;color:#aa44ff">${_ZI.dRed} IN POZ</div>`;
     } else if (r.isOpp && r.dir === 'bull') {
       actionHtml = `<button class="mscan-enter-btn long" onclick="manualEnterFromScan('${r.sym}','LONG',${r.score})">▲ LONG</button>`;
     } else if (r.isOpp && r.dir === 'bear') {
@@ -371,7 +372,7 @@ function renderMscanTable(results, opps) {
 
 // ─── MANUAL ENTRY FROM SCANNER ─────────────────────────────────
 function manualEnterFromScan(sym, side, score) {
-  const maxPos = parseInt(el('atMaxPos')?.value) || 4;
+  const maxPos = (typeof TC !== 'undefined' && Number.isFinite(TC.maxPos)) ? TC.maxPos : (parseInt(el('atMaxPos')?.value) || 4);
   const openAuto = (TP.demoPositions || []).filter(p => p.autoTrade && !p.closed).length;
   if (openAuto >= maxPos) { toast('Max pozitii atinse (' + maxPos + ')'); return; }
 
@@ -400,7 +401,7 @@ function runMultiSymbolAutoTrade(results) {
   // ASSIST → only if ARM_ASSIST valid (user confirmed, <5min)
   if (_mode === 'assist') {
     if (!isArmAssistValid()) {
-      atLog('info', '🔒 ASSIST — neînarmat. Apasă ARM ASSIST pentru confirmare.');
+      atLog('info', 'ASSIST — neînarmat. Apasă ARM ASSIST pentru confirmare.');
       return;
     }
   }
@@ -422,7 +423,7 @@ function runMultiSymbolAutoTrade(results) {
     const _anyDSLActive = (TP.demoPositions || []).some(p => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active);
     if (_anyDSLActive && _chaos > 60) {
       BlockReason.set('CHAOS', `Chaos ${_chaos} > 60 — piață prea volatilă cu DSL activ`, 'autoCheck');
-      atLog('warn', '⛔ AUTO BLOCK — DSL active + chaos>60'); return;
+      atLog('warn', '[BLOCK] AUTO BLOCK — DSL active + chaos>60'); return;
     }
 
     // DSL WAIT > 10min → raise threshold (protect-like behavior)
@@ -431,10 +432,10 @@ function runMultiSymbolAutoTrade(results) {
       const d = DSL.positions?.[p.id];
       return d && !d.active && p.autoTrade && !p.closed && (Date.now() - p.ts) > _dslWaitMs;
     });
-    if (_dslWaiting) { atLog('warn', '⚠ AUTO — DSL WAIT>10min, threshold ridicat'); }
+    if (_dslWaiting) { atLog('warn', '[WARN] AUTO — DSL WAIT>10min, threshold ridicat'); }
   }
 
-  const maxPos = parseInt(el('atMaxPos')?.value) || 4;
+  const maxPos = (typeof TC !== 'undefined' && Number.isFinite(TC.maxPos)) ? TC.maxPos : (parseInt(el('atMaxPos')?.value) || 4);
   const openAuto = (TP.demoPositions || []).filter(p => p.autoTrade && !p.closed);
   if (openAuto.length >= maxPos) return;
 
@@ -449,8 +450,8 @@ function runMultiSymbolAutoTrade(results) {
 
   // Filter: hour/day OK?
   if (!isCurrentTimeOK()) {
-    atLog('warn', '⏰ Ora curenta are WR scazut — nu intru (Day/Hour filter)');
-    brainThink('bad', '⏰ Hour filter: WR scazut acum, astept ora mai buna');
+    atLog('warn', '[TIME] Ora curenta are WR scazut — nu intru (Day/Hour filter)');
+    brainThink('bad', _ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna');
     return;
   }
 
@@ -479,11 +480,11 @@ function runMultiSymbolAutoTrade(results) {
     const side = opp.dir === 'bull' ? 'LONG' : 'SHORT';
     // FIX: get real price for this symbol, never use S.price for other symbols
     const price = opp.sym === S.symbol ? S.price : (wlPrices[opp.sym]?.price || 0);
-    if (!price) { atLog('warn', '❌ Nu am pret pentru ' + opp.sym); return; }
+    if (!price) { atLog('warn', '[ERR] Nu am pret pentru ' + opp.sym); return; }
 
     atLog(side === 'LONG' ? 'buy' : 'sell',
-      `🔭 MULTI-SYM: ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} ADX:${opp.adx || '—'} | ${opp.signals}`);
-    brainThink('trade', `🔭 ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} — intru!`);
+      `[MSCAN] ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} ADX:${opp.adx || '—'} | ${opp.signals}`);
+    brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} — intru!`);
     // [FIX] Removed early triggerExecCinematic — banner now fires only AFTER
     // placeAutoTrade succeeds, via onTradeExecuted() → triggerExecCinematic()
 
@@ -497,8 +498,8 @@ function runMultiSymbolAutoTrade(results) {
 function toggleMultiSymMode() {
   const on = el('atMultiSym')?.checked;
   _mscanUpdateLabel();
-  if (on) atLog('info', '🔭 Multi-Symbol ACTIV — ' + _mscanGetActive().length + ' simboluri');
-  else atLog('warn', '⚠️ Multi-Symbol DEZACTIVAT — doar symbol curent');
+  if (on) atLog('info', '[MSCAN] Multi-Symbol ACTIV — ' + _mscanGetActive().length + ' simboluri');
+  else atLog('warn', 'Multi-Symbol DEZACTIVAT — doar symbol curent');
   _usScheduleSave();
 }
 
@@ -515,6 +516,8 @@ function _mscanGetActive() {
 }
 function _mscanSaveActive(arr) {
   localStorage.setItem('zeus_mscan_syms', JSON.stringify(arr));
+  if (typeof _ucMarkDirty === 'function') _ucMarkDirty('scannerSyms');
+  if (typeof _userCtxPush === 'function') _userCtxPush();
   _mscanUpdateLabel();
 }
 function _mscanUpdateLabel() {

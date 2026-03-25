@@ -1,8 +1,215 @@
-// Zeus v122 — core/state.js
+// Zeus v124 — core/state.js
 // Global state objects — ALL exported to window for compat
 'use strict';
-window.__SYNC_VERSION__ = 'v9';  // bump this to verify phone has new JS
+window.__SYNC_VERSION__ = 'v12';  // bump this to verify phone has new JS
 console.log('[ZEUS] state.js loaded — sync version:', window.__SYNC_VERSION__);
+
+// ══════════════════════════════════════════════════════════════════
+// [MULTI-USER] Per-user localStorage isolation
+// Intercepts getItem/setItem/removeItem for user-scoped keys,
+// auto-suffixing with :userId. Installed BEFORE any LS reads.
+// ══════════════════════════════════════════════════════════════════
+(function _initUserScopedStorage() {
+  // Extract userId from JWT cookie synchronously (available before any async)
+  var uid = null;
+  try {
+    var m = document.cookie.match(/zeus_token=([^;]+)/);
+    if (m) {
+      var parts = m[1].split('.');
+      if (parts.length >= 2) {
+        var payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+        uid = payload.id || null;
+      }
+    }
+  } catch (e) { /* not logged in or malformed token */ }
+  window._zeusUserId = uid;
+
+  // Keys that MUST be scoped per user (contain positions, balances, trading data, credentials)
+  var _USER_KEYS = {
+    'zt_state_v1': 1, 'zt_journal': 1, 'zeus_user_settings': 1,
+    'ARES_MISSION_STATE_V1': 1, 'ARES_MISSION_STATE_V1_vw2': 1,
+    'ARES_POSITIONS_V1': 1, 'ARES_STATE_V1': 1, 'ares_init_v1': 1,
+    'ARES_LAST_TRADE_TS': 1, 'ARES_JOURNAL_V1': 1,
+    'zeus_postmortem_v1': 1,
+    'zeus_daily_pnl_v1': 1, 'zeus_adaptive_v1': 1,
+    'zeus_signal_registry': 1, 'zeus_notifications': 1,
+    'zeus_perf_v1': 1, 'zeus_ind_settings': 1,
+    'zeus_tg_bot_token': 1, 'zeus_tg_chat_id': 1,
+    'zeus_uc_beacon_pending': 1, 'zeus_uc_dirty_ts': 1,
+    'zeus_groups': 1, 'zeus_ui_context': 1,
+    'zeus_teacher_enabled': 1, 'zeus_teacher_mode': 1,
+    'zeus_teacher_sessionState': 1, 'zeus_teacher_cumulative': 1,
+    'zeus_teacher_checklistPrefs': 1, 'zeus_teacher_checklistState': 1,
+    'zeus_teacher_dismissed': 1
+  };
+  // Prefix-based user-scoped keys (e.g. zt_cloud_*)
+  var _USER_PREFIXES = ['zt_cloud_'];
+
+  function _isUserKey(key) {
+    if (_USER_KEYS[key]) return true;
+    for (var i = 0; i < _USER_PREFIXES.length; i++) {
+      if (key.indexOf(_USER_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+
+  function _scopedKey(key) {
+    if (!window._zeusUserId || !_isUserKey(key)) return key;
+    return key + ':' + window._zeusUserId;
+  }
+
+  // Save original methods (bound to localStorage context)
+  var _origGet = localStorage.getItem.bind(localStorage);
+  var _origSet = localStorage.setItem.bind(localStorage);
+  var _origRemove = localStorage.removeItem.bind(localStorage);
+  // Expose originals for migration/cleanup (bypasses proxy)
+  window._lsOrigGet = _origGet;
+  window._lsOrigSet = _origSet;
+  window._lsOrigRemove = _origRemove;
+
+  // Migration: move old un-scoped keys to user-scoped keys (runs once per user)
+  if (uid) {
+    var _migrated = 0;
+    var keys = Object.keys(_USER_KEYS);
+    for (var i = 0; i < keys.length; i++) {
+      var baseKey = keys[i];
+      var newKey = baseKey + ':' + uid;
+      var oldVal = _origGet(baseKey);
+      if (oldVal !== null) {
+        if (_origGet(newKey) === null) {
+          _origSet(newKey, oldVal);
+          _migrated++;
+        }
+        _origRemove(baseKey);
+      }
+    }
+    // Migrate prefix-based keys (zt_cloud_*)
+    try {
+      for (var j = 0; j < localStorage.length; j++) {
+        var k = localStorage.key(j);
+        if (!k) continue;
+        for (var p = 0; p < _USER_PREFIXES.length; p++) {
+          if (k.indexOf(_USER_PREFIXES[p]) === 0 && k.indexOf(':') === -1) {
+            var nk = k + ':' + uid;
+            if (_origGet(nk) === null) { _origSet(nk, _origGet(k)); _migrated++; }
+            _origRemove(k);
+            j--; // re-check same index after removal
+            break;
+          }
+        }
+      }
+    } catch (_) { }
+    if (_migrated > 0) console.log('[ZEUS] Migrated', _migrated, 'localStorage keys to user-scoped for uid=' + uid);
+  }
+
+  // Install proxy — all existing code automatically gets user-scoped keys
+  localStorage.getItem = function (key) { return _origGet(_scopedKey(key)); };
+  localStorage.setItem = function (key, val) { return _origSet(_scopedKey(key), val); };
+  localStorage.removeItem = function (key) { return _origRemove(_scopedKey(key)); };
+
+  // Logout cleanup — clear ALL user-scoped keys for the current user
+  window._lsClearUser = function () {
+    var id = window._zeusUserId;
+    if (!id) return;
+    var suffix = ':' + id;
+    var toRemove = [];
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.length > suffix.length && k.substring(k.length - suffix.length) === suffix) {
+        toRemove.push(k);
+      }
+    }
+    for (var r = 0; r < toRemove.length; r++) { _origRemove(toRemove[r]); }
+    console.log('[ZEUS] Cleared', toRemove.length, 'user-scoped localStorage keys for uid=' + id);
+    window._zeusUserId = null;
+  };
+
+  console.log('[ZEUS] User-scoped localStorage active — uid=' + (uid || 'none'));
+})();
+
+// ── P1: TRADING CONFIG — DOM-free parameter source ───────────────
+// All trading parameters that were previously read from DOM inputs.
+// Client syncs DOM→TC on input change. Server sets TC directly.
+// Functions read from TC first, DOM fallback only if TC value missing.
+window.TC = window.TC || {
+  // AT execution params
+  lev: 5,           // leverage (1-125)
+  size: 200,        // position size ($) — margin cap for risk-based sizing
+  slPct: 1.5,       // stop loss %
+  rr: 2,            // risk:reward ratio
+  riskPct: 1,       // risk % per trade (from atRiskPct)
+  maxPos: 3,        // max simultaneous positions (source: atMaxPos)
+  cooldownMs: 60000, // cooldown between trades (ms)
+  minADX: 18,       // minimum ADX for entry
+  hourStart: 0,     // trading hours start (UTC)
+  hourEnd: 23,      // trading hours end (UTC)
+  sigMin: 3,        // minimum signal count
+  confMin: 65,      // minimum confluence score
+  // DSL params (global defaults)
+  dslActivatePct: 40,
+  dslTrailPct: 0.8,
+  dslTrailSusPct: 1.0,
+  dslExtendPct: 20,
+};
+
+// Sync DOM → TC (called on input changes and at boot)
+function syncDOMtoTC() {
+  if (typeof document === 'undefined') return;
+  var _el = function (id) { return document.getElementById(id); };
+  var _pi = function (id, def) { var v = parseInt(_el(id)?.value); return Number.isFinite(v) ? v : def; };
+  var _pf = function (id, def) { var v = parseFloat(_el(id)?.value); return Number.isFinite(v) ? v : def; };
+  TC.lev = Math.max(1, Math.min(125, _pi('atLev', TC.lev)));
+  TC.size = Math.max(1, _pf('atSize', TC.size));
+  TC.slPct = Math.max(0.1, Math.min(20, _pf('atSL', TC.slPct)));
+  TC.rr = Math.max(0.1, Math.min(20, _pf('atRR', TC.rr)));
+  TC.maxPos = Math.max(1, _pi('atMaxPos', TC.maxPos));
+  TC.riskPct = Math.max(0.1, Math.min(5, _pf('atRiskPct', TC.riskPct)));
+  TC.sigMin = Math.max(1, _pi('atSigMin', TC.sigMin));
+  TC.dslActivatePct = _pf('dslActivatePct', TC.dslActivatePct);
+  TC.dslTrailPct = _pf('dslTrailPct', TC.dslTrailPct);
+  TC.dslTrailSusPct = _pf('dslTrailSusPct', TC.dslTrailSusPct);
+  TC.dslExtendPct = _pf('dslExtendPct', TC.dslExtendPct);
+}
+window.syncDOMtoTC = syncDOMtoTC;
+
+// [P4] Push TC to server for brain config sync
+// Maps client TC field names → server STC field names
+var _tcPushTimer = null;
+var _tcPushVersion = 0;
+function pushTCtoServer() {
+  if (typeof TC === 'undefined') return;
+  var payload = {
+    confMin: TC.confMin,
+    sigMin: TC.sigMin,
+    adxMin: TC.minADX,    // client=minADX, server=adxMin
+    maxPos: TC.maxPos,
+    cooldownMs: TC.cooldownMs,
+    lev: TC.lev,
+    size: TC.size,
+    slPct: TC.slPct,
+    rr: TC.rr,
+    dslMode: (typeof DSL !== 'undefined' && DSL.mode) ? DSL.mode : undefined,
+  };
+  _tcPushVersion++;
+  var ver = _tcPushVersion;
+  fetch('/api/tc/sync', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(function (r) {
+    if (!r.ok) console.warn('[TC] Server sync failed:', r.status);
+  }).catch(function () {
+    // silent — server may be down or feature disabled
+  });
+}
+// Debounced version (500ms) — called on every input change
+function _tcPushDebounced() {
+  if (_tcPushTimer) clearTimeout(_tcPushTimer);
+  _tcPushTimer = setTimeout(pushTCtoServer, 500);
+}
+window.pushTCtoServer = pushTCtoServer;
+window._tcPushDebounced = _tcPushDebounced;
 
 // CORE_STATE — single source of truth
 window.CORE_STATE = {
@@ -66,10 +273,11 @@ function buildExecSnapshot(side, cond) {
 
 
   // Atomic snapshot builder
-  const _levRaw = parseInt(document.getElementById('atLev')?.value);
-  const _sizeRaw = parseFloat(document.getElementById('atSize')?.value);
-  const _slRaw = parseFloat(document.getElementById('atSL')?.value);
-  const _rrRaw = parseFloat(document.getElementById('atRR')?.value);
+  // [P1] Read from TC (server-safe), DOM fallback
+  const _levRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.lev)) ? TC.lev : parseInt(document.getElementById('atLev')?.value);
+  const _sizeRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.size)) ? TC.size : parseFloat(document.getElementById('atSize')?.value);
+  const _slRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.slPct)) ? TC.slPct : parseFloat(document.getElementById('atSL')?.value);
+  const _rrRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.rr)) ? TC.rr : parseFloat(document.getElementById('atRR')?.value);
 
   const lev = (Number.isFinite(_levRaw) && _levRaw >= 1) ? Math.min(125, Math.max(1, _levRaw)) : 5;
   const size = (Number.isFinite(_sizeRaw) && _sizeRaw > 0) ? Math.min(100000, _sizeRaw) : 200;
@@ -103,6 +311,7 @@ function buildExecSnapshot(side, cond) {
     size,
     slPct,
     rr,       // [v105 FIX Bug4] rr inclus explicit in snapshot — anterior lipsea, _snap.rr era undefined
+    riskPct: (typeof TC !== 'undefined' && Number.isFinite(TC.riskPct)) ? TC.riskPct : 1, // [RISK RAILS]
     sl: side === 'LONG' ? price - slDist : price + slDist,
     tp: side === 'LONG' ? price + (slDist * rr) : price - (slDist * rr),
     btcAnchor: S.symbol === 'BTCUSDT' ? price : (S.btcPrice || 0),
@@ -117,22 +326,37 @@ function buildExecSnapshot(side, cond) {
 const ZState = (() => {
   const KEY = 'zt_state_v1';
   let _saveTimer = null;
+  // [S2B2-T1] Dirty flag + version counter + freshness tracking
+  let _dirty = false;         // true when local state mutated since last confirmed push
+  let _lastEditTs = 0;        // timestamp of last real local mutation
+  let _stateVersion = 0;      // monotonic version — increments on actual data changes
+  let _saving = false;        // true during save() — prevents pullAndMerge race
+  function markDirty() { _dirty = true; _lastEditTs = Date.now(); _stateVersion++; }
 
   function _serialize() {
     return {
       ts: Date.now(),
+      v: _stateVersion,           // [S2B2-T1] monotonic version for causality
+      lastEditTs: _lastEditTs,   // [S2B2-T1] when user last mutated state
       // Demo balance & stats persistence
       demoBalance: (typeof TP !== 'undefined') ? TP.demoBalance : 10000,
       demoPnL: (typeof TP !== 'undefined') ? TP.demoPnL : 0,
       demoWins: (typeof TP !== 'undefined') ? TP.demoWins : 0,
       demoLosses: (typeof TP !== 'undefined') ? TP.demoLosses : 0,
       positions: (typeof TP !== 'undefined' ? TP.demoPositions || [] : [])
-        .filter(p => !p.closed)
+        .filter(function (p) {
+          if (p.closed) return false;
+          // [v3] When serverAT is active, don't sync AT positions via cross-device state
+          // (serverAT is the single source of truth — prevents pullAndMerge resurrection loop)
+          if (window._serverATEnabled && p.autoTrade) return false;
+          return true;
+        })
         .map(p => ({
           id: p.id, side: p.side, sym: p.sym, entry: p.entry,
           size: p.size, lev: p.lev, tp: p.tp, sl: p.sl,
           liqPrice: p.liqPrice, autoTrade: !!p.autoTrade,
           openTs: p.openTs || p.id, isLive: !!p.isLive,
+          mode: p.mode || 'demo',
           // [PATCH1] Persist per-position control state
           controlMode: p.controlMode || null,
           sourceMode: p.sourceMode || null,
@@ -160,6 +384,18 @@ const ZState = (() => {
             })(DSL.positions[String(p.id)])
             : null
         })),
+      // Pending orders (demo LIMIT waiting for fill)
+      pendingOrders: (typeof TP !== 'undefined' ? TP.pendingOrders || [] : [])
+        .filter(function (o) { return o && !o.cancelled && !o.filled; })
+        .map(function (o) {
+          return { id: o.id, side: o.side, sym: o.sym, limitPrice: o.limitPrice, size: o.size, lev: o.lev, tp: o.tp, sl: o.sl, mode: o.mode || 'demo', createdAt: o.createdAt };
+        }),
+      // Manual live pending LIMIT orders (metadata only — source of truth is Binance)
+      manualLivePending: (typeof TP !== 'undefined' ? TP.manualLivePending || [] : [])
+        .filter(function (o) { return o && !o.cancelled && !o.filled; })
+        .map(function (o) {
+          return { orderId: o.orderId, symbol: o.symbol, side: o.side, price: o.price, origQty: o.origQty, leverage: o.leverage, tp: o.tp, sl: o.sl, clientOrderId: o.clientOrderId, createdAt: o.createdAt };
+        }),
       at: typeof AT !== 'undefined' ? {
         enabled: AT.enabled,
         mode: AT.mode,
@@ -176,18 +412,35 @@ const ZState = (() => {
       } : null,
       blockReason: BlockReason.get(),
       symbol: typeof S !== 'undefined' ? S.symbol : null,
+      // [B2] runMode REMOVED — report AT.enabled for backward compat
+      runMode: typeof AT !== 'undefined' ? !!AT.enabled : false,
+      assistArmed: typeof S !== 'undefined' ? !!S.assistArmed : false,
+      // Closed position IDs — prevents server zombie resurrection
+      closedIds: (function () {
+        var ids = [];
+        if (typeof TP !== 'undefined' && Array.isArray(TP.journal)) {
+          TP.journal.forEach(function (j) { if (j.id && j.journalEvent === 'CLOSE') ids.push(String(j.id)); });
+        }
+        if (Array.isArray(window._zeusRecentlyClosed)) {
+          window._zeusRecentlyClosed.forEach(function (id) { ids.push(String(id)); });
+        }
+        // Deduplicate and keep last 200
+        return Array.from(new Set(ids)).slice(-200);
+      })(),
     };
   }
 
   function save() {
     // [v105 FIX Bug8] _safeLocalStorageSet (hoisted function declaration) — protejeaza la QuotaExceededError
     // Anterior: localStorage.setItem direct — putea arunca exceptie si corupe starea silentios
+    _saving = true; // [S2B2-T1] gate against concurrent pullAndMerge
     try {
       var data = _serialize();
-      console.log('[ZState] SAVE — pos:', (data.positions || []).length, 'bal:', data.demoBalance, 'ts:', data.ts);
+      console.log('[ZState] SAVE — pos:', (data.positions || []).length, 'bal:', data.demoBalance, 'ts:', data.ts, 'v:', data.v);
       _safeLocalStorageSet(KEY, data);
     }
     catch (e) { console.warn('[ZState] save failed:', e.message); }
+    finally { _saving = false; }
   }
 
   function load() {
@@ -217,6 +470,7 @@ const ZState = (() => {
         const a = snap.at;
         AT.enabled = !!a.enabled;  // Restore saved enabled state (will be resumed after feed ready)
         AT.mode = a.mode || 'demo';
+        AT._modeConfirmed = false; // [ZT-AUD-001] unconfirmed until server pushes state
         AT.cooldownMs = a.cooldownMs || 120000;
         AT.lastTradeTs = a.lastTradeTs || 0;
         AT.lastTradeSide = a.lastTradeSide || null;
@@ -306,6 +560,29 @@ const ZState = (() => {
         if (typeof renderATPositions === 'function') setTimeout(renderATPositions, 500);
       }
 
+      // Restore pending orders (demo LIMIT)
+      if (Array.isArray(snap.pendingOrders) && snap.pendingOrders.length && typeof TP !== 'undefined') {
+        TP.pendingOrders = TP.pendingOrders || [];
+        var _existPending = new Set(TP.pendingOrders.map(function (o) { return String(o.id); }));
+        snap.pendingOrders.forEach(function (o) {
+          if (!_existPending.has(String(o.id))) {
+            TP.pendingOrders.push(o);
+          }
+        });
+        if (typeof renderPendingOrders === 'function') setTimeout(renderPendingOrders, 600);
+      }
+
+      // Restore manual live pending (metadata for LIMIT orders on Binance)
+      if (Array.isArray(snap.manualLivePending) && snap.manualLivePending.length && typeof TP !== 'undefined') {
+        TP.manualLivePending = TP.manualLivePending || [];
+        var _existLivePending = new Set(TP.manualLivePending.map(function (o) { return String(o.orderId); }));
+        snap.manualLivePending.forEach(function (o) {
+          if (!_existLivePending.has(String(o.orderId))) {
+            TP.manualLivePending.push(o);
+          }
+        });
+      }
+
       // Restore block reason
       if (snap.blockReason) BlockReason._current = snap.blockReason;
 
@@ -334,31 +611,42 @@ const ZState = (() => {
   let _syncTimer = null;
   let _syncing = false;
   let _syncReady = false; // prevents push before initial pull completes
+  let _syncQueued = false; // queue push when one is already in-flight
+  let _merging = false; // [S2B1-T2] prevents push during pullAndMerge async gap
 
-  // BUG-03 FIX: Shared sync token — must match server SYNC_TOKEN
-  var _SYNC_TOKEN = 'b8daa0b5d63ee1a9f5f4d9c33c20b46d';
-  var _syncHeaders = { 'Content-Type': 'application/json', 'X-Sync-Token': _SYNC_TOKEN };
+  var _syncHeaders = { 'Content-Type': 'application/json' };
+  var _offlinePending = false;
 
   function _pushToServer() {
-    if (_syncing) return;
+    if (_syncing || _merging) { _syncQueued = true; return; } // [S2B1-T2] also block during merge
     if (!_syncReady) { console.warn('[sync] push blocked — syncReady=false'); return; }
     _syncing = true;
+    _syncQueued = false;
     const data = _serialize();
+    var _pushDirtySnapshot = _dirty; // [S2B2-T1] snapshot dirty state before push
     console.log('[sync] PUSHING to server — pos:', (data.positions || []).length, 'bal:', data.demoBalance);
     fetch('/api/sync/state', {
       method: 'POST',
       headers: _syncHeaders,
+      credentials: 'same-origin',
       body: JSON.stringify(data)
     }).then(function (r) { return r.json(); })
       .then(function (j) { if (j.ok) console.log('[sync] pushed OK ts=' + data.ts); else console.warn('[sync] push rejected:', j); })
-      .catch(function (e) { console.warn('[sync] push failed:', e.message); })
-      .finally(function () { _syncing = false; });
-    // Also sync journal
+      .catch(function (e) { console.warn('[sync] push failed:', e.message); if (typeof navigator !== 'undefined' && !navigator.onLine) _offlinePending = true; })
+      .finally(function () {
+        _syncing = false;
+        // [S2B2-T1] Clear dirty only if no new mutations occurred during push
+        if (_pushDirtySnapshot && _dirty && _lastEditTs <= data.lastEditTs) { _dirty = false; }
+        if (_syncQueued) { _syncQueued = false; setTimeout(_pushToServer, 200); }
+      });
+    // Also sync journal (newest first, last 100)
     if (typeof TP !== 'undefined' && Array.isArray(TP.journal) && TP.journal.length > 0) {
+      var jSorted = TP.journal.slice().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
       fetch('/api/sync/journal', {
         method: 'POST',
         headers: _syncHeaders,
-        body: JSON.stringify(TP.journal.slice(0, 100))
+        credentials: 'same-origin',
+        body: JSON.stringify(jSorted.slice(0, 100))
       }).catch(function () { });
     }
   }
@@ -368,22 +656,312 @@ const ZState = (() => {
     _syncTimer = setTimeout(_pushToServer, 1500);
   }
 
-  function markSyncReady() { _syncReady = true; console.log('[sync] markSyncReady — pushes now enabled'); }
+  // Immediate push (no debounce) — used on visibility hidden / tab close
+  function syncNow() {
+    if (_syncTimer) clearTimeout(_syncTimer);
+    _pushToServer();
+  }
+
+  function markSyncReady() { _syncReady = true; console.log('[sync] markSyncReady — pushes now enabled'); _connectWS(); }
+
+  // ── WebSocket real-time sync (instant cross-device push) ──
+  var _ws = null;
+  var _wsRetry = 0;
+  var _wsVisListener = false;
+  function _connectWS() {
+    if (typeof WebSocket === 'undefined') return;
+    if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return;
+    try {
+      var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      _ws = new WebSocket(proto + '//' + location.host + '/ws/sync');
+      _ws.onopen = function () { _wsRetry = 0; console.log('[ws] sync connected'); };
+      _ws.onmessage = function (ev) {
+        try {
+          var msg = JSON.parse(ev.data);
+          if (msg.type === 'sync') { console.log('[ws] sync signal — pulling'); pullAndMerge(); }
+          if (msg.type === 'at_update' && msg.data) { _applyServerATState(msg.data); }
+        } catch (_) { }
+      };
+      _ws.onclose = function () {
+        _ws = null;
+        var delay = Math.min(30000, 1000 * Math.pow(2, _wsRetry++));
+        setTimeout(_connectWS, delay);
+      };
+      // Reconnect WS when tab comes back to foreground
+      if (!_wsVisListener) {
+        _wsVisListener = true;
+        document.addEventListener('visibilitychange', function () {
+          if (!document.hidden) { _wsRetry = 0; _connectWS(); }
+        });
+      }
+      _ws.onerror = function () { };
+    } catch (e) { console.warn('[ws] connect failed:', e.message); }
+  }
+
+  // ── Server AT state consumer (single source of truth) ──
+  window._serverATEnabled = false;
+  var _atPollTimer = null;
+
+  function _mapServerPos(sp) {
+    // Preserve existing client-side controlMode if position already synced
+    var existingPos = null;
+    if (typeof TP !== 'undefined' && sp.seq) {
+      var allClient = [].concat(TP.demoPositions || [], TP.livePositions || []);
+      for (var i = 0; i < allClient.length; i++) {
+        if (allClient[i]._serverSeq === sp.seq || allClient[i].id === sp.seq) { existingPos = allClient[i]; break; }
+      }
+    }
+    var srcMode = sp.mode === 'live' ? 'auto' : 'assist';
+    return {
+      id: sp.seq || sp.id || Date.now(),
+      side: sp.side,
+      sym: sp.symbol || sp.sym,
+      entry: sp.price || sp.entry,
+      size: sp.size || 0,
+      lev: sp.lev || 1,
+      tp: sp.tp || 0,
+      sl: sp.sl || 0,
+      liqPrice: 0,
+      pnl: sp.closePnl || 0,
+      qty: sp.qty || 0,
+      margin: sp.margin || sp.size || 0,
+      tpPnl: sp.tpPnl || 0,
+      slPnl: sp.slPnl || 0,
+      // [Batch B] Addon fields from server
+      addOnCount: sp.addOnCount || 0,
+      originalEntry: sp.originalEntry || sp.price || sp.entry || 0,
+      originalSize: sp.originalSize || sp.size || 0,
+      originalQty: sp.originalQty || '',
+      addOnHistory: sp.addOnHistory || [],
+      slPct: sp.slPct || 0,
+      rr: sp.rr || 0,
+      autoTrade: true,
+      openTs: sp.ts || sp.openTs || Date.now(),
+      label: ((sp.mode === 'live') ? '\uD83D\uDD34 LIVE' : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
+      mode: sp.mode || 'demo',
+      sourceMode: existingPos ? existingPos.sourceMode : srcMode,
+      controlMode: existingPos ? existingPos.controlMode : srcMode,
+      brainModeAtOpen: existingPos ? existingPos.brainModeAtOpen : srcMode,
+      // Preserve client-side dslParams when user has Take Control OR during release race window
+      dslParams: (existingPos && existingPos.dslParams && (
+        existingPos.controlMode === 'user' ||
+        (existingPos._dslParamsPushedAt && (Date.now() - existingPos._dslParamsPushedAt) < 10000)
+      )) ? existingPos.dslParams : (sp.dslParams || {}),
+      dslAdaptiveState: (sp.dsl && sp.dsl.phase) ? sp.dsl.phase : 'calm',
+      dslHistory: existingPos ? (existingPos.dslHistory || []) : [],
+      closed: sp.status ? sp.status !== 'OPEN' : !!sp.closed,
+      _serverSeq: sp.seq,
+      _serverMode: sp.mode,
+      _dsl: sp.dsl || null
+    };
+  }
+
+  // [BUG1 FIX] Track positions pending server close — prevent resurrection
+  var _pendingServerCloses = {};  // { seq: timestamp }
+  // Also track by client-side id (for _zeusRecentlyClosed cross-reference)
+  var _pendingCloseIds = {};      // { id: timestamp }
+  window._zeusRequestServerClose = function (seq, id) {
+    _pendingServerCloses[seq] = Date.now();
+    if (id) _pendingCloseIds[id] = Date.now();
+  };
+  window._zeusConfirmServerClose = function (seq) {
+    delete _pendingServerCloses[seq];
+  };
+
+  function _applyServerATState(state) {
+    if (!state) return;
+    window._serverATEnabled = true;
+    // Expire stale pending closes (>120s)
+    var _now = Date.now();
+    Object.keys(_pendingServerCloses).forEach(function (k) {
+      if (_now - _pendingServerCloses[k] > 120000) delete _pendingServerCloses[k];
+    });
+    Object.keys(_pendingCloseIds).forEach(function (k) {
+      if (_now - _pendingCloseIds[k] > 120000) delete _pendingCloseIds[k];
+    });
+    // Build recently-closed exclusion set
+    var _rcSet = new Set();
+    if (Array.isArray(window._zeusRecentlyClosed)) {
+      window._zeusRecentlyClosed.forEach(function (id) { _rcSet.add(String(id)); });
+    }
+    Object.keys(_pendingCloseIds).forEach(function (k) { _rcSet.add(String(k)); });
+    // Filter open positions and exclude pending closes
+    function _filterOpen(arr) {
+      return (arr || []).filter(function (p) {
+        if (p.status && p.status !== 'OPEN') return false;
+        if (p.closed) return false;
+        if (_pendingServerCloses[p.seq]) return false;
+        return true;
+      });
+    }
+    function _excludeRecentlyClosed(mapped) {
+      if (_rcSet.size === 0) return mapped;
+      return mapped.filter(function (p) { return !_rcSet.has(String(p.id)) && !_rcSet.has(String(p._serverSeq)); });
+    }
+    // [v4] MERGE server AT positions with client-only manual positions
+    // Server AT only knows about positions IT opened. Manual demo/live positions
+    // are client-only and must be PRESERVED — not wiped on every poll.
+    if (typeof TP !== 'undefined') {
+      // Get server AT positions (mapped to client format)
+      var serverATDemo, serverATLive;
+      if (state.demoPositions && state.livePositions) {
+        serverATDemo = _excludeRecentlyClosed(_filterOpen(state.demoPositions).map(_mapServerPos));
+        serverATLive = _excludeRecentlyClosed(_filterOpen(state.livePositions).map(_mapServerPos));
+      } else {
+        var serverPosns = _filterOpen(state.positions);
+        var mapped = serverPosns.map(_mapServerPos);
+        serverATDemo = _excludeRecentlyClosed(mapped.filter(function (p) { return p.mode !== 'live'; }));
+        serverATLive = _excludeRecentlyClosed(mapped.filter(function (p) { return p.mode === 'live'; }));
+      }
+      // Build set of server AT position IDs (by seq) for fast lookup
+      var _serverDemoIds = new Set();
+      serverATDemo.forEach(function (p) { _serverDemoIds.add(String(p.id)); if (p._serverSeq) _serverDemoIds.add(String(p._serverSeq)); });
+      var _serverLiveIds = new Set();
+      serverATLive.forEach(function (p) { _serverLiveIds.add(String(p.id)); if (p._serverSeq) _serverLiveIds.add(String(p._serverSeq)); });
+      // Preserve client-only manual positions (non-autoTrade, not closed, not in recently-closed)
+      var clientOnlyDemo = (TP.demoPositions || []).filter(function (p) {
+        if (p.closed) return false;
+        if (_rcSet.has(String(p.id))) return false;
+        // Keep if NOT an AT position (manual/paper) AND not a server-synced position
+        if (!p.autoTrade && !p._serverSeq) return true;
+        // Also keep AT positions that were opened client-side and not yet on server
+        // (race window: position just opened, server hasn't picked it up yet)
+        if (p.autoTrade && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && p._localOnly) return true;
+        return false;
+      });
+      var clientOnlyLive = (TP.livePositions || []).filter(function (p) {
+        if (p.closed) return false;
+        if (_rcSet.has(String(p.id))) return false;
+        if (!p.autoTrade && !p._serverSeq) return true;
+        return false;
+      });
+      // MERGE: server AT positions + preserved client-only manual positions
+      TP.demoPositions = serverATDemo.concat(clientOnlyDemo);
+      TP.livePositions = serverATLive.concat(clientOnlyLive);
+      // Update demo balance from server (always — it's the demo balance source of truth)
+      if (state.demoBalance) {
+        TP.demoBalance = state.demoBalance.balance || TP.demoBalance;
+        TP.demoPnL = state.demoBalance.pnl || 0;
+        TP._serverStartBalance = state.demoBalance.startBalance || 10000;
+      }
+    }
+    // Update AT state
+    if (typeof AT !== 'undefined') {
+      AT.killTriggered = !!state.killActive;
+      // [KILL FIX] Sync killPct from server to DOM — server is source of truth
+      if (typeof state.killPct === 'number' && state.killPct > 0) {
+        var _kpEl = document.getElementById('atKillPct');
+        if (_kpEl) _kpEl.value = state.killPct;
+      }
+      // Detect mode change — save/restore per-mode AT state
+      if (!AT._enabledPerMode) AT._enabledPerMode = {};
+      var _prevMode = AT._serverMode || AT.mode || 'demo';
+      if (state.mode && state.mode !== _prevMode) {
+        // [C2-fix] Save AT.enabled for the mode we are LEAVING
+        AT._enabledPerMode[_prevMode] = !!AT.enabled;
+        // Pause AT during transition (stop interval, update UI)
+        if (AT.enabled) {
+          AT.enabled = false;
+          if (typeof Intervals !== 'undefined') Intervals.clear('atCheck');
+          clearInterval(AT.interval); AT.interval = null;
+          var _btn = document.getElementById('atMainBtn');
+          var _dot = document.getElementById('atBtnDot');
+          var _txt = document.getElementById('atBtnTxt');
+          if (_btn) _btn.className = 'at-main-btn off';
+          if (_dot) { _dot.style.background = '#aa44ff'; _dot.style.boxShadow = '0 0 6px #aa44ff'; }
+          if (_txt) _txt.textContent = 'AUTO TRADE OFF';
+        }
+        // [C2-fix] Restore AT if it was previously enabled in the TARGET mode
+        if (AT._enabledPerMode[state.mode]) {
+          if (typeof atLog === 'function') atLog('info', '\u25B6 AT restoring — was ON in ' + state.mode.toUpperCase());
+          setTimeout(function () {
+            if (typeof toggleAutoTrade === 'function') toggleAutoTrade();
+          }, 600);
+        } else {
+          var _st2 = document.getElementById('atStatus');
+          if (_st2) _st2.textContent = '\u23F9 AT oprit — mod schimbat la ' + state.mode.toUpperCase();
+          if (typeof atLog === 'function') atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode);
+        }
+      }
+      // [C1] Server is authoritative for mode — set AT.mode directly (single source of truth)
+      if (state.mode) { AT.mode = state.mode; AT._serverMode = state.mode; AT._modeConfirmed = true; }
+      // [v3] Store per-mode stats separately — no more mixing
+      AT._serverStats = state.stats || null;
+      AT._serverDemoStats = state.demoStats || null;
+      AT._serverLiveStats = state.liveStats || null;
+      // Update TP demo stats from demo-specific stats (not global)
+      var _ds = state.demoStats || state.stats;
+      if (_ds) {
+        TP.demoWins = _ds.wins || 0;
+        TP.demoLosses = _ds.losses || 0;
+      }
+    }
+    // Track API configuration status for execution readiness
+    window._apiConfigured = !!state.apiConfigured;
+    // [HARDENING] Unified execution readiness flag
+    window.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive);
+    // Sync global mode UI with server state
+    if (state.mode && typeof _applyGlobalModeUI === 'function') _applyGlobalModeUI(state.mode);
+    if (typeof updateATMode === 'function') updateATMode();
+    if (typeof updateATStats === 'function') updateATStats();
+    if (typeof updateDemoBalance === 'function') updateDemoBalance();
+    // Refresh banners
+    if (typeof atUpdateBanner === 'function') atUpdateBanner();
+    if (typeof ptUpdateBanner === 'function') ptUpdateBanner();
+    if (typeof dslUpdateBanner === 'function') dslUpdateBanner();
+  }
+
+  function _startATPolling() {
+    if (_atPollTimer) return;
+    // Initial fetch
+    _atPollOnce();
+    // Poll every 10s as fallback (WS push is primary)
+    _atPollTimer = setInterval(_atPollOnce, 10000);
+  }
+
+  function _atPollOnce() {
+    fetch('/api/at/state', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) { if (data) _applyServerATState(data); })
+      .catch(function () { });
+  }
+
+  // ── Offline queue: re-push when back online ──
+  if (typeof window !== 'undefined') {
+    window.addEventListener('online', function () {
+      if (_offlinePending) {
+        _offlinePending = false;
+        console.log('[sync] back online — pushing pending state');
+        setTimeout(_pushToServer, 1500);
+      }
+      // Reconnect WebSocket if dropped
+      _connectWS();
+    });
+  }
 
   function pullFromServer() {
-    return fetch('/api/sync/state', { headers: { 'X-Sync-Token': _SYNC_TOKEN } }).then(function (r) { return r.json(); })
+    var ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+    var opts = { credentials: 'same-origin' };
+    if (ctrl) opts.signal = ctrl.signal;
+    return fetch('/api/sync/state', opts).then(function (r) {
+      if (timer) clearTimeout(timer);
+      if (!r.ok) { console.warn('[sync] pull HTTP', r.status); return null; }
+      return r.json();
+    })
       .then(function (j) {
-        if (!j.ok || !j.data) return null;
+        if (!j) return null;
+        if (!j.ok || !j.data) { console.warn('[sync] pull state \u2014 server returned:', j); return null; }
         return j.data;
-      }).catch(function () { return null; });
+      }).catch(function (e) { if (timer) clearTimeout(timer); console.warn('[sync] pull state FAILED:', e.message || e); return null; });
   }
 
   function pullJournalFromServer() {
-    return fetch('/api/sync/journal', { headers: { 'X-Sync-Token': _SYNC_TOKEN } }).then(function (r) { return r.json(); })
+    return fetch('/api/sync/journal', { credentials: 'same-origin' }).then(function (r) { return r.json(); })
       .then(function (j) {
         if (!j.ok || !j.data) return null;
         return j.data;
-      }).catch(function () { return null; });
+      }).catch(function (e) { console.warn('[sync] pull journal FAILED:', e.message || e); return null; });
   }
 
   // Enhanced save — local + server
@@ -398,12 +976,177 @@ const ZState = (() => {
   }
 
   // Debounced save — also syncs to server
+  // [S2B2-T1] scheduleSaveAndSync marks dirty — it's called after real user mutations
   function scheduleSaveAndSync() {
+    markDirty();
     if (_saveTimer) clearTimeout(_saveTimer);
     _saveTimer = setTimeout(saveAndSync, 800);
   }
 
-  return { save: saveAndSync, saveLocal: saveLocalOnly, load, restore, clear, scheduleSave: scheduleSaveAndSync, syncToServer, pullFromServer, pullJournalFromServer, markSyncReady };
+  // ── Pull from server and merge into local state (used by periodic sync + boot) ──
+  function pullAndMerge() {
+    // [S2B2-T1] Skip if save is in progress — prevents timestamp mismatch race
+    if (_saving) { console.log('[sync] pullAndMerge deferred — save in progress'); return Promise.resolve(false); }
+    _merging = true; // [S2B1-T2] block pushes during async merge
+    return pullFromServer().then(function (serverSnap) {
+      if (!serverSnap || !serverSnap.ts) return false;
+      if (typeof TP === 'undefined') return false;
+      var localSnap = load();
+      var localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0;
+      var changed = false;
+      // Build comprehensive closedIds from journal + recent splice tracker
+      var _closedSet = new Set();
+      if (Array.isArray(TP.journal)) TP.journal.forEach(function (j) { if (j.id) _closedSet.add(String(j.id)); });
+      if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { _closedSet.add(String(id)); });
+      if (Array.isArray(serverSnap.closedIds)) serverSnap.closedIds.forEach(function (id) { _closedSet.add(String(id)); });
+
+      // [v3] When serverAT is active, DO NOT merge positions from sync state — serverAT is the sole source of truth
+      // Only merge positions from sync state when serverAT is NOT the authority (non-AT paper positions)
+      if (window._serverATEnabled) {
+        // Skip position merge entirely — _applyServerATState handles positions
+      } else {
+        // Merge positions by mode — split demo vs live
+        if (serverSnap.positions && serverSnap.positions.length) {
+          TP.demoPositions = TP.demoPositions || [];
+          TP.livePositions = TP.livePositions || [];
+          var existingDemoIds = new Set(TP.demoPositions.map(function (p) { return String(p.id); }));
+          var existingLiveIds = new Set(TP.livePositions.map(function (p) { return String(p.id); }));
+          serverSnap.positions.forEach(function (p) {
+            if (p.closed || _closedSet.has(String(p.id))) return;
+            var posMode = p.mode || 'demo';
+            if (posMode === 'live') {
+              if (existingLiveIds.has(String(p.id))) return;
+              TP.livePositions.push(Object.assign({}, p, { _restored: true }));
+            } else {
+              if (existingDemoIds.has(String(p.id))) return;
+              TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
+            }
+            changed = true;
+          });
+        }
+        // Remove positions closed on other device
+        {
+          var serverIds = new Set((serverSnap.positions || []).map(function (p) { return String(p.id); }));
+          var serverClosedIds = new Set(Array.isArray(serverSnap.closedIds) ? serverSnap.closedIds.map(String) : []);
+          var now = Date.now();
+          function _cleanArray(arr) {
+            var toRemove = [];
+            (arr || []).forEach(function (p) {
+              var pid = String(p.id);
+              if (serverClosedIds.has(pid) || _closedSet.has(pid)) {
+                toRemove.push(pid);
+              } else if (!p.closed && !serverIds.has(pid) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 30000) {
+                toRemove.push(pid);
+              }
+            });
+            if (toRemove.length > 0) { changed = true; return (arr || []).filter(function (p) { return toRemove.indexOf(String(p.id)) === -1; }); }
+            return arr;
+          }
+          TP.demoPositions = _cleanArray(TP.demoPositions);
+          TP.livePositions = _cleanArray(TP.livePositions);
+        }
+      }
+
+      // Merge balance if server is newer
+      // [S2B2-T1] Freshness guard: skip balance overwrite if local has pending mutations newer than server
+      var _serverEditTs = serverSnap.lastEditTs || serverSnap.ts || 0;
+      if (serverSnap.ts > localTs && !(_dirty && _lastEditTs > _serverEditTs)) {
+        var _lActive = (TP.demoPositions || []).filter(function (p) { return !p.closed; }).length;
+        var _sPos = (serverSnap.positions || []).length;
+        if (!(_lActive > 0 && _sPos === 0) && !(Math.abs(_lActive - _sPos) > 2 && _lActive > 0)) {
+          if (typeof serverSnap.demoBalance === 'number' && isFinite(serverSnap.demoBalance)) { TP.demoBalance = serverSnap.demoBalance; changed = true; }
+          if (typeof serverSnap.demoPnL === 'number') TP.demoPnL = serverSnap.demoPnL;
+          if (typeof serverSnap.demoWins === 'number') TP.demoWins = serverSnap.demoWins;
+          if (typeof serverSnap.demoLosses === 'number') TP.demoLosses = serverSnap.demoLosses;
+        }
+        // AT state — full cross-device sync
+        if (serverSnap.at && typeof AT !== 'undefined') {
+          if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered;
+          if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL;
+          if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday;
+          // Sync AT enabled/mode across devices
+          if (typeof serverSnap.at.enabled === 'boolean' && serverSnap.at.enabled !== AT.enabled) {
+            AT.enabled = serverSnap.at.enabled;
+            changed = true;
+            // Update AT UI to reflect remote toggle
+            setTimeout(function () {
+              if (typeof atUpdateBanner === 'function') atUpdateBanner();
+              if (typeof ptUpdateBanner === 'function') ptUpdateBanner();
+              var btn = document.getElementById('atMainBtn');
+              var dot = document.getElementById('atBtnDot');
+              var txt = document.getElementById('atBtnTxt');
+              if (btn && dot && txt) {
+                if (AT.enabled) {
+                  btn.className = 'at-main-btn on';
+                  dot.style.background = '#00ff88'; dot.style.boxShadow = '0 0 10px #00ff88';
+                  txt.textContent = 'AUTO TRADE ON';
+                  var st = document.getElementById('atStatus'); if (st) st.innerHTML = _ZI.dGrn + ' Activ — scan la 30s';
+                  if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000);
+                } else {
+                  btn.className = 'at-main-btn off';
+                  dot.style.background = '#aa44ff'; dot.style.boxShadow = '0 0 6px #aa44ff';
+                  txt.textContent = 'AUTO TRADE OFF';
+                  var st = document.getElementById('atStatus'); if (st) st.textContent = 'Configureaza mai jos';
+                  if (typeof Intervals !== 'undefined') Intervals.clear('atCheck');
+                  clearInterval(AT.interval); AT.interval = null;
+                }
+              }
+            }, 50);
+          }
+          if (serverSnap.at.mode) AT.mode = serverSnap.at.mode;
+          if (typeof serverSnap.at.totalTrades === 'number') AT.totalTrades = serverSnap.at.totalTrades;
+          if (typeof serverSnap.at.wins === 'number') AT.wins = serverSnap.at.wins;
+          if (typeof serverSnap.at.losses === 'number') AT.losses = serverSnap.at.losses;
+          if (typeof serverSnap.at.totalPnL === 'number') AT.totalPnL = serverSnap.at.totalPnL;
+          if (typeof serverSnap.at.lastTradeTs === 'number') AT.lastTradeTs = serverSnap.at.lastTradeTs;
+        }
+        // Brain state — runMode/assistArmed now managed exclusively by user-context sync
+        // (_userCtxPull → settings section → _usApply). ZState no longer applies them
+        // to prevent conflicting dual-source updates. ZState still SAVES them for backup.
+      }
+
+      if (changed) {
+        saveLocalOnly();
+        setTimeout(function () {
+          if (typeof updateDemoBalance === 'function') updateDemoBalance();
+          if (typeof renderDemoPositions === 'function') renderDemoPositions();
+          if (typeof renderATPositions === 'function') renderATPositions();
+          if (typeof syncBrainFromState === 'function') syncBrainFromState();
+        }, 100);
+      }
+      return changed;
+    }).catch(function (e) { console.warn('[sync] pullAndMerge failed:', e); return false; })
+      .finally(function () { _merging = false; }); // [S2B1-T2] always release merge lock
+  }
+
+  // [C1] sendBeacon push for beforeunload — minimal critical data
+  function syncBeacon() {
+    try {
+      var data = _serialize();
+      // Minimal payload: positions, balance, closedIds, AT state, timestamp
+      var payload = JSON.stringify({
+        ts: data.ts,
+        positions: data.positions,
+        demoBalance: data.demoBalance,
+        demoPnL: data.demoPnL,
+        demoWins: data.demoWins,
+        demoLosses: data.demoLosses,
+        at: data.at,
+        closedIds: data.closedIds,
+        symbol: data.symbol,
+        runMode: data.runMode,
+        assistArmed: data.assistArmed
+      });
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/sync/state', new Blob([payload], { type: 'application/json' }));
+        console.log('[sync] \u2705 beacon pushed (critical state)');
+      } else {
+        fetch('/api/sync/state', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, credentials: 'same-origin', keepalive: true });
+      }
+    } catch (_) { }
+  }
+
+  return { save: saveAndSync, saveLocal: saveLocalOnly, load, restore, clear, scheduleSave: scheduleSaveAndSync, syncToServer, syncNow, syncBeacon, pullFromServer, pullJournalFromServer, pullAndMerge, markSyncReady, startATPolling: _startATPolling, markDirty, isDirty: function () { return _dirty; }, isMerging: function () { return _merging; } };
 })();
 
 // ╔═══════════════════════════════════════════════════════════════════╗
@@ -479,8 +1222,37 @@ const IND_SETTINGS = {
 let liqSeries = [], srSeries = [];
 let zsSeries = [];
 
+// ── IND_SETTINGS persistence (cross-device sync) ──
+function _indSettingsSave() {
+  try {
+    var data = JSON.stringify(IND_SETTINGS);
+    if (typeof _safeLocalStorageSet === 'function') _safeLocalStorageSet('zeus_ind_settings', data);
+    else localStorage.setItem('zeus_ind_settings', data);
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('indSettings');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
+  } catch (_) { }
+}
+function _indSettingsLoad() {
+  try {
+    var raw = localStorage.getItem('zeus_ind_settings');
+    if (!raw) return;
+    var saved = JSON.parse(raw);
+    if (!saved || typeof saved !== 'object') return;
+    for (var k in saved) {
+      if (IND_SETTINGS[k] && typeof saved[k] === 'object') {
+        for (var p in saved[k]) {
+          if (IND_SETTINGS[k].hasOwnProperty(p)) IND_SETTINGS[k][p] = saved[k][p];
+        }
+      }
+    }
+  } catch (_) { }
+}
+_indSettingsLoad(); // restore on boot
+window._indSettingsSave = _indSettingsSave;
+window._indSettingsLoad = _indSettingsLoad;
+
 // Trading Positions state
-const TP = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], liveConnected: false, liveExchange: 'binance', liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 };
+const TP = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], pendingOrders: [], manualLivePending: [], liveConnected: false, liveExchange: 'binance', liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 };
 let API_KEY = '';
 let API_SECRET = '';
 

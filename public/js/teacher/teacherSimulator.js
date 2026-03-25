@@ -13,14 +13,14 @@ function teacherInitEquity() {
   if (!T) return;
   T._equity = {
     startCapital: T.config.capitalUSD,
-    capital:      T.config.capitalUSD,
-    curve:        [{ bar: T.cursor, capital: T.config.capitalUSD, pnl: 0 }],
-    peak:         T.config.capitalUSD,
-    maxDrawdown:  0,          // max DD in $
+    capital: T.config.capitalUSD,
+    curve: [{ bar: T.cursor, capital: T.config.capitalUSD, pnl: 0 }],
+    peak: T.config.capitalUSD,
+    maxDrawdown: 0,          // max DD in $
     maxDrawdownPct: 0,        // max DD in %
-    currentDD:    0,
+    currentDD: 0,
     currentDDPct: 0,
-    tradeEquity:  [],         // equity snapshot per closed trade
+    tradeEquity: [],         // equity snapshot per closed trade
   };
 }
 
@@ -33,18 +33,18 @@ function _teacherUpdateEquity(closedTrade) {
 
   // Push to curve
   eq.curve.push({
-    bar:     closedTrade.exitBar,
+    bar: closedTrade.exitBar,
     capital: parseFloat(eq.capital.toFixed(2)),
-    pnl:     closedTrade.pnlNet,
+    pnl: closedTrade.pnlNet,
     tradeId: closedTrade.id,
   });
 
   // Trade equity snapshot
   eq.tradeEquity.push({
     tradeNum: T.trades.length,
-    capital:  parseFloat(eq.capital.toFixed(2)),
-    pnlNet:   closedTrade.pnlNet,
-    outcome:  closedTrade.outcome,
+    capital: parseFloat(eq.capital.toFixed(2)),
+    pnlNet: closedTrade.pnlNet,
+    outcome: closedTrade.outcome,
   });
 
   // Update peak and drawdown
@@ -65,16 +65,16 @@ function teacherGetEquity() {
   if (!T || !T._equity) return null;
   var eq = T._equity;
   return {
-    startCapital:   eq.startCapital,
+    startCapital: eq.startCapital,
     currentCapital: parseFloat(eq.capital.toFixed(2)),
-    returnPct:      parseFloat(((eq.capital - eq.startCapital) / eq.startCapital * 100).toFixed(2)),
-    peak:           parseFloat(eq.peak.toFixed(2)),
-    maxDrawdown:    eq.maxDrawdown,
+    returnPct: eq.startCapital > 0 ? parseFloat(((eq.capital - eq.startCapital) / eq.startCapital * 100).toFixed(2)) : 0,
+    peak: parseFloat(eq.peak.toFixed(2)),
+    maxDrawdown: eq.maxDrawdown,
     maxDrawdownPct: eq.maxDrawdownPct,
-    currentDD:      parseFloat(eq.currentDD.toFixed(2)),
-    currentDDPct:   parseFloat(eq.currentDDPct.toFixed(2)),
-    curveLength:    eq.curve.length,
-    tradeEquity:    eq.tradeEquity,
+    currentDD: parseFloat(eq.currentDD.toFixed(2)),
+    currentDDPct: parseFloat(eq.currentDDPct.toFixed(2)),
+    curveLength: eq.curve.length,
+    tradeEquity: eq.tradeEquity,
   };
 }
 
@@ -236,9 +236,9 @@ function teacherSizeFixedFraction(capitalUSD, riskPct, slDistancePct, entryPrice
   qty = notional / entryPrice;
   return {
     leverage: leverage,
-    qty:      parseFloat(qty.toFixed(6)),
+    qty: parseFloat(qty.toFixed(6)),
     notional: parseFloat(notional.toFixed(2)),
-    riskUSD:  parseFloat(riskUSD.toFixed(2)),
+    riskUSD: parseFloat(riskUSD.toFixed(2)),
   };
 }
 
@@ -252,7 +252,7 @@ function teacherSizeFixedFraction(capitalUSD, riskPct, slDistancePct, entryPrice
  * @returns {{ kellyPct, leverage, qty, notional }}
  */
 function teacherSizeKelly(winRate, avgWinLossRatio, capitalUSD, entryPrice, maxLeverage) {
-  if (!winRate || !avgWinLossRatio || !capitalUSD || !entryPrice) return null;
+  if (winRate == null || !avgWinLossRatio || !capitalUSD || !entryPrice) return null;
   maxLeverage = maxLeverage || TEACHER_TRADE_DEFAULTS.maxLeverage;
   // Kelly: f* = (p*b - q) / b, where p=winRate, q=1-p, b=avg win/loss ratio
   var kellyFull = (winRate * avgWinLossRatio - (1 - winRate)) / avgWinLossRatio;
@@ -263,10 +263,10 @@ function teacherSizeKelly(winRate, avgWinLossRatio, capitalUSD, entryPrice, maxL
   notional = capitalUSD * leverage;
   var qty = notional / entryPrice;
   return {
-    kellyPct:  parseFloat(kellyPct.toFixed(2)),
-    leverage:  leverage,
-    qty:       parseFloat(qty.toFixed(6)),
-    notional:  parseFloat(notional.toFixed(2)),
+    kellyPct: parseFloat(kellyPct.toFixed(2)),
+    leverage: leverage,
+    qty: parseFloat(qty.toFixed(6)),
+    notional: parseFloat(notional.toFixed(2)),
   };
 }
 
@@ -312,10 +312,10 @@ function teacherFindMissedTrades(dataset, trades, opts) {
     if (ind.confluence >= minConf && ind.stDir === 'bull' && ind.macdDir === 'bull') {
       if (ind.adx !== null && ind.adx >= minADX) {
         missed.push({
-          barIndex:   i,
-          bar:        dataset.bars[i],
-          side:       'LONG',
-          reasons:    _teacherAutoTagEntry('LONG', ind),
+          barIndex: i,
+          bar: dataset.bars[i],
+          side: 'LONG',
+          reasons: _teacherAutoTagEntry('LONG', ind),
           confluence: ind.confluence,
           indicators: ind,
         });
@@ -329,10 +329,10 @@ function teacherFindMissedTrades(dataset, trades, opts) {
     if (ind.confluence <= (100 - minConf) && ind.stDir === 'bear' && ind.macdDir === 'bear') {
       if (ind.adx !== null && ind.adx >= minADX) {
         missed.push({
-          barIndex:   i,
-          bar:        dataset.bars[i],
-          side:       'SHORT',
-          reasons:    _teacherAutoTagEntry('SHORT', ind),
+          barIndex: i,
+          bar: dataset.bars[i],
+          side: 'SHORT',
+          reasons: _teacherAutoTagEntry('SHORT', ind),
           confluence: ind.confluence,
           indicators: ind,
         });
@@ -457,9 +457,9 @@ function teacherCalcRMultiple(trade) {
   var rDollar = riskPerUnit * trade.qty;
   var rMultiple = rDollar > 0 ? trade.pnlRaw / rDollar : 0;
   return {
-    rDollar:   parseFloat(rDollar.toFixed(2)),
+    rDollar: parseFloat(rDollar.toFixed(2)),
     rMultiple: parseFloat(rMultiple.toFixed(2)),
-    pnlInR:    parseFloat(rMultiple.toFixed(2)),
+    pnlInR: parseFloat(rMultiple.toFixed(2)),
   };
 }
 
@@ -527,14 +527,14 @@ function teacherFullSessionAnalytics() {
   var avgR = rMultiples.length > 0 ? parseFloat((totalR / rMultiples.length).toFixed(2)) : 0;
 
   return {
-    equity:           equity,
-    streaks:          streaks,
-    scores:           scores,
-    avgTradeQuality:  avgScore,
-    rMultiples:       rMultiples,
-    avgR:             avgR,
-    totalR:           parseFloat(totalR.toFixed(2)),
-    exitBreakdown:    exitBreakdown,
-    entryReasonFreq:  entryReasonFreq,
+    equity: equity,
+    streaks: streaks,
+    scores: scores,
+    avgTradeQuality: avgScore,
+    rMultiples: rMultiples,
+    avgR: avgR,
+    totalR: parseFloat(totalR.toFixed(2)),
+    exitBreakdown: exitBreakdown,
+    entryReasonFreq: entryReasonFreq,
   };
 }

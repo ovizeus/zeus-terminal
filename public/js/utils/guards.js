@@ -114,12 +114,12 @@ function _onNewUTCDay(newDayId) {
   const _closed = +(AT.closedTradesToday) || 0;
   AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0;
   AT.dailyStart = new Date().toDateString();
-  atLog('info', `📅 New UTC day (${newDayId}) — daily counters reset`);
+  atLog('info', `[DAY] New UTC day (${newDayId}) — daily counters reset`);
   // Kill switch: only keep if there was REAL loss today
   if (AT.killTriggered && _closed === 0 && Math.abs(_rPnL) < 0.01) {
     AT.killTriggered = false;
     const kb = el('atKillBtn'); if (kb) kb.classList.remove('triggered');
-    atLog('info', 'ℹ️ Kill switch cleared — no realized loss on new day');
+    atLog('info', '[INFO] Kill switch cleared — no realized loss on new day');
   }
 }
 
@@ -144,7 +144,7 @@ function _resetWatchdog() {
     S.dataStalled = false;
     S.dataStalledSince = 0;
     _SAFETY.autoSuspended = false;
-    atLog('info', '✅ Data feed restored — AT resuming');  // logged once here, never repeated
+    atLog('info', '[OK] Data feed restored — AT resuming');  // logged once here, never repeated
     const sb = el('dataStallBanner'); if (sb) sb.style.display = 'none';
   }
 }
@@ -194,14 +194,14 @@ function _startWatchdog() {
       if (timeSinceLastLog >= STALL_LOG_DEBOUNCE) {
         _SAFETY._stallLastLogTs = now;
         const stalledForSec = Math.round((now - _SAFETY.dataStalledSince) / 1000);
-        atLog('warn', `⚠️ DATA STALLED ${stalledForSec}s — price feed unresponsive`);
+        atLog('warn', `[STALL] DATA STALLED ${stalledForSec}s — price feed unresponsive`);
       }
 
       // req 6: suspend AT only after 20s of confirmed stall
       const stalledMs = now - (_SAFETY.dataStalledSince || now);
       if (stalledMs >= STALL_AT_SUSPEND_MS && !_SAFETY.autoSuspended) {
         _SAFETY.autoSuspended = true;
-        atLog('warn', '⏸ AUTO-TRADE suspended (stall > 20s)');
+        atLog('warn', '[PAUSE] AUTO-TRADE suspended (stall > 20s)');
       }
     }
     // FIX3: refresh WHY BLOCKED pill every watchdog tick (cooldown countdown)
@@ -222,8 +222,8 @@ function _enterDegradedMode(source) {
   const now = Date.now();
   if (now - _degradedLogTs.enter >= _DEGRADED_LOG_COOLDOWN) {
     _degradedLogTs.enter = now;
-    atLog('warn', `⚠️ DEGRADED: ${source} feed down — continuing with reduced data`);
-    ncAdd('warning', 'system', `⚠️ Feed degradat: ${source} down`);
+    atLog('warn', `[DEGRADED] ${source} feed down — continuing with reduced data`);
+    ncAdd('warning', 'system', `Feed degradat: ${source} down`);
   }
   updConn();
   _updateWhyBlocked();
@@ -234,7 +234,7 @@ function _exitDegradedMode(source) {
     const now = Date.now();
     if (now - _degradedLogTs.exit >= _DEGRADED_LOG_COOLDOWN) {
       _degradedLogTs.exit = now;
-      atLog('info', `✅ ${source} feed restored — full data mode`);
+      atLog('info', `[OK] ${source} feed restored — full data mode`);
     }
     _updateWhyBlocked();
   }
@@ -250,10 +250,10 @@ function _enterRecoveryMode(source) {
   _recoveryMode = true;
   _SAFETY.isReconnecting = true;
   _SAFETY.autoSuspended = true;
-  atLog('warn', `⚡ RECOVERY MODE: ${source} disconnected — AT suspended`);
+  atLog('warn', `[RECOVERY] ${source} disconnected — AT suspended`);
   const rb = el('recoveryBanner'); if (rb) rb.style.display = 'flex';
   updConn();
-  ncAdd('critical', 'system', `⚡ RECOVERY MODE: ${source} disconnected`);  // [NC]
+  ncAdd('critical', 'system', `[RECOVERY] ${source} disconnected`);  // [NC]
 }
 
 function _exitRecoveryMode() {
@@ -263,7 +263,7 @@ function _exitRecoveryMode() {
     _verifyPositionsAfterReconnect();
     _SAFETY.autoSuspended = false;
     const rb = el('recoveryBanner'); if (rb) rb.style.display = 'none';
-    atLog('info', '✅ Connection restored — positions verified');
+    atLog('info', '[OK] Connection restored — positions verified');
     updConn();
   }, 2000);  // 2s settle time before resuming
 }
@@ -276,11 +276,11 @@ function _verifyPositionsAfterReconnect() {
     const cur = getSymPrice(pos);
     if (!cur || !Number.isFinite(cur)) return;
     if (pos.side === 'LONG') {
-      if (cur <= pos.sl) { closeDemoPos(pos.id, '🔌 SL (reconnect verify)'); }
-      else if (pos.tp != null && Number.isFinite(pos.tp) && cur >= pos.tp) { closeDemoPos(pos.id, '🔌 TP (reconnect verify)'); }
+      if (cur <= pos.sl) { closeDemoPos(pos.id, 'SL (reconnect verify)'); }
+      else if (pos.tp != null && Number.isFinite(pos.tp) && cur >= pos.tp) { closeDemoPos(pos.id, 'TP (reconnect verify)'); }
     } else {
-      if (cur >= pos.sl) { closeDemoPos(pos.id, '🔌 SL (reconnect verify)'); }
-      else if (pos.tp != null && Number.isFinite(pos.tp) && cur <= pos.tp) { closeDemoPos(pos.id, '🔌 TP (reconnect verify)'); }
+      if (cur >= pos.sl) { closeDemoPos(pos.id, 'SL (reconnect verify)'); }
+      else if (pos.tp != null && Number.isFinite(pos.tp) && cur <= pos.tp) { closeDemoPos(pos.id, 'TP (reconnect verify)'); }
     }
   });
 }
@@ -300,12 +300,53 @@ function _clearAllIntervals() {
 
 // FIX 21: Cleanup intervals and WebSockets on page unload
 
+// [C7] Client error forwarding — send uncaught errors to server
+(function () {
+  var _errQueue = [];
+  var _errTimer = null;
+  function _flushErrors() {
+    if (_errQueue.length === 0) return;
+    var batch = _errQueue.splice(0, 5);
+    batch.forEach(function (e) {
+      try {
+        navigator.sendBeacon('/api/client-error', new Blob([JSON.stringify(e)], { type: 'application/json' }));
+      } catch (_) { }
+    });
+  }
+  window.onerror = function (msg, src, line, col, err) {
+    if (typeof ZLOG !== 'undefined') ZLOG.push('ERROR', '[ERR] ' + String(msg || '') + ' (line ' + line + ')');
+    _errQueue.push({ msg: String(msg).slice(0, 500), src: String(src || '').slice(0, 200), line: line, col: col, stack: (err && err.stack) ? String(err.stack).slice(0, 1000) : '', ua: navigator.userAgent });
+    if (!_errTimer) _errTimer = setTimeout(function () { _errTimer = null; _flushErrors(); }, 2000);
+  };
+  window.addEventListener('unhandledrejection', function (ev) {
+    var reason = ev.reason || {};
+    _errQueue.push({ msg: 'UnhandledRejection: ' + String(reason.message || reason).slice(0, 500), src: '', line: 0, col: 0, stack: reason.stack ? String(reason.stack).slice(0, 1000) : '', ua: navigator.userAgent });
+    if (!_errTimer) _errTimer = setTimeout(function () { _errTimer = null; _flushErrors(); }, 2000);
+  });
+})();
+
 // Error handlers
+// beforeunload — desktop browsers
 window.addEventListener('beforeunload', function () {
   try {
+    if (typeof TabLeader !== 'undefined') TabLeader.release(); // [B1] release leadership
+    if (typeof _usFlush === 'function') _usFlush(); // flush settings + sendBeacon to server
+    if (typeof ZState !== 'undefined') {
+      ZState.syncBeacon(); // [C1] sendBeacon critical state to server
+      ZState.saveLocal();  // persist state locally before exit
+    }
     Intervals.clearAll();
-    if (typeof WS !== 'undefined') WS.closeAll();
-    if (typeof ZState !== 'undefined') ZState.saveLocal(); // persist state locally before exit (no server push on unload)
+    if (typeof WS !== 'undefined') WS.closeAll(); // close WS AFTER saves are done
+  } catch (_) { }
+});
+// pagehide — mobile Safari/Chrome (guaranteed on app close/swipe)
+window.addEventListener('pagehide', function () {
+  try {
+    if (typeof _usFlush === 'function') _usFlush();
+    if (typeof ZState !== 'undefined') {
+      ZState.syncBeacon(); // [C1] sendBeacon critical state
+      ZState.saveLocal();
+    }
   } catch (_) { }
 });
 
@@ -321,7 +362,7 @@ function _isExecAllowed() {
     const now = Date.now();
     if (now - _degradedLogTs.continues >= _DEGRADED_LOG_COOLDOWN) {
       _degradedLogTs.continues = now;
-      atLog('warn', `⚠️ DEGRADED feeds: ${[..._SAFETY.degradedFeeds].join(',')} — AT continues (reduced data)`);
+      atLog('warn', `[DEGRADED] feeds: ${[..._SAFETY.degradedFeeds].join(',')} — AT continues (reduced data)`);
     }
   }
   return [true, 'ok'];
@@ -332,7 +373,7 @@ window.addEventListener('error', (e) => {
   console.error('[ZEUS ERR]', e.message, e.filename, e.lineno);
   if (AT.enabled && (S.mode || 'assist') === 'auto') {
     // Don't stop terminal — just log
-    atLog('warn', `⚠️ JS Error: ${e.message?.substring(0, 60)}`);
+    atLog('warn', `[ERR] JS Error: ${e.message?.substring(0, 60)}`);
   }
 });
 

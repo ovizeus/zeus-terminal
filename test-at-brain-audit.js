@@ -9,6 +9,10 @@
 
 'use strict';
 
+// Stub required env vars for testing (config.js fail-fast requires these)
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-audit-jwt-secret-32chars!!';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-audit-enc-key-32chars!!!!';
+
 // ═══════════════════════════════════════════════════════════════
 // TEST HARNESS
 // ═══════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-// Zeus v122 — data/marketData.js
+﻿// Zeus v122 — data/marketData.js
 // WebSocket connections, data fetching, chart rendering, main update loops
 // WARNING: This is the tightly-coupled core — kept together for stability
 'use strict';
@@ -10,12 +10,6 @@ function _escHtml(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 window._escHtml = _escHtml;
-window.onerror = function (msg, src, line, col, err) {
-  if (typeof ZLOG !== 'undefined') ZLOG.push('ERROR', '[ERR] ' + _escHtml(String(msg || '')) + ' (line ' + line + ')');
-  const mc = document.getElementById('mc');
-  if (mc && !mc.querySelector('canvas'))
-    mc.innerHTML = '<div style="color:#ff3355;padding:10px;font-size:10px;font-family:monospace;white-space:pre-wrap">ERR: ' + _escHtml(msg) + ' (line ' + _escHtml(line) + ')</div>';
-};
 
 // ===== HELPERS =====
 // [MOVED TO TOP] el
@@ -39,10 +33,12 @@ function fmtDate(ts) { if (!ts) return '—'; const ms = ts > 1e10 ? ts : ts * 1
 function fmtFull(ts) { if (!ts) return '—'; const ms = ts > 1e10 ? ts : ts * 1000; return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof S !== 'undefined' && S.tz) || _TZ, day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms)); }
 // fmtNow() → "14:35:22" current time in RO tz
 function fmtNow(sec) { return sec ? fmtTimeSec(Date.now()) : fmtTime(Date.now()); }
-function toast(msg, dur = 3000) {
+function toast(msg, dur = 3000, icon) {
   let t = el('toast');
-  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#1a2530;border:1px solid #f0c04044;color:#f0c040;padding:8px 16px;border-radius:4px;font-size:10px;z-index:9999;pointer-events:none;transition:.3s;max-width:80%'; document.body.appendChild(t); }
-  t.textContent = msg; t.style.opacity = '1';
+  if (!t) { t = document.createElement('div'); t.id = 'toast'; t.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#1a2530;border:1px solid #f0c04044;color:#f0c040;padding:8px 16px;border-radius:4px;font-size:10px;z-index:9999;pointer-events:none;transition:.3s;max-width:80%;display:flex;align-items:center;gap:4px'; document.body.appendChild(t); }
+  if (icon) { t.innerHTML = ''; var _s = document.createElement('span'); _s.innerHTML = icon; t.appendChild(_s); t.appendChild(document.createTextNode(' ' + msg)); }
+  else { t.textContent = msg; }
+  t.style.opacity = '1';
   clearTimeout(t._t); t._t = setTimeout(() => t.style.opacity = '0', dur);
 }
 
@@ -125,7 +121,7 @@ function getChartW() {
 function initCharts() {
   const W = getChartW();
   const TZ = S.tz || 'Europe/Bucharest';
-  // ✅ FIX ORA CHART: Convertim UTC→Romania direct in formatter, FARA sa modificam timestamps
+  // FIX ORA CHART: Convertim UTC→Romania direct in formatter, FARA sa modificam timestamps
   // Asa functioneaza corect pe ORICE timeframe (5m, 1h, 4h, 1d, 1w)
   const locFmt = {
     timeFormatter: ts => fmtTime(ts),
@@ -246,11 +242,13 @@ async function fetchKlines(tf) {
         _resetKlineWatchdog();
         try { cSeries.update(bar); } catch (_) { }
         updOvrs();
+        // [CHART MARKERS] Throttled refresh on live candle updates
+        if (!window._tmThrottle) { window._tmThrottle = setTimeout(function () { window._tmThrottle = null; renderTradeMarkers(); }, 5000); }
       }
     });
   } catch (e) {
     console.error('[fetchKlines]', e.message);
-    toast(`⚠️ Chart: nu pot încărca datele (${e.message})`);
+    toast(`Chart: nu pot încărca datele (${e.message})`);
   }
   finally { FetchLock.release('klines'); }
 }
@@ -309,6 +307,7 @@ function renderChart() {
     updOvrs();
     if (S.vwapOn) renderVWAP();
     if (S.oviOn) { clearTimeout(S._oviRefreshT); S._oviRefreshT = setTimeout(renderOviLiquid, 15000); }
+    renderTradeMarkers();
   } catch (e) { console.error('renderChart', e); }
 }
 
@@ -328,6 +327,172 @@ function togOvr(o, btn) {
 }
 function clearHeatmap() { liqSeries.forEach(s => { try { mainChart.removeSeries(s); } catch (_) { } }); liqSeries = []; }
 function clearSR() { srSeries.forEach(s => { try { mainChart.removeSeries(s); } catch (_) { } }); srSeries = []; }
+
+// ═══════════════════════════════════════════════════════
+// ===== TRADE MARKERS (chart overlay) =====
+// ═══════════════════════════════════════════════════════
+var _tradePriceLines = [];  // cSeries price line refs for SL/TP of open positions
+
+function _tsToBarTime(tsMs) {
+  // Convert ms epoch → chart bar time (seconds, floored to nearest kline)
+  if (!tsMs || !S.klines.length) return 0;
+  var tsSec = Math.floor(tsMs / 1000);
+  // Binary search for the last kline whose time <= tsSec
+  var lo = 0, hi = S.klines.length - 1, best = S.klines[0].time;
+  while (lo <= hi) {
+    var mid = (lo + hi) >>> 1;
+    if (S.klines[mid].time <= tsSec) { best = S.klines[mid].time; lo = mid + 1; }
+    else hi = mid - 1;
+  }
+  return best;
+}
+
+function _classifyExitReason(reason) {
+  if (!reason) return 'CLOSE';
+  var r = reason.toUpperCase();
+  if (r.includes('SL') || r.includes('STOP LOSS') || r.includes('SL HIT')) return 'SL';
+  if (r.includes('TP') && !r.includes('TTP') || r.includes('TAKE PROFIT') || r.includes('TP HIT')) return 'TP';
+  if (r.includes('DSL') || r.includes('DSL')) return 'DSL';
+  if (r.includes('TTP')) return 'TTP';
+  if (r.includes('EMERGENCY') || r.includes('EMERGENCY')) return 'EMERGENCY';
+  if (r.includes('EXPIR') || r.includes('LIQ') || r.includes('LIQUIDATED')) return 'EXPIRY';
+  if (r.includes('MANUAL') || r.includes('MANUAL') || r.includes('CLOSE ALL')) return 'MANUAL_CLOSE';
+  if (r.includes('PARTIAL') || r.includes('◑')) return 'PARTIAL';
+  return 'CLOSE';
+}
+
+function _exitMarkerMeta(exitType) {
+  // Returns { color, text } for each exit type
+  switch (exitType) {
+    case 'SL': return { color: '#ff3355', text: 'SL' };
+    case 'TP': return { color: '#00d97a', text: 'TP' };
+    case 'DSL': return { color: '#aa44ff', text: 'DSL' };
+    case 'TTP': return { color: '#f0c040', text: 'TTP' };
+    case 'MANUAL_CLOSE': return { color: '#f0c040', text: 'CLOSE' };
+    case 'EMERGENCY': return { color: '#ff8800', text: 'EMRG' };
+    case 'EXPIRY': return { color: '#888888', text: 'EXP' };
+    case 'PARTIAL': return { color: '#00b8d4', text: 'PART' };
+    default: return { color: '#888888', text: 'EXIT' };
+  }
+}
+
+function renderTradeMarkers() {
+  if (!cSeries || !S.klines || !S.klines.length) return;
+  try {
+    // 1) Clear old SL/TP price lines
+    _tradePriceLines.forEach(function (pl) { try { cSeries.removePriceLine(pl); } catch (_) { } });
+    _tradePriceLines = [];
+
+    var curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+    var markers = [];
+    var curSym = (S.symbol || 'BTCUSDT').toUpperCase();
+
+    // 2) Open positions — ENTRY markers + SL/TP price lines (current mode only)
+    var openPos = curMode === 'live' ? (TP.livePositions || []) : (TP.demoPositions || []);
+    openPos.forEach(function (pos) {
+      if (pos.closed || pos.status === 'closing') return;
+      var posSym = (pos.sym || pos.symbol || '').toUpperCase();
+      if (posSym !== curSym) return;
+
+      var entryBarTime = _tsToBarTime(pos.openTs || pos.id);
+      if (!entryBarTime) return;
+
+      var isAuto = !!pos.autoTrade;
+      var isLong = pos.side === 'LONG';
+      var label = (isAuto ? 'AT ' : 'MAN ') + pos.side;
+      var entryColor = isAuto
+        ? (isLong ? '#00d97a' : '#ff3355')
+        : (isLong ? '#00b8d4' : '#ff8822');
+
+      markers.push({
+        time: entryBarTime,
+        position: isLong ? 'belowBar' : 'aboveBar',
+        color: entryColor,
+        shape: isLong ? 'arrowUp' : 'arrowDown',
+        text: label,
+      });
+
+      // SL price line
+      var effectiveSL = pos.sl;
+      if (typeof DSL !== 'undefined' && DSL.positions && DSL.positions[String(pos.id)]) {
+        var dsl = DSL.positions[String(pos.id)];
+        if (dsl.active && dsl.currentSL > 0) effectiveSL = dsl.currentSL;
+      }
+      if (effectiveSL && Number.isFinite(effectiveSL)) {
+        _tradePriceLines.push(cSeries.createPriceLine({
+          price: effectiveSL,
+          color: '#ff335599',
+          lineWidth: 1,
+          lineStyle: 2, // dashed
+          axisLabelVisible: true,
+          title: 'SL ' + (isAuto ? 'AT' : 'MAN'),
+        }));
+      }
+      // TP price line
+      if (pos.tp && Number.isFinite(pos.tp)) {
+        _tradePriceLines.push(cSeries.createPriceLine({
+          price: pos.tp,
+          color: '#00d97a99',
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          title: 'TP ' + (isAuto ? 'AT' : 'MAN'),
+        }));
+      }
+    });
+
+    // 3) Closed trades from journal — ENTRY + EXIT markers (current mode only, current symbol)
+    var journal = (typeof TP !== 'undefined' && Array.isArray(TP.journal)) ? TP.journal : [];
+    journal.forEach(function (t) {
+      if (t.journalEvent !== 'CLOSE') return;
+      // Mode filter: use explicit mode field, fallback isLive flag, fallback to demo
+      var tMode = t.mode || (t.isLive ? 'live' : 'demo');
+      if (tMode !== curMode) return;
+      var tSym = ((t.sym || '') + 'USDT').toUpperCase();
+      if (tSym !== curSym) return;
+      if (t.entry == null || t.exit == null) return;
+
+      var isAuto = !!t.autoTrade;
+      var isLong = (t.side || '').toUpperCase() === 'LONG';
+      var entryLabel = (isAuto ? 'AT ' : 'MAN ') + (t.side || '?');
+
+      // Entry marker (use openTs if available, else id as timestamp)
+      var entryTs = t.openTs || t.id;
+      var entryBarTime = _tsToBarTime(entryTs);
+      if (entryBarTime) {
+        var eColor = isAuto ? (isLong ? '#00d97a' : '#ff3355') : (isLong ? '#00b8d4' : '#ff8822');
+        markers.push({
+          time: entryBarTime,
+          position: isLong ? 'belowBar' : 'aboveBar',
+          color: eColor,
+          shape: isLong ? 'arrowUp' : 'arrowDown',
+          text: entryLabel,
+        });
+      }
+
+      // Exit marker (use closedAt if available, else current-ish)
+      var exitTs = t.closedAt || (t.id ? t.id + 60000 : 0); // fallback: entry + 1min
+      var exitBarTime = _tsToBarTime(exitTs);
+      if (exitBarTime) {
+        var exitType = _classifyExitReason(t.reason);
+        var meta = _exitMarkerMeta(exitType);
+        markers.push({
+          time: exitBarTime,
+          position: isLong ? 'aboveBar' : 'belowBar',
+          color: meta.color,
+          shape: 'circle',
+          text: meta.text,
+        });
+      }
+    });
+
+    // 4) Sort markers by time (Lightweight Charts requires ascending order)
+    markers.sort(function (a, b) { return a.time - b.time; });
+
+    // 5) Apply to chart
+    cSeries.setMarkers(markers);
+  } catch (e) { console.warn('[TradeMarkers]', e); }
+}
 
 // [p19 LLV START] ── LIQ Levels V2 ──────────────────────────────────────
 var _llvLines = []; // price line refs for cleanup (kept for compat, no longer populated)
@@ -508,6 +673,8 @@ function renderLiqLevels() {
 function llvSaveSettings() {
   try {
     localStorage.setItem('zeus_llv_settings', JSON.stringify(S.llvSettings));
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('llvSettings');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   } catch (e) { console.warn('[LLV] save settings error:', e); }
   renderLiqLevels();
   closeM('mllv');
@@ -635,6 +802,13 @@ function setTF(tf, btn) {
   S.chartTf = tf;
   document.querySelectorAll('.tfb').forEach(b => b.classList.remove('act'));
   if (btn) btn.classList.add('act');
+  // Sync dropdown label + active state
+  var _ztfLbl = document.getElementById('ztfLabel');
+  if (_ztfLbl) _ztfLbl.textContent = tf;
+  var _ztfDd = document.getElementById('ztfDropdown');
+  if (_ztfDd) _ztfDd.querySelectorAll('.ztf-item').forEach(function (b) {
+    b.classList.toggle('act', b.textContent.trim() === tf);
+  });
   clearHeatmap(); clearSR();
   // [v108 FIX] Release lock BEFORE fetch — identic cu fix-ul din setSymbol
   FetchLock.release('klines');
@@ -651,6 +825,47 @@ function setTF(tf, btn) {
 }
 // Alias pentru HTML care foloseste setTf (lowercase f)
 const setTf = setTF;
+
+// ── Timeframe dropdown (Visual-style) ──
+function ztfToggle() {
+  var w = document.getElementById('ztfWrap');
+  if (!w) return;
+  w.classList.toggle('open');
+}
+function ztfPick(tf, btn) {
+  // Update dropdown state
+  var dd = document.getElementById('ztfDropdown');
+  if (dd) dd.querySelectorAll('.ztf-item').forEach(function (b) { b.classList.remove('act'); });
+  if (btn) btn.classList.add('act');
+  // Update trigger label
+  var lbl = document.getElementById('ztfLabel');
+  if (lbl) lbl.textContent = tf;
+  // Close dropdown
+  var w = document.getElementById('ztfWrap');
+  if (w) w.classList.remove('open');
+  // Call real TF setter
+  if (typeof setTF === 'function') setTF(tf, btn);
+}
+// Close dropdown on outside click
+document.addEventListener('click', function (e) {
+  var w = document.getElementById('ztfWrap');
+  if (w && w.classList.contains('open') && !w.contains(e.target)) {
+    w.classList.remove('open');
+  }
+});
+// Sync dropdown label when TF is set externally (e.g. settings hub)
+(function _ztfSyncOnLoad() {
+  if (typeof S !== 'undefined' && S.chartTf) {
+    var lbl = document.getElementById('ztfLabel');
+    if (lbl) lbl.textContent = S.chartTf;
+    var dd = document.getElementById('ztfDropdown');
+    if (dd) {
+      dd.querySelectorAll('.ztf-item').forEach(function (b) {
+        b.classList.toggle('act', b.textContent.trim() === S.chartTf);
+      });
+    }
+  }
+})();
 
 // ===== INDICATORS =====
 // [FIX BUG2] togInd defined once in dom.js — this stub removed to prevent overwrite
@@ -765,7 +980,7 @@ async function fetchAllRSI() {
 }
 async function fetchFG() {
   try {
-    const d = await safeFetch('https://api.alternative.me/fng/?limit=2');
+    const d = await safeFetch('/api/fng');
     if (!d.data || !d.data[0]) throw new Error('Date Fear&Greed invalide');
     const val = +d.data[0].value, cls = d.data[0].value_classification;
     const yd = d.data[1] ? +d.data[1].value : null;
@@ -807,6 +1022,7 @@ async function fetchOI() {
     const d = await safeFetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`);
     if (!d.openInterest) throw new Error('Date OI invalide');
     S.oiPrev = S.oi; S.oi = +d.openInterest * (S.price || 1);
+    S.oiTs = Date.now(); // [ZT-AUD-B3] OI freshness timestamp
     updateMetrics(); throttledMainMetrics();
   } catch (e) { console.warn('[fetchOI]', e.message); }
 }
@@ -1040,7 +1256,7 @@ function updConn() {
   if (lbl) lbl.textContent = ok ? (degraded ? 'DEGRADED' : 'LIVE') : 'CONNECTING';
   const bv = el('bns'); const byv = el('bys');
   if (bv) bv.textContent = 'BNB:' + (S.bnbOk ? 'LIVE' : '—');
-  if (byv) byv.textContent = 'BYB:' + (S.bybOk ? 'LIVE' : '—' + (degraded ? ' ⚠' : ''));
+  if (byv) byv.textContent = 'BYB:' + (S.bybOk ? 'LIVE' : '—' + (degraded ? ' [!]' : ''));
   updBybHealth();
 }
 
@@ -1126,7 +1342,7 @@ function updLiqStats() {
   if (calm) {
     const recent = S.events.filter(e => Date.now() - e.ts < 60000);
     const bigLiq = recent.filter(e => e.usd > 100000).length;
-    calm.textContent = bigLiq > 5 ? '🔥 HOT' : bigLiq > 2 ? '⚡ ACTIVE' : 'CALM';
+    calm.innerHTML = bigLiq > 5 ? _ZI.fire + ' HOT' : bigLiq > 2 ? _ZI.bolt + ' ACTIVE' : 'CALM';
     calm.style.color = bigLiq > 5 ? 'var(--red)' : bigLiq > 2 ? 'var(--ylw)' : 'var(--dim)';
   }
   // Window stats
@@ -1274,7 +1490,7 @@ function renderFeed() {
   if (_liqSrcFilter !== 'all') filtered = filtered.filter(e => e.src === _liqSrcFilter);
   const html = filtered.slice(0, 30).map(e => {
     const col = e.isLong ? 'var(--red)' : 'var(--grn)';
-    const icon = e.usd >= 1e6 ? '🔥' : e.usd >= 500000 ? '💥' : '💧';
+    const icon = e.usd >= 1e6 ? _ZI.fire : e.usd >= 500000 ? _ZI.boom : _ZI.drop;
     const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>';
     const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : '';
     return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px">
@@ -1313,9 +1529,42 @@ function setSymbol(sym) {
     // [PATCH P2-1 + P2-2] Reset RegimeEngine/PhaseFilter state + BM cached results on symbol switch
     if (typeof RegimeEngine !== 'undefined' && RegimeEngine.reset) RegimeEngine.reset();
     if (typeof PhaseFilter !== 'undefined' && PhaseFilter.reset) PhaseFilter.reset();
+    if (typeof resetForecast === 'function') resetForecast(); // [S2B1-T1] Clear _qebLastRegime
     if (typeof BM !== 'undefined') {
       BM.regimeEngine = { regime: 'RANGE', confidence: 0, trendBias: 'neutral', volatilityState: 'normal', trapRisk: 0, notes: ['switching symbol'] };
       BM.phaseFilter = { allow: false, phase: 'RANGE', reason: 'switching symbol', riskMode: 'reduced', sizeMultiplier: 0.5, allowedSetups: [], blockedSetups: [] };
+      // [S2B1-T1] Reset all brain-derived BM fields to defaults — prevent ghost signals from previous symbol
+      BM.confluenceScore = 50;
+      BM.probScore = 0;
+      BM.probBreakdown = { regime: 0, liquidity: 0, signals: 0, flow: 0 };
+      BM.entryScore = 0;
+      BM.entryReady = false;
+      BM.gates = {};
+      BM.sweep = { type: 'none', reclaim: false, displacement: false };
+      BM.flow = { cvd: 'neut', delta: 0, ofi: 'neut' };
+      BM.mtf = { '15m': 'neut', '1h': 'neut', '4h': 'neut' };
+      BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['switching symbol'], sizeMultiplier: 1.0 };
+      BM.qexit = { risk: 0, signals: { divergence: { type: null, conf: 0 }, climax: { dir: null, mult: 0 }, regimeFlip: { from: null, to: null, conf: 0 }, liquidity: { nearestAboveDistPct: null, nearestBelowDistPct: null, bias: 'neutral' } }, action: 'HOLD', lastTs: 0, lastReason: '', shadowStop: null, confirm: { div: 0, climax: 0 } };
+      BM.danger = 0;
+      BM.dangerBreakdown = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 };
+      BM.conviction = 0;
+      BM.convictionMult = 1.0;
+      BM.structure = { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '—', structureLabel: '—', mtfAlign: { '15m': 'neut', '1h': 'neut', '4h': 'neut' }, score: 0, lastUpdate: 0 };
+    }
+    // [S2B1-T1] Reset BRAIN to scanning defaults on symbol switch
+    if (typeof BRAIN !== 'undefined') {
+      BRAIN.state = 'scanning';
+      BRAIN.regime = 'unknown';
+      BRAIN.regimeConfidence = 0;
+      BRAIN.score = 0;
+      BRAIN.thoughts = [];
+      BRAIN.neurons = {};
+      BRAIN.ofi = { buy: 0, sell: 0, blendBuy: 50, tape: [] };
+    }
+    // [S2B1-T1] Reset CORE_STATE score
+    if (typeof CORE_STATE !== 'undefined') {
+      CORE_STATE.score = 50;
+      CORE_STATE.lastUpdate = Date.now();
     }
     // ── [v108 FIX] Release FetchLock BEFORE fetchKlines —
     FetchLock.release('klines');
@@ -1334,7 +1583,9 @@ function toggleSnd() {
   S.soundOn = !S.soundOn;
   // FIX 17: force audio context resume on user interaction (iOS requirement)
   _initAudio();
-  const e = el('snd'); if (e) e.innerHTML = S.soundOn ? '🔔' : '🔕';
+  const e = el('snd'); if (e) e.innerHTML = S.soundOn ? _ZI.bell : _ZI.bellX;
+  // Persist sound state to UI context
+  if (typeof _ctxSave === 'function') _ctxSave();
 }
 
 // ===== MODAL =====
@@ -1427,6 +1678,7 @@ function applyChartColors() {
   const uw = el('ccBullW')?.value || '#00d97a77'; const dw = el('ccBearW')?.value || '#ff335577';
   if (cSeries) cSeries.applyOptions({ upColor: uc, downColor: dc, borderUpColor: uc, borderDownColor: dc, wickUpColor: uw, wickDownColor: dw });
   toast('Colors applied');
+  if (typeof _usScheduleSave === 'function') _usScheduleSave();
 }
 function setCandleStyle(style, btn) {
   document.querySelectorAll('#ct-candles .qb').forEach(b => b.classList.remove('act'));
@@ -1437,9 +1689,9 @@ function setTZ(tz, btn) {
   S.tz = tz;
   document.querySelectorAll('#cst .qb').forEach(b => b.classList.remove('act'));
   if (btn) btn.classList.add('act');
-  const n = { 'Europe/Bucharest': '🇷🇴 RO', 'UTC': 'UTC', 'America/New_York': '🗽 NY', 'Asia/Tokyo': '🗼 TK', 'Europe/London': '🎡 LN' };
+  const n = { 'Europe/Bucharest': 'RO', 'UTC': 'UTC', 'America/New_York': 'NY', 'Asia/Tokyo': 'TK', 'Europe/London': 'LN' };
   const lbl = el('chartTZLbl'); if (lbl) lbl.textContent = n[tz] || tz;
-  // ✅ FIX: Actualizam TOATE chart-urile cu noul timezone si ambele formatoare
+  // FIX: Actualizam TOATE chart-urile cu noul timezone si ambele formatoare
   const months = ['ian', 'feb', 'mar', 'apr', 'mai', 'iun', 'iul', 'aug', 'sep', 'oct', 'nov', 'dec'];
   const fmtLoc = {
     timeFormatter: ts => new Date(ts * 1000).toLocaleTimeString('ro-RO', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }),
@@ -1519,7 +1771,7 @@ function checkRSIAlerts(rsi, tf) {
   if (rsi > 70) { checkRSIAlerts._last[key] = Date.now(); sendAlert('RSI OVERBOUGHT', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi'); }
   if (rsi < 30) { checkRSIAlerts._last[key] = Date.now(); sendAlert('RSI OVERSOLD', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi'); }
 }
-function testNotification() { sendAlert('ZeuS Terminal', 'Test alert working! 🎯', 'test'); }
+function testNotification() { sendAlert('ZeuS Terminal', 'Test alert working!', 'test'); }
 
 // ===== SAVE ALERTS SETTINGS =====
 function saveAlerts() {
@@ -1554,7 +1806,7 @@ function applyZS() {
   numIds.forEach(id => { const e = el(id); if (e) S.zsSettings[id] = +e.value; });
   // VWAP checkboxes
   ['zsVwapD', 'zsVwapW', 'zsVwapM'].forEach(id => { const e = el(id); if (e) S.zsSettings[id] = e.checked; });
-  toast('👑 Supremus settings saved ✓');
+  toast('Supremus settings saved', 3000, _ZI.crown);
   if (S.overlays.zs) { clearZS(); renderZS(); }
 }
 // [MOVED TO TOP] zsSeries
@@ -1658,7 +1910,7 @@ function injectFakeWhale() {
   if (S.events.length > 200) S.events.pop();
   renderFeed();
   checkLiqAlert(usd, qty, side ? 'LONG' : 'SHORT', sym);
-  toast(`🐋 Fake whale: $${fmt(usd)} ${side ? 'LONG' : 'SHORT'} ${sym}`);
+  toast(`Fake whale: $${fmt(usd)} ${side ? 'LONG' : 'SHORT'} ${sym}`);
 }
 
 // ===== LIQ CHART FILTER FUNCTIONS =====
@@ -1713,14 +1965,14 @@ async function cloudSave() {
   localStorage.setItem('zt_cloud_' + hash, JSON.stringify(data));
   localStorage.setItem('zt_cloud_last_hash', hash);
   // [FIX v85 BUG1] Eliminat: localStorage.setItem('zt_cloud_email_hint', ...) — nu salvăm emailul în clar
-  const st = el('cloudStatus'); if (st) st.textContent = '✅ Saved at ' + new Date().toLocaleTimeString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest' });
-  toast('✅ Settings saved to cloud!');
+  const st = el('cloudStatus'); if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest' });
+  toast('Settings saved to cloud!', 3000, _ZI.ok);
 }
 async function cloudLoad() {
   const ei = el('cloudEmail'); if (!ei || !ei.value.trim()) { toast('Enter email first'); return; }
   const hash = await hashEmail(ei.value);
   const raw = localStorage.getItem('zt_cloud_' + hash);
-  if (!raw) { toast('❌ No saved settings for this email'); return; }
+  if (!raw) { toast('No saved settings for this email', 3000, _ZI.x); return; }
   const data = JSON.parse(raw);
   // Restore ALL settings
   if (data.symbol && data.symbol !== S.symbol) setSymbol(data.symbol);
@@ -1741,8 +1993,8 @@ async function cloudLoad() {
   if (data.vwapOn && !S.vwapOn) toggleVWAP(el('vwapBtn'));
   localStorage.setItem('zt_cloud_last_hash', hash);
   // [FIX v85 BUG1] Eliminat: localStorage.setItem('zt_cloud_email_hint', ...) — nu salvăm emailul în clar
-  const st = el('cloudStatus'); if (st) st.textContent = '✅ Loaded from ' + new Date(data.ts).toLocaleString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest' });
-  toast('✅ Settings restored!');
+  const st = el('cloudStatus'); if (st) st.textContent = 'Loaded from ' + new Date(data.ts).toLocaleString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest' });
+  toast('Settings restored!', 3000, _ZI.ok);
 }
 function initCloudSettings() {
   // Auto-restore on startup
@@ -1768,7 +2020,7 @@ function initCloudSettings() {
     // [FIX v85 BUG1] Eliminat: nu mai populăm câmpul email cu hint-ul
     const st = el('cloudStatus');
     if (st) st.textContent = 'Auto-restored from ' + fmtFull(d.ts);
-    toast('☁️ Settings auto-restored');
+    toast('Settings auto-restored', 3000, _ZI.cloud);
   } catch (e) {
     // [v106 FIX1] Cloud settings corupte — logat, aplicatia continua cu defaults
     console.warn('[initCloudSettings] Restore failed:', e.message);
@@ -1786,24 +2038,277 @@ function applySessionSettings() {
 // ===== TRADING PANELS =====
 // [MOVED TO TOP] TP
 
-function toggleTradePanel(type) {
-  if (type === 'demo') {
-    TP.demoOpen = !TP.demoOpen;
-    const p = el('panelDemo'), b = el('btnDemo');
-    if (p) p.style.display = TP.demoOpen ? 'block' : 'none';
-    if (b) b.classList.toggle('active', TP.demoOpen);
-    if (TP.demoOpen && TP.liveOpen) { TP.liveOpen = false; const lp = el('panelLive'), lb = el('btnLive'); if (lp) lp.style.display = 'none'; if (lb) lb.classList.remove('active'); }
-    if (TP.demoOpen && S.price) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(S.price); }
+// ═══════════════════════════════════════════════════════
+// GLOBAL MODE SWITCH — DEMO / LIVE (mutual exclusive)
+// ═══════════════════════════════════════════════════════
+function switchGlobalMode(mode) {
+  const currentMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  if (currentMode === mode) {
+    // Same mode — just toggle the trade panel open/close
+    _toggleManualPanel();
+    return;
+  }
+  if (mode === 'demo') {
+    _showConfirmDialog(
+      'Activate Demo Mode?',
+      'You are about to switch the entire system to DEMO mode.\n\nAll new manual and auto trades will run in simulated mode.\nNo real Binance orders will be executed.\nLive mode will be turned off.\n\nExisting live positions will remain live and continue independently.',
+      'Cancel', 'Activate Demo',
+      function () { _executeGlobalModeSwitch('demo'); }
+    );
   } else {
-    TP.liveOpen = !TP.liveOpen;
-    const p = el('panelLive'), b = el('btnLive');
-    if (p) p.style.display = TP.liveOpen ? 'block' : 'none';
-    if (b) b.classList.toggle('active', TP.liveOpen);
-    if (TP.liveOpen && TP.demoOpen) { TP.demoOpen = false; const dp = el('panelDemo'), db = el('btnDemo'); if (dp) dp.style.display = 'none'; if (db) db.classList.remove('active'); }
+    _showConfirmDialog(
+      'Activate Real Trading Mode?',
+      'You are about to switch the entire system to LIVE mode.\n\nAll new manual and auto trades may use REAL funds.\nReal Binance execution requires valid API keys configured in Settings.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.\n\nOnly continue if you understand the risks of real-money trading.',
+      'Cancel', 'Activate Live',
+      function () { _executeGlobalModeSwitch('live'); }
+    );
   }
 }
-function setDemoSide(side) { TP.demoSide = side; el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); const de = el('demoExec'); if (de) de.textContent = side === 'LONG' ? '🟢 OPEN LONG' : '🔴 OPEN SHORT'; updateDemoLiqPrice(); }
+
+function _executeGlobalModeSwitch(mode) {
+  fetch('/api/at/mode', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ mode: mode })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.ok) {
+        if (typeof AT !== 'undefined') AT._serverMode = mode;
+        _applyGlobalModeUI(mode);
+        if (mode === 'demo') {
+          toast('Demo Mode Activated — Global simulated trading is now ON. Real mode is OFF.', 3000, _ZI.ok);
+        } else {
+          if (!window._apiConfigured) {
+            toast('Live Mode Activated — Execution LOCKED until API keys are configured in Settings.', 3000, _ZI.w);
+          } else {
+            toast('Real Trading Mode Activated — Global live trading is now ON. Demo mode is OFF.', 3000, _ZI.ok);
+          }
+        }
+        // Open manual trade panel
+        _showManualPanel();
+        // Force DSL rerender immediately for mode-filtered display
+        if (typeof runDSLBrain === 'function') runDSLBrain();
+        // Force poll to get fresh server state
+        if (typeof _atPollOnce === 'function') setTimeout(_atPollOnce, 500);
+      } else {
+        toast('Mode switch failed: ' + (data.error || 'Unknown error'));
+      }
+    })
+    .catch(function () { toast('Network error — could not switch mode', 3000, _ZI.x); });
+}
+
+function _applyGlobalModeUI(mode) {
+  const btnD = el('btnDemo'), btnL = el('btnLive');
+  if (mode === 'live') {
+    if (btnD) btnD.classList.remove('active');
+    if (btnL) btnL.classList.add('active');
+  } else {
+    if (btnD) btnD.classList.add('active');
+    if (btnL) btnL.classList.remove('active');
+  }
+  // AT panel mode display
+  const atModeDisp = el('atModeDisplay');
+  const atModeLbl = el('atModeLabel');
+  const atWarn = el('atLiveWarn');
+  const execLocked = mode === 'live' && !window._apiConfigured;
+  if (mode === 'live') {
+    if (atModeDisp) {
+      atModeDisp.innerHTML = execLocked ? _ZI.dRed + ' LIVE MODE &middot; ' + _ZI.w + ' EXEC LOCKED' : _ZI.dRed + ' LIVE MODE';
+      atModeDisp.style.color = execLocked ? '#ff8800' : '#ff4444';
+      atModeDisp.style.borderColor = execLocked ? '#ff880044' : '#ff444444';
+    }
+    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _ZI.dRed + ' LIVE ' + _ZI.w : _ZI.dRed + ' LIVE'; atModeLbl.style.color = execLocked ? '#ff8800' : '#ff4444'; }
+    if (atWarn) {
+      atWarn.style.display = 'block';
+      atWarn.textContent = execLocked
+        ? 'EXECUTION LOCKED — API keys not configured. Configure in Settings → Exchange API.'
+        : 'LIVE MODE ACTIVE: Auto trades will execute with REAL funds';
+      atWarn.style.color = execLocked ? '#ff8800' : '';
+    }
+  } else {
+    if (atModeDisp) { atModeDisp.innerHTML = _ZI.pad + ' DEMO MODE'; atModeDisp.style.color = '#aa44ff'; atModeDisp.style.borderColor = '#aa44ff44'; }
+    if (atModeLbl) { atModeLbl.innerHTML = _ZI.pad + ' DEMO'; atModeLbl.style.color = '#aa44ff'; }
+    if (atWarn) { atWarn.style.display = 'none'; atWarn.style.color = ''; }
+  }
+  // Update add funds / reset demo visibility (only show in demo)
+  const af = el('btnAddFunds'), rd = el('btnResetDemo');
+  if (af) af.style.display = mode === 'demo' ? '' : 'none';
+  if (rd) rd.style.display = mode === 'demo' ? '' : 'none';
+  // Update manual order button label based on mode + executionReady
+  const execBtn = el('demoExec');
+  if (execBtn) {
+    if (mode === 'live') {
+      if (window._apiConfigured) {
+        execBtn.innerHTML = _ZI.dRed + ' PLACE REAL ORDER';
+        execBtn.disabled = false;
+        execBtn.style.opacity = '';
+      } else {
+        execBtn.innerHTML = _ZI.lock + ' PLACE REAL ORDER (EXEC LOCKED)';
+        // [BUG4 FIX] Don't disable — let placeDemoOrder guard show the toast message
+        execBtn.disabled = false;
+        execBtn.style.opacity = '0.6';
+      }
+    } else {
+      execBtn.innerHTML = _ZI.pad + ' PLACE DEMO ORDER';
+      execBtn.disabled = false;
+      execBtn.style.opacity = '';
+    }
+  }
+  // Update manual panel header to match mode
+  const panelHdr = document.querySelector('#panelDemo .tp-hdr span:first-child');
+  if (panelHdr) panelHdr.innerHTML = mode === 'live' ? _ZI.dRed + ' MANUAL TRADE (LIVE)' : _ZI.pad + ' MANUAL TRADE';
+  // [CHART MARKERS] Rebuild trade markers for the new mode
+  if (typeof renderTradeMarkers === 'function') renderTradeMarkers();
+  // Update balance display in manual panel
+  const balSpan = el('demoBalance');
+  if (balSpan) {
+    if (mode === 'live') {
+      if (window._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) {
+        balSpan.textContent = 'BAL: $' + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      } else {
+        balSpan.textContent = 'BAL: API not configured';
+      }
+    } else if (typeof updateDemoBalance === 'function') {
+      updateDemoBalance();
+    }
+  }
+}
+
+function _toggleManualPanel() {
+  TP.demoOpen = !TP.demoOpen;
+  const p = el('panelDemo');
+  if (p) p.style.display = TP.demoOpen ? 'block' : 'none';
+  if (TP.demoOpen && S.price) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(S.price); }
+}
+
+function _showManualPanel() {
+  TP.demoOpen = true;
+  const p = el('panelDemo');
+  if (p) p.style.display = 'block';
+  if (S.price) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(S.price); }
+}
+
+// ═══════════════════════════════════════════════════════
+// CONFIRM DIALOG (reusable modal)
+// ═══════════════════════════════════════════════════════
+function _showConfirmDialog(title, message, cancelText, confirmText, onConfirm) {
+  // Remove any existing dialog
+  const old = document.getElementById('zeusConfirmOverlay');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'zeusConfirmOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+
+  const safeTitle = typeof escHtml === 'function' ? escHtml(title) : title;
+  const safeMsg = (typeof escHtml === 'function' ? escHtml(message) : message).replace(/\n/g, '<br>');
+  const safeCancelText = typeof escHtml === 'function' ? escHtml(cancelText) : cancelText;
+  const safeConfirmText = typeof escHtml === 'function' ? escHtml(confirmText) : confirmText;
+
+  const isLive = confirmText.toLowerCase().includes('live');
+  const confirmColor = isLive ? '#ff4444' : '#00d4ff';
+  const confirmBg = isLive ? '#2a0000' : '#001a33';
+  const confirmBorder = isLive ? '#ff4444' : '#00aaff';
+
+  overlay.innerHTML = '<div style="background:#0a0a1a;border:1px solid ' + confirmBorder + '66;border-radius:8px;max-width:420px;width:100%;padding:24px;font-family:var(--ff,monospace)">' +
+    '<div style="font-size:14px;font-weight:700;color:' + confirmColor + ';margin-bottom:16px;letter-spacing:1px">' + safeTitle + '</div>' +
+    '<div style="font-size:11px;color:#ccc;line-height:1.7;margin-bottom:24px">' + safeMsg + '</div>' +
+    '<div style="display:flex;gap:12px;justify-content:flex-end">' +
+    '<button id="zeusConfirmCancel" style="padding:8px 20px;background:#1a1a2e;border:1px solid #333;color:#888;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;letter-spacing:1px">' + safeCancelText + '</button>' +
+    '<button id="zeusConfirmOk" style="padding:8px 20px;background:' + confirmBg + ';border:1px solid ' + confirmBorder + ';color:' + confirmColor + ';border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:1px">' + safeConfirmText + '</button>' +
+    '</div></div>';
+
+  document.body.appendChild(overlay);
+
+  document.getElementById('zeusConfirmCancel').onclick = function () { overlay.remove(); };
+  overlay.onclick = function (e) { if (e.target === overlay) overlay.remove(); };
+  document.getElementById('zeusConfirmOk').onclick = function () {
+    overlay.remove();
+    if (typeof onConfirm === 'function') onConfirm();
+  };
+}
+
+// ═══════════════════════════════════════════════════════
+// ADD FUNDS / RESET DEMO
+// ═══════════════════════════════════════════════════════
+function promptAddFunds() {
+  const amount = prompt('Enter amount to add to demo balance (USD):', '5000');
+  if (!amount) return;
+  const num = parseFloat(amount);
+  if (!num || num <= 0 || num > 1000000) { toast('Invalid amount', 3000, _ZI.w); return; }
+  fetch('/api/at/demo/add-funds', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ amount: num })
+  })
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (data.ok) {
+        TP.demoBalance = data.balance;
+        updateDemoBalance();
+        toast('Added $' + num.toLocaleString() + ' to demo balance → $' + data.balance.toLocaleString());
+        if (typeof _atPollOnce === 'function') setTimeout(_atPollOnce, 500);
+      } else { toast((data.error || 'Failed to add funds'), 3000, _ZI.x); }
+    })
+    .catch(function () { toast('Network error', 3000, _ZI.x); });
+}
+
+function promptResetDemo() {
+  _showConfirmDialog(
+    'Reset Demo Balance?',
+    'This will reset your demo balance to $10,000 and clear all trading statistics.\n\nOpen positions will NOT be closed — they will continue running.\n\nThis action cannot be undone.',
+    'Cancel', 'Reset Demo',
+    function () {
+      fetch('/api/at/demo/reset-balance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin'
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            TP.demoBalance = data.balance;
+            TP._serverStartBalance = data.startBalance;
+            updateDemoBalance();
+            toast('Demo balance reset to $10,000', 3000, _ZI.ok);
+            if (typeof _atPollOnce === 'function') setTimeout(_atPollOnce, 500);
+          } else { toast((data.error || 'Reset failed'), 3000, _ZI.x); }
+        })
+        .catch(function () { toast('Network error', 3000, _ZI.x); });
+    }
+  );
+}
+
+// Legacy compat — old code may call toggleTradePanel
+function toggleTradePanel(type) { _toggleManualPanel(); }
+function setDemoSide(side) { TP.demoSide = side; el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); const de = el('demoExec'); if (de) { const _m = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'; if (_m === 'live' && !window._apiConfigured) { de.innerHTML = _ZI.lock + ' PLACE REAL ORDER (EXEC LOCKED)'; } else if (_m === 'live') { de.innerHTML = side === 'LONG' ? _ZI.dGrn + ' OPEN LONG (LIVE)' : _ZI.dRed + ' OPEN SHORT (LIVE)'; } else { de.innerHTML = side === 'LONG' ? _ZI.dGrn + ' OPEN LONG' : _ZI.dRed + ' OPEN SHORT'; } } updateDemoLiqPrice(); }
 function setLiveSide(side) { TP.liveSide = side; el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice(); }
+
+// ===== ORDER TYPE TOGGLE =====
+function onDemoOrdTypeChange() {
+  var sel = el('demoOrdType');
+  var entryInput = el('demoEntry');
+  var entryLabel = el('demoEntryLabel');
+  if (!sel || !entryInput) return;
+  var isMarket = sel.value === 'market';
+  if (isMarket) {
+    entryInput.readOnly = true;
+    entryInput.value = '';
+    entryInput.placeholder = 'Market Price';
+    entryInput.style.opacity = '0.5';
+    if (entryLabel) entryLabel.textContent = 'ENTRY PRICE (MARKET)';
+  } else {
+    entryInput.readOnly = false;
+    entryInput.value = S.price ? fP(S.price) : '';
+    entryInput.placeholder = 'Limit Price';
+    entryInput.style.opacity = '1';
+    if (entryLabel) entryLabel.textContent = 'LIMIT PRICE';
+  }
+  updateDemoLiqPrice();
+}
 
 // ===== LEVERAGE CUSTOM =====
 function getDemoLev() {
@@ -1859,51 +2364,216 @@ function updateLiveLiqPrice() {
 function setDemoPct(pct) { const e = el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0); }
 // [FIX P6] Use actual liveBalance, not hardcoded 100
 function setLivePct(pct) { const e = el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0); }
-function updateDemoBalance() { const e = el('demoBalance'); if (e) e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function updateDemoBalance() {
+  const e = el('demoBalance'); if (!e) return;
+  const _gm = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  if (_gm === 'live') {
+    if (window._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) {
+      e.textContent = 'BAL: $' + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    } else {
+      e.textContent = 'BAL: API not configured';
+    }
+  } else {
+    e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+}
 function placeDemoOrder() {
-  // [PATCH9] Kill switch only blocks AT auto-trades, not manual paper/demo orders
-  // (removed: [P3-4] Respect kill switch for manual paper trades)
-  const size = parseFloat(el('demoSize')?.value || 100);
-  const entry = parseFloat(el('demoEntry')?.value) || S.price;
-  const tp = parseFloat(el('demoTP')?.value) || null;
-  const sl = parseFloat(el('demoSL')?.value) || null;
-  const lev = getDemoLev(); // Bug fix: folosim getDemoLev() pentru custom leverage
-  if (!entry || !size) { toast('⚠️ Entry price and size required'); return; }
-  // [FIX P5+P11] Reject negative/zero size and entry
-  if (size <= 0) { toast('⚠️ Size must be positive'); return; }
-  if (entry <= 0) { toast('⚠️ Entry price must be positive'); return; }
-  if (size > TP.demoBalance) { toast('❌ Insufficient demo balance'); return; }
-  // [FIX P1] Validate SL/TP direction — reject if on wrong side of entry
+  // Block real orders in live mode without API
+  const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  if (_curMode === 'live' && !window._apiConfigured) {
+    toast('Cannot place real order in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 3000, _ZI.lock);
+    return;
+  }
+  // [HARDENING] Require explicit confirmation for LIVE real orders
+  if (_curMode === 'live' && window._apiConfigured) {
+    _showConfirmDialog(
+      'Place Real Order?',
+      'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.\n\nConfirm you want to proceed.',
+      'Cancel', 'Place Real Order',
+      function () { _executePlaceDemoOrder(); }
+    );
+    return;
+  }
+  _executePlaceDemoOrder();
+}
+function _executePlaceDemoOrder() {
+  var _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  var orderTypeSel = el('demoOrdType');
+  var orderType = (orderTypeSel && orderTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET';
+  var size = parseFloat(el('demoSize')?.value || 100);
+  var lev = getDemoLev();
+  var tp = parseFloat(el('demoTP')?.value) || null;
+  var sl = parseFloat(el('demoSL')?.value) || null;
+  var entry;
+  if (orderType === 'MARKET') {
+    entry = S.price;
+  } else {
+    entry = parseFloat(el('demoEntry')?.value);
+    if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return; }
+  }
+  if (!entry || !size) { toast('Entry price and size required', 3000, _ZI.w); return; }
+  if (size <= 0) { toast('Size must be positive', 3000, _ZI.w); return; }
+  if (entry <= 0) { toast('Entry price must be positive', 3000, _ZI.w); return; }
+  // [FIX BUG1] Validate LIMIT price direction — must be on correct side of current price
+  if (orderType === 'LIMIT') {
+    if (TP.demoSide === 'LONG' && entry >= S.price) { toast('LONG LIMIT price ($' + fP(entry) + ') must be below current price ($' + fP(S.price) + ')'); return; }
+    if (TP.demoSide === 'SHORT' && entry <= S.price) { toast('SHORT LIMIT price ($' + fP(entry) + ') must be above current price ($' + fP(S.price) + ')'); return; }
+  }
+  // Validate SL/TP direction
+  var _valEntry = (orderType === 'LIMIT') ? entry : S.price;
   if (sl) {
-    if (TP.demoSide === 'LONG' && sl >= entry) { toast('⚠️ LONG SL must be below entry ($' + fP(entry) + ')'); return; }
-    if (TP.demoSide === 'SHORT' && sl <= entry) { toast('⚠️ SHORT SL must be above entry ($' + fP(entry) + ')'); return; }
+    if (TP.demoSide === 'LONG' && sl >= _valEntry) { toast('LONG SL must be below entry ($' + fP(_valEntry) + ')'); return; }
+    if (TP.demoSide === 'SHORT' && sl <= _valEntry) { toast('SHORT SL must be above entry ($' + fP(_valEntry) + ')'); return; }
   }
   if (tp) {
-    if (TP.demoSide === 'LONG' && tp <= entry) { toast('⚠️ LONG TP must be above entry ($' + fP(entry) + ')'); return; }
-    if (TP.demoSide === 'SHORT' && tp >= entry) { toast('⚠️ SHORT TP must be below entry ($' + fP(entry) + ')'); return; }
+    if (TP.demoSide === 'LONG' && tp <= _valEntry) { toast('LONG TP must be above entry ($' + fP(_valEntry) + ')'); return; }
+    if (TP.demoSide === 'SHORT' && tp >= _valEntry) { toast('SHORT TP must be below entry ($' + fP(_valEntry) + ')'); return; }
   }
-  const liqPrice = calcLiqPrice(entry, lev, TP.demoSide);
-  const pos = {
-    id: Date.now(), side: TP.demoSide, sym: S.symbol, entry, size, lev, tp, sl, liqPrice, pnl: 0,
-    sourceMode: 'paper',   // [PATCH1] immutable — original source
-    controlMode: 'paper',  // mutable — always manual for paper
+  // Branch: DEMO vs LIVE
+  if (_curMode === 'live') {
+    _executeLiveManualOrder(orderType, size, entry, lev, tp, sl);
+  } else {
+    _executeDemoManualOrder(orderType, size, entry, lev, tp, sl);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DEMO MANUAL ORDER — local engine, no exchange
+// ═══════════════════════════════════════════════════════════════
+function _executeDemoManualOrder(orderType, size, entry, lev, tp, sl) {
+  if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, _ZI.x); return; }
+  if (orderType === 'MARKET') {
+    // Instant fill at current market price
+    var fillPrice = S.price;
+    var liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide);
+    var pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType);
+    TP.demoPositions.push(pos);
+    TP.demoBalance -= size;
+    updateDemoBalance(); renderDemoPositions();
+    onPositionOpened(pos, 'manual_demo');
+    ZState.save();
+    renderTradeMarkers();
+    toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET');
+  } else {
+    // LIMIT — add to pending, wait for price to reach limit
+    var pending = {
+      id: Date.now(),
+      side: TP.demoSide,
+      sym: S.symbol,
+      limitPrice: entry,
+      size: size,
+      lev: lev,
+      tp: tp,
+      sl: sl,
+      mode: 'demo',
+      orderType: 'LIMIT',
+      status: 'WAITING',
+      createdAt: Date.now(),
+    };
+    TP.pendingOrders.push(pending);
+    TP.demoBalance -= size; // Reserve margin
+    updateDemoBalance();
+    renderPendingOrders();
+    ZState.save();
+    toast(' LIMIT ' + pending.side + ' ' + pending.sym.replace('USDT', '') + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x — waiting for fill');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LIVE MANUAL ORDER — real Binance exchange execution
+// ═══════════════════════════════════════════════════════════════
+function _executeLiveManualOrder(orderType, size, entry, lev, tp, sl) {
+  if (typeof manualLivePlaceOrder !== 'function') {
+    toast('Live API not available', 3000, _ZI.lock); return;
+  }
+  // Calculate quantity from USDT size: qty = size * leverage / price
+  var refPrice = (orderType === 'MARKET') ? S.price : entry;
+  var qty = (size * lev) / refPrice;
+  var binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL';
+  // Disable button to prevent double-submit
+  var execBtn = el('demoExec');
+  if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...'; }
+  manualLivePlaceOrder({
+    symbol: S.symbol,
+    side: binanceSide,
+    type: orderType,
+    quantity: qty.toFixed(8),
+    price: (orderType === 'LIMIT') ? String(entry) : undefined,
+    leverage: lev,
+    referencePrice: S.price,
+  }).then(function (result) {
+    if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide); }
+    if (orderType === 'MARKET') {
+      // MARKET fill — sync position from exchange
+      toast('LIVE MARKET ' + binanceSide + ' ' + S.symbol.replace('USDT', '') + ' filled @$' + fP(result.avgPrice || S.price) + ' orderId=' + (result.orderId || ''));
+      // Place SL/TP protection orders on exchange if provided
+      if (sl) {
+        manualLiveSetSL({ symbol: S.symbol, side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).then(function (slRes) {
+          toast('SL set @$' + fP(sl) + ' orderId=' + (slRes.orderId || ''));
+        }).catch(function (e) { toast('SL placement failed: ' + (e.message || e)); });
+      }
+      if (tp) {
+        manualLiveSetTP({ symbol: S.symbol, side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).then(function (tpRes) {
+          toast('TP set @$' + fP(tp) + ' orderId=' + (tpRes.orderId || ''));
+        }).catch(function (e) { toast('TP placement failed: ' + (e.message || e)); });
+      }
+      // Sync from exchange to get real position data
+      if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 1000);
+    } else {
+      // LIMIT placed on exchange — track as pending
+      var pendingLive = {
+        id: result.orderId || Date.now(),
+        exchangeOrderId: result.orderId,
+        side: TP.demoSide,
+        binanceSide: binanceSide,
+        sym: S.symbol,
+        limitPrice: entry,
+        size: size,
+        qty: qty,
+        lev: lev,
+        tp: tp,
+        sl: sl,
+        mode: 'live',
+        orderType: 'LIMIT',
+        status: 'WAITING',
+        createdAt: Date.now(),
+      };
+      TP.manualLivePending.push(pendingLive);
+      renderPendingOrders();
+      ZState.save();
+      toast('LIVE LIMIT ' + TP.demoSide + ' ' + S.symbol.replace('USDT', '') + ' @$' + fP(entry) + ' placed on Binance — orderId=' + (result.orderId || ''));
+      // Start polling for fill
+      _startLivePendingSync();
+    }
+  }).catch(function (err) {
+    if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide); }
+    toast('LIVE order failed: ' + (err.message || err));
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Helper: build a manual position object
+// ═══════════════════════════════════════════════════════════════
+function _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, mode, orderType) {
+  return {
+    id: Date.now(), side: TP.demoSide, sym: S.symbol, entry: fillPrice, size: size, lev: lev, tp: tp, sl: sl, liqPrice: liqPrice, pnl: 0,
+    mode: mode,
+    orderType: orderType,
+    sourceMode: 'paper',
+    controlMode: 'paper',
     brainModeAtOpen: (S.mode || 'assist'),
-    // [FIX BUG4] Snapshot DSL params at open — paper positions no longer float with global panel
     dslParams: Object.assign({
       pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
       pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
       impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
-    }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(TP.demoSide, entry, tp) : {
-      openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? entry * 1.015 : entry * 0.985
+    }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(TP.demoSide, fillPrice, tp) : {
+      openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985
     }),
     dslAdaptiveState: 'calm',
     dslHistory: [],
+    openTs: Date.now(),
+    filledAt: Date.now(),
   };
-  TP.demoPositions.push(pos); TP.demoBalance -= size;
-  updateDemoBalance(); renderDemoPositions();
-  onPositionOpened(pos, 'manual_demo');  // 2: DSL attach for manual paper orders
-  ZState.save();  // immediate save (not debounced) — survives instant refresh
-  toast(`🎮 ${pos.side} ${pos.sym.replace('USDT', '')} $${fmt(size)} @$${fP(entry)} ${lev}x | LIQ: $${fP(liqPrice)}`);
 }
 function getSymPrice(pos) {
   // BUG1 FIX: use allPrices map, never fall back to S.price (wrong symbol)
@@ -1921,7 +2591,376 @@ function getSymPrice(pos) {
   if (k && k.length) return k[k.length - 1].close;
   return null; // [v105 FIX Bug3] null in loc de pos.entry — opreste verificarile SL/TP pana se reconnecteaza WS
 }
-// ✅ FIX MAJOR: Verifica TP/SL pentru pozitii demo - SEPARAT de render
+
+// ═══════════════════════════════════════════════════════════════
+// PENDING ORDERS ENGINE — checks DEMO limits for fill by price tick
+// ═══════════════════════════════════════════════════════════════
+function checkPendingOrders() {
+  if (!TP.pendingOrders || !TP.pendingOrders.length) return;
+  var toFill = [];
+  TP.pendingOrders.forEach(function (ord) {
+    if (ord.status !== 'WAITING' || ord.mode !== 'demo') return;
+    var cur = getSymPrice(ord) || (allPrices[ord.sym] ? allPrices[ord.sym] : null);
+    if (!cur || cur <= 0) return;
+    // LONG LIMIT fills when price drops to or below limit price
+    // SHORT LIMIT fills when price rises to or above limit price
+    var filled = false;
+    if (ord.side === 'LONG' && cur <= ord.limitPrice) filled = true;
+    if (ord.side === 'SHORT' && cur >= ord.limitPrice) filled = true;
+    if (filled) toFill.push(ord);
+  });
+  toFill.forEach(function (ord) { _fillDemoPendingOrder(ord); });
+}
+
+function _fillDemoPendingOrder(ord) {
+  ord.status = 'FILLED';
+  ord.filledAt = Date.now();
+  // Remove from pending
+  var idx = TP.pendingOrders.indexOf(ord);
+  if (idx >= 0) TP.pendingOrders.splice(idx, 1);
+  // Create open position at limit price
+  var liqPrice = calcLiqPrice(ord.limitPrice, ord.lev, ord.side);
+  var pos = {
+    id: ord.id,
+    side: ord.side,
+    sym: ord.sym,
+    entry: ord.limitPrice,
+    size: ord.size,
+    lev: ord.lev,
+    tp: ord.tp,
+    sl: ord.sl,
+    liqPrice: liqPrice,
+    pnl: 0,
+    mode: 'demo',
+    orderType: 'LIMIT',
+    sourceMode: 'paper',
+    controlMode: 'paper',
+    brainModeAtOpen: (S.mode || 'assist'),
+    dslParams: Object.assign({
+      pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
+      pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
+      impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+    }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : {
+      openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985
+    }),
+    dslAdaptiveState: 'calm',
+    dslHistory: [],
+    openTs: Date.now(),
+    filledAt: Date.now(),
+    createdAt: ord.createdAt,
+  };
+  TP.demoPositions.push(pos);
+  // Balance already reserved at order creation
+  updateDemoBalance();
+  renderDemoPositions();
+  renderPendingOrders();
+  if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo_limit_fill');
+  ZState.save();
+  if (typeof renderTradeMarkers === 'function') renderTradeMarkers();
+  toast('LIMIT FILLED: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + fP(ord.limitPrice) + ' $' + fmt(ord.size) + ' ' + ord.lev + 'x');
+  addTradeToJournal({
+    id: pos.id, time: (typeof fmtNow === 'function' ? fmtNow() : new Date().toISOString()),
+    side: pos.side, sym: pos.sym.replace('USDT', ''), entry: pos.entry, exit: null,
+    pnl: 0, reason: 'LIMIT Fill', lev: pos.lev, autoTrade: false,
+    journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'demo',
+    openTs: pos.openTs, createdAt: ord.createdAt, filledAt: pos.filledAt,
+  });
+}
+
+function cancelPendingOrder(id) {
+  var strId = String(id);
+  var idx = TP.pendingOrders.findIndex(function (o) { return String(o.id) === strId; });
+  if (idx >= 0) {
+    var ord = TP.pendingOrders[idx];
+    // Return reserved margin to demo balance
+    if (ord.mode === 'demo') {
+      TP.demoBalance += ord.size;
+      updateDemoBalance();
+    }
+    TP.pendingOrders.splice(idx, 1);
+    renderPendingOrders();
+    ZState.save();
+    toast('Pending LIMIT cancelled: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + fP(ord.limitPrice));
+    return;
+  }
+  // Check live pending
+  var liveIdx = TP.manualLivePending.findIndex(function (o) { return String(o.id) === strId || String(o.exchangeOrderId) === strId; });
+  if (liveIdx >= 0) {
+    var liveOrd = TP.manualLivePending[liveIdx];
+    if (typeof manualLiveCancelOrder === 'function' && liveOrd.exchangeOrderId) {
+      manualLiveCancelOrder(liveOrd.sym, liveOrd.exchangeOrderId).then(function () {
+        TP.manualLivePending.splice(liveIdx, 1);
+        renderPendingOrders();
+        ZState.save();
+        toast('LIVE LIMIT cancelled on Binance: ' + liveOrd.sym.replace('USDT', '') + ' orderId=' + liveOrd.exchangeOrderId);
+      }).catch(function (err) {
+        toast('Cancel failed: ' + (err.message || err));
+      });
+    }
+  }
+}
+
+function modifyPendingPrice(id) {
+  var strId = String(id);
+  // Demo pending
+  var demoOrd = TP.pendingOrders.find(function (o) { return String(o.id) === strId; });
+  if (demoOrd && demoOrd.mode === 'demo') {
+    var newPrice = prompt('New limit price for ' + demoOrd.sym + ':', fP(demoOrd.limitPrice));
+    if (!newPrice) return;
+    var np = parseFloat(newPrice);
+    if (!np || np <= 0) { toast('Invalid price', 3000, _ZI.w); return; }
+    demoOrd.limitPrice = np;
+    renderPendingOrders();
+    ZState.save();
+    toast('EDIT Limit price updated to $' + fP(np));
+    return;
+  }
+  // Live pending
+  var liveOrd = TP.manualLivePending.find(function (o) { return String(o.id) === strId || String(o.exchangeOrderId) === strId; });
+  if (liveOrd && liveOrd.exchangeOrderId) {
+    var _newPrice = prompt('New limit price for ' + liveOrd.sym + ' (Binance cancel+replace):', fP(liveOrd.limitPrice));
+    if (!_newPrice) return;
+    var _np = parseFloat(_newPrice);
+    if (!_np || _np <= 0) { toast('Invalid price', 3000, _ZI.w); return; }
+    if (typeof manualLiveModifyLimit !== 'function') { toast('Live API not available', 3000, _ZI.lock); return; }
+    manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res) {
+      liveOrd.exchangeOrderId = res.orderId;
+      liveOrd.id = res.orderId;
+      liveOrd.limitPrice = _np;
+      renderPendingOrders();
+      ZState.save();
+      toast('EDIT LIVE LIMIT modified on Binance: new orderId=' + res.orderId + ' @$' + fP(_np));
+    }).catch(function (err) {
+      toast('Modify failed: ' + (err.message || err));
+    });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER PENDING ORDERS — unified for both demo and live
+// ═══════════════════════════════════════════════════════════════
+function renderPendingOrders() {
+  var cont = el('pendingOrdersTable');
+  if (!cont) return;
+  var _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  var allPending = [];
+  // Demo pending (only show in demo mode)
+  if (_gMode === 'demo') {
+    (TP.pendingOrders || []).forEach(function (o) {
+      if (o.status === 'WAITING') allPending.push(o);
+    });
+  }
+  // Live pending (only show in live mode)
+  if (_gMode === 'live') {
+    (TP.manualLivePending || []).forEach(function (o) {
+      if (o.status === 'WAITING') allPending.push(o);
+    });
+  }
+  if (!allPending.length) {
+    cont.innerHTML = '<div style="color:var(--dim);text-align:center;padding:4px;font-size:9px">No pending orders</div>';
+    return;
+  }
+  var html = allPending.map(function (ord) {
+    var symBase = escHtml((ord.sym || '').replace('USDT', ''));
+    var sideColor = ord.side === 'LONG' ? '#00d4ff' : '#00bcd4';
+    var modeBadge = ord.mode === 'live'
+      ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px">LIVE</span>'
+      : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px">DEMO</span>';
+    var age = Date.now() - (ord.createdAt || Date.now());
+    var ageStr = age < 60000 ? Math.floor(age / 1000) + 's' : Math.floor(age / 60000) + 'm';
+    var curPrice = getSymPrice(ord) || (allPrices[ord.sym] || 0);
+    var distPct = curPrice > 0 ? (((ord.limitPrice - curPrice) / curPrice) * 100).toFixed(2) : '?';
+    return '<div class="pos-row pos-pending" style="border-color:' + sideColor + '">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center">'
+      + '<span style="font-weight:700;color:' + sideColor + '">'
+      + '<span style="background:#00d4ff22;color:#00d4ff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;margin-right:4px"> WAITING LIMIT</span>'
+      + escHtml(ord.side) + ' ' + symBase + ' ' + ord.lev + 'x' + modeBadge
+      + '</span>'
+      + '<div style="display:flex;gap:4px">'
+      + '<button onclick="modifyPendingPrice(\'' + ord.id + '\')" style="padding:6px 10px;background:#001a33;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:36px">EDIT MODIFY</button>'
+      + '<button onclick="cancelPendingOrder(\'' + ord.id + '\')" style="padding:6px 10px;background:#2a0010;border:1px solid #ff4466;color:#ff4466;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:36px">✕ CANCEL</button>'
+      + '</div>'
+      + '</div>'
+      + '<div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px;color:var(--dim)">'
+      + '<span>Limit: $' + fP(ord.limitPrice) + ' | Size: $' + fmt(ord.size) + '</span>'
+      + '<span>Now: $' + (curPrice > 0 ? fP(curPrice) : '—') + ' (' + distPct + '%)</span>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--dim);margin-top:1px">'
+      + (ord.sl ? 'SL: $' + fP(ord.sl) + ' ' : '') + (ord.tp ? 'TP: $' + fP(ord.tp) + ' ' : '') + '| ' + ageStr + ' ago'
+      + (ord.exchangeOrderId ? ' | OID: ' + ord.exchangeOrderId : '')
+      + '</div>'
+      + '</div>';
+  }).join('');
+  cont.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LIVE PENDING ORDERS SYNC — poll Binance to detect fills/cancels
+// ═══════════════════════════════════════════════════════════════
+var _livePendingSyncTimer = null;
+function _startLivePendingSync() {
+  if (_livePendingSyncTimer) return; // already running
+  _livePendingSyncTimer = setInterval(_syncLivePendingOrders, 5000);
+  // Run immediately too
+  setTimeout(_syncLivePendingOrders, 500);
+}
+function _stopLivePendingSync() {
+  if (_livePendingSyncTimer) { clearInterval(_livePendingSyncTimer); _livePendingSyncTimer = null; }
+}
+
+function _syncLivePendingOrders() {
+  if (!TP.manualLivePending || !TP.manualLivePending.length) { _stopLivePendingSync(); return; }
+  if (typeof manualLiveGetOpenOrders !== 'function') return;
+  // Get all symbols we're tracking
+  var symbols = {};
+  TP.manualLivePending.forEach(function (o) { symbols[o.sym] = true; });
+  var symList = Object.keys(symbols);
+  // Query open orders for each symbol
+  var _remaining = symList.length;
+  var _exchangeOrderIds = new Set();
+  symList.forEach(function (sym) {
+    manualLiveGetOpenOrders(sym).then(function (orders) {
+      (orders || []).forEach(function (o) { _exchangeOrderIds.add(String(o.orderId)); });
+      _remaining--;
+      if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds);
+    }).catch(function () {
+      _remaining--;
+      if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds);
+    });
+  });
+}
+
+function _reconcileLivePending(exchangeOrderIds) {
+  var toRemove = [];
+  TP.manualLivePending.forEach(function (ord) {
+    if (!exchangeOrderIds.has(String(ord.exchangeOrderId))) {
+      // Order no longer on exchange — it was filled or cancelled
+      toRemove.push(ord);
+    }
+  });
+  if (!toRemove.length) return;
+  toRemove.forEach(function (ord) {
+    var idx = TP.manualLivePending.indexOf(ord);
+    if (idx >= 0) TP.manualLivePending.splice(idx, 1);
+    ord.status = 'FILLED';
+    ord.filledAt = Date.now();
+    toast('LIVE LIMIT FILLED: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + fP(ord.limitPrice));
+    // Place SL/TP protection orders if set at creation
+    if (ord.tp && typeof manualLiveSetTP === 'function') {
+      var _qty = ord.qty || ((ord.size * ord.lev) / ord.limitPrice);
+      manualLiveSetTP({ symbol: ord.sym, side: ord.side, quantity: _qty.toFixed(8), stopPrice: ord.tp }).catch(function (e) {
+        toast('TP placement failed after fill: ' + (e.message || e));
+      });
+    }
+    if (ord.sl && typeof manualLiveSetSL === 'function') {
+      var _qty2 = ord.qty || ((ord.size * ord.lev) / ord.limitPrice);
+      manualLiveSetSL({ symbol: ord.sym, side: ord.side, quantity: _qty2.toFixed(8), stopPrice: ord.sl }).catch(function (e) {
+        toast('SL placement failed after fill: ' + (e.message || e));
+      });
+    }
+    addTradeToJournal({
+      id: ord.id, time: (typeof fmtNow === 'function' ? fmtNow() : new Date().toISOString()),
+      side: ord.side, sym: (ord.sym || '').replace('USDT', ''), entry: ord.limitPrice, exit: null,
+      pnl: 0, reason: 'LIVE LIMIT Fill', lev: ord.lev, autoTrade: false,
+      journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'live', isLive: true,
+      openTs: Date.now(), createdAt: ord.createdAt, filledAt: Date.now(),
+    });
+  });
+  // Sync live positions from exchange
+  if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 500);
+  renderPendingOrders();
+  ZState.save();
+  // Stop polling if no more pending
+  if (!TP.manualLivePending.length) _stopLivePendingSync();
+}
+
+// Resume polling on load if there are pending live orders
+function _resumeLivePendingSyncIfNeeded() {
+  if (TP.manualLivePending && TP.manualLivePending.length > 0) {
+    _startLivePendingSync();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SL/TP EDITING ON OPEN POSITION CARDS
+// ═══════════════════════════════════════════════════════════════
+function savePosSLTP(posId, mode) {
+  var strId = String(posId);
+  var slInput = el('slEdit_' + strId);
+  var tpInput = el('tpEdit_' + strId);
+  var newSL = slInput ? parseFloat(slInput.value) || null : null;
+  var newTP = tpInput ? parseFloat(tpInput.value) || null : null;
+  if (mode === 'demo') {
+    var pos = TP.demoPositions.find(function (p) { return String(p.id) === strId; });
+    if (!pos) { toast('Position not found', 3000, _ZI.w); return; }
+    // Validate direction
+    if (newSL) {
+      if (pos.side === 'LONG' && newSL >= pos.entry) { toast('LONG SL must be below entry', 3000, _ZI.w); return; }
+      if (pos.side === 'SHORT' && newSL <= pos.entry) { toast('SHORT SL must be above entry', 3000, _ZI.w); return; }
+    }
+    if (newTP) {
+      if (pos.side === 'LONG' && newTP <= pos.entry) { toast('LONG TP must be above entry', 3000, _ZI.w); return; }
+      if (pos.side === 'SHORT' && newTP >= pos.entry) { toast('SHORT TP must be below entry', 3000, _ZI.w); return; }
+    }
+    pos.sl = newSL;
+    pos.tp = newTP;
+    renderDemoPositions();
+    ZState.save();
+    toast('SL/TP updated: SL=' + (newSL ? '$' + fP(newSL) : 'none') + ' TP=' + (newTP ? '$' + fP(newTP) : 'none'));
+  } else if (mode === 'live') {
+    // Live — update on Binance via protection orders
+    var livePos = TP.livePositions.find(function (p) { return String(p.id) === strId; });
+    if (!livePos) { toast('Position not found', 3000, _ZI.w); return; }
+    var _qty = livePos.qty || livePos.size;
+    // Validate direction
+    if (newSL) {
+      if (livePos.side === 'LONG' && newSL >= livePos.entry) { toast('LONG SL must be below entry', 3000, _ZI.w); return; }
+      if (livePos.side === 'SHORT' && newSL <= livePos.entry) { toast('SHORT SL must be above entry', 3000, _ZI.w); return; }
+    }
+    if (newTP) {
+      if (livePos.side === 'LONG' && newTP <= livePos.entry) { toast('LONG TP must be above entry', 3000, _ZI.w); return; }
+      if (livePos.side === 'SHORT' && newTP >= livePos.entry) { toast('SHORT TP must be below entry', 3000, _ZI.w); return; }
+    }
+    var promises = [];
+    if (typeof manualLiveSetSL === 'function') {
+      if (newSL) {
+        promises.push(
+          manualLiveSetSL({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newSL, cancelOrderId: livePos._slOrderId || undefined })
+            .then(function (res) { livePos._slOrderId = res.orderId; livePos.sl = newSL; })
+        );
+      } else if (livePos._slOrderId) {
+        promises.push(
+          manualLiveCancelOrder(livePos.sym, livePos._slOrderId)
+            .then(function () { livePos._slOrderId = null; livePos.sl = null; })
+            .catch(function () { })
+        );
+      }
+    }
+    if (typeof manualLiveSetTP === 'function') {
+      if (newTP) {
+        promises.push(
+          manualLiveSetTP({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newTP, cancelOrderId: livePos._tpOrderId || undefined })
+            .then(function (res) { livePos._tpOrderId = res.orderId; livePos.tp = newTP; })
+        );
+      } else if (livePos._tpOrderId) {
+        promises.push(
+          manualLiveCancelOrder(livePos.sym, livePos._tpOrderId)
+            .then(function () { livePos._tpOrderId = null; livePos.tp = null; })
+            .catch(function () { })
+        );
+      }
+    }
+    Promise.all(promises).then(function () {
+      renderLivePositions();
+      toast('LIVE SL/TP updated on Binance: SL=' + (newSL ? '$' + fP(newSL) : 'none') + ' TP=' + (newTP ? '$' + fP(newTP) : 'none'));
+    }).catch(function (err) {
+      toast('SL/TP update failed: ' + (err.message || err));
+      renderLivePositions();
+    });
+  }
+}
+
+// FIX MAJOR: Verifica TP/SL pentru pozitii demo - SEPARAT de render
 // REGULA CRITICA:
 //   - Pozitii autoTrade → gestionate EXCLUSIV de scheduleAutoClose (care citeste dsl.currentSL)
 //   - Pozitii manuale (paper trading) → verificate aici cu pos.sl/pos.tp original
@@ -1931,7 +2970,7 @@ function checkDemoPositionsSLTP() {
   const toClose = [];
   TP.demoPositions.forEach(pos => {
     if (pos.closed) return;
-    // ✅ SKIP pozitii autoTrade - le gestioneaza scheduleAutoClose
+    // SKIP pozitii autoTrade - le gestioneaza scheduleAutoClose
     // scheduleAutoClose citeste dsl.currentSL corect si nu afecteaza close manual
     // [v85 B2 ANALYZED] Skip-ul este intenționat: scheduleAutoClose verifică deja tp/sl/liq/dsl.currentSL
     // Dacă am elimina return, risc de double-close (ambele funcții închid aceeași poziție simultan)
@@ -1942,13 +2981,13 @@ function checkDemoPositionsSLTP() {
     if (!curPrice || !Number.isFinite(curPrice) || curPrice <= 0) return;
     let reason = null;
     if (pos.side === 'LONG') {
-      if (pos.tp && curPrice >= pos.tp) reason = 'TP ✅';
-      else if (pos.sl && curPrice <= pos.sl) reason = 'SL 🛑';
-      else if (pos.liqPrice && curPrice <= pos.liqPrice) reason = '💀 LIQUIDATED';
+      if (pos.tp && curPrice >= pos.tp) reason = 'TP HIT';
+      else if (pos.sl && curPrice <= pos.sl) reason = 'SL HIT';
+      else if (pos.liqPrice && curPrice <= pos.liqPrice) reason = 'LIQUIDATED';
     } else {
-      if (pos.tp && curPrice <= pos.tp) reason = 'TP ✅';
-      else if (pos.sl && curPrice >= pos.sl) reason = 'SL 🛑';
-      else if (pos.liqPrice && curPrice >= pos.liqPrice) reason = '💀 LIQUIDATED';
+      if (pos.tp && curPrice <= pos.tp) reason = 'TP HIT';
+      else if (pos.sl && curPrice >= pos.sl) reason = 'SL HIT';
+      else if (pos.liqPrice && curPrice >= pos.liqPrice) reason = 'LIQUIDATED';
     }
     if (reason) toClose.push({ id: pos.id, reason });
   });
@@ -1962,10 +3001,13 @@ function renderDemoPositions() {
   if (_now - _lastRenderDemo < 500) { if (!_pendingRenderDemo) _pendingRenderDemo = setTimeout(renderDemoPositions, 500 - (_now - _lastRenderDemo)); return; }
   _lastRenderDemo = _now; _pendingRenderDemo = 0;
   const table = el('demoPosTable'); if (!table) return;
-  // ✅ FIX: Afisam DOAR pozitiile manuale (nu autoTrade) si care nu sunt closed
-  // ✅ Filter: only manual (non-autoTrade), non-closed positions
-  // [FIX P12] Read-only filter — do NOT mutate TP.demoPositions here (closeDemoPos owns cleanup)
-  const manualPos = TP.demoPositions.filter(p => !p.closed && !p.autoTrade);
+  // [FIX BUG2] Skip full re-render while user is editing SL/TP — prevents focus loss
+  var _ae = document.activeElement;
+  if (_ae && _ae.tagName === 'INPUT' && (_ae.id && (_ae.id.startsWith('slEdit_') || _ae.id.startsWith('tpEdit_'))) && table.contains(_ae)) return;
+  // FIX: Afisam DOAR pozitiile manuale (nu autoTrade) si care nu sunt closed
+  // Filter: only manual (non-autoTrade), non-closed, matching current globalMode
+  const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  const manualPos = TP.demoPositions.filter(p => !p.closed && !p.autoTrade && (p.mode || 'demo') === _gMode);
   if (!manualPos.length) {
     table.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px">No open positions</div>';
     const pnlEl = el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$0.00'; pnlEl.className = 'tp-pnl-val neut'; }
@@ -1980,12 +3022,16 @@ function renderDemoPositions() {
       pos.pnl = 0;
       totalPnL += 0;
       const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''));
+      const _posMode = (pos.mode || pos._serverMode || 'demo');
+      const _modeBadge = _posMode === 'live'
+        ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>'
+        : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>';
       return `<div class="pos-row ${escHtml(pos.side) === 'LONG' ? 'pos-long' : 'pos-short'}">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x</span>
+          <span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x${_modeBadge}</span>
           <button data-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;touch-action:manipulation;min-height:52px;font-weight:700;display:block;user-select:none;">✕ CLOSE</button>
         </div>
-        <div style="font-size:13px;margin-top:3px;color:#ff8800">⚠️ Price unavailable — waiting for data...</div>
+        <div style="font-size:13px;margin-top:3px;color:#ff8800">Price unavailable — waiting for data...</div>
       </div>`;
     }
     const diff = curPrice - pos.entry;
@@ -2001,9 +3047,13 @@ function renderDemoPositions() {
     const roe = margin > 0 ? (pos.pnl / margin * 100).toFixed(2) : '0.00';
     const liqCol = pos.liqPrice ? (pos.side === 'LONG' ? '#ff3355' : '#00d97a') : '#555';
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''));  // [v105 FIX Bug6] escHtml
+    const posMode = (pos.mode || pos._serverMode || 'demo');
+    const modeBadge = posMode === 'live'
+      ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>'
+      : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>';
     return `<div class="pos-row ${escHtml(pos.side) === 'LONG' ? 'pos-long' : 'pos-short'}">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x</span>
+        <span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x${modeBadge}</span>
         <button data-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:rgba(255,68,102,.3);min-height:52px;font-weight:700;display:block;user-select:none;">✕ CLOSE</button>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px">
@@ -2011,12 +3061,19 @@ function renderDemoPositions() {
         <span style="color:${pos.pnl >= 0 ? 'var(--grn)' : 'var(--red)'}">${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (${pnlPct}%)</span>
       </div>
       <div style="font-size:12px;color:var(--dim);margin-top:1px">Margin: $${fmt(margin)} | Notional: $${fmt(notional)} | Fees≈$${fmt(estFees)} | ROE: ${roe}%</div>
-      ${(() => { const _dslSt = typeof DSL !== 'undefined' && DSL.positions ? DSL.positions[String(pos.id)] : null; const _dslActive = _dslSt && _dslSt.active; const _slVal = _dslActive && _dslSt.currentSL > 0 ? _dslSt.currentSL : pos.sl; const _slLabel = _dslActive ? 'DSL' : 'SL'; const _slColor = _dslActive ? '#39ff14' : '#ff6644'; return _slVal ? `<div style="font-size:12px;color:${_slColor};margin-top:1px">${_slLabel}: $${fP(_slVal)}${pos.tp ? ` | TP: $${fP(pos.tp)}` : ''}</div>` : (pos.tp ? `<div style="font-size:12px;color:#00ff88;margin-top:1px">TP: $${fP(pos.tp)}</div>` : ''); })()}
-      ${pos.liqPrice ? `<div style="font-size:12px;color:${liqCol};margin-top:1px">💀 LIQ: $${fP(pos.liqPrice)}</div>` : ''}
+      ${(() => { const _dslSt = typeof DSL !== 'undefined' && DSL.positions ? DSL.positions[String(pos.id)] : null; const _dslActive = _dslSt && _dslSt.active; const _slVal = _dslActive && _dslSt.currentSL > 0 ? _dslSt.currentSL : pos.sl; const _slLabel = _dslActive ? 'DSL' : 'SL'; const _slColor = _dslActive ? '#39ff14' : '#ff6644'; return _dslActive ? `<div style="font-size:12px;color:${_slColor};margin-top:1px">${_slLabel}: $${fP(_slVal)}${pos.tp ? ' | TP: $' + fP(pos.tp) : ''}</div>` : ''; })()}
+      <div style="display:flex;gap:4px;margin-top:3px;align-items:center">
+        <span style="font-size:10px;color:#ff6644;width:22px">SL:</span>
+        <input id="slEdit_${pos.id}" type="number" step="0.1" value="${pos.sl || ''}" placeholder="—" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px">
+        <span style="font-size:10px;color:#00ff88;width:22px">TP:</span>
+        <input id="tpEdit_${pos.id}" type="number" step="0.1" value="${pos.tp || ''}" placeholder="—" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px">
+        <button onclick="savePosSLTP('${pos.id}','demo')" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button>
+      </div>
+      ${pos.liqPrice ? `<div style="font-size:12px;color:${liqCol};margin-top:1px">LIQ: $${fP(pos.liqPrice)}</div>` : ''}
     </div>`;
   }).join('');
   table.innerHTML = html;
-  // ✅ Long-press pe fiecare buton CLOSE - previne inchideri accidentale la scroll
+  // Long-press pe fiecare buton CLOSE - previne inchideri accidentale la scroll
   table.querySelectorAll('button[data-id]').forEach(function (btn) {
     const posId = btn.getAttribute('data-id');
     attachConfirmClose(btn, function () { closeDemoPos(posId); });
@@ -2041,6 +3098,9 @@ function updateLiveBalance() {
 function renderLivePositions() {
   const cont = el('livePositions');
   if (!cont) return;
+  // [FIX BUG2] Skip full re-render while user is editing SL/TP — prevents focus loss
+  var _ae = document.activeElement;
+  if (_ae && _ae.tagName === 'INPUT' && (_ae.id && (_ae.id.startsWith('slEdit_') || _ae.id.startsWith('tpEdit_'))) && cont.contains(_ae)) return;
   const live = TP.livePositions.filter(p => !p.closed && p.status !== 'closing');
   if (!live.length) { cont.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px;font-size:9px">No live positions</div>'; return; }
   let totalPnl = 0;
@@ -2050,10 +3110,10 @@ function renderLivePositions() {
       pos.pnl = 0;
       return `<div class="pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}">
         <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-weight:700">🔴 ${escHtml(pos.side)} ${escHtml((pos.sym || '').replace('USDT', ''))} ${pos.lev}x</span>
+          <span style="font-weight:700">${_ZI.dRed} ${escHtml(pos.side)} ${escHtml((pos.sym || '').replace('USDT', ''))} ${pos.lev}x</span>
           <button data-live-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;touch-action:manipulation;min-height:52px;font-weight:700;user-select:none;">✕ CLOSE</button>
         </div>
-        <div style="font-size:13px;margin-top:3px;color:#ff8800">⚠️ Price unavailable</div>
+        <div style="font-size:13px;margin-top:3px;color:#ff8800">Price unavailable</div>
       </div>`;
     }
     const pnl = calcPosPnL(pos, cur);
@@ -2063,14 +3123,21 @@ function renderLivePositions() {
     const symBase = escHtml((pos.sym || '').replace('USDT', ''));
     return `<div class="pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}">
       <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-weight:700">🔴 ${escHtml(pos.side)} ${symBase} ${pos.lev}x</span>
+        <span style="font-weight:700">${_ZI.dRed} ${escHtml(pos.side)} ${symBase} ${pos.lev}x</span>
         <button data-live-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;touch-action:manipulation;min-height:52px;font-weight:700;user-select:none;">✕ CLOSE</button>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px">
         <span style="color:var(--dim)">Entry: $${fP(pos.entry)} | Now: $${fP(cur)}</span>
         <span style="color:${pnl >= 0 ? 'var(--grn)' : 'var(--red)'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct}%)</span>
       </div>
-      ${pos.liqPrice ? `<div style="font-size:12px;color:#ff3355;margin-top:1px">💀 LIQ: $${fP(pos.liqPrice)}</div>` : ''}
+      ${pos.liqPrice ? `<div style="font-size:12px;color:#ff3355;margin-top:1px">LIQ: $${fP(pos.liqPrice)}</div>` : ''}
+      <div style="display:flex;gap:4px;margin-top:3px;align-items:center">
+        <span style="font-size:10px;color:#ff6644;width:22px">SL:</span>
+        <input id="slEdit_${pos.id}" type="number" step="0.1" value="${pos.sl || ''}" placeholder="—" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px">
+        <span style="font-size:10px;color:#00ff88;width:22px">TP:</span>
+        <input id="tpEdit_${pos.id}" type="number" step="0.1" value="${pos.tp || ''}" placeholder="—" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px">
+        <button onclick="savePosSLTP('${pos.id}','live')" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button>
+      </div>
     </div>`;
   }).join('');
   cont.innerHTML = html;
@@ -2082,12 +3149,23 @@ function renderLivePositions() {
 }
 // BUG2 FIX: close only from livePositions — now sends counter-order through backend
 function closeLivePos(id, reason) {
-  const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id);
-  const idx = TP.livePositions.findIndex(p => p.id === numId || p.id === id);
+  const strId = String(id); // [FIX BUG7] String comparison — parseInt loses precision on large Binance orderIds
+  const idx = TP.livePositions.findIndex(p => String(p.id) === strId);
   if (idx < 0) return;
   const pos = TP.livePositions[idx];
   // [PATCH2 B3] Prevent double-close: if already closing/closed, skip
   if (pos.status === 'closing' || pos.closed) return;
+  // [BUG1 FIX] If server-managed position, tell server to close it too
+  if (window._serverATEnabled && pos._serverSeq) {
+    if (typeof window._zeusRequestServerClose === 'function') window._zeusRequestServerClose(pos._serverSeq, pos.id);
+    fetch('/api/at/close', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seq: pos._serverSeq })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok && typeof window._zeusConfirmServerClose === 'function') window._zeusConfirmServerClose(pos._serverSeq);
+    }).catch(function () { /* pending close guard handles timeout */ });
+  }
   // [FIX SYNC-M1] Proactively clear posCheck interval on close (don't wait for next tick)
   if (typeof Intervals !== 'undefined' && Intervals.clear) Intervals.clear('posCheck_' + pos.id);
   const cur = getSymPrice(pos);
@@ -2095,7 +3173,7 @@ function closeLivePos(id, reason) {
   pos.pnl = pnl;
   // [PATCH2 B3] Mark as 'closing' — do NOT remove from array yet
   pos.status = 'closing';
-  atLog('info', '🔴 LIVE CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + ' | ' + (reason || 'manual'));
+  atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + ' | ' + (reason || 'manual'));
   renderLivePositions();
   // Send close order to exchange — wait for confirmation before removing
   if (typeof liveApiClosePosition === 'function') {
@@ -2111,32 +3189,36 @@ function closeLivePos(id, reason) {
       if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1);
       // [FIX C5] Journal entry for live closes
       if (typeof addTradeToJournal === 'function') {
-        addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '—' : '—'), isLive: true });
+        addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '—' : '—'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' });
       }
       // [FIX M1] Clean DSL state for closed live position
       if (typeof DSL !== 'undefined') {
         delete DSL.positions[String(pos.id)];
         if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id));
       }
-      atLog('info', '🔴 LIVE CLOSE CONFIRMED: orderId=' + (res.orderId || '?') + ' ' + pos.sym + ' fillPrice=' + fillPrice);
+      atLog('info', '[LIVE] CLOSE CONFIRMED: orderId=' + (res.orderId || '?') + ' ' + pos.sym + ' fillPrice=' + fillPrice);
       renderLivePositions();
       // [FIX A5] Notify ARES of live close — same hook as demo path
       try { if (typeof ARES !== 'undefined' && typeof ARES.onTradeClosed === 'function') ARES.onTradeClosed(fillPnl); } catch (_) { }
+      // [FIX BUG1] Report AT live PnL to server-side risk guard
+      if (pos.autoTrade) {
+        try { fetch('/api/risk/pnl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pnl: fillPnl, owner: 'AT' }) }).catch(function () { }); } catch (_) { }
+      }
       // Sync balance after close
       if (typeof liveApiSyncState === 'function') liveApiSyncState();
     }).catch(function (err) {
       // [PATCH2 B3] Exchange rejected close — revert to open, keep position in array
       pos.status = 'open';
       pos.closed = false;
-      atLog('warn', '⚠️ LIVE CLOSE FAILED on exchange: ' + (err.message || err) + ' — position reverted to OPEN');
-      toast('⚠️ Close failed for ' + pos.sym + ' — position still open on exchange');
+      atLog('warn', 'LIVE CLOSE FAILED on exchange: ' + (err.message || err) + ' — position reverted to OPEN');
+      toast('Close failed for ' + pos.sym + ' — position still open on exchange');
       renderLivePositions();
       // [FIX SYNC-N1] Single retry after 2s if exchange temporarily rejected (429/503/timeout)
       if (!pos._closeRetried) {
         pos._closeRetried = true;
         setTimeout(function () {
           if (!pos.closed && pos.status === 'open') {
-            atLog('info', '🔄 RETRYING close for ' + pos.sym + '...');
+            atLog('info', '[RETRY] RETRYING close for ' + pos.sym + '...');
             closeLivePos(pos.id, reason || 'Retry');
           }
         }, 2000);
@@ -2153,7 +3235,7 @@ function closeLivePos(id, reason) {
 function closeDemoPos(id, reason) {
   // pos nu e disponibil încă (id lookup mai jos) — hook-ul se apelă după găsire
   // NOTA: _bmPostClose e apelat mai jos după ce avem pos
-  // ✅ parseInt garanteaza ca id-ul e number chiar daca vine ca string din onclick HTML
+  // parseInt garanteaza ca id-ul e number chiar daca vine ca string din onclick HTML
   const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id);
   const idx = TP.demoPositions.findIndex(p => p.id === numId || p.id === id);
   if (idx < 0) {
@@ -2165,12 +3247,25 @@ function closeDemoPos(id, reason) {
   if (pos.closed || pos.status === 'closing') return; // [FIX H3] Atomic guard: skip if already closing or closed
   pos.closed = true;
   pos.status = 'closing'; // [FIX H3] Prevent concurrent close attempts
-  // ✅ FIX: _bmPostClose primeşte pos → dailyTrades creşte DOAR pt AutoTrade
+  // [BUG1 FIX] If server-managed position, tell server to close it too
+  if (window._serverATEnabled && pos._serverSeq) {
+    if (typeof window._zeusRequestServerClose === 'function') window._zeusRequestServerClose(pos._serverSeq, pos.id);
+    fetch('/api/at/close', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seq: pos._serverSeq })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.ok && typeof window._zeusConfirmServerClose === 'function') window._zeusConfirmServerClose(pos._serverSeq);
+    }).catch(function () { /* pending close guard handles timeout */ });
+  }
+  // FIX: _bmPostClose primeşte pos → dailyTrades creşte DOAR pt AutoTrade
   if (typeof _bmPostClose === 'function') _bmPostClose(pos, reason);
   // [FIX P10] Guard null/stale price at close — use entry as fallback (flat close)
   const curPrice = getSymPrice(pos) || pos.entry;
   const diff = curPrice - pos.entry;
   const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true);
+  // [FIX BUG4] Store final PnL on pos for callers to use (prevents price-race drift)
+  pos._closePnl = pnl;
   if (typeof ZLOG !== 'undefined') ZLOG.push('AT', '[CLOSE DEMO] ' + pos.side + ' ' + pos.sym + ' PnL=' + pnl.toFixed(2) + ' ' + (reason || 'Manual'), { id: pos.id, sym: pos.sym, side: pos.side, pnl: pnl, reason: reason || 'Manual' });
   // Returnam margin (size) + profit/pierdere la balanta
   TP.demoBalance += pos.size + pnl;
@@ -2195,16 +3290,26 @@ function closeDemoPos(id, reason) {
     side: pos.side, sym: pos.sym.replace('USDT', ''),
     entry: pos.entry, exit: curPrice,
     pnl, reason: reason || 'Manual', lev: pos.lev,
-    autoTrade: !!pos.autoTrade,  // ✅ FIX v118: marcat pentru filtrare dailyTrades
+    autoTrade: !!pos.autoTrade,  // FIX v118: marcat pentru filtrare dailyTrades
     // [Etapa 4] Journal Context — salvat la CLOSE pentru Historical Regime Memory
     journalEvent: 'CLOSE',
     regime: BM.regime || BM.structure?.regime || '—',
     alignmentScore: BM.structure?.score ?? null,
     volRegime: BM.volRegime || '—',
     profile: S.profile || 'fast',
+    // [CHART MARKERS] real timestamps + mode for chart overlay anchoring
+    openTs: pos.openTs || pos.id,
+    closedAt: Date.now(),
+    mode: pos.mode || ((typeof AT !== 'undefined' && AT._serverMode) || 'demo'),
   });
   TP.demoPositions.splice(idx, 1);
-  // ✅ FIX SYNC: Ambele panouri se updateaza - Paper Trading SI AutoTrade
+  // Track recently closed IDs — prevents pullAndMerge from resurrecting them
+  window._zeusRecentlyClosed = window._zeusRecentlyClosed || [];
+  window._zeusRecentlyClosed.push(pos.id);
+  // [BUG1 FIX v2] Also track _serverSeq to prevent AT poll resurrection
+  if (pos._serverSeq && pos._serverSeq !== pos.id) window._zeusRecentlyClosed.push(pos._serverSeq);
+  if (window._zeusRecentlyClosed.length > 200) window._zeusRecentlyClosed = window._zeusRecentlyClosed.slice(-100);
+  // FIX SYNC: Ambele panouri se updateaza - Paper Trading SI AutoTrade
   setTimeout(() => {
     updateDemoBalance();
     renderDemoPositions(); // Sync Paper Trading panel
@@ -2213,13 +3318,14 @@ function closeDemoPos(id, reason) {
     TP.demoPositions = (TP.demoPositions || []).filter(p => !p.closed); // cleanup
     const autoPosns = TP.demoPositions.filter(p => p.autoTrade);
     if (autoPosns.length === 0) document.getElementById('atPosCount').textContent = '0 pozitii';
+    renderTradeMarkers();  // [CHART MARKERS] refresh after close
   }, 0);
-  toast(`${(reason && (reason.includes('TP') || reason.includes('✅'))) ? '✅' : '🎮'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`);
+  toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`);
   // [NC] notificare trade închis — severity bazată pe PnL
   ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade',
-    `${pnl >= 0 ? '✅' : '❌'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`
+    `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`
   );
-  ZState.scheduleSave();  // persist closed position
+  ZState.syncNow();  // IMMEDIATE push — ensures other devices see the close fast
   // ── EXIT OVERLAY (only auto trades) ──
   if (pos.autoTrade && typeof onTradeClosed === 'function') {
     const _openTs = pos.openTs || pos.id;

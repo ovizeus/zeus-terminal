@@ -1,11 +1,57 @@
 {
-  "atDaily": {
-    "date": "2026-03-16",
-    "realizedPnL": 0
+  "1": {
+    "atDaily": {
+      "date": "2026-03-18",
+      "realizedPnL": 0
+    },
+    "aresDaily": {
+      "date": "2026-03-18",
+      "realizedPnL": 0
+    },
+    "emergencyKill": false
   },
-  "aresDaily": {
-    "date": "2026-03-16",
-    "realizedPnL": 392.0162537132212
+  "700": {
+    "atDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": -12
+    },
+    "aresDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": 0
+    },
+    "emergencyKill": false
   },
-  "emergencyKill": false
+  "701": {
+    "atDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": 0
+    },
+    "aresDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": 0
+    },
+    "emergencyKill": false
+  },
+  "7700": {
+    "atDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": -54
+    },
+    "aresDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": 0
+    },
+    "emergencyKill": false
+  },
+  "7701": {
+    "atDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": 0
+    },
+    "aresDaily": {
+      "date": "2026-03-25",
+      "realizedPnL": 0
+    },
+    "emergencyKill": false
+  }
 }

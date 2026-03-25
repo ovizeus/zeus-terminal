@@ -443,11 +443,11 @@ function hubToggleDev(enabled) {
 
     if (enabled) {
       panel.style.display = 'block';
-      // Move into #zg-body-mi if not already there — fallback for any boot order issue
-      var mi = document.getElementById('zg-body-mi');
-      if (mi && panel.closest('#zg-body-mi') === null) {
+      // Move into #zeus-groups if not already there — fallback for any boot order issue
+      var mi = document.getElementById('zeus-groups');
+      if (mi && panel.closest('#zeus-groups') === null) {
         mi.appendChild(panel);
-        console.log('[DEV] dev-sec moved into #zg-body-mi dynamically');
+        console.log('[DEV] dev-sec moved into #zeus-groups dynamically');
       }
       // Full ensure + scroll
       _devEnsureVisible();
@@ -475,7 +475,7 @@ function _devEnsureVisible() {
     var devSec = document.getElementById('dev-sec');
     if (!devSec) return; // panel not in DOM yet — nothing to do
 
-    var mi = document.getElementById('zg-body-mi');
+    var mi = document.getElementById('zeus-groups');
     if (!mi) return;
 
     // Only proceed if DEV is enabled
@@ -491,7 +491,7 @@ function _devEnsureVisible() {
     devSec.style.display = 'block';
 
     // Check if already in MI
-    var alreadyInMI = devSec.closest('#zg-body-mi') !== null;
+    var alreadyInMI = devSec.closest('#zeus-groups') !== null;
 
     if (!alreadyInMI) {
       // Not in MI — insert after deepdive-sec (natural anchor), fallback to append
@@ -504,7 +504,7 @@ function _devEnsureVisible() {
         // deepdive-sec not in MI either — append at end
         mi.appendChild(devSec);
       }
-      console.log('[DEV] ✅ Fallback: dev-sec forțat în zg-body-mi');
+      console.log('[DEV] Fallback: dev-sec forțat în zeus-groups');
     } else {
       // Already in MI — verify it is after deepdive-sec
       var anchor2 = mi.querySelector('#deepdive-sec');
@@ -519,22 +519,9 @@ function _devEnsureVisible() {
           } else {
             mi.appendChild(devSec);
           }
-          console.log('[DEV] ✅ Fallback: dev-sec repoziționat după deepdive-sec');
+          console.log('[DEV] Fallback: dev-sec repoziționat după deepdive-sec');
         }
       }
-    }
-
-    // If MI group is collapsed and user never explicitly collapsed it — expand it
-    var miSec = document.getElementById('zg-mi');
-    if (miSec && miSec.classList.contains('collapsed')) {
-      try {
-        var savedGroups = JSON.parse(localStorage.getItem('zeus_groups') || '{}');
-        // Only expand if state was not saved explicitly as false
-        if (savedGroups['zg-mi'] === undefined) {
-          miSec.classList.remove('collapsed');
-          console.log('[DEV] ✅ MI expand: nu era salvat ca colapsat');
-        }
-      } catch (_) { }
     }
 
     // Render log so panel shows content immediately
@@ -562,6 +549,8 @@ function setUiScale(val) {
   if (isNaN(v) || v < 0.5 || v > 3) v = 1;
   document.documentElement.style.setProperty('--ui-scale', v);
   try { localStorage.setItem('zeus_ui_scale', v); } catch (_) { }
+  if (typeof _ucMarkDirty === 'function') _ucMarkDirty('uiScale');
+  if (typeof _userCtxPush === 'function') _userCtxPush();
   var sel = document.getElementById('hubUiScale');
   if (sel) sel.value = String(v);
 }
@@ -602,50 +591,12 @@ function hubPopulate() {
       scaleSel.value = (sv && !isNaN(parseFloat(sv))) ? String(parseFloat(sv)) : '1';
     }
 
-    // ── Chart TF ────────────────────────────────────────────────
-    var tf = (S && S.chartTf) ? S.chartTf : '5m';
-    document.querySelectorAll('#hubTfGroup .qb').forEach(function (b) {
-      b.classList.toggle('act', b.textContent.trim() === tf);
-    });
+    // ── (Chart TF / Timezone / Indicators removed — single source of truth is chart toolbar) ──
 
-    // ── Timezone ─────────────────────────────────────────────────
-    var tz = (S && S.tz) ? S.tz : 'Europe/Bucharest';
-    document.querySelectorAll('#hubTzGroup .qb').forEach(function (b) {
-      try {
-        var m = b.getAttribute('onclick') && b.getAttribute('onclick').match(/'([^']+)'/);
-        var val = m ? m[1] : '';
-        b.classList.toggle('act', val === tz);
-      } catch (_) { }
-    });
-
-    // ── Indicators ───────────────────────────────────────────────
-    var indList = document.getElementById('hubIndList');
-    if (indList) {
-      try {
-        var inds = (typeof INDICATORS !== 'undefined' && Array.isArray(INDICATORS))
-          ? INDICATORS
-          : Object.keys((S && S.activeInds) ? S.activeInds : {}).map(function (k) { return { id: k, ico: '', name: k }; });
-        indList.innerHTML = inds.map(function (ind) {
-          var active = (S && S.activeInds) ? S.activeInds[ind.id] !== false : true;
-          return '<label style="display:flex;align-items:center;gap:4px;font-size:12px;padding:3px 0;cursor:pointer">'
-            + '<input type="checkbox" data-ind="' + ind.id + '"' + (active ? ' checked' : '') + '> '
-            + (ind.ico || '') + ' ' + (ind.name || ind.id)
-            + '</label>';
-        }).join('');
-      } catch (_) {
-        indList.innerHTML = '<div class="hub-disabled-notice">Could not load indicator list.</div>';
-      }
-    }
-
-    // ── Indicator params ─────────────────────────────────────────
     var _setV = function (id, val) {
       var el = document.getElementById(id);
       if (el) el.value = val;
     };
-    _setV('hubRsiPeriod', (S && S.rsiPeriod) ? S.rsiPeriod : 14);
-    _setV('hubMacdFast', (S && S.macdFast) ? S.macdFast : 12);
-    _setV('hubMacdSlow', (S && S.macdSlow) ? S.macdSlow : 26);
-    _setV('hubMacdSig', (S && S.macdSig) ? S.macdSig : 9);
 
     // ── Alerts ───────────────────────────────────────────────────
     var al = (S && S.alerts) ? S.alerts : {};
@@ -662,23 +613,15 @@ function hubPopulate() {
     _setV('hubWhaleMin', al.whaleMinBtc !== undefined ? al.whaleMinBtc : 100);
     _setV('hubLiqMin', al.liqMinBtc !== undefined ? al.liqMinBtc : 1);
 
-    // ── Auto Trade ───────────────────────────────────────────────
+    // ── Auto Trade (populate AT panel toggles) ──────────────────
     var at = (typeof USER_SETTINGS !== 'undefined' && USER_SETTINGS.autoTrade)
       ? USER_SETTINGS.autoTrade : {};
-    _setV('hubAtLev', at.lev !== undefined ? at.lev : 5);
-    _setV('hubAtSL', at.sl !== undefined ? at.sl : 1.5);
-    _setV('hubAtRR', at.rr !== undefined ? at.rr : 2);
-    _setV('hubAtSize', at.size !== undefined ? at.size : 200);
-    _setV('hubAtMaxPos', at.maxPos !== undefined ? at.maxPos : 4);
-    _setV('hubAtKill', at.killPct !== undefined ? at.killPct : 5);
-    var multiEl = document.getElementById('hubAtMultiSym');
-    if (multiEl) multiEl.checked = at.multiSym !== false;
-    var seEl = document.getElementById('hubSmartExit');
-    if (seEl) seEl.checked = at.smartExitEnabled === true;
-    var adaptEl = document.getElementById('hubAdaptEnabled');
-    if (adaptEl) adaptEl.checked = BM.adapt && BM.adapt.enabled === true;
-    var adaptLiveEl = document.getElementById('hubAdaptLive');
-    if (adaptLiveEl) adaptLiveEl.checked = BM.adapt && BM.adapt.allowLiveAdjust === true;
+    var atSeEl = document.getElementById('atSmartExit');
+    if (atSeEl) atSeEl.checked = at.smartExitEnabled === true;
+    var atAdaptEl = document.getElementById('atAdaptEnabled');
+    if (atAdaptEl) atAdaptEl.checked = BM.adapt && BM.adapt.enabled === true;
+    var atAdaptLiveEl = document.getElementById('atAdaptLive');
+    if (atAdaptLiveEl) atAdaptLiveEl.checked = BM.adapt && BM.adapt.allowLiveAdjust === true;
 
     // ── Telegram ──────────────────────────────────────────────────
     if (typeof hubTgPopulate === 'function') hubTgPopulate();
@@ -697,50 +640,7 @@ function hubSaveAll() {
     var notEl = document.getElementById('hubNotifyEnabled');
     if (notEl && S && S.alerts) S.alerts.enabled = notEl.checked;
 
-    // ── Chart TF ─────────────────────────────────────────────────
-    var activeTfEl = document.querySelector('#hubTfGroup .qb.act');
-    if (activeTfEl) {
-      var newTf = activeTfEl.textContent.trim();
-      if (newTf && S && newTf !== S.chartTf && typeof setTF === 'function') {
-        setTF(newTf);
-      }
-    }
-
-    // ── Timezone ─────────────────────────────────────────────────
-    var activeTzEl = document.querySelector('#hubTzGroup .qb.act');
-    if (activeTzEl) {
-      try {
-        var m = activeTzEl.getAttribute('onclick') && activeTzEl.getAttribute('onclick').match(/'([^']+)'/);
-        if (m && m[1] && S && m[1] !== S.tz && typeof setTZ === 'function') {
-          setTZ(m[1]);
-        }
-      } catch (_) { }
-    }
-
-    // ── Candle colors ────────────────────────────────────────────
-    hubApplyChartColors();
-
-    // ── Indicators ───────────────────────────────────────────────
-    document.querySelectorAll('#hubIndList input[type="checkbox"]').forEach(function (cb) {
-      var ind = cb.dataset && cb.dataset.ind;
-      if (!ind) return;
-      if (S && S.activeInds) S.activeInds[ind] = cb.checked;
-      if (typeof applyIndVisibility === 'function') {
-        try { applyIndVisibility(ind, cb.checked); } catch (_) { }
-      }
-    });
-
-    // ── Indicator params ─────────────────────────────────────────
-    if (S) {
-      var _getN = function (id, def) {
-        var el = document.getElementById(id);
-        return el ? (parseFloat(el.value) || def) : def;
-      };
-      S.rsiPeriod = parseInt(_getN('hubRsiPeriod', 14));
-      S.macdFast = parseInt(_getN('hubMacdFast', 12));
-      S.macdSlow = parseInt(_getN('hubMacdSlow', 26));
-      S.macdSig = parseInt(_getN('hubMacdSig', 9));
-    }
+    // ── (Chart TF / Timezone / Candle colors / Indicators removed — single source of truth is chart toolbar) ──
 
     // ── Alerts ───────────────────────────────────────────────────
     if (S) {
@@ -759,26 +659,7 @@ function hubSaveAll() {
       S.alerts.liqMinBtc = parseFloat(document.getElementById('hubLiqMin')?.value) || 1;
     }
 
-    // ── Auto Trade ───────────────────────────────────────────────
-    if (typeof USER_SETTINGS !== 'undefined') {
-      if (!USER_SETTINGS.autoTrade) USER_SETTINGS.autoTrade = {};
-      var _getN2 = function (id, def) {
-        var el = document.getElementById(id);
-        return el ? (parseFloat(el.value) || def) : def;
-      };
-      USER_SETTINGS.autoTrade.lev = parseInt(_getN2('hubAtLev', 5));
-      USER_SETTINGS.autoTrade.sl = _getN2('hubAtSL', 1.5);
-      USER_SETTINGS.autoTrade.rr = _getN2('hubAtRR', 2);
-      USER_SETTINGS.autoTrade.size = _getN2('hubAtSize', 200);
-      USER_SETTINGS.autoTrade.maxPos = parseInt(_getN2('hubAtMaxPos', 4));
-      USER_SETTINGS.autoTrade.killPct = _getN2('hubAtKill', 5);
-      USER_SETTINGS.autoTrade.multiSym = (document.getElementById('hubAtMultiSym')?.checked !== false);
-      USER_SETTINGS.autoTrade.smartExitEnabled = (document.getElementById('hubSmartExit')?.checked === true);
-      // Sync back to AT DOM inputs via existing function
-      if (typeof _usApply === 'function') {
-        try { _usApply(); } catch (_) { }
-      }
-    }
+    // ── (AT Hub inputs removed — AT panel is single source of truth) ──
 
     // ── Persist ───────────────────────────────────────────────────
     if (typeof _usSave === 'function') {
@@ -792,12 +673,12 @@ function hubSaveAll() {
       hubTgSave();
     }
 
-    if (typeof toast === 'function') toast('✅ All settings saved');
+    if (typeof toast === 'function') toast('All settings saved', 0, _ZI.ok);
     devLog('Settings saved via Hub', 'info');
 
   } catch (e) {
     console.warn('[Hub] hubSaveAll error:', e);
-    if (typeof toast === 'function') toast('⚠️ Save error — check console');
+    if (typeof toast === 'function') toast('Save error — check console');
   }
 }
 
@@ -805,7 +686,7 @@ function hubLoadAll() {
   try {
     if (typeof loadUserSettings === 'function') loadUserSettings();
     hubPopulate();
-    if (typeof toast === 'function') toast('📂 Settings loaded');
+    if (typeof toast === 'function') toast('Settings loaded', 0, _ZI.fold);
   } catch (e) {
     console.warn('[Hub] hubLoadAll error:', e);
   }
@@ -819,25 +700,25 @@ function hubTgSave() {
   var token = tokenEl ? tokenEl.value.trim() : '';
   var chatId = chatEl ? chatEl.value.trim() : '';
   if (!token || !chatId) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">⚠️ Completează ambele câmpuri</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI.w + ' Completează ambele câmpuri</span>';
     return;
   }
   localStorage.setItem('zeus_tg_bot_token', token);
   localStorage.setItem('zeus_tg_chat_id', chatId);
   // Push to server runtime config
-  fetch('/api/config/telegram', {
+  fetch('/api/user/telegram', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ botToken: token, chatId: chatId })
   }).then(function (r) { return r.json(); }).then(function (d) {
     if (d.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">✅ Salvat + trimis la server</span>';
-      if (typeof toast === 'function') toast('✅ Telegram saved');
+      if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI.ok + ' Salvat + trimis la server</span>';
+      if (typeof toast === 'function') toast('Telegram saved', 0, _ZI.ok);
     } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">⚠️ Server: ' + (d.error || 'error') + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI.w + ' Server: ' + (d.error || 'error') + '</span>';
     }
   }).catch(function (e) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">⚠️ ' + e.message + '</span>';
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI.w + ' ' + e.message + '</span>';
   });
 }
 
@@ -846,18 +727,18 @@ function hubTgTest() {
   // Save first to ensure server has the latest creds
   hubTgSave();
   setTimeout(function () {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#4fc3f7">📨 Sending test...</span>';
-    fetch('/api/config/telegram/test', {
+    if (statusEl) statusEl.innerHTML = '<span style="color:#4fc3f7">' + _ZI.mail + ' Sending test...</span>';
+    fetch('/api/user/telegram/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     }).then(function (r) { return r.json(); }).then(function (d) {
       if (d.ok) {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">✅ Test trimis — verifică Telegram!</span>';
+        if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI.ok + ' Test trimis — verifică Telegram!</span>';
       } else {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">⚠️ Mesajul nu s-a trimis — verifică token/chat ID</span>';
+        if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI.w + ' Mesajul nu s-a trimis — verifică token/chat ID</span>';
       }
     }).catch(function (e) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">⚠️ ' + e.message + '</span>';
+      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI.w + ' ' + e.message + '</span>';
     });
   }, 500);
 }
@@ -869,6 +750,12 @@ function hubTgPopulate() {
   var chatEl = document.getElementById('hubTgChatId');
   if (tokenEl) tokenEl.value = token;
   if (chatEl) chatEl.value = chatId;
+  // Also fetch server-side config to show if configured
+  fetch('/api/user/telegram').then(function (r) { return r.json(); }).then(function (d) {
+    if (d.configured && chatEl && !chatEl.value) chatEl.value = d.chatId || '';
+    var statusEl = document.getElementById('hubTgStatus');
+    if (statusEl && d.configured) statusEl.innerHTML = '<span style="color:#4fc3f7">' + _ZI.inf + ' Telegram configurat (chat: ' + d.chatId + ')</span>';
+  }).catch(function () { });
 }
 
 function hubResetDefaults() {

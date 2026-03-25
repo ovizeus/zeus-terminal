@@ -1,120 +1,825 @@
 /* ── 8. BRAIN EXTENSION / TICKER STYLES ────────────────────────── */
-.bext{background:#020408;border-bottom:2px solid #1a0a30;overflow:hidden;position:relative;display:none}
-.bext.show{display:block}
+.bext {
+  background: #020408;
+  border-bottom: 2px solid #1a0a30;
+  overflow: hidden;
+  position: relative;
+  display: block
+}
+
+.bext.show {
+  display: block
+}
 
 
 /* ── ORB SESSION PILLS ── */
 /* ── SESSION PILLS — on orb rim ── */
-.orb-sess{
-  font-size:3.5px;letter-spacing:.8px;padding:0 3px;border-radius:1px;line-height:1.6;
-  border:1px solid #0e1e0e;color:#1a2a14;background:rgba(2,4,8,.6);
-  transition:all .3s ease;white-space:nowrap;opacity:.3;
-  text-align:center;box-sizing:border-box}
-.orb-sess.active{opacity:1;animation:zSessBlink 1.4s ease-in-out infinite}
-.orb-sess.active.asia   {color:#f0c040;background:#f0c04022;border-color:#f0c04077;text-shadow:0 0 5px #f0c040;box-shadow:0 0 7px #f0c04055}
-.orb-sess.active.london {color:#4488ff;background:#4488ff22;border-color:#4488ff77;text-shadow:0 0 5px #4488ff;box-shadow:0 0 7px #4488ff55}
-.orb-sess.active.ny     {color:#00ff88;background:#00ff8822;border-color:#00ff8877;text-shadow:0 0 5px #00ff88;box-shadow:0 0 7px #00ff8855}
-.orb-sess.active.primary.asia   {box-shadow:0 0 10px #f0c040,0 0 18px #f0c04044;animation:zSessPulse 1s ease-in-out infinite}
-.orb-sess.active.primary.london {box-shadow:0 0 10px #4488ff,0 0 18px #4488ff44;animation:zSessPulse 1s ease-in-out infinite}
-.orb-sess.active.primary.ny     {box-shadow:0 0 10px #00ff88,0 0 18px #00ff8844;animation:zSessPulse 1s ease-in-out infinite}
-@keyframes zSessBlink {0%,100%{opacity:1}50%{opacity:.55}}
-@keyframes zSessPulse {0%,100%{opacity:1;transform:scale(1)}50%{opacity:.8;transform:scale(1.05)}}
+.orb-sess {
+  font-size: 3.5px;
+  letter-spacing: .8px;
+  padding: 0 3px;
+  border-radius: 1px;
+  line-height: 1.6;
+  border: 1px solid #0e1e0e;
+  color: #1a2a14;
+  background: rgba(2, 4, 8, .6);
+  transition: all .3s ease;
+  white-space: nowrap;
+  opacity: .3;
+  text-align: center;
+  box-sizing: border-box
+}
+
+.orb-sess.active {
+  opacity: 1;
+  animation: zSessBlink 1.4s ease-in-out infinite
+}
+
+.orb-sess.active.asia {
+  color: #f0c040;
+  background: #f0c04022;
+  border-color: #f0c04077;
+  text-shadow: 0 0 5px #f0c040;
+  box-shadow: 0 0 7px #f0c04055
+}
+
+.orb-sess.active.london {
+  color: #4488ff;
+  background: #4488ff22;
+  border-color: #4488ff77;
+  text-shadow: 0 0 5px #4488ff;
+  box-shadow: 0 0 7px #4488ff55
+}
+
+.orb-sess.active.ny {
+  color: #00ff88;
+  background: #00ff8822;
+  border-color: #00ff8877;
+  text-shadow: 0 0 5px #00ff88;
+  box-shadow: 0 0 7px #00ff8855
+}
+
+.orb-sess.active.primary.asia {
+  box-shadow: 0 0 10px #f0c040, 0 0 18px #f0c04044;
+  animation: zSessPulse 1s ease-in-out infinite
+}
+
+.orb-sess.active.primary.london {
+  box-shadow: 0 0 10px #4488ff, 0 0 18px #4488ff44;
+  animation: zSessPulse 1s ease-in-out infinite
+}
+
+.orb-sess.active.primary.ny {
+  box-shadow: 0 0 10px #00ff88, 0 0 18px #00ff8844;
+  animation: zSessPulse 1s ease-in-out infinite
+}
+
+@keyframes zSessBlink {
+
+  0%,
+  100% {
+    opacity: 1
+  }
+
+  50% {
+    opacity: .55
+  }
+}
+
+@keyframes zSessPulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1)
+  }
+
+  50% {
+    opacity: .8;
+    transform: scale(1.05)
+  }
+}
+
 /* ── SESSION BAR ── */
-.znc-session-bar{display:flex;gap:0;border-bottom:1px solid #0a1a0a;overflow:hidden}
-.znc-sess{flex:1;padding:3px 2px;text-align:center;font-size:4px;letter-spacing:1px;color:#1a2a1a;border-right:1px solid #0a1a0a;cursor:default;transition:all .4s;position:relative}
-.znc-sess:last-child{border-right:none}
-.znc-sess.active.asia{color:#f0c040;background:#f0c04012;box-shadow:inset 0 -1px 0 #f0c040;text-shadow:0 0 6px #f0c040}
-.znc-sess.active.london{color:#4488ff;background:#4488ff12;box-shadow:inset 0 -1px 0 #4488ff;text-shadow:0 0 6px #4488ff}
-.znc-sess.active.ny{color:#00ff88;background:#00ff8812;box-shadow:inset 0 -1px 0 #00ff88;text-shadow:0 0 6px #00ff88}
-.znc-sess-dot{display:inline-block;width:3px;height:3px;border-radius:50%;background:currentColor;margin-right:2px;animation:zBlink 1s ease-in-out infinite}
+.znc-session-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid #0a1a0a;
+  overflow: hidden
+}
+
+.znc-sess {
+  flex: 1;
+  padding: 3px 2px;
+  text-align: center;
+  font-size: 4px;
+  letter-spacing: 1px;
+  color: #1a2a1a;
+  border-right: 1px solid #0a1a0a;
+  cursor: default;
+  transition: all .4s;
+  position: relative
+}
+
+.znc-sess:last-child {
+  border-right: none
+}
+
+.znc-sess.active.asia {
+  color: #f0c040;
+  background: #f0c04012;
+  box-shadow: inset 0 -1px 0 #f0c040;
+  text-shadow: 0 0 6px #f0c040
+}
+
+.znc-sess.active.london {
+  color: #4488ff;
+  background: #4488ff12;
+  box-shadow: inset 0 -1px 0 #4488ff;
+  text-shadow: 0 0 6px #4488ff
+}
+
+.znc-sess.active.ny {
+  color: #00ff88;
+  background: #00ff8812;
+  box-shadow: inset 0 -1px 0 #00ff88;
+  text-shadow: 0 0 6px #00ff88
+}
+
+.znc-sess-dot {
+  display: inline-block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+  margin-right: 2px;
+  animation: zBlink 1s ease-in-out infinite
+}
 
 /* ── NEURON SCAN ── */
-.znc-neuro{padding:4px 8px 3px;border-bottom:1px solid #0a1a0a}
-.znc-neuro-lbl{font-size:4px;letter-spacing:1.5px;color:#1a2a1a;margin-bottom:3px}
-.znc-neuro-coins{display:flex;flex-wrap:wrap;gap:4px}
-.znc-nc{display:flex;align-items:center;gap:2px;font-size:5px;color:#1a3020;transition:color .3s}
-.znc-nc.pulse{color:#39ff14;animation:zNeuro 300ms ease-out}
-@keyframes zNeuro{0%{filter:brightness(3) drop-shadow(0 0 3px #39ff14)}100%{filter:brightness(1)}}
-.znc-nc-dot{width:5px;height:5px;border-radius:50%;background:#1a3020;flex-shrink:0;border:1px solid #2a3a28;transition:background .3s,box-shadow .3s}
-.znc-nc.pulse .znc-nc-dot{background:#39ff14;box-shadow:0 0 6px #39ff14;border-color:#39ff14}
-/* neuron row inside orb */
-.orb-neurons .znc-nc{gap:0;margin:0}
-.orb-neurons .znc-nc-dot{width:5px;height:5px;margin:0 1px}
-#orbNeuroCoin .znc-nc{gap:0}
-#orbNeuroCoin .znc-nc-dot{width:5px;height:5px;margin:0 1px}
+.znc-neuro {
+  padding: 4px 8px 3px;
+  border-bottom: 1px solid #0a1a0a
+}
 
-.bext-toggle-btn{width:100%;padding:4px 12px;background:#030608;border:none;border-bottom:1px solid #1a0a30;color:#2a1a50;font-size:5px;letter-spacing:2px;cursor:pointer;font-family:var(--ff);text-align:left}
-.bext-toggle-btn:hover{color:#aa44ff44}
-.bext::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#4400aa,#00aaff,#4400aa,transparent);animation:scanLine 3s linear infinite}
+.znc-neuro-lbl {
+  font-size: 4px;
+  letter-spacing: 1.5px;
+  color: #1a2a1a;
+  margin-bottom: 3px
+}
+
+.znc-neuro-coins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px
+}
+
+.znc-nc {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 5px;
+  color: #1a3020;
+  transition: color .3s
+}
+
+.znc-nc.pulse {
+  color: #39ff14;
+  animation: zNeuro 300ms ease-out
+}
+
+@keyframes zNeuro {
+  0% {
+    filter: brightness(3) drop-shadow(0 0 3px #39ff14)
+  }
+
+  100% {
+    filter: brightness(1)
+  }
+}
+
+.znc-nc-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #1a3020;
+  flex-shrink: 0;
+  border: 1px solid #2a3a28;
+  transition: background .3s, box-shadow .3s
+}
+
+.znc-nc.pulse .znc-nc-dot {
+  background: #39ff14;
+  box-shadow: 0 0 6px #39ff14;
+  border-color: #39ff14
+}
+
+/* neuron row inside orb */
+.orb-neurons .znc-nc {
+  gap: 0;
+  margin: 0
+}
+
+.orb-neurons .znc-nc-dot {
+  width: 5px;
+  height: 5px;
+  margin: 0 1px
+}
+
+#orbNeuroCoin .znc-nc {
+  gap: 0
+}
+
+#orbNeuroCoin .znc-nc-dot {
+  width: 5px;
+  height: 5px;
+  margin: 0 1px
+}
+
+.bext-toggle-btn {
+  display: none
+}
+
+.bext-toggle-btn:hover {
+  color: #aa44ff44
+}
+
+.bext::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #4400aa, #00aaff, #4400aa, transparent);
+  animation: scanLine 3s linear infinite
+}
+
 /* HEX grid background */
-.bext-bg{position:absolute;top:0;left:0;right:0;bottom:0;opacity:.04;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49'%3E%3Cpolygon points='14,1 27,8 27,22 14,29 1,22 1,8' fill='none' stroke='%23aa44ff' stroke-width='1'/%3E%3C/svg%3E");background-size:28px 49px}
+.bext-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: .04;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49'%3E%3Cpolygon points='14,1 27,8 27,22 14,29 1,22 1,8' fill='none' stroke='%23aa44ff' stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 28px 49px
+}
 
 /* Market Pulse Matrix */
-.pulse-matrix{display:grid;grid-template-columns:repeat(14,1fr);gap:2px;padding:8px 10px 4px;max-width:100%;overflow:hidden}
-.sym-pulse-row{max-width:100%;overflow:hidden}
-@media(max-width:600px){.pulse-matrix{grid-template-columns:repeat(7,1fr)}.sym-pulse-price{width:44px!important}.sym-pulse-chg{width:32px!important}}
-.pulse-cell{height:28px;border-radius:2px;transition:all .5s;position:relative;overflow:hidden;cursor:default}
-.pulse-cell::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:rgba(255,255,255,.2)}
+.pulse-matrix {
+  display: grid;
+  grid-template-columns: repeat(14, 1fr);
+  gap: 2px;
+  padding: 8px 10px 4px;
+  max-width: 100%;
+  overflow: hidden
+}
+
+.sym-pulse-row {
+  max-width: 100%;
+  overflow: hidden
+}
+
+@media(max-width:600px) {
+  .pulse-matrix {
+    grid-template-columns: repeat(7, 1fr)
+  }
+
+  .sym-pulse-price {
+    width: 44px !important
+  }
+
+  .sym-pulse-chg {
+    width: 32px !important
+  }
+}
+
+.pulse-cell {
+  height: 28px;
+  border-radius: 2px;
+  transition: all .5s;
+  position: relative;
+  overflow: hidden;
+  cursor: default
+}
+
+.pulse-cell::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, .2)
+}
 
 /* Symbol Pulse Rows */
-.sym-pulse-row{display:flex;align-items:center;gap:6px;padding:3px 10px;font-size:7px;border-bottom:1px solid #06080e}
-.sym-pulse-row:last-child{border:none}
-.sym-pulse-label{width:32px;color:var(--dim);flex-shrink:0;letter-spacing:.5px}
-.sym-pulse-bars{flex:1;display:flex;gap:1px;align-items:flex-end;height:20px}
-.sym-pulse-bar{flex:1;border-radius:1px 1px 0 0;min-height:2px;transition:height .4s,background .4s}
-.sym-pulse-price{width:58px;text-align:right;font-weight:700;font-size:8px;flex-shrink:0}
-.sym-pulse-chg{width:42px;text-align:right;font-size:7px;flex-shrink:0}
+.sym-pulse-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 7px;
+  border-bottom: 1px solid #06080e
+}
+
+.sym-pulse-row:last-child {
+  border: none
+}
+
+.sym-pulse-label {
+  width: 32px;
+  color: var(--dim);
+  flex-shrink: 0;
+  letter-spacing: .5px
+}
+
+.sym-pulse-bars {
+  flex: 1;
+  display: flex;
+  gap: 1px;
+  align-items: flex-end;
+  height: 20px
+}
+
+.sym-pulse-bar {
+  flex: 1;
+  border-radius: 1px 1px 0 0;
+  min-height: 2px;
+  transition: height .4s, background .4s
+}
+
+.sym-pulse-price {
+  width: 58px;
+  text-align: right;
+  font-weight: 700;
+  font-size: 8px;
+  flex-shrink: 0
+}
+
+.sym-pulse-chg {
+  width: 42px;
+  text-align: right;
+  font-size: 7px;
+  flex-shrink: 0
+}
 
 /* Neural Heatmap */
-.nheat{display:grid;grid-template-columns:repeat(7,1fr);gap:0;border-top:1px solid #06080e}
-.nheat-cell{padding:5px 4px;text-align:center;font-size:6px;border-right:1px solid #06080e;border-bottom:1px solid #06080e;transition:all .5s;position:relative;overflow:hidden}
-.nheat-cell:nth-child(7n){border-right:none}
-.nheat-sym{letter-spacing:.5px;color:rgba(255,255,255,.6);margin-bottom:2px}
-.nheat-val{font-weight:700;font-size:8px}
-.nheat-bar{height:2px;border-radius:1px;margin-top:2px;transition:width .5s}
+.nheat {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0;
+  border-top: 1px solid #06080e
+}
+
+.nheat-cell {
+  padding: 5px 4px;
+  text-align: center;
+  font-size: 6px;
+  border-right: 1px solid #06080e;
+  border-bottom: 1px solid #06080e;
+  transition: all .5s;
+  position: relative;
+  overflow: hidden
+}
+
+.nheat-cell:nth-child(7n) {
+  border-right: none
+}
+
+.nheat-sym {
+  letter-spacing: .5px;
+  color: rgba(255, 255, 255, .6);
+  margin-bottom: 2px
+}
+
+.nheat-val {
+  font-weight: 700;
+  font-size: 8px
+}
+
+.nheat-bar {
+  height: 2px;
+  border-radius: 1px;
+  margin-top: 2px;
+  transition: width .5s
+}
 
 /* Quantum Clock */
-.qclock{position:relative;width:56px;height:56px;flex-shrink:0}
-.qclock-svg{width:100%;height:100%}
-.qclock-hands{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.qclock {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0
+}
+
+.qclock-svg {
+  width: 100%;
+  height: 100%
+}
+
+.qclock-hands {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%)
+}
 
 /* Data Stream ticker */
-.dstream{display:flex;overflow:hidden;white-space:nowrap;border-top:1px solid #06080e;padding:4px 0;background:#020308;position:relative}
-.dstream::before,.dstream::after{content:'';position:absolute;top:0;bottom:0;width:20px;z-index:2}
-.dstream::before{left:0;background:linear-gradient(90deg,#020308,transparent)}
-.dstream::after{right:0;background:linear-gradient(270deg,#020308,transparent)}
-.dstream-inner{display:flex;gap:0;animation:streamScroll 30s linear infinite}
-@keyframes streamScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.dstream-item{padding:0 12px;font-size:7px;white-space:nowrap;font-family:var(--ff);letter-spacing:.5px;border-right:1px solid #1a0a30}
-.dstream-item.up{color:#00ff88}.dstream-item.down{color:#ff4466}.dstream-item.neut{color:#555}
+.dstream {
+  display: flex;
+  overflow: hidden;
+  white-space: nowrap;
+  border-top: 1px solid #06080e;
+  padding: 4px 0;
+  background: #020308;
+  position: relative
+}
+
+.dstream::before,
+.dstream::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  z-index: 2
+}
+
+.dstream::before {
+  left: 0;
+  background: linear-gradient(90deg, #020308, transparent)
+}
+
+.dstream::after {
+  right: 0;
+  background: linear-gradient(270deg, #020308, transparent)
+}
+
+.dstream-inner {
+  display: flex;
+  gap: 0;
+  animation: streamScroll 30s linear infinite
+}
+
+@keyframes streamScroll {
+  0% {
+    transform: translateX(0)
+  }
+
+  100% {
+    transform: translateX(-50%)
+  }
+}
+
+.dstream-item {
+  padding: 0 12px;
+  font-size: 7px;
+  white-space: nowrap;
+  font-family: var(--ff);
+  letter-spacing: .5px;
+  border-right: 1px solid #1a0a30
+}
+
+.dstream-item.up {
+  color: #00ff88
+}
+
+.dstream-item.down {
+  color: #ff4466
+}
+
+.dstream-item.neut {
+  color: #555
+}
 
 /* Quantum clock special */
-.bext-top{display:flex;align-items:center;padding:6px 10px;gap:8px;border-bottom:1px solid #06080e}
-.bext-title{font-size:6px;letter-spacing:3px;color:#4400aa;font-family:'Cinzel',serif;flex:1}
-.market-phase{font-size:7px;padding:2px 8px;border-radius:2px;font-weight:700;letter-spacing:1px}
-.market-phase.asian{color:#f0c040;background:#f0c04015;border:1px solid #f0c04033}
-.market-phase.london{color:#4488ff;background:#4488ff15;border:1px solid #4488ff33}
-.market-phase.ny{color:#00ff88;background:#00ff8815;border:1px solid #00ff8833}
-.market-phase.dead{color:#333;background:#33333315;border:1px solid #33333333}
+.bext-top {
+  display: flex;
+  align-items: center;
+  padding: 6px 10px;
+  gap: 8px;
+  border-bottom: 1px solid #06080e
+}
+
+.bext-title {
+  font-size: 6px;
+  letter-spacing: 3px;
+  color: #4400aa;
+  font-family: 'Cinzel', serif;
+  flex: 1
+}
+
+.market-phase {
+  font-size: 7px;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-weight: 700;
+  letter-spacing: 1px
+}
+
+.market-phase.asian {
+  color: #f0c040;
+  background: #f0c04015;
+  border: 1px solid #f0c04033
+}
+
+.market-phase.london {
+  color: #4488ff;
+  background: #4488ff15;
+  border: 1px solid #4488ff33
+}
+
+.market-phase.ny {
+  color: #00ff88;
+  background: #00ff8815;
+  border: 1px solid #00ff8833
+}
+
+.market-phase.dead {
+  color: #333;
+  background: #33333315;
+  border: 1px solid #33333333
+}
+
 /* Session backtest stats */
-.sess-bt{font-size:6px;color:var(--dim);margin-top:3px;line-height:1.5;text-align:center}
-.sess-bt-row{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:wrap}
-.sess-bt-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block}
-.sess-bt-dot.bull{background:#00d97a;box-shadow:0 0 5px #00d97a;animation:btDotPulse 1.5s ease-in-out infinite}
-.sess-bt-dot.bear{background:#ff3355;box-shadow:0 0 5px #ff3355}
-.sess-bt-dot.idle{background:#555}
-@keyframes btDotPulse{0%,100%{opacity:1;box-shadow:0 0 4px #00d97a}50%{opacity:.6;box-shadow:0 0 10px #00d97a,0 0 18px #00d97a44}}
+.sess-bt {
+  font-size: 6px;
+  color: var(--dim);
+  margin-top: 3px;
+  line-height: 1.5;
+  text-align: center
+}
+
+.sess-bt-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-wrap: wrap
+}
+
+.sess-bt-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block
+}
+
+.sess-bt-dot.bull {
+  background: #00d97a;
+  box-shadow: 0 0 5px #00d97a;
+  animation: btDotPulse 1.5s ease-in-out infinite
+}
+
+.sess-bt-dot.bear {
+  background: #ff3355;
+  box-shadow: 0 0 5px #ff3355
+}
+
+.sess-bt-dot.idle {
+  background: #555
+}
+
+@keyframes btDotPulse {
+
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 4px #00d97a
+  }
+
+  50% {
+    opacity: .6;
+    box-shadow: 0 0 10px #00d97a, 0 0 18px #00d97a44
+  }
+}
 
 /* Risk gauge */
-.risk-gauge{padding:6px 10px;border-top:1px solid #06080e;display:flex;align-items:center;gap:10px}
-.risk-gauge-track{flex:1;height:6px;background:#0d1520;border-radius:3px;overflow:hidden;position:relative}
-.risk-gauge-fill{height:100%;border-radius:3px;transition:width 1s,background 1s;position:relative}
-.risk-gauge-fill::after{content:'';position:absolute;top:0;right:0;width:4px;height:100%;background:rgba(255,255,255,.4);border-radius:2px}
-.risk-label{font-size:7px;letter-spacing:1px;color:var(--dim);width:68px;flex-shrink:0}
-.risk-val{font-size:8px;font-weight:700;width:32px;text-align:right;flex-shrink:0}
+.risk-gauge {
+  padding: 6px 10px;
+  border-top: 1px solid #06080e;
+  display: flex;
+  align-items: center;
+  gap: 10px
+}
+
+.risk-gauge-track {
+  flex: 1;
+  height: 6px;
+  background: #0d1520;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative
+}
+
+.risk-gauge-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1s, background 1s;
+  position: relative
+}
+
+.risk-gauge-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 4px;
+  height: 100%;
+  background: rgba(255, 255, 255, .4);
+  border-radius: 2px
+}
+
+.risk-label {
+  font-size: 7px;
+  letter-spacing: 1px;
+  color: var(--dim);
+  width: 68px;
+  flex-shrink: 0
+}
+
+.risk-val {
+  font-size: 8px;
+  font-weight: 700;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0
+}
+
 /* ── Confirm-close button protection ── */
-button[data-close-id],button[data-partial-id],button[data-id],#closeAllBtn{
-  -webkit-tap-highlight-color:transparent;
+button[data-close-id],
+button[data-partial-id],
+button[data-id],
+#closeAllBtn {
+  -webkit-tap-highlight-color: transparent;
   transition: background .15s, border-color .15s, color .15s;
 }
-</style>
+
+/* ── ICON SYSTEM — Status Dots ─────────────────────────────────── */
+.z-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 1px;
+  flex-shrink: 0;
+}
+
+.z-dot--red {
+  background: #ff3355;
+  box-shadow: 0 0 4px #ff335566;
+}
+
+.z-dot--grn {
+  background: #00d97a;
+  box-shadow: 0 0 4px #00d97a66;
+}
+
+.z-dot--ylw {
+  background: #f0c040;
+  box-shadow: 0 0 4px #f0c04066;
+}
+
+.z-dot--blu {
+  background: #4488ff;
+  box-shadow: 0 0 4px #4488ff66;
+}
+
+/* ── ICON SYSTEM — Inline SVG Icons ────────────────────────────── */
+svg.z-i {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  vertical-align: -1.5px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex-shrink: 0;
+  margin-right: 1px
+}
+
+svg.z-i.z-i--lg {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2.5px
+}
+
+svg.z-i.z-i--xl {
+  width: 22px;
+  height: 22px;
+  vertical-align: -4px
+}
+
+svg.z-i.z-i--brand {
+  width: 16px;
+  height: 16px;
+  vertical-align: -3px;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 3px currentColor)
+}
+
+@keyframes z-spin {
+  to {
+    transform: rotate(360deg)
+  }
+}
+
+svg.z-i.z-spin {
+  animation: z-spin .7s linear infinite;
+  transform-origin: center
+}
+
+/* ── ZEUS BADGE — Premium neon micro-badge ─────────────────────── */
+.z-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  font-family: var(--ff);
+  padding: 1px 5px;
+  border-radius: 2px;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: middle
+}
+
+.z-badge--gold {
+  color: #f0c040;
+  border: 1px solid #f0c04033;
+  background: #f0c04012;
+  text-shadow: 0 0 6px #f0c04055
+}
+
+.z-badge--red {
+  color: #ff3355;
+  border: 1px solid #ff335533;
+  background: #ff335512;
+  text-shadow: 0 0 6px #ff335555
+}
+
+.z-badge--grn {
+  color: #00d97a;
+  border: 1px solid #00d97a33;
+  background: #00d97a12;
+  text-shadow: 0 0 6px #00d97a55
+}
+
+.z-badge--cyan {
+  color: #00b8d4;
+  border: 1px solid #00b8d433;
+  background: #00b8d412;
+  text-shadow: 0 0 6px #00b8d455
+}
+
+.z-badge--pur {
+  color: #aa44ff;
+  border: 1px solid #aa44ff33;
+  background: #aa44ff12;
+  text-shadow: 0 0 6px #aa44ff55
+}
+
+.z-badge--dim {
+  color: #7a9ab8;
+  border: 1px solid #7a9ab822;
+  background: #7a9ab80a
+}
+
+/* ─── Icon Dots (colored status circles) ─── */
+.z-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+
+.z-dot--red {
+  background: #ff4444;
+  box-shadow: 0 0 4px #ff444466
+}
+
+.z-dot--grn {
+  background: #00e676;
+  box-shadow: 0 0 4px #00e67666
+}
+
+.z-dot--ylw {
+  background: #ffd740;
+  box-shadow: 0 0 4px #ffd74066
+}
+
+.z-dot--pur {
+  background: #bb86fc;
+  box-shadow: 0 0 4px #bb86fc66
+}

@@ -11,8 +11,8 @@ function initZeusGroups() {
   }
   window.UI_BUILT = true;
 
-  const mi = document.getElementById('zg-body-mi');
-  // UI FIX: TE and RP are aliases of MI — all content goes into one group, no duplicates
+  const mi = document.getElementById('zeus-groups');
+  // All content goes into #zeus-groups directly (no sub-group wrappers)
   const te = mi;
   const rp = mi;
   if (!mi) { window.UI_BUILT = false; return; }
@@ -37,7 +37,7 @@ function initZeusGroups() {
       banner.id = 'zg-recovery-banner';
       document.body.insertAdjacentElement('afterbegin', banner);
     }
-    banner.innerHTML = '\u26A0\uFE0F Unele panouri nu s-au putut \u00eenc\u0103rca corect. <strong>Apas\u0103 aici pentru a re\u00eencerca.</strong>';
+    banner.innerHTML = '\u26A0\uFE0F Some panels could not load correctly. <strong>Click here to retry.<\/strong>';
     banner.style.display = 'block';
     banner.onclick = function () {
       window.UI_BUILT = false;
@@ -157,38 +157,6 @@ function initZeusGroups() {
     }
   }, 500);
 
-  // ── COLLAPSE BEHAVIOR (Step 3) ─────────────────────────────────
-  const saved = {};
-  try {
-    const raw = localStorage.getItem('zeus_groups');
-    if (raw) Object.assign(saved, JSON.parse(raw));
-  } catch (_) { }
-
-  document.querySelectorAll('.zg').forEach(function (sec) {
-    const id = sec.id;
-    if (saved[id] === false) {
-      sec.classList.add('collapsed');
-    }
-    const hdr = sec.querySelector('.zg-hdr');
-    if (!hdr) return;
-    hdr.onclick = function () {
-      sec.classList.toggle('collapsed');
-      const state = !sec.classList.contains('collapsed');
-      saved[id] = state;
-      try { localStorage.setItem('zeus_groups', JSON.stringify(saved)); } catch (_) { }
-    };
-  });
-
-  // ── MOBILE BEHAVIOR (Step 4) ────────────────────────────────────
-  if (window.innerWidth < 700) {
-    const te_sec = document.getElementById('zg-te');
-    const rp_sec = document.getElementById('zg-rp');
-    if (te_sec && saved['zg-te'] === undefined) te_sec.classList.add('collapsed');
-    if (rp_sec && saved['zg-rp'] === undefined) rp_sec.classList.add('collapsed');
-    // MI starts EXPANDED on mobile (user can collapse manually)
-    const mi_sec = document.getElementById('zg-mi');
-    if (mi_sec && saved['zg-mi'] === undefined) mi_sec.classList.remove('collapsed');
-  }
 }
 
 // ─── FEED-GATED EXTRAS (req 5) ─────────────────────────────────
@@ -211,11 +179,18 @@ function _waitForFeedThenStartExtras() {
     if (feedOk || waited >= MAX_WAIT_MS) {
       Intervals.clear('feedWait'); // stop polling
       if (!feedOk) {
-        atLog('warn', '⚠️ Extras started without confirmed feed (timeout)');
+        atLog('warn', '[WARN] Extras started without confirmed feed (timeout)');
       } else {
-        atLog('info', '✅ Feed confirmed — starting DSL + scanner extras');
+        atLog('info', '[OK] Feed confirmed — starting DSL + scanner extras');
       }
       _startExtras();
+      // UI context restore — AFTER DOM ready + charts init + WS established
+      // Only restores display state (sound, AT log). Live data always wins.
+      if (typeof _ctxLoad === 'function') _ctxLoad();
+      // Cross-device sync — pull user preferences from server (per-user, JWT-auth)
+      if (typeof _userCtxPull === 'function') _userCtxPull();
+      // Retry any pending sendBeacon payloads that failed on previous session close
+      if (typeof _ucRetryPendingBeacon === 'function') _ucRetryPendingBeacon();
     }
   }, CHECK_MS);
 }
@@ -232,22 +207,29 @@ function _startExtras() {
   // [FIX v85 B6] Salvare periodică blackbox (la fiecare 30s, doar dacă dirty)
   Intervals.set('bbSave', () => { if (typeof _aubSaveBB === 'function') _aubSaveBB(); }, 30000);
 
-  atLog('info', '🔧 Extras module online');
+  atLog('info', '[INIT] Extras module online');
+
+  // ── Periodic live position sync (exchange truth every 30s) ──
+  Intervals.set('livePosSync', function () {
+    if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') {
+      liveApiSyncState();
+    }
+  }, 30000);
 
   // ── Resume AutoTrade if it was enabled before reload ──
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     // AT.enabled was restored from localStorage — kick-start the scan interval + UI
-    console.log('[startApp] ♻️ AT was enabled before reload — resuming');
+    console.log('[startApp] AT was enabled before reload — resuming');
     // Update UI to reflect ON state
     const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on';
     const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = '#00ff88'; _dot.style.boxShadow = '0 0 10px #00ff88'; }
     const _txt = el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON';
-    const _st = el('atStatus'); if (_st) _st.textContent = '🟢 Activ — scan la 30s';
+    const _st = el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s';
     if (!AT.interval) AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000);
     setTimeout(runAutoTradeCheck, 3000); // first check after brief settle
     if (typeof atUpdateBanner === 'function') atUpdateBanner();
     if (typeof ptUpdateBanner === 'function') ptUpdateBanner();
-    atLog('info', '♻️ AutoTrade resumed from saved state');
+    atLog('info', '[RESUME] AutoTrade resumed from saved state');
   }
 }
 
@@ -265,8 +247,8 @@ function runHealthChecks() {
     return !!parent.querySelector(childSel);
   }
 
-  // [HEALTH] MI: #zg-body-mi exists and has at least one .sec child
-  checks.mi = _check('zg-body-mi', '.sec');
+  // [HEALTH] MI: #zeus-groups exists and has at least one .sec child
+  checks.mi = _check('zeus-groups', '.sec');
   // [HEALTH] DSL: #dsl-strip-panel contains #dslZone
   checks.dsl = _check('dsl-strip-panel', '#dslZone');
   // [HEALTH] AT: #at-strip-panel contains #atPanel
@@ -294,7 +276,7 @@ function runHealthChecks() {
   }
 
   if (anyFail) {
-    console.warn('[HEALTH] ⚠️ One or more modules failed to mount:', checks);
+    console.warn('[HEALTH] One or more modules failed to mount:', checks);
     let banner = document.getElementById('zg-health-banner');
     if (!banner) {
       banner = document.createElement('div');
@@ -305,13 +287,13 @@ function runHealthChecks() {
       else document.body.insertAdjacentElement('afterbegin', banner);
     }
     const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k.toUpperCase()).join(', ');
-    banner.textContent = `⚠️ Interfață incompletă – modulele [${failed}] nu s‑au încărcat. Reîmprospătează pagina.`;
+    banner.innerHTML = _ZI.w + ` Incomplete interface — modules [${failed}] failed to load. Refresh the page.`;
     banner.style.display = 'block';
   } else {
     // Hide banner if all good
     const banner = document.getElementById('zg-health-banner');
     if (banner) banner.style.display = 'none';
-    console.log('[HEALTH] ✅ All modules mounted OK');
+    console.log('[HEALTH] All modules mounted OK');
   }
 
   return checks;
@@ -365,22 +347,9 @@ function _updatePnlLabCondensed() {
   } catch (_) { }
 }
 
-// [RISK RAILS] Update summary line from live input values
-function updateRRSummary() {
-  var el = document.getElementById('rr-summary');
-  if (!el) return;
-  var v = function (id, d) { var e = document.getElementById(id); return e ? e.value : d; };
-  el.textContent =
-    v('rrRiskPct', '1') + '% risk · ' +
-    v('rrMaxDay', '5') + ' trades/day · ' +
-    v('rrMaxConcurrent', '3') + ' pos · ' +
-    v('rrDailyDD', '5') + '% DD · ' +
-    v('rrLossStreak', '3') + ' streak · ' +
-    v('rrMaxAddon', '2') + ' add-ons';
-}
-
 // startApp — MAIN ENTRY POINT
 function startApp() {
+  window._zeusBootTs = Date.now(); // timestamp for pull-overwrite guard
   // ─── GLOBAL BOOT GUARD (req 1, 7) ──────────────────────────
   if (window.ZEUS_STARTED) {
     console.warn('[ZEUS] startApp() called twice — ignoring duplicate boot');
@@ -391,7 +360,7 @@ function startApp() {
   // ── IMMEDIATE STATE RESTORE (before any code can save empty TP) ──
   const _earlyRestored = ZState.restore();
   if (_earlyRestored) {
-    console.log('[startApp] ✅ State restored immediately at boot — positions in TP before Phase 1');
+    console.log('[startApp] State restored immediately at boot — positions in TP before Phase 1');
   }
   // ── BUILD MANIFEST (single source of truth) ──────────────────
   window.BUILD = window.BUILD || {
@@ -400,7 +369,10 @@ function startApp() {
     features: ['ATR Parity', 'CoreTick', 'ZLOG'],
     ts: Date.now(),
   };
-  console.log('[startApp] 🚀 boot sequence starting | __wsGen=', window.__wsGen);
+  console.log('[startApp] boot sequence starting | __wsGen=', window.__wsGen);
+
+  // PIN lock check — block UI immediately if PIN is set
+  _pinCheckLock();
 
   if (typeof LightweightCharts === 'undefined') {
     window.ZEUS_STARTED = false;  // allow retry
@@ -431,10 +403,20 @@ function startApp() {
   setTimeout(runHealthChecks, 700);
   setTimeout(() => { _srUpdateStats(); _srRenderList(); srStripUpdateBar(); }, 800); // [SR] render initial
   setTimeout(_ncUpdateBadge, 900);  // [NC] update badge after load
+  // [UPDATE CHECK] Check for app updates after boot
+  setTimeout(_checkAppUpdate, 2000);
   initAUB();              // Alien Upgrade Bay — UI shell only, no intervals
   initARIANOVA();         // ARIA + NOVA HUD strips — init after groups moved
   initPMPanel();          // [v107] Post-Mortem panel — insertat după sr-strip
-  initARES();             // [v108] ARES Neural Command Center — READ ONLY
+  initARES();
+  // UI-3: relocate FLOW panel between ARES and POST-MORTEM
+  (function _relocateFlow() {
+    const flow = document.getElementById('flow-panel');
+    const pm = document.getElementById('pm-strip');
+    if (flow && pm && pm.parentNode) {
+      pm.parentNode.insertBefore(flow, pm);
+    }
+  })();
   setTimeout(initAriaBrain, 200); // [v110] Brain overlay — 136 noduri exacte
   if (typeof initTeacher === 'function') initTeacher(); // THE TEACHER — Batch 6
   // DSL strip: restore open state + init banner
@@ -476,12 +458,21 @@ function startApp() {
     }
   } catch (_pendErr) { console.warn('[ZState late-restore]', _pendErr.message); }
   _adaptLoad();  // [Etapa 5] restaurează BM.adaptive din localStorage (multiplieri imediat disponibili)
+  // Resume live pending order sync polling if any orders were restored
+  if (typeof _resumeLivePendingSyncIfNeeded === 'function') _resumeLivePendingSyncIfNeeded();
+  // Initialize order type toggle state
+  if (typeof onDemoOrdTypeChange === 'function') setTimeout(onDemoOrdTypeChange, 200);
+  // Render pending orders from restored state
+  if (typeof renderPendingOrders === 'function') setTimeout(renderPendingOrders, 400);
   registerServiceWorker();
   setPWAVersion();
   setupPWAReloadBtn();
 
   // Brain visual init (rAF + neurons) — purely visual, no data
   _initBrainCockpit();    // was IIFE, now gated function (req 4)
+
+  // [P1] Sync DOM input values → TradingConfig at boot
+  if (typeof syncDOMtoTC === 'function') syncDOMtoTC();
 
   // ═══════════════════════════════════════════════════════
   // PHASE 2 — DATA: safety engine + REST fetches (no WS yet)
@@ -577,7 +568,7 @@ function startApp() {
   }, 2000);
   // Interval 1h pentru recalc periodic
   Intervals.set('adaptiveRecalc', function () { recalcAdaptive(false); _pmCheckRegimeTransition(); }, 60 * 60 * 1000);
-  // Interval 5m pentru RegimeWatch — detecție mai frecventă decât recalcAdaptive
+  // Interval 5m for RegimeWatch — more frequent detection than recalcAdaptive
   Intervals.set('regimeWatch', function () { _pmCheckRegimeTransition(); if (typeof ARES !== 'undefined') ARES.tick(); }, 5 * 60 * 1000);
 
   // ═══════════════════════════════════════════════════════
@@ -587,7 +578,7 @@ function startApp() {
   setTimeout(() => {
     // Restore already ran at boot (top of startApp). Refresh UI now that DOM is ready.
     if (_earlyRestored) {
-      atLog('info', '💾 State restaurat din localStorage. Pozitii rambarcate.');
+      atLog('info', '[RESTORE] State restaurat din localStorage. Pozitii rambarcate.');
       setTimeout(() => { updateATStats(); updateDemoBalance(); renderDemoPositions(); renderATPositions(); }, 200);
     }
 
@@ -602,9 +593,37 @@ function startApp() {
       var localPositions = (typeof TP !== 'undefined' && Array.isArray(TP.demoPositions)) ? TP.demoPositions.length : 0;
       var serverPositions = (serverSnap.positions || []).length;
       console.log('[sync] serverTs:', serverSnap.ts, 'localTs:', localTs, 'localPos:', localPositions, 'serverPos:', serverPositions);
-      // Apply if: server is newer OR we have no local positions but server does
-      if (serverSnap.ts > localTs || (localPositions === 0 && serverPositions > 0)) {
+
+      // ALWAYS merge positions from server (union by ID) regardless of timestamp.
+      // Positions opened on another device must appear here even if local ts is newer.
+      if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined') {
+        TP.demoPositions = TP.demoPositions || [];
+        var existingIds = new Set(TP.demoPositions.map(function (p) { return String(p.id); }));
+        // [S2B2-T2] Comprehensive closedIds — matches pullAndMerge logic (journal + recentlyClosed + server)
+        var closedIds = new Set();
+        (TP.journal || []).forEach(function (j) { if (j.id) closedIds.add(String(j.id)); });
+        if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { closedIds.add(String(id)); });
+        if (Array.isArray(serverSnap.closedIds)) serverSnap.closedIds.forEach(function (id) { closedIds.add(String(id)); });
+        var _added = 0;
+        serverSnap.positions.forEach(function (p) {
+          if (p.closed || closedIds.has(String(p.id)) || existingIds.has(String(p.id))) return;
+          console.log('[sync] Adding server position', p.id, p.side, p.sym);
+          TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
+          _added++;
+        });
+        if (_added > 0) console.log('[sync] Merged', _added, 'new positions from server');
+      }
+
+      // Gate balance/AT overwrite on timestamp — only apply if server is newer OR local has no positions
+      // [S2B2-T2] Freshness guard: skip overwrite if local has unsaved newer edits
+      var _bootLocalEditTs = (localSnap && localSnap.lastEditTs) ? localSnap.lastEditTs : 0;
+      var _bootServerEditTs = serverSnap.lastEditTs || serverSnap.ts || 0;
+      var _bootLocalDirty = (typeof ZState !== 'undefined' && ZState.isDirty && ZState.isDirty());
+      var _bootFresh = !(_bootLocalDirty && _bootLocalEditTs > _bootServerEditTs);
+      if (_bootFresh && (serverSnap.ts > localTs || (localPositions === 0 && serverPositions > 0))) {
         console.log('[sync] Applying server state (reason:', serverSnap.ts > localTs ? 'newer' : 'local empty, server has positions', ')');
+        // [B2] runMode REMOVED, assistArmed synced exclusively via user-context (_usApply)
+        // No more dual-source from ZState snapshot
         if (typeof TP !== 'undefined') {
           // [PATCH5] Guard: do not overwrite balance from server if local has active positions but server has none
           var _localActive = (TP.demoPositions || []).filter(function (p) { return !p.closed; }).length;
@@ -628,29 +647,16 @@ function startApp() {
           if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL;
           if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday;
         }
-        if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined') {
-          TP.demoPositions = TP.demoPositions || [];
-          var existingIds = new Set(TP.demoPositions.map(function (p) { return String(p.id); }));
-          var closedIds = new Set((TP.journal || []).map(function (j) { return j.id; }).filter(Boolean).map(String));
-          console.log('[sync] Merging', serverSnap.positions.length, 'server positions. Existing:', existingIds.size, 'Closed:', closedIds.size);
-          serverSnap.positions.forEach(function (p) {
-            if (p.closed || closedIds.has(String(p.id)) || existingIds.has(String(p.id))) {
-              console.log('[sync] Skipped position', p.id, '(closed/exists)');
-              return;
-            }
-            console.log('[sync] Adding position', p.id, p.side, p.sym);
-            TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
-          });
-        }
-        setTimeout(function () {
-          if (typeof updateDemoBalance === 'function') updateDemoBalance();
-          if (typeof renderDemoPositions === 'function') renderDemoPositions();
-          if (typeof renderATPositions === 'function') renderATPositions();
-        }, 300);
-        // Persist merged TP state (not raw server snap) — prevents overwrite of local positions
-        ZState.saveLocal();
-        console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length);
       }
+      // Always render + save after sync merge (positions may have been added)
+      setTimeout(function () {
+        if (typeof updateDemoBalance === 'function') updateDemoBalance();
+        if (typeof renderDemoPositions === 'function') renderDemoPositions();
+        if (typeof renderATPositions === 'function') renderATPositions();
+        if (typeof syncBrainFromState === 'function') syncBrainFromState();
+      }, 300);
+      ZState.saveLocal();
+      console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length);
       _isPulling = false; // [FIX H10] release guard
       ZState.markSyncReady();
     }).catch(function () { _isPulling = false; ZState.markSyncReady(); });
@@ -675,12 +681,14 @@ function startApp() {
           console.log('[sync] Merged', added, 'journal entries from server');
         }
       }
-    }).catch(function () { });
+    }).catch(function (err) { console.warn('[sync] Journal pull failed:', err && err.message || err); });
 
     Intervals.set('stateSave', function () { ZState.saveLocal(); }, 30000);
+    // Periodic PULL from server — picks up positions opened on other devices
+    Intervals.set('syncPull', function () { if (typeof ZState.pullAndMerge === 'function') ZState.pullAndMerge(); if (typeof _userCtxPull === 'function') _userCtxPull(); }, 10000);
 
     // Connect WebSockets AFTER all state restore — ensures __wsGen is stable
-    console.log('[startApp] 📡 phase 3: connecting WebSockets | __wsGen=', window.__wsGen);
+    console.log('[startApp] phase 3: connecting WebSockets | __wsGen=', window.__wsGen);
     connectBNB();
     connectBYB();
     connectWatchlist();
@@ -696,29 +704,63 @@ function startApp() {
   // Delegăm pe document pentru că panoul AT e mutat de initZeusGroups()
   document.addEventListener('change', function (e) {
     const t = e.target;
-    const AT_INPUT_IDS = ['atLev', 'atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin', 'atMultiSym'];
+    const AT_INPUT_IDS = ['atLev', 'atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin', 'atMultiSym', 'atRiskPct', 'atMaxDay', 'atLossStreak', 'atMaxAddon'];
     if (AT_INPUT_IDS.includes(t.id)) {
+      // [P1] Sync DOM → TradingConfig
+      if (typeof syncDOMtoTC === 'function') syncDOMtoTC();
       // [FIX v85.1 F2] Sync BM.confMin la schimbare UI — sursă unică de adevăr
       if (t.id === 'atConfMin' && typeof BM !== 'undefined') {
         BM.confMin = parseFloat(t.value) || 65;
       }
+      // [KILL FIX] Push killPct change to server immediately
+      if (t.id === 'atKillPct') {
+        var _newKillPct = parseFloat(t.value);
+        if (Number.isFinite(_newKillPct) && _newKillPct >= 1 && _newKillPct <= 50) {
+          var _curBal = +(typeof AT !== 'undefined' && AT.mode === 'live' ? (typeof TP !== 'undefined' ? TP.liveBalance : 0) : (typeof TP !== 'undefined' ? TP.demoBalance : 0)) || 0;
+          fetch('/api/at/kill/pct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ pct: _newKillPct, balanceRef: _curBal }) }).catch(function () { });
+        }
+      }
+      // [P4] Push TC to server (debounced)
+      if (typeof _tcPushDebounced === 'function') _tcPushDebounced();
       _usScheduleSave();
+    }
+    // [P1] Also sync DSL inputs
+    if (t.id && (t.id.startsWith('dsl') || t.id === 'atLev')) {
+      if (typeof syncDOMtoTC === 'function') syncDOMtoTC();
     }
   });
   document.addEventListener('input', function (e) {
     const t = e.target;
-    const AT_INPUT_IDS = ['atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin'];
+    const AT_INPUT_IDS = ['atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin', 'atRiskPct', 'atMaxDay', 'atLossStreak', 'atMaxAddon'];
     if (AT_INPUT_IDS.includes(t.id)) {
+      // [P1] Sync DOM → TradingConfig
+      if (typeof syncDOMtoTC === 'function') syncDOMtoTC();
       // [FIX v85.1 F2] Sync BM.confMin la input live
       if (t.id === 'atConfMin' && typeof BM !== 'undefined') {
         BM.confMin = parseFloat(t.value) || 65;
       }
+      // [KILL FIX] Push killPct change to server immediately
+      if (t.id === 'atKillPct') {
+        var _newKillPct2 = parseFloat(t.value);
+        if (Number.isFinite(_newKillPct2) && _newKillPct2 >= 1 && _newKillPct2 <= 50) {
+          var _curBal2 = +(typeof AT !== 'undefined' && AT.mode === 'live' ? (typeof TP !== 'undefined' ? TP.liveBalance : 0) : (typeof TP !== 'undefined' ? TP.demoBalance : 0)) || 0;
+          fetch('/api/at/kill/pct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ pct: _newKillPct2, balanceRef: _curBal2 }) }).catch(function () { });
+        }
+      }
+      // [P4] Push TC to server (debounced)
+      if (typeof _tcPushDebounced === 'function') _tcPushDebounced();
       _usScheduleSave();
     }
   });
 
   // [US] Salvare periodică (fallback — capturează orice schimbare neinterceptată)
   Intervals.set('userSettingsSave', _usSave, 300000);  // la 5 minute
+
+  // [P4] Periodic TC push to server (every 60s fallback + initial push at boot)
+  if (typeof pushTCtoServer === 'function') {
+    setTimeout(pushTCtoServer, 5000);  // 5s after boot
+    Intervals.set('tcServerSync', pushTCtoServer, 60000);
+  }
 
   // [v122 ANALYTICS] Periodic PERF save + PnL Lab condensed update
   Intervals.set('perfSave', function () {
@@ -727,16 +769,15 @@ function startApp() {
   }, 60000);
   setTimeout(_updatePnlLabCondensed, 3000);
 
-  // [RISK RAILS] Summary line — update on any input change inside .rr-panel
-  var _rrPanel = document.querySelector('.rr-panel');
-  if (_rrPanel) _rrPanel.addEventListener('input', updateRRSummary);
-  updateRRSummary();
-
   setTimeout(runBrainUpdate, 2500);
   Intervals.set('brain', runBrainUpdate, 5000);
   Intervals.set('dslBanner', dslUpdateBanner, 2000);
   Intervals.set('atBanner', atUpdateBanner, 2000);
   Intervals.set('ptBanner', ptUpdateBanner, 2000); // update PT strip banner
+
+  // [AT-UNIFY] Start polling server AT state (WS push is primary, poll is fallback)
+  if (typeof ZState !== 'undefined' && ZState.startATPolling) ZState.startATPolling();
+
   Intervals.set('brainExt', updateBrainExtension, 5000);
 
   setTimeout(renderDHF, 1200);
@@ -744,7 +785,7 @@ function startApp() {
   setTimeout(renderPerfTracker, 2000);
   setTimeout(() => { updateQuantumClock(); updateBrainExtension(); }, 3000);
   setTimeout(() => {
-    brainThink('info', '🧠 Zeus Brain initializat. Astept date live...');
+    brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...');
   }, 3200);
 
   // Signal scan + confluence (UI derived from data)
@@ -757,7 +798,7 @@ function startApp() {
   setTimeout(computeMacroCortex, 8000); // [Macro] first compute after data settles
   // [DevMode] ready log — only visible if user enables dev panel
   setTimeout(function () {
-    try { devLog('Developer Mode ready. Enable from Settings Hub ⚙️ → DEVELOPER tab.', 'info'); } catch (_) { }
+    try { devLog('Developer Mode ready. Enable from Settings Hub → DEVELOPER tab.', 'info'); } catch (_) { }
   }, 5000);
   // [SettingsHub] populate once DOM + data are settled
   setTimeout(function () {
@@ -786,18 +827,50 @@ function startApp() {
   // Visibility refresh
   document.addEventListener('visibilitychange', () => {
     window._ztVisible = !document.hidden;
+    if (document.hidden && typeof _usFlush === 'function') _usFlush(); // flush settings before backgrounding
     if (document.visibilityState === 'visible') {
       fetchOI(); fetchLS(); fetchAllRSI();
       // Restart RAF chains that were paused
       if (typeof ZANIM !== 'undefined' && !ZANIM.running) startZAnim();
+      // Re-sync live positions from exchange on tab resume
+      if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') {
+        liveApiSyncState();
+      }
       // Pull latest state from server when app comes back to foreground
-      if (typeof ZState !== 'undefined' && ZState.pullFromServer) {
+      // Cross-device pull on tab resume
+      if (typeof _userCtxPull === 'function') _userCtxPull();
+      // [S2B2-T1] Skip visibility pull if pullAndMerge is already in progress (prevents parallel merges)
+      if (typeof ZState !== 'undefined' && ZState.pullFromServer && !(ZState.isMerging && ZState.isMerging())) {
         ZState.pullFromServer().then(function (serverSnap) {
           if (!serverSnap || !serverSnap.ts) return;
           var localSnap = ZState.load();
           var localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0;
-          if (serverSnap.ts > localTs) {
-            console.log('[sync] Visibility resume — server has newer state, applying');
+
+          // ALWAYS merge positions from server (union by ID) regardless of timestamp
+          if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined') {
+            var existingIds = new Set((TP.demoPositions || []).map(function (p) { return String(p.id); }));
+            // [S2B2-T2] Comprehensive closedIds — matches boot + pullAndMerge logic
+            var closedIds = new Set();
+            (TP.journal || []).forEach(function (j) { if (j.id) closedIds.add(String(j.id)); });
+            if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { closedIds.add(String(id)); });
+            if (Array.isArray(serverSnap.closedIds)) serverSnap.closedIds.forEach(function (id) { closedIds.add(String(id)); });
+            var _vAdded = 0;
+            serverSnap.positions.forEach(function (p) {
+              if (p.closed || closedIds.has(String(p.id)) || existingIds.has(String(p.id))) return;
+              TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
+              _vAdded++;
+            });
+            if (_vAdded > 0) console.log('[sync] Visibility resume — merged', _vAdded, 'new positions from server');
+          }
+
+          // Gate balance/AT overwrite on timestamp
+          // [S2B2-T1] Freshness guard: skip if local has pending dirty mutations newer than server
+          var _serverEditTs = serverSnap.lastEditTs || serverSnap.ts || 0;
+          var _localDirty = (typeof ZState !== 'undefined' && ZState.isDirty && ZState.isDirty());
+          if (serverSnap.ts > localTs && !(_localDirty && (serverSnap.lastEditTs || 0) < (localSnap && localSnap.lastEditTs || 0))) {
+            console.log('[sync] Visibility resume — server has newer state, applying balance/AT');
+            // [B2] runMode REMOVED, assistArmed synced exclusively via user-context (_usApply)
+            // No more dual-source from ZState snapshot
             if (typeof TP !== 'undefined') {
               // [PATCH5] Guard: do not overwrite balance from server if local has active positions but server has none
               var _localActiveCount = (TP.demoPositions || []).filter(function (p) { return !p.closed; }).length;
@@ -820,31 +893,27 @@ function startApp() {
                 if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL;
                 if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday;
               }
-              // Merge positions
-              if (serverSnap.positions && serverSnap.positions.length) {
-                var existingIds = new Set((TP.demoPositions || []).map(function (p) { return String(p.id); }));
-                var closedIds = new Set((TP.journal || []).map(function (j) { return j.id; }).filter(Boolean).map(String));
-                serverSnap.positions.forEach(function (p) {
-                  if (p.closed || closedIds.has(String(p.id)) || existingIds.has(String(p.id))) return;
-                  TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
-                });
-              }
-              // Persist merged TP state (not raw server snap)
-              ZState.saveLocal();
-              setTimeout(function () {
-                if (typeof updateDemoBalance === 'function') updateDemoBalance();
-                if (typeof renderDemoPositions === 'function') renderDemoPositions();
-                if (typeof renderATPositions === 'function') renderATPositions();
-              }, 200);
             }
           }
-        }).catch(function () { });
+          // Always render + save after sync merge
+          ZState.saveLocal();
+          setTimeout(function () {
+            if (typeof updateDemoBalance === 'function') updateDemoBalance();
+            if (typeof renderDemoPositions === 'function') renderDemoPositions();
+            if (typeof renderATPositions === 'function') renderATPositions();
+            if (typeof syncBrainFromState === 'function') syncBrainFromState();
+          }, 200);
+        }).catch(function (e) { console.warn('[sync] visibility pull failed:', e); });
       }
     } else {
       // Pause RAF chains— saves CPU in background tab
       if (typeof ZANIM !== 'undefined') ZANIM.running = false;
-      // Save state locally when app goes to background (critical for mobile PWA)
-      if (typeof ZState !== 'undefined') ZState.saveLocal();
+      // Save state + push to server immediately when app goes to background
+      if (typeof ZState !== 'undefined') { ZState.saveLocal(); ZState.syncNow(); }
+      // Persist UI context (sound, AT log) on background/close
+      if (typeof _ctxSave === 'function') _ctxSave();
+      // Cross-device push on background — ensures latest prefs reach server
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
   });
 
@@ -861,15 +930,15 @@ function startApp() {
           const hidden = document.hidden;
           if (typeof _SAFETY !== 'undefined') _SAFETY.tabHidden = hidden;
           if (hidden) {
-            // Când tab intră în background → BlockReason imediat, nu așteptăm watchdog
+            // When tab enters background → BlockReason immediately, skip watchdog
             if (typeof BlockReason !== 'undefined')
-              BlockReason.set('TAB_HIDDEN', 'Tab în background — AT paused', 'sentinel');
+              BlockReason.set('TAB_HIDDEN', 'Tab in background — AT paused', 'sentinel');
             if (typeof ZLOG !== 'undefined')
               ZLOG.push('WARN', '[SENTINEL] Tab hidden → AT paused (tabHidden=true)');
           } else {
-            // Tab revenit în foreground — set grace period for fresh data
+            // Tab returned to foreground — set grace period for fresh data
             if (typeof _SAFETY !== 'undefined') { _SAFETY.tabHidden = false; _SAFETY.tabRestoreTs = Date.now(); }
-            // BlockReason.clear() nu e chemat direct — îl va reseta runAutoTradeCheck
+            // BlockReason.clear() not called directly — runAutoTradeCheck will reset it
             // la primul tick bun, pentru a nu crea race cu alte blocaje active
             if (typeof ZLOG !== 'undefined')
               ZLOG.push('INFO', '[SENTINEL] Tab visible → tabHidden cleared, AT va relua la tick fresh');
@@ -892,16 +961,16 @@ function startApp() {
 
           let txt, bg, col;
           if (hidden) {
-            txt = '🔕 TAB HIDDEN — AT PAUSED';
+            txt = _ZI.bellX + ' TAB HIDDEN — AT PAUSED';
             bg = 'rgba(180,100,0,0.18)'; col = '#FFB000';
           } else if (stalled) {
-            txt = '⚠️ DATA STALLED — AT PAUSED';
+            txt = _ZI.w + ' DATA STALLED — AT PAUSED';
             bg = 'rgba(255,0,51,0.15)'; col = '#ff3355';
           } else if (dataAge !== null && dataAge > 8) {
-            txt = '⏳ DATA LAG ' + dataAge + 's';
+            txt = _ZI.clock + ' DATA LAG ' + dataAge + 's';
             bg = 'rgba(180,100,0,0.12)'; col = '#f0c040';
           } else if (dataAge !== null) {
-            txt = '✅ FEED OK ' + dataAge + 's';
+            txt = _ZI.ok + ' FEED OK ' + dataAge + 's';
             bg = 'rgba(0,200,100,0.10)'; col = '#00cc66';
           } else {
             txt = '— SENTINEL —';
@@ -911,7 +980,7 @@ function startApp() {
           bar.style.background = bg;
           bar.style.color = col;
           bar.style.border = '1px solid ' + col + '44';
-          bar.textContent = txt;
+          bar.innerHTML = txt;
         } catch (_) { }
       }
 
@@ -935,9 +1004,15 @@ function startApp() {
   setTimeout(() => {
     window.ZEUS_BOOTED = true;
     window.dispatchEvent(new CustomEvent('zeusReady'));  // req 2: engine ready event
-    atLog('info', '🛸 Zeus Terminal booted — PHASE 5 active');
+    atLog('info', '[BOOT] Zeus Terminal booted — PHASE 5 active');
     _renderBuildInfo(); // populate BUILD INFO panel once BUILD is guaranteed set
+    _pinUpdateUI(); // refresh PIN status in settings
   }, 15000);
+
+  // Welcome modal — show early (2.5s), once per page load
+  setTimeout(() => {
+    _showWelcomeModal();
+  }, 2500);
 
   // [SR] FALLBACK — garantăm că sr-sec ajunge în MI și e vizibil
   // Rulează la 3s după boot (după ce initZeusGroups a terminat sigur)
@@ -947,8 +1022,174 @@ function startApp() {
   // Rulează la 3.5s (după _srEnsureVisible, după ce toate mv() s-au stabilizat)
   setTimeout(_devEnsureVisible, 3500);
 
-  setTimeout(() => { atLog('info', '🤖 Zeus Auto Trade Engine initializat. Configureaza si porneste mai sus.'); }, 6000);
+  setTimeout(() => { atLog('info', '[AT] Zeus Auto Trade Engine initializat. Configureaza si porneste mai sus.'); }, 6000);
 }
+
+// ── PIN Lock — App Security (Server-Side Per-User) ──────────────────────
+// PIN hash is stored in DB per-user. Frontend only calls API endpoints.
+// No localStorage dependency for PIN — works across devices/browsers/PWA.
+
+// Check if current user has PIN set (async, calls server)
+var _pinSetCache = null; // cached after first check to avoid repeated calls during boot
+async function _pinIsSet() {
+  if (_pinSetCache !== null) return _pinSetCache;
+  try {
+    var r = await fetch('/auth/pin/status', { credentials: 'same-origin' });
+    if (!r.ok) return false;
+    var d = await r.json();
+    _pinSetCache = !!d.pinSet;
+    return _pinSetCache;
+  } catch (_) { return false; }
+}
+
+// Show lock screen on load (called very early, before startApp finishes)
+async function _pinCheckLock() {
+  var isSet = await _pinIsSet();
+  if (!isSet) return;
+  // Already unlocked this session
+  if (sessionStorage.getItem('zeus_pin_unlocked')) return;
+  var ls = document.getElementById('pinLockScreen');
+  if (ls) {
+    ls.style.display = 'flex';
+    // Focus PIN input when visible
+    setTimeout(function () {
+      var inp = document.getElementById('pinLockInput');
+      if (inp) inp.focus();
+    }, 100);
+    // Enter key to unlock
+    var inp = document.getElementById('pinLockInput');
+    if (inp) {
+      inp.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') pinUnlock();
+      });
+    }
+  }
+}
+
+// Unlock attempt — calls server to verify PIN
+async function pinUnlock() {
+  var inp = document.getElementById('pinLockInput');
+  var msg = document.getElementById('pinLockMsg');
+  if (!inp) return;
+  var val = inp.value.trim();
+  if (!val) { if (msg) msg.textContent = 'Introdu PIN-ul'; return; }
+  try {
+    var r = await fetch('/auth/pin/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ pin: val })
+    });
+    var d = await r.json();
+    if (d.ok === true) {
+      sessionStorage.setItem('zeus_pin_unlocked', '1');
+      var ls = document.getElementById('pinLockScreen');
+      if (ls) {
+        ls.style.transition = 'opacity .3s';
+        ls.style.opacity = '0';
+        setTimeout(function () {
+          ls.style.display = 'none';
+          // Show welcome modal after unlock
+          if (typeof _showWelcomeModal === 'function') _showWelcomeModal();
+        }, 300);
+      }
+    } else if (d.error === 'pin_not_set') {
+      if (msg) msg.textContent = 'PIN nu este configurat pentru contul tău';
+      sessionStorage.setItem('zeus_pin_unlocked', '1');
+      var ls2 = document.getElementById('pinLockScreen');
+      if (ls2) { ls2.style.display = 'none'; }
+    } else if (d.error === 'session_invalid') {
+      if (msg) msg.textContent = 'Sesiune expirată — re-autentifică-te';
+    } else if (d.error === 'invalid_pin' || !d.ok) {
+      if (msg) msg.textContent = 'PIN incorect!';
+      inp.value = '';
+      inp.focus();
+      var field = inp;
+      field.classList.add('pin-lock-shake');
+      setTimeout(function () { field.classList.remove('pin-lock-shake'); }, 500);
+    }
+  } catch (err) {
+    if (msg) msg.textContent = 'Eroare de rețea — verifică conexiunea';
+  }
+}
+
+// Settings: Activate/Change PIN — calls server
+async function pinActivate() {
+  var inp = document.getElementById('pinInput');
+  var conf = document.getElementById('pinConfirm');
+  var msg = document.getElementById('pin-msg');
+  if (!inp || !conf) return;
+  var val = inp.value.trim();
+  var val2 = conf.value.trim();
+  if (!val || val.length < 4) {
+    if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'PIN-ul trebuie să aibă minim 4 caractere'; }
+    return;
+  }
+  if (val !== val2) {
+    if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'PIN-urile nu coincid'; }
+    return;
+  }
+  try {
+    var r = await fetch('/auth/pin/set', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ pin: val })
+    });
+    var d = await r.json();
+    if (d.ok) {
+      inp.value = '';
+      conf.value = '';
+      _pinSetCache = true;
+      if (msg) { msg.style.color = '#00ff88'; msg.innerHTML = _ZI.ok + ' PIN activat! La următoarea deschidere vei fi întrebat.'; }
+      _pinUpdateUI();
+      // Mark this session as unlocked (don't lock yourself out mid-use)
+      sessionStorage.setItem('zeus_pin_unlocked', '1');
+    } else if (d.error === 'session_invalid') {
+      if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'Sesiune expirată — re-autentifică-te'; }
+    } else {
+      if (msg) { msg.style.color = '#ff4455'; msg.textContent = d.error || 'Eroare la setarea PIN-ului'; }
+    }
+  } catch (err) {
+    if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'Eroare de rețea'; }
+  }
+}
+
+// Settings: Remove PIN — calls server
+async function pinRemove() {
+  try {
+    var r = await fetch('/auth/pin/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
+      credentials: 'same-origin'
+    });
+    var d = await r.json();
+    if (d.ok) {
+      _pinSetCache = false;
+      sessionStorage.removeItem('zeus_pin_unlocked');
+      // Clean up legacy localStorage PIN if present
+      try { localStorage.removeItem('zeus_pin_hash'); } catch (_) { }
+      var msg = document.getElementById('pin-msg');
+      if (msg) { msg.style.color = '#00afff'; msg.textContent = 'PIN dezactivat.'; }
+      _pinUpdateUI();
+    }
+  } catch (_) { }
+}
+
+// Update PIN UI state in settings
+async function _pinUpdateUI() {
+  var isSet = await _pinIsSet();
+  var status = document.getElementById('pinStatus');
+  var actBtn = document.getElementById('pinActivateBtn');
+  var remBtn = document.getElementById('pinRemoveBtn');
+  if (status) {
+    status.innerHTML = isSet ? 'ACTIVAT ' + _ZI.ok : 'DEZACTIVAT';
+    status.style.color = isSet ? '#00ff88' : '#556';
+  }
+  if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' SCHIMBĂ PIN' : _ZI.lock + ' ACTIVEAZĂ PIN';
+  if (remBtn) remBtn.style.display = isSet ? '' : 'none';
+}
+
 
 // ── _renderBuildInfo() — populează #hub-build-info din window.BUILD ──
 // Apelat la boot (după ce BUILD e setat). Safe fallback dacă elementul lipsește.
@@ -969,7 +1210,155 @@ function _renderBuildInfo() {
       'Boot: ' + ts;
   } catch (e) { /* fallback static text remains */ }
 }
-// ✅ Window aliases for Android WebView compatibility
+
+// ── _showWelcomeModal() — post-login welcome dashboard ──
+// Shows REAL values only, scoped to the active mode (DEMO or LIVE).
+var _wlcShown = false; // in-memory guard — once per page load
+function _showWelcomeModal() {
+  try {
+    // Only show once per page load
+    if (_wlcShown) return;
+    // Don't show welcome if PIN lock is active (will be called again after unlock)
+    if (_pinIsSet() && !sessionStorage.getItem('zeus_pin_unlocked')) return;
+    _wlcShown = true;
+
+    var m = document.getElementById('mwelcome');
+    if (!m) return;
+
+    // Show modal FIRST (safe HTML defaults visible), then populate real values
+    m.style.display = 'flex';
+
+    // ── Determine active mode ──
+    var isLive = (typeof AT !== 'undefined' && AT.mode === 'live');
+    var modeLabel = isLive ? 'LIVE' : 'DEMO';
+
+    // Greeting
+    var greetEl = document.getElementById('wlcGreeting');
+    if (greetEl) greetEl.textContent = 'Welcome back, Commander';
+
+    // Mode badge
+    var badgeEl = document.getElementById('wlcModeBadge');
+    if (badgeEl) {
+      badgeEl.textContent = modeLabel;
+      badgeEl.className = 'wlc-mode-badge ' + (isLive ? 'wlc-live' : 'wlc-demo');
+    }
+
+    // Version
+    var verEl = document.getElementById('wlcVersion');
+    var b = window.BUILD || {};
+    if (verEl) verEl.textContent = 'ZEUS TERMINAL ' + (b.version || '').toUpperCase();
+
+    // ── Balance (mode-scoped) ──
+    var balEl = document.getElementById('wlcBalance');
+    if (balEl) {
+      var bal = 0;
+      if (typeof TP !== 'undefined') {
+        bal = isLive ? (TP.liveBalance || 0) : (TP.demoBalance || 0);
+      }
+      balEl.textContent = '$' + bal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    // ── Daily stats from journal (mode-filtered) ──
+    var todayTrades = 0, todayWins = 0, todayPnl = 0;
+    if (typeof TP !== 'undefined' && Array.isArray(TP.journal)) {
+      var tz = (typeof S !== 'undefined' && S.tz) || 'Europe/Bucharest';
+      var todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+      var closed = TP.journal.filter(function (t) {
+        if (t.journalEvent !== 'CLOSE' || !Number.isFinite(t.pnl)) return false;
+        if ((t.mode || 'demo') !== (isLive ? 'live' : 'demo')) return false;
+        var ts = t.closedAt || t.time || 0;
+        if (!ts) return false;
+        var dk = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(ts));
+        return dk === todayStr;
+      });
+      todayTrades = closed.length;
+      closed.forEach(function (t) {
+        todayPnl += (t.pnl || 0);
+        if (t.pnl >= 0) todayWins++;
+      });
+    }
+
+    // Daily PnL
+    var pnlEl = document.getElementById('wlcDailyPnl');
+    if (pnlEl) {
+      if (todayTrades > 0) {
+        pnlEl.textContent = (todayPnl >= 0 ? '+' : '') + '$' + todayPnl.toFixed(0);
+        pnlEl.className = 'wlc-value ' + (todayPnl > 0 ? 'wlc-pos' : todayPnl < 0 ? 'wlc-neg' : '');
+      } else {
+        pnlEl.textContent = 'no trades yet';
+        pnlEl.className = 'wlc-value';
+      }
+    }
+
+    // Trades today
+    var trEl = document.getElementById('wlcTrades');
+    if (trEl) trEl.textContent = todayTrades;
+
+    // Win rate
+    var wrEl = document.getElementById('wlcWinRate');
+    if (wrEl) {
+      if (todayTrades > 0) {
+        var wr = Math.round(todayWins / todayTrades * 100);
+        wrEl.textContent = wr + '%';
+        wrEl.className = 'wlc-value ' + (wr >= 50 ? 'wlc-pos' : 'wlc-neg');
+      } else {
+        wrEl.textContent = 'N/A';
+        wrEl.className = 'wlc-value';
+      }
+    }
+
+    // ── Open positions (mode-scoped) ──
+    var posEl = document.getElementById('wlcPositions');
+    if (posEl) {
+      var openCount = 0;
+      if (typeof TP !== 'undefined') {
+        var arr = isLive ? (TP.livePositions || []) : (TP.demoPositions || []);
+        openCount = arr.filter(function (p) { return !p.closed; }).length;
+      }
+      posEl.textContent = openCount;
+      posEl.className = 'wlc-value' + (openCount > 0 ? ' wlc-gold' : '');
+    }
+
+    // AutoTrade status
+    var atEl = document.getElementById('wlcAT');
+    if (atEl) {
+      if (typeof AT !== 'undefined') {
+        atEl.textContent = AT.enabled ? 'ON' : 'OFF';
+        atEl.className = 'wlc-value ' + (AT.enabled ? 'wlc-on' : 'wlc-off');
+      } else {
+        atEl.textContent = 'OFF';
+        atEl.className = 'wlc-value wlc-off';
+      }
+    }
+
+    // Brain mode
+    var brEl = document.getElementById('wlcBrain');
+    if (brEl) {
+      if (typeof BM !== 'undefined') {
+        var brMode = (BM.mode || 'assist').toUpperCase();
+        brEl.textContent = brMode;
+        brEl.className = 'wlc-value wlc-gold';
+      } else {
+        brEl.textContent = 'N/A';
+        brEl.className = 'wlc-value';
+      }
+    }
+
+    // Close on backdrop click
+    m.addEventListener('click', function (e) {
+      if (e.target === m) closeM('mwelcome');
+    });
+
+    // Close with Escape key
+    var _wlcEsc = function (e) {
+      if (e.key === 'Escape') { closeM('mwelcome'); document.removeEventListener('keydown', _wlcEsc); }
+    };
+    document.addEventListener('keydown', _wlcEsc);
+
+  } catch (e) { console.warn('[WLC]', e); }
+}
+
+// Window aliases for Android WebView compatibility
 // Samsung Internet/WebView poate bloca accesul la functii din innerHTML onclick
 if (typeof window !== 'undefined') {
   window.closeDemoPos = closeDemoPos;
@@ -982,6 +1371,10 @@ if (typeof window !== 'undefined') {
   // [SettingsHub + DevMode] — critice pentru Samsung WebView / Android (onchange/onclick în innerHTML)
   window.hubToggleDev = hubToggleDev;
   window.hubPopulate = hubPopulate;
+  // [PIN Lock] — exposed for onclick in settings + lock screen
+  window.pinActivate = pinActivate;
+  window.pinRemove = pinRemove;
+  window.pinUnlock = pinUnlock;
   window.hubSaveAll = hubSaveAll;
   window.hubLoadAll = hubLoadAll;
   window.hubSetTf = hubSetTf;
@@ -1107,7 +1500,7 @@ function setupPWAReloadBtn() {
 
 // Master reset
 function masterReset() {
-  if (!window.confirm('⚠️ MASTER RESET\nȘterge TOATE datele și repornește Zeus Terminal?\n\n• Poziții demo ✓\n• AT stats ✓\n• DSL state ✓\n• PERF tracker ✓\n• DHF win rates ✓\n• localStorage ✓')) return;
+  if (!window.confirm('MASTER RESET\nȘterge TOATE datele și repornește Zeus Terminal?\n\n• Poziții demo ✓\n• AT stats ✓\n• DSL state ✓\n• PERF tracker ✓\n• DHF win rates ✓\n• localStorage ✓')) return;
 
   // localStorage
   try { localStorage.clear(); } catch (e) { }
@@ -1163,7 +1556,7 @@ function masterReset() {
   if (typeof Intervals !== 'undefined') Intervals.clearAll();
   if (typeof WS !== 'undefined') WS.closeAll();
 
-  toast('🔄 Master Reset complet — reîncărcare...');
+  toast('Master Reset complet — reîncărcare...');
   setTimeout(() => location.reload(), 800);
 }
 
@@ -1254,7 +1647,7 @@ function initMidStack() {
     toggleBtn = document.createElement('div');
     toggleBtn.id = 'midStack-toggle';
     toggleBtn.title = 'Reorder panels';
-    toggleBtn.innerHTML = '⠿';
+    toggleBtn.innerHTML = '\u283F';
     document.body.appendChild(toggleBtn);
   }
 
@@ -1265,7 +1658,7 @@ function initMidStack() {
     ms.classList.add('reorder-mode');
     ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = true; });
     toggleBtn.classList.add('active');   // apare butonul
-    toggleBtn.innerHTML = '✕';
+    toggleBtn.innerHTML = '\u2715';
     if (navigator.vibrate) navigator.vibrate(40);
   }
 
@@ -1274,10 +1667,12 @@ function initMidStack() {
     ms.classList.remove('reorder-mode');
     ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = false; });
     toggleBtn.classList.remove('active'); // dispare butonul
-    toggleBtn.innerHTML = '⠿';
+    toggleBtn.innerHTML = '\u283F';
     // Salvăm ordinea
     const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
     try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
 
   toggleBtn.addEventListener('click', () => reorderMode ? exitReorder() : enterReorder());
@@ -1320,6 +1715,8 @@ function initMidStack() {
     if (reorderMode) {
       const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
       try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
   });
 
@@ -1390,6 +1787,8 @@ function initMidStack() {
     if (reorderMode) {
       const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
       try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
   };
 
@@ -1472,7 +1871,7 @@ function initMidStack() {
     toggleBtn = document.createElement('div');
     toggleBtn.id = 'midStack-toggle';
     toggleBtn.title = 'Reorder panels';
-    toggleBtn.innerHTML = '⠿';
+    toggleBtn.innerHTML = '\u283F';
     document.body.appendChild(toggleBtn);
   }
 
@@ -1483,7 +1882,7 @@ function initMidStack() {
     ms.classList.add('reorder-mode');
     ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = true; });
     toggleBtn.classList.add('active');   // apare butonul
-    toggleBtn.innerHTML = '✕';
+    toggleBtn.innerHTML = '\u2715';
     if (navigator.vibrate) navigator.vibrate(40);
   }
 
@@ -1492,10 +1891,12 @@ function initMidStack() {
     ms.classList.remove('reorder-mode');
     ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = false; });
     toggleBtn.classList.remove('active'); // dispare butonul
-    toggleBtn.innerHTML = '⠿';
+    toggleBtn.innerHTML = '\u283F';
     // Salvăm ordinea
     const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
     try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
 
   toggleBtn.addEventListener('click', () => reorderMode ? exitReorder() : enterReorder());
@@ -1538,6 +1939,8 @@ function initMidStack() {
     if (reorderMode) {
       const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
       try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
   });
 
@@ -1608,6 +2011,8 @@ function initMidStack() {
     if (reorderMode) {
       const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
       try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
+      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
     }
   };
 
@@ -1660,6 +2065,93 @@ window.addEventListener("error", function (e) {
   }
 });
 
+// ─── App Update Checker (auto-detect + install banner) ─────────
+var _updateCheckInterval = null;
+function _checkAppUpdate() {
+  // Save current version on first run
+  if (!localStorage.getItem('zeus_app_version')) {
+    fetch('/api/version')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && data.version) {
+          localStorage.setItem('zeus_app_version', data.version);
+          console.log('[UPDATE] First run — saved version:', data.version);
+        }
+      }).catch(function () { });
+  }
+  // Start periodic check every 45s
+  if (_updateCheckInterval) clearInterval(_updateCheckInterval);
+  _updateCheckInterval = setInterval(_pollForUpdate, 45000);
+  // Also check once now (after 5s delay to let auth settle)
+  setTimeout(_pollForUpdate, 5000);
+}
+
+function _pollForUpdate() {
+  fetch('/api/version')
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      if (!data || !data.version) return;
+      var current = localStorage.getItem('zeus_app_version');
+      console.log('[UPDATE] Server:', data.version, '| Local:', current);
+      if (!current) {
+        // First time — save and skip (no banner on first ever visit)
+        localStorage.setItem('zeus_app_version', data.version);
+        return;
+      }
+      if (current === data.version) return;
+      // New version detected — stop polling and show install banner
+      if (_updateCheckInterval) { clearInterval(_updateCheckInterval); _updateCheckInterval = null; }
+      _showUpdateBanner(data);
+    })
+    .catch(function (e) { console.log('[UPDATE] Poll failed:', e.message); });
+}
+
+function _showUpdateBanner(data) {
+  // Don't show duplicate banners
+  if (document.getElementById('zeus-update-banner')) return;
+  var overlay = document.createElement('div');
+  overlay.id = 'zeus-update-banner';
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease';
+  var box = document.createElement('div');
+  box.style.cssText = 'background:linear-gradient(135deg,#0a1628,#132040);border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;max-width:360px;width:90vw;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)';
+  var icon = document.createElement('div');
+  icon.style.cssText = 'font-size:48px;margin-bottom:12px';
+  icon.textContent = '\u26A1';
+  var title = document.createElement('div');
+  title.style.cssText = 'color:#fff;font-size:18px;font-weight:700;margin-bottom:8px';
+  title.textContent = 'Update ' + data.version;
+  var desc = document.createElement('div');
+  desc.style.cssText = 'color:#8899bb;font-size:13px;margin-bottom:20px;line-height:1.4';
+  desc.textContent = data.changelog || 'New version available';
+  var btn = document.createElement('button');
+  btn.style.cssText = 'background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;border:none;border-radius:10px;padding:14px 40px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:.5px;text-transform:uppercase';
+  btn.textContent = '\uD83D\uDD04 INSTALL';
+  btn.onclick = function () {
+    btn.textContent = 'Updating...';
+    btn.style.opacity = '0.6';
+    localStorage.setItem('zeus_app_version', data.version);
+    setTimeout(function () { location.reload(true); }, 500);
+  };
+  var skip = document.createElement('div');
+  skip.style.cssText = 'color:#556;font-size:11px;margin-top:12px;cursor:pointer';
+  skip.textContent = 'Later';
+  skip.onclick = function () {
+    overlay.remove();
+    // Resume checking in 5 min
+    _updateCheckInterval = setInterval(_pollForUpdate, 300000);
+  };
+  box.appendChild(icon);
+  box.appendChild(title);
+  box.appendChild(desc);
+  box.appendChild(btn);
+  box.appendChild(skip);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  if (typeof ncAdd === 'function') {
+    ncAdd('info', 'system', '\uD83C\uDD95 Update ' + data.version + (data.changelog ? ' — ' + data.changelog : ''));
+  }
+}
+
 // [v119] __ZEUS_INIT__ guard — previne dubla initializare (ex: hot-reload, multiple script tags)
 if (window.__ZEUS_INIT__) {
   console.warn('[ZEUS] __ZEUS_INIT__ already set — boot blocked.');
@@ -1671,4 +2163,5 @@ if (window.__ZEUS_INIT__) {
     startApp();
   }
 }
+
 

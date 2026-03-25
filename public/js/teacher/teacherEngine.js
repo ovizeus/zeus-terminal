@@ -111,13 +111,13 @@ function teacherStep(n) {
 
   // Build tick data
   var tick = {
-    barIndex:    T.cursor,
-    bar:         bar,
-    prevBar:     prevBar,
-    indicators:  T.indicators,
-    progress:    T.cursor / maxCursor,
-    barsLeft:    maxCursor - T.cursor,
-    openTrade:   T.openTrade,
+    barIndex: T.cursor,
+    bar: bar,
+    prevBar: prevBar,
+    indicators: T.indicators,
+    progress: T.cursor / maxCursor,
+    barsLeft: maxCursor - T.cursor,
+    openTrade: T.openTrade,
   };
 
   // Check open trade against this bar (SL/TP/DSL processing)
@@ -151,12 +151,12 @@ function teacherStepBack(n) {
 
   var bar = T.dataset.bars[T.cursor];
   return {
-    barIndex:   T.cursor,
-    bar:        bar,
+    barIndex: T.cursor,
+    bar: bar,
     indicators: T.indicators,
-    progress:   T.cursor / (T.dataset.bars.length - 1),
-    barsLeft:   T.dataset.bars.length - 1 - T.cursor,
-    openTrade:  T.openTrade,
+    progress: T.cursor / (T.dataset.bars.length - 1),
+    barsLeft: T.dataset.bars.length - 1 - T.cursor,
+    openTrade: T.openTrade,
   };
 }
 
@@ -173,12 +173,12 @@ function teacherJumpTo(index) {
 
   var bar = T.dataset.bars[T.cursor];
   return {
-    barIndex:   T.cursor,
-    bar:        bar,
+    barIndex: T.cursor,
+    bar: bar,
     indicators: T.indicators,
-    progress:   T.cursor / (T.dataset.bars.length - 1),
-    barsLeft:   T.dataset.bars.length - 1 - T.cursor,
-    openTrade:  T.openTrade,
+    progress: T.cursor / (T.dataset.bars.length - 1),
+    barsLeft: T.dataset.bars.length - 1 - T.cursor,
+    openTrade: T.openTrade,
   };
 }
 
@@ -349,35 +349,35 @@ function teacherOpenTrade(side, overrides) {
   // DSL config
   var dslEnabled = ov.dslEnabled !== undefined ? ov.dslEnabled : cfg.dslEnabled;
   var dsl = dslEnabled ? {
-    enabled:    true,
-    active:     false,
+    enabled: true,
+    active: false,
     activation: ov.dslActivation || cfg.dslActivation,
-    trailPct:   ov.dslTrailPct || cfg.dslTrailPct,
-    bestPrice:  entry,
+    trailPct: ov.dslTrailPct || cfg.dslTrailPct,
+    bestPrice: entry,
   } : { enabled: false, active: false };
 
   // Auto-tag entry reasons from indicators
   var entryReasons = _teacherAutoTagEntry(side, T.indicators);
 
   var trade = {
-    id:            'T_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
-    side:          side,
-    entry:         entry,
-    sl:            slPrice,
-    tp:            tpPrice,
-    dsl:           dsl,
-    entryBar:      T.cursor,
-    entryTs:       bar.time,
-    leverage:      leverage,
-    qty:           qty,
-    notional:      notional,
-    capital:       capital,
-    entryFee:      fees.entryFee + fees.slippage / 2,
-    feeProfile:    feeProfile,
-    orderType:     orderType,
-    entryReasons:  entryReasons,
+    id: 'T_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+    side: side,
+    entry: entry,
+    sl: slPrice,
+    tp: tpPrice,
+    dsl: dsl,
+    entryBar: T.cursor,
+    entryTs: bar.time,
+    leverage: leverage,
+    qty: qty,
+    notional: notional,
+    capital: capital,
+    entryFee: fees.entryFee + fees.slippage / 2,
+    feeProfile: feeProfile,
+    orderType: orderType,
+    entryReasons: entryReasons,
     unrealizedPnl: 0,
-    barsHeld:      0,
+    barsHeld: 0,
   };
 
   T.openTrade = trade;
@@ -410,40 +410,41 @@ function _teacherCloseTrade(exitPrice, reason, tick) {
 
   // Build closed trade record
   var closedTrade = {
-    id:           trade.id,
-    side:         trade.side,
-    entry:        trade.entry,
-    exit:         exitPrice,
-    sl:           trade.sl,
-    tp:           trade.tp,
-    leverage:     trade.leverage,
-    qty:          trade.qty,
-    notional:     trade.notional,
-    capital:      trade.capital,
-    entryBar:     trade.entryBar,
-    exitBar:      T.cursor,
-    entryTs:      trade.entryTs,
-    exitTs:       bar ? bar.time : 0,
-    barsHeld:     T.cursor - trade.entryBar,
-    pnlRaw:       parseFloat(pnlRaw.toFixed(4)),
-    pnlNet:       parseFloat(pnlNet.toFixed(4)),
-    pnlPct:       parseFloat(pnlPct.toFixed(2)),
-    totalFees:    parseFloat(totalFees.toFixed(4)),
-    exitReason:   reason,
+    id: trade.id,
+    side: trade.side,
+    entry: trade.entry,
+    exit: exitPrice,
+    sl: trade.sl,
+    tp: trade.tp,
+    leverage: trade.leverage,
+    qty: trade.qty,
+    notional: trade.notional,
+    capital: trade.capital,
+    entryBar: trade.entryBar,
+    exitBar: T.cursor,
+    entryTs: trade.entryTs,
+    exitTs: bar ? bar.time : 0,
+    barsHeld: T.cursor - trade.entryBar,
+    pnlRaw: parseFloat(pnlRaw.toFixed(4)),
+    pnlNet: parseFloat(pnlNet.toFixed(4)),
+    pnlPct: parseFloat(pnlPct.toFixed(2)),
+    totalFees: parseFloat(totalFees.toFixed(4)),
+    exitReason: reason,
     entryReasons: trade.entryReasons,
-    outcome:      pnlNet > 0.01 ? 'WIN' : pnlNet < -0.01 ? 'LOSS' : 'BREAKEVEN',
-    dslUsed:      trade.dsl && trade.dsl.active,
+    outcome: pnlNet > 0.01 ? 'WIN' : pnlNet < -0.01 ? 'LOSS' : 'BREAKEVEN',
+    dslUsed: trade.dsl && trade.dsl.active,
     indicators: {
-      entryRSI:        null, // filled below
-      exitRSI:         T.indicators.rsi,
+      entryRSI: null, // filled below
+      exitRSI: T.indicators.rsi,
       entryConfluence: null,
-      exitConfluence:  T.indicators.confluence,
-      regime:          T.indicators.regime,
+      exitConfluence: T.indicators.confluence,
+      regime: T.indicators.regime,
     },
   };
 
   // Store completed trade
   T.trades.push(closedTrade);
+  if (T.trades.length > 1000) T.trades = T.trades.slice(-1000);
   T.openTrade = null;
 
   return closedTrade;
@@ -582,23 +583,23 @@ function _teacherBuildSessionSummary() {
   var avgLoss = losses > 0 ? grossLoss / losses : 0;
 
   return {
-    sessionId:    'S_' + Date.now(),
-    tf:           T.dataset ? T.dataset.tf : '?',
-    totalBars:    T.dataset ? T.dataset.bars.length : 0,
+    sessionId: 'S_' + Date.now(),
+    tf: T.dataset ? T.dataset.tf : '?',
+    totalBars: T.dataset ? T.dataset.bars.length : 0,
     barsReplayed: T.cursor + 1,
-    totalTrades:  totalTrades,
-    wins:         wins,
-    losses:       losses,
-    breakeven:    breakeven,
-    winRate:      parseFloat(winRate.toFixed(1)),
-    totalPnl:     parseFloat(totalPnl.toFixed(2)),
-    grossProfit:  parseFloat(grossProfit.toFixed(2)),
-    grossLoss:    parseFloat(grossLoss.toFixed(2)),
+    totalTrades: totalTrades,
+    wins: wins,
+    losses: losses,
+    breakeven: breakeven,
+    winRate: parseFloat(winRate.toFixed(1)),
+    totalPnl: parseFloat(totalPnl.toFixed(2)),
+    grossProfit: parseFloat(grossProfit.toFixed(2)),
+    grossLoss: parseFloat(grossLoss.toFixed(2)),
     profitFactor: parseFloat(profitFactor.toFixed(2)),
-    avgWin:       parseFloat(avgWin.toFixed(2)),
-    avgLoss:      parseFloat(avgLoss.toFixed(2)),
-    totalFees:    parseFloat(totalFees.toFixed(2)),
-    trades:       trades,
+    avgWin: parseFloat(avgWin.toFixed(2)),
+    avgLoss: parseFloat(avgLoss.toFixed(2)),
+    totalFees: parseFloat(totalFees.toFixed(2)),
+    trades: trades,
   };
 }
 
@@ -614,16 +615,16 @@ function teacherGetSnapshot() {
   var bar = T.dataset.bars[T.cursor];
 
   return {
-    cursor:      T.cursor,
-    totalBars:   T.dataset.bars.length,
-    progress:    maxCursor > 0 ? T.cursor / maxCursor : 0,
-    barsLeft:    maxCursor - T.cursor,
-    bar:         bar,
-    indicators:  T.indicators,
-    openTrade:   T.openTrade,
-    tradeCount:  T.trades.length,
-    replaying:   T.replaying,
-    paused:      T.paused,
-    tf:          T.dataset.tf,
+    cursor: T.cursor,
+    totalBars: T.dataset.bars.length,
+    progress: maxCursor > 0 ? T.cursor / maxCursor : 0,
+    barsLeft: maxCursor - T.cursor,
+    bar: bar,
+    indicators: T.indicators,
+    openTrade: T.openTrade,
+    tradeCount: T.trades.length,
+    replaying: T.replaying,
+    paused: T.paused,
+    tf: T.dataset.tf,
   };
 }

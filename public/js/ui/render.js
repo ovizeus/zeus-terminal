@@ -155,10 +155,10 @@ function updateQuantumClock() {
   // Market phase (session) detection uses UTC
   const phaseEl = el('brainMarketPhase');
   if (phaseEl) {
-    if (hUTC >= 0 && hUTC < 8) { phaseEl.textContent = '🌏 ASIA SESSION'; phaseEl.className = 'market-phase asian'; }
-    else if (hUTC >= 8 && hUTC < 13) { phaseEl.textContent = '🇬🇧 LONDON SESSION'; phaseEl.className = 'market-phase london'; }
-    else if (hUTC >= 13 && hUTC < 21) { phaseEl.textContent = '🗽 NY SESSION'; phaseEl.className = 'market-phase ny'; }
-    else { phaseEl.textContent = '💤 QUIET HOURS'; phaseEl.className = 'market-phase dead'; }
+    if (hUTC >= 0 && hUTC < 8) { phaseEl.textContent = 'ASIA SESSION'; phaseEl.className = 'market-phase asian'; }
+    else if (hUTC >= 8 && hUTC < 13) { phaseEl.textContent = 'LONDON SESSION'; phaseEl.className = 'market-phase london'; }
+    else if (hUTC >= 13 && hUTC < 21) { phaseEl.textContent = 'NY SESSION'; phaseEl.className = 'market-phase ny'; }
+    else { phaseEl.textContent = 'QUIET HOURS'; phaseEl.className = 'market-phase dead'; }
     // Always update all 3 session backtest stats
     updateSessionBacktest(hUTC);
   }
@@ -337,7 +337,7 @@ function updateRiskGauges() {
 
   // Position risk gauge
   const openAuto = (TP.demoPositions || []).filter(p => p.autoTrade && !p.closed).length; // [FIX M2]
-  const maxPos = parseInt(el('atMaxPos')?.value) || 4;
+  const maxPos = (typeof TC !== 'undefined' && Number.isFinite(TC.maxPos)) ? TC.maxPos : (parseInt(el('atMaxPos')?.value) || 4);
   const posPct = openAuto / maxPos * 100;
   const posCol = posPct >= 100 ? '#ff4466' : posPct >= 50 ? '#f0c040' : '#00d97a';
   setRiskGauge('pos', posPct, posCol, openAuto + '/' + maxPos);
@@ -406,7 +406,7 @@ function updateBrainExtension() {
 
 
 // ─── DAY/HOUR FILTER (DHF) ───────────────────────────────────
-// ✅ FIX: Folosim ora Romaniei (Europe/Bucharest) in loc de UTC
+// FIX: Folosim ora Romaniei (Europe/Bucharest) in loc de UTC
 // BUG3 FIX: Unified UTC time — no more timezone inconsistency
 function getTimeUTC() {
   const d = new Date();
@@ -472,8 +472,10 @@ function renderDHF() {
   if (curSlot) {
     const dayWR = DHF.days[curDay]?.wr || 60;
     const hourWR = DHF.hours[curHour]?.wr || 60;
-    const isOK = dayWR >= 50 && hourWR >= 45;
-    curSlot.textContent = `${curDay} ${String(curHour).padStart(2, '0')}:00 UTC (${utcTimeStr}) — WR:${Math.min(dayWR, hourWR)}% — ${isOK ? '✅ OK' : '🚫 EVITA'}`;
+    // [FIX BUG5] Use same _wrMin threshold as isCurrentTimeOK gate — prevents misleading green
+    const _wrMinRender = (window.WVE_CONFIG && window.WVE_CONFIG.wrFilter && window.WVE_CONFIG.wrFilter.minWR) || 55;
+    const isOK = dayWR >= 50 && hourWR >= _wrMinRender;
+    curSlot.innerHTML = `${curDay} ${String(curHour).padStart(2, '0')}:00 UTC (${utcTimeStr}) — WR:${Math.min(dayWR, hourWR)}% — ${isOK ? _ZI.ok + ' OK' : _ZI.noent + ' EVITA'}`;
     curSlot.style.color = isOK ? '#00ff88' : '#ff4466';
   }
 
@@ -492,7 +494,7 @@ function renderDHF() {
   if (hourGrid) {
     hourGrid.innerHTML = Array.from({ length: 24 }, (_, h) => {
       const wr = DHF.hours[h]?.wr || 60;
-      const isCur = h === curHourRO; // PATCH A: highlight ora RO (nu UTC)
+      const isCur = h === curHour; // highlight UTC (consistent cu DHF.hours indexing)
       const cls = wr >= 60 ? 'good' : wr >= 45 ? 'ok' : 'bad';
       return `<div class="dhf-cell ${cls}" style="${isCur ? 'outline:1px solid #00ff88;outline-offset:1px' : ''}font-size:10px" title="Ora ${String(h).padStart(2, '0')}:00 Romania — ${wr}% WR">
         <div class="dhf-cell-day">${String(h).padStart(2, '0')}h</div>

@@ -230,6 +230,8 @@ function saveDailyPnl() {
         if (typeof _safeLocalStorageSet === 'function') {
             _safeLocalStorageSet(_DAILY_PNL_KEY, payload);
         }
+        if (typeof _ucMarkDirty === 'function') _ucMarkDirty('dailyPnl');
+        if (typeof _userCtxPush === 'function') _userCtxPush();
     } catch (e) {
         console.warn('[dailyPnl] save failed:', e.message);
     }
@@ -264,8 +266,9 @@ function loadDailyPnl() {
 
 // ── Date helpers ─────────────────────────────────────────────
 function _todayKey(tsOrDate) {
-    var d = tsOrDate instanceof Date ? tsOrDate : new Date(tsOrDate);
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    var d = tsOrDate instanceof Date ? tsOrDate : new Date(tsOrDate || Date.now());
+    if (isNaN(d.getTime())) d = new Date();
+    return new Intl.DateTimeFormat('en-CA', { timeZone: (typeof S !== 'undefined' && S.tz) || 'Europe/Bucharest' }).format(d);
 }
 
 function _pruneOldDays(ds) {

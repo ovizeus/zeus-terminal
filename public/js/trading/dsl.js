@@ -96,12 +96,12 @@ function toggleDSL() {
   const _mode = (S.mode || 'assist').toLowerCase();
   // AUTO: DSL is AI-controlled — user cannot toggle
   if (_mode === 'auto') {
-    atLog('info', '🤖 AI controls DSL in AUTO — nu poți schimba manual');
-    toast('🤖 AUTO: DSL e controlat de AI');
+    atLog('info', '[AI] AI controls DSL in AUTO — nu poți schimba manual');
+    toast('AUTO: DSL e controlat de AI', 0, _ZI.robot);
     return;
   }
   // ASSIST: allow but log clearly
-  atLog('info', DSL.enabled ? '⚠️ ASSIST: DSL oprit de user' : '✅ ASSIST: DSL pornit de user (USER DSL)');
+  atLog('info', DSL.enabled ? '[WARN] ASSIST: DSL oprit de user' : '[OK] ASSIST: DSL pornit de user (USER DSL)');
   DSL.enabled = !DSL.enabled;
   S.dsl.active = DSL.enabled;   // keep S.* in sync
   // [FIX C7] Clear DSL intervals when disabled, restart when enabled
@@ -111,8 +111,8 @@ function toggleDSL() {
   const dot = el('dslStatusDot');
   if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off'); }
   if (dot) { dot.style.color = DSL.enabled ? '#00ffcc' : '#333'; dot.style.background = DSL.enabled ? '#00ffcc' : '#333'; }
-  atLog('info', DSL.enabled ? '🎯 Dynamic SL ACTIV — Brain urmareste pozitiile' : '⚠️ Dynamic SL OPRIT');
-  brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? '🎯 DSL activat — trailing brain pornit' : 'DSL oprit');
+  atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV — Brain urmareste pozitiile' : '[WARN] Dynamic SL OPRIT');
+  brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? _ZI.tgt + ' DSL activat — trailing brain pornit' : 'DSL oprit');
   dslUpdateBanner();
 }
 
@@ -127,7 +127,7 @@ function toggleAssistArm() {
     ARM_ASSIST.ts = S.assistArmed ? Date.now() : 0;
   }
   _syncDslAssistUI();
-  brainThink(S.assistArmed ? 'ok' : 'info', S.assistArmed ? '🟡 ASSIST ARMAT — DSL va executa la semnal' : '🔓 ASSIST dezarmat — DSL în preview only');
+  brainThink(S.assistArmed ? 'ok' : 'info', S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT — DSL va executa la semnal' : _ZI.unlk + ' ASSIST dezarmat — DSL în preview only');
   dslUpdateBanner();
 }
 
@@ -160,7 +160,7 @@ function _syncDslAssistUI() {
     const dslBtn2 = el('dslToggleBtn');
     if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = ''; }
     if (armBtn) {
-      armBtn.textContent = S.assistArmed ? '🟡 ASSIST ARMAT' : '🔒 ARM ASSIST';
+      armBtn.innerHTML = S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT' : _ZI.lock + ' ARM ASSIST';
       armBtn.className = 'dsl-assist-arm' + (S.assistArmed ? ' armed' : '');
     }
     if (armStatus) {
@@ -257,7 +257,7 @@ function _dslSanitizeParams(raw, posId) {
     corrected = true;
   }
   if (corrected) {
-    const msg = `⚠️ DSL SANITIZE [${posId}]: ` + fixes.join(' | ');
+    const msg = `DSL SANITIZE [${posId}]: ` + fixes.join(' | ');
     console.warn(msg);
     if (typeof atLog === 'function') atLog('warn', msg);
   }
@@ -266,6 +266,89 @@ function _dslSanitizeParams(raw, posId) {
 }
 
 function runDSLBrain() {
+  // [AT-UNIFY] When server AT is active, server DSL handles SL management.
+  // We still need to bridge server DSL state into DSL.positions for rendering.
+  if (window._serverATEnabled) {
+    const allOpenPosns = [
+      ...(TP.demoPositions || []),
+      ...(TP.livePositions || [])
+    ].filter(p => !p.closed);
+    if (!allOpenPosns.length) { renderDSLWidget([]); return; }
+
+    allOpenPosns.forEach(pos => {
+      const _dslKey = String(pos.id);
+      const serverDsl = pos._dsl || null;
+      DSL.positions[_dslKey] = DSL.positions[_dslKey] || {};
+      const dsl = DSL.positions[_dslKey];
+      const isLong = pos.side === 'LONG';
+      const cur = pos.sym === S.symbol ? S.price : (allPrices[pos.sym] || wlPrices[pos.sym]?.price || pos.entry);
+
+      if (serverDsl) {
+        // [ZT-AUD-008] Stale detection — warn if server DSL hasn't ticked in 60s
+        if (serverDsl.lastTickTs && Date.now() - serverDsl.lastTickTs > 60000) {
+          dsl._stale = true;
+          if (!dsl._staleLogged) {
+            dsl._staleLogged = true;
+            if (typeof atLog === 'function') atLog('warn', '[STALE] DSL state stale for pos ' + _dslKey + ' (>' + Math.round((Date.now() - serverDsl.lastTickTs) / 1000) + 's)');
+          }
+        } else {
+          dsl._stale = false;
+          dsl._staleLogged = false;
+        }
+        // Bridge server DSL state into client DSL.positions
+        dsl.active = !!serverDsl.active;
+        dsl.progress = serverDsl.progress || 0;
+        dsl.currentSL = serverDsl.currentSL || pos.sl;
+        dsl.originalSL = serverDsl.originalSL || pos.sl;
+        dsl.originalTP = dsl.originalTP || pos.tp;
+        dsl.pivotLeft = serverDsl.pivotLeft || null;
+        dsl.pivotRight = serverDsl.pivotRight || null;
+        dsl.impulseVal = serverDsl.impulseVal || null;
+        dsl._activationPrice = serverDsl.activationPrice || 0;
+        dsl.ttpArmed = serverDsl.ttpArmed || false;
+        dsl.ttpPeak = serverDsl.ttpPeak || 0;
+        dsl.impulseTriggered = (serverDsl.phase === 'IMPULSE');
+        dsl.yellowLine = dsl.active ? cur : null;
+        // Compute visual bar values locally (server doesn't send these)
+        dsl._barGreenPct = serverDsl.progress || 0;
+        dsl._barYellowPct = 100;
+        // Build log from server lastLog
+        if (!Array.isArray(dsl.log)) dsl.log = [];
+        if (serverDsl.lastLog && (!dsl.log.length || dsl.log[dsl.log.length - 1].msg !== serverDsl.lastLog)) {
+          dsl.log.push({ ts: Date.now(), msg: serverDsl.lastLog });
+          if (dsl.log.length > 20) dsl.log = dsl.log.slice(-20);
+        }
+      } else {
+        // No server DSL state yet — initialize with defaults
+        if (dsl.active == null) dsl.active = false;
+        if (dsl.originalSL == null) dsl.originalSL = pos.sl;
+        if (dsl.originalTP == null) dsl.originalTP = pos.tp;
+        if (dsl.currentSL == null) dsl.currentSL = pos.sl;
+        if (!Array.isArray(dsl.log)) dsl.log = [];
+        // Compute progress from entry/params for waiting positions
+        const _pp = pos.dslParams || {};
+        const openDSLpct = _pp.openDslPct || 40;
+        const _storedTarget = _pp.dslTargetPrice > 0 ? _pp.dslTargetPrice
+          : (isLong ? pos.entry * (1 + openDSLpct / 100) : pos.entry * (1 - openDSLpct / 100));
+        dsl._activationPrice = _storedTarget;
+        const _entryToTarget = isLong ? (_storedTarget - pos.entry) : (pos.entry - _storedTarget);
+        const _entryToCur = cur > 0 ? (isLong ? (cur - pos.entry) : (pos.entry - cur)) : 0;
+        const progress = _entryToTarget > 0 ? Math.max(0, Math.min(100, (_entryToCur / _entryToTarget) * 100)) : 0;
+        dsl.progress = progress;
+        dsl._barGreenPct = progress;
+        dsl._barYellowPct = 100;
+      }
+    });
+
+    // Cleanup DSL states for closed positions
+    Object.keys(DSL.positions).forEach(id => {
+      if (!allOpenPosns.find(p => String(p.id) === String(id))) delete DSL.positions[id];
+    });
+
+    renderDSLWidget(allOpenPosns);
+    renderATPositions();
+    return;
+  }
   if (!DSL.enabled) return;
   // ── 6. DSL SAFETY LOCK: no SL move if data invalid ──
   if (!Number.isFinite(S.price) || S.price <= 0) return;
@@ -279,10 +362,11 @@ function runDSLBrain() {
   if (!allOpenPosns.length) { renderDSLWidget([]); return; }
 
   // Global DSL defaults (used for positions without per-position params)
-  const _globalDslPct = parseFloat(el('dslActivatePct')?.value) || 40;
-  const _globalPivotL = parseFloat(el('dslTrailPct')?.value) || 0.8;
-  const _globalPivotR = parseFloat(el('dslTrailSusPct')?.value) || 1.0;
-  const _globalImpulseV = parseFloat(el('dslExtendPct')?.value) || 20;
+  // [P1] Read from TC (server-safe), DOM fallback
+  const _globalDslPct = (typeof TC !== 'undefined' && Number.isFinite(TC.dslActivatePct)) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value) || 40);
+  const _globalPivotL = (typeof TC !== 'undefined' && Number.isFinite(TC.dslTrailPct)) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value) || 0.8);
+  const _globalPivotR = (typeof TC !== 'undefined' && Number.isFinite(TC.dslTrailSusPct)) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value) || 1.0);
+  const _globalImpulseV = (typeof TC !== 'undefined' && Number.isFinite(TC.dslExtendPct)) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value) || 20);
 
   allOpenPosns.forEach(pos => {
     // Per-position DSL params (snapshot at open) or fallback to global
@@ -415,9 +499,9 @@ function runDSLBrain() {
           // [FIX BUG4] Monotonic guard at Phase 1: magnet cannot weaken PL beyond original SL
           if (isLong) { dsl.pivotLeft = Math.max(dsl.pivotLeft, pos.sl); }
           else { dsl.pivotLeft = Math.min(dsl.pivotLeft, pos.sl); }
-          dsl.log.push({ ts: Date.now(), msg: '🧲 MAG-A: ' + _magSnap.reason });
+          dsl.log.push({ ts: Date.now(), msg: '[MAG-A] ' + _magSnap.reason });
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-          pos.dslHistory.push({ ts: Date.now(), msg: '🧲 ' + _magSnap.reason });
+          pos.dslHistory.push({ ts: Date.now(), msg: '[MAG] ' + _magSnap.reason });
         }
         // Store preview for UI even when not applied
         dsl._magnetPreview = _magSnap;
@@ -431,9 +515,11 @@ function runDSLBrain() {
       dsl.log.push({ ts: Date.now(), msg: `DSL activat @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` });
       // Push to per-position history journal
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-      pos.dslHistory.push({ ts: Date.now(), msg: `🎯 DSL activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` });
-      atLog('buy', `🎯 DSL ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`);
-      brainThink('ok', `🎯 DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`);
+      pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` });
+      // [P0.4] Decision log — DSL activation
+      if (typeof DLog !== 'undefined') DLog.record('dsl_move', { event: 'activate', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft, pivotRight: dsl.pivotRight, impulseVal: dsl.impulseVal });
+      atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`);
+      brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`);
     }
 
     // ══════════════════════════════════════════════════════
@@ -458,15 +544,25 @@ function runDSLBrain() {
       if (_canMoveSL && dsl.pivotLeft > 0 && !_wasRestored) {
         const _plHit = isLong ? (cur <= dsl.pivotLeft) : (cur >= dsl.pivotLeft);
         if (_plHit) {
-          const _plReason = `🎯 DSL PL Exit @$${fP(cur)} (PL=$${fP(dsl.pivotLeft)})`;
+          const _plReason = `DSL PL Exit @$${fP(cur)} (PL=$${fP(dsl.pivotLeft)})`;
           dsl.log.push({ ts: Date.now(), msg: _plReason });
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
           pos.dslHistory.push({ ts: Date.now(), msg: _plReason });
-          atLog('sell', `🎯 DSL PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`);
-          brainThink('info', `🎯 DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`);
-          toast(`🎯 DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`);
+          // [P0.4] Decision log — DSL PL exit
+          if (typeof DLog !== 'undefined') DLog.record('dsl_move', { event: 'pl_exit', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft });
+          atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`);
+          brainThink('info', _ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`);
+          toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`);
           if (pos.isLive && typeof closeLivePos === 'function') {
             closeLivePos(pos.id, _plReason);
+            // [FIX BUG5] Update AT stats for DSL PL exit on live positions
+            if (pos.autoTrade && typeof AT !== 'undefined') {
+              const _dslPnl = typeof calcPosPnL === 'function' ? calcPosPnL(pos, cur) : 0;
+              AT.totalPnL += _dslPnl; AT.dailyPnL += _dslPnl;
+              if (Number.isFinite(_dslPnl)) { AT.realizedDailyPnL += _dslPnl; AT.closedTradesToday++; }
+              if (_dslPnl >= 0) AT.wins++; else AT.losses++;
+              if (typeof updateATStats === 'function') setTimeout(updateATStats, 50);
+            }
           } else if (typeof closeDemoPos === 'function') {
             closeDemoPos(pos.id, _plReason);
           }
@@ -529,9 +625,9 @@ function runDSLBrain() {
                 } else {
                   dsl.pivotLeft = Math.min(oldPL, dsl.pivotLeft);
                 }
-                dsl.log.push({ ts: Date.now(), msg: '🧲 MAG-B: ' + _magSnapB.reason });
+                dsl.log.push({ ts: Date.now(), msg: '[MAG-B] ' + _magSnapB.reason });
                 if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-                pos.dslHistory.push({ ts: Date.now(), msg: '🧲 ' + _magSnapB.reason });
+                pos.dslHistory.push({ ts: Date.now(), msg: '[MAG] ' + _magSnapB.reason });
               }
               dsl._magnetPreview = _magSnapB;
             } else {
@@ -541,13 +637,15 @@ function runDSLBrain() {
             // SL nativ se updateaza
             dsl.currentSL = dsl.pivotLeft;
 
-            dsl.log.push({ ts: Date.now(), msg: `⚡ IMPULSE: PL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV $${fP(oldIV)}→$${fP(dsl.impulseVal)}` });
+            dsl.log.push({ ts: Date.now(), msg: `[IMP] IMPULSE: PL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV $${fP(oldIV)}→$${fP(dsl.impulseVal)}` });
             // Push to per-position history journal
             if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-            pos.dslHistory.push({ ts: Date.now(), msg: `⚡ Impulse hit — SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)}` });
-            atLog('buy', `⚡ IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV→$${fP(dsl.impulseVal)}`);
-            brainThink('ok', `⚡ Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${fP(dsl.pivotLeft)}`);
-            toast(`⚡ ${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${fP(dsl.pivotLeft)}`);
+            pos.dslHistory.push({ ts: Date.now(), msg: `[IMP] Impulse hit — SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)}` });
+            // [P0.4] Decision log — DSL impulse
+            if (typeof DLog !== 'undefined') DLog.record('dsl_move', { event: 'impulse', sym: pos.sym, side: pos.side, price: cur, oldPL: oldPL, newPL: dsl.pivotLeft, newIV: dsl.impulseVal });
+            atLog('buy', `[IMP] IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV→$${fP(dsl.impulseVal)}`);
+            brainThink('ok', _ZI.bolt + ` Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${fP(dsl.pivotLeft)}`);
+            toast(`${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${fP(dsl.pivotLeft)}`);
           }
           // dacă era deja triggered, prețul rămâne în zonă — nu facem nimic
         } else {
@@ -587,7 +685,7 @@ function runDSLBrain() {
         if (_newAdapt !== _prevAdapt) {
           pos.dslAdaptiveState = _newAdapt;
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-          const _aMap = { calm: '🌊', tense: '⚡', aggressive: '🔥' };
+          const _aMap = { calm: '[CALM]', tense: '[TENSE]', aggressive: '[AGG]' };
           pos.dslHistory.push({ ts: Date.now(), msg: `${_aMap[_newAdapt]} AI state → ${_newAdapt.toUpperCase()} (progress:${progress.toFixed(0)}% slDist:${_slDist.toFixed(2)}%)` });
         }
       }
@@ -597,7 +695,11 @@ function runDSLBrain() {
   // Cleanup DSL states pentru pozitii inchise
   // [PATCH DSL-ALL] Verifică față de allOpenPosns (include manual + live)
   Object.keys(DSL.positions).forEach(id => {
-    if (!allOpenPosns.find(p => String(p.id) === String(id))) delete DSL.positions[id];
+    if (!allOpenPosns.find(p => String(p.id) === String(id))) {
+      delete DSL.positions[id];
+      // [DSL-FIX4] Also cleanup _attachedIds to prevent stale dedupe blocks
+      if (DSL._attachedIds) DSL._attachedIds.delete(String(id));
+    }
   });
 
   renderDSLWidget(allOpenPosns);
@@ -616,10 +718,14 @@ function dslTakeControl(posId) {
   if (_cm !== 'auto' && _cm !== 'assist') { toast('Take Control: doar pentru AUTO/ASSIST'); return; }
   if (!pos.sourceMode) pos.sourceMode = _cm;  // preserve original if missing
   pos.controlMode = 'user';
+  // [BUG3 FIX] Notify server of controlMode change for server-managed positions
+  if (window._serverATEnabled && pos._serverSeq) {
+    fetch('/api/at/control', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq, controlMode: 'user' }) }).catch(function () { });
+  }
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-  pos.dslHistory.push({ ts: Date.now(), msg: '🖐️ USER TOOK CONTROL — manual override active' });
-  brainThink('info', `🖐️ User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`);
-  toast(`🖐️ Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`);
+  pos.dslHistory.push({ ts: Date.now(), msg: '[USER] TOOK CONTROL — manual override active' });
+  brainThink('info', _ZI.hand + ` User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`);
+  toast(`Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`);
   if (typeof ZState !== 'undefined') ZState.save();
 }
 
@@ -632,10 +738,24 @@ function dslReleaseControl(posId) {
   // Resume AI from CURRENT manual values — NO reset
   const _origSource = (pos.sourceMode || pos.brainModeAtOpen || 'assist').toLowerCase();
   pos.controlMode = _origSource;  // restore to auto or assist
+  // [BUG3 FIX] Notify server of controlMode change + send user-edited dslParams
+  if (window._serverATEnabled && pos._serverSeq) {
+    var _releasePayload = { seq: pos._serverSeq, controlMode: _origSource };
+    if (pos.dslParams) {
+      var _clean = {};
+      ['openDslPct', 'pivotLeftPct', 'pivotRightPct', 'impulseVPct', 'dslTargetPrice'].forEach(function (k) {
+        if (Number.isFinite(pos.dslParams[k])) _clean[k] = pos.dslParams[k];
+      });
+      _releasePayload.dslParams = _clean;
+    }
+    fetch('/api/at/control', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(_releasePayload) }).catch(function () { });
+  }
+  // Mark transition timestamp so _mapServerPos preserves params during race window
+  pos._dslParamsPushedAt = Date.now();
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-  pos.dslHistory.push({ ts: Date.now(), msg: `🤖 AI CONTROL RESUMED (${_origSource.toUpperCase()}) — continuing from current DSL values` });
-  brainThink('ok', `🤖 AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`);
-  toast(`🤖 AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`);
+  pos.dslHistory.push({ ts: Date.now(), msg: `[AI] CONTROL RESUMED (${_origSource.toUpperCase()}) — continuing from current DSL values` });
+  brainThink('ok', _ZI.robot + ` AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`);
+  toast(`AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`);
   if (typeof ZState !== 'undefined') ZState.save();
 }
 
@@ -671,17 +791,18 @@ function dslManualParam(posId, param, value) {
     }
   }
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = [];
-  pos.dslHistory.push({ ts: Date.now(), msg: `✏️ Manual ${param}: ${v}` });
+  pos.dslHistory.push({ ts: Date.now(), msg: `[EDIT] Manual ${param}: ${v}` });
 
   // ── LIVE RECALC: if DSL is active, rebind structure immediately ──
   const _dslKey = String(posId);
   const _dsl = DSL.positions[_dslKey];
   if (_dsl?.active) {
     const _pp = pos.dslParams;
-    const _gDsl = parseFloat(el('dslActivatePct')?.value) || 40;
-    const _gPL = parseFloat(el('dslTrailPct')?.value) || 0.8;
-    const _gPR = parseFloat(el('dslTrailSusPct')?.value) || 1.0;
-    const _gIV = parseFloat(el('dslExtendPct')?.value) || 20;
+    // [P1] Read from TC (server-safe), DOM fallback
+    const _gDsl = (typeof TC !== 'undefined' && Number.isFinite(TC.dslActivatePct)) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value) || 40);
+    const _gPL = (typeof TC !== 'undefined' && Number.isFinite(TC.dslTrailPct)) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value) || 0.8);
+    const _gPR = (typeof TC !== 'undefined' && Number.isFinite(TC.dslTrailSusPct)) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value) || 1.0);
+    const _gIV = (typeof TC !== 'undefined' && Number.isFinite(TC.dslExtendPct)) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value) || 20);
     const _san = _dslSanitizeParams({
       openDslPct: _pp.openDslPct ?? _gDsl,
       pivotLeftPct: _pp.pivotLeftPct ?? _gPL,
@@ -703,11 +824,37 @@ function dslManualParam(posId, param, value) {
       // Only reset if price hasn't reached new IV yet (prevents double SL extension)
       var _ivReached = isLong ? (cur >= _dsl.impulseVal) : (cur <= _dsl.impulseVal);
       if (!_ivReached) _dsl.impulseTriggered = false;
-      _dsl.log.push({ ts: Date.now(), msg: `✏️ LIVE recalc: PL=$${fP(_dsl.pivotLeft)} PR=$${fP(_dsl.pivotRight)} IV=$${fP(_dsl.impulseVal)}` });
+      _dsl.log.push({ ts: Date.now(), msg: `[EDIT] LIVE recalc: PL=$${fP(_dsl.pivotLeft)} PR=$${fP(_dsl.pivotRight)} IV=$${fP(_dsl.impulseVal)}` });
     }
   }
 
   if (typeof ZState !== 'undefined') ZState.save();
+
+  // ── Immediate re-render so derived price sublabels update ──
+  var _allOpen = [...(TP.demoPositions || []), ...(TP.livePositions || [])].filter(function (p) { return !p.closed; });
+  renderDSLWidget(_allOpen);
+
+  // ── Push edited dslParams to server (debounced) ──
+  if (window._serverATEnabled && pos._serverSeq) {
+    _dslPushParamsDebounced(pos._serverSeq, pos.dslParams);
+  }
+}
+
+// Debounced server push for manual DSL param edits
+var _dslPushTimers = {};
+function _dslPushParamsDebounced(seq, dslParams) {
+  clearTimeout(_dslPushTimers[seq]);
+  _dslPushTimers[seq] = setTimeout(function () {
+    var clean = {};
+    ['openDslPct', 'pivotLeftPct', 'pivotRightPct', 'impulseVPct', 'dslTargetPrice'].forEach(function (k) {
+      if (Number.isFinite(dslParams[k])) clean[k] = dslParams[k];
+    });
+    fetch('/api/at/dslparams', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ seq: seq, dslParams: clean })
+    }).catch(function () { });
+  }, 500);
 }
 
 // ── Drag handler for yellow DSL ON line (mouse + touch) ──────
@@ -768,18 +915,26 @@ function renderDSLWidget(positions) {
   const countEl = el('dslActiveCount');
   if (!container) return;
 
+  // [v5] Filter positions by active global mode for UI display only
+  const _activeMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  const modeFiltered = positions.filter(function (p) {
+    var posMode = p.mode || 'demo';
+    return posMode === _activeMode;
+  });
+
   // BUG1 FIX: Skip innerHTML re-render if user is editing a DSL input (prevents desktop typing interruption)
   if (container.contains(document.activeElement) && document.activeElement.tagName === 'INPUT') {
     // Still update the active count badge
-    if (countEl) countEl.textContent = positions.filter(p => DSL.positions[p.id]?.active).length + ' active';
+    if (countEl) countEl.textContent = modeFiltered.filter(p => DSL.positions[String(p.id)]?.active).length + ' active';
     return;
   }
 
-  const allDisplayPosns = positions;
-  const activeCount = allDisplayPosns.filter(p => DSL.positions[p.id]?.active).length;
+  const allDisplayPosns = modeFiltered;
+  const activeCount = allDisplayPosns.filter(p => DSL.positions[String(p.id)]?.active).length;
   if (countEl) countEl.textContent = activeCount + ' active';
 
   if (!allDisplayPosns.length) {
+    const _waitLabel = _activeMode === 'live' ? 'SCANNING LIVE POSITIONS FOR ACTIVATION' : 'SCANNING DEMO POSITIONS FOR ACTIVATION';
     container.innerHTML = `<div class="dsl-waiting" id="dslWaitingState">
       <div class="dsl-radar">
         <svg class="dsl-radar-svg" viewBox="0 0 80 80">
@@ -792,7 +947,7 @@ function renderDSLWidget(positions) {
       </div>
       <div>
         <div class="dsl-radar-txt">WAITING DYNAMIC SL...</div>
-        <div style="font-size:12px;color:#00ffcc22;margin-top:3px;letter-spacing:1px">SCANEZ POZITII PENTRU ACTIVARE</div>
+        <div style="font-size:12px;color:#00ffcc22;margin-top:3px;letter-spacing:1px">${_waitLabel}</div>
       </div>
     </div>`;
     return;
@@ -831,10 +986,11 @@ function _renderDslCard(pos) {
 
   // Per-position DSL params (or global fallback)
   const _pp = pos.dslParams || {};
-  const openDSLpct = _pp.openDslPct ?? (parseFloat(el('dslActivatePct')?.value) || 40);
-  const pivotLeftPct = _pp.pivotLeftPct ?? (parseFloat(el('dslTrailPct')?.value) || 0.8);
-  const pivotRightPct = _pp.pivotRightPct ?? (parseFloat(el('dslTrailSusPct')?.value) || 1.0);
-  const impulseValPct = _pp.impulseVPct ?? (parseFloat(el('dslExtendPct')?.value) || 20);
+  // [P1] Read from TC (server-safe), DOM fallback
+  const openDSLpct = _pp.openDslPct ?? ((typeof TC !== 'undefined' && Number.isFinite(TC.dslActivatePct)) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value) || 40));
+  const pivotLeftPct = _pp.pivotLeftPct ?? ((typeof TC !== 'undefined' && Number.isFinite(TC.dslTrailPct)) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value) || 0.8));
+  const pivotRightPct = _pp.pivotRightPct ?? ((typeof TC !== 'undefined' && Number.isFinite(TC.dslTrailSusPct)) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value) || 1.0));
+  const impulseValPct = _pp.impulseVPct ?? ((typeof TC !== 'undefined' && Number.isFinite(TC.dslExtendPct)) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value) || 20));
 
   // ── Control mode (fix: infer from autoTrade if controlMode missing) ──
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase();

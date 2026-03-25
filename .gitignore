@@ -1,3 +1,59 @@
+# Dependencies
 node_modules/
+
+# Environment / secrets
 .env
+.env.*
+!.env.example
+
+# Logs
 *.log
+data/logs/
+
+# Database
+*.db
+*.db-wal
+*.db-shm
+
+# Runtime data
+data/sync_user/
+data/metrics_snapshot.json
+data/riskState.json
+data/config_overrides.json
+
+# Android build artifacts
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test artifacts
+_*_result.txt
+_pm2_logs*.txt
+_tmt_result.txt
+_test_res.txt
+
+# Temp working files
+_diff*.txt
+_md_emoji.txt
+_check_schema.js
+_probe_creds.js
+_run_all_tests.js
+_run_test.ps1
+_run_test.sh
+_test_isolation.js
+_test_manual_trading.js
+_tmp_list.js
+
+# Deploy artifacts
+zeus-deploy.tar.gz

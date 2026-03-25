@@ -39,9 +39,19 @@ async function loadExchangeInfo() {
 }
 
 // Auto-refresh every 6 hours
+let _refreshInterval = null;
 function startAutoRefresh() {
-    loadExchangeInfo();
-    setInterval(loadExchangeInfo, 6 * 60 * 60 * 1000);
+    if (_refreshInterval) return;
+    // Initial load with retry on failure (30s, 60s, 120s)
+    (async function _initialLoad(attempt) {
+        await loadExchangeInfo();
+        if (!_loaded && attempt < 3) {
+            const delay = [30000, 60000, 120000][attempt];
+            console.warn(`[EXCHANGE_INFO] Retry #${attempt + 1} in ${delay / 1000}s`);
+            setTimeout(() => _initialLoad(attempt + 1), delay);
+        }
+    })(0);
+    _refreshInterval = setInterval(loadExchangeInfo, 6 * 60 * 60 * 1000);
 }
 
 /**
@@ -81,4 +91,4 @@ function roundOrderParams(symbol, quantity, stopPrice) {
     return result;
 }
 
-module.exports = { startAutoRefresh, loadExchangeInfo, getFilters, roundToStep, roundOrderParams };
+module.exports = { startAutoRefresh, roundOrderParams };

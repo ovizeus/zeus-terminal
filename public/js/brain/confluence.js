@@ -18,15 +18,17 @@ function calcConfluenceScore() {
   const rsiScore = rsiV > 70 ? 80 : rsiV < 30 ? 80 : rsiV > 55 ? 60 : rsiV < 45 ? 60 : 50;
   const rsiDir = rsiV > 50 ? 'bull' : 'bear';
   const signalRatioScore = total > 0 ? Math.min(100, (bullCount / (total || 1)) * 100) : 50;
-  const stScore = S.signalData && S.signalData.signals && S.signalData.signals.find(s => s.name.includes('Supertrend')) ? 80 : 50;
-  const stDir = S.signalData && S.signalData.signals && S.signalData.signals.find(s => s.name.includes('Supertrend') && s.dir === 'bull') ? 'bull' : 'bear';
+  const stScore = S.signalData && S.signalData.signals && S.signalData.signals.find(s => s.name?.includes('Supertrend')) ? 80 : 50;
+  const stDir = S.signalData && S.signalData.signals && S.signalData.signals.find(s => s.name?.includes('Supertrend') && s.dir === 'bull') ? 'bull' : 'bear';
   const lsScore = S.ls ? (S.ls.l > 55 || S.ls.s > 55 ? 75 : 50) : 50;
   const lsDir = S.ls ? (S.ls.l > S.ls.s ? 'bull' : 'bear') : 'neut';
   const frScore = S.fr !== null && S.fr !== undefined ? (Math.abs(S.fr) * 10000 > 5 ? 70 : 50) : 50;
   const frDir = S.fr !== null && S.fr !== undefined ? (S.fr < 0 ? 'bull' : 'bear') : 'neut';
-  const oiScore = S.oiPrev && S.oi ? ((Math.abs(S.oi - S.oiPrev) / S.oiPrev) * 100 > 0.1 ? 70 : 50) : 50;
+  // [ZT-AUD-B3] OI stale guard — if last fetch >5min ago, neutralise to prevent stale bias
+  const oiStale = !S.oiTs || (Date.now() - S.oiTs > 300000);
+  const oiScore = (!oiStale && S.oiPrev && S.oi) ? ((Math.abs(S.oi - S.oiPrev) / S.oiPrev) * 100 > 0.1 ? 70 : 50) : 50;
   // [FIX R1] Neutral fallback when OI data is missing — prevents hidden bear bias
-  const oiDir = (S.oi == null && S.oiPrev == null) ? 'neut' : ((S.oi || 0) > (S.oiPrev || 0) ? 'bull' : 'bear');
+  const oiDir = (oiStale || (S.oi == null && S.oiPrev == null)) ? 'neut' : ((S.oi || 0) > (S.oiPrev || 0) ? 'bull' : 'bear');
   const dirs = [rsiDir, stDir, lsDir, frDir, oiDir];
   const bullDirs = dirs.filter(d => d === 'bull').length;
   const dirFactor = bullDirs / dirs.length;
@@ -39,6 +41,8 @@ function calcConfluenceScore() {
   const col = finalScore >= 65 ? 'var(--grn)' : finalScore <= 35 ? 'var(--red)' : 'var(--ylw)';
   // [FIX v85.1 F3] Scrie în memorie — sursă unică de adevăr, DOM e doar afișaj
   if (typeof BM !== 'undefined') BM.confluenceScore = finalScore;
+  // [P0.4] Decision log — confluence snapshot
+  if (typeof DLog !== 'undefined') DLog.record('confluence', { score: finalScore, bull: bullCount, bear: bearCount, rsi: rsiScore, st: stScore, ls: lsScore, fr: frScore, oi: oiScore });
   // [v119] Sync CORE_STATE — unica sursa de adevar pentru logica
   window.CORE_STATE.score = finalScore;
   window.CORE_STATE.lastUpdate = Date.now();

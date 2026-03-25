@@ -24,7 +24,7 @@ function _initAudio() {
 function _updateAudioBadge() {
   const b = el('soundBadge');
   if (b) {
-    b.textContent = _audioReady ? '🔊 SOUND READY' : '🔇 SOUND';
+    b.innerHTML = _audioReady ? _ZI.vol + ' SOUND READY' : _ZI.mute + ' SOUND';
     b.style.color = _audioReady ? '#39ff14' : '#ff6644';
     b.style.cursor = _audioReady ? 'default' : 'pointer';
   }
@@ -64,7 +64,11 @@ function toggleAlerts(en) {
   S.alerts = S.alerts || {};
   S.alerts.enabled = en;
   const btn = el('bellBtn');
-  if (btn) btn.innerHTML = en ? '🔔' : '🔕';
+  if (btn) {
+    const svgOn = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
+    const svgOff = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    btn.innerHTML = en ? svgOn : svgOff;
+  }
   // Fix toggle slider visual
   const dot = el('alertToggleDot');
   const slider = el('alertToggleSlider');
@@ -74,7 +78,7 @@ function toggleAlerts(en) {
     try { Notification.requestPermission(); } catch (_) { }
   }
   if (en) playAlertSound();
-  toast(en ? '🔔 Alerte ON' : '🔕 Alerte OFF');
+  toast(en ? 'Alerte ON' : 'Alerte OFF', 0, en ? _ZI.bell : _ZI.bellX);
 }
 
 
@@ -97,8 +101,9 @@ function applyChartColors() {
   if (cvdChart) { cvdChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
   if (volChart) { volChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
   closeM('mcharts'); toast('Culori aplicate ✓');
-  // Salvăm culorile în USER_SETTINGS
-  if (typeof _usScheduleSave === 'function') _usScheduleSave();
+  // Save + IMMEDIATE push to server (no debounce — explicit user action)
+  if (typeof _usSave === 'function') _usSave();
+  if (typeof _userCtxPushNow === 'function') _userCtxPushNow();
 }
 
 // ===== INIT ACT BAR =====
@@ -106,11 +111,10 @@ function initActBar() {
   if (window._actBarBuilt) return;  // guard: never init twice
   window._actBarBuilt = true;
   renderActBar();
-  // Apply initial visibility based on S.activeInds
+  // Apply initial visibility for ALL indicators — enable active ones + hide disabled ones
   INDICATORS.forEach(ind => {
-    if (S.activeInds[ind.id] === false) {
-      applyIndVisibility(ind.id, false);
-    }
+    var on = S.activeInds[ind.id] !== false;
+    applyIndVisibility(ind.id, on);
   });
 }
 

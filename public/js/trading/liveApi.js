@@ -4,7 +4,7 @@
 'use strict';
 
 const _LIVE_API_BASE = '';  // Same origin
-var _LIVE_API_TOKEN = ''; // Set from UI config panel or env
+let _LIVE_API_TOKEN = ''; // Set from UI config panel or env
 
 // Set the auth token (called from config/bootstrap)
 function liveApiSetToken(token) { _LIVE_API_TOKEN = token || ''; }
@@ -14,6 +14,18 @@ function _liveApiHeaders(extra) {
   var h = Object.assign({ 'Content-Type': 'application/json' }, extra || {});
   if (_LIVE_API_TOKEN) h['Authorization'] = 'Bearer ' + _LIVE_API_TOKEN;
   return h;
+}
+
+// Generate unique idempotency key for mutation requests [S3B2] crypto-grade entropy
+function _idempotencyKey() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  // Fallback for older browsers — still 128-bit via getRandomValues
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    var a = new Uint8Array(16);
+    crypto.getRandomValues(a);
+    return Array.from(a, function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  }
+  return Date.now().toString(36) + '-' + Math.random().toString(36).substr(2, 9);
 }
 
 // Fetch with 15s timeout — prevents UI freeze if server hangs
@@ -30,8 +42,8 @@ function _liveApiError(err, context) {
   const msg = (err && err.message) ? err.message : String(err);
   const prefix = context ? ('[' + context + '] ') : '';
   // User-visible alerts
-  if (typeof toast === 'function') toast('🔴 LIVE API: ' + prefix + msg);
-  if (typeof atLog === 'function') atLog('warn', '🔴 LIVE API FAIL: ' + prefix + msg);
+  if (typeof toast === 'function') toast('LIVE API: ' + prefix + msg);
+  if (typeof atLog === 'function') atLog('warn', '[LIVE] API FAIL: ' + prefix + msg);
   console.error('[liveApi]', context, msg);
 }
 
@@ -41,9 +53,9 @@ async function _liveApiParse(res, context) {
   try { data = await res.json(); } catch (_) { data = {}; }
   if (!res.ok) {
     let reason = data.error || res.statusText || 'Unknown error';
-    if (res.status === 403) reason = '🔒 ' + reason;
-    if (res.status === 429) reason = '⏱️ Rate limit — asteapta 1 minut';
-    if (res.status === 400) reason = '⚠️ Validare: ' + reason;
+    if (res.status === 403) reason = reason;
+    if (res.status === 429) reason = 'Rate limit — asteapta 1 minut';
+    if (res.status === 400) reason = 'Validare: ' + reason;
     const err = new Error(reason);
     err.status = res.status;
     _liveApiError(err, context);
@@ -84,7 +96,7 @@ async function liveApiGetPositions() {
 async function liveApiPlaceOrder(params) {
   const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
-    headers: _liveApiHeaders(),
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
     body: JSON.stringify(params),
   });
   const result = await _liveApiParse(res, 'order/place');
@@ -177,7 +189,7 @@ async function liveApiSyncState() {
           var _exitPrice = (typeof getSymPrice === 'function') ? getSymPrice(gone) : 0;
           if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry; // ultimate fallback
           var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0;
-          addTradeToJournal({ id: gone.id, time: (typeof fmtNow === 'function' ? fmtNow() : new Date().toISOString()), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE' });
+          addTradeToJournal({ id: gone.id, time: (typeof fmtNow === 'function' ? fmtNow() : new Date().toISOString()), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' });
         }
       }
     });
@@ -280,6 +292,13 @@ function _aresClientOrderId() {
   return 'ARES_' + Date.now() + '_' + _aresOrderSeq + String(Math.floor(Math.random() * 99)).padStart(2, '0');
 }
 
+// [FIX BUG8] AT-specific clientOrderId with AT_ prefix (separate from ARES)
+var _atOrderSeq = 0;
+function _atClientOrderId() {
+  _atOrderSeq = (_atOrderSeq + 1) % 10000;
+  return 'AT_' + Date.now() + '_' + _atOrderSeq + String(Math.floor(Math.random() * 99)).padStart(2, '0');
+}
+
 /**
  * Place an ARES live market order (entry).
  * @param {object} params - {symbol, side:'BUY'|'SELL', quantity, leverage}
@@ -289,7 +308,7 @@ async function aresPlaceOrder(params) {
   const cid = _aresClientOrderId();
   const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
-    headers: _liveApiHeaders(),
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
     body: JSON.stringify({
       symbol: params.symbol,
       side: params.side,
@@ -315,7 +334,7 @@ async function aresSetStopLoss(params) {
   const cid = _aresClientOrderId();
   const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
-    headers: _liveApiHeaders(),
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
     body: JSON.stringify({
       symbol: params.symbol,
       side: closeSide,
@@ -339,7 +358,7 @@ async function aresSetTakeProfit(params) {
   const cid = _aresClientOrderId();
   const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
-    headers: _liveApiHeaders(),
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
     body: JSON.stringify({
       symbol: params.symbol,
       side: closeSide,
@@ -354,6 +373,29 @@ async function aresSetTakeProfit(params) {
   return result;
 }
 
+// [FIX BUG8] AT-specific SL/TP with AT_ prefix
+async function atSetStopLoss(params) {
+  const closeSide = params.side === 'BUY' || params.side === 'LONG' ? 'SELL' : 'BUY';
+  const cid = _atClientOrderId();
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
+    body: JSON.stringify({ symbol: params.symbol, side: closeSide, type: 'STOP_MARKET', quantity: String(params.quantity), stopPrice: params.stopPrice, newClientOrderId: cid }),
+  });
+  return _liveApiParse(res, 'AT SL');
+}
+
+async function atSetTakeProfit(params) {
+  const closeSide = params.side === 'BUY' || params.side === 'LONG' ? 'SELL' : 'BUY';
+  const cid = _atClientOrderId();
+  const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
+    body: JSON.stringify({ symbol: params.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET', quantity: String(params.quantity), stopPrice: params.stopPrice, newClientOrderId: cid }),
+  });
+  return _liveApiParse(res, 'AT TP');
+}
+
 /**
  * Close an ARES position by placing opposite-side MARKET order (reduce-only).
  * @param {object} pos - {symbol, side:'LONG'|'SHORT', qty}
@@ -363,7 +405,7 @@ async function aresClosePosition(pos) {
   const cid = _aresClientOrderId();
   const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
-    headers: _liveApiHeaders(),
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
     body: JSON.stringify({
       symbol: pos.symbol || pos.sym,
       side: closeSide,
@@ -385,4 +427,127 @@ async function aresClosePosition(pos) {
  */
 async function aresCancelOrder(symbol, orderId) {
   return liveApiCancelOrder(symbol, orderId);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MANUAL LIVE TRADING — Frontend API for exchange-real manual orders
+// All tagged with MANUAL_ prefix via newClientOrderId
+// ═══════════════════════════════════════════════════════════════════════════
+
+var _manualOrderSeq = 0;
+function _manualClientOrderId() {
+  _manualOrderSeq = (_manualOrderSeq + 1) % 10000;
+  return 'MANUAL_' + Date.now() + '_' + _manualOrderSeq + String(Math.floor(Math.random() * 99)).padStart(2, '0');
+}
+
+/**
+ * Place a manual live order (MARKET or LIMIT) on Binance.
+ * @param {object} params - {symbol, side:'BUY'|'SELL', type:'MARKET'|'LIMIT', quantity, price?, leverage?}
+ */
+async function manualLivePlaceOrder(params) {
+  var cid = _manualClientOrderId();
+  var body = {
+    symbol: params.symbol,
+    side: params.side,
+    type: params.type || 'MARKET',
+    quantity: String(params.quantity),
+    newClientOrderId: cid,
+  };
+  if (params.leverage) body.leverage = params.leverage;
+  if (params.type === 'LIMIT' && params.price) {
+    body.price = params.price;
+  }
+  if (params.referencePrice) body.referencePrice = params.referencePrice;
+  var res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
+    method: 'POST',
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),
+    body: JSON.stringify(body),
+  });
+  var result = await _liveApiParse(res, 'manual order/place');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('MANUAL', '[MANUAL LIVE ORDER] ' + params.symbol + ' ' + params.side + ' ' + (params.type || 'MARKET') + ' qty=' + params.quantity + ' orderId=' + (result.orderId || '') + ' cid=' + cid);
+  result._manualClientOrderId = cid;
+  return result;
+}
+
+/**
+ * Get open orders from Binance for manual trading (per-user).
+ * @param {string} [symbol] - Optional symbol filter
+ */
+async function manualLiveGetOpenOrders(symbol) {
+  var url = _LIVE_API_BASE + '/api/openOrders';
+  if (symbol) url += '?symbol=' + encodeURIComponent(symbol);
+  var res = await _liveApiFetch(url, { headers: _liveApiHeaders() });
+  return _liveApiParse(res, 'openOrders');
+}
+
+/**
+ * Cancel a manual live order on Binance.
+ */
+async function manualLiveCancelOrder(symbol, orderId) {
+  return liveApiCancelOrder(symbol, orderId);
+}
+
+/**
+ * Modify a manual live LIMIT order: cancel + replace with new price.
+ */
+async function manualLiveModifyLimit(symbol, orderId, newPrice, side) {
+  var cid = _manualClientOrderId();
+  var res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/modify', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({ symbol: symbol, orderId: orderId, newPrice: newPrice, side: side, newClientOrderId: cid }),
+  });
+  var result = await _liveApiParse(res, 'order/modify');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('MANUAL', '[MANUAL MODIFY LIMIT] ' + symbol + ' old=' + orderId + ' new=' + (result.orderId || '') + ' price=' + newPrice);
+  return result;
+}
+
+/**
+ * Set or update SL (STOP_MARKET) for a manual live position.
+ * @param {object} params - {symbol, side:'LONG'|'SHORT', quantity, stopPrice, cancelOrderId?}
+ */
+async function manualLiveSetSL(params) {
+  var closeSide = (params.side === 'BUY' || params.side === 'LONG') ? 'SELL' : 'BUY';
+  var cid = _manualClientOrderId();
+  var res = await _liveApiFetch(_LIVE_API_BASE + '/api/manual/protection', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({
+      symbol: params.symbol,
+      side: closeSide,
+      type: 'STOP_MARKET',
+      quantity: String(params.quantity),
+      stopPrice: params.stopPrice,
+      cancelOrderId: params.cancelOrderId || undefined,
+      newClientOrderId: cid,
+    }),
+  });
+  var result = await _liveApiParse(res, 'manual SL');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('MANUAL', '[MANUAL SL SET] ' + params.symbol + ' stopPrice=' + params.stopPrice + ' orderId=' + (result.orderId || ''));
+  return result;
+}
+
+/**
+ * Set or update TP (TAKE_PROFIT_MARKET) for a manual live position.
+ * @param {object} params - {symbol, side:'LONG'|'SHORT', quantity, stopPrice, cancelOrderId?}
+ */
+async function manualLiveSetTP(params) {
+  var closeSide = (params.side === 'BUY' || params.side === 'LONG') ? 'SELL' : 'BUY';
+  var cid = _manualClientOrderId();
+  var res = await _liveApiFetch(_LIVE_API_BASE + '/api/manual/protection', {
+    method: 'POST',
+    headers: _liveApiHeaders(),
+    body: JSON.stringify({
+      symbol: params.symbol,
+      side: closeSide,
+      type: 'TAKE_PROFIT_MARKET',
+      quantity: String(params.quantity),
+      stopPrice: params.stopPrice,
+      cancelOrderId: params.cancelOrderId || undefined,
+      newClientOrderId: cid,
+    }),
+  });
+  var result = await _liveApiParse(res, 'manual TP');
+  if (typeof ZLOG !== 'undefined') ZLOG.push('MANUAL', '[MANUAL TP SET] ' + params.symbol + ' stopPrice=' + params.stopPrice + ' orderId=' + (result.orderId || ''));
+  return result;
 }

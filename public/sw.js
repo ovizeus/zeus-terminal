@@ -1,8 +1,7 @@
-const CACHE_VERSION = 'zt-v122-mcr1';
+const CACHE_VERSION = 'zt-v122-consolidation';
 const CACHE_NAME = `zt-cache-${CACHE_VERSION}`;
 const ASSETS = [
-    '/',
-    '/index.html',
+    '/login.html',
     '/css/main.css',
     '/css/components.css',
     '/manifest.json',
@@ -45,7 +44,7 @@ self.addEventListener('fetch', event => {
                 return resp;
             }).catch(() =>
                 caches.match(event.request).then(cached =>
-                    cached || new Response('<html><body style="background:#0a0f16;color:#fff;font-family:sans-serif;text-align:center;padding-top:40px;font-size:18px">Zeus este offline — reconnecting</body></html>', {
+                    cached || new Response('<html><body style="background:#0a0f16;color:#fff;font-family:sans-serif;text-align:center;padding-top:40px;font-size:18px">Zeus Terminal is offline — reconnecting</body></html>', {
                         headers: { 'Content-Type': 'text/html' }
                     })
                 )

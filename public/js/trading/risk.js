@@ -190,6 +190,8 @@ function _adaptSave() {
       buckets: BM.adaptive.buckets,
     };
     _safeLocalStorageSet('zeus_adaptive_v1', payload);
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('adaptive');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   } catch (_) { }
 }
 
@@ -207,7 +209,7 @@ function _adaptLoad() {
     BM.adaptive.buckets = (p.buckets && typeof p.buckets === 'object') ? p.buckets : {};
     // Sync UI toggle
     const tog = document.getElementById('adaptiveToggleBtn');
-    if (tog) tog.textContent = BM.adaptive.enabled ? '🧠 ADAPTIVE ON' : '🧠 ADAPTIVE OFF';
+    if (tog) tog.innerHTML = BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF';
     if (tog) tog.style.borderColor = BM.adaptive.enabled ? '#00d97a' : '#2a3a4a';
     if (tog) tog.style.color = BM.adaptive.enabled ? '#00d97a' : '#778899';
   } catch (e) {
@@ -244,9 +246,9 @@ function recalcAdaptive(isStartup) {
 
     if (!closedTrades.length) return;
 
-    // Calculează SL% din setări pentru R-calc
-    var slPct = parseFloat(document.getElementById('atSL')?.value) || 1.5;
-    var rrRatio = parseFloat(document.getElementById('atRR')?.value) || 2;
+    // Calculează SL% din setări pentru R-calc — [P1] TC first, DOM fallback
+    var slPct = (typeof TC !== 'undefined' && Number.isFinite(TC.slPct)) ? TC.slPct : (parseFloat(document.getElementById('atSL')?.value) || 1.5);
+    var rrRatio = (typeof TC !== 'undefined' && Number.isFinite(TC.rr)) ? TC.rr : (parseFloat(document.getElementById('atRR')?.value) || 2);
 
     // Grupează pe bucketuri: regime|profile|volRegime
     var newBuckets = {};
@@ -319,13 +321,13 @@ function recalcAdaptive(isStartup) {
     _renderAdaptivePanel();
 
     if (typeof atLog === 'function') {
-      atLog('info', '🧠 Adaptive recalc: ' + Object.keys(newBuckets).length + ' buckets | valid:' + validBuckets.length
+      atLog('info', '[ADAPT] Adaptive recalc: ' + Object.keys(newBuckets).length + ' buckets | valid:' + validBuckets.length
         + ' | entryMult:' + BM.adaptive.entryMult.toFixed(2)
         + ' sizeMult:' + BM.adaptive.sizeMult.toFixed(2)
         + ' exitMult:' + BM.adaptive.exitMult.toFixed(2));
     }
   } catch (e) {
-    if (typeof atLog === 'function') atLog('warn', '⚠️ recalcAdaptive error: ' + e.message);
+    if (typeof atLog === 'function') atLog('warn', '[ERR] recalcAdaptive error: ' + e.message);
   }
 }
 
@@ -366,7 +368,7 @@ function _renderAdaptivePanel() {
         + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + k + '">' + k + '</span>'
         + '<span>' + b.trades + 't</span>'
         + '<span style="color:' + wrColor + '">' + (wr !== null ? wr + '%' : '—') + '</span>'
-        + '<span style="color:' + multColor + '">' + (hasData ? '×' + b.mult.toFixed(2) : '<30🔒') + '</span>'
+        + '<span style="color:' + multColor + '">' + (hasData ? '×' + b.mult.toFixed(2) : '<30 ' + _ZI.lock + '') + '</span>'
         + '</div>';
     }).join('');
 
@@ -385,7 +387,7 @@ function toggleAdaptive() {
   // Sync buton din panou MI (dacă există)
   var tog = document.getElementById('adaptiveToggleBtn');
   if (tog) {
-    tog.textContent = BM.adaptive.enabled ? '🧠 ADAPTIVE ON' : '🧠 ADAPTIVE OFF';
+    tog.innerHTML = BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF';
     tog.style.borderColor = BM.adaptive.enabled ? '#00d97a' : '#2a3a4a';
     tog.style.color = BM.adaptive.enabled ? '#00d97a' : '#778899';
   }
@@ -397,7 +399,7 @@ function toggleAdaptive() {
   }
   _adaptSave();
   _updateAdaptiveBarTxt();
-  if (typeof atLog === 'function') atLog('info', '🧠 Adaptive Control: ' + (BM.adaptive.enabled ? 'ON' : 'OFF'));
+  if (typeof atLog === 'function') atLog('info', '[ADAPT] Adaptive Control: ' + (BM.adaptive.enabled ? 'ON' : 'OFF'));
 }
 
 // Actualizează textul condensat pe bara adaptive-strip

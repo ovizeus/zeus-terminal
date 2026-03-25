@@ -29,11 +29,8 @@ function _queueExecOverlay(html, cssClass, duration) {
 
 // BM post close
 function _dayKeyLocal(){
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const da = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${da}`;
+  const s = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Bucharest' });
+  return s; // 'YYYY-MM-DD'
 }
 
 function _bmResetDailyIfNeeded(){
@@ -47,7 +44,7 @@ function _bmResetDailyIfNeeded(){
     // reset protect automat la schimbare zi
     BM.protectMode = false;
     BM.protectReason = '';
-    atLog('info', `📅 Zi nouă (${k}) — dailyTrades/lossStreak/protect resetate automat`);
+    atLog('info', `[DAY] Zi nouă (${k}) — dailyTrades/lossStreak/protect resetate automat`);
   }
 }
 
@@ -74,7 +71,7 @@ function _bmPostClose(pos, reason) {
 
 // ===== MODULE: EXECUTION =====
 // ===================================================================
-// ⚡ ZEUS AUTO TRADE ENGINE v1.0
+// ZEUS AUTO TRADE ENGINE v1.0
 // Logic: Confluence Score + Multi-Signal Confirmation + Risk Mgmt
 // ===================================================================
 // [MOVED TO TOP] AT

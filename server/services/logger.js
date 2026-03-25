@@ -17,7 +17,10 @@ try { if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true }); }
 let _logStream = null;
 function _getStream() {
     if (!_logStream || _logStream.destroyed) {
-        try { _logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' }); } catch (_) { }
+        try {
+            _logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
+            _logStream.on('error', (err) => { console.error('[LOGGER] Stream error:', err.message); _logStream = null; });
+        } catch (_) { }
     }
     return _logStream;
 }
@@ -28,16 +31,18 @@ function _rotate() {
         const stat = fs.statSync(LOG_FILE);
         if (stat.size > MAX_LOG_SIZE) {
             const rotated = LOG_FILE + '.' + Date.now();
-            if (_logStream) { _logStream.end(); _logStream = null; }
+            if (_logStream) { _logStream.destroy(); _logStream = null; }
             fs.renameSync(LOG_FILE, rotated);
             // Keep only last 3 rotated files
-            const files = fs.readdirSync(LOG_DIR)
-                .filter(f => f.startsWith('zeus.log.'))
-                .sort()
-                .reverse();
-            for (let i = 3; i < files.length; i++) {
-                fs.unlinkSync(path.join(LOG_DIR, files[i]));
-            }
+            try {
+                const files = fs.readdirSync(LOG_DIR)
+                    .filter(f => f.startsWith('zeus.log.'))
+                    .sort()
+                    .reverse();
+                for (let i = 3; i < files.length; i++) {
+                    fs.unlinkSync(path.join(LOG_DIR, files[i]));
+                }
+            } catch (_) { }
         }
     } catch (_) { }
 }

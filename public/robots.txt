@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /login.html
+Allow: /privacy.html
+Allow: /terms.html
+Disallow: /api/
+Disallow: /auth/
+Disallow: /js/
+Disallow: /css/
+Disallow: /assets/
+
+Sitemap: https://zeus-terminal.com/sitemap.xml

@@ -16,7 +16,10 @@ try { if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 let _stream = null;
 function _getStream() {
     if (!_stream || _stream.destroyed) {
-        try { _stream = fs.createWriteStream(AUDIT_FILE, { flags: 'a' }); } catch (_) { }
+        try {
+            _stream = fs.createWriteStream(AUDIT_FILE, { flags: 'a' });
+            _stream.on('error', (err) => { console.error('[AUDIT] Stream error:', err.message); _stream = null; });
+        } catch (_) { }
     }
     return _stream;
 }
@@ -27,7 +30,7 @@ function _rotate() {
         const stat = fs.statSync(AUDIT_FILE);
         if (stat.size > MAX_SIZE) {
             if (_stream) { _stream.end(); _stream = null; }
-            const rotated = AUDIT_FILE + '.' + new Date().toISOString().slice(0, 10);
+            const rotated = AUDIT_FILE + '.' + new Date().toISOString().slice(0, 10) + '-' + Date.now();
             fs.renameSync(AUDIT_FILE, rotated);
         }
     } catch (_) { }
@@ -57,6 +60,7 @@ function record(action, details, actor, ip) {
 
 /**
  * Read the last N audit entries (most recent first).
+ * Uses reverse-read from end of file to avoid loading entire file into memory.
  * @param {number} [count=50]
  * @returns {Array<object>}
  */
@@ -64,13 +68,38 @@ function readLast(count) {
     const n = count || 50;
     try {
         if (!fs.existsSync(AUDIT_FILE)) return [];
-        const raw = fs.readFileSync(AUDIT_FILE, 'utf8').trim();
-        if (!raw) return [];
-        const lines = raw.split('\n');
+        const stat = fs.statSync(AUDIT_FILE);
+        if (stat.size === 0) return [];
+
+        const fd = fs.openSync(AUDIT_FILE, 'r');
+        const CHUNK = 8192;
+        let pos = stat.size;
+        let tail = '';
         const result = [];
-        for (let i = lines.length - 1; i >= 0 && result.length < n; i--) {
-            try { result.push(JSON.parse(lines[i])); } catch (_) { }
+
+        while (pos > 0 && result.length < n) {
+            const readSize = Math.min(CHUNK, pos);
+            pos -= readSize;
+            const buf = Buffer.alloc(readSize);
+            fs.readSync(fd, buf, 0, readSize, pos);
+            tail = buf.toString('utf8') + tail;
+
+            const lines = tail.split('\n');
+            // Keep first partial line for next iteration
+            tail = lines.shift();
+
+            for (let i = lines.length - 1; i >= 0 && result.length < n; i--) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                try { result.push(JSON.parse(line)); } catch (_) { }
+            }
         }
+        // Handle remaining tail (first line of file)
+        if (result.length < n && tail.trim()) {
+            try { result.push(JSON.parse(tail.trim())); } catch (_) { }
+        }
+
+        fs.closeSync(fd);
         return result;
     } catch (_) {
         return [];

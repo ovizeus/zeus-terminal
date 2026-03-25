@@ -15,6 +15,8 @@ function _teacherStorageSet(key, data) {
       return false;
     }
     localStorage.setItem(key, str);
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('teacherData');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
     return true;
   } catch (e) {
     console.warn('[TEACHER] Storage write failed:', key, e.message);
@@ -127,7 +129,7 @@ function teacherSaveMemory(memory) {
   // Cap each category
   var toSave = {
     patterns: Array.isArray(memory.patterns) ? memory.patterns.slice(0, 100) : [],
-    edges:    Array.isArray(memory.edges)    ? memory.edges.slice(0, 100)    : [],
+    edges: Array.isArray(memory.edges) ? memory.edges.slice(0, 100) : [],
     mistakes: Array.isArray(memory.mistakes) ? memory.mistakes.slice(0, 100) : [],
   };
   return _teacherStorageSet(TEACHER_STORAGE_KEYS.memory, toSave);
@@ -138,7 +140,7 @@ function teacherLoadMemory() {
   if (data && typeof data === 'object') {
     return {
       patterns: Array.isArray(data.patterns) ? data.patterns : [],
-      edges:    Array.isArray(data.edges)    ? data.edges    : [],
+      edges: Array.isArray(data.edges) ? data.edges : [],
       mistakes: Array.isArray(data.mistakes) ? data.mistakes : [],
     };
   }
@@ -152,8 +154,8 @@ function teacherLoadAllPersistent() {
   if (!window.TEACHER) return;
   teacherLoadConfig();
   window.TEACHER.lessons = teacherLoadLessons();
-  window.TEACHER.memory  = teacherLoadMemory();
-  window.TEACHER.stats   = teacherLoadStats();
+  window.TEACHER.memory = teacherLoadMemory();
+  window.TEACHER.stats = teacherLoadStats();
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -163,12 +165,12 @@ function teacherExportAll() {
   var payload = {
     version: 'teacher_v2',
     exportedAt: new Date().toISOString(),
-    config:   window.TEACHER ? window.TEACHER.config : null,
+    config: window.TEACHER ? window.TEACHER.config : null,
     sessions: teacherLoadSessions(),
-    lessons:  teacherLoadLessons(),
-    stats:    teacherLoadStats(),
-    memory:   teacherLoadMemory(),
-    v2state:  _teacherStorageGet(TEACHER_STORAGE_KEYS.v2state),
+    lessons: teacherLoadLessons(),
+    stats: teacherLoadStats(),
+    memory: teacherLoadMemory(),
+    v2state: _teacherStorageGet(TEACHER_STORAGE_KEYS.v2state),
   };
   var str = JSON.stringify(payload, null, 2);
   var blob = new Blob([str], { type: 'application/json' });
@@ -225,17 +227,17 @@ function teacherSaveV2State() {
   if (!T || !T.v2) return false;
   var v2 = T.v2;
   var toSave = {
-    capability:          v2.capability,
-    capabilityLabel:     v2.capabilityLabel,
+    capability: v2.capability,
+    capabilityLabel: v2.capabilityLabel,
     capabilityBreakdown: v2.capabilityBreakdown,
-    currentCapital:      v2.currentCapital,
-    failCount:           v2.failCount,
-    reloadCount:         v2.reloadCount,
-    lifetimeSessions:    v2.lifetimeSessions,
-    lifetimeStats:       v2.lifetimeStats,
-    lifetimeTrades:      v2.lifetimeTrades.slice(-500), // cap storage to last 500
-    curriculum:          v2.curriculum,
-    recentActivity:      v2.recentActivity,
+    currentCapital: v2.currentCapital,
+    failCount: v2.failCount,
+    reloadCount: v2.reloadCount,
+    lifetimeSessions: v2.lifetimeSessions,
+    lifetimeStats: v2.lifetimeStats,
+    lifetimeTrades: v2.lifetimeTrades.slice(-500), // cap storage to last 500
+    curriculum: v2.curriculum,
+    recentActivity: v2.recentActivity,
   };
   return _teacherStorageSet(TEACHER_STORAGE_KEYS.v2state, toSave);
 }
@@ -246,17 +248,17 @@ function teacherLoadV2State() {
   var data = _teacherStorageGet(TEACHER_STORAGE_KEYS.v2state);
   if (!data || typeof data !== 'object') return false;
   var v2 = T.v2;
-  if (typeof data.capability === 'number')        v2.capability = data.capability;
-  if (typeof data.capabilityLabel === 'string')   v2.capabilityLabel = data.capabilityLabel;
-  if (data.capabilityBreakdown)                   v2.capabilityBreakdown = data.capabilityBreakdown;
-  if (typeof data.currentCapital === 'number')    v2.currentCapital = data.currentCapital;
-  if (typeof data.failCount === 'number')         v2.failCount = data.failCount;
-  if (typeof data.reloadCount === 'number')       v2.reloadCount = data.reloadCount;
-  if (typeof data.lifetimeSessions === 'number')  v2.lifetimeSessions = data.lifetimeSessions;
-  if (data.lifetimeStats)                         v2.lifetimeStats = data.lifetimeStats;
-  if (Array.isArray(data.lifetimeTrades))          v2.lifetimeTrades = data.lifetimeTrades;
-  if (data.curriculum)                             v2.curriculum = data.curriculum;
-  if (Array.isArray(data.recentActivity))          v2.recentActivity = data.recentActivity;
+  if (typeof data.capability === 'number') v2.capability = data.capability;
+  if (typeof data.capabilityLabel === 'string') v2.capabilityLabel = data.capabilityLabel;
+  if (data.capabilityBreakdown) v2.capabilityBreakdown = data.capabilityBreakdown;
+  if (typeof data.currentCapital === 'number') v2.currentCapital = data.currentCapital;
+  if (typeof data.failCount === 'number') v2.failCount = data.failCount;
+  if (typeof data.reloadCount === 'number') v2.reloadCount = data.reloadCount;
+  if (typeof data.lifetimeSessions === 'number') v2.lifetimeSessions = data.lifetimeSessions;
+  if (data.lifetimeStats) v2.lifetimeStats = data.lifetimeStats;
+  if (Array.isArray(data.lifetimeTrades)) v2.lifetimeTrades = data.lifetimeTrades;
+  if (data.curriculum) v2.curriculum = data.curriculum;
+  if (Array.isArray(data.recentActivity)) v2.recentActivity = data.recentActivity;
   return true;
 }
 
@@ -271,8 +273,8 @@ function teacherClearAllStorage() {
   // Reset state
   if (window.TEACHER) {
     window.TEACHER.lessons = [];
-    window.TEACHER.memory  = { patterns: [], edges: [], mistakes: [] };
-    window.TEACHER.stats   = null;
+    window.TEACHER.memory = { patterns: [], edges: [], mistakes: [] };
+    window.TEACHER.stats = null;
     if (window.TEACHER.v2) {
       window.TEACHER.v2 = null;
       teacherInitV2State();

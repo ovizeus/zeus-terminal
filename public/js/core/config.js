@@ -68,22 +68,22 @@ let _ptStripOpen = false;
 
 // Indicators array
 const INDICATORS = [
-  { id: 'ema', ico: '📈', name: 'EMA 50/200', desc: 'Exponential Moving Average', cat: 'trend', def: true },
-  { id: 'wma', ico: '〰️', name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },
-  { id: 'st', ico: '🔶', name: 'Supertrend', desc: 'Trend + Stop Loss dinamic', cat: 'trend', def: true },
-  { id: 'vp', ico: '📊', name: 'Volume Profile', desc: 'Volum pe niveluri de pret', cat: 'volume', def: true },
-  { id: 'macd', ico: '⚡', name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
-  { id: 'bb', ico: '🎯', name: 'Bollinger Bands', desc: 'Volatilitate si trend', cat: 'vol', def: false },
-  { id: 'stoch', ico: '🌊', name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch', cat: 'momentum', def: false },
-  { id: 'obv', ico: '💹', name: 'OBV', desc: 'On-Balance Volume', cat: 'volume', def: false },
-  { id: 'atr', ico: '📉', name: 'ATR', desc: 'Average True Range - volat', cat: 'vol', def: false },
-  { id: 'vwap', ico: '🏦', name: 'VWAP', desc: 'Volume Weighted Avg Price', cat: 'trend', def: false },
-  { id: 'ichimoku', ico: '☁️', name: 'Ichimoku Cloud', desc: 'Sistem complet japonez', cat: 'trend', def: false },
-  { id: 'fib', ico: '🌀', name: 'Fibonacci', desc: 'Retracement auto pe swing', cat: 'support', def: false },
-  { id: 'pivot', ico: '📌', name: 'Pivot Points', desc: 'Suport/Rezistenta zilnice', cat: 'support', def: false },
-  { id: 'rsi14', ico: '⚡', name: 'RSI 14', desc: 'Relative Strength Index', cat: 'momentum', def: false },
-  { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'RSI bazat pe volum', cat: 'volume', def: false },
-  { id: 'cci', ico: '📐', name: 'CCI', desc: 'Commodity Channel Index', cat: 'momentum', def: false },
+  { id: 'ema', ico: _ZI.tup, name: 'EMA 50/200', desc: 'Exponential Moving Average', cat: 'trend', def: true },
+  { id: 'wma', ico: _ZI.wave, name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },
+  { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + Stop Loss dinamic', cat: 'trend', def: true },
+  { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volum pe niveluri de pret', cat: 'volume', def: true },
+  { id: 'macd', ico: _ZI.bolt, name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
+  { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatilitate si trend', cat: 'vol', def: false },
+  { id: 'stoch', ico: _ZI.wave, name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch', cat: 'momentum', def: false },
+  { id: 'obv', ico: _ZI.chart, name: 'OBV', desc: 'On-Balance Volume', cat: 'volume', def: false },
+  { id: 'atr', ico: _ZI.ruler, name: 'ATR', desc: 'Average True Range - volat', cat: 'vol', def: false },
+  { id: 'vwap', ico: _ZI.chart, name: 'VWAP', desc: 'Volume Weighted Avg Price', cat: 'trend', def: false },
+  { id: 'ichimoku', ico: _ZI.cloud, name: 'Ichimoku Cloud', desc: 'Sistem complet japonez', cat: 'trend', def: false },
+  { id: 'fib', ico: _ZI.hex, name: 'Fibonacci', desc: 'Retracement auto pe swing', cat: 'support', def: false },
+  { id: 'pivot', ico: _ZI.tgt, name: 'Pivot Points', desc: 'Suport/Rezistenta zilnice', cat: 'support', def: false },
+  { id: 'rsi14', ico: _ZI.bolt, name: 'RSI 14', desc: 'Relative Strength Index', cat: 'momentum', def: false },
+  { id: 'mfi', ico: _ZI.money, name: 'Money Flow Index', desc: 'RSI bazat pe volum', cat: 'volume', def: false },
+  { id: 'cci', ico: _ZI.ruler, name: 'CCI', desc: 'Commodity Channel Index', cat: 'momentum', def: false },
 ];
 let _macdChart = null, _macdLineSeries = null, _macdSigSeries = null, _macdHistSeries = null;
 let _macdInited = false;
@@ -144,7 +144,7 @@ function srLinkTrade(pos) {
   const sig = SIGNAL_REGISTRY.signals.find(s =>
     !s.tradeId && s.direction === dir && (Date.now() - s.ts) < 120000
   );
-  if (sig) {
+  if (sig && !sig.tradeId) {
     sig.tradeId = pos.id;
     pos.signalId = sig.id;     // stocăm pe poziţie referinţa înapoi
     _srSave();
@@ -188,8 +188,8 @@ function _srRenderStats() {
   const wr = st.total ? st.winRate : '—';
   const exp = st.total ? (st.expectancy >= 0 ? '+' : '') + st.expectancy : '—';
   el_s.innerHTML =
-    `<span class="sr-stat">📊 ${st.total} semnale</span>` +
-    `<span class="sr-stat ${st.wins >= st.losses ? 'sr-win' : 'sr-loss'}">✅ ${st.wins}W / ❌ ${st.losses}L</span>` +
+    `<span class="sr-stat">${_ZI.chart} ${st.total} semnale</span>` +
+    `<span class="sr-stat ${st.wins >= st.losses ? 'sr-win' : 'sr-loss'}">${_ZI.ok} ${st.wins}W / ${_ZI.x} ${st.losses}L</span>` +
     `<span class="sr-stat">WR: <b>${wr}%</b></span>` +
     `<span class="sr-stat">Exp: <b>${exp}$</b></span>`;
   srStripUpdateBar();
@@ -209,15 +209,17 @@ function _srRenderList() {
       timeZone: S.tz || 'Europe/Bucharest',
       hour: '2-digit', minute: '2-digit'
     });
+    const _type = typeof escHtml === 'function' ? escHtml(s.type || '') : (s.type || '');
+    const _typeShort = _type.length > 18 ? _type.slice(0, 16) + '…' : _type;
     const dirCls = s.direction === 'LONG' ? 'sr-long' : s.direction === 'SHORT' ? 'sr-short' : 'sr-neut';
     const outCls = s.outcome === 'win' ? 'sr-win' : s.outcome === 'loss' ? 'sr-loss' : 'sr-pend';
-    const outTxt = s.outcome === 'win' ? `✅ +$${s.pnl?.toFixed(2)}` :
-      s.outcome === 'loss' ? `❌ $${s.pnl?.toFixed(2)}` : '⏳ —';
-    const srcIco = s.source === 'confluence' ? '🧠' : '🔍';
+    const outTxt = s.outcome === 'win' ? `${_ZI.ok} +$${s.pnl?.toFixed(2)}` :
+      s.outcome === 'loss' ? `${_ZI.x} $${s.pnl?.toFixed(2)}` : `${_ZI.ld} —`;
+    const srcIco = s.source === 'confluence' ? _ZI.brain : _ZI.eye;
     return `<div class="sr-row">
       <span class="sr-time">${t}</span>
       <span class="sr-src">${srcIco}</span>
-      <span class="sr-type" title="${s.type}">${s.type.length > 18 ? s.type.slice(0, 16) + '…' : s.type}</span>
+      <span class="sr-type" title="${_type}">${_typeShort}</span>
       <span class="sr-dir ${dirCls}">${s.direction}</span>
       <span class="sr-score">${typeof s.score === 'number' ? s.score : s.score}</span>
       <span class="sr-outcome ${outCls}">${outTxt}</span>
@@ -232,6 +234,8 @@ function _srSave() {
     signals: SIGNAL_REGISTRY.signals.slice(0, 100),
     stats: SIGNAL_REGISTRY.stats,
   });
+  _ucMarkDirty('signalRegistry');
+  if (typeof _userCtxPush === 'function') _userCtxPush();
 }
 function _srLoad() {
   try {
@@ -243,13 +247,13 @@ function _srLoad() {
   } catch (_) { }
 }
 
-// ── Fallback: garantează că #sr-strip ajunge în MI după AUB ────────
+// ── Fallback: garantează că #sr-strip ajunge în zeus-groups după AUB ────────
 function _srEnsureVisible() {
   try {
     const srSec = document.getElementById('sr-strip') || document.getElementById('sr-sec');
     if (!srSec) return;
 
-    const mi = document.getElementById('zg-body-mi');
+    const mi = document.getElementById('zeus-groups');
     if (!mi) return;
 
     // Asigurăm că nu e ascuns de clase reziduale
@@ -259,51 +263,34 @@ function _srEnsureVisible() {
     srSec.style.removeProperty('max-height');
     srSec.style.removeProperty('overflow');
 
-    // Verificăm dacă e deja în MI
-    const alreadyInMI = srSec.closest('#zg-body-mi') !== null;
+    // Verificăm dacă e deja în zeus-groups
+    const alreadyIn = srSec.closest('#zeus-groups') !== null;
 
-    if (!alreadyInMI) {
-      // Nu e în MI — forțăm inserarea după #aub
+    if (!alreadyIn) {
       const aub = mi.querySelector('#aub');
       if (aub && aub.nextSibling) {
         mi.insertBefore(srSec, aub.nextSibling);
       } else if (aub) {
         mi.appendChild(srSec);
       } else {
-        // AUB nu e în MI — adăugăm la început
         mi.insertBefore(srSec, mi.firstChild);
       }
-      console.log('[SR] ✅ Fallback: sr-sec forțat în zg-body-mi');
+      console.log('[SR] Fallback: sr-sec forțat în zeus-groups');
     } else {
-      // E în MI — verificăm că e după AUB
       const aub = mi.querySelector('#aub');
       if (aub) {
         const nodes = Array.from(mi.children);
         const aubIdx = nodes.indexOf(aub);
         const srIdx = nodes.indexOf(srSec);
         if (srIdx !== aubIdx + 1) {
-          // Repoziționăm după AUB
           if (aub.nextSibling) {
             mi.insertBefore(srSec, aub.nextSibling);
           } else {
             mi.appendChild(srSec);
           }
-          console.log('[SR] ✅ Fallback: sr-sec repoziționat după AUB');
+          console.log('[SR] Fallback: sr-sec repoziționat după AUB');
         }
       }
-    }
-
-    // Dacă MI este colapsat și utilizatorul nu l-a colapsat explicit, îl deschidem
-    const miSec = document.getElementById('zg-mi');
-    if (miSec && miSec.classList.contains('collapsed')) {
-      try {
-        const savedGroups = JSON.parse(localStorage.getItem('zeus_groups') || '{}');
-        // Deschidem MI doar dacă starea nu a fost salvată explicit ca false
-        if (savedGroups['zg-mi'] === undefined) {
-          miSec.classList.remove('collapsed');
-          console.log('[SR] ✅ MI expand: nu era salvat ca colapsat');
-        }
-      } catch (_) { }
     }
 
     // Randăm conținutul (poate că n-a rulat încă)
@@ -378,8 +365,8 @@ function _ncRenderList() {
       timeZone: (typeof S !== 'undefined' && S.tz) || 'Europe/Bucharest',
       hour: '2-digit', minute: '2-digit', second: '2-digit'
     });
-    const ico = i.severity === 'critical' ? '🔴' :
-      i.severity === 'warning' ? '🟡' : '🔵';
+    const ico = i.severity === 'critical' ? _ZI.dRed :
+      i.severity === 'warning' ? _ZI.dYlw : '<span class="z-dot" style="background:#4488ff;box-shadow:0 0 4px #4488ff66"></span>';
     // [FIX R12] Sanitize notification fields to prevent stored XSS
     const _esc = typeof escHtml === 'function' ? escHtml : function (s) { return s; };
     return `<div class="nc-item ${_esc(i.severity)} ${i.read ? 'nc-read' : ''}" data-id="${_esc(i.id)}">
@@ -394,7 +381,7 @@ function _ncRenderList() {
   }).join('');
 }
 
-// ── Actualizare badge 🔔 ─────────────────────────────────────────
+// ── Actualizare badge ─────────────────────────────────────────
 function _ncUpdateBadge() {
   const badge = document.getElementById('nc-badge');
   if (!badge) return;
@@ -437,6 +424,8 @@ function _ncSave() {
   _safeLocalStorageSet('zeus_notifications', {
     items: NOTIFICATION_CENTER.items.slice(0, 100),
   });
+  _ucMarkDirty('notifications');
+  if (typeof _userCtxPush === 'function') _userCtxPush();
 }
 function _ncLoad() {
   try {
@@ -445,6 +434,365 @@ function _ncLoad() {
     const data = JSON.parse(raw);
     NOTIFICATION_CENTER.items = data.items || [];
   } catch (_) { }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UI Context Persistence — isolated display-only state (sound, AT log)
+// Zero interaction with trading/brain/signal/execution paths
+// ══════════════════════════════════════════════════════════════════
+let _ctxSaveTimer = null;
+function _ctxSave() {
+  if (_ctxSaveTimer) clearTimeout(_ctxSaveTimer);
+  _ctxSaveTimer = setTimeout(function _ctxSaveNow() {
+    try {
+      _safeLocalStorageSet('zeus_ui_context', {
+        _v: 1,
+        ts: Date.now(),
+        soundOn: typeof S !== 'undefined' ? !!S.soundOn : false,
+        atLog: (typeof AT !== 'undefined' && Array.isArray(AT.log)) ? AT.log.slice(0, 50) : [],
+      });
+      _ucMarkDirty('uiContext');
+      if (typeof _userCtxPush === 'function') _userCtxPush();
+    } catch (_) { }
+  }, 1000);
+}
+function _ctxLoad() {
+  try {
+    const raw = localStorage.getItem('zeus_ui_context');
+    if (!raw) return;
+    const ctx = JSON.parse(raw);
+    if (!ctx || ctx._v !== 1) return;
+    // Sound toggle — display only, no trading impact
+    if (typeof S !== 'undefined' && typeof ctx.soundOn === 'boolean') {
+      S.soundOn = ctx.soundOn;
+      const sndEl = document.getElementById('snd');
+      if (sndEl) sndEl.innerHTML = S.soundOn ? _ZI.bell : _ZI.bellX;
+    }
+    // AT log — display only, never read by any decision function
+    if (typeof AT !== 'undefined' && Array.isArray(ctx.atLog) && ctx.atLog.length > 0 && AT.log.length === 0) {
+      AT.log = ctx.atLog;
+      if (typeof renderATLog === 'function') renderATLog();
+    }
+    console.log('[CTX] UI context restored (sound:', ctx.soundOn, ', atLog:', (ctx.atLog || []).length, 'entries)');
+  } catch (_) { }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Cross-Device Per-User Sync — preferences only, zero trading impact
+// Pushes safe settings to server, pulls on boot + tab-resume
+// ══════════════════════════════════════════════════════════════════
+let _ucPushTimer = null;
+let _ucPulling = false;
+let _ucVersion = 4; // v4: per-section dirty timestamps, hot-reload on pull, push triggers on all saves
+let _ucPushPending = false; // offline queue flag — retry on next opportunity
+
+// ── Per-section dirty timestamp registry ──
+// Each section gets its own last-modified timestamp — prevents global overwrite on multi-device
+var _ucDirtyTs = {};
+try { _ucDirtyTs = JSON.parse(localStorage.getItem('zeus_uc_dirty_ts') || '{}'); } catch (_) { _ucDirtyTs = {}; }
+// Upgrade migration: if no dirty-ts exists, seed all 19 sections with Date.now()
+// so existing localStorage data gets a valid ts on first push after upgrade
+if (!localStorage.getItem('zeus_uc_dirty_ts')) {
+  var _seedTs = Date.now();
+  ['settings', 'uiContext', 'panels', 'indSettings', 'llvSettings', 'uiScale',
+    'signalRegistry', 'perfStats', 'dailyPnl', 'postmortem', 'adaptive',
+    'notifications', 'scannerSyms', 'midstackOrder', 'aubData', 'ofHud',
+    'teacherData', 'ariaNovaHud', 'aresData'].forEach(function (s) { _ucDirtyTs[s] = _seedTs; });
+  try { localStorage.setItem('zeus_uc_dirty_ts', JSON.stringify(_ucDirtyTs)); } catch (_) { }
+}
+function _ucMarkDirty(section) {
+  _ucDirtyTs[section] = Date.now();
+  try { localStorage.setItem('zeus_uc_dirty_ts', JSON.stringify(_ucDirtyTs)); } catch (_) { }
+}
+window._ucMarkDirty = _ucMarkDirty;
+
+// ── Build ALL sync sections from localStorage (shared by push + beacon) ──
+function _buildAllSections() {
+  var _t = function (s) { return _ucDirtyTs[s] || 0; };
+  var _g = function (k) { try { return localStorage.getItem(k); } catch (_) { return null; } };
+  var _j = function (k) { try { return JSON.parse(_g(k) || 'null'); } catch (_) { return null; } };
+  return {
+    // ── Core 6 ──
+    settings: { ts: _t('settings'), data: _j('zeus_user_settings') },
+    uiContext: { ts: _t('uiContext'), data: _j('zeus_ui_context') },
+    panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _g('zeus_dsl_mode'), adaptStrip: _g('zeus_adaptive_strip_open') } },
+    indSettings: { ts: _t('indSettings'), data: _j('zeus_ind_settings') },
+    llvSettings: { ts: _t('llvSettings'), data: _j('zeus_llv_settings') },
+    uiScale: { ts: _t('uiScale'), data: _g('zeus_ui_scale') },
+    // ── Extended 12 ──
+    signalRegistry: { ts: _t('signalRegistry'), data: _j('zeus_signal_registry') },
+    perfStats: { ts: _t('perfStats'), data: _j('zeus_perf_v1') },
+    dailyPnl: { ts: _t('dailyPnl'), data: _j('zeus_daily_pnl_v1') },
+    postmortem: { ts: _t('postmortem'), data: _j('zeus_postmortem_v1') },
+    adaptive: { ts: _t('adaptive'), data: _j('zeus_adaptive_v1') },
+    notifications: { ts: _t('notifications'), data: _j('zeus_notifications') },
+    scannerSyms: { ts: _t('scannerSyms'), data: _j('zeus_mscan_syms') },
+    midstackOrder: { ts: _t('midstackOrder'), data: _j('zt_midstack_order') },
+    aubData: { ts: _t('aubData'), data: { bb: _j('aub_bb'), macro: _j('aub_macro'), sim: _j('aub_sim_last'), expanded: _g('aub_expanded') } },
+    ofHud: { ts: _t('ofHud'), data: { v2: _g('of_hud_v2'), pos: _g('of_hud_pos_v1'), anchor: _g('of_hud_anchor_x_v1') } },
+    teacherData: { ts: _t('teacherData'), data: { config: _j('zeus_teacher_config'), sessions: _j('zeus_teacher_sessions'), lessons: _j('zeus_teacher_lessons'), stats: _j('zeus_teacher_stats'), memory: _j('zeus_teacher_memory'), v2state: _j('zeus_teacher_v2state'), panelOpen: _g('zeus_teacher_panel_open') } },
+    ariaNovaHud: { ts: _t('ariaNovaHud'), data: { aria: _j('aria_v1'), nova: _j('nova_v1') } },
+    // ── ARES data (simulation engine — synced for cross-device continuity) ──
+    aresData: { ts: _t('aresData'), data: { wallet: _j('ARES_MISSION_STATE_V1_vw2'), positions: _j('ARES_POSITIONS_V1'), state: _j('ARES_STATE_V1'), init: _j('ares_init_v1'), lastTradeTs: _g('ARES_LAST_TRADE_TS'), journal: _j('ARES_JOURNAL_V1') } },
+  };
+}
+
+// Immediate push (no debounce) — for explicit user actions like Apply Colors, toggle indicator
+function _userCtxPushNow() {
+  if (_ucPushTimer) { clearTimeout(_ucPushTimer); _ucPushTimer = null; }
+  _ucPushBeacon();
+}
+window._userCtxPushNow = _userCtxPushNow;
+
+function _userCtxPush() {
+  if (_ucPushTimer) clearTimeout(_ucPushTimer);
+  _ucPushTimer = setTimeout(function _ucPushExec() {
+    try {
+      var payload = { _v: _ucVersion, ts: Date.now(), sections: _buildAllSections() };
+      fetch('/api/sync/user-context', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+      }).then(function (r) {
+        if (!r.ok) { console.warn('[UC] push failed:', r.status); _ucPushPending = true; return null; }
+        return r.json();
+      }).then(function (json) {
+        if (!json) return;
+        console.log('[UC] \u2705 pushed'); _ucPushPending = false;
+        // [C3] Validate server stored settings match what we sent
+        if (json.storedSettings && json.storedSettings.data) {
+          try {
+            var sent = payload.sections.settings ? payload.sections.settings.data : null;
+            var stored = json.storedSettings.data;
+            if (sent && stored) {
+              var sentAT = typeof sent === 'string' ? JSON.parse(sent) : sent;
+              var storedAT = typeof stored === 'string' ? JSON.parse(stored) : stored;
+              if (sentAT.autoTrade && storedAT.autoTrade) {
+                var keys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin'];
+                var mismatches = [];
+                keys.forEach(function (k) {
+                  if (sentAT.autoTrade[k] !== storedAT.autoTrade[k]) {
+                    mismatches.push(k + ':sent=' + sentAT.autoTrade[k] + '/stored=' + storedAT.autoTrade[k]);
+                  }
+                });
+                if (mismatches.length > 0) {
+                  console.error('[UC] \u26a0\ufe0f SETTINGS MISMATCH:', mismatches.join(', '));
+                  if (typeof ZLOG !== 'undefined') ZLOG.push('WARN', '[UC] settings mismatch after push', { mismatches: mismatches });
+                } else {
+                  console.log('[UC] \u2705 settings validated \u2014 server matches client');
+                }
+              }
+            }
+          } catch (_) { }
+        }
+      }).catch(function (e) { console.warn('[UC] push err:', e.message); _ucPushPending = true; });
+    } catch (_) { }
+  }, 1000);
+}
+
+function _userCtxPull() {
+  if (_ucPulling) return;
+  _ucPulling = true;
+  // Retry pending push before pulling (offline queue recovery)
+  if (_ucPushPending) {
+    console.log('[UC] retrying pending push before pull');
+    _ucPushBeacon();
+    _ucPushPending = false;
+  }
+  fetch('/api/sync/user-context', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (json) {
+      _ucPulling = false;
+      if (!json || !json.ok || !json.data || !json.data.sections) return;
+      var sec = json.data.sections;
+      var _dirty = false; // track if any dirty-ts changed this pull cycle
+
+      // Boot verify: if local settings are newer than server, re-push (last beacon was lost)
+      var localUS = JSON.parse(localStorage.getItem('zeus_user_settings') || 'null');
+      var localTs = (localUS && localUS._syncTs) ? localUS._syncTs : 0;
+      var serverSettingsTs = (sec.settings && sec.settings.ts) ? sec.settings.ts : 0;
+      if (localTs > serverSettingsTs && localTs > 0) {
+        console.log('[UC] local newer than server (' + localTs + ' > ' + serverSettingsTs + ') — re-pushing');
+        _ucPushBeacon();
+      }
+
+      // ── settings section (field-level merge) ──
+      if (sec.settings && sec.settings.data) {
+        var localUS = JSON.parse(localStorage.getItem('zeus_user_settings') || 'null');
+        var localTs = (localUS && localUS._syncTs) ? localUS._syncTs : 0;
+        // Only apply server data if genuinely newer AND no local edits since boot
+        var bootTs = window._zeusBootTs || 0;
+        var localEditedSinceBoot = localTs > bootTs;
+        if (sec.settings.ts > (_ucDirtyTs.settings || 0) && !localEditedSinceBoot) {
+          var sData = sec.settings.data;
+          if (sData) {
+            if (localUS && typeof localUS === 'object') {
+              for (var fk in sData) {
+                if (fk === '_syncTs' || fk === '_version') continue;
+                localUS[fk] = sData[fk];
+              }
+              localUS._syncTs = sec.settings.ts;
+              localStorage.setItem('zeus_user_settings', JSON.stringify(localUS));
+            } else {
+              sData._syncTs = sec.settings.ts;
+              localStorage.setItem('zeus_user_settings', JSON.stringify(sData));
+            }
+            _ucDirtyTs.settings = sec.settings.ts; _dirty = true;
+            if (typeof loadUserSettings === 'function') loadUserSettings();
+            console.log('[UC] \u2705 settings field-merged from server');
+          }
+        }
+      }
+
+      // ── uiContext section ──
+      if (sec.uiContext && sec.uiContext.data) {
+        if (sec.uiContext.ts > (_ucDirtyTs.uiContext || 0)) {
+          localStorage.setItem('zeus_ui_context', JSON.stringify(sec.uiContext.data));
+          _ucDirtyTs.uiContext = sec.uiContext.ts; _dirty = true;
+          if (typeof _ctxLoad === 'function') _ctxLoad();
+          console.log('[UC] \u2705 uiContext merged from server');
+        }
+      }
+
+      // ── panels section ──
+      if (sec.panels && sec.panels.data) {
+        if (sec.panels.ts > (_ucDirtyTs.panels || 0)) {
+          var pd = sec.panels.data;
+          if (pd.groups) localStorage.setItem('zeus_groups', JSON.stringify(pd.groups));
+          if (pd.dslStrip != null) localStorage.setItem('zeus_dsl_strip_open', pd.dslStrip);
+          if (pd.atStrip != null) localStorage.setItem('zeus_at_strip_open', pd.atStrip);
+          if (pd.ptStrip != null) localStorage.setItem('zeus_pt_strip_open', pd.ptStrip);
+          if (pd.mtfOpen != null) localStorage.setItem('zeus_mtf_open', pd.mtfOpen);
+          if (pd.dslMode != null) localStorage.setItem('zeus_dsl_mode', pd.dslMode);
+          if (pd.adaptStrip != null) localStorage.setItem('zeus_adaptive_strip_open', pd.adaptStrip);
+          _ucDirtyTs.panels = sec.panels.ts; _dirty = true;
+          console.log('[UC] \u2705 panels merged from server');
+        }
+      }
+
+      // ── indSettings section (indicator parameters) ──
+      if (sec.indSettings && sec.indSettings.data) {
+        if (sec.indSettings.ts > (_ucDirtyTs.indSettings || 0)) {
+          localStorage.setItem('zeus_ind_settings', JSON.stringify(sec.indSettings.data));
+          _ucDirtyTs.indSettings = sec.indSettings.ts; _dirty = true;
+          if (typeof _indSettingsLoad === 'function') _indSettingsLoad();
+          if (typeof renderChart === 'function') renderChart();
+          console.log('[UC] \u2705 indSettings merged from server');
+        }
+      }
+
+      // ── llvSettings section (liquidation levels) ──
+      if (sec.llvSettings && sec.llvSettings.data) {
+        if (sec.llvSettings.ts > (_ucDirtyTs.llvSettings || 0)) {
+          localStorage.setItem('zeus_llv_settings', JSON.stringify(sec.llvSettings.data));
+          _ucDirtyTs.llvSettings = sec.llvSettings.ts; _dirty = true;
+          console.log('[UC] \u2705 llvSettings merged from server');
+        }
+      }
+
+      // ── uiScale section ──
+      if (sec.uiScale && sec.uiScale.data != null) {
+        if (sec.uiScale.ts > (_ucDirtyTs.uiScale || 0)) {
+          localStorage.setItem('zeus_ui_scale', sec.uiScale.data);
+          _ucDirtyTs.uiScale = sec.uiScale.ts; _dirty = true;
+          document.documentElement.style.fontSize = sec.uiScale.data + 'px';
+          console.log('[UC] \u2705 uiScale merged from server');
+        }
+      }
+
+      // ── Extended sections pull — use _ucDirtyTs for comparison + hot-reload ──
+      var _restoreJSON = function (sectionName, lsKey, reloadFn) {
+        if (sec[sectionName] && sec[sectionName].data != null) {
+          var localDirty = _ucDirtyTs[sectionName] || 0;
+          if (sec[sectionName].ts > localDirty) {
+            localStorage.setItem(lsKey, JSON.stringify(sec[sectionName].data));
+            _ucDirtyTs[sectionName] = sec[sectionName].ts; _dirty = true;
+            if (reloadFn) reloadFn();
+            console.log('[UC] \u2705 ' + sectionName + ' merged from server');
+          }
+        }
+      };
+      _restoreJSON('signalRegistry', 'zeus_signal_registry', function () { if (typeof _srLoad === 'function') _srLoad(); });
+      _restoreJSON('perfStats', 'zeus_perf_v1', function () { if (typeof loadPerfFromStorage === 'function') loadPerfFromStorage(); });
+      _restoreJSON('dailyPnl', 'zeus_daily_pnl_v1', function () { if (typeof loadDailyPnl === 'function') loadDailyPnl(); });
+      _restoreJSON('postmortem', 'zeus_postmortem_v1', null);
+      _restoreJSON('adaptive', 'zeus_adaptive_v1', function () { if (typeof _adaptLoad === 'function') _adaptLoad(); });
+      _restoreJSON('notifications', 'zeus_notifications', function () { if (typeof _ncLoad === 'function') { _ncLoad(); if (typeof _ncRenderList === 'function') _ncRenderList(); if (typeof _ncUpdateBadge === 'function') _ncUpdateBadge(); } });
+      _restoreJSON('scannerSyms', 'zeus_mscan_syms', null);
+      _restoreJSON('midstackOrder', 'zt_midstack_order', null);
+      // AUB compound section
+      if (sec.aubData && sec.aubData.data) {
+        var aubLocalDirty = _ucDirtyTs['aubData'] || 0;
+        if (sec.aubData.ts > aubLocalDirty) {
+          var ad = sec.aubData.data;
+          if (ad.bb != null) localStorage.setItem('aub_bb', JSON.stringify(ad.bb));
+          if (ad.macro != null) localStorage.setItem('aub_macro', JSON.stringify(ad.macro));
+          if (ad.sim != null) localStorage.setItem('aub_sim_last', JSON.stringify(ad.sim));
+          if (ad.expanded != null) localStorage.setItem('aub_expanded', ad.expanded);
+          _ucDirtyTs['aubData'] = sec.aubData.ts; _dirty = true;
+          console.log('[UC] \u2705 aubData merged from server');
+        }
+      }
+      // Orderflow HUD compound section
+      if (sec.ofHud && sec.ofHud.data) {
+        var ofLocalDirty = _ucDirtyTs['ofHud'] || 0;
+        if (sec.ofHud.ts > ofLocalDirty) {
+          var od = sec.ofHud.data;
+          if (od.v2 != null) localStorage.setItem('of_hud_v2', od.v2);
+          if (od.pos != null) localStorage.setItem('of_hud_pos_v1', od.pos);
+          if (od.anchor != null) localStorage.setItem('of_hud_anchor_x_v1', od.anchor);
+          _ucDirtyTs['ofHud'] = sec.ofHud.ts; _dirty = true;
+          console.log('[UC] \u2705 ofHud merged from server');
+        }
+      }
+      // Teacher compound section
+      if (sec.teacherData && sec.teacherData.data) {
+        var tLocalDirty = _ucDirtyTs['teacherData'] || 0;
+        if (sec.teacherData.ts > tLocalDirty) {
+          var td = sec.teacherData.data;
+          if (td.config != null) localStorage.setItem('zeus_teacher_config', JSON.stringify(td.config));
+          if (td.sessions != null) localStorage.setItem('zeus_teacher_sessions', JSON.stringify(td.sessions));
+          if (td.lessons != null) localStorage.setItem('zeus_teacher_lessons', JSON.stringify(td.lessons));
+          if (td.stats != null) localStorage.setItem('zeus_teacher_stats', JSON.stringify(td.stats));
+          if (td.memory != null) localStorage.setItem('zeus_teacher_memory', JSON.stringify(td.memory));
+          if (td.v2state != null) localStorage.setItem('zeus_teacher_v2state', JSON.stringify(td.v2state));
+          if (td.panelOpen != null) localStorage.setItem('zeus_teacher_panel_open', td.panelOpen);
+          _ucDirtyTs['teacherData'] = sec.teacherData.ts; _dirty = true;
+          if (typeof teacherLoadAllPersistent === 'function') teacherLoadAllPersistent();
+          console.log('[UC] \u2705 teacherData merged from server');
+        }
+      }
+      // ARIA/NOVA HUD
+      if (sec.ariaNovaHud && sec.ariaNovaHud.data) {
+        var anLocalDirty = _ucDirtyTs['ariaNovaHud'] || 0;
+        if (sec.ariaNovaHud.ts > anLocalDirty) {
+          var an = sec.ariaNovaHud.data;
+          if (an.aria != null) localStorage.setItem('aria_v1', JSON.stringify(an.aria));
+          if (an.nova != null) localStorage.setItem('nova_v1', JSON.stringify(an.nova));
+          _ucDirtyTs['ariaNovaHud'] = sec.ariaNovaHud.ts; _dirty = true;
+          console.log('[UC] \u2705 ariaNovaHud merged from server');
+        }
+      }
+      // ARES data (simulation engine — wallet, positions, state, journal)
+      if (sec.aresData && sec.aresData.data) {
+        var arLocalDirty = _ucDirtyTs['aresData'] || 0;
+        if (sec.aresData.ts > arLocalDirty) {
+          var ad = sec.aresData.data;
+          if (ad.wallet != null) localStorage.setItem('ARES_MISSION_STATE_V1_vw2', JSON.stringify(ad.wallet));
+          if (ad.positions != null) localStorage.setItem('ARES_POSITIONS_V1', JSON.stringify(ad.positions));
+          if (ad.state != null) localStorage.setItem('ARES_STATE_V1', JSON.stringify(ad.state));
+          if (ad.init != null) localStorage.setItem('ares_init_v1', JSON.stringify(ad.init));
+          if (ad.lastTradeTs != null) localStorage.setItem('ARES_LAST_TRADE_TS', ad.lastTradeTs);
+          if (ad.journal != null) localStorage.setItem('ARES_JOURNAL_V1', JSON.stringify(ad.journal));
+          _ucDirtyTs['aresData'] = sec.aresData.ts; _dirty = true;
+          console.log('[UC] \u2705 aresData merged from server');
+        }
+      }
+      // Persist dirty-ts changes from this pull cycle
+      if (_dirty) { try { localStorage.setItem('zeus_uc_dirty_ts', JSON.stringify(_ucDirtyTs)); } catch (_) { } }
+    })
+    .catch(function (e) { _ucPulling = false; console.warn('[UC] pull err:', e.message); });
 }
 
 // ── CSS inline ───────────────────────────────────────────────────
@@ -531,35 +879,40 @@ function srStripUpdateBar() {
   style.textContent = `
   #sr-sec { font-family: var(--ff); }
   /* ── SR Strip banner colapsibil ── */
-  #sr-strip { background:#020810; border-bottom:1px solid #00d9ff18; position:relative; overflow:hidden; }
-  #sr-strip-bar { display:flex; align-items:center; justify-content:space-between; padding:0 10px; height:30px; cursor:pointer; user-select:none; gap:8px; }
-  #sr-strip-bar:hover { background:#00d9ff06; }
-  #sr-strip-title { font-size:13px; font-weight:700; letter-spacing:2px; color:#00d9ff; text-shadow:0 0 12px #00d9ff99, 0 0 24px #00d9ff44; display:flex; align-items:center; gap:5px; }
+  #sr-strip { background:transparent; border-bottom:none; margin:3px 6px; position:relative; }
+  #sr-strip-bar { display:flex; align-items:center; justify-content:space-between; padding:0; min-height:44px; cursor:pointer; user-select:none; gap:0; transition:border-color .25s,box-shadow .25s; color:#00d9ff77; background:none; border:none; border-radius:10px; opacity:1; position:relative; overflow:hidden; }
+  #sr-strip-bar:hover { }
+  #sr-strip-title { font-size:13px; font-weight:700; letter-spacing:2px; color:#00d9ff; display:flex; align-items:center; gap:5px; }
   #sr-strip-info { display:flex; align-items:center; gap:8px; }
-  .sr-strip-stat { font-size:11px; color:#00d9ff66; letter-spacing:0.5px; }
+  .sr-strip-stat { font-size:11px; color:#00d9ff66; letter-spacing:0.5px; padding:2px 6px; border-radius:999px; background:#00d9ff11; border:1px solid #00d9ff22; }
   .sr-strip-stat b { color:#00d9ff; }
   .sr-strip-wr-good { color:#00ff88 !important; }
   .sr-strip-wr-bad  { color:#ff3355 !important; }
-  .sr-strip-chev { font-size:13px; color:#00d9ff44; transition:transform .25s; margin-left:2px; }
+  .sr-strip-chev { font-size:8px; color:#00d9ff44; transition:transform .25s; margin-left:2px; flex-shrink:0; opacity:.35; }
   #sr-strip.sr-strip-open .sr-strip-chev { transform:rotate(180deg); }
-  #sr-strip-panel { display:none; }
+  #sr-strip.sr-strip-open #sr-strip-bar { opacity:1; }
+  #sr-strip-info { display:none; }
+  #sr-strip.sr-strip-open #sr-strip-info { display:flex; }
+  #sr-strip-panel { display:none; border-top:1px solid #00d9ff12; }
   #sr-strip.sr-strip-open #sr-strip-panel { display:block; }
 
   /* ── MTF Structural Model Panel (Etapa 1) ───────────────────── */
-  #mtf-strip { background:#020810; border-bottom:1px solid #00d9ff18; }
-  #mtf-strip-bar { display:flex; align-items:center; gap:6px; padding:7px 12px; cursor:pointer; min-height:32px; user-select:none; -webkit-tap-highlight-color:transparent; }
-  #mtf-strip-title { font-family:var(--ff); font-size:10px; letter-spacing:2px; color:#00d9ff; text-shadow:0 0 12px #00d9ff99,0 0 24px #00d9ff44; flex-shrink:0; }
+  #mtf-strip { background:transparent; border-bottom:none; margin:3px 6px; }
+  #mtf-strip-bar { display:flex; align-items:center; gap:0; padding:0; cursor:pointer; min-height:44px; user-select:none; -webkit-tap-highlight-color:transparent; transition:border-color .25s,box-shadow .25s; color:#00d9ff77; background:none; border:none; border-radius:10px; opacity:1; position:relative; overflow:hidden; }
+  #mtf-strip-bar:hover { }
+  #mtf-strip-title { font-family:var(--ff); font-size:13px; letter-spacing:2px; color:#00d9ff; flex-shrink:0; }
   #mtf-strip-score { font-family:var(--ff); font-size:13px; color:#00d9ff66; margin-left:auto; }
   /* info condensat pe bara MTF când e închis */
   #mtf-bar-condensed { display:flex; align-items:center; gap:6px; margin-left:6px; flex:1; overflow:hidden; }
-  .mtf-bar-pill { font-size:12px; padding:2px 6px; border-radius:2px; background:#00d9ff11; border:1px solid #00d9ff22; color:#00d9ff88; white-space:nowrap; }
+  .mtf-bar-pill { font-size:11px; padding:2px 6px; border-radius:999px; background:#00d9ff11; border:1px solid #00d9ff22; color:#00d9ff88; white-space:nowrap; }
   .mtf-bar-pill.bull { background:#00d97a11; border-color:#00d97a33; color:#00d97a; }
   .mtf-bar-pill.bear { background:#ff335511; border-color:#ff335533; color:#ff3355; }
   .mtf-bar-pill.squeeze { background:#f0c04011; border-color:#f0c04033; color:#f0c040; }
   #mtf-strip.mtf-open #mtf-bar-condensed { display:none; }
-  #mtf-strip-chev { font-size:13px; color:#00d9ff44; transition:transform .25s; margin-left:4px; }
+  #mtf-strip-chev { font-size:8px; color:#00d9ff44; transition:transform .25s; margin-left:2px; flex-shrink:0; opacity:.35; }
   #mtf-strip.mtf-open #mtf-strip-chev { transform:rotate(180deg); }
-  #mtf-strip-panel { display:none; padding:8px 12px 10px; }
+  #mtf-strip.mtf-open #mtf-strip-bar { opacity:1; }
+  #mtf-strip-panel { display:none; padding:8px 12px 10px; border-top:1px solid #00d9ff12; border-radius:0 0 10px 10px; margin:2px 8px 0; }
   #mtf-strip.mtf-open #mtf-strip-panel { display:block; }
   .mtf-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; font-family:var(--ff); font-size:13px; }
   .mtf-lbl { color:#00d9ff44; letter-spacing:1px; width:82px; flex-shrink:0; }
@@ -830,7 +1183,7 @@ function renderMTFPanel() {
     // Squeeze
     const sqEl = _el('mtf-squeeze');
     if (sqEl) {
-      sqEl.textContent = st.squeeze ? '⚡ ACTIV' : 'OFF';
+      sqEl.innerHTML = st.squeeze ? _ZI.bolt + ' ACTIV' : 'OFF';
       _cls(sqEl, st.squeeze ? 'warn' : '');
     }
 
@@ -1227,6 +1580,8 @@ const USER_SETTINGS = {
   alerts: null,         // sync cu S.alerts
   profile: 'fast',      // S.profile — fast/swing/defensive
   bmMode: null,         // BM.mode
+  // [B2] runMode REMOVED — AT.enabled is sole command
+  assistArmed: false,   // S.assistArmed — DSL arm state
   autoTrade: {
     lev: 5,
     sl: 1.5,
@@ -1247,9 +1602,66 @@ function _usScheduleSave() {
   if (_usSettingsTimer) clearTimeout(_usSettingsTimer);
   _usSettingsTimer = setTimeout(_usSave, 800);
 }
+// Flush pending saves immediately (called on beforeunload / visibilitychange)
+function _usFlush() {
+  if (_usSettingsTimer) { clearTimeout(_usSettingsTimer); _usSettingsTimer = null; _usSave(); }
+  // Execute the server push instead of just canceling it
+  if (_ucPushTimer) { clearTimeout(_ucPushTimer); _ucPushTimer = null; _ucPushBeacon(); }
+}
+// Reliable sync push via sendBeacon (works during beforeunload)
+// [C6] Saves payload to LS before sending — on next boot, verifies delivery
+var _UC_BEACON_PENDING_KEY = 'zeus_uc_beacon_pending';
+function _ucPushBeacon() {
+  try {
+    var payload = JSON.stringify({
+      _v: _ucVersion,
+      ts: Date.now(),
+      sections: _buildAllSections()
+    });
+    // [C6] Save to LS before sending — if beacon fails (offline), next boot will re-push
+    try { localStorage.setItem(_UC_BEACON_PENDING_KEY, payload); } catch (_) { }
+    if (navigator.sendBeacon) {
+      var sent = navigator.sendBeacon('/api/sync/user-context', new Blob([payload], { type: 'application/json' }));
+      if (sent) {
+        try { localStorage.removeItem(_UC_BEACON_PENDING_KEY); } catch (_) { }
+        console.log('[UC] beacon pushed (all sections)');
+      } else {
+        console.warn('[UC] sendBeacon returned false — payload saved in LS for retry');
+      }
+    } else {
+      // fallback: fire-and-forget fetch
+      fetch('/api/sync/user-context', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: payload, credentials: 'same-origin', keepalive: true })
+        .then(function () { try { localStorage.removeItem(_UC_BEACON_PENDING_KEY); } catch (_) { } })
+        .catch(function () { /* LS pending will be retried on next boot */ });
+    }
+  } catch (_) { }
+}
+// [C6] On boot, check for unsent beacon payload and re-push
+function _ucRetryPendingBeacon() {
+  try {
+    var pending = localStorage.getItem(_UC_BEACON_PENDING_KEY);
+    if (!pending) return;
+    var parsed = JSON.parse(pending);
+    // Only retry if payload is < 5 min old (avoid pushing ancient state)
+    if (parsed.ts && (Date.now() - parsed.ts) > 300000) {
+      localStorage.removeItem(_UC_BEACON_PENDING_KEY);
+      console.log('[UC] Discarded stale pending beacon (>5min old)');
+      return;
+    }
+    console.log('[UC] Retrying unsent beacon from previous session...');
+    fetch('/api/sync/user-context', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: pending, credentials: 'same-origin' })
+      .then(function (r) { if (r.ok) { localStorage.removeItem(_UC_BEACON_PENDING_KEY); console.log('[UC] Pending beacon re-sent successfully'); } })
+      .catch(function () { console.warn('[UC] Pending beacon retry failed — will retry next boot'); });
+  } catch (_) { localStorage.removeItem(_UC_BEACON_PENDING_KEY); }
+}
+window._usFlush = _usFlush;
+
+// Guard: skip saves before _usApply() has run (prevents baking HTML defaults)
+let _usApplyDone = false;
 
 // ── Colectează valorile curente şi scrie în localStorage ─────────
 function _usSave() {
+  if (!_usApplyDone) { console.log('[US] skip save — _usApply not yet run'); return; }
   try {
     // Chart
     USER_SETTINGS.chart.tf = S.chartTf || '5m';
@@ -1277,6 +1689,8 @@ function _usSave() {
     // Profile + BM mode
     USER_SETTINGS.profile = S.profile || 'fast';
     USER_SETTINGS.bmMode = (typeof BM !== 'undefined' ? BM.mode : null) || null;
+    // [B2] runMode REMOVED — AT.enabled is sole command
+    USER_SETTINGS.assistArmed = !!S.assistArmed;
 
     // Auto-trade — citeşte direct din DOM (valorile live)
     const _iv = (id, def) => {
@@ -1290,21 +1704,33 @@ function _usSave() {
       size: _iv('atSize', 200),
       maxPos: parseInt(document.getElementById('atMaxPos')?.value) || 4,
       killPct: _iv('atKillPct', 5),
+      riskPct: _iv('atRiskPct', 1),
+      maxDay: parseInt(document.getElementById('atMaxDay')?.value) || 5,
+      lossStreak: parseInt(document.getElementById('atLossStreak')?.value) || 3,
+      maxAddon: parseInt(document.getElementById('atMaxAddon')?.value) || 2,
       confMin: _iv('atConfMin', 65),
       sigMin: parseInt(document.getElementById('atSigMin')?.value) || 3,
       multiSym: document.getElementById('atMultiSym')?.checked !== false,
+      smartExitEnabled: document.getElementById('atSmartExit')?.checked === true,
+      adaptEnabled: (typeof BM !== 'undefined' && BM.adapt) ? !!BM.adapt.enabled : false,
+      adaptLive: (typeof BM !== 'undefined' && BM.adapt) ? !!BM.adapt.allowLiveAdjust : false,
     };
 
+    USER_SETTINGS._syncTs = Date.now();
     localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS));
-    console.log('[US] ✅ Settings saved');
+    _ucMarkDirty('settings');
+    console.log('[US] Settings saved');
+    // Cross-device push — piggyback on existing save trigger
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   } catch (e) {
-    console.warn('[US] ❌ Save failed:', e.message);
+    console.warn('[US] Save failed:', e.message);
   }
 }
 
 // ── Aplică setările restaurate în DOM şi în stările globale ──────
 function _usApply() {
   try {
+    _usApplyDone = true; // allow saves from this point
     // Chart TF — apelăm funcţia existentă fără efecte secundare
     if (USER_SETTINGS.chart.tf && USER_SETTINGS.chart.tf !== S.chartTf) {
       S.chartTf = USER_SETTINGS.chart.tf;  // setat direct; setTF() se apelează mai târziu în boot
@@ -1349,10 +1775,10 @@ function _usApply() {
       }
     }
 
-    // Indicators
+    // Indicators — sync BOTH dicts so renderChart() and _indRenderHook() agree
     if (USER_SETTINGS.indicators) {
       Object.assign(S.activeInds, USER_SETTINGS.indicators);
-      // Vizibilitatea se va aplica în initActBar(), după ce seriile sunt create
+      Object.assign(S.indicators, USER_SETTINGS.indicators);
     }
 
     // Profile — setăm S.profile și activăm butonul corect
@@ -1372,18 +1798,34 @@ function _usApply() {
       Object.assign(S.alerts, USER_SETTINGS.alerts);
     }
 
+    // [B2] runMode REMOVED — AT.enabled is sole command
+    // DSL Assist Armed
+    if (USER_SETTINGS.assistArmed) {
+      S.assistArmed = true;
+      if (typeof ARM_ASSIST !== 'undefined') { ARM_ASSIST.armed = true; ARM_ASSIST.ts = Date.now(); }
+    }
+
     // Auto-trade inputs — setăm valorile în DOM
     const _setInp = (id, val) => {
       const el = document.getElementById(id);
       if (el) el.value = val;
     };
     const at = USER_SETTINGS.autoTrade;
+    // AT.enabled/mode now synced exclusively via ZState (single source of truth)
+    if (typeof AT !== 'undefined') {
+      var _atModeEl = document.getElementById('atMode');
+      if (_atModeEl && AT.mode) _atModeEl.value = AT.mode;
+    }
     _setInp('atLev', at.lev);
     _setInp('atSL', at.sl);
     _setInp('atRR', at.rr);
     _setInp('atSize', at.size);
     _setInp('atMaxPos', at.maxPos);
     _setInp('atKillPct', at.killPct);
+    if (at.riskPct) _setInp('atRiskPct', at.riskPct);
+    if (at.maxDay) _setInp('atMaxDay', at.maxDay);
+    if (at.lossStreak) _setInp('atLossStreak', at.lossStreak);
+    if (at.maxAddon !== undefined) _setInp('atMaxAddon', at.maxAddon);
     _setInp('atConfMin', at.confMin);
     // [FIX v85.1 F2] Sync BM.confMin la restaurare settings
     if (typeof BM !== 'undefined' && at.confMin) BM.confMin = parseFloat(at.confMin) || 65;
@@ -1399,10 +1841,42 @@ function _usApply() {
       }
     }
 
-    console.log('[US] ✅ Settings applied');
+    // Restore 3 advanced toggles
+    if (typeof BM !== 'undefined' && BM.adapt) {
+      if (at.adaptEnabled !== undefined) BM.adapt.enabled = !!at.adaptEnabled;
+      if (at.adaptLive !== undefined) BM.adapt.allowLiveAdjust = !!at.adaptLive;
+    }
+    const _atAdaptEl = document.getElementById('atAdaptEnabled');
+    if (_atAdaptEl) _atAdaptEl.checked = BM.adapt && BM.adapt.enabled === true;
+    const _atAdaptLiveEl = document.getElementById('atAdaptLive');
+    if (_atAdaptLiveEl) _atAdaptLiveEl.checked = BM.adapt && BM.adapt.allowLiveAdjust === true;
+    const _atSmartExitEl = document.getElementById('atSmartExit');
+    if (_atSmartExitEl) _atSmartExitEl.checked = at.smartExitEnabled === true;
+
+    console.log('[US] Settings applied');
   } catch (e) {
-    console.warn('[US] ❌ Apply failed:', e.message);
+    console.warn('[US] Apply failed:', e.message);
   }
+}
+
+// ── Settings migration registry ──────────────────────────────────
+// Fiecare funcţie primeşte obiectul parsed şi îl transformă in-place.
+// Convenţie: migraţia N actualizează de la versiunea N-1 → N.
+const _SETTINGS_MIGRATIONS = {
+  // 2: function(s) { /* exemplu: s.chart.newField = s.chart.oldField; delete s.chart.oldField; */ },
+};
+const _CURRENT_SETTINGS_VERSION = 1;
+
+function _migrateSettings(parsed) {
+  let v = parsed._version || 0;
+  while (v < _CURRENT_SETTINGS_VERSION) {
+    v++;
+    if (_SETTINGS_MIGRATIONS[v]) {
+      try { _SETTINGS_MIGRATIONS[v](parsed); console.log('[US] migrated →', v); }
+      catch (e) { console.warn('[US] migration', v, 'failed:', e.message); break; }
+    }
+  }
+  parsed._version = _CURRENT_SETTINGS_VERSION;
 }
 
 // ── Încarcă setările din localStorage şi le aplică ───────────────
@@ -1411,6 +1885,12 @@ function loadUserSettings() {
     const raw = localStorage.getItem('zeus_user_settings');
     if (!raw) return;
     const parsed = JSON.parse(raw);
+    // Aplică migraţii dacă versiunea e mai veche
+    if ((parsed._version || 0) < _CURRENT_SETTINGS_VERSION) {
+      _migrateSettings(parsed);
+      localStorage.setItem('zeus_user_settings', JSON.stringify(parsed));
+      console.log('[US] settings migrated & saved');
+    }
     // Merge recursiv superficial (nu suprascrie chei lipsă)
     if (parsed.chart) Object.assign(USER_SETTINGS.chart, parsed.chart);
     if (parsed.indicators) USER_SETTINGS.indicators = parsed.indicators;
@@ -1418,10 +1898,12 @@ function loadUserSettings() {
     if (parsed.autoTrade) Object.assign(USER_SETTINGS.autoTrade, parsed.autoTrade);
     if (parsed.profile) USER_SETTINGS.profile = parsed.profile;
     if (parsed.bmMode) USER_SETTINGS.bmMode = parsed.bmMode;
+    // [B2] runMode REMOVED — AT.enabled is sole command
+    if (typeof parsed.assistArmed === 'boolean') USER_SETTINGS.assistArmed = parsed.assistArmed;
     _usApply();
-    console.log('[US] ✅ Settings loaded from localStorage');
+    console.log('[US] Settings loaded from localStorage');
   } catch (e) {
-    console.warn('[US] ❌ Load failed:', e.message);
+    console.warn('[US] Load failed:', e.message);
   }
 }
 
@@ -1431,15 +1913,15 @@ let oviSeries = [];   // all LightweightCharts series for pockets
 let oviPriceSeries = []; // price label series
 const BT = { running: false, results: null };
 const BT_INDICATORS = [
-  { id: 'rsi_ob', name: 'RSI >70 (OB)', ico: '⚡', color: '#f5c842' },
-  { id: 'rsi_os', name: 'RSI <30 (OS)', ico: '⚡', color: '#f5c842' },
-  { id: 'macd_cross', name: 'MACD Cross ↑', ico: '📊', color: '#00e5ff' },
-  { id: 'macd_under', name: 'MACD Cross ↓', ico: '📊', color: '#00e5ff' },
-  { id: 'st_bull', name: 'SuperTrend ↑', ico: '🔶', color: '#ff8800' },
-  { id: 'st_bear', name: 'SuperTrend ↓', ico: '🔶', color: '#ff8800' },
-  { id: 'ema_cross', name: 'EMA50>EMA200', ico: '📈', color: '#f0c040' },
-  { id: 'vol_spike', name: 'Volume Spike', ico: '📊', color: '#00b8d4' },
-  { id: 'confluence_bull', name: 'Confluence ≥65', ico: '🎯', color: '#aa44ff' },
+  { id: 'rsi_ob', name: 'RSI >70 (OB)', ico: _ZI.bolt, color: '#f5c842' },
+  { id: 'rsi_os', name: 'RSI <30 (OS)', ico: _ZI.bolt, color: '#f5c842' },
+  { id: 'macd_cross', name: 'MACD Cross ↑', ico: _ZI.chart, color: '#00e5ff' },
+  { id: 'macd_under', name: 'MACD Cross ↓', ico: _ZI.chart, color: '#00e5ff' },
+  { id: 'st_bull', name: 'SuperTrend ↑', ico: _ZI.dia, color: '#ff8800' },
+  { id: 'st_bear', name: 'SuperTrend ↓', ico: _ZI.dia, color: '#ff8800' },
+  { id: 'ema_cross', name: 'EMA50>EMA200', ico: _ZI.tup, color: '#f0c040' },
+  { id: 'vol_spike', name: 'Volume Spike', ico: _ZI.chart, color: '#00b8d4' },
+  { id: 'confluence_bull', name: 'Confluence ≥65', ico: _ZI.tgt, color: '#aa44ff' },
 ];
 const DSL = {
   enabled: true,
@@ -1514,9 +1996,9 @@ const SESSION_HOURS_BT = {
 };
 let _sessLastBt = { ts: 0 };
 const SESS_CFG = {
-  asia: { label: '🌏 ASIA', col: '#f0c040', h: { start: 0, end: 8 } },
-  london: { label: '🇬🇧 LON', col: '#4488ff', h: { start: 8, end: 13 } },
-  ny: { label: '🗽 NY', col: '#00ff88', h: { start: 13, end: 21 } }
+  asia: { label: 'ASIA', col: '#f0c040', h: { start: 0, end: 8 } },
+  london: { label: 'LON', col: '#4488ff', h: { start: 8, end: 13 } },
+  ny: { label: 'NY', col: '#00ff88', h: { start: 13, end: 21 } }
 };
 
 // Brain & BM state
@@ -1537,14 +2019,14 @@ const BM = {
   // [FIX v85.1 F2+F3] Sursă unică de adevăr — nu mai citim din DOM
   confluenceScore: 50, // scris de calcConfluenceScore(), citit de toți
   confMin: 65,         // scris când UI se schimbă, citit de toți
-  runMode: false,
+  // [B2] runMode REMOVED — AT.enabled is sole command
   applyToOpen: false,
   protectMode: false,
   protectReason: '',
   dailyTrades: 0,
   dailyPnL: 0,
   lossStreak: 0,
-  addonCount: 0,
+  // addonCount removed — per-position pos.addOnCount is authoritative [RISK RAILS]
   newsRisk: 'low',     // 'low' | 'med' | 'high'
   gates: {},
   entryScore: 0,
@@ -1641,6 +2123,12 @@ const BM = {
     magnetBias: '—',      // 'above' | 'below' | 'neut'
     lastUpdate: 0,
   },
+  // ── Adaptive Shield — Market Danger Score (0-100) ────────────
+  danger: 0,
+  dangerBreakdown: { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 },
+  // ── Conviction Score (0-100) ──────────────────────────────────
+  conviction: 0,
+  convictionMult: 1.0,  // sizing multiplier derived from conviction+danger
   // ── CoreTick Scheduler State (Etapa 2 v89) ───────────────────
   core: {
     lastLiqTs: 0,    // timestamp ultima rulare updateLiqCycle

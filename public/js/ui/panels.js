@@ -2,48 +2,14 @@
 // Panel toggles, strip UI, eye panel
 'use strict';
 
-// Eye panel (indicator visibility)
-function openEyePanel() {
-  const ov = el('eyeOverlay'); const pan = el('eyePanel'); const body = el('eyePanelBody');
-  if (!ov || !pan || !body) return;
-  body.innerHTML = '';
-  INDICATORS.forEach(ind => {
-    const on = S.activeInds[ind.id] !== false;
-    const row = document.createElement('div');
-    row.className = 'eye-row';
-    row.innerHTML = `
-      <div class="eye-row-info">
-        <div class="eye-row-color" style="background:${getIndColor(ind.id)}"></div>
-        <span class="eye-row-name">${ind.ico} ${ind.name}</span>
-      </div>
-      <div class="eye-actions">
-        <button class="eye-vis ${on ? '' : 'hidden'}" onclick="eyeToggle('${ind.id}',this)" title="${on ? 'Hide' : 'Show'}">
-          ${on ? '👁️' : '🚫'}
-        </button>
-      </div>`;
-    body.appendChild(row);
-  });
-  ov.classList.add('open'); pan.classList.add('open');
-}
-function closeEyePanel() {
-  el('eyeOverlay')?.classList.remove('open');
-  el('eyePanel')?.classList.remove('open');
-}
-function eyeToggle(id, btn) {
-  S.activeInds[id] = S.activeInds[id] === false ? true : false;
-  S.indicators[id] = S.activeInds[id]; // [FIX BUG1] sync both dicts
-  const visible = S.activeInds[id] !== false;
-  btn.className = 'eye-vis' + (visible ? '' : ' hidden');
-  btn.innerHTML = visible ? '👁️' : '🚫';
-  applyIndVisibility(id, visible);
-  if (visible && typeof renderChart === 'function') renderChart();
-  renderActBar();
-  toast((visible ? '👁️ ' : ' 🚫 ') + INDICATORS.find(i => i.id === id)?.name + (visible ? ' visible' : ' ascuns'));
-}
+// [REMOVED] Eye panel — indicator control is now unified in "Select Indicator" panel
+function openEyePanel() { /* removed — use openIndPanel() */ }
+function closeEyePanel() { /* removed */ }
+function eyeToggle() { /* removed */ }
 
 
 // Magnets
-// 🧲 LIQUIDITY MAGNET SCANNER
+// LIQUIDITY MAGNET SCANNER
 // Sources: Order Book Walls + Liq Clusters + OI Levels + S/R
 // ===================================================================
 S.magnets = { above: [], below: [], lastScan: 0 };
@@ -68,7 +34,7 @@ async function scanLiquidityMagnets() {
         magnets.push({
           price: a.p, type: 'ob_wall', direction: 'above',
           strength: Math.min(100, Math.round(a.q / avgQ * 20)),
-          usd, label: `🐋 Perete ASK $${fmt(usd)}`,
+          usd, label: `Perete ASK $${fmt(usd)}`,
           source: 'Order Book', qty: a.q.toFixed(2)
         });
       }
@@ -79,7 +45,7 @@ async function scanLiquidityMagnets() {
         magnets.push({
           price: b.p, type: 'ob_wall', direction: 'below',
           strength: Math.min(100, Math.round(b.q / avgQ * 20)),
-          usd, label: `🐋 Perete BID $${fmt(usd)}`,
+          usd, label: `Perete BID $${fmt(usd)}`,
           source: 'Order Book', qty: b.q.toFixed(2)
         });
       }
@@ -97,7 +63,7 @@ async function scanLiquidityMagnets() {
       magnets.push({
         price: c.price, type: 'liq_cluster', direction: dir,
         strength, usd: c.vol,
-        label: `💥 Cluster LIQ $${fmt(c.vol)} ${c.isLong ? 'LONG' : 'SHORT'}`,
+        label: `Cluster LIQ $${fmt(c.vol)} ${c.isLong ? 'LONG' : 'SHORT'}`,
         source: 'Liq Clusters', qty: null
       });
     });
@@ -119,7 +85,7 @@ async function scanLiquidityMagnets() {
         price: level, type: 'vol_node', direction: dir,
         strength,
         usd: k.volume * level,
-        label: `📊 Nod Volum Mare (${(k.volume / 1000).toFixed(1)}K)`,
+        label: `Nod Volum Mare (${(k.volume / 1000).toFixed(1)}K)`,
         source: 'Volume', qty: null
       });
     });
@@ -136,14 +102,14 @@ async function scanLiquidityMagnets() {
         price: above, type: 'atr_level', direction: 'above',
         strength: isGolden ? 70 : 50,
         usd: 0,
-        label: `📐 ATR×${mult} ${isGolden ? '(Golden)' : ''}`,
+        label: `ATR×${mult} ${isGolden ? '(Golden)' : ''}`,
         source: 'ATR', qty: null
       });
       magnets.push({
         price: below, type: 'atr_level', direction: 'below',
         strength: isGolden ? 70 : 50,
         usd: 0,
-        label: `📐 ATR×${mult} ${isGolden ? '(Golden)' : ''}`,
+        label: `ATR×${mult} ${isGolden ? '(Golden)' : ''}`,
         source: 'ATR', qty: null
       });
     });
@@ -222,10 +188,10 @@ function renderMagnets() {
     const scoreA = nearAbove.strength / (distA + 0.1);
     const scoreB = nearBelow.strength / (distB + 0.1);
     let biasDir, biasClass, biasLabel;
-    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = '🟢 BULL — Magnet jos atrage'; }
-    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = '🔴 BEAR — Magnet sus atrage'; }
-    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = '⚡ NEUTRU'; }
-    biasEl.textContent = biasLabel;
+    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = _ZI.dGrn + ' BULL — Magnet jos atrage'; }
+    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = _ZI.dRed + ' BEAR — Magnet sus atrage'; }
+    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = _ZI.bolt + ' NEUTRU'; }
+    biasEl.innerHTML = biasLabel;
     biasEl.className = 'mag-bias ' + biasClass;
     S.magnets.bias = biasDir;
   }
@@ -243,7 +209,7 @@ function renderMagnets() {
       const srcTag = m.sources ? (m.sources.join(' + ')) : m.source;
       return `<div class="mag-level ${cls}" onclick="jumpToMagnet(${m.price})">
         <div class="mag-bar-fill" style="width:${m.strength}%"></div>
-        <div class="mag-icon">${m.type === 'ob_wall' ? '🐋' : m.type === 'liq_cluster' ? '💥' : m.type === 'vol_node' ? '📊' : '📐'}</div>
+        <div class="mag-icon">${m.type === 'ob_wall' ? _ZI.whale : m.type === 'liq_cluster' ? _ZI.boom : m.type === 'vol_node' ? _ZI.chart : _ZI.ruler}</div>
         <div class="mag-info">
           <div class="mag-price">$${fP(m.price)}</div>
           <div class="mag-desc">${srcTag} ${m.usd > 0 ? '· $' + fmt(m.usd) : ''}</div>
@@ -265,13 +231,13 @@ function updateMagnetBias() {
 
 function jumpToMagnet(price) {
   // Flash a toast with the price level
-  toast(`🎯 Magnet: $${fP(price)} | Dist: ${((Math.abs(price - S.price) / S.price) * 100).toFixed(2)}%`);
+  toast(`Magnet: $${fP(price)} | Dist: ${((Math.abs(price - S.price) / S.price) * 100).toFixed(2)}%`);
 }
 
 
 // Backtest results render
 // ===================================================================
-// 📈 BACKTEST ENGINE
+// BACKTEST ENGINE
 // Tests each indicator on historical kline data
 // ===================================================================
 // [MOVED TO TOP] BT
@@ -555,9 +521,9 @@ function renderBacktestResults(results, equityCurve, fwdBars, lookback, minMoveP
   const bestRow = rows[0];
   if (bestRow && el('btDetailNote')) {
     el('btDetailNote').innerHTML = `
-      ✅ <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> — cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
-      💡 Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> — combina toti indicatorii pentru precizie maxima.<br>
-      ⚠️ Backtestul e pe date istorice — performanta trecuta nu garanteaza rezultate viitoare.
+      ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> — cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
+      ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> — combina toti indicatorii pentru precizie maxima.<br>
+      ${_ZI.w} Backtestul e pe date istorice — performanta trecuta nu garanteaza rezultate viitoare.
     `;
   }
 }
@@ -567,7 +533,7 @@ function renderBacktestResults(results, equityCurve, fwdBars, lookback, minMoveP
 // ===================================================================
 
 // ===================================================================
-// 🎯 DYNAMIC SL BRAIN — TRAILING STOP ENGINE
+// DYNAMIC SL BRAIN — TRAILING STOP ENGINE
 // ===================================================================
 // [MOVED TO TOP] DSL
 
@@ -973,7 +939,7 @@ function toggleOviLiquid(btn) {
   if (S.oviOn) {
     oviReadSettings();
     renderOviLiquid();
-    toast('💧 OVI LIQUID ON');
+    toast('OVI LIQUID ON', 0, _ZI.drop);
   } else {
     clearOviLiquid();
     toast('OVI LIQUID OFF');
@@ -1092,10 +1058,12 @@ function renderPnlLab() {
     body.innerHTML = html;
   } catch (err) {
     console.error('[PnL Lab] renderPnlLab error:', err);
+    var _errMsg = typeof escHtml === 'function' ? escHtml(err.message || 'Unknown error') : (err.message || 'Unknown error');
+    var _errStack = typeof escHtml === 'function' ? escHtml((err.stack || '').split('\n').slice(0, 3).join('\n')) : '';
     body.innerHTML = '<div class="pnl-lab-section" style="text-align:center;padding:16px 10px">' +
       '<div style="color:#ff4466;font-size:12px;font-weight:700">PnL Lab Error</div>' +
-      '<div style="color:#3a5068;font-size:11px;margin-top:4px">' + (err.message || 'Unknown error') + '</div>' +
-      '<div style="color:#1e2d42;font-size:9px;margin-top:4px">' + (err.stack ? err.stack.split('\n').slice(0, 3).join('<br>') : '') + '</div></div>';
+      '<div style="color:#3a5068;font-size:11px;margin-top:4px">' + _errMsg + '</div>' +
+      '<div style="color:#1e2d42;font-size:9px;margin-top:4px">' + _errStack.replace(/\n/g, '<br>') + '</div></div>';
   }
 }
 

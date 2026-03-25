@@ -4,7 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zeus Terminal — Secure Gateway</title>
+    <title>Zeus Terminal — AI Trading Analytics Platform</title>
+    <script>!function () { var _f = window.fetch; window.fetch = function (u, o) { o = o || {}; if (!o.headers) o.headers = {}; if (typeof o.headers.set === 'function') o.headers.set('X-Zeus-Request', '1'); else o.headers['X-Zeus-Request'] = '1'; return _f.call(this, u, o) } }()</script>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
+    <meta name="theme-color" content="#0a0f16">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="/assets/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">
     <style>
@@ -33,7 +40,10 @@
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
             min-height: 100vh;
             overflow-x: hidden;
-            position: relative
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center
         }
 
         /* ─── Animated Grid Background ─── */
@@ -144,41 +154,7 @@
             padding: 20px
         }
 
-        /* ─── Top Bar ─── */
-        .top-bar {
-            width: 100%;
-            max-width: 1100px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            margin-bottom: 20px;
-            opacity: 0.7
-        }
 
-        .top-bar .sys-info {
-            font-size: 10px;
-            font-family: 'Courier New', monospace;
-            color: var(--dim);
-            display: flex;
-            gap: 16px
-        }
-
-        .top-bar .sys-info span {
-            display: flex;
-            align-items: center;
-            gap: 4px
-        }
-
-        .status-dot {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--green);
-            box-shadow: 0 0 6px var(--green);
-            display: inline-block;
-            animation: blink 2s ease-in-out infinite
-        }
 
         @keyframes blink {
 
@@ -378,6 +354,10 @@
             color: #283040
         }
 
+        .code-step .form-group {
+            margin-bottom: 8px
+        }
+
         .btn {
             width: 100%;
             padding: 12px;
@@ -423,6 +403,11 @@
             transform: translateY(0)
         }
 
+        .btn-primary:focus-visible {
+            outline: 2px solid var(--cyan);
+            outline-offset: 2px
+        }
+
         .error-msg {
             background: rgba(255, 50, 50, 0.08);
             border: 1px solid rgba(255, 50, 50, 0.25);
@@ -450,6 +435,12 @@
 
         .toggle-link a:hover {
             text-decoration: underline
+        }
+
+        .toggle-link a:focus-visible {
+            outline: 2px solid var(--cyan);
+            outline-offset: 2px;
+            border-radius: 2px
         }
 
         .register-fields {
@@ -549,7 +540,12 @@
             text-decoration: underline
         }
 
-        /* ─── Admin Panel ─── */
+        .code-resend a:focus-visible {
+            outline: 2px solid var(--cyan);
+            outline-offset: 2px;
+            border-radius: 2px
+        }
+
         .admin-panel {
             margin-top: 20px;
             padding-top: 18px;
@@ -653,25 +649,38 @@
             padding: 12px
         }
 
-        /* ─── Feature Cards (right side) ─── */
+        /* ─── System Module Showcase ─── */
         .features {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            width: 320px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            width: 560px;
             max-width: 92vw
         }
 
         .feat-card {
-            background: var(--card);
+            background: linear-gradient(160deg, #0b1120 0%, #0d1528 100%);
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 16px 18px;
-            transition: border-color 0.3s, transform 0.2s
+            padding: 14px 16px;
+            transition: border-color 0.3s, transform 0.2s;
+            position: relative;
+            overflow: hidden
+        }
+
+        .feat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 3px;
+            height: 100%;
+            border-radius: 10px 0 0 10px;
+            opacity: 0.5
         }
 
         .feat-card:hover {
-            border-color: rgba(0, 175, 255, 0.25);
+            border-color: rgba(0, 175, 255, 0.2);
             transform: translateY(-1px)
         }
 
@@ -679,101 +688,320 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            margin-bottom: 8px
+            margin-bottom: 7px
         }
 
         .feat-icon {
-            font-size: 18px;
-            width: 34px;
-            height: 34px;
+            font-size: 11px;
+            font-weight: 800;
+            width: 28px;
+            height: 28px;
             display: flex;
             align-items: center;
             justify-content: center;
-            border-radius: 8px;
-            background: rgba(0, 175, 255, 0.08);
-            border: 1px solid rgba(0, 175, 255, 0.15)
+            border-radius: 6px;
+            font-family: 'Courier New', monospace;
+            letter-spacing: -0.5px;
+            flex-shrink: 0
+        }
+
+        .feat-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 1px
+        }
+
+        .feat-chip {
+            display: inline-block;
+            font-size: 7.5px;
+            letter-spacing: 1.5px;
+            font-weight: 700;
+            padding: 1px 5px;
+            border-radius: 3px;
+            width: fit-content
         }
 
         .feat-label {
-            font-size: 12px;
+            font-size: 11.5px;
             font-weight: 700;
-            letter-spacing: 0.5px;
-            color: #e0e8f0
-        }
-
-        .feat-status {
-            font-size: 9px;
-            padding: 2px 7px;
-            border-radius: 4px;
-            font-weight: 700;
-            margin-left: auto;
-            letter-spacing: 0.5px
-        }
-
-        .feat-status.online {
-            color: var(--green);
-            background: rgba(0, 255, 136, 0.1);
-            border: 1px solid rgba(0, 255, 136, 0.2)
-        }
-
-        .feat-status.armed {
-            color: var(--cyan);
-            background: rgba(0, 175, 255, 0.1);
-            border: 1px solid rgba(0, 175, 255, 0.2)
+            letter-spacing: 0.3px;
+            color: #d0d8e4
         }
 
         .feat-desc {
-            font-size: 11px;
-            color: var(--muted);
+            font-size: 10.5px;
+            color: #4d5d6d;
             line-height: 1.5
         }
 
-        .feat-bar {
-            display: flex;
-            gap: 2px;
-            margin-top: 8px;
-            height: 4px;
-            align-items: flex-end
+        .feat-scan {
+            height: 2px;
+            margin-top: 10px;
+            border-radius: 1px;
+            position: relative;
+            overflow: hidden;
+            opacity: 0.35
         }
 
-        .feat-bar span {
-            flex: 1;
-            border-radius: 2px;
+        .feat-scan::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -30%;
+            width: 30%;
             height: 100%;
-            transition: opacity 0.3s
+            border-radius: 1px;
+            animation: scanSlide 3.5s ease-in-out infinite
+        }
+
+        .feat-card:nth-child(2) .feat-scan::after {
+            animation-delay: 0.5s
+        }
+
+        .feat-card:nth-child(3) .feat-scan::after {
+            animation-delay: 1s
+        }
+
+        .feat-card:nth-child(4) .feat-scan::after {
+            animation-delay: 1.5s
+        }
+
+        .feat-card:nth-child(5) .feat-scan::after {
+            animation-delay: 2s
+        }
+
+        .feat-card:nth-child(6) .feat-scan::after {
+            animation-delay: 2.5s
+        }
+
+        .feat-card:nth-child(7) .feat-scan::after {
+            animation-delay: 3s
+        }
+
+        @keyframes scanSlide {
+            0% {
+                left: -30%;
+                opacity: 0
+            }
+
+            20% {
+                opacity: 1
+            }
+
+            80% {
+                opacity: 1
+            }
+
+            100% {
+                left: 100%;
+                opacity: 0
+            }
+        }
+
+        /* Module accents */
+        .mod-brain::before {
+            background: linear-gradient(to bottom, #8b5cf6, #06b6d4)
+        }
+
+        .mod-brain .feat-icon {
+            background: rgba(139, 92, 246, 0.12);
+            border: 1px solid rgba(139, 92, 246, 0.25);
+            color: #a78bfa
+        }
+
+        .mod-brain .feat-chip {
+            background: rgba(139, 92, 246, 0.1);
+            color: #8b5cf6;
+            border: 1px solid rgba(139, 92, 246, 0.2)
+        }
+
+        .mod-brain .feat-scan {
+            background: rgba(139, 92, 246, 0.15)
+        }
+
+        .mod-brain .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #8b5cf6, transparent)
+        }
+
+        .mod-dsl::before {
+            background: linear-gradient(to bottom, #f0c040, #e8a020)
+        }
+
+        .mod-dsl .feat-icon {
+            background: rgba(240, 192, 64, 0.12);
+            border: 1px solid rgba(240, 192, 64, 0.25);
+            color: #f0c040
+        }
+
+        .mod-dsl .feat-chip {
+            background: rgba(240, 192, 64, 0.08);
+            color: #d4a030;
+            border: 1px solid rgba(240, 192, 64, 0.18)
+        }
+
+        .mod-dsl .feat-scan {
+            background: rgba(240, 192, 64, 0.15)
+        }
+
+        .mod-dsl .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #f0c040, transparent)
+        }
+
+        .mod-intel::before {
+            background: linear-gradient(to bottom, #0088ff, #00cc88)
+        }
+
+        .mod-intel .feat-icon {
+            background: rgba(0, 136, 255, 0.12);
+            border: 1px solid rgba(0, 136, 255, 0.25);
+            color: #4da6ff
+        }
+
+        .mod-intel .feat-chip {
+            background: rgba(0, 136, 255, 0.08);
+            color: #0088ff;
+            border: 1px solid rgba(0, 136, 255, 0.18)
+        }
+
+        .mod-intel .feat-scan {
+            background: rgba(0, 136, 255, 0.15)
+        }
+
+        .mod-intel .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #0088ff, transparent)
+        }
+
+        .mod-signal::before {
+            background: linear-gradient(to bottom, #06b6d4, #00afff)
+        }
+
+        .mod-signal .feat-icon {
+            background: rgba(6, 182, 212, 0.12);
+            border: 1px solid rgba(6, 182, 212, 0.25);
+            color: #22d3ee
+        }
+
+        .mod-signal .feat-chip {
+            background: rgba(6, 182, 212, 0.08);
+            color: #06b6d4;
+            border: 1px solid rgba(6, 182, 212, 0.18)
+        }
+
+        .mod-signal .feat-scan {
+            background: rgba(6, 182, 212, 0.15)
+        }
+
+        .mod-signal .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #06b6d4, transparent)
+        }
+
+        .mod-risk::before {
+            background: linear-gradient(to bottom, #ff4455, #ff8844)
+        }
+
+        .mod-risk .feat-icon {
+            background: rgba(255, 68, 85, 0.10);
+            border: 1px solid rgba(255, 68, 85, 0.22);
+            color: #ff6b7a
+        }
+
+        .mod-risk .feat-chip {
+            background: rgba(255, 68, 85, 0.08);
+            color: #ff4455;
+            border: 1px solid rgba(255, 68, 85, 0.18)
+        }
+
+        .mod-risk .feat-scan {
+            background: rgba(255, 68, 85, 0.15)
+        }
+
+        .mod-risk .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #ff4455, transparent)
+        }
+
+        .mod-perf::before {
+            background: linear-gradient(to bottom, #94a3b8, #cbd5e1)
+        }
+
+        .mod-perf .feat-icon {
+            background: rgba(148, 163, 184, 0.12);
+            border: 1px solid rgba(148, 163, 184, 0.22);
+            color: #94a3b8
+        }
+
+        .mod-perf .feat-chip {
+            background: rgba(148, 163, 184, 0.08);
+            color: #8293a5;
+            border: 1px solid rgba(148, 163, 184, 0.18)
+        }
+
+        .mod-perf .feat-scan {
+            background: rgba(148, 163, 184, 0.12)
+        }
+
+        .mod-perf .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #94a3b8, transparent)
+        }
+
+        .mod-ares::before {
+            background: linear-gradient(to bottom, #10b981, #34d399)
+        }
+
+        .mod-ares .feat-icon {
+            background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+            color: #34d399
+        }
+
+        .mod-ares .feat-chip {
+            background: rgba(16, 185, 129, 0.08);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.18)
+        }
+
+        .mod-ares .feat-scan {
+            background: rgba(16, 185, 129, 0.15)
+        }
+
+        .mod-ares .feat-scan::after {
+            background: linear-gradient(90deg, transparent, #10b981, transparent)
         }
 
         /* ─── Footer ─── */
         .footer {
             width: 100%;
             max-width: 1100px;
-            margin-top: 32px;
-            padding: 16px 0;
-            border-top: 1px solid #0e1a28;
+            margin-top: auto;
+            padding: 20px 0 14px;
+            border-top: 1px solid rgba(56, 189, 248, 0.06);
             display: flex;
             justify-content: space-between;
-            align-items: center;
+            align-items: baseline;
             flex-wrap: wrap;
             gap: 8px
         }
 
         .footer-left {
-            font-size: 10px;
-            color: #334;
-            letter-spacing: 1px
+            font-size: 11px;
+            color: #4a5568;
+            letter-spacing: 0.5px
         }
 
         .footer-right {
             display: flex;
-            gap: 16px;
-            font-size: 10px;
-            color: #334
+            gap: 22px;
+            font-size: 11px
         }
 
-        .footer-right span {
-            display: flex;
-            align-items: center;
-            gap: 4px
+        .footer-right a {
+            color: #556a7f;
+            text-decoration: none;
+            letter-spacing: 0.3px;
+            transition: color 0.2s ease
+        }
+
+        .footer-right a:hover {
+            color: #7dd3fc
         }
 
         /* ─── Responsive ─── */
@@ -784,7 +1012,7 @@
             }
 
             .features {
-                width: 380px;
+                width: 560px;
                 max-width: 92vw
             }
 
@@ -795,6 +1023,12 @@
             .tick {
                 min-width: 150px;
                 padding: 8px 12px
+            }
+        }
+
+        @media(max-width:560px) {
+            .features {
+                grid-template-columns: 1fr
             }
         }
 
@@ -816,19 +1050,187 @@
     <div class="bg-grid"></div>
     <div class="particles" id="particles"></div>
 
+    <!-- ═══ Animated Chart Background Canvas ═══ -->
+    <canvas id="chartBg"
+        style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;pointer-events:none;opacity:0.12"></canvas>
+    <script>
+            (function () {
+                const cv = document.getElementById('chartBg');
+                const ctx = cv.getContext('2d');
+                let W, H;
+                function resize() { W = cv.width = window.innerWidth; H = cv.height = window.innerHeight; }
+                resize();
+                window.addEventListener('resize', resize);
+
+                // Generate random candle data
+                const CANDLES = 120;
+                const candleW = 14;
+                const gap = 4;
+                let candles = [];
+                let offset = 0;
+                const speed = 0.3; // pixels per frame
+
+                function genCandle(prevClose) {
+                    const vol = 0.003 + Math.random() * 0.015;
+                    const dir = Math.random() > 0.48 ? 1 : -1;
+                    const open = prevClose;
+                    const close = open + dir * vol * open;
+                    const high = Math.max(open, close) + Math.random() * vol * 0.6 * open;
+                    const low = Math.min(open, close) - Math.random() * vol * 0.6 * open;
+                    const volume = 0.2 + Math.random() * 0.8;
+                    return { open, close, high, low, volume };
+                }
+
+                function initCandles() {
+                    candles = [];
+                    let price = 0.5; // normalized 0-1
+                    for (let i = 0; i < CANDLES + 40; i++) {
+                        const c = genCandle(price);
+                        candles.push(c);
+                        price = c.close;
+                    }
+                }
+                initCandles();
+
+                // Moving average
+                function getMA(idx, period) {
+                    let sum = 0, cnt = 0;
+                    for (let i = Math.max(0, idx - period); i <= idx; i++) {
+                        sum += candles[i].close; cnt++;
+                    }
+                    return sum / cnt;
+                }
+
+                function priceToY(p) {
+                    // Find min/max for visible range
+                    const margin = H * 0.15;
+                    return margin + (1 - p) * (H - margin * 2);
+                }
+
+                function draw() {
+                    ctx.clearRect(0, 0, W, H);
+
+                    offset += speed;
+                    // When we've scrolled a full candle width, shift data
+                    if (offset >= candleW + gap) {
+                        offset -= (candleW + gap);
+                        candles.shift();
+                        candles.push(genCandle(candles[candles.length - 1].close));
+                    }
+
+                    // Find visible price range for scaling
+                    const startIdx = 0;
+                    const visibleEnd = Math.min(candles.length, Math.ceil(W / (candleW + gap)) + 2);
+                    let pMin = Infinity, pMax = -Infinity;
+                    for (let i = startIdx; i < visibleEnd; i++) {
+                        if (candles[i].low < pMin) pMin = candles[i].low;
+                        if (candles[i].high > pMax) pMax = candles[i].high;
+                    }
+                    const pRange = pMax - pMin || 0.01;
+
+                    function scaleY(p) { return H * 0.12 + (1 - (p - pMin) / pRange) * (H * 0.76); }
+
+                    // Grid lines (horizontal)
+                    ctx.strokeStyle = 'rgba(0,175,255,0.04)';
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < 8; i++) {
+                        const y = H * 0.12 + i * (H * 0.76) / 7;
+                        ctx.beginPath();
+                        ctx.moveTo(0, y);
+                        ctx.lineTo(W, y);
+                        ctx.stroke();
+                    }
+
+                    // Draw volume bars at bottom
+                    for (let i = 0; i < visibleEnd; i++) {
+                        const x = i * (candleW + gap) - offset;
+                        if (x + candleW < 0 || x > W) continue;
+                        const c = candles[i];
+                        const bullish = c.close >= c.open;
+                        const volH = c.volume * H * 0.08;
+                        ctx.fillStyle = bullish ? 'rgba(0,255,136,0.08)' : 'rgba(255,68,85,0.08)';
+                        ctx.fillRect(x, H - volH, candleW, volH);
+                    }
+
+                    // Draw candles
+                    for (let i = 0; i < visibleEnd; i++) {
+                        const x = i * (candleW + gap) - offset;
+                        if (x + candleW < 0 || x > W) continue;
+                        const c = candles[i];
+                        const bullish = c.close >= c.open;
+                        const oY = scaleY(c.open);
+                        const cY = scaleY(c.close);
+                        const hY = scaleY(c.high);
+                        const lY = scaleY(c.low);
+
+                        // Wick
+                        const wickX = x + candleW / 2;
+                        ctx.strokeStyle = bullish ? 'rgba(0,255,136,0.5)' : 'rgba(255,68,85,0.5)';
+                        ctx.lineWidth = 1.5;
+                        ctx.beginPath();
+                        ctx.moveTo(wickX, hY);
+                        ctx.lineTo(wickX, lY);
+                        ctx.stroke();
+
+                        // Body
+                        const bodyTop = Math.min(oY, cY);
+                        const bodyH = Math.max(Math.abs(oY - cY), 1);
+                        if (bullish) {
+                            ctx.fillStyle = 'rgba(0,255,136,0.25)';
+                            ctx.strokeStyle = 'rgba(0,255,136,0.6)';
+                        } else {
+                            ctx.fillStyle = 'rgba(255,68,85,0.25)';
+                            ctx.strokeStyle = 'rgba(255,68,85,0.6)';
+                        }
+                        ctx.lineWidth = 1;
+                        ctx.fillRect(x + 1, bodyTop, candleW - 2, bodyH);
+                        ctx.strokeRect(x + 1, bodyTop, candleW - 2, bodyH);
+                    }
+
+                    // Moving average line (20 period)
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'rgba(0,175,255,0.7)';
+                    ctx.lineWidth = 2;
+                    ctx.shadowColor = 'rgba(0,175,255,0.4)';
+                    ctx.shadowBlur = 6;
+                    let started = false;
+                    for (let i = 0; i < visibleEnd; i++) {
+                        const x = i * (candleW + gap) - offset + candleW / 2;
+                        if (x < -20 || x > W + 20) continue;
+                        const ma = getMA(i, 20);
+                        const y = scaleY(ma);
+                        if (!started) { ctx.moveTo(x, y); started = true; }
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+
+                    // Second MA line (7 period) — gold
+                    ctx.beginPath();
+                    ctx.strokeStyle = 'rgba(240,192,64,0.5)';
+                    ctx.lineWidth = 1.5;
+                    ctx.shadowColor = 'rgba(240,192,64,0.3)';
+                    ctx.shadowBlur = 4;
+                    started = false;
+                    for (let i = 0; i < visibleEnd; i++) {
+                        const x = i * (candleW + gap) - offset + candleW / 2;
+                        if (x < -20 || x > W + 20) continue;
+                        const ma = getMA(i, 7);
+                        const y = scaleY(ma);
+                        if (!started) { ctx.moveTo(x, y); started = true; }
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                    ctx.shadowBlur = 0;
+
+                    requestAnimationFrame(draw);
+                }
+                draw();
+            })();
+    </script>
+
     <div class="page">
-        <!-- Top System Bar -->
-        <div class="top-bar">
-            <div class="sys-info">
-                <span><span class="status-dot"></span> SYSTEM ONLINE</span>
-                <span>v1.22</span>
-                <span id="sysTime">--:--:--</span>
-            </div>
-            <div class="sys-info">
-                <span>LATENCY <span id="sysLatency">--</span>ms</span>
-                <span>NODE EU-WEST</span>
-            </div>
-        </div>
+
 
         <!-- Market Ticker Strip -->
         <div class="ticker-strip" id="tickerStrip">
@@ -873,7 +1275,14 @@
                 <div class="logo">
                     <img class="logo-icon" src="/assets/logo-zeus.jpg" alt="Zeus">
                     <div class="t1">ZEU'S</div>
-                    <div class="t2">TRADING TERMINAL</div>
+                    <div class="t2">AI Trading Analytics Platform</div>
+                    <div id="adminStatus"
+                        style="display:none;font-size:10px;color:var(--cyan);letter-spacing:1px;margin-top:4px"></div>
+                    <div style="font-size:9.5px;color:#3a4a5a;letter-spacing:1.5px;margin-top:3px">Intelligence &middot;
+                        Signals &middot; Protection &middot; Execution Assistance</div>
+                    <div
+                        style="font-size:10px;color:#4a5568;letter-spacing:2px;margin-top:6px;text-transform:uppercase">
+                        Private Beta &middot; Invite-Only &middot; Access Subject to Approval</div>
                 </div>
 
                 <div class="error-msg" id="errorMsg"></div>
@@ -895,11 +1304,11 @@
                                 autocomplete="new-password">
                         </div>
                     </div>
-                    <button type="submit" class="btn btn-primary" id="submitBtn">AUTHENTICATE</button>
+                    <button type="submit" class="btn btn-primary" id="submitBtn">SIGN IN</button>
                 </form>
 
                 <div class="code-step" id="codeStep">
-                    <div class="code-msg">📧 Verification code sent to your email.<br>Enter the 6-digit code:</div>
+                    <div class="code-msg">Verification code sent to your email.<br>Enter the 6-digit code:</div>
                     <input type="text" class="code-input" id="codeInput" maxlength="6" inputmode="numeric"
                         pattern="[0-9]*" placeholder="------" autocomplete="one-time-code">
                     <div class="code-timer" id="codeTimer">Code expires in 5:00</div>
@@ -911,74 +1320,158 @@
                 </div>
 
                 <div class="toggle-link" id="toggleWrap">
-                    <span id="toggleText">Don't have an account?</span>
-                    <a id="toggleLink" onclick="toggleMode()">Create one</a>
+                    <span id="toggleText">Need access?</span>
+                    <a id="toggleLink" onclick="toggleMode()">Request an invite</a>
+                </div>
+
+                <div class="toggle-link" id="forgotWrap">
+                    <a onclick="showForgotPassword()" style="color:#7dd3fc;font-size:11px">Forgot password?</a>
+                </div>
+
+                <div
+                    style="text-align:center;margin-top:16px;font-size:9px;color:#3a4a5a;letter-spacing:1.2px;text-transform:uppercase">
+                    Access requests are manually reviewed</div>
+
+                <!-- FORGOT PASSWORD STEP -->
+                <div class="code-step" id="forgotStep" style="display:none">
+                    <div class="code-msg" style="margin-bottom:12px">Reset your password</div>
+                    <div class="form-group">
+                        <label>Email address</label>
+                        <input type="email" id="forgotEmail" placeholder="you@example.com">
+                    </div>
+                    <button class="btn btn-primary" id="forgotSendBtn" onclick="forgotSendCode()"
+                        style="margin-bottom:10px">SEND RESET CODE</button>
+                    <div id="forgot-msg" style="font-size:10px;min-height:16px;margin-bottom:8px"></div>
+                    <div id="forgotCodeForm" style="display:none">
+                        <div class="form-group">
+                            <label>6-digit code</label>
+                            <input type="text" class="code-input" id="forgotCode" maxlength="6" inputmode="numeric"
+                                pattern="[0-9]*" placeholder="------" autocomplete="one-time-code">
+                        </div>
+                        <div class="form-group">
+                            <label>New password (min 12 chars, A-z + digit)</label>
+                            <input type="password" id="forgotNewPass" placeholder="New password">
+                        </div>
+                        <button class="btn btn-primary" id="forgotConfirmBtn" onclick="forgotConfirmCode()">RESET
+                            PASSWORD</button>
+                        <div id="forgot-code-msg" style="font-size:10px;min-height:16px;margin-top:6px"></div>
+                    </div>
+                    <div class="code-resend" style="margin-top:10px">
+                        <a onclick="backFromForgot()">← Back to login</a>
+                    </div>
                 </div>
 
                 <div class="pending-msg" id="pendingMsg">
-                    ⏳ Account created successfully!<br>
-                    Waiting for administrator approval.
+                    Access request submitted.<br>
+                    Your account is pending administrator approval.<br>
+                    <span style="font-size:10px;color:#445;margin-top:6px;display:inline-block">This is a private beta —
+                        approval is manual and may take time.</span>
                 </div>
 
                 <div class="admin-panel" id="adminPanel">
-                    <h3>👑 Admin — User Management</h3>
+                    <h3>Admin — User Management</h3>
                     <div id="usersList"></div>
                 </div>
             </div>
 
-            <!-- Feature Cards -->
+            <!-- System Modules -->
             <div class="features">
-                <div class="feat-card">
+                <div class="feat-card mod-brain">
                     <div class="feat-head">
-                        <div class="feat-icon">📡</div>
-                        <span class="feat-label">Live Market Pulse</span>
-                        <span class="feat-status online">LIVE</span>
+                        <div class="feat-icon">Z</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">CORE</span>
+                            <span class="feat-label">ZEUS Brain</span>
+                        </div>
                     </div>
-                    <div class="feat-desc">Real-time order flow, depth analysis, and multi-timeframe market structure —
-                        always on.</div>
-                    <div class="feat-bar" id="pulseBar"></div>
+                    <div class="feat-desc">Adaptive regime detection, layered confluence scoring, behavioral state
+                        logic, and controlled decision-routing.</div>
+                    <div class="feat-scan"></div>
                 </div>
-                <div class="feat-card">
+                <div class="feat-card mod-dsl">
                     <div class="feat-head">
-                        <div class="feat-icon"
-                            style="background:rgba(0,255,136,0.08);border-color:rgba(0,255,136,0.15)">🧠</div>
-                        <span class="feat-label">Signal Engine</span>
-                        <span class="feat-status armed">ARMED</span>
+                        <div class="feat-icon">D</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">PROTECTION</span>
+                            <span class="feat-label">DSL Protection Engine</span>
+                        </div>
                     </div>
-                    <div class="feat-desc">Multi-layer AI signal fusion — confluence scoring, regime detection, and
-                        adaptive entry timing.</div>
-                    <div class="feat-bar" id="signalBar"></div>
+                    <div class="feat-desc">Dynamic stop logic, activation thresholds, impulse tracking, pivot control,
+                        and structured exit behavior.</div>
+                    <div class="feat-scan"></div>
                 </div>
-                <div class="feat-card">
+                <div class="feat-card mod-intel">
                     <div class="feat-head">
-                        <div class="feat-icon"
-                            style="background:rgba(255,68,85,0.08);border-color:rgba(255,68,85,0.15)">🛡️</div>
-                        <span class="feat-label">Risk Control</span>
-                        <span class="feat-status online">ACTIVE</span>
+                        <div class="feat-icon">M</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">FLOW</span>
+                            <span class="feat-label">Market Intelligence</span>
+                        </div>
                     </div>
-                    <div class="feat-desc">Server-side position guards, leverage limits, daily loss caps, and automated
-                        risk enforcement.</div>
+                    <div class="feat-desc">Order flow context, multi-timeframe structure, volatility mapping, liquidity
+                        behavior, and chart-state awareness.</div>
+                    <div class="feat-scan"></div>
                 </div>
-                <div class="feat-card">
+                <div class="feat-card mod-signal">
                     <div class="feat-head">
-                        <div class="feat-icon"
-                            style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.15)">🔐</div>
-                        <span class="feat-label">Secure Access</span>
-                        <span class="feat-status armed">2FA</span>
+                        <div class="feat-icon">S</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">SIGNAL</span>
+                            <span class="feat-label">Signal Fusion</span>
+                        </div>
                     </div>
-                    <div class="feat-desc">AES-256 encrypted keys, per-user exchange isolation, 2FA verification, and
-                        full audit trail.</div>
+                    <div class="feat-desc">Multi-layer signal synthesis combining timing logic, regime alignment,
+                        contextual filters, and execution-assistance scoring.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-risk">
+                    <div class="feat-head">
+                        <div class="feat-icon">R</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">CONTROL</span>
+                            <span class="feat-label">Risk &amp; Execution Control</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">Exposure discipline, leverage boundaries, position constraints, loss
+                        protection rails, and execution-side safety.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-perf">
+                    <div class="feat-head">
+                        <div class="feat-icon">P</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">REVIEW</span>
+                            <span class="feat-label">Performance Review</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">Trade journal insight, execution feedback, post-session review, behavioral
+                        tracking, and refinement data.</div>
+                    <div class="feat-scan"></div>
+                </div>
+                <div class="feat-card mod-ares">
+                    <div class="feat-head">
+                        <div class="feat-icon">A</div>
+                        <div class="feat-meta">
+                            <span class="feat-chip">ARES</span>
+                            <span class="feat-label">ARES Watch</span>
+                        </div>
+                    </div>
+                    <div class="feat-desc">Autonomous wallet logic, control-state supervision, position intelligence,
+                        and protected execution monitoring.</div>
+                    <div class="feat-scan"></div>
                 </div>
             </div>
         </div>
 
         <!-- Footer -->
         <div class="footer">
-            <div class="footer-left">ZEUS TERMINAL &copy; 2026 — PRIVATE ACCESS ONLY</div>
+            <div class="footer-left">&copy; <span id="footerYear"></span> Zeus Terminal</div>
+            <script>document.getElementById('footerYear').textContent = new Date().getFullYear();</script>
             <div class="footer-right">
-                <span><span class="status-dot" style="width:5px;height:5px"></span> WebSocket</span>
-                <span>TLS 1.3</span>
-                <span>Hetzner EU</span>
+                <a href="/privacy.html">Privacy</a>
+                <a href="/terms.html">Terms</a>
+                <a href="/cookies.html">Cookies</a>
+                <a href="/support.html">Support</a>
             </div>
         </div>
     </div>
@@ -998,22 +1491,7 @@
             }
         })();
 
-        /* ─── System Clock ─── */
-        setInterval(() => {
-            const d = new Date();
-            document.getElementById('sysTime').textContent = d.toLocaleTimeString('en-GB');
-        }, 1000);
 
-        /* ─── Latency Ping ─── */
-        (async function pingLatency() {
-            try {
-                const t = performance.now();
-                await fetch('/auth/me', { method: 'HEAD', cache: 'no-store' }).catch(() => { });
-                const ms = Math.round(performance.now() - t);
-                document.getElementById('sysLatency').textContent = ms;
-            } catch (_) { }
-            setTimeout(pingLatency, 8000);
-        })();
 
         /* ─── Live Market Tickers ─── */
         const PAIRS = [
@@ -1035,9 +1513,11 @@
             }).join('');
         }
 
+        let tickerRetries = 0;
         function connectTickers() {
             const streams = PAIRS.map(p => p.sym + '@ticker').join('/');
             const ws = new WebSocket('wss://fstream.binance.com/stream?streams=' + streams);
+            ws.onopen = function () { tickerRetries = 0; };
             ws.onmessage = function (e) {
                 try {
                     const msg = JSON.parse(e.data);
@@ -1056,7 +1536,15 @@
                     renderSpark(pair.id, sparkData[pair.id]);
                 } catch (_) { }
             };
-            ws.onclose = function () { setTimeout(connectTickers, 3000); };
+            ws.onclose = function () {
+                tickerRetries++;
+                if (tickerRetries >= 5) {
+                    const strip = document.getElementById('tickerStrip');
+                    if (strip) strip.style.display = 'none';
+                    return;
+                }
+                setTimeout(connectTickers, 3000);
+            };
             ws.onerror = function () { ws.close(); };
         }
         connectTickers();
@@ -1087,9 +1575,9 @@
         function toggleMode() {
             isRegister = !isRegister;
             document.getElementById('registerFields').classList.toggle('active', isRegister);
-            document.getElementById('submitBtn').textContent = isRegister ? 'CREATE ACCOUNT' : 'AUTHENTICATE';
-            document.getElementById('toggleText').textContent = isRegister ? 'Already have an account?' : "Don't have an account?";
-            document.getElementById('toggleLink').textContent = isRegister ? 'Login' : 'Create one';
+            document.getElementById('submitBtn').textContent = isRegister ? 'REQUEST AN INVITE' : 'SIGN IN';
+            document.getElementById('toggleText').textContent = isRegister ? 'Already have an account?' : 'Need access?';
+            document.getElementById('toggleLink').textContent = isRegister ? 'Sign in' : 'Request an invite';
             document.getElementById('errorMsg').style.display = 'none';
             document.getElementById('pendingMsg').style.display = 'none';
         }
@@ -1101,6 +1589,69 @@
             document.getElementById('pendingMsg').style.display = 'none';
             document.getElementById('loginBox').classList.add('shake');
             setTimeout(() => document.getElementById('loginBox').classList.remove('shake'), 400);
+        }
+
+        // ─── FORGOT PASSWORD ───
+        function showForgotPassword() {
+            document.getElementById('authForm').style.display = 'none';
+            document.getElementById('toggleWrap').style.display = 'none';
+            document.getElementById('forgotWrap').style.display = 'none';
+            document.getElementById('codeStep').style.display = 'none';
+            document.getElementById('errorMsg').style.display = 'none';
+            document.getElementById('forgotStep').style.display = 'block';
+            document.getElementById('forgotEmail').value = document.getElementById('email').value || '';
+            document.getElementById('forgotEmail').focus();
+        }
+        function backFromForgot() {
+            document.getElementById('forgotStep').style.display = 'none';
+            document.getElementById('forgotCodeForm').style.display = 'none';
+            document.getElementById('authForm').style.display = 'block';
+            document.getElementById('toggleWrap').style.display = 'block';
+            document.getElementById('forgotWrap').style.display = 'block';
+            document.getElementById('forgot-msg').textContent = '';
+            document.getElementById('forgot-code-msg').textContent = '';
+            document.getElementById('forgotEmail').value = '';
+            document.getElementById('forgotCode').value = '';
+            document.getElementById('forgotNewPass').value = '';
+        }
+        async function forgotSendCode() {
+            const email = (document.getElementById('forgotEmail').value || '').trim();
+            if (!email || email.indexOf('@') < 1) { document.getElementById('forgot-msg').textContent = 'Enter a valid email'; document.getElementById('forgot-msg').style.color = '#ff8844'; return; }
+            const btn = document.getElementById('forgotSendBtn');
+            btn.disabled = true; btn.textContent = 'Sending...';
+            try {
+                const res = await fetch('/auth/forgot-password/request', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                btn.disabled = false; btn.textContent = 'SEND RESET CODE';
+                if (!res.ok) { document.getElementById('forgot-msg').textContent = data.error || 'Error'; document.getElementById('forgot-msg').style.color = '#ff4444'; return; }
+                document.getElementById('forgot-msg').textContent = 'If the email exists, a code has been sent.'; document.getElementById('forgot-msg').style.color = '#00ff88';
+                document.getElementById('forgotCodeForm').style.display = 'block';
+                document.getElementById('forgotCode').focus();
+            } catch (e) { btn.disabled = false; btn.textContent = 'SEND RESET CODE'; document.getElementById('forgot-msg').textContent = 'Connection error'; document.getElementById('forgot-msg').style.color = '#ff4444'; }
+        }
+        async function forgotConfirmCode() {
+            const email = (document.getElementById('forgotEmail').value || '').trim();
+            const code = (document.getElementById('forgotCode').value || '').trim();
+            const newPassword = document.getElementById('forgotNewPass').value;
+            if (!code || code.length !== 6) { document.getElementById('forgot-code-msg').textContent = 'Enter the 6-digit code'; document.getElementById('forgot-code-msg').style.color = '#ff8844'; return; }
+            if (!newPassword || newPassword.length < 12) { document.getElementById('forgot-code-msg').textContent = 'Password must be at least 12 characters'; document.getElementById('forgot-code-msg').style.color = '#ff8844'; return; }
+            if (!/[a-z]/.test(newPassword) || !/[A-Z]/.test(newPassword) || !/\d/.test(newPassword)) { document.getElementById('forgot-code-msg').textContent = 'Must contain uppercase, lowercase and a digit'; document.getElementById('forgot-code-msg').style.color = '#ff8844'; return; }
+            const btn = document.getElementById('forgotConfirmBtn');
+            btn.disabled = true; btn.textContent = 'Verifying...';
+            try {
+                const res = await fetch('/auth/forgot-password/confirm', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code, newPassword })
+                });
+                const data = await res.json();
+                btn.disabled = false; btn.textContent = 'RESET PASSWORD';
+                if (!res.ok) { document.getElementById('forgot-code-msg').textContent = data.error || 'Error'; document.getElementById('forgot-code-msg').style.color = '#ff4444'; return; }
+                document.getElementById('forgot-code-msg').textContent = data.message; document.getElementById('forgot-code-msg').style.color = '#00ff88';
+                setTimeout(backFromForgot, 3000);
+            } catch (e) { btn.disabled = false; btn.textContent = 'RESET PASSWORD'; document.getElementById('forgot-code-msg').textContent = 'Connection error'; document.getElementById('forgot-code-msg').style.color = '#ff4444'; }
         }
 
         function showCodeStep() {
@@ -1189,7 +1740,10 @@
             if (isRegister) {
                 const confirm = document.getElementById('confirmPassword').value;
                 if (password !== confirm) { showError('Passwords do not match'); return; }
-                if (password.length < 6) { showError('Password must be at least 6 characters'); return; }
+                if (password.length < 12) { showError('Password must be at least 12 characters'); return; }
+                if (!/[a-z]/.test(password)) { showError('Must contain at least one lowercase letter'); return; }
+                if (!/[A-Z]/.test(password)) { showError('Must contain at least one uppercase letter'); return; }
+                if (!/\d/.test(password)) { showError('Password must contain at least one digit'); return; }
             }
 
             btn.disabled = true; btn.textContent = '...';
@@ -1214,7 +1768,7 @@
                     } else { window.location.href = '/'; }
                 } else { showError(data.error || 'Unknown error'); }
             } catch (err) { showError('Connection error'); }
-            finally { btn.disabled = false; btn.textContent = isRegister ? 'CREATE ACCOUNT' : 'AUTHENTICATE'; }
+            finally { btn.disabled = false; btn.textContent = isRegister ? 'REQUEST AN INVITE' : 'SIGN IN'; }
         });
 
         /* ─── Admin Panel ─── */
@@ -1227,7 +1781,9 @@
                     document.getElementById('authForm').style.display = 'none';
                     document.querySelector('.toggle-link').style.display = 'none';
                     document.getElementById('adminPanel').style.display = 'block';
-                    document.querySelector('.logo .t2').textContent = 'Logged in as ' + data.email;
+                    const statusEl = document.getElementById('adminStatus');
+                    statusEl.textContent = 'Logged in as ' + data.email;
+                    statusEl.style.display = 'block';
                     loadUsers();
                 } else if (data.ok) {
                     window.location.href = '/';
@@ -1245,19 +1801,51 @@
                 data.users.forEach(u => {
                     const row = document.createElement('div');
                     row.className = 'user-row';
-                    let badge = '';
-                    if (u.role === 'admin') badge = '<span class="badge badge-admin">ADMIN</span>';
-                    else if (u.approved) badge = '<span class="badge badge-approved">APPROVED</span>';
-                    else badge = '<span class="badge badge-pending">PENDING</span>';
-                    let actions = '';
-                    if (u.role !== 'admin') {
-                        if (!u.approved) actions += '<button class="btn-approve" onclick="approveUser(\'' + u.email + '\')">✓ APPROVE</button>';
-                        actions += '<button class="btn-delete" onclick="deleteUser(\'' + u.email + '\')">✕ DELETE</button>';
+
+                    const emailSpan = document.createElement('span');
+                    emailSpan.className = 'email';
+                    emailSpan.textContent = u.email;
+                    row.appendChild(emailSpan);
+
+                    const badgeSpan = document.createElement('span');
+                    if (u.role === 'admin') {
+                        badgeSpan.className = 'badge badge-admin';
+                        badgeSpan.textContent = 'ADMIN';
+                    } else if (u.approved) {
+                        badgeSpan.className = 'badge badge-approved';
+                        badgeSpan.textContent = 'APPROVED';
+                    } else {
+                        badgeSpan.className = 'badge badge-pending';
+                        badgeSpan.textContent = 'PENDING';
                     }
-                    row.innerHTML = '<span class="email">' + u.email + '</span>' + badge + (actions ? '<div class="user-actions">' + actions + '</div>' : '');
+                    row.appendChild(badgeSpan);
+
+                    if (u.role !== 'admin') {
+                        const actionsDiv = document.createElement('div');
+                        actionsDiv.className = 'user-actions';
+                        if (!u.approved) {
+                            const approveBtn = document.createElement('button');
+                            approveBtn.className = 'btn-approve';
+                            approveBtn.textContent = '\u2713 APPROVE';
+                            approveBtn.addEventListener('click', () => approveUser(u.email));
+                            actionsDiv.appendChild(approveBtn);
+                        }
+                        const deleteBtn = document.createElement('button');
+                        deleteBtn.className = 'btn-delete';
+                        deleteBtn.textContent = '\u2715 DELETE';
+                        deleteBtn.addEventListener('click', () => deleteUser(u.email));
+                        actionsDiv.appendChild(deleteBtn);
+                        row.appendChild(actionsDiv);
+                    }
+
                     container.appendChild(row);
                 });
-                if (data.users.length <= 1) container.innerHTML += '<div class="no-pending">No other users registered</div>';
+                if (data.users.length <= 1) {
+                    const noPending = document.createElement('div');
+                    noPending.className = 'no-pending';
+                    noPending.textContent = 'No other users registered';
+                    container.appendChild(noPending);
+                }
             } catch (e) { console.error('Failed to load users:', e); }
         }
 
@@ -1278,6 +1866,14 @@
         }
 
         checkAdmin();
+    </script>
+    <script>
+        // PWA: Register Service Worker only (install prompt moved to main app)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').then(reg => {
+                reg.update().catch(() => { });
+            }).catch(err => console.warn('[PWA] SW reg failed:', err));
+        }
     </script>
 </body>
 

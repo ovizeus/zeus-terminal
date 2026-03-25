@@ -7,6 +7,7 @@ const router = express.Router();
 const crypto = require('crypto');
 const db = require('../services/database');
 const { encrypt, decrypt, maskKey } = require('../services/encryption');
+const logger = require('../services/logger');
 
 // ─── Helpers ───
 
@@ -103,7 +104,8 @@ router.post('/save', async (req, res) => {
         balanceInfo = await _testBinanceKeys(cleanKey, cleanSecret, safeMode);
     } catch (err) {
         db.auditLog(req.user.id, 'EXCHANGE_VERIFY_FAILED', { exchange: 'binance', mode: safeMode, error: err.message }, req.ip);
-        return res.status(400).json({ ok: false, error: 'Verificare eșuată: ' + err.message });
+        const safeMsg = err.status ? err.message : 'API key verification failed — check your keys and try again';
+        return res.status(400).json({ ok: false, error: safeMsg });
     }
 
     // Step 2: Encrypt keys
@@ -121,7 +123,7 @@ router.post('/save', async (req, res) => {
         balance: balanceInfo.balance,
     }, req.ip);
 
-    console.log(`[EXCHANGE] User ${req.user.email} connected Binance (${safeMode}) — balance: ${balanceInfo.balance} USDT`);
+    logger.info('EXCHANGE', 'User connected Binance', { userId: req.user.id, mode: safeMode });
 
     res.json({
         ok: true,
@@ -148,7 +150,7 @@ router.post('/disconnect', (req, res) => {
     db.disconnectExchange(req.user.id);
     db.auditLog(req.user.id, 'EXCHANGE_DISCONNECTED', { exchange: account.exchange }, req.ip);
 
-    console.log(`[EXCHANGE] User ${req.user.email} disconnected exchange`);
+    logger.info('EXCHANGE', 'User disconnected exchange', { userId: req.user.id });
     res.json({ ok: true });
 });
 
@@ -189,7 +191,8 @@ router.post('/verify', async (req, res) => {
         });
     } catch (err) {
         db.auditLog(req.user.id, 'EXCHANGE_VERIFY_FAILED', { exchange: account.exchange, error: err.message }, req.ip);
-        res.status(400).json({ ok: false, error: 'Reverificare eșuată: ' + err.message });
+        const safeMsg = err.status ? err.message : 'Re-verification failed — check your keys';
+        res.status(400).json({ ok: false, error: safeMsg });
     }
 });
 

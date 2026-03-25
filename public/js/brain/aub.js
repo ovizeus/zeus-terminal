@@ -24,12 +24,14 @@ function aubToggle() {
   }
   // Mobile: save preference
   try { localStorage.setItem('aub_expanded', AUB.expanded ? '1' : '0'); } catch (_) { }
+  if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aubData');
+  if (typeof _userCtxPush === 'function') _userCtxPush();
 }
 
 function aubToggleSFX() {
   AUB.sfxEnabled = !AUB.sfxEnabled;
   const btn = document.getElementById('aub-sfx-btn');
-  if (btn) { btn.textContent = AUB.sfxEnabled ? '🔔 SFX' : '🔇 SFX'; btn.className = AUB.sfxEnabled ? 'on' : ''; }
+  if (btn) { btn.innerHTML = AUB.sfxEnabled ? _ZI.bell + ' SFX' : _ZI.bellX + ' SFX'; btn.className = AUB.sfxEnabled ? 'on' : ''; }
   if (AUB.sfxEnabled) _aubInitAudio();
 }
 
@@ -100,14 +102,14 @@ function aubCheckCompat() {
 
   const list = document.getElementById('aub-compat-list');
   if (!list) return;
-  const row = (icon, label) =>
-    `<div class="aub-row ${icon === '✅' ? 'ok' : 'warn'}">${icon} ${label}</div>`;
+  const row = (pass, label) =>
+    `<div class="aub-row ${pass ? 'ok' : 'warn'}">${pass ? _ZI.ok : _ZI.w} ${label}</div>`;
 
   list.innerHTML = [
-    row(AUB_COMPAT.ws ? '✅' : '⚠️', 'WebSocket: ' + (AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
-    row(AUB_COMPAT.audio ? '✅' : '⚠️', 'AudioContext: ' + (AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING')),
-    row(AUB_COMPAT.crypto ? '✅' : '⚠️', 'crypto.subtle: ' + (AUB_COMPAT.crypto ? 'OK' : 'MISSING')),
-    row(AUB_COMPAT.sw ? '✅' : '⚠️', 'ServiceWorker: ' + (AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A')),
+    row(AUB_COMPAT.ws, 'WebSocket: ' + (AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
+    row(AUB_COMPAT.audio, 'AudioContext: ' + (AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING')),
+    row(AUB_COMPAT.crypto, 'crypto.subtle: ' + (AUB_COMPAT.crypto ? 'OK' : 'MISSING')),
+    row(AUB_COMPAT.sw, 'ServiceWorker: ' + (AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A')),
   ].join('');
 }
 
@@ -146,7 +148,7 @@ function _aubWrapPublicFunctions() {
   const _origSetTf = window.setTf;
   if (typeof _origSetTf === 'function') {
     window.setTf = function (tf, btn) {
-      const valid = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '1d', '1w', '1M'];
+      const valid = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '5h', '6h', '12h', '1d', '3d', '1w', '1M'];
       if (!_aubGuard('setTf', tf, v => valid.includes(v))) return;
       return _origSetTf.apply(this, arguments);
     };
@@ -192,7 +194,7 @@ function _aubUpdatePerfBadge() {
   }
 }
 function _aubUpdatePerfCard() {
-  AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + AUB.rafFPS + (AUB._perfHeavy ? ' ⚠' : ''));
+  AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + AUB.rafFPS + (AUB._perfHeavy ? ' (!)' : ''));
   AUB_PERF.setDOM('aub-perf-skips', 'DOM skips (no-change): ' + AUB.domSkips);
 }
 
@@ -205,6 +207,8 @@ function _aubSaveBB() {
   if (!_bbDirty) return;
   _safeLocalStorageSet('aub_bb', AUB.bb.slice(0, 50));
   _bbDirty = false;
+  if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aubData');
+  if (typeof _userCtxPush === 'function') _userCtxPush();
 }
 function aubBBSnapshot(event, extra) {
   try {
@@ -249,14 +253,14 @@ function aubBBExport() {
     a.href = URL.createObjectURL(blob);
     a.download = 'zeus_blackbox_' + new Date().toISOString().slice(0, 10) + '.json';
     a.click();
-    if (typeof toast === 'function') toast('📼 Blackbox exported!');
+    if (typeof toast === 'function') toast('Blackbox exported!', 0, _ZI.clip);
   } catch (e) { console.warn('[AUB BB export]', e); }
 }
 function aubBBClear() {
   AUB.bb = [];
   try { localStorage.removeItem('aub_bb'); } catch (_) { }
   _aubUpdateBBCard();
-  if (typeof toast === 'function') toast('🗑 Blackbox cleared');
+  if (typeof toast === 'function') toast('Blackbox cleared', 0, _ZI.trash);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -302,7 +306,7 @@ function _aubUpdateMTFCard(s5m, s15m, s1h, s4h, penalty) {
     const b = document.getElementById(bid); if (b) b.style.width = pct(val);
     const v = document.getElementById(vid); if (v) v.textContent = Math.round(val * 100);
   });
-  AUB_PERF.setDOM('aub-mtf-penalty', penalty ? '⚠ PENALTY: 4h bull vs 5m weak' : 'Penalty: none');
+  AUB_PERF.setDOM('aub-mtf-penalty', penalty ? '(!) PENALTY: 4h bull vs 5m weak' : 'Penalty: none');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -324,7 +328,9 @@ function aubCalcCorrelation() {
     function corrProxy(btcChg, altChg) {
       if (!btcChg || !altChg) return null;
       const same = (btcChg >= 0) === (altChg >= 0);
-      return same ? +0.7 + Math.random() * 0.2 : -0.4 + Math.random() * 0.2;
+      // Deterministic proxy: scale by magnitude similarity (no Math.random)
+      const magRatio = Math.min(Math.abs(btcChg), Math.abs(altChg)) / (Math.max(Math.abs(btcChg), Math.abs(altChg)) || 1);
+      return same ? +0.7 + magRatio * 0.2 : -0.4 + magRatio * 0.2;
     }
 
     const btcChg = (typeof S !== 'undefined' && S.chg) ? S.chg : 0;
@@ -348,7 +354,7 @@ function _aubUpdateCorrCard() {
   AUB_PERF.setDOM('aub-corr-sol', fmt(AUB.corr.sol));
   const pen = document.getElementById('aub-corr-penalty');
   if (pen) {
-    pen.textContent = AUB.corrPenalty ? '⚠ PENALTY: BTC drag active' : 'Penalty: inactive';
+    pen.textContent = AUB.corrPenalty ? '(!) PENALTY: BTC drag active' : 'Penalty: inactive';
     pen.className = 'aub-row ' + (AUB.corrPenalty ? 'warn' : '');
   }
 }
@@ -363,7 +369,7 @@ function aubMacroClear() {
   AUB.macroEvents = [];
   try { localStorage.removeItem('aub_macro'); } catch (_) { }
   _aubRenderMacroEvents();
-  if (typeof toast === 'function') toast('🗑 Macro events cleared');
+  if (typeof toast === 'function') toast('Macro events cleared', 0, _ZI.trash);
 }
 function aubMacroFileLoad(input) {
   const file = input?.files?.[0]; if (!file) return;
@@ -379,10 +385,12 @@ function aubMacroFileLoad(input) {
           risk: ev.risk || 0.5,      // risk reduce factor 0–1
         }));
         _safeLocalStorageSet('aub_macro', AUB.macroEvents); // FIX 22
+        if (typeof _ucMarkDirty === 'function') _ucMarkDirty('aubData');
+        if (typeof _userCtxPush === 'function') _userCtxPush();
         _aubRenderMacroEvents();
-        if (typeof toast === 'function') toast('📡 Macro events loaded: ' + AUB.macroEvents.length);
+        if (typeof toast === 'function') toast('Macro events loaded: ' + AUB.macroEvents.length);
       }
-    } catch (e) { if (typeof toast === 'function') toast('❌ Invalid JSON'); }
+    } catch (e) { if (typeof toast === 'function') toast('Invalid JSON', 0, _ZI.x); }
   };
   reader.readAsText(file);
   input.value = '';
@@ -485,7 +493,7 @@ function _aubSimWorker() {
     const res = document.getElementById('aub-sim-result');
     if (res) {
       res.style.display = 'block';
-      res.innerHTML = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">⚠ Suggest only — confirm before applying</span>`;
+      res.innerHTML = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">' + _ZI.w + ' Suggest only — confirm before applying</span>`;
     }
     const applyBtn = document.getElementById('aub-sim-apply');
     if (applyBtn) applyBtn.style.display = 'inline-block';
@@ -506,7 +514,7 @@ function aubSimApply() {
   const rrInput = document.getElementById('atRR');
   if (slInput) slInput.value = AUB.simPendingApply.sl;
   if (rrInput) rrInput.value = AUB.simPendingApply.rr;
-  if (typeof toast === 'function') toast('✅ Suggestion applied to fields — review before enabling AT');
+  if (typeof toast === 'function') toast('Suggestion applied to fields — review before enabling AT');
   document.getElementById('aub-sim-apply').style.display = 'none';
   AUB.simPendingApply = null;
   aubBBSnapshot('SIM_APPLIED', { sl: AUB.simResult.sl, rr: AUB.simResult.rr });
@@ -540,7 +548,7 @@ function _aubCheckNightlySim() {
 // DATA BADGE — sync with _SAFETY.dataStalled
 // ════════════════════════════════════════════════════════════════
 function _aubUpdateDataBadge() {
-  // ✅ FIX v118: aceeași sursă ca bannerul de feed și renderCircuitBrain
+  // FIX v118: aceeași sursă ca bannerul de feed și renderCircuitBrain
   const stalled = (typeof _SAFETY !== 'undefined' && _SAFETY.dataStalled) ||
     (typeof S !== 'undefined' && S.dataStalled);
   const recon = (typeof _SAFETY !== 'undefined' && _SAFETY.isReconnecting);
@@ -609,7 +617,7 @@ function initAUB() {
     _aubCheckNightlySim();   // runs 1x/day, after engine fully booted
   }, { once: true });
 
-  console.log('[AUB] 🛸 Alien Upgrade Bay shell ready — waiting for engine');
+  console.log('[AUB] Alien Upgrade Bay shell ready — waiting for engine');
 }
 
 

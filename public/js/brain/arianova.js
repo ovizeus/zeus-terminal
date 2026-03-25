@@ -51,6 +51,8 @@ if (!window._ARIA_NOVA_LOADED) {
         lastMsg: NOVA_STATE.lastMsg
       }));
     } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('ariaNovaHud');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
 
   // ── TOGGLE ───────────────────────────────────────────────────────
@@ -74,6 +76,8 @@ if (!window._ARIA_NOVA_LOADED) {
     const s = document.getElementById('dsl-strip');
     if (s) s.classList.toggle('dsl-strip-open', _dslStripOpen);
     try { localStorage.setItem('zeus_dsl_strip_open', _dslStripOpen ? '1' : '0'); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('panels');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
   function dslUpdateBanner() {
     const el_s = document.getElementById('dsl-bar-status');
@@ -90,19 +94,19 @@ if (!window._ARIA_NOVA_LOADED) {
       el_s.textContent = 'DSL OFFLINE';
       el_s.className = 'dsls-off';
     } else if (mode === 'auto' && atOn) {
-      el_s.textContent = '🤖 AUTO TRADE · DSL BRAIN ACTIV';
+      el_s.innerHTML = _ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIV';
       el_s.className = 'dsls-auto';
     } else if (mode === 'auto') {
-      el_s.textContent = '🤖 AUTO MODE · AT OPRIT';
+      el_s.innerHTML = _ZI.robot + ' AUTO MODE · AT OPRIT';
       el_s.className = 'dsls-auto';
     } else if (mode === 'assist' && armed) {
-      el_s.textContent = '🟡 ASSIST ARMAT · DSL EXECUTĂ';
+      el_s.innerHTML = _ZI.dYlw + ' ASSIST ARMAT · DSL EXECUTĂ';
       el_s.className = 'dsls-assist-armed';
     } else if (mode === 'assist') {
-      el_s.textContent = '🔒 ASSIST MANUAL · DEZARMAT';
+      el_s.innerHTML = _ZI.lock + ' ASSIST MANUAL · DEZARMAT';
       el_s.className = 'dsls-assist';
     } else {
-      el_s.textContent = '✋ MANUAL · DSL MONITOR';
+      el_s.innerHTML = _ZI.hand + ' MANUAL · DSL MONITOR';
       el_s.className = 'dsls-manual';
     }
     if (el_c) el_c.textContent = nPos > 0 ? nPos + ' poz·' : '';
@@ -115,6 +119,8 @@ if (!window._ARIA_NOVA_LOADED) {
     const s = document.getElementById('at-strip');
     if (s) s.classList.toggle('at-strip-open', _atStripOpen);
     try { localStorage.setItem('zeus_at_strip_open', _atStripOpen ? '1' : '0'); } catch (_) { }
+    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('panels');
+    if (typeof _userCtxPush === 'function') _userCtxPush();
   }
   function atUpdateBanner() {
     const el_state = document.getElementById('at-bar-state');
@@ -123,15 +129,17 @@ if (!window._ARIA_NOVA_LOADED) {
     const el_strip = document.getElementById('at-strip');
     if (!el_state) return;
 
-    const atOn = typeof AT !== 'undefined' && AT.enabled;
+    const atOn = typeof AT !== 'undefined' && (AT.enabled || window._serverATEnabled);
     const killed = typeof AT !== 'undefined' && AT.killTriggered;
-    const mode = typeof AT !== 'undefined' ? (AT.mode || 'demo') : 'demo';
+    const mode = window._serverATEnabled ? (AT._serverMode || 'demo') : (typeof AT !== 'undefined' ? (AT.mode || 'demo') : 'demo');
     const brMode = (typeof S !== 'undefined' ? S.mode || 'assist' : 'assist').toLowerCase();
 
-    // Calc live PnL for AUTO positions only
-    const autoPosns = (typeof TP !== 'undefined' && Array.isArray(TP.demoPositions))
-      ? TP.demoPositions.filter(p => p.autoTrade && !p.closed)
+    // Calc live PnL for AUTO positions matching current mode
+    const _atMode = mode;
+    const _allATPosns = (typeof TP !== 'undefined')
+      ? [].concat(TP.demoPositions || [], TP.livePositions || []).filter(p => p.autoTrade && !p.closed && (p.mode || p._serverMode || 'demo') === _atMode)
       : [];
+    const autoPosns = _allATPosns;
     const nPos = autoPosns.length;
     let livePnl = 0;
     autoPosns.forEach(p => {
@@ -151,21 +159,22 @@ if (!window._ARIA_NOVA_LOADED) {
     // State badge
     el_state.className = '';
     if (killed) {
-      el_state.textContent = '☠ KILL SWITCH';
+      el_state.innerHTML = _ZI.skull + ' KILL SWITCH';
       el_state.className = 'atbs-kill';
     } else if (atOn) {
       if (nPos === 0) el_state.className = 'atbs-on-neutral';
       else if (livePnl > 0) el_state.className = 'atbs-on-profit';
       else el_state.className = 'atbs-on-loss';
-      el_state.textContent = '🟢 AT ON · ' + mode.toUpperCase();
+      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (mode === 'live' ? 'LIVE' : 'DEMO');
     } else {
-      el_state.textContent = '⭕ AT OFF · ' + mode.toUpperCase();
+      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (mode === 'live' ? 'LIVE' : 'DEMO');
       el_state.className = 'atbs-off';
     }
 
     // Info
     const modeTag = brMode === 'auto' ? 'AUTO' : brMode === 'assist' ? 'ASSIST' : 'MANUAL';
-    el_info.textContent = modeTag + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții');
+    const execLocked = mode === 'live' && !window._apiConfigured;
+    el_info.innerHTML = modeTag + (execLocked ? ' · ' + _ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții');
 
     // PnL
     if (el_pnl) {
@@ -194,15 +203,21 @@ if (!window._ARIA_NOVA_LOADED) {
     const el_strip = document.getElementById('pt-strip');
     if (!el_state) return;
 
-    // All demo positions (manual + auto)
-    const allPosns = (typeof TP !== 'undefined' && Array.isArray(TP.demoPositions))
-      ? TP.demoPositions.filter(p => !p.closed)
-      : [];
+    // All positions matching current globalMode
+    var globalMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+    var allDemo = (typeof TP !== 'undefined' && Array.isArray(TP.demoPositions))
+      ? TP.demoPositions.filter(p => !p.closed) : [];
+    var allLive = (typeof TP !== 'undefined' && Array.isArray(TP.livePositions))
+      ? TP.livePositions.filter(p => !p.closed) : [];
+    const allPosns = globalMode === 'live' ? allLive : allDemo;
     const nPos = allPosns.length;
+    const isLiveMode = globalMode === 'live';
     const demobal = (typeof TP !== 'undefined') ? (TP.demoBalance || 10000) : 10000;
-    const startBal = 10000;
-    const balPnl = demobal - startBal;
-    const balPct = (balPnl / startBal * 100).toFixed(2);
+    const liveBal = (typeof TP !== 'undefined') ? (TP.liveBalance || 0) : 0;
+    const bal = isLiveMode ? liveBal : demobal;
+    const startBal = isLiveMode ? liveBal : ((typeof TP !== 'undefined' && TP._serverStartBalance) ? TP._serverStartBalance : 10000);
+    const balPnl = isLiveMode ? 0 : (demobal - startBal);
+    const balPct = (startBal > 0 ? (balPnl / startBal * 100) : 0).toFixed(2);
 
     // Live unrealized PnL across all open positions
     let livePnl = 0;
@@ -220,21 +235,29 @@ if (!window._ARIA_NOVA_LOADED) {
       else el_strip.classList.add('pts-loss');
     }
 
-    // State badge
+    // State badge — reflects global mode
+    var globalMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+    var modeLabel = globalMode === 'live' ? 'LIVE MODE' : 'DEMO MODE';
     el_state.className = '';
     if (nPos === 0) {
-      el_state.textContent = '📄 PAPER TRADING'; el_state.className = 'ptbs-empty';
+      el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-empty';
     } else if (livePnl > 0) {
-      el_state.textContent = '📈 PAPER PROFIT'; el_state.className = 'ptbs-profit';
+      el_state.innerHTML = _ZI.tup + ' ' + modeLabel + ' PROFIT'; el_state.className = 'ptbs-profit';
     } else if (livePnl < 0) {
-      el_state.textContent = '📉 PAPER LOSS'; el_state.className = 'ptbs-loss';
+      el_state.innerHTML = _ZI.drop + ' ' + modeLabel + ' LOSS'; el_state.className = 'ptbs-loss';
     } else {
-      el_state.textContent = '📄 PAPER TRADING'; el_state.className = 'ptbs-neutral';
+      el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-neutral';
     }
 
     // Info: balance + positions
-    const balStr = balPnl >= 0 ? '+$' + balPnl.toFixed(2) : '-$' + Math.abs(balPnl).toFixed(2);
-    el_info.textContent = 'BAL $' + demobal.toFixed(0) + ' (' + balStr + ') · ' + (nPos > 0 ? nPos + ' poz active' : 'fără poziții');
+    if (isLiveMode && bal <= 0 && !window._apiConfigured) {
+      el_info.textContent = 'Live balance unavailable · API not configured' + (nPos > 0 ? ' · ' + nPos + ' poz active' : '');
+    } else if (isLiveMode) {
+      el_info.textContent = 'BAL $' + bal.toFixed(0) + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții');
+    } else {
+      const balStr = balPnl >= 0 ? '+$' + balPnl.toFixed(2) : '-$' + Math.abs(balPnl).toFixed(2);
+      el_info.textContent = 'BAL $' + bal.toFixed(0) + ' (' + balStr + ') · ' + (nPos > 0 ? nPos + ' poz active' : 'fără poziții');
+    }
 
     // Live PnL unrealized
     if (el_pnl) {
@@ -270,7 +293,7 @@ if (!window._ARIA_NOVA_LOADED) {
 
     // Feed to atLog only for danger/warn (anti-spam)
     if ((severity === 'danger' || severity === 'warn') && typeof atLog === 'function') {
-      atLog('warn', '🧠 NOVA: ' + msg);
+      atLog('warn', '[NOVA] ' + msg);
     }
     _novaRenderBar();
     _novaRenderLog();
@@ -318,6 +341,99 @@ if (!window._ARIA_NOVA_LOADED) {
       + '<line x1="4" y1="46" x2="72" y2="26" stroke="#f0c040" stroke-width="1.5"/>',
     wedge_fall: '<line x1="4" y1="14" x2="72" y2="36" stroke="#00d97a" stroke-width="1.5"/>'
       + '<line x1="4" y1="4"  x2="72" y2="24" stroke="#f0c040" stroke-width="1.5"/>',
+    // ── Batch 1: Candle Power patterns ──
+    shootingstar: '<rect x="32" y="28" width="16" height="12" fill="#ff335522" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="40" y1="28" x2="40" y2="4" stroke="#ff3355" stroke-width="1.5"/>',
+    hangingman: '<rect x="32" y="8" width="16" height="14" fill="#ff335522" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="40" y1="22" x2="40" y2="46" stroke="#ff3355" stroke-width="1.5"/>',
+    soldiers: '<rect x="6" y="28" width="14" height="16" fill="#00d97a22" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<rect x="24" y="20" width="14" height="16" fill="#00d97a33" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<rect x="42" y="10" width="14" height="18" fill="#00d97a44" stroke="#00d97a" stroke-width="1.5"/>',
+    crows: '<rect x="6" y="6" width="14" height="16" fill="#ff335522" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<rect x="24" y="14" width="14" height="16" fill="#ff335533" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<rect x="42" y="24" width="14" height="18" fill="#ff335544" stroke="#ff3355" stroke-width="1.5"/>',
+    tweezertop: '<rect x="18" y="8" width="14" height="20" fill="#00d97a22" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<rect x="40" y="8" width="14" height="20" fill="#ff335522" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<line x1="14" y1="8" x2="58" y2="8" stroke="#f0c040" stroke-width="1" stroke-dasharray="2 2"/>',
+    tweezerbottom: '<rect x="18" y="20" width="14" height="20" fill="#ff335522" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<rect x="40" y="20" width="14" height="20" fill="#00d97a22" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<line x1="14" y1="40" x2="58" y2="40" stroke="#f0c040" stroke-width="1" stroke-dasharray="2 2"/>',
+    darkcloud: '<rect x="16" y="14" width="16" height="26" fill="#00d97a22" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<rect x="38" y="8" width="16" height="22" fill="#ff335533" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="38" y1="25" x2="54" y2="25" stroke="#f0c04066" stroke-width="1" stroke-dasharray="2 2"/>',
+    piercing: '<rect x="16" y="8" width="16" height="26" fill="#ff335522" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<rect x="38" y="18" width="16" height="22" fill="#00d97a33" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<line x1="38" y1="21" x2="54" y2="21" stroke="#f0c04066" stroke-width="1" stroke-dasharray="2 2"/>',
+    // ── Batch 2: Smart Money patterns ──
+    fvg_bull: '<rect x="10" y="10" width="14" height="14" fill="#00d97a22" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<rect x="30" y="4" width="14" height="8" fill="#00d97a11" stroke="#00d97a44" stroke-width="1"/>'
+      + '<rect x="30" y="32" width="14" height="14" fill="#00d97a33" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<rect x="50" y="6" width="14" height="14" fill="#00d97a22" stroke="#00d97a" stroke-width="1.3"/>'
+      + '<line x1="30" y1="12" x2="44" y2="12" stroke="#00ffcc" stroke-width="1" stroke-dasharray="2 2"/>'
+      + '<line x1="30" y1="32" x2="44" y2="32" stroke="#00ffcc" stroke-width="1" stroke-dasharray="2 2"/>',
+    fvg_bear: '<rect x="10" y="24" width="14" height="14" fill="#ff335522" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<rect x="30" y="36" width="14" height="8" fill="#ff335511" stroke="#ff335544" stroke-width="1"/>'
+      + '<rect x="30" y="4" width="14" height="14" fill="#ff335533" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<rect x="50" y="22" width="14" height="14" fill="#ff335522" stroke="#ff3355" stroke-width="1.3"/>'
+      + '<line x1="30" y1="18" x2="44" y2="18" stroke="#ff3355" stroke-width="1" stroke-dasharray="2 2"/>'
+      + '<line x1="30" y1="36" x2="44" y2="36" stroke="#ff3355" stroke-width="1" stroke-dasharray="2 2"/>',
+    ob_bull: '<rect x="10" y="26" width="18" height="18" fill="#00d97a22" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<polyline points="32,44 42,28 52,18 68,8" fill="none" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<line x1="10" y1="26" x2="68" y2="26" stroke="#00ffcc44" stroke-width="1" stroke-dasharray="2 2"/>',
+    ob_bear: '<rect x="10" y="6" width="18" height="18" fill="#ff335522" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<polyline points="32,6 42,22 52,32 68,42" fill="none" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="10" y1="24" x2="68" y2="24" stroke="#ff335544" stroke-width="1" stroke-dasharray="2 2"/>',
+    liq_sweep: '<polyline points="4,24 20,12 36,18 52,6 68,16" fill="none" stroke="#f0c040" stroke-width="1.3"/>'
+      + '<line x1="4" y1="8" x2="68" y2="8" stroke="#ff335566" stroke-width="1" stroke-dasharray="3 3"/>'
+      + '<circle cx="52" cy="6" r="4" fill="none" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<polyline points="52,6 58,14 68,20" fill="none" stroke="#ff3355" stroke-width="1.5"/>',
+    bos_bull: '<polyline points="4,40 18,28 30,34 44,18 60,12 76,8" fill="none" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<line x1="4" y1="28" x2="76" y2="28" stroke="#00ffcc44" stroke-width="1" stroke-dasharray="3 3"/>'
+      + '<text x="66" y="28" fill="#00d97a" font-size="8" font-family="monospace">BOS</text>',
+    bos_bear: '<polyline points="4,8 18,20 30,14 44,30 60,36 76,40" fill="none" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="4" y1="20" x2="76" y2="20" stroke="#ff335544" stroke-width="1" stroke-dasharray="3 3"/>'
+      + '<text x="66" y="20" fill="#ff3355" font-size="8" font-family="monospace">BOS</text>',
+    choch_bull: '<polyline points="4,8 16,22 28,12 42,30 56,20 68,38" fill="none" stroke="#ff3355" stroke-width="1.2"/>'
+      + '<polyline points="56,20 68,10" fill="none" stroke="#00d97a" stroke-width="2"/>'
+      + '<line x1="4" y1="22" x2="68" y2="22" stroke="#f0c04044" stroke-width="1" stroke-dasharray="2 2"/>',
+    choch_bear: '<polyline points="4,40 16,26 28,36 42,18 56,28 68,10" fill="none" stroke="#00d97a" stroke-width="1.2"/>'
+      + '<polyline points="56,28 68,38" fill="none" stroke="#ff3355" stroke-width="2"/>'
+      + '<line x1="4" y1="26" x2="68" y2="26" stroke="#f0c04044" stroke-width="1" stroke-dasharray="2 2"/>',
+    // ── Batch 3: Chart Power patterns ──
+    tripletop: '<polyline points="2,44 12,10 22,30 34,8 46,30 58,10 72,44" fill="none" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="2" y1="10" x2="72" y2="10" stroke="#ff335544" stroke-width="1" stroke-dasharray="3 3"/>',
+    triplebottom: '<polyline points="2,6 12,40 22,18 34,42 46,18 58,40 72,6" fill="none" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<line x1="2" y1="40" x2="72" y2="40" stroke="#00d97a44" stroke-width="1" stroke-dasharray="3 3"/>',
+    chan_up: '<line x1="4" y1="32" x2="72" y2="6" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<line x1="4" y1="46" x2="72" y2="20" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<polyline points="8,44 20,28 32,38 46,18 58,28 68,10" fill="none" stroke="#00ffcc66" stroke-width="1"/>',
+    chan_down: '<line x1="4" y1="6" x2="72" y2="32" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<line x1="4" y1="20" x2="72" y2="46" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<polyline points="8,8 20,22 32,14 46,30 58,24 68,38" fill="none" stroke="#ff335566" stroke-width="1"/>',
+    // ── Batch 4: Momentum Intel patterns ──
+    ema_cross_bull: '<polyline points="4,38 20,34 36,30 52,22 68,12" fill="none" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<polyline points="4,32 20,32 36,32 52,30 68,26" fill="none" stroke="#f0c040" stroke-width="1.2"/>'
+      + '<circle cx="42" cy="30" r="4" fill="none" stroke="#00ffcc" stroke-width="1.5"/>',
+    ema_cross_bear: '<polyline points="4,12 20,16 36,22 52,30 68,40" fill="none" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<polyline points="4,18 20,18 36,20 52,22 68,24" fill="none" stroke="#f0c040" stroke-width="1.2"/>'
+      + '<circle cx="42" cy="20" r="4" fill="none" stroke="#ff3355" stroke-width="1.5"/>',
+    rsi_div_bull: '<polyline points="4,10 24,34 52,28 72,40" fill="none" stroke="#ff335588" stroke-width="1.2"/>'
+      + '<polyline points="4,40 24,34 52,22 72,16" fill="none" stroke="#00d97a" stroke-width="1.5"/>'
+      + '<text x="38" y="46" fill="#00d97a" font-size="7" font-family="monospace">RSI↑</text>',
+    rsi_div_bear: '<polyline points="4,40 24,16 52,22 72,10" fill="none" stroke="#00d97a88" stroke-width="1.2"/>'
+      + '<polyline points="4,10 24,16 52,28 72,34" fill="none" stroke="#ff3355" stroke-width="1.5"/>'
+      + '<text x="38" y="46" fill="#ff3355" font-size="7" font-family="monospace">RSI↓</text>',
+    breakout: '<rect x="4" y="18" width="40" height="24" fill="none" stroke="#f0c04066" stroke-width="1" stroke-dasharray="3 3"/>'
+      + '<polyline points="44,22 56,10 68,4" fill="none" stroke="#00d97a" stroke-width="2"/>'
+      + '<line x1="4" y1="18" x2="68" y2="18" stroke="#00ffcc44" stroke-width="1"/>',
+    breakdown: '<rect x="4" y="8" width="40" height="24" fill="none" stroke="#f0c04066" stroke-width="1" stroke-dasharray="3 3"/>'
+      + '<polyline points="44,28 56,38 68,44" fill="none" stroke="#ff3355" stroke-width="2"/>'
+      + '<line x1="4" y1="32" x2="68" y2="32" stroke="#ff335544" stroke-width="1"/>',
+    vol_climax: '<rect x="8" y="30" width="8" height="14" fill="#f0c04044" stroke="#f0c040" stroke-width="1"/>'
+      + '<rect x="20" y="26" width="8" height="18" fill="#f0c04055" stroke="#f0c040" stroke-width="1"/>'
+      + '<rect x="32" y="20" width="8" height="24" fill="#f0c04066" stroke="#f0c040" stroke-width="1"/>'
+      + '<rect x="44" y="6" width="8" height="38" fill="#f0c04099" stroke="#f0c040" stroke-width="1.5"/>'
+      + '<rect x="56" y="28" width="8" height="16" fill="#f0c04044" stroke="#f0c040" stroke-width="1"/>',
     none: '<text x="40" y="28" text-anchor="middle" fill="#00ffcc22" font-size="12" font-family="monospace">—</text>',
   };
 
@@ -383,6 +499,62 @@ if (!window._ARIA_NOVA_LOADED) {
     if (p2.close > p2.open && starBig && c.close < c.open && c.close < (p2.open + p2.close) / 2)
       return { name: 'Evening Star', dir: 'bear', svgType: 'eveningstar', score: 46 };
 
+    // ── Batch 1: Candle Power (8 new patterns) ──
+
+    // Shooting Star — long upper wick after uptrend (bearish reversal)
+    if (upW > body * 2.2 && dnW < body * .35 && br > .08 && c.close < c.open
+      && p.close > p.open && p.close > p2.close)
+      return { name: 'Shooting Star', dir: 'bear', svgType: 'shootingstar', score: 38 };
+
+    // Hanging Man — long lower wick at top of uptrend (bearish warning)
+    if (dnW > body * 2.2 && upW < body * .35 && br > .08
+      && p.close > p.open && p.close > p2.close)
+      return { name: 'Hanging Man', dir: 'bear', svgType: 'hangingman', score: 34 };
+
+    // Three White Soldiers — 3 consecutive bullish candles, each closing higher
+    if (kl.length >= 4) {
+      const p3 = kl[kl.length - 4];
+      const allBull = c.close > c.open && p.close > p.open && p2.close > p2.open;
+      const rising = c.close > p.close && p.close > p2.close && p2.close > p3.close;
+      const noLongWicks = upW < body * 0.5 && (p.high - p.close) < Math.abs(p.close - p.open) * 0.5;
+      if (allBull && rising && noLongWicks)
+        return { name: '3 White Soldiers', dir: 'bull', svgType: 'soldiers', score: 48 };
+    }
+
+    // Three Black Crows — 3 consecutive bearish candles, each closing lower
+    if (kl.length >= 4) {
+      const p3 = kl[kl.length - 4];
+      const allBear = c.close < c.open && p.close < p.open && p2.close < p2.open;
+      const falling = c.close < p.close && p.close < p2.close && p2.close < p3.close;
+      const noLongWicks = dnW < body * 0.5 && (p2.open - p2.high) < Math.abs(p2.close - p2.open) * 0.5;
+      if (allBear && falling && noLongWicks)
+        return { name: '3 Black Crows', dir: 'bear', svgType: 'crows', score: 48 };
+    }
+
+    // Tweezer Top — two candles with matching highs at top (bearish reversal)
+    if (p.close > p.open && c.close < c.open) {
+      const highDiff = Math.abs(c.high - p.high) / Math.max(c.high, p.high);
+      if (highDiff < 0.002)
+        return { name: 'Tweezer Top', dir: 'bear', svgType: 'tweezertop', score: 36 };
+    }
+
+    // Tweezer Bottom — two candles with matching lows at bottom (bullish reversal)
+    if (p.close < p.open && c.close > c.open) {
+      const lowDiff = Math.abs(c.low - p.low) / Math.min(c.low, p.low);
+      if (lowDiff < 0.002)
+        return { name: 'Tweezer Bottom', dir: 'bull', svgType: 'tweezerbottom', score: 36 };
+    }
+
+    // Dark Cloud Cover — bearish candle opens above prev close, closes >50% into prev body
+    if (p.close > p.open && c.close < c.open && c.open > p.close
+      && c.close < (p.open + p.close) / 2 && c.close > p.open)
+      return { name: 'Dark Cloud Cover', dir: 'bear', svgType: 'darkcloud', score: 40 };
+
+    // Piercing Line — bullish candle opens below prev close, closes >50% into prev body
+    if (p.close < p.open && c.close > c.open && c.open < p.close
+      && c.close > (p.open + p.close) / 2 && c.close < p.open)
+      return { name: 'Piercing Line', dir: 'bull', svgType: 'piercing', score: 40 };
+
     return null;
   }
 
@@ -441,6 +613,261 @@ if (!window._ARIA_NOVA_LOADED) {
       if (hs < -.00008 && ls < -.00008 && hs < ls * 1.15)
         return { name: 'Falling Wedge', dir: 'bull', svgType: 'wedge_fall', score: 38 };
     }
+
+    // ── Batch 3: Chart Power ──
+
+    // Triple Top — 3 peaks at similar level with valleys between
+    if (pk.length >= 3) {
+      const a = pk[pk.length - 3], b = pk[pk.length - 2], c = pk[pk.length - 1];
+      const avg = (a.v + b.v + c.v) / 3;
+      const spread = Math.max(a.v, b.v, c.v) - Math.min(a.v, b.v, c.v);
+      if (spread / avg < 0.02 && c.i - a.i >= 8) {
+        const mids = vl.filter(v => v.i > a.i && v.i < c.i);
+        if (mids.length >= 2)
+          return { name: 'Triple Top', dir: 'bear', svgType: 'tripletop', score: 52 };
+      }
+    }
+
+    // Triple Bottom — 3 valleys at similar level with peaks between
+    if (vl.length >= 3) {
+      const a = vl[vl.length - 3], b = vl[vl.length - 2], c = vl[vl.length - 1];
+      const avg = (a.v + b.v + c.v) / 3;
+      const spread = Math.max(a.v, b.v, c.v) - Math.min(a.v, b.v, c.v);
+      if (spread / avg < 0.02 && c.i - a.i >= 8) {
+        const mids = pk.filter(p => p.i > a.i && p.i < c.i);
+        if (mids.length >= 2)
+          return { name: 'Triple Bottom', dir: 'bull', svgType: 'triplebottom', score: 52 };
+      }
+    }
+
+    // Ascending Channel — parallel upward trendlines (both slopes positive, similar magnitude)
+    if (r.length >= 20) {
+      const h20 = hi.slice(-20), l20 = lo.slice(-20);
+      const hs2 = _linSlope(h20), ls2 = _linSlope(l20);
+      if (hs2 > .00008 && ls2 > .00008 && Math.abs(hs2 - ls2) / Math.max(Math.abs(hs2), Math.abs(ls2)) < 0.5)
+        return { name: 'Asc. Channel', dir: 'bull', svgType: 'chan_up', score: 40 };
+      // Descending Channel — parallel downward trendlines
+      if (hs2 < -.00008 && ls2 < -.00008 && Math.abs(hs2 - ls2) / Math.max(Math.abs(hs2), Math.abs(ls2)) < 0.5)
+        return { name: 'Desc. Channel', dir: 'bear', svgType: 'chan_down', score: 40 };
+    }
+
+    return null;
+  }
+
+  // ── ADVANCED PATTERN DETECTION (higher lows, lower highs, flag, pennant) ──
+  function _detectAdvanced(kl) {
+    if (!kl || kl.length < 25) return null;
+    const r = kl.slice(-40);
+    const hi = r.map(c => c.high), lo = r.map(c => c.low);
+    const pk = _peaks(hi, 3), vl = _valleys(lo, 3);
+
+    // Higher Lows (bullish structure) — 3 consecutive rising valleys
+    if (vl.length >= 3) {
+      const a = vl[vl.length - 3], b = vl[vl.length - 2], c = vl[vl.length - 1];
+      if (c.v > b.v * 1.002 && b.v > a.v * 1.002)
+        return { name: 'Higher Lows', dir: 'bull', svgType: 'wedge_fall', score: 40 };
+    }
+    // Lower Highs (bearish structure) — 3 consecutive falling peaks
+    if (pk.length >= 3) {
+      const a = pk[pk.length - 3], b = pk[pk.length - 2], c = pk[pk.length - 1];
+      if (c.v < b.v * 0.998 && b.v < a.v * 0.998)
+        return { name: 'Lower Highs', dir: 'bear', svgType: 'wedge_rise', score: 40 };
+    }
+    // Bull Flag — sharp move up then tight consolidation (range < 40% of impulse)
+    if (r.length >= 20) {
+      const impulse = r.slice(-20, -8);
+      const flag = r.slice(-8);
+      const impH = Math.max(...impulse.map(c => c.high));
+      const impL = Math.min(...impulse.map(c => c.low));
+      const impRng = impH - impL;
+      const flH = Math.max(...flag.map(c => c.high));
+      const flL = Math.min(...flag.map(c => c.low));
+      const flRng = flH - flL;
+      if (impRng > 0 && impulse[impulse.length - 1].close > impulse[0].close * 1.008
+        && flRng < impRng * 0.4 && flRng > 0) {
+        return { name: 'Bull Flag', dir: 'bull', svgType: 'tri_asc', score: 42 };
+      }
+      // Bear Flag — sharp drop then tight consolidation
+      if (impRng > 0 && impulse[impulse.length - 1].close < impulse[0].close * 0.992
+        && flRng < impRng * 0.4 && flRng > 0) {
+        return { name: 'Bear Flag', dir: 'bear', svgType: 'tri_desc', score: 42 };
+      }
+    }
+    // Pennant — converging range from highs and lows in consolidation
+    if (r.length >= 20) {
+      const cons = r.slice(-12);
+      const cHi = cons.map(c => c.high), cLo = cons.map(c => c.low);
+      const hSlope = _linSlope(cHi), lSlope = _linSlope(cLo);
+      // Pennant needs converging slopes (one negative, one positive)
+      if (hSlope < -0.00005 && lSlope > 0.00005) {
+        // Determine direction from prior impulse
+        const pre = r.slice(-20, -12);
+        const preDir = pre[pre.length - 1].close > pre[0].close ? 'bull' : 'bear';
+        return { name: preDir === 'bull' ? 'Bull Pennant' : 'Bear Pennant', dir: preDir, svgType: 'tri_sym', score: 38 };
+      }
+    }
+
+    // ── Batch 2: Smart Money Concepts ──
+
+    // Fair Value Gap (FVG) — gap between candle 1 high and candle 3 low (or vice versa)
+    if (r.length >= 6) {
+      for (let i = r.length - 1; i >= 2; i--) {
+        const c1 = r[i - 2], c2 = r[i - 1], c3 = r[i];
+        const atr = (c2.high - c2.low) || 1;
+        // Bullish FVG: gap up — candle3.low > candle1.high
+        if (c3.low > c1.high && (c3.low - c1.high) > atr * 0.15
+          && c3.close > c3.open && c1.close > c1.open)
+          return { name: 'FVG (Bull)', dir: 'bull', svgType: 'fvg_bull', score: 42 };
+        // Bearish FVG: gap down — candle3.high < candle1.low
+        if (c3.high < c1.low && (c1.low - c3.high) > atr * 0.15
+          && c3.close < c3.open && c1.close < c1.open)
+          return { name: 'FVG (Bear)', dir: 'bear', svgType: 'fvg_bear', score: 42 };
+        if (i <= r.length - 3) break; // only check last 3-bar window
+      }
+    }
+
+    // Order Block — last opposing candle before a strong impulse move
+    if (r.length >= 8) {
+      const last5 = r.slice(-5);
+      const impulse = last5[last5.length - 1];
+      const preBlock = last5[0];
+      const impBody = Math.abs(impulse.close - impulse.open);
+      const avgBody = last5.slice(0, 4).reduce((s, x) => s + Math.abs(x.close - x.open), 0) / 4;
+      // Bullish OB: last candle is strong bull, preBlock was bearish
+      if (impulse.close > impulse.open && impBody > avgBody * 1.8
+        && preBlock.close < preBlock.open)
+        return { name: 'Order Block (Bull)', dir: 'bull', svgType: 'ob_bull', score: 44 };
+      // Bearish OB: last candle is strong bear, preBlock was bullish
+      if (impulse.close < impulse.open && impBody > avgBody * 1.8
+        && preBlock.close > preBlock.open)
+        return { name: 'Order Block (Bear)', dir: 'bear', svgType: 'ob_bear', score: 44 };
+    }
+
+    // Liquidity Sweep — price pierces above/below recent high/low then reverses sharply
+    if (pk.length >= 2 && vl.length >= 2) {
+      const lastC = r[r.length - 1], prevC = r[r.length - 2];
+      const recentHigh = Math.max(...pk.slice(-3).map(p => p.v));
+      const recentLow = Math.min(...vl.slice(-3).map(v => v.v));
+      // Bearish sweep: wick above recent high then closes below it
+      if (lastC.high > recentHigh && lastC.close < recentHigh && lastC.close < lastC.open)
+        return { name: 'Liquidity Sweep', dir: 'bear', svgType: 'liq_sweep', score: 46 };
+      // Bullish sweep: wick below recent low then closes above it
+      if (lastC.low < recentLow && lastC.close > recentLow && lastC.close > lastC.open)
+        return { name: 'Liquidity Sweep', dir: 'bull', svgType: 'liq_sweep', score: 46 };
+    }
+
+    // Break of Structure (BOS) — new higher high in uptrend or lower low in downtrend
+    if (pk.length >= 3 && vl.length >= 3) {
+      const pk1 = pk[pk.length - 3], pk2 = pk[pk.length - 2], pk3 = pk[pk.length - 1];
+      const vl1 = vl[vl.length - 3], vl2 = vl[vl.length - 2], vl3 = vl[vl.length - 1];
+      // Bullish BOS: higher highs + higher lows, latest breaks above
+      if (pk3.v > pk2.v && pk2.v > pk1.v && vl3.v > vl2.v)
+        return { name: 'BOS (Bull)', dir: 'bull', svgType: 'bos_bull', score: 44 };
+      // Bearish BOS: lower lows + lower highs, latest breaks below
+      if (vl3.v < vl2.v && vl2.v < vl1.v && pk3.v < pk2.v)
+        return { name: 'BOS (Bear)', dir: 'bear', svgType: 'bos_bear', score: 44 };
+    }
+
+    // Change of Character (CHoCH) — trend reversal: uptrend makes lower low, or downtrend makes higher high
+    if (pk.length >= 3 && vl.length >= 3) {
+      const pk2 = pk[pk.length - 2], pk3 = pk[pk.length - 1];
+      const vl1 = vl[vl.length - 3], vl2 = vl[vl.length - 2], vl3 = vl[vl.length - 1];
+      const pk1 = pk[pk.length - 3];
+      // Bearish CHoCH: was making higher highs, now lower high + lower low
+      if (pk2.v > pk1.v && pk3.v < pk2.v * 0.998 && vl3.v < vl2.v * 0.998)
+        return { name: 'CHoCH (Bear)', dir: 'bear', svgType: 'choch_bear', score: 48 };
+      // Bullish CHoCH: was making lower lows, now higher low + higher high
+      if (vl2.v < vl1.v && vl3.v > vl2.v * 1.002 && pk3.v > pk2.v * 1.002)
+        return { name: 'CHoCH (Bull)', dir: 'bull', svgType: 'choch_bull', score: 48 };
+    }
+
+    return null;
+  }
+
+  // ── MOMENTUM INTEL DETECTION (Batch 4) ──────────────────────────
+  function _detectMomentum(kl) {
+    if (!kl || kl.length < 30) return null;
+    const closes = kl.slice(-30).map(c => c.close);
+    const vols = kl.slice(-30).map(c => c.volume || 0);
+
+    // EMA helper (inline, period n over arr)
+    function _ema(arr, n) {
+      const k = 2 / (n + 1);
+      const out = [arr[0]];
+      for (let i = 1; i < arr.length; i++) out.push(arr[i] * k + out[i - 1] * (1 - k));
+      return out;
+    }
+
+    // EMA 9 / EMA 21 Cross
+    const ema9 = _ema(closes, 9);
+    const ema21 = _ema(closes, 21);
+    const len = ema9.length;
+    const cur9 = ema9[len - 1], cur21 = ema21[len - 1];
+    const prev9 = ema9[len - 2], prev21 = ema21[len - 2];
+    // Bullish cross: EMA9 crosses above EMA21
+    if (prev9 <= prev21 && cur9 > cur21)
+      return { name: 'EMA Cross (Bull)', dir: 'bull', svgType: 'ema_cross_bull', score: 40 };
+    // Bearish cross: EMA9 crosses below EMA21
+    if (prev9 >= prev21 && cur9 < cur21)
+      return { name: 'EMA Cross (Bear)', dir: 'bear', svgType: 'ema_cross_bear', score: 40 };
+
+    // RSI (14-period) for divergence detection
+    const rsiPeriod = 14;
+    if (closes.length >= rsiPeriod + 6) {
+      const gains = [], losses = [];
+      for (let i = 1; i < closes.length; i++) {
+        const d = closes[i] - closes[i - 1];
+        gains.push(d > 0 ? d : 0);
+        losses.push(d < 0 ? -d : 0);
+      }
+      // Smoothed RSI
+      let avgG = gains.slice(0, rsiPeriod).reduce((a, b) => a + b, 0) / rsiPeriod;
+      let avgL = losses.slice(0, rsiPeriod).reduce((a, b) => a + b, 0) / rsiPeriod;
+      const rsiArr = [];
+      for (let i = rsiPeriod; i < gains.length; i++) {
+        avgG = (avgG * (rsiPeriod - 1) + gains[i]) / rsiPeriod;
+        avgL = (avgL * (rsiPeriod - 1) + losses[i]) / rsiPeriod;
+        rsiArr.push(avgL === 0 ? 100 : 100 - 100 / (1 + avgG / avgL));
+      }
+      if (rsiArr.length >= 6) {
+        const rLen = rsiArr.length;
+        const priceLow1 = closes[closes.length - 6], priceLow2 = closes[closes.length - 1];
+        const rsiLow1 = rsiArr[rLen - 6], rsiLow2 = rsiArr[rLen - 1];
+        // Bullish RSI Divergence: price makes lower low but RSI makes higher low
+        if (priceLow2 < priceLow1 * 0.998 && rsiLow2 > rsiLow1 + 3 && rsiLow2 < 45)
+          return { name: 'RSI Divergence (Bull)', dir: 'bull', svgType: 'rsi_div_bull', score: 44 };
+        // Bearish RSI Divergence: price makes higher high but RSI makes lower high
+        if (priceLow2 > priceLow1 * 1.002 && rsiLow2 < rsiLow1 - 3 && rsiLow2 > 55)
+          return { name: 'RSI Divergence (Bear)', dir: 'bear', svgType: 'rsi_div_bear', score: 44 };
+      }
+    }
+
+    // Breakout / Breakdown — price exits range of last 20 bars
+    if (closes.length >= 22) {
+      const range = closes.slice(-22, -2);
+      const rangeHigh = Math.max(...range);
+      const rangeLow = Math.min(...range);
+      const rangeSpan = rangeHigh - rangeLow;
+      const current = closes[closes.length - 1];
+      // Breakout: closes above range high with momentum
+      if (current > rangeHigh && rangeSpan > 0 && (current - rangeHigh) > rangeSpan * 0.15)
+        return { name: 'Breakout', dir: 'bull', svgType: 'breakout', score: 46 };
+      // Breakdown: closes below range low with momentum
+      if (current < rangeLow && rangeSpan > 0 && (rangeLow - current) > rangeSpan * 0.15)
+        return { name: 'Breakdown', dir: 'bear', svgType: 'breakdown', score: 46 };
+    }
+
+    // Volume Climax — current volume > 2.5x average of last 20 bars
+    if (vols.length >= 22) {
+      const avgVol = vols.slice(-22, -2).reduce((a, b) => a + b, 0) / 20;
+      const curVol = vols[vols.length - 1];
+      if (avgVol > 0 && curVol > avgVol * 2.5) {
+        const lastC = kl[kl.length - 1];
+        const dir = lastC.close > lastC.open ? 'bull' : 'bear';
+        return { name: 'Volume Climax', dir, svgType: 'vol_climax', score: 42 };
+      }
+    }
+
     return null;
   }
 
@@ -514,8 +941,8 @@ if (!window._ARIA_NOVA_LOADED) {
       dot.className = 'aria-dot aria-scan'; return;
     }
     const cls = pat.dir === 'bull' ? 'aria-bar-bull' : pat.dir === 'bear' ? 'aria-bar-bear' : 'aria-bar-watch';
-    const ic = pat.dir === 'bull' ? '🟢' : pat.dir === 'bear' ? '🔴' : '🟡';
-    txt.textContent = `${ic} PATTERN: ${pat.name} — ${pat.conf}%`;
+    const ic = pat.dir === 'bull' ? _ZI.dGrn : pat.dir === 'bear' ? _ZI.dRed : _ZI.dYlw;
+    txt.innerHTML = `${ic} PATTERN: ${pat.name} — ${pat.conf}%`;
     txt.className = cls;
     dot.className = 'aria-dot ' + (pat.dir === 'bull' ? 'aria-bull' : pat.dir === 'bear' ? 'aria-bear' : 'aria-watch');
   }
@@ -604,7 +1031,7 @@ if (!window._ARIA_NOVA_LOADED) {
           trapEl.style.color = '#00ffcc44';
         } else {
           const trPct = Math.round(tr * 100);
-          trapEl.textContent = trPct + '%' + (tr >= 0.55 ? ' ⚠️' : '');
+          trapEl.innerHTML = trPct + '%' + (tr >= 0.55 ? ' ' + _ZI.w : '');
           trapEl.style.color = tr >= 0.65 ? '#ff3355' : tr >= 0.55 ? '#f0c040' : '#00d97a';
         }
       }
@@ -626,9 +1053,11 @@ if (!window._ARIA_NOVA_LOADED) {
     const el = document.getElementById('nova-bar-txt');
     if (!el) return;
     const lm = NOVA_STATE.lastMsg;
-    if (!lm) { el.textContent = 'idle'; el.className = ''; return; }
+    if (!lm) { el.textContent = 'idle'; el.className = ''; _novaRenderAriaSummary(); return; }
     el.textContent = lm.msg.length > 48 ? lm.msg.slice(0, 48) + '\u2026' : lm.msg;
     el.className = lm.severity === 'danger' ? 'nova-blocked' : lm.severity === 'ok' ? 'nova-ready' : '';
+    // NOVA Improvement 1: update ARIA mini-summary in NOVA
+    _novaRenderAriaSummary();
   }
 
   function _novaRenderLog() {
@@ -638,12 +1067,17 @@ if (!window._ARIA_NOVA_LOADED) {
       el.innerHTML = '<div class="nova-empty">No verdicts yet \u2014 monitoring market\u2026</div>';
       return;
     }
-    el.innerHTML = NOVA_STATE.log.map(e =>
+    // NOVA Improvement 3: correlate current ARIA pattern with latest log entry
+    const pat = ARIA_STATE.pattern;
+    const patTag = pat ? ` <span style="opacity:.4;font-size:7px">[` + pat.name + ' ' + (pat.dir === 'bull' ? '\u{1F7E2}' : pat.dir === 'bear' ? '\u{1F534}' : '\u{1F7E1}') + ' ' + pat.conf + `%]</span>` : '';
+    el.innerHTML = NOVA_STATE.log.map((e, i) =>
       `<div class="nova-log-row nova-log-${e.severity}">
       <span class="nova-log-ts">${e.ts}</span>
-      <span class="nova-log-msg">${e.msg}</span>
+      <span class="nova-log-msg">${e.msg}${i === 0 ? patTag : ''}</span>
     </div>`
     ).join('');
+    // NOVA Improvement 2: render ARIA history inside NOVA panel
+    _novaRenderAriaHist();
   }
 
   // ── RAF PAINT ─────────────────────────────────────────────────────
@@ -752,9 +1186,12 @@ if (!window._ARIA_NOVA_LOADED) {
 
     const candle = _detectCandle(kl);
     const chart = _detectChart(kl);
+    const advanced = _detectAdvanced(kl);
+    const momentum = _detectMomentum(kl);
     let chosen = null;
-    if (candle && chart) chosen = chart.score >= candle.score ? chart : candle;
-    else chosen = chart || candle;
+    // Pick highest-scoring pattern from all four detectors
+    const _candidates = [candle, chart, advanced, momentum].filter(Boolean);
+    if (_candidates.length) chosen = _candidates.reduce((a, b) => b.score > a.score ? b : a);
 
     const vol = _volTrend(kl);
     const mtf = _getMTF();
@@ -794,7 +1231,7 @@ if (!window._ARIA_NOVA_LOADED) {
         const sev = cfAdj >= 75 ? 'ok' : cfAdj >= 60 ? 'warn' : 'info';
         novaLog(sev, `ARIA: ${chosen.name} (${chosen.dir.toUpperCase()}) ${cfAdj}% @ ${S.chartTf || '5m'}`);
         if (cfAdj >= 72 && typeof atLog === 'function')
-          atLog('info', `👁 ARIA: ${chosen.name} ${chosen.dir === 'bull' ? '🟢' : '🔴'} ${cfAdj}%`);
+          atLog('info', `[ARIA] ${chosen.name} ${chosen.dir === 'bull' ? 'BULL' : 'BEAR'} ${cfAdj}%`);
       }
 
       ARIA_STATE.pattern = {
@@ -865,16 +1302,59 @@ if (!window._ARIA_NOVA_LOADED) {
     // First run after data settles
     setTimeout(_anUpdate, 6000);
 
-    console.log('[ARIA/NOVA] 👁 ARIA + 🧠 NOVA initialized');
+    console.log('[ARIA/NOVA] ARIA + NOVA initialized');
   }
 
   // ── NOVA CLIPBOARD EXPORT ──────────────────────────────────────────
   function novaCopyLog() {
-    if (!NOVA_STATE.log.length) { toast('🧠 NOVA log empty'); return; }
+    if (!NOVA_STATE.log.length) { toast('NOVA log empty', 0, _ZI.brain); return; }
     const txt = NOVA_STATE.log.map(e => `[${e.ts}] [${e.severity.toUpperCase()}] ${e.msg}`).join('\n');
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(txt).then(() => toast('📋 NOVA log copied')).catch(() => toast('❌ Copy failed'));
-    } else { toast('❌ Clipboard unavailable'); }
+      navigator.clipboard.writeText(txt).then(() => toast('NOVA log copied', 0, _ZI.clip)).catch(() => toast('Copy failed', 0, _ZI.x));
+    } else { toast('Clipboard unavailable', 0, _ZI.x); }
+  }
+
+  // ── NOVA IMPROVEMENT 1: ARIA mini-summary in NOVA bar + panel ────
+  function _novaRenderAriaSummary() {
+    const pat = ARIA_STATE.pattern;
+    // Bar inline hint
+    const barEl = document.getElementById('nova-bar-aria');
+    if (barEl) {
+      barEl.innerHTML = pat
+        ? `${pat.dir === 'bull' ? _ZI.dGrn : pat.dir === 'bear' ? _ZI.dRed : _ZI.dYlw} ${pat.name} ${pat.conf}%`
+        : '';
+    }
+    // Panel summary row
+    const nameEl = document.getElementById('nova-aria-name');
+    const dirEl = document.getElementById('nova-aria-dir');
+    const confEl = document.getElementById('nova-aria-conf');
+    const tfEl = document.getElementById('nova-aria-tf');
+    if (nameEl) nameEl.textContent = pat ? pat.name : '—';
+    if (dirEl) {
+      dirEl.innerHTML = pat ? (pat.dir === 'bull' ? _ZI.dGrn + ' BULL' : pat.dir === 'bear' ? _ZI.dRed + ' BEAR' : _ZI.dYlw + ' WATCH') : '';
+    }
+    if (confEl) {
+      confEl.textContent = pat ? `${pat.conf}%` : '';
+      if (pat) confEl.style.color = pat.conf >= 70 ? '#00d97a' : pat.conf >= 50 ? '#f0c040' : '#ff335588';
+    }
+    if (tfEl) tfEl.textContent = pat ? pat.tf : '';
+  }
+
+  // ── NOVA IMPROVEMENT 2: ARIA history inside NOVA panel ───────────
+  function _novaRenderAriaHist() {
+    const el = document.getElementById('nova-aria-hist');
+    if (!el) return;
+    if (!_ariaHist.length) { el.innerHTML = '<span style="opacity:.3">—</span>'; return; }
+    el.innerHTML = _ariaHist.map(h => {
+      const ic = h.dir === 'bull' ? _ZI.dGrn : h.dir === 'bear' ? _ZI.dRed : _ZI.dYlw;
+      const cc = h.dir === 'bull' ? '#00d97a' : h.dir === 'bear' ? '#ff3355' : '#f0c040';
+      return `<div style="display:flex;gap:4px;padding:1px 0">`
+        + `<span style="opacity:.4">${h.ts}</span>`
+        + `<span>${ic}</span>`
+        + `<span style="color:${cc}">${h.name}</span>`
+        + `<span style="opacity:.5">${h.conf}% ${h.tf}</span>`
+        + `</div>`;
+    }).join('');
   }
 
   // ── ARIA PATTERN HISTORY (last 5 detections) ───────────────────
@@ -896,7 +1376,7 @@ if (!window._ARIA_NOVA_LOADED) {
     if (!el) return;
     if (!_ariaHist.length) { el.innerHTML = '<span style="opacity:.3">—</span>'; return; }
     el.innerHTML = _ariaHist.map(h => {
-      const ic = h.dir === 'bull' ? '🟢' : h.dir === 'bear' ? '🔴' : '🟡';
+      const ic = h.dir === 'bull' ? _ZI.dGrn : h.dir === 'bear' ? _ZI.dRed : _ZI.dYlw;
       const cc = h.dir === 'bull' ? '#00d97a' : h.dir === 'bear' ? '#ff3355' : '#f0c040';
       return `<div style="display:flex;gap:4px;padding:1px 0">`
         + `<span style="opacity:.4">${h.ts}</span>`
@@ -1272,14 +1752,14 @@ if (!window._ARIA_NOVA_LOADED) {
           throttledLog({ blocked: true, reason: out.reason });
           // [FIX A2] Surface WVE_v2 block via user-visible log/block-reason path
           try { if (typeof BlockReason !== 'undefined') BlockReason.set('WVE_BLOCK', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2'); } catch (_e) { }
-          try { if (typeof atLog === 'function') atLog('warn', '⛔ WVE_v2 BLOCK: ' + ((out.reason || []).join(', '))); } catch (_e) { }
+          try { if (typeof atLog === 'function') atLog('warn', '[WVE] BLOCK: ' + ((out.reason || []).join(', '))); } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "BLOCK" };
         }
         if (out && out.decision === "NO_TRADE") {
           throttledLog({ blocked: true, reason: out.reason });
           // [FIX A2] Surface WVE_v2 NO_TRADE via user-visible log/block-reason path
           try { if (typeof BlockReason !== 'undefined') BlockReason.set('WVE_NO_TRADE', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2'); } catch (_e) { }
-          try { if (typeof atLog === 'function') atLog('warn', '⚠️ WVE_v2 NO_TRADE: ' + ((out.reason || []).join(', '))); } catch (_e) { }
+          try { if (typeof atLog === 'function') atLog('warn', '[WVE] NO_TRADE: ' + ((out.reason || []).join(', '))); } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "NO_TRADE" };
         }
         if (out && out.decision === "ADVISORY_ONLY") {

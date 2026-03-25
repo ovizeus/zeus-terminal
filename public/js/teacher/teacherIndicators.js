@@ -4,11 +4,17 @@
 // Every function takes data in, returns result out.
 'use strict';
 
+// [P2] Node.js shim — load config constants if not already available (browser loads via script tag)
+// Use a local alias to avoid var-hoisting conflict with const in browser global scope
+var _TID = (typeof TEACHER_IND_DEFAULTS !== 'undefined') ? TEACHER_IND_DEFAULTS
+         : (typeof require === 'function') ? require('./teacherConfig').TEACHER_IND_DEFAULTS
+         : {};
+
 // ══════════════════════════════════════════════════════════════════
 // RSI (Wilder smoothing, returns full array)
 // ══════════════════════════════════════════════════════════════════
 function teacherCalcRSI(closes, period) {
-  period = period || TEACHER_IND_DEFAULTS.rsiPeriod;
+  period = period || _TID.rsiPeriod;
   var len = closes.length;
   var out = new Array(len).fill(null);
   if (len < period + 1) return out;
@@ -32,7 +38,7 @@ function teacherCalcRSI(closes, period) {
 // ADX (Wilder smoothing, returns scalar for last bar)
 // ══════════════════════════════════════════════════════════════════
 function teacherCalcADX(bars, period) {
-  period = period || TEACHER_IND_DEFAULTS.adxPeriod;
+  period = period || _TID.adxPeriod;
   if (!bars || bars.length < period * 3 + 1) return null;
   var slice = bars.slice(-(period * 3 + 1));
   var sTR = 0, sDMp = 0, sDMm = 0;
@@ -69,9 +75,9 @@ function teacherCalcADX(bars, period) {
 // MACD (returns {macd, signal, hist} for last bar)
 // ══════════════════════════════════════════════════════════════════
 function teacherCalcMACD(closes, fast, slow, sig) {
-  fast = fast || TEACHER_IND_DEFAULTS.macdFast;
-  slow = slow || TEACHER_IND_DEFAULTS.macdSlow;
-  sig  = sig  || TEACHER_IND_DEFAULTS.macdSignal;
+  fast = fast || _TID.macdFast;
+  slow = slow || _TID.macdSlow;
+  sig  = sig  || _TID.macdSignal;
   if (!closes || closes.length < slow + sig) return null;
   var emaCalc = function (data, p) {
     var k = 2 / (p + 1), e = data[0];
@@ -92,9 +98,9 @@ function teacherCalcMACD(closes, fast, slow, sig) {
 
 // MACD direction (bull/bear/neut)
 function teacherDetectMACDDir(closes, fast, slow, sig) {
-  fast = fast || TEACHER_IND_DEFAULTS.macdFast;
-  slow = slow || TEACHER_IND_DEFAULTS.macdSlow;
-  sig  = sig  || TEACHER_IND_DEFAULTS.macdSignal;
+  fast = fast || _TID.macdFast;
+  slow = slow || _TID.macdSlow;
+  sig  = sig  || _TID.macdSignal;
   if (!closes || closes.length < slow + sig + 2) return 'neut';
   var emaCalc = function (data, p) {
     var k = 2 / (p + 1), e = data[0];
@@ -119,7 +125,7 @@ function teacherDetectMACDDir(closes, fast, slow, sig) {
 // ATR (Average True Range, returns scalar)
 // ══════════════════════════════════════════════════════════════════
 function teacherCalcATR(bars, period) {
-  period = period || TEACHER_IND_DEFAULTS.atrPeriod;
+  period = period || _TID.atrPeriod;
   if (!bars || bars.length < period + 1) return null;
   var slice = bars.slice(-(period + 1));
   var sum = 0;
@@ -137,7 +143,7 @@ function teacherCalcATR(bars, period) {
 // Supertrend direction (bull/bear/neut)
 // ══════════════════════════════════════════════════════════════════
 function teacherDetectSTDir(bars, mult) {
-  mult = mult || TEACHER_IND_DEFAULTS.stMult;
+  mult = mult || _TID.stMult;
   if (!bars || bars.length < 20) return 'neut';
   var slice = bars.slice(-20);
   var closes = [];
@@ -164,8 +170,8 @@ function teacherDetectSTDir(bars, mult) {
 // Bollinger Bands (returns {upper, middle, lower, squeeze})
 // ══════════════════════════════════════════════════════════════════
 function teacherCalcBB(closes, period, mult) {
-  period = period || TEACHER_IND_DEFAULTS.bbPeriod;
-  mult   = mult   || TEACHER_IND_DEFAULTS.bbMult;
+  period = period || _TID.bbPeriod;
+  mult   = mult   || _TID.bbMult;
   if (!closes || closes.length < period) return null;
   var slice = closes.slice(-period);
   var sum = 0;
@@ -495,5 +501,16 @@ function teacherComputeIndicators(bars) {
     climax: climax,
     wickChaos: wickChaos,
     breakoutStr: breakoutStr,
+  };
+}
+
+// [P2] Node.js compatibility — export pure functions for server use
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    teacherCalcRSI, teacherCalcADX, teacherCalcMACD, teacherDetectMACDDir,
+    teacherCalcATR, teacherDetectSTDir, teacherCalcBB, teacherWickChaos,
+    teacherBreakoutStrength, teacherDetectRegime, teacherCalcConfluence,
+    teacherSwingPivots, teacherDetectDivergence, teacherDetectClimax,
+    teacherEstimateFees, teacherComputeIndicators,
   };
 }

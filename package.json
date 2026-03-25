@@ -1,19 +1,30 @@
 {
   "name": "zeus-terminal",
   "private": true,
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "audit:check": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^11.9.1",
+    "better-sqlite3": "^12.8.0",
+    "compression": "^1.8.0",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.7",
     "express": "^5.2.1",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "nodemailer": "^8.0.2"
+    "nodemailer": "^8.0.2",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
-    "ssh2": "^1.17.0"
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/cli": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/status-bar": "^8.0.1",
+    "typescript": "^5.9.3"
   }
 }
