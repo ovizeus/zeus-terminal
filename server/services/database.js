@@ -268,6 +268,9 @@ const _stmts = {
     atSetState: db.prepare('INSERT OR REPLACE INTO at_state (key, value, user_id) VALUES (?, ?, ?)'),
     atGetStateByUser: db.prepare('SELECT key, value FROM at_state WHERE user_id = ?'),
     atPruneClosed: db.prepare('DELETE FROM at_closed WHERE seq NOT IN (SELECT seq FROM at_closed ORDER BY closed_at DESC LIMIT 500)'),
+    // Journal queries
+    journalGetClosed: db.prepare('SELECT seq, data, closed_at FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT ? OFFSET ?'),
+    journalCountClosed: db.prepare('SELECT COUNT(*) as cnt FROM at_closed WHERE user_id = ?'),
 };
 
 // ─── Public API ───
@@ -597,4 +600,7 @@ module.exports = {
     atSetState,
     atGetStateByUser,
     atPruneClosed,
+    // Journal
+    journalGetClosed: (userId, limit, offset) => _stmts.journalGetClosed.all(userId, limit, offset),
+    journalCountClosed: (userId) => (_stmts.journalCountClosed.get(userId) || { cnt: 0 }).cnt,
 };

@@ -1,0 +1,103 @@
+/* Zeus Terminal — Trade Journal Styles */
+.j-page {
+  max-width: 1400px; margin: 0 auto; padding: 20px;
+  font-family: var(--ff); color: var(--txt);
+}
+.j-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px; flex-wrap: wrap; gap: 10px;
+}
+.j-header h1 {
+  font-size: 18px; color: var(--whi); margin: 0;
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.j-back {
+  color: var(--dim); text-decoration: none; font-size: 13px;
+  border: 1px solid var(--brd); padding: 4px 12px; border-radius: var(--r-sm);
+}
+.j-back:hover { color: var(--whi); border-color: var(--txt); }
+
+/* Stats cards */
+.j-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px; margin-bottom: 20px;
+}
+.j-stat {
+  background: var(--bg2); border: 1px solid var(--brd); border-radius: var(--r-md);
+  padding: 12px; text-align: center;
+}
+.j-stat-label { font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px; }
+.j-stat-value { font-size: 20px; color: var(--whi); margin-top: 4px; font-weight: 700; }
+.j-stat-value.pos { color: var(--grn); }
+.j-stat-value.neg { color: var(--red); }
+
+/* Filters bar */
+.j-filters {
+  display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+}
+.j-filters select, .j-filters input {
+  background: var(--bg2); color: var(--txt); border: 1px solid var(--brd);
+  padding: 6px 10px; border-radius: var(--r-sm); font-family: var(--ff); font-size: 12px;
+}
+.j-filters select:focus, .j-filters input:focus { border-color: var(--gold); outline: none; }
+.j-btn {
+  background: var(--bg2); color: var(--gold); border: 1px solid var(--gold);
+  padding: 6px 14px; border-radius: var(--r-sm); cursor: pointer;
+  font-family: var(--ff); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.j-btn:hover { background: var(--gold); color: var(--bg); }
+.j-btn--dim { color: var(--dim); border-color: var(--brd); }
+.j-btn--dim:hover { color: var(--whi); border-color: var(--txt); background: var(--bg2); }
+
+/* Chart */
+.j-chart-wrap {
+  background: var(--bg2); border: 1px solid var(--brd); border-radius: var(--r-md);
+  padding: 16px; margin-bottom: 20px; height: 200px; position: relative;
+}
+.j-chart-title { font-size: 11px; color: var(--dim); text-transform: uppercase; margin-bottom: 10px; }
+.j-chart { width: 100%; height: 170px; }
+
+/* Table */
+.j-table-wrap {
+  overflow-x: auto; background: var(--bg2); border: 1px solid var(--brd);
+  border-radius: var(--r-md);
+}
+.j-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.j-table th {
+  background: var(--bg3); color: var(--dim); font-size: 10px; text-transform: uppercase;
+  letter-spacing: 1px; padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--brd);
+  position: sticky; top: 0;
+}
+.j-table td { padding: 8px 12px; border-bottom: 1px solid #111820; color: var(--txt); }
+.j-table tr:hover td { background: #0f1520; }
+.j-table .win { color: var(--grn); }
+.j-table .loss { color: var(--red); }
+.j-table .dim { color: var(--dim); }
+.j-table .bold { font-weight: 700; }
+.j-table .side-long { color: var(--grn); }
+.j-table .side-short { color: var(--red); }
+.j-table .mode-live { color: var(--gold); font-weight: 700; }
+.j-table .mode-demo { color: var(--dim); }
+
+/* Mode toggle tabs */
+.j-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
+.j-tab {
+  padding: 6px 16px; border: 1px solid var(--brd); border-radius: var(--r-sm);
+  background: transparent; color: var(--dim); cursor: pointer; font-family: var(--ff); font-size: 12px;
+}
+.j-tab.active { background: var(--gold); color: var(--bg); border-color: var(--gold); font-weight: 700; }
+.j-tab:hover:not(.active) { color: var(--whi); border-color: var(--txt); }
+
+/* Empty state */
+.j-empty { text-align: center; padding: 60px 20px; color: var(--dim); font-size: 14px; }
+
+/* Pagination */
+.j-pagination { display: flex; justify-content: center; gap: 8px; margin-top: 16px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .j-stats { grid-template-columns: repeat(2, 1fr); }
+  .j-page { padding: 10px; }
+  .j-table { font-size: 11px; }
+  .j-table th, .j-table td { padding: 6px 8px; }
+}

@@ -377,6 +377,10 @@ app.use('/api/sync', syncRoutes);
 const userContextRoutes = require('./server/routes/userContext');
 app.use('/api/sync', userContextRoutes);
 
+// ─── Journal Route ───
+const journalRoutes = require('./server/routes/journal');
+app.use('/api/journal', journalRoutes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
