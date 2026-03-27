@@ -1,0 +1,6 @@
+{
+  "version": "0.2",
+  "language": "en,ro",
+  "ignorePaths": ["node_modules", "data", "docs"],
+  "enabledLanguageIds": ["javascript", "json", "markdown"]
+}
