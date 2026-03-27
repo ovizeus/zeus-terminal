@@ -141,7 +141,10 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
   if (idem && idem.duplicate) {
     return res.status(409).json({ error: 'Duplicate order — already processing (key: ' + req.headers['x-idempotency-key'] + ')' });
   }
+  // [BE-01] Compute idempotency key early for cleanup on all confirmed-failure paths
+  const _idemKey = req.user && req.headers['x-idempotency-key'] ? `${req.user.id}:${req.headers['x-idempotency-key']}` : null;
   if (!config.tradingEnabled) {
+    if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] Release key — trading disabled
     return res.status(403).json({ error: 'Trading disabled' });
   }
   const { symbol, side, type, quantity, price, leverage, stopPrice, newClientOrderId, closePosition } = req.body;
@@ -150,6 +153,7 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
   const owner = _owner(req.body);
   const risk = validateOrder({ symbol, side, type, quantity, price: price || 0, referencePrice: req.body.referencePrice || 0, leverage: leverage || 1 }, owner, req.user.id);
   if (!risk.ok) {
+    if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] Release key — order was never sent to exchange
     console.warn('[RISK] Order blocked:', risk.reason);
     logger.warn('RISK', 'Order blocked: ' + risk.reason, { symbol, side, owner });
     audit.record('ORDER_BLOCKED', { symbol, side, type, quantity, reason: risk.reason }, owner, req.ip);
@@ -165,6 +169,7 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
         await sendSignedRequest('POST', '/fapi/v1/leverage', { symbol, leverage }, req.exchangeCreds);
       } catch (levErr) {
         console.error('[API] leverage set failed:', levErr.message);
+        if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
         return res.status(500).json({ error: 'Failed to set leverage: ' + _safeError(levErr) });
       }
     }
@@ -213,6 +218,11 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       type: data.type,
     });
   } catch (err) {
+    // [BE-01] Release idempotency key only if order confirmed NOT executed (4xx = Binance rejected)
+    // Do NOT release on 5xx/timeout — order status is ambiguous, keeping key prevents duplicate
+    if (_idemKey && err.status && err.status >= 400 && err.status < 500) {
+      _idempotencyCache.delete(_idemKey);
+    }
     console.error('[API] order/place error:', err.message);
     logger.error('ORDER', 'order/place failed', { symbol, side, error: err.message });
     audit.record('ORDER_FAILED', { symbol, side, type, quantity, error: err.message }, owner, req.ip);
@@ -503,6 +513,24 @@ router.post('/addon', async (req, res) => {
   } catch (err) {
     console.error('[API] addon error:', err.message);
     res.status(500).json({ error: 'Add-on failed' });
+  }
+});
+
+// ─── [F1] Per-user AT on/off toggle ───
+router.post('/at/toggle', (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { active } = req.body;
+    if (typeof active !== 'boolean') {
+      return res.status(400).json({ error: 'active must be boolean (true/false)' });
+    }
+    const serverAT = require('../services/serverAT');
+    const result = serverAT.toggleActive(userId, active);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json(result);
+  } catch (err) {
+    console.error('[API] at/toggle error:', err.message);
+    res.status(500).json({ error: 'Toggle failed' });
   }
 });
 

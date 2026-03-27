@@ -212,7 +212,7 @@ function tick(posId, price) {
         // ═══════════════════════════════════════════════════════
         // PHASE 3: IMPULSE VALIDATION — PR reaches IV level
         // ═══════════════════════════════════════════════════════
-        const prDistPct = Math.abs(price - s.pivotRight) / price * 100;
+        const prDistPct = price > 0 ? Math.abs(price - s.pivotRight) / price * 100 : 0; // [TL-06] Guard div-by-zero
         const ivConditionMet = prDistPct >= 0.05 && (isLong
             ? (s.pivotRight >= s.impulseVal)
             : (s.pivotRight <= s.impulseVal));

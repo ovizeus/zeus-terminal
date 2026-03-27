@@ -45,6 +45,7 @@ function _defaultUserState() {
         dailyPnLDemo: 0,
         dailyPnLLive: 0,
         lastResetDay: -1,
+        atActive: true, // [F1] Per-user AT on/off — default ON for backward compat
     };
 }
 
@@ -94,6 +95,7 @@ function _persistState(userId) {
             pnlAtReset: us.pnlAtReset,
             liveBalanceRef: us.liveBalanceRef,
             lastResetDay: us.lastResetDay,
+            atActive: us.atActive, // [F1]
         }, userId);
     } catch (e) { logger.error('AT_DB', 'Save state failed: ' + e.message); }
 }
@@ -115,7 +117,8 @@ function _applyStateBlob(userId, saved) {
     us.pnlAtReset = saved.pnlAtReset || 0;
     us.liveBalanceRef = saved.liveBalanceRef || 0;
     us.lastResetDay = saved.lastResetDay || -1;
-    logger.info('AT_DB', `State restored uid=${userId}: mode=${us.engineMode} seq=${us.seq} balance=$${us.demoBalance.toFixed(2)}`);
+    us.atActive = saved.atActive !== false; // [F1] Default true for existing users
+    logger.info('AT_DB', `State restored uid=${userId}: mode=${us.engineMode} seq=${us.seq} balance=$${us.demoBalance.toFixed(2)} atActive=${us.atActive}`);
 }
 
 function _restoreFromDb() {
@@ -210,6 +213,23 @@ function setMode(userId, mode) {
 
 function getMode(userId) { return _uState(userId).engineMode; }
 
+// [F1] Per-user AT on/off toggle — independent of mode (demo/live)
+function toggleActive(userId, active) {
+    if (typeof active !== 'boolean') return { ok: false, error: 'active must be boolean' };
+    if (!userId) return { ok: false, error: 'Missing userId' };
+    const us = _uState(userId);
+    const was = us.atActive;
+    us.atActive = active;
+    _persistState(userId);
+    logger.info('AT_ENGINE', `AT toggled uid=${userId}: ${was} → ${active}`);
+    audit.record('AT_TOGGLE', { userId, was, now: active }, 'user');
+    telegram.sendToUser(userId, active
+        ? '🟢 *AT Activated* — brain entries enabled'
+        : '🔴 *AT Deactivated* — brain entries blocked');
+    _notifyChange(userId);
+    return { ok: true, atActive: active, was };
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Process a brain decision (called by serverBrain)
 // ══════════════════════════════════════════════════════════════════
@@ -219,6 +239,13 @@ function processBrainDecision(decision, stc, userId) {
     if (!userId) { logger.error('AT_ENGINE', 'processBrainDecision called without userId — skipping'); return null; }
 
     const us = _uState(userId);
+
+    // [F1] Per-user AT on/off gate — if user disabled AT, block ALL entries
+    if (!us.atActive) {
+        logger.info('AT_ENGINE', `Entry blocked uid=${userId} — AT disabled by user`);
+        return null;
+    }
+
     const fusion = decision.fusion;
     const tier = fusion.decision;
     if (tier === 'NO_TRADE' || tier === 'SKIP' || tier === 'ERROR') return null;
@@ -231,6 +258,12 @@ function processBrainDecision(decision, stc, userId) {
 
     const price = decision.price;
     if (!price || price <= 0) return null;
+
+    // [F2] Stale price gate — reject if price is > 10s old at entry time
+    if (decision.priceTs && (Date.now() - decision.priceTs) > 10000) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — stale price (${Math.round((Date.now() - decision.priceTs) / 1000)}s old)`);
+        return null;
+    }
 
     // ── Kill switch check (per-user) ──
     _checkDailyReset(userId);
@@ -309,6 +342,8 @@ function processBrainDecision(decision, stc, userId) {
         originalQty: +qty.toFixed(6),
         addOnCount: 0,
         addOnHistory: [],
+        controlMode: 'auto', // [TL-03] Initialize controlMode so user-override check works
+        _livePending: false, // [TL-04] True while _executeLiveEntry is in-flight
     };
 
     // ── Demo: deduct margin ──
@@ -364,6 +399,8 @@ function processBrainDecision(decision, stc, userId) {
 // Live Execution — Binance API calls (only for live-mode positions)
 // ══════════════════════════════════════════════════════════════════
 async function _executeLiveEntry(entry, stc) {
+    entry._livePending = true; // [TL-04] Lock position from onPriceUpdate exits
+    try {
     // [MULTI-USER] Hard guard — no fallback to user 1
     if (!entry.userId) { logger.error('AT_LIVE', 'executeLiveEntry without userId — aborting'); return; }
     const userId = entry.userId;
@@ -549,6 +586,7 @@ async function _executeLiveEntry(entry, stc) {
             logger.error('AT_LIVE', `[${entry.seq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
             telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition is UNPROTECTED on Binance.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`);
         }
+        return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
     }
 
     // TP order with retry loop [B3]
@@ -624,6 +662,10 @@ async function _executeLiveEntry(entry, stc) {
     us.liveStats.entries++;
     _persistPosition(entry);
     _persistState(userId);
+    } finally {
+        entry._livePending = false; // [TL-04] Unlock — all paths covered
+        _persistPosition(entry);
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -792,6 +834,10 @@ async function _updateLiveSL(pos, newSL) {
     if (!pos.live || (pos.live.status !== 'LIVE' && pos.live.status !== 'LIVE_NO_SL') || !pos.live.slOrderId) return;
     // [MULTI-USER] Hard guard — no fallback to user 1
     if (!pos.userId) { logger.error('AT_LIVE', '_updateLiveSL without pos.userId — aborting'); return; }
+    // [TL-05] Per-position lock — prevent concurrent SL updates
+    pos._slUpdateInFlight = true;
+    pos._slQueuedSL = null;
+    try {
     const userId = pos.userId;
     const creds = getExchangeCreds(userId);
     if (!creds) return;
@@ -838,6 +884,16 @@ async function _updateLiveSL(pos, newSL) {
         _persistPosition(pos);
         logger.error('AT_LIVE', `[${pos.seq}] CRITICAL: DSL SL update ALL retries failed — position UNPROTECTED`);
         telegram.sendToUser(userId, `🚨 *DSL SL UPDATE FAILED*\n${pos.side} ${pos.symbol}\nOld SL cancelled, new SL ($${newSL.toFixed(2)}) could not be placed after ${DSL_SL_RETRIES.length + 1} attempts.\nPosition is *UNPROTECTED*. Place manual SL immediately!`);
+    }
+    } finally { // [TL-05] Release lock and drain queued SL if any
+        pos._slUpdateInFlight = false;
+        const queued = pos._slQueuedSL;
+        pos._slQueuedSL = null;
+        if (queued != null && queued !== newSL) {
+            _updateLiveSL(pos, queued).catch(err => {
+                logger.error('AT_LIVE', `[${pos.seq}] Queued SL update failed: ${err.message}`);
+            });
+        }
     }
 }
 
@@ -942,7 +998,22 @@ function onPriceUpdate(symbol, price) {
         pos._lastPrice = price; // track for client-initiated close PnL
 
         // [BUG3 FIX] Skip server-side automated exits when user has manual control
-        if (pos.controlMode === 'user') continue;
+        // [F3] Safety timeout — revert to 'auto' after 30min of user control
+        if (pos.controlMode === 'user') {
+            if (pos._controlModeTs && (Date.now() - pos._controlModeTs) > 1800000) {
+                pos.controlMode = 'auto';
+                delete pos._controlModeTs;
+                logger.warn('AT_ENGINE', `[${pos.seq}] controlMode reverted to auto — 30min timeout (uid=${pos.userId})`);
+                telegram.sendToUser(pos.userId, `⚠️ *Take Control Expired*\nPosition #${pos.seq} — reverted to AUTO after 30min safety timeout`);
+                _persistPosition(pos);
+                // Don't continue — let exit logic run on this tick
+            } else {
+                continue;
+            }
+        }
+
+        // [TL-04] Skip positions where live entry is still in-flight on Binance
+        if (pos._livePending) continue;
 
         // ── DSL tick ──
         const dsl = serverDSL.tick(pos.seq, price);
@@ -966,12 +1037,17 @@ function onPriceUpdate(symbol, price) {
             continue;
         }
 
-        // DSL moved SL → update live order on Binance
+        // DSL moved SL → update internal state + live order on Binance
         if (dsl.changed) {
+            pos.sl = effectiveSL; // [TL-09] Sync internal SL with DSL tightened value
             if (pos.live && pos.live.status === 'LIVE') {
-                _updateLiveSL(pos, effectiveSL).catch(err => {
-                    logger.error('AT_LIVE', `[${pos.seq}] SL update failed: ${err.message}`);
-                });
+                if (pos._slUpdateInFlight) { // [TL-05] Already updating — queue latest SL
+                    pos._slQueuedSL = effectiveSL;
+                } else {
+                    _updateLiveSL(pos, effectiveSL).catch(err => {
+                        logger.error('AT_LIVE', `[${pos.seq}] SL update failed: ${err.message}`);
+                    });
+                }
             }
             _persistPosition(pos);
             if (pos.userId) dslChangedUsers.add(pos.userId);
@@ -1142,7 +1218,8 @@ function getFullState(userId) {
     const creds = getExchangeCreds(userId);
     return {
         mode: us.engineMode,
-        enabled: true,
+        enabled: us.atActive, // [F1] Reflect actual per-user AT state
+        atActive: us.atActive, // [F1] Explicit field for frontend
         apiConfigured: !!creds,
         positions: getOpenPositions(userId),
         demoPositions: getDemoPositions(userId),
@@ -1674,6 +1751,8 @@ function updateControlMode(userId, seq, controlMode, dslParams) {
     const allowed = ['auto', 'assist', 'user'];
     if (!allowed.includes(controlMode)) return { ok: false, error: 'Invalid controlMode' };
     pos.controlMode = controlMode;
+    // [F3] Track when user takes control — for timeout safety
+    if (controlMode === 'user') pos._controlModeTs = Date.now();
     // When releasing from user control, apply user-edited dslParams so AI resumes from them
     if (dslParams && typeof dslParams === 'object') {
         _applyUserDslParams(pos, dslParams);
@@ -2000,6 +2079,7 @@ module.exports = {
     // Mode control
     setMode,
     getMode,
+    toggleActive, // [F1] Per-user AT on/off
     activateKillSwitch,
     resetKill,
     setKillPct,
