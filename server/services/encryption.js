@@ -12,7 +12,7 @@ const KEY_VERSION = 'v1';
 // Master key from env — must be 64-char hex (32 bytes)
 function _getKey() {
     const hex = process.env.ENCRYPTION_KEY;
-    if (!hex || hex.length !== 64) {
+    if (!hex || !/^[0-9a-fA-F]{64}$/.test(hex)) { // [SC-03] strict hex validation
         throw new Error('ENCRYPTION_KEY must be set in .env (64 hex chars = 32 bytes). Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
     }
     return Buffer.from(hex, 'hex');

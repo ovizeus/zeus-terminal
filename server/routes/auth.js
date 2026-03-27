@@ -17,7 +17,8 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRY = '30d'; // stay logged in 30 days
+const JWT_EXPIRY_DAYS = Math.max(1, Math.min(30, parseInt(process.env.JWT_EXPIRY_DAYS, 10) || 7)); // [SC-02] default 7d, env-configurable
+const JWT_EXPIRY = JWT_EXPIRY_DAYS + 'd'; // [SC-02] reduced from 30d
 const BCRYPT_ROUNDS = 10;
 
 // ─── 2FA Code Store (in-memory, codes expire after 5 min) ───
@@ -146,7 +147,7 @@ function _setAuthCookie(res, token) {
         httpOnly: true,
         secure: true,       // HTTPS only (Cloudflare handles this)
         sameSite: 'lax',
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000, // [SC-02] matches JWT_EXPIRY
         path: '/'
     });
 }
@@ -791,7 +792,7 @@ router.post('/change-email/confirm', async (req, res) => {
         const newToken = jwt.sign(
             { id: user.id, email: pending.newEmail, role: user.role, tokenVersion: user.token_version || 1 },
             JWT_SECRET,
-            { expiresIn: '30d' }
+            { expiresIn: JWT_EXPIRY } // [SC-02] use constant instead of hardcoded
         );
         _setAuthCookie(res, newToken);
 

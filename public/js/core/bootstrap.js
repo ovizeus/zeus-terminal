@@ -648,6 +648,28 @@ function startApp() {
           if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday;
         }
       }
+      // [B1v2] AT.enabled + mode — ALWAYS apply from server truth (outside freshness gate)
+      // Root cause: on same-device refresh, localTs > serverTs so the gate above never opens.
+      // AT.enabled and AT.mode must be authoritative from server regardless of timestamp.
+      if (serverSnap.at && typeof AT !== 'undefined') {
+        if (typeof serverSnap.at.enabled === 'boolean') AT.enabled = serverSnap.at.enabled;
+        if (serverSnap.at.mode) {
+          AT.mode = serverSnap.at.mode;
+          AT._modeConfirmed = true; // [B2] server snapshot confirms mode — unblock toggle
+        }
+        if (AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + AT.mode + ')');
+      }
+      // [B3] Post-sync AT resume — start interval + update UI if server restored AT.enabled
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) {
+        var _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on';
+        var _b3dot = document.getElementById('atBtnDot'); if (_b3dot) { _b3dot.style.background = '#00ff88'; _b3dot.style.boxShadow = '0 0 10px #00ff88'; }
+        var _b3txt = document.getElementById('atBtnTxt'); if (_b3txt) _b3txt.textContent = 'AUTO TRADE ON';
+        var _b3st = document.getElementById('atStatus'); if (_b3st) _b3st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s';
+        AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000);
+        setTimeout(runAutoTradeCheck, 3000);
+        if (typeof atUpdateBanner === 'function') atUpdateBanner();
+        console.log('[sync] B3 — AT resumed from server state');
+      }
       // Always render + save after sync merge (positions may have been added)
       setTimeout(function () {
         if (typeof updateDemoBalance === 'function') updateDemoBalance();

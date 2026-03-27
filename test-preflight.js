@@ -25,7 +25,7 @@ function assert(cond, msg) { if (!cond) throw new Error(msg || 'Assertion failed
 
 // Stub env vars so config.js doesn't exit
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-preflight-jwt-secret-32chars!!';
-process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'test-preflight-enc-key-32chars!!';
+process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'a]b]c]d]e]f]0]1]2]3]4]5]6]7]8]9]a]b]c]d]e]f]0]1]2]3]4]5]6]7]8]9'.replace(/]/g, '');
 
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('  Zeus Terminal — Pre-Flight VPS Readiness Check');
@@ -172,7 +172,7 @@ section('4. RISK GUARD');
 
 test('validateOrder: TRADING_ENABLED=false blocks (correct behavior)', () => {
     const rg = require('./server/services/riskGuard');
-    const r = rg.validateOrder({ symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: 0.001, leverage: 5 }, 'AT');
+    const r = rg.validateOrder({ symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: 0.001, leverage: 5 }, 'AT', 1);
     // In test env TRADING_ENABLED=false → riskGuard correctly blocks
     assert(!r.ok, 'Should be blocked when trading disabled');
     assert(r.reason.includes('disabled'), `Reason: ${r.reason}`);
@@ -180,16 +180,16 @@ test('validateOrder: TRADING_ENABLED=false blocks (correct behavior)', () => {
 
 test('validateOrder rejects excessive leverage', () => {
     const rg = require('./server/services/riskGuard');
-    const r = rg.validateOrder({ symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: 0.001, leverage: 200 }, 'AT');
+    const r = rg.validateOrder({ symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: 0.001, leverage: 200 }, 'AT', 1);
     assert(!r.ok, 'Should block 200x');
 });
 
 test('Emergency kill blocks everything', () => {
     const rg = require('./server/services/riskGuard');
-    rg.setEmergencyKill(true);
-    const r = rg.validateOrder({ symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: 0.001, leverage: 5 }, 'AT');
+    rg.setEmergencyKill(true, 1);
+    const r = rg.validateOrder({ symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: 0.001, leverage: 5 }, 'AT', 1);
     assert(!r.ok, 'Kill should block');
-    rg.setEmergencyKill(false);
+    rg.setEmergencyKill(false, 1);
 });
 
 // ═══════════════════════════════════════════════════════════════

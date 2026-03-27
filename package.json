@@ -6,6 +6,8 @@
   },
   "scripts": {
     "start": "node server.js",
+    "test": "jest --verbose",
+    "test:unit": "jest --verbose --testPathPattern=tests/unit",
     "audit:check": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
@@ -25,6 +27,7 @@
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/status-bar": "^8.0.1",
+    "jest": "^30.3.0",
     "typescript": "^5.9.3"
   }
 }

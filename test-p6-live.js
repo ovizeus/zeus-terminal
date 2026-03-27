@@ -147,6 +147,9 @@ const mockSigner = {
         }
         // Default: return sensible mock Binance response
         _orderSeq++;
+        if (path === '/fapi/v2/balance') {
+            return [{ asset: 'USDT', availableBalance: '50000.00', balance: '50000.00' }];
+        }
         if (path === '/fapi/v1/leverage') {
             return { leverage: params.leverage, symbol: params.symbol };
         }
@@ -190,6 +193,7 @@ require.cache[require.resolve('./server/services/riskGuard')] = { id: 'rg', expo
 // ── 7. Mock telegram ──
 const mockTelegram = {
     send: (text) => { _mockCalls.telegram.push({ fn: 'send', text }); },
+    sendToUser: (userId, text) => { _mockCalls.telegram.push({ fn: 'sendToUser', userId, text }); },
     alertOrderFilled: (...args) => { _mockCalls.telegram.push({ fn: 'alertOrderFilled', args }); },
     alertOrderFailed: (...args) => { _mockCalls.telegram.push({ fn: 'alertOrderFailed', args }); },
     alertRiskBlock: (...args) => { _mockCalls.telegram.push({ fn: 'alertRiskBlock', args }); },
@@ -230,6 +234,7 @@ require.cache[require.resolve('./server/services/encryption')] = { id: 'enc', ex
 // LOAD serverAT with mocked dependencies
 // ═══════════════════════════════════════════════════════════════
 const serverAT = require('./server/services/serverAT');
+const TEST_UID = 1;
 
 // Helpers
 function makeDecision(overrides) {
@@ -322,10 +327,10 @@ test('getExchangeCreds live mode baseUrl', () => {
 section('2. SHADOW MODE — P5 Regression');
 
 test('Shadow entry created for LARGE LONG', () => {
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
     resetMocks();
-    _mfServerAT = false;
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.setMode(TEST_UID, 'demo');
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     assert(entry !== null, 'Should create shadow entry');
     assertEq(entry.side, 'LONG', 'side');
     assertEq(entry.symbol, 'BTCUSDT', 'symbol');
@@ -335,7 +340,7 @@ test('Shadow entry created for LARGE LONG', () => {
 });
 
 test('Shadow stats increment correctly', () => {
-    const stats = serverAT.getStats();
+    const stats = serverAT.getStats(TEST_UID);
     assertEq(stats.entries, 1, '1 entry');
     assertEq(stats.openCount, 1, '1 open');
     assertEq(stats.exits, 0, '0 exits');
@@ -349,7 +354,7 @@ test('No Binance API calls when SERVER_AT=false', async () => {
 });
 
 test('Duplicate symbol+side rejected', () => {
-    const dup = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    const dup = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     assertEq(dup, null, 'Duplicate BTCUSDT LONG rejected');
 });
 
@@ -357,7 +362,7 @@ test('Shadow entry for different symbol allowed', () => {
     const entry2 = serverAT.processBrainDecision(
         makeDecision({ symbol: 'ETHUSDT', price: 3500 }),
         makeSTC()
-    );
+    , TEST_UID);
     assert(entry2 !== null, 'ETHUSDT entry created');
     assertEq(entry2.symbol, 'ETHUSDT', 'symbol');
 });
@@ -366,7 +371,7 @@ test('MEDIUM tier uses correct multiplier', () => {
     const entry = serverAT.processBrainDecision(
         makeDecision({ symbol: 'SOLUSDT', price: 150, fusion: { decision: 'MEDIUM', dir: 'SHORT', confidence: 72, score: 65 } }),
         makeSTC()
-    );
+    , TEST_UID);
     assert(entry !== null, 'MEDIUM SHORT created');
     assertEq(entry.tier, 'MEDIUM', 'tier=MEDIUM');
     assertEq(entry.side, 'SHORT', 'side=SHORT');
@@ -377,16 +382,16 @@ test('NO_TRADE tier returns null', () => {
     const r = serverAT.processBrainDecision(
         makeDecision({ fusion: { decision: 'NO_TRADE', dir: 'LONG', confidence: 20, score: 15 } }),
         makeSTC()
-    );
+    , TEST_UID);
     assertEq(r, null, 'NO_TRADE → null');
 });
 
 test('SL/TP calculation correct for LONG', () => {
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     // SL = 60000 - (60000 * 1.0/100) = 60000 - 600 = 59400
     // TP = 60000 + (600 * 2.0) = 61200
     assertEq(entry.sl, 59400, 'SL=59400');
@@ -397,7 +402,7 @@ test('SL/TP calculation correct for SHORT', () => {
     const entry = serverAT.processBrainDecision(
         makeDecision({ symbol: 'ETHUSDT', price: 4000, fusion: { decision: 'SMALL', dir: 'SHORT', confidence: 60, score: 55 } }),
         makeSTC({ slPct: 0.5, rr: 3.0 })
-    );
+    , TEST_UID);
     // SL = 4000 + (4000 * 0.5/100) = 4000 + 20 = 4020
     // TP = 4000 - (20 * 3.0) = 3940
     assertEq(entry.sl, 4020, 'SHORT SL=4020');
@@ -405,48 +410,48 @@ test('SL/TP calculation correct for SHORT', () => {
 });
 
 test('onPriceUpdate closes at SL (LONG)', () => {
-    serverAT.reset();
-    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC({ slPct: 1.0, rr: 2.0 }));
-    assertEq(serverAT.getOpenCount(), 1, '1 open before SL');
+    serverAT.reset(TEST_UID);
+    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC({ slPct: 1.0, rr: 2.0 }), TEST_UID);
+    assertEq(serverAT.getOpenCount(TEST_UID), 1, '1 open before SL');
     serverAT.onPriceUpdate('BTCUSDT', 59400);  // Hit SL
-    assertEq(serverAT.getOpenCount(), 0, '0 open after SL hit');
-    const stats = serverAT.getStats();
+    assertEq(serverAT.getOpenCount(TEST_UID), 0, '0 open after SL hit');
+    const stats = serverAT.getStats(TEST_UID);
     assertEq(stats.exits, 1, '1 exit');
     assert(stats.pnl < 0, 'Negative PnL at SL');
     assertEq(stats.losses, 1, '1 loss');
 });
 
 test('onPriceUpdate closes at TP (LONG)', () => {
-    serverAT.reset();
-    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC({ slPct: 1.0, rr: 2.0 }));
+    serverAT.reset(TEST_UID);
+    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC({ slPct: 1.0, rr: 2.0 }), TEST_UID);
     serverAT.onPriceUpdate('BTCUSDT', 61200);  // Hit TP
-    assertEq(serverAT.getOpenCount(), 0, '0 open after TP hit');
-    const stats = serverAT.getStats();
+    assertEq(serverAT.getOpenCount(TEST_UID), 0, '0 open after TP hit');
+    const stats = serverAT.getStats(TEST_UID);
     assertEq(stats.wins, 1, '1 win (TP)');
     assert(stats.pnl > 0, 'Positive PnL at TP');
 });
 
 test('maxPos gate blocks excess shadow entries', () => {
-    serverAT.reset();
-    serverAT.processBrainDecision(makeDecision({ symbol: 'BTCUSDT' }), makeSTC({ maxPos: 2 }));
-    serverAT.processBrainDecision(makeDecision({ symbol: 'ETHUSDT', price: 3500 }), makeSTC({ maxPos: 2 }));
+    serverAT.reset(TEST_UID);
+    serverAT.processBrainDecision(makeDecision({ symbol: 'BTCUSDT' }), makeSTC({ maxPos: 2 }), TEST_UID);
+    serverAT.processBrainDecision(makeDecision({ symbol: 'ETHUSDT', price: 3500 }), makeSTC({ maxPos: 2 }), TEST_UID);
     const third = serverAT.processBrainDecision(
         makeDecision({ symbol: 'SOLUSDT', price: 150 }),
         makeSTC({ maxPos: 2 })
-    );
+    , TEST_UID);
     assertEq(third, null, '3rd entry blocked by maxPos=2');
-    assertEq(serverAT.getOpenCount(), 2, '2 positions open');
+    assertEq(serverAT.getOpenCount(TEST_UID), 2, '2 positions open');
 });
 
 test('expireStale removes old positions', () => {
-    serverAT.reset();
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.reset(TEST_UID);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     assert(entry !== null, 'Entry created');
     // Hack: set entry timestamp to 5 hours ago
     entry.ts = Date.now() - (5 * 60 * 60 * 1000);
     serverAT.expireStale();
-    assertEq(serverAT.getOpenCount(), 0, 'Expired position removed');
-    const stats = serverAT.getStats();
+    assertEq(serverAT.getOpenCount(TEST_UID), 0, 'Expired position removed');
+    const stats = serverAT.getStats(TEST_UID);
     assertEq(stats.exits, 1, '1 exit from expiry');
 });
 
@@ -457,43 +462,46 @@ section('3. LIVE EXECUTION — Entry');
 
 test('Live entry calls sendSignedRequest for leverage + market + SL + TP', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
     _orderSeq = 2000;
 
-    const entry = serverAT.processBrainDecision(makeDecision({ price: 65000 }), makeSTC());
+    const entry = serverAT.processBrainDecision(makeDecision({ price: 65000 }), makeSTC(), TEST_UID);
     assert(entry !== null, 'Entry created');
 
     // Wait for async live execution
     await tick(100);
 
-    // Should have: leverage, market entry, SL, TP = 4 calls
-    assert(_mockCalls.sendSigned.length >= 4, `Expected ≥4 API calls, got ${_mockCalls.sendSigned.length}`);
+    // Should have: balance check, leverage, market entry, SL, TP = 5 calls
+    assert(_mockCalls.sendSigned.length >= 5, `Expected ≥5 API calls, got ${_mockCalls.sendSigned.length}`);
+
+    // Call 0: margin pre-check
+    assertEq(_mockCalls.sendSigned[0].path, '/fapi/v2/balance', 'First call checks balance');
 
     // Call 1: leverage
-    assertEq(_mockCalls.sendSigned[0].path, '/fapi/v1/leverage', 'First call sets leverage');
-    assertEq(_mockCalls.sendSigned[0].params.leverage, 10, 'leverage=10');
+    assertEq(_mockCalls.sendSigned[1].path, '/fapi/v1/leverage', 'Second call sets leverage');
+    assertEq(_mockCalls.sendSigned[1].params.leverage, 10, 'leverage=10');
 
     // Call 2: MARKET entry
-    assertEq(_mockCalls.sendSigned[1].path, '/fapi/v1/order', 'Second call places order');
-    assertEq(_mockCalls.sendSigned[1].params.type, 'MARKET', 'MARKET order');
-    assertEq(_mockCalls.sendSigned[1].params.side, 'BUY', 'LONG → BUY');
+    assertEq(_mockCalls.sendSigned[2].path, '/fapi/v1/order', 'Third call places order');
+    assertEq(_mockCalls.sendSigned[2].params.type, 'MARKET', 'MARKET order');
+    assertEq(_mockCalls.sendSigned[2].params.side, 'BUY', 'LONG → BUY');
 
     // Call 3: STOP_MARKET (SL)
-    assertEq(_mockCalls.sendSigned[2].params.type, 'STOP_MARKET', 'SL is STOP_MARKET');
-    assert(_mockCalls.sendSigned[2].params.reduceOnly === true, 'SL reduceOnly');
+    assertEq(_mockCalls.sendSigned[3].params.type, 'STOP_MARKET', 'SL is STOP_MARKET');
+    assert(_mockCalls.sendSigned[3].params.reduceOnly === true, 'SL reduceOnly');
 
     // Call 4: TAKE_PROFIT_MARKET (TP)
-    assertEq(_mockCalls.sendSigned[3].params.type, 'TAKE_PROFIT_MARKET', 'TP is TAKE_PROFIT_MARKET');
-    assert(_mockCalls.sendSigned[3].params.reduceOnly === true, 'TP reduceOnly');
+    assertEq(_mockCalls.sendSigned[4].params.type, 'TAKE_PROFIT_MARKET', 'TP is TAKE_PROFIT_MARKET');
+    assert(_mockCalls.sendSigned[4].params.reduceOnly === true, 'TP reduceOnly');
 });
 
 test('Risk guard validateOrder is called before entry', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     assertEq(_mockCalls.validateOrder.length, 1, 'validateOrder called once');
@@ -504,12 +512,14 @@ test('Risk guard validateOrder is called before entry', async () => {
 
 test('Risk guard block prevents live entry', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
+    await tick(100); // let async handlers from reset complete
+    resetMocks();    // clear leaked DELETE calls from prior live positions
     _mockBehavior.riskOk = false;
     _mockBehavior.riskReason = 'daily_loss_limit';
 
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     // Shadow entry should exist with risk blocked live status
@@ -525,7 +535,7 @@ test('Risk guard block prevents live entry', async () => {
     assert(riskAlert, 'Telegram risk block alert sent');
 
     // Live stats
-    const ls = serverAT.getLiveStats();
+    const ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ls.blocked, 1, 'blocked=1 in live stats');
 
     _mockBehavior.riskOk = true;
@@ -534,18 +544,18 @@ test('Risk guard block prevents live entry', async () => {
 
 test('No creds prevents live entry', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
     _mockBehavior.creds = null;  // No credentials
 
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     assert(entry !== null, 'Shadow entry exists');
     assertEq(entry.live.status, 'NO_CREDS', 'live status = NO_CREDS');
     assertEq(_mockCalls.sendSigned.length, 0, 'No exchange calls');
 
-    const ls = serverAT.getLiveStats();
+    const ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ls.errors, 1, 'errors=1 in live stats');
 
     _mockBehavior.creds = { apiKey: 'TESTKEY', apiSecret: 'TESTSECRET', baseUrl: 'https://testnet.binancefuture.com', mode: 'testnet' };
@@ -553,12 +563,12 @@ test('No creds prevents live entry', async () => {
 
 test('Market order failure logged and tracked', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
     // Leverage OK, but all /fapi/v1/order calls fail
     _mockBehavior.sendSignedPathErrors['/fapi/v1/order'] = 'INSUFFICIENT_MARGIN';
 
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     assertEq(entry.live.status, 'ENTRY_FAILED', 'live status = ENTRY_FAILED');
@@ -571,44 +581,44 @@ test('Market order failure logged and tracked', async () => {
 
 test('Leverage failure is non-fatal — entry still placed', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
     // Leverage call fails, but orders should still go through
     _mockBehavior.sendSignedPathErrors['/fapi/v1/leverage'] = 'LEVERAGE_ALREADY_SET';
 
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     assertEq(entry.live.status, 'LIVE', 'Still enters LIVE despite leverage failure');
     assert(entry.live.mainOrderId > 0, 'Has orderId');
 });
 
-test('SL/TP failures are non-fatal — entry stays LIVE', async () => {
+test('SL/TP failures trigger emergency close', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
     // SL and TP order types fail, but MARKET is fine
     _mockBehavior.sendSignedTypeErrors['STOP_MARKET'] = 'STOP_ORDER_FAILED';
     _mockBehavior.sendSignedTypeErrors['TAKE_PROFIT_MARKET'] = 'TP_ORDER_FAILED';
 
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
-    await tick(100);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    await tick(6000); // SL retries: 0s + 1s + 3s = 4s, then emergency close
 
-    assertEq(entry.live.status, 'LIVE', 'Still LIVE despite SL/TP failures');
-    assertEq(entry.live.slPlaced, false, 'slPlaced=false');
-    assertEq(entry.live.tpPlaced, false, 'tpPlaced=false');
+    // SL retries all fail → emergency MARKET close succeeds → position closed
+    assert(entry.live !== undefined, 'live object exists');
+    assertEq(entry.live.status, 'EMERGENCY_CLOSED', 'Emergency closed after SL retries exhausted');
 
-    // Telegram warnings sent for both
-    const warnings = _mockCalls.telegram.filter(c => c.fn === 'send' && c.text.includes('MANUAL'));
-    assert(warnings.length >= 2, `Should have ≥2 manual SL/TP warnings, got ${warnings.length}`);
+    // Telegram emergency close message sent
+    const emgMsg = _mockCalls.telegram.find(c => c.fn === 'sendToUser' && c.text.includes('EMERGENCY'));
+    assert(emgMsg, 'Telegram emergency close message sent');
 });
 
 test('Live entry stores tracking data on shadow entry', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC());
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     assertEq(entry.live.status, 'LIVE', 'status=LIVE');
@@ -621,10 +631,10 @@ test('Live entry stores tracking data on shadow entry', async () => {
 
 test('Audit record written on entry fill', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     const fillAudit = _mockCalls.audit.find(a => a.action === 'SAT_ENTRY_FILLED');
@@ -635,10 +645,10 @@ test('Audit record written on entry fill', async () => {
 
 test('Metrics recordOrder(filled) called', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     const filled = _mockCalls.metrics.filter(m => m.outcome === 'filled');
@@ -647,10 +657,10 @@ test('Metrics recordOrder(filled) called', async () => {
 
 test('Telegram alertOrderFilled called', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
     const fillAlert = _mockCalls.telegram.filter(c => c.fn === 'alertOrderFilled');
@@ -664,13 +674,13 @@ section('4. LIVE EXIT — SL/TP/Expiry');
 
 test('SL hit cancels TP order and records PnL', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     await tick(100);  // live entry completes
 
     resetMocks();  // Clear mock calls to isolate exit calls
@@ -692,19 +702,19 @@ test('SL hit cancels TP order and records PnL', async () => {
     assertEq(exitAudit.details.exitType, 'HIT_SL', 'exitType=HIT_SL');
 
     // Telegram exit message
-    const exitMsg = _mockCalls.telegram.find(c => c.fn === 'send' && c.text.includes('HIT_SL'));
+    const exitMsg = _mockCalls.telegram.find(c => c.fn === 'sendToUser' && c.text.includes('HIT_SL'));
     assert(exitMsg, 'Telegram exit message sent');
 });
 
 test('TP hit cancels SL order', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     await tick(100);
 
     resetMocks();
@@ -723,13 +733,13 @@ test('TP hit cancels SL order', async () => {
 
 test('Expiry force-closes and cancels both SL/TP', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     await tick(100);
 
     resetMocks();
@@ -754,9 +764,9 @@ section('5. LIVE STATS & GETTERS');
 
 test('getLiveStats returns correct structure', () => {
     resetMocks();
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
 
-    const ls = serverAT.getLiveStats();
+    const ls = serverAT.getLiveStats(TEST_UID);
     assert('enabled' in ls, 'has enabled');
     assert('tradingUserId' in ls, 'has tradingUserId');
     assert('entries' in ls, 'has entries');
@@ -770,21 +780,21 @@ test('getLiveStats returns correct structure', () => {
 });
 
 test('getLiveStats.enabled reflects MF.SERVER_AT', () => {
-    _mfServerAT = false;
-    assertEq(serverAT.getLiveStats().enabled, false, 'enabled=false when SERVER_AT=false');
-    _mfServerAT = true;
-    assertEq(serverAT.getLiveStats().enabled, true, 'enabled=true when SERVER_AT=true');
+    serverAT.setMode(TEST_UID, 'demo');
+    assertEq(serverAT.getLiveStats(TEST_UID).enabled, false, 'enabled=false when SERVER_AT=false');
+    serverAT.setMode(TEST_UID, 'live');
+    assertEq(serverAT.getLiveStats(TEST_UID).enabled, true, 'enabled=true when SERVER_AT=true');
 });
 
 test('getLivePositions returns only LIVE positions', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
-    const lp = serverAT.getLivePositions();
+    const lp = serverAT.getLivePositions(TEST_UID);
     assertEq(lp.length, 1, '1 live position');
     assertEq(lp[0].live.status, 'LIVE', 'status=LIVE');
     assertEq(lp[0].symbol, 'BTCUSDT', 'symbol in live position');
@@ -792,35 +802,35 @@ test('getLivePositions returns only LIVE positions', async () => {
 
 test('getLivePositions returns empty when no live entries', () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = false;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'demo');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     // No live execution because SERVER_AT=false
-    const lp = serverAT.getLivePositions();
+    const lp = serverAT.getLivePositions(TEST_UID);
     assertEq(lp.length, 0, '0 live positions when SERVER_AT=false');
 });
 
 test('Live stats accumulate entries/exits', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
     // Entry
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     await tick(100);
 
-    let ls = serverAT.getLiveStats();
+    let ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ls.entries, 1, 'live entries=1');
 
     // Hit TP → exit
     serverAT.onPriceUpdate('BTCUSDT', 61200);
     await tick(100);
 
-    ls = serverAT.getLiveStats();
+    ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ls.exits, 1, 'live exits=1');
     assertEq(ls.wins, 1, 'live wins=1');
     assert(ls.pnl > 0, 'live pnl positive after TP');
@@ -828,10 +838,10 @@ test('Live stats accumulate entries/exits', async () => {
 });
 
 test('Reset clears both shadow and live stats', () => {
-    _mfServerAT = true;
-    serverAT.reset();
-    const ss = serverAT.getStats();
-    const ls = serverAT.getLiveStats();
+    serverAT.setMode(TEST_UID, 'live');
+    serverAT.reset(TEST_UID);
+    const ss = serverAT.getStats(TEST_UID);
+    const ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ss.entries, 0, 'shadow entries=0 after reset');
     assertEq(ls.entries, 0, 'live entries=0 after reset');
     assertEq(ls.blocked, 0, 'live blocked=0 after reset');
@@ -845,17 +855,17 @@ section('6. SHADOW LOG — Ring Buffer');
 
 test('Log records shadow entries and live events', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC());
+    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
     await tick(100);
 
-    const log = serverAT.getLog(50);
+    const log = serverAT.getLog(TEST_UID, 50);
     assert(log.length >= 1, 'Has log entries');
 
-    const shadowEntry = log.find(l => l.type === 'SHADOW_ENTRY');
-    assert(shadowEntry, 'SHADOW_ENTRY log');
+    const shadowEntry = log.find(l => l.type === 'ENTRY');
+    assert(shadowEntry, 'ENTRY log');
 
     const liveEntry = log.find(l => l.type === 'LIVE_ENTRY');
     assert(liveEntry, 'LIVE_ENTRY log');
@@ -863,10 +873,10 @@ test('Log records shadow entries and live events', async () => {
 });
 
 test('Log limit works', () => {
-    const log1 = serverAT.getLog(1);
+    const log1 = serverAT.getLog(TEST_UID, 1);
     assertEq(log1.length, 1, 'Limit=1 returns 1 entry');
 
-    const log5 = serverAT.getLog(5);
+    const log5 = serverAT.getLog(TEST_UID, 5);
     assert(log5.length <= 5, 'Limit=5 returns ≤5 entries');
 });
 
@@ -876,45 +886,45 @@ test('Log limit works', () => {
 section('7. ORDER PARAMETERS & SIZE CALCULATION');
 
 test('LARGE tier size clamped correctly', () => {
-    serverAT.reset();
-    _mfServerAT = false;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'demo');
     // LARGE mult=1.75, base=100 → raw=175, max=160 → clamped to 160
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 50000 }),
         makeSTC({ size: 100 })
-    );
+    , TEST_UID);
     assertEq(entry.size, 160, 'LARGE clamped to 160% of base');
 });
 
 test('SMALL tier size correct', () => {
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
     // SMALL mult=1.0, base=100 → raw=100, within [50,160] → 100
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 50000, fusion: { decision: 'SMALL', dir: 'LONG', confidence: 55, score: 50 } }),
         makeSTC({ size: 100 })
-    );
+    , TEST_UID);
     assertEq(entry.size, 100, 'SMALL size=100 (1x base)');
 });
 
 test('Quantity calculation: (size * lev) / price', () => {
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
     // size=100, lev=10, price=50000 → qty = (100*10)/50000 = 0.02
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 50000, fusion: { decision: 'SMALL', dir: 'LONG', confidence: 55, score: 50 } }),
         makeSTC({ size: 100, lev: 10 })
-    );
+    , TEST_UID);
     assertEq(entry.qty, 0.02, 'qty = (100*10)/50000 = 0.02');
 });
 
 test('SHORT MARKET order sends SELL side', async () => {
     resetMocks();
-    serverAT.reset();
-    _mfServerAT = true;
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'live');
 
     serverAT.processBrainDecision(
         makeDecision({ price: 3500, symbol: 'ETHUSDT', fusion: { decision: 'MEDIUM', dir: 'SHORT', confidence: 70, score: 65 } }),
         makeSTC()
-    );
+    , TEST_UID);
     await tick(100);
 
     const marketCall = _mockCalls.sendSigned.find(c => c.params.type === 'MARKET');
@@ -935,27 +945,27 @@ test('SHORT MARKET order sends SELL side', async () => {
 section('8. EDGE CASES');
 
 test('Null decision returns null', () => {
-    assertEq(serverAT.processBrainDecision(null, makeSTC()), null, 'null decision');
+    assertEq(serverAT.processBrainDecision(null, makeSTC(), TEST_UID), null, 'null decision');
 });
 
 test('Missing fusion returns null', () => {
-    assertEq(serverAT.processBrainDecision({ price: 100, symbol: 'X' }, makeSTC()), null, 'no fusion');
+    assertEq(serverAT.processBrainDecision({ price: 100, symbol: 'X' }, makeSTC(), TEST_UID), null, 'no fusion');
 });
 
 test('Missing stc returns null', () => {
-    assertEq(serverAT.processBrainDecision(makeDecision(), null), null, 'null stc');
+    assertEq(serverAT.processBrainDecision(makeDecision(), null, TEST_UID), null, 'null stc');
 });
 
 test('Invalid price returns null', () => {
-    assertEq(serverAT.processBrainDecision(makeDecision({ price: 0 }), makeSTC()), null, 'price=0');
-    assertEq(serverAT.processBrainDecision(makeDecision({ price: -1 }), makeSTC()), null, 'price=-1');
+    assertEq(serverAT.processBrainDecision(makeDecision({ price: 0 }), makeSTC(), TEST_UID), null, 'price=0');
+    assertEq(serverAT.processBrainDecision(makeDecision({ price: -1 }), makeSTC(), TEST_UID), null, 'price=-1');
 });
 
 test('Invalid side returns null', () => {
     const r = serverAT.processBrainDecision(
         makeDecision({ fusion: { decision: 'LARGE', dir: 'SIDEWAYS', confidence: 80, score: 70 } }),
         makeSTC()
-    );
+    , TEST_UID);
     assertEq(r, null, 'Invalid dir → null');
 });
 
@@ -963,30 +973,30 @@ test('SKIP tier returns null', () => {
     assertEq(serverAT.processBrainDecision(
         makeDecision({ fusion: { decision: 'SKIP', dir: 'LONG', confidence: 50, score: 40 } }),
         makeSTC()
-    ), null, 'SKIP → null');
+    , TEST_UID), null, 'SKIP → null');
 });
 
 test('ERROR tier returns null', () => {
     assertEq(serverAT.processBrainDecision(
         makeDecision({ fusion: { decision: 'ERROR', dir: 'LONG', confidence: 0, score: 0 } }),
         makeSTC()
-    ), null, 'ERROR → null');
+    , TEST_UID), null, 'ERROR → null');
 });
 
 test('onPriceUpdate ignores invalid price', () => {
-    serverAT.reset();
-    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC());
+    serverAT.reset(TEST_UID);
+    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC(), TEST_UID);
     serverAT.onPriceUpdate('BTCUSDT', 0);
     serverAT.onPriceUpdate('BTCUSDT', -1);
     serverAT.onPriceUpdate('BTCUSDT', null);
-    assertEq(serverAT.getOpenCount(), 1, 'Position still open after invalid prices');
+    assertEq(serverAT.getOpenCount(TEST_UID), 1, 'Position still open after invalid prices');
 });
 
 test('onPriceUpdate ignores different symbol', () => {
-    serverAT.reset();
-    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC());
+    serverAT.reset(TEST_UID);
+    serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC(), TEST_UID);
     serverAT.onPriceUpdate('ETHUSDT', 1);  // Price that would trigger SL on BTC
-    assertEq(serverAT.getOpenCount(), 1, 'Different symbol ignored');
+    assertEq(serverAT.getOpenCount(TEST_UID), 1, 'Different symbol ignored');
 });
 
 // ═══════════════════════════════════════════════════════════════
@@ -995,29 +1005,31 @@ test('onPriceUpdate ignores different symbol', () => {
 section('9. SHORT PATH TESTS');
 
 test('SHORT SL hit when price goes up', () => {
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'demo'); // [A4] explicit mode — prior section leaves live
     // SHORT @ 4000, SL = 4000 + (4000*1%) = 4040
     const entry = serverAT.processBrainDecision(
         makeDecision({ symbol: 'ETHUSDT', price: 4000, fusion: { decision: 'SMALL', dir: 'SHORT', confidence: 60, score: 55 } }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     assertEq(entry.sl, 4040, 'SHORT SL=4040');
     serverAT.onPriceUpdate('ETHUSDT', 4040);
-    assertEq(serverAT.getOpenCount(), 0, 'SHORT closed at SL');
-    assertEq(serverAT.getStats().losses, 1, '1 loss');
+    assertEq(serverAT.getOpenCount(TEST_UID), 0, 'SHORT closed at SL');
+    assertEq(serverAT.getStats(TEST_UID).losses, 1, '1 loss');
 });
 
 test('SHORT TP hit when price goes down', () => {
-    serverAT.reset();
+    serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'demo'); // [A4] explicit mode — prior section leaves live
     // SHORT @ 4000, TP = 4000 - (40*2) = 3920
     const entry = serverAT.processBrainDecision(
         makeDecision({ symbol: 'ETHUSDT', price: 4000, fusion: { decision: 'SMALL', dir: 'SHORT', confidence: 60, score: 55 } }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
-    );
+    , TEST_UID);
     assertEq(entry.tp, 3920, 'SHORT TP=3920');
     serverAT.onPriceUpdate('ETHUSDT', 3920);
-    assertEq(serverAT.getOpenCount(), 0, 'SHORT closed at TP');
-    assertEq(serverAT.getStats().wins, 1, '1 win');
+    assertEq(serverAT.getOpenCount(TEST_UID), 0, 'SHORT closed at TP');
+    assertEq(serverAT.getStats(TEST_UID).wins, 1, '1 win');
 });
 
 // ═══════════════════════════════════════════════════════════════

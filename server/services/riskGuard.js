@@ -112,7 +112,7 @@ function setEmergencyKill(active, userId) {
   const state = _getUserState(userId);
   state.emergencyKill = !!active;
   _saveToDisk();
-  try { telegram.alertKillSwitch(state.emergencyKill, userId); } catch (e) { logger.warn('RISK', `alertKillSwitch TG failed (best-effort): ${e.message}`); }
+  try { telegram.alertKillSwitch(state.emergencyKill, userId); } catch (e) { console.warn('[RISK]', `alertKillSwitch TG failed (best-effort): ${e.message}`); }
   if (state.emergencyKill) console.warn('[RISK] EMERGENCY KILL activated — all orders blocked for user ' + userId);
 }
 
@@ -193,7 +193,7 @@ function validateOrder(order, owner, userId) {
     const _dlKey = `${userId}:${who}:${_today}`;
     if (!_dailyLossAlerted[_dlKey]) {
       _dailyLossAlerted[_dlKey] = true;
-      try { telegram.alertDailyLoss(who, tracker.realizedPnL, lossLimit, userId); } catch (e) { logger.warn('RISK', `alertDailyLoss TG failed (best-effort): ${e.message}`); }
+      try { telegram.alertDailyLoss(who, tracker.realizedPnL, lossLimit, userId); } catch (e) { console.warn('[RISK]', `alertDailyLoss TG failed (best-effort): ${e.message}`); }
     }
     const r = `${who} daily loss limit reached ($${Math.abs(tracker.realizedPnL).toFixed(2)} / $${lossLimit.toFixed(2)})`;
     _logBlock(order, owner, userId, r); // [OB-01]

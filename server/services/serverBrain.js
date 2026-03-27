@@ -158,6 +158,7 @@ function _runCycle() {
                 cycle: _cycleCount,
                 symbol: snap.symbol,
                 price: snap.price,
+                priceTs: snap.priceTs, // [F2] Price age for freshness gate
                 confluence: confluence,
                 regime: regime,
                 gates: gates,

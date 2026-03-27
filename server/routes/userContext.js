@@ -14,6 +14,16 @@ const MAX_BACKUPS = 5; // rotative backups per user
 // Ensure directory exists
 if (!fs.existsSync(CTX_DIR)) fs.mkdirSync(CTX_DIR, { recursive: true });
 
+// [BE-02] Per-user write lock — prevents concurrent POST from overwriting each other
+const _writeLocks = new Map(); // userId → Promise chain
+function _withLock(userId, fn) {
+    const key = String(userId);
+    const prev = _writeLocks.get(key) || Promise.resolve();
+    const next = prev.then(fn, fn); // always run, even if prev rejected
+    _writeLocks.set(key, next);
+    return next;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────
 function _userFile(userId) {
     // Guard: userId must be a positive integer (from JWT via sessionAuth)
@@ -60,22 +70,24 @@ router.get('/user-context', (req, res) => {
 
 // ── POST /api/sync/user-context — push user preferences ─────────
 router.post('/user-context', (req, res) => {
-    try {
-        if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
-        const fp = _userFile(req.user.id);
-        if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const fp = _userFile(req.user.id);
+    if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
 
-        const body = req.body;
-        if (!body || typeof body !== 'object' || !body.ts) {
-            return res.status(400).json({ ok: false, error: 'missing payload or ts' });
-        }
+    const body = req.body;
+    if (!body || typeof body !== 'object' || !body.ts) {
+        return res.status(400).json({ ok: false, error: 'missing payload or ts' });
+    }
 
-        // Size guard
-        const raw = JSON.stringify(body);
-        if (raw.length > MAX_SIZE) {
-            return res.status(413).json({ ok: false, error: 'payload too large' });
-        }
+    // Size guard
+    const raw = JSON.stringify(body);
+    if (raw.length > MAX_SIZE) {
+        return res.status(413).json({ ok: false, error: 'payload too large' });
+    }
 
+    // [BE-02] Serialize writes per-user to prevent read-merge-write race
+    _withLock(req.user.id, () => {
+      try {
         // Section-level last-write-wins merge
         let existing = {};
         if (fs.existsSync(fp)) {
@@ -103,10 +115,11 @@ router.post('/user-context', (req, res) => {
         // [C3] Echo stored settings section for client-side validation
         var storedSettings = merged.settings || null;
         return res.json({ ok: true, ts: body.ts, storedSettings: storedSettings });
-    } catch (e) {
+      } catch (e) {
         console.error('[user-ctx] POST error:', e.message);
         return res.status(500).json({ ok: false, error: 'write failed' });
-    }
+      }
+    }); // [BE-02] end _withLock
 });
 
 module.exports = router;
