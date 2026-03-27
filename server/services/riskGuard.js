@@ -7,6 +7,7 @@ const config = require('../config');
 const fs = require('fs');
 const path = require('path');
 const telegram = require('./telegram');
+const audit = require('./audit'); // [OB-01]
 
 // ── Persistence file — survives server restarts ──
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
@@ -67,8 +68,11 @@ function _makeTracker() {
 const _dailyLossAlerted = {};  // { "userId:owner:date" → true }
 
 function _getUserState(userId) {
-  // [MULTI-USER] Hard guard — never fall back to user 1
-  if (!userId) throw new Error('[RISK] _getUserState called without userId');
+  // [RM-05] Defensive: return safe default instead of throwing — prevents caller crash
+  if (!userId) {
+    console.error('[RISK] _getUserState called without userId — returning safe default');
+    return { atDaily: _makeTracker(), aresDaily: _makeTracker(), emergencyKill: true }; // [RM-05] kill=true blocks orders for safety
+  }
   const key = String(userId);
   if (!_users[key]) {
     _users[key] = { atDaily: _makeTracker(), aresDaily: _makeTracker(), emergencyKill: false };
@@ -108,7 +112,7 @@ function setEmergencyKill(active, userId) {
   const state = _getUserState(userId);
   state.emergencyKill = !!active;
   _saveToDisk();
-  telegram.alertKillSwitch(state.emergencyKill, userId);
+  try { telegram.alertKillSwitch(state.emergencyKill, userId); } catch (e) { logger.warn('RISK', `alertKillSwitch TG failed (best-effort): ${e.message}`); }
   if (state.emergencyKill) console.warn('[RISK] EMERGENCY KILL activated — all orders blocked for user ' + userId);
 }
 
@@ -119,23 +123,41 @@ function setEmergencyKill(active, userId) {
  * @param {number|string} [userId=1]
  * Returns { ok: true } or { ok: false, reason: string }.
  */
+// [OB-01] Log blocked orders to audit trail for observability
+function _logBlock(order, owner, userId, reason) {
+  try {
+    audit.record('ORDER_BLOCKED', { symbol: order.symbol, side: order.side, type: order.type, owner: owner, userId: userId, reason: reason }, owner || 'system');
+  } catch (_) { /* audit is best-effort */ }
+}
+
 function validateOrder(order, owner, userId) {
   const state = _getUserState(userId);
 
   // Global emergency kill
   if (state.emergencyKill) {
-    return { ok: false, reason: 'Emergency kill switch active — all trading blocked' };
+    const r = 'Emergency kill switch active — all trading blocked';
+    _logBlock(order, owner, userId, r); // [OB-01]
+    return { ok: false, reason: r };
   }
 
   // Master kill switch
   if (!config.tradingEnabled) {
-    return { ok: false, reason: 'Trading is disabled (TRADING_ENABLED=false)' };
+    const r = 'Trading is disabled (TRADING_ENABLED=false)';
+    _logBlock(order, owner, userId, r); // [OB-01]
+    return { ok: false, reason: r };
   }
 
   // Leverage check
   const lev = parseInt(order.leverage, 10);
+  if (!Number.isFinite(lev) || lev < 1) {
+    const r = 'Invalid or missing leverage';
+    _logBlock(order, owner, userId, r); // [OB-01]
+    return { ok: false, reason: r };
+  }
   if (lev > config.risk.maxLeverage) {
-    return { ok: false, reason: `Leverage ${lev}x exceeds max ${config.risk.maxLeverage}x` };
+    const r = `Leverage ${lev}x exceeds max ${config.risk.maxLeverage}x`;
+    _logBlock(order, owner, userId, r); // [OB-01]
+    return { ok: false, reason: r };
   }
 
   // Position size check
@@ -143,11 +165,21 @@ function validateOrder(order, owner, userId) {
   if (orderType === 'LIMIT' || orderType === 'MARKET') {
     const refPrice = parseFloat(order.price || order.referencePrice || 0);
     if (!Number.isFinite(refPrice) || refPrice <= 0) {
-      return { ok: false, reason: `Missing or invalid reference price for ${orderType} order (got ${refPrice})` };
+      const r = `Missing or invalid reference price for ${orderType} order (got ${refPrice})`;
+      _logBlock(order, owner, userId, r); // [OB-01]
+      return { ok: false, reason: r };
     }
-    const notional = parseFloat(order.quantity) * refPrice;
+    const qty = parseFloat(order.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      const r = 'Invalid or missing quantity';
+      _logBlock(order, owner, userId, r); // [OB-01]
+      return { ok: false, reason: r };
+    }
+    const notional = qty * refPrice;
     if (notional > config.risk.maxPositionUsdt) {
-      return { ok: false, reason: `Position size $${notional.toFixed(2)} exceeds max $${config.risk.maxPositionUsdt}` };
+      const r = `Position size $${notional.toFixed(2)} exceeds max $${config.risk.maxPositionUsdt}`;
+      _logBlock(order, owner, userId, r); // [OB-01]
+      return { ok: false, reason: r };
     }
   }
 
@@ -161,9 +193,11 @@ function validateOrder(order, owner, userId) {
     const _dlKey = `${userId}:${who}:${_today}`;
     if (!_dailyLossAlerted[_dlKey]) {
       _dailyLossAlerted[_dlKey] = true;
-      telegram.alertDailyLoss(who, tracker.realizedPnL, lossLimit, userId);
+      try { telegram.alertDailyLoss(who, tracker.realizedPnL, lossLimit, userId); } catch (e) { logger.warn('RISK', `alertDailyLoss TG failed (best-effort): ${e.message}`); }
     }
-    return { ok: false, reason: `${who} daily loss limit reached ($${Math.abs(tracker.realizedPnL).toFixed(2)} / $${lossLimit.toFixed(2)})` };
+    const r = `${who} daily loss limit reached ($${Math.abs(tracker.realizedPnL).toFixed(2)} / $${lossLimit.toFixed(2)})`;
+    _logBlock(order, owner, userId, r); // [OB-01]
+    return { ok: false, reason: r };
   }
 
   return { ok: true };
