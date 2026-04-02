@@ -4,6 +4,7 @@
 // Gated by MF.SERVER_MARKET_DATA flag.
 'use strict';
 
+const Sentry = require('@sentry/node');
 const WebSocket = require('ws');
 const logger = require('./logger');
 
@@ -18,7 +19,7 @@ const STALE_DATA_MS = 120000;    // 2min data staleness threshold
 
 // ── Active streams ──
 const _streams = {};    // { streamKey: { ws, reconnects, timer, alive } }
-let _symbol = null;     // current tracked symbol
+const _activeSymbols = new Set();  // [MULTI-SYM] all subscribed symbols (uppercase)
 let _timeframes = [];   // active timeframes ['5m', '1h', '4h']
 
 // ── Event listeners ──
@@ -139,6 +140,7 @@ function _connectStream(streamName, onMessage) {
 
         ws.on('error', (err) => {
             logger.error('FEED', `Stream error [${streamName}]:`, err.message);
+            if (entry.reconnects >= 3) Sentry.captureException(err, { tags: { module: 'marketFeed', stream: streamName, reconnects: entry.reconnects } });
             ws.close();
         });
     } catch (err) {
@@ -153,40 +155,39 @@ function _connectStream(streamName, onMessage) {
 // Subscribe — start all streams for a symbol
 // ══════════════════════════════════════════════════════════════════
 async function subscribe(symbol, timeframes) {
-    // Unsub from previous symbol
-    if (_symbol && _symbol !== symbol) {
-        unsubscribeAll();
-    }
+    const symUpper = symbol.toUpperCase();
+    const symLower = symbol.toLowerCase();     // [MULTI-SYM] local capture for closures
 
-    _symbol = symbol.toLowerCase();
+    // [MULTI-SYM] additive subscribe — no unsubscribeAll on symbol switch
+    _activeSymbols.add(symUpper);
     _timeframes = timeframes || ['5m', '1h', '4h'];
 
-    logger.info('FEED', `Subscribing to ${symbol} [${_timeframes.join(',')}]`);
+    logger.info('FEED', `Subscribing to ${symUpper} [${_timeframes.join(',')}]`);
 
     // 1) Fetch initial kline history for each timeframe
     const klinePromises = _timeframes.map(async (tf) => {
-        const bars = await fetchKlines(symbol, tf, KLINE_HISTORY);
+        const bars = await fetchKlines(symUpper, tf, KLINE_HISTORY);
         if (bars && bars.length > 0) {
-            _emit('kline', { symbol, timeframe: tf, bars, initial: true });
+            _emit('kline', { symbol: symUpper, timeframe: tf, bars, initial: true });
         }
         return { tf, count: bars ? bars.length : 0 };
     });
     const results = await Promise.all(klinePromises);
     for (const r of results) {
-        logger.info('FEED', `  ${r.tf}: ${r.count} initial candles`);
+        logger.info('FEED', `  ${symUpper} ${r.tf}: ${r.count} initial candles`);
     }
 
     // 2) Fetch funding rate + OI
     const [fr, oi] = await Promise.all([
-        fetchFundingRate(symbol),
-        fetchOpenInterest(symbol),
+        fetchFundingRate(symUpper),
+        fetchOpenInterest(symUpper),
     ]);
-    if (fr !== null) _emit('fundingRate', { symbol, rate: fr });
-    if (oi !== null) _emit('openInterest', { symbol, value: oi });
+    if (fr !== null) _emit('fundingRate', { symbol: symUpper, rate: fr });
+    if (oi !== null) _emit('openInterest', { symbol: symUpper, value: oi });
 
     // 3) Connect kline WebSocket streams
     for (const tf of _timeframes) {
-        _connectStream(`${_symbol}@kline_${tf}`, (data) => {
+        _connectStream(`${symLower}@kline_${tf}`, (data) => {
             if (data.e !== 'kline' || !data.k) return;
             const k = data.k;
             const bar = {
@@ -198,19 +199,38 @@ async function subscribe(symbol, timeframes) {
                 volume: +k.v,
                 closed: k.x,  // true if candle just closed
             };
-            _emit('kline', { symbol: _symbol.toUpperCase(), timeframe: tf, bar, initial: false });
+            _emit('kline', { symbol: symUpper, timeframe: tf, bar, initial: false });
             // Also emit price on every kline tick
-            if (+k.c > 0) _emit('price', { symbol: _symbol.toUpperCase(), price: +k.c });
+            if (+k.c > 0) _emit('price', { symbol: symUpper, price: +k.c });
         });
     }
 
     // 4) Connect mark price stream (includes funding rate updates)
-    _connectStream(`${_symbol}@markPrice@1s`, (data) => {
-        if (data.p) _emit('price', { symbol: _symbol.toUpperCase(), price: +data.p });
-        if (data.r) _emit('fundingRate', { symbol: _symbol.toUpperCase(), rate: +data.r });
+    _connectStream(`${symLower}@markPrice@1s`, (data) => {
+        if (data.p) _emit('price', { symbol: symUpper, price: +data.p });
+        if (data.r) _emit('fundingRate', { symbol: symUpper, rate: +data.r });
     });
 
-    logger.info('FEED', `Subscription complete for ${symbol}`);
+    // 5) [BRAIN-V2] Connect aggTrade stream for order flow analysis
+    _connectStream(`${symLower}@aggTrade`, (data) => {
+        _emit('aggTrade', {
+            symbol: symUpper,
+            price: +data.p,
+            qty: +data.q,
+            isBuyerMaker: data.m,  // true = seller aggressor (taker sell)
+            ts: data.T,
+        });
+    });
+
+    logger.info('FEED', `Subscription complete for ${symUpper}`);
+}
+
+// [MULTI-SYM] Subscribe to multiple symbols sequentially
+async function subscribeMulti(symbols, timeframes) {
+    for (const sym of symbols) {
+        await subscribe(sym, timeframes);
+    }
+    logger.info('FEED', `All symbols subscribed: [${[..._activeSymbols].join(',')}]`);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -226,7 +246,7 @@ function unsubscribeAll() {
         }
         delete _streams[key];
     }
-    _symbol = null;
+    _activeSymbols.clear();  // [MULTI-SYM]
     _timeframes = [];
     logger.info('FEED', 'All streams closed');
 }
@@ -244,7 +264,8 @@ function getHealth() {
         };
     }
     return {
-        symbol: _symbol?.toUpperCase() || null,
+        symbols: [..._activeSymbols],             // [MULTI-SYM] array of all subscribed symbols
+        symbol: [..._activeSymbols][0] || null,   // backward compat: primary symbol
         timeframes: _timeframes,
         streamCount: Object.keys(_streams).length,
         streams,
@@ -253,6 +274,7 @@ function getHealth() {
 
 module.exports = {
     subscribe,
+    subscribeMulti,    // [MULTI-SYM]
     unsubscribeAll,
     fetchKlines,
     fetchFundingRate,

@@ -5,6 +5,7 @@
 // Per-user isolation: each userId has independent state, positions, balance.
 'use strict';
 
+const Sentry = require('@sentry/node');
 const logger = require('./logger');
 const MF = require('../migrationFlags');
 const { getExchangeCreds } = require('./credentialStore');
@@ -583,6 +584,7 @@ function processBrainDecision(decision, stc, userId) {
     if (entry.mode === 'live') {
         _executeLiveEntry(entry, stc).catch(err => {
             logger.error('AT_LIVE', `Live entry failed [${entry.seq}]: ${err.message}`);
+            Sentry.captureException(err, { tags: { module: 'AT', action: 'live_entry_unhandled', symbol: entry.symbol }, user: { id: String(entry.userId) } });
             entry.live = entry.live || { status: 'ERROR', error: err.message };
             _pushLog(userId, 'LIVE_ERROR', { seq: entry.seq, error: err.message });
             _uState(entry.userId).liveStats.errors++;
@@ -764,6 +766,7 @@ async function _executeLiveEntry(entry, stc) {
         entry.live = { status: 'ENTRY_FAILED', error: err.message };
         _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: err.message });
         logger.error('AT_LIVE', `[${entry.seq}] MARKET entry failed: ${err.message}`);
+        Sentry.captureException(err, { tags: { module: 'AT', action: 'live_entry', symbol: entry.symbol, side: entry.side }, user: { id: String(userId) } });
         telegram.alertOrderFailed(entry.symbol, entry.side, err.message, userId);
         audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: err.message }, 'SERVER_AT');
         metrics.recordOrder('failed');
@@ -793,6 +796,7 @@ async function _executeLiveEntry(entry, stc) {
     }
     if (!verifiedOrder.avgPrice || parseFloat(verifiedOrder.avgPrice) <= 0) {
         logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: No verified fill price after polling — using MARKET response as-is`);
+        Sentry.captureMessage(`Fill unverified: ${entry.symbol} ${entry.side}`, { level: 'error', tags: { module: 'AT', action: 'fill_unverified', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `⚠️ *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — avgPrice not confirmed. Monitor manually.`);
     }
     const avgPrice = parseFloat(verifiedOrder.avgPrice || 0);
@@ -852,6 +856,7 @@ async function _executeLiveEntry(entry, stc) {
     // [FIX1] EMERGENCY CLOSE: if all SL retries failed, market-close + properly remove from _positions
     if (!slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL SL retries exhausted — executing EMERGENCY MARKET CLOSE`);
+        Sentry.captureMessage(`EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_sl', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing position to prevent unprotected exposure.`);
         try {
             const emgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
@@ -876,6 +881,7 @@ async function _executeLiveEntry(entry, stc) {
             return; // exit early — no TP needed, position is closed
         } catch (emgErr) {
             logger.error('AT_LIVE', `[${entry.seq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
+            Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_failed', symbol: entry.symbol }, user: { id: String(userId) } });
             telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition is UNPROTECTED on Binance.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`);
         }
         return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
@@ -906,6 +912,7 @@ async function _executeLiveEntry(entry, stc) {
     // [B3] If all TP retries failed — emergency close to prevent unprotected exposure
     if (!tpOrder && slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL TP retries exhausted — executing EMERGENCY MARKET CLOSE`);
+        Sentry.captureMessage(`EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_tp', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${TP_RETRY_DELAYS.length + 1} TP attempts failed.\nEmergency closing — position cannot stay open without TP protection.`);
         // Cancel SL order first (we're closing the position) — await to prevent SL fill racing with emergency close
         if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
@@ -929,6 +936,7 @@ async function _executeLiveEntry(entry, stc) {
             return; // position closed — no further processing needed
         } catch (tpEmgErr) {
             logger.error('AT_LIVE', `[${entry.seq}] TP EMERGENCY CLOSE FAILED: ${tpEmgErr.message}`);
+            Sentry.captureException(tpEmgErr, { level: 'fatal', tags: { module: 'AT', action: 'tp_emergency_failed', symbol: entry.symbol }, user: { id: String(userId) } });
             telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition has SL but NO TP protection.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`);
         }
     }

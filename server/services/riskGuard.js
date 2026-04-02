@@ -3,6 +3,7 @@
 // AT and ARES have independent daily loss trackers — per user, no cross-veto
 'use strict';
 
+const Sentry = require('@sentry/node');
 const config = require('../config');
 const fs = require('fs');
 const path = require('path');
@@ -25,6 +26,7 @@ function _saveToDisk() {
     }
   } catch (err) {
     console.error('[RISK] Failed to persist state:', err.message);
+    Sentry.captureException(err, { tags: { module: 'riskGuard', action: 'persist_state' } });
   }
 }
 
@@ -135,7 +137,10 @@ function setEmergencyKill(active, userId) {
   state.emergencyKill = !!active;
   _saveToDisk();
   try { telegram.alertKillSwitch(state.emergencyKill, userId); } catch (_) {}
-  if (state.emergencyKill) console.warn('[RISK] EMERGENCY KILL activated — all orders blocked for user ' + userId);
+  if (state.emergencyKill) {
+    console.warn('[RISK] EMERGENCY KILL activated — all orders blocked for user ' + userId);
+    Sentry.captureMessage('Emergency kill switch activated', { level: 'warning', tags: { module: 'riskGuard' }, user: { id: String(userId) } });
+  }
 }
 
 /**
@@ -227,6 +232,7 @@ function validateOrder(order, owner, userId) {
       telegram.alertDailyLoss(who, tracker.realizedPnL, lossLimit, userId);
     }
     const r = `${who} daily loss limit reached ($${Math.abs(tracker.realizedPnL).toFixed(2)} / $${lossLimit.toFixed(2)})`;
+    Sentry.captureMessage(`Daily loss limit hit: ${who}`, { level: 'warning', tags: { module: 'riskGuard', owner: who }, user: { id: String(userId) }, extra: { pnl: tracker.realizedPnL, limit: lossLimit } });
     _logBlock(order, owner, userId, r); // [OB-01]
     return { ok: false, reason: r };
   }

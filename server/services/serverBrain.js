@@ -4,6 +4,7 @@
 // Gated by MF.SERVER_BRAIN flag.
 'use strict';
 
+const Sentry = require('@sentry/node');
 const logger = require('./logger');
 const brainLock = require('../brainLock');
 const serverState = require('./serverState');
@@ -329,6 +330,7 @@ function _runCycle() {
 
     } catch (err) {
         logger.error('BRAIN', 'Brain cycle error: ' + String(err) + ' | ' + (err && err.stack ? err.stack : 'no stack'));
+        Sentry.captureException(err, { tags: { module: 'brain', cycle: _cycleCount } });
         _logDecision('ERROR', 'EXCEPTION', null, { error: err.message });
     } finally {
         _running = false;

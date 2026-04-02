@@ -12,6 +12,10 @@ jest.mock('../../server/services/telegram', () => ({
 jest.mock('../../server/services/audit', () => ({
   record: jest.fn(),
 }));
+jest.mock('@sentry/node', () => ({
+  captureException: jest.fn(),
+  captureMessage: jest.fn(),
+}));
 jest.mock('fs', () => ({
   existsSync: jest.fn(() => false),
   writeFileSync: jest.fn(),
