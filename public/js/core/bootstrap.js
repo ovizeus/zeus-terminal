@@ -89,21 +89,28 @@ function initZeusGroups() {
     } catch (_) { }
   }
 
-  // ── MARKET INTELLIGENCE ────────────────────────────────────────
-  // AUB este în fluxul paginii după zeus-groups — îl mutăm explicit primul
-  mv('aub', mi);   // Alien Upgrade Bay — PRIMUL în MI
-  mv('sr-strip', mi);   // Signal Registry strip — imediat după AUB
-  mv('csec', mi);   // chart section (mc, cc, vc inside)
-  mv('aria-strip', mi); // ARIA HUD strip
-  mv('teacher-strip', mi); // THE TEACHER — Replay & Practice Lab
-  mv('pnl-lab-strip', mi); // PnL Lab strip — between ARIA and DSL
-  mv('dsl-strip', mi); // DSL banner strip
-  mv('at-strip', mi); // AT banner strip
-  mv('pt-strip', mi); // Paper Trading banner strip
-  mv('nova-strip', mi); // NOVA HUD strip
-  mv('mtf-strip', mi); // MTF Structural Model — Etapa 1
-  mv('zeusBrain', mi);  // brain / cockpit
-  mv('brainExt', mi);   // brain extension panel
+  // ── LAYOUT: MODE BAR → CHART → DOCK → BRAIN → rest ────────────
+  mv('zeus-mode-bar', mi);  // 1. Global Execution Mode Bar — top of content
+  if (typeof initModeBar === 'function') initModeBar(); // populate mode bar
+  mv('csec', mi);           // 2. Chart section — sub mode bar
+  mv('zeus-dock', mi);      // 3. Icon Dock — sub chart
+  if (typeof initPageView === 'function') initPageView(); // page view shell (before dock so openPageView exists)
+  if (typeof initZeusDock === 'function') initZeusDock(); // populate dock icons
+  mv('zeusBrain', mi);      // 4. Brain / cockpit — sub dock
+  mv('brainExt', mi);       // 5. Brain extension panel
+  // ── REST: exact same relative order as before ────────────────
+  mv('aub', document.getElementById('zeus-hidden-panels'));  // AUB → hidden staging (accessed via dock page view)
+  mv('sr-strip', document.getElementById('zeus-hidden-panels'));  // SR → hidden staging (accessed via dock page view)
+  mv('aria-strip', document.getElementById('zeus-hidden-panels'));  // ARIA → hidden staging (accessed via dock page view)
+  mv('teacher-strip', document.getElementById('zeus-hidden-panels'));  // Teacher → hidden staging (accessed via dock page view)
+  mv('pnl-lab-strip', document.getElementById('zeus-hidden-panels'));  // PnL Lab → hidden staging (accessed via dock page view)
+  mv('dsl-strip', document.getElementById('zeus-hidden-panels'));  // DSL → hidden staging (accessed via dock page view)
+  mv('actfeed-strip', document.getElementById('zeus-hidden-panels'));  // Activity → hidden staging (accessed via dock page view)
+  mv('at-strip', document.getElementById('zeus-hidden-panels'));  // AT → hidden staging (accessed via dock page view)
+  mv('pt-strip', document.getElementById('zeus-hidden-panels'));  // PT → hidden staging (accessed via dock page view)
+  mv('nova-strip', document.getElementById('zeus-hidden-panels'));  // NOVA → hidden staging (accessed via dock page view)
+  mv('mtf-strip', document.getElementById('zeus-hidden-panels'));  // MTF → hidden staging (accessed via dock page view)
+  mv('adaptive-strip', document.getElementById('zeus-hidden-panels'));  // Adaptive → hidden staging (accessed via dock page view)
   mvSec('#rsiupd', mi);  // RSI Multi-TF
   mvSec('.dttabs', mi);  // AI Metrics
   mvSec('.conf-widget', mi);  // Confluence Score
@@ -155,7 +162,12 @@ function initZeusGroups() {
       console.warn('[ZEUS] Recovery mode activated for:', _failedElements);
       _showRecoveryBanner();
     }
+    // Safety: reveal if no dock restore pending (feed-gate handles dock case)
+    if (!sessionStorage.getItem('zeusDock')) var _sp=document.getElementById('_dockSplash');if(_sp)_sp.remove();
   }, 500);
+
+  // Absolute safety: if feed never comes, reveal after 5s
+  setTimeout(function() { var _sp=document.getElementById('_dockSplash');if(_sp)_sp.remove(); }, 5000);
 
 }
 
@@ -191,6 +203,18 @@ function _waitForFeedThenStartExtras() {
       if (typeof _userCtxPull === 'function') _userCtxPull();
       // Retry any pending sendBeacon payloads that failed on previous session close
       if (typeof _ucRetryPendingBeacon === 'function') _ucRetryPendingBeacon();
+      // Restore page view if was open before refresh (seamless — no home flash)
+      try {
+        var _sd = sessionStorage.getItem('zeusDock');
+        if (_sd && typeof openPageView === 'function') openPageView(_sd);
+      } catch(_e) {}
+      // Reveal page (hidden by <head> script when restoring dock)
+      var _sp=document.getElementById('_dockSplash');if(_sp)_sp.remove();
+      // Restore page view if was open before refresh
+      try {
+        var _sd = sessionStorage.getItem('zeusDock');
+        if (_sd && typeof openPageView === 'function') openPageView(_sd);
+      } catch(_e) {}
     }
   }, CHECK_MS);
 }
@@ -348,7 +372,7 @@ function _updatePnlLabCondensed() {
 }
 
 // startApp — MAIN ENTRY POINT
-function startApp() {
+async function startApp() {
   window._zeusBootTs = Date.now(); // timestamp for pull-overwrite guard
   // ─── GLOBAL BOOT GUARD (req 1, 7) ──────────────────────────
   if (window.ZEUS_STARTED) {
@@ -357,6 +381,21 @@ function startApp() {
   }
   window.ZEUS_STARTED = true;
   window.ZEUS_BOOTED = false;  // set true after full init
+
+  // [B17b] PREBOOT: fetch AT state BEFORE localStorage restore
+  // If serverAT is authoritative, _serverATEnabled is set BEFORE restore runs,
+  // so restore() skips stale demo financial fields from localStorage
+  try {
+    var _prebootRes = await fetch('/api/at/state', { credentials: 'same-origin' });
+    if (_prebootRes.ok) {
+      var _prebootData = await _prebootRes.json();
+      if (_prebootData && typeof ZState !== 'undefined' && typeof ZState._applyPreboot === 'function') {
+        ZState._applyPreboot(_prebootData);
+        console.log('[startApp] Preboot AT state applied — _serverATEnabled:', !!window._serverATEnabled);
+      }
+    }
+  } catch (_) { console.log('[startApp] Preboot AT fetch skipped (offline or no auth)'); }
+
   // ── IMMEDIATE STATE RESTORE (before any code can save empty TP) ──
   const _earlyRestored = ZState.restore();
   if (_earlyRestored) {
@@ -365,8 +404,8 @@ function startApp() {
   // ── BUILD MANIFEST (single source of truth) ──────────────────
   window.BUILD = window.BUILD || {
     name: 'ZeuS',
-    version: 'v90 OVI',
-    features: ['ATR Parity', 'CoreTick', 'ZLOG'],
+    version: 'v1.2.1',
+    features: ['ServerAT', 'DSL', 'Brain', 'ARES', 'Reconciliation', 'ZLOG'],
     ts: Date.now(),
   };
   console.log('[startApp] boot sequence starting | __wsGen=', window.__wsGen);
@@ -393,7 +432,7 @@ function startApp() {
     }
   } catch (_) { }
   initZeusGroups();       // move panels into collapsible group wrappers
-  initMidStack();         // wrap 5 strips in #midStack + drag&drop reorder
+  // initMidStack() removed — all strips now in hidden-panels, accessed via dock page view
   initAdaptiveStrip();    // [Etapa 5] mută conținut adaptive-sec → adaptive-strip-panel
   initMTFStrip();         // MTF Structural Model — restaurează stare panou + interval gating
   loadUserSettings();     // [US] restore persisted user preferences (TF, TZ, indicators, AT params)
@@ -587,31 +626,25 @@ function startApp() {
     var _isPulling = true; // [FIX H10] guard: prevent save during pull
     ZState.pullFromServer().then(function (serverSnap) {
       console.log('[sync] pullFromServer returned:', serverSnap ? 'data (ts=' + serverSnap.ts + ', pos=' + (serverSnap.positions || []).length + ')' : 'null');
-      if (!serverSnap || !serverSnap.ts) { ZState.markSyncReady(); return; }
+      if (!serverSnap || !serverSnap.ts) {
+        // [P4 FIX] New account or empty server state — confirm default mode so AT toggle isn't blocked
+        if (typeof AT !== 'undefined' && !AT._modeConfirmed) {
+          AT._modeConfirmed = true;
+          console.log('[sync] P4 — no server state, confirming default mode:', AT.mode || 'demo');
+        }
+        ZState.markSyncReady(); return;
+      }
       var localSnap = ZState.load();
       var localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0;
       var localPositions = (typeof TP !== 'undefined' && Array.isArray(TP.demoPositions)) ? TP.demoPositions.length : 0;
       var serverPositions = (serverSnap.positions || []).length;
       console.log('[sync] serverTs:', serverSnap.ts, 'localTs:', localTs, 'localPos:', localPositions, 'serverPos:', serverPositions);
 
-      // ALWAYS merge positions from server (union by ID) regardless of timestamp.
-      // Positions opened on another device must appear here even if local ts is newer.
-      if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined') {
+      // [B16] Merge positions using shared helpers — skip if serverAT active [B5]
+      if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined' && !window._serverATEnabled && window._zeusMerge) {
         TP.demoPositions = TP.demoPositions || [];
-        var existingIds = new Set(TP.demoPositions.map(function (p) { return String(p.id); }));
-        // [S2B2-T2] Comprehensive closedIds — matches pullAndMerge logic (journal + recentlyClosed + server)
-        var closedIds = new Set();
-        (TP.journal || []).forEach(function (j) { if (j.id) closedIds.add(String(j.id)); });
-        if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { closedIds.add(String(id)); });
-        if (Array.isArray(serverSnap.closedIds)) serverSnap.closedIds.forEach(function (id) { closedIds.add(String(id)); });
-        var _added = 0;
-        serverSnap.positions.forEach(function (p) {
-          if (p.closed || closedIds.has(String(p.id)) || existingIds.has(String(p.id))) return;
-          console.log('[sync] Adding server position', p.id, p.side, p.sym);
-          TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
-          _added++;
-        });
-        if (_added > 0) console.log('[sync] Merged', _added, 'new positions from server');
+        var closedSet = window._zeusMerge.buildClosedSet(serverSnap.closedIds);
+        window._zeusMerge.mergePositionsInto(TP.demoPositions, serverSnap.positions, closedSet, 'boot');
       }
 
       // Gate balance/AT overwrite on timestamp — only apply if server is newer OR local has no positions
@@ -634,7 +667,9 @@ function startApp() {
             console.warn('[sync] Boot — server has 0 positions but local has ' + _localActive + ' — skipping balance overwrite');
           } else if (_posDivergence > 2 && _localActive > 0) {
             console.warn('[sync] Boot — position sets diverge by ' + _posDivergence + ' — skipping balance overwrite to prevent corruption');
-          } else {
+          } else if (!window._serverATEnabled) {
+            // [B17] Only apply balance from sync file when serverAT is NOT active
+            // When serverAT is active, demoBalance comes exclusively from _applyServerATState
             if (typeof serverSnap.demoBalance === 'number' && isFinite(serverSnap.demoBalance)) TP.demoBalance = serverSnap.demoBalance;
             if (typeof serverSnap.demoPnL === 'number' && isFinite(serverSnap.demoPnL)) TP.demoPnL = serverSnap.demoPnL;
             if (typeof serverSnap.demoWins === 'number' && isFinite(serverSnap.demoWins)) TP.demoWins = serverSnap.demoWins;
@@ -681,7 +716,15 @@ function startApp() {
       console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length);
       _isPulling = false; // [FIX H10] release guard
       ZState.markSyncReady();
-    }).catch(function () { _isPulling = false; ZState.markSyncReady(); });
+    }).catch(function () {
+      _isPulling = false;
+      // [P4 FIX] Network error — confirm default mode so AT isn't permanently blocked
+      if (typeof AT !== 'undefined' && !AT._modeConfirmed) {
+        AT._modeConfirmed = true;
+        console.log('[sync] P4 — pull failed, confirming default mode:', AT.mode || 'demo');
+      }
+      ZState.markSyncReady();
+    });
     // Also pull journal from server — merge missing entries
     ZState.pullJournalFromServer().then(function (srvJournal) {
       if (!srvJournal || !srvJournal.length) return;
@@ -784,6 +827,43 @@ function startApp() {
     Intervals.set('tcServerSync', pushTCtoServer, 60000);
   }
 
+  // [MULTI-SYM] Load available symbols and build selector
+  setTimeout(function () {
+    fetch('/api/sd/symbols', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.configured || data.configured.length <= 1) return;
+        var section = document.getElementById('atSymbolSection');
+        var grid = document.getElementById('atSymbolGrid');
+        if (!section || !grid) return;
+        section.style.display = '';
+        window._atSelectedSymbols = null; // null = all
+        // Hide old MSCAN picker when server symbols are active (avoid duplicate UI)
+        var mscanRow = document.getElementById('atMscanRow');
+        if (mscanRow) mscanRow.style.display = 'none';
+        var shortNames = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', DOGEUSDT: 'DOGE', ADAUSDT: 'ADA', AVAXUSDT: 'AVAX' };
+        data.configured.forEach(function (sym) {
+          var label = document.createElement('label');
+          label.className = 'mchk';
+          label.style.cssText = 'padding:3px 8px;font-size:10px;letter-spacing:1px;border:1px solid #aa44ff44;border-radius:4px;cursor:pointer';
+          var cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.checked = true;
+          cb.dataset.sym = sym;
+          cb.onchange = function () {
+            var checked = [];
+            grid.querySelectorAll('input[type=checkbox]').forEach(function (c) { if (c.checked) checked.push(c.dataset.sym); });
+            window._atSelectedSymbols = checked.length === data.configured.length ? null : checked;
+            if (typeof _tcPushDebounced === 'function') _tcPushDebounced();
+          };
+          label.appendChild(cb);
+          label.appendChild(document.createTextNode(' ' + (shortNames[sym] || sym.replace('USDT', ''))));
+          grid.appendChild(label);
+        });
+      })
+      .catch(function () { /* silent */ });
+  }, 3000);
+
   // [v122 ANALYTICS] Periodic PERF save + PnL Lab condensed update
   Intervals.set('perfSave', function () {
     if (typeof savePerfToStorage === 'function') savePerfToStorage();
@@ -868,21 +948,11 @@ function startApp() {
           var localSnap = ZState.load();
           var localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0;
 
-          // ALWAYS merge positions from server (union by ID) regardless of timestamp
-          if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined') {
-            var existingIds = new Set((TP.demoPositions || []).map(function (p) { return String(p.id); }));
-            // [S2B2-T2] Comprehensive closedIds — matches boot + pullAndMerge logic
-            var closedIds = new Set();
-            (TP.journal || []).forEach(function (j) { if (j.id) closedIds.add(String(j.id)); });
-            if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { closedIds.add(String(id)); });
-            if (Array.isArray(serverSnap.closedIds)) serverSnap.closedIds.forEach(function (id) { closedIds.add(String(id)); });
-            var _vAdded = 0;
-            serverSnap.positions.forEach(function (p) {
-              if (p.closed || closedIds.has(String(p.id)) || existingIds.has(String(p.id))) return;
-              TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
-              _vAdded++;
-            });
-            if (_vAdded > 0) console.log('[sync] Visibility resume — merged', _vAdded, 'new positions from server');
+          // [B16] Merge positions using shared helpers — skip if serverAT active [B5]
+          if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined' && !window._serverATEnabled && window._zeusMerge) {
+            TP.demoPositions = TP.demoPositions || [];
+            var closedSet = window._zeusMerge.buildClosedSet(serverSnap.closedIds);
+            window._zeusMerge.mergePositionsInto(TP.demoPositions, serverSnap.positions, closedSet, 'visibility');
           }
 
           // Gate balance/AT overwrite on timestamp
@@ -903,7 +973,8 @@ function startApp() {
                 console.warn('[sync] Visibility resume — server has 0 positions but local has ' + _localActiveCount + ' — skipping balance overwrite');
               } else if (_visDivergence > 2 && _localActiveCount > 0) {
                 console.warn('[sync] Visibility resume — position sets diverge by ' + _visDivergence + ' — skipping balance overwrite');
-              } else {
+              } else if (!window._serverATEnabled) {
+                // [B17] Skip sync file balance when serverAT active
                 if (typeof serverSnap.demoBalance === 'number') TP.demoBalance = serverSnap.demoBalance;
                 if (typeof serverSnap.demoPnL === 'number') TP.demoPnL = serverSnap.demoPnL;
                 if (typeof serverSnap.demoWins === 'number') TP.demoWins = serverSnap.demoWins;
@@ -1252,7 +1323,8 @@ function _showWelcomeModal() {
 
     // ── Determine active mode ──
     var isLive = (typeof AT !== 'undefined' && AT.mode === 'live');
-    var modeLabel = isLive ? 'LIVE' : 'DEMO';
+    var _wlcEnv = window._resolvedEnv || (isLive ? 'REAL' : 'DEMO');
+    var modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO');
 
     // Greeting
     var greetEl = document.getElementById('wlcGreeting');
@@ -1262,7 +1334,8 @@ function _showWelcomeModal() {
     var badgeEl = document.getElementById('wlcModeBadge');
     if (badgeEl) {
       badgeEl.textContent = modeLabel;
-      badgeEl.className = 'wlc-mode-badge ' + (isLive ? 'wlc-live' : 'wlc-demo');
+      var _wlcCls = _wlcEnv === 'TESTNET' ? 'wlc-testnet' : (isLive ? 'wlc-live' : 'wlc-demo');
+      badgeEl.className = 'wlc-mode-badge ' + _wlcCls;
     }
 
     // Version
@@ -1527,8 +1600,7 @@ function masterReset() {
   // localStorage
   try { localStorage.clear(); } catch (e) { }
 
-  // Session API keys
-  API_KEY = ''; API_SECRET = '';
+  // [V1.5] Legacy API_KEY/API_SECRET removed — credentials are server-side only
 
   // Demo positions
   if (typeof TP !== 'undefined') {
@@ -1623,200 +1695,7 @@ if (!window._closeAllBtnInited) {
 }
 
 // FIX: sigScanSec and other elements defined AFTER this script block.
-// ═══════════════════════════════════════════════════════════════
-// MIDSTACK — drag&drop reorder pentru cele 5 banere HUD
-// Safe: mută doar noduri DOM, nu atinge logica/state/intervals
-// ═══════════════════════════════════════════════════════════════
-function initMidStack() {
-  const STRIP_IDS = ['aria-strip', 'dsl-strip', 'mtf-strip', 'adaptive-strip', 'at-strip', 'pt-strip', 'nova-strip'];
-  const LS_KEY = 'zt_midstack_order';
-
-  // ── 1. Gasim primul strip în DOM ca referință de inserție ──
-  const firstStrip = document.getElementById(STRIP_IDS[0]);
-  if (!firstStrip) return; // safety
-
-  // ── 2. Cream #midStack dacă nu există ──
-  let ms = document.getElementById('midStack');
-  if (!ms) {
-    ms = document.createElement('div');
-    ms.id = 'midStack';
-    firstStrip.parentNode.insertBefore(ms, firstStrip);
-  }
-
-  // ── 3. Mutăm cele 5 strip-uri în #midStack (ordinea din LS sau default) ──
-  let savedOrder = null;
-  try { savedOrder = JSON.parse(localStorage.getItem(LS_KEY)); } catch (_) { }
-  // Acceptă ordinea salvată dacă conține cel puțin toate ID-urile curente
-  const savedValid = Array.isArray(savedOrder) && STRIP_IDS.every(id => savedOrder.includes(id));
-  const order = savedValid
-    ? STRIP_IDS.map(id => savedOrder.includes(id) ? id : id) // păstrează ordinea salvată
-      .concat(savedOrder.filter(id => STRIP_IDS.includes(id))) // reconstruit în ordinea saved
-    : [...STRIP_IDS];
-  // Reconstruit corect: ordinea din saved, dar doar cu ID-urile valide
-  const finalOrder = savedValid
-    ? savedOrder.filter(id => STRIP_IDS.includes(id))
-      .concat(STRIP_IDS.filter(id => !savedOrder.includes(id)))
-    : [...STRIP_IDS];
-
-  finalOrder.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) ms.appendChild(el);
-  });
-
-  // ── 4. Buton toggle reorder mode ──
-  let toggleBtn = document.getElementById('midStack-toggle');
-  if (!toggleBtn) {
-    toggleBtn = document.createElement('div');
-    toggleBtn.id = 'midStack-toggle';
-    toggleBtn.title = 'Reorder panels';
-    toggleBtn.innerHTML = '\u283F';
-    document.body.appendChild(toggleBtn);
-  }
-
-  let reorderMode = false;
-
-  function enterReorder() {
-    reorderMode = true;
-    ms.classList.add('reorder-mode');
-    ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = true; });
-    toggleBtn.classList.add('active');   // apare butonul
-    toggleBtn.innerHTML = '\u2715';
-    if (navigator.vibrate) navigator.vibrate(40);
-  }
-
-  function exitReorder() {
-    reorderMode = false;
-    ms.classList.remove('reorder-mode');
-    ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = false; });
-    toggleBtn.classList.remove('active'); // dispare butonul
-    toggleBtn.innerHTML = '\u283F';
-    // Salvăm ordinea
-    const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
-    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
-    if (typeof _userCtxPush === 'function') _userCtxPush();
-  }
-
-  toggleBtn.addEventListener('click', () => reorderMode ? exitReorder() : enterReorder());
-
-  // ── 5. Long-press 700ms pe mobil (cu anti-scroll threshold 10px) ──
-  let _lpTimer = null, _lpStartX = 0, _lpStartY = 0, _lpCancelled = false;
-
-  ms.addEventListener('touchstart', e => {
-    if (reorderMode) return;
-    const t = e.touches[0];
-    _lpStartX = t.clientX; _lpStartY = t.clientY; _lpCancelled = false;
-    _lpTimer = setTimeout(() => { if (!_lpCancelled) enterReorder(); }, 700);
-  }, { passive: true });
-
-  ms.addEventListener('touchmove', e => {
-    if (_lpTimer) {
-      const t = e.touches[0];
-      const dx = Math.abs(t.clientX - _lpStartX);
-      const dy = Math.abs(t.clientY - _lpStartY);
-      if (dx > 10 || dy > 10) { clearTimeout(_lpTimer); _lpTimer = null; _lpCancelled = true; }
-    }
-  }, { passive: true });
-
-  ms.addEventListener('touchend', () => { clearTimeout(_lpTimer); _lpTimer = null; });
-
-  // ── 6. Drag&drop — Desktop (HTML5 DnD) ──
-  let _dragEl = null;
-
-  ms.addEventListener('dragstart', e => {
-    if (!reorderMode) return;
-    _dragEl = e.target.closest('[data-panel]');
-    if (!_dragEl) return;
-    _dragEl.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-
-  ms.addEventListener('dragend', () => {
-    if (_dragEl) { _dragEl.classList.remove('dragging'); _dragEl = null; }
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    if (reorderMode) {
-      const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
-      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
-      if (typeof _userCtxPush === 'function') _userCtxPush();
-    }
-  });
-
-  ms.addEventListener('dragover', e => {
-    if (!reorderMode || !_dragEl) return;
-    e.preventDefault();
-    const over = e.target.closest('[data-panel]');
-    if (!over || over === _dragEl) return;
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    over.classList.add('drag-over');
-    // Inserție live
-    const rect = over.getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    if (e.clientY < mid) ms.insertBefore(_dragEl, over);
-    else ms.insertBefore(_dragEl, over.nextSibling);
-  });
-
-  ms.addEventListener('dragleave', e => {
-    const over = e.target.closest('[data-panel]');
-    if (over) over.classList.remove('drag-over');
-  });
-
-  ms.addEventListener('drop', e => { e.preventDefault(); });
-
-  // ── 7. Touch drag&drop — Mobil ──
-  let _tDragEl = null, _tClone = null, _tOffX = 0, _tOffY = 0;
-
-  ms.addEventListener('touchstart', e => {
-    if (!reorderMode) return;
-    const strip = e.target.closest('[data-panel]');
-    if (!strip) return;
-    _tDragEl = strip;
-    const touch = e.touches[0];
-    const rect = strip.getBoundingClientRect();
-    _tOffX = touch.clientX - rect.left;
-    _tOffY = touch.clientY - rect.top;
-    // Clone vizual
-    _tClone = strip.cloneNode(true);
-    _tClone.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:.6;pointer-events:none;z-index:9999;`;
-    document.body.appendChild(_tClone);
-    strip.style.opacity = '0.3';
-  }, { passive: true });
-
-  ms.addEventListener('touchmove', e => {
-    if (!reorderMode || !_tDragEl || !_tClone) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    _tClone.style.left = (touch.clientX - _tOffX) + 'px';
-    _tClone.style.top = (touch.clientY - _tOffY) + 'px';
-    // Determina over ce element suntem
-    _tClone.style.display = 'none';
-    const elBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-    _tClone.style.display = '';
-    const over = elBelow?.closest('[data-panel]');
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    if (over && over !== _tDragEl) {
-      over.classList.add('drag-over');
-      const rect = over.getBoundingClientRect();
-      if (touch.clientY < rect.top + rect.height / 2) ms.insertBefore(_tDragEl, over);
-      else ms.insertBefore(_tDragEl, over.nextSibling);
-    }
-  }, { passive: false });
-
-  const _tEnd = () => {
-    if (_tDragEl) { _tDragEl.style.opacity = ''; _tDragEl = null; }
-    if (_tClone) { _tClone.remove(); _tClone = null; }
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    if (reorderMode) {
-      const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
-      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
-      if (typeof _userCtxPush === 'function') _userCtxPush();
-    }
-  };
-
-  ms.addEventListener('touchend', _tEnd, { passive: true });
-  ms.addEventListener('touchcancel', _tEnd, { passive: true });
-}
+// initMidStack() removed — all strips now in hidden-panels, accessed via dock page view
 
 // startApp() must run only after full DOM is parsed, else initZeusGroups
 // ── DESKTOP RESPONSIVE CHART RESIZE ──────────────────────────────
@@ -1828,12 +1707,11 @@ function initMidStack() {
     const h = getChartH();
     try {
       mainChart.applyOptions({ width: w, height: h });
-      if (typeof cvdChart !== 'undefined' && cvdChart) cvdChart.applyOptions({ width: w, height: window.innerWidth >= 1000 ? 80 : 60 });
-      if (typeof volChart !== 'undefined' && volChart) volChart.applyOptions({ width: w, height: window.innerWidth >= 1000 ? 60 : 44 });
+      if (typeof cvdChart !== 'undefined' && cvdChart) cvdChart.applyOptions({ width: w, height: 60 });
       if (typeof macdChart !== 'undefined' && macdChart) macdChart.applyOptions({ width: w });
       // v104: preserve rightOffset:12 on aux at every resize
       try { if (cvdChart) cvdChart.timeScale().applyOptions({ rightOffset: 12 }); } catch (_) { }
-      try { if (volChart) volChart.timeScale().applyOptions({ rightOffset: 12 }); } catch (_) { }
+      // volChart removed — volume overlay on mainChart
       try { if (typeof _macdChart !== 'undefined' && _macdChart) _macdChart.timeScale().applyOptions({ rightOffset: 12 }); } catch (_) { }
     } catch (e) { }
   }
@@ -1847,231 +1725,6 @@ function initMidStack() {
   });
 })();
 
-// fails to move panels and they appear duplicated in original positions.
-// [v119] GLOBAL ERROR BOUNDARY — arata bannerul vizual la orice eroare necapturata
-
-// MidStack init
-function initMidStack() {
-  const STRIP_IDS = ['aria-strip', 'dsl-strip', 'mtf-strip', 'adaptive-strip', 'at-strip', 'pt-strip', 'nova-strip'];
-  const LS_KEY = 'zt_midstack_order';
-
-  // ── 1. Gasim primul strip în DOM ca referință de inserție ──
-  const firstStrip = document.getElementById(STRIP_IDS[0]);
-  if (!firstStrip) return; // safety
-
-  // ── 2. Cream #midStack dacă nu există ──
-  let ms = document.getElementById('midStack');
-  if (!ms) {
-    ms = document.createElement('div');
-    ms.id = 'midStack';
-    firstStrip.parentNode.insertBefore(ms, firstStrip);
-  }
-
-  // ── 3. Mutăm cele 5 strip-uri în #midStack (ordinea din LS sau default) ──
-  let savedOrder = null;
-  try { savedOrder = JSON.parse(localStorage.getItem(LS_KEY)); } catch (_) { }
-  // Acceptă ordinea salvată dacă conține cel puțin toate ID-urile curente
-  const savedValid = Array.isArray(savedOrder) && STRIP_IDS.every(id => savedOrder.includes(id));
-  const order = savedValid
-    ? STRIP_IDS.map(id => savedOrder.includes(id) ? id : id) // păstrează ordinea salvată
-      .concat(savedOrder.filter(id => STRIP_IDS.includes(id))) // reconstruit în ordinea saved
-    : [...STRIP_IDS];
-  // Reconstruit corect: ordinea din saved, dar doar cu ID-urile valide
-  const finalOrder = savedValid
-    ? savedOrder.filter(id => STRIP_IDS.includes(id))
-      .concat(STRIP_IDS.filter(id => !savedOrder.includes(id)))
-    : [...STRIP_IDS];
-
-  finalOrder.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) ms.appendChild(el);
-  });
-
-  // ── 4. Buton toggle reorder mode ──
-  let toggleBtn = document.getElementById('midStack-toggle');
-  if (!toggleBtn) {
-    toggleBtn = document.createElement('div');
-    toggleBtn.id = 'midStack-toggle';
-    toggleBtn.title = 'Reorder panels';
-    toggleBtn.innerHTML = '\u283F';
-    document.body.appendChild(toggleBtn);
-  }
-
-  let reorderMode = false;
-
-  function enterReorder() {
-    reorderMode = true;
-    ms.classList.add('reorder-mode');
-    ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = true; });
-    toggleBtn.classList.add('active');   // apare butonul
-    toggleBtn.innerHTML = '\u2715';
-    if (navigator.vibrate) navigator.vibrate(40);
-  }
-
-  function exitReorder() {
-    reorderMode = false;
-    ms.classList.remove('reorder-mode');
-    ms.querySelectorAll('[data-panel]').forEach(el => { el.draggable = false; });
-    toggleBtn.classList.remove('active'); // dispare butonul
-    toggleBtn.innerHTML = '\u283F';
-    // Salvăm ordinea
-    const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
-    try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
-    if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
-    if (typeof _userCtxPush === 'function') _userCtxPush();
-  }
-
-  toggleBtn.addEventListener('click', () => reorderMode ? exitReorder() : enterReorder());
-
-  // ── 5. Long-press 700ms pe mobil (cu anti-scroll threshold 10px) ──
-  let _lpTimer = null, _lpStartX = 0, _lpStartY = 0, _lpCancelled = false;
-
-  ms.addEventListener('touchstart', e => {
-    if (reorderMode) return;
-    const t = e.touches[0];
-    _lpStartX = t.clientX; _lpStartY = t.clientY; _lpCancelled = false;
-    _lpTimer = setTimeout(() => { if (!_lpCancelled) enterReorder(); }, 700);
-  }, { passive: true });
-
-  ms.addEventListener('touchmove', e => {
-    if (_lpTimer) {
-      const t = e.touches[0];
-      const dx = Math.abs(t.clientX - _lpStartX);
-      const dy = Math.abs(t.clientY - _lpStartY);
-      if (dx > 10 || dy > 10) { clearTimeout(_lpTimer); _lpTimer = null; _lpCancelled = true; }
-    }
-  }, { passive: true });
-
-  ms.addEventListener('touchend', () => { clearTimeout(_lpTimer); _lpTimer = null; });
-
-  // ── 6. Drag&drop — Desktop (HTML5 DnD) ──
-  let _dragEl = null;
-
-  ms.addEventListener('dragstart', e => {
-    if (!reorderMode) return;
-    _dragEl = e.target.closest('[data-panel]');
-    if (!_dragEl) return;
-    _dragEl.classList.add('dragging');
-    e.dataTransfer.effectAllowed = 'move';
-  });
-
-  ms.addEventListener('dragend', () => {
-    if (_dragEl) { _dragEl.classList.remove('dragging'); _dragEl = null; }
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    if (reorderMode) {
-      const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
-      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
-      if (typeof _userCtxPush === 'function') _userCtxPush();
-    }
-  });
-
-  ms.addEventListener('dragover', e => {
-    if (!reorderMode || !_dragEl) return;
-    e.preventDefault();
-    const over = e.target.closest('[data-panel]');
-    if (!over || over === _dragEl) return;
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    over.classList.add('drag-over');
-    // Inserție live
-    const rect = over.getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    if (e.clientY < mid) ms.insertBefore(_dragEl, over);
-    else ms.insertBefore(_dragEl, over.nextSibling);
-  });
-
-  ms.addEventListener('dragleave', e => {
-    const over = e.target.closest('[data-panel]');
-    if (over) over.classList.remove('drag-over');
-  });
-
-  ms.addEventListener('drop', e => { e.preventDefault(); });
-
-  // ── 7. Touch drag&drop — Mobil ──
-  let _tDragEl = null, _tClone = null, _tOffX = 0, _tOffY = 0;
-
-  ms.addEventListener('touchstart', e => {
-    if (!reorderMode) return;
-    const strip = e.target.closest('[data-panel]');
-    if (!strip) return;
-    _tDragEl = strip;
-    const touch = e.touches[0];
-    const rect = strip.getBoundingClientRect();
-    _tOffX = touch.clientX - rect.left;
-    _tOffY = touch.clientY - rect.top;
-    // Clone vizual
-    _tClone = strip.cloneNode(true);
-    _tClone.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;opacity:.6;pointer-events:none;z-index:9999;`;
-    document.body.appendChild(_tClone);
-    strip.style.opacity = '0.3';
-  }, { passive: true });
-
-  ms.addEventListener('touchmove', e => {
-    if (!reorderMode || !_tDragEl || !_tClone) return;
-    e.preventDefault();
-    const touch = e.touches[0];
-    _tClone.style.left = (touch.clientX - _tOffX) + 'px';
-    _tClone.style.top = (touch.clientY - _tOffY) + 'px';
-    // Determina over ce element suntem
-    _tClone.style.display = 'none';
-    const elBelow = document.elementFromPoint(touch.clientX, touch.clientY);
-    _tClone.style.display = '';
-    const over = elBelow?.closest('[data-panel]');
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    if (over && over !== _tDragEl) {
-      over.classList.add('drag-over');
-      const rect = over.getBoundingClientRect();
-      if (touch.clientY < rect.top + rect.height / 2) ms.insertBefore(_tDragEl, over);
-      else ms.insertBefore(_tDragEl, over.nextSibling);
-    }
-  }, { passive: false });
-
-  const _tEnd = () => {
-    if (_tDragEl) { _tDragEl.style.opacity = ''; _tDragEl = null; }
-    if (_tClone) { _tClone.remove(); _tClone = null; }
-    ms.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-    if (reorderMode) {
-      const newOrder = [...ms.querySelectorAll('[data-panel]')].map(el => el.id);
-      try { localStorage.setItem(LS_KEY, JSON.stringify(newOrder)); } catch (_) { }
-      if (typeof _ucMarkDirty === 'function') _ucMarkDirty('midstackOrder');
-      if (typeof _userCtxPush === 'function') _userCtxPush();
-    }
-  };
-
-  ms.addEventListener('touchend', _tEnd, { passive: true });
-  ms.addEventListener('touchcancel', _tEnd, { passive: true });
-}
-
-// startApp() must run only after full DOM is parsed, else initZeusGroups
-// ── DESKTOP RESPONSIVE CHART RESIZE ──────────────────────────────
-(function () {
-  let _rzTimer = null;
-  function _resizeCharts() {
-    if (typeof mainChart === 'undefined' || !mainChart) return;
-    const w = getChartW();
-    const h = getChartH();
-    try {
-      mainChart.applyOptions({ width: w, height: h });
-      if (typeof cvdChart !== 'undefined' && cvdChart) cvdChart.applyOptions({ width: w, height: window.innerWidth >= 1000 ? 80 : 60 });
-      if (typeof volChart !== 'undefined' && volChart) volChart.applyOptions({ width: w, height: window.innerWidth >= 1000 ? 60 : 44 });
-      if (typeof macdChart !== 'undefined' && macdChart) macdChart.applyOptions({ width: w });
-      // v104: preserve rightOffset:12 on aux at every resize
-      try { if (cvdChart) cvdChart.timeScale().applyOptions({ rightOffset: 12 }); } catch (_) { }
-      try { if (volChart) volChart.timeScale().applyOptions({ rightOffset: 12 }); } catch (_) { }
-      try { if (typeof _macdChart !== 'undefined' && _macdChart) _macdChart.timeScale().applyOptions({ rightOffset: 12 }); } catch (_) { }
-    } catch (e) { }
-  }
-  window.addEventListener('resize', function () {
-    clearTimeout(_rzTimer);
-    _rzTimer = setTimeout(_resizeCharts, 120);
-  });
-  // Run once after boot to correct desktop chart size
-  window.addEventListener('zeusReady', function () {
-    setTimeout(_resizeCharts, 500);
-  });
-})();
-
-// fails to move panels and they appear duplicated in original positions.
 // [v119] GLOBAL ERROR BOUNDARY — arata bannerul vizual la orice eroare necapturata
 
 // [PATCH4] Filtered global error handler — only show ENGINE ERROR banner for critical engine errors
@@ -2186,4 +1839,1290 @@ if (window.__ZEUS_INIT__) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Global Status Bar — updates every 2s, reads existing state only
+// ═══════════════════════════════════════════════════════════════
+(function _initStatusBar() {
+  function _updateStatusBar() {
+    try {
+      // Mode
+      var modeEl = document.getElementById('zsbMode');
+      if (modeEl && typeof AT !== 'undefined') {
+        var mode = AT._serverMode || AT.mode || 'demo';
+        var _sbEnv = window._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL');
+        modeEl.textContent = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase();
+        modeEl.className = 'zsb-item zsb-mode ' + (_sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo'));
+      }
+      // AT state
+      var atEl = document.getElementById('zsbAT');
+      if (atEl && typeof AT !== 'undefined') {
+        var on = !!AT.enabled;
+        atEl.innerHTML = '<span class="zsb-dot ' + (on ? 'zsb-on' : 'zsb-off') + '"></span>AT ' + (on ? 'ON' : 'OFF');
+      }
+      // WS connection
+      var wsEl = document.getElementById('zsbWS');
+      if (wsEl) {
+        var wsOk = !!(window._zeusWS && window._zeusWS.readyState === 1);
+        wsEl.innerHTML = '<span class="zsb-dot ' + (wsOk ? 'zsb-on' : 'zsb-warn') + '"></span>' + (wsOk ? 'WS' : 'WS...');
+      }
+      // Data freshness
+      var dataEl = document.getElementById('zsbData');
+      if (dataEl && typeof _SAFETY !== 'undefined') {
+        var stale = !!_SAFETY.dataStalled;
+        var degraded = _SAFETY.degradedFeeds && _SAFETY.degradedFeeds.size > 0;
+        var cls = stale ? 'zsb-warn' : (degraded ? 'zsb-stale' : 'zsb-on');
+        var txt = stale ? 'STALE' : (degraded ? 'DEGRADED' : 'DATA');
+        dataEl.innerHTML = '<span class="zsb-dot ' + cls + '"></span>' + txt;
+      }
+      // Kill switch
+      var killEl = document.getElementById('zsbKill');
+      var killSep = document.getElementById('zsbKillSep');
+      if (killEl && typeof AT !== 'undefined') {
+        var killActive = !!AT.killTriggered;
+        killEl.style.display = killActive ? '' : 'none';
+        if (killSep) killSep.style.display = killActive ? '' : 'none';
+        if (killActive) killEl.innerHTML = '<span class="zsb-dot zsb-warn"></span>KILL ACTIVE';
+      }
+      // Positions count
+      var posEl = document.getElementById('zsbPos');
+      if (posEl && typeof TP !== 'undefined') {
+        var demoCount = (TP.demoPositions || []).filter(function(p){ return !p.closed; }).length;
+        var liveCount = (TP.livePositions || []).filter(function(p){ return !p.closed; }).length;
+        var total = demoCount + liveCount;
+        posEl.textContent = total + ' pos';
+        posEl.style.color = total > 0 ? '#00d4ff' : '#555';
+      }
+      // Daily PnL
+      var pnlEl = document.getElementById('zsbPnl');
+      if (pnlEl && typeof AT !== 'undefined') {
+        var pnl = AT.totalPnL || AT.realizedDailyPnL || 0;
+        pnlEl.textContent = '$' + pnl.toFixed(2);
+        pnlEl.style.color = pnl > 0 ? '#00ff88' : (pnl < 0 ? '#ff4444' : '#555');
+      }
+      // [MODE BAR] Piggyback on status bar update cycle (no separate polling)
+      if (typeof updateModeBar === 'function') updateModeBar();
+    } catch (_) { /* status bar is non-critical */ }
+  }
+  // Update every 2s, start after DOM ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() { setInterval(_updateStatusBar, 2000); _updateStatusBar(); });
+  } else {
+    setInterval(_updateStatusBar, 2000); _updateStatusBar();
+  }
+})();
 
+// ═══════════════════════════════════════════════════════════════
+// Decision Log Panel — renders DLog data visually
+// ═══════════════════════════════════════════════════════════════
+var _dlogOpen = false;
+var _dlogFilter = 'all';
+var _DLOG_CATS = ['all','at_block','at_entry','at_gate','confluence','regime','fusion','signal','sizing','kill_switch','dsl_move','dsl_close','predator'];
+
+function _toggleDecisionPanel() {
+  _dlogOpen = !_dlogOpen;
+  var panel = document.getElementById('dlogPanel');
+  if (!panel) return;
+  panel.style.display = _dlogOpen ? 'flex' : 'none';
+  if (_dlogOpen) _renderDlog();
+}
+
+function _renderDlog() {
+  if (typeof DLog === 'undefined') return;
+  // Filters
+  var filtersEl = document.getElementById('dlogFilters');
+  if (filtersEl && !filtersEl.dataset.init) {
+    filtersEl.dataset.init = '1';
+    _DLOG_CATS.forEach(function(cat) {
+      var btn = document.createElement('button');
+      btn.className = 'dlog-fbtn' + (cat === 'at_block' ? ' dlog-block' : (cat === 'at_entry' ? ' dlog-entry' : '')) + (cat === _dlogFilter ? ' active' : '');
+      btn.textContent = cat === 'all' ? 'ALL' : cat.replace(/_/g, ' ').toUpperCase();
+      btn.onclick = function() { _dlogFilter = cat; _renderDlogEntries(); _updateDlogFilterUI(); };
+      filtersEl.appendChild(btn);
+    });
+  }
+  _updateDlogFilterUI();
+  // Stats
+  var statsEl = document.getElementById('dlogStats');
+  if (statsEl) {
+    var st = DLog.stats();
+    var parts = ['Total: <span>' + st.total + '</span>'];
+    for (var c in st.categories) {
+      parts.push(c + ': <span>' + st.categories[c] + '</span>');
+    }
+    statsEl.innerHTML = parts.join(' | ');
+  }
+  _renderDlogEntries();
+}
+
+function _updateDlogFilterUI() {
+  var filtersEl = document.getElementById('dlogFilters');
+  if (!filtersEl) return;
+  var btns = filtersEl.querySelectorAll('.dlog-fbtn');
+  btns.forEach(function(btn, i) {
+    var cat = _DLOG_CATS[i];
+    if (cat === _dlogFilter) btn.classList.add('active');
+    else btn.classList.remove('active');
+  });
+}
+
+function _renderDlogEntries() {
+  if (typeof DLog === 'undefined') return;
+  var listEl = document.getElementById('dlogList');
+  if (!listEl) return;
+  var entries = _dlogFilter === 'all' ? DLog.entries(200) : DLog.byCategory(_dlogFilter, 200);
+  if (entries.length === 0) {
+    listEl.innerHTML = '<div style="padding:20px;text-align:center;color:#333;font-size:11px">No decisions logged yet. Enable AutoTrade to start capturing decisions.</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < entries.length; i++) {
+    var e = entries[i];
+    var ts = new Date(e.ts).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var catClass = 'dlog-cat-' + (e.cat || 'unknown');
+    var detail = _dlogFormatDetail(e.cat, e.d);
+    html += '<div class="dlog-entry-row">' +
+      '<span class="dlog-ts">' + ts + '</span>' +
+      '<span class="dlog-cat ' + catClass + '">' + (e.cat || '?').toUpperCase() + '</span>' +
+      detail + '</div>';
+  }
+  listEl.innerHTML = html;
+}
+
+function _dlogFormatDetail(cat, d) {
+  if (!d) return '';
+  try {
+    if (cat === 'at_block') {
+      return '<span class="dlog-detail"><b>' + (d.sym || '?') + '</b> — ' +
+        (Array.isArray(d.reasons) ? d.reasons.join(', ') : (d.reason || '?')) +
+        (d.score != null ? ' | score=' + d.score : '') +
+        (d.regime ? ' | regime=' + d.regime : '') + '</span>';
+    }
+    if (cat === 'at_entry') {
+      return '<span class="dlog-detail"><b>' + (d.sym || d.symbol || '?') + ' ' + (d.side || '') + '</b>' +
+        (d.tier ? ' tier=' + d.tier : '') +
+        (d.conf != null ? ' conf=' + d.conf + '%' : '') +
+        (d.size ? ' $' + d.size : '') + '</span>';
+    }
+    if (cat === 'at_gate') {
+      return '<span class="dlog-detail"><b>' + (d.sym || '?') + '</b> gates: ' +
+        (d.allOk ? '<b style="color:#00ff88">PASS</b>' : '<b style="color:#ff4444">FAIL</b>') +
+        (Array.isArray(d.reasons) && d.reasons.length ? ' [' + d.reasons.join(', ') + ']' : '') + '</span>';
+    }
+    if (cat === 'confluence') {
+      return '<span class="dlog-detail">score=<b>' + (d.score || '?') + '</b>' +
+        (d.regime ? ' regime=' + d.regime : '') +
+        (d.isBull != null ? (d.isBull ? ' BULL' : ' BEAR') : '') + '</span>';
+    }
+    if (cat === 'regime') {
+      return '<span class="dlog-detail"><b>' + (d.regime || '?') + '</b> conf=' + (d.confidence || '?') + '%' +
+        (d.trendBias ? ' bias=' + d.trendBias : '') +
+        (d.volatilityState ? ' vol=' + d.volatilityState : '') + '</span>';
+    }
+    if (cat === 'fusion') {
+      return '<span class="dlog-detail"><b>' + (d.decision || '?') + '</b> ' + (d.dir || '') +
+        ' conf=' + (d.confidence || '?') + '%' +
+        (d.score != null ? ' score=' + d.score : '') + '</span>';
+    }
+    if (cat === 'kill_switch') {
+      return '<span class="dlog-detail"><b style="color:#ff0000">KILL SWITCH</b> ' + (d.action || d.reason || '') + '</span>';
+    }
+    // Generic fallback
+    var keys = Object.keys(d).slice(0, 6);
+    var parts = keys.map(function(k) { return k + '=' + (typeof d[k] === 'object' ? JSON.stringify(d[k]) : d[k]); });
+    return '<span class="dlog-detail">' + parts.join(' | ') + '</span>';
+  } catch (_) { return '<span class="dlog-detail">' + JSON.stringify(d).substring(0, 120) + '</span>'; }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Activity Feed Strip — live event stream from DLog
+// ═══════════════════════════════════════════════════════════════
+var _actfeedOpen = false;
+var _actfeedLastSeq = 0;
+
+function _actfeedToggle() {
+  _actfeedOpen = !_actfeedOpen;
+  var panel = document.getElementById('actfeed-panel');
+  if (panel) panel.style.display = _actfeedOpen ? '' : 'none';
+  if (_actfeedOpen) _actfeedRender();
+}
+
+var _ACTFEED_ICONS = {
+  at_entry: '📥', at_block: '🚫', at_gate: '🚧', confluence: '🔗',
+  regime: '🌐', fusion: '⚡', kill_switch: '🛑', sizing: '📏',
+  dsl_move: '🎯', dsl_close: '📤', predator: '🐾', signal: '📡'
+};
+
+function _actfeedRender() {
+  if (typeof DLog === 'undefined') return;
+  var listEl = document.getElementById('actfeedList');
+  if (!listEl) return;
+  // Show important categories only (not every confluence tick)
+  var important = ['at_entry','at_block','at_gate','regime','kill_switch','dsl_move','dsl_close','fusion'];
+  var all = DLog.entries(500);
+  var filtered = all.filter(function(e) { return important.indexOf(e.cat) !== -1; }).slice(0, 50);
+  if (filtered.length === 0) {
+    listEl.innerHTML = '<div class="actfeed-empty">No activity yet — events will appear here as the system operates.</div>';
+    return;
+  }
+  var html = '';
+  for (var i = 0; i < filtered.length; i++) {
+    var e = filtered[i];
+    var ts = new Date(e.ts).toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    var icon = _ACTFEED_ICONS[e.cat] || '•';
+    var msg = _actfeedMsg(e.cat, e.d);
+    html += '<div class="actfeed-row"><span class="actfeed-ts">' + ts + '</span><span class="actfeed-icon">' + icon + '</span><span class="actfeed-msg">' + msg + '</span></div>';
+  }
+  listEl.innerHTML = html;
+}
+
+function _actfeedMsg(cat, d) {
+  if (!d) return cat;
+  try {
+    if (cat === 'at_entry') return '<b>' + (d.side || '') + ' ' + (d.sym || d.symbol || '?') + '</b> — entry ' + (d.tier || '') + (d.conf ? ' conf=' + d.conf + '%' : '');
+    if (cat === 'at_block') return '<b>' + (d.sym || '?') + '</b> blocked — ' + (Array.isArray(d.reasons) ? d.reasons.join(', ') : (d.reason || '?'));
+    if (cat === 'at_gate') return '<b>' + (d.sym || '?') + '</b> gates ' + (d.allOk ? '<b style="color:#00ff88">PASS</b>' : '<b style="color:#ff4444">FAIL</b>');
+    if (cat === 'regime') return 'Regime: <b>' + (d.regime || '?') + '</b> conf=' + (d.confidence || '?') + '%';
+    if (cat === 'kill_switch') return '<b style="color:#ff0000">KILL SWITCH</b> ' + (d.action || d.reason || 'activated');
+    if (cat === 'fusion') return '<b>' + (d.decision || '?') + '</b> ' + (d.dir || '') + ' conf=' + (d.confidence || '?') + '%';
+    if (cat === 'dsl_move') return 'DSL ' + (d.sym || d.symbol || '?') + ' SL moved';
+    if (cat === 'dsl_close') return 'DSL exit ' + (d.sym || d.symbol || '?') + ' — ' + (d.reason || d.exitType || '?');
+    return cat + ': ' + JSON.stringify(d).substring(0, 80);
+  } catch (_) { return cat; }
+}
+
+// Badge update — count recent events (last 5 min)
+// [B7] Only runs when activity page view is open (avoids wasted cycles in hidden-panels)
+(function _actfeedBadgeLoop() {
+  function _updateBadge() {
+    try {
+      if (typeof DLog === 'undefined') return;
+      if (typeof _pvState !== 'undefined' && _pvState.open && _pvState.dockId === 'activity') {
+        var important = ['at_entry','at_block','at_gate','regime','kill_switch','dsl_move','dsl_close','fusion'];
+        var cutoff = Date.now() - 300000; // 5 min
+        var all = DLog.entries(200);
+        var recent = all.filter(function(e) { return e.ts > cutoff && important.indexOf(e.cat) !== -1; });
+        var el = document.getElementById('actfeedBadge');
+        if (el) el.textContent = recent.length + ' events (5m)';
+        if (_actfeedOpen) _actfeedRender();
+      }
+    } catch (_) {}
+  }
+  setInterval(_updateBadge, 3000);
+})();
+
+
+
+// ═══════════════════════════════════════════════════════════════
+// Exposure Dashboard Panel (Alt+E)
+// ═══════════════════════════════════════════════════════════════
+var _exposureOpen = false;
+
+function _toggleExposurePanel() {
+  _exposureOpen = !_exposureOpen;
+  var panel = document.getElementById('exposurePanel');
+  if (!panel) return;
+  panel.style.display = _exposureOpen ? 'flex' : 'none';
+  if (_exposureOpen) _fetchExposure();
+}
+
+function _fetchExposure() {
+  var content = document.getElementById('exposureContent');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:#333">Loading...</div>';
+  fetch('/api/exposure', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">Error: ' + escHtml(data.error || 'unknown') + '</div>'; return; }
+      var pnlClass = data.unrealizedPnl > 0 ? 'positive' : (data.unrealizedPnl < 0 ? 'negative' : '');
+      var marginClass = data.marginUsagePct > 80 ? 'negative' : (data.marginUsagePct > 50 ? 'warn' : '');
+      var concClass = data.maxConcentrationPct > 70 ? 'warn' : '';
+      var html = '';
+      html += '<div class="expo-row"><span class="expo-label">Mode</span><span class="expo-val" style="color:' + (data.mode === 'live' ? '#ff4444' : '#00d4ff') + '">' + data.mode.toUpperCase() + '</span></div>';
+      html += '<div class="expo-row"><span class="expo-label">Balance</span><span class="expo-val">$' + data.balance.toFixed(2) + '</span></div>';
+      html += '<div class="expo-row"><span class="expo-label">Total Margin Used</span><span class="expo-val">$' + data.totalMargin.toFixed(2) + '</span></div>';
+      html += '<div class="expo-row"><span class="expo-label">Margin Usage</span><span class="expo-val ' + marginClass + '">' + data.marginUsagePct.toFixed(1) + '%</span></div>';
+      html += '<div class="expo-bar"><div class="expo-bar-fill" style="width:' + Math.min(100, data.marginUsagePct) + '%"></div></div>';
+      html += '<div class="expo-row"><span class="expo-label">Unrealized PnL</span><span class="expo-val ' + pnlClass + '">$' + data.unrealizedPnl.toFixed(2) + '</span></div>';
+      html += '<div class="expo-row"><span class="expo-label">Open Positions</span><span class="expo-val">' + data.positionCount.total + ' (' + data.positionCount.demo + 'D / ' + data.positionCount.live + 'L)</span></div>';
+      html += '<div class="expo-row"><span class="expo-label">Max Concentration</span><span class="expo-val ' + concClass + '">' + data.maxConcentrationPct.toFixed(1) + '%</span></div>';
+      html += '<div class="expo-row"><span class="expo-label">Kill Switch</span><span class="expo-val" style="color:' + (data.killActive ? '#ff4444' : '#00ff88') + '">' + (data.killActive ? 'ACTIVE' : 'OK') + '</span></div>';
+      if (data.bySymbol && data.bySymbol.length > 0) {
+        html += '<div class="expo-sym"><div class="expo-sym-hdr">PER-SYMBOL EXPOSURE</div>';
+        data.bySymbol.forEach(function(s) {
+          html += '<div class="expo-sym-row"><span>' + s.symbol.replace('USDT','') + ' <span style="color:#555">(' + s.sides.join('/') + ')</span></span><span>$' + s.margin.toFixed(0) + ' <span style="color:#555">' + s.concentrationPct.toFixed(0) + '%</span></span></div>';
+          html += '<div class="expo-bar"><div class="expo-bar-fill" style="width:' + Math.min(100, s.concentrationPct) + '%"></div></div>';
+        });
+        html += '</div>';
+      }
+      content.innerHTML = html;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<div style="color:#ff4444">Failed to load: ' + escHtml(err.message) + '</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Exposure Inline Toggle (chart toolbar button)
+// ═══════════════════════════════════════════════════════════════
+var _expoInlineOpen = false;
+
+function _toggleExpoInline() {
+  _expoInlineOpen = !_expoInlineOpen;
+  var panel = document.getElementById('expoInlinePanel');
+  var btn = document.getElementById('expoToggleBtn');
+  if (!panel) return;
+  panel.style.display = _expoInlineOpen ? '' : 'none';
+  if (btn) btn.classList.toggle('active', _expoInlineOpen);
+  if (_expoInlineOpen) _fetchExpoInline();
+}
+
+function _fetchExpoInline() {
+  var content = document.getElementById('expoInlineContent');
+  if (!content) return;
+  content.innerHTML = '<span style="color:#333">Loading...</span>';
+  fetch('/api/exposure', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) { content.innerHTML = '<span style="color:#ff4444">' + escHtml(data.error || 'Error') + '</span>'; return; }
+      var html = '<div style="display:flex;flex-wrap:wrap;gap:8px 16px">';
+      html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Mode</span> <span class="expo-val" style="color:' + (data.mode === 'live' ? '#ff4444' : '#00d4ff') + '">' + data.mode.toUpperCase() + '</span></div>';
+      html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Bal</span> <span class="expo-val">$' + data.balance.toFixed(0) + '</span></div>';
+      html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Margin</span> <span class="expo-val">$' + data.totalMargin.toFixed(0) + ' (' + data.marginUsagePct.toFixed(0) + '%)</span></div>';
+      var pnlColor = data.unrealizedPnl > 0 ? '#00ff88' : (data.unrealizedPnl < 0 ? '#ff4444' : '#555');
+      html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">uPnL</span> <span class="expo-val" style="color:' + pnlColor + '">$' + data.unrealizedPnl.toFixed(2) + '</span></div>';
+      html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Pos</span> <span class="expo-val">' + data.positionCount.total + '</span></div>';
+      if (data.maxConcentrationPct > 0) html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Conc</span> <span class="expo-val" style="color:' + (data.maxConcentrationPct > 70 ? '#ff8800' : '#bbb') + '">' + data.maxConcentrationPct.toFixed(0) + '%</span></div>';
+      if (data.killActive) html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Kill</span> <span class="expo-val" style="color:#ff4444">ACTIVE</span></div>';
+      html += '</div>';
+      if (data.bySymbol && data.bySymbol.length > 0) {
+        html += '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px 12px">';
+        data.bySymbol.forEach(function(s) {
+          html += '<span style="color:#666">' + s.symbol.replace('USDT','') + ' <span style="color:#999">$' + s.margin.toFixed(0) + '</span> <span style="color:#444">' + s.concentrationPct.toFixed(0) + '%</span></span>';
+        });
+        html += '</div>';
+      }
+      content.innerHTML = html;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<span style="color:#ff4444">' + escHtml(err.message) + '</span>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Command Palette (Ctrl+K / Search button)
+// ═══════════════════════════════════════════════════════════════
+var _cmdOpen = false;
+var _cmdIdx = 0;
+
+var _CMD_ACTIONS = [
+  // ── Symbols (Top 20) ──
+  { cat: 'symbol', label: 'BTC — Bitcoin', icon: '₿', action: function() { if(typeof setSymbol==='function') setSymbol('BTCUSDT'); }, keys: 'btc bitcoin' },
+  { cat: 'symbol', label: 'ETH — Ethereum', icon: 'Ξ', action: function() { if(typeof setSymbol==='function') setSymbol('ETHUSDT'); }, keys: 'eth ethereum' },
+  { cat: 'symbol', label: 'SOL — Solana', icon: '◎', action: function() { if(typeof setSymbol==='function') setSymbol('SOLUSDT'); }, keys: 'sol solana' },
+  { cat: 'symbol', label: 'BNB — Binance', icon: '◆', action: function() { if(typeof setSymbol==='function') setSymbol('BNBUSDT'); }, keys: 'bnb binance' },
+  { cat: 'symbol', label: 'XRP — Ripple', icon: '✕', action: function() { if(typeof setSymbol==='function') setSymbol('XRPUSDT'); }, keys: 'xrp ripple' },
+  { cat: 'symbol', label: 'DOGE — Dogecoin', icon: 'D', action: function() { if(typeof setSymbol==='function') setSymbol('DOGEUSDT'); }, keys: 'doge dogecoin' },
+  { cat: 'symbol', label: 'ADA — Cardano', icon: 'A', action: function() { if(typeof setSymbol==='function') setSymbol('ADAUSDT'); }, keys: 'ada cardano' },
+  { cat: 'symbol', label: 'AVAX — Avalanche', icon: 'A', action: function() { if(typeof setSymbol==='function') setSymbol('AVAXUSDT'); }, keys: 'avax avalanche' },
+  { cat: 'symbol', label: 'LINK — Chainlink', icon: 'L', action: function() { if(typeof setSymbol==='function') setSymbol('LINKUSDT'); }, keys: 'link chainlink' },
+  { cat: 'symbol', label: 'DOT — Polkadot', icon: 'D', action: function() { if(typeof setSymbol==='function') setSymbol('DOTUSDT'); }, keys: 'dot polkadot' },
+  { cat: 'symbol', label: 'UNI — Uniswap', icon: 'U', action: function() { if(typeof setSymbol==='function') setSymbol('UNIUSDT'); }, keys: 'uni uniswap' },
+  { cat: 'symbol', label: 'MATIC — Polygon', icon: 'M', action: function() { if(typeof setSymbol==='function') setSymbol('MATICUSDT'); }, keys: 'matic polygon' },
+  { cat: 'symbol', label: 'ARB — Arbitrum', icon: 'A', action: function() { if(typeof setSymbol==='function') setSymbol('ARBUSDT'); }, keys: 'arb arbitrum' },
+  { cat: 'symbol', label: 'OP — Optimism', icon: 'O', action: function() { if(typeof setSymbol==='function') setSymbol('OPUSDT'); }, keys: 'op optimism' },
+  { cat: 'symbol', label: 'ATOM — Cosmos', icon: 'A', action: function() { if(typeof setSymbol==='function') setSymbol('ATOMUSDT'); }, keys: 'atom cosmos' },
+  { cat: 'symbol', label: 'FIL — Filecoin', icon: 'F', action: function() { if(typeof setSymbol==='function') setSymbol('FILUSDT'); }, keys: 'fil filecoin' },
+  { cat: 'symbol', label: 'APT — Aptos', icon: 'A', action: function() { if(typeof setSymbol==='function') setSymbol('APTUSDT'); }, keys: 'apt aptos' },
+  { cat: 'symbol', label: 'NEAR — Near Protocol', icon: 'N', action: function() { if(typeof setSymbol==='function') setSymbol('NEARUSDT'); }, keys: 'near protocol' },
+  { cat: 'symbol', label: 'LTC — Litecoin', icon: 'L', action: function() { if(typeof setSymbol==='function') setSymbol('LTCUSDT'); }, keys: 'ltc litecoin' },
+  { cat: 'symbol', label: 'PEPE', icon: 'P', action: function() { if(typeof setSymbol==='function') setSymbol('PEPEUSDT'); }, keys: 'pepe meme' },
+  // ── Navigation ──
+  { cat: 'nav', label: 'Open Journal', icon: '📖', action: function() { window.open('/journal.html','_blank'); }, keys: 'journal trades history closed' },
+  { cat: 'nav', label: 'Open Settings', icon: '⚙', action: function() { if(typeof openM==='function'){ openM('msettings'); if(typeof hubPopulate==='function') hubPopulate(); } }, keys: 'settings config preferences options' },
+  { cat: 'nav', label: 'Open Decision Log', icon: '📋', action: function() { if(typeof _toggleDecisionPanel==='function') _toggleDecisionPanel(); }, keys: 'decisions dlog brain why blocked' },
+  { cat: 'nav', label: 'View Missed Trades', icon: '🚫', action: function() { _showMissedTrades(); }, keys: 'missed trades blocked opportunities lost' },
+  { cat: 'nav', label: 'Session Review (Today)', icon: '📑', action: function() { _showSessionReview(); }, keys: 'session review summary today daily report eod end' },
+  { cat: 'nav', label: 'Regime History', icon: '🌐', action: function() { _showRegimeHistory(); }, keys: 'regime history timeline trend range squeeze chaos market' },
+  { cat: 'nav', label: 'Performance Dashboard', icon: '🏆', action: function() { _showPerformance(); }, keys: 'performance stats equity drawdown win rate calendar streak' },
+  { cat: 'nav', label: 'Strategy Comparison', icon: '⚖', action: function() { _showCompare(); }, keys: 'compare strategy demo live month regime symbol versus' },
+  { cat: 'nav', label: 'Open Exposure Dashboard', icon: '📊', action: function() { if(typeof _toggleExpoInline==='function') _toggleExpoInline(); }, keys: 'exposure risk margin positions' },
+  { cat: 'nav', label: 'Open Notifications', icon: '🔔', action: function() { if(typeof openM==='function'){ openM('mnotifications'); if(typeof _ncRenderList==='function') _ncRenderList(); } }, keys: 'notifications alerts messages' },
+  { cat: 'nav', label: 'Open Cloud Sync', icon: '☁', action: function() { if(typeof openM==='function') openM('mcloud'); }, keys: 'cloud sync backup save load' },
+  { cat: 'nav', label: 'Open Chart Settings', icon: '🎨', action: function() { if(typeof openM==='function') openM('mcharts'); }, keys: 'chart colors theme visual' },
+  { cat: 'nav', label: 'Open Telegram Settings', icon: '✈', action: function() { if(typeof openM==='function'){ openM('msettings'); setTimeout(function(){ if(typeof swtab==='function') swtab('msettings','set-telegram'); },100); } }, keys: 'telegram bot notifications' },
+  { cat: 'nav', label: 'Open Exchange API', icon: '🔑', action: function() { if(typeof openM==='function'){ openM('msettings'); setTimeout(function(){ if(typeof swtab==='function') swtab('msettings','set-exchange'); if(typeof zeusExchangeLoad==='function') zeusExchangeLoad(); },100); } }, keys: 'api keys binance exchange credentials' },
+  { cat: 'nav', label: 'Open Account & Security', icon: '🔒', action: function() { if(typeof openM==='function'){ openM('msettings'); setTimeout(function(){ if(typeof swtab==='function') swtab('msettings','set-account'); },100); } }, keys: 'account password security pin email' },
+  // ── Actions ──
+  { cat: 'action', label: 'Toggle AutoTrade ON/OFF', icon: '⚡', action: function() { if(typeof toggleAutoTrade==='function') toggleAutoTrade(); }, keys: 'at autotrade toggle start stop on off' },
+  { cat: 'action', label: 'Toggle Fullscreen Chart', icon: '⛶', action: function() { if(typeof toggleFS==='function') toggleFS(); }, keys: 'fullscreen expand chart big' },
+  { cat: 'action', label: 'Reset Kill Switch', icon: '🛑', action: function() { if(typeof resetKillSwitch==='function') resetKillSwitch(); }, keys: 'kill switch reset unblock resume' },
+  { cat: 'action', label: 'Switch to DEMO mode', icon: '🎮', action: function() { if(typeof switchGlobalMode==='function') switchGlobalMode('demo'); }, keys: 'demo mode simulate paper' },
+  { cat: 'action', label: 'Switch to LIVE mode', icon: '🔴', action: function() { if(typeof switchGlobalMode==='function') switchGlobalMode('live'); }, keys: 'live mode real trading money' },
+  { cat: 'action', label: 'Export Journal CSV', icon: '📥', action: function() { if(typeof exportJournalCSV==='function') exportJournalCSV(); }, keys: 'export csv download journal' },
+  { cat: 'action', label: 'Add Demo Funds', icon: '💰', action: function() { if(typeof addDemoFunds==='function') addDemoFunds(); }, keys: 'demo funds balance add money reset' },
+  // ── Overlays ──
+  { cat: 'overlay', label: 'Toggle Liquidity Overlay', icon: 'L', action: function() { if(typeof toggleOverlay==='function') toggleOverlay('liq'); }, keys: 'liquidity liq heatmap' },
+  { cat: 'overlay', label: 'Toggle Support/Resistance', icon: 'S', action: function() { if(typeof toggleOverlay==='function') toggleOverlay('sr'); }, keys: 'support resistance sr levels' },
+  { cat: 'overlay', label: 'Toggle VWAP', icon: 'V', action: function() { if(typeof toggleOverlay==='function') toggleOverlay('vwap'); }, keys: 'vwap volume weighted' },
+  { cat: 'overlay', label: 'Toggle Time & Sales', icon: 'T', action: function() { if(typeof toggleOverlay==='function') toggleOverlay('ts'); }, keys: 'time sales tape' },
+  { cat: 'overlay', label: 'Toggle H-Lines', icon: 'H', action: function() { if(typeof toggleOverlay==='function') toggleOverlay('hline'); }, keys: 'horizontal lines hline drawing' },
+  // ── Panels / Strips ──
+  { cat: 'panel', label: 'Toggle DSL Panel', icon: '🎯', action: function() { if(typeof dslStripToggle==='function') dslStripToggle(); }, keys: 'dsl dynamic stop loss panel' },
+  { cat: 'panel', label: 'Toggle AT Panel', icon: '🤖', action: function() { if(typeof atStripToggle==='function') atStripToggle(); }, keys: 'at autotrade panel strip' },
+  { cat: 'panel', label: 'Toggle Paper Trading', icon: '📝', action: function() { if(typeof ptStripToggle==='function') ptStripToggle(); }, keys: 'paper trading manual demo panel' },
+  { cat: 'panel', label: 'Toggle Activity Feed', icon: '📡', action: function() { if(typeof _actfeedToggle==='function') _actfeedToggle(); }, keys: 'activity feed events stream' },
+  { cat: 'panel', label: 'Open Indicator Panel', icon: '📐', action: function() { if(typeof openIndPanel==='function') openIndPanel(); }, keys: 'indicators add rsi macd adx bollinger' },
+  // ── Timeframes ──
+  { cat: 'tf', label: '1m — 1 Minute', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('1m'); }, keys: '1m 1min minute scalp' },
+  { cat: 'tf', label: '3m — 3 Minutes', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('3m'); }, keys: '3m 3min' },
+  { cat: 'tf', label: '5m — 5 Minutes', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('5m'); }, keys: '5m 5min' },
+  { cat: 'tf', label: '15m — 15 Minutes', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('15m'); }, keys: '15m 15min' },
+  { cat: 'tf', label: '1h — 1 Hour', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('1h'); }, keys: '1h 1hour hour' },
+  { cat: 'tf', label: '4h — 4 Hours', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('4h'); }, keys: '4h 4hour swing' },
+  { cat: 'tf', label: '1d — Daily', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('1d'); }, keys: '1d daily day' },
+  { cat: 'tf', label: '1w — Weekly', icon: '⏱', action: function() { if(typeof ztfPick==='function') ztfPick('1w'); }, keys: '1w weekly week' },
+  // ── Info ──
+  { cat: 'info', label: 'Show Keyboard Shortcuts', icon: '⌨', action: function() { document.dispatchEvent(new KeyboardEvent('keydown',{key:'?'})); }, keys: 'hotkeys keyboard shortcuts help' },
+];
+
+function _toggleCmdPalette() {
+  _cmdOpen = !_cmdOpen;
+  var el = document.getElementById('cmdPalette');
+  if (!el) return;
+  el.style.display = _cmdOpen ? 'flex' : 'none';
+  if (_cmdOpen) {
+    var input = document.getElementById('cmdInput');
+    if (input) {
+      input.value = '';
+      // Delayed focus for mobile (iOS/Android block instant focus)
+      setTimeout(function() { input.focus(); }, 50);
+      setTimeout(function() { input.focus(); }, 200);
+    }
+    _cmdIdx = 0;
+    _cmdRender('');
+  }
+}
+
+function _cmdRender(query) {
+  var results = document.getElementById('cmdResults');
+  if (!results) return;
+  var q = (query || '').toLowerCase().trim();
+  var filtered = q ? _CMD_ACTIONS.filter(function(a) {
+    return a.label.toLowerCase().indexOf(q) !== -1 || a.keys.indexOf(q) !== -1;
+  }) : _CMD_ACTIONS;
+  if (filtered.length === 0) {
+    results.innerHTML = '<div class="cmd-empty">No results for "' + q + '"</div>';
+    return;
+  }
+  _cmdIdx = Math.max(0, Math.min(_cmdIdx, filtered.length - 1));
+  results.innerHTML = filtered.map(function(a, i) {
+    return '<div class="cmd-item' + (i === _cmdIdx ? ' active' : '') + '" data-cmd-idx="' + i + '">' +
+      '<span class="cmd-item-icon">' + a.icon + '</span>' +
+      '<span class="cmd-item-label">' + a.label + '</span>' +
+      '<span class="cmd-item-hint">' + a.cat + '</span>' +
+      '</div>';
+  }).join('');
+  // Store filtered for delegated handler
+  results._cmdFiltered = filtered;
+  // Scroll active into view
+  var active = results.querySelector('.active');
+  if (active) active.scrollIntoView({ block: 'nearest' });
+}
+
+function _cmdHighlight() {
+  var q = (document.getElementById('cmdInput') || {}).value || '';
+  _cmdRender(q);
+}
+
+function _cmdExec(idx) {
+  var results = document.getElementById('cmdResults');
+  var filtered = results && results._cmdFiltered ? results._cmdFiltered : [];
+  if (filtered[idx]) {
+    _toggleCmdPalette();
+    filtered[idx].action();
+  }
+}
+
+// Keyboard handling for command palette
+document.addEventListener('keydown', function(e) {
+  // Ctrl+K / Cmd+K opens palette
+  if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+    e.preventDefault();
+    _toggleCmdPalette();
+    return;
+  }
+  if (!_cmdOpen) return;
+  // ESC closes
+  if (e.key === 'Escape') { _toggleCmdPalette(); return; }
+  // Arrow navigation
+  if (e.key === 'ArrowDown') { e.preventDefault(); _cmdIdx++; _cmdHighlight(); return; }
+  if (e.key === 'ArrowUp') { e.preventDefault(); _cmdIdx = Math.max(0, _cmdIdx - 1); _cmdHighlight(); return; }
+  // Enter executes
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    _cmdExec(_cmdIdx);
+    return;
+  }
+});
+
+// Input handler
+document.addEventListener('input', function(e) {
+  if (e.target && e.target.id === 'cmdInput') {
+    _cmdIdx = 0;
+    _cmdRender(e.target.value);
+  }
+});
+
+// Delegated click handler for command palette (works on mobile + desktop)
+document.addEventListener('click', function(e) {
+  if (!_cmdOpen) return;
+  // Click on overlay background closes
+  if (e.target && e.target.id === 'cmdPalette') { _toggleCmdPalette(); return; }
+  // Click on cmd-item or child of cmd-item executes
+  var item = e.target.closest ? e.target.closest('.cmd-item') : null;
+  if (item && item.dataset.cmdIdx != null) {
+    var idx = parseInt(item.dataset.cmdIdx, 10);
+    var results = document.getElementById('cmdResults');
+    var filtered = results && results._cmdFiltered ? results._cmdFiltered : [];
+    if (filtered[idx]) {
+      _toggleCmdPalette();
+      filtered[idx].action();
+    }
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// Missed Trades Viewer
+// ═══════════════════════════════════════════════════════════════
+function _showMissedTrades() {
+  var panel = document.getElementById('missedPanel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  var content = document.getElementById('missedContent');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:#333;padding:16px">Loading...</div>';
+  fetch('/api/missed-trades?limit=100', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok || !data.trades || data.trades.length === 0) {
+        content.innerHTML = '<div style="text-align:center;color:#333;padding:20px;font-size:11px">No missed trades recorded yet. Signals blocked by AT gates will appear here.</div>';
+        return;
+      }
+      // Aggregate reasons
+      var reasons = {};
+      data.trades.forEach(function(t) { reasons[t.reason] = (reasons[t.reason] || 0) + 1; });
+      var statsHtml = '<div style="padding:8px 16px;font-size:9px;color:#555;border-bottom:1px solid #0f0f1a;display:flex;gap:10px;flex-wrap:wrap">';
+      statsHtml += '<span>Total: <b style="color:#888">' + data.trades.length + '</b></span>';
+      for (var r in reasons) {
+        var color = r === 'KILL_SWITCH' ? '#ff4444' : (r === 'AT_DISABLED' ? '#aa44ff' : '#ff8800');
+        statsHtml += '<span>' + r.replace(/_/g,' ') + ': <b style="color:' + color + '">' + reasons[r] + '</b></span>';
+      }
+      statsHtml += '</div>';
+
+      var rowsHtml = data.trades.map(function(t) {
+        var sideColor = t.side === 'LONG' ? '#00ff88' : '#ff4444';
+        var reasonColor = t.reason === 'KILL_SWITCH' ? '#ff4444' : (t.reason === 'AT_DISABLED' ? '#aa44ff' : '#ff8800');
+        var ts = new Date(t.created_at).toLocaleString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+        return '<div class="dlog-entry-row">' +
+          '<span class="dlog-ts">' + ts + '</span>' +
+          '<span style="color:' + sideColor + ';font-weight:700;font-size:9px;margin-right:4px">' + t.side + '</span>' +
+          '<span style="color:#ccc;margin-right:6px">' + (t.symbol || '').replace('USDT','') + '</span>' +
+          '<span style="color:' + reasonColor + ';font-size:9px;font-weight:600">' + t.reason.replace(/_/g,' ') + '</span>' +
+          '<span style="color:#555;margin-left:auto;font-size:9px">$' + (t.price || 0).toFixed(0) + ' | ' + (t.tier || '?') + ' | conf=' + (t.confidence || 0) + '%</span>' +
+          '</div>';
+      }).join('');
+
+      content.innerHTML = statsHtml + rowsHtml;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Session Review
+// ═══════════════════════════════════════════════════════════════
+function _showSessionReview() {
+  var panel = document.getElementById('sessionPanel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  var content = document.getElementById('sessionContent');
+  var dateEl = document.getElementById('sessionDate');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading session data...</div>';
+  fetch('/api/session-review', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">' + escHtml(data.error || 'Error') + '</div>'; return; }
+      if (dateEl) dateEl.textContent = data.date;
+      var s = data.summary;
+      var html = '';
+
+      // Hero PnL
+      var pnlClass = s.totalPnl > 0 ? 'positive' : (s.totalPnl < 0 ? 'negative' : 'zero');
+      html += '<div class="sr-hero">';
+      html += '<div class="sr-pnl ' + pnlClass + '">$' + s.totalPnl.toFixed(2) + '</div>';
+      html += '<div class="sr-sub">' + s.totalTrades + ' trades | ' + s.wins + 'W / ' + s.losses + 'L | WR: ' + s.winRate + '%</div>';
+      if (data.missedCount > 0) html += '<div class="sr-sub" style="color:#ff8800">' + data.missedCount + ' missed opportunities</div>';
+      html += '</div>';
+
+      // Stats grid
+      html += '<div class="sr-grid">';
+      html += '<div class="sr-card"><div class="sr-card-label">Avg PnL</div><div class="sr-card-val" style="color:' + (s.avgPnl >= 0 ? '#00ff88' : '#ff4444') + '">$' + s.avgPnl.toFixed(2) + '</div></div>';
+      html += '<div class="sr-card"><div class="sr-card-label">Avg Hold</div><div class="sr-card-val">' + s.avgHoldMin + 'min</div></div>';
+      if (s.bestTrade) html += '<div class="sr-card"><div class="sr-card-label">Best Trade</div><div class="sr-card-val" style="color:#00ff88">' + (s.bestTrade.symbol||'').replace('USDT','') + ' $' + (s.bestTrade.pnl||0).toFixed(2) + '</div></div>';
+      if (s.worstTrade) html += '<div class="sr-card"><div class="sr-card-label">Worst Trade</div><div class="sr-card-val" style="color:#ff4444">' + (s.worstTrade.symbol||'').replace('USDT','') + ' $' + (s.worstTrade.pnl||0).toFixed(2) + '</div></div>';
+      if (s.avgCapturedPct !== null) html += '<div class="sr-card"><div class="sr-card-label">Avg Captured</div><div class="sr-card-val">' + s.avgCapturedPct + '%</div></div>';
+      if (s.avgMAE !== null) html += '<div class="sr-card"><div class="sr-card-label">Avg MAE</div><div class="sr-card-val" style="color:#ff8800">' + s.avgMAE + '%</div></div>';
+      html += '</div>';
+
+      // Per-symbol breakdown
+      if (data.symbols && Object.keys(data.symbols).length > 0) {
+        html += '<div class="sr-section"><div class="sr-section-title">PER SYMBOL</div>';
+        var maxSymPnl = Math.max.apply(null, Object.values(data.symbols).map(function(v){return Math.abs(v.pnl);})) || 1;
+        for (var sym in data.symbols) {
+          var sv = data.symbols[sym];
+          var pct = Math.abs(sv.pnl) / maxSymPnl * 100;
+          var color = sv.pnl >= 0 ? '#00ff88' : '#ff4444';
+          html += '<div class="sr-bar-row"><span class="sr-bar-label">' + sym.replace('USDT','') + '</span><div class="sr-bar-track"><div class="sr-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div><span class="sr-bar-val" style="color:' + color + '">$' + sv.pnl.toFixed(2) + ' (' + sv.count + ')</span></div>';
+        }
+        html += '</div>';
+      }
+
+      // Per-regime breakdown
+      if (data.regimes && Object.keys(data.regimes).length > 0) {
+        html += '<div class="sr-section"><div class="sr-section-title">PER REGIME</div>';
+        var maxRegPnl = Math.max.apply(null, Object.values(data.regimes).map(function(v){return Math.abs(v.pnl);})) || 1;
+        for (var reg in data.regimes) {
+          var rv = data.regimes[reg];
+          var rpct = Math.abs(rv.pnl) / maxRegPnl * 100;
+          var rcolor = rv.pnl >= 0 ? '#00ff88' : '#ff4444';
+          html += '<div class="sr-bar-row"><span class="sr-bar-label">' + reg + '</span><div class="sr-bar-track"><div class="sr-bar-fill" style="width:' + rpct + '%;background:' + rcolor + '"></div></div><span class="sr-bar-val" style="color:' + rcolor + '">$' + rv.pnl.toFixed(2) + ' (' + rv.count + ')</span></div>';
+        }
+        html += '</div>';
+      }
+
+      // Exit reasons
+      if (data.exitReasons && Object.keys(data.exitReasons).length > 0) {
+        html += '<div class="sr-section"><div class="sr-section-title">EXIT REASONS</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+        for (var er in data.exitReasons) {
+          html += '<span style="font-size:9px;padding:2px 6px;background:#111;border:1px solid #222;border-radius:2px;color:#888">' + er.replace(/_/g,' ') + ' <b style="color:#ccc">' + data.exitReasons[er] + '</b></span>';
+        }
+        html += '</div></div>';
+      }
+
+      // No trades state
+      if (s.totalTrades === 0) {
+        html = '<div style="text-align:center;padding:30px;color:#333;font-size:12px">No trades closed today yet.<br><span style="font-size:10px;color:#222">Session review will populate as trades close.</span></div>';
+      }
+
+      content.innerHTML = html;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Regime History Timeline
+// ═══════════════════════════════════════════════════════════════
+function _showRegimeHistory() {
+  var panel = document.getElementById('regimePanel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  var content = document.getElementById('regimeContent');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>';
+  fetch('/api/regime-history?limit=200', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok || !data.history || data.history.length === 0) {
+        content.innerHTML = '<div style="text-align:center;color:#333;padding:20px;font-size:11px">No regime changes recorded yet. Brain will log regime transitions as they happen.</div>';
+        return;
+      }
+
+      // Stats: count per regime
+      var counts = {};
+      data.history.forEach(function(h) {
+        counts[h.regime] = (counts[h.regime] || 0) + 1;
+      });
+      var statsHtml = '<div class="rh-stats">';
+      statsHtml += '<span>Total changes: <b style="color:#888">' + data.history.length + '</b></span>';
+      for (var reg in counts) {
+        statsHtml += '<span><span class="rh-regime rh-regime-' + reg + '">' + reg + '</span> ' + counts[reg] + '</span>';
+      }
+      statsHtml += '</div>';
+
+      // Rows
+      var rowsHtml = data.history.map(function(h) {
+        var ts = h.created_at ? new Date(h.created_at + 'Z').toLocaleString('en-GB', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : '?';
+        var prevClass = h.prev_regime ? 'rh-regime-' + h.prev_regime : '';
+        return '<div class="rh-row">' +
+          '<span class="rh-ts">' + ts + '</span>' +
+          '<span class="rh-sym">' + (h.symbol || '').replace('USDT','') + '</span>' +
+          (h.prev_regime ? '<span class="rh-regime ' + prevClass + '">' + h.prev_regime + '</span>' : '') +
+          '<span class="rh-arrow">&rarr;</span>' +
+          '<span class="rh-regime rh-regime-' + h.regime + '">' + h.regime + '</span>' +
+          '<span class="rh-conf">' + (h.confidence || 0) + '%</span>' +
+          '<span class="rh-price">$' + (h.price || 0).toFixed(h.price >= 100 ? 0 : 2) + '</span>' +
+          '</div>';
+      }).join('');
+
+      content.innerHTML = statsHtml + rowsHtml;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Performance Dashboard Pro
+// ═══════════════════════════════════════════════════════════════
+var _perfMode = '';
+
+function _showPerformance(mode) {
+  var panel = document.getElementById('perfPanel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  _perfMode = mode || '';
+
+  // Render mode tabs
+  var tabs = document.getElementById('perfModeTabs');
+  if (tabs && !tabs.dataset.init) {
+    tabs.dataset.init = '1';
+    ['all','demo','live'].forEach(function(m) {
+      var btn = document.createElement('button');
+      btn.className = 'perf-tab' + (m === '' || m === 'all' ? ' active' : '');
+      btn.textContent = m === 'all' ? 'ALL' : m.toUpperCase();
+      btn.onclick = function() {
+        tabs.querySelectorAll('.perf-tab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        _showPerformance(m === 'all' ? '' : m);
+      };
+      tabs.appendChild(btn);
+    });
+  }
+
+  var content = document.getElementById('perfContent');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>';
+  var url = '/api/performance' + (_perfMode ? '?mode=' + _perfMode : '');
+  fetch(url, { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(data.error || 'Error') + '</div>'; return; }
+      if (data.empty) { content.innerHTML = '<div style="text-align:center;color:#333;padding:30px;font-size:11px">No trades yet. Performance data will appear as trades close.</div>'; return; }
+      var html = '';
+
+      // Hero stats
+      var pnlColor = data.totalPnl > 0 ? '#00ff88' : (data.totalPnl < 0 ? '#ff4444' : '#555');
+      html += '<div class="perf-hero">';
+      html += '<div class="perf-stat"><div class="perf-stat-val" style="color:' + pnlColor + '">$' + data.totalPnl.toFixed(2) + '</div><div class="perf-stat-lbl">TOTAL PNL</div></div>';
+      html += '<div class="perf-stat"><div class="perf-stat-val">' + data.totalTrades + '</div><div class="perf-stat-lbl">TRADES</div></div>';
+      html += '<div class="perf-stat"><div class="perf-stat-val" style="color:#ff4444">-$' + data.maxDrawdown.toFixed(2) + '</div><div class="perf-stat-lbl">MAX DD</div></div>';
+      html += '<div class="perf-stat"><div class="perf-stat-val" style="color:#00ff88">' + data.bestWinStreak + '</div><div class="perf-stat-lbl">WIN STREAK</div></div>';
+      html += '<div class="perf-stat"><div class="perf-stat-val" style="color:#ff4444">' + data.worstLossStreak + '</div><div class="perf-stat-lbl">LOSS STREAK</div></div>';
+      html += '</div>';
+
+      // Equity curve (bar chart)
+      if (data.equity && data.equity.length > 0) {
+        var eqMin = Math.min.apply(null, data.equity.map(function(e){return e.pnl;}));
+        var eqMax = Math.max.apply(null, data.equity.map(function(e){return e.pnl;}));
+        var eqRange = Math.max(Math.abs(eqMin), Math.abs(eqMax)) || 1;
+        html += '<div class="perf-eq"><div class="perf-eq-title">EQUITY CURVE</div><div class="perf-eq-bar">';
+        var step = Math.max(1, Math.floor(data.equity.length / 80));
+        for (var ei = 0; ei < data.equity.length; ei += step) {
+          var e = data.equity[ei];
+          var h = Math.abs(e.pnl) / eqRange * 36;
+          var c = e.pnl >= 0 ? '#00ff88' : '#ff4444';
+          html += '<div class="perf-eq-col" style="height:' + Math.max(1, h) + 'px;background:' + c + '" title="$' + e.pnl.toFixed(2) + '"></div>';
+        }
+        html += '</div></div>';
+      }
+
+      // Calendar heatmap
+      if (data.calendar && Object.keys(data.calendar).length > 0) {
+        var days = Object.keys(data.calendar).sort();
+        var calMax = Math.max.apply(null, Object.values(data.calendar).map(function(d){return Math.abs(d.pnl);})) || 1;
+        html += '<div class="perf-cal"><div class="perf-eq-title">P&L CALENDAR</div><div class="perf-cal-grid">';
+        days.forEach(function(day) {
+          var d = data.calendar[day];
+          var intensity = Math.min(1, Math.abs(d.pnl) / calMax);
+          var bg = d.pnl >= 0 ? 'rgba(0,255,136,' + (0.15 + intensity * 0.7) + ')' : 'rgba(255,68,68,' + (0.15 + intensity * 0.7) + ')';
+          html += '<div class="perf-cal-day" style="background:' + bg + '" title="' + day + ': $' + d.pnl.toFixed(2) + ' (' + d.count + ' trades)">' + day.slice(8) + '</div>';
+        });
+        html += '</div></div>';
+      }
+
+      // PnL distribution
+      if (data.buckets) {
+        var bMax = Math.max.apply(null, Object.values(data.buckets)) || 1;
+        html += '<div class="perf-bucket"><div class="perf-eq-title">PNL DISTRIBUTION</div>';
+        var bKeys = Object.keys(data.buckets);
+        bKeys.forEach(function(k) {
+          var v = data.buckets[k];
+          var pct = v / bMax * 100;
+          var isNeg = k.indexOf('-') !== -1 || k.indexOf('<') !== -1;
+          var c = isNeg ? '#ff4444' : '#00ff88';
+          html += '<div class="perf-bucket-row"><span class="perf-bucket-lbl">$' + k + '</span><div class="perf-bucket-bar"><div class="perf-bucket-fill" style="width:' + pct + '%;background:' + c + '"></div></div><span class="perf-bucket-val">' + v + '</span></div>';
+        });
+        html += '</div>';
+      }
+
+      // Per-symbol table
+      if (data.bySymbol && Object.keys(data.bySymbol).length > 0) {
+        html += '<div style="padding:8px 16px;border-bottom:1px solid #0f0f1a"><div class="perf-eq-title">PER SYMBOL</div>';
+        for (var sym in data.bySymbol) {
+          var sv = data.bySymbol[sym];
+          var sColor = sv.pnl >= 0 ? '#00ff88' : '#ff4444';
+          html += '<div class="sr-bar-row"><span class="sr-bar-label">' + sym.replace('USDT','') + '</span><span style="color:' + sColor + ';font-size:10px;width:60px">$' + sv.pnl.toFixed(2) + '</span><span style="color:#888;font-size:9px">WR ' + sv.winRate + '% (' + sv.wins + 'W/' + sv.losses + 'L)</span></div>';
+        }
+        html += '</div>';
+      }
+
+      // Per-regime table
+      if (data.byRegime && Object.keys(data.byRegime).length > 0) {
+        html += '<div style="padding:8px 16px"><div class="perf-eq-title">PER REGIME</div>';
+        for (var reg in data.byRegime) {
+          var rv = data.byRegime[reg];
+          var rColor = rv.pnl >= 0 ? '#00ff88' : '#ff4444';
+          html += '<div class="sr-bar-row"><span class="sr-bar-label">' + reg + '</span><span style="color:' + rColor + ';font-size:10px;width:60px">$' + rv.pnl.toFixed(2) + '</span><span style="color:#888;font-size:9px">WR ' + rv.winRate + '% (' + rv.wins + 'W/' + rv.losses + 'L)</span></div>';
+        }
+        html += '</div>';
+      }
+
+      content.innerHTML = html;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>';
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Strategy Comparison
+// ═══════════════════════════════════════════════════════════════
+function _showCompare() {
+  var panel = document.getElementById('comparePanel');
+  if (!panel) return;
+  panel.style.display = 'flex';
+  var content = document.getElementById('compareContent');
+  if (!content) return;
+  content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>';
+  fetch('/api/compare', { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(data.error || 'Error') + '</div>'; return; }
+      var html = '';
+
+      // Demo vs Live
+      html += _cmpSection('DEMO vs LIVE', ['Metric', 'DEMO', 'LIVE'], data.demoVsLive.demo, data.demoVsLive.live);
+
+      // This month vs last month
+      html += _cmpSection(data.thisVsLast.thisLabel + ' vs ' + data.thisVsLast.lastLabel, ['Metric', 'THIS MONTH', 'LAST MONTH'], data.thisVsLast.thisMonth, data.thisVsLast.lastMonth);
+
+      // Per regime
+      var regKeys = Object.keys(data.byRegime);
+      if (regKeys.length >= 2) {
+        html += '<div class="cmp-section"><div class="cmp-title">PER REGIME</div><table class="cmp-table"><tr><th>Metric</th>';
+        regKeys.forEach(function(r) { html += '<th>' + r + '</th>'; });
+        html += '</tr>';
+        var metrics = [
+          { key: 'trades', label: 'Trades' }, { key: 'winRate', label: 'Win Rate %' },
+          { key: 'totalPnl', label: 'Total PnL' }, { key: 'avgPnl', label: 'Avg PnL' },
+          { key: 'maxDD', label: 'Max DD' }, { key: 'avgCaptured', label: 'Avg Captured %' },
+        ];
+        metrics.forEach(function(m) {
+          html += '<tr><td>' + m.label + '</td>';
+          regKeys.forEach(function(r) {
+            var v = data.byRegime[r][m.key];
+            var cls = m.key === 'totalPnl' || m.key === 'avgPnl' ? (v > 0 ? 'cmp-pos' : (v < 0 ? 'cmp-neg' : '')) : '';
+            html += '<td class="' + cls + '">' + _cmpFmt(m.key, v) + '</td>';
+          });
+          html += '</tr>';
+        });
+        html += '</table></div>';
+      }
+
+      // Per symbol (top 5)
+      var symKeys = Object.keys(data.bySymbol).sort(function(a,b) { return data.bySymbol[b].trades - data.bySymbol[a].trades; }).slice(0, 5);
+      if (symKeys.length >= 2) {
+        html += '<div class="cmp-section"><div class="cmp-title">TOP SYMBOLS</div><table class="cmp-table"><tr><th>Metric</th>';
+        symKeys.forEach(function(s) { html += '<th>' + s.replace('USDT','') + '</th>'; });
+        html += '</tr>';
+        [{ key:'trades',label:'Trades' },{ key:'winRate',label:'Win Rate %' },{ key:'totalPnl',label:'PnL' },{ key:'avgPnl',label:'Avg PnL' }].forEach(function(m) {
+          html += '<tr><td>' + m.label + '</td>';
+          symKeys.forEach(function(s) {
+            var v = data.bySymbol[s][m.key];
+            var cls = m.key === 'totalPnl' || m.key === 'avgPnl' ? (v > 0 ? 'cmp-pos' : (v < 0 ? 'cmp-neg' : '')) : '';
+            html += '<td class="' + cls + '">' + _cmpFmt(m.key, v) + '</td>';
+          });
+          html += '</tr>';
+        });
+        html += '</table></div>';
+      }
+
+      if (!data.demoVsLive.demo.trades && !data.demoVsLive.live.trades) {
+        html = '<div style="text-align:center;color:#333;padding:30px;font-size:11px">No trades yet to compare.</div>';
+      }
+
+      content.innerHTML = html;
+    })
+    .catch(function(err) {
+      content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>';
+    });
+}
+
+function _cmpSection(title, headers, setA, setB) {
+  var metrics = [
+    { key: 'trades', label: 'Trades' }, { key: 'wins', label: 'Wins' }, { key: 'losses', label: 'Losses' },
+    { key: 'winRate', label: 'Win Rate %' }, { key: 'totalPnl', label: 'Total PnL' },
+    { key: 'avgPnl', label: 'Avg PnL' }, { key: 'avgHoldMin', label: 'Avg Hold (min)' },
+    { key: 'maxDD', label: 'Max Drawdown' }, { key: 'bestTrade', label: 'Best Trade' },
+    { key: 'worstTrade', label: 'Worst Trade' }, { key: 'avgCaptured', label: 'Avg Captured %' },
+  ];
+  var html = '<div class="cmp-section"><div class="cmp-title">' + title + '</div>';
+  html += '<table class="cmp-table"><tr>';
+  headers.forEach(function(h) { html += '<th>' + h + '</th>'; });
+  html += '</tr>';
+  metrics.forEach(function(m) {
+    var a = setA[m.key]; var b = setB[m.key];
+    var clsA = m.key === 'totalPnl' || m.key === 'avgPnl' || m.key === 'bestTrade' ? (a > 0 ? 'cmp-pos' : (a < 0 ? 'cmp-neg' : '')) : '';
+    var clsB = m.key === 'totalPnl' || m.key === 'avgPnl' || m.key === 'bestTrade' ? (b > 0 ? 'cmp-pos' : (b < 0 ? 'cmp-neg' : '')) : '';
+    // Highlight better value
+    if (m.key === 'winRate' || m.key === 'totalPnl' || m.key === 'avgPnl') {
+      if (a > b) clsA += ' cmp-hi'; else if (b > a) clsB += ' cmp-hi';
+    }
+    html += '<tr><td>' + m.label + '</td><td class="' + clsA + '">' + _cmpFmt(m.key, a) + '</td><td class="' + clsB + '">' + _cmpFmt(m.key, b) + '</td></tr>';
+  });
+  html += '</table></div>';
+  return html;
+}
+
+function _cmpFmt(key, val) {
+  if (val === null || val === undefined) return '—';
+  if (key === 'totalPnl' || key === 'avgPnl' || key === 'maxDD' || key === 'bestTrade' || key === 'worstTrade') return '$' + val.toFixed(2);
+  if (key === 'winRate' || key === 'avgCaptured') return val + '%';
+  if (key === 'avgHoldMin') return val + 'm';
+  return '' + val;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// BRAIN VISION (V2) — Polls /api/trading/brain/vision every 30s
+// ══════════════════════════════════════════════════════════════════
+(function () {
+  var _bvTimer = null;
+  var _bvData = null;
+
+  function _bvColor(dir) {
+    if (dir === 'bull' || dir === 'up' || dir === 'LONG' || dir === 'bullish') return '#00ff88';
+    if (dir === 'bear' || dir === 'down' || dir === 'SHORT' || dir === 'bearish') return '#ff4466';
+    return 'rgba(255,255,255,0.35)';
+  }
+  function _bvArrow(dir) {
+    if (dir === 'bull' || dir === 'up' || dir === 'LONG') return '\u2191';
+    if (dir === 'bear' || dir === 'down' || dir === 'SHORT') return '\u2193';
+    return '\u2194';
+  }
+  function _bvDot(dir) {
+    var c = _bvColor(dir);
+    return '<span style="color:' + c + '">\u25CF</span>';
+  }
+  function _bvVal(v, suffix) {
+    if (v === null || v === undefined) return '<span style="color:var(--dim)">\u2014</span>';
+    return v + (suffix || '');
+  }
+  function _bvDelta(v) {
+    if (!v && v !== 0) return '\u2014';
+    var sign = v >= 0 ? '+' : '';
+    var color = v > 0 ? '#00ff88' : v < 0 ? '#ff4466' : 'rgba(255,255,255,0.35)';
+    return '<span style="color:' + color + '">' + sign + (v >= 1000 || v <= -1000 ? (v / 1000).toFixed(1) + 'K' : v) + '</span>';
+  }
+
+  function _bvRender() {
+    var body = document.getElementById('brainVisionBody');
+    var cycleEl = document.getElementById('brainVisionCycle');
+    if (!body || !_bvData) return;
+
+    if (cycleEl) cycleEl.textContent = 'C' + (_bvData.cycle || 0);
+
+    var syms = _bvData.symbols;
+    if (!syms || Object.keys(syms).length === 0) {
+      body.innerHTML = '<div style="color:var(--dim);padding:4px 0">Waiting for data...</div>';
+      return;
+    }
+
+    var html = '';
+    for (var sym in syms) {
+      var d = syms[sym];
+      var short = sym.replace('USDT', '');
+
+      // ── Header: symbol + regime ──
+      html += '<div style="border-top:1px solid rgba(120,80,220,0.1);padding:5px 0 2px;margin-top:3px">';
+      html += '<span style="color:#aa88ff;font-weight:bold;font-size:9px;letter-spacing:1px">' + short + '</span>';
+      html += ' <span style="color:var(--dim);font-size:7px">$' + (d.price || 0).toLocaleString() + '</span>';
+      html += ' <span style="background:rgba(120,80,220,0.15);color:#cc88ff;font-size:7px;padding:1px 4px;border-radius:2px;letter-spacing:1px">' + (d.regime || '?') + '</span>';
+      html += '</div>';
+
+      // ── MTF Alignment ──
+      var mtfHtml = '';
+      var tfOrder = ['4h', '1h', '15m', '5m'];
+      for (var i = 0; i < tfOrder.length; i++) {
+        var tf = tfOrder[i];
+        var m = d.mtf[tf];
+        if (!m) continue;
+        mtfHtml += '<span style="margin-right:5px">' + tf + ':' + _bvDot(m.st) + '</span>';
+      }
+      if (mtfHtml) {
+        html += '<div style="padding:1px 0;color:rgba(255,255,255,0.5)"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">MTF</span>' + mtfHtml + '</div>';
+      }
+
+      // ── Structure ──
+      var structColor = _bvColor(d.structure.trend);
+      var structLabel = d.structure.trend || 'none';
+      if (d.structure.choch) structLabel = 'CHoCH ' + _bvArrow(d.structure.choch);
+      else if (d.structure.bos) structLabel = 'BOS ' + _bvArrow(d.structure.bos);
+      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">STRUCT</span>';
+      html += '<span style="color:' + structColor + '">' + structLabel + '</span>';
+      html += ' <span style="color:var(--dim)">(' + d.structure.score + '%)</span></div>';
+
+      // ── Order Flow ──
+      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">FLOW</span>';
+      html += 'CVD:' + _bvDelta(d.flow.delta5m);
+      if (d.flow.poc) html += ' <span style="color:var(--dim)">POC:$' + d.flow.poc.toLocaleString() + '</span>';
+      if (d.flow.absorption > 30) html += ' <span style="color:#ffaa00">ABS:' + d.flow.absorption + '%</span>';
+      html += '</div>';
+
+      // ── Sentiment ──
+      var sentColor = d.sentiment.score > 15 ? '#00ff88' : d.sentiment.score < -15 ? '#ff4466' : 'rgba(255,255,255,0.35)';
+      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">SENT</span>';
+      html += '<span style="color:' + sentColor + '">' + (d.sentiment.score > 0 ? '+' : '') + d.sentiment.score + '</span>';
+      html += ' <span style="color:var(--dim)">crowd:' + (d.sentiment.crowd || '?') + ' fund:' + (d.sentiment.funding || '?') + '</span></div>';
+
+      // ── Liquidity ──
+      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">LIQ</span>';
+      if (d.liquidity.above) html += '<span style="color:#ff4466">\u2191$' + d.liquidity.above.toLocaleString() + '</span> ';
+      if (d.liquidity.below) html += '<span style="color:#00ff88">\u2193$' + d.liquidity.below.toLocaleString() + '</span> ';
+      html += '<span style="color:var(--dim)">' + d.liquidity.zones + 'z</span>';
+      if (d.liquidity.grabRisk > 30) html += ' <span style="color:#ffaa00">GRAB:' + d.liquidity.grabRisk + '%</span>';
+      if (d.liquidity.antic && d.liquidity.antic !== 'neutral') html += ' <span style="color:#ffaa00">' + d.liquidity.antic + '</span>';
+      html += '</div>';
+
+      // ── Regime Params ──
+      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">PARAMS</span>';
+      html += '<span style="color:rgba(255,255,255,0.45)">conf\u2265' + d.regimeParams.confMin + ' SL\u00D7' + d.regimeParams.slMult + ' RR\u2265' + d.regimeParams.rrMin + ' DSL:' + d.regimeParams.dsl + ' size:' + (d.regimeParams.sizeScale * 100) + '%</span></div>';
+
+      // ── KNN ──
+      if (d.knn) {
+        var knnColor = d.knn.winRate >= 60 ? '#00ff88' : d.knn.winRate <= 40 ? '#ff4466' : '#ffaa00';
+        html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">KNN</span>';
+        html += '<span style="color:' + knnColor + '">' + d.knn.winRate + '% WIN</span>';
+        html += ' <span style="color:var(--dim)">dir:' + (d.knn.dir || '?') + ' sim:' + (d.knn.similarity || '?') + '% ' + d.knn.patterns + ' patterns</span></div>';
+      }
+
+      // ── Journal ──
+      if (d.journal) {
+        var jColor = d.journal.winRate >= 50 ? '#00ff88' : '#ff4466';
+        html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">LEARN</span>';
+        html += '<span style="color:' + jColor + '">WR:' + d.journal.winRate + '%</span>';
+        html += ' <span style="color:var(--dim)">' + d.journal.trades + ' trades</span>';
+        if (d.journal.bestRegime) html += ' <span style="color:#00ff88">best:' + d.journal.bestRegime + '</span>';
+        if (d.journal.worstRegime) html += ' <span style="color:#ff4466">avoid:' + d.journal.worstRegime + '</span>';
+        html += '</div>';
+      }
+
+      // ── Regime Transition ──
+      if (d.regimeTransition && d.regimeTransition.transitioning) {
+        var rt = d.regimeTransition;
+        html += '<div style="padding:1px 0"><span style="color:#ffaa00;width:65px;display:inline-block;font-weight:600">⚡ SHIFT</span>';
+        html += '<span style="color:#ffaa00">' + rt.from + ' → ' + rt.to + '</span>';
+        html += ' <span style="color:var(--dim)">' + (rt.warning || '') + '</span></div>';
+      }
+
+      // ── Volatility Forecast ──
+      if (d.volatilityForecast && d.volatilityForecast.score > 15) {
+        var vf = d.volatilityForecast;
+        var vfCol = vf.level === 'high' ? '#ff3355' : '#ffaa00';
+        html += '<div style="padding:1px 0"><span style="color:' + vfCol + ';width:65px;display:inline-block;font-weight:600">⚡ VOL</span>';
+        html += '<span style="color:' + vfCol + '">' + vf.level.toUpperCase() + ' (' + vf.score + ')</span>';
+        if (vf.signals) html += ' <span style="color:var(--dim)">' + vf.signals.join(', ') + '</span>';
+        if (vf.recommendation) html += ' <span style="color:#ffaa00">' + vf.recommendation + '</span>';
+        html += '</div>';
+      }
+    }
+
+    body.innerHTML = html;
+  }
+
+  function _bvPoll() {
+    fetch('/api/brain/vision', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data && data.symbols) {
+          _bvData = data;
+          _bvRender();
+        }
+      })
+      .catch(function () { /* silent */ });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var wrap = document.getElementById('brainVisionWrap');
+    if (!wrap) return;
+    // Poll every 30s, first poll after 3s
+    setTimeout(_bvPoll, 3000);
+    _bvTimer = setInterval(_bvPoll, 30000);
+  });
+})();
+
+// ══════════════════════════════════════════════════════════════════
+// BRAIN DASHBOARD (Reflection Engine) — Polls /api/brain/dashboard every 30s
+// ══════════════════════════════════════════════════════════════════
+(function () {
+  var _bdData = null;
+  var _bdTimer = null;
+
+  function _bdRender() {
+    var body = document.getElementById('brainDashBody');
+    var scoreEl = document.getElementById('brainDashScore');
+    if (!body || !_bdData) return;
+
+    var html = '';
+
+    // ── A) Live Thinking ──
+    var thoughts = _bdData.thoughts || [];
+    if (thoughts.length > 0) {
+      html += '<div style="color:#3ab4dc;margin-bottom:3px;font-size:11px;letter-spacing:1px;font-weight:600">LIVE THINKING</div>';
+      var recent = thoughts.slice(-8);
+      for (var i = recent.length - 1; i >= 0; i--) {
+        var t = recent[i];
+        var sev = t.severity || 'info';
+        var col = sev === 'critical' ? '#ff3355' : sev === 'warning' ? '#ffaa00' : '#668899';
+        var icon = sev === 'critical' ? '\u25CF' : sev === 'warning' ? '\u25B2' : '\u25CB';
+        var ago = Math.round((Date.now() - t.ts) / 60000);
+        html += '<div style="color:' + col + ';padding:1px 0;border-bottom:1px solid rgba(50,70,90,0.2)">' +
+          icon + ' <span style="color:#557788">' + ago + 'm</span> ' + _esc(t.text) + '</div>';
+      }
+    } else {
+      html += '<div style="color:#334455;font-style:italic">Waiting for trades to reflect on...</div>';
+    }
+
+    // ── B) Self-Score ──
+    var ss = _bdData.selfScore;
+    if (ss) {
+      html += '<div style="color:#3ab4dc;margin:6px 0 3px;font-size:11px;letter-spacing:1px;font-weight:600">SELF-SCORE</div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px">';
+      html += _bdCard('Accuracy', ss.accuracyToday != null ? ss.accuracyToday + '%' : '—', ss.accuracyToday >= 60 ? '#22cc66' : ss.accuracyToday != null ? '#ff6644' : '#445566');
+      html += _bdCard('Streak', ss.streak + 'W', ss.streak >= 3 ? '#22cc66' : '#778899');
+      html += _bdCard('Best', ss.bestStreak + 'W', '#aa88ff');
+      html += _bdCard('Decisions', ss.decisionsToday || 0, '#778899');
+      html += _bdCard('Avoided', ss.avoidedLosses || 0, '#22cc66');
+      html += _bdCard('Regret', ss.regretTrades || 0, ss.regretTrades > 3 ? '#ff6644' : '#778899');
+      html += '</div>';
+      if (scoreEl) scoreEl.textContent = ss.accuracyToday != null ? 'Accuracy: ' + ss.accuracyToday + '%' : '';
+    }
+
+    // ── C) Learned Rules ──
+    var rules = _bdData.learnedRules || [];
+    if (rules.length > 0) {
+      html += '<div style="color:#3ab4dc;margin:6px 0 3px;font-size:11px;letter-spacing:1px;font-weight:600">LEARNED RULES (' + rules.length + ')</div>';
+      for (var r = 0; r < Math.min(rules.length, 8); r++) {
+        var rule = rules[r];
+        html += '<div style="color:#aabbcc;padding:1px 0">' +
+          '<span style="color:#ffaa00">#' + rule.id + '</span> ' + _esc(rule.rule) +
+          (rule.blockEntry ? ' <span style="color:#ff3355">[BLOCK]</span>' : '') +
+          ' <span style="color:#556677">hits:' + (rule.hitCount || 0) + '</span></div>';
+      }
+    }
+
+    // ── D) DSL Recommendations ──
+    var dsl = _bdData.dslRecommendations || [];
+    if (dsl.length > 0) {
+      html += '<div style="color:#3ab4dc;margin:6px 0 3px;font-size:11px;letter-spacing:1px;font-weight:600">DSL RECOMMENDATIONS</div>';
+      for (var d = 0; d < dsl.length; d++) {
+        var rec = dsl[d];
+        html += '<div style="color:#ffbb44;padding:1px 0">' +
+          '<span style="color:#778899">' + (rec.regime || '') + '</span> ' +
+          rec.param + ': <span style="color:#ff6644">' + rec.current + '</span> → ' +
+          '<span style="color:#22cc66">' + rec.recommended + '</span>' +
+          ' <span style="color:#556677">' + _esc(rec.reason || '') + '</span></div>';
+      }
+    }
+
+    // ── E) Calibration ──
+    var cal = _bdData.calibration || {};
+    var calKeys = Object.keys(cal);
+    if (calKeys.length > 0) {
+      html += '<div style="color:#3ab4dc;margin:6px 0 3px;font-size:11px;letter-spacing:1px;font-weight:600">CONFIDENCE CALIBRATION</div>';
+      html += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
+      for (var c = 0; c < calKeys.length; c++) {
+        var k = calKeys[c];
+        var cv = cal[k];
+        var gapCol = cv.gap > 5 ? '#22cc66' : cv.gap < -10 ? '#ff3355' : '#778899';
+        html += '<div style="background:rgba(30,40,60,0.5);padding:2px 4px;border-radius:2px">' +
+          '<span style="color:#556677">' + k + '</span> ' +
+          '<span style="color:' + gapCol + '">' + (cv.gap > 0 ? '+' : '') + cv.gap + '%</span>' +
+          ' <span style="color:#445566">(' + cv.samples + ')</span></div>';
+      }
+      html += '</div>';
+    }
+
+    // ── F) Anti-Patterns ──
+    var ap = _bdData.antiPatterns || [];
+    if (ap.length > 0) {
+      html += '<div style="color:#3ab4dc;margin:6px 0 3px;font-size:11px;letter-spacing:1px;font-weight:600">ANTI-PATTERNS (' + ap.length + ')</div>';
+      for (var a = 0; a < Math.min(ap.length, 6); a++) {
+        var pat = ap[a];
+        html += '<div style="color:#ff8866;padding:1px 0">' +
+          _esc(pat.pattern) + ' <span style="color:#556677">×' + pat.occurrences + '</span>' +
+          ' <span style="color:#ff3355">' + Math.round((pat.lossRate || 0) * 100) + '% loss</span></div>';
+      }
+    }
+
+    // ── G) Session Reviews ──
+    var reviews = _bdData.sessionReviews || [];
+    if (reviews.length > 0) {
+      var rev = reviews[reviews.length - 1];
+      html += '<div style="color:#3ab4dc;margin:6px 0 3px;font-size:11px;letter-spacing:1px;font-weight:600">SESSION REVIEW</div>';
+      var wrCol = rev.winRate >= 60 ? '#22cc66' : rev.winRate < 40 ? '#ff3355' : '#ffaa00';
+      html += '<div style="color:#aabbcc">' + rev.trades + ' trades | ' +
+        '<span style="color:#22cc66">' + rev.wins + 'W</span> / <span style="color:#ff3355">' + rev.losses + 'L</span> | ' +
+        'WR: <span style="color:' + wrCol + '">' + rev.winRate + '%</span> | ' +
+        'PnL: <span style="color:' + (rev.totalPnl >= 0 ? '#22cc66' : '#ff3355') + '">$' + (rev.totalPnl || 0).toFixed(2) + '</span></div>';
+      if (rev.conclusions && rev.conclusions.length > 0) {
+        for (var ci = 0; ci < rev.conclusions.length; ci++) {
+          html += '<div style="color:#8899aa;padding:1px 0">\u25B8 ' + _esc(rev.conclusions[ci]) + '</div>';
+        }
+      }
+    }
+
+    body.innerHTML = html;
+  }
+
+  function _bdCard(label, value, color) {
+    return '<div style="background:rgba(20,30,50,0.5);padding:2px 4px;border-radius:2px;text-align:center">' +
+      '<div style="color:#445566;font-size:10px">' + label + '</div>' +
+      '<div style="color:' + (color || '#aabbcc') + ';font-size:13px;font-weight:bold">' + value + '</div></div>';
+  }
+
+  function _esc(s) { return (s || '').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+  function _bdPoll() {
+    fetch('/api/brain/dashboard', { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (data) {
+          _bdData = data;
+          _bdRender();
+        }
+      })
+      .catch(function () { /* silent */ });
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var wrap = document.getElementById('brainDashWrap');
+    if (!wrap) return;
+    setTimeout(_bdPoll, 5000);
+    _bdTimer = setInterval(_bdPoll, 30000);
+  });
+})();

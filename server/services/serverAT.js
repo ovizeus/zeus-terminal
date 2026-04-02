@@ -25,6 +25,10 @@ const MAX_POSITIONS = 20;
 
 const _positions = [];          // flat array — each pos carries .userId
 const _userState = new Map();   // userId → per-user engine state
+const _liveEntryLocks = new Set(); // 'userId:symbol' — prevents concurrent live entries
+const _pendingLiveCloses = new Map(); // [LIVE-PARITY] seq → { pos, exitType, ts } — failed closes for reconciliation
+const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → closeTs — prevents immediate re-entry after close
+const CLOSE_COOLDOWN_MS = 600000;   // [RE-ENTRY] 10 min cooldown after any close
 
 const DEFAULT_DEMO_BALANCE = 10000;
 function _defaultUserState() {
@@ -32,6 +36,7 @@ function _defaultUserState() {
         log: [],
         seq: 0,
         stats: { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 },
+        demoStats: { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 },
         engineMode: 'demo',
         demoBalance: DEFAULT_DEMO_BALANCE,
         demoStartBalance: DEFAULT_DEMO_BALANCE,
@@ -69,11 +74,43 @@ let _onChangeCallback = null;
 // Persistence — save/restore from SQLite
 // ══════════════════════════════════════════════════════════════════
 function _persistPosition(pos) {
-    try { db.atSavePosition(pos); } catch (e) { logger.error('AT_DB', 'Save position failed: ' + e.message); }
+    // Snapshot DSL progress so it survives server restart
+    const dslState = serverDSL.getState(pos.seq);
+    if (dslState) {
+        pos.dslProgress = {
+            active: dslState.active,
+            progress: dslState.progress,
+            activationPrice: dslState.activationPrice,
+            currentSL: dslState.currentSL,
+            pivotLeft: dslState.pivotLeft,
+            pivotRight: dslState.pivotRight,
+            impulseVal: dslState.impulseVal,
+            ttpArmed: dslState.ttpArmed,
+            ttpPeak: dslState.ttpPeak,
+            phaseChanges: dslState.phaseChanges,
+        };
+    }
+    try { db.atSavePosition(pos); } catch (e) {
+        logger.error('AT_DB', 'Save position failed: ' + e.message);
+        _alertPersistFailure(pos.userId, 'Save position [' + pos.seq + ']', e.message);
+    }
 }
 
 function _persistClose(pos) {
-    try { db.atArchiveClosed(pos); } catch (e) { logger.error('AT_DB', 'Archive closed failed: ' + e.message); }
+    try { db.atArchiveClosed(pos); return true; } catch (e) {
+        logger.error('AT_DB', 'Archive closed failed: ' + e.message);
+        _alertPersistFailure(pos.userId, 'Archive closed [' + pos.seq + ']', e.message);
+        return false;
+    }
+}
+
+const _persistAlertTs = new Map(); // per-user throttle
+function _alertPersistFailure(userId, op, msg) {
+    if (!userId) return;
+    const now = Date.now();
+    if (now - (_persistAlertTs.get(userId) || 0) < 60000) return; // max 1 alert/min per user
+    _persistAlertTs.set(userId, now);
+    try { telegram.sendToUser(userId, '⚠️ *DB PERSIST FAILURE*\n' + op + '\n' + msg); } catch (_) { }
 }
 
 function _persistState(userId) {
@@ -84,6 +121,7 @@ function _persistState(userId) {
             seq: us.seq,
             liveSeq: us.liveSeq,
             stats: us.stats,
+            demoStats: us.demoStats,
             liveStats: us.liveStats,
             demoBalance: us.demoBalance,
             demoStartBalance: us.demoStartBalance,
@@ -97,7 +135,10 @@ function _persistState(userId) {
             lastResetDay: us.lastResetDay,
             atActive: us.atActive, // [F1]
         }, userId);
-    } catch (e) { logger.error('AT_DB', 'Save state failed: ' + e.message); }
+    } catch (e) {
+        logger.error('AT_DB', 'Save state failed: ' + e.message);
+        _alertPersistFailure(userId, 'Save state', e.message);
+    }
 }
 
 function _applyStateBlob(userId, saved) {
@@ -106,6 +147,20 @@ function _applyStateBlob(userId, saved) {
     us.seq = saved.seq || 0;
     us.liveSeq = saved.liveSeq || 0;
     us.stats = saved.stats || { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 };
+    // Restore demoStats; if missing (legacy), derive from stats - liveStats (one-time migration)
+    if (saved.demoStats) {
+        us.demoStats = saved.demoStats;
+    } else {
+        const ls = saved.liveStats || {};
+        const st = saved.stats || {};
+        us.demoStats = {
+            entries: (st.entries || 0) - (ls.entries || 0),
+            exits: (st.exits || 0) - (ls.exits || 0),
+            pnl: +((st.pnl || 0) - (ls.pnl || 0)).toFixed(2),
+            wins: (st.wins || 0) - (ls.wins || 0),
+            losses: (st.losses || 0) - (ls.losses || 0),
+        };
+    }
     us.liveStats = saved.liveStats || { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0, blocked: 0, errors: 0 };
     us.demoBalance = typeof saved.demoBalance === 'number' ? saved.demoBalance : DEFAULT_DEMO_BALANCE;
     us.demoStartBalance = typeof saved.demoStartBalance === 'number' ? saved.demoStartBalance : DEFAULT_DEMO_BALANCE;
@@ -123,6 +178,28 @@ function _applyStateBlob(userId, saved) {
 
 function _restoreFromDb() {
     try {
+        // [B2] Startup ghost cleanup: remove stale open positions that have a NEWER closed record
+        // (seq collision from seq reuse: new open entry with same seq as old closed = keep open)
+        try {
+            const candidates = db.getGhostCandidates();
+            let cleaned = 0;
+            for (const c of candidates) {
+                // [H1 FIX] Normalize both to Unix ms before comparing
+                // openTs: always number (from JSON $.ts)
+                // closedTs: can be string (SQLite CURRENT_TIMESTAMP) or number (JSON $.closeTs) or 0
+                const openMs = Number(c.openTs) || 0;
+                const closedMs = typeof c.closedTs === 'string'
+                    ? new Date(c.closedTs + 'Z').getTime()  // SQLite datetime is UTC, append Z for correct parse
+                    : (Number(c.closedTs) || 0);
+                // Only delete if closed entry is NEWER than open entry (= open is the stale ghost)
+                if (closedMs > 0 && openMs > 0 && closedMs >= openMs) {
+                    db.runRaw('DELETE FROM at_positions WHERE seq = ' + Number(c.seq));
+                    cleaned++;
+                }
+            }
+            if (cleaned > 0) logger.warn('AT_DB', `Startup cleanup: removed ${cleaned} ghost position(s) from at_positions`);
+        } catch (e) { logger.error('AT_DB', 'Startup ghost cleanup failed: ' + e.message); }
+
         // [A3] Per-user restore — query distinct user IDs first, then load per-user
         const knownUserIds = db.atGetOpenUserIds();
         // Always include user 1 for engine state restore (legacy + primary)
@@ -132,40 +209,53 @@ function _restoreFromDb() {
         let restoredCount = 0;
         let skippedCount = 0;
         for (const uid of userIds) {
-            const openPos = db.atLoadOpenPositions(uid);
+            let openPos;
+            try { openPos = db.atLoadOpenPositions(uid); } catch (e) {
+                logger.error('AT_DB', `Failed to load positions for uid=${uid}: ${e.message} — skipping user`);
+                continue; // skip this user, continue with others
+            }
             for (const pos of openPos) {
-                // Skip positions that were emergency-closed or have non-OPEN live status stuck in DB
-                if (pos.live && (pos.live.status === 'EMERGENCY_CLOSED' || pos.live.status === 'CLOSED')) {
-                    logger.warn('AT_DB', `[${pos.seq}] Skipping stuck position (live.status=${pos.live.status}) — archiving as closed`);
-                    try { db.atArchiveClosed(pos); } catch (_) { }
+                try {
+                    // Skip positions that were emergency-closed or have non-OPEN live status stuck in DB
+                    if (pos.live && (pos.live.status === 'EMERGENCY_CLOSED' || pos.live.status === 'CLOSED')) {
+                        logger.warn('AT_DB', `[${pos.seq}] Skipping stuck position (live.status=${pos.live.status}) — archiving as closed`);
+                        try { db.atArchiveClosed(pos); } catch (_) { }
+                        skippedCount++;
+                        continue;
+                    }
+                    // Validate essential fields
+                    if (!pos.symbol || !pos.side || !pos.price || pos.price <= 0) {
+                        logger.warn('AT_DB', `[${pos.seq}] Skipping corrupted position (missing fields)`);
+                        skippedCount++;
+                        continue;
+                    }
+                    // [C5] Reject positions without userId — do NOT default to user 1 (prevents cross-user leak)
+                    if (!pos.userId) {
+                        logger.error('AT_DB', `[${pos.seq}] Skipping position with MISSING userId — refusing to assign default (cross-user safety)`);
+                        skippedCount++;
+                        continue;
+                    }
+                    _positions.push(pos);
+                    // Re-attach DSL with saved params + restored progress (survives restart)
+                    serverDSL.attach(pos, pos.dslParams || serverDSL.DSL_DEFAULTS, pos.dslProgress || null);
+                    restoredCount++;
+                } catch (e) {
+                    logger.error('AT_DB', `[${pos.seq || '?'}] Failed to restore position: ${e.message} — skipping`);
                     skippedCount++;
-                    continue;
                 }
-                // Validate essential fields
-                if (!pos.symbol || !pos.side || !pos.price || pos.price <= 0) {
-                    logger.warn('AT_DB', `[${pos.seq}] Skipping corrupted position (missing fields)`);
-                    skippedCount++;
-                    continue;
-                }
-                // [C5] Reject positions without userId — do NOT default to user 1 (prevents cross-user leak)
-                if (!pos.userId) {
-                    logger.error('AT_DB', `[${pos.seq}] Skipping position with MISSING userId — refusing to assign default (cross-user safety)`);
-                    skippedCount++;
-                    continue;
-                }
-                _positions.push(pos);
-                // Re-attach DSL with saved params or defaults
-                serverDSL.attach(pos, pos.dslParams || serverDSL.DSL_DEFAULTS);
-                restoredCount++;
             }
         }
 
         // Restore per-user engine states — [6B1] user_id-based read path
         for (const uid of userIds) {
-            const rows = db.atGetStateByUser(uid);
-            const engineRow = rows.find(r => r.key === 'engine:' + uid);
-            const saved = engineRow ? engineRow.value : null;
-            if (saved) _applyStateBlob(uid, saved);
+            try {
+                const rows = db.atGetStateByUser(uid);
+                const engineRow = rows.find(r => r.key === 'engine:' + uid);
+                const saved = engineRow ? engineRow.value : null;
+                if (saved) _applyStateBlob(uid, saved);
+            } catch (e) {
+                logger.error('AT_DB', `Failed to restore state for uid=${uid}: ${e.message} — skipping`);
+            }
         }
 
         if (restoredCount > 0) {
@@ -174,7 +264,7 @@ function _restoreFromDb() {
             logger.warn('AT_DB', `No valid positions restored (${skippedCount} skipped as stuck/corrupt)`);
         }
     } catch (e) {
-        logger.error('AT_DB', 'Restore failed: ' + e.message);
+        logger.error('AT_DB', 'Restore failed critically: ' + e.message);
     }
 }
 
@@ -192,15 +282,46 @@ function setMode(userId, mode) {
 
     // [B1] Reject cross-switch if user has open positions
     if (mode !== oldMode) {
-        const openCount = _positions.filter(p => p.userId === userId && !p.closed).length;
+        const openCount = _positions.filter(p => p.userId === userId).length;
         if (openCount > 0) {
             logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — ${openCount} open position(s)`);
             return { ok: false, error: `Cannot switch mode with ${openCount} open position(s). Close them first.` };
         }
     }
 
+    // [V3.1] Guard: live mode requires valid exchange credentials
+    if (mode === 'live') {
+        const creds = getExchangeCreds(userId);
+        if (!creds) {
+            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: no exchange credentials configured`);
+            return { ok: false, error: 'Cannot switch to live — no exchange credentials configured. Go to Settings → Exchange API.' };
+        }
+        if (us.killActive) {
+            return { ok: false, error: 'Cannot switch to live — kill switch is active. Reset it first.' };
+        }
+    }
+
     us.engineMode = mode;
     _persistState(userId);
+
+    // [LIVE-PARITY] Auto-init liveBalanceRef from Binance on live mode switch (non-blocking)
+    if (mode === 'live' && us.liveBalanceRef <= 0) {
+        const creds = getExchangeCreds(userId);
+        if (creds) {
+            sendSignedRequest('GET', '/fapi/v2/balance', {}, creds).then(balances => {
+                const usdtBal = balances.find(b => b.asset === 'USDT');
+                const total = usdtBal ? parseFloat(usdtBal.balance || 0) : 0;
+                if (total > 0) {
+                    us.liveBalanceRef = total;
+                    _persistState(userId);
+                    logger.info('AT_ENGINE', `Kill switch auto-init uid=${userId}: liveBalanceRef=$${total.toFixed(2)}`);
+                }
+            }).catch(err => {
+                logger.warn('AT_ENGINE', `Kill switch auto-init failed uid=${userId}: ${err.message} — liveBalanceRef stays at $${us.liveBalanceRef}`);
+            });
+        }
+    }
+
     logger.info('AT_ENGINE', `Mode changed uid=${userId}: ${oldMode} → ${mode}`);
     // [C4] Record mode change in audit trail for compliance
     audit.record('AT_MODE_CHANGE', { userId, oldMode, newMode: mode }, 'user');
@@ -212,6 +333,58 @@ function setMode(userId, mode) {
 }
 
 function getMode(userId) { return _uState(userId).engineMode; }
+function isATActive(userId) { return _uState(userId).atActive; }
+
+/**
+ * Pre-live checklist — validates readiness before switching to live mode.
+ * Returns { ok: true, checks: [...] } or { ok: false, checks: [...], failedChecks: [...] }
+ */
+async function preLiveChecklist(userId) {
+    const checks = [];
+    let allOk = true;
+
+    // 1. Exchange credentials exist
+    const creds = getExchangeCreds(userId);
+    if (!creds) {
+        checks.push({ name: 'API_KEYS', ok: false, detail: 'No exchange credentials configured' });
+        allOk = false;
+    } else {
+        checks.push({ name: 'API_KEYS', ok: true, detail: 'Credentials found' });
+
+        // 2. Binance connectivity + balance
+        try {
+            const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
+            const usdtBal = balances.find(b => b.asset === 'USDT');
+            const available = usdtBal ? parseFloat(usdtBal.availableBalance || 0) : 0;
+            if (available > 0) {
+                checks.push({ name: 'BALANCE', ok: true, detail: `$${available.toFixed(2)} USDT available` });
+            } else {
+                checks.push({ name: 'BALANCE', ok: false, detail: 'Zero USDT balance on Binance' });
+                allOk = false;
+            }
+            checks.push({ name: 'CONNECTIVITY', ok: true, detail: 'Binance API reachable' });
+        } catch (err) {
+            checks.push({ name: 'CONNECTIVITY', ok: false, detail: 'Binance API unreachable: ' + err.message });
+            checks.push({ name: 'BALANCE', ok: false, detail: 'Cannot verify (API unreachable)' });
+            allOk = false;
+        }
+    }
+
+    // 3. No open positions (already checked by setMode, but include for completeness)
+    const openCount = _positions.filter(p => p.userId === userId).length;
+    checks.push({ name: 'NO_OPEN_POSITIONS', ok: openCount === 0, detail: openCount === 0 ? 'No open positions' : `${openCount} position(s) still open` });
+    if (openCount > 0) allOk = false;
+
+    // 4. Kill switch not active
+    const us = _uState(userId);
+    checks.push({ name: 'KILL_SWITCH', ok: !us.killActive, detail: us.killActive ? 'Kill switch is active — reset first' : 'Kill switch OK' });
+    if (us.killActive) allOk = false;
+
+    const failedChecks = checks.filter(c => !c.ok).map(c => c.name);
+    logger.info('AT_ENGINE', `Pre-live checklist uid=${userId}: ${allOk ? 'PASSED' : 'FAILED'} [${failedChecks.join(', ') || 'all ok'}]`);
+
+    return { ok: allOk, checks, failedChecks };
+}
 
 // [F1] Per-user AT on/off toggle — independent of mode (demo/live)
 function toggleActive(userId, active) {
@@ -230,6 +403,17 @@ function toggleActive(userId, active) {
     return { ok: true, atActive: active, was };
 }
 
+// ── Missed trade recorder ──
+function _recordMissedTrade(userId, decision, reason) {
+    try {
+        const f = decision.fusion || {};
+        db.saveMissedTrade(userId, decision.symbol, f.dir || '?', reason,
+            decision.price || 0, f.confidence || 0, f.decision || '?',
+            (decision.regime && decision.regime.regime) || '?',
+            { score: f.score, confluence: decision.confluence ? decision.confluence.score : null, priceTs: decision.priceTs });
+    } catch (e) { logger.warn('AT_ENGINE', 'Failed to record missed trade: ' + e.message); }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Process a brain decision (called by serverBrain)
 // ══════════════════════════════════════════════════════════════════
@@ -243,6 +427,7 @@ function processBrainDecision(decision, stc, userId) {
     // [F1] Per-user AT on/off gate — if user disabled AT, block ALL entries
     if (!us.atActive) {
         logger.info('AT_ENGINE', `Entry blocked uid=${userId} — AT disabled by user`);
+        _recordMissedTrade(userId, decision, 'AT_DISABLED');
         return null;
     }
 
@@ -262,6 +447,7 @@ function processBrainDecision(decision, stc, userId) {
     // [F2] Stale price gate — reject if price is > 10s old at entry time
     if (decision.priceTs && (Date.now() - decision.priceTs) > 10000) {
         logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — stale price (${Math.round((Date.now() - decision.priceTs) / 1000)}s old)`);
+        _recordMissedTrade(userId, decision, 'STALE_PRICE');
         return null;
     }
 
@@ -269,6 +455,7 @@ function processBrainDecision(decision, stc, userId) {
     _checkDailyReset(userId);
     if (us.killActive) {
         logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — daily kill switch active (PnL: $${us.dailyPnL.toFixed(2)})`);
+        _recordMissedTrade(userId, decision, 'KILL_SWITCH');
         return null;
     }
 
@@ -278,7 +465,7 @@ function processBrainDecision(decision, stc, userId) {
 
     // ── Max positions gate (per-user) ──
     const userPosCount = _positions.filter(p => p.userId === userId).length;
-    if (userPosCount >= stc.maxPos) return null;
+    if (userPosCount >= stc.maxPos) { _recordMissedTrade(userId, decision, 'MAX_POSITIONS'); return null; }
 
     // ── Compute order ──
     const baseSize = stc.size;
@@ -292,6 +479,7 @@ function processBrainDecision(decision, stc, userId) {
     // ── Demo balance gate (per-user) ──
     if (us.engineMode === 'demo' && us.demoBalance < finalSize) {
         logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — insufficient demo balance ($${us.demoBalance.toFixed(2)} < $${finalSize})`);
+        _recordMissedTrade(userId, decision, 'INSUFFICIENT_BALANCE');
         return null;
     }
 
@@ -343,8 +531,15 @@ function processBrainDecision(decision, stc, userId) {
         addOnCount: 0,
         addOnHistory: [],
         controlMode: 'auto', // [TL-03] Initialize controlMode so user-override check works
+        autoTrade: true,     // [AT-PANEL] Mark as AT position for client panel filtering
+        sourceMode: 'auto',  // [AT-PANEL] Source mode for display labeling
         _livePending: false, // [TL-04] True while _executeLiveEntry is in-flight
     };
+
+    // [REFLECTION] Save entry snapshot from brain for post-trade analysis
+    if (decision._entrySnapshot) {
+        entry.entrySnapshot = decision._entrySnapshot;
+    }
 
     // ── Demo: deduct margin ──
     if (us.engineMode === 'demo') {
@@ -354,13 +549,15 @@ function processBrainDecision(decision, stc, userId) {
     // ── Add to THE positions array ──
     _positions.push(entry);
     us.stats.entries++;
+    if (entry.mode !== 'live') us.demoStats.entries++;
 
     // ── Attach DSL ──
     serverDSL.attach(entry, entry.dslParams);
 
-    // ── Persist ──
-    _persistPosition(entry);
+    // ── Persist — [M5] state FIRST (seq counter), then position
+    // If crash between: seq counter is saved (no reuse), position is lost (no ghost)
     _persistState(userId);
+    _persistPosition(entry);
 
     // ── Log ──
     _pushLog(userId, 'ENTRY', entry);
@@ -370,10 +567,12 @@ function processBrainDecision(decision, stc, userId) {
         `Tier=${tier} Conf=${fusion.confidence}%`
     );
 
-    // ── Telegram ──
-    const modeEmoji = entry.mode === 'live' ? '🔴' : '🎮';
+    // ── Telegram — [MODE-P5] resolved environment label ──
+    const _tgCreds = getExchangeCreds(userId);
+    const _tgEnv = entry.mode === 'demo' ? 'DEMO' : ((_tgCreds && _tgCreds.mode === 'testnet') ? 'TESTNET' : 'LIVE');
+    const modeEmoji = _tgEnv === 'TESTNET' ? '🟡' : (entry.mode === 'live' ? '🔴' : '🎮');
     telegram.sendToUser(userId,
-        `📥 *${entry.mode.toUpperCase()} ENTRY*\n` +
+        `📥 *${_tgEnv} ENTRY*\n` +
         `${modeEmoji} ${side === 'LONG' ? '🟢' : '🔴'} \`${side}\` \`${entry.symbol}\` @ \`$${price.toFixed(0)}\`\n` +
         `Size: \`$${finalSize}\` | Lev: \`${lev}x\` | Tier: \`${tier}\`\n` +
         `SL: \`$${entry.sl.toFixed(0)}\` | TP: \`$${entry.tp.toFixed(0)}\`\n` +
@@ -384,10 +583,21 @@ function processBrainDecision(decision, stc, userId) {
     if (entry.mode === 'live') {
         _executeLiveEntry(entry, stc).catch(err => {
             logger.error('AT_LIVE', `Live entry failed [${entry.seq}]: ${err.message}`);
-            entry.live = { status: 'ERROR', error: err.message };
+            entry.live = entry.live || { status: 'ERROR', error: err.message };
             _pushLog(userId, 'LIVE_ERROR', { seq: entry.seq, error: err.message });
             _uState(entry.userId).liveStats.errors++;
-            _persistPosition(entry);
+            // [V5.2] Cleanup zombie — no exchange exposure
+            const zIdx = _positions.indexOf(entry);
+            if (zIdx >= 0) {
+                entry.closeReason = 'ENTRY_FAILED_ERROR';
+                entry.closePnl = 0;
+                entry.closeTs = Date.now();
+                if (_persistClose(entry)) {
+                    _positions.splice(zIdx, 1);
+                    _persistState(entry.userId);
+                    logger.warn('AT_LIVE', `[${entry.seq}] Zombie cleanup — removed errored entry`);
+                }
+            }
         });
     }
 
@@ -396,15 +606,73 @@ function processBrainDecision(decision, stc, userId) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// Algo Order Helper — Binance Dec 2025 migration
+// STOP_MARKET / TAKE_PROFIT_MARKET moved from /fapi/v1/order to /fapi/v1/algoOrder
+// Maps: stopPrice→triggerPrice, newClientOrderId→clientAlgoId
+// Response: algoId mapped to orderId for backward compat
+// ══════════════════════════════════════════════════════════════════
+async function _placeConditionalOrder(params, creds) {
+    const mapped = {
+        algoType: 'CONDITIONAL',
+        symbol: params.symbol,
+        side: params.side,
+        type: params.type,
+    };
+    if (params.stopPrice != null) mapped.triggerPrice = String(params.stopPrice);
+    if (params.quantity != null) mapped.quantity = String(params.quantity);
+    if (params.reduceOnly != null) mapped.reduceOnly = String(params.reduceOnly);
+    if (params.newClientOrderId) mapped.clientAlgoId = params.newClientOrderId;
+
+    const data = await sendSignedRequest('POST', '/fapi/v1/algoOrder', mapped, creds);
+    // Normalize algoId → orderId so existing code that reads .orderId keeps working
+    if (data.algoId != null && data.orderId == null) data.orderId = data.algoId;
+    return data;
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Live Execution — Binance API calls (only for live-mode positions)
 // ══════════════════════════════════════════════════════════════════
 async function _executeLiveEntry(entry, stc) {
     entry._livePending = true; // [TL-04] Lock position from onPriceUpdate exits
+    const _lockKey = entry.userId + ':' + entry.symbol;
+    if (_liveEntryLocks.has(_lockKey)) {
+        logger.warn('AT_LIVE', `[${entry.seq}] Live entry SKIPPED uid=${entry.userId} ${entry.symbol} — another entry in-flight`);
+        entry.live = { status: 'LOCK_BLOCKED' };
+        entry._livePending = false;
+        // [V5.2] Cleanup zombie — no exchange exposure
+        const zIdx = _positions.indexOf(entry);
+        if (zIdx >= 0) {
+            entry.closeReason = 'ENTRY_FAILED_LOCK_BLOCKED';
+            entry.closePnl = 0;
+            entry.closeTs = Date.now();
+            if (_persistClose(entry)) {
+                _positions.splice(zIdx, 1);
+                _persistState(entry.userId);
+            }
+            logger.warn('AT_LIVE', `[${entry.seq}] Zombie cleanup — removed lock-blocked entry`);
+        }
+        return;
+    }
+    _liveEntryLocks.add(_lockKey);
     try {
     // [MULTI-USER] Hard guard — no fallback to user 1
     if (!entry.userId) { logger.error('AT_LIVE', 'executeLiveEntry without userId — aborting'); return; }
     const userId = entry.userId;
     const us = _uState(userId);
+
+    // [RE-ENTRY] Re-check atActive — user may have disabled AT between decision and execution
+    if (!us.atActive) {
+        logger.info('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} — AT disabled after decision`);
+        const abortIdx = _positions.indexOf(entry);
+        if (abortIdx >= 0) {
+            entry.closeReason = 'AT_DISABLED_INFLIGHT';
+            entry.closePnl = 0;
+            entry.closeTs = Date.now();
+            if (_persistClose(entry)) { _positions.splice(abortIdx, 1); _persistState(userId); }
+        }
+        return;
+    }
+
     const creds = getExchangeCreds(userId);
     if (!creds) {
         entry.live = { status: 'NO_CREDS' };
@@ -456,13 +724,26 @@ async function _executeLiveEntry(entry, stc) {
     const liveSeq = ++us.liveSeq;
     const clientOrderId = `SAT_${liveSeq}_${Date.now()}`;
 
-    // Set leverage
-    try {
-        await sendSignedRequest('POST', '/fapi/v1/leverage', {
-            symbol: entry.symbol, leverage: entry.lev,
-        }, creds);
-    } catch (levErr) {
-        logger.warn('AT_LIVE', `[${entry.seq}] Leverage set failed (non-fatal): ${levErr.message}`);
+    // Set leverage — BLOCKING: wrong leverage = wrong risk
+    for (let levAttempt = 0; levAttempt < 2; levAttempt++) {
+        try {
+            await sendSignedRequest('POST', '/fapi/v1/leverage', {
+                symbol: entry.symbol, leverage: entry.lev,
+            }, creds);
+            break; // success
+        } catch (levErr) {
+            if (levAttempt === 0) {
+                logger.warn('AT_LIVE', `[${entry.seq}] Leverage set failed, retrying: ${levErr.message}`);
+                await new Promise(r => setTimeout(r, 1000));
+            } else {
+                entry.live = { status: 'LEVERAGE_FAILED', error: levErr.message, intendedLev: entry.lev };
+                _pushLog(userId, 'LIVE_LEVERAGE_FAILED', { seq: entry.seq, leverage: entry.lev, error: levErr.message });
+                logger.error('AT_LIVE', `[${entry.seq}] Leverage set failed — BLOCKING entry: ${levErr.message}`);
+                telegram.sendToUser(userId, `⚠️ *Leverage Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: ${entry.lev}x\nEntry skipped — wrong leverage = wrong risk.\nError: ${levErr.message}`);
+                us.liveStats.blocked++;
+                return;
+            }
+        }
     }
 
     // Round params
@@ -484,7 +765,7 @@ async function _executeLiveEntry(entry, stc) {
         _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: err.message });
         logger.error('AT_LIVE', `[${entry.seq}] MARKET entry failed: ${err.message}`);
         telegram.alertOrderFailed(entry.symbol, entry.side, err.message, userId);
-        audit.record('SAT_ENTRY_FAILED', { seq: entry.seq, symbol: entry.symbol, side: entry.side, error: err.message }, 'SERVER_AT');
+        audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: err.message }, 'SERVER_AT');
         metrics.recordOrder('failed');
         us.liveStats.errors++;
         return;
@@ -517,10 +798,10 @@ async function _executeLiveEntry(entry, stc) {
     const avgPrice = parseFloat(verifiedOrder.avgPrice || 0);
     const executedQty = parseFloat(verifiedOrder.executedQty || 0);
     const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
-    if (avgPrice <= 0 || executedQty <= 0) {
+    if (!Number.isFinite(avgPrice) || avgPrice <= 0 || !Number.isFinite(executedQty) || executedQty <= 0) {
         entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data', orderId: mainOrder.orderId };
         logger.error('AT_LIVE', `[${entry.seq}] Entry aborted — no confirmed fill (avgPrice=${avgPrice}, qty=${executedQty})`);
-        telegram.sendToUser(userId, `🚨 *ENTRY ABORTED*\n${entry.symbol} ${entry.side} — fill data missing. Order ${mainOrder.orderId} may be open on exchange. CHECK MANUALLY.`);
+        telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — fill data missing. Order ${mainOrder.orderId} may be open on exchange.\nPosition kept tracked — reconciliation will verify.`);
         us.liveStats.errors++;
         return;
     }
@@ -528,10 +809,20 @@ async function _executeLiveEntry(entry, stc) {
     // [FIX2] Re-round using ACTUAL executedQty (not original qty) for all downstream orders
     const fillQty = String(roundOrderParams(entry.symbol, executedQty).quantity || executedQty);
 
-    logger.info('AT_LIVE', `[${entry.seq}] ENTRY FILLED ${entry.side} ${entry.symbol} qty=${executedQty} @ $${avgPrice}`);
+    // Slippage tracking — compare fill price vs expected price
+    const entrySlippage = avgPrice - entry.price;
+    const entrySlippagePct = entry.price > 0 ? +((entrySlippage / entry.price) * 100).toFixed(4) : 0;
+    entry.live = entry.live || {};
+    entry.live.entrySlippage = entrySlippage;
+    entry.live.entrySlippagePct = entrySlippagePct;
+    entry.live.expectedPrice = entry.price;
+    entry.live.fillPrice = avgPrice;
+
+    logger.info('AT_LIVE', `[${entry.seq}] ENTRY FILLED ${entry.side} ${entry.symbol} qty=${executedQty} @ $${avgPrice} (expected $${entry.price.toFixed(2)}, slippage ${entrySlippagePct >= 0 ? '+' : ''}${entrySlippagePct}%)`);
     audit.record('SAT_ENTRY_FILLED', {
-        seq: entry.seq, symbol: entry.symbol, side: entry.side,
+        userId, seq: entry.seq, symbol: entry.symbol, side: entry.side,
         qty: executedQty, avgPrice, orderId: mainOrder.orderId, tier: entry.tier,
+        slippage: entrySlippagePct,
     }, 'SERVER_AT');
     metrics.recordOrder('filled');
     telegram.alertOrderFilled(entry.symbol, entry.side, executedQty, avgPrice, mainOrder.orderId, userId);
@@ -541,7 +832,7 @@ async function _executeLiveEntry(entry, stc) {
     const SL_RETRY_DELAYS = [1000, 3000]; // [ZT-AUD-007] 1s, 3s backoff (max 4s vs old 17s)
     for (let attempt = 0; attempt <= SL_RETRY_DELAYS.length; attempt++) {
         try {
-            slOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+            slOrder = await _placeConditionalOrder({
                 symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
                 quantity: fillQty,
                 stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl),
@@ -568,14 +859,15 @@ async function _executeLiveEntry(entry, stc) {
                 quantity: fillQty, reduceOnly: true,
                 newClientOrderId: `SAT_EMGCLOSE_${liveSeq}`,
             }, creds);
-            const emgPrice = parseFloat(emgResult.avgPrice || avgPrice);
-            const emgPnl = entry.side === 'LONG'
+            const _emgRaw = parseFloat(emgResult.avgPrice);
+            const emgPrice = (Number.isFinite(_emgRaw) && _emgRaw > 0) ? _emgRaw : avgPrice;
+            const emgPnl = avgPrice > 0 ? (entry.side === 'LONG'
                 ? +((emgPrice - avgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)
-                : +((avgPrice - emgPrice) / avgPrice * entry.size * entry.lev).toFixed(2);
+                : +((avgPrice - emgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)) : 0;
             entry.live = { status: 'EMERGENCY_CLOSED', liveSeq, clientOrderId, mainOrderId: mainOrder.orderId, avgPrice, executedQty, reason: 'SL placement failed after all retries' };
             logger.warn('AT_LIVE', `[${entry.seq}] Emergency close executed @ $${emgPrice.toFixed(2)} PnL=$${emgPnl.toFixed(2)}`);
             telegram.sendToUser(userId, `✅ Emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${emgPrice.toFixed(2)} — PnL: $${emgPnl.toFixed(2)}`);
-            audit.record('SAT_EMERGENCY_CLOSE', { seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'SERVER_AT');
+            audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'SERVER_AT');
             // [FIX1] Properly close position — remove from _positions, update stats, persist
             const emgIdx = _positions.findIndex(p => p.seq === entry.seq);
             if (emgIdx >= 0) {
@@ -594,7 +886,7 @@ async function _executeLiveEntry(entry, stc) {
     const TP_RETRY_DELAYS = [1000, 3000]; // [ZT-AUD-007] 1s, 3s backoff (consistent with SL)
     for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
         try {
-            tpOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+            tpOrder = await _placeConditionalOrder({
                 symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
                 quantity: fillQty,
                 stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
@@ -615,22 +907,23 @@ async function _executeLiveEntry(entry, stc) {
     if (!tpOrder && slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL TP retries exhausted — executing EMERGENCY MARKET CLOSE`);
         telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${TP_RETRY_DELAYS.length + 1} TP attempts failed.\nEmergency closing — position cannot stay open without TP protection.`);
-        // Cancel SL order first (we're closing the position)
-        if (slOrder && slOrder.orderId) _cancelOrderSafe(entry.symbol, slOrder.orderId, creds);
+        // Cancel SL order first (we're closing the position) — await to prevent SL fill racing with emergency close
+        if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
         try {
             const tpEmgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
                 symbol: entry.symbol, side: closeSide, type: 'MARKET',
                 quantity: fillQty, reduceOnly: true,
                 newClientOrderId: `SAT_TPEMG_${liveSeq}`,
             }, creds);
-            const tpEmgPrice = parseFloat(tpEmgResult.avgPrice || avgPrice);
-            const tpEmgPnl = entry.side === 'LONG'
+            const _tpEmgRaw = parseFloat(tpEmgResult.avgPrice);
+            const tpEmgPrice = (Number.isFinite(_tpEmgRaw) && _tpEmgRaw > 0) ? _tpEmgRaw : avgPrice;
+            const tpEmgPnl = avgPrice > 0 ? (entry.side === 'LONG'
                 ? +((tpEmgPrice - avgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)
-                : +((avgPrice - tpEmgPrice) / avgPrice * entry.size * entry.lev).toFixed(2);
+                : +((avgPrice - tpEmgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)) : 0;
             entry.live = { status: 'EMERGENCY_CLOSED', liveSeq, clientOrderId, mainOrderId: mainOrder.orderId, avgPrice, executedQty, reason: 'TP placement failed after all retries' };
             logger.warn('AT_LIVE', `[${entry.seq}] TP emergency close executed @ $${tpEmgPrice.toFixed(2)} PnL=$${tpEmgPnl.toFixed(2)}`);
             telegram.sendToUser(userId, `✅ TP emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${tpEmgPrice.toFixed(2)} — PnL: $${tpEmgPnl.toFixed(2)}`);
-            audit.record('SAT_EMERGENCY_CLOSE', { seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice: tpEmgPrice, emgPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' }, 'SERVER_AT');
+            audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice: tpEmgPrice, emgPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' }, 'SERVER_AT');
             const tpEmgIdx = _positions.findIndex(p => p.seq === entry.seq);
             if (tpEmgIdx >= 0) _closePosition(tpEmgIdx, entry, 'EMERGENCY_CLOSED', tpEmgPrice, tpEmgPnl);
             return; // position closed — no further processing needed
@@ -664,7 +957,44 @@ async function _executeLiveEntry(entry, stc) {
     _persistState(userId);
     } finally {
         entry._livePending = false; // [TL-04] Unlock — all paths covered
-        _persistPosition(entry);
+        _liveEntryLocks.delete(_lockKey); // Release per-symbol lock
+
+        // [B18] FILL_UNVERIFIED: keep tracked — order may be filled on Binance
+        // Do NOT delete. Reconciliation will verify exchange state on next cycle (60s).
+        if (entry.live && entry.live.status === 'FILL_UNVERIFIED') {
+            logger.warn('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED — keeping position tracked for reconciliation`);
+            telegram.sendToUser(entry.userId,
+                `⚠️ *FILL UNVERIFIED — POSITION TRACKED*\n` +
+                `${entry.side} ${entry.symbol}\n` +
+                `Market order sent but fill NOT confirmed.\n` +
+                `Position kept tracked for reconciliation.\n` +
+                `Order ID: \`${entry.live.orderId || '?'}\`\n` +
+                `Check Binance manually if alert persists.`
+            );
+            _persistPosition(entry);
+        }
+
+        // [V5.2] Cleanup zombie positions — failed live entries with no exchange exposure
+        // (FILL_UNVERIFIED excluded — may have real exchange exposure)
+        const _failedStatuses = new Set([
+            'NO_CREDS', 'RISK_BLOCKED', 'INSUFFICIENT_MARGIN', 'MARGIN_CHECK_FAILED',
+            'LEVERAGE_FAILED', 'ENTRY_FAILED', 'LOCK_BLOCKED', 'ERROR',
+        ]);
+        if (entry.live && _failedStatuses.has(entry.live.status)) {
+            const zIdx = _positions.indexOf(entry);
+            if (zIdx >= 0) {
+                entry.closeReason = 'ENTRY_FAILED_' + entry.live.status;
+                entry.closePnl = 0;
+                entry.closeTs = Date.now();
+                if (_persistClose(entry)) {
+                    _positions.splice(zIdx, 1);
+                    _persistState(entry.userId);
+                    logger.warn('AT_LIVE', `[${entry.seq}] Zombie cleanup — removed failed live entry (${entry.live.status})`);
+                }
+            }
+        } else {
+            _persistPosition(entry);
+        }
     }
 }
 
@@ -681,47 +1011,110 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     const creds = getExchangeCreds(userId);
     if (!creds) return;
 
-    // [FIX4] For EXPIRED: send market close and capture real fill price
-    if (exitType === 'EXPIRED') {
-        try {
-            const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
-            const rounded = roundOrderParams(pos.symbol, pos.live.executedQty);
-            const expResult = await sendSignedRequest('POST', '/fapi/v1/order', {
-                symbol: pos.symbol, side: closeSide, type: 'MARKET',
-                quantity: String(rounded.quantity || pos.live.executedQty),
-                reduceOnly: true, newClientOrderId: `SAT_EXP_${pos.live.liveSeq}`,
-            }, creds);
-            // [FIX4] Update exitPrice/pnl with actual fill price
-            const realExitPrice = parseFloat(expResult.avgPrice || exitPrice);
-            if (realExitPrice > 0) {
-                const realPnl = pos.side === 'LONG'
-                    ? +((realExitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                    : +((pos.price - realExitPrice) / pos.price * pos.size * pos.lev).toFixed(2);
-                pos.closePnl = realPnl;
-                pos.closeTs = Date.now();
-                exitPrice = realExitPrice;
-                pnl = realPnl;
-                logger.info('AT_LIVE', `[${pos.seq}] Expiry close filled @ $${realExitPrice.toFixed(2)} PnL=$${realPnl.toFixed(2)}`);
-            }
-        } catch (err) {
-            logger.error('AT_LIVE', `[${pos.seq}] Expiry close failed: ${err.message}`);
-            telegram.sendToUser(userId, `⚠️ Expiry close FAILED for ${pos.symbol} ${pos.side} — MANUAL CLOSE REQUIRED!`);
-        }
-        // Cancel both SL and TP after expiry close
-        for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
-            if (oid) _cancelOrderSafe(pos.symbol, oid, creds);
-        }
-    } else if (exitType === 'HIT_SL') {
+    // [FIX-EXPIRY] EXPIRED handling removed — no code path produces EXPIRED anymore
+    if (exitType === 'HIT_SL') {
         // SL triggered on exchange — cancel remaining TP
-        if (pos.live.tpOrderId) _cancelOrderSafe(pos.symbol, pos.live.tpOrderId, creds);
+        if (pos.live.tpOrderId) await _cancelOrderSafe(pos.symbol, pos.live.tpOrderId, creds, userId);
+        // Query real fill price from SL order (best-effort — corrects slippage)
+        if (pos.live.slOrderId) {
+            try {
+                // [ALGO-FIX] Try algo order query first (SL is now algo), fallback to regular
+                let slOrder;
+                try {
+                    slOrder = await sendSignedRequest('GET', '/fapi/v1/algoOrder', { algoId: pos.live.slOrderId }, creds);
+                } catch (_) {
+                    slOrder = await sendSignedRequest('GET', '/fapi/v1/order', { symbol: pos.symbol, orderId: pos.live.slOrderId }, creds);
+                }
+                const realFill = parseFloat(slOrder.avgPrice || slOrder.executedPrice || 0);
+                const slStatus = slOrder.status || slOrder.algoStatus || '';
+                if (Number.isFinite(realFill) && realFill > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
+                    // Exit slippage tracking
+                    const expectedExitPrice = pos.sl;
+                    const exitSlippage = realFill - expectedExitPrice;
+                    const exitSlippagePct = expectedExitPrice > 0 ? +((exitSlippage / expectedExitPrice) * 100).toFixed(4) : 0;
+                    pos.live.exitSlippage = exitSlippage;
+                    pos.live.exitSlippagePct = exitSlippagePct;
+                    pos.live.exitFillPrice = realFill;
+                    pos.live.exitExpectedPrice = expectedExitPrice;
+
+                    const realPnl = pos.side === 'LONG'
+                        ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                        : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                    if (realPnl !== pos.closePnl) {
+                        const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
+                        logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
+                        pos.closePnl = realPnl;
+                        pnl = realPnl;
+                        // Correct stats with delta from slippage
+                        const _us = _uState(userId);
+                        _us.stats.pnl = +(_us.stats.pnl + pnlDelta).toFixed(2);
+                        _us.liveStats.pnl = +(_us.liveStats.pnl + pnlDelta).toFixed(2);
+                        _us.dailyPnL = +(_us.dailyPnL + pnlDelta).toFixed(2);
+                        _us.dailyPnLLive = +(_us.dailyPnLLive + pnlDelta).toFixed(2);
+                        _persistState(userId);
+                        _persistClose(pos);
+                    }
+                }
+            } catch (slErr) {
+                logger.warn('AT_LIVE', `[${pos.seq}] SL fill query failed: ${slErr.message}`);
+            }
+        }
     } else if (exitType === 'HIT_TP') {
         // TP triggered on exchange — cancel remaining SL
-        if (pos.live.slOrderId) _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds);
+        if (pos.live.slOrderId) await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds, userId);
     } else {
-        // [FIX3] All other exit types (RECON_PHANTOM, DSL_PL, DSL_TTP, MANUAL_CLIENT, etc.)
+        // All other exit types: DSL_PL, DSL_TTP, MANUAL_CLIENT, RESET, RECON_PHANTOM, etc.
+
+        // [V5.1] Server-side exits need a MARKET close on Binance (position is still open on exchange)
+        // Exception: RECON_PHANTOM / RECON_EXCHANGE_CLOSED — Binance already doesn't have the position
+        if (exitType !== 'RECON_PHANTOM' && exitType !== 'RECON_EXCHANGE_CLOSED' && pos.live.executedQty) {
+            const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
+            const rounded = roundOrderParams(pos.symbol, pos.live.executedQty);
+            // [LIVE-PARITY] Retry loop for market close (was single attempt)
+            const CLOSE_RETRIES = [1000, 3000, 5000];
+            let closeResult = null;
+            for (let attempt = 0; attempt <= CLOSE_RETRIES.length; attempt++) {
+                try {
+                    closeResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                        symbol: pos.symbol,
+                        side: closeSide,
+                        type: 'MARKET',
+                        quantity: String(rounded.quantity || pos.live.executedQty),
+                        reduceOnly: true,
+                        newClientOrderId: `SAT_EXIT_${pos.live.liveSeq}_${Date.now()}`,
+                    }, creds);
+                    break; // success
+                } catch (closeErr) {
+                    logger.error('AT_LIVE', `[${pos.seq}] ${exitType} market close attempt ${attempt + 1}/${CLOSE_RETRIES.length + 1} failed: ${closeErr.message}`);
+                    if (attempt < CLOSE_RETRIES.length) {
+                        await new Promise(r => setTimeout(r, CLOSE_RETRIES[attempt]));
+                    } else {
+                        // All retries exhausted — queue for reconciliation
+                        _pendingLiveCloses.set(pos.seq, { pos, exitType, exitPrice, pnl, ts: Date.now() });
+                        logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — queued for reconciliation`);
+                        telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on Binance — reconciliation will retry.*`);
+                    }
+                }
+            }
+            if (closeResult) {
+                const _clRaw = parseFloat(closeResult.avgPrice);
+                const realFill = (Number.isFinite(_clRaw) && _clRaw > 0) ? _clRaw : exitPrice;
+                if (realFill > 0 && pos.price > 0) {
+                    const realPnl = pos.side === 'LONG'
+                        ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                        : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                    pos.live.exitFillPrice = realFill;
+                    pos.live.exitExpectedPrice = exitPrice;
+                    pos.closePnl = realPnl;
+                    pnl = realPnl;
+                }
+                logger.info('AT_LIVE', `[${pos.seq}] ${exitType} market close filled @ $${(closeResult.avgPrice || exitPrice)} PnL=$${pnl.toFixed(2)}`);
+            }
+        }
+
         // Cancel BOTH remaining SL and TP orders to avoid orphans on Binance
         for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
-            if (oid) _cancelOrderSafe(pos.symbol, oid, creds);
+            if (oid) await _cancelOrderSafe(pos.symbol, oid, creds, userId);
         }
     }
 
@@ -731,7 +1124,7 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
 
     const holdMin = ((pos.closeTs - pos.ts) / 60000).toFixed(1);
     audit.record('SAT_EXIT', {
-        seq: pos.seq, symbol: pos.symbol, side: pos.side,
+        userId, seq: pos.seq, symbol: pos.symbol, side: pos.side,
         exitType, exitPrice, pnl, holdMin,
     }, 'SERVER_AT');
 
@@ -750,16 +1143,45 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     logger.info('AT_LIVE', `[${pos.seq}] uid=${userId} LIVE EXIT ${exitType} ${pos.side} ${pos.symbol} PnL=$${pnl.toFixed(2)}`);
 }
 
-async function _cancelOrderSafe(symbol, orderId, creds) {
-    try {
-        await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol, orderId }, creds);
-    } catch (err) {
-        logger.warn('AT_LIVE', `Cancel order ${orderId} failed: ${err.message}`);
+async function _cancelOrderSafe(symbol, orderId, creds, userId) {
+    // [ALGO-FIX] SL/TP are now algo orders — try algo cancel first, then regular
+    for (let attempt = 0; attempt < 2; attempt++) {
+        // Try algo order cancel (SL/TP since Dec 2025)
+        try {
+            await sendSignedRequest('DELETE', '/fapi/v1/algoOrder', { symbol, algoId: orderId }, creds);
+            return true;
+        } catch (algoErr) {
+            const am = algoErr.message || '';
+            // Not found on algo endpoint — try regular endpoint below
+            if (!am.includes('not found') && !am.includes('Unknown') && !am.includes('not active') && !am.includes('2011')) {
+                // Real error on algo endpoint — still try regular as fallback
+            }
+        }
+        // Try regular order cancel (MARKET/LIMIT orders, or legacy SL/TP)
+        try {
+            await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol, orderId }, creds);
+            return true;
+        } catch (err) {
+            const msg = err.message || '';
+            if (msg.includes('Unknown order') || msg.includes('2011')) {
+                return true; // already cancelled/filled/expired
+            }
+            if (attempt === 0) {
+                logger.warn('AT_LIVE', `Cancel order ${orderId} failed, retrying: ${msg}`);
+                await new Promise(r => setTimeout(r, 2000));
+            } else {
+                logger.error('AT_LIVE', `Cancel order ${orderId} FAILED after retry: ${msg}`);
+                if (userId) {
+                    try { telegram.sendToUser(userId, `⚠️ *Orphan Order Alert*\nFailed to cancel order \`${orderId}\` on ${symbol}\nCheck Binance manually!`); } catch (_) { }
+                }
+                return false;
+            }
+        }
     }
 }
 
 // ══════════════════════════════════════════════════════════════════
-// _closePosition — unified close handler (SL/TP/DSL/TTP/Expire)
+// _closePosition — unified close handler (SL/TP/DSL/TTP/MANUAL/RECON/EMERGENCY/RESET)
 // ══════════════════════════════════════════════════════════════════
 function _closePosition(idx, pos, exitType, price, pnl) {
     // [MULTI-USER] Hard guard — no fallback to user 1
@@ -771,14 +1193,58 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     pos.closeTs = Date.now();
     pos.closePnl = pnl;
     pos.closeReason = exitType;
+    // Save current regime at exit time (lazy require to avoid circular dep)
+    try {
+        const snap = require('./serverState').getSnapshotForSymbol(pos.symbol);
+        if (snap && snap.indicators) {
+            pos.closeRegime = snap.indicators.regime || null;
+            pos.closeRegimeConf = snap.indicators.regimeConf || null;
+        }
+    } catch (_) { /* serverState not ready */ }
+    // Entry/Exit quality scoring (MAE/MFE)
+    if (pos.price > 0 && price > 0) {
+        const minP = pos._minPrice || pos.price;
+        const maxP = pos._maxPrice || pos.price;
+        const entry = pos.price;
+        if (pos.side === 'LONG') {
+            pos.quality = {
+                mae: +((minP - entry) / entry * 100).toFixed(2),       // worst drawdown % (negative = adverse)
+                mfe: +((maxP - entry) / entry * 100).toFixed(2),       // best run-up %
+                exitPct: +((price - entry) / entry * 100).toFixed(2),  // actual exit %
+                capturedPct: (maxP > entry) ? +(((price - entry) / (maxP - entry)) * 100).toFixed(1) : 0,  // % of max move captured
+                minPrice: minP,
+                maxPrice: maxP,
+            };
+        } else {
+            pos.quality = {
+                mae: +((entry - maxP) / entry * 100).toFixed(2),       // worst (price went up = adverse for SHORT)
+                mfe: +((entry - minP) / entry * 100).toFixed(2),       // best (price went down = favorable for SHORT)
+                exitPct: +((entry - price) / entry * 100).toFixed(2),
+                capturedPct: (minP < entry) ? +(((entry - price) / (entry - minP)) * 100).toFixed(1) : 0,
+                minPrice: minP,
+                maxPrice: maxP,
+            };
+        }
+    }
     us.stats.exits++;
     us.stats.pnl = +(us.stats.pnl + pnl).toFixed(2);
     if (pnl > 0) us.stats.wins++;
     else us.stats.losses++;
+    if (pos.mode !== 'live') {
+        us.demoStats.exits++;
+        us.demoStats.pnl = +(us.demoStats.pnl + pnl).toFixed(2);
+        if (pnl > 0) us.demoStats.wins++;
+        else us.demoStats.losses++;
+    }
 
     // ── Demo: refund margin + apply PnL ──
     if (pos.mode === 'demo') {
         us.demoBalance = +(us.demoBalance + pos.margin + pnl).toFixed(2);
+    }
+
+    // ── Live: adjust liveBalanceRef with PnL for kill switch accuracy ──
+    if (pos.mode === 'live' && us.liveBalanceRef > 0) {
+        us.liveBalanceRef = +(us.liveBalanceRef + pnl).toFixed(2);
     }
 
     const dslState = serverDSL.getState(pos.seq);
@@ -797,7 +1263,10 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     );
 
     const emoji = pnl > 0 ? '✅' : pnl < 0 ? '❌' : '⏳';
-    const modeTag = pos.mode === 'live' ? '🔴 LIVE' : '🎮 DEMO';
+    // [MODE-P5] Resolved environment for Telegram exit label
+    const _exitCreds = getExchangeCreds(userId);
+    const _exitEnv = pos.mode === 'demo' ? 'DEMO' : ((_exitCreds && _exitCreds.mode === 'testnet') ? 'TESTNET' : 'LIVE');
+    const modeTag = _exitEnv === 'TESTNET' ? '🟡 TESTNET' : (pos.mode === 'live' ? '🔴 LIVE' : '🎮 DEMO');
     const phaseLabel = dslState ? ` | DSL: ${dslState.phase}` : '';
     telegram.sendToUser(userId,
         `${emoji} *${modeTag} EXIT — ${exitType}*\n` +
@@ -820,10 +1289,37 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     else { us.dailyPnLDemo = +(us.dailyPnLDemo + pnl).toFixed(2); }
     _checkKillSwitch(userId);
 
+    // [RE-ENTRY] Set close cooldown so brain won't re-enter this symbol immediately
+    _closeCooldowns.set(userId + ':' + pos.symbol, Date.now());
+
     // ── Persist close + remove from active ──
-    _persistClose(pos);
-    _positions.splice(idx, 1);
+    // [B4] Splice only if persist succeeds — prevents ghost positions on DB failure
+    if (_persistClose(pos)) {
+        _positions.splice(idx, 1);
+    } else {
+        // DB failed — keep in memory to retry on next close attempt, don't lose the position
+        logger.error('AT_DB', `[${pos.seq}] Position kept in memory — archive failed, will retry`);
+    }
     _persistState(userId);
+
+    // [REFLECTION] Post-trade reflection — brain analyzes what happened
+    try {
+        const serverReflection = require('./serverReflection');
+        const tradeForReflection = Object.assign({}, pos, {
+            mae: pos.quality ? pos.quality.mae : null,
+            mfe: pos.quality ? pos.quality.mfe : null,
+            entrySnapshot: pos.entrySnapshot || pos._entrySnapshot || {},
+        });
+        serverReflection.reflectOnTrade(tradeForReflection, null, userId);
+        // Calibration update
+        serverReflection.updateCalibration(
+            (pos.entrySnapshot && pos.entrySnapshot.confidence) || 0,
+            pnl > 0,
+            userId
+        );
+    } catch (reflErr) {
+        logger.warn('AT_ENGINE', `Reflection hook failed: ${reflErr.message}`);
+    }
     _notifyChange(userId);
 }
 
@@ -842,22 +1338,16 @@ async function _updateLiveSL(pos, newSL) {
     const creds = getExchangeCreds(userId);
     if (!creds) return;
 
-    // Cancel old SL first
-    let cancelOk = false;
-    try {
-        await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds);
-        cancelOk = true;
-    } catch (_) { cancelOk = true; /* cancel failures are non-fatal — order may already be filled/expired */ }
-
-    // Place new SL with retry logic
+    const oldSlOrderId = pos.live.slOrderId;
     const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
     const rounded = roundOrderParams(pos.symbol, pos.live.executedQty, newSL);
     const DSL_SL_RETRIES = [1000, 3000, 8000]; // 3 retries with backoff
     let newSlOrder = null;
 
+    // [LIVE-PARITY] STEP 1: Place new SL FIRST — position stays protected by old SL during placement
     for (let attempt = 0; attempt <= DSL_SL_RETRIES.length; attempt++) {
         try {
-            newSlOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+            newSlOrder = await _placeConditionalOrder({
                 symbol: pos.symbol, side: closeSide, type: 'STOP_MARKET',
                 quantity: String(rounded.quantity || pos.live.executedQty),
                 stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : newSL),
@@ -877,13 +1367,16 @@ async function _updateLiveSL(pos, newSL) {
         }
     }
 
-    // If all retries failed: position is now unprotected (old SL cancelled, new SL not placed)
+    // [LIVE-PARITY] STEP 2: Cancel old SL only AFTER new one is confirmed
+    if (newSlOrder && oldSlOrderId) {
+        await _cancelOrderSafe(pos.symbol, oldSlOrderId, creds, userId);
+    }
+
+    // If new SL failed: old SL is still active — position remains protected at previous level
     if (!newSlOrder) {
-        pos.live.status = 'LIVE_NO_SL';
-        pos.live.slOrderId = null;
-        _persistPosition(pos);
-        logger.error('AT_LIVE', `[${pos.seq}] CRITICAL: DSL SL update ALL retries failed — position UNPROTECTED`);
-        telegram.sendToUser(userId, `🚨 *DSL SL UPDATE FAILED*\n${pos.side} ${pos.symbol}\nOld SL cancelled, new SL ($${newSL.toFixed(2)}) could not be placed after ${DSL_SL_RETRIES.length + 1} attempts.\nPosition is *UNPROTECTED*. Place manual SL immediately!`);
+        // DON'T set LIVE_NO_SL — old SL is still there
+        logger.warn('AT_LIVE', `[${pos.seq}] DSL SL update failed — old SL still active at previous level`);
+        telegram.sendToUser(userId, `⚠️ *DSL SL Update Failed*\n${pos.side} ${pos.symbol}\nOld SL still active. New SL ($${newSL.toFixed(2)}) could not be placed.\nPosition remains protected at previous SL level.`);
     }
     } finally { // [TL-05] Release lock and drain queued SL if any
         pos._slUpdateInFlight = false;
@@ -922,13 +1415,18 @@ function _checkKillSwitch(userId) {
     const us = _uState(userId);
     if (us.killActive) return;
     const pct = us.killPct || 5;
-    const balRef = us.engineMode === 'live'
-        ? (us.liveBalanceRef > 0 ? us.liveBalanceRef : (us.demoBalance || 10000))
-        : (us.demoBalance > 0 ? us.demoBalance : 10000);
+    let balRef;
+    if (us.engineMode === 'live') {
+        if (us.liveBalanceRef > 0) { balRef = us.liveBalanceRef; }
+        else { return; } // no live balance ref — skip to avoid false trigger
+    } else {
+        balRef = us.demoBalance > 0 ? us.demoBalance : 10000;
+    }
     const lossLimit = +(balRef * pct / 100).toFixed(2);
     const lossSinceReset = us.dailyPnL - (us.pnlAtReset || 0);
     if (lossSinceReset <= -lossLimit && lossLimit > 0) {
         us.killActive = true;
+        audit.record('KILL_SWITCH_TRIGGERED', { userId, loss: lossSinceReset, limit: lossLimit, pct, balRef, mode: us.engineMode }, 'SERVER_AT');
         logger.warn('AT_ENGINE', `KILL SWITCH uid=${userId} — loss $${lossSinceReset.toFixed(2)} <= -$${lossLimit.toFixed(2)} (${pct}% of $${balRef.toFixed(0)})`);
         telegram.sendToUser(userId,
             '🛑 *KILL SWITCH ACTIVATED*\n' +
@@ -945,17 +1443,28 @@ function activateKillSwitch(userId) {
     const us = _uState(userId);
     us.killActive = true;
     _persistState(userId);
+    audit.record('KILL_SWITCH_MANUAL', { userId, action: 'activate' }, 'user');
     logger.warn('AT_ENGINE', `Kill switch manually activated uid=${userId}`);
     telegram.sendToUser(userId, '🛑 *Kill Switch MANUALLY Activated*\nAll new entries BLOCKED until manual reset or UTC day change');
     _notifyChange(userId);
     return { ok: true, killActive: true };
 }
 
+const _killResetCooldown = new Map(); // userId → last reset timestamp
+const KILL_RESET_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes between resets
+
 function resetKill(userId) {
+    const lastReset = _killResetCooldown.get(userId) || 0;
+    if (Date.now() - lastReset < KILL_RESET_COOLDOWN_MS) {
+        const waitSec = Math.ceil((KILL_RESET_COOLDOWN_MS - (Date.now() - lastReset)) / 1000);
+        return { ok: false, error: `Kill switch reset cooldown — wait ${waitSec}s` };
+    }
+    _killResetCooldown.set(userId, Date.now());
     const us = _uState(userId);
     us.killActive = false;
     us.pnlAtReset = us.dailyPnL;
     _persistState(userId);
+    audit.record('KILL_SWITCH_RESET', { userId, dailyPnL: us.dailyPnL, mode: us.engineMode }, 'user');
     const balRef = us.engineMode === 'live'
         ? (us.liveBalanceRef > 0 ? us.liveBalanceRef : (us.demoBalance || 10000))
         : (us.demoBalance > 0 ? us.demoBalance : 10000);
@@ -992,10 +1501,16 @@ function onPriceUpdate(symbol, price) {
     if (!price || price <= 0) return;
 
     const dslChangedUsers = new Set();
+    // Snapshot length to avoid issues if array mutates during iteration
     for (let i = _positions.length - 1; i >= 0; i--) {
+        if (i >= _positions.length) continue; // guard: array shrunk during iteration
         const pos = _positions[i];
-        if (pos.symbol !== symbol) continue;
+        if (!pos || pos.symbol !== symbol) continue;
+        if (pos.status && pos.status !== 'OPEN') continue; // already closing
         pos._lastPrice = price; // track for client-initiated close PnL
+        // MAE/MFE tracking — min/max price during position lifetime
+        if (!pos._minPrice || price < pos._minPrice) pos._minPrice = price;
+        if (!pos._maxPrice || price > pos._maxPrice) pos._maxPrice = price;
 
         // [BUG3 FIX] Skip server-side automated exits when user has manual control
         // [F3] Safety timeout — revert to 'auto' after 30min of user control
@@ -1065,7 +1580,8 @@ function onPriceUpdate(symbol, price) {
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
             } else if (price >= pos.tp) {
-                _closePosition(i, pos, 'HIT_TP', price, pos.tpPnl);
+                var tpPnlReal = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
+                _closePosition(i, pos, 'HIT_TP', price, tpPnlReal);
                 closed = true;
             }
         } else {
@@ -1076,7 +1592,8 @@ function onPriceUpdate(symbol, price) {
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
             } else if (price <= pos.tp) {
-                _closePosition(i, pos, 'HIT_TP', price, pos.tpPnl);
+                var tpPnlRealS = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
+                _closePosition(i, pos, 'HIT_TP', price, tpPnlRealS);
                 closed = true;
             }
         }
@@ -1088,24 +1605,8 @@ function onPriceUpdate(symbol, price) {
     for (const uid of dslChangedUsers) _notifyChange(uid);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// Expire stale positions (>4h)
-// ══════════════════════════════════════════════════════════════════
-const EXPIRE_MS = 4 * 60 * 60 * 1000;
-function expireStale() {
-    const now = Date.now();
-    for (let i = _positions.length - 1; i >= 0; i--) {
-        const pos = _positions[i];
-        if (now - pos.ts > EXPIRE_MS) {
-            // [FIX4] Use last known market price for PnL calc, not entry price
-            const exitPrice = pos._lastPrice || pos.price;
-            const pnl = pos.side === 'LONG'
-                ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2);
-            _closePosition(i, pos, 'EXPIRED', exitPrice, pnl);
-        }
-    }
-}
+// [FIX-EXPIRY] expireStale removed — time-based expiry fully eliminated
+// Positions close only via: SL, TP, DSL_PL, DSL_TTP, MANUAL_CLIENT, EMERGENCY_CLOSED, RECON_PHANTOM, RESET, kill switch
 
 // ══════════════════════════════════════════════════════════════════
 // Log ring buffer (per-user)
@@ -1140,10 +1641,32 @@ function getOpenPositions(userId) {
 
 function getOpenCount(userId) { return _positions.filter(p => p.userId === userId).length; }
 
+// [RE-ENTRY] Check if symbol was recently closed (prevents immediate re-entry)
+function isCloseCooldownActive(userId, symbol) {
+    const key = userId + ':' + symbol;
+    const ts = _closeCooldowns.get(key);
+    if (!ts) return false;
+    if ((Date.now() - ts) > CLOSE_COOLDOWN_MS) {
+        _closeCooldowns.delete(key); // expired, clean up
+        return false;
+    }
+    return true;
+}
+
 function getLog(userId, limit) {
     const us = _uState(userId);
     limit = Math.min(limit || 50, MAX_LOG);
     return us.log.slice(-limit);
+}
+
+function _filterDslByUser(userId) {
+    const userSeqs = new Set(_positions.filter(p => p.userId === userId).map(p => String(p.seq)));
+    const all = serverDSL.getAllStates();
+    const filtered = {};
+    for (const [seq, state] of Object.entries(all)) {
+        if (userSeqs.has(seq)) filtered[seq] = state;
+    }
+    return filtered;
 }
 
 function getStats(userId) {
@@ -1162,7 +1685,7 @@ function getStats(userId) {
         dailyPnLLive: us.dailyPnLLive,
         killActive: us.killActive,
         killPct: us.killPct || 5,
-        dslStates: serverDSL.getAllStates(),
+        dslStates: _filterDslByUser(userId),
     };
 }
 
@@ -1181,8 +1704,12 @@ function getLiveStats(userId) {
 
 function getLivePositions(userId) {
     // [DSL-FIX2] Include LIVE_NO_SL positions (so user can see them) + attach DSL state
+    // [AT-PANEL] Also include _livePending positions so client sees them before exchange fill
     return _positions
-        .filter(p => p.userId === userId && p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL'))
+        .filter(p => p.userId === userId && p.mode === 'live' && (
+            (p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL')) ||
+            p._livePending === true
+        ))
         .map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
 }
 
@@ -1193,15 +1720,11 @@ function getDemoBalance(userId) {
 
 function getDemoStats(userId) {
     const us = _uState(userId);
-    const dEntries = us.stats.entries - (us.liveStats.entries || 0);
-    const dExits = us.stats.exits - (us.liveStats.exits || 0);
-    const dPnl = +(us.stats.pnl - (us.liveStats.pnl || 0)).toFixed(2);
-    const dWins = us.stats.wins - (us.liveStats.wins || 0);
-    const dLosses = us.stats.losses - (us.liveStats.losses || 0);
-    const wr = dExits > 0 ? +(dWins / dExits * 100).toFixed(1) : 0;
+    const ds = us.demoStats;
+    const wr = ds.exits > 0 ? +(ds.wins / ds.exits * 100).toFixed(1) : 0;
     return {
-        entries: dEntries, exits: dExits, pnl: dPnl,
-        wins: dWins, losses: dLosses, winRate: wr,
+        entries: ds.entries, exits: ds.exits, pnl: ds.pnl,
+        wins: ds.wins, losses: ds.losses, winRate: wr,
         dailyPnL: us.dailyPnLDemo,
     };
 }
@@ -1216,11 +1739,16 @@ function getDemoPositions(userId) {
 function getFullState(userId) {
     const us = _uState(userId);
     const creds = getExchangeCreds(userId);
+    const exchangeMode = creds ? (creds.mode || 'live') : null;
+    const resolvedEnv = us.engineMode === 'demo' ? 'DEMO'
+        : (exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
     return {
         mode: us.engineMode,
         enabled: us.atActive, // [F1] Reflect actual per-user AT state
         atActive: us.atActive, // [F1] Explicit field for frontend
         apiConfigured: !!creds,
+        exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
+        resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'
         positions: getOpenPositions(userId),
         demoPositions: getDemoPositions(userId),
         livePositions: getLivePositions(userId),
@@ -1253,11 +1781,13 @@ function resetDemoBalance(userId) {
     const us = _uState(userId);
     us.demoBalance = DEFAULT_DEMO_BALANCE;
     us.demoStartBalance = DEFAULT_DEMO_BALANCE;
-    // Reset stats but keep positions running
-    us.stats = { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 };
-    us.dailyPnL = 0;
+    // Reset only demo stats — live stats and live daily PnL stay intact
+    us.demoStats = { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 };
     us.dailyPnLDemo = 0;
-    us.dailyPnLLive = 0;
+    // Recalculate combined stats from live (demo portion zeroed)
+    const ls = us.liveStats;
+    us.stats = { entries: ls.entries, exits: ls.exits, pnl: ls.pnl, wins: ls.wins, losses: ls.losses };
+    us.dailyPnL = us.dailyPnLLive;
     _persistState(userId);
     logger.info('AT_ENGINE', `Demo balance reset uid=${userId} to $${DEFAULT_DEMO_BALANCE}`);
     _notifyChange(userId);
@@ -1301,6 +1831,88 @@ setInterval(() => {
         if (ts < cutoff) _closingGuard.delete(key);
     }
 }, 60000);
+
+// ══════════════════════════════════════════════════════════════════
+// Register manual LIVE/TESTNET position as server-tracked Zeus object
+// Called after successful exchange fill for PT/manual orders
+// ══════════════════════════════════════════════════════════════════
+function registerManualPosition(userId, data) {
+    if (!userId) return { ok: false, error: 'Missing userId' };
+    if (!data || !data.symbol || !data.side || !data.entryPrice || !data.qty) {
+        return { ok: false, error: 'Missing required fields (symbol, side, entryPrice, qty)' };
+    }
+    const us = _uState(userId);
+    const seq = ++us.seq;
+    const price = parseFloat(data.entryPrice);
+    const qty = parseFloat(data.qty);
+    const lev = parseInt(data.leverage, 10) || 1;
+    const size = (lev > 0) ? (qty * price / lev) : (qty * price);
+    const side = data.side === 'BUY' ? 'LONG' : (data.side === 'SELL' ? 'SHORT' : data.side);
+
+    // Duplicate guard: no existing position with same userId + symbol + side
+    const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side);
+    if (existing) {
+        logger.info('AT_ENGINE', `[${seq}] Manual position already tracked as seq=${existing.seq} — skipping`);
+        return { ok: true, seq: existing.seq, alreadyTracked: true };
+    }
+
+    const sl = data.sl ? parseFloat(data.sl) : null;
+    const tp = data.tp ? parseFloat(data.tp) : null;
+    const slDist = sl ? Math.abs(price - sl) : 0;
+    const tpDist = tp ? Math.abs(price - tp) : 0;
+    const slPct = price > 0 && slDist > 0 ? +(slDist / price * 100).toFixed(2) : 0;
+    const rr = slDist > 0 && tpDist > 0 ? +(tpDist / slDist).toFixed(2) : 0;
+    const tpPnl = tp ? +(tpDist / price * size * lev).toFixed(2) : 0;
+    const slPnl = sl ? +(-slDist / price * size * lev).toFixed(2) : 0;
+
+    const entry = {
+        seq,
+        userId,
+        ts: Date.now(),
+        symbol: data.symbol,
+        side,
+        mode: data.mode || us.engineMode,
+        price,
+        size,
+        margin: size,
+        lev,
+        qty: +qty.toFixed(6),
+        sl, tp, slPct, rr, tpPnl, slPnl,
+        status: 'OPEN',
+        closeTs: null, closePnl: null, closeReason: null,
+        // Manual-specific metadata
+        autoTrade: false,
+        sourceMode: 'manual',
+        controlMode: 'user',
+        // DSL params: use client-provided if available, else defaults
+        dslParams: (data.dslParams && typeof data.dslParams === 'object') ? data.dslParams : serverDSL.DSL_DEFAULTS,
+        originalEntry: price,
+        originalSize: size,
+        originalQty: +qty.toFixed(6),
+        addOnCount: 0,
+        addOnHistory: [],
+        // Live exchange metadata
+        live: data.orderId ? {
+            status: 'LIVE',
+            liveSeq: ++us.liveSeq,
+            mainOrderId: data.orderId,
+            avgPrice: price,
+            executedQty: qty,
+            slOrderId: data.slOrderId || null,
+            tpOrderId: data.tpOrderId || null,
+        } : null,
+    };
+
+    _positions.push(entry);
+    serverDSL.attach(entry, entry.dslParams);
+    _persistState(userId);
+    _persistPosition(entry);
+    _notifyChange(userId);
+
+    logger.info('AT_ENGINE', `[${seq}] uid=${userId} MANUAL ${side} ${data.symbol} @ $${price.toFixed(2)} | Size=$${size.toFixed(0)} Lev=${lev}x | Registered as server-tracked`);
+
+    return { ok: true, seq, position: entry };
+}
 
 function closeBySeq(userId, seq) {
     const gk = `${userId}:${seq}`;
@@ -1351,6 +1963,9 @@ const ADDON_TP_RETRIES = [1000, 3000];
 async function addOnPosition(userId, seq, options = {}) {
     if (!userId) return { ok: false, error: 'Missing userId' };
     if (!seq) return { ok: false, error: 'Missing seq' };
+    // [M1] Block add-ons when AT is OFF — no exposure growth while disabled
+    const us = _uState(userId);
+    if (!us.atActive) return { ok: false, error: 'Cannot add on: AT is OFF' };
 
     // ── Lock: prevent double trigger on same position ──
     const gk = `${userId}:${seq}`;
@@ -1478,7 +2093,7 @@ async function addOnPosition(userId, seq, options = {}) {
                 }, creds);
             } catch (err) {
                 logger.error('AT_ADDON', `[${seq}] LIVE addon MARKET order failed: ${err.message}`);
-                audit.record('SAT_ADDON_FAILED', { seq, symbol: pos.symbol, error: err.message }, 'SERVER_AT');
+                audit.record('SAT_ADDON_FAILED', { userId, seq, symbol: pos.symbol, error: err.message }, 'SERVER_AT');
                 return { ok: false, error: 'ADDON_FAILED', detail: err.message };
             }
 
@@ -1500,9 +2115,9 @@ async function addOnPosition(userId, seq, options = {}) {
             }
             const fillPrice = parseFloat(verifiedOrder.avgPrice || 0);
             const fillQty = parseFloat(verifiedOrder.executedQty || 0);
-            if (fillPrice <= 0 || fillQty <= 0) {
+            if (!Number.isFinite(fillPrice) || fillPrice <= 0 || !Number.isFinite(fillQty) || fillQty <= 0) {
                 logger.error('AT_ADDON', `[${seq}] LIVE addon fill unverified — ADDON_FAILED`);
-                audit.record('SAT_ADDON_FILL_UNVERIFIED', { seq, symbol: pos.symbol, orderId: addonOrder.orderId }, 'SERVER_AT');
+                audit.record('SAT_ADDON_FILL_UNVERIFIED', { userId, seq, symbol: pos.symbol, orderId: addonOrder.orderId }, 'SERVER_AT');
                 return { ok: false, error: 'ADDON_FAILED', detail: 'Fill not verified' };
             }
 
@@ -1537,7 +2152,7 @@ async function addOnPosition(userId, seq, options = {}) {
                 pos.tp = +(pos.price - tpDist).toFixed(2);
             }
             pos.tpPnl = +((tpDist / pos.price) * pos.size * pos.lev).toFixed(2);
-            pos.slPnl = +-((slDist / pos.price) * pos.size * pos.lev).toFixed(2);
+            pos.slPnl = -Math.abs(+((slDist / pos.price) * pos.size * pos.lev).toFixed(2));
 
             // ── Cancel old SL/TP orders ──
             if (pos.live.slOrderId) await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds);
@@ -1551,7 +2166,7 @@ async function addOnPosition(userId, seq, options = {}) {
             let newSlOrder = null;
             for (let attempt = 0; attempt <= ADDON_SL_RETRIES.length; attempt++) {
                 try {
-                    newSlOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    newSlOrder = await _placeConditionalOrder({
                         symbol: pos.symbol, side: closeSide, type: 'STOP_MARKET',
                         quantity: totalQtyStr,
                         stopPrice: String(totalRounded.stopPrice != null ? totalRounded.stopPrice : pos.sl),
@@ -1570,7 +2185,7 @@ async function addOnPosition(userId, seq, options = {}) {
             let newTpOrder = null;
             for (let attempt = 0; attempt <= ADDON_TP_RETRIES.length; attempt++) {
                 try {
-                    newTpOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    newTpOrder = await _placeConditionalOrder({
                         symbol: pos.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
                         quantity: totalQtyStr,
                         stopPrice: String(totalRoundedTp.stopPrice != null ? totalRoundedTp.stopPrice : pos.tp),
@@ -1600,7 +2215,7 @@ async function addOnPosition(userId, seq, options = {}) {
                     `Position size: $${pos.size} | Qty: ${totalQty}\n` +
                     `*PLACE MANUAL SL/TP IMMEDIATELY!*`
                 );
-                audit.record('SAT_ADDON_SLTP_FAILED', { seq, symbol: pos.symbol, totalQty }, 'SERVER_AT');
+                audit.record('SAT_ADDON_SLTP_FAILED', { userId, seq, symbol: pos.symbol, totalQty }, 'SERVER_AT');
             } else {
                 // ── Update live state with new order IDs ──
                 pos.live.slOrderId = newSlOrder ? newSlOrder.orderId : null;
@@ -1621,7 +2236,7 @@ async function addOnPosition(userId, seq, options = {}) {
                         logger.warn('AT_ADDON', `[${seq}] Qty mismatch after addon: internal=${totalQty} exchange=${exchangeQty}`);
                         pos.qty = exchangeQty;
                         pos.live.executedQty = exchangeQty;
-                        audit.record('SAT_ADDON_QTY_RESYNCED', { seq, symbol: pos.symbol, internal: totalQty, exchange: exchangeQty }, 'SERVER_AT');
+                        audit.record('SAT_ADDON_QTY_RESYNCED', { userId, seq, symbol: pos.symbol, internal: totalQty, exchange: exchangeQty }, 'SERVER_AT');
                     }
                 }
             } catch (reconErr) {
@@ -1654,7 +2269,7 @@ async function addOnPosition(userId, seq, options = {}) {
 
             metrics.recordOrder('addon_filled');
             audit.record('SAT_ADDON_FILLED', {
-                seq, symbol: pos.symbol, side: pos.side,
+                userId, seq, symbol: pos.symbol, side: pos.side,
                 addonQty: fillQty, fillPrice, totalQty,
                 addonCount: pos.addOnCount, orderId: addonOrder.orderId,
             }, 'SERVER_AT');
@@ -1694,7 +2309,7 @@ async function addOnPosition(userId, seq, options = {}) {
 
         // ── Recalc expected PnL at SL/TP ──
         pos.tpPnl = +((tpDist / pos.price) * pos.size * pos.lev).toFixed(2);
-        pos.slPnl = +-((slDist / pos.price) * pos.size * pos.lev).toFixed(2);
+        pos.slPnl = -Math.abs(+((slDist / pos.price) * pos.size * pos.lev).toFixed(2));
 
         // ── Deduct demo balance ──
         if (pos.mode === 'demo') {
@@ -1777,11 +2392,15 @@ function _applyUserDslParams(pos, dslParams) {
     logger.info('AT_DSL', `[S${pos.seq}] User dslParams applied: ${JSON.stringify(pos.dslParams)}`);
 }
 
-// Client pushes dslParams during Take Control (controlMode === 'user')
+// Client pushes dslParams for positions under user/manual/paper control
 function updateDslParams(userId, seq, dslParams) {
     const pos = _positions.find(p => p.seq === seq && p.userId === userId);
     if (!pos) return { ok: false, error: 'Position not found' };
-    if (pos.controlMode !== 'user') return { ok: false, error: 'Not in user control' };
+    // Allow param updates for user-controlled, manual, and paper positions
+    const cm = (pos.controlMode || '').toLowerCase();
+    if (cm !== 'user' && cm !== 'paper' && cm !== 'manual' && pos.autoTrade) {
+        return { ok: false, error: 'Not in user control' };
+    }
     _applyUserDslParams(pos, dslParams);
     _persistPosition(pos);
     return { ok: true, seq };
@@ -1800,6 +2419,8 @@ const _reconAlerted = {
     slFails: new Set(),    // "userId:seq" — alerted once per SL re-fail
     tpFails: new Set(),    // "userId:seq" — alerted once per TP re-fail
 };
+// [V5.4] Orphan pending map — tracks first detection for 2-cycle confirmation
+const _orphanPending = new Map(); // "userId:symbol:side" → { firstSeen, bpos, userId, symbol }
 
 async function _runReconciliation(isStartup) {
     if (_reconRunning) return;
@@ -1807,7 +2428,7 @@ async function _runReconciliation(isStartup) {
     const label = isStartup ? 'STARTUP_RECON' : 'RECON';
     try {
         const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL'));
-        if (livePositions.length === 0) { _reconRunning = false; return; }
+        if (livePositions.length === 0) return; // [B6] finally will reset _reconRunning
 
         // Group live positions by userId for per-user reconciliation
         const byUser = new Map();
@@ -1854,18 +2475,41 @@ async function _runReconciliation(isStartup) {
                 // PHANTOM: server says position exists, Binance says no
                 if (!bpos || bpos.side !== pos.side) {
                     logger.warn(label, `[${pos.seq}] PHANTOM DETECTED uid=${userId}: ${pos.side} ${pos.symbol} not found on Binance — closing locally`);
+
+                    // Query userTrades for real fill price (best-effort)
+                    let realExitPrice = null;
+                    let realPnl = null;
+                    try {
+                        const trades = await sendSignedRequest('GET', '/fapi/v1/userTrades', {
+                            symbol: pos.symbol, limit: 10,
+                        }, creds);
+                        if (Array.isArray(trades) && trades.length > 0) {
+                            // Find the most recent trade matching our side (reduce-only = exit)
+                            const exitTrade = trades.reverse().find(t =>
+                                t.symbol === pos.symbol && t.realizedPnl && parseFloat(t.realizedPnl) !== 0
+                            );
+                            if (exitTrade) {
+                                realExitPrice = parseFloat(exitTrade.price);
+                                realPnl = parseFloat(exitTrade.realizedPnl);
+                                logger.info(label, `[${pos.seq}] PHANTOM real fill: price=$${realExitPrice} pnl=$${realPnl} (from userTrades)`);
+                            }
+                        }
+                    } catch (tradeErr) {
+                        logger.warn(label, `[${pos.seq}] userTrades query failed: ${tradeErr.message} — using markPrice fallback`);
+                    }
+
                     telegram.sendToUser(userId,
                         `🔍 *RECON: Phantom Position Removed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nPosition not found on Binance — likely closed externally (SL/TP hit, liquidation, or manual close).\nRemoving from server tracker.`
                     );
-                    const idx = _positions.findIndex(p => p.seq === pos.seq);
+                    const idx = _positions.findIndex(p => p.seq === pos.seq && p.userId === userId);
                     if (idx >= 0) {
-                        const exitPrice = bpos ? bpos.markPrice : (pos._lastPrice || pos.price);
-                        const pnl = pos.side === 'LONG'
+                        const exitPrice = realExitPrice || (bpos ? bpos.markPrice : (pos._lastPrice || pos.price));
+                        const pnl = realPnl != null ? realPnl : (pos.side === 'LONG'
                             ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                            : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2);
+                            : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2));
                         _closePosition(idx, pos, 'RECON_PHANTOM', exitPrice, pnl);
                     }
-                    audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId }, 'SERVER_AT');
+                    audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl }, 'SERVER_AT');
                     continue;
                 }
 
@@ -1874,20 +2518,144 @@ async function _runReconciliation(isStartup) {
             }
 
             // 3. Check for ORPHAN positions (Binance has, server doesn't track)
+            // [V5.4] 2-cycle confirmation + SAT_ prefix check before auto-close
             for (const [symbol, bpos] of binanceHeld) {
                 const tracked = userLivePositions.find(p => p.symbol === symbol && p.side === bpos.side);
                 if (!tracked) {
-                    logger.warn(label, `ORPHAN on Binance uid=${userId}: ${bpos.side} ${symbol} amt=${bpos.amt} — not tracked by server`);
-                    // [AUDIT] Per-user dedupe — alert once per orphan, not every recon cycle
                     const _orphanKey = `${userId}:${symbol}:${bpos.side}`;
-                    if (!_reconAlerted.orphans.has(_orphanKey)) {
-                        _reconAlerted.orphans.add(_orphanKey);
+
+                    if (!_orphanPending.has(_orphanKey)) {
+                        // First detection — mark pending, alert, wait for next cycle
+                        _orphanPending.set(_orphanKey, { firstSeen: Date.now(), bpos, userId, symbol });
+                        logger.warn(label, `ORPHAN detected uid=${userId}: ${bpos.side} ${symbol} amt=${bpos.amt} — pending confirmation (next cycle)`);
                         telegram.sendToUser(userId,
-                            `⚠️ *RECON: Orphan Position on Binance*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nEntry: $${bpos.entryPrice.toFixed(2)} | Mark: $${bpos.markPrice.toFixed(2)} | uPnL: $${bpos.unrealizedProfit.toFixed(2)}\nThis position is NOT tracked by the server.\nManual review required.`
+                            `⚠️ *RECON: Orphan Detected*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nEntry: $${bpos.entryPrice.toFixed(2)} | uPnL: $${bpos.unrealizedProfit.toFixed(2)}\nVerifying in next recon cycle (60s)...`
                         );
+                        audit.record('SAT_RECON_ORPHAN_PENDING', { symbol, side: bpos.side, amt: bpos.amt, userId }, 'SERVER_AT');
+                    } else {
+                        // Second detection — confirmed orphan, check if Zeus-created via open orders
+                        logger.warn(label, `ORPHAN confirmed uid=${userId}: ${bpos.side} ${symbol} — checking SAT_ orders`);
+                        let isZeusCreated = false;
+                        try {
+                            const openOrders = await sendSignedRequest('GET', '/fapi/v1/openOrders', { symbol }, creds);
+                            isZeusCreated = Array.isArray(openOrders) && openOrders.some(o =>
+                                o.clientOrderId && o.clientOrderId.startsWith('SAT_')
+                            );
+                            // [ALGO-FIX] Also check algo orders (SL/TP are conditional algo orders)
+                            if (!isZeusCreated) {
+                                try {
+                                    let algoOrders = await sendSignedRequest('GET', '/fapi/v1/openAlgoOrders', { symbol }, creds);
+                                    if (algoOrders && algoOrders.orders) algoOrders = algoOrders.orders;
+                                    if (Array.isArray(algoOrders)) {
+                                        isZeusCreated = algoOrders.some(o =>
+                                            o.clientAlgoId && o.clientAlgoId.startsWith('SAT_')
+                                        );
+                                    }
+                                } catch (_) {}
+                            }
+                            // If no open orders but orphan confirmed, also treat as Zeus-created
+                            // (SL/TP may have been cancelled already by V5.3)
+                            if (!isZeusCreated && openOrders.length === 0) isZeusCreated = true;
+                        } catch (oErr) {
+                            logger.warn(label, `Open orders check failed for ${symbol}: ${oErr.message}`);
+                        }
+
+                        if (isZeusCreated) {
+                            // Auto-close: MARKET close with reduceOnly
+                            try {
+                                const closeSide = bpos.side === 'LONG' ? 'SELL' : 'BUY';
+                                const absAmt = Math.abs(bpos.amt);
+                                const rounded = roundOrderParams(symbol, absAmt);
+                                const closeResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                                    symbol,
+                                    side: closeSide,
+                                    type: 'MARKET',
+                                    quantity: String(rounded.quantity || absAmt),
+                                    reduceOnly: true,
+                                    newClientOrderId: `SAT_RECON_CLOSE_${Date.now()}`,
+                                }, creds);
+                                const _orphRaw = parseFloat(closeResult.avgPrice);
+                                const fillPrice = (Number.isFinite(_orphRaw) && _orphRaw > 0) ? _orphRaw : bpos.markPrice;
+                                logger.info(label, `ORPHAN auto-closed uid=${userId}: ${bpos.side} ${symbol} @ $${fillPrice.toFixed(2)}`);
+                                telegram.sendToUser(userId,
+                                    `✅ *RECON: Orphan Auto-Closed*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nFill: $${fillPrice.toFixed(2)} | uPnL was: $${bpos.unrealizedProfit.toFixed(2)}\nPosition was not tracked by server — closed for safety.`
+                                );
+                                audit.record('SAT_RECON_ORPHAN_CLOSED', { symbol, side: bpos.side, amt: bpos.amt, fillPrice, userId }, 'SERVER_AT');
+                                // Cancel any remaining SAT_ orders on this symbol (regular + algo)
+                                try {
+                                    const remaining = await sendSignedRequest('GET', '/fapi/v1/openOrders', { symbol }, creds);
+                                    for (const o of remaining) {
+                                        if (o.clientOrderId && o.clientOrderId.startsWith('SAT_')) {
+                                            await _cancelOrderSafe(symbol, o.orderId, creds, userId);
+                                        }
+                                    }
+                                    // [ALGO-FIX] Also cancel algo orders (SL/TP)
+                                    let algoRemaining = await sendSignedRequest('GET', '/fapi/v1/openAlgoOrders', { symbol }, creds);
+                                    if (algoRemaining && algoRemaining.orders) algoRemaining = algoRemaining.orders;
+                                    if (Array.isArray(algoRemaining)) {
+                                        for (const o of algoRemaining) {
+                                            if (o.clientAlgoId && o.clientAlgoId.startsWith('SAT_')) {
+                                                await _cancelOrderSafe(symbol, o.algoId, creds, userId);
+                                            }
+                                        }
+                                    }
+                                } catch (_) { }
+                            } catch (closeErr) {
+                                logger.error(label, `ORPHAN auto-close FAILED uid=${userId}: ${bpos.side} ${symbol} — ${closeErr.message}`);
+                                telegram.sendToUser(userId,
+                                    `🚨 *RECON: Orphan Close FAILED*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nError: ${closeErr.message}\n*Close this position manually on Binance!*`
+                                );
+                            }
+                        } else {
+                            // Not Zeus-created — alert only
+                            if (!_reconAlerted.orphans.has(_orphanKey)) {
+                                _reconAlerted.orphans.add(_orphanKey);
+                                telegram.sendToUser(userId,
+                                    `⚠️ *RECON: External Orphan*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nThis position was NOT created by Zeus (no SAT_ orders).\nManual review required.`
+                                );
+                            }
+                        }
+                        _orphanPending.delete(_orphanKey);
                     }
-                    audit.record('SAT_RECON_ORPHAN', { symbol, side: bpos.side, amt: bpos.amt, userId }, 'SERVER_AT');
+                } else {
+                    // Position is tracked — clean up any stale pending entry
+                    const _orphanKey = `${userId}:${symbol}:${bpos.side}`;
+                    if (_orphanPending.has(_orphanKey)) {
+                        _orphanPending.delete(_orphanKey);
+                        logger.info(label, `Orphan false alarm cleared: ${bpos.side} ${symbol} uid=${userId}`);
+                    }
                 }
+            }
+
+            // [LIVE-PARITY] Check pending live closes — resolve or escalate
+            for (const [seq, pending] of _pendingLiveCloses) {
+                if (pending.pos.userId !== userId) continue;
+                const key = `${pending.pos.symbol}_${pending.pos.side}`;
+                const stillOnExchange = binanceHeld.has(pending.pos.symbol) &&
+                    binanceHeld.get(pending.pos.symbol).side === pending.pos.side;
+                if (!stillOnExchange) {
+                    // Position closed on exchange (by SL/TP/liquidation) — remove from queue
+                    _pendingLiveCloses.delete(seq);
+                    logger.info(label, `[${seq}] Pending close resolved — position no longer on exchange`);
+                } else if (Date.now() - pending.ts > 300000) {
+                    // 5min timeout — alert for manual intervention
+                    _pendingLiveCloses.delete(seq);
+                    telegram.sendToUser(userId, `🚨 *RECON: Position still open after 5min*\n${pending.pos.side} ${pending.pos.symbol}\nAll auto-close attempts failed. Manual close required on exchange!`);
+                    audit.record('SAT_RECON_PENDING_TIMEOUT', { seq, symbol: pending.pos.symbol, side: pending.pos.side, userId }, 'SERVER_AT');
+                }
+            }
+
+            // [LIVE-PARITY] Update liveBalanceRef periodically for kill switch accuracy
+            if (!isStartup) {
+                const us = _uState(userId);
+                try {
+                    const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
+                    const usdtBal = balances.find(b => b.asset === 'USDT');
+                    if (usdtBal) {
+                        const realBalance = parseFloat(usdtBal.balance || 0);
+                        if (realBalance > 0) us.liveBalanceRef = realBalance;
+                    }
+                } catch (_) { /* balance refresh non-critical */ }
             }
 
             if (isStartup && userLivePositions.length > 0) {
@@ -1896,8 +2664,9 @@ async function _runReconciliation(isStartup) {
         }
     } catch (err) {
         logger.error('RECON', `Reconciliation error: ${err.message}`);
+    } finally {
+        _reconRunning = false;
     }
-    _reconRunning = false;
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1915,8 +2684,17 @@ async function _checkOrderHealth(pos, creds, label) {
         logger.warn(label, `[${pos.seq}] openOrders query failed: ${err.message}`);
         return;
     }
+    // [ALGO-FIX] Also fetch algo orders (SL/TP are conditional algo orders since Dec 2025)
+    let openAlgoOrders = [];
+    try {
+        openAlgoOrders = await sendSignedRequest('GET', '/fapi/v1/openAlgoOrders', { symbol: pos.symbol }, creds);
+        if (openAlgoOrders && openAlgoOrders.orders) openAlgoOrders = openAlgoOrders.orders;
+    } catch (_) { /* non-critical — regular orders still checked */ }
 
-    const orderIds = new Set(openOrders.map(o => o.orderId));
+    const orderIds = new Set([
+        ...openOrders.map(o => o.orderId),
+        ...(Array.isArray(openAlgoOrders) ? openAlgoOrders.map(o => o.algoId) : []),
+    ]);
 
     // Check SL order
     if (pos.live.slOrderId && !orderIds.has(pos.live.slOrderId)) {
@@ -1928,7 +2706,7 @@ async function _checkOrderHealth(pos, creds, label) {
         const rounded = roundOrderParams(pos.symbol, pos.live.executedQty, currentSL);
         let replaced = false;
         try {
-            const newSl = await sendSignedRequest('POST', '/fapi/v1/order', {
+            const newSl = await _placeConditionalOrder({
                 symbol: pos.symbol, side: closeSide, type: 'STOP_MARKET',
                 quantity: String(rounded.quantity || pos.live.executedQty),
                 stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : currentSL),
@@ -1937,7 +2715,7 @@ async function _checkOrderHealth(pos, creds, label) {
             pos.live.slOrderId = newSl.orderId;
             pos.live.status = 'LIVE';
             replaced = true;
-            logger.info(label, `[${pos.seq}] SL re-placed successfully → orderId=${newSl.orderId}`);
+            logger.info(label, `[${pos.seq}] SL re-placed successfully → algoId=${newSl.orderId}`);
             telegram.sendToUser(userId, `✅ *SL Re-placed*\n${pos.side} ${pos.symbol}\nSL order was missing on Binance — automatically re-placed at $${currentSL.toFixed(2)}`);
         } catch (err) {
             pos.live.status = 'LIVE_NO_SL';
@@ -1959,14 +2737,14 @@ async function _checkOrderHealth(pos, creds, label) {
         const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
         const roundedTp = roundOrderParams(pos.symbol, pos.live.executedQty, pos.tp);
         try {
-            const newTp = await sendSignedRequest('POST', '/fapi/v1/order', {
+            const newTp = await _placeConditionalOrder({
                 symbol: pos.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
                 quantity: String(roundedTp.quantity || pos.live.executedQty),
                 stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : pos.tp),
                 reduceOnly: true, newClientOrderId: `SAT_RETPOT_${pos.live.liveSeq}_${Date.now()}`,
             }, creds);
             pos.live.tpOrderId = newTp.orderId;
-            logger.info(label, `[${pos.seq}] TP re-placed successfully → orderId=${newTp.orderId}`);
+            logger.info(label, `[${pos.seq}] TP re-placed successfully → algoId=${newTp.orderId}`);
         } catch (err) {
             pos.live.tpOrderId = null;
             logger.warn(label, `[${pos.seq}] TP re-placement failed: ${err.message}`);
@@ -2026,7 +2804,7 @@ async function _watchdogLiveNoSL() {
             const rounded = roundOrderParams(pos.symbol, pos.live.executedQty, currentSL);
 
             try {
-                const newSl = await sendSignedRequest('POST', '/fapi/v1/order', {
+                const newSl = await _placeConditionalOrder({
                     symbol: pos.symbol, side: closeSide, type: 'STOP_MARKET',
                     quantity: String(rounded.quantity || pos.live.executedQty),
                     stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : currentSL),
@@ -2038,7 +2816,7 @@ async function _watchdogLiveNoSL() {
                 pos.live.slPlaced = true;
                 _persistPosition(pos);
                 _watchdogAlerted.delete(`${userId}:${pos.seq}`);
-                logger.info('WATCHDOG', `[${pos.seq}] SL repaired → orderId=${newSl.orderId} @ $${currentSL}`);
+                logger.info('WATCHDOG', `[${pos.seq}] SL repaired → algoId=${newSl.orderId} @ $${currentSL}`);
                 telegram.sendToUser(userId, `✅ *Watchdog SL Repair*\n${pos.side} ${pos.symbol}\nSL successfully placed at $${currentSL}\nPosition is now protected.`);
             } catch (err) {
                 logger.error('WATCHDOG', `[${pos.seq}] SL repair failed: ${err.message}`);
@@ -2066,10 +2844,10 @@ setTimeout(() => {
 module.exports = {
     processBrainDecision,
     onPriceUpdate,
-    expireStale,
     // Getters
     getOpenPositions,
     getOpenCount,
+    isCloseCooldownActive, // [RE-ENTRY] Check post-close cooldown
     getLog,
     getStats,
     getLiveStats,
@@ -2079,6 +2857,8 @@ module.exports = {
     // Mode control
     setMode,
     getMode,
+    isATActive,
+    preLiveChecklist,
     toggleActive, // [F1] Per-user AT on/off
     activateKillSwitch,
     resetKill,
@@ -2091,6 +2871,7 @@ module.exports = {
     addDemoFunds,
     resetDemoBalance,
     // Client actions
+    registerManualPosition,
     closeBySeq,
     addOnPosition,
     updateControlMode,

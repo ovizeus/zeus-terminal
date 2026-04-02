@@ -86,6 +86,14 @@ function createSessionAuth(jwtSecret) {
             // Also allow /auth/admin/* for logged-in admin (even from login page context)
             if (req.path.startsWith('/auth/admin/')) return next();
 
+            // [SENTRY] Tag all errors with authenticated user
+            if (req.user.id) {
+                try {
+                    const Sentry = require('@sentry/node');
+                    Sentry.setUser({ id: String(req.user.id), email: req.user.email || undefined });
+                } catch (_) {}
+            }
+
             // Inactivity timeout check
             if (req.user.id) {
                 const last = _activity.get(req.user.id);

@@ -19,21 +19,62 @@ function toggleAutoTrade() {
     if (typeof ZState !== 'undefined' && ZState.startATPolling) ZState.startATPolling();
     return;
   }
-  AT.enabled = !AT.enabled;
+  // ── Live mode confirmation gate ──
+  const _atGlobalMode = (typeof AT !== 'undefined' && AT.mode) ? AT.mode : 'demo';
+  if (!AT.enabled && _atGlobalMode === 'live') {
+    // Block without API keys
+    if (!window._apiConfigured) {
+      toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, _ZI.w);
+      const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.lock + ' EXEC LOCKED — Exchange not configured';
+      return;
+    }
+    // [MODE-P4] Require explicit confirmation — wording matches resolved environment
+    if (typeof _showConfirmDialog === 'function') {
+      var _atEnv = window._resolvedEnv || 'REAL';
+      var _atTest = _atEnv === 'TESTNET';
+      _showConfirmDialog(
+        _atTest ? 'Enable AutoTrade in TESTNET Mode?' : 'Enable AutoTrade in LIVE Mode?',
+        _atTest
+          ? 'You are about to enable AutoTrade on Binance TESTNET.\n\nThe system will automatically execute orders with TEST funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings are configured before proceeding.'
+          : 'You are about to enable AutoTrade while in LIVE mode.\n\nThe system will automatically execute REAL orders on Binance using REAL funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings, leverage, and position size are correctly configured before proceeding.',
+        'Cancel', _atTest ? 'Enable Testnet AT' : 'Enable Live AT',
+        function () { _doEnableAT(); }
+      );
+      return;
+    }
+  }
+  _doEnableAT();
+}
+
+function _doEnableAT() {
+  var _newState = !AT.enabled;
+  // [AT-TOGGLE-FIX] Server-authoritative toggle — call dedicated endpoint
+  fetch('/api/at/toggle', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ active: _newState })
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (!data.ok) {
+      toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, _ZI.x);
+      return;
+    }
+    // Server confirmed — now update client state
+    AT.enabled = _newState;
+    _applyATToggleUI(_newState);
+    if (typeof _atPollOnce === 'function') setTimeout(_atPollOnce, 500);
+  }).catch(function(err) {
+    toast('AT toggle failed: network error', 3000, _ZI.x);
+  });
+}
+
+function _applyATToggleUI(enabled) {
   const btn = el('atMainBtn');
   const dot = el('atBtnDot');
   const txt = el('atBtnTxt');
   const panel = el('atPanel');
-  if (AT.enabled) {
-    // Block AT enable in live mode without API keys
-    // [C1] Use AT.mode directly — server is authoritative, AT._serverMode kept for compat
+  if (enabled) {
     const _atGlobalMode = (typeof AT !== 'undefined' && AT.mode) ? AT.mode : 'demo';
-    if (_atGlobalMode === 'live' && !window._apiConfigured) {
-      AT.enabled = false;
-      toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, _ZI.w);
-      const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.lock + ' EXEC LOCKED — API not configured';
-      return;
-    }
     // FIX v118: reset zi dacă s-a schimbat data
     if (typeof _bmResetDailyIfNeeded === 'function') _bmResetDailyIfNeeded();
     // ── INIT: Recalculate daily counters from journal (no stale state) ──
@@ -96,17 +137,23 @@ function toggleAutoTrade() {
 }
 
 function updateATMode() {
-  // Legacy: AT mode now controlled by global switch via server
-  // This function only updates the UI to reflect the current server mode
+  // [MODE-P4] AT mode UI — uses resolved environment
   const mode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
   AT.mode = mode;
   const lbl = el('atModeLabel');
   const warn = el('atLiveWarn');
   const disp = el('atModeDisplay');
+  var _env = window._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL');
   if (mode === 'live') {
-    if (lbl) { lbl.innerHTML = _ZI.dRed + ' LIVE'; lbl.style.color = '#ff4444'; }
+    var _isTest = _env === 'TESTNET';
+    var _col = _isTest ? '#f0c040' : '#ff4444';
+    var _colDim = _isTest ? '#f0c04044' : '#ff444444';
+    var _ico = _isTest ? _ZI.dYlw : _ZI.dRed;
+    var _short = _isTest ? 'TESTNET' : 'LIVE';
+    var _long = _isTest ? 'TESTNET MODE' : 'LIVE MODE';
+    if (lbl) { lbl.innerHTML = _ico + ' ' + _short; lbl.style.color = _col; }
     if (warn) warn.style.display = 'block';
-    if (disp) { disp.innerHTML = _ZI.dRed + ' LIVE MODE'; disp.style.color = '#ff4444'; disp.style.borderColor = '#ff444444'; }
+    if (disp) { disp.innerHTML = _ico + ' ' + _long; disp.style.color = _col; disp.style.borderColor = _colDim; }
   } else {
     if (lbl) { lbl.innerHTML = _ZI.pad + ' DEMO'; lbl.style.color = '#aa44ff'; }
     if (warn) warn.style.display = 'none';
@@ -167,7 +214,12 @@ function updateATStats() {
   if (trEl) trEl.textContent = trades;
   if (wrEl) { wrEl.textContent = tot ? wr + '%' : '—'; wrEl.style.color = wr >= 55 ? 'var(--grn)' : wr >= 40 ? 'var(--ylw)' : 'var(--red)'; }
   if (pnlEl) { pnlEl.textContent = (totalPnL >= 0 ? '+' : '') + '$' + totalPnL.toFixed(0); pnlEl.style.color = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)'; }
-  if (dlEl) { dlEl.textContent = '$' + Math.abs(dailyPnl).toFixed(0); dlEl.style.color = dailyPnl < 0 ? 'var(--red)' : 'var(--grn)'; }
+  if (dlEl) {
+    dlEl.textContent = (dailyPnl >= 0 ? '+' : '-') + '$' + Math.abs(dailyPnl).toFixed(0);
+    dlEl.style.color = dailyPnl < 0 ? 'var(--red)' : 'var(--grn)';
+    var _dlLabel = el('atDailyLabel');
+    if (_dlLabel) _dlLabel.textContent = dailyPnl >= 0 ? 'DAILY WIN' : 'DAILY LOSS';
+  }
   // [v3] Mode-aware balance display
   if (balEl) {
     if (_gm === 'live') {
@@ -175,7 +227,7 @@ function updateATStats() {
         balEl.textContent = '$' + TP.liveBalance.toLocaleString('en-US', { maximumFractionDigits: 0 });
         balEl.style.color = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)';
       } else {
-        balEl.textContent = 'API not configured';
+        balEl.textContent = 'Exchange not configured';
         balEl.style.color = 'var(--dim)';
       }
     } else {
@@ -411,7 +463,21 @@ function computeFusionDecision() {
 // Main AT check loop
 function runAutoTradeCheck() {
   // [AT-UNIFY] Server is source of truth — skip client AT engine
-  if (window._serverATEnabled) return;
+  if (window._serverATEnabled) {
+    // Update AT conditions UI from server state so panel doesn't appear frozen
+    try {
+      var _se = function(id, ok) { var e = el(id); if (e) { e.textContent = ok ? 'OK' : '—'; e.className = ok ? 'atcond-ok' : 'atcond-fail'; } };
+      _se('atCondConf', true); // Server handles gates — show as delegated
+      _se('atCondSig', true);
+      _se('atCondST', true);
+      _se('atCondADX', true);
+      _se('atCondHour', true);
+      _se('atCondOpp', true);
+      var _oe = el('atStatus');
+      if (_oe && AT.enabled) _oe.innerHTML = '<span style="color:#00d4ff">SERVER AT ACTIVE</span> — brain controls execution';
+    } catch (_) {}
+    return;
+  }
   // [B1] Multi-tab protection — only leader tab runs AT
   if (typeof TabLeader !== 'undefined' && !TabLeader.checkLeader()) return;
   // [p19] Predator state refresh — always runs
@@ -1410,7 +1476,8 @@ function renderATPositions() {
   const autoPosns = [
     ...(TP.demoPositions || []).filter(p => p.autoTrade && !p.closed),
     ...(TP.livePositions || []).filter(p => p.autoTrade && !p.closed && p.status !== 'closing'),
-  ].filter(p => (p.mode || p._serverMode || 'demo') === _globalMode);
+  ].filter(p => (p.mode || p._serverMode || 'demo') === _globalMode)
+   .sort((a, b) => (a.seq || 0) - (b.seq || 0));
   if (cnt) cnt.textContent = autoPosns.length + ' pozit' + (autoPosns.length === 1 ? 'ie' : 'ii');
   if (!autoPosns.length) {
     panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">Nicio pozitie auto deschisa</div>';
@@ -1429,8 +1496,11 @@ function renderATPositions() {
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''));  // [v105 FIX Bug6] escHtml
     const safeSide = escHtml(pos.side);                           // [v105 FIX Bug6] escHtml
     const posMode = (pos.mode || pos._serverMode || 'demo');
+    var _atPosEnv = window._resolvedEnv || (posMode === 'demo' ? 'DEMO' : 'REAL');
     const modeBadge = posMode === 'live'
-      ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>'
+      ? (_atPosEnv === 'TESTNET'
+        ? '<span style="background:#f0c04022;color:#f0c040;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">TESTNET</span>'
+        : '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>')
       : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>';
 
     // TP/SL expected P&L
@@ -1633,40 +1703,61 @@ function closeAutoPos(id) {
   setTimeout(() => { updateATStats(); renderATPositions(); renderDemoPositions(); }, 50);
 }
 
-// NOU: Inchide TOATE pozitiile (AT + Paper Trading manual)
+// Inchide pozitiile MANUAL (nu AT) din panoul curent
+// [FIX] Close All din panoul manual NU mai inchide pozitiile AT — fiecare panou cu ale lui
 function closeAllDemoPos() {
-  // ─── Close live positions first ───
-  const livePosns = [...TP.livePositions].filter(p => !p.closed);
+  var _activeMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  // ─── Close MANUAL live positions only (skip autoTrade) ───
+  const livePosns = _activeMode === 'live'
+    ? [...TP.livePositions].filter(p => !p.closed && !p.autoTrade)
+    : [];
   livePosns.forEach(function (p) {
-    // [FIX P7] Let closeLivePos handle the close; track AT stats + kill switch for live AT positions
-    if (p.autoTrade) {
-      const cur = getSymPrice(p) || p.entry;
-      const pnl = calcPosPnL(p, cur);
-      AT.totalPnL += pnl; AT.dailyPnL += pnl;
-      if (pnl >= 0) AT.wins++; else AT.losses++;
-      // [FIX P7] Kill switch accounting for live (closeLivePos doesn't touch these)
-      AT.realizedDailyPnL = (AT.realizedDailyPnL || 0) + pnl;
-      AT.closedTradesToday = (AT.closedTradesToday || 0) + 1;
-    }
-    closeLivePos(p.id, 'Close All');
+    closeLivePos(p.id, 'Close All Manual');
   });
-  // ─── Close demo positions — closeDemoPos handles balance + kill switch stats ───
-  const posns = [...TP.demoPositions].filter(p => !p.closed);
+  // ─── Close MANUAL demo positions only (skip autoTrade) ───
+  const posns = _activeMode === 'demo'
+    ? [...TP.demoPositions].filter(p => !p.closed && !p.autoTrade)
+    : [];
   const totalClosed = livePosns.length + posns.length;
-  if (!totalClosed) { toast('Nu exista pozitii deschise', 0, _ZI.clip); return; }
+  if (!totalClosed) { toast('Nu exista pozitii manuale deschise', 0, _ZI.clip); return; }
   posns.forEach(p => {
-    closeDemoPos(p.id, 'Close All');
-    // [FIX BUG4] Use closeDemoPos PnL (prevents price-race drift)
-    if (p.autoTrade) {
-      const pnl = Number.isFinite(p._closePnl) ? p._closePnl : 0;
-      AT.totalPnL += pnl; AT.dailyPnL += pnl;
-      if (pnl >= 0) AT.wins++; else AT.losses++;
-    }
+    closeDemoPos(p.id, 'Close All Manual');
   });
-  // [FIX P7] Check kill switch after all live closes
-  if (livePosns.some(p => p.autoTrade)) checkKillThreshold();
+  setTimeout(() => { renderATPositions(); updateATStats(); renderDemoPositions(); }, 100);
+  toast('Inchis ' + totalClosed + ' pozitii manuale', 0, _ZI.ok);
+}
+
+// Inchide TOATE pozitiile AT (apelat din panoul AT / Emergency Stop)
+function closeAllATPos() {
+  var _activeMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  // ─── Close AT live positions ───
+  const livePosns = _activeMode === 'live'
+    ? [...TP.livePositions].filter(p => !p.closed && p.autoTrade)
+    : [];
+  livePosns.forEach(function (p) {
+    const cur = getSymPrice(p) || p.entry;
+    const pnl = calcPosPnL(p, cur);
+    AT.totalPnL += pnl; AT.dailyPnL += pnl;
+    if (pnl >= 0) AT.wins++; else AT.losses++;
+    AT.realizedDailyPnL = (AT.realizedDailyPnL || 0) + pnl;
+    AT.closedTradesToday = (AT.closedTradesToday || 0) + 1;
+    closeLivePos(p.id, 'Close All AT');
+  });
+  // ─── Close AT demo positions ───
+  const posns = _activeMode === 'demo'
+    ? [...TP.demoPositions].filter(p => !p.closed && p.autoTrade)
+    : [];
+  posns.forEach(p => {
+    closeDemoPos(p.id, 'Close All AT');
+    const pnl = Number.isFinite(p._closePnl) ? p._closePnl : 0;
+    AT.totalPnL += pnl; AT.dailyPnL += pnl;
+    if (pnl >= 0) AT.wins++; else AT.losses++;
+  });
+  const totalClosed = livePosns.length + posns.length;
+  if (!totalClosed) { toast('Nu exista pozitii AT deschise', 0, _ZI.clip); return; }
+  if (livePosns.length > 0) checkKillThreshold();
   setTimeout(() => { renderATPositions(); updateATStats(); }, 100);
-  toast('Inchis ' + totalClosed + ' pozitii', 0, _ZI.ok);
+  toast('Inchis ' + totalClosed + ' pozitii AT', 0, _ZI.ok);
 }
 
 // ===================================================================

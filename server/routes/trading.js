@@ -13,6 +13,8 @@ const { validateOrderBody, validateCancelBody, validateLeverageBody } = require(
 const resolveExchange = require('../middleware/resolveExchange');
 const telegram = require('../services/telegram');
 const logger = require('../services/logger');
+// Lazy require to avoid circular dependency
+function _getServerAT() { return require('../services/serverAT'); }
 const audit = require('../services/audit');
 const metrics = require('../services/metrics');
 const rateLimit = require('../middleware/rateLimit');
@@ -78,11 +80,23 @@ router.get('/metrics', (req, res) => {
   res.json(metrics.getMetrics());
 });
 
-// ─── GET /api/audit ── Last N audit entries (admin only) ───
+// ─── GET /api/audit ── Last N audit entries (admin: all or per-user; user: own only) ───
 router.get('/audit', (req, res) => {
   if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const count = Math.min(parseInt(req.query.count, 10) || 50, 200);
-  res.json(audit.readLast(count));
+  const filterUserId = req.query.userId ? parseInt(req.query.userId, 10) : null;
+  if (filterUserId) {
+    res.json(audit.readByUser(filterUserId, count));
+  } else {
+    res.json(audit.readLast(count));
+  }
+});
+
+// ─── GET /api/audit/me ── Current user's audit trail ───
+router.get('/audit/me', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Auth required' });
+  const count = Math.min(parseInt(req.query.count, 10) || 50, 100);
+  res.json(audit.readByUser(req.user.id, count));
 });
 
 // ─── GET /api/balance ───
@@ -141,25 +155,35 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
   if (idem && idem.duplicate) {
     return res.status(409).json({ error: 'Duplicate order — already processing (key: ' + req.headers['x-idempotency-key'] + ')' });
   }
-  // [BE-01] Compute idempotency key early for cleanup on all confirmed-failure paths
-  const _idemKey = req.user && req.headers['x-idempotency-key'] ? `${req.user.id}:${req.headers['x-idempotency-key']}` : null;
   if (!config.tradingEnabled) {
-    if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] Release key — trading disabled
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  // [BE-01] Compute idempotency key for cleanup on confirmed-failure paths
+  const _idemKey = req.user && req.headers['x-idempotency-key'] ? `${req.user.id}:${req.headers['x-idempotency-key']}` : null;
   const { symbol, side, type, quantity, price, leverage, stopPrice, newClientOrderId, closePosition } = req.body;
 
   // Server-side risk check
   const owner = _owner(req.body);
-  const risk = validateOrder({ symbol, side, type, quantity, price: price || 0, referencePrice: req.body.referencePrice || 0, leverage: leverage || 1 }, owner, req.user.id);
+  const risk = validateOrder({ symbol, side, type, quantity, price: price || 0, referencePrice: req.body.referencePrice || 0, leverage: leverage || 1, closePosition: !!closePosition, reduceOnly: !!req.body.reduceOnly }, owner, req.user.id);
   if (!risk.ok) {
-    if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] Release key — order was never sent to exchange
     console.warn('[RISK] Order blocked:', risk.reason);
     logger.warn('RISK', 'Order blocked: ' + risk.reason, { symbol, side, owner });
-    audit.record('ORDER_BLOCKED', { symbol, side, type, quantity, reason: risk.reason }, owner, req.ip);
+    audit.record('ORDER_BLOCKED', { userId: req.user.id, symbol, side, type, quantity, reason: risk.reason }, owner, req.ip);
     metrics.recordOrder('blocked');
     telegram.alertRiskBlock(risk.reason, owner, req.user.id);
     return res.status(403).json({ error: risk.reason });
+  }
+
+  // Duplicate position guard — prevent accidental double-open on same symbol+side
+  // Override with allowDuplicate:true in body for intentional hedging/scaling
+  if (!req.body.allowDuplicate && !closePosition) {
+    const _existingLive = require('../services/serverAT').getLivePositions(req.user.id);
+    const _dup = _existingLive.find(p => p.symbol === symbol && p.side === side);
+    if (_dup) {
+      logger.warn('ORDER', `Duplicate guard: ${side} ${symbol} already open (seq=${_dup.seq}) uid=${req.user.id}`);
+      if (_idemKey) _idempotencyCache.delete(_idemKey);
+      return res.status(409).json({ error: `Position already open: ${side} ${symbol} (seq=${_dup.seq}). Send allowDuplicate:true to override.` });
+    }
   }
 
   try {
@@ -180,7 +204,9 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     const _rounded = roundOrderParams(symbol, parseFloat(quantity), stopPrice ? parseFloat(stopPrice) : undefined);
     params.quantity = String(_rounded.quantity || quantity);
     if (type === 'LIMIT' && price) {
-      params.price = String(price);
+      // Round limit price to tickSize (same as stopPrice rounding)
+      const _rndPrice = roundOrderParams(symbol, 0, parseFloat(price));
+      params.price = String(_rndPrice.stopPrice != null ? _rndPrice.stopPrice : price);
       params.timeInForce = 'GTC';
     }
     // STOP_MARKET / TAKE_PROFIT_MARKET require stopPrice
@@ -193,20 +219,53 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     if (newClientOrderId) {
       params.newClientOrderId = newClientOrderId;
     }
-    // Reduce-only for close orders
+    // [CLOSE-FIX] MARKET close: reduceOnly + exact quantity (no rounding, no dust)
     if (closePosition === true && type === 'MARKET') {
-      params.reduceOnly = true;
+      params.quantity = String(quantity); // exact exchange qty, skip roundOrderParams
+      params.reduceOnly = 'true';
     }
-    const data = await sendSignedRequest('POST', '/fapi/v1/order', params, req.exchangeCreds);
+    // [ALGO-FIX] Route STOP_MARKET/TAKE_PROFIT_MARKET to algo endpoint (Binance Dec 2025)
+    const _isConditional = type === 'STOP_MARKET' || type === 'TAKE_PROFIT_MARKET';
+    let data;
+    if (_isConditional) {
+      const algoParams = { algoType: 'CONDITIONAL', symbol: params.symbol, side: params.side, type: params.type };
+      if (params.stopPrice != null) algoParams.triggerPrice = params.stopPrice;
+      if (params.quantity != null) algoParams.quantity = params.quantity;
+      if (params.reduceOnly != null) algoParams.reduceOnly = String(params.reduceOnly);
+      if (params.newClientOrderId) algoParams.clientAlgoId = params.newClientOrderId;
+      data = await sendSignedRequest('POST', '/fapi/v1/algoOrder', algoParams, req.exchangeCreds);
+      if (data.algoId != null && data.orderId == null) data.orderId = data.algoId;
+    } else {
+      data = await sendSignedRequest('POST', '/fapi/v1/order', params, req.exchangeCreds);
+    }
 
     // [ZT-AUD-002] Log actual status instead of assuming FILLED
-    const fillStatus = data.status || 'UNKNOWN';
+    const fillStatus = data.status || data.algoStatus || 'UNKNOWN';
     console.log(`[ORDER] ${side} ${quantity} ${symbol} @ ${type} → orderId: ${data.orderId} status: ${fillStatus}`);
     logger.info('ORDER', `${side} ${quantity} ${symbol} @ ${type}`, { orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty });
-    audit.record(fillStatus === 'FILLED' ? 'ORDER_FILLED' : 'ORDER_PLACED', { symbol, side, type, quantity, orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty }, owner, req.ip);
+    audit.record(fillStatus === 'FILLED' ? 'ORDER_FILLED' : 'ORDER_PLACED', { userId: req.user.id, symbol, side, type, quantity, orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty }, owner, req.ip);
     metrics.recordOrder(fillStatus === 'FILLED' ? 'filled' : 'placed');
     if (fillStatus === 'FILLED') {
       telegram.alertOrderFilled(symbol, side, data.executedQty || quantity, data.avgPrice || 0, data.orderId, req.user.id);
+      // [PHASE1] Register manual LIVE/TESTNET position as server-tracked Zeus object
+      // Only for non-close, non-reduceOnly MARKET fills (new exposure, not closing)
+      if (!closePosition && !req.body.reduceOnly && type === 'MARKET') {
+        try {
+          const regResult = _getServerAT().registerManualPosition(req.user.id, {
+            symbol,
+            side,
+            entryPrice: parseFloat(data.avgPrice) || parseFloat(data.price) || 0,
+            qty: parseFloat(data.executedQty) || parseFloat(quantity) || 0,
+            leverage: parseInt(leverage, 10) || 1,
+            orderId: data.orderId,
+            sl: req.body.sl ? parseFloat(req.body.sl) : null,
+            tp: req.body.tp ? parseFloat(req.body.tp) : null,
+          });
+          if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side}`);
+        } catch (regErr) {
+          logger.warn('ORDER', `Manual position registration failed: ${regErr.message}`);
+        }
+      }
     }
     res.json({
       orderId: data.orderId,
@@ -225,7 +284,7 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     }
     console.error('[API] order/place error:', err.message);
     logger.error('ORDER', 'order/place failed', { symbol, side, error: err.message });
-    audit.record('ORDER_FAILED', { symbol, side, type, quantity, error: err.message }, owner, req.ip);
+    audit.record('ORDER_FAILED', { userId: req.user.id, symbol, side, type, quantity, error: err.message }, owner, req.ip);
     metrics.recordOrder('failed');
     metrics.recordError(err.message);
     telegram.alertOrderFailed(symbol, side, err.message, req.user.id);
@@ -410,7 +469,10 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
     }, req.exchangeCreds);
     // Step 2: Re-place with new price
     const side = cancelData.side || req.body.side;
-    const qty = newQuantity ? parseFloat(newQuantity) : parseFloat(cancelData.origQty);
+    let qty = newQuantity ? parseFloat(newQuantity) : parseFloat(cancelData.origQty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return res.status(400).json({ error: 'Invalid newQuantity' });
+    }
     const _rounded = roundOrderParams(symbol, qty);
     const placeParams = {
       symbol,
@@ -423,7 +485,7 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
     if (req.body.newClientOrderId) placeParams.newClientOrderId = req.body.newClientOrderId;
     const placeData = await sendSignedRequest('POST', '/fapi/v1/order', placeParams, req.exchangeCreds);
     logger.info('ORDER', `MODIFY LIMIT ${symbol} old=${orderId} new=${placeData.orderId} price=${np}`);
-    audit.record('ORDER_MODIFIED', { symbol, oldOrderId: orderId, newOrderId: placeData.orderId, newPrice: np }, 'MANUAL', req.ip);
+    audit.record('ORDER_MODIFIED', { userId: req.user.id, symbol, oldOrderId: orderId, newOrderId: placeData.orderId, newPrice: np }, 'MANUAL', req.ip);
     res.json({
       cancelledOrderId: cancelData.orderId,
       orderId: placeData.orderId,
@@ -449,41 +511,56 @@ router.post('/manual/protection', validateOrderBody, async (req, res) => {
   const { symbol, side, type, quantity, stopPrice, cancelOrderId } = req.body;
   try {
     // Cancel existing protection order if provided
+    // [ALGO-FIX] Try algo cancel first (SL/TP are now algo orders), then regular
     if (cancelOrderId) {
+      let cancelled = false;
       try {
-        await sendSignedRequest('DELETE', '/fapi/v1/order', {
-          symbol, orderId: String(cancelOrderId),
-        }, req.exchangeCreds);
-        logger.info('ORDER', `Cancelled old protection ${cancelOrderId} for ${symbol}`);
-      } catch (cancelErr) {
-        // If cancel fails with "Unknown order" it was already filled/cancelled — safe to continue
-        if (cancelErr.message && (cancelErr.message.includes('Unknown order') || cancelErr.message.includes('UNKNOWN_ORDER'))) {
-          logger.warn('ORDER', `Old protection ${cancelOrderId} already gone — continuing`);
-        } else {
-          throw cancelErr;
+        await sendSignedRequest('DELETE', '/fapi/v1/algoOrder', { symbol, algoId: String(cancelOrderId) }, req.exchangeCreds);
+        cancelled = true;
+      } catch (_algoErr) {
+        const _am = _algoErr.message || '';
+        if (_am.includes('not found') || _am.includes('Unknown') || _am.includes('not active')) {
+          // Not an algo order — try regular
+        } else if (_am.includes('2011') || _am.includes('already')) {
+          cancelled = true; // already gone
         }
       }
+      if (!cancelled) {
+        try {
+          await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol, orderId: String(cancelOrderId) }, req.exchangeCreds);
+          cancelled = true;
+        } catch (cancelErr) {
+          if (cancelErr.message && (cancelErr.message.includes('Unknown order') || cancelErr.message.includes('UNKNOWN_ORDER'))) {
+            cancelled = true; // already gone
+          } else {
+            throw cancelErr;
+          }
+        }
+      }
+      if (cancelled) logger.info('ORDER', `Cancelled old protection ${cancelOrderId} for ${symbol}`);
     }
-    // Place new protection order
+    // [ALGO-FIX] Place new protection order via algo endpoint
     const _rounded = roundOrderParams(symbol, parseFloat(quantity), parseFloat(stopPrice));
-    const params = {
+    const algoParams = {
+      algoType: 'CONDITIONAL',
       symbol,
       side,
       type,
       quantity: String(_rounded.quantity || quantity),
-      stopPrice: String(_rounded.stopPrice != null ? _rounded.stopPrice : stopPrice),
-      reduceOnly: true,
+      triggerPrice: String(_rounded.stopPrice != null ? _rounded.stopPrice : stopPrice),
+      reduceOnly: 'true',
     };
-    if (req.body.newClientOrderId) params.newClientOrderId = req.body.newClientOrderId;
-    const data = await sendSignedRequest('POST', '/fapi/v1/order', params, req.exchangeCreds);
+    if (req.body.newClientOrderId) algoParams.clientAlgoId = req.body.newClientOrderId;
+    const data = await sendSignedRequest('POST', '/fapi/v1/algoOrder', algoParams, req.exchangeCreds);
+    if (data.algoId != null && data.orderId == null) data.orderId = data.algoId;
     const protType = type === 'STOP_MARKET' ? 'SL' : 'TP';
-    logger.info('ORDER', `MANUAL ${protType} SET ${symbol} stopPrice=${stopPrice} orderId=${data.orderId}`);
-    audit.record('PROTECTION_SET', { symbol, type: protType, stopPrice, orderId: data.orderId }, 'MANUAL', req.ip);
+    logger.info('ORDER', `MANUAL ${protType} SET ${symbol} triggerPrice=${stopPrice} algoId=${data.orderId}`);
+    audit.record('PROTECTION_SET', { userId: req.user.id, symbol, type: protType, stopPrice, orderId: data.orderId }, 'MANUAL', req.ip);
     res.json({
       orderId: data.orderId,
-      status: data.status,
-      type: data.type,
-      stopPrice: parseFloat(data.stopPrice || stopPrice),
+      status: data.status || data.algoStatus,
+      type: data.type || data.orderType,
+      stopPrice: parseFloat(data.triggerPrice || stopPrice),
       symbol: data.symbol,
       side: data.side,
     });
@@ -531,6 +608,38 @@ router.post('/at/toggle', (req, res) => {
   } catch (err) {
     console.error('[API] at/toggle error:', err.message);
     res.status(500).json({ error: 'Toggle failed' });
+  }
+});
+
+// ─── Brain Vision API (Brain V2 UI) ───
+router.get('/brain/vision', (req, res) => {
+  try {
+    const serverBrain = require('../services/serverBrain');
+    res.json(serverBrain.getBrainVision());
+  } catch (err) {
+    console.error('[API] brain/vision error:', err.message);
+    res.status(500).json({ error: 'Brain vision unavailable' });
+  }
+});
+
+// ─── Brain Dashboard API (Reflection Engine UI) ───
+router.get('/brain/dashboard', (req, res) => {
+  try {
+    const serverReflection = require('../services/serverReflection');
+    res.json(serverReflection.getDashboard(req.user.id));
+  } catch (err) {
+    console.error('[API] brain/dashboard error:', err.message);
+    res.status(500).json({ error: 'Brain dashboard unavailable' });
+  }
+});
+
+// ─── Exit Analysis API ───
+router.get('/brain/exits', (req, res) => {
+  try {
+    const serverExitManager = require('../services/serverExitManager');
+    res.json({ regimeStats: serverExitManager.getRegimeStats(req.user.id) });
+  } catch (err) {
+    res.status(500).json({ error: 'Exit analysis unavailable' });
   }
 });
 

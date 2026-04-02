@@ -9,6 +9,8 @@
   <meta name="apple-mobile-web-app-title" content="ZeuS">
   <meta name="theme-color" content="#0a0a0a">
   <title>Zeus Terminal — AI Trading Analytics Platform</title>
+  <script src="https://browser.sentry-cdn.com/8.55.0/bundle.min.js" crossorigin="anonymous"></script>
+  <script>window.Sentry&&Sentry.init({dsn:'https://c34e302cfbc932bf228713c699d0bfb3@o4511152491855872.ingest.de.sentry.io/4511152522395728',environment:'production',sampleRate:1.0,beforeSend:function(e){if(e.exception&&e.exception.values){var m=e.exception.values[0]&&e.exception.values[0].value;if(m&&(m.indexOf('ResizeObserver')>-1||m.indexOf('Non-Error')>-1))return null}return e}})</script>
   <script>!function () { var _f = window.fetch; window.fetch = function (u, o) { o = o || {}; if (!o.headers) o.headers = {}; if (typeof o.headers.set === 'function') o.headers.set('X-Zeus-Request', '1'); else o.headers['X-Zeus-Request'] = '1'; return _f.call(this, u, o) } }()</script>
   <link rel="manifest" id="pwa-manifest" href="/manifest.json">
   <link rel="apple-touch-icon"
@@ -18,8 +20,9 @@
   <meta name="theme-color" content="#0a0f16">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <script>try{if(sessionStorage.getItem('zeusDock')){var d=document.createElement('div');d.id='_dockSplash';d.style.cssText='position:fixed;inset:0;z-index:99999;background:#060a10;display:flex;align-items:center;justify-content:center;flex-direction:column';d.innerHTML='<div style="color:#3a7bd5;font-family:monospace;font-size:14px;letter-spacing:3px;opacity:.8">REFRESHING<span id="_dkDots"></span></div>';document.documentElement.appendChild(d);var _n=0;setInterval(function(){_n=(_n+1)%4;var s=document.getElementById('_dkDots');if(s)s.textContent='.'.repeat(_n)},400)}}catch(e){}</script>
   <meta name="apple-mobile-web-app-title" content="ZeuS Terminal">
-  <link rel="stylesheet" href="css/main.css?v=081">
+  <link rel="stylesheet" href="css/main.css?v=101">
   <link rel="stylesheet" href="css/components.css?v=114">
   <!-- SW unregister removed — sw.js is now correctly configured -->
   <script>function loadLWC2() { var s = document.createElement('script'); s.src = 'https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js'; s.integrity = 'sha384-JZigAjwiaZtkUbA44CWkPaT3iBb/mU5pO6QOANp+OqHd4q+1+7MG1kzp2OOP9ZfP'; s.crossOrigin = 'anonymous'; s.onerror = function () { var s2 = document.createElement('script'); s2.src = 'https://cdnjs.cloudflare.com/ajax/libs/lightweight-charts/4.1.3/lightweight-charts.standalone.production.min.js'; s2.integrity = 'sha384-ZSs6LKr2GoUPDyHrN+rCQgyHL1yUyok5xMniSrgeRG7rUvA6vTmxronM1eZOfjgz'; s2.crossOrigin = 'anonymous'; document.head.appendChild(s2); }; document.head.appendChild(s); }</script>
@@ -234,6 +237,22 @@
     </svg> DATA STALLED — price feed unresponsive</div>
 
   <div class="page">
+    <!-- Global Status Bar — always visible -->
+    <div id="zeusStatusBar" class="zeus-status-bar">
+      <div class="zsb-item zsb-mode" id="zsbMode" title="Trading Mode">DEMO</div>
+      <div class="zsb-sep"></div>
+      <div class="zsb-item" id="zsbAT" title="AutoTrade State"><span class="zsb-dot zsb-off"></span>AT OFF</div>
+      <div class="zsb-sep"></div>
+      <div class="zsb-item" id="zsbWS" title="WebSocket Connection"><span class="zsb-dot zsb-on"></span>WS</div>
+      <div class="zsb-sep"></div>
+      <div class="zsb-item" id="zsbData" title="Data Freshness"><span class="zsb-dot zsb-on"></span>DATA</div>
+      <div class="zsb-sep"></div>
+      <div class="zsb-item" id="zsbKill" title="Kill Switch" style="display:none"><span class="zsb-dot zsb-warn"></span>KILL</div>
+      <div class="zsb-sep" id="zsbKillSep" style="display:none"></div>
+      <div class="zsb-item" id="zsbPos" title="Open Positions — tap for Exposure" onclick="_toggleExposurePanel()" style="cursor:pointer">0 pos</div>
+      <div class="zsb-sep"></div>
+      <div class="zsb-item" id="zsbPnl" title="Daily PnL">$0.00</div>
+    </div>
     <div class="hdr">
       <div class="brand">
         <img
@@ -242,6 +261,10 @@
         <div>
           <div class="t1">ZEU'S</div>
           <div class="t2">AI TRADING ANALYTICS</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+            <div class="bprice" id="bprice">$&#8212;</div>
+            <div class="bchg" id="bchg">&#8212; &#8212;%</div>
+          </div>
           <button id="installBtn" onclick="installPWA()"
             style="display:none;margin-top:3px;background:linear-gradient(90deg,#f0c040,#aa7700);color:#000;border:none;padding:2px 8px;border-radius:10px;font-size:8px;font-weight:700;cursor:pointer;font-family:var(--ff);align-items:center;gap:3px"><svg
               class="z-i" viewBox="0 0 16 16">
@@ -255,27 +278,16 @@
       </div>
       <div class="hdr-r">
         <div class="hdr-btns">
-          <button class="sbtn" onclick="openM('mcloud')" title="Cloud Sync"><svg width="16" height="16"
+          <button class="sbtn" onclick="_toggleCmdPalette()" title="Search (Ctrl+K)" id="cmdPaletteBtn"><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
               stroke-linejoin="round">
-              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z" />
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg></button>
-          <div id="nc-bell-wrap">
-            <button class="sbtn" onclick="openM('mnotifications');_ncRenderList();_ncUpdateBadge();"
-              title="Notification Center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg></button>
+          <button class="sbtn" onclick="_toggleDecisionPanel()" title="Decision Log" id="dlogBtn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></button>
+          <!-- NC bell + alert bell moved: NC into Price Alerts panel, alerts into Settings Hub -->
+          <div id="nc-bell-wrap" style="display:none">
             <span id="nc-badge">0</span>
           </div>
-          <button class="sbtn" onclick="openM('malerts')" title="Alerts" id="bellBtn"><svg width="16" height="16"
-              viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-              stroke-linejoin="round">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              <line x1="1" y1="1" x2="23" y2="23" />
-            </svg></button>
           <button class="sbtn" onclick="openM('msettings');hubPopulate();" title="Settings Hub"><svg width="16"
               height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
               <circle cx="12" cy="12" r="3" />
@@ -296,7 +308,102 @@
             </svg></button>
         </div>
         <div class="hdr-price">
-          <select id="symSel" onchange="setSymbol(this.value)">
+          <span id="userEmail"
+            style="font-size:8px;color:#556;letter-spacing:0.5px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        </div>
+      </div>
+    </div>
+    <!-- ===== MULTI-SYMBOL WATCHLIST ===== -->
+    <div class="wl-bar" id="wlBar">
+      <div class="wl-item act" id="wl-BTCUSDT" onclick="switchWLSymbol('BTCUSDT')">
+        <div class="wl-sym">BTC</div>
+        <div class="wl-price" id="wlp-BTCUSDT">—</div>
+        <div class="wl-chg" id="wlc-BTCUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-ETHUSDT" onclick="switchWLSymbol('ETHUSDT')">
+        <div class="wl-sym">ETH</div>
+        <div class="wl-price" id="wlp-ETHUSDT">—</div>
+        <div class="wl-chg" id="wlc-ETHUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-SOLUSDT" onclick="switchWLSymbol('SOLUSDT')">
+        <div class="wl-sym">SOL</div>
+        <div class="wl-price" id="wlp-SOLUSDT">—</div>
+        <div class="wl-chg" id="wlc-SOLUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-BNBUSDT" onclick="switchWLSymbol('BNBUSDT')">
+        <div class="wl-sym">BNB</div>
+        <div class="wl-price" id="wlp-BNBUSDT">—</div>
+        <div class="wl-chg" id="wlc-BNBUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-XRPUSDT" onclick="switchWLSymbol('XRPUSDT')">
+        <div class="wl-sym">XRP</div>
+        <div class="wl-price" id="wlp-XRPUSDT">—</div>
+        <div class="wl-chg" id="wlc-XRPUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-DOGEUSDT" onclick="switchWLSymbol('DOGEUSDT')">
+        <div class="wl-sym">DOGE</div>
+        <div class="wl-price" id="wlp-DOGEUSDT">—</div>
+        <div class="wl-chg" id="wlc-DOGEUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-ADAUSDT" onclick="switchWLSymbol('ADAUSDT')">
+        <div class="wl-sym">ADA</div>
+        <div class="wl-price" id="wlp-ADAUSDT">—</div>
+        <div class="wl-chg" id="wlc-ADAUSDT">—</div>
+      </div>
+      <div class="wl-item" id="wl-ZECUSDT" onclick="switchWLSymbol('ZECUSDT')">
+        <div class="wl-sym">ZEC</div>
+        <div class="wl-price" id="wlp-ZECUSDT">—</div>
+        <div class="wl-chg" id="wlc-ZECUSDT">—</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════
+     ZEUS GROUPS — panels moved here by initZeusGroups()
+     ═══════════════════════════════════════════════════ -->
+    <div id="zeus-groups"></div>
+    <!-- Icon Dock — populated by initZeusDock(), positioned by initZeusGroups() -->
+    <div id="zeus-dock"></div>
+    <!-- Global Execution Mode Bar — populated by initModeBar(), positioned by initZeusGroups() -->
+    <div id="zeus-mode-bar" class="zeus-mode-bar"></div>
+    <!-- Hidden staging container — panels moved here when removed from home flow -->
+    <div id="zeus-hidden-panels" style="display:none!important"></div>
+    <!-- Page View — full-screen dedicated module page, hidden by default -->
+    <div id="zeus-page-view" class="zpv" style="display:none"></div>
+
+    <div class="sec chart-section" id="csec">
+      <div class="slbl" style="justify-content:space-between">
+        <span>&#128200; <span id="chartTitleLbl">BTCUSDT</span> &#8212; LIVE CHART</span>
+        <span id="chartTZLbl" style="color:#44aaff;font-size:7px"><span style="font-weight:700">RO</span></span>
+      </div>
+      <div class="ctrls">
+        <div class="crow">
+          <div class="ztf-wrap" id="ztfWrap">
+            <button class="ztf-trigger" id="ztfTrigger" onclick="ztfToggle()"><span id="ztfLabel">5m</span> <span
+                class="ztf-arrow">▾</span></button>
+            <div class="ztf-dropdown" id="ztfDropdown">
+              <button class="ztf-item" onclick="ztfPick('1m',this)">1m</button>
+              <button class="ztf-item" onclick="ztfPick('3m',this)">3m</button>
+              <button class="ztf-item act" onclick="ztfPick('5m',this)">5m</button>
+              <button class="ztf-item" onclick="ztfPick('15m',this)">15m</button>
+              <button class="ztf-item" onclick="ztfPick('30m',this)">30m</button>
+              <button class="ztf-item" onclick="ztfPick('1h',this)">1h</button>
+              <button class="ztf-item" onclick="ztfPick('2h',this)">2h</button>
+              <button class="ztf-item" onclick="ztfPick('4h',this)">4h</button>
+              <button class="ztf-item" onclick="ztfPick('5h',this)">5h</button>
+              <button class="ztf-item" onclick="ztfPick('6h',this)">6h</button>
+              <button class="ztf-item" onclick="ztfPick('12h',this)">12h</button>
+              <button class="ztf-item" onclick="ztfPick('1d',this)">1d</button>
+              <button class="ztf-item" onclick="ztfPick('3d',this)">3d</button>
+              <button class="ztf-item" onclick="ztfPick('1w',this)">1w</button>
+              <button class="ztf-item" onclick="ztfPick('1M',this)">1M</button>
+            </div>
+          </div>
+          <span style="width:4px"></span>
+          <button class="tfb ztf-sibling" onclick="toggleFS()" id="fsbtn" title="Fullscreen">&#10021;</button>
+          <button class="tfb ztf-sibling" onclick="openM('mcharts')" title="Chart Settings">&#9881;</button>
+          <button class="tfb ztf-sibling" onclick="openIndPanel()" title="Add Indicator">&#9776;</button>
+          <span style="width:8px"></span>
+          <select id="symSel" class="tfb" onchange="setSymbol(this.value)" style="height:24px;padding:2px 6px">
             <optgroup label="── TOP 10 ──" style="color:#888">
               <option value="BTCUSDT">BTC/USDT</option>
               <option value="ETHUSDT">ETH/USDT</option>
@@ -379,94 +486,10 @@
               <option value="FLOKIUSDT">FLOKI/USDT</option>
             </optgroup>
           </select>
-          <div class="bprice" id="bprice">$&#8212;</div>
-          <div class="bchg" id="bchg">&#8212; &#8212;%</div>
-          <span id="userEmail"
-            style="font-size:8px;color:#556;letter-spacing:0.5px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <button class="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" onclick="_toggleExpoInline()" title="Exposure Dashboard">EXP</button>
         </div>
-      </div>
-    </div>
-    <!-- ===== MULTI-SYMBOL WATCHLIST ===== -->
-    <div class="wl-bar" id="wlBar">
-      <div class="wl-item act" id="wl-BTCUSDT" onclick="switchWLSymbol('BTCUSDT')">
-        <div class="wl-sym">BTC</div>
-        <div class="wl-price" id="wlp-BTCUSDT">—</div>
-        <div class="wl-chg" id="wlc-BTCUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-ETHUSDT" onclick="switchWLSymbol('ETHUSDT')">
-        <div class="wl-sym">ETH</div>
-        <div class="wl-price" id="wlp-ETHUSDT">—</div>
-        <div class="wl-chg" id="wlc-ETHUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-SOLUSDT" onclick="switchWLSymbol('SOLUSDT')">
-        <div class="wl-sym">SOL</div>
-        <div class="wl-price" id="wlp-SOLUSDT">—</div>
-        <div class="wl-chg" id="wlc-SOLUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-BNBUSDT" onclick="switchWLSymbol('BNBUSDT')">
-        <div class="wl-sym">BNB</div>
-        <div class="wl-price" id="wlp-BNBUSDT">—</div>
-        <div class="wl-chg" id="wlc-BNBUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-XRPUSDT" onclick="switchWLSymbol('XRPUSDT')">
-        <div class="wl-sym">XRP</div>
-        <div class="wl-price" id="wlp-XRPUSDT">—</div>
-        <div class="wl-chg" id="wlc-XRPUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-DOGEUSDT" onclick="switchWLSymbol('DOGEUSDT')">
-        <div class="wl-sym">DOGE</div>
-        <div class="wl-price" id="wlp-DOGEUSDT">—</div>
-        <div class="wl-chg" id="wlc-DOGEUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-ADAUSDT" onclick="switchWLSymbol('ADAUSDT')">
-        <div class="wl-sym">ADA</div>
-        <div class="wl-price" id="wlp-ADAUSDT">—</div>
-        <div class="wl-chg" id="wlc-ADAUSDT">—</div>
-      </div>
-      <div class="wl-item" id="wl-ZECUSDT" onclick="switchWLSymbol('ZECUSDT')">
-        <div class="wl-sym">ZEC</div>
-        <div class="wl-price" id="wlp-ZECUSDT">—</div>
-        <div class="wl-chg" id="wlc-ZECUSDT">—</div>
-      </div>
-    </div>
-
-    <!-- ═══════════════════════════════════════════════════
-     ZEUS GROUPS — panels moved here by initZeusGroups()
-     ═══════════════════════════════════════════════════ -->
-    <div id="zeus-groups"></div>
-
-    <div class="sec chart-section" id="csec">
-      <div class="slbl" style="justify-content:space-between">
-        <span>&#128200; <span id="chartTitleLbl">BTCUSDT</span> &#8212; LIVE CHART</span>
-        <span id="chartTZLbl" style="color:#44aaff;font-size:7px"><span style="font-weight:700">RO</span></span>
-      </div>
-      <div class="ctrls">
-        <div class="crow">
-          <div class="ztf-wrap" id="ztfWrap">
-            <button class="ztf-trigger" id="ztfTrigger" onclick="ztfToggle()"><span id="ztfLabel">5m</span> <span
-                class="ztf-arrow">▾</span></button>
-            <div class="ztf-dropdown" id="ztfDropdown">
-              <button class="ztf-item" onclick="ztfPick('1m',this)">1m</button>
-              <button class="ztf-item" onclick="ztfPick('3m',this)">3m</button>
-              <button class="ztf-item act" onclick="ztfPick('5m',this)">5m</button>
-              <button class="ztf-item" onclick="ztfPick('15m',this)">15m</button>
-              <button class="ztf-item" onclick="ztfPick('30m',this)">30m</button>
-              <button class="ztf-item" onclick="ztfPick('1h',this)">1h</button>
-              <button class="ztf-item" onclick="ztfPick('2h',this)">2h</button>
-              <button class="ztf-item" onclick="ztfPick('4h',this)">4h</button>
-              <button class="ztf-item" onclick="ztfPick('5h',this)">5h</button>
-              <button class="ztf-item" onclick="ztfPick('6h',this)">6h</button>
-              <button class="ztf-item" onclick="ztfPick('12h',this)">12h</button>
-              <button class="ztf-item" onclick="ztfPick('1d',this)">1d</button>
-              <button class="ztf-item" onclick="ztfPick('3d',this)">3d</button>
-              <button class="ztf-item" onclick="ztfPick('1w',this)">1w</button>
-              <button class="ztf-item" onclick="ztfPick('1M',this)">1M</button>
-            </div>
-          </div>
-          <span style="width:4px"></span>
-          <button class="tfb ztf-sibling" onclick="toggleFS()" id="fsbtn" title="Fullscreen">&#10021;</button>
-          <button class="tfb ztf-sibling" onclick="openM('mcharts')" title="Chart Settings">&#9881;</button>
-          <button class="tfb ztf-sibling" onclick="openIndPanel()" title="Add Indicator">&#9776;</button>
+        <div id="expoInlinePanel" class="expo-inline" style="display:none">
+          <div id="expoInlineContent" style="padding:8px 10px;font-size:10px;color:#888;line-height:1.7"></div>
         </div>
         <div class="crow">
           <button class="sess-btn asia" id="sessAsia" onclick="toggleSession('asia',this)" title="Asia Session"><span
@@ -500,13 +523,32 @@
             onclick="openM('mllv')"
             style="cursor:pointer;padding:2px 5px;border-radius:4px;border:1px solid #f0c04033;font-size:10px"
             title="LLV Settings">&#9881;&#65039;</span>
+          <span style="width:5px"></span>
+          <button class="ovrb" id="ts-toggle-btn" onclick="toggleTimeSales()" title="Time &amp; Sales tape (T)">&#128200; T&amp;S</button>
+          <span style="width:8px"></span>
+          <span class="dt-sep">|</span>
+          <button class="dt-btn" id="dt-hline" onclick="drawToolActivate('hline')" title="Horizontal Line (H)">&#9473;</button>
+          <button class="dt-btn" id="dt-tline" onclick="drawToolActivate('tline')" title="Trendline (click 2 points)">&#9585;</button>
+          <button class="dt-btn" id="dt-eraser" onclick="drawToolActivate('eraser')" title="Eraser (click near line)">&#9003;</button>
+          <button class="dt-btn" id="dt-eye" onclick="drawToolToggleVis()" title="Toggle drawings visibility">&#128065;</button>
+          <button class="dt-btn" onclick="drawToolClearAll()" title="Clear all drawings" style="color:var(--red,#ff3355)">&#128465;</button>
         </div>
       </div>
       <div style="position:relative">
         <div id="mc"></div>
       </div>
-      <div id="cc"></div>
-      <div id="vc"></div>
+      <div class="cleg">
+        <span class="li"><span class="ld" style="background:#f0c040"></span>EMA50</span>
+        <span class="li"><span class="ld" style="background:#00b8d4"></span>EMA200</span>
+        <span class="li"><span class="ld" style="background:#aa44ff"></span>WMA20</span>
+        <span class="li"><span class="ld" style="background:#ff8800"></span>ST</span>
+        <span class="li" id="liqleg" style="display:none"><span class="ld"
+            style="background:#ff335599"></span>LIQ</span>
+        <span class="li" id="zsleg" style="display:none"><span class="ld" style="background:#f0c040"></span>VWAP</span>
+        <span class="li" id="srleg" style="display:none"><span class="ld" style="background:#00d97a"></span>S/R</span>
+      </div>
+      <div id="cc"
+        style="display:none;width:100%;height:60px;background:#0a0f16;border-top:1px solid var(--brd)"></div>
       <div id="macdChart"
         style="display:none;width:100%;height:60px;background:#0a0f16;border-top:1px solid var(--brd)"></div>
       <div id="rsiChart" style="display:none;width:100%;height:60px;background:#0a0f16;border-top:1px solid var(--brd)">
@@ -521,16 +563,8 @@
       </div>
       <div id="cciChart" style="display:none;width:100%;height:60px;background:#0a0f16;border-top:1px solid var(--brd)">
       </div>
-      <div class="cleg">
-        <span class="li"><span class="ld" style="background:#f0c040"></span>EMA50</span>
-        <span class="li"><span class="ld" style="background:#00b8d4"></span>EMA200</span>
-        <span class="li"><span class="ld" style="background:#aa44ff"></span>WMA20</span>
-        <span class="li"><span class="ld" style="background:#ff8800"></span>ST</span>
-        <span class="li" id="liqleg" style="display:none"><span class="ld"
-            style="background:#ff335599"></span>LIQ</span>
-        <span class="li" id="zsleg" style="display:none"><span class="ld" style="background:#f0c040"></span>VWAP</span>
-        <span class="li" id="srleg" style="display:none"><span class="ld" style="background:#00d97a"></span>S/R</span>
-      </div>
+      <!-- Time & Sales tape (read-only, fed from RAW_FLOW.buf) -->
+      <div id="ts-wrap" style="display:none"></div>
     </div>
 
     <!-- ═══════════════════════════════════════════════════════════════
@@ -756,6 +790,24 @@
             id="pf-risk">—</span></div>
         <div class="mtf-row"><span class="mtf-lbl" style="color:#88f040">PF SIZE</span><span class="mtf-val"
             id="pf-size">—</span></div>
+      </div>
+    </div>
+
+    <!-- ══ ACTIVITY FEED STRIP ════════════════════ -->
+    <div id="actfeed-strip" data-panel="actfeed">
+      <div class="actfeed-bar" onclick="_actfeedToggle()">
+        <div class="v6-accent">
+          <div class="v6-ico"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div>
+          <span class="v6-lbl">FEED</span>
+        </div>
+        <div class="v6-content">
+          <span style="font-weight:700;letter-spacing:1.5px;color:#aa44ff;margin-right:4px">ACTIVITY</span>
+          <span id="actfeedBadge" style="color:#555;font-size:9px">0 events</span>
+          <span class="actfeed-chev" style="margin-left:auto;color:#333;font-size:10px">&#9660;</span>
+        </div>
+      </div>
+      <div id="actfeed-panel" style="display:none">
+        <div id="actfeedList" class="actfeed-list"></div>
       </div>
     </div>
 
@@ -1753,6 +1805,9 @@
         <span id="atModeLabel" style="font-size:8px;color:#aa44ff;letter-spacing:1px">DEMO</span>
       </div>
       <div class="at-body">
+        <div style="text-align:center;padding:8px 0 4px">
+          <a href="/journal.html" style="font-size:11px;color:var(--bg);background:var(--gold);text-decoration:none;letter-spacing:1px;padding:6px 18px;border-radius:4px;font-weight:700;display:inline-block">FULL JOURNAL</a>
+        </div>
 
         <!-- MODE (read-only — controlled by global switch) -->
         <div class="at-row">
@@ -1771,6 +1826,13 @@
               <option value="20">20x</option>
             </select>
           </div>
+        </div>
+
+        <!-- TRADING SYMBOLS (multi-symbol) -->
+        <div class="at-condition" id="atSymbolSection" style="display:none">
+          <div class="at-cond-title">TRADING SYMBOLS</div>
+          <div id="atSymbolGrid" style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0"></div>
+          <div style="font-size:7px;color:#556;margin-top:4px">Select which symbols the AT engine trades for you</div>
         </div>
 
         <!-- ENTRY CONDITIONS -->
@@ -1854,7 +1916,7 @@
             <span><input type="number" id="atMaxAddon" value="2" min="0" max="5" class="at-inp"
                 style="width:40px;display:inline;padding:2px 4px;font-size:9px"> add-ons</span>
           </div>
-          <div class="at-cond-row" style="flex-wrap:wrap;position:relative">
+          <div class="at-cond-row" id="atMscanRow" style="flex-wrap:wrap;position:relative">
             <span class="at-cond-name">Multi-Symbol Scan</span>
             <div style="display:flex;align-items:center;gap:6px">
               <input type="checkbox" id="atMultiSym" checked onchange="toggleMultiSymMode()">
@@ -1908,7 +1970,7 @@
             <div class="at-stat-v" id="atTotalPnL" style="color:var(--dim)">$0</div>
           </div>
           <div class="at-stat">
-            <div class="at-stat-l">DAILY LOSS</div>
+            <div class="at-stat-l" id="atDailyLabel">DAILY P&amp;L</div>
             <div class="at-stat-v" id="atDailyLoss" style="color:var(--dim)">$0</div>
           </div>
         </div>
@@ -1918,6 +1980,30 @@
         <div class="at-log" id="atLog">
           <div class="at-log-row"><span class="at-log-time">--:--</span><span class="at-log-msg info">Auto Trade Engine
               pornit. Astept semnal...</span></div>
+        </div>
+
+        <!-- BRAIN VISION (V2) -->
+        <div id="brainVisionWrap" style="margin:8px 0 6px;border:1px solid rgba(120,80,220,0.25);border-radius:6px;background:rgba(10,6,20,0.6);overflow:hidden">
+          <div id="brainVisionHdr" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;cursor:pointer;user-select:none" onclick="(function(){var b=document.getElementById('brainVisionBody');b.style.display=b.style.display==='none'?'block':'none';document.getElementById('brainVisionChev').textContent=b.style.display==='none'?'\u25B6':'\u25BC'})()">
+            <span style="font-size:11px;letter-spacing:2px;color:#aa44ff;font-weight:600">BRAIN VISION</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span id="brainVisionCycle" style="font-size:11px;color:var(--dim)">C0</span>
+              <span id="brainVisionChev" style="font-size:12px;color:#aa44ff">\u25BC</span>
+            </span>
+          </div>
+          <div id="brainVisionBody" style="padding:2px 12px 10px;font-family:monospace;font-size:12px;line-height:1.8"></div>
+        </div>
+
+        <!-- BRAIN DASHBOARD (Reflection Engine) -->
+        <div id="brainDashWrap" style="margin:8px 0 6px;border:1px solid rgba(60,180,220,0.25);border-radius:6px;background:rgba(6,12,20,0.7);overflow:hidden">
+          <div id="brainDashHdr" style="display:flex;align-items:center;justify-content:space-between;padding:6px 10px;cursor:pointer;user-select:none" onclick="(function(){var b=document.getElementById('brainDashBody');b.style.display=b.style.display==='none'?'block':'none';document.getElementById('brainDashChev').textContent=b.style.display==='none'?'\u25B6':'\u25BC'})()">
+            <span style="font-size:11px;letter-spacing:2px;color:#3ab4dc;font-weight:600">BRAIN DASHBOARD</span>
+            <span style="display:flex;align-items:center;gap:6px">
+              <span id="brainDashScore" style="font-size:11px;color:var(--dim)"></span>
+              <span id="brainDashChev" style="font-size:12px;color:#3ab4dc">&#9660;</span>
+            </span>
+          </div>
+          <div id="brainDashBody" style="padding:2px 12px 10px;font-family:monospace;font-size:12px;line-height:1.8"></div>
         </div>
 
         <!-- KILL SWITCH -->
@@ -1988,7 +2074,7 @@
           </div>
           <div class="tp-field">
             <div class="tp-lbl">MARGIN MODE</div>
-            <select id="demoMarginMode" class="tp-sel">
+            <select id="demoMarginMode" class="tp-sel" onchange="if(typeof _usScheduleSave==='function')_usScheduleSave()">
               <option value="cross">CROSS</option>
               <option value="isolated">ISOLATED</option>
             </select>
@@ -2090,11 +2176,15 @@
             <div id="demoTrades" class="tp-pnl-val">0</div>
           </div>
         </div>
+        <!-- LIVE/TESTNET OPEN POSITIONS (shown when mode=live, hidden in demo) -->
+        <div id="livePositionsInDemo" style="display:none;border-top:1px solid var(--brd);padding-top:8px;margin-top:4px">
+          <div style="font-size:8px;letter-spacing:2px;color:var(--dim);margin-bottom:6px">EXCHANGE POSITIONS</div>
+          <div id="livePositionsDemo" style="font-size:9px;color:var(--dim);text-align:center">—</div>
+        </div>
         <!-- TRADE JOURNAL -->
         <div style="border-top:1px solid var(--brd);padding-top:8px;margin-top:4px">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px 6px">
             <span style="font-size:8px;letter-spacing:2px;color:var(--dim)">TRADE JOURNAL</span>
-            <a href="/journal.html" style="font-size:8px;color:var(--gold);text-decoration:none;letter-spacing:1px;margin-left:8px" title="Open full journal">FULL</a>
             <button class="csv-btn" onclick="exportJournalCSV()"><svg class="z-i" viewBox="0 0 16 16">
                 <path d="M8 2v8m-3-3l3 3 3-3M3 14h10" />
               </svg> CSV</button>
@@ -2960,6 +3050,19 @@
                 style="position:absolute;height:18px;width:18px;left:2px;bottom:2px;background:#555;border-radius:50%;transition:.3s"></span>
             </span>
           </label>
+        </div>
+
+        <!-- Notification Center quick access -->
+        <div
+          style="background:#0d1018;border:1px solid #aa44ff33;border-radius:6px;padding:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;cursor:pointer"
+          onclick="closeM('malerts');openM('mnotifications');_ncRenderList();_ncUpdateBadge();">
+          <div>
+            <div style="font-size:11px;color:#aa88ff;font-weight:700">Notification Center</div>
+            <div style="font-size:8px;color:var(--dim);margin-top:2px">View all system notifications</div>
+          </div>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aa88ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
         </div>
 
         <!-- Sound toggle -->
@@ -4050,6 +4153,13 @@
 
       <!-- ALERTS -->
       <div class="mbody" id="set-alerts">
+        <div style="margin-bottom:10px">
+          <button class="hub-sbtn pri" onclick="closeM('msettings');openM('malerts');" style="width:100%;padding:8px;font-size:10px">
+            <svg class="z-i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;vertical-align:middle;margin-right:4px">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg> OPEN FULL ALERTS PANEL
+          </button>
+        </div>
         <div class="msec">ALERT TRIGGERS</div>
         <label class="mchk"><input type="checkbox" id="hubAlertMaster"> Master: enable all alerts</label>
         <label class="mchk"><input type="checkbox" id="hubAlertVol"> Volume spikes</label>
@@ -4434,7 +4544,7 @@
 
   <!-- 2. Core state & config (depends on utils) -->
   <script src="js/core/state.js?v=125"></script>
-  <script src="js/core/config.js?v=114"></script>
+  <script src="js/core/config.js?v=115"></script>
   <script src="js/core/constants.js?v=111"></script>
   <script src="js/core/events.js?v=112"></script>
 
@@ -4477,6 +4587,7 @@
   <script src="js/ui/marketCoreReactor.js?v=111"></script>
   <script src="js/ui/dom.js?v=109"></script>
   <script src="js/ui/panels.js?v=073"></script>
+  <script src="js/ui/timeSales.js?v=1"></script>
   <script src="js/ui/modals.js?v=111"></script>
   <script src="js/ui/notifications.js?v=111"></script>
   <script src="js/ui/render.js?v=112"></script>
@@ -4509,8 +4620,35 @@
   <!-- 10. Patch layer -->
   <script src="js/core/patch.js?v=111"></script>
 
+  <!-- 10.5 Keyboard shortcuts (pure UI overlay, no deps on execution) -->
+  <script src="js/core/hotkeys.js?v=1"></script>
+
+  <!-- 10.6 Global Mode Bar + Icon Dock (visual UI, no deps on execution) -->
+  <script src="js/ui/modebar.js?v=2"></script>
+  <script src="js/ui/pageview.js?v=20"></script>
+  <script src="js/ui/dock.js?v=17"></script>
+
   <!-- 11. Bootstrap (MUST be last — calls startApp) -->
-  <script src="js/core/bootstrap.js?v=115"></script>
+  <script src="js/core/bootstrap.js?v=127"></script>
+
+  <!-- 12. Drawing tools — needs chart refs exposed from let-scoped globals -->
+  <script>
+    // Bridge: expose let-scoped chart refs to window for drawingTools IIFE
+    // mainChart and cSeries are declared with `let` in state.js (not on window)
+    // This inline script runs in the same scope and can access them directly
+    (function _bridgeChartRefs() {
+      var check = setInterval(function () {
+        if (typeof mainChart !== 'undefined' && mainChart &&
+            typeof cSeries !== 'undefined' && cSeries) {
+          window._zMainChart = mainChart;
+          window._zCSeries = cSeries;
+          clearInterval(check);
+        }
+      }, 200);
+      setTimeout(function () { clearInterval(check); }, 20000);
+    })();
+  </script>
+  <script src="js/ui/drawingTools.js?v=8"></script>
 
   <!-- SYNC DEBUG — remove after testing -->
   <script>
@@ -5261,6 +5399,101 @@
         });
     }
   </script>
+
+  <!-- Strategy Comparison -->
+  <div id="comparePanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel" style="max-width:620px">
+      <div class="dlog-hdr">
+        <span class="dlog-title">STRATEGY COMPARISON</span>
+        <button class="dlog-close" onclick="document.getElementById('comparePanel').style.display='none'">&times;</button>
+      </div>
+      <div id="compareContent" style="padding:8px 0;max-height:75vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Performance Dashboard Pro -->
+  <div id="perfPanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel" style="max-width:580px">
+      <div class="dlog-hdr">
+        <span class="dlog-title">PERFORMANCE</span>
+        <div id="perfModeTabs" style="display:flex;gap:4px;margin-left:8px"></div>
+        <button class="dlog-close" onclick="document.getElementById('perfPanel').style.display='none'">&times;</button>
+      </div>
+      <div id="perfContent" style="padding:8px 0;max-height:75vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Regime History Panel -->
+  <div id="regimePanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel" style="max-width:560px">
+      <div class="dlog-hdr">
+        <span class="dlog-title">REGIME HISTORY</span>
+        <button class="dlog-close" onclick="document.getElementById('regimePanel').style.display='none'">&times;</button>
+      </div>
+      <div id="regimeContent" style="padding:8px 0;max-height:75vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Session Review Panel -->
+  <div id="sessionPanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel" style="max-width:520px">
+      <div class="dlog-hdr">
+        <span class="dlog-title">SESSION REVIEW</span>
+        <span id="sessionDate" style="color:#444;font-size:9px;margin-left:8px"></span>
+        <button class="dlog-close" onclick="document.getElementById('sessionPanel').style.display='none'">&times;</button>
+      </div>
+      <div id="sessionContent" style="padding:16px;max-height:75vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Missed Trades Panel -->
+  <div id="missedPanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel" style="max-width:580px">
+      <div class="dlog-hdr">
+        <span class="dlog-title">MISSED TRADES</span>
+        <span style="color:#444;font-size:9px;margin-left:8px">Signals blocked by AT gates</span>
+        <button class="dlog-close" onclick="document.getElementById('missedPanel').style.display='none'">&times;</button>
+      </div>
+      <div id="missedContent" style="padding:8px 0;max-height:70vh;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Command Palette (Ctrl+K / Search) -->
+  <div id="cmdPalette" class="cmd-overlay" style="display:none">
+    <div class="cmd-panel">
+      <div class="cmd-input-wrap">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="cmdInput" type="text" class="cmd-input" placeholder="Search symbols, actions, navigation..." autocomplete="off" spellcheck="false">
+        <span class="cmd-hint">ESC</span>
+      </div>
+      <div id="cmdResults" class="cmd-results"></div>
+    </div>
+  </div>
+
+  <!-- Exposure Dashboard Panel (Alt+E) -->
+  <div id="exposurePanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel" style="max-width:520px">
+      <div class="dlog-hdr">
+        <span class="dlog-title">EXPOSURE DASHBOARD</span>
+        <span style="color:#444;font-size:9px;margin-left:8px">Alt+E</span>
+        <button class="dlog-close" onclick="_toggleExposurePanel()">&times;</button>
+      </div>
+      <div id="exposureContent" style="padding:16px;font-size:11px;color:#888;line-height:1.8"></div>
+    </div>
+  </div>
+
+  <!-- Decision Log Panel -->
+  <div id="dlogPanel" class="dlog-overlay" style="display:none">
+    <div class="dlog-panel">
+      <div class="dlog-hdr">
+        <span class="dlog-title">DECISION LOG</span>
+        <div class="dlog-filters" id="dlogFilters"></div>
+        <button class="dlog-close" onclick="_toggleDecisionPanel()">&times;</button>
+      </div>
+      <div class="dlog-stats" id="dlogStats"></div>
+      <div class="dlog-list" id="dlogList"></div>
+    </div>
+  </div>
 </body>
 
 </html>

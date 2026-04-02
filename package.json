@@ -6,11 +6,13 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "jest --verbose",
-    "test:unit": "jest --verbose --testPathPattern=tests/unit",
+    "test": "jest --forceExit --detectOpenHandles",
+    "test:watch": "jest --watch --forceExit",
+    "test:coverage": "jest --forceExit --coverage",
     "audit:check": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
+    "@sentry/node": "^10.47.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "compression": "^1.8.0",
