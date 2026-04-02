@@ -15,7 +15,6 @@
     <h1>Trade Journal</h1>
     <div style="display:flex;gap:8px">
       <button class="j-btn--dim j-btn" onclick="exportCSV()">Export CSV</button>
-      <a href="/" class="j-back">Back to Terminal</a>
     </div>
   </div>
 
@@ -59,7 +58,6 @@
       <option value="HIT_TP">Hit TP</option>
       <option value="DSL_PL">DSL Profit Lock</option>
       <option value="DSL_TTP">DSL Trailing TP</option>
-      <option value="EXPIRED">Expired</option>
       <option value="MANUAL_CLIENT">Manual</option>
     </select>
     <button class="j-btn--dim j-btn" onclick="clearFilters()">Clear</button>
@@ -72,7 +70,7 @@
         <tr>
           <th>#</th><th>Date</th><th>Symbol</th><th>Side</th><th>Mode</th>
           <th>Entry</th><th>Exit</th><th>Size</th><th>Lev</th>
-          <th>PnL</th><th>Exit Reason</th><th>Hold Time</th><th>SL</th><th>TP</th>
+          <th>PnL</th><th>Exit Reason</th><th>Hold Time</th><th>SL</th><th>TP</th><th>Notes</th>
         </tr>
       </thead>
       <tbody id="tableBody"></tbody>
@@ -84,6 +82,9 @@
   <div class="j-pagination" id="pagination"></div>
 
 </div>
+
+<!-- Fixed bottom bar (mobile) -->
+<a href="/" class="j-back-fixed">BACK TO TERMINAL</a>
 
 <script src="/js/journal.js"></script>
 </body>

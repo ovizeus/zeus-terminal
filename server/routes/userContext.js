@@ -6,6 +6,8 @@ const express = require('express');
 const router = express.Router();
 const fs = require('fs');
 const path = require('path');
+const db = require('../services/database');
+const logger = require('../services/logger');
 
 const CTX_DIR = path.join(__dirname, '..', '..', 'data', 'user_ctx');
 const MAX_SIZE = 256 * 1024; // 256KB ceiling per user — extended sections included
@@ -13,6 +15,18 @@ const MAX_BACKUPS = 5; // rotative backups per user
 
 // Ensure directory exists
 if (!fs.existsSync(CTX_DIR)) fs.mkdirSync(CTX_DIR, { recursive: true });
+
+// Whitelist of allowed section keys (must match client _buildAllSections)
+const ALLOWED_SECTIONS = new Set([
+    // Core 6
+    'settings', 'uiContext', 'panels', 'indSettings', 'llvSettings', 'uiScale',
+    // Extended 12
+    'signalRegistry', 'perfStats', 'dailyPnl', 'postmortem', 'adaptive',
+    'notifications', 'scannerSyms', 'midstackOrder', 'aubData', 'ofHud',
+    'teacherData', 'ariaNovaHud',
+    // ARES
+    'aresData',
+]);
 
 // [BE-02] Per-user write lock — prevents concurrent POST from overwriting each other
 const _writeLocks = new Map(); // userId → Promise chain
@@ -97,14 +111,31 @@ router.post('/user-context', (req, res) => {
         const sections = body.sections || {};
         const merged = existing.sections || {};
 
+        const MAX_SECTION_SIZE = 64 * 1024; // 64KB per section
+        let rejected = 0;
         for (const key of Object.keys(sections)) {
+            if (!ALLOWED_SECTIONS.has(key)) { rejected++; continue; }
             const incoming = sections[key];
+            // [V4.3] Validate section data: must be a non-null object
+            if (incoming === null || typeof incoming !== 'object' || Array.isArray(incoming)) {
+                console.warn('[user-ctx] Rejected section', key, 'from user', req.user.id, '— not an object');
+                rejected++;
+                continue;
+            }
+            // [V4.3] Per-section size guard
+            const sectionSize = JSON.stringify(incoming).length;
+            if (sectionSize > MAX_SECTION_SIZE) {
+                console.warn('[user-ctx] Rejected section', key, 'from user', req.user.id, '— too large:', sectionSize);
+                rejected++;
+                continue;
+            }
             const current = merged[key];
             // Accept if no existing section or incoming is newer
             if (!current || !current.ts || (incoming && incoming.ts && incoming.ts >= current.ts)) {
                 merged[key] = incoming;
             }
         }
+        if (rejected > 0) console.warn('[user-ctx] Rejected', rejected, 'section(s) from user', req.user.id);
 
         const final = { userId: req.user.id, ts: body.ts, sections: merged };
         _atomicWrite(fp, final);
@@ -121,5 +152,35 @@ router.post('/user-context', (req, res) => {
       }
     }); // [BE-02] end _withLock
 });
+
+// ─── Prune stale user_ctx files for deleted users (runs daily) ───
+const CTX_PRUNE_INTERVAL = 24 * 60 * 60 * 1000;
+const CTX_STALE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+
+function _pruneStaleCtxFiles() {
+    try {
+        const validIds = new Set(db.listUsers().map(u => u.id));
+        const files = fs.readdirSync(CTX_DIR);
+        let pruned = 0;
+        for (const f of files) {
+            const m = f.match(/^(\d+)\.json(\.bak\d+)?$/);
+            if (!m) continue;
+            const uid = parseInt(m[1], 10);
+            const filePath = path.join(CTX_DIR, f);
+            const stat = fs.statSync(filePath);
+            const age = Date.now() - stat.mtimeMs;
+            if (!validIds.has(uid) || age > CTX_STALE_AGE_MS) {
+                fs.unlinkSync(filePath);
+                pruned++;
+            }
+        }
+        if (pruned > 0) logger.info('USER_CTX', `Pruned ${pruned} stale user context file(s)`);
+    } catch (e) {
+        logger.error('USER_CTX', 'Context file prune failed: ' + e.message);
+    }
+}
+
+setTimeout(_pruneStaleCtxFiles, 90000); // 90s after startup
+setInterval(_pruneStaleCtxFiles, CTX_PRUNE_INTERVAL);
 
 module.exports = router;

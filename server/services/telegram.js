@@ -78,19 +78,21 @@ function send(text, parseMode) {
 }
 
 // ── Send to a specific user (from DB, encrypted) ──
+// [P3 FIX] No fallback to global — per-user alerts stay per-user.
+// If user has no Telegram configured, the alert is silently skipped.
 function sendToUser(userId, text, parseMode) {
     try {
         const db = require('./database');
         const { decrypt } = require('./encryption');
         const row = db.getUserTelegram(userId);
         if (!row || !row.telegram_bot_token_enc || !row.telegram_chat_id) {
-            return send(text, parseMode); // fallback to global
+            return Promise.resolve(false); // user has no Telegram — skip silently
         }
         const token = decrypt(row.telegram_bot_token_enc);
         return _sendWithRetry(token, row.telegram_chat_id, text, parseMode);
     } catch (e) {
         console.warn('[TELEGRAM] sendToUser failed:', e.message);
-        return send(text, parseMode); // fallback
+        return Promise.resolve(false); // don't leak to global on error
     }
 }
 
@@ -130,8 +132,13 @@ function sendToAll(text, parseMode) {
 
 // ── Pre-built alert helpers (userId is optional — omit for broadcast) ──
 
+// [P3 FIX] Per-user alerts require userId — no fallback to global
 function _userSend(userId, text, parseMode) {
-    return userId ? sendToUser(userId, text, parseMode) : send(text, parseMode);
+    if (!userId) {
+        console.warn('[TELEGRAM] _userSend called without userId — alert dropped');
+        return Promise.resolve(false);
+    }
+    return sendToUser(userId, text, parseMode);
 }
 
 function alertOrderFilled(symbol, side, qty, price, orderId, userId) {

@@ -66,6 +66,12 @@ function log(level, component, message, data) {
     };
     if (data && typeof data === 'object') {
         entry.data = data;
+        if (data.userId) entry.userId = data.userId;
+    }
+    // Extract userId from message pattern uid=N if not already set
+    if (!entry.userId && typeof message === 'string') {
+        const m = /uid=(\d+)/.exec(message);
+        if (m) entry.userId = parseInt(m[1], 10);
     }
 
     const line = JSON.stringify(entry);

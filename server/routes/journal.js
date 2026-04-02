@@ -146,4 +146,49 @@ function _msToStr(ms) {
     return +(ms / 86400000).toFixed(1) + 'd';
 }
 
+// PUT /api/journal/:seq/annotate — save notes, tags, rating on a closed trade
+router.put('/:seq/annotate', (req, res) => {
+    try {
+        const userId = req.user.id;
+        const seq = parseInt(req.params.seq, 10);
+        if (!Number.isFinite(seq) || seq <= 0) return res.status(400).json({ ok: false, error: 'Invalid seq' });
+        const { notes, tags, rating } = req.body;
+        if (rating != null && (rating < 0 || rating > 5)) return res.status(400).json({ ok: false, error: 'Rating must be 0-5' });
+        if (tags && !Array.isArray(tags)) return res.status(400).json({ ok: false, error: 'Tags must be an array' });
+        if (notes && typeof notes !== 'string') return res.status(400).json({ ok: false, error: 'Notes must be a string' });
+        if (notes && notes.length > 2000) return res.status(400).json({ ok: false, error: 'Notes too long (max 2000 chars)' });
+        if (tags && tags.length > 20) return res.status(400).json({ ok: false, error: 'Too many tags (max 20)' });
+        const cleanTags = tags ? tags.filter(t => typeof t === 'string').map(t => t.trim().substring(0, 50)) : [];
+        db.saveAnnotation(seq, userId, notes || '', cleanTags, rating || 0);
+        res.json({ ok: true });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/journal/:seq/annotate — get annotation for a trade
+router.get('/:seq/annotate', (req, res) => {
+    try {
+        const userId = req.user.id;
+        const seq = parseInt(req.params.seq, 10);
+        if (!Number.isFinite(seq) || seq <= 0) return res.status(400).json({ ok: false, error: 'Invalid seq' });
+        const annotation = db.getAnnotation(seq, userId);
+        res.json({ ok: true, annotation: annotation || { notes: '', tags: [], rating: 0 } });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/journal/annotations — all annotations for current user
+router.get('/annotations/all', (req, res) => {
+    try {
+        const annotations = db.getAnnotationsByUser(req.user.id);
+        const map = {};
+        annotations.forEach(a => { map[a.seq] = { notes: a.notes, tags: a.tags, rating: a.rating }; });
+        res.json({ ok: true, annotations: map });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;

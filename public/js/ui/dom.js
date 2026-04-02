@@ -99,7 +99,6 @@ function applyChartColors() {
   if (cSeries) { cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bw + '77', wickDownColor: brw + '77' }); }
   if (mainChart) { mainChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText }, rightPriceScale: { textColor: pText } }); }
   if (cvdChart) { cvdChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
-  if (volChart) { volChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
   closeM('mcharts'); toast('Culori aplicate ✓');
   // Save + IMMEDIATE push to server (no debounce — explicit user action)
   if (typeof _usSave === 'function') _usSave();
@@ -113,7 +112,7 @@ function initActBar() {
   renderActBar();
   // Apply initial visibility for ALL indicators — enable active ones + hide disabled ones
   INDICATORS.forEach(ind => {
-    var on = S.activeInds[ind.id] !== false;
+    var on = (ind.id in S.activeInds) ? !!S.activeInds[ind.id] : !!ind.def;
     applyIndVisibility(ind.id, on);
   });
 }
@@ -128,7 +127,7 @@ function applyPriceAxisWidth(px, btn) {
   if (btn) btn.classList.add("act");
   const w = parseInt(px) || 60;
   // v96: apply to all 4 charts so plot area stays aligned
-  [mainChart, cvdChart, volChart].forEach(c => {
+  [mainChart, cvdChart].forEach(c => {
     if (c) c.applyOptions({ rightPriceScale: { width: w } });
   });
   if (typeof _macdChart !== 'undefined' && _macdChart)
@@ -148,6 +147,9 @@ function togInd(id, btn) {
   applyIndVisibility(id, newVal);
   if (newVal && typeof renderChart === 'function') renderChart();
   renderActBar();
+  // [P5 FIX] Persist indicator state so it survives refresh
+  if (typeof _usSave === 'function') _usSave();
+  if (typeof _userCtxPush === 'function') _userCtxPush();
 }
 
 function applyPriceAxisColors() {
@@ -155,7 +157,7 @@ function applyPriceAxisColors() {
   const pBg = el('ccPriceBg2')?.value || '#0a0f16';
   const gh = el('ccGridH')?.value || '#1a2530';
   const gv = el('ccGridV')?.value || '#1a2530';
-  [mainChart, cvdChart, volChart].forEach(c => {
+  [mainChart, cvdChart].forEach(c => {
     if (c) c.applyOptions({
       layout: { background: { color: pBg }, textColor: pText },
       grid: { vertLines: { color: gv }, horzLines: { color: gh } },

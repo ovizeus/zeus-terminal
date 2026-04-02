@@ -2218,11 +2218,11 @@ function _aresRender() {
           if (lastDec.shouldTrade) {
             decEl.style.display = 'block';
             decEl.style.color = '#00ff88';
-            decEl.innerHTML = _ZI.ok + ' DECISION: ' + lastDec.side + ' — ' + lastDec.reasons.slice(0, 3).join(' · ');
+            decEl.innerHTML = _ZI.ok + ' DECISION: ' + escHtml(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map(escHtml).join(' · ');
           } else {
             decEl.style.display = 'block';
             decEl.style.color = '#ff8800';
-            decEl.innerHTML = _ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).join(' · ');
+            decEl.innerHTML = _ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map(escHtml).join(' · ');
           }
         }
       }
@@ -3728,9 +3728,7 @@ function _demoTick() {
   // Render pending orders (live distance update)
   if (typeof renderPendingOrders === 'function') renderPendingOrders();
 }
-// BUG7 FIX: API keys in session variables ONLY — never persisted to localStorage
-// [MOVED TO TOP] API_KEY
-// [MOVED TO TOP] API_SECRET
+// [V1.5] Legacy API_KEY/API_SECRET removed — credentials are server-side only (credentialStore)
 
 function connectLiveAPI() {
   var st = el('apiStatus');
@@ -3757,7 +3755,7 @@ function connectLiveAPI() {
     // Sync balance + positions
     if (typeof liveApiSyncState === 'function') liveApiSyncState();
   }).catch(function (err) {
-    if (st) { st.innerHTML = _ZI.x + ' Backend unreachable: ' + (err.message || err); st.style.color = 'var(--red)'; }
+    if (st) { st.innerHTML = _ZI.x + ' Backend unreachable: ' + escHtml(err.message || err); st.style.color = 'var(--red)'; }
   });
 }
 // FIX 13: LIVE TRADING — now wired to backend proxy
@@ -3901,6 +3899,10 @@ function applyIndVisibility(id, visible) {
       else { if (typeof vwapSeries !== 'undefined') { vwapSeries.forEach(s => { try { mainChart.removeSeries(s); } catch (_) { } }); vwapSeries = []; } }
       const vBtn = document.getElementById('vwapBtn');
       if (vBtn) vBtn.classList.toggle('on', show);
+      break;
+    case 'cvd':
+      const cvdEl = document.getElementById('cc');
+      if (cvdEl) cvdEl.style.display = show ? '' : 'none';
       break;
     case 'macd':
       const mc = document.getElementById('macdChart');
@@ -4439,11 +4441,11 @@ function initMACDChart() {
   const container = document.getElementById('macdChart');
   if (!container || typeof LightweightCharts === 'undefined') return;
 
-  container.style.height = '80px';
+  container.style.height = '60px';
   const w = getChartW();
 
   _macdChart = LightweightCharts.createChart(container, {
-    width: w, height: 80,
+    width: w, height: 60,
     layout: { background: { color: '#0a0f16' }, textColor: '#7a9ab8' },
     grid: { vertLines: { color: '#1a2030' }, horzLines: { color: '#1a2030' } },
     rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: 0.1, bottom: 0.1 } },

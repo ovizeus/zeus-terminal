@@ -50,7 +50,6 @@ const moduleList = [
     ['server/services/telegram', 'Telegram'],
     ['server/services/audit', 'Audit'],
     ['server/services/metrics', 'Metrics'],
-    ['server/services/reconciliation', 'Reconciliation'],
     ['server/services/credentialStore', 'Credential Store (P6)'],
     ['server/middleware/validate', 'Validate Middleware'],
     ['server/middleware/rateLimit', 'Rate Limiter'],

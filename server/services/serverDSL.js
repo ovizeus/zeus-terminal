@@ -4,6 +4,7 @@
 'use strict';
 
 const logger = require('./logger');
+const audit = require('./audit');
 
 // ══════════════════════════════════════════════════════════════════
 // DSL Configuration Defaults (mirrors client TC/global defaults)
@@ -73,7 +74,7 @@ function _safePrice(val, fallback) {
 // Call immediately after shadow/live entry is created
 // position must have: { seq, symbol, side, price, sl, tp }
 // ══════════════════════════════════════════════════════════════════
-function attach(position, params) {
+function attach(position, params, savedProgress) {
     const id = String(position.seq);
     const p = _sanitizeParams(params || DSL_DEFAULTS);
     const isLong = position.side === 'LONG';
@@ -85,6 +86,7 @@ function attach(position, params) {
 
     const state = {
         id: id,
+        userId: position.userId || null,
         symbol: position.symbol,
         side: position.side,
         entry: position.price,
@@ -110,8 +112,25 @@ function attach(position, params) {
         phaseChanges: 0,
     };
 
+    // Restore persisted DSL progress (survives server restart)
+    if (savedProgress && typeof savedProgress === 'object' && savedProgress.active) {
+        state.active = true;
+        state.progress = savedProgress.progress || 0;
+        state.activationPrice = savedProgress.activationPrice || activationPrice;
+        state.currentSL = savedProgress.currentSL || position.sl;
+        state.pivotLeft = savedProgress.pivotLeft || null;
+        state.pivotRight = savedProgress.pivotRight || null;
+        state.impulseVal = savedProgress.impulseVal || null;
+        state.ttpArmed = !!savedProgress.ttpArmed;
+        state.ttpPeak = savedProgress.ttpPeak || null;
+        state.phaseChanges = savedProgress.phaseChanges || 0;
+        state.log.push({ ts: Date.now(), msg: `Restored from DB — phase=${_getPhase(state)} PL=$${(state.pivotLeft || 0).toFixed(2)}` });
+    }
+
     _states.set(id, state);
-    logger.info('DSL', `[S${id}] Attached ${position.side} ${position.symbol} @ $${position.price.toFixed(2)} | Activation: $${activationPrice.toFixed(2)} | SL: $${position.sl.toFixed(2)}`);
+    const restoredTag = (savedProgress && savedProgress.active) ? ' [RESTORED]' : '';
+    var _slDisplay = state.currentSL || position.sl || 0;
+    logger.info('DSL', `[S${id}] Attached ${position.side} ${position.symbol} @ $${position.price.toFixed(2)} | Activation: $${activationPrice.toFixed(2)} | SL: $${_slDisplay.toFixed(2)}${restoredTag}`);
     return state;
 }
 
@@ -181,6 +200,7 @@ function tick(posId, price) {
         s.log.push({ ts: Date.now(), msg });
         s.phaseChanges++;
         logger.info('DSL', `[S${s.id}] 🎯 ${msg}`);
+        audit.record('DSL_ACTIVATION', { userId: s.userId, posId: s.id, symbol: s.symbol, side: s.side, price, pivotLeft: s.pivotLeft, pivotRight: s.pivotRight, impulseVal: s.impulseVal }, 'SERVER_AT');
     }
 
     // ═══════════════════════════════════════════════════════
@@ -212,7 +232,10 @@ function tick(posId, price) {
         // ═══════════════════════════════════════════════════════
         // PHASE 3: IMPULSE VALIDATION — PR reaches IV level
         // ═══════════════════════════════════════════════════════
-        const prDistPct = price > 0 ? Math.abs(price - s.pivotRight) / price * 100 : 0; // [TL-06] Guard div-by-zero
+        if (!Number.isFinite(s.pivotRight) || !Number.isFinite(s.impulseVal)) {
+            return { currentSL: s.currentSL, plExit: false, ttpExit: false, phase: _getPhase(s), changed };
+        }
+        const prDistPct = Math.abs(price - s.pivotRight) / price * 100;
         const ivConditionMet = prDistPct >= 0.05 && (isLong
             ? (s.pivotRight >= s.impulseVal)
             : (s.pivotRight <= s.impulseVal));
@@ -255,6 +278,7 @@ function tick(posId, price) {
                 const msg = `IMPULSE: PL $${oldPL.toFixed(2)}→$${s.pivotLeft.toFixed(2)} | IV $${oldIV.toFixed(2)}→$${s.impulseVal.toFixed(2)}`;
                 s.log.push({ ts: Date.now(), msg });
                 logger.info('DSL', `[S${s.id}] ⚡ ${msg}`);
+                audit.record('DSL_IMPULSE', { userId: s.userId, posId: s.id, symbol: s.symbol, side: s.side, price, oldPL, newPL: s.pivotLeft, oldIV, newIV: s.impulseVal, phaseChanges: s.phaseChanges }, 'SERVER_AT');
             }
         } else {
             // Price left IV zone → reset for next impulse

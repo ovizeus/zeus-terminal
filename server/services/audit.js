@@ -45,17 +45,25 @@ setInterval(_rotate, 60000);
  * @param {string} [ip] — request IP if applicable
  */
 function record(action, details, actor, ip) {
+    const d = details || {};
     const entry = {
         ts: new Date().toISOString(),
         action: action,
         actor: actor || 'system',
+        userId: d.userId || null,
         ip: ip || null,
-        details: details || {},
+        details: d,
     };
+    // Write to JSONL file (append-only log)
     const stream = _getStream();
     if (stream) {
         stream.write(JSON.stringify(entry) + '\n');
     }
+    // Also write to SQLite audit_log (unified source)
+    try {
+        const db = require('./database');
+        db.auditLog(d.userId || null, action, d, ip || null);
+    } catch (_) { /* DB not ready at early boot — JSONL still captures */ }
 }
 
 /**
@@ -106,4 +114,61 @@ function readLast(count) {
     }
 }
 
-module.exports = { record, readLast };
+/**
+ * Read the last N audit entries for a specific user (most recent first).
+ * Scans from end of file, filters by userId, stops after collecting `count` matches.
+ * @param {number} userId
+ * @param {number} [count=50]
+ * @returns {Array<object>}
+ */
+function readByUser(userId, count) {
+    if (!userId) return [];
+    const n = count || 50;
+    const uidStr = String(userId);
+    try {
+        if (!fs.existsSync(AUDIT_FILE)) return [];
+        const stat = fs.statSync(AUDIT_FILE);
+        if (stat.size === 0) return [];
+
+        const fd = fs.openSync(AUDIT_FILE, 'r');
+        const CHUNK = 16384;
+        let pos = stat.size;
+        let tail = '';
+        const result = [];
+
+        while (pos > 0 && result.length < n) {
+            const readSize = Math.min(CHUNK, pos);
+            pos -= readSize;
+            const buf = Buffer.alloc(readSize);
+            fs.readSync(fd, buf, 0, readSize, pos);
+            tail = buf.toString('utf8') + tail;
+
+            const lines = tail.split('\n');
+            tail = lines.shift();
+
+            for (let i = lines.length - 1; i >= 0 && result.length < n; i--) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                // Quick pre-filter before JSON parse
+                if (!line.includes(uidStr)) continue;
+                try {
+                    const entry = JSON.parse(line);
+                    if (String(entry.userId) === uidStr) result.push(entry);
+                } catch (_) { }
+            }
+        }
+        if (result.length < n && tail.trim() && tail.includes(uidStr)) {
+            try {
+                const entry = JSON.parse(tail.trim());
+                if (String(entry.userId) === uidStr) result.push(entry);
+            } catch (_) { }
+        }
+
+        fs.closeSync(fd);
+        return result;
+    } catch (_) {
+        return [];
+    }
+}
+
+module.exports = { record, readLast, readByUser };

@@ -165,9 +165,11 @@ if (!window._ARIA_NOVA_LOADED) {
       if (nPos === 0) el_state.className = 'atbs-on-neutral';
       else if (livePnl > 0) el_state.className = 'atbs-on-profit';
       else el_state.className = 'atbs-on-loss';
-      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (mode === 'live' ? 'LIVE' : 'DEMO');
+      var _arEnv = window._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE');
+      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'));
     } else {
-      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (mode === 'live' ? 'LIVE' : 'DEMO');
+      var _arEnv2 = window._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE');
+      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'));
       el_state.className = 'atbs-off';
     }
 
@@ -237,7 +239,8 @@ if (!window._ARIA_NOVA_LOADED) {
 
     // State badge — reflects global mode
     var globalMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
-    var modeLabel = globalMode === 'live' ? 'LIVE MODE' : 'DEMO MODE';
+    var _ptEnv = window._resolvedEnv || (globalMode === 'demo' ? 'DEMO' : 'REAL');
+    var modeLabel = globalMode === 'demo' ? 'DEMO MODE' : (_ptEnv === 'TESTNET' ? 'TESTNET MODE' : 'LIVE MODE');
     el_state.className = '';
     if (nPos === 0) {
       el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-empty';
@@ -251,7 +254,7 @@ if (!window._ARIA_NOVA_LOADED) {
 
     // Info: balance + positions
     if (isLiveMode && bal <= 0 && !window._apiConfigured) {
-      el_info.textContent = 'Live balance unavailable · API not configured' + (nPos > 0 ? ' · ' + nPos + ' poz active' : '');
+      el_info.textContent = 'Balance unavailable · Exchange not configured' + (nPos > 0 ? ' · ' + nPos + ' poz active' : '');
     } else if (isLiveMode) {
       el_info.textContent = 'BAL $' + bal.toFixed(0) + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții');
     } else {

@@ -6,11 +6,22 @@ var _filtered = [];
 var _mode = 'all';
 var _page = 0;
 var _perPage = 50;
+var _annotations = {}; // seq → { notes, tags, rating }
 
 // ── Init ──
 (function init() {
     fetchJournal();
+    _fetchAnnotations();
 })();
+
+function _fetchAnnotations() {
+    fetch('/api/journal/annotations/all', { credentials: 'include' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.ok && data.annotations) _annotations = data.annotations;
+        })
+        .catch(function() {});
+}
 
 function fetchJournal() {
     var params = '?limit=500';
@@ -135,13 +146,21 @@ function renderTable(trades) {
     body.innerHTML = page.map(function (t, i) {
         var pnlCls = t.pnl > 0 ? 'win bold' : t.pnl < 0 ? 'loss bold' : 'dim';
         var sideCls = t.side === 'LONG' ? 'side-long' : 'side-short';
-        var modeCls = t.mode === 'live' ? 'mode-live' : 'mode-demo';
+        var _jEnv = (t.mode === 'live' && window._resolvedEnv === 'TESTNET') ? 'testnet' : t.mode;
+        var modeCls = _jEnv === 'testnet' ? 'mode-testnet' : (t.mode === 'live' ? 'mode-live' : 'mode-demo');
+        var ann = _annotations[t.seq] || {};
+        var stars = ann.rating ? '★'.repeat(ann.rating) + '☆'.repeat(5 - ann.rating) : '';
+        var tags = (ann.tags || []).map(function(tg) { return '<span class="j-tag">' + tg + '</span>'; }).join('');
+        var notePreview = ann.notes ? ann.notes.substring(0, 30) + (ann.notes.length > 30 ? '...' : '') : '';
+        var annCell = '<span class="j-ann-stars">' + stars + '</span>' + tags +
+            (notePreview ? '<span class="j-ann-note">' + notePreview + '</span>' : '') +
+            '<button class="j-ann-btn" onclick="_openAnnotation(' + t.seq + ')" title="Edit notes">✎</button>';
         return '<tr>' +
             '<td class="dim">' + (start + i + 1) + '</td>' +
             '<td>' + _fmtDate(t.openTs) + '</td>' +
             '<td>' + (t.symbol || '').replace('USDT', '') + '</td>' +
             '<td class="' + sideCls + '">' + t.side + '</td>' +
-            '<td class="' + modeCls + '">' + (t.mode || 'demo').toUpperCase() + '</td>' +
+            '<td class="' + modeCls + '">' + (_jEnv === 'testnet' ? 'TESTNET' : (t.mode || 'demo').toUpperCase()) + '</td>' +
             '<td>$' + _fmtPrice(t.entryPrice) + '</td>' +
             '<td>' + (t.exitPrice ? '$' + _fmtPrice(t.exitPrice) : '—') + '</td>' +
             '<td>$' + _fmtNum(t.size) + '</td>' +
@@ -151,6 +170,7 @@ function renderTable(trades) {
             '<td class="dim">' + _msToStr(t.holdMs) + '</td>' +
             '<td class="dim">$' + _fmtPrice(t.sl) + '</td>' +
             '<td class="dim">$' + _fmtPrice(t.tp) + '</td>' +
+            '<td class="j-ann-cell">' + annCell + '</td>' +
             '</tr>';
     }).join('');
 
@@ -341,4 +361,81 @@ function _msToStr(ms) {
 function showEmpty() {
     document.getElementById('tableBody').innerHTML = '';
     document.getElementById('emptyState').style.display = 'block';
+}
+
+// ═══ Trade Annotations ═══
+var _annSeq = null;
+
+function _openAnnotation(seq) {
+    _annSeq = seq;
+    var ann = _annotations[seq] || { notes: '', tags: [], rating: 0 };
+    var overlay = document.getElementById('annOverlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = 'annOverlay';
+        overlay.className = 'ann-overlay';
+        overlay.innerHTML =
+            '<div class="ann-panel">' +
+            '<div class="ann-hdr"><span>TRADE NOTES</span><span class="ann-seq" id="annSeqLabel"></span><button class="ann-close" onclick="_closeAnnotation()">&times;</button></div>' +
+            '<div class="ann-body">' +
+            '<div class="ann-field"><label>Rating</label><div id="annStars" class="ann-stars"></div></div>' +
+            '<div class="ann-field"><label>Tags</label><input id="annTags" type="text" placeholder="scalp, setup-A, mistake..." class="ann-input"></div>' +
+            '<div class="ann-field"><label>Notes</label><textarea id="annNotes" rows="4" placeholder="What happened? What did you learn?" class="ann-input ann-textarea"></textarea></div>' +
+            '<button class="ann-save" onclick="_saveAnnotation()">SAVE</button>' +
+            '</div></div>';
+        document.body.appendChild(overlay);
+    }
+    overlay.style.display = 'flex';
+    document.getElementById('annSeqLabel').textContent = '#' + seq;
+    document.getElementById('annNotes').value = ann.notes || '';
+    document.getElementById('annTags').value = (ann.tags || []).join(', ');
+    _renderStars(ann.rating || 0);
+}
+
+function _closeAnnotation() {
+    var overlay = document.getElementById('annOverlay');
+    if (overlay) overlay.style.display = 'none';
+    _annSeq = null;
+}
+
+function _renderStars(rating) {
+    var el = document.getElementById('annStars');
+    if (!el) return;
+    var html = '';
+    for (var i = 1; i <= 5; i++) {
+        html += '<span class="ann-star' + (i <= rating ? ' ann-star-on' : '') + '" onclick="_setRating(' + i + ')">' + (i <= rating ? '★' : '☆') + '</span>';
+    }
+    el.innerHTML = html;
+    el.dataset.rating = rating;
+}
+
+function _setRating(r) {
+    var current = parseInt(document.getElementById('annStars').dataset.rating || '0', 10);
+    _renderStars(r === current ? 0 : r);
+}
+
+function _saveAnnotation() {
+    if (!_annSeq) return;
+    var notes = document.getElementById('annNotes').value.trim();
+    var tagsRaw = document.getElementById('annTags').value;
+    var tags = tagsRaw.split(',').map(function(t) { return t.trim(); }).filter(Boolean);
+    var rating = parseInt(document.getElementById('annStars').dataset.rating || '0', 10);
+
+    fetch('/api/journal/' + _annSeq + '/annotate', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ notes: notes, tags: tags, rating: rating })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok) {
+            _annotations[_annSeq] = { notes: notes, tags: tags, rating: rating };
+            _closeAnnotation();
+            renderTable(_filtered);
+        } else {
+            alert('Save failed: ' + (data.error || 'unknown'));
+        }
+    })
+    .catch(function(err) { alert('Save error: ' + err.message); });
 }

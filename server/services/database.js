@@ -204,6 +204,58 @@ migrate('010_password_history', () => {
     `);
 });
 
+migrate('013_regime_history', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS regime_history (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol      TEXT NOT NULL,
+            regime      TEXT NOT NULL,
+            prev_regime TEXT,
+            confidence  INTEGER DEFAULT 0,
+            price       REAL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_regime_symbol ON regime_history(symbol);
+        CREATE INDEX IF NOT EXISTS idx_regime_time ON regime_history(created_at);
+    `);
+});
+
+migrate('012_missed_trades', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS missed_trades (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            symbol      TEXT NOT NULL,
+            side        TEXT NOT NULL,
+            reason      TEXT NOT NULL,
+            price       REAL NOT NULL,
+            confidence  INTEGER DEFAULT 0,
+            tier        TEXT,
+            regime      TEXT,
+            data        TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_missed_user ON missed_trades(user_id);
+        CREATE INDEX IF NOT EXISTS idx_missed_time ON missed_trades(created_at);
+    `);
+});
+
+migrate('011_trade_annotations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS trade_annotations (
+            seq         INTEGER NOT NULL,
+            user_id     INTEGER NOT NULL,
+            notes       TEXT DEFAULT '',
+            tags        TEXT DEFAULT '[]',
+            rating      INTEGER DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (seq, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_annotations_user ON trade_annotations(user_id);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -267,10 +319,23 @@ const _stmts = {
     atGetState: db.prepare('SELECT value FROM at_state WHERE key = ?'),
     atSetState: db.prepare('INSERT OR REPLACE INTO at_state (key, value, user_id) VALUES (?, ?, ?)'),
     atGetStateByUser: db.prepare('SELECT key, value FROM at_state WHERE user_id = ?'),
-    atPruneClosed: db.prepare('DELETE FROM at_closed WHERE seq NOT IN (SELECT seq FROM at_closed ORDER BY closed_at DESC LIMIT 500)'),
+    atPruneClosed: db.prepare('DELETE FROM at_closed WHERE user_id = ? AND seq NOT IN (SELECT seq FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT 500)'),
     // Journal queries
     journalGetClosed: db.prepare('SELECT seq, data, closed_at FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT ? OFFSET ?'),
     journalCountClosed: db.prepare('SELECT COUNT(*) as cnt FROM at_closed WHERE user_id = ?'),
+    // Trade annotations
+    annotationUpsert: db.prepare("INSERT INTO trade_annotations (seq, user_id, notes, tags, rating, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now')) ON CONFLICT(seq, user_id) DO UPDATE SET notes = excluded.notes, tags = excluded.tags, rating = excluded.rating, updated_at = datetime('now')"),
+    annotationGet: db.prepare('SELECT notes, tags, rating FROM trade_annotations WHERE seq = ? AND user_id = ?'),
+    annotationsByUser: db.prepare('SELECT seq, notes, tags, rating FROM trade_annotations WHERE user_id = ? ORDER BY seq DESC'),
+    // Missed trades
+    missedInsert: db.prepare('INSERT INTO missed_trades (user_id, symbol, side, reason, price, confidence, tier, regime, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    missedByUser: db.prepare('SELECT id, symbol, side, reason, price, confidence, tier, regime, data, created_at FROM missed_trades WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'),
+    missedPrune: db.prepare('DELETE FROM missed_trades WHERE user_id = ? AND id NOT IN (SELECT id FROM missed_trades WHERE user_id = ? ORDER BY created_at DESC LIMIT 200)'),
+    // Regime history
+    regimeInsert: db.prepare('INSERT INTO regime_history (symbol, regime, prev_regime, confidence, price) VALUES (?, ?, ?, ?, ?)'),
+    regimeBySymbol: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, created_at FROM regime_history WHERE symbol = ? ORDER BY created_at DESC LIMIT ?'),
+    regimeRecent: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, created_at FROM regime_history ORDER BY created_at DESC LIMIT ?'),
+    regimePrune: db.prepare('DELETE FROM regime_history WHERE id NOT IN (SELECT id FROM regime_history ORDER BY created_at DESC LIMIT 500)'),
 };
 
 // ─── Public API ───
@@ -475,9 +540,12 @@ function atRemovePosition(seq) {
     _stmts.atDeletePos.run(seq);
 }
 
-function atArchiveClosed(pos) {
+const _txnArchiveClosed = db.transaction((pos) => {
     _stmts.atInsertClosed.run(pos.seq, JSON.stringify(pos), pos.userId || null);
     _stmts.atDeletePos.run(pos.seq);
+});
+function atArchiveClosed(pos) {
+    _txnArchiveClosed(pos);
 }
 
 function atLoadOpenPositions(userId) {
@@ -509,8 +577,9 @@ function atGetStateByUser(userId) {
     });
 }
 
-function atPruneClosed() {
-    _stmts.atPruneClosed.run();
+function atPruneClosed(userId) {
+    if (!userId) return; // safety: no global prune without userId
+    _stmts.atPruneClosed.run(userId, userId);
 }
 
 // ─── Graceful close ───
@@ -600,7 +669,51 @@ module.exports = {
     atSetState,
     atGetStateByUser,
     atPruneClosed,
+    // [B2] Startup ghost cleanup helpers
+    runRaw: (sql) => { const r = db.prepare(sql).run(); return r.changes; },
+    getGhostCandidates: () => {
+        // Returns seqs that exist in BOTH at_positions AND at_closed, with timestamps for comparison
+        return db.prepare(`
+            SELECT p.seq,
+                   COALESCE(json_extract(p.data, '$.ts'), 0) as openTs,
+                   COALESCE(c.closed_at, json_extract(c.data, '$.closeTs'), 0) as closedTs
+            FROM at_positions p
+            INNER JOIN at_closed c ON p.seq = c.seq
+        `).all();
+    },
     // Journal
     journalGetClosed: (userId, limit, offset) => _stmts.journalGetClosed.all(userId, limit, offset),
     journalCountClosed: (userId) => (_stmts.journalCountClosed.get(userId) || { cnt: 0 }).cnt,
+    // Trade annotations
+    saveAnnotation: (seq, userId, notes, tags, rating) => _stmts.annotationUpsert.run(seq, userId, notes || '', JSON.stringify(tags || []), rating || 0),
+    getAnnotation: (seq, userId) => {
+        const row = _stmts.annotationGet.get(seq, userId);
+        if (!row) return null;
+        try { row.tags = JSON.parse(row.tags); } catch (_) { row.tags = []; }
+        return row;
+    },
+    getAnnotationsByUser: (userId) => {
+        return _stmts.annotationsByUser.all(userId).map(r => {
+            try { r.tags = JSON.parse(r.tags); } catch (_) { r.tags = []; }
+            return r;
+        });
+    },
+    // Missed trades
+    saveMissedTrade: (userId, symbol, side, reason, price, confidence, tier, regime, data) => {
+        _stmts.missedInsert.run(userId, symbol, side, reason, price, confidence || 0, tier || '', regime || '', JSON.stringify(data || {}));
+        _stmts.missedPrune.run(userId, userId); // keep max 200 per user
+    },
+    getMissedTrades: (userId, limit) => {
+        return _stmts.missedByUser.all(userId, limit || 50).map(r => {
+            try { r.data = JSON.parse(r.data); } catch (_) { r.data = {}; }
+            return r;
+        });
+    },
+    // Regime history
+    saveRegimeChange: (symbol, regime, prevRegime, confidence, price) => {
+        _stmts.regimeInsert.run(symbol, regime, prevRegime || '', confidence || 0, price || 0);
+        _stmts.regimePrune.run(); // keep max 500
+    },
+    getRegimeHistory: (symbol, limit) => _stmts.regimeBySymbol.all(symbol, limit || 100),
+    getRegimeHistoryAll: (limit) => _stmts.regimeRecent.all(limit || 100),
 };

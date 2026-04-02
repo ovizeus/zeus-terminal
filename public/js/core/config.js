@@ -72,6 +72,7 @@ const INDICATORS = [
   { id: 'wma', ico: _ZI.wave, name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },
   { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + Stop Loss dinamic', cat: 'trend', def: true },
   { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volum pe niveluri de pret', cat: 'volume', def: true },
+  { id: 'cvd', ico: _ZI.chart, name: 'CVD', desc: 'Cumulative Volume Delta', cat: 'volume', def: false },
   { id: 'macd', ico: _ZI.bolt, name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
   { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatilitate si trend', cat: 'vol', def: false },
   { id: 'stoch', ico: _ZI.wave, name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch', cat: 'momentum', def: false },
@@ -1518,9 +1519,8 @@ function mtfStripToggle() {
     setTimeout(function () { if (BM.core.mtfOn) { _safeCoreTickMI(); Intervals.set('coreMI', ZT_safeInterval('coreMI', _safeCoreTickMI, 5000), 5000); } }, 2000);
     console.log('[CORE] coreMI started | ticks:', BM.core.ticks);
   } else {
-    BM.core.mtfOn = false;
-    Intervals.clear('coreMI');
-    console.log('[CORE] coreMI stopped | ticks total:', BM.core.ticks);
+    // coreMI ramane activ — calcul in background chiar si cu panoul inchis
+    console.log('[CORE] MTF panel closed — coreMI stays active | ticks:', BM.core.ticks);
   }
 
   // Persistență UI
@@ -1557,10 +1557,21 @@ function initMTFStrip() {
         }, 1500);
       }
     } else {
-      // Defensiv: asigurăm că nu rulează nimic dacă panoul e colapsat
-      Intervals.clear('coreMI');
-      BM.core.mtfOn = false;
-      console.log('[CORE] MTF panel colapsat la boot — coreMI inactiv');
+      // coreMI ruleaza MEREU — calculeaza MTF/Regime/Phase in background
+      setTimeout(function () {
+        try {
+          BM.core.mtfOn = true;
+          buildMTFStructure();
+          updateLiqCycle();
+          BM.core.lastLiqTs = Date.now();
+          Intervals.clear('coreMI');
+          _safeCoreTickMI();
+          Intervals.set('coreMI', ZT_safeInterval('coreMI', _safeCoreTickMI, 5000), 5000);
+          console.log('[CORE] coreMI started (always-on) | ticks:', BM.core.ticks);
+        } catch (e) {
+          console.warn('[CORE] initMTFStrip always-on error:', e.message);
+        }
+      }, 1500);
     }
   } catch (e) {
     console.warn('[MTF] initMTFStrip error:', e.message);
@@ -1716,6 +1727,19 @@ function _usSave() {
       adaptLive: (typeof BM !== 'undefined' && BM.adapt) ? !!BM.adapt.allowLiveAdjust : false,
     };
 
+    // [LIVE-PERSIST] Manual trade params — live panel
+    USER_SETTINGS.manualLive = {
+      size: _iv('liveSize', null),
+      sl: _iv('liveSL', null),
+      tp: _iv('liveTP', null),
+    };
+
+    // [LEV-PERSIST] PT leverage + margin mode per panel
+    USER_SETTINGS.ptLevDemo = (typeof getDemoLev === 'function') ? getDemoLev() : null;
+    USER_SETTINGS.ptLevLive = (typeof getLiveLev === 'function') ? getLiveLev() : null;
+    var _dmm = document.getElementById('demoMarginMode');
+    if (_dmm) USER_SETTINGS.ptMarginMode = _dmm.value;
+
     USER_SETTINGS._syncTs = Date.now();
     localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS));
     _ucMarkDirty('settings');
@@ -1853,6 +1877,14 @@ function _usApply() {
     const _atSmartExitEl = document.getElementById('atSmartExit');
     if (_atSmartExitEl) _atSmartExitEl.checked = at.smartExitEnabled === true;
 
+    // [LIVE-PERSIST] Restore manual live trade params into DOM
+    if (USER_SETTINGS.manualLive) {
+      const ml = USER_SETTINGS.manualLive;
+      if (ml.size != null) _setInp('liveSize', ml.size);
+      if (ml.sl != null) _setInp('liveSL', ml.sl);
+      if (ml.tp != null) _setInp('liveTP', ml.tp);
+    }
+
     console.log('[US] Settings applied');
   } catch (e) {
     console.warn('[US] Apply failed:', e.message);
@@ -1900,6 +1932,33 @@ function loadUserSettings() {
     if (parsed.bmMode) USER_SETTINGS.bmMode = parsed.bmMode;
     // [B2] runMode REMOVED — AT.enabled is sole command
     if (typeof parsed.assistArmed === 'boolean') USER_SETTINGS.assistArmed = parsed.assistArmed;
+    // [LEV-PERSIST] Restore PT leverage + margin mode
+    if (parsed.ptMarginMode) {
+      var _mmSel = document.getElementById('demoMarginMode');
+      if (_mmSel && (parsed.ptMarginMode === 'cross' || parsed.ptMarginMode === 'isolated')) {
+        _mmSel.value = parsed.ptMarginMode;
+      }
+    }
+    if (parsed.ptLevDemo) {
+      var _dls = document.getElementById('demoLev');
+      if (_dls) {
+        var _found = Array.from(_dls.options).some(function(o) { return o.value === String(parsed.ptLevDemo); });
+        if (_found) { _dls.value = String(parsed.ptLevDemo); }
+        else { _dls.value = 'custom'; var _dcl = document.getElementById('demoCustomLev'); if (_dcl) _dcl.value = parsed.ptLevDemo; var _dcr = document.getElementById('demoCustomLevRow'); if (_dcr) _dcr.style.display = 'flex'; }
+      }
+    }
+    if (parsed.ptLevLive) {
+      var _lls = document.getElementById('liveLev');
+      if (_lls) {
+        var _foundL = Array.from(_lls.options).some(function(o) { return o.value === String(parsed.ptLevLive); });
+        if (_foundL) { _lls.value = String(parsed.ptLevLive); }
+        else { _lls.value = 'custom'; var _lcl = document.getElementById('liveCustomLev'); if (_lcl) _lcl.value = parsed.ptLevLive; var _lcr = document.getElementById('liveCustomLevRow'); if (_lcr) _lcr.style.display = 'flex'; }
+      }
+    }
+    // [LIVE-PERSIST] Restore manual live trade params
+    if (parsed.manualLive) {
+      USER_SETTINGS.manualLive = parsed.manualLive;
+    }
     _usApply();
     console.log('[US] Settings loaded from localStorage');
   } catch (e) {

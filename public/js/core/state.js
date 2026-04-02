@@ -26,21 +26,53 @@ console.log('[ZEUS] state.js loaded — sync version:', window.__SYNC_VERSION__)
 
   // Keys that MUST be scoped per user (contain positions, balances, trading data, credentials)
   var _USER_KEYS = {
+    // Core state & journal
     'zt_state_v1': 1, 'zt_journal': 1, 'zeus_user_settings': 1,
+    // ARES simulation engine
     'ARES_MISSION_STATE_V1': 1, 'ARES_MISSION_STATE_V1_vw2': 1,
     'ARES_POSITIONS_V1': 1, 'ARES_STATE_V1': 1, 'ares_init_v1': 1,
     'ARES_LAST_TRADE_TS': 1, 'ARES_JOURNAL_V1': 1,
-    'zeus_postmortem_v1': 1,
-    'zeus_daily_pnl_v1': 1, 'zeus_adaptive_v1': 1,
+    // Analytics & performance
+    'zeus_postmortem_v1': 1, 'zeus_daily_pnl_v1': 1, 'zeus_adaptive_v1': 1,
     'zeus_signal_registry': 1, 'zeus_notifications': 1,
     'zeus_perf_v1': 1, 'zeus_ind_settings': 1,
+    // Telegram credentials
     'zeus_tg_bot_token': 1, 'zeus_tg_chat_id': 1,
+    // Cloud sync
     'zeus_uc_beacon_pending': 1, 'zeus_uc_dirty_ts': 1,
     'zeus_groups': 1, 'zeus_ui_context': 1,
+    'zt_cloud_last_hash': 1,
+    // Strip/panel open states
+    'zeus_dsl_strip_open': 1, 'zeus_at_strip_open': 1,
+    'zeus_pt_strip_open': 1, 'zeus_mtf_open': 1,
+    'zeus_dsl_mode': 1, 'zeus_adaptive_strip_open': 1,
+    // Settings & UI
+    'zeus_llv_settings': 1, 'zeus_ui_scale': 1,
+    'zeus_mscan_syms': 1, 'zt_midstack_order': 1,
+    // AUB (Alien Upgrade Bay)
+    'aub_bb': 1, 'aub_macro': 1, 'aub_sim_last': 1, 'aub_expanded': 1,
+    // Orderflow HUD
+    'of_hud_v2': 1, 'of_hud_pos_v1': 1, 'of_hud_anchor_x_v1': 1,
+    // Teacher module
     'zeus_teacher_enabled': 1, 'zeus_teacher_mode': 1,
     'zeus_teacher_sessionState': 1, 'zeus_teacher_cumulative': 1,
     'zeus_teacher_checklistPrefs': 1, 'zeus_teacher_checklistState': 1,
-    'zeus_teacher_dismissed': 1
+    'zeus_teacher_dismissed': 1,
+    'zeus_teacher_config': 1, 'zeus_teacher_sessions': 1,
+    'zeus_teacher_lessons': 1, 'zeus_teacher_stats': 1,
+    'zeus_teacher_memory': 1, 'zeus_teacher_v2state': 1,
+    'zeus_teacher_panel_open': 1,
+    // ARIA & NOVA HUD
+    'aria_v1': 1, 'nova_v1': 1,
+    // Dev mode
+    'zeus_dev_enabled': 1,
+    // Drawings
+    'zeus_drawings_v1': 1,
+    // Time & Sales
+    'zeus_ts_open': 1,
+    // Legacy credential cleanup (removeItem only, but scope for safety)
+    'zeus_pin_hash': 1,
+    'zt_api_key': 1, 'zt_api_secret': 1, 'zt_api_token': 1, 'zt_api_exchange': 1
   };
   // Prefix-based user-scoped keys (e.g. zt_cloud_*)
   var _USER_PREFIXES = ['zt_cloud_'];
@@ -189,6 +221,7 @@ function pushTCtoServer() {
     slPct: TC.slPct,
     rr: TC.rr,
     dslMode: (typeof DSL !== 'undefined' && DSL.mode) ? DSL.mode : undefined,
+    symbols: window._atSelectedSymbols || null,
   };
   _tcPushVersion++;
   var ver = _tcPushVersion;
@@ -211,12 +244,9 @@ function _tcPushDebounced() {
 window.pushTCtoServer = pushTCtoServer;
 window._tcPushDebounced = _tcPushDebounced;
 
-// CORE_STATE — single source of truth
+// CORE_STATE — active fields only (market/indicators/position were never populated — removed)
 window.CORE_STATE = {
-  market: {},
-  indicators: {},
   score: 0,
-  position: null,
   engineStatus: "idle",
   lastUpdate: 0
 };
@@ -384,6 +414,41 @@ const ZState = (() => {
             })(DSL.positions[String(p.id)])
             : null
         })),
+      // [PHASE3B] Live manual positions (non-AT, user-opened) — persist for refresh restore
+      liveManualPositions: (typeof TP !== 'undefined' ? TP.livePositions || [] : [])
+        .filter(function (p) {
+          if (p.closed) return false;
+          if (p.autoTrade) return false; // AT positions restored from server, not localStorage
+          if (!p.isLive && !p.fromExchange) return false; // only real live positions
+          return true;
+        })
+        .map(p => ({
+          id: p.id, side: p.side, sym: p.sym, entry: p.entry,
+          size: p.size, lev: p.lev, tp: p.tp, sl: p.sl, qty: p.qty,
+          liqPrice: p.liqPrice, autoTrade: false, isLive: true, fromExchange: true,
+          mode: p.mode || 'live', openTs: p.openTs || p.id,
+          controlMode: p.controlMode || 'paper',
+          sourceMode: p.sourceMode || 'paper',
+          brainModeAtOpen: p.brainModeAtOpen || null,
+          _serverSeq: p._serverSeq || null,
+          _serverMode: p._serverMode || null,
+          dslParams: p.dslParams || null,
+          dslAdaptiveState: p.dslAdaptiveState || null,
+          dslHistory: Array.isArray(p.dslHistory) ? p.dslHistory.slice(-20) : [],
+          dsl: (typeof DSL !== 'undefined' && DSL.positions?.[String(p.id)])
+            ? (function (d) {
+              return {
+                active: d.active ?? false, currentSL: d.currentSL ?? null,
+                pivotLeft: d.pivotLeft ?? null, pivotRight: d.pivotRight ?? null,
+                impulseVal: d.impulseVal ?? null, yellowLine: d.yellowLine ?? null,
+                originalSL: d.originalSL ?? null, originalTP: d.originalTP ?? null,
+                source: d.source ?? null, attachedTs: d.attachedTs ?? null,
+                impulseTriggered: d.impulseTriggered ?? false,
+                log: Array.isArray(d.log) ? d.log.slice(-20) : [],
+              };
+            })(DSL.positions[String(p.id)])
+            : null
+        })),
       // Pending orders (demo LIMIT waiting for fill)
       pendingOrders: (typeof TP !== 'undefined' ? TP.pendingOrders || [] : [])
         .filter(function (o) { return o && !o.cancelled && !o.filled; })
@@ -412,9 +477,7 @@ const ZState = (() => {
       } : null,
       blockReason: BlockReason.get(),
       symbol: typeof S !== 'undefined' ? S.symbol : null,
-      // [B2] runMode REMOVED — report AT.enabled for backward compat
-      runMode: typeof AT !== 'undefined' ? !!AT.enabled : false,
-      assistArmed: typeof S !== 'undefined' ? !!S.assistArmed : false,
+      // [B10] runMode/assistArmed removed — dead fields, never read by server
       // Closed position IDs — prevents server zombie resurrection
       closedIds: (function () {
         var ids = [];
@@ -424,8 +487,8 @@ const ZState = (() => {
         if (Array.isArray(window._zeusRecentlyClosed)) {
           window._zeusRecentlyClosed.forEach(function (id) { ids.push(String(id)); });
         }
-        // Deduplicate and keep last 200
-        return Array.from(new Set(ids)).slice(-200);
+        // Deduplicate and keep last 1000
+        return Array.from(new Set(ids)).slice(-1000);
       })(),
     };
   }
@@ -457,12 +520,14 @@ const ZState = (() => {
       console.log('[ZState] RESTORE — snap:', snap ? ('pos:' + (snap.positions || []).length + ' bal:' + snap.demoBalance + ' ts:' + snap.ts) : 'NULL');
       if (!snap) return false;
 
-      // Restore demo balance & stats
-      if (typeof TP !== 'undefined') {
+      // Restore demo balance & stats — [B17b] skip when serverAT already applied (preboot)
+      if (typeof TP !== 'undefined' && !window._serverATEnabled) {
         if (typeof snap.demoBalance === 'number' && isFinite(snap.demoBalance)) TP.demoBalance = snap.demoBalance;
         if (typeof snap.demoPnL === 'number' && isFinite(snap.demoPnL)) TP.demoPnL = snap.demoPnL;
         if (typeof snap.demoWins === 'number' && isFinite(snap.demoWins)) TP.demoWins = snap.demoWins;
         if (typeof snap.demoLosses === 'number' && isFinite(snap.demoLosses)) TP.demoLosses = snap.demoLosses;
+      } else if (window._serverATEnabled) {
+        console.log('[ZState] RESTORE — skipping demo financial fields (serverAT authoritative)');
       }
 
       // Restore AT state
@@ -560,6 +625,36 @@ const ZState = (() => {
         if (typeof renderATPositions === 'function') setTimeout(renderATPositions, 500);
       }
 
+      // [PHASE3B] Restore manual live/testnet positions
+      if (Array.isArray(snap.liveManualPositions) && snap.liveManualPositions.length && typeof TP !== 'undefined') {
+        TP.livePositions = TP.livePositions || [];
+        var _existLive = new Set(TP.livePositions.map(function (p) { return String(p.id); }));
+        snap.liveManualPositions.forEach(function (p) {
+          if (p.closed || _existLive.has(String(p.id))) return;
+          var _restoredLive = Object.assign({}, p, { _restored: true });
+          TP.livePositions.push(_restoredLive);
+          // Restore DSL state
+          if (p.dsl && typeof DSL !== 'undefined') {
+            DSL.positions = DSL.positions || {};
+            var _k = String(p.id);
+            DSL.positions[_k] = DSL.positions[_k] || {};
+            var _d = DSL.positions[_k];
+            if (_d.active == null) _d.active = p.dsl.active ?? false;
+            if (_d.currentSL == null) _d.currentSL = p.dsl.currentSL ?? null;
+            if (_d.pivotLeft == null) _d.pivotLeft = p.dsl.pivotLeft ?? null;
+            if (_d.pivotRight == null) _d.pivotRight = p.dsl.pivotRight ?? null;
+            if (_d.impulseVal == null) _d.impulseVal = p.dsl.impulseVal ?? null;
+            if (_d.originalSL == null) _d.originalSL = p.dsl.originalSL ?? null;
+            if (_d.originalTP == null) _d.originalTP = p.dsl.originalTP ?? null;
+            if (_d.source == null) _d.source = p.dsl.source ?? 'restore';
+            if (_d.attachedTs == null) _d.attachedTs = p.dsl.attachedTs ?? Date.now();
+          }
+          if (typeof onPositionOpened === 'function') onPositionOpened(_restoredLive, 'restore');
+        });
+        if (typeof renderLivePositions === 'function') setTimeout(renderLivePositions, 500);
+        console.log('[ZState] Restored', snap.liveManualPositions.length, 'live manual position(s)');
+      }
+
       // Restore pending orders (demo LIMIT)
       if (Array.isArray(snap.pendingOrders) && snap.pendingOrders.length && typeof TP !== 'undefined') {
         TP.pendingOrders = TP.pendingOrders || [];
@@ -639,16 +734,8 @@ const ZState = (() => {
         if (_pushDirtySnapshot && _dirty && _lastEditTs <= data.lastEditTs) { _dirty = false; }
         if (_syncQueued) { _syncQueued = false; setTimeout(_pushToServer, 200); }
       });
-    // Also sync journal (newest first, last 100)
-    if (typeof TP !== 'undefined' && Array.isArray(TP.journal) && TP.journal.length > 0) {
-      var jSorted = TP.journal.slice().sort(function (a, b) { return (b.id || 0) - (a.id || 0); });
-      fetch('/api/sync/journal', {
-        method: 'POST',
-        headers: _syncHeaders,
-        credentials: 'same-origin',
-        body: JSON.stringify(jSorted.slice(0, 100))
-      }).catch(function () { });
-    }
+    // Journal sync disabled — server reads from SQLite at_closed (single source of truth)
+    // POST /api/sync/journal is no-op on server; no need to send data
   }
 
   function syncToServer() {
@@ -710,6 +797,15 @@ const ZState = (() => {
       for (var i = 0; i < allClient.length; i++) {
         if (allClient[i]._serverSeq === sp.seq || allClient[i].id === sp.seq) { existingPos = allClient[i]; break; }
       }
+      // Fallback: match by sym+side for manual positions restored from ZState (no _serverSeq yet)
+      if (!existingPos) {
+        var _spSym = sp.symbol || sp.sym;
+        for (var j = 0; j < allClient.length; j++) {
+          if (allClient[j].sym === _spSym && allClient[j].side === sp.side && !allClient[j].closed && !allClient[j]._serverSeq) {
+            existingPos = allClient[j]; break;
+          }
+        }
+      }
     }
     var srcMode = sp.mode === 'live' ? 'auto' : 'assist';
     return {
@@ -735,16 +831,19 @@ const ZState = (() => {
       addOnHistory: sp.addOnHistory || [],
       slPct: sp.slPct || 0,
       rr: sp.rr || 0,
-      autoTrade: true,
+      autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : true,
       openTs: sp.ts || sp.openTs || Date.now(),
-      label: ((sp.mode === 'live') ? '\uD83D\uDD34 LIVE' : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
+      label: ((sp.mode === 'live') ? (window._resolvedEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : '\uD83D\uDD34 LIVE') : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
-      sourceMode: existingPos ? existingPos.sourceMode : srcMode,
-      controlMode: existingPos ? existingPos.controlMode : srcMode,
-      brainModeAtOpen: existingPos ? existingPos.brainModeAtOpen : srcMode,
-      // Preserve client-side dslParams when user has Take Control OR during release race window
+      // [AT-PANEL] Server explicit values take priority over stale existingPos values
+      sourceMode: sp.sourceMode ? sp.sourceMode : (existingPos ? existingPos.sourceMode : srcMode),
+      controlMode: sp.controlMode ? sp.controlMode : (existingPos ? existingPos.controlMode : srcMode),
+      brainModeAtOpen: sp.brainModeAtOpen ? sp.brainModeAtOpen : (existingPos ? existingPos.brainModeAtOpen : srcMode),
+      // Preserve client-side dslParams for manual/paper positions + Take Control + race window
       dslParams: (existingPos && existingPos.dslParams && (
         existingPos.controlMode === 'user' ||
+        existingPos.controlMode === 'paper' ||
+        !existingPos.autoTrade ||
         (existingPos._dslParamsPushedAt && (Date.now() - existingPos._dslParamsPushedAt) < 10000)
       )) ? existingPos.dslParams : (sp.dslParams || {}),
       dslAdaptiveState: (sp.dsl && sp.dsl.phase) ? sp.dsl.phase : 'calm',
@@ -807,11 +906,14 @@ const ZState = (() => {
       if (state.demoPositions && state.livePositions) {
         serverATDemo = _excludeRecentlyClosed(_filterOpen(state.demoPositions).map(_mapServerPos));
         serverATLive = _excludeRecentlyClosed(_filterOpen(state.livePositions).map(_mapServerPos));
+        // [AT-MANUAL-SEP] Cache raw server positions for liveApiSyncState AT detection
+        window._lastServerPositions = (state.livePositions || []).concat(state.demoPositions || []);
       } else {
         var serverPosns = _filterOpen(state.positions);
         var mapped = serverPosns.map(_mapServerPos);
         serverATDemo = _excludeRecentlyClosed(mapped.filter(function (p) { return p.mode !== 'live'; }));
         serverATLive = _excludeRecentlyClosed(mapped.filter(function (p) { return p.mode === 'live'; }));
+        window._lastServerPositions = state.positions || [];
       }
       // Build set of server AT position IDs (by seq) for fast lookup
       var _serverDemoIds = new Set();
@@ -838,6 +940,8 @@ const ZState = (() => {
       // MERGE: server AT positions + preserved client-only manual positions
       TP.demoPositions = serverATDemo.concat(clientOnlyDemo);
       TP.livePositions = serverATLive.concat(clientOnlyLive);
+      // [PTVIS-FIX] Re-render live positions after merge (preserves PT/manual visibility)
+      if (typeof renderLivePositions === 'function') renderLivePositions();
       // Update demo balance from server (always — it's the demo balance source of truth)
       if (state.demoBalance) {
         TP.demoBalance = state.demoBalance.balance || TP.demoBalance;
@@ -896,14 +1000,37 @@ const ZState = (() => {
         TP.demoLosses = _ds.losses || 0;
       }
     }
+    // [AT-TOGGLE-FIX] Sync AT enabled state from server (authoritative)
+    if (typeof state.atActive === 'boolean' && typeof AT !== 'undefined') {
+      if (AT.enabled !== state.atActive) {
+        AT.enabled = state.atActive;
+        if (typeof _applyATToggleUI === 'function') _applyATToggleUI(state.atActive);
+      }
+    }
     // Track API configuration status for execution readiness
     window._apiConfigured = !!state.apiConfigured;
-    // [HARDENING] Unified execution readiness flag
+    // [MODE-P2] Exchange environment truth — separate from readiness
+    // exchangeMode: 'testnet' | 'live' | null (null = no creds configured)
+    // resolvedEnv: 'DEMO' | 'TESTNET' | 'REAL' (derived from engineMode + exchangeMode)
+    window._exchangeMode = state.exchangeMode || null;
+    // [LIVE-PARITY] Fallback checks exchangeMode to avoid showing REAL when actually TESTNET
+    if (state.resolvedEnv) {
+        window._resolvedEnv = state.resolvedEnv;
+    } else if (state.mode === 'demo') {
+        window._resolvedEnv = 'DEMO';
+    } else if (state.exchangeMode === 'testnet') {
+        window._resolvedEnv = 'TESTNET';
+    } else {
+        window._resolvedEnv = 'REAL';
+    }
+    // [HARDENING] Unified execution readiness flag — separate from environment
+    // executionReady = has creds + live mode + kill switch off (does NOT mean REAL — could be TESTNET)
     window.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive);
     // Sync global mode UI with server state
     if (state.mode && typeof _applyGlobalModeUI === 'function') _applyGlobalModeUI(state.mode);
     if (typeof updateATMode === 'function') updateATMode();
     if (typeof updateATStats === 'function') updateATStats();
+    if (typeof renderATPositions === 'function') renderATPositions();
     if (typeof updateDemoBalance === 'function') updateDemoBalance();
     // Refresh banners
     if (typeof atUpdateBanner === 'function') atUpdateBanner();
@@ -983,6 +1110,32 @@ const ZState = (() => {
     _saveTimer = setTimeout(saveAndSync, 800);
   }
 
+  // ── [B16] Shared merge helpers — single source of truth for position merge logic ──
+  // Used by: boot merge (bootstrap.js), visibility resume (bootstrap.js), pullAndMerge (below)
+  function _buildClosedSet(serverClosedIds) {
+    var s = new Set();
+    if (Array.isArray(TP.journal)) TP.journal.forEach(function (j) { if (j.id) s.add(String(j.id)); });
+    if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { s.add(String(id)); });
+    if (Array.isArray(serverClosedIds)) serverClosedIds.forEach(function (id) { s.add(String(id)); });
+    return s;
+  }
+
+  function _mergePositionsInto(targetArray, serverPositions, closedSet, label) {
+    if (!Array.isArray(targetArray) || !Array.isArray(serverPositions)) return 0;
+    var existingIds = new Set(targetArray.map(function (p) { return String(p.id); }));
+    var added = 0;
+    serverPositions.forEach(function (p) {
+      if (p.closed || closedSet.has(String(p.id)) || existingIds.has(String(p.id))) return;
+      targetArray.push(Object.assign({}, p, { _restored: true }));
+      added++;
+    });
+    if (added > 0) console.log('[sync] ' + label + ' — merged ' + added + ' position(s)');
+    return added;
+  }
+
+  // Expose for bootstrap.js (classic script tags, no ES modules)
+  window._zeusMerge = { buildClosedSet: _buildClosedSet, mergePositionsInto: _mergePositionsInto };
+
   // ── Pull from server and merge into local state (used by periodic sync + boot) ──
   function pullAndMerge() {
     // [S2B2-T1] Skip if save is in progress — prevents timestamp mismatch race
@@ -994,35 +1147,20 @@ const ZState = (() => {
       var localSnap = load();
       var localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0;
       var changed = false;
-      // Build comprehensive closedIds from journal + recent splice tracker
-      var _closedSet = new Set();
-      if (Array.isArray(TP.journal)) TP.journal.forEach(function (j) { if (j.id) _closedSet.add(String(j.id)); });
-      if (Array.isArray(window._zeusRecentlyClosed)) window._zeusRecentlyClosed.forEach(function (id) { _closedSet.add(String(id)); });
-      if (Array.isArray(serverSnap.closedIds)) serverSnap.closedIds.forEach(function (id) { _closedSet.add(String(id)); });
+      // [B16] Use shared helpers for closedIds + merge
+      var _closedSet = _buildClosedSet(serverSnap.closedIds);
 
-      // [v3] When serverAT is active, DO NOT merge positions from sync state — serverAT is the sole source of truth
-      // Only merge positions from sync state when serverAT is NOT the authority (non-AT paper positions)
       if (window._serverATEnabled) {
         // Skip position merge entirely — _applyServerATState handles positions
       } else {
-        // Merge positions by mode — split demo vs live
+        // Merge positions by mode — split demo vs live, using shared helper
         if (serverSnap.positions && serverSnap.positions.length) {
           TP.demoPositions = TP.demoPositions || [];
           TP.livePositions = TP.livePositions || [];
-          var existingDemoIds = new Set(TP.demoPositions.map(function (p) { return String(p.id); }));
-          var existingLiveIds = new Set(TP.livePositions.map(function (p) { return String(p.id); }));
-          serverSnap.positions.forEach(function (p) {
-            if (p.closed || _closedSet.has(String(p.id))) return;
-            var posMode = p.mode || 'demo';
-            if (posMode === 'live') {
-              if (existingLiveIds.has(String(p.id))) return;
-              TP.livePositions.push(Object.assign({}, p, { _restored: true }));
-            } else {
-              if (existingDemoIds.has(String(p.id))) return;
-              TP.demoPositions.push(Object.assign({}, p, { _restored: true }));
-            }
-            changed = true;
-          });
+          var demoOnly = serverSnap.positions.filter(function (p) { return (p.mode || 'demo') !== 'live'; });
+          var liveOnly = serverSnap.positions.filter(function (p) { return (p.mode || 'demo') === 'live'; });
+          if (_mergePositionsInto(TP.demoPositions, demoOnly, _closedSet, 'pullMerge-demo') > 0) changed = true;
+          if (_mergePositionsInto(TP.livePositions, liveOnly, _closedSet, 'pullMerge-live') > 0) changed = true;
         }
         // Remove positions closed on other device
         {
@@ -1047,10 +1185,9 @@ const ZState = (() => {
         }
       }
 
-      // Merge balance if server is newer
-      // [S2B2-T1] Freshness guard: skip balance overwrite if local has pending mutations newer than server
+      // Merge balance if server is newer — [B17] skip when serverAT is active (balance from _applyServerATState only)
       var _serverEditTs = serverSnap.lastEditTs || serverSnap.ts || 0;
-      if (serverSnap.ts > localTs && !(_dirty && _lastEditTs > _serverEditTs)) {
+      if (!window._serverATEnabled && serverSnap.ts > localTs && !(_dirty && _lastEditTs > _serverEditTs)) {
         var _lActive = (TP.demoPositions || []).filter(function (p) { return !p.closed; }).length;
         var _sPos = (serverSnap.positions || []).length;
         if (!(_lActive > 0 && _sPos === 0) && !(Math.abs(_lActive - _sPos) > 2 && _lActive > 0)) {
@@ -1133,9 +1270,7 @@ const ZState = (() => {
         demoLosses: data.demoLosses,
         at: data.at,
         closedIds: data.closedIds,
-        symbol: data.symbol,
-        runMode: data.runMode,
-        assistArmed: data.assistArmed
+        symbol: data.symbol
       });
       if (navigator.sendBeacon) {
         navigator.sendBeacon('/api/sync/state', new Blob([payload], { type: 'application/json' }));
@@ -1146,7 +1281,7 @@ const ZState = (() => {
     } catch (_) { }
   }
 
-  return { save: saveAndSync, saveLocal: saveLocalOnly, load, restore, clear, scheduleSave: scheduleSaveAndSync, syncToServer, syncNow, syncBeacon, pullFromServer, pullJournalFromServer, pullAndMerge, markSyncReady, startATPolling: _startATPolling, markDirty, isDirty: function () { return _dirty; }, isMerging: function () { return _merging; } };
+  return { save: saveAndSync, saveLocal: saveLocalOnly, load, restore, clear, scheduleSave: scheduleSaveAndSync, syncToServer, syncNow, syncBeacon, pullFromServer, pullJournalFromServer, pullAndMerge, markSyncReady, startATPolling: _startATPolling, _applyPreboot: _applyServerATState, markDirty, isDirty: function () { return _dirty; }, isMerging: function () { return _merging; } };
 })();
 
 // ╔═══════════════════════════════════════════════════════════════════╗
@@ -1253,8 +1388,7 @@ window._indSettingsLoad = _indSettingsLoad;
 
 // Trading Positions state
 const TP = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], pendingOrders: [], manualLivePending: [], liveConnected: false, liveExchange: 'binance', liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 };
-let API_KEY = '';
-let API_SECRET = '';
+// [V1.5] Legacy API_KEY/API_SECRET removed — credentials are server-side only (credentialStore)
 
 // OI + Watchlist + Prices
 const oiHistory = [];
@@ -1266,12 +1400,10 @@ window.S = S; window.allPrices = allPrices; // [v122 FIX] const not auto-exposed
 // ╔══════════════════════════════════════════════════════════════╗
 
 // Window exports for backward compat
-window.CORE_STATE = CORE_STATE;
+// (CORE_STATE already on window from declaration; S and allPrices already exported above)
 window.BlockReason = BlockReason;
 window.buildExecSnapshot = buildExecSnapshot;
 window.ZState = ZState;
-window.S = S;
 window.TP = TP;
 window.oiHistory = oiHistory;
-window.allPrices = allPrices;
 window.wlPrices = wlPrices;

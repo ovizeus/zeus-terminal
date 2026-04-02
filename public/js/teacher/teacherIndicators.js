@@ -146,8 +146,7 @@ function teacherDetectSTDir(bars, mult) {
   mult = mult || _TID.stMult;
   if (!bars || bars.length < 20) return 'neut';
   var slice = bars.slice(-20);
-  var closes = [];
-  for (var i = 0; i < slice.length; i++) closes.push(slice[i].close);
+  // [BIAS-FIX] Proper SuperTrend with stateful flip-flop over bar window
   var atrs = [];
   for (var i = 1; i < slice.length; i++) {
     atrs.push(Math.max(
@@ -159,11 +158,33 @@ function teacherDetectSTDir(bars, mult) {
   var atr = 0;
   for (var i = 0; i < atrs.length; i++) atr += atrs[i];
   atr /= atrs.length;
-  var last = slice[slice.length - 1];
-  var hl2 = (last.high + last.low) / 2;
-  var lower = hl2 - mult * atr;
-  var upper = hl2 + mult * atr;
-  return last.close > lower ? 'bull' : last.close < upper ? 'bear' : 'neut';
+
+  // Initialize direction from first bar relative to midpoint
+  var hl2_0 = (slice[0].high + slice[0].low) / 2;
+  var dir = slice[0].close >= hl2_0 ? 1 : -1; // 1=bull, -1=bear
+  var finalUpper = (slice[0].high + slice[0].low) / 2 + mult * atr;
+  var finalLower = (slice[0].high + slice[0].low) / 2 - mult * atr;
+
+  for (var i = 1; i < slice.length; i++) {
+    var hl2 = (slice[i].high + slice[i].low) / 2;
+    var basicUpper = hl2 + mult * atr;
+    var basicLower = hl2 - mult * atr;
+
+    // Ratchet bands: upper can only tighten down, lower can only tighten up
+    finalUpper = (basicUpper < finalUpper || slice[i - 1].close > finalUpper) ? basicUpper : finalUpper;
+    finalLower = (basicLower > finalLower || slice[i - 1].close < finalLower) ? basicLower : finalLower;
+
+    // Flip logic — symmetric
+    if (dir === 1 && slice[i].close < finalLower) {
+      dir = -1;
+      finalUpper = basicUpper; // reset resistance band
+    } else if (dir === -1 && slice[i].close > finalUpper) {
+      dir = 1;
+      finalLower = basicLower; // reset support band
+    }
+  }
+
+  return dir === 1 ? 'bull' : 'bear';
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -316,16 +337,20 @@ function teacherCalcConfluence(rsi, macdDir, stDir, adx, regime) {
     dirs.push(stDir);
   }
 
-  // ADX → trend strength bias
+  // [BIAS-FIX] ADX measures strength not direction — follow existing directional consensus
   if (adx != null) {
-    var adxDir = adx >= 25 ? 'bull' : 'bear'; // strong trend = confirmed direction
+    var bullSoFar = 0, bearSoFar = 0;
+    for (var j = 0; j < dirs.length; j++) { if (dirs[j] === 'bull') bullSoFar++; else if (dirs[j] === 'bear') bearSoFar++; }
+    var adxDir = bullSoFar >= bearSoFar ? 'bull' : 'bear';
     scores.push({ name: 'ADX', score: Math.min(100, adx * 2), dir: adxDir });
     dirs.push(adxDir);
   }
 
-  // Regime context
+  // [BIAS-FIX] Regime measures market state not direction — follow existing directional consensus
   if (regime) {
-    var regDir = regime === 'TREND' || regime === 'BREAKOUT' ? 'bull' : 'bear';
+    var bullSoFar2 = 0, bearSoFar2 = 0;
+    for (var j = 0; j < dirs.length; j++) { if (dirs[j] === 'bull') bullSoFar2++; else if (dirs[j] === 'bear') bearSoFar2++; }
+    var regDir = bullSoFar2 >= bearSoFar2 ? 'bull' : 'bear';
     scores.push({ name: 'REGIME', score: regime === 'TREND' ? 70 : regime === 'BREAKOUT' ? 80 : 40, dir: regDir });
     dirs.push(regDir);
   }

@@ -12,8 +12,6 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET,
   binance: {
-    apiKey: process.env.BINANCE_API_KEY || '',
-    apiSecret: process.env.BINANCE_API_SECRET || '',
     baseUrl: process.env.BINANCE_BASE_URL || 'https://testnet.binancefuture.com',
   },
   risk: {
@@ -66,9 +64,6 @@ for (const v of _required) {
   }
 }
 
-// Warn if API keys not configured
-if (!config.binance.apiKey || !config.binance.apiSecret) {
-  console.warn('[CONFIG] ⚠ BINANCE_API_KEY or BINANCE_API_SECRET not set — trading will fail');
-}
+// Note: Binance API keys are per-user (stored encrypted in DB via credentialStore)
 
 module.exports = config;

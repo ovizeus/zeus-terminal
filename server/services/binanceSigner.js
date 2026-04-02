@@ -86,7 +86,12 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     throw err;
   }
 
-  const baseUrl = creds.baseUrl || 'https://fapi.binance.com';
+  if (!creds.baseUrl) {
+    const err = new Error('[SIGNER] Missing baseUrl in credentials — refusing to default to production. Check credentialStore.');
+    err.status = 500;
+    throw err;
+  }
+  const baseUrl = creds.baseUrl;
   const MAX_RETRIES = 2;
   const RETRY_DELAY_MS = 300;
 

@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const db = require('../services/database');
 const { encrypt, decrypt, maskKey } = require('../services/encryption');
 const logger = require('../services/logger');
+const serverAT = require('../services/serverAT');
 
 // ─── Helpers ───
 
@@ -145,6 +146,12 @@ router.post('/disconnect', (req, res) => {
     const account = db.getExchangeAccount(req.user.id);
     if (!account) {
         return res.status(404).json({ ok: false, error: 'Nicio conexiune exchange activă' });
+    }
+
+    // [M4] Block disconnect if exchange-backed positions are still open (TESTNET or REAL)
+    const livePos = serverAT.getOpenPositions(req.user.id).filter(p => p.mode === 'live');
+    if (livePos.length > 0) {
+        return res.json({ ok: false, error: `Cannot disconnect exchange: ${livePos.length} exchange-backed position(s) still open. Close them first.` });
     }
 
     db.disconnectExchange(req.user.id);

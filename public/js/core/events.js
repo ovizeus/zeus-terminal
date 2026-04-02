@@ -121,6 +121,7 @@ const _pendingClose = {}; // { posId: { timer, btnRef } }
 function attachConfirmClose(btn, callback) {
   const posId =
     btn.getAttribute('data-id') ||
+    btn.getAttribute('data-live-id') ||
     btn.getAttribute('data-close-id') ||
     btn.getAttribute('data-partial-id') ||
     btn.id; // fallback pentru butoane gen closeAllBtn

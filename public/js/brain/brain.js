@@ -118,14 +118,14 @@ function updateBrainState() {
   const bulls = S.signalData?.bullCount || 0;
   const bears = S.signalData?.bearCount || 0;
   const sigs = bulls + bears;
-  const hasAutoPos = (TP.demoPositions || []).some(p => p.autoTrade && !p.closed); // [FIX M2]
+  const hasAutoPos = (TP.demoPositions || []).some(p => p.autoTrade && !p.closed) || (TP.livePositions || []).some(p => p.autoTrade && !p.closed); // [FIX M2+LIVE]
 
   let state = 'scanning';
   let ticker = '';
 
   if (hasAutoPos) {
     state = 'trading';
-    const pos = TP.demoPositions.find(p => p.autoTrade);
+    const pos = (TP.demoPositions || []).find(p => p.autoTrade && !p.closed) || (TP.livePositions || []).find(p => p.autoTrade && !p.closed);
     const pnl = pos ? ((pos.side === 'LONG' ? S.price - pos.entry : pos.entry - S.price) / pos.entry * pos.size * (pos.lev || 1)) : 0;
     ticker = `POZITIE ACTIVA ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORIZEZ TP/SL...`;
   } else if (score >= 68 && sigs >= 3) {
@@ -511,7 +511,7 @@ function applyTimezone(tz) {
   S.tz = tz;
   // Re-apply localization to all charts so crosshair + labels use new TZ
   const lf = { timeFormatter: ts => fmtTime(ts), dateFormatter: ts => fmtDate(ts) };
-  [mainChart, cvdChart, volChart].forEach(ch => { try { if (ch) ch.applyOptions({ localization: lf }); } catch (_) { } });
+  [mainChart, cvdChart].forEach(ch => { try { if (ch) ch.applyOptions({ localization: lf }); } catch (_) { } });
   const fmt = {
     timeFormatter: ts => new Date(ts * 1000).toLocaleTimeString('ro-RO', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }),
     dateFormatter: ts => {
@@ -523,7 +523,7 @@ function applyTimezone(tz) {
       return day + ' ' + months[month] + '. \'' + year;
     }
   };
-  [mainChart, cvdChart, volChart].forEach(c => {
+  [mainChart, cvdChart].forEach(c => {
     if (c) try { c.applyOptions({ timeScale: { localization: fmt } }); } catch (_) { }
   });
 }

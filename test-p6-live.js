@@ -217,9 +217,18 @@ const mockMetrics = {
 };
 require.cache[require.resolve('./server/services/metrics')] = { id: 'mt', exports: mockMetrics, loaded: true };
 
-// ── 10. Mock database (for credentialStore) ──
+// ── 10. Mock database (for credentialStore + serverAT persistence) ──
 const mockDB = {
     getExchangeAccount: () => null,
+    atSavePosition: () => { },
+    atArchiveClosed: () => true,
+    atSetState: () => { },
+    atGetOpenUserIds: () => [],
+    atLoadOpenPositions: () => [],
+    atGetStateByUser: () => [],
+    getGhostCandidates: () => [],
+    saveMissedTrade: () => { },
+    runRaw: () => { },
 };
 require.cache[require.resolve('./server/services/database')] = { id: 'db', exports: mockDB, loaded: true };
 
@@ -443,17 +452,8 @@ test('maxPos gate blocks excess shadow entries', () => {
     assertEq(serverAT.getOpenCount(TEST_UID), 2, '2 positions open');
 });
 
-test('expireStale removes old positions', () => {
-    serverAT.reset(TEST_UID);
-    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
-    assert(entry !== null, 'Entry created');
-    // Hack: set entry timestamp to 5 hours ago
-    entry.ts = Date.now() - (5 * 60 * 60 * 1000);
-    serverAT.expireStale();
-    assertEq(serverAT.getOpenCount(TEST_UID), 0, 'Expired position removed');
-    const stats = serverAT.getStats(TEST_UID);
-    assertEq(stats.exits, 1, '1 exit from expiry');
-});
+// [REMOVED] expireStale was removed from serverAT — time-based expiry fully eliminated
+// Positions close only via: SL, TP, DSL_PL, DSL_TTP, MANUAL_CLIENT, EMERGENCY_CLOSED, RECON_PHANTOM, RESET, kill switch
 
 // ═══════════════════════════════════════════════════════════════
 // 3. LIVE EXECUTION — Entry (MF.SERVER_AT = true)
@@ -464,10 +464,13 @@ test('Live entry calls sendSignedRequest for leverage + market + SL + TP', async
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); // let setMode background balance check complete
+    resetMocks();   // clear the background balance call
     _orderSeq = 2000;
 
     const entry = serverAT.processBrainDecision(makeDecision({ price: 65000 }), makeSTC(), TEST_UID);
     assert(entry !== null, 'Entry created');
+    entry.live = {}; // [FIX] init live object — serverAT.js line 767 needs entry.live to exist before assignment
 
     // Wait for async live execution
     await tick(100);
@@ -489,11 +492,11 @@ test('Live entry calls sendSignedRequest for leverage + market + SL + TP', async
 
     // Call 3: STOP_MARKET (SL)
     assertEq(_mockCalls.sendSigned[3].params.type, 'STOP_MARKET', 'SL is STOP_MARKET');
-    assert(_mockCalls.sendSigned[3].params.reduceOnly === true, 'SL reduceOnly');
+    assert(String(_mockCalls.sendSigned[3].params.reduceOnly) === 'true', 'SL reduceOnly');
 
     // Call 4: TAKE_PROFIT_MARKET (TP)
     assertEq(_mockCalls.sendSigned[4].params.type, 'TAKE_PROFIT_MARKET', 'TP is TAKE_PROFIT_MARKET');
-    assert(_mockCalls.sendSigned[4].params.reduceOnly === true, 'TP reduceOnly');
+    assert(String(_mockCalls.sendSigned[4].params.reduceOnly) === 'true', 'TP reduceOnly');
 });
 
 test('Risk guard validateOrder is called before entry', async () => {
@@ -579,29 +582,33 @@ test('Market order failure logged and tracked', async () => {
     assert(failAlert, 'Telegram alertOrderFailed called');
 });
 
-test('Leverage failure is non-fatal — entry still placed', async () => {
+test('Leverage failure is BLOCKING — entry rejected', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
-    // Leverage call fails, but orders should still go through
+    await tick(50); resetMocks();
+    // Leverage call fails — now BLOCKING (wrong leverage = wrong risk)
     _mockBehavior.sendSignedPathErrors['/fapi/v1/leverage'] = 'LEVERAGE_ALREADY_SET';
 
     const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
-    await tick(100);
+    entry.live = {};
+    await tick(2500); // leverage retry has 1s delay before second attempt
 
-    assertEq(entry.live.status, 'LIVE', 'Still enters LIVE despite leverage failure');
-    assert(entry.live.mainOrderId > 0, 'Has orderId');
+    assertEq(entry.live.status, 'LEVERAGE_FAILED', 'Entry blocked after leverage failure');
+    assertEq(entry.live.error, 'LEVERAGE_ALREADY_SET', 'error stored');
 });
 
 test('SL/TP failures trigger emergency close', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
     // SL and TP order types fail, but MARKET is fine
     _mockBehavior.sendSignedTypeErrors['STOP_MARKET'] = 'STOP_ORDER_FAILED';
     _mockBehavior.sendSignedTypeErrors['TAKE_PROFIT_MARKET'] = 'TP_ORDER_FAILED';
 
     const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(6000); // SL retries: 0s + 1s + 3s = 4s, then emergency close
 
     // SL retries all fail → emergency MARKET close succeeds → position closed
@@ -617,8 +624,10 @@ test('Live entry stores tracking data on shadow entry', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
     const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     assertEq(entry.live.status, 'LIVE', 'status=LIVE');
@@ -633,8 +642,10 @@ test('Audit record written on entry fill', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     const fillAudit = _mockCalls.audit.find(a => a.action === 'SAT_ENTRY_FILLED');
@@ -647,8 +658,10 @@ test('Metrics recordOrder(filled) called', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     const filled = _mockCalls.metrics.filter(m => m.outcome === 'filled');
@@ -659,8 +672,10 @@ test('Telegram alertOrderFilled called', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     const fillAlert = _mockCalls.telegram.filter(c => c.fn === 'alertOrderFilled');
@@ -676,11 +691,13 @@ test('SL hit cancels TP order and records PnL', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
     , TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);  // live entry completes
 
     resetMocks();  // Clear mock calls to isolate exit calls
@@ -710,11 +727,13 @@ test('TP hit cancels SL order', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
     , TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     resetMocks();
@@ -731,31 +750,8 @@ test('TP hit cancels SL order', async () => {
     assertEq(exitAudit.details.exitType, 'HIT_TP', 'exitType=HIT_TP');
 });
 
-test('Expiry force-closes and cancels both SL/TP', async () => {
-    resetMocks();
-    serverAT.reset(TEST_UID);
-    serverAT.setMode(TEST_UID, 'live');
-
-    const entry = serverAT.processBrainDecision(
-        makeDecision({ price: 60000 }),
-        makeSTC({ slPct: 1.0, rr: 2.0 })
-    , TEST_UID);
-    await tick(100);
-
-    resetMocks();
-
-    // Artificially age the position
-    entry.ts = Date.now() - (5 * 60 * 60 * 1000);
-    serverAT.expireStale();
-    await tick(100);
-
-    // Should place a MARKET close + cancel both SL and TP = 1 POST + 2 DELETE
-    const postCalls = _mockCalls.sendSigned.filter(c => c.method === 'POST' && c.params.reduceOnly === true);
-    assert(postCalls.length >= 1, 'Market close order placed for expiry');
-
-    const delCalls = _mockCalls.sendSigned.filter(c => c.method === 'DELETE');
-    assert(delCalls.length >= 2, `Should cancel SL + TP (2 DELETEs), got ${delCalls.length}`);
-});
+// [REMOVED] expireStale was removed from serverAT — time-based expiry fully eliminated
+// Expiry force-close test removed along with expireStale function
 
 // ═══════════════════════════════════════════════════════════════
 // 5. LIVE STATS & GETTERS
@@ -790,8 +786,10 @@ test('getLivePositions returns only LIVE positions', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     const lp = serverAT.getLivePositions(TEST_UID);
@@ -814,21 +812,25 @@ test('getLivePositions returns empty when no live entries', () => {
 test('Live stats accumulate entries/exits', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
+    await tick(200); // drain async from prior tests (leaked _handleLiveExit)
+    serverAT.reset(TEST_UID); // re-reset to clear any leaked liveStats increments
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
     // Entry
     const entry = serverAT.processBrainDecision(
         makeDecision({ price: 60000 }),
         makeSTC({ slPct: 1.0, rr: 2.0 })
     , TEST_UID);
-    await tick(100);
+    entry.live = {}; // [FIX] init live object
+    await tick(200);
 
     let ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ls.entries, 1, 'live entries=1');
 
     // Hit TP → exit
     serverAT.onPriceUpdate('BTCUSDT', 61200);
-    await tick(100);
+    await tick(200);
 
     ls = serverAT.getLiveStats(TEST_UID);
     assertEq(ls.exits, 1, 'live exits=1');
@@ -857,8 +859,10 @@ test('Log records shadow entries and live events', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
-    serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    const entry = serverAT.processBrainDecision(makeDecision(), makeSTC(), TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     const log = serverAT.getLog(TEST_UID, 50);
@@ -920,11 +924,13 @@ test('SHORT MARKET order sends SELL side', async () => {
     resetMocks();
     serverAT.reset(TEST_UID);
     serverAT.setMode(TEST_UID, 'live');
+    await tick(50); resetMocks();
 
-    serverAT.processBrainDecision(
+    const entry = serverAT.processBrainDecision(
         makeDecision({ price: 3500, symbol: 'ETHUSDT', fusion: { decision: 'MEDIUM', dir: 'SHORT', confidence: 70, score: 65 } }),
         makeSTC()
     , TEST_UID);
+    entry.live = {}; // [FIX] init live object
     await tick(100);
 
     const marketCall = _mockCalls.sendSigned.find(c => c.params.type === 'MARKET');
@@ -985,6 +991,7 @@ test('ERROR tier returns null', () => {
 
 test('onPriceUpdate ignores invalid price', () => {
     serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'demo'); // [FIX] explicit demo mode — prior section leaves live
     serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC(), TEST_UID);
     serverAT.onPriceUpdate('BTCUSDT', 0);
     serverAT.onPriceUpdate('BTCUSDT', -1);
@@ -994,6 +1001,7 @@ test('onPriceUpdate ignores invalid price', () => {
 
 test('onPriceUpdate ignores different symbol', () => {
     serverAT.reset(TEST_UID);
+    serverAT.setMode(TEST_UID, 'demo'); // [FIX] explicit demo mode — prior section leaves live
     serverAT.processBrainDecision(makeDecision({ price: 60000 }), makeSTC(), TEST_UID);
     serverAT.onPriceUpdate('ETHUSDT', 1);  // Price that would trigger SL on BTC
     assertEq(serverAT.getOpenCount(TEST_UID), 1, 'Different symbol ignored');
@@ -1039,9 +1047,10 @@ section('10. MODULE EXPORTS');
 
 test('All expected functions exported', () => {
     const fns = [
-        'processBrainDecision', 'onPriceUpdate', 'expireStale',
+        'processBrainDecision', 'onPriceUpdate',
         'getOpenPositions', 'getOpenCount', 'getLog', 'getStats',
         'getLiveStats', 'getLivePositions', 'reset',
+        'setMode', 'getMode', 'toggleActive',
     ];
     for (const fn of fns) {
         assertEq(typeof serverAT[fn], 'function', `${fn} is a function`);

@@ -57,8 +57,9 @@ function onTradeExecuted(pos) {
   const tf2 = PROFILE_TF?.[S.profile || 'fast']?.context || S.contextTF || '15m';
   const isLive = pos.isLive;
   const isSim = AT.mode === 'demo';
+  var _posEnv = window._resolvedEnv || (isLive ? 'REAL' : 'DEMO');
   const simTag = isLive
-    ? `<div class="zeus-exec-sim">LIVE TRADE</div>`
+    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`
     : `<div class="zeus-exec-sim">SIMULATION</div>`;
 
   const html = `
@@ -97,8 +98,9 @@ function onTradeClosed(result) {
   const isProfit = pnl >= 0;
   const cssClass = isProfit ? 'exit-profit' : 'exit-loss';
   const isLive = result.isLive;
+  var _posEnv = window._resolvedEnv || (isLive ? 'REAL' : 'DEMO');
   const simTag = isLive
-    ? `<div class="zeus-exec-sim">LIVE TRADE</div>`
+    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`
     : `<div class="zeus-exec-sim">SIMULATION</div>`;
 
   const html = `

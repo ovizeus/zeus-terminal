@@ -210,7 +210,7 @@ async function liveApiSyncState() {
         id: _origId,
         sym: p.symbol,
         side: p.side,
-        size: p.size * p.entryPrice,
+        size: (p.leverage > 0) ? (p.size * p.entryPrice / p.leverage) : (p.size * p.entryPrice),
         qty: p.size,
         entry: p.entryPrice,
         lev: p.leverage,
@@ -218,6 +218,8 @@ async function liveApiSyncState() {
         liqPrice: p.liquidationPrice || 0,
         isLive: true,
         fromExchange: true,
+        mode: 'live',
+        openTs: Date.now(),
       };
       if (existing) {
         // [FIX R7] If ID changed (e.g. orderId → sym_side), re-attach DSL state
@@ -231,29 +233,80 @@ async function liveApiSyncState() {
             DSL._attachedIds.add(String(fresh.id));
           }
         }
-        // Preserve runtime state from prior sync/open
-        fresh.autoTrade = existing.autoTrade;
-        fresh.controlMode = existing.controlMode || 'auto';
-        fresh.brainModeAtOpen = existing.brainModeAtOpen || 'auto';
+        // Preserve runtime state from prior sync/open — full demo parity
+        // [AT-PANEL] Re-check: if tagged paper but server now knows about it, reclassify
+        var _reclassified = false;
+        if (!existing.autoTrade && Array.isArray(window._lastServerPositions)) {
+          var _nowServerAT = window._lastServerPositions.some(function(sp) {
+            return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false;
+          });
+          if (_nowServerAT) _reclassified = true;
+        }
+        fresh.autoTrade = _reclassified ? true : existing.autoTrade;
+        fresh.controlMode = _reclassified ? 'auto' : (existing.controlMode || 'auto');
+        fresh.brainModeAtOpen = _reclassified ? 'auto' : (existing.brainModeAtOpen || 'auto');
+        fresh.sourceMode = _reclassified ? 'auto' : (existing.sourceMode || (existing.autoTrade ? 'auto' : 'paper'));
+        fresh.sl = existing.sl || null;
+        fresh.tp = existing.tp || null;
+        fresh.tpPnl = existing.tpPnl || 0;
+        fresh.slPnl = existing.slPnl || 0;
+        fresh.slPct = existing.slPct || 0;
+        fresh.rr = existing.rr || 0;
+        fresh.margin = existing.margin || fresh.size;
+        fresh.originalEntry = existing.originalEntry || fresh.entry;
+        fresh.originalSize = existing.originalSize || fresh.size;
+        fresh.originalQty = existing.originalQty || String(fresh.qty || '');
+        fresh.addOnCount = existing.addOnCount || 0;
+        fresh.addOnHistory = existing.addOnHistory || [];
+        fresh.openTs = existing.openTs || fresh.openTs;
+        fresh._serverSeq = existing._serverSeq || null;
+        fresh._serverMode = existing._serverMode || null;
+        fresh._dsl = existing._dsl || null;
         fresh.dslParams = existing.dslParams || {
-          openDslPct: parseFloat(el('dslActivatePct')?.value) || 40,
-          pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
-          pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
-          impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+          openDslPct: 0.50,
+          pivotLeftPct: 0.70,
+          pivotRightPct: 1.00,
+          impulseVPct: 1.30,
         };
         fresh.dslAdaptiveState = existing.dslAdaptiveState || 'calm';
         fresh.dslHistory = existing.dslHistory || [];
       } else {
-        // New position from exchange — init with safe defaults
-        // [FIX H2] Default to user-controlled, not auto — unknown positions shouldn't be auto-managed
-        fresh.autoTrade = false;
-        fresh.controlMode = 'user';
-        fresh.brainModeAtOpen = 'user';
+        // New position from exchange — check if server AT knows about it
+        var _isServerAT = false;
+        // Check 1: server AT positions list (from state sync)
+        if (Array.isArray(window._lastServerPositions)) {
+          _isServerAT = window._lastServerPositions.some(function(sp) {
+            return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false;
+          });
+        }
+        // Check 2: already in TP.livePositions from state sync with autoTrade flag
+        if (!_isServerAT && Array.isArray(TP.livePositions)) {
+          var _tpMatch = TP.livePositions.find(function(tp) {
+            return tp.sym === p.symbol && tp.side === p.side && !tp.closed;
+          });
+          if (_tpMatch && _tpMatch.autoTrade) _isServerAT = true;
+        }
+        fresh.autoTrade = _isServerAT;
+        fresh.controlMode = _isServerAT ? 'auto' : 'user';
+        fresh.brainModeAtOpen = _isServerAT ? 'auto' : 'user';
+        fresh.sourceMode = _isServerAT ? 'auto' : 'paper';
+        fresh.sl = null;
+        fresh.tp = null;
+        fresh.tpPnl = 0;
+        fresh.slPnl = 0;
+        fresh.slPct = 0;
+        fresh.rr = 0;
+        fresh.margin = fresh.size;
+        fresh.originalEntry = fresh.entry;
+        fresh.originalSize = fresh.size;
+        fresh.originalQty = String(fresh.qty || '');
+        fresh.addOnCount = 0;
+        fresh.addOnHistory = [];
         fresh.dslParams = {
-          openDslPct: parseFloat(el('dslActivatePct')?.value) || 40,
-          pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
-          pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
-          impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+          openDslPct: 0.50,
+          pivotLeftPct: 0.70,
+          pivotRightPct: 1.00,
+          impulseVPct: 1.30,
         };
         fresh.dslAdaptiveState = 'calm';
         fresh.dslHistory = [];

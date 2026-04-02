@@ -7,6 +7,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const logger = require('../services/logger');
+const db = require('../services/database');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const SYNC_DIR = path.join(DATA_DIR, 'sync_user');
@@ -37,11 +38,7 @@ function _stateFile(userId) {
     if (!Number.isFinite(id) || id <= 0) return null;
     return path.join(SYNC_DIR, id + '_state.json');
 }
-function _journalFile(userId) {
-    const id = parseInt(userId, 10);
-    if (!Number.isFinite(id) || id <= 0) return null;
-    return path.join(SYNC_DIR, id + '_journal.json');
-}
+// _journalFile removed — journal now reads from SQLite at_closed exclusively
 
 // Auth guard — require JWT user (already set by sessionAuth middleware)
 router.use((req, res, next) => {
@@ -113,19 +110,18 @@ router.post('/state', (req, res) => {
                 });
             }
 
-            // Persist merged closedIds (keep last 300 to avoid unbounded growth)
-            body.closedIds = Array.from(closedIds).slice(-300);
+            // Persist merged closedIds (keep last 1000 to avoid unbounded growth)
+            body.closedIds = Array.from(closedIds).slice(-1000);
             // Filter ALL positions against full closedIds set (resurrection guard)
             body.positions = (body.positions || []).filter(p => !closedIds.has(String(p.id)));
-            // Balance logic: if incoming has NO positions AND no closedIds (device has no knowledge of trades),
-            // keep server balance. But if closedIds exist, user intentionally closed everything — trust incoming.
-            const clientClosed2 = Array.isArray(body.closedIds) ? body.closedIds : [];
-            if (incomingPositions.length === 0 && serverPositions.length > 0 && existing && clientClosed2.length === 0) {
-                body.demoBalance = existing.demoBalance;
-                body.demoPnL = existing.demoPnL;
-                body.demoWins = existing.demoWins;
-                body.demoLosses = existing.demoLosses;
-            }
+            // Balance: serverAT is the canonical source — override client balance with server truth
+            try {
+                const serverAT = require('../services/serverAT');
+                const bal = serverAT.getDemoBalance(uid);
+                if (bal && typeof bal.balance === 'number') {
+                    body.demoBalance = bal.balance;
+                }
+            } catch (_) { /* serverAT not ready — keep client value as fallback */ }
             const finalPositions = Array.isArray(body.positions) ? body.positions : [];
             const tmpFile = sf + '.tmp';
             fs.writeFileSync(tmpFile, JSON.stringify(body), 'utf8');
@@ -142,14 +138,15 @@ router.post('/state', (req, res) => {
     });
 });
 
-// ─── GET /api/sync/journal — fetch synced journal (per-user) ───
+// ─── GET /api/sync/journal — reads from SQLite at_closed (single source of truth) ───
 router.get('/journal', (req, res) => {
     try {
-        const jf = _journalFile(req.user.id);
-        if (!jf) return res.status(400).json({ ok: false, error: 'bad user id' });
-        if (!fs.existsSync(jf)) return res.json({ ok: true, data: null });
-        const raw = fs.readFileSync(jf, 'utf8');
-        const data = JSON.parse(raw);
+        const userId = req.user.id;
+        if (!userId) return res.status(400).json({ ok: false, error: 'bad user id' });
+        const rows = db.journalGetClosed(userId, 100, 0);
+        const data = rows.map(r => {
+            try { return JSON.parse(r.data); } catch (_) { return null; }
+        }).filter(Boolean);
         res.json({ ok: true, data });
     } catch (e) {
         logger.warn('SYNC', 'Read journal failed', { error: e.message });
@@ -157,48 +154,7 @@ router.get('/journal', (req, res) => {
     }
 });
 
-// ─── POST /api/sync/journal — merge journal entries (union by id, per-user) ───
-router.post('/journal', (req, res) => {
-    const uid = req.user.id;
-    _acquireLock(uid, () => {
-        try {
-            const jf = _journalFile(uid);
-            if (!jf) { _releaseLock(uid); return res.status(400).json({ ok: false, error: 'bad user id' }); }
-            const body = req.body;
-            if (!Array.isArray(body)) {
-                _releaseLock(uid);
-                return res.status(400).json({ ok: false, error: 'expected array' });
-            }
-            // Load existing journal and merge
-            let existing = [];
-            if (fs.existsSync(jf)) {
-                try { existing = JSON.parse(fs.readFileSync(jf, 'utf8')); } catch (_) { }
-            }
-            // Union by id
-            const idSet = new Set(body.map(j => String(j.id)).filter(Boolean));
-            (existing || []).forEach(j => {
-                if (j.id && !idSet.has(String(j.id))) body.push(j);
-            });
-            // Sort by id desc (newest first), cap at 100
-            body.sort((a, b) => (b.id || 0) - (a.id || 0));
-            const limited = body.slice(0, 100);
-            const json = JSON.stringify(limited);
-            if (json.length > MAX_SIZE) {
-                _releaseLock(uid);
-                return res.status(413).json({ ok: false, error: 'payload too large' });
-            }
-            const tmpFile = jf + '.tmp';
-            fs.writeFileSync(tmpFile, json, 'utf8');
-            fs.renameSync(tmpFile, jf);
-            _releaseLock(uid);
-            res.json({ ok: true, count: limited.length });
-        } catch (e) {
-            _releaseLock(uid);
-            logger.warn('SYNC', 'Write journal failed', { error: e.message });
-            res.status(500).json({ ok: false, error: 'write failed' });
-        }
-    });
-});
+// [B13] POST /api/sync/journal removed — journal written exclusively by serverAT to SQLite at_closed
 
 // ─── GET /api/sync/debug — quick check what's on server (per-user) ───
 router.get('/debug', (req, res) => {
@@ -214,5 +170,37 @@ router.get('/debug', (req, res) => {
         res.json({ ok: false, error: e.message });
     }
 });
+
+// ─── Prune stale sync files for deleted/inactive users (runs daily) ───
+const PRUNE_INTERVAL = 24 * 60 * 60 * 1000; // 24h
+const STALE_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days without update
+
+function _pruneStaleSyncFiles() {
+    try {
+        const validIds = new Set(db.listUsers().map(u => u.id));
+        const files = fs.readdirSync(SYNC_DIR);
+        let pruned = 0;
+        for (const f of files) {
+            const m = f.match(/^(\d+)_(?:state|journal)\.json$/);
+            if (!m) continue;
+            const uid = parseInt(m[1], 10);
+            const filePath = path.join(SYNC_DIR, f);
+            // Prune if user no longer exists OR file older than 30 days
+            const stat = fs.statSync(filePath);
+            const age = Date.now() - stat.mtimeMs;
+            if (!validIds.has(uid) || age > STALE_AGE_MS) {
+                fs.unlinkSync(filePath);
+                pruned++;
+            }
+        }
+        if (pruned > 0) logger.info('SYNC', `Pruned ${pruned} stale sync file(s)`);
+    } catch (e) {
+        logger.error('SYNC', 'Sync file prune failed: ' + e.message);
+    }
+}
+
+// Run once at startup (delayed 60s) and then daily
+setTimeout(_pruneStaleSyncFiles, 60000);
+setInterval(_pruneStaleSyncFiles, PRUNE_INTERVAL);
 
 module.exports = router;

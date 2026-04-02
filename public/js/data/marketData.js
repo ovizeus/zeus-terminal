@@ -109,7 +109,7 @@ function calcRSI(prices, p = 14) {
 }
 
 // ===== CHART INIT =====
-function getChartH() { return window.innerWidth >= 1000 ? 320 : 280; }
+function getChartH() { return window.innerWidth >= 1000 ? 400 : 340; }
 function getChartW() {
   const page = document.querySelector('.page');
   if (window.innerWidth >= 1000 && page) {
@@ -139,6 +139,7 @@ function initCharts() {
   });
   mainChart = LightweightCharts.createChart(el('mc'), base(getChartH()));
   cSeries = mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' });
+  window.mainChart = mainChart; window.cSeries = cSeries; // expose for drawingTools
   // LLV: load persisted settings and ensure canvas is ready
   llvLoadSettings();
   llvEnsureCanvas();
@@ -153,12 +154,15 @@ function initCharts() {
   wma20S = mainChart.addLineSeries({ color: '#aa44ff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false });
   wma50S = mainChart.addLineSeries({ color: '#ff8822', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 });
   stS = mainChart.addLineSeries({ color: '#ff8800', lineWidth: 2, priceLineVisible: false, lastValueVisible: false });
-  const co = Object.assign(base(65), { rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: .1, bottom: .1 } } });
-  cvdChart = LightweightCharts.createChart(el('cc'), co);
-  cvdS = cvdChart.addLineSeries({ color: '#f0c040', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'CVD' });
-  const vo = Object.assign(base(48), { rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: .05, bottom: 0 } } });
-  volChart = LightweightCharts.createChart(el('vc'), vo);
-  volS = volChart.addHistogramSeries({ color: '#00b8d444', priceFormat: { type: 'volume' }, priceScaleId: '', scaleMargins: { top: 0, bottom: 0 } });
+  // CVD: optional sub-chart (toggled via indicator panel, like MACD)
+  if (el('cc')) {
+    const co = Object.assign(base(60), { rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: .1, bottom: .1 } } });
+    cvdChart = LightweightCharts.createChart(el('cc'), co);
+    cvdS = cvdChart.addLineSeries({ color: '#f0c040', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'CVD' });
+  }
+  // Volume overlay on main chart (bottom 20%)
+  volS = mainChart.addHistogramSeries({ color: '#00b8d422', priceFormat: { type: 'volume' }, priceScaleId: 'vol', lastValueVisible: false, priceLineVisible: false });
+  mainChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, drawTicks: false, borderVisible: false, visible: false });
   // Force localization on main chart only at ROOT
   if (mainChart) mainChart.applyOptions({ localization: locFmt });
 
@@ -171,16 +175,12 @@ function initCharts() {
     timeScale: { visible: false, timeVisible: false, secondsVisible: false, borderVisible: false, rightOffset: 12 },
     rightPriceScale: { visible: true, borderColor: '#1e2530', width: 70 }
   });
-  if (volChart) volChart.applyOptions({
-    localization: locFmt,
-    timeScale: { visible: true, timeVisible: true, secondsVisible: false, borderVisible: true, borderColor: '#1e2530', rightOffset: 12 },
-    rightPriceScale: { visible: true, borderColor: '#1e2530', width: 70 }
-  });
+  // volChart removed — volume is now overlaid on mainChart
 
   let syncing = false;
   mainChart.timeScale().subscribeVisibleLogicalRangeChange(r => {
     if (syncing || !r) return; syncing = true;
-    try { cvdChart.timeScale().setVisibleLogicalRange(r); volChart.timeScale().setVisibleLogicalRange(r); } catch (_) { }
+    try { if (cvdChart) cvdChart.timeScale().setVisibleLogicalRange(r); } catch (_) { }
     // [INDICATORS] sync all sub-charts
     try { if (typeof _syncSubChartsToMain === 'function') _syncSubChartsToMain(); } catch (_) { }
     syncing = false;
@@ -816,7 +816,7 @@ function setTF(tf, btn) {
   // Re-apply localization AFTER data rebuild so axis doesn't jump
   setTimeout(() => {
     const lf = { timeFormatter: ts => fmtTime(ts), dateFormatter: ts => fmtDate(ts) };
-    [mainChart, cvdChart, volChart].forEach(ch => {
+    [mainChart, cvdChart].forEach(ch => {
       try { if (ch) ch.applyOptions({ localization: lf }); } catch (_) { }
     });
   }, 200);
@@ -877,20 +877,16 @@ function toggleFS() {
   if (!sec) return;
   const isFull = sec.classList.toggle('fsm');
   if (btn) btn.textContent = isFull ? '⊡' : '⊞';
-  const cc = el('cc'); const vc = el('vc');
+  const cc = el('cc');
   if (isFull) {
-    // In fullscreen: main chart takes full height, hide CVD+Vol (no overlap)
     const h = window.innerHeight - 100;
     if (mainChart) mainChart.applyOptions({ height: h });
     if (cc) cc.style.display = 'none';
-    if (vc) vc.style.display = 'none';
   } else {
-    // Restore normal layout
     if (mainChart) mainChart.applyOptions({ height: getChartH() });
-    if (cvdChart) cvdChart.applyOptions({ height: window.innerWidth >= 1000 ? 80 : 60 });
-    if (volChart) volChart.applyOptions({ height: window.innerWidth >= 1000 ? 60 : 44 });
-    if (cc) cc.style.display = '';
-    if (vc) vc.style.display = '';
+    if (cvdChart) cvdChart.applyOptions({ height: 60 });
+    // [P5 FIX] Only show CVD if indicator is actually active — don't force-show on FS exit
+    if (cc) cc.style.display = (S.activeInds && S.activeInds.cvd) ? '' : 'none';
   }
 }
 
@@ -2009,8 +2005,10 @@ function initCloudSettings() {
     if (d.tz) S.tz = d.tz;
     if (d.symbol) S.symbol = d.symbol;
     if (d.chartTf) S.chartTf = d.chartTf;
-    if (d.indicators) Object.assign(S.indicators, d.indicators);
-    if (d.activeInds) S.activeInds = Object.assign({}, d.activeInds);
+    // [P5 FIX] Only restore indicators from legacy cloud if loadUserSettings() didn't already set them.
+    // USER_SETTINGS (localStorage per-user) has priority over legacy cloud cache.
+    if (d.indicators && !USER_SETTINGS.indicators) Object.assign(S.indicators, d.indicators);
+    if (d.activeInds && !USER_SETTINGS.indicators) S.activeInds = Object.assign({}, d.activeInds);
     if (d.overlays) Object.assign(S.overlays, d.overlays);
     if (d.heatmapSettings) Object.assign(S.heatmapSettings, d.heatmapSettings);
     if (d.alerts) Object.assign(S.alerts, d.alerts);
@@ -2056,10 +2054,15 @@ function switchGlobalMode(mode) {
       function () { _executeGlobalModeSwitch('demo'); }
     );
   } else {
+    // [MODE-P3] Resolve environment for confirm dialog wording
+    var _switchEnv = window._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL';
+    var _switchIsTestnet = _switchEnv === 'TESTNET';
     _showConfirmDialog(
-      'Activate Real Trading Mode?',
-      'You are about to switch the entire system to LIVE mode.\n\nAll new manual and auto trades may use REAL funds.\nReal Binance execution requires valid API keys configured in Settings.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.\n\nOnly continue if you understand the risks of real-money trading.',
-      'Cancel', 'Activate Live',
+      _switchIsTestnet ? 'Activate Testnet Mode?' : 'Activate Real Trading Mode?',
+      _switchIsTestnet
+        ? 'You are about to switch to exchange-backed TESTNET mode.\n\nAll new trades will execute on Binance TESTNET with TEST funds.\nNo real money is involved.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.'
+        : 'You are about to switch the entire system to LIVE mode.\n\nAll new manual and auto trades may use REAL funds.\nReal Binance execution requires valid API keys configured in Settings.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.\n\nOnly continue if you understand the risks of real-money trading.',
+      'Cancel', _switchIsTestnet ? 'Activate Testnet' : 'Activate Live',
       function () { _executeGlobalModeSwitch('live'); }
     );
   }
@@ -2078,12 +2081,15 @@ function _executeGlobalModeSwitch(mode) {
         if (typeof AT !== 'undefined') AT._serverMode = mode;
         _applyGlobalModeUI(mode);
         if (mode === 'demo') {
-          toast('Demo Mode Activated — Global simulated trading is now ON. Real mode is OFF.', 3000, _ZI.ok);
+          toast('Demo Mode Activated — Global simulated trading is now ON. Live mode is OFF.', 3000, _ZI.ok);
         } else {
+          var _toastEnv = window._resolvedEnv || (window._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
           if (!window._apiConfigured) {
-            toast('Live Mode Activated — Execution LOCKED until API keys are configured in Settings.', 3000, _ZI.w);
+            toast('Live Mode Locked — Execution unavailable until API keys are configured in Settings.', 3000, _ZI.w);
+          } else if (_toastEnv === 'TESTNET') {
+            toast('Testnet Trading Mode Activated — Global live testnet trading is now ON. Demo mode is OFF.', 3000, _ZI.ok);
           } else {
-            toast('Real Trading Mode Activated — Global live trading is now ON. Demo mode is OFF.', 3000, _ZI.ok);
+            toast('Real Trading Mode Activated — Global live real trading is now ON. Demo mode is OFF.', 3000, _ZI.ok);
           }
         }
         // Open manual trade panel
@@ -2093,7 +2099,11 @@ function _executeGlobalModeSwitch(mode) {
         // Force poll to get fresh server state
         if (typeof _atPollOnce === 'function') setTimeout(_atPollOnce, 500);
       } else {
-        toast('Mode switch failed: ' + (data.error || 'Unknown error'));
+        var _fails = (data.checks || []).filter(function(c) { return !c.ok; });
+        var _reason = _fails.length > 0
+          ? _fails.slice(0, 2).map(function(c) { return c.detail; }).join('. ')
+          : (data.error || 'Unknown error');
+        toast('Cannot switch to LIVE: ' + _reason, 5000, _ZI.lock);
       }
     })
     .catch(function () { toast('Network error — could not switch mode', 3000, _ZI.x); });
@@ -2108,23 +2118,33 @@ function _applyGlobalModeUI(mode) {
     if (btnD) btnD.classList.add('active');
     if (btnL) btnL.classList.remove('active');
   }
-  // AT panel mode display
+  // [MODE-P7] _env must be declared before AT section (was causing var hoisting bug)
+  var _env = window._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL');
+  // [MODE-P4] AT panel mode display — uses resolved environment
   const atModeDisp = el('atModeDisplay');
   const atModeLbl = el('atModeLabel');
   const atWarn = el('atLiveWarn');
   const execLocked = mode === 'live' && !window._apiConfigured;
   if (mode === 'live') {
+    var _atIsTestnet = _env === 'TESTNET';
+    var _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE';
+    var _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE';
+    var _atEnvColor = _atIsTestnet ? '#f0c040' : '#ff4444';
+    var _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444';
+    var _atEnvIcon = _atIsTestnet ? _ZI.dYlw : _ZI.dRed;
     if (atModeDisp) {
-      atModeDisp.innerHTML = execLocked ? _ZI.dRed + ' LIVE MODE &middot; ' + _ZI.w + ' EXEC LOCKED' : _ZI.dRed + ' LIVE MODE';
-      atModeDisp.style.color = execLocked ? '#ff8800' : '#ff4444';
-      atModeDisp.style.borderColor = execLocked ? '#ff880044' : '#ff444444';
+      atModeDisp.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvLabel + ' &middot; ' + _ZI.w + ' EXEC LOCKED' : _atEnvIcon + ' ' + _atEnvLabel;
+      atModeDisp.style.color = execLocked ? '#ff8800' : _atEnvColor;
+      atModeDisp.style.borderColor = execLocked ? '#ff880044' : _atEnvColorDim;
     }
-    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _ZI.dRed + ' LIVE ' + _ZI.w : _ZI.dRed + ' LIVE'; atModeLbl.style.color = execLocked ? '#ff8800' : '#ff4444'; }
+    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort; atModeLbl.style.color = execLocked ? '#ff8800' : _atEnvColor; }
     if (atWarn) {
       atWarn.style.display = 'block';
       atWarn.textContent = execLocked
-        ? 'EXECUTION LOCKED — API keys not configured. Configure in Settings → Exchange API.'
-        : 'LIVE MODE ACTIVE: Auto trades will execute with REAL funds';
+        ? 'EXECUTION LOCKED — Exchange not configured. Configure in Settings → Exchange API.'
+        : (_atIsTestnet
+          ? 'TESTNET MODE ACTIVE: Auto trades will execute on Binance TESTNET with TEST funds'
+          : 'LIVE MODE ACTIVE: Auto trades will execute with REAL funds');
       atWarn.style.color = execLocked ? '#ff8800' : '';
     }
   } else {
@@ -2136,17 +2156,18 @@ function _applyGlobalModeUI(mode) {
   const af = el('btnAddFunds'), rd = el('btnResetDemo');
   if (af) af.style.display = mode === 'demo' ? '' : 'none';
   if (rd) rd.style.display = mode === 'demo' ? '' : 'none';
-  // Update manual order button label based on mode + executionReady
+  // [MODE-P3] Update manual order button label based on resolved environment
   const execBtn = el('demoExec');
   if (execBtn) {
     if (mode === 'live') {
       if (window._apiConfigured) {
-        execBtn.innerHTML = _ZI.dRed + ' PLACE REAL ORDER';
+        var _btnLabel = _env === 'TESTNET' ? ' PLACE TESTNET ORDER' : ' PLACE REAL ORDER';
+        var _btnIcon = _env === 'TESTNET' ? _ZI.dYlw : _ZI.dRed;
+        execBtn.innerHTML = _btnIcon + _btnLabel;
         execBtn.disabled = false;
         execBtn.style.opacity = '';
       } else {
-        execBtn.innerHTML = _ZI.lock + ' PLACE REAL ORDER (EXEC LOCKED)';
-        // [BUG4 FIX] Don't disable — let placeDemoOrder guard show the toast message
+        execBtn.innerHTML = _ZI.lock + ' PLACE ORDER (EXEC LOCKED)';
         execBtn.disabled = false;
         execBtn.style.opacity = '0.6';
       }
@@ -2156,9 +2177,17 @@ function _applyGlobalModeUI(mode) {
       execBtn.style.opacity = '';
     }
   }
-  // Update manual panel header to match mode
+  // [MODE-P3] Update manual panel header with resolved environment
   const panelHdr = document.querySelector('#panelDemo .tp-hdr span:first-child');
-  if (panelHdr) panelHdr.innerHTML = mode === 'live' ? _ZI.dRed + ' MANUAL TRADE (LIVE)' : _ZI.pad + ' MANUAL TRADE';
+  if (panelHdr) {
+    if (mode === 'live') {
+      var _hdrLabel = _env === 'TESTNET' ? ' MANUAL TRADE (TESTNET)' : ' MANUAL TRADE (LIVE)';
+      var _hdrIcon = _env === 'TESTNET' ? _ZI.dYlw : _ZI.dRed;
+      panelHdr.innerHTML = _hdrIcon + _hdrLabel;
+    } else {
+      panelHdr.innerHTML = _ZI.pad + ' MANUAL TRADE';
+    }
+  }
   // [CHART MARKERS] Rebuild trade markers for the new mode
   if (typeof renderTradeMarkers === 'function') renderTradeMarkers();
   // Update balance display in manual panel
@@ -2166,14 +2195,17 @@ function _applyGlobalModeUI(mode) {
   if (balSpan) {
     if (mode === 'live') {
       if (window._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) {
-        balSpan.textContent = 'BAL: $' + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        var _balPrefix = _env === 'TESTNET' ? 'BAL (TESTNET): $' : 'BAL: $';
+        balSpan.textContent = _balPrefix + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       } else {
-        balSpan.textContent = 'BAL: API not configured';
+        balSpan.textContent = 'BAL: Exchange not configured';
       }
     } else if (typeof updateDemoBalance === 'function') {
       updateDemoBalance();
     }
   }
+  // [MODE BAR] Sync global mode bar with current state
+  if (typeof updateModeBar === 'function') updateModeBar();
 }
 
 function _toggleManualPanel() {
@@ -2207,7 +2239,7 @@ function _showConfirmDialog(title, message, cancelText, confirmText, onConfirm) 
   const safeCancelText = typeof escHtml === 'function' ? escHtml(cancelText) : cancelText;
   const safeConfirmText = typeof escHtml === 'function' ? escHtml(confirmText) : confirmText;
 
-  const isLive = confirmText.toLowerCase().includes('live');
+  const isLive = confirmText.toLowerCase().includes('live') || confirmText.toLowerCase().includes('real');
   const confirmColor = isLive ? '#ff4444' : '#00d4ff';
   const confirmBg = isLive ? '#2a0000' : '#001a33';
   const confirmBorder = isLive ? '#ff4444' : '#00aaff';
@@ -2284,7 +2316,7 @@ function promptResetDemo() {
 
 // Legacy compat — old code may call toggleTradePanel
 function toggleTradePanel(type) { _toggleManualPanel(); }
-function setDemoSide(side) { TP.demoSide = side; el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); const de = el('demoExec'); if (de) { const _m = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'; if (_m === 'live' && !window._apiConfigured) { de.innerHTML = _ZI.lock + ' PLACE REAL ORDER (EXEC LOCKED)'; } else if (_m === 'live') { de.innerHTML = side === 'LONG' ? _ZI.dGrn + ' OPEN LONG (LIVE)' : _ZI.dRed + ' OPEN SHORT (LIVE)'; } else { de.innerHTML = side === 'LONG' ? _ZI.dGrn + ' OPEN LONG' : _ZI.dRed + ' OPEN SHORT'; } } updateDemoLiqPrice(); }
+function setDemoSide(side) { TP.demoSide = side; el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); const de = el('demoExec'); if (de) { const _m = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'; var _se = window._resolvedEnv || (_m === 'demo' ? 'DEMO' : 'REAL'); if (_m === 'live' && !window._apiConfigured) { de.innerHTML = _ZI.lock + ' PLACE ORDER (EXEC LOCKED)'; } else if (_m === 'live') { var _sideTag = _se === 'TESTNET' ? 'TESTNET' : 'LIVE'; de.innerHTML = side === 'LONG' ? _ZI.dGrn + ' OPEN LONG (' + _sideTag + ')' : _ZI.dRed + ' OPEN SHORT (' + _sideTag + ')'; } else { de.innerHTML = side === 'LONG' ? _ZI.dGrn + ' OPEN LONG' : _ZI.dRed + ' OPEN SHORT'; } } updateDemoLiqPrice(); }
 function setLiveSide(side) { TP.liveSide = side; el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice(); }
 
 // ===== ORDER TYPE TOGGLE =====
@@ -2328,11 +2360,13 @@ function onDemoLevChange() {
   const sel = el('demoLev'); const row = el('demoCustomLevRow');
   if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none';
   updateDemoLiqPrice();
+  if (typeof _usScheduleSave === 'function') _usScheduleSave(); // [LEV-PERSIST]
 }
 function onLiveLevChange() {
   const sel = el('liveLev'); const row = el('liveCustomLevRow');
   if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none';
   updateLiveLiqPrice();
+  if (typeof _usScheduleSave === 'function') _usScheduleSave(); // [LEV-PERSIST]
 }
 
 // ===== LIQUIDATION PRICE =====
@@ -2369,27 +2403,32 @@ function updateDemoBalance() {
   const _gm = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
   if (_gm === 'live') {
     if (window._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) {
-      e.textContent = 'BAL: $' + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      var _balPrefix = (window._resolvedEnv === 'TESTNET') ? 'BAL (TESTNET): $' : 'BAL: $';
+      e.textContent = _balPrefix + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     } else {
-      e.textContent = 'BAL: API not configured';
+      e.textContent = 'BAL: Exchange not configured';
     }
   } else {
     e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 }
 function placeDemoOrder() {
-  // Block real orders in live mode without API
+  // Block orders in live mode without API
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  var _curEnv = window._resolvedEnv || (_curMode === 'demo' ? 'DEMO' : 'REAL');
   if (_curMode === 'live' && !window._apiConfigured) {
-    toast('Cannot place real order in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 3000, _ZI.lock);
+    toast('Cannot place order — exchange not configured. Go to Settings → Exchange API.', 3000, _ZI.lock);
     return;
   }
-  // [HARDENING] Require explicit confirmation for LIVE real orders
+  // [HARDENING] Require explicit confirmation for exchange-backed orders
   if (_curMode === 'live' && window._apiConfigured) {
+    var _isTestnet = _curEnv === 'TESTNET';
     _showConfirmDialog(
-      'Place Real Order?',
-      'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.\n\nConfirm you want to proceed.',
-      'Cancel', 'Place Real Order',
+      _isTestnet ? 'Place Testnet Order?' : 'Place Real Order?',
+      _isTestnet
+        ? 'You are about to place an order on Binance TESTNET with TEST funds.\n\nThis uses the testnet environment — no real money involved.\n\nConfirm you want to proceed.'
+        : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.\n\nConfirm you want to proceed.',
+      'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order',
       function () { _executePlaceDemoOrder(); }
     );
     return;
@@ -2438,6 +2477,36 @@ function _executePlaceDemoOrder() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Register manual position on server for DSL param persistence
+// ═══════════════════════════════════════════════════════════════
+function _registerManualOnServer(pos) {
+  if (!pos || pos._serverSeq) return;              // already registered
+  var payload = {
+    symbol:     pos.sym,
+    side:       pos.side,
+    entryPrice: pos.entry,
+    qty:        pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0),
+    leverage:   pos.lev || 1,
+    sl:         pos.sl || null,
+    tp:         pos.tp || null,
+    mode:       pos.mode || 'demo',
+    dslParams:  pos.dslParams || null,
+  };
+  fetch('/api/at/register-manual', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.ok && d.seq) {
+      pos._serverSeq = d.seq;
+      if (typeof ZState !== 'undefined' && ZState.save) ZState.save();
+    }
+  }).catch(function(err) {
+    console.warn('[registerManualOnServer] failed:', err.message || err);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // DEMO MANUAL ORDER — local engine, no exchange
 // ═══════════════════════════════════════════════════════════════
 function _executeDemoManualOrder(orderType, size, entry, lev, tp, sl) {
@@ -2452,6 +2521,8 @@ function _executeDemoManualOrder(orderType, size, entry, lev, tp, sl) {
     updateDemoBalance(); renderDemoPositions();
     onPositionOpened(pos, 'manual_demo');
     ZState.save();
+    // Register on server for DSL param persistence (per-position, survives restart)
+    _registerManualOnServer(pos);
     renderTradeMarkers();
     toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET');
   } else {
@@ -2504,8 +2575,21 @@ function _executeLiveManualOrder(orderType, size, entry, lev, tp, sl) {
   }).then(function (result) {
     if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide); }
     if (orderType === 'MARKET') {
-      // MARKET fill — sync position from exchange
-      toast('LIVE MARKET ' + binanceSide + ' ' + S.symbol.replace('USDT', '') + ' filled @$' + fP(result.avgPrice || S.price) + ' orderId=' + (result.orderId || ''));
+      // MARKET fill — create full Zeus position object immediately (same as demo)
+      var fillPrice = parseFloat(result.avgPrice) || S.price;
+      var liqPrice = (typeof calcLiqPrice === 'function') ? calcLiqPrice(fillPrice, lev, TP.demoSide) : 0;
+      var pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET');
+      pos.isLive = true;
+      pos.fromExchange = true;
+      pos.qty = parseFloat(result.executedQty) || qty;
+      TP.livePositions.push(pos);
+      renderLivePositions();
+      if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_live');
+      if (typeof ZState !== 'undefined' && ZState.save) ZState.save();
+      if (typeof renderTradeMarkers === 'function') renderTradeMarkers();
+
+      var _envLabel = (window._resolvedEnv === 'TESTNET') ? 'TESTNET' : 'LIVE';
+      toast(_envLabel + ' MARKET ' + binanceSide + ' ' + S.symbol.replace('USDT', '') + ' filled @$' + fP(fillPrice) + ' orderId=' + (result.orderId || ''));
       // Place SL/TP protection orders on exchange if provided
       if (sl) {
         manualLiveSetSL({ symbol: S.symbol, side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).then(function (slRes) {
@@ -2517,7 +2601,7 @@ function _executeLiveManualOrder(orderType, size, entry, lev, tp, sl) {
           toast('TP set @$' + fP(tp) + ' orderId=' + (tpRes.orderId || ''));
         }).catch(function (e) { toast('TP placement failed: ' + (e.message || e)); });
       }
-      // Sync from exchange to get real position data
+      // Sync from exchange to merge real exchange data (liqPrice, exact qty)
       if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 1000);
     } else {
       // LIMIT placed on exchange — track as pending
@@ -2559,13 +2643,13 @@ function _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, mode, orde
     id: Date.now(), side: TP.demoSide, sym: S.symbol, entry: fillPrice, size: size, lev: lev, tp: tp, sl: sl, liqPrice: liqPrice, pnl: 0,
     mode: mode,
     orderType: orderType,
-    sourceMode: 'paper',
-    controlMode: 'paper',
+    sourceMode: (mode === 'live') ? 'manual' : 'paper',
+    controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (S.mode || 'assist'),
     dslParams: Object.assign({
-      pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
-      pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
-      impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+      pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70,
+      pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00,
+      impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30,
     }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(TP.demoSide, fillPrice, tp) : {
       openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985
     }),
@@ -2637,9 +2721,9 @@ function _fillDemoPendingOrder(ord) {
     controlMode: 'paper',
     brainModeAtOpen: (S.mode || 'assist'),
     dslParams: Object.assign({
-      pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.8,
-      pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.0,
-      impulseVPct: parseFloat(el('dslExtendPct')?.value) || 20,
+      pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70,
+      pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00,
+      impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30,
     }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : {
       openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985
     }),
@@ -2656,6 +2740,7 @@ function _fillDemoPendingOrder(ord) {
   renderPendingOrders();
   if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo_limit_fill');
   ZState.save();
+  _registerManualOnServer(pos);
   if (typeof renderTradeMarkers === 'function') renderTradeMarkers();
   toast('LIMIT FILLED: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + fP(ord.limitPrice) + ' $' + fmt(ord.size) + ' ' + ord.lev + 'x');
   addTradeToJournal({
@@ -3008,13 +3093,11 @@ function renderDemoPositions() {
   // Filter: only manual (non-autoTrade), non-closed, matching current globalMode
   const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
   const manualPos = TP.demoPositions.filter(p => !p.closed && !p.autoTrade && (p.mode || 'demo') === _gMode);
-  if (!manualPos.length) {
-    table.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px">No open positions</div>';
-    const pnlEl = el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$0.00'; pnlEl.className = 'tp-pnl-val neut'; }
-    return;
-  }
   // DOAR RENDER - fara close logic
   let totalPnL = 0;
+  if (!manualPos.length) {
+    table.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px">No open positions</div>';
+  } else {
   const html = manualPos.map(pos => {
     const curPrice = getSymPrice(pos);
     // [FIX P9] Guard null/stale price — show 0 PnL instead of giant spike
@@ -3078,10 +3161,37 @@ function renderDemoPositions() {
     const posId = btn.getAttribute('data-id');
     attachConfirmClose(btn, function () { closeDemoPos(posId); });
   });
-  const pnlEl = el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$' + totalPnL.toFixed(2); pnlEl.className = 'tp-pnl-val ' + (totalPnL > 0 ? 'pos' : totalPnL < 0 ? 'neg' : 'neut'); }
-  const total = TP.demoWins + TP.demoLosses;
-  const wr = el('demoWR'); if (wr) wr.textContent = total ? Math.round(TP.demoWins / total * 100) + '%' : '0%';
-  const tr = el('demoTrades'); if (tr) tr.textContent = total;
+  } // end else (manualPos.length > 0)
+  // [PT-STATS] Stats from actual positions — manual only, per active mode
+  var _statsMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo';
+  var _statsWins = 0, _statsLosses = 0, _statsPnl = 0, _statsTrades = 0;
+  if (_statsMode === 'live') {
+    // Live/testnet: calculate from open manual live positions (real-time PnL)
+    var _openManualLive = (TP.livePositions || []).filter(function(p) { return !p.closed && !p.autoTrade; });
+    _openManualLive.forEach(function(p) {
+      var _cur = getSymPrice(p);
+      var _pnl = (_cur && _cur > 0) ? calcPosPnL(p, _cur) : (Number.isFinite(p.pnl) ? p.pnl : 0);
+      _statsPnl += _pnl;
+    });
+    // Add closed trades from journal (manual live only)
+    var _jManualLive = (Array.isArray(TP.journal) ? TP.journal : []).filter(function(j) {
+      return j.mode === 'live' && !j.autoTrade;
+    });
+    _jManualLive.forEach(function(j) {
+      var _jp = Number(j.pnl) || 0;
+      _statsPnl += _jp;
+      if (_jp >= 0) _statsWins++; else _statsLosses++;
+    });
+    _statsTrades = _openManualLive.length + _jManualLive.length;
+  } else {
+    _statsWins = TP.demoWins || 0;
+    _statsLosses = TP.demoLosses || 0;
+    _statsPnl = totalPnL;
+    _statsTrades = _statsWins + _statsLosses;
+  }
+  const pnlEl = el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$' + _statsPnl.toFixed(2); pnlEl.className = 'tp-pnl-val ' + (_statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut'); }
+  const wr = el('demoWR'); if (wr) wr.textContent = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%';
+  const tr = el('demoTrades'); if (tr) tr.textContent = _statsTrades;
 }
 // calcPosPnL — convenience wrapper over _safePnl for position objects
 function calcPosPnL(pos, cur) {
@@ -3097,12 +3207,23 @@ function updateLiveBalance() {
 // [FIX P4] Separate live positions renderer — never touches demoBalance — now renders actual HTML
 function renderLivePositions() {
   const cont = el('livePositions');
-  if (!cont) return;
+  const contDemo = el('livePositionsDemo');
+  const contWrap = el('livePositionsInDemo');
+  // Show/hide the demo-panel live positions section based on mode
+  var _isLiveMode = (typeof AT !== 'undefined' && AT._serverMode === 'live');
+  if (contWrap) contWrap.style.display = _isLiveMode ? 'block' : 'none';
   // [FIX BUG2] Skip full re-render while user is editing SL/TP — prevents focus loss
   var _ae = document.activeElement;
   if (_ae && _ae.tagName === 'INPUT' && (_ae.id && (_ae.id.startsWith('slEdit_') || _ae.id.startsWith('tpEdit_'))) && cont.contains(_ae)) return;
-  const live = TP.livePositions.filter(p => !p.closed && p.status !== 'closing');
-  if (!live.length) { cont.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px;font-size:9px">No live positions</div>'; return; }
+  // [PHASE2] Show only manual/PT positions here — AT positions render in AT panel
+  const live = TP.livePositions.filter(p => !p.closed && p.status !== 'closing' && !p.autoTrade);
+  if (!live.length) {
+    var _emptyTarget = (_isLiveMode && contDemo) ? contDemo : cont;
+    _emptyTarget.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px;font-size:9px">No exchange positions</div>';
+    if (_isLiveMode && cont) cont.innerHTML = '';
+    if (!_isLiveMode && contDemo) contDemo.innerHTML = '';
+    return;
+  }
   let totalPnl = 0;
   const html = live.map(function (pos) {
     const cur = getSymPrice(pos);
@@ -3116,8 +3237,9 @@ function renderLivePositions() {
         <div style="font-size:13px;margin-top:3px;color:#ff8800">Price unavailable</div>
       </div>`;
     }
-    const pnl = calcPosPnL(pos, cur);
-    pos.pnl = pnl;
+    // [LIVEPOS-FIX] For exchange positions, use Binance PnL directly; for demo, calculate locally
+    const pnl = (pos.fromExchange && Number.isFinite(pos.pnl)) ? pos.pnl : calcPosPnL(pos, cur);
+    if (!pos.fromExchange) pos.pnl = pnl;
     totalPnl += pnl;
     const pnlPct = pos.size > 0 ? (pnl / _safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00';
     const symBase = escHtml((pos.sym || '').replace('USDT', ''));
@@ -3140,12 +3262,17 @@ function renderLivePositions() {
       </div>
     </div>`;
   }).join('');
-  cont.innerHTML = html;
+  // [FIX] Render into the VISIBLE container only — avoid duplicate IDs (breaks getElementById for SL/TP editing)
+  var _target = (_isLiveMode && contDemo) ? contDemo : cont;
+  _target.innerHTML = html;
   // Attach long-press close buttons
-  cont.querySelectorAll('button[data-live-id]').forEach(function (btn) {
+  _target.querySelectorAll('button[data-live-id]').forEach(function (btn) {
     var posId = btn.getAttribute('data-live-id');
     attachConfirmClose(btn, function () { closeLivePos(posId); });
   });
+  // Clear the other container to avoid stale content
+  if (_isLiveMode && cont && cont !== _target) cont.innerHTML = '';
+  if (!_isLiveMode && contDemo && contDemo !== _target) contDemo.innerHTML = '';
 }
 // BUG2 FIX: close only from livePositions — now sends counter-order through backend
 function closeLivePos(id, reason) {
@@ -3211,7 +3338,7 @@ function closeLivePos(id, reason) {
       pos.status = 'open';
       pos.closed = false;
       atLog('warn', 'LIVE CLOSE FAILED on exchange: ' + (err.message || err) + ' — position reverted to OPEN');
-      toast('Close failed for ' + pos.sym + ' — position still open on exchange');
+      toast('Close failed for ' + pos.sym + ': ' + (err.message || 'position still open on exchange'));
       renderLivePositions();
       // [FIX SYNC-N1] Single retry after 2s if exchange temporarily rejected (429/503/timeout)
       if (!pos._closeRetried) {
