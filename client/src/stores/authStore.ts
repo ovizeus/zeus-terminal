@@ -31,12 +31,14 @@ export const useAuthStore = create<AuthStore>()((set) => ({
     set({ loading: true, error: null })
     try {
       const res = await authApi.me()
-      if (res.ok && res.data) {
+      // Server returns flat { ok, id, email, role } — fields at top level, not in .data
+      const data = res.data ?? (res as unknown as Record<string, unknown>)
+      if (res.ok && data.id) {
         set({
           authenticated: true,
-          userId: String(res.data.id),
-          email: res.data.email,
-          role: res.data.role,
+          userId: String(data.id),
+          email: String(data.email ?? ''),
+          role: String(data.role ?? 'user'),
           loading: false,
         })
       } else {

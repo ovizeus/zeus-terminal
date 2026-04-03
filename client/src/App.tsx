@@ -6,6 +6,8 @@ import { SettingsModal } from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
 import { useServerSync } from './hooks/useServerSync'
+import { useBrainEngine } from './hooks/useBrainEngine'
+import { useForecastEngine } from './hooks/useForecastEngine'
 import { wsService } from './services/ws'
 import './app.css'
 
@@ -34,8 +36,14 @@ export function App() {
     }
   }, [authenticated])
 
-  // Sync positions/AT state from server
-  useServerSync()
+  // Sync positions/AT state from server (only when authenticated)
+  useServerSync(authenticated)
+
+  // Brain computation engine (runs on kline updates)
+  useBrainEngine(authenticated)
+
+  // Forecast engine — QEB, probability score, scenarios (runs after brain)
+  useForecastEngine(authenticated)
 
   if (loading) {
     return (

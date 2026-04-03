@@ -28,6 +28,8 @@ interface PositionsStore {
   setLiveBalance: (balance: Balance) => void
   /** Set live connection status */
   setLiveConnected: (connected: boolean) => void
+  /** Merge partial state */
+  patch: (partial: Partial<PositionsStore>) => void
 }
 
 export const usePositionsStore = create<PositionsStore>()((set) => ({
@@ -46,4 +48,5 @@ export const usePositionsStore = create<PositionsStore>()((set) => ({
   setDemoBalance: (balance) => set({ demoBalance: balance }),
   setLiveBalance: (balance) => set({ liveBalance: balance }),
   setLiveConnected: (connected) => set({ liveConnected: connected }),
+  patch: (partial) => set((s) => ({ ...s, ...partial })),
 }))

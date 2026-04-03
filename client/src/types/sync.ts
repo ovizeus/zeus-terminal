@@ -2,7 +2,7 @@ import type { Position } from './position'
 
 /**
  * WebSocket message from server
- * From server.js lines 1068-1081
+ * From server.js lines 1068-1087
  */
 export type WsMessage = WsAtUpdate | WsSyncSignal
 
@@ -17,31 +17,64 @@ export interface WsSyncSignal {
 
 /**
  * Server AT state pushed via WebSocket at_update
- * Shape from serverAT.js getState()
+ * Shape from serverAT.js getFullState() — lines 1763-1791
  */
 export interface ServerATState {
-  mode: string
-  positions: Position[]
-  demoBalance: number
-  liveBalance?: number
-  stats: {
-    totalTrades: number
-    wins: number
-    losses: number
-    totalPnL: number
-    dailyPnL: number
-    realizedDailyPnL: number
-    closedTradesToday: number
-    dailyStart: string
-  }
-  killTriggered: boolean
-  killPct?: number
+  mode: string // 'demo' | 'live'
   enabled: boolean
+  atActive: boolean
+  apiConfigured: boolean
+  exchangeMode: string | null // 'testnet' | 'live' | null
+  resolvedEnv: string // 'DEMO' | 'TESTNET' | 'REAL'
+
+  // Positions — server sends both flat and split
+  positions: Position[]
+  demoPositions?: Position[]
+  livePositions?: Position[]
+
+  // Stats
+  stats: ServerATStats
+  demoStats?: ServerATStats
+  liveStats?: ServerLiveStats
+
+  // Balance — server sends object: { balance, pnl, startBalance }
+  demoBalance: number | ServerDemoBalance
+  killActive: boolean
+  killPct?: number
+  dailyPnL: number
+  dailyPnLDemo: number
+  dailyPnLLive: number
+  pnlAtReset: number
+  ts: number
+}
+
+export interface ServerDemoBalance {
+  balance: number
+  pnl: number
+  startBalance: number
+}
+
+export interface ServerATStats {
+  entries: number
+  exits: number
+  openCount?: number
+  pnl: number
+  wins: number
+  losses: number
+  winRate: number
+  dailyPnL: number
+}
+
+export interface ServerLiveStats extends ServerATStats {
+  enabled: boolean
+  tradingUserId: number
+  blocked: number
+  errors: number
 }
 
 /**
  * Server snapshot from GET /api/sync/state
- * From server/routes/sync.js lines 52-80
+ * From server/routes/sync.js
  */
 export interface ServerSnapshot {
   ts: number

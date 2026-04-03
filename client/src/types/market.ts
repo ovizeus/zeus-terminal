@@ -155,7 +155,7 @@ export interface MarketState {
   heatmapPockets: unknown[]
 
   // Data
-  klines: number[][]
+  klines: Array<{ time: number; open: number; high: number; low: number; close: number; volume: number }>
   liqMinUsd: number
   liqSym: string
   wsK: unknown | null

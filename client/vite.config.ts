@@ -15,10 +15,12 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        cookieDomainRewrite: '',
       },
       '/auth': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        cookieDomainRewrite: '',
       },
       '/health': {
         target: 'http://localhost:3000',

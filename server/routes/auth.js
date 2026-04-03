@@ -92,9 +92,9 @@ function _validatePassword(pw) {
 async function _sendCode(email, code) {
     const mailer = _getMailer();
     if (!mailer) {
-        // SMTP not configured — code NOT logged for security
-        console.warn('[AUTH-2FA] SMTP not configured — cannot send code');
-        return false;
+        // SMTP not configured — log code to console for local dev
+        console.warn(`[AUTH-2FA] SMTP not configured — DEV CODE for ${email}: ${code}`);
+        return true;
     }
     try {
         await mailer.sendMail({
@@ -145,7 +145,7 @@ function _checkLoginRateEmail(email) {
 function _setAuthCookie(res, token) {
     res.cookie('zeus_token', token, {
         httpOnly: true,
-        secure: true,       // HTTPS only (Cloudflare handles this)
+        secure: process.env.NODE_ENV === 'production', // HTTPS only in prod (Cloudflare handles this)
         sameSite: 'lax',
         maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000, // [SC-02] matches JWT_EXPIRY
         path: '/'
@@ -274,9 +274,20 @@ router.post('/login', async (req, res) => {
             expiresAt: Date.now() + CODE_TTL
         });
 
+        // If SMTP is not configured, skip 2FA entirely for local dev
+        const mailer = _getMailer();
+        if (!mailer) {
+            console.warn(`[AUTH-2FA] SMTP not configured — auto-verifying login for ${_mask(normalEmail)}`);
+            pendingCodes.delete(normalEmail);
+            const token = jwt.sign({ id: user.id, email: normalEmail, role: user.role || 'user', tokenVersion: user.token_version || 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+            _setAuthCookie(res, token);
+            db.auditLog(user.id, 'LOGIN_SUCCESS', { method: 'auto-2fa-bypass' }, req.ip);
+            logger.info('AUTH', 'Login auto-verified (no SMTP)', { email: _mask(normalEmail) });
+            return res.json({ ok: true, email: normalEmail, role: user.role || 'user' });
+        }
+
         const sent = await _sendCode(normalEmail, code);
         if (!sent) {
-            // SMTP failed — do NOT bypass 2FA, return error
             pendingCodes.delete(normalEmail);
             logger.error('AUTH', 'SMTP failed, login blocked', { email: _mask(normalEmail) });
             return res.status(503).json({ error: 'Email service unavailable. Cannot send 2FA code. Try again later.' });

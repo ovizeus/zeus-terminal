@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useMarketStore } from '../../stores'
 import { TradingChart } from '../chart/TradingChart'
 import { PositionTable } from '../trading/PositionTable'
@@ -11,19 +11,34 @@ import { TeacherPanel } from '../advanced/TeacherPanel'
 import { JournalPanel } from '../advanced/JournalPanel'
 import { ErrorBoundary } from '../ErrorBoundary'
 
+/** Collapsible strip panel — matches old frontend's strip layout */
+function Strip({ title, defaultOpen = false, children }: { title: string; defaultOpen?: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section className="zr-panel">
+      <button className="zr-strip__toggle" onClick={() => setOpen(!open)}>
+        <span>{title}</span>
+        <span className={`zr-strip__chevron ${open ? 'zr-strip__chevron--open' : ''}`}>▶</span>
+      </button>
+      <div className={`zr-panel__body ${open ? '' : 'zr-panel__body--collapsed'}`}>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </div>
+    </section>
+  )
+}
+
 type PosTab = 'demo' | 'live' | 'journal'
 type BrainTab = 'cockpit' | 'forecast' | 'deepdive'
-type BottomTab = 'at' | 'flow' | 'teacher'
 
 export function PanelShell() {
   const price = useMarketStore((s) => s.market.price)
   const symbol = useMarketStore((s) => s.market.symbol)
   const [posTab, setPosTab] = useState<PosTab>('demo')
   const [brainTab, setBrainTab] = useState<BrainTab>('cockpit')
-  const [bottomTab, setBottomTab] = useState<BottomTab>('at')
 
   return (
     <main className="zr-panels">
+      {/* ── Chart — always visible, prominent ── */}
       <section className="zr-panel zr-panel--chart" data-panel="chart">
         <div className="zr-panel__header">
           {symbol} — ${price > 0 ? price.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
@@ -33,99 +48,54 @@ export function PanelShell() {
         </div>
       </section>
 
-      <section className="zr-panel" data-panel="positions">
-        <div className="zr-panel__header">
-          <div className="zr-panel__header-tabs">
+      {/* ── Positions / Journal ── */}
+      <Strip title="POSITIONS" defaultOpen>
+        <div className="zr-panel__header-tabs" style={{ marginBottom: 8 }}>
+          {(['demo', 'live', 'journal'] as PosTab[]).map((t) => (
             <button
-              className={`zr-panel__header-tab ${posTab === 'demo' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setPosTab('demo')}
+              key={t}
+              className={`zr-panel__header-tab ${posTab === t ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setPosTab(t)}
             >
-              Demo
+              {t === 'demo' ? 'Demo' : t === 'live' ? 'Live' : 'Journal'}
             </button>
-            <button
-              className={`zr-panel__header-tab ${posTab === 'live' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setPosTab('live')}
-            >
-              Live
-            </button>
-            <button
-              className={`zr-panel__header-tab ${posTab === 'journal' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setPosTab('journal')}
-            >
-              Journal
-            </button>
-          </div>
+          ))}
         </div>
-        <div className="zr-panel__body">
-          <ErrorBoundary>
-            {posTab === 'journal' ? <JournalPanel /> : <PositionTable mode={posTab} />}
-          </ErrorBoundary>
-        </div>
-      </section>
+        {posTab === 'journal' ? <JournalPanel /> : <PositionTable mode={posTab} />}
+      </Strip>
 
-      <section className="zr-panel" data-panel="brain">
-        <div className="zr-panel__header">
-          <div className="zr-panel__header-tabs">
+      {/* ── Brain ── */}
+      <Strip title="BRAIN" defaultOpen>
+        <div className="zr-panel__header-tabs" style={{ marginBottom: 8 }}>
+          {(['cockpit', 'forecast', 'deepdive'] as BrainTab[]).map((t) => (
             <button
-              className={`zr-panel__header-tab ${brainTab === 'cockpit' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setBrainTab('cockpit')}
+              key={t}
+              className={`zr-panel__header-tab ${brainTab === t ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBrainTab(t)}
             >
-              Cockpit
+              {t === 'cockpit' ? 'Cockpit' : t === 'forecast' ? 'Forecast' : 'Deep Dive'}
             </button>
-            <button
-              className={`zr-panel__header-tab ${brainTab === 'forecast' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setBrainTab('forecast')}
-            >
-              Forecast
-            </button>
-            <button
-              className={`zr-panel__header-tab ${brainTab === 'deepdive' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setBrainTab('deepdive')}
-            >
-              Deep Dive
-            </button>
-          </div>
+          ))}
         </div>
-        <div className="zr-panel__body">
-          <ErrorBoundary>
-            {brainTab === 'cockpit' && <BrainCockpit />}
-            {brainTab === 'forecast' && <ForecastPanel />}
-            {brainTab === 'deepdive' && <DeepDivePanel />}
-          </ErrorBoundary>
-        </div>
-      </section>
+        {brainTab === 'cockpit' && <BrainCockpit />}
+        {brainTab === 'forecast' && <ForecastPanel />}
+        {brainTab === 'deepdive' && <DeepDivePanel />}
+      </Strip>
 
-      <section className="zr-panel" data-panel="at">
-        <div className="zr-panel__header">
-          <div className="zr-panel__header-tabs">
-            <button
-              className={`zr-panel__header-tab ${bottomTab === 'at' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setBottomTab('at')}
-            >
-              AutoTrade
-            </button>
-            <button
-              className={`zr-panel__header-tab ${bottomTab === 'flow' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setBottomTab('flow')}
-            >
-              Flow
-            </button>
-            <button
-              className={`zr-panel__header-tab ${bottomTab === 'teacher' ? 'zr-panel__header-tab--active' : ''}`}
-              onClick={() => setBottomTab('teacher')}
-            >
-              Teacher
-            </button>
-          </div>
-        </div>
-        <div className="zr-panel__body">
-          <ErrorBoundary>
-            {bottomTab === 'at' && <ATPanel />}
-            {bottomTab === 'flow' && <OrderFlowPanel />}
-            {bottomTab === 'teacher' && <TeacherPanel />}
-          </ErrorBoundary>
-        </div>
-      </section>
+      {/* ── AutoTrade ── */}
+      <Strip title="AUTOTRADE" defaultOpen>
+        <ATPanel />
+      </Strip>
+
+      {/* ── Flow ── */}
+      <Strip title="FLOW">
+        <OrderFlowPanel />
+      </Strip>
+
+      {/* ── Teacher ── */}
+      <Strip title="TEACHER">
+        <TeacherPanel />
+      </Strip>
     </main>
   )
 }

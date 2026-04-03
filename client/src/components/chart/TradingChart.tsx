@@ -7,6 +7,8 @@ import {
   CrosshairMode,
 } from 'lightweight-charts'
 import { useMarketData, type Kline } from '../../hooks/useMarketData'
+import { useMarketStore } from '../../stores'
+
 
 /** Chart colors — will read from CSS vars in future phases */
 const COLORS = {
@@ -141,6 +143,9 @@ export function TradingChart() {
     }
 
     chartRef.current?.timeScale().scrollToRealTime()
+
+    // Store klines in marketStore for brain engine
+    useMarketStore.getState().patch({ klines })
   }, [])
 
   // Update single bar
@@ -164,6 +169,9 @@ export function TradingChart() {
       value: bar.volume,
       color: bar.close >= bar.open ? COLORS.volBull : COLORS.volBear,
     })
+
+    // Update klines in store for brain engine (throttled by brain's own throttle)
+    useMarketStore.getState().patch({ klines })
   }, [])
 
   // Connect to Binance data

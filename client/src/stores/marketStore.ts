@@ -86,7 +86,7 @@ const defaultMarket: MarketState = {
     shortCol: '#ffe400',
   },
   heatmapPockets: [],
-  klines: [],
+  klines: [] as MarketState['klines'],
   liqMinUsd: 500,
   liqSym: 'BTC',
   wsK: null,

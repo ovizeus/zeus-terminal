@@ -6,17 +6,18 @@ import { useJournalStore } from '../../stores'
 describe('JournalPanel', () => {
   it('renders empty state', () => {
     render(<JournalPanel />)
-    expect(screen.getByText('No journal entries')).toBeInTheDocument()
+    expect(screen.getByText('No closed trades yet')).toBeInTheDocument()
     expect(screen.getByText('TRADE JOURNAL')).toBeInTheDocument()
   })
 
   it('renders journal entries', () => {
     useJournalStore.setState({
       entries: [{
-        id: 'j1', event: 'CLOSE', side: 'LONG',
+        id: 'j1', side: 'LONG', symbol: 'BTCUSDT',
         entryPrice: 60000, exitPrice: 61000,
-        pnl: 100, pnlPct: 1.67, reason: 'TP',
-        ts: Date.now(), symbol: 'BTCUSDT',
+        pnl: 100, reason: 'TP',
+        openTs: Date.now() - 60000, closeTs: Date.now(),
+        mode: 'demo',
       }],
     })
     render(<JournalPanel />)

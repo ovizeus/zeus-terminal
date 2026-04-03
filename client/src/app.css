@@ -98,11 +98,11 @@ body {
 
 /* ── Panels ── */
 .zr-panels {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 8px;
-  height: calc(100vh - 44px);
+  min-height: calc(100vh - 44px);
 }
 .zr-panel {
   background: var(--bg2);
@@ -135,6 +135,35 @@ body {
   color: var(--dim);
 }
 
+/* ── Strip (collapsible panel) ── */
+.zr-strip__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  font-family: var(--ff);
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--brd);
+}
+.zr-strip__toggle:hover { color: var(--txt); }
+.zr-strip__chevron {
+  font-size: 10px;
+  transition: transform 0.2s;
+}
+.zr-strip__chevron--open { transform: rotate(90deg); }
+.zr-panel__body--collapsed {
+  display: none;
+}
+
 /* ── Key-value rows ── */
 .zr-kv {
   display: flex;
@@ -157,7 +186,7 @@ body {
 
 /* ── Chart panel ── */
 .zr-panel--chart {
-  grid-column: 1 / -1;
+  width: 100%;
 }
 .zr-panel__body--chart {
   padding: 0;
@@ -829,15 +858,6 @@ body {
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
-  .zr-panels {
-    grid-template-columns: 1fr;
-    height: auto;
-    min-height: calc(100vh - 44px);
-  }
-  .zr-panel--chart {
-    grid-column: 1;
-    min-height: 300px;
-  }
   .zr-header__center { display: none; }
 }
 @media (max-width: 600px) {

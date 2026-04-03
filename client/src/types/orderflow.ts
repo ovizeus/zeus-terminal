@@ -82,16 +82,16 @@ export interface TeacherState {
   }
 }
 
-/** Journal entry */
+/** Journal entry — closed trade from /api/sync/journal */
 export interface JournalEntry {
   id: string
-  event: 'OPEN' | 'CLOSE'
+  symbol: string
   side: 'LONG' | 'SHORT'
   entryPrice: number
   exitPrice: number
   pnl: number
-  pnlPct: number
   reason: string
-  ts: number
-  symbol: string
+  openTs: number
+  closeTs: number
+  mode: 'demo' | 'live'
 }

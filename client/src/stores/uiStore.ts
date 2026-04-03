@@ -19,6 +19,12 @@ interface UiStore {
   toggleSettings: () => void
   /** Set connection status */
   setConnected: (connected: boolean) => void
+  /** Server environment info */
+  apiConfigured: boolean
+  exchangeMode: string | null
+  resolvedEnv: string
+  /** Merge partial state */
+  patch: (partial: Partial<UiStore>) => void
 }
 
 function readTheme(): ThemeId {
@@ -36,6 +42,9 @@ export const useUiStore = create<UiStore>()((set) => ({
   activePanel: 'chart',
   settingsOpen: false,
   connected: false,
+  apiConfigured: false,
+  exchangeMode: null,
+  resolvedEnv: 'DEMO',
 
   setTheme: (theme) => {
     try {
@@ -50,4 +59,5 @@ export const useUiStore = create<UiStore>()((set) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
   setConnected: (connected) => set({ connected }),
+  patch: (partial) => set((s) => ({ ...s, ...partial })),
 }))
