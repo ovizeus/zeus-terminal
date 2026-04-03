@@ -804,3 +804,46 @@ body {
 .zr-journal__prices { color: var(--txt); font-size: 11px; }
 .zr-journal__pnl { font-weight: bold; font-size: 11px; min-width: 60px; text-align: right; }
 .zr-journal__reason { font-size: 10px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Error Boundary ── */
+.zr-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  text-align: center;
+}
+.zr-error__title {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: bold;
+}
+.zr-error__msg {
+  color: var(--dim);
+  font-size: 11px;
+  max-width: 300px;
+  word-break: break-word;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .zr-panels {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: calc(100vh - 44px);
+  }
+  .zr-panel--chart {
+    grid-column: 1;
+    min-height: 300px;
+  }
+  .zr-header__center { display: none; }
+}
+@media (max-width: 600px) {
+  .zr-header { padding: 6px 10px; height: 38px; }
+  .zr-header__logo { font-size: 12px; }
+  .zr-header__badge { display: none; }
+  .zr-panel__body { padding: 6px; font-size: 11px; }
+  .zr-login__card { padding: 20px; }
+}

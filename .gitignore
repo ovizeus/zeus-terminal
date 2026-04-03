@@ -55,5 +55,8 @@ _test_isolation.js
 _test_manual_trading.js
 _tmp_list.js
 
+# React app build output
+public/app/
+
 # Deploy artifacts
 zeus-deploy.tar.gz

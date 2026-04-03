@@ -9,6 +9,7 @@ import { DeepDivePanel } from '../brain/DeepDivePanel'
 import { OrderFlowPanel } from '../advanced/OrderFlowPanel'
 import { TeacherPanel } from '../advanced/TeacherPanel'
 import { JournalPanel } from '../advanced/JournalPanel'
+import { ErrorBoundary } from '../ErrorBoundary'
 
 type PosTab = 'demo' | 'live' | 'journal'
 type BrainTab = 'cockpit' | 'forecast' | 'deepdive'
@@ -28,7 +29,7 @@ export function PanelShell() {
           {symbol} — ${price > 0 ? price.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
         </div>
         <div className="zr-panel__body zr-panel__body--chart">
-          <TradingChart />
+          <ErrorBoundary><TradingChart /></ErrorBoundary>
         </div>
       </section>
 
@@ -56,7 +57,9 @@ export function PanelShell() {
           </div>
         </div>
         <div className="zr-panel__body">
-          {posTab === 'journal' ? <JournalPanel /> : <PositionTable mode={posTab} />}
+          <ErrorBoundary>
+            {posTab === 'journal' ? <JournalPanel /> : <PositionTable mode={posTab} />}
+          </ErrorBoundary>
         </div>
       </section>
 
@@ -84,9 +87,11 @@ export function PanelShell() {
           </div>
         </div>
         <div className="zr-panel__body">
-          {brainTab === 'cockpit' && <BrainCockpit />}
-          {brainTab === 'forecast' && <ForecastPanel />}
-          {brainTab === 'deepdive' && <DeepDivePanel />}
+          <ErrorBoundary>
+            {brainTab === 'cockpit' && <BrainCockpit />}
+            {brainTab === 'forecast' && <ForecastPanel />}
+            {brainTab === 'deepdive' && <DeepDivePanel />}
+          </ErrorBoundary>
         </div>
       </section>
 
@@ -114,9 +119,11 @@ export function PanelShell() {
           </div>
         </div>
         <div className="zr-panel__body">
-          {bottomTab === 'at' && <ATPanel />}
-          {bottomTab === 'flow' && <OrderFlowPanel />}
-          {bottomTab === 'teacher' && <TeacherPanel />}
+          <ErrorBoundary>
+            {bottomTab === 'at' && <ATPanel />}
+            {bottomTab === 'flow' && <OrderFlowPanel />}
+            {bottomTab === 'teacher' && <TeacherPanel />}
+          </ErrorBoundary>
         </div>
       </section>
     </main>

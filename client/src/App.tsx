@@ -3,6 +3,7 @@ import { LoginPage } from './components/auth/LoginPage'
 import { Header } from './components/layout/Header'
 import { PanelShell } from './components/layout/PanelShell'
 import { SettingsModal } from './components/settings/SettingsModal'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
 import { useServerSync } from './hooks/useServerSync'
 import { wsService } from './services/ws'
@@ -49,10 +50,12 @@ export function App() {
   }
 
   return (
-    <div id="zeus-app">
-      <Header />
-      <PanelShell />
-      <SettingsModal />
-    </div>
+    <ErrorBoundary>
+      <div id="zeus-app">
+        <Header />
+        <PanelShell />
+        <SettingsModal />
+      </div>
+    </ErrorBoundary>
   )
 }
