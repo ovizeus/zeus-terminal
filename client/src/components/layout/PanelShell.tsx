@@ -6,15 +6,20 @@ import { ATPanel } from '../trading/ATPanel'
 import { BrainCockpit } from '../brain/BrainCockpit'
 import { ForecastPanel } from '../brain/ForecastPanel'
 import { DeepDivePanel } from '../brain/DeepDivePanel'
+import { OrderFlowPanel } from '../advanced/OrderFlowPanel'
+import { TeacherPanel } from '../advanced/TeacherPanel'
+import { JournalPanel } from '../advanced/JournalPanel'
 
-type PosTab = 'demo' | 'live'
+type PosTab = 'demo' | 'live' | 'journal'
 type BrainTab = 'cockpit' | 'forecast' | 'deepdive'
+type BottomTab = 'at' | 'flow' | 'teacher'
 
 export function PanelShell() {
   const price = useMarketStore((s) => s.market.price)
   const symbol = useMarketStore((s) => s.market.symbol)
   const [posTab, setPosTab] = useState<PosTab>('demo')
   const [brainTab, setBrainTab] = useState<BrainTab>('cockpit')
+  const [bottomTab, setBottomTab] = useState<BottomTab>('at')
 
   return (
     <main className="zr-panels">
@@ -42,10 +47,16 @@ export function PanelShell() {
             >
               Live
             </button>
+            <button
+              className={`zr-panel__header-tab ${posTab === 'journal' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setPosTab('journal')}
+            >
+              Journal
+            </button>
           </div>
         </div>
         <div className="zr-panel__body">
-          <PositionTable mode={posTab} />
+          {posTab === 'journal' ? <JournalPanel /> : <PositionTable mode={posTab} />}
         </div>
       </section>
 
@@ -80,9 +91,32 @@ export function PanelShell() {
       </section>
 
       <section className="zr-panel" data-panel="at">
-        <div className="zr-panel__header">AutoTrade</div>
+        <div className="zr-panel__header">
+          <div className="zr-panel__header-tabs">
+            <button
+              className={`zr-panel__header-tab ${bottomTab === 'at' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBottomTab('at')}
+            >
+              AutoTrade
+            </button>
+            <button
+              className={`zr-panel__header-tab ${bottomTab === 'flow' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBottomTab('flow')}
+            >
+              Flow
+            </button>
+            <button
+              className={`zr-panel__header-tab ${bottomTab === 'teacher' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBottomTab('teacher')}
+            >
+              Teacher
+            </button>
+          </div>
+        </div>
         <div className="zr-panel__body">
-          <ATPanel />
+          {bottomTab === 'at' && <ATPanel />}
+          {bottomTab === 'flow' && <OrderFlowPanel />}
+          {bottomTab === 'teacher' && <TeacherPanel />}
         </div>
       </section>
     </main>

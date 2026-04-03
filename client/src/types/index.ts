@@ -78,3 +78,9 @@ export type {
   ThemeId,
   GlobalMode,
 } from './settings'
+
+export type {
+  OrderFlowState,
+  TeacherState,
+  JournalEntry,
+} from './orderflow'

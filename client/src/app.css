@@ -648,3 +648,159 @@ body {
   margin-bottom: 10px;
   letter-spacing: 1px;
 }
+
+/* ── Order Flow Panel ── */
+.zr-flow { font-size: 12px; }
+.zr-flow__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.zr-flow-health {
+  font-size: 10px;
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+}
+.zr-flow-health--ok { background: rgba(0, 217, 122, 0.15); color: var(--grn); }
+.zr-flow-health--thin { background: rgba(240, 192, 64, 0.15); color: var(--gold); }
+.zr-flow-health--dead { background: rgba(255, 51, 85, 0.15); color: var(--red); }
+.zr-flow-inst {
+  font-size: 9px;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(0, 212, 255, 0.2);
+  color: var(--blu);
+}
+.zr-flow__metrics { margin-bottom: 8px; }
+.zr-flow__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.zr-flow-flag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--brd);
+  border-radius: 3px;
+  font-size: 10px;
+  background: var(--bg3);
+}
+.zr-flow-flag--active { border-color: var(--gold); }
+.zr-flow-flag__label { color: var(--dim); font-weight: bold; }
+.zr-flow-flag__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.zr-flow-flag__dot--on { background: var(--grn); }
+.zr-flow-flag__detail { color: var(--txt); }
+.zr-flow__exhaust {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+}
+
+/* ── Teacher Panel ── */
+.zr-teacher { font-size: 12px; }
+.zr-teacher__hero {
+  text-align: center;
+  padding: 10px;
+  margin-bottom: 8px;
+  border: 1px solid var(--brd);
+  border-radius: 4px;
+  background: var(--bg3);
+}
+.zr-teacher__score {
+  font-size: 32px;
+  font-weight: bold;
+  display: block;
+}
+.zr-teacher__label {
+  font-size: 11px;
+  font-weight: bold;
+  display: block;
+}
+.zr-teacher__subtitle {
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+.zr-teacher__quick {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--dim);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.zr-teacher__status {
+  font-size: 10px;
+  font-weight: bold;
+  text-align: center;
+  padding: 3px;
+  margin-bottom: 6px;
+  border-radius: 3px;
+  letter-spacing: 1px;
+}
+.zr-teacher__status--idle { color: var(--dim); }
+.zr-teacher__status--training { color: var(--grn); background: rgba(0, 217, 122, 0.1); }
+.zr-teacher__status--reviewing { color: var(--gold); background: rgba(240, 192, 64, 0.1); }
+.zr-teacher__body { margin-top: 8px; }
+.zr-teacher__activity {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zr-teacher__event {
+  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 2px;
+  color: var(--txt);
+}
+.zr-teacher__event--trade { color: var(--grn); }
+.zr-teacher__event--fail { color: var(--red); }
+.zr-teacher__event--warn { color: var(--gold); }
+.zr-teacher__event--learn { color: var(--blu); }
+
+/* ── Journal Panel ── */
+.zr-journal { font-size: 12px; }
+.zr-journal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.zr-journal__title {
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+.zr-journal__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.zr-journal__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 3px;
+  border-left: 2px solid var(--brd);
+}
+.zr-journal__row--win { border-left-color: var(--grn); }
+.zr-journal__row--loss { border-left-color: var(--red); }
+.zr-journal__time { font-size: 10px; color: var(--dim); min-width: 40px; }
+.zr-journal__prices { color: var(--txt); font-size: 11px; }
+.zr-journal__pnl { font-weight: bold; font-size: 11px; min-width: 60px; text-align: right; }
+.zr-journal__reason { font-size: 10px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
