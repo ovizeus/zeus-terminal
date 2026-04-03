@@ -1,0 +1,153 @@
+/*
+ * Zeus Terminal React Shell — Phase 0 CSS
+ * Uses the same CSS variable names as the main app (--bg, --txt, --gold, etc.)
+ * so themes.css overrides work automatically.
+ */
+
+:root {
+  --bg: #0a0a0f;
+  --bg2: #0d1018;
+  --bg3: #111820;
+  --brd: #1e2530;
+  --gold: #f0c040;
+  --grn: #00d97a;
+  --red: #ff3355;
+  --blu: #00d4ff;
+  --dim: #3a5068;
+  --txt: #7a9ab8;
+  --whi: #d8eaf8;
+  --ff: 'Share Tech Mono', 'Fira Code', monospace;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--ff);
+  background: var(--bg);
+  color: var(--txt);
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.zr-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--brd);
+  height: 44px;
+}
+.zr-header__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.zr-header__logo {
+  color: var(--gold);
+  font-weight: bold;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+.zr-header__badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--blu);
+  color: var(--bg);
+  font-weight: bold;
+}
+.zr-header__center {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.zr-header__symbol {
+  color: var(--whi);
+  font-size: 13px;
+  font-weight: bold;
+}
+.zr-header__price {
+  color: var(--gold);
+  font-size: 13px;
+}
+.zr-header__right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.zr-header__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+}
+.zr-header__dot--on {
+  background: var(--grn);
+}
+.zr-header__theme-select {
+  font-family: var(--ff);
+  font-size: 11px;
+  background: var(--bg3);
+  color: var(--txt);
+  border: 1px solid var(--brd);
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+/* ── Panels ── */
+.zr-panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  height: calc(100vh - 44px);
+}
+.zr-panel {
+  background: var(--bg2);
+  border: 1px solid var(--brd);
+  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.zr-panel__header {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  border-bottom: 1px solid var(--brd);
+  background: var(--bg3);
+}
+.zr-panel__body {
+  padding: 10px;
+  flex: 1;
+  font-size: 12px;
+  overflow-y: auto;
+}
+.zr-panel__body--chart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+}
+
+/* ── Key-value rows ── */
+.zr-kv {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--brd);
+}
+.zr-kv__label {
+  color: var(--dim);
+}
+.zr-kv__value {
+  color: var(--whi);
+}
+.zr-kv__value--grn {
+  color: var(--grn);
+}
