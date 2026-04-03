@@ -1,4 +1,5 @@
-import { usePositionsStore, useATStore, useBrainStore } from '../../stores'
+import { usePositionsStore, useATStore, useBrainStore, useMarketStore } from '../../stores'
+import { TradingChart } from '../chart/TradingChart'
 
 export function PanelShell() {
   const demoCount = usePositionsStore((s) => s.demoPositions.length)
@@ -6,15 +7,24 @@ export function PanelShell() {
   const demoBalance = usePositionsStore((s) => s.demoBalance)
   const atEnabled = useATStore((s) => s.enabled)
   const atMode = useATStore((s) => s.mode)
+  const atTrades = useATStore((s) => s.totalTrades)
+  const atWins = useATStore((s) => s.wins)
+  const atLosses = useATStore((s) => s.losses)
+  const atPnL = useATStore((s) => s.totalPnL)
+  const atKill = useATStore((s) => s.killTriggered)
   const brainMode = useBrainStore((s) => s.brain.mode)
   const confluence = useBrainStore((s) => s.brain.confluenceScore)
+  const price = useMarketStore((s) => s.market.price)
+  const symbol = useMarketStore((s) => s.market.symbol)
 
   return (
     <main className="zr-panels">
-      <section className="zr-panel" data-panel="chart">
-        <div className="zr-panel__header">Chart</div>
+      <section className="zr-panel zr-panel--chart" data-panel="chart">
+        <div className="zr-panel__header">
+          {symbol} — ${price > 0 ? price.toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}
+        </div>
         <div className="zr-panel__body zr-panel__body--chart">
-          Chart placeholder — will wrap Lightweight Charts in Phase 2
+          <TradingChart />
         </div>
       </section>
 
@@ -54,14 +64,24 @@ export function PanelShell() {
         <div className="zr-panel__header">AutoTrade</div>
         <div className="zr-panel__body">
           <div className="zr-kv">
-            <span className="zr-kv__label">Enabled</span>
-            <span className={`zr-kv__value ${atEnabled ? 'zr-kv__value--grn' : ''}`}>
-              {atEnabled ? 'ON' : 'OFF'}
+            <span className="zr-kv__label">Status</span>
+            <span className={`zr-kv__value ${atKill ? 'zr-kv__value--red' : atEnabled ? 'zr-kv__value--grn' : ''}`}>
+              {atKill ? 'KILLED' : atEnabled ? 'ON' : 'OFF'}
             </span>
           </div>
           <div className="zr-kv">
             <span className="zr-kv__label">Mode</span>
             <span className="zr-kv__value">{atMode}</span>
+          </div>
+          <div className="zr-kv">
+            <span className="zr-kv__label">Trades</span>
+            <span className="zr-kv__value">{atTrades} ({atWins}W / {atLosses}L)</span>
+          </div>
+          <div className="zr-kv">
+            <span className="zr-kv__label">Total PnL</span>
+            <span className={`zr-kv__value ${atPnL >= 0 ? 'zr-kv__value--grn' : 'zr-kv__value--red'}`}>
+              ${atPnL.toFixed(2)}
+            </span>
           </div>
         </div>
       </section>

@@ -151,6 +151,22 @@ body {
 .zr-kv__value--grn {
   color: var(--grn);
 }
+.zr-kv__value--red {
+  color: var(--red);
+}
+
+/* ── Chart panel ── */
+.zr-panel--chart {
+  grid-column: 1 / -1;
+}
+.zr-panel__body--chart {
+  padding: 0;
+}
+.zr-chart-container {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+}
 
 /* ── Loading screen ── */
 .zr-loading {

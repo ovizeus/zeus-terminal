@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header'
 import { PanelShell } from './components/layout/PanelShell'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { useUiStore, useAuthStore } from './stores'
+import { useServerSync } from './hooks/useServerSync'
 import { wsService } from './services/ws'
 import './app.css'
 
@@ -31,6 +32,9 @@ export function App() {
       return () => wsService.disconnect()
     }
   }, [authenticated])
+
+  // Sync positions/AT state from server
+  useServerSync()
 
   if (loading) {
     return (
