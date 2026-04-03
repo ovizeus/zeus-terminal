@@ -593,23 +593,7 @@ router.post('/addon', async (req, res) => {
   }
 });
 
-// ─── [F1] Per-user AT on/off toggle ───
-router.post('/at/toggle', (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { active } = req.body;
-    if (typeof active !== 'boolean') {
-      return res.status(400).json({ error: 'active must be boolean (true/false)' });
-    }
-    const serverAT = require('../services/serverAT');
-    const result = serverAT.toggleActive(userId, active);
-    if (!result.ok) return res.status(400).json({ error: result.error });
-    res.json(result);
-  } catch (err) {
-    console.error('[API] at/toggle error:', err.message);
-    res.status(500).json({ error: 'Toggle failed' });
-  }
-});
+// [S12] Removed duplicate /at/toggle — already defined in server.js (without resolveExchange requirement)
 
 // ─── Brain Vision API (Brain V2 UI) ───
 router.get('/brain/vision', (req, res) => {

@@ -143,7 +143,7 @@ app.get('/health', (_req, res) => {
 app.use('/auth', authRoutes);
 
 // ─── Session Auth (protects everything below) ───
-app.use(createSessionAuth(authRoutes.JWT_SECRET));
+app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
 
 // ─── App Version endpoint ───
 const appVersion = require('./server/version');

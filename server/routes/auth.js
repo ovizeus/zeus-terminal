@@ -819,7 +819,7 @@ router.post('/change-email/confirm', async (req, res) => {
 // ─── FORGOT PASSWORD: Step 1 — request code (no login needed) ───
 router.post('/forgot-password/request', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
-    const { email } = req.body;
+    const email = (req.body.email || '').toLowerCase().trim(); // [S13] normalize
     if (!email) return res.status(400).json({ error: 'Emailul este necesar' });
 
     const user = db.findUserByEmail(email);

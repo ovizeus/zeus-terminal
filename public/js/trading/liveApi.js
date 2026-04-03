@@ -112,7 +112,7 @@ async function liveApiPlaceOrder(params) {
 async function liveApiCancelOrder(symbol, orderId) {
   const res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/cancel', {
     method: 'POST',
-    headers: _liveApiHeaders(),
+    headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }), // [S7]
     body: JSON.stringify({ symbol: symbol, orderId: orderId }),
   });
   return _liveApiParse(res, 'order/cancel');
@@ -219,7 +219,7 @@ async function liveApiSyncState() {
         isLive: true,
         fromExchange: true,
         mode: 'live',
-        openTs: Date.now(),
+        openTs: p.updateTime || Date.now(), // [S8] prefer exchange timestamp
       };
       if (existing) {
         // [FIX R7] If ID changed (e.g. orderId → sym_side), re-attach DSL state

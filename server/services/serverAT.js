@@ -1442,7 +1442,7 @@ function _checkKillSwitch(userId) {
         if (us.liveBalanceRef > 0) { balRef = us.liveBalanceRef; }
         else { return; } // no live balance ref — skip to avoid false trigger
     } else {
-        balRef = us.demoBalance > 0 ? us.demoBalance : 10000;
+        balRef = us.demoStartBalance > 0 ? us.demoStartBalance : 10000; // [S3] use start-of-day balance, not floating balance
     }
     const lossLimit = +(balRef * pct / 100).toFixed(2);
     const lossSinceReset = us.dailyPnL - (us.pnlAtReset || 0);
@@ -1828,10 +1828,10 @@ function reset(userId) {
     }
     const us = _uState(userId);
     us.log.length = 0;
-    us.seq = 0;
+    us.seq = db.getMaxSeq(userId); // [S2] preserve seq continuity — never reuse archived seq numbers
     us.stats = { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0 };
     us.liveStats = { entries: 0, exits: 0, pnl: 0, wins: 0, losses: 0, blocked: 0, errors: 0 };
-    us.liveSeq = 0;
+    us.liveSeq = us.seq; // [S2] keep liveSeq aligned
     us.dailyPnL = 0;
     us.dailyPnLDemo = 0;
     us.dailyPnLLive = 0;
@@ -2179,8 +2179,8 @@ async function addOnPosition(userId, seq, options = {}) {
             pos.slPnl = -Math.abs(+((slDist / pos.price) * pos.size * pos.lev).toFixed(2));
 
             // ── Cancel old SL/TP orders ──
-            if (pos.live.slOrderId) await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds);
-            if (pos.live.tpOrderId) await _cancelOrderSafe(pos.symbol, pos.live.tpOrderId, creds);
+            if (pos.live.slOrderId) await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds, userId); // [S5]
+            if (pos.live.tpOrderId) await _cancelOrderSafe(pos.symbol, pos.live.tpOrderId, creds, userId); // [S5]
 
             // ── Place new SL with total qty ──
             const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';

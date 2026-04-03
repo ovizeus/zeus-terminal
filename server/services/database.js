@@ -715,6 +715,11 @@ module.exports = {
             INNER JOIN at_closed c ON p.seq = c.seq
         `).all();
     },
+    // [S2] Max seq across positions + closed — prevents seq collision after reset
+    getMaxSeq: (userId) => {
+        const r = db.prepare('SELECT MAX(seq) as m FROM (SELECT seq FROM at_positions WHERE user_id = ? UNION ALL SELECT seq FROM at_closed WHERE user_id = ?)').get(userId, userId);
+        return (r && r.m) || 0;
+    },
     // Journal
     journalGetClosed: (userId, limit, offset) => _stmts.journalGetClosed.all(userId, limit, offset),
     journalCountClosed: (userId) => (_stmts.journalCountClosed.get(userId) || { cnt: 0 }).cnt,

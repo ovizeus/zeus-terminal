@@ -229,6 +229,7 @@ const mockDB = {
     getGhostCandidates: () => [],
     saveMissedTrade: () => { },
     runRaw: () => { },
+    getMaxSeq: () => 0,
 };
 require.cache[require.resolve('./server/services/database')] = { id: 'db', exports: mockDB, loaded: true };
 

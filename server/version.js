@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.5.0',
-    build: 22,
+    build: 23,
     date: '2026-04-03',
-    changelog: 'Mega audit bugfix: fusion weights, memory leak cleanups, fd leak fix, DSL log cap, orderflow perf'
+    changelog: 'Ultra audit bugfix: seq collision fix, kill switch ref, state restore fix, 16 bugs fixed'
 };

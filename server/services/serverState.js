@@ -60,6 +60,7 @@ const SD = _createSD(null, ['5m']);
 // Initialize — subscribe to market feed events
 // [MULTI-SYM] Accepts string or array of symbols
 // ══════════════════════════════════════════════════════════════════
+let _feedWired = false; // [RT-09] guard against duplicate listener registration
 function init(symbols, timeframes) {
     const symArr = Array.isArray(symbols) ? symbols : [symbols];
 
@@ -77,15 +78,14 @@ function init(symbols, timeframes) {
         }
     }
 
-    // [RT-09] Wire market feed events — remove old listeners first to prevent accumulation
-    marketFeed.removeListener('kline', _onKline);
-    marketFeed.removeListener('price', _onPrice);
-    marketFeed.removeListener('fundingRate', _onFundingRate);
-    marketFeed.removeListener('openInterest', _onOpenInterest);
-    marketFeed.on('kline', _onKline);
-    marketFeed.on('price', _onPrice);
-    marketFeed.on('fundingRate', _onFundingRate);
-    marketFeed.on('openInterest', _onOpenInterest);
+    // [RT-09] Wire market feed events — guard prevents duplicate registration
+    if (!_feedWired) {
+        _feedWired = true;
+        marketFeed.on('kline', _onKline);
+        marketFeed.on('price', _onPrice);
+        marketFeed.on('fundingRate', _onFundingRate);
+        marketFeed.on('openInterest', _onOpenInterest);
+    }
 
     logger.info('SD', `Server state initialized for [${symArr.join(',')}] [${(timeframes || ['5m']).join(',')}]`);
 }

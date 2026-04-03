@@ -584,7 +584,7 @@ const ZState = (() => {
             }
           }
           if (Array.isArray(jEntries)) {
-            jEntries.forEach(j => { if (j && j.id) closedPosIds.add(String(j.id)); });
+            jEntries.forEach(j => { if (j && j.id && j.journalEvent === 'CLOSE') closedPosIds.add(String(j.id)); }); // [S9] only CLOSE events
           }
         } catch (_) { }
 
@@ -1043,7 +1043,7 @@ const ZState = (() => {
     // Initial fetch
     _atPollOnce();
     // Poll every 10s as fallback (WS push is primary)
-    _atPollTimer = setInterval(_atPollOnce, 10000);
+    _atPollTimer = Intervals.set('atPoll', _atPollOnce, 10000); // [S14] use Intervals registry
   }
 
   function _atPollOnce() {

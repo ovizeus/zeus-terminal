@@ -162,7 +162,7 @@ function initZeusGroups() {
       _showRecoveryBanner();
     }
     // Safety: reveal if no dock restore pending (feed-gate handles dock case)
-    if (!sessionStorage.getItem('zeusDock')) var _sp=document.getElementById('_dockSplash');if(_sp)_sp.remove();
+    if (!sessionStorage.getItem('zeusDock')) { var _sp=document.getElementById('_dockSplash');if(_sp)_sp.remove(); } // [S4] braces fix
   }, 500);
 
   // Absolute safety: if feed never comes, reveal after 5s
@@ -209,11 +209,6 @@ function _waitForFeedThenStartExtras() {
       } catch(_e) {}
       // Reveal page (hidden by <head> script when restoring dock)
       var _sp=document.getElementById('_dockSplash');if(_sp)_sp.remove();
-      // Restore page view if was open before refresh
-      try {
-        var _sd = sessionStorage.getItem('zeusDock');
-        if (_sd && typeof openPageView === 'function') openPageView(_sd);
-      } catch(_e) {}
     }
   }, CHECK_MS);
 }

@@ -83,7 +83,7 @@ router.get('/user-context', (req, res) => {
 });
 
 // ── POST /api/sync/user-context — push user preferences ─────────
-router.post('/user-context', (req, res) => {
+router.post('/user-context', async (req, res) => { // [S11] async to properly await lock
     if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
     const fp = _userFile(req.user.id);
     if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
@@ -100,7 +100,7 @@ router.post('/user-context', (req, res) => {
     }
 
     // [BE-02] Serialize writes per-user to prevent read-merge-write race
-    _withLock(req.user.id, () => {
+    await _withLock(req.user.id, () => { // [S11] await the lock promise
       try {
         // Section-level last-write-wins merge
         let existing = {};

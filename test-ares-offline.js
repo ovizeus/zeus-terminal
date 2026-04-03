@@ -490,8 +490,10 @@ console.log('\n\u2550\u2550\u2550 22. F1 \u2014 Per-user AT on/off gate \u2550\u
   // 6. getFullState exposes atActive
   ok(atSrc.includes('atActive: us.atActive'), 'F1 getFullState exposes atActive');
   // 7. API endpoint exists
-  ok(tradingSrc.includes("router.post('/at/toggle'"), 'F1 POST /at/toggle endpoint exists');
-  ok(tradingSrc.includes("typeof active !== 'boolean'"), 'F1 /at/toggle validates boolean input');
+  // [S12] Route moved from trading.js to server.js (no resolveExchange needed)
+  const _serverSrc = require('fs').readFileSync('./server.js', 'utf8');
+  ok(_serverSrc.includes("'/api/at/toggle'"), 'F1 POST /at/toggle endpoint exists');
+  ok(_serverSrc.includes("typeof active !== 'boolean'"), 'F1 /at/toggle validates boolean input');
   // 8. toggleActive exported
   ok(atSrc.includes('toggleActive, // [F1]'), 'F1 toggleActive is exported');
 })();
