@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.4.0',
-    build: 18,
+    version: '1.5.0',
+    build: 20,
     date: '2026-04-03',
-    changelog: 'Sentry error tracking, 110 unit tests, CI/CD pipeline, per-user data isolation'
+    changelog: 'Brain V3: correlation guard, adaptive sizing, session profiling, drawdown guard, multi-entry scaling, volatility engine'
 };

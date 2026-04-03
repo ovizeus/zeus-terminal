@@ -2876,6 +2876,8 @@ module.exports = {
     setLiveBalanceRef,
     // Change listener
     onChange,
+    // [V3] State access for brain modules
+    getUserState: function(userId) { try { return _uState(userId); } catch(_) { return null; } },
     // Admin
     reset,
     addDemoFunds,

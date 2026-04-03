@@ -22,6 +22,12 @@ const serverReflection = require('./serverReflection');
 const serverCalibration = require('./serverCalibration');
 const serverPendingEntry = require('./serverPendingEntry');
 const serverExitManager = require('./serverExitManager');
+const serverCorrelationGuard = require('./serverCorrelationGuard');
+const serverAdaptiveSizing = require('./serverAdaptiveSizing');
+const serverSessionProfile = require('./serverSessionProfile');
+const serverDrawdownGuard = require('./serverDrawdownGuard');
+const serverMultiEntry = require('./serverMultiEntry');
+const serverVolatilityEngine = require('./serverVolatilityEngine');
 
 // ══════════════════════════════════════════════════════════════════
 // Configuration
@@ -235,9 +241,9 @@ function _runCycle() {
                 const pendingResult = serverPendingEntry.checkPending(symbol, snap.price, userId);
                 if (pendingResult) {
                     if (pendingResult.action === 'FILL' || pendingResult.action === 'MOMENTUM') {
-                        // Execute the pending entry via AT
-                        const adaptedStcPend = serverRegimeParams.getAdaptedParams(regime.regime, stc);
-                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, adaptedStcPend, userId);
+                        // Execute the pending entry via AT (use stored stc from pending)
+                        const pendStc = pendingResult.pending.stc || serverRegimeParams.getAdaptedParams(regime.regime, stc);
+                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId);
                         if (entry) {
                             logger.info('BRAIN', `[2G] Pending ${pendingResult.action} executed for uid=${userId} ${symbol}`);
                         }
@@ -245,10 +251,59 @@ function _runCycle() {
                     // EXPIRE and CANCEL — nothing to do, already cleaned up
                 }
 
+                // [V3] Multi-entry / pyramiding check for existing winning positions
+                if (!pendingResult) {
+                    const existingPos = (serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [])
+                        .find(p => p.symbol === symbol);
+                    if (existingPos && existingPos.pnlPct > 0) {
+                        const scaleCheck = serverMultiEntry.checkScaleIn(existingPos, confluence.score, regime.regime);
+                        if (scaleCheck.shouldScale) {
+                            const scaleStc = { ...serverRegimeParams.getAdaptedParams(regime.regime, stc) };
+                            scaleStc.size = Math.round(scaleStc.size * scaleCheck.sizeMultiplier);
+                            const scaleDec = {
+                                ts: Date.now(), cycle: _cycleCount, symbol, price: snap.price, priceTs: snap.priceTs,
+                                fusion: { dir: existingPos.side, decision: 'SMALL', confidence: confluence.score, score: confluence.score, reasons: ['scale_in'] },
+                            };
+                            const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId);
+                            if (scaleEntry) {
+                                serverMultiEntry.recordScaleIn(userId, symbol, snap.price, scaleStc.size);
+                                logger.info('BRAIN', `[V3] Scale-in L${scaleCheck.level} ${symbol} uid=${userId}`);
+                            }
+                        }
+                    }
+                }
+
+                // [V3] Session block check
+                const sessionBlock = serverSessionProfile.checkSessionBlock(userId);
+                if (sessionBlock.blocked) {
+                    _logDecision('BLOCKED', 'session', null, { reason: sessionBlock.reason });
+                    continue;
+                }
+
+                // [V3] Drawdown assessment
+                const us = serverAT.getUserState ? serverAT.getUserState(userId) : null;
+                const dailyPnL = us ? (us.dailyPnL || 0) : 0;
+                const refBalance = us ? (us.demoBalance || us.liveBalanceRef || 10000) : 10000;
+                const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
+                if (ddAssess.locked) {
+                    _logDecision('BLOCKED', 'drawdown_lockout', null, { drawdownPct: ddAssess.drawdownPct });
+                    continue;
+                }
+
                 // [BRAIN-V2] Adapt STC params to current regime
                 const adaptedStc = serverRegimeParams.getAdaptedParams(regime.regime, stc);
-                const gates = _checkGates(snap, ind, confluence, adaptedStc, userId);
+
+                // [V3] Volatility-adjusted params
                 const bars = serverState.getBarsForSymbol(symbol);
+                const volProfile = serverVolatilityEngine.assessVolatility(snap, bars);
+                const volAdjustedStc = serverVolatilityEngine.adjustParams(adaptedStc, volProfile);
+
+                // [V3] Drawdown raises confMin requirement
+                if (ddAssess.confBoost > 0) {
+                    volAdjustedStc.confMin = (volAdjustedStc.confMin || 65) + ddAssess.confBoost;
+                }
+
+                const gates = _checkGates(snap, ind, confluence, volAdjustedStc, userId);
                 const fusion = _computeFusion(snap, ind, confluence, regime, gates, bars, userId);
                 const decision = {
                     ts: Date.now(),
@@ -305,15 +360,43 @@ function _runCycle() {
                         reflectionConcerns: questioning.concerns.length,
                     };
 
+                    // [V3] Correlation guard — block if too much correlated exposure
+                    const openPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [];
+                    const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
+                    if (!corrCheck.allowed) {
+                        _logDecision('BLOCKED', 'correlation', decision, { reason: corrCheck.reason });
+                        continue;
+                    }
+
+                    // [V3] Correlation modifier on confidence
+                    const corrMod = serverCorrelationGuard.getCorrelationModifier(snap.symbol, fusion.dir, openPos);
+                    if (corrMod < 1.0) {
+                        decision.fusion.confidence = Math.round(decision.fusion.confidence * corrMod);
+                        if (decision.fusion.confidence < 62) {
+                            decision.fusion.decision = 'NO_TRADE';
+                            decision.fusion.reasons.push('correlation_penalty');
+                            continue;
+                        }
+                    }
+
+                    // [V3] Adaptive sizing
+                    const sizingResult = serverAdaptiveSizing.calcSizeMultiplier(
+                        userId, fusion.decision, fusion.confidence, regime.regime, dailyPnL, volAdjustedStc.size
+                    );
+                    // [V3] Drawdown size scaling
+                    const ddSizeScale = ddAssess.sizeScale != null ? ddAssess.sizeScale : 1.0;
+                    const finalSizeMult = sizingResult.multiplier * ddSizeScale;
+                    const sizingStc = { ...volAdjustedStc, size: Math.round(volAdjustedStc.size * finalSizeMult) };
+
                     // [2G] Pending Entry System — wait for pullback instead of instant entry
-                    const pending = serverPendingEntry.createPending(decision, adaptedStc, userId, marketCtx);
+                    const pending = serverPendingEntry.createPending(decision, sizingStc, userId, marketCtx);
                     if (pending) {
                         _cooldowns.set(userId + ':' + decision.symbol, Date.now());
                         _persistCooldowns();
-                        logger.info(`[BRAIN] Pending entry created for user ${userId} ${decision.symbol} (${adaptedStc.cooldownMs}ms cooldown)`);
+                        logger.info(`[BRAIN] Pending entry created for user ${userId} ${decision.symbol} (${volAdjustedStc.cooldownMs}ms cooldown)`);
                     } else {
                         // Fallback: if pending creation failed (e.g., already pending), execute directly
-                        const entry = serverAT.processBrainDecision(decision, adaptedStc, userId);
+                        const entry = serverAT.processBrainDecision(decision, sizingStc, userId);
                         if (entry) {
                             _cooldowns.set(userId + ':' + decision.symbol, Date.now());
                             _persistCooldowns();
@@ -613,6 +696,26 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
         }
     }
 
+    // ── [V3] Session modifier ──
+    if (userId) {
+        const sessMod = serverSessionProfile.getSessionModifier(userId);
+        confidence *= sessMod;
+    }
+
+    // ── [V3] Volatility modifier ──
+    if (bars && bars.length > 30) {
+        const snap2 = { indicators: ind, symbol: ind.symbol };
+        const volProf = serverVolatilityEngine.assessVolatility(snap2, bars);
+        const volMod = serverVolatilityEngine.getVolatilityModifier(volProf);
+        confidence *= volMod;
+    }
+
+    // ── [V3] Drawdown tilt modifier ──
+    if (userId) {
+        const tiltMod = serverDrawdownGuard.getTiltModifier(userId);
+        confidence *= tiltMod;
+    }
+
     // ── Trap risk penalty ──
     if (regime.trapRisk >= 40) {
         confidence *= (1 - regime.trapRisk * 0.005); // up to 50% reduction at trapRisk=100
@@ -830,6 +933,9 @@ function getBrainVision() {
             }
         }
 
+        // [V3] Volatility engine
+        const volProfile = serverVolatilityEngine.assessVolatility(snap, bars);
+
         vision[symbol] = {
             price: snap.price,
             regime,
@@ -847,6 +953,8 @@ function getBrainVision() {
             regimeParams: { confMin: regimeProfile.confMin, slMult: regimeProfile.slMult, rrMin: regimeProfile.rrMin, dsl: regimeProfile.dslMode, sizeScale: regimeProfile.sizeScale },
             knn: knn ? { winRate: knn.winRate, dir: knn.dir, avgPnl: knn.avgPnl, patterns: knn.matchCount, similarity: knn.avgSimilarity } : null,
             journal,
+            // [V3] New modules
+            volatility: { level: volProfile.level, score: volProfile.score, atrPct: volProfile.atrPercentile, slMult: volProfile.slMultiplier, signals: volProfile.signals },
         };
     }
 
@@ -869,7 +977,21 @@ function getBrainVision() {
         if (vision[symbol]) vision[symbol].volatilityForecast = volForecast;
     }
 
-    return { ts: Date.now(), cycle: _cycleCount, symbols: vision, reflection };
+    // [V3] Per-user intelligence data
+    const v3Data = {};
+    if (_visionUser) {
+        v3Data.session = serverSessionProfile.getSessionData(_visionUser);
+        v3Data.sizing = serverAdaptiveSizing.getEdgeStats(_visionUser);
+        const _us = serverAT.getUserState ? serverAT.getUserState(_visionUser) : null;
+        const _dpnl = _us ? (_us.dailyPnL || 0) : 0;
+        const _ref = _us ? (_us.demoBalance || _us.liveBalanceRef || 10000) : 10000;
+        v3Data.drawdown = serverDrawdownGuard.getDrawdownData(_visionUser, _dpnl, _ref);
+        const _openPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(_visionUser) : [];
+        v3Data.correlation = serverCorrelationGuard.getAnalysis(_openPos);
+        v3Data.scaling = serverMultiEntry.getAllScaleData(_visionUser);
+    }
+
+    return { ts: Date.now(), cycle: _cycleCount, symbols: vision, reflection, v3: v3Data };
 }
 
 module.exports = {

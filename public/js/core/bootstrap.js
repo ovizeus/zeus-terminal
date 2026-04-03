@@ -2930,6 +2930,17 @@ function _cmpFmt(key, val) {
         html += '</div>';
       }
 
+      // ── Volatility Engine [V3] ──
+      if (d.volatility && d.volatility.score > 10) {
+        var vol = d.volatility;
+        var volCol = vol.level === 'EXTREME' ? '#ff2244' : vol.level === 'HIGH' ? '#ff6644' : vol.level === 'ELEVATED' ? '#ffaa00' : '#668899';
+        html += '<div style="padding:1px 0"><span style="color:' + volCol + ';width:65px;display:inline-block;font-weight:600">VOL</span>';
+        html += '<span style="color:' + volCol + '">' + vol.level + '</span>';
+        html += ' <span style="color:var(--dim)">ATR:P' + (vol.atrPct || 50) + ' SL\u00D7' + (vol.slMult || 1) + '</span>';
+        if (vol.signals && vol.signals.length > 0) html += ' <span style="color:var(--dim)">' + vol.signals.slice(0, 2).join(', ') + '</span>';
+        html += '</div>';
+      }
+
       // ── Regime Transition ──
       if (d.regimeTransition && d.regimeTransition.transitioning) {
         var rt = d.regimeTransition;
@@ -2948,6 +2959,64 @@ function _cmpFmt(key, val) {
         if (vf.recommendation) html += ' <span style="color:#ffaa00">' + vf.recommendation + '</span>';
         html += '</div>';
       }
+    }
+
+    // ══ V3 Intelligence Summary ══
+    var v3 = _bvData.v3;
+    if (v3) {
+      html += '<div style="border-top:1px solid rgba(120,80,220,0.2);margin-top:5px;padding-top:5px">';
+      html += '<span style="color:#44aaff;font-size:9px;letter-spacing:1.5px;font-weight:600">BRAIN V3 INTELLIGENCE</span>';
+
+      // Session
+      if (v3.session && v3.session.current) {
+        var sess = v3.session;
+        var sessCol = sess.modifier >= 1.05 ? '#00ff88' : sess.modifier <= 0.90 ? '#ff4466' : 'rgba(255,255,255,0.45)';
+        html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">SESS</span>';
+        html += '<span style="color:#aa88ff">' + sess.current.name + '</span>';
+        html += ' <span style="color:' + sessCol + '">\u00D7' + sess.modifier + '</span>';
+        if (sess.current.overlap) html += ' <span style="color:#ffaa00">OVERLAP</span>';
+        html += '</div>';
+      }
+
+      // Drawdown
+      if (v3.drawdown) {
+        var dd = v3.drawdown;
+        var ddCol = dd.tier === 'GREEN' ? '#00ff88' : dd.tier === 'CAUTION' ? '#ffaa00' : dd.tier === 'WARNING' ? '#ff8844' : dd.tier === 'DANGER' ? '#ff3355' : dd.tier === 'LOCKOUT' ? '#ff0033' : '#668899';
+        html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">DD</span>';
+        html += '<span style="color:' + ddCol + '">' + dd.tier + '</span>';
+        html += ' <span style="color:var(--dim)">-' + dd.drawdownPct + '% max:-' + dd.maxDrawdown + '%</span>';
+        if (dd.sizeScale < 100) html += ' <span style="color:#ffaa00">size:' + dd.sizeScale + '%</span>';
+        if (dd.consecutiveLosses >= 2) html += ' <span style="color:#ff4466">streak:-' + dd.consecutiveLosses + '</span>';
+        html += '</div>';
+      }
+
+      // Sizing/Edge
+      if (v3.sizing && v3.sizing.sufficient) {
+        var sz = v3.sizing;
+        var szCol = sz.winRate >= 55 ? '#00ff88' : sz.winRate < 45 ? '#ff4466' : '#ffaa00';
+        html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">EDGE</span>';
+        html += '<span style="color:' + szCol + '">WR:' + sz.winRate + '%</span>';
+        html += ' <span style="color:var(--dim)">Kelly:' + sz.quarterKelly + '% W:$' + sz.avgWin + ' L:$' + sz.avgLoss + ' n=' + sz.sampleSize + '</span>';
+        html += '</div>';
+      }
+
+      // Correlation
+      if (v3.correlation && v3.correlation.warning) {
+        html += '<div style="padding:1px 0"><span style="color:#ff4466;width:65px;display:inline-block;font-weight:600">\u26A0 CORR</span>';
+        html += '<span style="color:#ff8844">' + v3.correlation.warning + '</span></div>';
+      }
+
+      // Scaling
+      if (v3.scaling && Object.keys(v3.scaling).length > 0) {
+        html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">SCALE</span>';
+        for (var sk in v3.scaling) {
+          var si = v3.scaling[sk];
+          html += '<span style="color:#aa88ff">' + sk.replace('USDT', '') + ':L' + si.scaleCount + '/' + si.maxScales + '</span> ';
+        }
+        html += '</div>';
+      }
+
+      html += '</div>';
     }
 
     body.innerHTML = html;
