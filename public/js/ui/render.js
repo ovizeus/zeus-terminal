@@ -62,15 +62,15 @@ function renderPerfTracker() {
   body.innerHTML = entries.map(([name, p]) => {
     const tot = p.wins + p.losses;
     const wr = tot ? Math.round(p.wins / tot * 100) : 0;
-    const barColor = wr >= 65 ? '#00d97a' : wr >= 50 ? '#f0c040' : '#ff4466';
+    const barColor = wr >= 65 ? 'var(--grn)' : wr >= 50 ? 'var(--gold)' : 'var(--red)';
     const weightDisplay = (p.weight * 100).toFixed(0) + '%';
     // v122 analytics: expectancy + pnl
     const avgW = p.wins > 0 ? ((p.winPnl || 0) / p.wins) : 0;
     const avgL = p.losses > 0 ? ((p.lossPnl || 0) / p.losses) : 0;
     const exp = typeof calcExpectancy === 'function' ? calcExpectancy(name) : 0;
     const netPnl = (p.pnlSum || 0) - (p.feeSum || 0);
-    const expColor = exp > 0 ? '#00d97a' : exp < 0 ? '#ff4466' : 'var(--dim)';
-    const pnlColor = netPnl > 0 ? '#00d97a' : netPnl < 0 ? '#ff4466' : 'var(--dim)';
+    const expColor = exp > 0 ? 'var(--grn)' : exp < 0 ? 'var(--red)' : 'var(--dim)';
+    const pnlColor = netPnl > 0 ? 'var(--grn)' : netPnl < 0 ? 'var(--red)' : 'var(--dim)';
     return `<div class="perf-row">
       <div class="perf-name">${name.toUpperCase()}</div>
       <div class="perf-bar-wrap"><div class="perf-bar-fill" style="width:${wr}%;background:${barColor}"></div></div>
@@ -86,7 +86,7 @@ function renderPerfTracker() {
   }).join('');
   // Global expectancy row
   const gExp = typeof calcGlobalExpectancy === 'function' ? calcGlobalExpectancy() : 0;
-  const gExpColor = gExp > 0 ? '#00d97a' : gExp < 0 ? '#ff4466' : 'var(--dim)';
+  const gExpColor = gExp > 0 ? 'var(--grn)' : gExp < 0 ? 'var(--red)' : 'var(--dim)';
   body.innerHTML += `<div class="perf-row perf-total-row">
     <div class="perf-name" style="color:var(--cyan)">GLOBAL</div>
     <div class="perf-bar-wrap"></div><div class="perf-wr"></div><div class="perf-trades"></div><div class="perf-weight"></div>
@@ -143,7 +143,7 @@ function updateQuantumClock() {
     const fill = (s / 60) * circ;
     secArc.setAttribute('stroke-dasharray', `${fill.toFixed(1)} ${circ}`);
     // Color pulses at :00
-    const secColor = s < 10 ? '#00ff88' : s < 30 ? '#aa44ff' : '#4400aa';
+    const secColor = s < 10 ? 'var(--grn-bright)' : s < 30 ? 'var(--pur)' : '#4400aa';
     secArc.setAttribute('stroke', secColor);
   }
 
@@ -271,7 +271,7 @@ function updateSymPulseRows() {
     const curP = hist[hist.length - 1] || 0;
     const chg = wlPrices[sym]?.chg || 0;
     const chgCls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'neut';
-    const col = chg > 0 ? '#00ff88' : chg < 0 ? '#ff4466' : '#555';
+    const col = chg > 0 ? 'var(--grn-bright)' : chg < 0 ? 'var(--red)' : '#555';
 
     // Sparkline bars
     const maxP = hist.length ? Math.max(...hist) : 1;
@@ -312,12 +312,12 @@ function updateBrainHeatmap() {
     // Heatmap color by momentum score
     const intensity = Math.abs(chg) / 3; // 0-1
     let bg, textCol;
-    if (dir === 'bull') { bg = `rgba(0,217,122,${Math.min(.3, intensity * .2 + .05)})`; textCol = '#00ff88'; }
-    else if (dir === 'bear') { bg = `rgba(255,68,102,${Math.min(.3, intensity * .2 + .05)})`; textCol = '#ff4466'; }
+    if (dir === 'bull') { bg = `rgba(0,217,122,${Math.min(.3, intensity * .2 + .05)})`; textCol = 'var(--grn-bright)'; }
+    else if (dir === 'bear') { bg = `rgba(255,68,102,${Math.min(.3, intensity * .2 + .05)})`; textCol = 'var(--red)'; }
     else { bg = 'transparent'; textCol = '#444'; }
 
     const barW = score + '%';
-    const barCol = score >= 65 ? '#00d97a' : score >= 50 ? '#f0c040' : '#ff4466';
+    const barCol = score >= 65 ? 'var(--grn)' : score >= 50 ? 'var(--gold)' : 'var(--red)';
 
     return `<div class="nheat-cell" style="background:${bg}">
       <div class="nheat-sym">${sym}</div>
@@ -332,14 +332,14 @@ function updateRiskGauges() {
   // Volatility gauge (from ATR%)
   const atrPct = BRAIN.regimeAtrPct || 1;
   const volPct = Math.min(100, atrPct * 30);
-  const volCol = volPct > 70 ? '#ff4466' : volPct > 40 ? '#f0c040' : '#00d97a';
+  const volCol = volPct > 70 ? 'var(--red)' : volPct > 40 ? 'var(--gold)' : 'var(--grn)';
   setRiskGauge('vol', volPct, volCol, atrPct.toFixed(2) + '%');
 
   // Position risk gauge
   const openAuto = (TP.demoPositions || []).filter(p => p.autoTrade && !p.closed).length; // [FIX M2]
   const maxPos = (typeof TC !== 'undefined' && Number.isFinite(TC.maxPos)) ? TC.maxPos : (parseInt(el('atMaxPos')?.value) || 4);
   const posPct = openAuto / maxPos * 100;
-  const posCol = posPct >= 100 ? '#ff4466' : posPct >= 50 ? '#f0c040' : '#00d97a';
+  const posCol = posPct >= 100 ? 'var(--red)' : posPct >= 50 ? 'var(--gold)' : 'var(--grn)';
   setRiskGauge('pos', posPct, posCol, openAuto + '/' + maxPos);
 
   // Sentiment gauge (FR + LS + fear&greed combined)
@@ -347,12 +347,12 @@ function updateRiskGauges() {
   const fg = S.fg || 50;
   const sentimentBull = fg > 50 ? fg : (100 - fg);
   const sentPct = Math.min(100, sentimentBull);
-  const sentCol = sentPct > 65 ? '#00d97a' : sentPct > 40 ? '#f0c040' : '#ff4466';
+  const sentCol = sentPct > 65 ? 'var(--grn)' : sentPct > 40 ? 'var(--gold)' : 'var(--red)';
   setRiskGauge('sent', sentPct, sentCol, fg + '/100');
 
   // Confluence gauge
   const confScore = (typeof BM !== 'undefined' ? BM.confluenceScore : 0) || 0; // [FIX v85.1 F3] din memorie
-  const confCol = confScore >= 70 ? '#00d97a' : confScore >= 50 ? '#f0c040' : '#ff4466';
+  const confCol = confScore >= 70 ? 'var(--grn)' : confScore >= 50 ? 'var(--gold)' : 'var(--red)';
   setRiskGauge('conf', confScore, confCol, confScore + '');
 }
 
@@ -476,7 +476,7 @@ function renderDHF() {
     const _wrMinRender = (window.WVE_CONFIG && window.WVE_CONFIG.wrFilter && window.WVE_CONFIG.wrFilter.minWR) || 55;
     const isOK = dayWR >= 50 && hourWR >= _wrMinRender;
     curSlot.innerHTML = `${curDay} ${String(curHour).padStart(2, '0')}:00 UTC (${utcTimeStr}) — WR:${Math.min(dayWR, hourWR)}% — ${isOK ? _ZI.ok + ' OK' : _ZI.noent + ' EVITA'}`;
-    curSlot.style.color = isOK ? '#00ff88' : '#ff4466';
+    curSlot.style.color = isOK ? 'var(--grn-bright)' : 'var(--red)';
   }
 
   if (dayGrid) {

@@ -25,7 +25,7 @@ function _updateAudioBadge() {
   const b = el('soundBadge');
   if (b) {
     b.innerHTML = _audioReady ? _ZI.vol + ' SOUND READY' : _ZI.mute + ' SOUND';
-    b.style.color = _audioReady ? '#39ff14' : '#ff6644';
+    b.style.color = _audioReady ? 'var(--lime)' : 'var(--orange)';
     b.style.cursor = _audioReady ? 'default' : 'pointer';
   }
 }
@@ -72,7 +72,7 @@ function toggleAlerts(en) {
   // Fix toggle slider visual
   const dot = el('alertToggleDot');
   const slider = el('alertToggleSlider');
-  if (dot) dot.style.cssText = en ? 'position:absolute;height:18px;width:18px;background:#00d97a;border-radius:50%;bottom:2px;transition:.3s;transform:translateX(22px);box-shadow:0 0 6px #00d97a' : 'position:absolute;height:18px;width:18px;background:#555;border-radius:50%;bottom:2px;transition:.3s;left:2px';
+  if (dot) dot.style.cssText = en ? 'position:absolute;height:18px;width:18px;background:var(--grn);border-radius:50%;bottom:2px;transition:.3s;transform:translateX(22px);box-shadow:0 0 6px var(--grn)' : 'position:absolute;height:18px;width:18px;background:#555;border-radius:50%;bottom:2px;transition:.3s;left:2px';
   if (slider) slider.style.background = en ? '#00d97a33' : '#1e2530';
   if (en && typeof Notification !== 'undefined' && Notification.permission === 'default') {
     try { Notification.requestPermission(); } catch (_) { }

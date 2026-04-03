@@ -2129,15 +2129,15 @@ function _applyGlobalModeUI(mode) {
     var _atIsTestnet = _env === 'TESTNET';
     var _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE';
     var _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE';
-    var _atEnvColor = _atIsTestnet ? '#f0c040' : '#ff4444';
+    var _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)';
     var _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444';
     var _atEnvIcon = _atIsTestnet ? _ZI.dYlw : _ZI.dRed;
     if (atModeDisp) {
       atModeDisp.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvLabel + ' &middot; ' + _ZI.w + ' EXEC LOCKED' : _atEnvIcon + ' ' + _atEnvLabel;
-      atModeDisp.style.color = execLocked ? '#ff8800' : _atEnvColor;
+      atModeDisp.style.color = execLocked ? 'var(--orange)' : _atEnvColor;
       atModeDisp.style.borderColor = execLocked ? '#ff880044' : _atEnvColorDim;
     }
-    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort; atModeLbl.style.color = execLocked ? '#ff8800' : _atEnvColor; }
+    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort; atModeLbl.style.color = execLocked ? 'var(--orange)' : _atEnvColor; }
     if (atWarn) {
       atWarn.style.display = 'block';
       atWarn.textContent = execLocked
@@ -2145,11 +2145,11 @@ function _applyGlobalModeUI(mode) {
         : (_atIsTestnet
           ? 'TESTNET MODE ACTIVE: Auto trades will execute on Binance TESTNET with TEST funds'
           : 'LIVE MODE ACTIVE: Auto trades will execute with REAL funds');
-      atWarn.style.color = execLocked ? '#ff8800' : '';
+      atWarn.style.color = execLocked ? 'var(--orange)' : '';
     }
   } else {
-    if (atModeDisp) { atModeDisp.innerHTML = _ZI.pad + ' DEMO MODE'; atModeDisp.style.color = '#aa44ff'; atModeDisp.style.borderColor = '#aa44ff44'; }
-    if (atModeLbl) { atModeLbl.innerHTML = _ZI.pad + ' DEMO'; atModeLbl.style.color = '#aa44ff'; }
+    if (atModeDisp) { atModeDisp.innerHTML = _ZI.pad + ' DEMO MODE'; atModeDisp.style.color = 'var(--pur)'; atModeDisp.style.borderColor = '#aa44ff44'; }
+    if (atModeLbl) { atModeLbl.innerHTML = _ZI.pad + ' DEMO'; atModeLbl.style.color = 'var(--pur)'; }
     if (atWarn) { atWarn.style.display = 'none'; atWarn.style.color = ''; }
   }
   // Update add funds / reset demo visibility (only show in demo)
@@ -2240,7 +2240,7 @@ function _showConfirmDialog(title, message, cancelText, confirmText, onConfirm) 
   const safeConfirmText = typeof escHtml === 'function' ? escHtml(confirmText) : confirmText;
 
   const isLive = confirmText.toLowerCase().includes('live') || confirmText.toLowerCase().includes('real');
-  const confirmColor = isLive ? '#ff4444' : '#00d4ff';
+  const confirmColor = isLive ? 'var(--red-bright)' : 'var(--cyan)';
   const confirmBg = isLive ? '#2a0000' : '#001a33';
   const confirmBorder = isLive ? '#ff4444' : '#00aaff';
 
@@ -2847,7 +2847,7 @@ function renderPendingOrders() {
   }
   var html = allPending.map(function (ord) {
     var symBase = escHtml((ord.sym || '').replace('USDT', ''));
-    var sideColor = ord.side === 'LONG' ? '#00d4ff' : '#00bcd4';
+    var sideColor = ord.side === 'LONG' ? 'var(--cyan)' : 'var(--blu)';
     var modeBadge = ord.mode === 'live'
       ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px">LIVE</span>'
       : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;margin-left:4px">DEMO</span>';

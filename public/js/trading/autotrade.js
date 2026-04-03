@@ -96,7 +96,7 @@ function _applyATToggleUI(enabled) {
       return;
     }
     btn.className = 'at-main-btn on';
-    dot.style.background = '#00ff88'; dot.style.boxShadow = '0 0 10px #00ff88';
+    dot.style.background = 'var(--grn-bright)'; dot.style.boxShadow = '0 0 10px var(--grn-bright)';
     txt.textContent = 'AUTO TRADE ON';
     { const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.dGrn + ' Activ — scan la 30s'; }
     atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${AT.realizedDailyPnL.toFixed(2)} | Trades: ${AT.closedTradesToday}`);
@@ -125,7 +125,7 @@ function _applyATToggleUI(enabled) {
     if (typeof _usScheduleSave === 'function') _usScheduleSave(); // also push AT state via user-context
   } else {
     btn.className = 'at-main-btn off';
-    dot.style.background = '#aa44ff'; dot.style.boxShadow = '0 0 6px #aa44ff';
+    dot.style.background = 'var(--pur)'; dot.style.boxShadow = '0 0 6px var(--pur)';
     txt.textContent = 'AUTO TRADE OFF';
     { const _oe = el('atStatus'); if (_oe) _oe.textContent = 'Configureaza mai jos'; }
     atLog('warn', '[AT] Auto Trade OPRIT.');
@@ -146,7 +146,7 @@ function updateATMode() {
   var _env = window._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL');
   if (mode === 'live') {
     var _isTest = _env === 'TESTNET';
-    var _col = _isTest ? '#f0c040' : '#ff4444';
+    var _col = _isTest ? 'var(--gold)' : 'var(--red-bright)';
     var _colDim = _isTest ? '#f0c04044' : '#ff444444';
     var _ico = _isTest ? _ZI.dYlw : _ZI.dRed;
     var _short = _isTest ? 'TESTNET' : 'LIVE';
@@ -155,9 +155,9 @@ function updateATMode() {
     if (warn) warn.style.display = 'block';
     if (disp) { disp.innerHTML = _ico + ' ' + _long; disp.style.color = _col; disp.style.borderColor = _colDim; }
   } else {
-    if (lbl) { lbl.innerHTML = _ZI.pad + ' DEMO'; lbl.style.color = '#aa44ff'; }
+    if (lbl) { lbl.innerHTML = _ZI.pad + ' DEMO'; lbl.style.color = 'var(--pur)'; }
     if (warn) warn.style.display = 'none';
-    if (disp) { disp.innerHTML = _ZI.pad + ' DEMO MODE'; disp.style.color = '#aa44ff'; disp.style.borderColor = '#aa44ff44'; }
+    if (disp) { disp.innerHTML = _ZI.pad + ' DEMO MODE'; disp.style.color = 'var(--pur)'; disp.style.borderColor = '#aa44ff44'; }
   }
 }
 

@@ -448,7 +448,7 @@ function _qebUpdateRiskUI() {
       advEl.innerHTML = smartOn
         ? _ZI.bolt + ' Smart Exit ENABLED — emergency actions may execute.'
         : _ZI.eye + ' Advisory mode — enable Smart Exit in Settings Hub to allow auto-exec.';
-      advEl.style.color = smartOn ? '#f0c040' : '#556677';
+      advEl.style.color = smartOn ? 'var(--gold)' : '#556677';
     }
   } catch (e) { /* silent */ }
 }

@@ -240,7 +240,7 @@ function _startExtras() {
     console.log('[startApp] AT was enabled before reload — resuming');
     // Update UI to reflect ON state
     const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on';
-    const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = '#00ff88'; _dot.style.boxShadow = '0 0 10px #00ff88'; }
+    const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)'; }
     const _txt = el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON';
     const _st = el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s';
     if (!AT.interval) AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000);
@@ -331,34 +331,34 @@ function _updatePnlLabCondensed() {
     if (cumEl) {
       if (!hasData) {
         cumEl.textContent = 'PnL: —';
-        cumEl.style.color = '#3a5068';
+        cumEl.style.color = 'var(--dim)';
       } else {
         var c = ds.cumPnl || 0;
         cumEl.textContent = 'PnL: ' + (c >= 0 ? '+' : '') + '$' + c.toFixed(2);
-        cumEl.style.color = c >= 0 ? '#00d97a' : '#ff4466';
+        cumEl.style.color = c >= 0 ? 'var(--grn)' : 'var(--red)';
       }
     }
     if (ddEl) {
       if (!hasData) {
         ddEl.textContent = 'DD: —';
-        ddEl.style.color = '#3a5068';
+        ddEl.style.color = 'var(--dim)';
       } else {
         ddEl.textContent = 'DD: $' + (ds.currentDD || 0).toFixed(2);
-        ddEl.style.color = ds.currentDD > 0 ? '#ff4466' : 'var(--dim)';
+        ddEl.style.color = ds.currentDD > 0 ? 'var(--red)' : 'var(--dim)';
       }
     }
     if (expEl) {
       if (typeof calcGlobalExpectancy !== 'function') {
         expEl.textContent = 'E: —';
-        expEl.style.color = '#3a5068';
+        expEl.style.color = 'var(--dim)';
       } else {
         var e = calcGlobalExpectancy();
         if (e === 0 && !hasData) {
           expEl.textContent = 'E: —';
-          expEl.style.color = '#3a5068';
+          expEl.style.color = 'var(--dim)';
         } else {
           expEl.textContent = 'E: ' + (e >= 0 ? '+' : '') + '$' + e.toFixed(2);
-          expEl.style.color = e > 0 ? '#00d97a' : e < 0 ? '#ff4466' : 'var(--dim)';
+          expEl.style.color = e > 0 ? 'var(--grn)' : e < 0 ? 'var(--red)' : 'var(--dim)';
         }
       }
     }
@@ -691,7 +691,7 @@ async function startApp() {
       // [B3] Post-sync AT resume — start interval + update UI if server restored AT.enabled
       if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) {
         var _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on';
-        var _b3dot = document.getElementById('atBtnDot'); if (_b3dot) { _b3dot.style.background = '#00ff88'; _b3dot.style.boxShadow = '0 0 10px #00ff88'; }
+        var _b3dot = document.getElementById('atBtnDot'); if (_b3dot) { _b3dot.style.background = 'var(--grn-bright)'; _b3dot.style.boxShadow = '0 0 10px var(--grn-bright)'; }
         var _b3txt = document.getElementById('atBtnTxt'); if (_b3txt) _b3txt.textContent = 'AUTO TRADE ON';
         var _b3st = document.getElementById('atStatus'); if (_b3st) _b3st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s';
         AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000);
@@ -1209,11 +1209,11 @@ async function pinActivate() {
   var val = inp.value.trim();
   var val2 = conf.value.trim();
   if (!val || val.length < 4) {
-    if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'PIN-ul trebuie să aibă minim 4 caractere'; }
+    if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN-ul trebuie să aibă minim 4 caractere'; }
     return;
   }
   if (val !== val2) {
-    if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'PIN-urile nu coincid'; }
+    if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN-urile nu coincid'; }
     return;
   }
   try {
@@ -1228,17 +1228,17 @@ async function pinActivate() {
       inp.value = '';
       conf.value = '';
       _pinSetCache = true;
-      if (msg) { msg.style.color = '#00ff88'; msg.innerHTML = _ZI.ok + ' PIN activat! La următoarea deschidere vei fi întrebat.'; }
+      if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activat! La următoarea deschidere vei fi întrebat.'; }
       _pinUpdateUI();
       // Mark this session as unlocked (don't lock yourself out mid-use)
       sessionStorage.setItem('zeus_pin_unlocked', '1');
     } else if (d.error === 'session_invalid') {
-      if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'Sesiune expirată — re-autentifică-te'; }
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Sesiune expirată — re-autentifică-te'; }
     } else {
-      if (msg) { msg.style.color = '#ff4455'; msg.textContent = d.error || 'Eroare la setarea PIN-ului'; }
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Eroare la setarea PIN-ului'; }
     }
   } catch (err) {
-    if (msg) { msg.style.color = '#ff4455'; msg.textContent = 'Eroare de rețea'; }
+    if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Eroare de rețea'; }
   }
 }
 
@@ -1257,7 +1257,7 @@ async function pinRemove() {
       // Clean up legacy localStorage PIN if present
       try { localStorage.removeItem('zeus_pin_hash'); } catch (_) { }
       var msg = document.getElementById('pin-msg');
-      if (msg) { msg.style.color = '#00afff'; msg.textContent = 'PIN dezactivat.'; }
+      if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN dezactivat.'; }
       _pinUpdateUI();
     }
   } catch (_) { }
@@ -1271,7 +1271,7 @@ async function _pinUpdateUI() {
   var remBtn = document.getElementById('pinRemoveBtn');
   if (status) {
     status.innerHTML = isSet ? 'ACTIVAT ' + _ZI.ok : 'DEZACTIVAT';
-    status.style.color = isSet ? '#00ff88' : '#556';
+    status.style.color = isSet ? 'var(--grn-bright)' : '#556';
   }
   if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' SCHIMBĂ PIN' : _ZI.lock + ' ACTIVEAZĂ PIN';
   if (remBtn) remBtn.style.display = isSet ? '' : 'none';
@@ -1884,14 +1884,14 @@ if (window.__ZEUS_INIT__) {
         var liveCount = (TP.livePositions || []).filter(function(p){ return !p.closed; }).length;
         var total = demoCount + liveCount;
         posEl.textContent = total + ' pos';
-        posEl.style.color = total > 0 ? '#00d4ff' : '#555';
+        posEl.style.color = total > 0 ? 'var(--cyan)' : '#555';
       }
       // Daily PnL
       var pnlEl = document.getElementById('zsbPnl');
       if (pnlEl && typeof AT !== 'undefined') {
         var pnl = AT.totalPnL || AT.realizedDailyPnL || 0;
         pnlEl.textContent = '$' + pnl.toFixed(2);
-        pnlEl.style.color = pnl > 0 ? '#00ff88' : (pnl < 0 ? '#ff4444' : '#555');
+        pnlEl.style.color = pnl > 0 ? 'var(--grn-bright)' : (pnl < 0 ? 'var(--red-bright)' : '#555');
       }
       // [MODE BAR] Piggyback on status bar update cycle (no separate polling)
       if (typeof updateModeBar === 'function') updateModeBar();
@@ -2809,8 +2809,8 @@ function _cmpFmt(key, val) {
   var _bvData = null;
 
   function _bvColor(dir) {
-    if (dir === 'bull' || dir === 'up' || dir === 'LONG' || dir === 'bullish') return '#00ff88';
-    if (dir === 'bear' || dir === 'down' || dir === 'SHORT' || dir === 'bearish') return '#ff4466';
+    if (dir === 'bull' || dir === 'up' || dir === 'LONG' || dir === 'bullish') return 'var(--grn-bright)';
+    if (dir === 'bear' || dir === 'down' || dir === 'SHORT' || dir === 'bearish') return 'var(--red)';
     return 'rgba(255,255,255,0.35)';
   }
   function _bvArrow(dir) {
@@ -2829,7 +2829,7 @@ function _cmpFmt(key, val) {
   function _bvDelta(v) {
     if (!v && v !== 0) return '\u2014';
     var sign = v >= 0 ? '+' : '';
-    var color = v > 0 ? '#00ff88' : v < 0 ? '#ff4466' : 'rgba(255,255,255,0.35)';
+    var color = v > 0 ? 'var(--grn-bright)' : v < 0 ? 'var(--red)' : 'rgba(255,255,255,0.35)';
     return '<span style="color:' + color + '">' + sign + (v >= 1000 || v <= -1000 ? (v / 1000).toFixed(1) + 'K' : v) + '</span>';
   }
 

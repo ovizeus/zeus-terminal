@@ -246,7 +246,7 @@ function _teacherRefreshDashboard() {
   var failsEl = _tEl('teacher-v2-fails');
   if (failsEl) {
     failsEl.textContent = v2.failCount;
-    failsEl.style.color = v2.failCount > 0 ? '#ff5252' : '#778899';
+    failsEl.style.color = v2.failCount > 0 ? 'var(--red)' : 'var(--txt-dim)';
   }
 
   // Buttons

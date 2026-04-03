@@ -76,9 +76,9 @@ function updateMacroUI() {
     var ps = BM.positionSizing;
     var ph = m.phase || 'NEUTRAL';
     var col = {
-      ACCUMULATION: '#00d97a', EARLY_BULL: '#44eebb', LATE_BULL: '#f0c040',
-      DISTRIBUTION: '#ff8844', TOP_RISK: '#ff3355', NEUTRAL: '#778899'
-    }[ph] || '#778899';
+      ACCUMULATION: 'var(--grn)', EARLY_BULL: '#44eebb', LATE_BULL: 'var(--gold)',
+      DISTRIBUTION: 'var(--orange)', TOP_RISK: 'var(--red)', NEUTRAL: 'var(--txt-dim)'
+    }[ph] || 'var(--txt-dim)';
 
     var badge = document.getElementById('macro-phase-badge');
     if (badge) {
@@ -91,7 +91,7 @@ function updateMacroUI() {
     var adaptSt = document.getElementById('macro-adapt-status');
     if (adaptSt) {
       adaptSt.textContent = BM.adapt.enabled ? 'ADAPT ON' : 'ADAPT OFF';
-      adaptSt.style.color = BM.adapt.enabled ? '#00d97a' : '#3a4a5a';
+      adaptSt.style.color = BM.adapt.enabled ? 'var(--grn)' : 'var(--dim)';
     }
 
     var bar = document.getElementById('macro-composite-bar');
@@ -106,7 +106,7 @@ function updateMacroUI() {
     setTxt('macro-slope-val', m.slope > 0 ? '▲' + m.slope.toFixed(2) : m.slope < 0 ? '▼' + Math.abs(m.slope).toFixed(2) : '—');
 
     var sizeMult = document.getElementById('macro-size-mult');
-    if (sizeMult) { sizeMult.textContent = '×' + (ps.finalMult || 1).toFixed(2); sizeMult.style.color = ps.finalMult > 1 ? '#00d97a' : ps.finalMult < 1 ? '#ff8844' : '#f0c040'; }
+    if (sizeMult) { sizeMult.textContent = '×' + (ps.finalMult || 1).toFixed(2); sizeMult.style.color = ps.finalMult > 1 ? 'var(--grn)' : ps.finalMult < 1 ? 'var(--orange)' : 'var(--gold)'; }
     var perfMult = document.getElementById('macro-perf-mult');
     if (perfMult) perfMult.textContent = '×' + (ps.perfMult || 1).toFixed(2);
 
@@ -117,7 +117,7 @@ function updateMacroUI() {
         var r = BM.performance.byRegime[k];
         var wr = r.trades > 0 ? Math.round(r.wins / r.trades * 100) : null;
         var isCur = (k === ph);
-        return '<div style="display:flex;justify-content:space-between;' + (isCur ? 'color:#f0c040' : '') + '">'
+        return '<div style="display:flex;justify-content:space-between;' + (isCur ? 'color:var(--gold)' : '') + '">'
           + '<span>' + k.replace('_', ' ') + (isCur ? ' ◀' : '') + '</span>'
           + '<span>' + (wr !== null ? wr + '% (' + r.trades + 't)' : '—') + '</span>'
           + '<span>×' + (r.mult || 1).toFixed(2) + '</span>'
@@ -210,8 +210,8 @@ function _adaptLoad() {
     // Sync UI toggle
     const tog = document.getElementById('adaptiveToggleBtn');
     if (tog) tog.innerHTML = BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF';
-    if (tog) tog.style.borderColor = BM.adaptive.enabled ? '#00d97a' : '#2a3a4a';
-    if (tog) tog.style.color = BM.adaptive.enabled ? '#00d97a' : '#778899';
+    if (tog) tog.style.borderColor = BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a';
+    if (tog) tog.style.color = BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)';
   } catch (e) {
     // [v106 FIX1] Eroare la restore adaptive state — logat, nu inghetit silentios
     console.warn('[_adaptLoad] Restore failed:', e.message);
@@ -343,7 +343,7 @@ function _renderAdaptivePanel() {
     // Header stats
     var headerEl = document.getElementById('adaptive-mults-row');
     if (headerEl) {
-      var color = function (v) { return v > 1.0 ? '#00d97a' : v < 1.0 ? '#ff8844' : '#778899'; };
+      var color = function (v) { return v > 1.0 ? 'var(--grn)' : v < 1.0 ? 'var(--orange)' : 'var(--txt-dim)'; };
       headerEl.innerHTML =
         '<span style="color:var(--dim)">ENTRY</span><span style="color:' + color(ad.entryMult) + ';font-weight:700">×' + ad.entryMult.toFixed(2) + '</span>' +
         '<span style="color:var(--dim)">SIZE</span><span style="color:' + color(ad.sizeMult) + ';font-weight:700">×' + ad.sizeMult.toFixed(2) + '</span>' +
@@ -362,8 +362,8 @@ function _renderAdaptivePanel() {
       var b = buckets[k];
       var wr = b.trades > 0 ? Math.round(b.winrate * 100) : null;
       var hasData = b.trades >= 30;
-      var wrColor = hasData ? (b.winrate > 0.60 ? '#00d97a' : b.winrate < 0.40 ? '#ff4466' : '#f0c040') : '#556677';
-      var multColor = hasData ? (b.mult > 1.0 ? '#00d97a' : b.mult < 1.0 ? '#ff8844' : '#778899') : '#556677';
+      var wrColor = hasData ? (b.winrate > 0.60 ? 'var(--grn)' : b.winrate < 0.40 ? 'var(--red)' : 'var(--gold)') : '#556677';
+      var multColor = hasData ? (b.mult > 1.0 ? 'var(--grn)' : b.mult < 1.0 ? 'var(--orange)' : 'var(--txt-dim)') : '#556677';
       return '<div style="display:grid;grid-template-columns:1fr 40px 40px 45px;gap:2px;font-size:11px;padding:2px 0;border-bottom:1px solid #0d1520;color:#6a8090">'
         + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + k + '">' + k + '</span>'
         + '<span>' + b.trades + 't</span>'
@@ -388,8 +388,8 @@ function toggleAdaptive() {
   var tog = document.getElementById('adaptiveToggleBtn');
   if (tog) {
     tog.innerHTML = BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF';
-    tog.style.borderColor = BM.adaptive.enabled ? '#00d97a' : '#2a3a4a';
-    tog.style.color = BM.adaptive.enabled ? '#00d97a' : '#778899';
+    tog.style.borderColor = BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a';
+    tog.style.color = BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)';
   }
   if (!BM.adaptive.enabled) {
     BM.adaptive.entryMult = 1.0;
@@ -409,7 +409,7 @@ function _updateAdaptiveBarTxt() {
   var ad = BM.adaptive;
   if (!ad.enabled) {
     el.textContent = 'OFF · ×1.00 ×1.00 ×1.00';
-    el.style.color = '#aa44ff44';
+    el.style.color = 'var(--pur)';
     return;
   }
   var buckets = Object.values(ad.buckets || {});
@@ -419,7 +419,7 @@ function _updateAdaptiveBarTxt() {
   else txt += ' · <30t';
   el.textContent = txt;
   var avg = (ad.entryMult + ad.sizeMult + ad.exitMult) / 3;
-  el.style.color = avg > 1.0 ? '#00d97a' : avg < 1.0 ? '#ff8844' : '#aa44ff88';
+  el.style.color = avg > 1.0 ? 'var(--grn)' : avg < 1.0 ? 'var(--orange)' : 'var(--pur)';
 }
 
 // Toggle strip open/close

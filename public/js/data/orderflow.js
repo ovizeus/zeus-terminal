@@ -375,7 +375,7 @@
       const btn = document.createElement('button');
       btn.className = 'hub-sbtn';
       btn.setAttribute('data-zt-diag', '1');
-      btn.style.cssText = 'border-color:rgba(0,229,255,0.35);color:#00E5FF';
+      btn.style.cssText = 'border-color:rgba(0,229,255,0.35);color:var(--cyan)';
       btn.textContent = '\uD83E\uDE7A Copy Diag Pack';
       btn.onclick = function () {
         try {

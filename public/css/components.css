@@ -36,10 +36,10 @@
 }
 
 .orb-sess.active.asia {
-  color: #f0c040;
+  color: var(--gold);
   background: #f0c04022;
   border-color: #f0c04077;
-  text-shadow: 0 0 5px #f0c040;
+  text-shadow: 0 0 5px var(--gold);
   box-shadow: 0 0 7px #f0c04055
 }
 
@@ -52,15 +52,15 @@
 }
 
 .orb-sess.active.ny {
-  color: #00ff88;
+  color: var(--grn-bright);
   background: #00ff8822;
   border-color: #00ff8877;
-  text-shadow: 0 0 5px #00ff88;
+  text-shadow: 0 0 5px var(--grn-bright);
   box-shadow: 0 0 7px #00ff8855
 }
 
 .orb-sess.active.primary.asia {
-  box-shadow: 0 0 10px #f0c040, 0 0 18px #f0c04044;
+  box-shadow: 0 0 10px var(--gold), 0 0 18px #f0c04044;
   animation: zSessPulse 1s ease-in-out infinite
 }
 
@@ -70,7 +70,7 @@
 }
 
 .orb-sess.active.primary.ny {
-  box-shadow: 0 0 10px #00ff88, 0 0 18px #00ff8844;
+  box-shadow: 0 0 10px var(--grn-bright), 0 0 18px #00ff8844;
   animation: zSessPulse 1s ease-in-out infinite
 }
 
@@ -126,10 +126,10 @@
 }
 
 .znc-sess.active.asia {
-  color: #f0c040;
+  color: var(--gold);
   background: #f0c04012;
-  box-shadow: inset 0 -1px 0 #f0c040;
-  text-shadow: 0 0 6px #f0c040
+  box-shadow: inset 0 -1px 0 var(--gold);
+  text-shadow: 0 0 6px var(--gold)
 }
 
 .znc-sess.active.london {
@@ -140,10 +140,10 @@
 }
 
 .znc-sess.active.ny {
-  color: #00ff88;
+  color: var(--grn-bright);
   background: #00ff8812;
-  box-shadow: inset 0 -1px 0 #00ff88;
-  text-shadow: 0 0 6px #00ff88
+  box-shadow: inset 0 -1px 0 var(--grn-bright);
+  text-shadow: 0 0 6px var(--grn-bright)
 }
 
 .znc-sess-dot {
@@ -185,13 +185,13 @@
 }
 
 .znc-nc.pulse {
-  color: #39ff14;
+  color: var(--lime);
   animation: zNeuro 300ms ease-out
 }
 
 @keyframes zNeuro {
   0% {
-    filter: brightness(3) drop-shadow(0 0 3px #39ff14)
+    filter: brightness(3) drop-shadow(0 0 3px var(--lime))
   }
 
   100% {
@@ -210,9 +210,9 @@
 }
 
 .znc-nc.pulse .znc-nc-dot {
-  background: #39ff14;
-  box-shadow: 0 0 6px #39ff14;
-  border-color: #39ff14
+  background: var(--lime);
+  box-shadow: 0 0 6px var(--lime);
+  border-color: var(--lime)
 }
 
 /* neuron row inside orb */
@@ -485,11 +485,11 @@
 }
 
 .dstream-item.up {
-  color: #00ff88
+  color: var(--grn-bright)
 }
 
 .dstream-item.down {
-  color: #ff4466
+  color: var(--red)
 }
 
 .dstream-item.neut {
@@ -522,7 +522,7 @@
 }
 
 .market-phase.asian {
-  color: #f0c040;
+  color: var(--gold);
   background: #f0c04015;
   border: 1px solid #f0c04033
 }
@@ -534,7 +534,7 @@
 }
 
 .market-phase.ny {
-  color: #00ff88;
+  color: var(--grn-bright);
   background: #00ff8815;
   border: 1px solid #00ff8833
 }
@@ -571,14 +571,14 @@
 }
 
 .sess-bt-dot.bull {
-  background: #00d97a;
-  box-shadow: 0 0 5px #00d97a;
+  background: var(--grn);
+  box-shadow: 0 0 5px var(--grn);
   animation: btDotPulse 1.5s ease-in-out infinite
 }
 
 .sess-bt-dot.bear {
-  background: #ff3355;
-  box-shadow: 0 0 5px #ff3355
+  background: var(--red);
+  box-shadow: 0 0 5px var(--red)
 }
 
 .sess-bt-dot.idle {
@@ -590,12 +590,12 @@
   0%,
   100% {
     opacity: 1;
-    box-shadow: 0 0 4px #00d97a
+    box-shadow: 0 0 4px var(--grn)
   }
 
   50% {
     opacity: .6;
-    box-shadow: 0 0 10px #00d97a, 0 0 18px #00d97a44
+    box-shadow: 0 0 10px var(--grn), 0 0 18px #00d97a44
   }
 }
 
@@ -672,17 +672,17 @@ button[data-id],
 }
 
 .z-dot--red {
-  background: #ff3355;
+  background: var(--red);
   box-shadow: 0 0 4px #ff335566;
 }
 
 .z-dot--grn {
-  background: #00d97a;
+  background: var(--grn);
   box-shadow: 0 0 4px #00d97a66;
 }
 
 .z-dot--ylw {
-  background: #f0c040;
+  background: var(--gold);
   box-shadow: 0 0 4px #f0c04066;
 }
 
@@ -755,42 +755,42 @@ svg.z-i.z-spin {
 }
 
 .z-badge--gold {
-  color: #f0c040;
+  color: var(--gold);
   border: 1px solid #f0c04033;
   background: #f0c04012;
   text-shadow: 0 0 6px #f0c04055
 }
 
 .z-badge--red {
-  color: #ff3355;
+  color: var(--red);
   border: 1px solid #ff335533;
   background: #ff335512;
   text-shadow: 0 0 6px #ff335555
 }
 
 .z-badge--grn {
-  color: #00d97a;
+  color: var(--grn);
   border: 1px solid #00d97a33;
   background: #00d97a12;
   text-shadow: 0 0 6px #00d97a55
 }
 
 .z-badge--cyan {
-  color: #00b8d4;
+  color: var(--blu);
   border: 1px solid #00b8d433;
   background: #00b8d412;
   text-shadow: 0 0 6px #00b8d455
 }
 
 .z-badge--pur {
-  color: #aa44ff;
+  color: var(--pur);
   border: 1px solid #aa44ff33;
   background: #aa44ff12;
   text-shadow: 0 0 6px #aa44ff55
 }
 
 .z-badge--dim {
-  color: #7a9ab8;
+  color: var(--txt);
   border: 1px solid #7a9ab822;
   background: #7a9ab80a
 }
@@ -805,7 +805,7 @@ svg.z-i.z-spin {
 }
 
 .z-dot--red {
-  background: #ff4444;
+  background: var(--red-bright);
   box-shadow: 0 0 4px #ff444466
 }
 

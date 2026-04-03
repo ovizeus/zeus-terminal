@@ -78,7 +78,7 @@
 .j-table .side-short { color: var(--red); }
 .j-table .mode-live { color: var(--gold); font-weight: 700; }
 .j-table .mode-demo { color: var(--dim); }
-.j-table .mode-testnet { color: #f0c040; font-weight: 700; }
+.j-table .mode-testnet { color: var(--gold); font-weight: 700; }
 
 /* Mode toggle tabs */
 .j-tabs { display: flex; gap: 4px; margin-bottom: 16px; }
@@ -116,16 +116,16 @@
 /* ═══ Trade Annotations ═══ */
 .j-ann-cell{max-width:180px;white-space:nowrap;overflow:hidden}
 .j-ann-btn{background:none;border:1px solid #333;color:#666;font-size:11px;cursor:pointer;padding:0 4px;border-radius:2px;margin-left:4px;font-family:inherit}
-.j-ann-btn:hover{color:#00d4ff;border-color:#00d4ff44}
-.j-ann-stars{color:#ff8800;font-size:9px;margin-right:3px}
+.j-ann-btn:hover{color:var(--cyan);border-color:#00d4ff44}
+.j-ann-stars{color:var(--orange);font-size:9px;margin-right:3px}
 .j-ann-note{color:#555;font-size:9px;margin-left:3px}
-.j-tag{display:inline-block;font-size:8px;padding:0 3px;background:#1a1a2e;color:#888;border-radius:2px;margin:0 1px}
+.j-tag{display:inline-block;font-size:8px;padding:0 3px;background:var(--bg-purple-tint);color:#888;border-radius:2px;margin:0 1px}
 .ann-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px}
 .ann-panel{background:#0a0a1a;border:1px solid #1a1a3e;border-radius:8px;width:100%;max-width:400px;font-family:var(--ff,monospace)}
-.ann-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1a1a2e;font-size:12px;color:#00d4ff;font-weight:700;letter-spacing:1px}
+.ann-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--bg-purple-tint);font-size:12px;color:var(--cyan);font-weight:700;letter-spacing:1px}
 .ann-seq{color:#555;font-size:10px;font-weight:400}
 .ann-close{background:none;border:none;color:#666;font-size:20px;cursor:pointer}
-.ann-close:hover{color:#ff4444}
+.ann-close:hover{color:var(--red-bright)}
 .ann-body{padding:16px}
 .ann-field{margin-bottom:12px}
 .ann-field label{display:block;font-size:9px;color:#555;letter-spacing:1px;margin-bottom:4px}
@@ -135,6 +135,6 @@
 .ann-stars{font-size:18px;cursor:pointer;user-select:none}
 .ann-star{color:#333;margin-right:2px;transition:color .15s}
 .ann-star:hover{color:#ff880088}
-.ann-star-on{color:#ff8800}
-.ann-save{width:100%;padding:8px;background:#00d4ff11;border:1px solid #00d4ff44;color:#00d4ff;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:1px;margin-top:8px}
+.ann-star-on{color:var(--orange)}
+.ann-save{width:100%;padding:8px;background:#00d4ff11;border:1px solid #00d4ff44;color:var(--cyan);border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:1px;margin-top:8px}
 .ann-save:hover{background:#00d4ff22}

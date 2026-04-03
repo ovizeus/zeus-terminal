@@ -76,7 +76,7 @@ function computePredatorState() {
     // [p19 UI] Update PREDATOR HUD pills
     try {
       var _pills = { SLEEP: 'pred-sleep', HUNT: 'pred-hunt', KILL: 'pred-kill' };
-      var _colors = { SLEEP: '#ff4444', HUNT: '#ffcc00', KILL: '#00ff88' };
+      var _colors = { SLEEP: 'var(--red-bright)', HUNT: '#ffcc00', KILL: 'var(--grn-bright)' };
       var _glows = { SLEEP: '#ff444466', HUNT: '#ffcc0066', KILL: '#00ff8866' };
       Object.keys(_pills).forEach(function (st) {
         var el2 = document.getElementById(_pills[st]);
@@ -87,7 +87,7 @@ function computePredatorState() {
           el2.style.boxShadow = '0 0 6px ' + _glows[st];
           el2.style.background = _glows[st];
         } else {
-          el2.style.color = '#333';
+          el2.style.color = '#333';  /* leave as-is: dark gray, no variable */
           el2.style.borderColor = '#2a2a2a';
           el2.style.boxShadow = 'none';
           el2.style.background = 'transparent';
@@ -182,8 +182,8 @@ function _handleConfirm(posId, btn, callback) {
 function _applyPendingStyle(btn) {
   btn.innerHTML = '✓ CONFIRMĂ?';
   btn.style.background = '#1a1200';
-  btn.style.borderColor = '#f0c040';
-  btn.style.color = '#f0c040';
+  btn.style.borderColor = 'var(--gold)';
+  btn.style.color = 'var(--gold)';
 }
 
 function _resetCloseBtn(btn) {
@@ -191,19 +191,19 @@ function _resetCloseBtn(btn) {
   if (btn.getAttribute('data-close-id')) {
     btn.innerHTML = '✕ INCHIDE TOT';
     btn.style.background = '#2a0010';
-    btn.style.borderColor = '#ff4466';
-    btn.style.color = '#ff4466';
+    btn.style.borderColor = 'var(--red)';
+    btn.style.color = 'var(--red)';
   } else if (btn.getAttribute('data-id')) {
     btn.innerHTML = '✕ CLOSE';
     btn.style.background = '#2a0010';
-    btn.style.borderColor = '#ff4466';
-    btn.style.color = '#ff4466';
+    btn.style.borderColor = 'var(--red)';
+    btn.style.color = 'var(--red)';
   } else if (btn.id === 'closeAllBtn') {
     // Restaurare text pentru CLOSE ALL (identificat prin btn.id fallback)
     btn.innerHTML = '✕ CLOSE ALL';
     btn.style.background = '#2a0010';
-    btn.style.borderColor = '#ff4466';
-    btn.style.color = '#ff4466';
+    btn.style.borderColor = 'var(--red)';
+    btn.style.color = 'var(--red)';
   }
 }
 

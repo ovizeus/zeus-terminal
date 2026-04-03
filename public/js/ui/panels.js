@@ -932,7 +932,7 @@ function toggleOviLiquid(btn) {
   S.oviOn = !S.oviOn;
   if (btn) {
     btn.classList.toggle('on', S.oviOn);
-    btn.style.color = S.oviOn ? '#f0c040' : '#f0c04088';
+    btn.style.color = S.oviOn ? 'var(--gold)' : '#f0c04088';
     btn.style.background = S.oviOn ? '#f0c04015' : 'transparent';
     btn.style.borderColor = S.oviOn ? '#f0c04066' : '#f0c04033';
   }

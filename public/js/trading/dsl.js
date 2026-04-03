@@ -110,7 +110,7 @@ function toggleDSL() {
   const btn = el('dslToggleBtn');
   const dot = el('dslStatusDot');
   if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off'); }
-  if (dot) { dot.style.color = DSL.enabled ? '#00ffcc' : '#333'; dot.style.background = DSL.enabled ? '#00ffcc' : '#333'; }
+  if (dot) { dot.style.color = DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = DSL.enabled ? 'var(--grn-bright)' : '#333'; }
   atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV — Brain urmareste pozitiile' : '[WARN] Dynamic SL OPRIT');
   brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? _ZI.tgt + ' DSL activat — trailing brain pornit' : 'DSL oprit');
   dslUpdateBanner();

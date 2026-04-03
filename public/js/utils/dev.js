@@ -584,6 +584,10 @@ function hubPopulate() {
     var devCb2 = document.getElementById('hubDevEnabled2');
     if (devCb2) devCb2.checked = DEV.enabled;
 
+    // ── Theme ────────────────────────────────────────────────────
+    var _ts = document.getElementById('themeSelect');
+    if (_ts) _ts.value = zeusGetTheme ? zeusGetTheme() : 'native';
+
     // ── UI Scale ────────────────────────────────────────────────
     var scaleSel = document.getElementById('hubUiScale');
     if (scaleSel) {

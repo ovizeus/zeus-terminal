@@ -47,7 +47,7 @@ console.log('[ZEUS] state.js loaded — sync version:', window.__SYNC_VERSION__)
     'zeus_pt_strip_open': 1, 'zeus_mtf_open': 1,
     'zeus_dsl_mode': 1, 'zeus_adaptive_strip_open': 1,
     // Settings & UI
-    'zeus_llv_settings': 1, 'zeus_ui_scale': 1,
+    'zeus_theme': 1, 'zeus_llv_settings': 1, 'zeus_ui_scale': 1,
     'zeus_mscan_syms': 1, 'zt_midstack_order': 1,
     // AUB (Alien Upgrade Bay)
     'aub_bb': 1, 'aub_macro': 1, 'aub_sim_last': 1, 'aub_expanded': 1,

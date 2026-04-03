@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.5.0',
-    build: 23,
+    version: '1.6.0',
+    build: 24,
     date: '2026-04-03',
-    changelog: 'Ultra audit bugfix: seq collision fix, kill switch ref, state restore fix, 16 bugs fixed'
+    changelog: 'Theme system: 3 themes (Obsidian/Onyx/Ivory), 400+ color migrations, theme engine + selector'
 };
