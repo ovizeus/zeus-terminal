@@ -20,6 +20,7 @@ const serverSentiment = require('./serverSentiment');
 const serverKNN = require('./serverKNN');
 const serverReflection = require('./serverReflection');
 const serverCalibration = require('./serverCalibration');
+const serverPendingEntry = require('./serverPendingEntry');
 const serverExitManager = require('./serverExitManager');
 
 // ══════════════════════════════════════════════════════════════════
@@ -230,6 +231,20 @@ function _runCycle() {
                 // [MULTI-SYM] Skip if user has symbol selection and this symbol is not in it
                 if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
 
+                // [2G] Check existing pending entries before evaluating new ones
+                const pendingResult = serverPendingEntry.checkPending(symbol, snap.price, userId);
+                if (pendingResult) {
+                    if (pendingResult.action === 'FILL' || pendingResult.action === 'MOMENTUM') {
+                        // Execute the pending entry via AT
+                        const adaptedStcPend = serverRegimeParams.getAdaptedParams(regime.regime, stc);
+                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, adaptedStcPend, userId);
+                        if (entry) {
+                            logger.info('BRAIN', `[2G] Pending ${pendingResult.action} executed for uid=${userId} ${symbol}`);
+                        }
+                    }
+                    // EXPIRE and CANCEL — nothing to do, already cleaned up
+                }
+
                 // [BRAIN-V2] Adapt STC params to current regime
                 const adaptedStc = serverRegimeParams.getAdaptedParams(regime.regime, stc);
                 const gates = _checkGates(snap, ind, confluence, adaptedStc, userId);
@@ -290,11 +305,20 @@ function _runCycle() {
                         reflectionConcerns: questioning.concerns.length,
                     };
 
-                    const entry = serverAT.processBrainDecision(decision, adaptedStc, userId);
-                    if (entry) {
+                    // [2G] Pending Entry System — wait for pullback instead of instant entry
+                    const pending = serverPendingEntry.createPending(decision, adaptedStc, userId, marketCtx);
+                    if (pending) {
                         _cooldowns.set(userId + ':' + decision.symbol, Date.now());
                         _persistCooldowns();
-                        logger.info(`[BRAIN] Cooldown set for user ${userId} ${decision.symbol} (${adaptedStc.cooldownMs}ms)`);
+                        logger.info(`[BRAIN] Pending entry created for user ${userId} ${decision.symbol} (${adaptedStc.cooldownMs}ms cooldown)`);
+                    } else {
+                        // Fallback: if pending creation failed (e.g., already pending), execute directly
+                        const entry = serverAT.processBrainDecision(decision, adaptedStc, userId);
+                        if (entry) {
+                            _cooldowns.set(userId + ':' + decision.symbol, Date.now());
+                            _persistCooldowns();
+                            logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);
+                        }
                     }
                 } else {
                     // Track NO_TRADE for regret analysis

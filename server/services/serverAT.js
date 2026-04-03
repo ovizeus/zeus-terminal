@@ -1451,6 +1451,8 @@ function activateKillSwitch(userId) {
     const us = _uState(userId);
     us.killActive = true;
     _persistState(userId);
+    // [2G] Cancel pending entries on kill switch
+    try { require('./serverPendingEntry').cancelAllForUser(userId); } catch (_) {}
     audit.record('KILL_SWITCH_MANUAL', { userId, action: 'activate' }, 'user');
     logger.warn('AT_ENGINE', `Kill switch manually activated uid=${userId}`);
     telegram.sendToUser(userId, '🛑 *Kill Switch MANUALLY Activated*\nAll new entries BLOCKED until manual reset or UTC day change');
