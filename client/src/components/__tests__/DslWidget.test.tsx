@@ -6,9 +6,9 @@ import type { Position } from '../../types'
 
 const mockPos: Position = {
   seq: 1, symbol: 'BTCUSDT', side: 'LONG', size: 100, lev: 10,
-  price: 60000, sl: 59000, tp: 62000, mode: 'demo', source: 'AT',
-  status: 'OPEN', openTime: Date.now(), positionId: 'pos-1',
-}
+  price: 60000, sl: 59000, tp: 62000, mode: 'demo', autoTrade: true,
+  status: 'OPEN',
+} as Position
 
 describe('DslWidget', () => {
   it('returns null when DSL disabled', () => {

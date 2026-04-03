@@ -14,11 +14,9 @@ const mockPos: Position = {
   sl: 59000,
   tp: 62000,
   mode: 'demo',
-  source: 'AT',
+  autoTrade: true,
   status: 'OPEN',
-  openTime: Date.now(),
-  positionId: 'pos-1',
-}
+} as any
 
 describe('PositionTable', () => {
   it('renders empty state when no positions', () => {

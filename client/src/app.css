@@ -550,3 +550,101 @@ body {
   color: var(--gold);
   font-weight: bold;
 }
+
+/* ── Brain Cockpit ── */
+.zr-brain { font-size: 12px; }
+.zr-brain__grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.zr-neuron {
+  text-align: center;
+  padding: 4px;
+  border-radius: 3px;
+  border: 1px solid var(--brd);
+  background: var(--bg3);
+}
+.zr-neuron__label {
+  font-size: 9px;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+.zr-neuron--ok { border-color: var(--grn); color: var(--grn); }
+.zr-neuron--wait { border-color: var(--gold); color: var(--gold); }
+.zr-neuron--fail { border-color: var(--red); color: var(--red); }
+.zr-neuron--off { color: var(--dim); }
+
+.zr-brain__arc {
+  text-align: center;
+  margin-bottom: 12px;
+  padding: 8px;
+  border: 1px solid var(--brd);
+  border-radius: 4px;
+  background: var(--bg3);
+}
+.zr-brain__score {
+  font-size: 28px;
+  font-weight: bold;
+  display: block;
+}
+.zr-brain__score-label {
+  font-size: 9px;
+  color: var(--dim);
+  letter-spacing: 1px;
+}
+.zr-brain__stats { margin-bottom: 8px; }
+.zr-brain__section { margin-top: 8px; }
+.zr-brain__section-title {
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--brd);
+  margin-bottom: 4px;
+}
+
+/* ── Forecast Panel ── */
+.zr-forecast { font-size: 12px; }
+.zr-forecast__section { margin-bottom: 12px; }
+.zr-forecast__risk-bar {
+  position: relative;
+  height: 16px;
+  background: var(--bg3);
+  border: 1px solid var(--brd);
+  border-radius: 3px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.zr-forecast__risk-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--grn), var(--gold), var(--red));
+  transition: width 0.3s ease;
+}
+.zr-forecast__risk-label {
+  position: absolute;
+  top: 0;
+  right: 6px;
+  font-size: 10px;
+  font-weight: bold;
+  color: var(--whi);
+  line-height: 16px;
+}
+
+/* ── Deep Dive Panel ── */
+.zr-deepdive { font-size: 12px; }
+.zr-deepdive__protect {
+  background: rgba(255, 51, 85, 0.15);
+  border: 1px solid var(--red);
+  color: var(--red);
+  text-align: center;
+  padding: 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  letter-spacing: 1px;
+}

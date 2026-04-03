@@ -1,19 +1,20 @@
 import { useState } from 'react'
-import { useBrainStore, useMarketStore } from '../../stores'
+import { useMarketStore } from '../../stores'
 import { TradingChart } from '../chart/TradingChart'
 import { PositionTable } from '../trading/PositionTable'
 import { ATPanel } from '../trading/ATPanel'
+import { BrainCockpit } from '../brain/BrainCockpit'
+import { ForecastPanel } from '../brain/ForecastPanel'
+import { DeepDivePanel } from '../brain/DeepDivePanel'
 
 type PosTab = 'demo' | 'live'
+type BrainTab = 'cockpit' | 'forecast' | 'deepdive'
 
 export function PanelShell() {
-  const brainMode = useBrainStore((s) => s.brain.mode)
-  const confluence = useBrainStore((s) => s.brain.confluenceScore)
-  const regime = useBrainStore((s) => s.brain.regimeEngine.regime)
-  const danger = useBrainStore((s) => s.brain.danger)
   const price = useMarketStore((s) => s.market.price)
   const symbol = useMarketStore((s) => s.market.symbol)
   const [posTab, setPosTab] = useState<PosTab>('demo')
+  const [brainTab, setBrainTab] = useState<BrainTab>('cockpit')
 
   return (
     <main className="zr-panels">
@@ -49,26 +50,32 @@ export function PanelShell() {
       </section>
 
       <section className="zr-panel" data-panel="brain">
-        <div className="zr-panel__header">Brain Cockpit</div>
+        <div className="zr-panel__header">
+          <div className="zr-panel__header-tabs">
+            <button
+              className={`zr-panel__header-tab ${brainTab === 'cockpit' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBrainTab('cockpit')}
+            >
+              Cockpit
+            </button>
+            <button
+              className={`zr-panel__header-tab ${brainTab === 'forecast' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBrainTab('forecast')}
+            >
+              Forecast
+            </button>
+            <button
+              className={`zr-panel__header-tab ${brainTab === 'deepdive' ? 'zr-panel__header-tab--active' : ''}`}
+              onClick={() => setBrainTab('deepdive')}
+            >
+              Deep Dive
+            </button>
+          </div>
+        </div>
         <div className="zr-panel__body">
-          <div className="zr-kv">
-            <span className="zr-kv__label">Mode</span>
-            <span className="zr-kv__value">{brainMode}</span>
-          </div>
-          <div className="zr-kv">
-            <span className="zr-kv__label">Confluence</span>
-            <span className="zr-kv__value">{confluence}</span>
-          </div>
-          <div className="zr-kv">
-            <span className="zr-kv__label">Regime</span>
-            <span className="zr-kv__value">{regime}</span>
-          </div>
-          <div className="zr-kv">
-            <span className="zr-kv__label">Danger</span>
-            <span className={`zr-kv__value ${danger > 60 ? 'zr-kv__value--red' : danger > 30 ? 'zr-kv__value--ylw' : ''}`}>
-              {danger}
-            </span>
-          </div>
+          {brainTab === 'cockpit' && <BrainCockpit />}
+          {brainTab === 'forecast' && <ForecastPanel />}
+          {brainTab === 'deepdive' && <DeepDivePanel />}
         </div>
       </section>
 
