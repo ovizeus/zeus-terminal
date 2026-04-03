@@ -89,28 +89,27 @@ function initZeusGroups() {
     } catch (_) { }
   }
 
-  // ── LAYOUT: MODE BAR → CHART → DOCK → BRAIN → rest ────────────
+  // ── LAYOUT: MODE BAR → panels inline → CHART → DOCK → BRAIN ──
   mv('zeus-mode-bar', mi);  // 1. Global Execution Mode Bar — top of content
   if (typeof initModeBar === 'function') initModeBar(); // populate mode bar
-  mv('csec', mi);           // 2. Chart section — sub mode bar
-  mv('zeus-dock', mi);      // 3. Icon Dock — sub chart
-  if (typeof initPageView === 'function') initPageView(); // page view shell (before dock so openPageView exists)
-  if (typeof initZeusDock === 'function') initZeusDock(); // populate dock icons
-  mv('zeusBrain', mi);      // 4. Brain / cockpit — sub dock
-  mv('brainExt', mi);       // 5. Brain extension panel
-  // ── REST: exact same relative order as before ────────────────
-  mv('aub', document.getElementById('zeus-hidden-panels'));  // AUB → hidden staging (accessed via dock page view)
-  mv('sr-strip', document.getElementById('zeus-hidden-panels'));  // SR → hidden staging (accessed via dock page view)
-  mv('aria-strip', document.getElementById('zeus-hidden-panels'));  // ARIA → hidden staging (accessed via dock page view)
-  mv('teacher-strip', document.getElementById('zeus-hidden-panels'));  // Teacher → hidden staging (accessed via dock page view)
-  mv('pnl-lab-strip', document.getElementById('zeus-hidden-panels'));  // PnL Lab → hidden staging (accessed via dock page view)
-  mv('dsl-strip', document.getElementById('zeus-hidden-panels'));  // DSL → hidden staging (accessed via dock page view)
-  mv('actfeed-strip', document.getElementById('zeus-hidden-panels'));  // Activity → hidden staging (accessed via dock page view)
-  mv('at-strip', document.getElementById('zeus-hidden-panels'));  // AT → hidden staging (accessed via dock page view)
-  mv('pt-strip', document.getElementById('zeus-hidden-panels'));  // PT → hidden staging (accessed via dock page view)
-  mv('nova-strip', document.getElementById('zeus-hidden-panels'));  // NOVA → hidden staging (accessed via dock page view)
-  mv('mtf-strip', document.getElementById('zeus-hidden-panels'));  // MTF → hidden staging (accessed via dock page view)
-  mv('adaptive-strip', document.getElementById('zeus-hidden-panels'));  // Adaptive → hidden staging (accessed via dock page view)
+  mv('aub', mi);             // Alien Upgrade Bay
+  mv('sr-strip', mi);        // Signal Registry strip
+  mv('csec', mi);            // Chart section
+  mv('zeus-dock', mi);       // Icon Dock — sub chart
+  if (typeof initPageView === 'function') initPageView();
+  if (typeof initZeusDock === 'function') initZeusDock();
+  mv('aria-strip', mi);      // ARIA HUD strip
+  mv('teacher-strip', mi);   // THE TEACHER
+  mv('pnl-lab-strip', mi);   // PnL Lab strip
+  mv('dsl-strip', mi);       // DSL banner strip
+  mv('at-strip', mi);        // AT banner strip
+  mv('pt-strip', mi);        // Paper Trading banner strip
+  mv('nova-strip', mi);      // NOVA HUD strip
+  mv('mtf-strip', mi);       // MTF Structural Model
+  mv('adaptive-strip', mi);  // Adaptive strip
+  mv('actfeed-strip', mi);   // Activity feed strip
+  mv('zeusBrain', mi);       // Brain / cockpit
+  mv('brainExt', mi);        // Brain extension panel
   mvSec('#rsiupd', mi);  // RSI Multi-TF
   mvSec('.dttabs', mi);  // AI Metrics
   mvSec('.conf-widget', mi);  // Confluence Score
