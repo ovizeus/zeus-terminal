@@ -1,4 +1,5 @@
 import { useUiStore, useMarketStore } from '../../stores'
+import { SymbolSelector } from '../trading/SymbolSelector'
 import type { ThemeId } from '../../types'
 
 const THEMES: { id: ThemeId; label: string }[] = [
@@ -12,7 +13,6 @@ export function Header() {
   const setTheme = useUiStore((s) => s.setTheme)
   const connected = useUiStore((s) => s.connected)
   const toggleSettings = useUiStore((s) => s.toggleSettings)
-  const symbol = useMarketStore((s) => s.market.symbol)
   const price = useMarketStore((s) => s.market.price)
 
   return (
@@ -22,9 +22,9 @@ export function Header() {
         <span className="zr-header__badge">React</span>
       </div>
       <div className="zr-header__center">
-        <span className="zr-header__symbol">{symbol}</span>
+        <SymbolSelector />
         {price > 0 && (
-          <span className="zr-header__price">${price.toLocaleString()}</span>
+          <span className="zr-header__price">${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
         )}
       </div>
       <div className="zr-header__right">
