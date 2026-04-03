@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.5.0',
-    build: 21,
+    build: 22,
     date: '2026-04-03',
-    changelog: 'ML data layer: brain decision snapshots with full feature capture + outcome linkage'
+    changelog: 'Mega audit bugfix: fusion weights, memory leak cleanups, fd leak fix, DSL log cap, orderflow perf'
 };

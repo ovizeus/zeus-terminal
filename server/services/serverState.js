@@ -77,7 +77,11 @@ function init(symbols, timeframes) {
         }
     }
 
-    // Wire market feed events → dispatch by symbol
+    // [RT-09] Wire market feed events — remove old listeners first to prevent accumulation
+    marketFeed.removeListener('kline', _onKline);
+    marketFeed.removeListener('price', _onPrice);
+    marketFeed.removeListener('fundingRate', _onFundingRate);
+    marketFeed.removeListener('openInterest', _onOpenInterest);
     marketFeed.on('kline', _onKline);
     marketFeed.on('price', _onPrice);
     marketFeed.on('fundingRate', _onFundingRate);

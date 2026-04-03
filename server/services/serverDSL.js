@@ -6,6 +6,8 @@
 const logger = require('./logger');
 const audit = require('./audit');
 
+const DSL_MAX_LOG = 200; // [H2] cap per-position log to prevent unbounded growth
+
 // ══════════════════════════════════════════════════════════════════
 // DSL Configuration Defaults (mirrors client TC/global defaults)
 // ══════════════════════════════════════════════════════════════════
@@ -152,6 +154,9 @@ function tick(posId, price) {
 
     // [ZT-AUD-008] Stamp every valid tick for freshness detection
     s.lastTickTs = Date.now();
+
+    // [H2] Cap log length — trim oldest entries
+    if (s.log.length > DSL_MAX_LOG) s.log.splice(0, s.log.length - DSL_MAX_LOG);
 
     const isLong = s.side === 'LONG';
     const p = s.params;
@@ -385,6 +390,17 @@ function _getPhase(s) {
     if (s.impulseTriggered) return 'IMPULSE';
     return 'PIVOT';
 }
+
+// [RT-04] Hourly cleanup of orphan DSL states (no tick in 2 hours)
+setInterval(() => {
+    const cutoff = Date.now() - 7200000;
+    for (const [id, s] of _states) {
+        if (s.lastTickTs && s.lastTickTs < cutoff) {
+            logger.info('DSL', `[S${id}] Orphan cleanup — no tick for 2h`);
+            _states.delete(id);
+        }
+    }
+}, 3600000);
 
 module.exports = {
     attach,

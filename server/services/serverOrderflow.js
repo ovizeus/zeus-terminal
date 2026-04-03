@@ -156,14 +156,14 @@ function _cleanupAll() {
     const vpCutoff = now - VP_WINDOW_MS;
 
     for (const [, st] of _state) {
-        // Trim trades
-        while (st.trades.length > 0 && st.trades[0].ts < tradeCutoff) {
-            st.trades.shift();
-        }
-        // Trim VP trades
-        while (st.vpTrades.length > 0 && st.vpTrades[0].ts < vpCutoff) {
-            st.vpTrades.shift();
-        }
+        // [H4] Trim trades — single splice instead of O(n) shift loop
+        const ti = st.trades.findIndex(t => t.ts >= tradeCutoff);
+        if (ti > 0) st.trades.splice(0, ti);
+        else if (ti === -1 && st.trades.length > 0) st.trades.length = 0;
+        // [H4] Trim VP trades — single splice
+        const vi = st.vpTrades.findIndex(t => t.ts >= vpCutoff);
+        if (vi > 0) st.vpTrades.splice(0, vi);
+        else if (vi === -1 && st.vpTrades.length > 0) st.vpTrades.length = 0;
         // Cap VP trades to prevent memory growth
         if (st.vpTrades.length > 50000) {
             st.vpTrades.splice(0, st.vpTrades.length - 50000);

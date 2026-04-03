@@ -18,7 +18,7 @@ function _getStream() {
     if (!_stream || _stream.destroyed) {
         try {
             _stream = fs.createWriteStream(AUDIT_FILE, { flags: 'a' });
-            _stream.on('error', (err) => { console.error('[AUDIT] Stream error:', err.message); _stream = null; });
+            _stream.on('error', (err) => { console.error('[AUDIT] Stream error:', err.message); try { _stream.destroy(); } catch (_) {} _stream = null; });
         } catch (_) { }
     }
     return _stream;

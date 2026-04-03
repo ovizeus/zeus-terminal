@@ -1038,7 +1038,7 @@ router.post('/pin/verify', async (req, res) => {
         }
 
         const storedHash = db.getUserPin(user.id);
-        if (!storedHash) return res.status(200).json({ error: 'pin_not_set' });
+        if (!storedHash) return res.status(400).json({ error: 'pin_not_set' }); // [SC-09]
         const { pin } = req.body;
         if (!pin || typeof pin !== 'string') return res.status(400).json({ error: 'invalid_pin' });
         const valid = await bcrypt.compare(pin, storedHash);
@@ -1049,7 +1049,7 @@ router.post('/pin/verify', async (req, res) => {
             if (!pa || now > pa.resetAt) { pa = { count: 0, resetAt: now + PIN_WINDOW }; pinAttempts.set(user.id, pa); }
             pa.count++;
             db.auditLog(user.id, 'PIN_VERIFY_FAILED', { attempts: pa.count }, req.ip);
-            res.json({ ok: false, error: 'invalid_pin' });
+            res.status(401).json({ ok: false, error: 'invalid_pin' }); // [SC-09]
         }
     } catch (err) { res.status(401).json({ error: 'session_invalid' }); }
 });

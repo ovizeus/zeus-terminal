@@ -1604,7 +1604,7 @@ function onPriceUpdate(symbol, price) {
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
             } else if (price >= pos.tp) {
-                var tpPnlReal = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
+                const tpPnlReal = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_TP', price, tpPnlReal);
                 closed = true;
             }
@@ -1616,7 +1616,7 @@ function onPriceUpdate(symbol, price) {
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
             } else if (price <= pos.tp) {
-                var tpPnlRealS = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
+                const tpPnlRealS = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_TP', price, tpPnlRealS);
                 closed = true;
             }

@@ -9,6 +9,14 @@ const cookieParser = require('cookie-parser');
 const _activity = new Map();
 const INACTIVITY_TIMEOUT_MS = parseInt(process.env.SESSION_INACTIVITY_MIN, 10) * 60000 || 4 * 3600000; // default 4h
 
+// [RT-05] Hourly cleanup of stale activity entries
+setInterval(() => {
+    const cutoff = Date.now() - INACTIVITY_TIMEOUT_MS;
+    for (const [uid, ts] of _activity) {
+        if (ts < cutoff) _activity.delete(uid);
+    }
+}, 3600000);
+
 function createSessionAuth(jwtSecret) {
     return function sessionAuth(req, res, next) {
         // Public paths — no auth required

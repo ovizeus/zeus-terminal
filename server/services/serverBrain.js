@@ -66,6 +66,13 @@ const _cooldowns = new Map();   // 'userId:symbol' → lastEntryTs
 const _regimeTgLastTs = new Map();  // userId → timestamp
 const REGIME_TG_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
 
+// [RT-03] Hourly cleanup of stale cooldowns and TG throttle entries
+setInterval(() => {
+    const now = Date.now();
+    for (const [k, ts] of _cooldowns) { if (now - ts > 3600000) _cooldowns.delete(k); }
+    for (const [k, ts] of _regimeTgLastTs) { if (now - ts > 3600000) _regimeTgLastTs.delete(k); }
+}, 3600000);
+
 // ── Decision log (ring buffer) ──
 const DECISION_LOG_MAX = 200;
 const _decisionLog = [];
@@ -782,7 +789,7 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
     const rsiV = (snap.rsi && snap.rsi['5m']) || 50;
     const rsiStrength = Math.abs(rsiV - 50) / 50;
     const indScore = (adxNorm * 0.6 + rsiStrength * 0.4);
-    const indWeight = 0.20;
+    const indWeight = 0.18; // [H7] was 0.20 — total was 1.02, now sums to 1.00
 
     // [BRAIN-V2] MTF Alignment: 12%
     const mtfScore = _calcMTFAlignment(snap, confluence);

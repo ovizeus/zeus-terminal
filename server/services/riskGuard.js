@@ -85,6 +85,13 @@ function _makeTracker() {
 
 // [AUDIT] Per-user daily loss TG dedupe — one alert per user per owner per day
 const _dailyLossAlerted = {};  // { "userId:owner:date" → true }
+// [BUGFIX] Cleanup stale daily alert keys (keep only today)
+setInterval(() => {
+  const today = new Date().toISOString().slice(0, 10);
+  for (const k of Object.keys(_dailyLossAlerted)) {
+    if (!k.endsWith(today)) delete _dailyLossAlerted[k];
+  }
+}, 3600000); // hourly
 
 function _getUserState(userId) {
   // [RM-05] Defensive: return safe default instead of throwing — prevents caller crash

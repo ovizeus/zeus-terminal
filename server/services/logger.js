@@ -19,7 +19,7 @@ function _getStream() {
     if (!_logStream || _logStream.destroyed) {
         try {
             _logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
-            _logStream.on('error', (err) => { console.error('[LOGGER] Stream error:', err.message); _logStream = null; });
+            _logStream.on('error', (err) => { console.error('[LOGGER] Stream error:', err.message); try { _logStream.destroy(); } catch (_) {} _logStream = null; });
         } catch (_) { }
     }
     return _logStream;
