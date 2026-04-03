@@ -28,6 +28,7 @@ const serverSessionProfile = require('./serverSessionProfile');
 const serverDrawdownGuard = require('./serverDrawdownGuard');
 const serverMultiEntry = require('./serverMultiEntry');
 const serverVolatilityEngine = require('./serverVolatilityEngine');
+const brainLogger = require('./brainLogger');
 
 // ══════════════════════════════════════════════════════════════════
 // Configuration
@@ -88,6 +89,8 @@ function start() {
     _timer = setInterval(_runCycle, CYCLE_INTERVAL_MS);
     // Run first cycle after short delay to let data settle
     setTimeout(_runCycle, 5000);
+    // [ML] Daily prune of old decision snapshots
+    setInterval(() => { try { brainLogger.prune(); } catch (_) {} }, 86400000);
 }
 
 function _restoreStcFromDb() {
@@ -148,6 +151,71 @@ function stop() {
     }
     _running = false;
     logger.info('BRAIN', 'Server brain stopped');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [ML] Build snapshot for brainLogger
+// ══════════════════════════════════════════════════════════════════
+function _buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, extra) {
+    try {
+        const s = {
+            // Identity
+            userId, symbol, cycle: _cycleCount, ts: Date.now(),
+            // Price
+            price: snap.price, priceTs: snap.priceTs,
+            dataAge: snap.priceTs ? Date.now() - snap.priceTs : null,
+            // Raw 5m indicators
+            rsi5m: (snap.rsi && snap.rsi['5m']) || null,
+            adx: ind.adx != null ? +ind.adx.toFixed(2) : null,
+            macdDir: ind.macdDir || null,
+            stDir: ind.stDir || null,
+            bbWidth: ind.bbWidth != null ? +ind.bbWidth.toFixed(4) : null,
+            atr: ind.atr != null ? +ind.atr.toFixed(4) : null,
+            fr: snap.fr != null ? snap.fr : null,
+            oi: snap.oi != null ? snap.oi : null,
+            // Regime
+            regime: regime.regime, regimeConf: regime.confidence,
+            trendBias: regime.trendBias, volatilityState: regime.volatilityState,
+            trapRisk: regime.trapRisk,
+            // Confluence
+            confScore: confluence.score,
+            confBullDirs: confluence.bullDirs, confBearDirs: confluence.bearDirs,
+            confIsBull: confluence.isBull,
+            // Gates
+            gateAllOk: gates ? gates.allOk : null,
+            gateReasons: gates ? gates.reasons : [],
+            // Fusion
+            finalConfidence: fusion ? fusion.confidence : 0,
+            finalDir: fusion ? fusion.dir : 'neutral',
+            finalTier: fusion ? fusion.decision : 'NO_TRADE',
+            fusionReasons: fusion ? fusion.reasons : [],
+        };
+        // Fusion intermediates (if available)
+        if (fusion && fusion._intermediates) {
+            s.fusRawConfidence = fusion._intermediates.fusRawConfidence;
+            s.fusConfNorm = fusion._intermediates.fusConfNorm;
+            s.fusRegimeScore = fusion._intermediates.fusRegimeScore;
+            s.fusAlignScore = fusion._intermediates.fusAlignScore;
+            s.fusIndScore = fusion._intermediates.fusIndScore;
+            s.fusMtfScore = fusion._intermediates.fusMtfScore;
+            s.fusStructScore = fusion._intermediates.fusStructScore;
+            s.fusFlowScore = fusion._intermediates.fusFlowScore;
+            s.fusSentScore = fusion._intermediates.fusSentScore;
+            s.modStructure = fusion._intermediates.modifiers.structure;
+            s.modLiquidity = fusion._intermediates.modifiers.liquidity;
+            s.modLiqAnticipation = fusion._intermediates.modifiers.liqAnticipation;
+            s.modJournal = fusion._intermediates.modifiers.journal;
+            s.modKnn = fusion._intermediates.modifiers.knn;
+            s.modSession = fusion._intermediates.modifiers.session;
+            s.modVolatility = fusion._intermediates.modifiers.volatility;
+            s.modTilt = fusion._intermediates.modifiers.tilt;
+            s.modTrapRisk = fusion._intermediates.modifiers.trapRisk;
+            s.modRegimeDanger = fusion._intermediates.modifiers.regimeDanger;
+        }
+        // Extra fields from caller
+        if (extra) Object.assign(s, extra);
+        return s;
+    } catch (_) { return { userId, symbol, ts: Date.now(), cycle: _cycleCount }; }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -245,10 +313,24 @@ function _runCycle() {
                         const pendStc = pendingResult.pending.stc || serverRegimeParams.getAdaptedParams(regime.regime, stc);
                         const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId);
                         if (entry) {
+                            // [ML] Link pending snapshot to the created position
+                            const _pendSnapId = pendingResult.pending._snapId;
+                            if (_pendSnapId && entry.seq) {
+                                try {
+                                    brainLogger.linkSeq(_pendSnapId, entry.seq);
+                                    brainLogger.updateAction(_pendSnapId, pendingResult.action === 'FILL' ? 'pending_fill' : 'pending_momentum');
+                                } catch (_) {}
+                            }
                             logger.info('BRAIN', `[2G] Pending ${pendingResult.action} executed for uid=${userId} ${symbol}`);
                         }
                     }
-                    // EXPIRE and CANCEL — nothing to do, already cleaned up
+                    // [ML] Handle EXPIRE — update snapshot action
+                    if (pendingResult.action === 'EXPIRE' || pendingResult.action === 'CANCEL') {
+                        const _pendSnapId = pendingResult.pending._snapId;
+                        if (_pendSnapId) {
+                            try { brainLogger.updateAction(_pendSnapId, pendingResult.action === 'EXPIRE' ? 'pending_expire' : 'pending_cancel'); } catch (_) {}
+                        }
+                    }
                 }
 
                 // [V3] Multi-entry / pyramiding check for existing winning positions
@@ -267,6 +349,12 @@ function _runCycle() {
                             const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId);
                             if (scaleEntry) {
                                 serverMultiEntry.recordScaleIn(userId, symbol, snap.price, scaleStc.size);
+                                try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
+                                    sourcePath: 'scale_in', finalAction: 'entry',
+                                    finalConfidence: confluence.score, finalDir: existingPos.side,
+                                    finalTier: 'SMALL', linkedSeq: scaleEntry.seq || null,
+                                    scaleLevel: scaleCheck.level, scaleSizeMult: scaleCheck.sizeMultiplier,
+                                })); } catch (_) {}
                                 logger.info('BRAIN', `[V3] Scale-in L${scaleCheck.level} ${symbol} uid=${userId}`);
                             }
                         }
@@ -277,6 +365,10 @@ function _runCycle() {
                 const sessionBlock = serverSessionProfile.checkSessionBlock(userId);
                 if (sessionBlock.blocked) {
                     _logDecision('BLOCKED', 'session', null, { reason: sessionBlock.reason });
+                    try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
+                        sourcePath: 'no_trade', finalAction: 'blocked_session', finalTier: 'NO_TRADE', finalDir: 'neutral', finalConfidence: 0,
+                        sessionBlocked: true, sessionBlockReason: sessionBlock.reason,
+                    })); } catch (_) {}
                     continue;
                 }
 
@@ -287,6 +379,11 @@ function _runCycle() {
                 const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
                 if (ddAssess.locked) {
                     _logDecision('BLOCKED', 'drawdown_lockout', null, { drawdownPct: ddAssess.drawdownPct });
+                    try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
+                        sourcePath: 'no_trade', finalAction: 'blocked_drawdown', finalTier: 'NO_TRADE', finalDir: 'neutral', finalConfidence: 0,
+                        ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
+                        ddTier: ddAssess.tier ? ddAssess.tier.label : 'LOCKOUT', ddLocked: true,
+                    })); } catch (_) {}
                     continue;
                 }
 
@@ -331,6 +428,13 @@ function _runCycle() {
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: questioning.concerns.map(c => c.type),
                         });
+                        try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
+                            sourcePath: 'no_trade', finalAction: 'blocked_reflection',
+                            reflProceed: false, reflConcernCount: questioning.concerns.length,
+                            reflConcernTypes: questioning.concerns.map(c => c.type),
+                            ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
+                            ddTier: ddAssess.tier ? ddAssess.tier.label : 'GREEN',
+                        })); } catch (_) {}
                         continue; // skip to next user
                     }
 
@@ -342,6 +446,12 @@ function _runCycle() {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('reflection_penalty');
                             serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
+                            try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
+                                sourcePath: 'no_trade', finalAction: 'blocked_reflection_penalty',
+                                finalConfidence: decision.fusion.confidence, finalTier: 'NO_TRADE',
+                                modReflectionPenalty: questioning.totalPenalty,
+                                ddDailyPnL: dailyPnL, ddRefBalance: refBalance,
+                            })); } catch (_) {}
                             continue;
                         } else if (decision.fusion.confidence < 72) {
                             decision.fusion.decision = 'SMALL';
@@ -365,6 +475,11 @@ function _runCycle() {
                     const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
                     if (!corrCheck.allowed) {
                         _logDecision('BLOCKED', 'correlation', decision, { reason: corrCheck.reason });
+                        try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
+                            sourcePath: 'no_trade', finalAction: 'blocked_correlation',
+                            corrAllowed: false, corrReason: corrCheck.reason,
+                            corrCorrelatedWith: corrCheck.correlatedWith || [],
+                        })); } catch (_) {}
                         continue;
                     }
 
@@ -375,6 +490,11 @@ function _runCycle() {
                         if (decision.fusion.confidence < 62) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('correlation_penalty');
+                            try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
+                                sourcePath: 'no_trade', finalAction: 'blocked_correlation_penalty',
+                                finalConfidence: decision.fusion.confidence, finalTier: 'NO_TRADE',
+                                modCorrelation: corrMod,
+                            })); } catch (_) {}
                             continue;
                         }
                     }
@@ -388,18 +508,44 @@ function _runCycle() {
                     const finalSizeMult = sizingResult.multiplier * ddSizeScale;
                     const sizingStc = { ...volAdjustedStc, size: Math.round(volAdjustedStc.size * finalSizeMult) };
 
+                    // [ML] Build snapshot for this trade decision
+                    const _mlExtra = {
+                        finalConfidence: decision.fusion.confidence, finalTier: decision.fusion.decision,
+                        finalDir: decision.fusion.dir,
+                        modReflectionPenalty: questioning.totalPenalty || 0,
+                        modCorrelation: corrMod < 1.0 ? corrMod : 1.0,
+                        corrAllowed: true,
+                        sizingKellyMult: sizingResult.multiplier, sizingReason: sizingResult.reason,
+                        sizingFinalMult: finalSizeMult,
+                        sizeBrainIntended: sizingStc.size,
+                        ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
+                        ddTier: ddAssess.tier ? ddAssess.tier.label : 'GREEN',
+                        ddSizeScale: ddSizeScale, ddConfBoost: ddAssess.confBoost || 0,
+                        volLevel: volProfile.level, volScore: volProfile.score,
+                        volSlMult: volProfile.slMultiplier,
+                        sessionName: sessionBlock.session || null,
+                    };
+
                     // [2G] Pending Entry System — wait for pullback instead of instant entry
                     const pending = serverPendingEntry.createPending(decision, sizingStc, userId, marketCtx);
                     if (pending) {
                         _cooldowns.set(userId + ':' + decision.symbol, Date.now());
                         _persistCooldowns();
+                        const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
+                            Object.assign({}, _mlExtra, { sourcePath: 'pending_created', finalAction: 'pending_created' })
+                        ));
+                        if (_snapId && pending) pending._snapId = _snapId; // carry for Phase 2 linkage
                         logger.info(`[BRAIN] Pending entry created for user ${userId} ${decision.symbol} (${volAdjustedStc.cooldownMs}ms cooldown)`);
                     } else {
                         // Fallback: if pending creation failed (e.g., already pending), execute directly
+                        const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
+                            Object.assign({}, _mlExtra, { sourcePath: 'direct', finalAction: 'entry' })
+                        ));
                         const entry = serverAT.processBrainDecision(decision, sizingStc, userId);
                         if (entry) {
                             _cooldowns.set(userId + ':' + decision.symbol, Date.now());
                             _persistCooldowns();
+                            if (_snapId && entry.seq) brainLogger.linkSeq(_snapId, entry.seq);
                             logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);
                         }
                     }
@@ -408,6 +554,11 @@ function _runCycle() {
                     if (fusion.confidence > 50) {
                         serverReflection.trackSkippedTrade(snap.symbol, confluence.isBull ? 'LONG' : 'SHORT', fusion.confidence, snap.price, userId);
                     }
+                    try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
+                        sourcePath: 'no_trade', finalAction: gates.allOk ? 'no_trade' : 'blocked_gates',
+                        ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
+                        ddTier: ddAssess.tier ? ddAssess.tier.label : 'GREEN',
+                    })); } catch (_) {}
                 }
             }
 
@@ -660,30 +811,40 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
         mtfScore * mtfWeight + structScore * structWeight +
         flowScore * flowWeight + sentScore * sentWeight) * 100;
 
+    // ── [ML] Track all modifiers for data layer ──
+    const _mods = {
+        structure: 1.0, liquidity: 1.0, liqAnticipation: 1.0,
+        journal: 1.0, knn: 1.0, session: 1.0, volatility: 1.0,
+        tilt: 1.0, trapRisk: 1.0, regimeDanger: 1.0,
+    };
+
+    const fusRawConfidence = confidence; // capture pre-modifier value
+
     // ── Structure modifier (CHoCH contra = penalty, BOS with = boost) ──
     if (tradeDir !== 'neut') {
-        const structMod = serverStructure.getStructureModifier(tradeDir, structure);
-        confidence *= structMod;
+        _mods.structure = serverStructure.getStructureModifier(tradeDir, structure);
+        confidence *= _mods.structure;
     }
 
     // ── Liquidity modifier (near liquidity zone = penalty) ──
     if (tradeDir !== 'neut') {
         const liq = serverLiquidity.getLiquidity(snap.symbol, bars || [], snap.price);
         let liqMod = serverLiquidity.getLiquidityModifier(tradeDir, liq);
-        // [3I] Liquidity anticipation — avoid traps, ride grabs
         const antic = serverLiquidity.getAnticipation(snap.symbol, bars || [], snap.price);
-        if (antic.tradeBias === 'avoid_long' && tradeDir === 'bull') liqMod *= 0.85;
-        if (antic.tradeBias === 'avoid_short' && tradeDir === 'bear') liqMod *= 0.85;
-        if (antic.tradeBias === 'bull' && tradeDir === 'bull') liqMod *= 1.08; // grabbed below → bullish
-        if (antic.tradeBias === 'bear' && tradeDir === 'bear') liqMod *= 1.08; // grabbed above → bearish
+        _mods.liqAnticipation = 1.0;
+        if (antic.tradeBias === 'avoid_long' && tradeDir === 'bull') { liqMod *= 0.85; _mods.liqAnticipation = 0.85; }
+        if (antic.tradeBias === 'avoid_short' && tradeDir === 'bear') { liqMod *= 0.85; _mods.liqAnticipation = 0.85; }
+        if (antic.tradeBias === 'bull' && tradeDir === 'bull') { liqMod *= 1.08; _mods.liqAnticipation = 1.08; }
+        if (antic.tradeBias === 'bear' && tradeDir === 'bear') { liqMod *= 1.08; _mods.liqAnticipation = 1.08; }
+        _mods.liquidity = liqMod;
         confidence *= liqMod;
     }
 
     // ── Journal learning modifier (adaptive from trade history) ──
     if (userId && tradeDir !== 'neut') {
         const dir = confluence.isBull ? 'LONG' : 'SHORT';
-        const journalMod = serverJournal.getAdaptiveModifier(userId, r, dir, snap.symbol);
-        confidence *= journalMod;
+        _mods.journal = serverJournal.getAdaptiveModifier(userId, r, dir, snap.symbol);
+        confidence *= _mods.journal;
     }
 
     // ── KNN pattern matching modifier ──
@@ -691,38 +852,40 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
         const knnPred = serverKNN.predict(snap, confluence, ind, userId);
         if (knnPred) {
             const knnDir = confluence.isBull ? 'LONG' : 'SHORT';
-            const knnMod = serverKNN.getKNNModifier(knnDir, knnPred);
-            confidence *= knnMod;
+            _mods.knn = serverKNN.getKNNModifier(knnDir, knnPred);
+            confidence *= _mods.knn;
         }
     }
 
     // ── [V3] Session modifier ──
     if (userId) {
-        const sessMod = serverSessionProfile.getSessionModifier(userId);
-        confidence *= sessMod;
+        _mods.session = serverSessionProfile.getSessionModifier(userId);
+        confidence *= _mods.session;
     }
 
     // ── [V3] Volatility modifier ──
     if (bars && bars.length > 30) {
         const snap2 = { indicators: ind, symbol: ind.symbol };
         const volProf = serverVolatilityEngine.assessVolatility(snap2, bars);
-        const volMod = serverVolatilityEngine.getVolatilityModifier(volProf);
-        confidence *= volMod;
+        _mods.volatility = serverVolatilityEngine.getVolatilityModifier(volProf);
+        confidence *= _mods.volatility;
     }
 
     // ── [V3] Drawdown tilt modifier ──
     if (userId) {
-        const tiltMod = serverDrawdownGuard.getTiltModifier(userId);
-        confidence *= tiltMod;
+        _mods.tilt = serverDrawdownGuard.getTiltModifier(userId);
+        confidence *= _mods.tilt;
     }
 
     // ── Trap risk penalty ──
     if (regime.trapRisk >= 40) {
-        confidence *= (1 - regime.trapRisk * 0.005); // up to 50% reduction at trapRisk=100
+        _mods.trapRisk = (1 - regime.trapRisk * 0.005);
+        confidence *= _mods.trapRisk;
     }
 
     // ── Regime danger penalty ──
     if (r === 'CHAOS' || r === 'LIQUIDATION_EVENT') {
+        _mods.regimeDanger = 0.5;
         confidence *= 0.5;
     }
 
@@ -755,6 +918,19 @@ function _computeFusion(snap, ind, confluence, regime, gates, bars, userId) {
         confidence,
         score: confluence.score,
         reasons,
+        // [ML] Intermediates for data layer — not used by decision pipeline
+        _intermediates: {
+            fusConfNorm: +confNorm.toFixed(4),
+            fusRegimeScore: +regimeScore.toFixed(4),
+            fusAlignScore: +alignScore.toFixed(4),
+            fusIndScore: +indScore.toFixed(4),
+            fusMtfScore: +mtfScore.toFixed(4),
+            fusStructScore: +structScore.toFixed(4),
+            fusFlowScore: +flowScore.toFixed(4),
+            fusSentScore: +sentScore.toFixed(4),
+            fusRawConfidence: +fusRawConfidence.toFixed(2),
+            modifiers: _mods,
+        },
     };
 }
 

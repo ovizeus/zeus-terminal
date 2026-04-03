@@ -1310,6 +1310,20 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     }
     _persistState(userId);
 
+    // [ML] Link trade outcome to brain decision snapshot
+    try {
+        const brainLogger = require('./brainLogger');
+        const holdMin = pos.closeTs && pos.ts ? +((pos.closeTs - pos.ts) / 60000).toFixed(1) : 0;
+        brainLogger.linkOutcomeBySeq(pos.seq, {
+            pnl: pnl,
+            mae: pos.quality ? pos.quality.mae : null,
+            mfe: pos.quality ? pos.quality.mfe : null,
+            holdMin: holdMin,
+            capturedPct: pos.quality ? pos.quality.capturedPct : null,
+            closeReason: exitType,
+        });
+    } catch (_) { /* ML logging failure must never affect trading */ }
+
     // [REFLECTION] Post-trade reflection — brain analyzes what happened
     try {
         const serverReflection = require('./serverReflection');

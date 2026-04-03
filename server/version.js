@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.5.0',
-    build: 20,
+    build: 21,
     date: '2026-04-03',
-    changelog: 'Brain V3: correlation guard, adaptive sizing, session profiling, drawdown guard, multi-entry scaling, volatility engine'
+    changelog: 'ML data layer: brain decision snapshots with full feature capture + outcome linkage'
 };

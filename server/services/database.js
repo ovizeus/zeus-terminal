@@ -256,6 +256,30 @@ migrate('011_trade_annotations', () => {
     `);
 });
 
+migrate('014_brain_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS brain_decisions (
+            snap_id     TEXT PRIMARY KEY,
+            user_id     INTEGER NOT NULL,
+            symbol      TEXT NOT NULL,
+            ts          INTEGER NOT NULL,
+            cycle       INTEGER NOT NULL,
+            source_path TEXT NOT NULL,
+            final_tier  TEXT NOT NULL,
+            final_conf  INTEGER NOT NULL,
+            final_dir   TEXT NOT NULL,
+            final_action TEXT NOT NULL,
+            linked_seq  INTEGER DEFAULT NULL,
+            data        TEXT NOT NULL,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_bd_user_ts ON brain_decisions(user_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_bd_symbol_ts ON brain_decisions(symbol, ts);
+        CREATE INDEX IF NOT EXISTS idx_bd_linked ON brain_decisions(linked_seq);
+        CREATE INDEX IF NOT EXISTS idx_bd_action ON brain_decisions(final_action, ts);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -327,6 +351,16 @@ const _stmts = {
     annotationUpsert: db.prepare("INSERT INTO trade_annotations (seq, user_id, notes, tags, rating, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now')) ON CONFLICT(seq, user_id) DO UPDATE SET notes = excluded.notes, tags = excluded.tags, rating = excluded.rating, updated_at = datetime('now')"),
     annotationGet: db.prepare('SELECT notes, tags, rating FROM trade_annotations WHERE seq = ? AND user_id = ?'),
     annotationsByUser: db.prepare('SELECT seq, notes, tags, rating FROM trade_annotations WHERE user_id = ? ORDER BY seq DESC'),
+    // Brain decisions (ML data layer)
+    bdInsert: db.prepare('INSERT INTO brain_decisions (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, linked_seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    bdLinkSeq: db.prepare('UPDATE brain_decisions SET linked_seq = ? WHERE snap_id = ?'),
+    bdUpdateData: db.prepare('UPDATE brain_decisions SET data = ? WHERE snap_id = ?'),
+    bdUpdateAction: db.prepare('UPDATE brain_decisions SET final_action = ? WHERE snap_id = ?'),
+    bdGetBySnap: db.prepare('SELECT snap_id, data FROM brain_decisions WHERE snap_id = ?'),
+    bdGetBySeq: db.prepare('SELECT snap_id, data FROM brain_decisions WHERE linked_seq = ?'),
+    bdPruneNoTrade: db.prepare("DELETE FROM brain_decisions WHERE final_tier = 'NO_TRADE' AND linked_seq IS NULL AND ts < ?"),
+    bdPruneBlocked: db.prepare("DELETE FROM brain_decisions WHERE final_action LIKE 'blocked_%' AND ts < ?"),
+    bdCount: db.prepare('SELECT COUNT(*) as cnt, final_action FROM brain_decisions GROUP BY final_action'),
     // Missed trades
     missedInsert: db.prepare('INSERT INTO missed_trades (user_id, symbol, side, reason, price, confidence, tier, regime, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     missedByUser: db.prepare('SELECT id, symbol, side, reason, price, confidence, tier, regime, data, created_at FROM missed_trades WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'),
@@ -716,4 +750,30 @@ module.exports = {
     },
     getRegimeHistory: (symbol, limit) => _stmts.regimeBySymbol.all(symbol, limit || 100),
     getRegimeHistoryAll: (limit) => _stmts.regimeRecent.all(limit || 100),
+    // Brain decisions (ML data layer)
+    bdInsert: (snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, data) => {
+        _stmts.bdInsert.run(snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, JSON.stringify(data));
+    },
+    bdLinkSeq: (snapId, seq) => _stmts.bdLinkSeq.run(seq, snapId),
+    bdUpdateData: (snapId, data) => _stmts.bdUpdateData.run(JSON.stringify(data), snapId),
+    bdUpdateAction: (snapId, action) => _stmts.bdUpdateAction.run(action, snapId),
+    bdGetBySnap: (snapId) => {
+        const row = _stmts.bdGetBySnap.get(snapId);
+        if (!row) return null;
+        try { row.data = JSON.parse(row.data); } catch (_) { row.data = {}; }
+        return row;
+    },
+    bdGetBySeq: (seq) => {
+        const rows = _stmts.bdGetBySeq.all(seq);
+        for (const r of rows) { try { r.data = JSON.parse(r.data); } catch (_) { r.data = {}; } }
+        return rows;
+    },
+    bdPrune: () => {
+        const now = Date.now();
+        const d30 = now - 30 * 86400000;
+        const d90 = now - 90 * 86400000;
+        _stmts.bdPruneNoTrade.run(d30);
+        _stmts.bdPruneBlocked.run(d90);
+    },
+    bdCount: () => _stmts.bdCount.all(),
 };

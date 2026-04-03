@@ -246,7 +246,8 @@ function _persist(userId) {
         for (const [sym, p] of up) {
             data[sym] = { symbol: p.symbol, dir: p.dir, tier: p.tier, confidence: p.confidence,
                 entryPrice: p.entryPrice, targetPrice: p.targetPrice, candleCount: p.candleCount,
-                maxCandles: p.maxCandles, createdAt: p.createdAt, status: p.status };
+                maxCandles: p.maxCandles, createdAt: p.createdAt, status: p.status,
+                _snapId: p._snapId || null };
         }
         db.atSetState('pending:' + userId, data, parseInt(userId, 10) || null);
     } catch (_) { /* best effort */ }
