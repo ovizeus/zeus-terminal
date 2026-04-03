@@ -151,3 +151,229 @@ body {
 .zr-kv__value--grn {
   color: var(--grn);
 }
+
+/* ── Loading screen ── */
+.zr-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: var(--bg);
+}
+.zr-loading__text {
+  color: var(--gold);
+  font-size: 18px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  animation: zr-pulse 1.5s ease-in-out infinite;
+}
+@keyframes zr-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ── Login page ── */
+.zr-login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 16px;
+}
+.zr-login__card {
+  background: var(--bg2);
+  border: 1px solid var(--brd);
+  border-radius: 8px;
+  padding: 32px;
+  width: 100%;
+  max-width: 380px;
+}
+.zr-login__title {
+  color: var(--gold);
+  font-size: 20px;
+  text-align: center;
+  margin-bottom: 24px;
+  letter-spacing: 2px;
+}
+.zr-login__input {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--bg3);
+  border: 1px solid var(--brd);
+  border-radius: 4px;
+  color: var(--whi);
+  font-family: var(--ff);
+  font-size: 13px;
+  outline: none;
+}
+.zr-login__input:focus {
+  border-color: var(--gold);
+}
+.zr-login__btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  margin-top: 4px;
+  background: var(--gold);
+  color: var(--bg);
+  border: none;
+  border-radius: 4px;
+  font-family: var(--ff);
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  letter-spacing: 1px;
+}
+.zr-login__btn:hover { opacity: 0.9; }
+.zr-login__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.zr-login__btn--danger {
+  background: var(--red);
+  color: var(--whi);
+  margin-top: 16px;
+}
+.zr-login__error {
+  background: rgba(255, 51, 85, 0.15);
+  border: 1px solid var(--red);
+  color: var(--red);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.zr-login__info {
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid var(--blu);
+  color: var(--blu);
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.zr-login__switch {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.zr-login__switch button {
+  background: none;
+  border: none;
+  color: var(--blu);
+  font-family: var(--ff);
+  font-size: 12px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ── Settings gear button ── */
+.zr-header__settings-btn {
+  background: none;
+  border: 1px solid var(--brd);
+  border-radius: 3px;
+  color: var(--txt);
+  font-size: 16px;
+  padding: 0 6px;
+  cursor: pointer;
+  line-height: 1;
+}
+.zr-header__settings-btn:hover { color: var(--gold); }
+
+/* ── Modal overlay ── */
+.zr-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.zr-modal {
+  background: var(--bg2);
+  border: 1px solid var(--brd);
+  border-radius: 8px;
+  width: 90%;
+  max-width: 460px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+}
+.zr-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--brd);
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--whi);
+}
+.zr-modal__close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 20px;
+  cursor: pointer;
+}
+.zr-modal__close:hover { color: var(--red); }
+.zr-modal__tabs {
+  display: flex;
+  border-bottom: 1px solid var(--brd);
+}
+.zr-modal__tab {
+  flex: 1;
+  padding: 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--dim);
+  font-family: var(--ff);
+  font-size: 11px;
+  font-weight: bold;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+.zr-modal__tab:hover { color: var(--txt); }
+.zr-modal__tab--active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+.zr-modal__body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ── Settings fields ── */
+.zr-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.zr-settings__label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--txt);
+}
+.zr-settings__select,
+.zr-settings__input {
+  font-family: var(--ff);
+  font-size: 12px;
+  background: var(--bg3);
+  color: var(--whi);
+  border: 1px solid var(--brd);
+  border-radius: 3px;
+  padding: 4px 8px;
+  width: 120px;
+  text-align: right;
+}
+.zr-settings__select:focus,
+.zr-settings__input:focus {
+  border-color: var(--gold);
+  outline: none;
+}

@@ -1,5 +1,4 @@
-import { useUiStore } from '../../stores'
-import { useMarketStore } from '../../stores'
+import { useUiStore, useMarketStore } from '../../stores'
 import type { ThemeId } from '../../types'
 
 const THEMES: { id: ThemeId; label: string }[] = [
@@ -12,6 +11,7 @@ export function Header() {
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
   const connected = useUiStore((s) => s.connected)
+  const toggleSettings = useUiStore((s) => s.toggleSettings)
   const symbol = useMarketStore((s) => s.market.symbol)
   const price = useMarketStore((s) => s.market.price)
 
@@ -38,6 +38,9 @@ export function Header() {
             <option key={t.id} value={t.id}>{t.label}</option>
           ))}
         </select>
+        <button className="zr-header__settings-btn" onClick={toggleSettings} title="Settings">
+          &#9881;
+        </button>
       </div>
     </header>
   )
