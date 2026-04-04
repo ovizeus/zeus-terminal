@@ -2014,44 +2014,71 @@ body {
 .zr-kv__value--ylw { color: var(--gold); }
 
 /* ══════════════════════════════════════════════════════════
-   V6 STRIP ACCENT (used by original strips for icon + label)
+   V6 PANEL BAR SYSTEM — 1:1 from main.css lines 9817-11050
+   Split card: .v6-accent left + .v6-content right
    ══════════════════════════════════════════════════════════ */
 .v6-accent {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  width: 54px; flex-shrink: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px; padding: 10px 6px; position: relative;
+}
+.v6-accent::after {
+  content: ''; position: absolute; right: 0; top: 12%; bottom: 12%; width: 1px;
 }
 .v6-ico {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 28px; height: 28px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
 }
 .v6-ico svg {
-  width: 14px;
-  height: 14px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 1.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: 14px; height: 14px; display: block; fill: none;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
 .v6-lbl {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 1.5px;
-  color: var(--dim);
+  font-family: 'Orbitron', sans-serif; font-size: 7px; font-weight: 900;
+  letter-spacing: .15em; text-align: center; line-height: 1.3; word-break: break-all;
 }
 .v6-content {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  font-size: 11px;
+  flex: 1; background: linear-gradient(135deg, #0b1522 0%, #070d1a 60%, #040910 100%);
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px 10px 12px;
+  position: relative; overflow: hidden; min-height: 50px;
+  font-family: 'Rajdhani', sans-serif; font-size: 13px; font-weight: 500;
+  letter-spacing: .04em; color: var(--v6-text);
 }
+.v6-content::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; opacity: .3;
+}
+.v6-content::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 60%; height: 1px; opacity: .15;
+}
+.v6-content .v6-hi { color: #c0d8e8; font-weight: 600; }
+.v6-content .v6-neg { color: var(--v6-red); font-weight: 600; }
+.v6-content .v6-pos { color: #00e676; font-weight: 600; }
+
+/* ── ARES strip bar ── */
+#ares-strip-bar .v6-accent { background: linear-gradient(160deg, rgba(0,229,204,.18), rgba(0,229,204,.05)); }
+#ares-strip-bar .v6-accent::after { background: linear-gradient(180deg, transparent, rgba(0,229,204,.5), transparent); box-shadow: 0 0 6px rgba(0,229,204,.25); }
+#ares-strip-bar .v6-ico { background: rgba(0,229,204,.09); border: 1px solid rgba(0,229,204,.25); }
+#ares-strip-bar .v6-ico svg { stroke: var(--v6-cyan); filter: drop-shadow(0 0 5px rgba(0,229,204,.7)); }
+#ares-strip-bar .v6-lbl { color: var(--v6-cyan); text-shadow: 0 0 12px rgba(0,229,204,.7); }
+#ares-strip-bar .v6-content::before { background: linear-gradient(90deg, rgba(0,229,204,.7), transparent 60%); }
+#ares-strip-bar .v6-content::after { background: var(--v6-cyan); }
+
+/* ── ARIA strip bar ── */
+.aria-bar .v6-accent { background: linear-gradient(160deg, rgba(0,229,204,.18), rgba(0,229,204,.05)); }
+.aria-bar .v6-accent::after { background: linear-gradient(180deg, transparent, rgba(0,229,204,.5), transparent); box-shadow: 0 0 6px rgba(0,229,204,.25); }
+.aria-bar .v6-ico { background: rgba(0,229,204,.09); border: 1px solid rgba(0,229,204,.25); }
+.aria-bar .v6-ico svg { stroke: var(--v6-cyan); filter: drop-shadow(0 0 5px rgba(0,229,204,.7)); }
+.aria-bar .v6-lbl { color: var(--v6-cyan); text-shadow: 0 0 12px rgba(0,229,204,.7); }
+.aria-bar .v6-content::before { background: linear-gradient(90deg, rgba(0,229,204,.7), transparent 60%); }
+.aria-bar .v6-content::after { background: var(--v6-cyan); }
+
+/* ── NOVA strip bar ── */
+.nova-bar .v6-accent { background: linear-gradient(160deg, rgba(176,96,255,.18), rgba(176,96,255,.06)); }
+.nova-bar .v6-accent::after { background: linear-gradient(180deg, transparent, rgba(176,96,255,.6), transparent); box-shadow: 0 0 6px rgba(176,96,255,.3); }
+.nova-bar .v6-ico { background: rgba(176,96,255,.12); border: 1px solid rgba(176,96,255,.3); }
+.nova-bar .v6-ico svg { stroke: var(--v6-purple); filter: drop-shadow(0 0 5px rgba(176,96,255,.7)); }
+.nova-bar .v6-lbl { color: var(--v6-purple); text-shadow: 0 0 12px rgba(176,96,255,.7); }
+.nova-bar .v6-content::before { background: linear-gradient(90deg, rgba(176,96,255,.8), transparent 60%); }
+.nova-bar .v6-content::after { background: var(--v6-purple); }
 
 /* ══════════════════════════════════════════════════════════
    ACTIVITY FEED
@@ -3701,15 +3728,279 @@ body {
 }
 
 /* ══════════════════════════════════════════════════════════════════
-   ARES — meta titles, stat cells, thought log, lesson
+   ARES — full panel CSS (1:1 from deepdive.js _aresCSS + _v114CSS +
+   _v116CSS + _aresMetaLayoutFix + _aresDesktopCSS + _ariaBrainCSS)
    ══════════════════════════════════════════════════════════════════ */
-.ares-meta-title {
-  font-size: 9px;
-  letter-spacing: 2px;
-  color: #445566;
-  margin-bottom: 3px;
-  font-family: monospace;
+
+/* ── Strip Banner ── */
+#ares-strip { background: transparent; border-bottom: none; margin: 3px 6px; position: relative; }
+#ares-strip-bar {
+  display: flex; align-items: center; justify-content: space-between; padding: 0; min-height: 44px;
+  cursor: pointer; user-select: none; gap: 0; transition: border-color .25s, box-shadow .25s;
+  background: none; border: none; border-radius: 10px; opacity: 1; position: relative; overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(0,229,204,.30), 0 4px 24px rgba(0,229,204,.09);
 }
+#ares-strip-bar:hover {
+  transform: translateY(-1px) translateX(2px);
+  box-shadow: 0 0 0 1.5px rgba(0,229,204,.6), 0 8px 36px rgba(0,229,204,.16);
+}
+#ares-strip-bar::before, #ares-strip-bar::after {
+  content: ''; display: block; position: absolute; width: 8px; height: 8px;
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 10; border-color: var(--v6-cyan);
+}
+#ares-strip-bar::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; border-radius: 2px 0 0 0; }
+#ares-strip-bar::after { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; border-radius: 0 0 2px 0; }
+#ares-strip-bar:hover::before, #ares-strip-bar:hover::after { opacity: 1; }
+
+#ares-strip-title {
+  font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #00d9ff;
+  display: flex; align-items: center; gap: 6px; font-family: monospace;
+}
+#ares-strip-badge {
+  font-size: 11px; padding: 2px 6px; border-radius: 999px; letter-spacing: 1px; font-weight: 700;
+  border: 1px solid currentColor; font-family: monospace; box-shadow: 0 0 8px currentColor;
+}
+#ares-strip-conf, #ares-imm-span, #ares-emotion-span { display: none; }
+#ares-strip.open #ares-strip-conf, #ares-strip.open #ares-imm-span, #ares-strip.open #ares-emotion-span { display: inline; }
+#ares-strip-chev { font-size: 8px; color: #00d9ff44; transition: transform .25s; flex-shrink: 0; opacity: .35; }
+#ares-strip-panel { max-height: 0; overflow: hidden; transition: max-height .5s cubic-bezier(.4,0,.2,1); }
+#ares-strip.open #ares-strip-panel { max-height: 900px; }
+#ares-strip.open #ares-strip-chev { transform: rotate(180deg); }
+#ares-strip.open #ares-strip-bar { opacity: 1; }
+#ares-imm-span { font-size: 11px; color: #f0c04088; letter-spacing: 1px; font-family: monospace; white-space: nowrap; }
+#ares-emotion-span { font-size: 11px; color: #ffffff66; letter-spacing: 1px; font-family: monospace; margin-left: 2px; }
+
+/* ── In PageView: hide strip bar, show panel fully ── */
+.zpv-content #ares-strip { display: block !important; }
+.zpv-content #ares-strip-bar { display: none !important; }
+.zpv-content #ares-wound-line { display: none !important; }
+.zpv-content #ares-decision-line { display: none !important; }
+.zpv-content #ares-strip-panel { max-height: none !important; overflow: visible !important; }
+
+/* ── Wound / Decision lines ── */
+#ares-wound-line { font-size: 13px; color: #ff335588; letter-spacing: 1px; font-family: monospace; padding: 1px 10px 0; display: none !important; }
+#ares-decision-line { font-size: 12px; letter-spacing: 0.5px; font-family: monospace; padding: 1px 10px 0; display: none; }
+
+/* ── Main Panel ── */
+#ares-panel {
+  background: linear-gradient(180deg, #00050f 0%, #000818 60%, #000d20 100%);
+  padding: 0; font-family: monospace; position: relative; overflow: hidden;
+}
+#ares-panel::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse at 50% 20%, #0080ff0a 0%, #00d9ff04 40%, transparent 75%);
+  pointer-events: none; z-index: 0;
+}
+#ares-panel::after {
+  content: ''; position: absolute; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,.08) 3px, rgba(0,0,0,.08) 4px);
+  pointer-events: none; z-index: 10;
+}
+
+/* ── Meta Row (Stage + Wallet + Objectives) ── */
+#ares-meta-row {
+  display: grid !important;
+  grid-template-columns: minmax(120px, 1fr) minmax(108px, .92fr) minmax(120px, 1fr) !important;
+  align-items: start !important; gap: 8px !important; padding: 6px 10px 2px !important;
+  box-sizing: border-box !important; width: 100% !important; position: relative; z-index: 2;
+}
+#ares-stage-col, #ares-wallet-col, #ares-obj-col { min-width: 0 !important; overflow: hidden !important; box-sizing: border-box !important; }
+#ares-stage-col { padding-left: 14px !important; }
+#ares-wallet-col { padding: 0 4px !important; }
+#ares-obj-col { padding-right: 6px !important; text-align: right; min-width: 130px; }
+.ares-meta-title {
+  font-size: 11px; letter-spacing: 2px; color: #0080ff66;
+  font-family: monospace; margin-bottom: 2px; text-transform: uppercase;
+}
+.ares-stage-name { font-size: 10px; color: #00ff88e8; font-family: monospace; letter-spacing: 1px; font-weight: 700; }
+.ares-prog-bar { font-size: 13px; color: #00ff88bb; font-family: monospace; letter-spacing: 0; margin-top: 1px; }
+.ares-prog-next { font-size: 12px; color: #0080ff99; font-family: monospace; margin-top: 1px; }
+.ares-obj-item { font-size: 12px; font-family: monospace; margin-bottom: 1px; letter-spacing: 0.3px; opacity: 1; }
+.ares-obj-item.active { color: #00ff88cc; opacity: 0.92; font-weight: 700; }
+.ares-obj-item.done { color: #00d9ff88; opacity: 0.65; }
+.ares-obj-bar { font-size: 11px; font-family: monospace; color: #00ff8877; margin-bottom: 4px; }
+#ares-obj-col .ares-obj-item, #ares-obj-col .ares-obj-bar { white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important; }
+
+/* ── Positions ── */
+#ares-positions-wrap { border-top: 1px solid rgba(0,150,255,0.12); padding-left: 14px !important; padding-right: 12px !important; }
+#ares-positions-list::-webkit-scrollbar { width: 3px; }
+#ares-positions-list::-webkit-scrollbar-thumb { background: rgba(0,200,255,0.25); border-radius: 2px; }
+#ares-close-all-btn:hover { background: rgba(255,50,50,0.3) !important; border-color: rgba(255,80,80,0.7) !important; }
+
+/* ── Mission Arc ── */
+#ares-arc-wrap { padding: 12px 12px 0; position: relative; z-index: 2; }
+#ares-arc-svg { width: 100%; height: 64px; display: block; }
+
+/* ── Neural Brain Core ── */
+#ares-core-wrap { display: flex; justify-content: center; align-items: center; padding: 4px 0 0; position: relative; z-index: 2; }
+#ares-core-svg { width: 100%; max-width: 480px; height: auto; display: block; overflow: visible; }
+
+/* ── Cognitive Clarity Bar ── */
+#ares-cog-bar { display: flex; align-items: center; gap: 8px; margin: 4px 12px 6px; z-index: 2; position: relative; }
+#ares-cog-label { font-size: 10px; color: #0080ff77; letter-spacing: 2px; flex-shrink: 0; }
+#ares-cog-track { flex: 1; height: 3px; background: #0080ff11; border-radius: 2px; overflow: hidden; }
+#ares-cog-fill { height: 3px; background: linear-gradient(90deg, #0080ff, #00d9ff, #ffffff); border-radius: 2px; transition: width .8s ease; box-shadow: 0 0 6px #00d9ffaa; }
+#ares-cog-pct { font-size: 10px; color: #00d9ffaa; letter-spacing: 1px; min-width: 28px; text-align: right; }
+
+/* ── Stats Row ── */
+#ares-stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin: 6px 12px; border: 1px solid #0080ff12; border-radius: 3px; overflow: hidden; z-index: 2; position: relative; }
+.ares-stat-cell { background: #000510; padding: 5px 4px; text-align: center; }
+.ares-stat-label { font-size: 10px; color: #0080ff44; letter-spacing: 1.2px; margin-bottom: 2px; }
+.ares-stat-val { font-size: 13px; font-weight: 900; letter-spacing: 1px; }
+.ares-stat-sub { font-size: 10px; color: #0080ff33; margin-top: 1px; }
+
+/* ── Thought Stream ── */
+#ares-thought-wrap { height: 68px; overflow: hidden; position: relative; margin: 4px 12px; border: 1px solid #0080ff18; border-radius: 3px; background: #000510; z-index: 2; }
+#ares-thought-wrap::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 18px; background: linear-gradient(180deg, #000510, transparent); z-index: 3; pointer-events: none; }
+#ares-thought-wrap::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 18px; background: linear-gradient(0deg, #000510, transparent); z-index: 3; pointer-events: none; }
+#ares-thought-inner { position: absolute; width: 100%; }
+.ares-thought-line { padding: 2px 8px; font-size: 11px; color: #0080ff55; letter-spacing: .5px; line-height: 1.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ares-thought-line.new { color: #00d9ffcc; text-shadow: 0 0 8px #00d9ff66; }
+.ares-thought-line.alert { color: #ff6644cc; }
+
+/* ─�� Last Lesson ── */
+#ares-lesson-wrap { margin: 6px 12px 10px; padding: 7px 10px; background: #000510; border: 1px solid #f0c04018; border-radius: 3px; position: relative; z-index: 2; }
+#ares-lesson-label { font-size: 10px; color: #f0c04055; letter-spacing: 2px; margin-bottom: 4px; }
+#ares-lesson-text { font-size: 11px; color: #f0c040aa; line-height: 1.7; letter-spacing: .3px; }
+#ares-history-bar { display: flex; gap: 2px; margin-top: 6px; }
+.ares-hist-dot { width: 14px; height: 8px; border-radius: 1px; flex-shrink: 0; }
+
+/* ── Brain Animation Keyframes (from _ariaBrainCSS) ── */
+@keyframes ariaZone { 0%,100% { opacity: .12; } 50% { opacity: .32; } }
+@keyframes ariaEdge { 0% { stroke-dashoffset: 60; opacity: .08; } 50% { opacity: .45; } 100% { stroke-dashoffset: 0; opacity: .08; } }
+@keyframes ariaHot { 0%,100% { opacity: .40; } 50% { opacity: .95; } }
+@keyframes ariaPulse { 0%,100% { opacity: .25; } 50% { opacity: .92; } }
+@keyframes aresThoughtScroll { 0% { transform: translateY(0); } 100% { transform: translateY(-50%); } }
+@keyframes aresBrainPulse { 0%,100% { filter: drop-shadow(0 0 8px #00d9ff66) drop-shadow(0 0 20px #0080ff33); } 50% { filter: drop-shadow(0 0 16px #00d9ffcc) drop-shadow(0 0 40px #0080ff66); } }
+
+/* ── ARES Desktop Readability (min-width: 768px) ── */
+@media (min-width: 768px) {
+  #ares-strip-bar { height: 44px !important; padding: 0 14px !important; }
+  #ares-strip-title { font-size: 13px !important; letter-spacing: 5px !important; gap: 8px !important; }
+  #ares-strip-title > span:first-child { font-size: 15px !important; }
+  #ares-strip-title > span:last-child { font-size: 13px !important; letter-spacing: 1.5px !important; }
+  #ares-strip-badge { font-size: 10px !important; padding: 3px 10px !important; letter-spacing: 1.2px !important; }
+  .ares-meta-title { font-size: 13px !important; letter-spacing: 2.5px !important; margin-bottom: 3px !important; }
+  .ares-stage-name { font-size: 14px !important; letter-spacing: 1.5px !important; }
+  .ares-prog-bar { font-size: 12px !important; margin-top: 2px !important; }
+  .ares-prog-next { font-size: 10.5px !important; margin-top: 2px !important; }
+  #ares-wallet-col { min-width: 140px !important; padding: 0 10px !important; }
+  #ares-wallet-balance { font-size: 16px !important; letter-spacing: 1.5px !important; }
+  #ares-wallet-avail { font-size: 13px !important; }
+  .ares-obj-item { font-size: 10.5px !important; margin-bottom: 4px !important; letter-spacing: .4px !important; }
+  .ares-obj-bar { font-size: 13px !important; margin-bottom: 5px !important; }
+  #ares-meta-row { gap: 12px !important; padding: 8px 14px 4px !important; }
+  #ares-cog-bar { margin: 6px 14px 8px !important; gap: 10px !important; }
+  #ares-cog-label { font-size: 12px !important; letter-spacing: 2.5px !important; }
+  #ares-cog-track { height: 5px !important; }
+  #ares-cog-fill { height: 5px !important; }
+  #ares-cog-pct { font-size: 13px !important; min-width: 36px !important; }
+  #ares-stats-row { margin: 8px 14px !important; gap: 2px !important; }
+  .ares-stat-cell { padding: 7px 6px !important; }
+  .ares-stat-label { font-size: 11px !important; letter-spacing: 1.5px !important; margin-bottom: 3px !important; }
+  .ares-stat-val { font-size: 13px !important; letter-spacing: 1.2px !important; }
+  .ares-stat-sub { font-size: 11px !important; margin-top: 2px !important; }
+  #ares-thought-wrap { height: 100px !important; margin: 6px 14px !important; }
+  .ares-thought-line { font-size: 13px !important; padding: 3px 10px !important; line-height: 1.9 !important; }
+  #ares-lesson-wrap { margin: 8px 14px 12px !important; padding: 9px 12px !important; }
+  #ares-lesson-label { font-size: 13px !important; letter-spacing: 2.5px !important; margin-bottom: 5px !important; }
+  #ares-lesson-text { font-size: 10px !important; line-height: 1.8 !important; }
+  .ares-hist-dot { width: 18px !important; height: 10px !important; }
+  #ares-arc-wrap { padding: 14px 14px 0 !important; }
+  #ares-arc-svg { height: 72px !important; }
+  #ares-strip.open #ares-strip-panel { max-height: 1200px !important; }
+}
+
+/* ── ARES Mobile ── */
+@media (max-width: 420px) {
+  #ares-meta-row { grid-template-columns: minmax(108px, 1fr) minmax(96px, .88fr) minmax(108px, 1fr) !important; gap: 6px !important; padding: 6px 6px 2px !important; }
+  #ares-stage-col { padding-left: 16px !important; }
+  #ares-wallet-col { padding: 0 2px !important; }
+  #ares-obj-col { padding-right: 4px !important; }
+  #ares-obj-col .ares-obj-item { font-size: 11px !important; letter-spacing: .2px !important; }
+  #ares-obj-col .ares-obj-bar { font-size: 11px !important; }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   ARIA strip — 1:1 from main.css + arianova.js
+   ══════════════════════════════════════════════════════════════════ */
+#aria-strip { background: #020608; border-bottom: 1px solid #00ffcc22; position: relative; overflow: hidden; }
+.aria-bar {
+  display: flex; align-items: center; gap: 6px; padding: 5px 12px; cursor: pointer; min-height: 36px;
+  font-family: var(--ff); font-size: 10px; letter-spacing: 1px; user-select: none;
+  color: #00ffcc77; background: linear-gradient(90deg, #00ffcc06, transparent);
+  border-left: 2px solid #00ffcc33; opacity: .6; border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(0,229,204,.30), 0 4px 24px rgba(0,229,204,.09);
+  transition: background .2s, opacity .25s, transform .16s ease, box-shadow .16s ease;
+}
+.aria-bar:hover { transform: translateY(-1px) translateX(2px); box-shadow: 0 0 0 1.5px rgba(0,229,204,.6), 0 8px 36px rgba(0,229,204,.16); }
+.aria-title { color: #00d9ff; font-size: 13px; letter-spacing: 2px; flex-shrink: 0; text-shadow: 0 0 12px #00d9ff99, 0 0 24px var(--cyan-a27); }
+.aria-sep { color: rgba(0,255,204,.2); flex-shrink: 0; }
+#aria-bar-txt { flex: 1; color: #00ffcc88; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aria-dot { width: 5px; height: 5px; border-radius: 50%; background: #00ffcc33; flex-shrink: 0; }
+.aria-dot.aria-scan { animation: ariaDotPulse 2.4s ease-in-out infinite; }
+@keyframes ariaDotPulse { 0%,100% { opacity: .25; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.25); } }
+.aria-chev { font-size: 12px; color: #00ffcc44; transition: transform .25s; flex-shrink: 0; }
+#aria-strip.aria-open .aria-chev { transform: rotate(180deg); }
+#aria-strip.aria-open .aria-bar { background: linear-gradient(90deg, #00ffcc14, transparent); opacity: 1; gap: 10px; padding: 7px 12px; }
+#aria-bar-txt, .aria-sep, #aria-dot { display: none; }
+#aria-strip.aria-open #aria-bar-txt, #aria-strip.aria-open .aria-sep { display: inline; }
+#aria-strip.aria-open #aria-dot { display: block; }
+.aria-panel { display: none; background: inherit; border-top: 1px solid #00ffcc12; padding: 7px 12px 10px; }
+#aria-strip.aria-open .aria-panel { display: block; }
+.aria-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.aria-col-hdr { font-size: 12px; letter-spacing: 2px; color: #00ffcc44; margin-bottom: 4px; }
+.aria-svg-wrap { width: 100%; height: 48px; }
+.aria-psvg { width: 100%; height: 48px; display: block; }
+.aria-pname { font-size: 10px; color: #00ffcccc; letter-spacing: 1px; margin: 3px 0; }
+.aria-meta { display: flex; gap: 8px; font-size: 13px; flex-wrap: wrap; }
+.aria-lbl { color: #00ffcc33; }
+.aria-col-r { font-size: 13px; }
+.aria-cline { display: flex; gap: 5px; margin-bottom: 3px; color: #00ffcc88; }
+.aria-mtf { display: flex; flex-direction: column; gap: 1px; margin-top: 2px; }
+.aria-verdict-row { display: flex; align-items: center; gap: 8px; margin-top: 7px; padding-top: 6px; border-top: 1px solid #00ffcc0d; }
+.aria-verdict { font-size: 10px; letter-spacing: 2px; padding: 2px 7px; border: 1px solid #00ffcc33; border-radius: 1px; color: #00ffcc88; white-space: nowrap; }
+.aria-verdict-txt { font-size: 13px; color: #00ffcc44; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ══════════════════════════════════════════════════════════════════
+   NOVA strip — 1:1 from main.css + arianova.js
+   ══════════════════════════════════════════════════════════════════ */
+#nova-strip { background: #020408; border-bottom: 1px solid #aa44ff22; position: relative; }
+.nova-bar {
+  color: #aa44ff77; background: linear-gradient(90deg, #aa44ff06, transparent);
+  border-left: 2px solid #aa44ff33; display: flex; align-items: center; gap: 6px; padding: 5px 12px;
+  cursor: pointer; min-height: 36px; font-family: var(--ff); font-size: 10px; letter-spacing: 1px;
+  user-select: none; opacity: .6; border-radius: 10px;
+  box-shadow: 0 0 0 1px rgba(176,96,255,.35), 0 4px 24px rgba(176,96,255,.12);
+  transition: background .2s, opacity .25s, transform .16s ease, box-shadow .16s ease;
+}
+.nova-bar:hover { transform: translateY(-1px) translateX(2px); box-shadow: 0 0 0 1.5px rgba(176,96,255,.7), 0 8px 36px rgba(176,96,255,.22); }
+.nova-title { color: #00d9ff; font-size: 13px; letter-spacing: 2px; flex-shrink: 0; text-shadow: 0 0 12px #00d9ff99, 0 0 24px var(--cyan-a27); }
+.nova-sep { color: rgba(0,255,204,.2); flex-shrink: 0; }
+#nova-bar-txt { flex: 1; color: #aa44ff88; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#nova-bar-txt.nova-blocked { color: var(--red); }
+#nova-bar-txt.nova-ready { color: var(--grn); }
+.nova-chev { font-size: 12px; color: #aa44ff44; transition: transform .25s; flex-shrink: 0; }
+#nova-strip.nova-open .nova-chev { transform: rotate(180deg); }
+#nova-strip.nova-open .nova-bar { background: linear-gradient(90deg, #aa44ff14, transparent); opacity: 1; gap: 10px; padding: 7px 12px; }
+#nova-bar-txt, .nova-sep, #nova-bar-aria { display: none; }
+#nova-strip.nova-open #nova-bar-txt, #nova-strip.nova-open .nova-sep { display: inline; }
+#nova-strip.nova-open #nova-bar-aria { display: inline; }
+.nova-panel { display: none; background: inherit; border-top: 1px solid #aa44ff12; padding: 5px 12px 8px; }
+#nova-strip.nova-open .nova-panel { display: block; }
+.nova-log { display: flex; flex-direction: column; gap: 2px; max-height: 120px; overflow-y: auto; }
+.nova-log-row { display: flex; gap: 7px; align-items: baseline; font-size: 13px; padding: 2px 0; border-bottom: 1px solid #aa44ff08; }
+.nova-log-row:last-child { border-bottom: none; }
+.nova-log-ts { color: #aa44ff33; white-space: nowrap; flex-shrink: 0; font-size: 12px; }
+.nova-log-msg { flex: 1; color: #aa44ff77; }
+.nova-log-info .nova-log-msg { color: #aa44ff88; }
+.nova-log-warn .nova-log-msg { color: #f0c040aa; }
+.nova-log-danger .nova-log-msg { color: #ff3355aa; }
+.nova-log-ok .nova-log-msg { color: #00d97aaa; }
+.nova-empty { font-size: 13px; color: #aa44ff22; padding: 6px 0; text-align: center; letter-spacing: 1px; }
+
+/* ── Panel bodies: shared border-radius ── */
+.aria-panel, .nova-panel, #ares-strip-panel { border-radius: 0 0 10px 10px; margin: 2px 6px 0; }
 
 /* ══════════════════════════════════════════════════════════════════
    ANALYSIS SECTIONS — .sec, .slbl base
