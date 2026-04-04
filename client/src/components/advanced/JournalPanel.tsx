@@ -22,7 +22,7 @@ export function JournalPanel() {
     <div className="zr-journal">
       <div className="zr-journal__header">
         <span className="zr-journal__title">TRADE JOURNAL</span>
-        <button className="zr-at-btn" onClick={exportCSV} disabled={entries.length === 0}>
+        <button className="csv-btn" onClick={exportCSV} disabled={entries.length === 0}>
           CSV
         </button>
       </div>
