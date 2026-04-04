@@ -52,30 +52,28 @@ import { Footer } from './Footer'
  *
  * ALL strips are hidden on home (display:none !important in old CSS).
  * Every strip is accessed ONLY via dock icon → PageView overlay.
+ *
+ * BRIDGE: All panels always mounted in #zeus-groups so old JS can find
+ * them via getElementById at any time. Active panel shown via PageView.
  */
 
-/** Map dock id → page view title + component (1:1 from old dock.js + pageview.js) */
-const DOCK_PAGES: Record<string, { title: string; component: () => ReactNode }> = {
-  // ── Trading group ──
-  'autotrade':    { title: 'AutoTrade',    component: () => <AutoTradePanel /> },
-  'manual-trade': { title: 'Manual Trade', component: () => <ManualTradePanel /> },
-  'dsl':          { title: 'DSL',          component: () => <DSLZonePanel /> },
-  'ares':         { title: 'ARES',         component: () => <ARESPanel /> },
-  // ── Review group ──
-  'postmortem':   { title: 'Post-Mortem',  component: () => <PostMortemPanel /> },
-  'pnllab':       { title: 'PnL Lab',     component: () => <PnlLabPanel /> },
-  // ── Intel group ──
-  'aria':         { title: 'ARIA',         component: () => <ARIAPanel /> },
-  'nova':         { title: 'Nova',         component: () => <NovaPanel /> },
-  'adaptive':     { title: 'Adaptive',     component: () => <AdaptivePanel /> },
-  'flow':         { title: 'Flow',         component: () => <FlowPanel /> },
-  'mtf':          { title: 'MTF',          component: () => <MTFPanel /> },
-  'teacher':      { title: 'Teacher',      component: () => <TeacherDockPanel /> },
-  'sigreg':       { title: 'Signals',      component: () => <SignalRegistryPanel /> },
-  // ── Review group (cont) ──
-  'activity':     { title: 'Activity',     component: () => <ActivityFeedPanel /> },
-  'aub':          { title: 'Alien',        component: () => <AUBPanel /> },
-  // 'more' has no page view — special dock button
+/** Map dock id → page view title (1:1 from old dock.js + pageview.js) */
+const DOCK_TITLES: Record<string, string> = {
+  'autotrade': 'AutoTrade',
+  'manual-trade': 'Manual Trade',
+  'dsl': 'DSL',
+  'ares': 'ARES',
+  'postmortem': 'Post-Mortem',
+  'pnllab': 'PnL Lab',
+  'aria': 'ARIA',
+  'nova': 'Nova',
+  'adaptive': 'Adaptive',
+  'flow': 'Flow',
+  'mtf': 'MTF',
+  'teacher': 'Teacher',
+  'sigreg': 'Signals',
+  'activity': 'Activity',
+  'aub': 'Alien',
 }
 
 export function PanelShell() {
@@ -92,14 +90,14 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  const activePage = dockActive ? DOCK_PAGES[dockActive] : null
+  const activeTitle = dockActive ? DOCK_TITLES[dockActive] : null
 
   return (
     <>
-      {/* ── Full-screen page view (over everything, like original zpv) ── */}
-      {activePage && (
-        <PageView title={activePage.title} onClose={closePageView}>
-          <ErrorBoundary>{activePage.component()}</ErrorBoundary>
+      {/* ── Full-screen page view overlay header ── */}
+      {dockActive && activeTitle && (
+        <PageView title={activeTitle} onClose={closePageView}>
+          {/* Content rendered via #zeus-groups below, made visible via CSS */}
         </PageView>
       )}
 
@@ -121,7 +119,7 @@ export function PanelShell() {
       <DecisionLogPanel visible={activeModal === 'decisionlog'} onClose={closeModal} />
 
       <main className="zr-panels">
-        {/* ── Mode Bar — 1:1 from original zeus-mode-bar (first element in initZeusGroups order) ── */}
+        {/* ── Mode Bar — 1:1 from original zeus-mode-bar ── */}
         <ModeBar />
 
         {/* ── Watchlist Bar ── */}
@@ -157,6 +155,61 @@ export function PanelShell() {
 
         {/* ── Icon Dock — 1:1 from original zeus-dock ── */}
         <ZeusDock active={dockActive} onDockClick={handleDockClick} />
+
+        {/*
+         * ══ BRIDGE: #zeus-groups — ALL panels always in DOM ══
+         * Old JS uses getElementById() to find and populate these elements.
+         * They must exist at all times, not just when PageView is open.
+         * Each panel wrapper is hidden by default; the active dock panel
+         * is shown via zpv-active-panel CSS class inside the PageView overlay.
+         */}
+        <div id="zeus-groups" className={dockActive ? 'zpv-open' : ''}>
+          <div data-panel-id="autotrade" className={dockActive === 'autotrade' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <AutoTradePanel />
+          </div>
+          <div data-panel-id="manual-trade" className={dockActive === 'manual-trade' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <ManualTradePanel />
+          </div>
+          <div data-panel-id="dsl" className={dockActive === 'dsl' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <DSLZonePanel />
+          </div>
+          <div data-panel-id="ares" className={dockActive === 'ares' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <ARESPanel />
+          </div>
+          <div data-panel-id="postmortem" className={dockActive === 'postmortem' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <PostMortemPanel />
+          </div>
+          <div data-panel-id="pnllab" className={dockActive === 'pnllab' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <PnlLabPanel />
+          </div>
+          <div data-panel-id="aria" className={dockActive === 'aria' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <ARIAPanel />
+          </div>
+          <div data-panel-id="nova" className={dockActive === 'nova' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <NovaPanel />
+          </div>
+          <div data-panel-id="adaptive" className={dockActive === 'adaptive' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <AdaptivePanel />
+          </div>
+          <div data-panel-id="flow" className={dockActive === 'flow' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <FlowPanel />
+          </div>
+          <div data-panel-id="mtf" className={dockActive === 'mtf' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <MTFPanel />
+          </div>
+          <div data-panel-id="teacher" className={dockActive === 'teacher' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <TeacherDockPanel />
+          </div>
+          <div data-panel-id="sigreg" className={dockActive === 'sigreg' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <SignalRegistryPanel />
+          </div>
+          <div data-panel-id="activity" className={dockActive === 'activity' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <ActivityFeedPanel />
+          </div>
+          <div data-panel-id="aub" className={dockActive === 'aub' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <AUBPanel />
+          </div>
+        </div>
 
         {/* ── Brain — direct on home, no strip wrapper (1:1 with original) ── */}
         <ErrorBoundary><BrainCockpit /></ErrorBoundary>

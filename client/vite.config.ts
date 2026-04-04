@@ -31,6 +31,16 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      // BRIDGE: Serve old JS files from Express static (public/ dir)
+      '/js': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      // Old CSS files (main.css, components.css, themes.css)
+      '/css': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
   test: {

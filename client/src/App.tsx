@@ -8,6 +8,7 @@ import { useUiStore, useAuthStore } from './stores'
 import { useServerSync } from './hooks/useServerSync'
 import { useBrainEngine } from './hooks/useBrainEngine'
 import { useForecastEngine } from './hooks/useForecastEngine'
+import { useLegacyBridge } from './bridge'
 import { wsService } from './services/ws'
 import './app.css'
 
@@ -40,10 +41,17 @@ export function App() {
   useServerSync(authenticated)
 
   // Brain computation engine (runs on kline updates)
+  // NOTE: When bridge is active, old brain.js runs instead (more complete).
+  // React brain still runs as fallback — old brain overwrites its DOM output.
   useBrainEngine(authenticated)
 
   // Forecast engine — QEB, probability score, scenarios (runs after brain)
   useForecastEngine(authenticated)
+
+  // ── LEGACY BRIDGE — load old JS scripts after React mount ──
+  // Old JS populates React DOM elements via getElementById().
+  // Runs old brain, orderflow, trading, UI engines.
+  useLegacyBridge(authenticated)
 
   if (loading) {
     return (
