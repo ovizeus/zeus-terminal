@@ -52,8 +52,7 @@ export function AutoTradePanel() {
         {bextOpen ? '▲' : '▼'} NEURAL DATA STREAM (tap to expand)
       </button>
 
-      {bextOpen && (
-        <div className="bext show" id="brainExt">
+        <div className="bext show" id="brainExt" style={bextOpen ? undefined : { display: 'none' }}>
           <div className="bext-bg"></div>
           <div className="bext-top">
             <div className="bext-title">⬡ NEURAL DATA STREAM ⬡ QUANTUM ANALYTICS</div>
@@ -119,7 +118,6 @@ export function AutoTradePanel() {
           {/* Data stream ticker */}
           <div className="dstream"><div className="dstream-inner" id="dstreamInner"></div></div>
         </div>
-      )}
 
       <div className="at-line"></div>
       <div className="at-center">

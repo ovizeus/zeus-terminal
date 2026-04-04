@@ -11,9 +11,10 @@ interface ModalOverlayProps {
 }
 
 export function ModalOverlay({ id, visible, onClose, children, maxWidth }: ModalOverlayProps) {
-  if (!visible) return null
+  // Always render in DOM (hidden when !visible) so old JS can find elements by ID.
+  // Old app keeps .mover always in DOM — old JS pre-populates modal fields at boot.
   return (
-    <div className="mover" id={id} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="mover" id={id} style={{ display: visible ? 'flex' : 'none' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal" style={maxWidth ? { maxWidth } : undefined}>
         {children}
       </div>

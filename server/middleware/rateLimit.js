@@ -99,7 +99,7 @@ function atCriticalLimit(req, res, next) {
 }
 
 // ─── Global API limiter (per-IP, covers all /api/ routes) ───
-const _GLOBAL_LIMIT = 200; // per minute per IP — generous baseline
+const _GLOBAL_LIMIT = 600; // per minute per IP — raised for React bridge (old JS + React both make API calls at boot)
 const _globalHits = new Map();
 
 setInterval(() => {

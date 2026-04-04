@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts'
 import { useMarketData, type Kline } from '../../hooks/useMarketData'
 import { useMarketStore } from '../../stores'
+import { registerChart, unregisterChart } from '../../bridge/chartBridge'
 
 /** Chart colors — 1:1 match with original marketData.js */
 const COLORS = {
@@ -196,6 +197,18 @@ export function TradingChart() {
       lastValueVisible: false,
     })
 
+    // ── BRIDGE: Expose chart + series to window for old JS ──
+    registerChart({
+      chart,
+      candle: candleRef.current!,
+      volume: volRef.current!,
+      ema50: ema50Ref.current!,
+      ema200: ema200Ref.current!,
+      wma20: wma20Ref.current!,
+      wma50: wma50Ref.current!,
+      st: stRef.current!,
+    })
+
     // Resize observer
     const ro = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect
@@ -204,6 +217,7 @@ export function TradingChart() {
     ro.observe(containerRef.current)
 
     return () => {
+      unregisterChart()
       ro.disconnect()
       chart.remove()
       chartRef.current = null
@@ -313,7 +327,9 @@ export function TradingChart() {
     useMarketStore.getState().patch({ klines })
   }, [])
 
-  // Connect to Binance data
+  // React fetches klines initially so chart renders fast.
+  // Old JS renderChart() will overwrite with its own data once bridge loads (~5-8s).
+  // After that, old JS manages all updates via cSeries.setData/update through bridge globals.
   useMarketData(onKlinesLoaded, onKlineUpdate)
 
   return <div ref={containerRef} className="zr-chart-container" />

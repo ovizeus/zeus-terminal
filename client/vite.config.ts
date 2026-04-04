@@ -16,11 +16,16 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         cookieDomainRewrite: '',
+        // Rewrite Origin header so server CSRF check (Origin vs Host) passes in dev.
+        // Without this, browser sends Origin: http://localhost:5173 but server sees
+        // Host: localhost:3000 → "Forbidden — origin mismatch" on exempt endpoints.
+        headers: { origin: 'http://localhost:3000' },
       },
       '/auth': {
         target: 'http://localhost:3000',
         changeOrigin: true,
         cookieDomainRewrite: '',
+        headers: { origin: 'http://localhost:3000' },
       },
       '/health': {
         target: 'http://localhost:3000',

@@ -32,6 +32,21 @@ export function ManualTradePanel() {
   }
 
   return (
+    <>
+    {/* Mode toggle separator — NOT shown in pageview (old pageview.js only moves #panelDemo, skips .trade-sep).
+         Kept in DOM so old JS switchGlobalMode() can find btnDemo/btnLive, but hidden via CSS below. */}
+    <div className="trade-sep" style={{ display: 'none' }}>
+      <div className="trade-line" />
+      <div className="trade-btns">
+        <button className="tbtn demo active" id="btnDemo">
+          <span className="tbtn-dot demo-dot" />DEMO MODE
+        </button>
+        <button className="tbtn live" id="btnLive">
+          <span className="tbtn-dot live-dot" />LIVE MODE
+        </button>
+      </div>
+      <div className="trade-line" />
+    </div>
     <div className="trade-panel" id="panelDemo">
       <div className="tp-hdr demo-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
         <span>MANUAL TRADE</span>
@@ -106,7 +121,7 @@ export function ManualTradePanel() {
           <span style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '1px' }}>
             <svg className="z-i" viewBox="0 0 16 16"><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> LIQ PRICE
           </span>
-          <span style={{ fontSize: '13px', fontWeight: 700, color: '#ff5577', fontFamily: "'Cinzel',serif" }}>
+          <span id="demoLiqPrice" style={{ fontSize: '13px', fontWeight: 700, color: '#ff5577', fontFamily: "'Cinzel',serif" }}>
             {liqPrice > 0 ? `$${liqPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
           </span>
         </div>
@@ -144,7 +159,7 @@ export function ManualTradePanel() {
         {/* OPEN POSITIONS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>OPEN POSITIONS</span>
-          <button style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
+          <button id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
         </div>
         <div style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center', padding: '8px' }}>No open positions</div>
 
@@ -170,11 +185,84 @@ export function ManualTradePanel() {
           <div className="jl-hdr">
             <span>TIME</span><span>SIDE</span><span>ENTRY→EXIT</span><span>PnL</span><span>REASON</span>
           </div>
-          <div className="journal-wrap">
+          <div className="journal-wrap" id="journalBody">
             <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>No trades yet</div>
           </div>
         </div>
       </div>
     </div>
+    {/* LIVE TRADING PANEL — old JS populates via positions.js + liveApi.js */}
+    <div className="trade-panel" id="panelLive" style={{ display: 'none' }}>
+      <div className="tp-hdr live-hdr">
+        <span><span className="z-dot z-dot--red" /> LIVE TRADING — REAL FUNDS</span>
+        <span style={{ fontSize: '8px', color: '#ff8800' }}>
+          <svg className="z-i" viewBox="0 0 16 16"><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> USE WITH CAUTION
+        </span>
+      </div>
+      <div className="tp-body">
+        <div className="api-section" id="apiSection">
+          <div id="apiStatus" style={{ padding: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)', lineHeight: 1.8 }}>
+            Checking exchange connection...
+          </div>
+          <button className="tp-exec live-exec" id="btnConnectExchange">CHECK CONNECTION</button>
+        </div>
+        <div id="liveOrderForm" style={{ display: 'none' }}>
+          <div className="tp-sides">
+            <button className="tp-side-btn long-btn act" id="liveLongBtn">LONG ▲</button>
+            <button className="tp-side-btn short-btn" id="liveShortBtn">SHORT ▼</button>
+          </div>
+          <div className="tp-row">
+            <div className="tp-field">
+              <div className="tp-lbl">TYPE</div>
+              <select id="liveOrdType" className="tp-sel" defaultValue="market">
+                <option value="market">MARKET</option>
+                <option value="limit">LIMIT</option>
+              </select>
+            </div>
+            <div className="tp-field">
+              <div className="tp-lbl">LEVERAGE</div>
+              <select id="liveLev" className="tp-sel" defaultValue="20">
+                <option value="1">1x</option><option value="2">2x</option><option value="5">5x</option>
+                <option value="10">10x</option><option value="20">20x</option><option value="50">50x</option>
+                <option value="100">100x</option><option value="custom">✏ Custom</option>
+              </select>
+            </div>
+          </div>
+          <div className="tp-row" id="liveCustomLevRow" style={{ display: 'none' }}>
+            <div className="tp-field" style={{ width: '100%' }}>
+              <div className="tp-lbl">LEVIER CUSTOM (1 — 150x)</div>
+              <input type="number" id="liveCustomLev" className="tp-inp" defaultValue={20} min={1} max={150} step={1} style={{ width: '100%' }} />
+            </div>
+          </div>
+          <div className="tp-row">
+            <div className="tp-field">
+              <div className="tp-lbl">SIZE (USDT)</div>
+              <input type="number" id="liveSize" className="tp-inp" defaultValue={50} step={10} />
+            </div>
+            <div className="tp-field">
+              <div className="tp-lbl">ENTRY</div>
+              <input type="number" id="liveEntry" className="tp-inp" placeholder="Market" step={0.1} />
+            </div>
+          </div>
+          <div style={{ background: '#1a0a0a', border: '1px solid #ff335533', borderRadius: '4px', padding: '7px 10px', margin: '4px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '1px' }}>
+              <svg className="z-i" viewBox="0 0 16 16"><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> LIQ PRICE
+            </span>
+            <span id="liveLiqPrice" style={{ fontSize: '13px', fontWeight: 700, color: '#ff5577', fontFamily: "'Cinzel',serif" }}>—</span>
+          </div>
+          <div className="tp-row">
+            <div className="tp-field"><div className="tp-lbl">TP</div><input type="number" id="liveTP" className="tp-inp" placeholder="—" step={0.1} /></div>
+            <div className="tp-field"><div className="tp-lbl">SL</div><input type="number" id="liveSL" className="tp-inp" placeholder="—" step={0.1} /></div>
+          </div>
+          <div className="tp-pcts">
+            <button className="tp-pct">25%</button><button className="tp-pct">50%</button>
+            <button className="tp-pct">75%</button><button className="tp-pct">100%</button>
+          </div>
+          <button className="tp-exec live-exec"><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
+          <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }}>—</div>
+        </div>
+      </div>
+    </div>
+    </>
   )
 }

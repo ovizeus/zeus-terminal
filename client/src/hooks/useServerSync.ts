@@ -137,27 +137,28 @@ export function useServerSync(authenticated: boolean) {
 
   useEffect(() => {
     if (!authenticated) return
-    // 1. Initial pull — sync/state for positions + balance
-    syncApi.pullState().then((res) => {
-      if (res.ok && res.data) {
-        const snap = res.data
-        const all = filterOpen(snap.positions || [])
-        const demo = all.filter((p) => p.mode !== 'live')
-        const live = all.filter((p) => p.mode === 'live')
-        usePositionsStore.getState().setDemoPositions(demo)
-        usePositionsStore.getState().setLivePositions(live)
-        if (snap.demoBalance) {
-          const bal = extractBalance(snap.demoBalance)
-          usePositionsStore.getState().setDemoBalance(bal.balance)
+
+    // Delay initial pulls to avoid 429 collision with old JS bridge.
+    // Old JS (state.js, config.js) also pulls state/AT/journal at boot.
+    // Wait 8s so bridge loads first, then React does one-time sync.
+    const initTimer = setTimeout(() => {
+      syncApi.pullState().then((res) => {
+        if (res.ok && res.data) {
+          const snap = res.data
+          const all = filterOpen(snap.positions || [])
+          const demo = all.filter((p) => p.mode !== 'live')
+          const live = all.filter((p) => p.mode === 'live')
+          usePositionsStore.getState().setDemoPositions(demo)
+          usePositionsStore.getState().setLivePositions(live)
+          if (snap.demoBalance) {
+            const bal = extractBalance(snap.demoBalance)
+            usePositionsStore.getState().setDemoBalance(bal.balance)
+          }
         }
-      }
-    })
-
-    // 2. Initial AT state pull (gets full state including stats)
-    pullATState()
-
-    // 3. Journal pull
-    pullJournal()
+      })
+      pullATState()
+      pullJournal()
+    }, 8000)
 
     // 4. WS subscription — handles at_update and sync messages
     const unsub = wsService.subscribe((msg: WsMessage) => {
@@ -182,8 +183,8 @@ export function useServerSync(authenticated: boolean) {
       useUiStore.getState().setConnected(true)
     })
 
-    // 5. AT polling fallback — every 10s (same as old frontend)
-    pollRef.current = setInterval(pullATState, 10000)
+    // 5. AT polling fallback — every 30s (old JS already polls at 10s, avoid double-hit)
+    pollRef.current = setInterval(pullATState, 30000)
 
     // 6. Connection status check
     const connInterval = setInterval(() => {
@@ -191,6 +192,7 @@ export function useServerSync(authenticated: boolean) {
     }, 3000)
 
     return () => {
+      clearTimeout(initTimer)
       unsub()
       if (pollRef.current) clearInterval(pollRef.current)
       clearInterval(connInterval)

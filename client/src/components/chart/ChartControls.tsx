@@ -89,7 +89,19 @@ export function ChartControls() {
   const [tsOn, setTsOn] = useState(false)
   const [drawTool, setDrawTool] = useState<string | null>(null)
   const [drawingsVisible, setDrawingsVisible] = useState(true)
+  const [activeInds, setActiveInds] = useState<Record<string, boolean>>({})
   const tfRef = useRef<HTMLDivElement>(null)
+
+  // Sync activeInds from old JS S.activeInds on mount + after bridge loads
+  useEffect(() => {
+    function sync() {
+      const w = window as any
+      if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
+    }
+    sync()
+    const id = setInterval(sync, 2000)
+    return () => clearInterval(id)
+  }, [])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -101,19 +113,37 @@ export function ChartControls() {
   }, [])
 
   function pickTf(tf: string) {
+    const w = window as any
+    if (typeof w.setTF === 'function') w.setTF(tf, null)
     patch({ chartTf: tf })
     setTfOpen(false)
   }
 
-  function togInd(key: keyof typeof indicators) {
-    patch({ indicators: { ...indicators, [key]: !indicators[key] } })
+  function togInd(key: string) {
+    const w = window as any
+    if (typeof w.togInd === 'function') {
+      w.togInd(key, null)
+    }
+    // Sync React state from old JS after toggle
+    if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
+    // Also update React store for the 4 React-managed indicators
+    if (key in indicators) {
+      patch({ indicators: { ...indicators, [key]: !indicators[key] } })
+    }
   }
 
   function togOvr(key: keyof typeof overlays) {
+    const w = window as any
+    if (typeof w.togOvr === 'function') {
+      const btn = document.getElementById('b' + key)
+      try { w.togOvr(key, btn) } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
+    }
     patch({ overlays: { ...overlays, [key]: !overlays[key] } })
   }
 
-  function setSymbol(val: string) {
+  function handleSymbolChange(val: string) {
+    const w = window as any
+    if (typeof w.setSymbol === 'function') w.setSymbol(val)
     patch({ symbol: val })
   }
 
@@ -125,15 +155,25 @@ export function ChartControls() {
     setFsMode(isFull)
   }
 
-  // Session toggles — toggle .act class (1:1 with toggleSession)
-  function toggleSession(key: 'asia' | 'london' | 'ny', el: HTMLButtonElement) {
-    el.classList.toggle('act')
+  // Session toggles — delegate to old JS toggleSession(sess, btn)
+  function handleSession(key: 'asia' | 'london' | 'ny', btn: HTMLButtonElement) {
+    const w = window as any
+    if (typeof w.toggleSession === 'function') {
+      w.toggleSession(key, btn)
+    } else {
+      btn.classList.toggle('act')
+    }
     setSessions(s => ({ ...s, [key]: !s[key] }))
   }
 
-  // VWAP toggle
-  function toggleVWAP(el: HTMLButtonElement) {
-    el.classList.toggle('act')
+  // VWAP toggle — delegate to old JS toggleVWAP(btn)
+  function handleVWAP(btn: HTMLButtonElement) {
+    const w = window as any
+    if (typeof w.toggleVWAP === 'function') {
+      w.toggleVWAP(btn)
+    } else {
+      btn.classList.toggle('act')
+    }
     setVwapOn(v => !v)
   }
 
@@ -144,14 +184,22 @@ export function ChartControls() {
     setTsOn(t => !t)
   }
 
-  // Drawing tools
-  function drawToolActivate(tool: string) {
+  // Drawing tools — delegate to old JS drawingTools.js
+  function handleDrawTool(tool: string) {
+    const w = window as any
+    if (typeof w.drawToolActivate === 'function') {
+      w.drawToolActivate(drawTool === tool ? null : tool)
+    }
     setDrawTool(drawTool === tool ? null : tool)
   }
-  function drawToolToggleVis() {
+  function handleDrawToggleVis() {
+    const w = window as any
+    if (typeof w.drawToolToggleVis === 'function') w.drawToolToggleVis()
     setDrawingsVisible(v => !v)
   }
-  function drawToolClearAll() {
+  function handleDrawClearAll() {
+    const w = window as any
+    if (typeof w.drawToolClearAll === 'function') w.drawToolClearAll()
     setDrawTool(null)
   }
 
@@ -190,7 +238,7 @@ export function ChartControls() {
             id="symSel"
             className="tfb"
             value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
+            onChange={(e) => handleSymbolChange(e.target.value)}
             style={{ height: '24px', padding: '2px 6px' }}
           >
             {SYMBOLS.map((g) => (
@@ -211,19 +259,19 @@ export function ChartControls() {
 
         {/* Row 2: Sessions + VWAP + OVI */}
         <div className="crow">
-          <button className="sess-btn asia" id="sessAsia" title="Asia Session" onClick={(e) => toggleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
-          <button className="sess-btn london" id="sessLondon" title="London Session" onClick={(e) => toggleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
-          <button className="sess-btn ny" id="sessNY" title="New York Session" onClick={(e) => toggleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
-          <button className="vwap-btn" id="vwapBtn" title="VWAP + Bands" onClick={(e) => toggleVWAP(e.currentTarget)}>VWAP</button>
+          <button className="sess-btn asia" id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
+          <button className="sess-btn london" id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
+          <button className="sess-btn ny" id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
+          <button className="vwap-btn" id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
           <button className="vwap-btn" id="oviBtn" title="OVI LIQUID &#8212; Liquidation Pockets" style={{ color: '#f0c040', borderColor: '#f0c04044' }} onClick={() => openModal('ovi')}>OVI</button>
         </div>
 
         {/* Row 3: Indicators + Overlays + Drawing Tools */}
         <div className="crow">
-          <button className={`indb${indicators.ema ? ' act' : ''}`} id="bema" onClick={() => togInd('ema')}>EMA</button>
-          <button className={`indb${indicators.wma ? ' act' : ''}`} id="bwma" onClick={() => togInd('wma')}>WMA</button>
-          <button className={`indb${indicators.st ? ' act' : ''}`} id="bst" onClick={() => togInd('st')}>ST</button>
-          <button className={`indb${indicators.vp ? ' act' : ''}`} id="bvp" onClick={() => togInd('vp')}>VOLP</button>
+          <button className={`indb${activeInds.ema ?? indicators.ema ? ' act' : ''}`} id="bema" onClick={() => togInd('ema')}>EMA</button>
+          <button className={`indb${activeInds.wma ?? indicators.wma ? ' act' : ''}`} id="bwma" onClick={() => togInd('wma')}>WMA</button>
+          <button className={`indb${activeInds.st ?? indicators.st ? ' act' : ''}`} id="bst" onClick={() => togInd('st')}>ST</button>
+          <button className={`indb${activeInds.vp ?? indicators.vp ? ' act' : ''}`} id="bvp" onClick={() => togInd('vp')}>VOLP</button>
           <span style={{ width: '5px' }}></span>
           <button className={`ovrb${overlays.liq ? ' act' : ''}`} id="bliq" onClick={() => togOvr('liq')}>&#128165; LIQ</button><span className="gear" onClick={() => openModal('liq')}>&#9881;&#65039;</span>
           <button className={`ovrb${overlays.zs ? ' act' : ''}`} id="bzs" onClick={() => togOvr('zs')}>&#128081; SUPREMUS</button><span className="gear" onClick={() => openModal('supremus')}>&#9881;&#65039;</span>
@@ -233,11 +281,11 @@ export function ChartControls() {
           <button className={`ovrb${tsOn ? ' act' : ''}`} id="ts-toggle-btn" title="Time &amp; Sales tape (T)" onClick={toggleTimeSales}>&#128200; T&amp;S</button>
           <span style={{ width: '8px' }}></span>
           <span className="dt-sep">|</span>
-          <button className={`dt-btn${drawTool === 'hline' ? ' act' : ''}`} id="dt-hline" title="Horizontal Line (H)" onClick={() => drawToolActivate('hline')}>&#9473;</button>
-          <button className={`dt-btn${drawTool === 'tline' ? ' act' : ''}`} id="dt-tline" title="Trendline (click 2 points)" onClick={() => drawToolActivate('tline')}>&#9585;</button>
-          <button className={`dt-btn${drawTool === 'eraser' ? ' act' : ''}`} id="dt-eraser" title="Eraser (click near line)" onClick={() => drawToolActivate('eraser')}>&#9003;</button>
-          <button className={`dt-btn${!drawingsVisible ? ' act' : ''}`} id="dt-eye" title="Toggle drawings visibility" onClick={drawToolToggleVis}>&#128065;</button>
-          <button className="dt-btn" title="Clear all drawings" style={{ color: 'var(--red, #ff3355)' }} onClick={drawToolClearAll}>&#128465;</button>
+          <button className={`dt-btn${drawTool === 'hline' ? ' act' : ''}`} id="dt-hline" title="Horizontal Line (H)" onClick={() => handleDrawTool('hline')}>&#9473;</button>
+          <button className={`dt-btn${drawTool === 'tline' ? ' act' : ''}`} id="dt-tline" title="Trendline (click 2 points)" onClick={() => handleDrawTool('tline')}>&#9585;</button>
+          <button className={`dt-btn${drawTool === 'eraser' ? ' act' : ''}`} id="dt-eraser" title="Eraser (click near line)" onClick={() => handleDrawTool('eraser')}>&#9003;</button>
+          <button className={`dt-btn${!drawingsVisible ? ' act' : ''}`} id="dt-eye" title="Toggle drawings visibility" onClick={handleDrawToggleVis}>&#128065;</button>
+          <button className="dt-btn" title="Clear all drawings" style={{ color: 'var(--red, #ff3355)' }} onClick={handleDrawClearAll}>&#128465;</button>
         </div>
       </div>
 
@@ -250,7 +298,7 @@ export function ChartControls() {
         </div>
         <div className="ind-panel-body" id="indPanelBody">
           {IND_LIST.map((ind) => {
-            const isOn = (indicators as Record<string, boolean>)[ind.id] ?? false
+            const isOn = activeInds[ind.id] ?? (indicators as Record<string, boolean>)[ind.id] ?? false
             return (
               <div key={ind.id} className="ind-row">
                 <div className="ind-row-l">
@@ -263,9 +311,7 @@ export function ChartControls() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <div
                     className={`ind-toggle${isOn ? ' on' : ''}`}
-                    onClick={() => {
-                      if (ind.id in indicators) togInd(ind.id as keyof typeof indicators)
-                    }}
+                    onClick={() => togInd(ind.id)}
                   >
                     <div className="ind-toggle-dot"></div>
                   </div>

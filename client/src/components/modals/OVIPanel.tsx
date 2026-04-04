@@ -4,10 +4,9 @@ const numInputStyle: React.CSSProperties = { width:'70px', background:'#0d1520',
 const colorInputStyle: React.CSSProperties = { width:'40px', height:'22px', border:'1px solid #f0c04033', background:'#0d1520', cursor:'pointer', borderRadius:'2px' }
 
 export function OVIPanel({ visible, onClose }: Props) {
-  if (!visible) return null
-
   return (
     <div id="oviPanel" style={{
+      display: visible ? 'block' : 'none',
       position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', zIndex:9000,
       background:'#0a1018', border:'1px solid #f0c04033', borderRadius:'8px', padding:'16px',
       width:'320px', maxHeight:'80vh', overflowY:'auto', fontFamily:'var(--ff)',

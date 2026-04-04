@@ -3,9 +3,8 @@
 interface Props { visible: boolean; onClose: () => void }
 
 export function ExposurePanel({ visible, onClose }: Props) {
-  if (!visible) return null
   return (
-    <div id="exposurePanel" className="dlog-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div id="exposurePanel" className="dlog-overlay" style={{ display: visible ? 'flex' : 'none' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="dlog-panel" style={{ maxWidth: '520px' }}>
         <div className="dlog-hdr">
           <span className="dlog-title">EXPOSURE DASHBOARD</span>

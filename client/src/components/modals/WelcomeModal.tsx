@@ -3,9 +3,8 @@
 interface Props { visible: boolean; onClose: () => void }
 
 export function WelcomeModal({ visible, onClose }: Props) {
-  if (!visible) return null
   return (
-    <div className="mover" id="mwelcome" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div className="mover" id="mwelcome" style={{ display: visible ? 'flex' : 'none' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal wlc-modal">
         <div className="wlc-header">
           <div className="wlc-logo">

@@ -3,9 +3,8 @@
 interface Props { visible: boolean; onClose: () => void }
 
 export function CommandPalette({ visible, onClose }: Props) {
-  if (!visible) return null
   return (
-    <div id="cmdPalette" className="cmd-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+    <div id="cmdPalette" className="cmd-overlay" style={{ display: visible ? 'flex' : 'none' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="cmd-panel">
         <div className="cmd-input-wrap">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">

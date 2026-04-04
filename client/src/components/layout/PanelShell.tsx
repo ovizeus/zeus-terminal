@@ -80,6 +80,7 @@ export function PanelShell() {
   const [dockActive, setDockActive] = useState<string | null>(null)
   const activeModal = useUiStore((s) => s.activeModal)
   const closeModal = useUiStore((s) => s.closeModal)
+  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
 
   function handleDockClick(id: string) {
     if (id === 'more') return
@@ -90,7 +91,12 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  const activeTitle = dockActive ? DOCK_TITLES[dockActive] : null
+  // 1:1 with old pageview.js — manual-trade title includes environment
+  const activeTitle = dockActive
+    ? (dockActive === 'manual-trade'
+      ? `Manual Trade (${resolvedEnv || 'DEMO'})`
+      : DOCK_TITLES[dockActive])
+    : null
 
   return (
     <>
@@ -164,13 +170,13 @@ export function PanelShell() {
          * is shown via zpv-active-panel CSS class inside the PageView overlay.
          */}
         <div id="zeus-groups" className={dockActive ? 'zpv-open' : ''}>
-          <div data-panel-id="autotrade" className={dockActive === 'autotrade' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+          <div id="at-strip-panel" data-panel-id="autotrade" className={dockActive === 'autotrade' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <AutoTradePanel />
           </div>
-          <div data-panel-id="manual-trade" className={dockActive === 'manual-trade' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+          <div id="pt-strip-panel" data-panel-id="manual-trade" className={dockActive === 'manual-trade' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <ManualTradePanel />
           </div>
-          <div data-panel-id="dsl" className={dockActive === 'dsl' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+          <div id="dsl-strip-panel" data-panel-id="dsl" className={dockActive === 'dsl' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <DSLZonePanel />
           </div>
           <div data-panel-id="ares" className={dockActive === 'ares' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>

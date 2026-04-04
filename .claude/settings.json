@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5174/app/)",
+      "Read(//d/Projects/zeus-terminal/**)",
+      "Bash(do taskkill:*)"
+    ]
+  }
+}

@@ -32,20 +32,21 @@ function parseKlines(raw: number[][]): Kline[] {
 
 export function useMarketData(
   onKlinesLoaded?: (klines: Kline[]) => void,
-  onKlineUpdate?: (bar: Kline) => void,
+  _onKlineUpdate?: (bar: Kline) => void,
 ) {
   const symbol = useMarketStore((s) => s.market.symbol)
   const chartTf = useMarketStore((s) => s.market.chartTf)
   const setPrice = useMarketStore((s) => s.setPrice)
-  const wsRef = useRef<WebSocket | null>(null)
   const genRef = useRef(0)
 
   useEffect(() => {
     const gen = ++genRef.current
-    let ws: WebSocket | null = null
 
-    async function fetchAndSubscribe() {
-      // Fetch klines
+    // React does ONE REST fetch for initial klines so chart renders fast.
+    // Old JS bridge (marketData.js) opens the kline WS and handles all live
+    // updates via cSeries.setData/update through bridge globals.
+    // No React WS — eliminates duplicate Binance kline connections.
+    async function fetchInitial() {
       try {
         const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${symbol}&interval=${chartTf}&limit=1000`
         const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
@@ -59,48 +60,12 @@ export function useMarketData(
           onKlinesLoaded?.(klines)
         }
       } catch {
-        // Will retry on next symbol/tf change
-        return
-      }
-
-      // Subscribe to live kline WS
-      if (gen !== genRef.current) return
-      const symLow = symbol.toLowerCase()
-      ws = new WebSocket(`${BINANCE_WS}/${symLow}@kline_${chartTf}`)
-      wsRef.current = ws
-
-      ws.onmessage = (e) => {
-        if (gen !== genRef.current) return
-        try {
-          const j = JSON.parse(e.data)
-          const k = j.k
-          const bar: Kline = {
-            time: Math.floor(k.t / 1000),
-            open: +k.o,
-            high: +k.h,
-            low: +k.l,
-            close: +k.c,
-            volume: +k.v,
-          }
-          if (bar.close > 0) {
-            setPrice(bar.close)
-            onKlineUpdate?.(bar)
-          }
-        } catch {
-          // ignore malformed
-        }
+        // Old JS will load klines when bridge starts — not critical
       }
     }
 
-    fetchAndSubscribe()
+    fetchInitial()
 
-    return () => {
-      genRef.current++
-      if (ws) {
-        ws.close()
-        ws = null
-      }
-      if (wsRef.current === ws) wsRef.current = null
-    }
-  }, [symbol, chartTf, setPrice, onKlinesLoaded, onKlineUpdate])
+    return () => { genRef.current++ }
+  }, [symbol, chartTf, setPrice, onKlinesLoaded, _onKlineUpdate])
 }

@@ -34,8 +34,11 @@ const state: BridgeState = {
 // Each phase must complete before the next starts
 
 const SCRIPT_PHASES: string[][] = [
-  // Phase 0 — Head managers (MUST load first)
+  // Phase 0 — Icons + Head managers (MUST load first)
+  // icons.js defines _ZI (global icon constants) — extracted from index.html inline <script>.
+  // Every module (config.js, deepdive.js, aub.js, bootstrap.js) depends on _ZI.
   [
+    'js/core/icons.js',
     'js/core/managers.js',
   ],
   // Phase 1A — Utilities
@@ -214,11 +217,14 @@ function installShims(): void {
   const w = window as any
 
   // ── SHIM 1: initCharts() → no-op ──
-  // React's TradingChart.tsx creates the LightweightCharts instance.
-  // Old initCharts() would try to create a second one in #mc → conflict.
-  // We expose a fake LightweightCharts so startApp() doesn't retry.
+  // React's TradingChart.tsx creates the chart instance.
+  // chartBridge.ts exposes it to window.mainChart / window.cSeries etc.
+  // Old initCharts() would create a duplicate → skip it.
+  // NOTE: LightweightCharts namespace is set by chartBridge.ts (real library, not fake).
+  // If chartBridge hasn't registered yet, set a placeholder so startApp() doesn't retry-loop.
   if (typeof w.LightweightCharts === 'undefined') {
-    w.LightweightCharts = { version: () => 'shim' }
+    // chartBridge.ts will overwrite this with the real library on chart mount
+    w.LightweightCharts = { version: () => 'bridge-pending' }
   }
   w.__BRIDGE_SKIP_INIT_CHARTS = true
 
@@ -245,6 +251,35 @@ function installShims(): void {
   // Old bootstrap.js uses el('id') shorthand. Define if not already present.
   if (typeof w.el !== 'function') {
     w.el = (id: string) => document.getElementById(id)
+  }
+
+  // ── SHIM 6: Block bootstrap.js auto-invoke ──
+  // bootstrap.js (line 1825) checks __ZEUS_INIT__ and auto-calls startApp() if not set.
+  // We MUST prevent this — the bridge needs to call startApp() AFTER:
+  //   1. All scripts loaded
+  //   2. Functions patched (initCharts → no-op, etc.)
+  //   3. Chart ready (mainChart exposed by chartBridge.ts)
+  // Setting __ZEUS_INIT__ = true blocks bootstrap.js from auto-invoking.
+  w.__ZEUS_INIT__ = true
+
+  // ── SHIM 7: Patch fetch() to add CSRF header ──
+  // Old JS fetch calls (config.js, state.js, guards.js, etc.) don't include
+  // the X-Zeus-Request: 1 header required by the server's CSRF middleware.
+  // Monkey-patch window.fetch to auto-add the header on same-origin POST/PUT/DELETE.
+  const _origFetch = w.fetch.bind(w)
+  w.fetch = function bridgeFetch(input: RequestInfo | URL, init?: RequestInit) {
+    // Only patch same-origin requests (relative URLs or same host)
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url
+    const isSameOrigin = url.startsWith('/') || url.startsWith(location.origin)
+    if (isSameOrigin && init && typeof init.method === 'string' &&
+        ['POST', 'PUT', 'DELETE', 'PATCH'].includes(init.method.toUpperCase())) {
+      const headers = new Headers(init.headers || {})
+      if (!headers.has('X-Zeus-Request')) {
+        headers.set('X-Zeus-Request', '1')
+      }
+      init = { ...init, headers }
+    }
+    return _origFetch(input, init)
   }
 
   console.log('[BRIDGE] Shims installed')
@@ -315,7 +350,41 @@ function patchLoadedFunctions(): void {
     }
   }
 
+  // Patch _srEnsureVisible — old JS moves #sr-strip out of its React wrapper
+  // (config.js line 252, called via setTimeout 3s after boot in bootstrap.js line 1106)
+  if (typeof w._srEnsureVisible === 'function') {
+    w._origSrEnsureVisible = w._srEnsureVisible
+    w._srEnsureVisible = function () {
+      console.log('[BRIDGE] _srEnsureVisible() skipped — React DOM manages sr-strip position')
+      // Still run stats/list rendering (safe, doesn't move DOM)
+      if (typeof w._srUpdateStats === 'function') w._srUpdateStats()
+      if (typeof w._srRenderList === 'function') w._srRenderList()
+    }
+  }
+
   console.log('[BRIDGE] Functions patched')
+}
+
+// ─��� DOM Recovery ───────────────────────────────────────���──────────
+// Old JS (bootstrap.js startApp) moves certain panel elements out of their
+// React wrappers via mv() and _relocateFlow(). This breaks React's panel
+// visibility system (.zpv-active-panel). We move them back after startApp().
+
+/** Map of inner element ID → correct React wrapper data-panel-id */
+const PANEL_RECOVERY_MAP: Record<string, string> = {
+  'flow-panel': 'flow',
+  'sr-strip': 'sigreg',
+}
+
+function recoverMovedPanels(): void {
+  for (const [innerId, panelId] of Object.entries(PANEL_RECOVERY_MAP)) {
+    const el = document.getElementById(innerId)
+    const wrapper = document.querySelector(`[data-panel-id="${panelId}"]`)
+    if (!el || !wrapper) continue
+    if (wrapper.contains(el)) continue // already in correct position
+    wrapper.appendChild(el)
+    console.log(`[BRIDGE] Recovered #${innerId} → [data-panel-id="${panelId}"]`)
+  }
 }
 
 // ── Main API ───────────────────────────────────────────────────────
@@ -352,8 +421,34 @@ export async function startLegacyBridge(): Promise<BridgeState> {
   // Step 3: Patch functions that would conflict with React
   patchLoadedFunctions()
 
-  // Step 4: Call startApp()
+  // Step 4: Wait for React chart to be ready before calling startApp()
+  // chartBridge.ts dispatches 'zeus:chartReady' when TradingChart mounts and
+  // exposes all series refs to window. startApp() depends on these globals.
   const w = window as any
+  if (!w.mainChart) {
+    console.log('[BRIDGE] Waiting for zeus:chartReady...')
+    await new Promise<void>((resolve) => {
+      // If chart registers while we wait, resolve immediately
+      const onReady = () => {
+        window.removeEventListener('zeus:chartReady', onReady)
+        resolve()
+      }
+      window.addEventListener('zeus:chartReady', onReady)
+      // Safety timeout — don't block forever if chart never mounts
+      setTimeout(() => {
+        window.removeEventListener('zeus:chartReady', onReady)
+        if (!w.mainChart) {
+          console.warn('[BRIDGE] Chart not ready after 10s — proceeding anyway')
+        }
+        resolve()
+      }, 10_000)
+    })
+    console.log('[BRIDGE] Chart ready — mainChart:', !!w.mainChart)
+  } else {
+    console.log('[BRIDGE] Chart already ready — mainChart present')
+  }
+
+  // Step 5: Call startApp()
   if (typeof w.startApp === 'function') {
     console.log('[BRIDGE] Calling startApp()...')
     try {
@@ -368,6 +463,24 @@ export async function startLegacyBridge(): Promise<BridgeState> {
     state.error = 'startApp() not found after loading bootstrap.js'
     console.error('[BRIDGE]', state.error)
   }
+
+  // Step 6: Expose WS state to window._zeusWS so old JS _updateStatusBar shows "WS" not "WS..."
+  // bootstrap.js line 1859 checks: window._zeusWS && window._zeusWS.readyState === 1
+  // but _zeusWS is never assigned anywhere in old code (dead reference).
+  // We create a proxy object that reports readyState from the React WS service.
+  try {
+    const { wsService } = await import('../services/ws')
+    Object.defineProperty(w, '_zeusWS', {
+      configurable: true,
+      get() { return wsService.isConnected() ? { readyState: 1 } : null }
+    })
+  } catch { /* wsService not available — ignore */ }
+
+  // Step 7: Recover DOM elements moved by old JS back to their React wrappers.
+  // bootstrap.js _relocateFlow() moves #flow-panel before #pm-strip (line 446-452).
+  // _srEnsureVisible() moves #sr-strip to direct child of #zeus-groups (patched above,
+  // but the mv() in initZeusGroups might have run before patch if timing is off).
+  recoverMovedPanels()
 
   state.loaded = true
   state.loading = false
