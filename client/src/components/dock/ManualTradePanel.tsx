@@ -147,7 +147,7 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className="tp-exec demo-exec">PLACE DEMO ORDER</button>
+        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { const w = window as any; if (typeof w.placeDemoOrder === 'function') w.placeDemoOrder() }}>PLACE DEMO ORDER</button>
 
         {/* PENDING ORDERS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -39,8 +39,9 @@ export function AutoTradePanel() {
     await api.post('/api/at/kill', { reason: 'manual' })
   }
 
-  async function handleToggle() {
-    await api.post('/api/at/toggle')
+  function handleToggle() {
+    const w = window as any
+    if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
   }
 
   return (
