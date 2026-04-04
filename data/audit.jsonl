@@ -10,3 +10,6 @@
 {"ts":"2026-04-03T14:21:15.332Z","action":"ORDER_BLOCKED","actor":"AT","userId":99998,"ip":null,"details":{"symbol":"BTCUSDT","side":"BUY","type":"MARKET","owner":"AT","userId":99998,"reason":"Emergency kill switch active — all trading blocked"}}
 {"ts":"2026-04-03T14:21:15.332Z","action":"ORDER_BLOCKED","actor":"ARES","userId":99998,"ip":null,"details":{"symbol":"BTCUSDT","side":"BUY","type":"MARKET","owner":"ARES","userId":99998,"reason":"Emergency kill switch active — all trading blocked"}}
 {"ts":"2026-04-03T14:21:15.418Z","action":"ORDER_BLOCKED","actor":"AT","userId":null,"ip":null,"details":{"symbol":"BTCUSDT","side":"BUY","type":"MARKET","owner":"AT","userId":null,"reason":"Emergency kill switch active — all trading blocked"}}
+{"ts":"2026-04-04T00:06:32.622Z","action":"KILL_SWITCH_MANUAL","actor":"user","userId":1,"ip":null,"details":{"userId":1,"action":"activate"}}
+{"ts":"2026-04-04T00:09:22.258Z","action":"KILL_SWITCH_MANUAL","actor":"user","userId":1,"ip":null,"details":{"userId":1,"action":"activate"}}
+{"ts":"2026-04-04T06:23:54.708Z","action":"KILL_SWITCH_MANUAL","actor":"user","userId":1,"ip":null,"details":{"userId":1,"action":"activate"}}

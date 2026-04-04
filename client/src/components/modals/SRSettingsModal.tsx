@@ -27,7 +27,7 @@ export function SRSettingsModal({ visible, onClose }: Props) {
           <label className="mchk"><input type="checkbox" defaultChecked /> Show Support</label>
           <label className="mchk"><input type="checkbox" defaultChecked /> Show Resistance</label>
           <label className="mchk"><input type="checkbox" defaultChecked /> Show Labels</label>
-          <label className="mchk"><input type="checkbox" /> Width by Strength</label>
+          <label className="mchk"><input type="checkbox" defaultChecked /> Width by Strength</label>
           <label className="mchk"><input type="checkbox" /> Extend Lines</label>
         </div>
 
@@ -35,7 +35,7 @@ export function SRSettingsModal({ visible, onClose }: Props) {
           <div className="mrow"><span className="mlbl">Pivot Length</span><input type="number" defaultValue={10} style={inputStyle} /></div>
           <div className="mrow"><span className="mlbl">Max Levels</span><input type="number" defaultValue={8} style={inputStyle} /></div>
           <div className="mrow"><span className="mlbl">Min Strength</span><input type="number" defaultValue={2} style={inputStyle} /></div>
-          <div className="mrow"><span className="mlbl">Zone Width</span><input type="number" defaultValue={0.5} step={0.1} style={inputStyle} /></div>
+          <div className="mrow"><span className="mlbl">Zone Width ($)</span><input type="number" defaultValue={150} min={10} max={2000} style={inputStyle} /></div>
         </div>
 
         <div style={{marginTop:'10px'}}>
@@ -52,8 +52,8 @@ export function SRSettingsModal({ visible, onClose }: Props) {
 
       {/* STYLE TAB */}
       <div className="mbody" style={{display:tab==='style'?'block':'none', padding:'12px'}}>
-        <div className="mrow"><span className="mlbl">Support Color</span><input type="color" defaultValue="#00c853" style={colorStyle} /></div>
-        <div className="mrow"><span className="mlbl">Resistance Color</span><input type="color" defaultValue="#ff1744" style={colorStyle} /></div>
+        <div className="mrow"><span className="mlbl">Support Color</span><input type="color" defaultValue="#00d97a" style={colorStyle} /></div>
+        <div className="mrow"><span className="mlbl">Resistance Color</span><input type="color" defaultValue="#ff3355" style={colorStyle} /></div>
         <div className="mrow"><span className="mlbl">Line Opacity</span><input type="range" min={0} max={100} defaultValue={70} style={{width:'100%'}} /></div>
         <div className="mrow"><span className="mlbl">Zone Opacity</span><input type="range" min={0} max={100} defaultValue={20} style={{width:'100%'}} /></div>
         <div className="mrow"><span className="mlbl">Min Width</span><input type="number" defaultValue={1} style={inputStyle} /></div>
@@ -70,9 +70,9 @@ export function SRSettingsModal({ visible, onClose }: Props) {
         <div style={{marginTop:'10px'}}>
           <div className="mrow"><span className="mlbl">Display Period</span></div>
           <div className="qbs" style={{marginTop:'4px'}}>
-            <button className="qb">Session</button>
+            <button className="qb act">Session</button>
             <button className="qb">Today</button>
-            <button className="qb act">This Week</button>
+            <button className="qb">This Week</button>
             <button className="qb">All Time</button>
           </div>
         </div>

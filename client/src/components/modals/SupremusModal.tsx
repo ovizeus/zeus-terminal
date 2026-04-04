@@ -10,17 +10,6 @@ const inputStyle: React.CSSProperties = {
 
 const tabs = ['MAIN', 'SESSIONS', 'PIVOT', 'VWAP'] as const
 
-const sessions = [
-  { name: 'Asia', color: '#f0c040' },
-  { name: 'Sydney', color: '#4fc3f7' },
-  { name: 'Tokyo', color: '#ff7043' },
-  { name: 'Shanghai', color: '#ef5350' },
-  { name: 'Frankfurt', color: '#66bb6a' },
-  { name: 'London', color: '#42a5f5' },
-  { name: 'NYC', color: '#ab47bc' },
-  { name: 'NYSE', color: '#26a69a' },
-] as const
-
 export function SupremusModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState<typeof tabs[number]>('MAIN')
 
@@ -42,17 +31,18 @@ export function SupremusModal({ visible, onClose }: Props) {
             {/* Market Structure */}
             <div className="msec" style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>MARKET STRUCTURE</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                {['HH', 'HL', 'LH', 'LL'].map(label => (
-                  <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <label className="mchk" style={{ flex: 1 }}>
-                      <input type="checkbox" defaultChecked /> {label}
-                    </label>
-                    <input type="color" defaultValue={label.startsWith('H') ? '#00e676' : '#ff3355'}
-                      style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
-                  </div>
-                ))}
-              </div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> HH — Higher High</label>
+              <div className="mrow"><span className="mlbl">HH Color</span>
+                <input type="color" defaultValue="#00d97a" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> HL — Higher Low</label>
+              <div className="mrow"><span className="mlbl">HL Color</span>
+                <input type="color" defaultValue="#44aaff" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> LH — Lower High</label>
+              <div className="mrow"><span className="mlbl">LH Color</span>
+                <input type="color" defaultValue="#ff8800" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> LL — Lower Low</label>
+              <div className="mrow"><span className="mlbl">LL Color</span>
+                <input type="color" defaultValue="#ff3355" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
             </div>
 
             {/* Nova Zones */}
@@ -63,37 +53,48 @@ export function SupremusModal({ visible, onClose }: Props) {
                 <label className="mchk"><input type="checkbox" /> Extend Zones</label>
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Width</span>
-                <input type="number" defaultValue={2} style={{ ...inputStyle, width: 50 }} />
+                <span className="mlbl">Zone Width</span>
+                <input type="number" defaultValue={6} min={1} max={20} style={{ ...inputStyle, width: 50 }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Bull Color</span>
-                <input type="color" defaultValue="#00e676" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <span className="mlbl">Upper Zone Color</span>
+                <input type="color" defaultValue="#00b8d4" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Bear Color</span>
-                <input type="color" defaultValue="#ff3355" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <span className="mlbl">Lower Zone Color</span>
+                <input type="color" defaultValue="#aa44ff" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Pivot</span>
-                <input type="number" defaultValue={5} style={{ ...inputStyle, width: 50 }} />
+                <span className="mlbl">Pivot Length</span>
+                <input type="number" defaultValue={8} min={2} max={50} style={{ ...inputStyle, width: 50 }} />
+              </div>
+              <div className="mrow" style={{ marginTop: 6 }}>
+                <span className="mlbl">Pivot Count</span>
+                <input type="number" defaultValue={3} min={1} max={10} style={{ ...inputStyle, width: 50 }} />
               </div>
             </div>
 
             {/* Nova Pivot Detector */}
             <div className="msec" style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>NOVA PIVOT DETECTOR</div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> Enable</label>
+              <div className="mrow"><span className="mlbl">Pivot Length</span>
+                <input type="number" defaultValue={10} style={{ ...inputStyle, width: 50 }} /></div>
+              <div className="mrow" style={{ marginTop: 6 }}><span className="mlbl">Max Pivots</span>
+                <input type="number" defaultValue={3} style={{ ...inputStyle, width: 50 }} /></div>
+              <div className="mrow" style={{ marginTop: 6 }}><span className="mlbl">Sensitivity</span>
+                <input type="number" defaultValue={0.25} step={0.01} style={{ ...inputStyle, width: 50 }} /></div>
+              <div className="mrow" style={{ marginTop: 6 }}><span className="mlbl">Strength Factor</span>
+                <input type="number" defaultValue={5} style={{ ...inputStyle, width: 50 }} /></div>
             </div>
 
             {/* Signals */}
             <div className="msec" style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>SIGNALS</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <label className="mchk"><input type="checkbox" defaultChecked /> Buy Signals</label>
-                <label className="mchk"><input type="checkbox" defaultChecked /> Sell Signals</label>
-                <label className="mchk"><input type="checkbox" /> Reversal Signals</label>
-                <label className="mchk"><input type="checkbox" /> Continuation Signals</label>
+                <label className="mchk"><input type="checkbox" /> Channel Break Signals</label>
+                <label className="mchk"><input type="checkbox" defaultChecked /> Pivot HH/LL Signals</label>
+                <label className="mchk"><input type="checkbox" /> Open Signals</label>
+                <label className="mchk"><input type="checkbox" /> Exit Signals</label>
               </div>
             </div>
           </div>
@@ -102,20 +103,27 @@ export function SupremusModal({ visible, onClose }: Props) {
         {/* SESSIONS tab */}
         {tab === 'SESSIONS' && (
           <div>
+            <div style={{ fontSize: 8, color: 'var(--dim)', marginBottom: 8 }}>Zones highlighted on chart during session hours (UTC)</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-              {sessions.map(s => (
-                <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{
-                    fontSize: 8, fontWeight: 700, color: s.color, background: s.color + '18',
-                    padding: '2px 6px', borderRadius: 3, minWidth: 52, textAlign: 'center'
-                  }}>
+              {[
+                { abbr: 'ASI', name: 'Asia (23:00-06:00)', checked: true, color: '#ffffff15', badgeClass: 'z-badge z-badge--cyan' },
+                { abbr: 'SYD', name: 'Sydney (23:00-05:00)', checked: false, color: '#6600cc33', badgeClass: 'z-badge z-badge--pur' },
+                { abbr: 'TKY', name: 'Tokyo (00:00-06:00)', checked: true, color: '#ff44aa33', badgeStyle: { color: '#ff44aa', borderColor: '#ff44aa33', background: '#ff44aa12' } },
+                { abbr: 'SHG', name: 'Shanghai (01:30-06:57)', checked: false, color: '#ffaa0033', badgeStyle: { color: '#ffaa00', borderColor: '#ffaa0033', background: '#ffaa0012' } },
+                { abbr: 'FRA', name: 'Frankfurt (07:00-16:30)', checked: true, color: '#ffff0033', badgeClass: 'z-badge z-badge--gold' },
+                { abbr: 'LON', name: 'London (08:00-16:30)', checked: true, color: '#0044ff44', badgeStyle: { color: '#4488ff', borderColor: '#4488ff33', background: '#4488ff12' } },
+                { abbr: 'NYC', name: 'New York (13:00-22:00)', checked: true, color: '#00aa0033', badgeClass: 'z-badge z-badge--grn' },
+                { abbr: 'NYSE', name: 'NYSE (14:30-22:00)', checked: false, color: '#00cc4422', badgeClass: 'z-badge z-badge--grn' },
+              ].map(s => (
+                <div key={s.abbr} className="mrow">
+                  <span className="mlbl">
+                    <span className={s.badgeClass || 'z-badge'} style={{ fontSize: 6, padding: '0 3px', ...(s.badgeStyle || {}) }}>{s.abbr}</span>{' '}
                     {s.name}
                   </span>
-                  <label className="mchk" style={{ flex: 1 }}>
-                    <input type="checkbox" defaultChecked />
+                  <label className="mchk" style={{ margin: 0 }}>
+                    <input type="checkbox" defaultChecked={s.checked} /> ON
                   </label>
-                  <input type="color" defaultValue={s.color}
-                    style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                  <input type="color" defaultValue={s.color} />
                 </div>
               ))}
             </div>
@@ -123,16 +131,12 @@ export function SupremusModal({ visible, onClose }: Props) {
             <div className="msec" style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>LINE SETTINGS</div>
               <div className="mrow">
-                <span className="mlbl">Line Width</span>
-                <input type="number" defaultValue={1} min={1} max={5} style={{ ...inputStyle, width: 50 }} />
+                <span className="mlbl">Line Length (min)</span>
+                <input type="number" defaultValue={400} style={{ ...inputStyle, width: 60 }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Line Style</span>
-                <select style={inputStyle} defaultValue="dashed">
-                  <option value="solid">Solid</option>
-                  <option value="dashed">Dashed</option>
-                  <option value="dotted">Dotted</option>
-                </select>
+                <span className="mlbl">Line Offset Right (min)</span>
+                <input type="number" defaultValue={2000} style={{ ...inputStyle, width: 60 }} />
               </div>
             </div>
           </div>
@@ -145,33 +149,47 @@ export function SupremusModal({ visible, onClose }: Props) {
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>NOVA TREND LINES</div>
               <label className="mchk"><input type="checkbox" defaultChecked /> Show Labels</label>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Up Color</span>
-                <input type="color" defaultValue="#00e676" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <span className="mlbl">Pivot Label Lookback</span>
+                <input type="number" defaultValue={4} style={{ ...inputStyle, width: 50 }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Down Color</span>
-                <input type="color" defaultValue="#ff3355" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <span className="mlbl">Active UP Color</span>
+                <input type="color" defaultValue="#00b8d4" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Width</span>
-                <input type="number" defaultValue={1} min={1} max={5} style={{ ...inputStyle, width: 50 }} />
+                <span className="mlbl">Active DOWN Color</span>
+                <input type="color" defaultValue="#ff44aa" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+              </div>
+              <div className="mrow" style={{ marginTop: 6 }}>
+                <span className="mlbl">Line Width</span>
+                <input type="number" defaultValue={2} min={1} max={5} style={{ ...inputStyle, width: 50 }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Style</span>
-                <select style={inputStyle} defaultValue="solid">
-                  <option value="solid">Solid</option>
-                  <option value="dashed">Dashed</option>
-                  <option value="dotted">Dotted</option>
+                <select style={inputStyle} defaultValue="Dashed">
+                  <option value="Dashed">Dashed</option>
+                  <option value="Solid">Solid</option>
+                  <option value="Dotted">Dotted</option>
                 </select>
               </div>
             </div>
 
             <div className="msec" style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>ALPHA MAX LEVEL</div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> Enable</label>
+              <div className="mrow">
+                <span className="mlbl">Timeframe</span>
+                <select style={inputStyle} defaultValue="Day">
+                  <option value="Day">Day</option>
+                  <option value="Week">Week</option>
+                  <option value="Month">Month</option>
+                </select>
+              </div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> Show Current Levels</label>
+              <label className="mchk"><input type="checkbox" /> Show Previous Levels</label>
+              <label className="mchk"><input type="checkbox" /> Show Extra Levels (3.5-6)</label>
               <div className="mrow" style={{ marginTop: 6 }}>
-                <span className="mlbl">Color</span>
-                <input type="color" defaultValue="#f0c040" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <span className="mlbl">Label Offset (Bars)</span>
+                <input type="number" defaultValue={3} style={{ ...inputStyle, width: 50 }} />
               </div>
             </div>
           </div>
@@ -180,29 +198,32 @@ export function SupremusModal({ visible, onClose }: Props) {
         {/* VWAP tab */}
         {tab === 'VWAP' && (
           <div>
-            {['Daily', 'Weekly', 'Monthly'].map(period => (
-              <div key={period} className="msec" style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>{period.toUpperCase()} VWAP</div>
-                <label className="mchk"><input type="checkbox" defaultChecked={period === 'Daily'} /> Enable</label>
-                <div className="mrow" style={{ marginTop: 6 }}>
-                  <span className="mlbl">Color</span>
-                  <input type="color"
-                    defaultValue={period === 'Daily' ? '#f0c040' : period === 'Weekly' ? '#4fc3f7' : '#ab47bc'}
-                    style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
-                </div>
-                <div className="mrow" style={{ marginTop: 6 }}>
-                  <span className="mlbl">Width</span>
-                  <input type="number" defaultValue={1} min={1} max={5} style={{ ...inputStyle, width: 50 }} />
-                </div>
+            <div className="msec" style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>VWAP</div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> Daily VWAP</label>
+              <div className="mrow" style={{ marginTop: 6 }}>
+                <span className="mlbl">Daily Color</span>
+                <input type="color" defaultValue="#f0c040" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
-            ))}
-
-            <div className="msec" style={{ marginBottom: 12 }}>
-              <label className="mchk"><input type="checkbox" /> Show Status Line</label>
+              <label className="mchk"><input type="checkbox" defaultChecked /> Weekly VWAP</label>
+              <div className="mrow" style={{ marginTop: 6 }}>
+                <span className="mlbl">Weekly Color</span>
+                <input type="color" defaultValue="#00d97a" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+              </div>
+              <label className="mchk"><input type="checkbox" /> Monthly VWAP</label>
+              <div className="mrow" style={{ marginTop: 6 }}>
+                <span className="mlbl">Monthly Color</span>
+                <input type="color" defaultValue="#aa44ff" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+              </div>
+              <div className="mrow" style={{ marginTop: 6 }}>
+                <span className="mlbl">VWAP Line Width</span>
+                <input type="number" defaultValue={1} min={1} max={4} style={{ ...inputStyle, width: 50 }} />
+              </div>
+              <label className="mchk"><input type="checkbox" defaultChecked /> Show in Status Line</label>
             </div>
 
             <div className="srow" style={{ justifyContent: 'flex-end' }}>
-              <button className="sbtn2 pri">SAVE</button>
+              <button className="sbtn2 pri">SAVE &amp; APPLY</button>
               <button className="sbtn2 sec" onClick={onClose}>CLOSE</button>
             </div>
           </div>

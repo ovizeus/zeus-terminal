@@ -5,27 +5,64 @@
  */
 
 :root {
+  /* UI Scale */
+  --ui-scale: 1;
+  /* Colors */
   --bg: #0a0a0a;
-  --bg2: #0d1018;
-  --bg3: #0a0f16;
   --brd: #1e2530;
   --gold: #f0c040;
   --grn: #00d97a;
   --red: #ff3355;
   --blu: #00b8d4;
   --pur: #aa44ff;
+  --ylw: #f5c842;
   --dim: #3a5068;
   --txt: #7a9ab8;
   --whi: #d8eaf8;
-  --ff: 'Share Tech Mono', 'Fira Code', monospace;
-  --lime: #39ff14;
-  --orange: #ff8800;
+  --bg2: #0d1018;
+  --bg3: #0a0f16;
+  /* Typography & spacing */
+  --ff: 'Share Tech Mono', monospace;
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-lg: 8px;
+  --sp-xs: 4px;
+  --sp-sm: 8px;
+  --sp-md: 12px;
+  --sp-lg: 16px;
+  --trans: .15s;
+  /* Surface layers */
+  --sf-0: #050508;
+  --sf-hover: #111820;
+  --sf-input: #0a121a;
+  /* Alpha variants */
   --gold-a20: #f0c04033;
   --gold-a33: #f0c04055;
   --gold-a40: #f0c04066;
-  --grn-bright: #00ff88;
-  --red-bright: #ff3355;
+  --grn-a20: #00d97a33;
+  --grn-a33: #00d97a55;
   --red-a20: #ff335533;
+  --red-a33: #ff335555;
+  --cyan-a27: #00d9ff44;
+  /* Borders */
+  --brd-light: #2a3a4a;
+  --brd-focus: #3a5a7a;
+  /* Extended accents */
+  --grn-bright: #00ff88;
+  --lime: #39ff14;
+  --cyan: #00d4ff;
+  --orange: #ff8800;
+  --red-bright: #ff4444;
+  /* Extended backgrounds */
+  --bg-grn-tint: #1a3020;
+  --bg-slate: #1a2530;
+  --bg-purple-tint: #1a1a2e;
+  /* Text extensions */
+  --txt-bright: #88aacc;
+  --txt-dim: #778899;
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -568,7 +605,7 @@ body {
   flex-direction: column;
   gap: 0;
   padding: 0;
-  padding-top: 116px; /* 22px status bar + ~94px header */
+  padding-top: 126px; /* ~94px header + ~26px status bar + ~6px breathing room */
   min-height: 100vh;
 }
 .zr-panel {
@@ -1350,7 +1387,7 @@ body {
     border-radius: 5px;
   }
   .sbtn svg { width: 13px; height: 13px; }
-  .zr-panels { padding-top: 94px; }
+  .zr-panels { padding-top: 104px; }
 }
 @media (max-width: 600px) {
   .zr-panel__body { padding: 6px; font-size: 11px; }
@@ -2999,6 +3036,39 @@ body {
 .dsl-assist-bar.show { display:flex }
 .dsl-assist-arm { padding:3px 12px; font-size:11px; font-family:var(--ff); letter-spacing:1.5px; border-radius:2px; cursor:pointer; border:1px solid var(--gold-a40); background:#f0c04010; color:var(--gold); transition:all .2s }
 .dsl-assist-status { font-size:10px; color:#f0c04077; letter-spacing:.5px }
+.dsl-assist-arm.armed { background:#f0c04025; border-color:#f0c040aa; color:#fff5cc; box-shadow:0 0 8px var(--gold-a33); animation:zArmPulse 1.5s ease-in-out infinite }
+
+/* DSL zone locked state */
+.dsl-zone-locked { position:relative }
+
+/* DSL animated elements */
+.dsl-bubble { position:absolute; border-radius:50%; animation:dslRise linear infinite }
+.dsl-drop { width:2px; border-radius:1px; animation:dslDrop linear infinite }
+
+/* DSL position card variants */
+.dsl-pos-card::before { content:''; position:absolute; top:0; left:-100%; width:60%; height:100%; background:linear-gradient(90deg,transparent,rgba(0,255,204,.06),transparent); animation:dslShimmer 3s ease-in-out infinite }
+.dsl-pos-card.long { border-color:#00ffcc44; background:#00ffcc08 }
+.dsl-pos-card.short { border-color:#ff66aa44; background:#ff66aa08 }
+
+/* DSL trail bar */
+.dsl-trail-track { height:8px; background:#0d1520; border-radius:4px; overflow:hidden; position:relative; margin:6px 0 }
+.dsl-trail-safe { height:100%; border-radius:4px; transition:width 1.5s ease; position:absolute; left:0 }
+.dsl-trail-marker { position:absolute; top:-2px; width:3px; height:12px; border-radius:2px; transition:left 1.5s ease }
+
+/* DSL badge states */
+.dsl-badge.active { color:#00ffcc; background:#00ffcc18; border:1px solid #00ffcc44; box-shadow:0 0 6px #00ffcc33 }
+.dsl-badge.waiting { color:#444; background:transparent; border:1px solid #1a1a2a }
+
+/* DSL telemetry grid */
+.dsl-tele-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(110px,1fr)); gap:4px 8px; margin-top:4px }
+.dsl-tele-cell { padding:4px 6px; background:#00080d; border-radius:3px; border:1px solid #00ffcc0a; overflow:hidden }
+.dsl-tele-lbl { font-size:14px; color:var(--dim); letter-spacing:.5px; line-height:1.4; white-space:nowrap }
+.dsl-tele-val { font-size:22px; color:#00ffcc; font-family:var(--ff); letter-spacing:.3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.4 }
+
+/* DSL keyframes */
+@keyframes dslRise { 0%{transform:translateY(100%) scale(.5);opacity:.6} 100%{transform:translateY(-120%) scale(1.2);opacity:0} }
+@keyframes dslShimmer { 0%{left:-100%} 100%{left:200%} }
+@keyframes dslDrop { 0%{transform:translateY(-16px);opacity:.8} 100%{transform:translateY(16px);opacity:0} }
 
 /* ══════════════════════════════════════════════════════════════
    PAGE VIEW — full-screen overlay (1:1 from main.css .zpv)
@@ -3017,6 +3087,7 @@ body {
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 12px);
   background: linear-gradient(180deg, #0c1018 0%, #080c14 100%);
   border-bottom: 1px solid #1a2235;
   flex-shrink: 0;
@@ -3055,7 +3126,7 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  padding: 0 0 20px;
+  padding: 0 0 calc(env(safe-area-inset-bottom, 0px) + 20px);
 }
 .zpv-content > * { display: block !important; width: 100% }
 
@@ -4205,7 +4276,7 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
    CHART SECTION — 1:1 from main.css lines 2823-2851
    ═══════════════════════════════════════════════════════════════ */
 .chart-section { position: relative; border-bottom: none; padding-bottom: 0; margin-bottom: 0 }
-.chart-section.fsm { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: var(--bg3); overflow: hidden; display: flex; flex-direction: column }
+.chart-section.fsm, .zr-panel--chart.fsm { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: var(--bg3); overflow: hidden; display: flex; flex-direction: column }
 #mc { position: relative !important; z-index: 1 }
 #cc { position: relative !important; z-index: 1 }
 

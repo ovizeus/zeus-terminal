@@ -113,7 +113,7 @@ export function AUBPanel() {
             </svg> Clear
           </button>
         </div>
-        <input type="file" id="aub-macro-file" accept=".json" style={{ display: 'none' }} readOnly />
+        <input type="file" id="aub-macro-file" accept=".json" style={{ display: 'none' }} />
       </div>
 
       {/* 8: NIGHTLY SIM LAB */}

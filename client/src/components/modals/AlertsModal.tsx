@@ -1,9 +1,11 @@
 /** Price Alerts Modal — 1:1 from #malerts in index.html lines 3034-3182 */
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
+import { useUiStore } from '../../stores'
 
 interface Props { visible: boolean; onClose: () => void }
 
 export function AlertsModal({ visible, onClose }: Props) {
+  const openModal = useUiStore((s) => s.openModal)
   return (
     <ModalOverlay id="malerts" visible={visible} onClose={onClose}>
       <ModalHeader title="PRICE ALERTS — BTCUSDT" onClose={onClose} />
@@ -37,7 +39,7 @@ export function AlertsModal({ visible, onClose }: Props) {
         <div style={{
           background: '#0d1018', border: '1px solid #aa44ff33', borderRadius: 6,
           padding: 10, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer'
-        }}>
+        }} onClick={() => { onClose(); openModal('notifications') }}>
           <div>
             <div style={{ fontSize: 11, color: '#aa88ff', fontWeight: 700 }}>Notification Center</div>
             <div style={{ fontSize: 8, color: 'var(--dim)', marginTop: 2 }}>View all system notifications</div>

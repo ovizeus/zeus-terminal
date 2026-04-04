@@ -20,11 +20,7 @@ export function SignalRegistryPanel() {
             ↺ refresh
           </button>
         </div>
-        <div id="sr-list">
-          <div style={{ padding: '16px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)' }}>
-            Se colectează semnale...
-          </div>
-        </div>
+        <div id="sr-list"></div>
       </div>
     </div>
   )

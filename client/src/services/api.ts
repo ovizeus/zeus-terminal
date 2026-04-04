@@ -55,6 +55,12 @@ export interface MeResponse {
   role: string
 }
 
+export interface AdminUser {
+  email: string
+  role: string
+  approved: boolean
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     api.post<LoginResponse>('/auth/login', { email, password }),
@@ -68,6 +74,20 @@ export const authApi = {
   me: () => api.get<MeResponse>('/auth/me'),
 
   logout: () => api.post('/auth/logout'),
+
+  forgotPasswordRequest: (email: string) =>
+    api.post('/auth/forgot-password/request', { email }),
+
+  forgotPasswordConfirm: (email: string, code: string, newPassword: string) =>
+    api.post('/auth/forgot-password/confirm', { email, code, newPassword }),
+
+  adminUsers: () => api.get<{ users: AdminUser[] }>('/auth/admin/users'),
+
+  adminApprove: (email: string) =>
+    api.post('/auth/admin/approve', { email }),
+
+  adminDelete: (email: string) =>
+    api.post('/auth/admin/delete', { email }),
 }
 
 // ── User Context (Settings Sync) ──

@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { ThemeId } from '../types'
 
+type ModalId = 'notifications' | 'cloud' | 'alerts' | 'charts' | 'liq' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'cmdpalette' | 'exposure' | 'decisionlog'
+
 interface UiStore {
   /** Current theme */
   theme: ThemeId
@@ -10,6 +12,8 @@ interface UiStore {
   settingsOpen: boolean
   /** Whether app is connected to server */
   connected: boolean
+  /** Currently open modal (null = none) */
+  activeModal: ModalId | null
 
   /** Set theme and persist to localStorage */
   setTheme: (theme: ThemeId) => void
@@ -19,6 +23,10 @@ interface UiStore {
   toggleSettings: () => void
   /** Set connection status */
   setConnected: (connected: boolean) => void
+  /** Open a modal by ID */
+  openModal: (id: ModalId) => void
+  /** Close current modal */
+  closeModal: () => void
   /** Server environment info */
   apiConfigured: boolean
   exchangeMode: string | null
@@ -42,6 +50,7 @@ export const useUiStore = create<UiStore>()((set) => ({
   activePanel: 'chart',
   settingsOpen: false,
   connected: false,
+  activeModal: null,
   apiConfigured: false,
   exchangeMode: null,
   resolvedEnv: 'DEMO',
@@ -59,5 +68,7 @@ export const useUiStore = create<UiStore>()((set) => ({
   setActivePanel: (panel) => set({ activePanel: panel }),
   toggleSettings: () => set((s) => ({ settingsOpen: !s.settingsOpen })),
   setConnected: (connected) => set({ connected }),
+  openModal: (id) => set({ activeModal: id }),
+  closeModal: () => set({ activeModal: null }),
   patch: (partial) => set((s) => ({ ...s, ...partial })),
 }))

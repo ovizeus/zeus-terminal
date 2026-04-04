@@ -1,15 +1,22 @@
 import { create } from 'zustand'
 import type { MarketState } from '../types'
 
+interface WlPrice { price: number; chg: number }
+
 interface MarketStore {
   /** Live market snapshot — mirrors window.S */
   market: MarketState
+  /** Watchlist prices — keyed by symbol (e.g. BTCUSDT) */
+  wlPrices: Record<string, WlPrice>
 
   /** Update partial market state */
   patch: (partial: Partial<MarketState>) => void
 
   /** Update price only (hot path) */
   setPrice: (price: number) => void
+
+  /** Update a single watchlist price */
+  setWlPrice: (sym: string, price: number, chg: number) => void
 }
 
 const defaultMarket: MarketState = {
@@ -99,10 +106,14 @@ const defaultMarket: MarketState = {
 
 export const useMarketStore = create<MarketStore>()((set) => ({
   market: defaultMarket,
+  wlPrices: {},
 
   patch: (partial) =>
     set((s) => ({ market: { ...s.market, ...partial } })),
 
   setPrice: (price) =>
     set((s) => ({ market: { ...s.market, prevPrice: s.market.price, price } })),
+
+  setWlPrice: (sym, price, chg) =>
+    set((s) => ({ wlPrices: { ...s.wlPrices, [sym]: { price, chg } } })),
 }))

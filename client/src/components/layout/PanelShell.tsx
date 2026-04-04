@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { useUiStore } from '../../stores'
 import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'
 import { BrainCockpit } from '../brain/BrainCockpit'
@@ -77,12 +78,10 @@ const DOCK_PAGES: Record<string, { title: string; component: () => ReactNode }> 
   // 'more' has no page view — special dock button
 }
 
-/** All modal IDs — matches old Zeus openM('xxx') / closeM('xxx') */
-type ModalId = 'notifications' | 'cloud' | 'alerts' | 'charts' | 'liq' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'cmdpalette' | 'exposure' | 'decisionlog'
-
 export function PanelShell() {
   const [dockActive, setDockActive] = useState<string | null>(null)
-  const [activeModal, setActiveModal] = useState<ModalId | null>(null)
+  const activeModal = useUiStore((s) => s.activeModal)
+  const closeModal = useUiStore((s) => s.closeModal)
 
   function handleDockClick(id: string) {
     if (id === 'more') return
@@ -91,10 +90,6 @@ export function PanelShell() {
 
   function closePageView() {
     setDockActive(null)
-  }
-
-  function closeModal() {
-    setActiveModal(null)
   }
 
   const activePage = dockActive ? DOCK_PAGES[dockActive] : null
@@ -135,7 +130,7 @@ export function PanelShell() {
         {/* ── Chart section — 1:1 from original #csec .chart-section ── */}
         <section className="zr-panel zr-panel--chart" data-panel="chart">
           <ErrorBoundary><ChartControls /></ErrorBoundary>
-          <div className="zr-panel__body zr-panel__body--chart">
+          <div id="mc" className="zr-panel__body zr-panel__body--chart">
             <ErrorBoundary><TradingChart /></ErrorBoundary>
           </div>
           <div className="cleg">

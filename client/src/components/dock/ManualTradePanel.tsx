@@ -36,7 +36,7 @@ export function ManualTradePanel() {
       <div className="tp-hdr demo-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
         <span>MANUAL TRADE</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="tp-bal">BAL: ${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span id="demoBalance" className="tp-bal">BAL: ${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           <button style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance">+ ADD</button>
           <button style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000">↻ RESET</button>
         </span>
@@ -44,29 +44,29 @@ export function ManualTradePanel() {
       <div className="tp-body">
         {/* ORDER SIDE */}
         <div className="tp-sides">
-          <button className={`tp-side-btn long-btn${side === 'LONG' ? ' act' : ''}`} onClick={() => setSide('LONG')}>LONG ▲</button>
-          <button className={`tp-side-btn short-btn${side === 'SHORT' ? ' act' : ''}`} onClick={() => setSide('SHORT')}>SHORT ▼</button>
+          <button id="demoLongBtn" className={`tp-side-btn long-btn${side === 'LONG' ? ' act' : ''}`} onClick={() => setSide('LONG')}>LONG ▲</button>
+          <button id="demoShortBtn" className={`tp-side-btn short-btn${side === 'SHORT' ? ' act' : ''}`} onClick={() => setSide('SHORT')}>SHORT ▼</button>
         </div>
 
         {/* SETTINGS ROW */}
         <div className="tp-row">
           <div className="tp-field">
             <div className="tp-lbl">ORDER TYPE</div>
-            <select className="tp-sel" value={ordType} onChange={e => setOrdType(e.target.value)}>
+            <select id="demoOrdType" className="tp-sel" value={ordType} onChange={e => setOrdType(e.target.value)}>
               <option value="market">MARKET</option>
               <option value="limit">LIMIT</option>
             </select>
           </div>
           <div className="tp-field">
             <div className="tp-lbl">MARGIN MODE</div>
-            <select className="tp-sel" value={marginMode} onChange={e => setMarginMode(e.target.value)}>
+            <select id="demoMarginMode" className="tp-sel" value={marginMode} onChange={e => setMarginMode(e.target.value)}>
               <option value="cross">CROSS</option>
               <option value="isolated">ISOLATED</option>
             </select>
           </div>
           <div className="tp-field">
             <div className="tp-lbl">LEVERAGE</div>
-            <select className="tp-sel" value={lev} onChange={e => setLev(e.target.value)}>
+            <select id="demoLev" className="tp-sel" value={lev} onChange={e => setLev(e.target.value)}>
               <option value="1">1x</option>
               <option value="2">2x</option>
               <option value="5">5x</option>
@@ -81,10 +81,10 @@ export function ManualTradePanel() {
 
         {/* CUSTOM LEVERAGE ROW */}
         {showCustomLev && (
-          <div className="tp-row">
+          <div className="tp-row" id="demoCustomLevRow">
             <div className="tp-field" style={{ width: '100%' }}>
               <div className="tp-lbl">LEVIER CUSTOM (1 — 150x)</div>
-              <input type="number" className="tp-inp" value={customLev} onChange={e => setCustomLev(+e.target.value)} min={1} max={150} step={1} placeholder="ex: 75" style={{ width: '100%' }} />
+              <input type="number" id="demoCustomLev" className="tp-inp" value={customLev} onChange={e => setCustomLev(+e.target.value)} min={1} max={150} step={1} placeholder="ex: 75" style={{ width: '100%' }} />
             </div>
           </div>
         )}
@@ -92,12 +92,12 @@ export function ManualTradePanel() {
         {/* ENTRY / SIZE */}
         <div className="tp-row">
           <div className="tp-field">
-            <div className="tp-lbl">{ordType === 'market' ? 'ENTRY PRICE' : 'LIMIT PRICE'}</div>
-            <input type="number" className="tp-inp" value={entry} onChange={e => setEntry(e.target.value)} placeholder="Market Price" step={0.1} readOnly={ordType === 'market'} />
+            <div id="demoEntryLabel" className="tp-lbl">{ordType === 'market' ? 'ENTRY PRICE' : 'LIMIT PRICE'}</div>
+            <input type="number" id="demoEntry" className="tp-inp" value={entry} onChange={e => setEntry(e.target.value)} placeholder="Market Price" step={0.1} readOnly={ordType === 'market'} />
           </div>
           <div className="tp-field">
             <div className="tp-lbl">SIZE (USDT)</div>
-            <input type="number" className="tp-inp" value={size} onChange={e => setSize(e.target.value)} step={10} />
+            <input type="number" id="demoSize" className="tp-inp" value={size} onChange={e => setSize(e.target.value)} step={10} />
           </div>
         </div>
 
@@ -115,11 +115,11 @@ export function ManualTradePanel() {
         <div className="tp-row">
           <div className="tp-field">
             <div className="tp-lbl">TAKE PROFIT</div>
-            <input type="number" className="tp-inp" value={tp} onChange={e => setTp(e.target.value)} placeholder="Optional" step={0.1} />
+            <input type="number" id="demoTP" className="tp-inp" value={tp} onChange={e => setTp(e.target.value)} placeholder="Optional" step={0.1} />
           </div>
           <div className="tp-field">
             <div className="tp-lbl">STOP LOSS</div>
-            <input type="number" className="tp-inp" value={sl} onChange={e => setSl(e.target.value)} placeholder="Optional" step={0.1} />
+            <input type="number" id="demoSL" className="tp-inp" value={sl} onChange={e => setSl(e.target.value)} placeholder="Optional" step={0.1} />
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button className="tp-exec demo-exec">PLACE DEMO ORDER</button>
+        <button id="demoExec" className="tp-exec demo-exec">PLACE DEMO ORDER</button>
 
         {/* PENDING ORDERS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -150,9 +150,9 @@ export function ManualTradePanel() {
 
         {/* P&L STATS */}
         <div className="tp-pnl-row">
-          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div className="tp-pnl-val neut">$0.00</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div className="tp-pnl-val">0%</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div className="tp-pnl-val">0</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div id="demoPnL" className="tp-pnl-val neut">$0.00</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div id="demoWR" className="tp-pnl-val">0%</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div id="demoTrades" className="tp-pnl-val">0</div></div>
         </div>
 
         {/* LIVE/TESTNET OPEN POSITIONS (shown when mode=live, hidden in demo) */}

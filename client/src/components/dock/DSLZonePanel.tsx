@@ -1,13 +1,58 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 
-/** 1:1 port of #dslZone from public/index.html lines 1573-1681 */
+// Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
+function seededRandom(seed: number) {
+  let s = seed
+  return () => { s = (s * 16807 + 0) % 2147483647; return s / 2147483647 }
+}
+
+/** 1:1 port of #dslZone from public/index.html lines 1573-1681
+ *  + initDSLBubbles() from dsl.js lines 181-204 */
 export function DSLZonePanel() {
   const [dslOn, setDslOn] = useState(false)
 
+  // Generate 12 floating bubbles (same logic as dsl.js initDSLBubbles)
+  const bubbles = useMemo(() => {
+    const rng = seededRandom(42)
+    return Array.from({ length: 12 }, (_, i) => {
+      const size = 4 + rng() * 8
+      const left = 5 + rng() * 90
+      const dur = 3 + rng() * 5
+      const delay = rng() * 4
+      const col = rng() > 0.5 ? '#00ffcc' : '#0066ff'
+      return (
+        <div key={`b${i}`} className="dsl-bubble" style={{
+          width: `${size}px`, height: `${size}px`, left: `${left}%`,
+          background: col, opacity: 0.15,
+          animationDuration: `${dur}s`, animationDelay: `${delay}s`,
+          boxShadow: `0 0 ${size}px ${col}44`,
+        }} />
+      )
+    })
+  }, [])
+
+  // Generate 20 cascade drops (same logic as dsl.js initDSLBubbles)
+  const drops = useMemo(() => {
+    const rng = seededRandom(99)
+    return Array.from({ length: 20 }, (_, i) => {
+      const h = 4 + rng() * 10
+      const dur = 0.4 + rng() * 0.6
+      const del = rng() * 1.5
+      const col = rng() > 0.4 ? '#00ffcc' : '#0088ff'
+      return (
+        <div key={`d${i}`} className="dsl-drop" style={{
+          height: `${h}px`, background: col,
+          animationDuration: `${dur}s`, animationDelay: `${del}s`,
+          opacity: 0.7,
+        }} />
+      )
+    })
+  }, [])
+
   return (
     <div className={`dsl-zone${dslOn ? '' : ' dsl-zone-locked'}`} id="dslZone">
-      {/* Liquid background bubbles */}
-      <div className="dsl-liquid-bg" id="dslLiquidBg"></div>
+      {/* Liquid background bubbles (12 — from initDSLBubbles in dsl.js) */}
+      <div className="dsl-liquid-bg" id="dslLiquidBg">{bubbles}</div>
 
       {/* Neon pipes */}
       <div className="dsl-tubes">
@@ -44,8 +89,8 @@ export function DSLZonePanel() {
         <button className="dsl-assist-arm" id="dslAssistArmBtn">ARM ASSIST</button>
       </div>
 
-      {/* Cascade drops */}
-      <div className="dsl-cascade" id="dslCascade"></div>
+      {/* Cascade drops (20 — neon rain from initDSLBubbles in dsl.js) */}
+      <div className="dsl-cascade" id="dslCascade">{drops}</div>
 
       {/* Config */}
       <div className="dsl-config" style={{ display: 'none' }}>
