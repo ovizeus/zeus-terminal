@@ -32,6 +32,12 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 6B: trading files
+import { dslToggleMagnet, _computeDslMagnetSnap, toggleDSL, toggleAssistArm, _syncDslAssistUI, initDSLBubbles, _dslSafePrice, _dslSanitizeParams, runDSLBrain, _runClientDSLOnPositions, dslTakeControl, dslReleaseControl, dslManualParam, _dslPushParamsDebounced, renderDSLWidget, _renderDslCard, stopDSLIntervals, startDSLIntervals, _dslTrimLogs, _dslTrimAll } from '../trading/dsl'
+import { computeMacroCortex, updateMacroUI, FEE_MODEL, estimateRoundTripFees, _adaptSave, _adaptLoad, _adaptClamp, recalcAdaptive, _renderAdaptivePanel, toggleAdaptive, _updateAdaptiveBarTxt, adaptiveStripToggle, initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, computePositionSizingMult, perfRecordTrade, _posR as _riskPosR, _macroPhaseFromComposite } from '../trading/risk'
+import { onPositionOpened, onTradeExecuted, onTradeClosed as onTradeClosedPos, triggerExecCinematic } from '../trading/positions'
+import { _showExecOverlay, _queueExecOverlay, _dayKeyLocal, _bmResetDailyIfNeeded, _bmPostClose } from '../trading/orders'
+import { liveApiSetToken, _liveApiHeaders, _idempotencyKey, _liveApiFetch, _liveApiError, _liveApiParse, liveApiStatus, liveApiGetBalance, liveApiGetPositions, liveApiPlaceOrder, liveApiCancelOrder, liveApiSetLeverage, liveApiClosePosition, liveApiSyncState, aresPlaceOrder, aresSetStopLoss, aresSetTakeProfit, atSetStopLoss, atSetTakeProfit, aresClosePosition, aresCancelOrder, manualLivePlaceOrder, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveModifyLimit, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 // Phase 6A: managers.js, guards.js, dev.js, theme.js, decisionLog.js
 import { Intervals, WS, FetchLock, ingestPrice, Timeouts } from '../core/managers'
 import { _SAFETY, _safe, _safePnl, _isPriceSane, _syncServerTime, _onNewUTCDay, _startServerTimeSync, _resetWatchdog, _resetKlineWatchdog, _startWatchdog, _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode, _verifyPositionsAfterReconnect, _safeSetInterval as _guardsSafeSetInterval, _clearAllIntervals as _guardsClearAllIntervals, _isExecAllowed, initSafetyEngine } from '../utils/guards'
@@ -128,6 +134,90 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 6B: trading/dsl.js ──
+  w.dslToggleMagnet = dslToggleMagnet
+  w._computeDslMagnetSnap = _computeDslMagnetSnap
+  w.toggleDSL = toggleDSL
+  w.toggleAssistArm = toggleAssistArm
+  w._syncDslAssistUI = _syncDslAssistUI
+  w.initDSLBubbles = initDSLBubbles
+  w._dslSafePrice = _dslSafePrice
+  w._dslSanitizeParams = _dslSanitizeParams
+  w.runDSLBrain = runDSLBrain
+  w._runClientDSLOnPositions = _runClientDSLOnPositions
+  w.dslTakeControl = dslTakeControl
+  w.dslReleaseControl = dslReleaseControl
+  w.dslManualParam = dslManualParam
+  w._dslPushParamsDebounced = _dslPushParamsDebounced
+  w.renderDSLWidget = renderDSLWidget
+  w._renderDslCard = _renderDslCard
+  w.stopDSLIntervals = stopDSLIntervals
+  w.startDSLIntervals = startDSLIntervals
+  w._dslTrimLogs = _dslTrimLogs
+  w._dslTrimAll = _dslTrimAll
+
+  // ── Phase 6B: trading/risk.js ──
+  w.computeMacroCortex = computeMacroCortex
+  w.updateMacroUI = updateMacroUI
+  w.FEE_MODEL = FEE_MODEL
+  w.estimateRoundTripFees = estimateRoundTripFees
+  w._adaptSave = _adaptSave
+  w._adaptLoad = _adaptLoad
+  w._adaptClamp = _adaptClamp
+  w.recalcAdaptive = recalcAdaptive
+  w._renderAdaptivePanel = _renderAdaptivePanel
+  w.toggleAdaptive = toggleAdaptive
+  w._updateAdaptiveBarTxt = _updateAdaptiveBarTxt
+  w.adaptiveStripToggle = adaptiveStripToggle
+  w.initAdaptiveStrip = initAdaptiveStrip
+  w.macroAdjustEntryScore = macroAdjustEntryScore
+  w.macroAdjustExitRisk = macroAdjustExitRisk
+  w.computePositionSizingMult = computePositionSizingMult
+  w.perfRecordTrade = perfRecordTrade
+  w._macroPhaseFromComposite = _macroPhaseFromComposite
+
+  // ── Phase 6B: trading/positions.js ──
+  w.onPositionOpened = onPositionOpened
+  w.onTradeExecuted = onTradeExecuted
+  w.onTradeClosedPos = onTradeClosedPos
+  w.triggerExecCinematic = triggerExecCinematic
+
+  // ── Phase 6B: trading/orders.js ──
+  w._showExecOverlay = _showExecOverlay
+  w._queueExecOverlay = _queueExecOverlay
+  w._dayKeyLocal = _dayKeyLocal
+  w._bmResetDailyIfNeeded = _bmResetDailyIfNeeded
+  w._bmPostClose = _bmPostClose
+
+  // ── Phase 6B: trading/liveApi.js ──
+  w.liveApiSetToken = liveApiSetToken
+  w._liveApiHeaders = _liveApiHeaders
+  w._idempotencyKey = _idempotencyKey
+  w._liveApiFetch = _liveApiFetch
+  w._liveApiError = _liveApiError
+  w._liveApiParse = _liveApiParse
+  w.liveApiStatus = liveApiStatus
+  w.liveApiGetBalance = liveApiGetBalance
+  w.liveApiGetPositions = liveApiGetPositions
+  w.liveApiPlaceOrder = liveApiPlaceOrder
+  w.liveApiCancelOrder = liveApiCancelOrder
+  w.liveApiSetLeverage = liveApiSetLeverage
+  w.liveApiClosePosition = liveApiClosePosition
+  w.liveApiSyncState = liveApiSyncState
+  w.aresPlaceOrder = aresPlaceOrder
+  w.aresSetStopLoss = aresSetStopLoss
+  w.aresSetTakeProfit = aresSetTakeProfit
+  w.atSetStopLoss = atSetStopLoss
+  w.atSetTakeProfit = atSetTakeProfit
+  w.aresClosePosition = aresClosePosition
+  w.aresCancelOrder = aresCancelOrder
+  w.manualLivePlaceOrder = manualLivePlaceOrder
+  w.manualLiveGetOpenOrders = manualLiveGetOpenOrders
+  w.manualLiveCancelOrder = manualLiveCancelOrder
+  w.manualLiveModifyLimit = manualLiveModifyLimit
+  w.manualLiveSetSL = manualLiveSetSL
+  w.manualLiveSetTP = manualLiveSetTP
 
   // ── Phase 6A: managers.js (self-installs on window via import) ──
   // Intervals, WS, FetchLock, ingestPrice, Timeouts already on w.* from import

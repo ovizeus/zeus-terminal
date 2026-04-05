@@ -52,13 +52,8 @@ const SCRIPT_PHASES: string[][] = [
   ],
   // Phase 3 — Brain engine (all ported to React Phase 5: signals, confluence, forecast, regime, phaseFilter, deepdive, brain)
   // [EMPTY — all brain scripts ported]
-  // Phase 4 — Trading
+  // Phase 4 — Trading (dsl.js, risk.js, positions.js, orders.js, liveApi.js ported Phase 6B)
   [
-    'js/trading/dsl.js',
-    'js/trading/risk.js',
-    'js/trading/positions.js',
-    'js/trading/orders.js',
-    'js/trading/liveApi.js',
     'js/trading/autotrade.js',
   ],
   // Phase 5 — Analytics (perfStore.js + dailyPnl.js ported to React Phase 4)
