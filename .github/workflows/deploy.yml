@@ -39,7 +39,8 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} '
             cd /root/zeus-terminal &&
-            git pull origin main &&
+            git fetch origin main &&
+            git reset --hard origin/main &&
             npm ci --production --no-audit --no-fund &&
             pm2 reload zeus --update-env &&
             sleep 3 &&
