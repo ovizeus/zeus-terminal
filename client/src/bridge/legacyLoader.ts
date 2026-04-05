@@ -60,10 +60,8 @@ const SCRIPT_PHASES: string[][] = [
   // [EMPTY — all brain extensions ported]
   // Phase 8 — Teacher (all 15 files ported Phase 7C)
   // [EMPTY — all teacher scripts ported]
-  // Phase 9 — Final modules (modebar.js, dock.js ported 6E; patch.js, hotkeys.js, pageview.js ported 7A)
-  [
-    'js/data/orderflow.js',
-  ],
+  // Phase 9 — Final modules (all ported: modebar/dock 6E, patch/hotkeys/pageview 7A, orderflow 7D)
+  // [EMPTY]
   // Phase 10 — Bootstrap (defines startApp, must be last)
   [
     'js/core/bootstrap.js',
