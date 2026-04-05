@@ -65,11 +65,8 @@ const SCRIPT_PHASES: string[][] = [
     'js/ui/notifications.js',
     'js/ui/render.js',
   ],
-  // Phase 7 — Brain extensions
-  [
-    'js/brain/aub.js',
-    'js/brain/arianova.js',
-  ],
+  // Phase 7 — Brain extensions (aub.js + arianova.js ported Phase 6D)
+  // [EMPTY — all brain extensions ported]
   // Phase 8 — Teacher
   [
     'js/teacher/teacherConfig.js',

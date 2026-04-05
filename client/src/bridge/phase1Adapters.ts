@@ -7,6 +7,9 @@
  * Phase 2: constants.js, events.js
  */
 
+// Early shims — MUST be first import (sets ZT_safeInterval before arianova.ts IIFE runs)
+import './earlyShims'
+
 import { el, safeSetText, safeSetHTML, escHtml, isValidMarketPrice, safeLastKline } from '../utils/dom'
 import { fmt, fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
 import { _clamp, _clampFB01, _clampFB, calcRSIArr } from '../utils/math'
@@ -32,6 +35,9 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 6D: brain extensions
+import { aubToggle, aubToggleSFX, aubCheckCompat, aubBBSnapshot, aubBBExport, aubBBClear, aubCalcMTFStrength, aubCalcCorrelation, aubMacroImport, aubMacroClear, aubMacroFileLoad, aubGetActiveMacroRisk, aubSimRun, aubSimApply, aubRefreshAll, initAUB } from '../engine/aub'
+import '../engine/arianova' // self-registers on window via IIFE
 // Phase 6B: trading files
 import { dslToggleMagnet, _computeDslMagnetSnap, toggleDSL, toggleAssistArm, _syncDslAssistUI, initDSLBubbles, _dslSafePrice, _dslSanitizeParams, runDSLBrain, _runClientDSLOnPositions, dslTakeControl, dslReleaseControl, dslManualParam, _dslPushParamsDebounced, renderDSLWidget, _renderDslCard, stopDSLIntervals, startDSLIntervals, _dslTrimLogs, _dslTrimAll } from '../trading/dsl'
 import { computeMacroCortex, updateMacroUI, FEE_MODEL, estimateRoundTripFees, _adaptSave, _adaptLoad, _adaptClamp, recalcAdaptive, _renderAdaptivePanel, toggleAdaptive, _updateAdaptiveBarTxt, adaptiveStripToggle, initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, computePositionSizingMult, perfRecordTrade, _posR as _riskPosR, _macroPhaseFromComposite } from '../trading/risk'
@@ -52,6 +58,23 @@ import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, inst
 
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
+
+  // ── Shim: ZT_safeInterval (defined in config.js, needed by arianova.ts at import time) ──
+  if (typeof (w as any).ZT_safeInterval !== 'function') {
+    (w as any).ZT_safeInterval = function (name: string, fn: any, ms?: number) {
+      try {
+        if (!(w as any).__ZT_INT_ERR__) (w as any).__ZT_INT_ERR__ = {}
+        const wrap = function () {
+          try { fn() }
+          catch (e: any) {
+            (w as any).__ZT_INT_ERR__[name] = ((w as any).__ZT_INT_ERR__[name] || 0) + 1
+            console.warn('[ZT interval error]', name, e?.message || e)
+          }
+        }
+        return wrap
+      } catch (_) { return fn }
+    }
+  }
 
   // ── Phase 1: helpers.js ──
   w.el = el
@@ -136,6 +159,25 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 6D: brain/aub.js ──
+  w.aubToggle = aubToggle
+  w.aubToggleSFX = aubToggleSFX
+  w.aubCheckCompat = aubCheckCompat
+  w.aubBBSnapshot = aubBBSnapshot
+  w.aubBBExport = aubBBExport
+  w.aubBBClear = aubBBClear
+  w.aubCalcMTFStrength = aubCalcMTFStrength
+  w.aubCalcCorrelation = aubCalcCorrelation
+  w.aubMacroImport = aubMacroImport
+  w.aubMacroClear = aubMacroClear
+  w.aubMacroFileLoad = aubMacroFileLoad
+  w.aubGetActiveMacroRisk = aubGetActiveMacroRisk
+  w.aubSimRun = aubSimRun
+  w.aubSimApply = aubSimApply
+  w.aubRefreshAll = aubRefreshAll
+  w.initAUB = initAUB
+  // arianova.js — self-registers on window via IIFE import above
 
   // ── Phase 6C: trading/autotrade.js ──
   w.toggleAutoTrade = toggleAutoTrade
