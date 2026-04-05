@@ -32,6 +32,12 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 6A: managers.js, guards.js, dev.js, theme.js, decisionLog.js
+import { Intervals, WS, FetchLock, ingestPrice, Timeouts } from '../core/managers'
+import { _SAFETY, _safe, _safePnl, _isPriceSane, _syncServerTime, _onNewUTCDay, _startServerTimeSync, _resetWatchdog, _resetKlineWatchdog, _startWatchdog, _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode, _verifyPositionsAfterReconnect, _safeSetInterval as _guardsSafeSetInterval, _clearAllIntervals as _guardsClearAllIntervals, _isExecAllowed, initSafetyEngine } from '../utils/guards'
+import { DEV, devLog, devClearLog, devExportLog, ZLOG, safeAsync, _devModuleOk, _devModuleError, devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, hubToggleDev, _devEnsureVisible, setUiScale, hubPopulate, hubSaveAll, hubLoadAll, hubTgSave, hubTgTest, hubTgPopulate, hubResetDefaults, hubSetTf, hubSetTZ, hubApplyChartColors, hubCloudSave, hubCloudLoad, hubCloudClear } from '../utils/dev'
+import { zeusApplyTheme, zeusGetTheme } from '../ui/theme'
+import { DLog } from '../utils/decisionLog'
 // Phase 5B4: brain.js
 import { updateNeurons, getNeuronColor, setNeuron, updateBrainArc, updateBrainState, brainThink, runBrainUpdate, armAssist, disarmAssist, isArmAssistValid, _setRadio, syncDslFromProfile, syncTFProfile, syncBrainFromState, setMode, _applyModeSwitch, confirmBrainModeSwitch, cancelBrainModeSwitch, setBrainMode, setProfile, setDslMode, calcDslTargetPrice, _calcAtrPct, applyTimezone, detectRegimeEnhanced, updateMTFAlignment, detectSweepDisplacement, updateFlowEngine, computeGates, renderGates, computeEntryScore, computeMarketAtmosphere, updateChaosBar, updateNewsShield, checkProtectMode, resetProtectMode, updateDSLTelemetry, showExecCinematic, getStableRegime, checkAntiFakeout, computeSafetyGates, _getCooldownMs, allSafetyPass, computeContextGates, _getActiveSessions, updateSessionPills, renderSessionBar, initNeuroCoinLEDs, pulseNeuronCoin, onNeuronScanUpdate, renderBrainCockpit, initZParticles, zAnimFrame, startZAnim, _brainDirtySet, _brainSafeSet, getBrainViewSnapshot, renderCircuitBrain, runGrandUpdate, _initBrainCockpit, detectMarketRegime, updateOrderFlow, adaptAutoTradeParams } from '../engine/brain'
 import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, installPWA, initIndicatorState, openIndPanel, closeIndPanel, toggleInd, applyIndVisibility, openIndSettings, closeIndSettings, applyIndSettings, initBBSeries, updateBB, initIchimokuSeries, updateIchimoku, updateFib, updatePivot, updateVP, initRSIChart, updateRSI, initStochChart, initATRChart, initOBVChart, initMFIChart, initCCIChart, _indRenderHook, renderActBar, getIndColor, deactivateInd, toggleActBar, calcMACD, initMACDChart, _macdKlineHook, detectSupertrendFlip, detectRSIDivergence, runSignalScan, generateDeepDive, updateDeepDive, _syncSubChartsToMain } from '../engine/indicators'
@@ -122,6 +128,72 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 6A: managers.js (self-installs on window via import) ──
+  // Intervals, WS, FetchLock, ingestPrice, Timeouts already on w.* from import
+  void Intervals; void WS; void FetchLock; void ingestPrice; void Timeouts
+
+  // ── Phase 6A: guards.js ──
+  w._SAFETY = _SAFETY
+  w._safe = _safe
+  w._safePnl = _safePnl
+  w._isPriceSane = _isPriceSane
+  w._syncServerTime = _syncServerTime
+  w._onNewUTCDay = _onNewUTCDay
+  w._startServerTimeSync = _startServerTimeSync
+  w._resetWatchdog = _resetWatchdog
+  w._resetKlineWatchdog = _resetKlineWatchdog
+  w._startWatchdog = _startWatchdog
+  w._enterDegradedMode = _enterDegradedMode
+  w._exitDegradedMode = _exitDegradedMode
+  w._isDegradedOnly = _isDegradedOnly
+  w._enterRecoveryMode = _enterRecoveryMode
+  w._exitRecoveryMode = _exitRecoveryMode
+  w._verifyPositionsAfterReconnect = _verifyPositionsAfterReconnect
+  w._isExecAllowed = _isExecAllowed
+  w.initSafetyEngine = initSafetyEngine
+
+  // ── Phase 6A: dev.js ──
+  w.DEV = DEV
+  w.devLog = devLog
+  w.devClearLog = devClearLog
+  w.devExportLog = devExportLog
+  w.ZLOG = ZLOG
+  w.safeAsync = safeAsync
+  w._devModuleOk = _devModuleOk
+  w._devModuleError = _devModuleError
+  w.devInjectSignal = devInjectSignal
+  w.devInjectLiquidation = devInjectLiquidation
+  w.devInjectWhale = devInjectWhale
+  w.devFeedDisconnect = devFeedDisconnect
+  w.devFeedRecover = devFeedRecover
+  w.devTriggerKillSwitch = devTriggerKillSwitch
+  w.devResetProtect = devResetProtect
+  w.devReplayStart = devReplayStart
+  w.devReplayStop = devReplayStop
+  w.hubToggleDev = hubToggleDev
+  w._devEnsureVisible = _devEnsureVisible
+  w.setUiScale = setUiScale
+  w.hubPopulate = hubPopulate
+  w.hubSaveAll = hubSaveAll
+  w.hubLoadAll = hubLoadAll
+  w.hubTgSave = hubTgSave
+  w.hubTgTest = hubTgTest
+  w.hubTgPopulate = hubTgPopulate
+  w.hubResetDefaults = hubResetDefaults
+  w.hubSetTf = hubSetTf
+  w.hubSetTZ = hubSetTZ
+  w.hubApplyChartColors = hubApplyChartColors
+  w.hubCloudSave = hubCloudSave
+  w.hubCloudLoad = hubCloudLoad
+  w.hubCloudClear = hubCloudClear
+
+  // ── Phase 6A: theme.js (self-applies on import) ──
+  w.zeusApplyTheme = zeusApplyTheme
+  w.zeusGetTheme = zeusGetTheme
+
+  // ── Phase 6A: decisionLog.js ──
+  w.DLog = DLog
 
   // ── Phase 5A: signals.js ──
   w.renderSignals = renderSignals

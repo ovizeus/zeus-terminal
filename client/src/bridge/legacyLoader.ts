@@ -36,22 +36,15 @@ const state: BridgeState = {
 // Each phase must complete before the next starts
 
 const SCRIPT_PHASES: string[][] = [
-  // Phase 0 — Head managers (icons.js, helpers.js, formatters.js, math.js ported to React Phase 1)
-  [
-    'js/core/managers.js',
-  ],
+  // Phase 0 — Head managers (icons.js, helpers.js, formatters.js, math.js ported Phase 1; managers.js ported Phase 6A)
+  // [EMPTY — all head scripts ported]
   // Phase 1B — Global state & config (constants.js + events.js ported to React Phase 2)
   [
     'js/core/state.js',
     'js/core/config.js',
   ],
-  // Phase 1C — UI & Dev (tabLeader.js ported to React Phase 3)
-  [
-    'js/utils/guards.js',
-    'js/utils/dev.js',
-    'js/ui/theme.js',
-    'js/utils/decisionLog.js',
-  ],
+  // Phase 1C — UI & Dev (tabLeader.js ported Phase 3; guards.js, dev.js, theme.js, decisionLog.js ported Phase 6A)
+  // [EMPTY — all utility scripts ported]
   // Phase 2 — Data layer (storage.js + symbols.js ported to React Phase 3)
   [
     'js/data/marketData.js',
