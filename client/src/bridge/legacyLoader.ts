@@ -55,14 +55,10 @@ const SCRIPT_PHASES: string[][] = [
   // Phase 4 — Trading (all ported: dsl/risk/positions/orders/liveApi Phase 6B, autotrade Phase 6C)
   // [EMPTY — all trading scripts ported]
   // Phase 5 — Analytics (perfStore.js + dailyPnl.js ported to React Phase 4)
-  // Phase 6 — UI rendering
+  // Phase 6 — UI rendering (dom.js, timeSales.js, modals.js, notifications.js ported Phase 6E)
   [
     'js/ui/marketCoreReactor.js',
-    'js/ui/dom.js',
     'js/ui/panels.js',
-    'js/ui/timeSales.js',
-    'js/ui/modals.js',
-    'js/ui/notifications.js',
     'js/ui/render.js',
   ],
   // Phase 7 — Brain extensions (aub.js + arianova.js ported Phase 6D)
@@ -85,23 +81,19 @@ const SCRIPT_PHASES: string[][] = [
     'js/teacher/teacherEngine.js',
     'js/teacher/teacherPanel.js',
   ],
-  // Phase 9 — Final modules
+  // Phase 9 — Final modules (modebar.js, dock.js ported Phase 6E)
   [
     'js/data/orderflow.js',
     'js/core/patch.js',
     'js/core/hotkeys.js',
-    'js/ui/modebar.js',
     'js/ui/pageview.js',
-    'js/ui/dock.js',
   ],
   // Phase 10 — Bootstrap (defines startApp, must be last)
   [
     'js/core/bootstrap.js',
   ],
-  // Phase 11 — Post-bootstrap
-  [
-    'js/ui/drawingTools.js',
-  ],
+  // Phase 11 — Post-bootstrap (drawingTools.js ported Phase 6E)
+  // [EMPTY]
 ]
 
 // ── Old CSS files to load ─────────────────────────────────────────

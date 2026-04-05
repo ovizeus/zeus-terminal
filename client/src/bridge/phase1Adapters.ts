@@ -35,6 +35,14 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 6E: UI leaf files
+import { _initAudio, _updateAudioBadge, _safePlayTone, playAlertSound, playEntrySound, playExitSound, toggleAlerts, applyChartColors, initActBar, applyPriceAxisWidth, togInd, applyPriceAxisColors } from '../ui/dom2'
+import { _showExecOverlay as _showExecOverlayModal, _queueExecOverlay as _queueExecOverlayModal } from '../ui/modals'
+import '../ui/notifications' // 6 lines, self-registers
+import { toggleTimeSales } from '../ui/timeSales'
+import { initModeBar, updateModeBar, _modeBarSwitch } from '../ui/modebar'
+import { initZeusDock, dockClearActive } from '../ui/dock'
+import '../ui/drawingTools' // self-registers drawing tool functions
 // Phase 6D: brain extensions
 import { aubToggle, aubToggleSFX, aubCheckCompat, aubBBSnapshot, aubBBExport, aubBBClear, aubCalcMTFStrength, aubCalcCorrelation, aubMacroImport, aubMacroClear, aubMacroFileLoad, aubGetActiveMacroRisk, aubSimRun, aubSimApply, aubRefreshAll, initAUB } from '../engine/aub'
 import '../engine/arianova' // self-registers on window via IIFE
@@ -159,6 +167,29 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 6E: ui leaf files ──
+  w._initAudio = _initAudio
+  w._updateAudioBadge = _updateAudioBadge
+  w._safePlayTone = _safePlayTone
+  w.playAlertSound = playAlertSound
+  w.playEntrySound = playEntrySound
+  w.playExitSound = playExitSound
+  w.toggleAlerts = toggleAlerts
+  w.applyChartColors = applyChartColors
+  w.initActBar = initActBar
+  w.applyPriceAxisWidth = applyPriceAxisWidth
+  w.togInd = togInd
+  w.applyPriceAxisColors = applyPriceAxisColors
+  w.toggleTimeSales = toggleTimeSales
+  w.initModeBar = initModeBar
+  w.updateModeBar = updateModeBar
+  w._modeBarSwitch = _modeBarSwitch
+  w.initZeusDock = initZeusDock
+  w.dockClearActive = dockClearActive
+  // modals.ts — _showExecOverlay already set by orders.ts adapter; modal version as alias
+  // notifications.ts — self-registers on import
+  // drawingTools.ts — self-registers on import
 
   // ── Phase 6D: brain/aub.js ──
   w.aubToggle = aubToggle
