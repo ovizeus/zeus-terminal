@@ -38,6 +38,8 @@ import { computeMacroCortex, updateMacroUI, FEE_MODEL, estimateRoundTripFees, _a
 import { onPositionOpened, onTradeExecuted, onTradeClosed as onTradeClosedPos, triggerExecCinematic } from '../trading/positions'
 import { _showExecOverlay, _queueExecOverlay, _dayKeyLocal, _bmResetDailyIfNeeded, _bmPostClose } from '../trading/orders'
 import { liveApiSetToken, _liveApiHeaders, _idempotencyKey, _liveApiFetch, _liveApiError, _liveApiParse, liveApiStatus, liveApiGetBalance, liveApiGetPositions, liveApiPlaceOrder, liveApiCancelOrder, liveApiSetLeverage, liveApiClosePosition, liveApiSyncState, aresPlaceOrder, aresSetStopLoss, aresSetTakeProfit, atSetStopLoss, atSetTakeProfit, aresClosePosition, aresCancelOrder, manualLivePlaceOrder, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveModifyLimit, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
+// Phase 6C: autotrade.js
+import { toggleAutoTrade, _doEnableAT, _applyATToggleUI, updateATMode, atLog as atLogFn, renderATLog, updateATStats, checkATConditions, setCondUI, isDataOkForAutoTrade, computeFusionDecision, runAutoTradeCheck, placeAutoTrade, canAddOn, openAddOn, scheduleAutoClose, checkKillThreshold, triggerKillSwitch, resetKillSwitch, renderATPositions, openPartialClose, execPartialClose, closeAutoPos, closeAllDemoPos, closeAllATPos } from '../trading/autotrade'
 // Phase 6A: managers.js, guards.js, dev.js, theme.js, decisionLog.js
 import { Intervals, WS, FetchLock, ingestPrice, Timeouts } from '../core/managers'
 import { _SAFETY, _safe, _safePnl, _isPriceSane, _syncServerTime, _onNewUTCDay, _startServerTimeSync, _resetWatchdog, _resetKlineWatchdog, _startWatchdog, _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode, _verifyPositionsAfterReconnect, _safeSetInterval as _guardsSafeSetInterval, _clearAllIntervals as _guardsClearAllIntervals, _isExecAllowed, initSafetyEngine } from '../utils/guards'
@@ -134,6 +136,33 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 6C: trading/autotrade.js ──
+  w.toggleAutoTrade = toggleAutoTrade
+  w._doEnableAT = _doEnableAT
+  w._applyATToggleUI = _applyATToggleUI
+  w.updateATMode = updateATMode
+  w.atLog = atLogFn
+  w.renderATLog = renderATLog
+  w.updateATStats = updateATStats
+  w.checkATConditions = checkATConditions
+  w.setCondUI = setCondUI
+  w.isDataOkForAutoTrade = isDataOkForAutoTrade
+  w.computeFusionDecision = computeFusionDecision
+  w.runAutoTradeCheck = runAutoTradeCheck
+  w.placeAutoTrade = placeAutoTrade
+  w.canAddOn = canAddOn
+  w.openAddOn = openAddOn
+  w.scheduleAutoClose = scheduleAutoClose
+  w.checkKillThreshold = checkKillThreshold
+  w.triggerKillSwitch = triggerKillSwitch
+  w.resetKillSwitch = resetKillSwitch
+  w.renderATPositions = renderATPositions
+  w.openPartialClose = openPartialClose
+  w.execPartialClose = execPartialClose
+  w.closeAutoPos = closeAutoPos
+  w.closeAllDemoPos = closeAllDemoPos
+  w.closeAllATPos = closeAllATPos
 
   // ── Phase 6B: trading/dsl.js ──
   w.dslToggleMagnet = dslToggleMagnet
