@@ -10,6 +10,8 @@
  * Old JS populates React DOM elements via getElementById() — this is the bridge.
  */
 
+import { installPhase1Adapters } from './phase1Adapters'
+
 // ── Types ──────────────────────────────────────────────────────────
 interface BridgeState {
   loaded: boolean
@@ -34,18 +36,9 @@ const state: BridgeState = {
 // Each phase must complete before the next starts
 
 const SCRIPT_PHASES: string[][] = [
-  // Phase 0 — Icons + Head managers (MUST load first)
-  // icons.js defines _ZI (global icon constants) — extracted from index.html inline <script>.
-  // Every module (config.js, deepdive.js, aub.js, bootstrap.js) depends on _ZI.
+  // Phase 0 — Head managers (icons.js, helpers.js, formatters.js, math.js ported to React Phase 1)
   [
-    'js/core/icons.js',
     'js/core/managers.js',
-  ],
-  // Phase 1A — Utilities
-  [
-    'js/utils/helpers.js',
-    'js/utils/formatters.js',
-    'js/utils/math.js',
   ],
   // Phase 1B — Global state & config
   [
@@ -215,6 +208,11 @@ async function loadPhase(scripts: string[]): Promise<void> {
  */
 function installShims(): void {
   const w = window as any
+
+  // ── Phase 1 adapters: ported utilities exposed on window.* ──
+  // Replaces: helpers.js, formatters.js, math.js, icons.js
+  // Must run BEFORE any old JS loads (config.js, deepdive.js, etc. depend on _ZI, el, fmt, _clamp)
+  installPhase1Adapters()
 
   // ── SHIM 1: initCharts() → no-op ──
   // React's TradingChart.tsx creates the chart instance.
