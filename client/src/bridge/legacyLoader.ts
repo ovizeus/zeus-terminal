@@ -54,12 +54,8 @@ const SCRIPT_PHASES: string[][] = [
   // Phase 4 — Trading (all ported: dsl/risk/positions/orders/liveApi Phase 6B, autotrade Phase 6C)
   // [EMPTY — all trading scripts ported]
   // Phase 5 — Analytics (perfStore.js + dailyPnl.js ported to React Phase 4)
-  // Phase 6 — UI rendering (dom.js, timeSales.js, modals.js, notifications.js ported Phase 6E)
-  [
-    'js/ui/marketCoreReactor.js',
-    'js/ui/panels.js',
-    'js/ui/render.js',
-  ],
+  // Phase 6 — UI rendering (all ported: dom/timeSales/modals/notifications 6E, marketCoreReactor 7A, panels/render 7B)
+  // [EMPTY — all UI rendering scripts ported]
   // Phase 7 — Brain extensions (aub.js + arianova.js ported Phase 6D)
   // [EMPTY — all brain extensions ported]
   // Phase 8 — Teacher

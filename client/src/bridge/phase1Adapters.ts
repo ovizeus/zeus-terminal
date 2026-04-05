@@ -35,6 +35,9 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 7B: panels + render
+import { scanLiquidityMagnets, renderMagnets, updateMagnetBias, jumpToMagnet, runBacktest, renderBacktestResults, calcVWAPBands, renderVWAP, toggleVWAP, oviReadSettings, oviApplySettings, oviCalcATR, oviPivots, oviWeightAt, oviColor, oviCalcPockets, renderOviLiquid, oviRenderScale, clearOviLiquid, toggleOviLiquid, togglePnlLab, renderPnlLab, _pnlLabCard, _pnlLabProfileCard, toggleSession, clearAllSessionOverlays, renderSessionOverlay } from '../ui/panels'
+import { recordIndicatorPerformance, recordAllIndicators, recalcPerfWeights, renderPerfTracker, getCurrentADX, updateQuantumClock, getSessionKey, updateSessionBacktest, updateSymPulseRows, updateBrainHeatmap, updateRiskGauges, setRiskGauge, updateDataStream, updateBrainExtension, getTimeUTC, getRoTime, isCurrentTimeOK, renderDHF } from '../ui/render'
 // Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines
 import '../core/patch' // side-effect module
 import '../core/hotkeys' // side-effect module
@@ -173,6 +176,53 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 7B: panels + render ──
+  w.scanLiquidityMagnets = scanLiquidityMagnets
+  w.renderMagnets = renderMagnets
+  w.updateMagnetBias = updateMagnetBias
+  w.jumpToMagnet = jumpToMagnet
+  w.runBacktest = runBacktest
+  w.renderBacktestResults = renderBacktestResults
+  w.calcVWAPBands = calcVWAPBands
+  w.renderVWAP = renderVWAP
+  w.toggleVWAP = toggleVWAP
+  w.oviReadSettings = oviReadSettings
+  w.oviApplySettings = oviApplySettings
+  w.oviCalcATR = oviCalcATR
+  w.oviPivots = oviPivots
+  w.oviWeightAt = oviWeightAt
+  w.oviColor = oviColor
+  w.oviCalcPockets = oviCalcPockets
+  w.renderOviLiquid = renderOviLiquid
+  w.oviRenderScale = oviRenderScale
+  w.clearOviLiquid = clearOviLiquid
+  w.toggleOviLiquid = toggleOviLiquid
+  w.togglePnlLab = togglePnlLab
+  w.renderPnlLab = renderPnlLab
+  w._pnlLabCard = _pnlLabCard
+  w._pnlLabProfileCard = _pnlLabProfileCard
+  w.toggleSession = toggleSession
+  w.clearAllSessionOverlays = clearAllSessionOverlays
+  w.renderSessionOverlay = renderSessionOverlay
+  w.recordIndicatorPerformance = recordIndicatorPerformance
+  w.recordAllIndicators = recordAllIndicators
+  w.recalcPerfWeights = recalcPerfWeights
+  w.renderPerfTracker = renderPerfTracker
+  w.getCurrentADX = getCurrentADX
+  w.updateQuantumClock = updateQuantumClock
+  w.getSessionKey = getSessionKey
+  w.updateSessionBacktest = updateSessionBacktest
+  w.updateSymPulseRows = updateSymPulseRows
+  w.updateBrainHeatmap = updateBrainHeatmap
+  w.updateRiskGauges = updateRiskGauges
+  w.setRiskGauge = setRiskGauge
+  w.updateDataStream = updateDataStream
+  w.updateBrainExtension = updateBrainExtension
+  w.getTimeUTC = getTimeUTC
+  w.getRoTime = getRoTime
+  w.isCurrentTimeOK = isCurrentTimeOK
+  w.renderDHF = renderDHF
 
   // ── Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines ──
   // patch.ts, hotkeys.ts, marketCoreReactor.ts — side-effect imports, self-register
