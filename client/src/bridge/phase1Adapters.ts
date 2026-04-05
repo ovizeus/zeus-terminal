@@ -9,6 +9,9 @@
 
 // Early shims — MUST be first import (sets ZT_safeInterval before arianova.ts IIFE runs)
 import './earlyShims'
+// Phase 7E: foundation — state + config. earlyShims already set _ZI on window.
+import '../core/state'   // defines w.S, w.TC, w.TP
+import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w._ZI)
 
 import { el, safeSetText, safeSetHTML, escHtml, isValidMarketPrice, safeLastKline } from '../utils/dom'
 import { fmt, fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
