@@ -16,6 +16,8 @@ import { AT, PREDATOR, computePredatorState, _pendingClose, attachConfirmClose, 
 import { TabLeader } from '../services/tabLeader'
 import { _safeLocalStorageSet, addTradeToJournal, renderTradeJournal, loadJournalFromStorage, exportJournalCSV, startFRCountdown, trackOIDelta } from '../services/storage'
 import { ZStore, connectWatchlist, switchWLSymbol } from '../services/symbols'
+import { savePerfToStorage, loadPerfFromStorage, recordIndicatorPnl, calcExpectancy, calcGlobalExpectancy, calcExpectancyByProfile, resetPerfStore } from '../engine/perfStore'
+import { recordDailyClose, rebuildDailyFromJournal, getDailyStats, getLastNDays, getWeeklyRollup, getMonthlyRollup, getDrawdownStats, saveDailyPnl, loadDailyPnl, resetDailyPnl } from '../engine/dailyPnl'
 
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
@@ -82,4 +84,25 @@ export function installPhase1Adapters(): void {
   w.ZStore = ZStore
   w.connectWatchlist = connectWatchlist
   w.switchWLSymbol = switchWLSymbol
+
+  // ── Phase 4: perfStore.js ──
+  w.savePerfToStorage = savePerfToStorage
+  w.loadPerfFromStorage = loadPerfFromStorage
+  w.recordIndicatorPnl = recordIndicatorPnl
+  w.calcExpectancy = calcExpectancy
+  w.calcGlobalExpectancy = calcGlobalExpectancy
+  w.calcExpectancyByProfile = calcExpectancyByProfile
+  w.resetPerfStore = resetPerfStore
+
+  // ── Phase 4: dailyPnl.js ──
+  w.recordDailyClose = recordDailyClose
+  w.rebuildDailyFromJournal = rebuildDailyFromJournal
+  w.getDailyStats = getDailyStats
+  w.getLastNDays = getLastNDays
+  w.getWeeklyRollup = getWeeklyRollup
+  w.getMonthlyRollup = getMonthlyRollup
+  w.getDrawdownStats = getDrawdownStats
+  w.saveDailyPnl = saveDailyPnl
+  w.loadDailyPnl = loadDailyPnl
+  w.resetDailyPnl = resetDailyPnl
 }

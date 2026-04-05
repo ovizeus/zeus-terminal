@@ -76,11 +76,7 @@ const SCRIPT_PHASES: string[][] = [
     'js/trading/liveApi.js',
     'js/trading/autotrade.js',
   ],
-  // Phase 5 — Analytics
-  [
-    'js/analytics/perfStore.js',
-    'js/analytics/dailyPnl.js',
-  ],
+  // Phase 5 — Analytics (perfStore.js + dailyPnl.js ported to React Phase 4)
   // Phase 6 — UI rendering
   [
     'js/ui/marketCoreReactor.js',
