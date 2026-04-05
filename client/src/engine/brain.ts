@@ -249,12 +249,16 @@ export function runBrainUpdate(): void {
 // UI buttons → call setMode()/setProfile() only.
 // AT.enabled is the sole command for brain scan + execution (no more S.runMode).
 // ══════════════════════════════════════════════════════════════════
-w.S.mode = (w.S.mode && w.S.mode !== 'manual') ? w.S.mode : 'assist'
-w.S.profile = w.S.profile || 'fast'
-// [B2] S.runMode REMOVED — AT.enabled is sole command
-w.S.tz = 'Europe/Bucharest'
-if (!w.S.dsl) w.S.dsl = { active: false, state: 'OFF', pivotL: 1.2, pivotR: 1.4, impulseV: 70, openDsl: 50 }
-w.S.assistArmed = w.S.assistArmed || false   // ASSIST mode: must arm before DSL executes
+// Guard: S may not exist yet at import time (state.js loads later via bridge)
+// These defaults are applied on first syncBrainFromState() call when S is ready
+if (typeof w.S !== 'undefined' && w.S) {
+  w.S.mode = (w.S.mode && w.S.mode !== 'manual') ? w.S.mode : 'assist'
+  w.S.profile = w.S.profile || 'fast'
+  // [B2] S.runMode REMOVED — AT.enabled is sole command
+  w.S.tz = w.S.tz || 'Europe/Bucharest'
+  if (!w.S.dsl) w.S.dsl = { active: false, state: 'OFF', pivotL: 1.2, pivotR: 1.4, impulseV: 70, openDsl: 50 }
+  w.S.assistArmed = w.S.assistArmed || false
+}   // ASSIST mode: must arm before DSL executes
 
 // ── PROFILE → TF mapping (canonical) ─────────────────────────────
 // [MOVED TO TOP] PROFILE_TF
@@ -1229,6 +1233,7 @@ export function computeContextGates(dir: any, klines: any): any {
 // Session management
 export function _getActiveSessions(hUTC: any): any {
   const active: string[] = []
+  if (!w._SESS_DEF) return { active: [], primary: null }
   Object.entries(w._SESS_DEF).forEach(([key, def]: any) => {
     if (hUTC >= def.start && hUTC < def.end) active.push(key)
   })
@@ -1268,8 +1273,10 @@ export function updateSessionPills(): void {
 export function renderSessionBar(): void { updateSessionPills() }
 
 // ── SINGLE INTERVAL GUARD ────────────────────────────────────────
-if (!w._sessIntervalId) {
-  updateSessionPills() // immediate first run
+// Deferred: _SESS_DEF comes from config.js (bridge-loaded later).
+// Run after a short delay so bridge has time to load config.js.
+if (!w._sessIntervalId && typeof w.Intervals !== 'undefined') {
+  setTimeout(() => { try { updateSessionPills() } catch (_) { } }, 2000)
   w._sessIntervalId = w.Intervals.set('sessionPills', updateSessionPills, 60000)
 }
 

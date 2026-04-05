@@ -63,6 +63,7 @@ export function installPWA(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function initIndicatorState(): void {
+  if (typeof w.S === 'undefined' || !w.S) return
   if (!w.S.activeInds) w.S.activeInds = { ema: true, wma: true, st: true, vp: true }
   if (!w.S.macdData) w.S.macdData = []
   if (!w.S.signalData) w.S.signalData = {}
