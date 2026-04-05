@@ -58,24 +58,8 @@ const SCRIPT_PHASES: string[][] = [
   // [EMPTY — all UI rendering scripts ported]
   // Phase 7 — Brain extensions (aub.js + arianova.js ported Phase 6D)
   // [EMPTY — all brain extensions ported]
-  // Phase 8 — Teacher
-  [
-    'js/teacher/teacherConfig.js',
-    'js/teacher/teacherStorage.js',
-    'js/teacher/teacherIndicators.js',
-    'js/teacher/teacherDataset.js',
-    'js/teacher/teacherBrain.js',
-    'js/teacher/teacherSimulator.js',
-    'js/teacher/teacherStats.js',
-    'js/teacher/teacherMemory.js',
-    'js/teacher/teacherReason.js',
-    'js/teacher/teacherCalibration.js',
-    'js/teacher/teacherCurriculum.js',
-    'js/teacher/teacherCapability.js',
-    'js/teacher/teacherAutopilot.js',
-    'js/teacher/teacherEngine.js',
-    'js/teacher/teacherPanel.js',
-  ],
+  // Phase 8 — Teacher (all 15 files ported Phase 7C)
+  // [EMPTY — all teacher scripts ported]
   // Phase 9 — Final modules (modebar.js, dock.js ported 6E; patch.js, hotkeys.js, pageview.js ported 7A)
   [
     'js/data/orderflow.js',
