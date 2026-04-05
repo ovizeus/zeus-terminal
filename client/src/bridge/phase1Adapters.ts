@@ -23,6 +23,16 @@ import { calcConfluenceScore } from '../engine/confluence'
 import { RegimeEngine } from '../engine/regime'
 import { PhaseFilter } from '../engine/phaseFilter'
 import { resetForecast, computeExitRisk, decideExitAction, applyQuantumExit, runQuantumExitUpdate, computeProbScore, updateScenarioData, updateScenarioUI } from '../engine/forecast'
+// Phase 5B: deepdive.js
+import { PM, runPostMortem, PM_render, initPMPanel, _pmStripUpdateStat, _pmCheckRegimeTransition } from '../engine/postMortem'
+import { ARES_JOURNAL } from '../engine/aresJournal'
+import { ARES_MIND } from '../engine/aresMind'
+import { ARES, ARES_openPosition } from '../engine/ares'
+import { ARES_DECISION } from '../engine/aresDecision'
+import { ARES_EXECUTE } from '../engine/aresExecute'
+import { ARES_MONITOR } from '../engine/aresMonitor'
+import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, installPWA, initIndicatorState, openIndPanel, closeIndPanel, toggleInd, applyIndVisibility, openIndSettings, closeIndSettings, applyIndSettings, initBBSeries, updateBB, initIchimokuSeries, updateIchimoku, updateFib, updatePivot, updateVP, initRSIChart, updateRSI, initStochChart, initATRChart, initOBVChart, initMFIChart, initCCIChart, _indRenderHook, renderActBar, getIndColor, deactivateInd, toggleActBar, calcMACD, initMACDChart, _macdKlineHook, detectSupertrendFlip, detectRSIDivergence, runSignalScan, generateDeepDive, updateDeepDive, _syncSubChartsToMain } from '../engine/indicators'
 
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
@@ -132,4 +142,71 @@ export function installPhase1Adapters(): void {
   w.computeProbScore = computeProbScore
   w.updateScenarioData = updateScenarioData
   w.updateScenarioUI = updateScenarioUI
+
+  // ── Phase 5B: deepdive.js — PM ──
+  w.PM = PM
+  w.runPostMortem = runPostMortem
+  w.PM_render = PM_render
+  w.initPMPanel = initPMPanel
+  w._pmStripUpdateStat = _pmStripUpdateStat
+  w._pmCheckRegimeTransition = _pmCheckRegimeTransition
+
+  // ── Phase 5B: deepdive.js — ARES core ──
+  w.ARES = ARES
+  w.ARES_openPosition = ARES_openPosition
+  w.ARES_DECISION = ARES_DECISION
+  w.ARES_EXECUTE = ARES_EXECUTE
+  w.ARES_MONITOR = ARES_MONITOR
+  w.ARES_JOURNAL = ARES_JOURNAL
+  w.ARES_MIND = ARES_MIND
+
+  // ── Phase 5B: deepdive.js — ARES UI ──
+  w._aresRender = _aresRender
+  w._aresRenderArc = _aresRenderArc
+  w.initAriaBrain = initAriaBrain
+  w.initARES = initARES
+  w._demoTick = _demoTick
+
+  // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──
+  w.connectLiveAPI = connectLiveAPI
+  w.placeLiveOrder = placeLiveOrder
+  w.connectLiveExchange = connectLiveExchange
+  w.loadSavedAPI = loadSavedAPI
+  w.installPWA = installPWA
+  initIndicatorState()
+  w.openIndPanel = openIndPanel
+  w.closeIndPanel = closeIndPanel
+  w.toggleInd = toggleInd
+  w.applyIndVisibility = applyIndVisibility
+  w.openIndSettings = openIndSettings
+  w.closeIndSettings = closeIndSettings
+  w.applyIndSettings = applyIndSettings
+  w.initBBSeries = initBBSeries
+  w.updateBB = updateBB
+  w.initIchimokuSeries = initIchimokuSeries
+  w.updateIchimoku = updateIchimoku
+  w.updateFib = updateFib
+  w.updatePivot = updatePivot
+  w.updateVP = updateVP
+  w.initRSIChart = initRSIChart
+  w.updateRSI = updateRSI
+  w.initStochChart = initStochChart
+  w.initATRChart = initATRChart
+  w.initOBVChart = initOBVChart
+  w.initMFIChart = initMFIChart
+  w.initCCIChart = initCCIChart
+  w._indRenderHook = _indRenderHook
+  w.renderActBar = renderActBar
+  w.getIndColor = getIndColor
+  w.deactivateInd = deactivateInd
+  w.toggleActBar = toggleActBar
+  w.calcMACD = calcMACD
+  w.initMACDChart = initMACDChart
+  w._macdKlineHook = _macdKlineHook
+  w.detectSupertrendFlip = detectSupertrendFlip
+  w.detectRSIDivergence = detectRSIDivergence
+  w.runSignalScan = runSignalScan
+  w.generateDeepDive = generateDeepDive
+  w.updateDeepDive = updateDeepDive
+  w._syncSubChartsToMain = _syncSubChartsToMain
 }
