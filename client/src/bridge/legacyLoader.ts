@@ -57,15 +57,10 @@ const SCRIPT_PHASES: string[][] = [
     'js/data/marketData.js',
     'js/data/klines.js',
   ],
-  // Phase 3 — Brain engine
+  // Phase 3 — Brain engine (signals.js, confluence.js, forecast.js, regime.js, phaseFilter.js ported to React Phase 5A)
   [
     'js/brain/deepdive.js',
-    'js/brain/signals.js',
-    'js/brain/confluence.js',
-    'js/brain/forecast.js',
     'js/brain/brain.js',
-    'js/brain/regime.js',
-    'js/brain/phaseFilter.js',
   ],
   // Phase 4 — Trading
   [

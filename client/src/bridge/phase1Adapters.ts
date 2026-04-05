@@ -18,6 +18,11 @@ import { _safeLocalStorageSet, addTradeToJournal, renderTradeJournal, loadJourna
 import { ZStore, connectWatchlist, switchWLSymbol } from '../services/symbols'
 import { savePerfToStorage, loadPerfFromStorage, recordIndicatorPnl, calcExpectancy, calcGlobalExpectancy, calcExpectancyByProfile, resetPerfStore } from '../engine/perfStore'
 import { recordDailyClose, rebuildDailyFromJournal, getDailyStats, getLastNDays, getWeeklyRollup, getMonthlyRollup, getDrawdownStats, saveDailyPnl, loadDailyPnl, resetDailyPnl } from '../engine/dailyPnl'
+import { renderSignals } from '../engine/signals'
+import { calcConfluenceScore } from '../engine/confluence'
+import { RegimeEngine } from '../engine/regime'
+import { PhaseFilter } from '../engine/phaseFilter'
+import { resetForecast, computeExitRisk, decideExitAction, applyQuantumExit, runQuantumExitUpdate, computeProbScore, updateScenarioData, updateScenarioUI } from '../engine/forecast'
 
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
@@ -105,4 +110,26 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 5A: signals.js ──
+  w.renderSignals = renderSignals
+
+  // ── Phase 5A: confluence.js ──
+  w.calcConfluenceScore = calcConfluenceScore
+
+  // ── Phase 5A: regime.js ──
+  w.RegimeEngine = RegimeEngine
+
+  // ── Phase 5A: phaseFilter.js ──
+  w.PhaseFilter = PhaseFilter
+
+  // ── Phase 5A: forecast.js ──
+  w.resetForecast = resetForecast
+  w.computeExitRisk = computeExitRisk
+  w.decideExitAction = decideExitAction
+  w.applyQuantumExit = applyQuantumExit
+  w.runQuantumExitUpdate = runQuantumExitUpdate
+  w.computeProbScore = computeProbScore
+  w.updateScenarioData = updateScenarioData
+  w.updateScenarioUI = updateScenarioUI
 }
