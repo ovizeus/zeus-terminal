@@ -32,6 +32,8 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 5B4: brain.js
+import { updateNeurons, getNeuronColor, setNeuron, updateBrainArc, updateBrainState, brainThink, runBrainUpdate, armAssist, disarmAssist, isArmAssistValid, _setRadio, syncDslFromProfile, syncTFProfile, syncBrainFromState, setMode, _applyModeSwitch, confirmBrainModeSwitch, cancelBrainModeSwitch, setBrainMode, setProfile, setDslMode, calcDslTargetPrice, _calcAtrPct, applyTimezone, detectRegimeEnhanced, updateMTFAlignment, detectSweepDisplacement, updateFlowEngine, computeGates, renderGates, computeEntryScore, computeMarketAtmosphere, updateChaosBar, updateNewsShield, checkProtectMode, resetProtectMode, updateDSLTelemetry, showExecCinematic, getStableRegime, checkAntiFakeout, computeSafetyGates, _getCooldownMs, allSafetyPass, computeContextGates, _getActiveSessions, updateSessionPills, renderSessionBar, initNeuroCoinLEDs, pulseNeuronCoin, onNeuronScanUpdate, renderBrainCockpit, initZParticles, zAnimFrame, startZAnim, _brainDirtySet, _brainSafeSet, getBrainViewSnapshot, renderCircuitBrain, runGrandUpdate, _initBrainCockpit, detectMarketRegime, updateOrderFlow, adaptAutoTradeParams } from '../engine/brain'
 import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, installPWA, initIndicatorState, openIndPanel, closeIndPanel, toggleInd, applyIndVisibility, openIndSettings, closeIndSettings, applyIndSettings, initBBSeries, updateBB, initIchimokuSeries, updateIchimoku, updateFib, updatePivot, updateVP, initRSIChart, updateRSI, initStochChart, initATRChart, initOBVChart, initMFIChart, initCCIChart, _indRenderHook, renderActBar, getIndColor, deactivateInd, toggleActBar, calcMACD, initMACDChart, _macdKlineHook, detectSupertrendFlip, detectRSIDivergence, runSignalScan, generateDeepDive, updateDeepDive, _syncSubChartsToMain } from '../engine/indicators'
 
 export function installPhase1Adapters(): void {
@@ -209,4 +211,69 @@ export function installPhase1Adapters(): void {
   w.generateDeepDive = generateDeepDive
   w.updateDeepDive = updateDeepDive
   w._syncSubChartsToMain = _syncSubChartsToMain
+
+  // ── Phase 5B4: brain.js ──
+  w.updateNeurons = updateNeurons
+  w.getNeuronColor = getNeuronColor
+  w.setNeuron = setNeuron
+  w.updateBrainArc = updateBrainArc
+  w.updateBrainState = updateBrainState
+  w.brainThink = brainThink
+  w.runBrainUpdate = runBrainUpdate
+  w.armAssist = armAssist
+  w.disarmAssist = disarmAssist
+  w.isArmAssistValid = isArmAssistValid
+  w._setRadio = _setRadio
+  w.syncDslFromProfile = syncDslFromProfile
+  w.syncTFProfile = syncTFProfile
+  w.syncBrainFromState = syncBrainFromState
+  w.setMode = setMode
+  w._applyModeSwitch = _applyModeSwitch
+  w.confirmBrainModeSwitch = confirmBrainModeSwitch
+  w.cancelBrainModeSwitch = cancelBrainModeSwitch
+  w.setBrainMode = setBrainMode
+  w.setProfile = setProfile
+  w.setDslMode = setDslMode
+  w.calcDslTargetPrice = calcDslTargetPrice
+  w._calcAtrPct = _calcAtrPct
+  w.applyTimezone = applyTimezone
+  w.detectRegimeEnhanced = detectRegimeEnhanced
+  w.updateMTFAlignment = updateMTFAlignment
+  w.detectSweepDisplacement = detectSweepDisplacement
+  w.updateFlowEngine = updateFlowEngine
+  w.computeGates = computeGates
+  w.renderGates = renderGates
+  w.computeEntryScore = computeEntryScore
+  w.computeMarketAtmosphere = computeMarketAtmosphere
+  w.updateChaosBar = updateChaosBar
+  w.updateNewsShield = updateNewsShield
+  w.checkProtectMode = checkProtectMode
+  w.resetProtectMode = resetProtectMode
+  w.updateDSLTelemetry = updateDSLTelemetry
+  w.showExecCinematic = showExecCinematic
+  w.getStableRegime = getStableRegime
+  w.checkAntiFakeout = checkAntiFakeout
+  w.computeSafetyGates = computeSafetyGates
+  w._getCooldownMs = _getCooldownMs
+  w.allSafetyPass = allSafetyPass
+  w.computeContextGates = computeContextGates
+  w._getActiveSessions = _getActiveSessions
+  w.updateSessionPills = updateSessionPills
+  w.renderSessionBar = renderSessionBar
+  w.initNeuroCoinLEDs = initNeuroCoinLEDs
+  w.pulseNeuronCoin = pulseNeuronCoin
+  w.onNeuronScanUpdate = onNeuronScanUpdate
+  w.renderBrainCockpit = renderBrainCockpit
+  w.initZParticles = initZParticles
+  w.zAnimFrame = zAnimFrame
+  w.startZAnim = startZAnim
+  w._brainDirtySet = _brainDirtySet
+  w._brainSafeSet = _brainSafeSet
+  w.getBrainViewSnapshot = getBrainViewSnapshot
+  w.renderCircuitBrain = renderCircuitBrain
+  w.runGrandUpdate = runGrandUpdate
+  w._initBrainCockpit = _initBrainCockpit
+  w.detectMarketRegime = detectMarketRegime
+  w.updateOrderFlow = updateOrderFlow
+  w.adaptAutoTradeParams = adaptAutoTradeParams
 }
