@@ -40,12 +40,10 @@ const SCRIPT_PHASES: string[][] = [
   [
     'js/core/managers.js',
   ],
-  // Phase 1B — Global state & config
+  // Phase 1B — Global state & config (constants.js + events.js ported to React Phase 2)
   [
     'js/core/state.js',
     'js/core/config.js',
-    'js/core/constants.js',
-    'js/core/events.js',
   ],
   // Phase 1C — UI & Dev
   [
