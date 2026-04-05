@@ -45,18 +45,15 @@ const SCRIPT_PHASES: string[][] = [
     'js/core/state.js',
     'js/core/config.js',
   ],
-  // Phase 1C — UI & Dev
+  // Phase 1C — UI & Dev (tabLeader.js ported to React Phase 3)
   [
-    'js/core/tabLeader.js',
     'js/utils/guards.js',
     'js/utils/dev.js',
     'js/ui/theme.js',
     'js/utils/decisionLog.js',
   ],
-  // Phase 2 — Data layer
+  // Phase 2 — Data layer (storage.js + symbols.js ported to React Phase 3)
   [
-    'js/data/storage.js',
-    'js/data/symbols.js',
     'js/data/marketData.js',
     'js/data/klines.js',
   ],

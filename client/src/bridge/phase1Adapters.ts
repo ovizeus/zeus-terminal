@@ -13,6 +13,9 @@ import { _clamp, _clampFB01, _clampFB, calcRSIArr } from '../utils/math'
 import { _ZI } from '../constants/icons'
 import { MACRO_MULT, STALL_GRACE_MS, GATE_DEFS } from '../constants/trading'
 import { AT, PREDATOR, computePredatorState, _pendingClose, attachConfirmClose, _safeSetInterval, _clearAllIntervals } from '../engine/events'
+import { TabLeader } from '../services/tabLeader'
+import { _safeLocalStorageSet, addTradeToJournal, renderTradeJournal, loadJournalFromStorage, exportJournalCSV, startFRCountdown, trackOIDelta } from '../services/storage'
+import { ZStore, connectWatchlist, switchWLSymbol } from '../services/symbols'
 
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
@@ -62,4 +65,21 @@ export function installPhase1Adapters(): void {
   w.attachConfirmClose = attachConfirmClose
   w._safeSetInterval = _safeSetInterval
   w._clearAllIntervals = _clearAllIntervals
+
+  // ── Phase 3: tabLeader.js ──
+  w.TabLeader = TabLeader
+
+  // ── Phase 3: storage.js ──
+  w._safeLocalStorageSet = _safeLocalStorageSet
+  w.addTradeToJournal = addTradeToJournal
+  w.renderTradeJournal = renderTradeJournal
+  w.loadJournalFromStorage = loadJournalFromStorage
+  w.exportJournalCSV = exportJournalCSV
+  w.startFRCountdown = startFRCountdown
+  w.trackOIDelta = trackOIDelta
+
+  // ── Phase 3: symbols.js ──
+  w.ZStore = ZStore
+  w.connectWatchlist = connectWatchlist
+  w.switchWLSymbol = switchWLSymbol
 }
