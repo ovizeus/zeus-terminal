@@ -50,20 +50,20 @@ export function BrainCockpit() {
       {/* MODE / PROFILE BAR */}
       <div className="znc-mbar">
         <span className="znc-lbl">MODE:</span>
-        <button className={`znc-mbtn${brainMode === 'assist' ? ' act-assist' : ''}`} onClick={() => setBrainMode('assist')}>ASSIST</button>
-        <button className={`znc-mbtn${brainMode === 'auto' ? ' act-auto' : ''}`} onClick={() => setBrainMode('auto')}>AUTO</button>
+        <button id="bmode-assist" className={`znc-mbtn${brainMode === 'assist' ? ' act-assist' : ''}`} onClick={() => { setBrainMode('assist'); (window as any).setBrainMode?.('assist') }}>ASSIST</button>
+        <button id="bmode-auto" className={`znc-mbtn${brainMode === 'auto' ? ' act-auto' : ''}`} onClick={() => { setBrainMode('auto'); (window as any).setBrainMode?.('auto') }}>AUTO</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">PROFILE:</span>
-        <button className={`znc-pbtn${profile === 'fast' ? ' act-fast' : ''}`} onClick={() => setProfile('fast')}>FAST</button>
-        <button className={`znc-pbtn${profile === 'swing' ? ' act-swing' : ''}`} onClick={() => setProfile('swing')}>SWING</button>
-        <button className={`znc-pbtn${profile === 'defensive' ? ' act-defensive' : ''}`} onClick={() => setProfile('defensive')}>DEF</button>
+        <button id="prof-fast" className={`znc-pbtn${profile === 'fast' ? ' act-fast' : ''}`} onClick={() => { setProfile('fast'); (window as any).setProfile?.('fast') }}>FAST</button>
+        <button id="prof-swing" className={`znc-pbtn${profile === 'swing' ? ' act-swing' : ''}`} onClick={() => { setProfile('swing'); (window as any).setProfile?.('swing') }}>SWING</button>
+        <button id="prof-defensive" className={`znc-pbtn${profile === 'defensive' ? ' act-defensive' : ''}`} onClick={() => { setProfile('defensive'); (window as any).setProfile?.('defensive') }}>DEF</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
-        <button className={`znc-dbtn${dslMode === 'atr' ? ' act-dsl-atr' : ''}`} onClick={() => setDslMode('atr')}>ATR</button>
-        <button className={`znc-dbtn${dslMode === 'fast' ? ' act-dsl-fast' : ''}`} onClick={() => setDslMode('fast')}>FAST</button>
-        <button className={`znc-dbtn${dslMode === 'swing' ? ' act-dsl-swing' : ''}`} onClick={() => setDslMode('swing')}>SWING</button>
-        <button className={`znc-dbtn${dslMode === 'defensive' ? ' act-dsl-defensive' : ''}`} onClick={() => setDslMode('defensive')}>DEF</button>
-        <button className={`znc-dbtn${dslMode === 'tp' ? ' act-dsl-tp' : ''}`} onClick={() => setDslMode('tp')}>TP</button>
+        <button id="dsl-atr" className={`znc-dbtn${dslMode === 'atr' ? ' act-dsl-atr' : ''}`} onClick={() => { setDslMode('atr'); (window as any).setDslMode?.('atr') }}>ATR</button>
+        <button id="dsl-fast" className={`znc-dbtn${dslMode === 'fast' ? ' act-dsl-fast' : ''}`} onClick={() => { setDslMode('fast'); (window as any).setDslMode?.('fast') }}>FAST</button>
+        <button id="dsl-swing" className={`znc-dbtn${dslMode === 'swing' ? ' act-dsl-swing' : ''}`} onClick={() => { setDslMode('swing'); (window as any).setDslMode?.('swing') }}>SWING</button>
+        <button id="dsl-defensive" className={`znc-dbtn${dslMode === 'defensive' ? ' act-dsl-defensive' : ''}`} onClick={() => { setDslMode('defensive'); (window as any).setDslMode?.('defensive') }}>DEF</button>
+        <button id="dsl-tp" className={`znc-dbtn${dslMode === 'tp' ? ' act-dsl-tp' : ''}`} onClick={() => { setDslMode('tp'); (window as any).setDslMode?.('tp') }}>TP</button>
       </div>
 
       {/* PROTECT BANNER */}

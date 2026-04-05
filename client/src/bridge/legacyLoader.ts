@@ -387,6 +387,70 @@ function recoverMovedPanels(): void {
   }
 }
 
+// ── Onclick re-attacher ──────────────────────────────────────────────
+// Old index.html had inline onclick="fn()" on buttons. React shells render
+// the same IDs but without handlers. This attaches them after bridge boot.
+
+function reattachOnclickHandlers(): void {
+  const w = window as any
+
+  // Map: element ID → function call string (matches old HTML onclick values)
+  // Only elements where React shell doesn't have an onClick handler.
+  const ONCLICK_MAP: Record<string, () => void> = {
+    // ── Manual Trade ──
+    'btnAddFunds': () => w.promptAddFunds?.(),
+    'btnResetDemo': () => w.promptResetDemo?.(),
+    'btnDemo': () => w.switchGlobalMode?.('demo'),
+    'btnLive': () => w.switchGlobalMode?.('live'),
+    'btnConnectExchange': () => w.connectLiveAPI?.(),
+    // ── DSL ──
+    'dslToggleBtn': () => w.toggleDSL?.(),
+    'dslAssistArmBtn': () => w.toggleAssistArm?.(),
+    // ── Brain cockpit ──
+    'bmode-assist': () => w.setBrainMode?.('assist'),
+    'bmode-auto': () => w.setBrainMode?.('auto'),
+    'prof-fast': () => w.setProfile?.('fast'),
+    'prof-swing': () => w.setProfile?.('swing'),
+    'prof-defensive': () => w.setProfile?.('defensive'),
+    'dsl-atr': () => w.setDslMode?.('atr'),
+    'dsl-fast': () => w.setDslMode?.('fast'),
+    'dsl-swing': () => w.setDslMode?.('swing'),
+    'dsl-defensive': () => w.setDslMode?.('defensive'),
+    'dsl-tp': () => w.setDslMode?.('tp'),
+    'soundBadge': () => w._initAudio?.(),
+    // ── AUB ──
+    'aub-sfx-btn': () => { event?.stopPropagation(); w.aubToggleSFX?.() },
+    'aub-toggle-btn': () => { event?.stopPropagation(); w.aubToggle?.() },
+    // ── Teacher ──
+    'teacher-v2-teach-btn': () => w.teacherStart?.(),
+    'teacher-v2-stop-btn': () => w.teacherStop?.(),
+    // ── Nova ──
+    'nova-copy-btn': () => w.novaCopyLog?.(),
+    // ── Adaptive ──
+    'adaptiveToggleBtn': () => w.toggleAdaptive?.(),
+    // ── Signal Registry ──
+    'sr-strip-bar': () => w.srStripToggle?.(),
+    // ── Welcome ──
+    'wlcEnterBtn': () => w.closeM?.('mwelcome'),
+    // ── Header ──
+    'zsbPos': () => w._toggleExposurePanel?.(),
+  }
+
+  let attached = 0
+  for (const [id, handler] of Object.entries(ONCLICK_MAP)) {
+    const el = document.getElementById(id)
+    if (!el) continue
+    // Don't override if React already has an onClick (check __reactFiber)
+    const hasReactHandler = Object.keys(el).some(k => k.startsWith('__reactFiber') || k.startsWith('__reactEvents'))
+    // Attach as addEventListener (doesn't conflict with React's synthetic events)
+    el.addEventListener('click', (e) => {
+      try { handler() } catch (err) { console.warn(`[BRIDGE] onclick ${id} error:`, err) }
+    })
+    attached++
+  }
+  console.log(`[BRIDGE] Onclick handlers attached: ${attached}`)
+}
+
 // ── Main API ───────────────────────────────────────────────────────
 
 /**
@@ -481,6 +545,11 @@ export async function startLegacyBridge(): Promise<BridgeState> {
   // _srEnsureVisible() moves #sr-strip to direct child of #zeus-groups (patched above,
   // but the mv() in initZeusGroups might have run before patch if timing is off).
   recoverMovedPanels()
+
+  // Step 8: Re-attach onclick handlers from old HTML that React shells don't have.
+  // Old index.html used inline onclick="fn()" on ~100+ elements. React components
+  // render the same IDs but without onclick. This scan attaches missing handlers.
+  reattachOnclickHandlers()
 
   state.loaded = true
   state.loading = false
