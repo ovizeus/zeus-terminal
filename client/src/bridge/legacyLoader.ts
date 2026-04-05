@@ -45,10 +45,9 @@ const SCRIPT_PHASES: string[][] = [
   ],
   // Phase 1C — UI & Dev (tabLeader.js ported Phase 3; guards.js, dev.js, theme.js, decisionLog.js ported Phase 6A)
   // [EMPTY — all utility scripts ported]
-  // Phase 2 — Data layer (storage.js + symbols.js ported to React Phase 3)
+  // Phase 2 — Data layer (storage.js + symbols.js ported Phase 3; klines.js ported Phase 7A)
   [
     'js/data/marketData.js',
-    'js/data/klines.js',
   ],
   // Phase 3 — Brain engine (all ported to React Phase 5: signals, confluence, forecast, regime, phaseFilter, deepdive, brain)
   // [EMPTY — all brain scripts ported]
@@ -81,12 +80,9 @@ const SCRIPT_PHASES: string[][] = [
     'js/teacher/teacherEngine.js',
     'js/teacher/teacherPanel.js',
   ],
-  // Phase 9 — Final modules (modebar.js, dock.js ported Phase 6E)
+  // Phase 9 — Final modules (modebar.js, dock.js ported 6E; patch.js, hotkeys.js, pageview.js ported 7A)
   [
     'js/data/orderflow.js',
-    'js/core/patch.js',
-    'js/core/hotkeys.js',
-    'js/ui/pageview.js',
   ],
   // Phase 10 — Bootstrap (defines startApp, must be last)
   [

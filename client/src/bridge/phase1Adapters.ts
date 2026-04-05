@@ -35,6 +35,12 @@ import { ARES_DECISION } from '../engine/aresDecision'
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick } from '../engine/aresUI'
+// Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines
+import '../core/patch' // side-effect module
+import '../core/hotkeys' // side-effect module
+import { initPageView, openPageView, closePageView, _pvMoveIn } from '../ui/pageview'
+import '../ui/marketCoreReactor' // side-effect, self-registers MarketCoreReactor
+import { calcADX, calcRSIFromKlines, detectMACDDir, detectSTDir, calcSymbolScore, fetchSymbolKlines, _updateWhyBlocked, runMultiSymbolScan, renderMscanTable, manualEnterFromScan, _endMultiScan, runMultiSymbolAutoTrade, toggleMultiSymMode, _mscanGetActive, _mscanSaveActive, _mscanUpdateLabel, getActiveMscanSyms, toggleSymPicker, mscanToggleSym, mscanPickAll } from '../data/klines'
 // Phase 6E: UI leaf files
 import { _initAudio, _updateAudioBadge, _safePlayTone, playAlertSound, playEntrySound, playExitSound, toggleAlerts, applyChartColors, initActBar, applyPriceAxisWidth, togInd, applyPriceAxisColors } from '../ui/dom2'
 import { _showExecOverlay as _showExecOverlayModal, _queueExecOverlay as _queueExecOverlayModal } from '../ui/modals'
@@ -167,6 +173,33 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines ──
+  // patch.ts, hotkeys.ts, marketCoreReactor.ts — side-effect imports, self-register
+  w.initPageView = initPageView
+  w.openPageView = openPageView
+  w.closePageView = closePageView
+  w._pvMoveIn = _pvMoveIn
+  w.calcADX = calcADX
+  w.calcRSIFromKlines = calcRSIFromKlines
+  w.detectMACDDir = detectMACDDir
+  w.detectSTDir = detectSTDir
+  w.calcSymbolScore = calcSymbolScore
+  w.fetchSymbolKlines = fetchSymbolKlines
+  w._updateWhyBlocked = _updateWhyBlocked
+  w.runMultiSymbolScan = runMultiSymbolScan
+  w.renderMscanTable = renderMscanTable
+  w.manualEnterFromScan = manualEnterFromScan
+  w._endMultiScan = _endMultiScan
+  w.runMultiSymbolAutoTrade = runMultiSymbolAutoTrade
+  w.toggleMultiSymMode = toggleMultiSymMode
+  w._mscanGetActive = _mscanGetActive
+  w._mscanSaveActive = _mscanSaveActive
+  w._mscanUpdateLabel = _mscanUpdateLabel
+  w.getActiveMscanSyms = getActiveMscanSyms
+  w.toggleSymPicker = toggleSymPicker
+  w.mscanToggleSym = mscanToggleSym
+  w.mscanPickAll = mscanPickAll
 
   // ── Phase 6E: ui leaf files ──
   w._initAudio = _initAudio
