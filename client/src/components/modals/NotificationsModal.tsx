@@ -51,7 +51,7 @@ export function NotificationsModal({ visible, onClose }: Props) {
         </div>
 
         {/* Notification list (JS-populated) */}
-        <div className="nc-list" />
+        <div className="nc-list" id="nc-list" />
       </div>
     </ModalOverlay>
   )

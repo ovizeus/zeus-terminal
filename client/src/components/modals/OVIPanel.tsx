@@ -56,7 +56,7 @@ export function OVIPanel({ visible, onClose }: Props) {
 
       {/* WEIGHT SOURCE */}
       <div style={{fontSize:'6px', color:'#f0c04055', letterSpacing:'1px', marginBottom:'6px'}}>WEIGHT SOURCE</div>
-      <div style={{display:'flex', gap:'6px', marginBottom:'10px'}}>
+      <div id="oviWeightMode" style={{display:'flex', gap:'6px', marginBottom:'10px'}}>
         <label style={{fontSize:'7px', color:'#8899aa', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer'}}>
           <input type="radio" name="oviWeightMode" defaultValue="Volume" style={{accentColor:'#f0c040'}} onChange={() => {}} /> Volume
         </label>

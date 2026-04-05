@@ -203,8 +203,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <input type="text" id="hubTgChatId" placeholder="-100123456789" style={inp} />
         </div>
         <div style={{display:'flex',gap:'6px',marginTop:'8px'}}>
-          <button className="hub-sbtn pri"><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE</button>
-          <button className="hub-sbtn"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> SEND TEST</button>
+          <button id="hubTgSave" className="hub-sbtn pri" onClick={() => (window as any).hubTgSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE</button>
+          <button id="hubTgTest" className="hub-sbtn" onClick={() => (window as any).hubTgTest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> SEND TEST</button>
         </div>
         <div id="hubTgStatus" style={{marginTop:'6px',fontSize:'8px',color:'var(--dim)',minHeight:'14px'}}></div>
         <div className="msec">CUM OBȚII</div>
@@ -280,12 +280,12 @@ export function SettingsHubModal({ visible, onClose }: Props) {
             Foloseste permisiuni READ + TRADE only (fără withdrawal)<br/>
             Restrictionează API la IP-ul tău pentru securitate maximă
           </div>
-          <button className="hub-sbtn pri" style={{width:'100%',padding:'8px',fontSize:'10px',fontWeight:700}}>VERIFY &amp; SAVE</button>
+          <button id="zeusExchangeSave" className="hub-sbtn pri" style={{width:'100%',padding:'8px',fontSize:'10px',fontWeight:700}} onClick={() => (window as any).zeusExchangeSave?.()}>VERIFY &amp; SAVE</button>
         </div>
         <div id="exConnectedBox" style={{display:'none',marginTop:'8px'}}>
           <div style={{display:'flex',gap:'6px'}}>
-            <button className="hub-sbtn" style={{flex:1}}>RE-VERIFY</button>
-            <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 1L2 4v4c0 4 3 7 6 8 3-1 6-4 6-8V4L8 1z" /></svg> DISCONNECT</button>
+            <button id="zeusExchangeVerify" className="hub-sbtn" style={{flex:1}} onClick={() => (window as any).zeusExchangeVerify?.()}>RE-VERIFY</button>
+            <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={() => (window as any).zeusExchangeDisconnect?.()}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 1L2 4v4c0 4 3 7 6 8 3-1 6-4 6-8V4L8 1z" /></svg> DISCONNECT</button>
           </div>
         </div>
         <div id="exResult" style={{marginTop:'8px',fontSize:'9px',color:'var(--dim)',textAlign:'center',minHeight:'14px'}}></div>
@@ -293,9 +293,9 @@ export function SettingsHubModal({ visible, onClose }: Props) {
 
       {/* ══ Footer ══ */}
       <div style={{padding:'12px 16px',display:'flex',gap:'6px',flexWrap:'wrap',borderTop:'1px solid #1e2530'}}>
-        <button className="hub-sbtn pri"><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE ALL</button>
-        <button className="hub-sbtn"><svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> LOAD SAVED</button>
-        <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}}>↺ RESET DEFAULTS</button>
+        <button id="hubSaveAll" className="hub-sbtn pri" onClick={() => (window as any).hubSaveAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE ALL</button>
+        <button id="hubLoadAll" className="hub-sbtn" onClick={() => (window as any).hubLoadAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> LOAD SAVED</button>
+        <button id="hubResetDefaults" className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}} onClick={() => (window as any).hubResetDefaults?.()}>↺ RESET DEFAULTS</button>
         <button className="hub-sbtn" onClick={onClose} style={{marginLeft:'auto'}}>✕ CLOSE</button>
       </div>
     </ModalOverlay>
