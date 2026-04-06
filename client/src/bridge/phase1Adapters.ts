@@ -9,6 +9,8 @@
 
 // Early shims — MUST be first import (sets ZT_safeInterval before arianova.ts IIFE runs)
 import './earlyShims'
+// Phase 8B: startApp (chunk B — THE core boot sequence)
+import { startApp } from '../core/bootstrapStartApp'
 // Phase 8F: bootstrap brain dashboard (chunk F — brain vision + reflection engine IIFEs)
 import '../core/bootstrapBrainDash'
 // Phase 8E: bootstrap panels (chunk E — exposure, cmd palette, missed, session, regime, perf, compare)
@@ -289,6 +291,9 @@ export function installPhase1Adapters(): void {
   w.showPWAUpdateBanner = showPWAUpdateBanner; w.hidePWAUpdateBanner = hidePWAUpdateBanner
   w.setPWAVersion = setPWAVersion; w.setupPWAReloadBtn = setupPWAReloadBtn
   w.masterReset = masterReset
+
+  // ── Phase 8B: startApp (coexist — bootstrap.js still defines startApp for bridge) ──
+  w.startApp = startApp
 
   // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
   w.initZeusGroups = initZeusGroups
