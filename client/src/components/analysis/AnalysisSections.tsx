@@ -200,6 +200,7 @@ export function AnalysisSections() {
                 borderRadius: '2px', background: 'transparent', color: '#00b8d4',
                 cursor: 'pointer', fontFamily: 'var(--ff)'
               }}
+              onClick={() => (window as any).runMultiSymbolScan?.()}
             >&#8634; SCAN</button>
           </div>
         </div>
@@ -237,7 +238,7 @@ export function AnalysisSections() {
           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
             <span id="dhfCurrentSlot" style={{ fontSize: '8px', color: '#00ff88' }}>&mdash;</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '7px', cursor: 'pointer' }}>
-              <input type="checkbox" id="dhfEnabled" defaultChecked />
+              <input type="checkbox" id="dhfEnabled" defaultChecked onChange={() => (window as any).renderDHF?.()} />
               <span style={{ color: '#aa44ff' }}>Filtru activ</span>
             </label>
           </div>
@@ -290,20 +291,20 @@ export function AnalysisSections() {
         <div className="bt-wrap">
           {/* Controls */}
           <div className="bt-controls">
-            <button className="bt-btn bt-btn-run" id="btRunBtn">&#9654; RUN BACKTEST</button>
-            <select className="bt-sel" id="btLookback" defaultValue="500">
+            <button className="bt-btn bt-btn-run" id="btRunBtn" onClick={() => (window as any).runBacktest?.()}>&#9654; RUN BACKTEST</button>
+            <select className="bt-sel" id="btLookback" defaultValue="500" onChange={() => {}}>
               <option value="100">100 bare</option>
               <option value="200">200 bare</option>
               <option value="500">500 bare</option>
               <option value="1000">1000 bare (max)</option>
             </select>
-            <select className="bt-sel" id="btFwdBars" defaultValue="5">
+            <select className="bt-sel" id="btFwdBars" defaultValue="5" onChange={() => {}}>
               <option value="3">+3 bare</option>
               <option value="5">+5 bare</option>
               <option value="10">+10 bare</option>
               <option value="20">+20 bare</option>
             </select>
-            <select className="bt-sel" id="btMinMove" defaultValue="0.5">
+            <select className="bt-sel" id="btMinMove" defaultValue="0.5" onChange={() => {}}>
               <option value="0.2">&ge;0.2% move</option>
               <option value="0.5">&ge;0.5% move</option>
               <option value="1.0">&ge;1.0% move</option>
@@ -681,9 +682,9 @@ export function AnalysisSections() {
           <span id="fcnt">0 events</span>
         </div>
         <div className="liq-filter-bar">
-          <button className="liq-fbtn act" id="lf-all">ALL</button>
-          <button className="liq-fbtn" id="lf-bnb">BNB</button>
-          <button className="liq-fbtn" id="lf-byb">BYB</button>
+          <button className="liq-fbtn act" id="lf-all" onClick={() => (window as any).setLiqSrcFilter?.('all')}>ALL</button>
+          <button className="liq-fbtn" id="lf-bnb" onClick={() => (window as any).setLiqSrcFilter?.('bnb')}>BNB</button>
+          <button className="liq-fbtn" id="lf-byb" onClick={() => (window as any).setLiqSrcFilter?.('byb')}>BYB</button>
         </div>
         <div className="feed">
           <div className="fdlist" id="fdlist"></div>
