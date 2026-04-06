@@ -38,10 +38,10 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Time Window</span>
-                <select style={{
+                <select id="llvTimeWindow" style={{
                   background: '#0d1a26', border: '1px solid #1e2a3a', color: '#e0e8f0',
                   padding: '3px', fontSize: 8, fontFamily: 'var(--ff)', flex: 1
-                }} defaultValue="7d">
+                }} defaultValue="7d" onChange={(e) => { if ((window as any).S?.llvSettings) (window as any).S.llvSettings.timeWindow = e.target.value }}>
                   <option value="1d">1 Day</option>
                   <option value="3d">3 Days</option>
                   <option value="7d">7 Days</option>
@@ -51,7 +51,7 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
-              <label className="mchk"><input type="checkbox" defaultChecked /> Show BTC Labels</label>
+              <label className="mchk"><input type="checkbox" id="llvShowLabels" defaultChecked onChange={(e) => { if ((window as any).S?.llvSettings) (window as any).S.llvSettings.showLabels = e.target.checked }} /> Show BTC Labels</label>
             </div>
           </div>
         )}
