@@ -30,7 +30,7 @@ import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFm
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w._ZI)
 // Named imports for config.ts exports that need window.* mapping
-import { AUB, AUB_COMPAT, AUB_PERF, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar } from '../core/config'
+import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, SIGNAL_REGISTRY, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESSION_HOURS_BT, SESS_CFG, PROFILE_TF, ARM_ASSIST, NEWS, _regimeHistory, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar } from '../core/config'
 
 import { el, safeSetText, safeSetHTML, escHtml, isValidMarketPrice, safeLastKline } from '../utils/dom'
 import { fmt, fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
@@ -218,17 +218,22 @@ export function installPhase1Adapters(): void {
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
 
-  // ── Fix: config.ts exports missing on window ──
-  w.AUB = AUB
-  w.AUB_COMPAT = AUB_COMPAT
-  w.AUB_PERF = AUB_PERF
-  w._srUpdateStats = _srUpdateStats
-  w._srRenderStats = _srRenderStats
-  w._srRenderList = _srRenderList
-  w._srSave = _srSave
-  w._srLoad = _srLoad
-  w._srEnsureVisible = _srEnsureVisible
-  w.srStripUpdateBar = srStripUpdateBar
+  // ── config.ts exports → window.* ──
+  w.AUB = AUB; w.AUB_COMPAT = AUB_COMPAT; w.AUB_PERF = AUB_PERF; w.AUB_SIM_KEY = AUB_SIM_KEY
+  w.ARIA_STATE = ARIA_STATE; w.NOVA_STATE = NOVA_STATE
+  w._AN_KEY_A = _AN_KEY_A; w._AN_KEY_N = _AN_KEY_N
+  w.SIGNAL_REGISTRY = SIGNAL_REGISTRY; w.NOTIFICATION_CENTER = NOTIFICATION_CENTER
+  w.USER_SETTINGS = USER_SETTINGS; w.BT = BT; w.BT_INDICATORS = BT_INDICATORS
+  w.MSCAN_SYMS = MSCAN_SYMS; w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
+  w.DAILY_STATS = DAILY_STATS; w.BEXT = BEXT
+  w.SESSION_HOURS_BT = SESSION_HOURS_BT; w.SESS_CFG = SESS_CFG
+  w.PROFILE_TF = PROFILE_TF; w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
+  w._regimeHistory = _regimeHistory; w._fakeout = _fakeout
+  w._SESS_DEF = _SESS_DEF; w._SESS_PRIORITY = _SESS_PRIORITY; w._NEURO_SYMS = _NEURO_SYMS
+  w.ZANIM = ZANIM; w._execQueue = _execQueue
+  w._srUpdateStats = _srUpdateStats; w._srRenderStats = _srRenderStats
+  w._srRenderList = _srRenderList; w._srSave = _srSave; w._srLoad = _srLoad
+  w._srEnsureVisible = _srEnsureVisible; w.srStripUpdateBar = srStripUpdateBar
 
   // ── Phase 7F-G: closeDemoPos (coexist) ──
   w.closeDemoPos = closeDemoPos
