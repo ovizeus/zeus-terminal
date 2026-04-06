@@ -163,7 +163,7 @@ export function srUpdateOutcome(pos: any, pnl: any) {
   _srRenderList()
 }
 
-function _srUpdateStats() {
+export function _srUpdateStats() {
   const closed = SIGNAL_REGISTRY.signals.filter((s: any) => s.outcome)
   const wins = closed.filter((s: any) => s.outcome === 'win').length
   const losses = closed.length - wins
@@ -178,7 +178,7 @@ function _srUpdateStats() {
   _srRenderStats()
 }
 
-function _srRenderStats() {
+export function _srRenderStats() {
   const el_s = document.getElementById('sr-stats')
   if (!el_s) return
   const st = SIGNAL_REGISTRY.stats
@@ -224,7 +224,7 @@ export function _srRenderList() {
   }).join('')
 }
 
-function _srSave() {
+export function _srSave() {
   w._safeLocalStorageSet('zeus_signal_registry', {
     signals: SIGNAL_REGISTRY.signals.slice(0, 100),
     stats: SIGNAL_REGISTRY.stats,
