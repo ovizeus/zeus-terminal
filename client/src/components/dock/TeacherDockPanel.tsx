@@ -60,17 +60,17 @@ export function TeacherDockPanel() {
             <div className="teacher-controls">
               <button id="teacher-v2-teach-btn" className="teacher-btn teacher-btn-teach">▶ TEACH</button>
               <button id="teacher-v2-stop-btn" className="teacher-btn teacher-btn-stop" style={{ display: 'none' }}>■ STOP</button>
-              <button className="teacher-btn teacher-btn-sm">EXPORT</button>
-              <button className="teacher-btn teacher-btn-sm teacher-btn-danger">RESET</button>
+              <button className="teacher-btn teacher-btn-sm" onClick={() => (window as any).teacherExport?.()}>EXPORT</button>
+              <button className="teacher-btn teacher-btn-sm teacher-btn-danger" onClick={() => (window as any).teacherReset?.()}>RESET</button>
             </div>
 
             {/* ── TABS ── */}
             <div id="teacher-tabs" className="teacher-tabs">
-              <button className="teacher-tab active" data-tab="replay">REPLAY</button>
-              <button className="teacher-tab" data-tab="trades">TRADES</button>
-              <button className="teacher-tab" data-tab="stats">STATS</button>
-              <button className="teacher-tab" data-tab="memory">MEMORY</button>
-              <button className="teacher-tab" data-tab="review">REVIEW</button>
+              <button className="teacher-tab active" data-tab="replay" onClick={(e) => { const tabs = e.currentTarget.parentElement; if (tabs) { tabs.querySelectorAll('.teacher-tab').forEach(t => t.classList.remove('active')); e.currentTarget.classList.add('active') }; const p = document.getElementById('teacher-tab-replay'); if (p) { (p.parentElement as HTMLElement)?.querySelectorAll('.teacher-tab-content').forEach((c: any) => c.style.display = 'none'); p.style.display = '' } }}>REPLAY</button>
+              <button className="teacher-tab" data-tab="trades" onClick={(e) => { const tabs = e.currentTarget.parentElement; if (tabs) { tabs.querySelectorAll('.teacher-tab').forEach(t => t.classList.remove('active')); e.currentTarget.classList.add('active') }; const p = document.getElementById('teacher-tab-trades'); if (p) { (p.parentElement as HTMLElement)?.querySelectorAll('.teacher-tab-content').forEach((c: any) => c.style.display = 'none'); p.style.display = '' } }}>TRADES</button>
+              <button className="teacher-tab" data-tab="stats" onClick={(e) => { const tabs = e.currentTarget.parentElement; if (tabs) { tabs.querySelectorAll('.teacher-tab').forEach(t => t.classList.remove('active')); e.currentTarget.classList.add('active') }; const p = document.getElementById('teacher-tab-stats'); if (p) { (p.parentElement as HTMLElement)?.querySelectorAll('.teacher-tab-content').forEach((c: any) => c.style.display = 'none'); p.style.display = '' } }}>STATS</button>
+              <button className="teacher-tab" data-tab="memory" onClick={(e) => { const tabs = e.currentTarget.parentElement; if (tabs) { tabs.querySelectorAll('.teacher-tab').forEach(t => t.classList.remove('active')); e.currentTarget.classList.add('active') }; const p = document.getElementById('teacher-tab-memory'); if (p) { (p.parentElement as HTMLElement)?.querySelectorAll('.teacher-tab-content').forEach((c: any) => c.style.display = 'none'); p.style.display = '' } }}>MEMORY</button>
+              <button className="teacher-tab" data-tab="review" onClick={(e) => { const tabs = e.currentTarget.parentElement; if (tabs) { tabs.querySelectorAll('.teacher-tab').forEach(t => t.classList.remove('active')); e.currentTarget.classList.add('active') }; const p = document.getElementById('teacher-tab-review'); if (p) { (p.parentElement as HTMLElement)?.querySelectorAll('.teacher-tab-content').forEach((c: any) => c.style.display = 'none'); p.style.display = '' } }}>REVIEW</button>
             </div>
 
             {/* ══ TAB: REPLAY — Live autonomous session view ══ */}

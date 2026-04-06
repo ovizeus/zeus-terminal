@@ -52,14 +52,14 @@ export function LiqSettingsModal({ visible, onClose }: Props) {
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Min Size BTC</span>
-                <input type="range" min={0} max={100} defaultValue={1} style={{ flex: 1 }} />
+                <input type="range" min={0} max={100} defaultValue={1} style={{ flex: 1 }} onChange={() => {}} />
               </div>
             </div>
 
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Time Window</span>
-                <input type="range" min={1} max={48} defaultValue={24} style={{ flex: 1 }} />
+                <input type="range" min={1} max={48} defaultValue={24} style={{ flex: 1 }} onChange={() => {}} />
               </div>
               <div className="qbs" style={{ marginTop: 6 }}>
                 <div className="qb">1h</div>
