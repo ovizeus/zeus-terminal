@@ -9,18 +9,6 @@
 
 // Early shims — MUST be first import (sets ZT_safeInterval before arianova.ts IIFE runs)
 import './earlyShims'
-// Phase 8B: startApp (chunk B — THE core boot sequence)
-import { startApp } from '../core/bootstrapStartApp'
-// Phase 8F: bootstrap brain dashboard (chunk F — brain vision + reflection engine IIFEs)
-import '../core/bootstrapBrainDash'
-// Phase 8E: bootstrap panels (chunk E — exposure, cmd palette, missed, session, regime, perf, compare)
-import { _toggleExposurePanel, _toggleExpoInline, _toggleCmdPalette, _showMissedTrades, _showSessionReview, _showRegimeHistory, _showPerformance, _showCompare } from '../core/bootstrapPanels'
-// Phase 8D: bootstrap error + dlog + actfeed (chunk D)
-import { _checkAppUpdate, _toggleDecisionPanel, _actfeedToggle } from '../core/bootstrapError'
-// Phase 8C: bootstrap misc (chunk C — PIN, build info, welcome, PWA, masterReset, heartbeat, resize)
-import { _pinIsSet, _pinCheckLock, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _renderBuildInfo, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, setupPWAReloadBtn, masterReset } from '../core/bootstrapMisc'
-// Phase 8A: bootstrap init (chunk A — initZeusGroups, extras, health)
-import { initZeusGroups, _waitForFeedThenStartExtras, _startExtras, runHealthChecks, _updatePnlLabCondensed } from '../core/bootstrapInit'
 // Phase 7F-G: marketData close (chunk G — closeDemoPos)
 import { closeDemoPos } from '../data/marketDataClose'
 // Phase 7F-F: marketData positions (chunk F — pending orders, SL/TP, render, closeLivePos)
@@ -126,6 +114,14 @@ import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, inst
 
 // Phase 7D: orderflow — MUST be after managers (needs w.Intervals) and after guards (needs w._SAFETY)
 import '../data/orderflow'
+
+// Phase 8 — Bootstrap chunks — MUST be AFTER managers/guards/orderflow (heartbeat IIFE needs w.ingestPrice)
+import { startApp } from '../core/bootstrapStartApp'
+import '../core/bootstrapBrainDash'
+import { _toggleExposurePanel, _toggleExpoInline, _toggleCmdPalette, _showMissedTrades, _showSessionReview, _showRegimeHistory, _showPerformance, _showCompare } from '../core/bootstrapPanels'
+import { _checkAppUpdate, _toggleDecisionPanel, _actfeedToggle } from '../core/bootstrapError'
+import { _pinIsSet, _pinCheckLock, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _renderBuildInfo, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, setupPWAReloadBtn, masterReset } from '../core/bootstrapMisc'
+import { initZeusGroups, _waitForFeedThenStartExtras, _startExtras, runHealthChecks, _updatePnlLabCondensed } from '../core/bootstrapInit'
 
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
