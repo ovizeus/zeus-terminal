@@ -23,8 +23,9 @@ import { connectBNB, connectBYB, updConn as _mdUpdConn, procLiq, updLiqStats, up
 import { setTF, setTf, ztfToggle, ztfPick, toggleFS, updatePriceDisplay, calcFrCd, safeFetch, throttledMainMetrics, fetchRSI, fetchAllRSI, fetchFG, fetchATR, fetchOI, fetchLS, fetch24h, setDtTf, updateMetrics, renderRSI, calcSRTable } from '../data/marketDataFeeds'
 // Phase 7F-C: marketData overlays (chunk C — chart overlays, coexist with bridge marketData.js)
 import { updOvrs, togOvr, clearHeatmap, clearSR, renderTradeMarkers, llvEnsureCanvas, llvResizeCanvas, llvClearCanvas, llvRequestRender, clearLiqLevels, renderLiqLevels, llvSaveSettings, llvLoadSettings, _llvPressStart, _llvPressEnd, calcHeatmapPockets, renderHeatmapOverlay, renderSROverlay } from '../data/marketDataOverlays'
-// Phase 7F-A: marketData helpers (chunk A — pure functions, coexist with bridge marketData.js)
-import { _escHtml as _mdEscHtml, fmtTime as _mdFmtTime, fmtTimeSec as _mdFmtTimeSec, fmtDate as _mdFmtDate, fmtFull as _mdFmtFull, fmtNow as _mdFmtNow, toast as _mdToast, _calcATRSeries, calcRSI as _mdCalcRSI } from '../data/marketDataHelpers'
+// Phase 7F-A: marketData helpers — DYNAMIC timezone versions + unique functions
+// These supersede the static format.ts versions on window.* (S.tz support)
+import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFmtDate, fmtFull as _dynFmtFull, fmtNow, toast, _calcATRSeries, calcRSI } from '../data/marketDataHelpers'
 // Phase 7E: foundation — state + config. earlyShims already set _ZI on window.
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w._ZI)
@@ -292,16 +293,18 @@ export function installPhase1Adapters(): void {
   w.renderHeatmapOverlay = renderHeatmapOverlay
   w.renderSROverlay = renderSROverlay
 
-  // ── Phase 7F-A: marketData helpers (coexist — old JS re-declares same functions) ──
-  // These are set early so ported modules can use them.
-  // marketData.js in bridge will overwrite some of these — that's fine (same logic).
+  // ── Phase 7F-A: marketData helpers ──
+  // Dynamic timezone versions REPLACE the static ones from format.ts
+  // Old JS and ported TS modules consume these via window.*
+  w.fmtTime = _dynFmtTime
+  w.fmtTimeSec = _dynFmtTimeSec
+  w.fmtDate = _dynFmtDate
+  w.fmtFull = _dynFmtFull
+  w.fmtNow = fmtNow
+  w.toast = toast
   w._calcATRSeries = _calcATRSeries
-  w.fmtNow = _mdFmtNow
-  w.toast = _mdToast
-  w.calcRSI = _mdCalcRSI
-  // fmtTime/fmtDate/fmtFull already set from format.ts (Phase 1)
-  // _escHtml already set from dom.ts (Phase 1)
-  void _mdEscHtml; void _mdFmtTime; void _mdFmtTimeSec; void _mdFmtDate; void _mdFmtFull
+  w.calcRSI = calcRSI
+  // _escHtml: NOT set here — escHtml from dom.ts (Phase 1) is already on window
 
   // ── Phase 7B: panels + render ──
   w.scanLiquidityMagnets = scanLiquidityMagnets
