@@ -30,7 +30,8 @@ import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFm
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w._ZI)
 // Named imports for config.ts exports that need window.* mapping
-import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, SIGNAL_REGISTRY, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESSION_HOURS_BT, SESS_CFG, PROFILE_TF, ARM_ASSIST, NEWS, _regimeHistory, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar } from '../core/config'
+import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, SIGNAL_REGISTRY, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESSION_HOURS_BT, SESS_CFG, PROFILE_TF, ARM_ASSIST, NEWS, _regimeHistory, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, _audioReady, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, oviPriceSeries as _cfgOviPriceSeries, _sessLastBt, _neuroLastScan, _execActive } from '../core/config'
+import { BlockReason, ZState, mainChart as _stMainChart, bbUpperS, ichimokuSeries, fibSeries, pivotSeries, vpSeries, _rsiChart, _stochChart, _atrChart, _obvChart, _mfiChart, _cciChart, IND_SETTINGS as _stIND_SETTINGS, liqSeries, zsSeries, oiHistory, WL_SYMS, wlPrices, allPrices } from '../core/state'
 
 import { el, safeSetText, safeSetHTML, escHtml, isValidMarketPrice, safeLastKline } from '../utils/dom'
 import { fmt, fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
@@ -234,6 +235,19 @@ export function installPhase1Adapters(): void {
   w._srUpdateStats = _srUpdateStats; w._srRenderStats = _srRenderStats
   w._srRenderList = _srRenderList; w._srSave = _srSave; w._srLoad = _srLoad
   w._srEnsureVisible = _srEnsureVisible; w.srStripUpdateBar = srStripUpdateBar
+  w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
+  w._macdChart = _macdChart; w._macdInited = _macdInited
+  w._audioCtx = _audioCtx; w._audioReady = _audioReady
+  w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; w.oviPriceSeries = _cfgOviPriceSeries
+  w._sessLastBt = _sessLastBt; w._neuroLastScan = _neuroLastScan; w._execActive = _execActive
+  // state.ts exports
+  w.BlockReason = BlockReason; w.ZState = ZState
+  w.bbUpperS = bbUpperS; w.ichimokuSeries = ichimokuSeries
+  w.fibSeries = fibSeries; w.pivotSeries = pivotSeries; w.vpSeries = vpSeries
+  w._rsiChart = _rsiChart; w._stochChart = _stochChart; w._atrChart = _atrChart
+  w._obvChart = _obvChart; w._mfiChart = _mfiChart; w._cciChart = _cciChart
+  w.IND_SETTINGS = _stIND_SETTINGS; w.liqSeries = liqSeries; w.zsSeries = zsSeries
+  w.oiHistory = oiHistory; w.WL_SYMS = WL_SYMS; w.wlPrices = wlPrices; w.allPrices = allPrices
 
   // ── Phase 7F-G: closeDemoPos (coexist) ──
   w.closeDemoPos = closeDemoPos
