@@ -123,14 +123,14 @@ export function renderChart(): void {
       const _ep2 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.ema) ? Math.round(w.IND_SETTINGS.ema.p2) : 200
       const e50 = calcEMA(c, _ep1).map((v: number, i: number) => ({ time: w.S.klines[i].time, value: v }))
       const e200 = calcEMA(c, _ep2).map((v: number, i: number) => ({ time: w.S.klines[i].time, value: v }))
-      w.ema50S.setData(e50); w.ema200S.setData(e200)
-    } else { w.ema50S.setData([]); w.ema200S.setData([]) }
+      if (w.ema50S) w.ema50S.setData(e50); if (w.ema200S) w.ema200S.setData(e200)
+    } else { if (w.ema50S) w.ema50S.setData([]); if (w.ema200S) w.ema200S.setData([]) }
     if (w.S.indicators.wma) {
       const _wp1 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.wma) ? Math.round(w.IND_SETTINGS.wma.p1) : 20
       const _wp2 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.wma) ? Math.round(w.IND_SETTINGS.wma.p2) : 50
       function calcWMA(data: number[], p: number) { return data.map((v: number, i: number) => { if (i < p - 1) return { time: w.S.klines[i].time, value: 0 }; let s = 0, wt = 0; for (let j = 0; j < p; j++) { s += data[i - j] * (p - j); wt += p - j } return { time: w.S.klines[i].time, value: s / wt } }) }
-      w.wma20S.setData(calcWMA(c, _wp1)); w.wma50S.setData(calcWMA(c, _wp2))
-    } else { w.wma20S.setData([]); w.wma50S.setData([]) }
+      if (w.wma20S) w.wma20S.setData(calcWMA(c, _wp1)); if (w.wma50S) w.wma50S.setData(calcWMA(c, _wp2))
+    } else { if (w.wma20S) w.wma20S.setData([]); if (w.wma50S) w.wma50S.setData([]) }
     if (w.S.indicators.st && w.S.atr) {
       const atr = w.S.atr
       const mult = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.st) ? w.IND_SETTINGS.st.mult : 3
@@ -143,13 +143,13 @@ export function renderChart(): void {
         if (c[i] > up) trend = 1; else if (c[i] < dn) trend = -1
         stData.push({ time: k.time, value: trend === 1 ? dn : up, up, dn, trend })
       })
-      w.stS.setData(stData.map((d: any) => ({ time: d.time, value: d.value })))
-    } else { w.stS.setData([]) }
+      if (w.stS) w.stS.setData(stData.map((d: any) => ({ time: d.time, value: d.value })))
+    } else { if (w.stS) w.stS.setData([]) }
     let cvd = 0
     const cvdData = w.S.klines.map((k: any) => { cvd += k.close > k.open ? k.volume : -k.volume; return { time: k.time, value: cvd } })
-    w.cvdS.setData(cvdData)
+    if (w.cvdS) w.cvdS.setData(cvdData)
     const volData = w.S.klines.map((k: any) => ({ time: k.time, value: k.volume, color: k.close >= k.open ? '#00d97a44' : '#ff335544' }))
-    w.volS.setData(volData)
+    if (w.volS) w.volS.setData(volData)
     if (typeof w._macdKlineHook === 'function') w._macdKlineHook()
     if (typeof w._indRenderHook === 'function') w._indRenderHook()
     if (typeof w.updOvrs === 'function') w.updOvrs()
