@@ -248,6 +248,18 @@ export function installPhase1Adapters(): void {
   w._obvChart = _obvChart; w._mfiChart = _mfiChart; w._cciChart = _cciChart
   w.IND_SETTINGS = _stIND_SETTINGS; w.liqSeries = liqSeries; w.zsSeries = zsSeries
   w.oiHistory = oiHistory; w.WL_SYMS = WL_SYMS; w.wlPrices = wlPrices; w.allPrices = allPrices
+  // Chart series refs — start as null/undefined, set by initCharts() in marketDataChart.ts
+  // Bridge marketData.js renderChart() references these as globals
+  if (w.cSeries === undefined) w.cSeries = null
+  if (w.cvdS === undefined) w.cvdS = null
+  if (w.cvdChart === undefined) w.cvdChart = null
+  if (w.volS === undefined) w.volS = null
+  if (w.ema50S === undefined) w.ema50S = null
+  if (w.ema200S === undefined) w.ema200S = null
+  if (w.wma20S === undefined) w.wma20S = null
+  if (w.wma50S === undefined) w.wma50S = null
+  if (w.stS === undefined) w.stS = null
+  if (w.srSeries === undefined) w.srSeries = []
 
   // ── Phase 7F-G: closeDemoPos (coexist) ──
   w.closeDemoPos = closeDemoPos
