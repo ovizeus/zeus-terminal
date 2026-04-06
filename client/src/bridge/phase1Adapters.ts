@@ -9,6 +9,16 @@
 
 // Early shims — MUST be first import (sets ZT_safeInterval before arianova.ts IIFE runs)
 import './earlyShims'
+// Phase 8F: bootstrap brain dashboard (chunk F — brain vision + reflection engine IIFEs)
+import '../core/bootstrapBrainDash'
+// Phase 8E: bootstrap panels (chunk E — exposure, cmd palette, missed, session, regime, perf, compare)
+import { _toggleExposurePanel, _toggleExpoInline, _toggleCmdPalette, _showMissedTrades, _showSessionReview, _showRegimeHistory, _showPerformance, _showCompare } from '../core/bootstrapPanels'
+// Phase 8D: bootstrap error + dlog + actfeed (chunk D)
+import { _checkAppUpdate, _toggleDecisionPanel, _actfeedToggle } from '../core/bootstrapError'
+// Phase 8C: bootstrap misc (chunk C — PIN, build info, welcome, PWA, masterReset, heartbeat, resize)
+import { _pinIsSet, _pinCheckLock, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _renderBuildInfo, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, setupPWAReloadBtn, masterReset } from '../core/bootstrapMisc'
+// Phase 8A: bootstrap init (chunk A — initZeusGroups, extras, health)
+import { initZeusGroups, _waitForFeedThenStartExtras, _startExtras, runHealthChecks, _updatePnlLabCondensed } from '../core/bootstrapInit'
 // Phase 7F-G: marketData close (chunk G — closeDemoPos)
 import { closeDemoPos } from '../data/marketDataClose'
 // Phase 7F-F: marketData positions (chunk F — pending orders, SL/TP, render, closeLivePos)
@@ -260,6 +270,32 @@ export function installPhase1Adapters(): void {
   if (w.wma50S === undefined) w.wma50S = null
   if (w.stS === undefined) w.stS = null
   if (w.srSeries === undefined) w.srSeries = []
+
+  // ── Phase 8E: bootstrap panels (coexist) ──
+  w._toggleExposurePanel = _toggleExposurePanel; w._toggleExpoInline = _toggleExpoInline
+  w._toggleCmdPalette = _toggleCmdPalette; w._showMissedTrades = _showMissedTrades
+  w._showSessionReview = _showSessionReview; w._showRegimeHistory = _showRegimeHistory
+  w._showPerformance = _showPerformance; w._showCompare = _showCompare
+
+  // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
+  w._checkAppUpdate = _checkAppUpdate
+  w._toggleDecisionPanel = _toggleDecisionPanel
+  w._actfeedToggle = _actfeedToggle
+
+  // ── Phase 8C: bootstrap misc (coexist) ──
+  w._pinIsSet = _pinIsSet; w._pinCheckLock = _pinCheckLock
+  w.pinUnlock = pinUnlock; w.pinActivate = pinActivate; w.pinRemove = pinRemove; w._pinUpdateUI = _pinUpdateUI
+  w._renderBuildInfo = _renderBuildInfo; w._showWelcomeModal = _showWelcomeModal
+  w.showPWAUpdateBanner = showPWAUpdateBanner; w.hidePWAUpdateBanner = hidePWAUpdateBanner
+  w.setPWAVersion = setPWAVersion; w.setupPWAReloadBtn = setupPWAReloadBtn
+  w.masterReset = masterReset
+
+  // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
+  w.initZeusGroups = initZeusGroups
+  w._waitForFeedThenStartExtras = _waitForFeedThenStartExtras
+  w._startExtras = _startExtras
+  w.runHealthChecks = runHealthChecks
+  w._updatePnlLabCondensed = _updatePnlLabCondensed
 
   // ── Phase 7F-G: closeDemoPos (coexist) ──
   w.closeDemoPos = closeDemoPos
