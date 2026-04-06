@@ -226,7 +226,7 @@ export function AutoTradePanel() {
           <div className="at-cond-row" id="atMscanRow" style={{ flexWrap: 'wrap', position: 'relative' }}>
             <span className="at-cond-name">Multi-Symbol Scan</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input type="checkbox" id="atMultiSym" defaultChecked />
+              <input type="checkbox" id="atMultiSym" defaultChecked onChange={() => (window as any).toggleMultiSymMode?.()} />
               <div id="atSymPickerCard" onClick={() => setSymPickerOpen(!symPickerOpen)}
                 style={{ cursor: 'pointer', background: 'linear-gradient(135deg,#1a1030,#0d0a1a)', border: '1px solid #aa44ff33', borderRadius: '4px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '5px', transition: 'border-color .2s' }}>
                 <span style={{ color: '#aa44ff', fontSize: '8px', fontWeight: 700 }} id="atMultiSymLbl">ACTIV — 8 simboluri</span>
