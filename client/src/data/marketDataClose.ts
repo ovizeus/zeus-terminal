@@ -1,0 +1,116 @@
+// Zeus — data/marketDataClose.ts
+// Ported 1:1 from public/js/data/marketData.js lines 3362-3471 (Chunk G)
+// closeDemoPos — the most critical function in the trading engine
+
+const w = window as any
+
+export function closeDemoPos(id: any, reason?: string): void {
+  const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id)
+  const idx = w.TP.demoPositions.findIndex((p: any) => p.id === numId || p.id === id)
+  if (idx < 0) {
+    setTimeout(() => { w.renderDemoPositions(); w.renderATPositions() }, 0)
+    return
+  }
+  const pos = w.TP.demoPositions[idx]
+  if (pos.closed || pos.status === 'closing') return // [FIX H3]
+  pos.closed = true
+  pos.status = 'closing' // [FIX H3]
+
+  // [BUG1 FIX] Server-managed position close
+  if (w._serverATEnabled && pos._serverSeq) {
+    if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id)
+    fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq }) })
+      .then(function (r: any) { return r.json() })
+      .then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) })
+      .catch(function () { })
+  }
+
+  // _bmPostClose
+  if (typeof w._bmPostClose === 'function') w._bmPostClose(pos, reason)
+
+  // [FIX P10] Guard null/stale price — use entry as fallback
+  const curPrice = (typeof w.getSymPrice === 'function' ? w.getSymPrice(pos) : null) || pos.entry
+  const diff = curPrice - pos.entry
+  const pnl = w._safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+  pos._closePnl = pnl // [FIX BUG4]
+
+  if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('AT', '[CLOSE DEMO] ' + pos.side + ' ' + pos.sym + ' PnL=' + pnl.toFixed(2) + ' ' + (reason || 'Manual'), { id: pos.id, sym: pos.sym, side: pos.side, pnl: pnl, reason: reason || 'Manual' })
+
+  // Return margin + PnL
+  w.TP.demoBalance += pos.size + pnl
+  if (w.TP.demoBalance < 0) w.TP.demoBalance = 0 // [FIX P13]
+  if (pnl >= 0) w.TP.demoWins++; else w.TP.demoLosses++
+
+  // [SR] outcome update
+  if (typeof w.srUpdateOutcome === 'function') w.srUpdateOutcome(pos, pnl)
+
+  // Kill switch check after realized loss
+  if (pos.autoTrade && Number.isFinite(pnl)) {
+    w.AT.realizedDailyPnL = (w.AT.realizedDailyPnL || 0) + pnl
+    w.AT.closedTradesToday = (w.AT.closedTradesToday || 0) + 1
+    if (typeof w.checkKillThreshold === 'function') w.checkKillThreshold()
+  }
+
+  // Clean DSL state
+  delete w.DSL.positions[String(pos.id)]
+  if (w.DSL._attachedIds) w.DSL._attachedIds.delete(String(pos.id))
+
+  // Journal
+  w.addTradeToJournal({
+    id: pos.id,
+    time: w.fmtNow(),
+    side: pos.side, sym: pos.sym.replace('USDT', ''),
+    entry: pos.entry, exit: curPrice,
+    pnl, reason: reason || 'Manual', lev: pos.lev,
+    autoTrade: !!pos.autoTrade,
+    journalEvent: 'CLOSE',
+    regime: w.BM.regime || w.BM.structure?.regime || '\u2014',
+    alignmentScore: w.BM.structure?.score ?? null,
+    volRegime: w.BM.volRegime || '\u2014',
+    profile: w.S.profile || 'fast',
+    openTs: pos.openTs || pos.id,
+    closedAt: Date.now(),
+    mode: pos.mode || ((typeof w.AT !== 'undefined' && w.AT._serverMode) || 'demo'),
+  })
+
+  w.TP.demoPositions.splice(idx, 1)
+
+  // Track recently closed IDs
+  w._zeusRecentlyClosed = w._zeusRecentlyClosed || []
+  w._zeusRecentlyClosed.push(pos.id)
+  if (pos._serverSeq && pos._serverSeq !== pos.id) w._zeusRecentlyClosed.push(pos._serverSeq)
+  if (w._zeusRecentlyClosed.length > 200) w._zeusRecentlyClosed = w._zeusRecentlyClosed.slice(-100)
+
+  // UI sync
+  setTimeout(() => {
+    w.updateDemoBalance()
+    w.renderDemoPositions()
+    w.renderATPositions()
+    w.TP.demoPositions = (w.TP.demoPositions || []).filter((p: any) => !p.closed)
+    const autoPosns = w.TP.demoPositions.filter((p: any) => p.autoTrade)
+    if (autoPosns.length === 0) { const el = document.getElementById('atPosCount'); if (el) el.textContent = '0 pozitii' }
+    if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
+  }, 0)
+
+  w.toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  w.ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade', `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+
+  w.ZState.syncNow()
+
+  // Exit overlay (auto trades only)
+  if (pos.autoTrade && typeof w.onTradeClosed === 'function') {
+    const _openTs = pos.openTs || pos.id
+    const _durMs = Date.now() - _openTs
+    const _durMin = Math.round(_durMs / 60000)
+    w.onTradeClosed({ sym: pos.sym, pnl, percent: (pnl / pos.size * 100), duration: (_durMin > 0 ? _durMin + 'm' : '<1m'), reason: reason || 'CLOSE', isLive: pos.isLive })
+  }
+
+  // Post-mortem (async, 200ms delay)
+  setTimeout(function () { if (typeof w.runPostMortem === 'function') w.runPostMortem(pos, pnl, curPrice) }, 200)
+
+  // Close hooks (ARES, extensions)
+  if (Array.isArray(w._demoCloseHooks)) {
+    const _hPos = pos, _hPnl = pnl, _hReason = reason
+    w._demoCloseHooks.forEach(function (fn: any) { try { fn(_hPos, _hPnl, _hReason) } catch (_) { } })
+  }
+}

@@ -9,6 +9,22 @@
 
 // Early shims — MUST be first import (sets ZT_safeInterval before arianova.ts IIFE runs)
 import './earlyShims'
+// Phase 7F-G: marketData close (chunk G — closeDemoPos)
+import { closeDemoPos } from '../data/marketDataClose'
+// Phase 7F-F: marketData positions (chunk F — pending orders, SL/TP, render, closeLivePos)
+import { checkPendingOrders, cancelPendingOrder, modifyPendingPrice, renderPendingOrders, _startLivePendingSync, _stopLivePendingSync, _resumeLivePendingSyncIfNeeded, savePosSLTP, checkDemoPositionsSLTP, renderDemoPositions, calcPosPnL, updateLiveBalance, renderLivePositions, closeLivePos, getSymPrice as _mdGetSymPriceFull } from '../data/marketDataPositions'
+// Phase 7F-E: marketData trading (chunk E — mode switch, orders, leverage, liq price)
+import { switchGlobalMode, _applyGlobalModeUI, _showConfirmDialog, promptAddFunds, promptResetDemo, toggleTradePanel, setDemoSide, setLiveSide, onDemoOrdTypeChange, getDemoLev, getLiveLev, onDemoLevChange, onLiveLevChange, calcLiqPrice, updateDemoLiqPrice, updateLiveLiqPrice, setDemoPct, setLivePct, updateDemoBalance, placeDemoOrder, getSymPrice } from '../data/marketDataTrading'
+// Phase 7F-B: marketData chart (chunk B — chart init, fetchKlines, renderChart)
+import { getChartH, getChartW, initCharts, fetchKlines, renderChart } from '../data/marketDataChart'
+// Phase 7F-D2: marketData WS (chunk D2 — WS connects, liq, symbol, modals, alerts, cloud)
+import { connectBNB, connectBYB, updConn as _mdUpdConn, procLiq, updLiqStats, updLiqSourceMetrics, updBybHealth, renderOB, renderHotZones, updMarketPressure, setLiqSrcFilter, updLiqFilterBtns, renderFeed, setSymbol as _mdSetSymbol, toggleSnd, openM, closeM, _initModalDrag, swtab, updateMainMetrics, showTab, applyChartColors as _mdApplyChartColors, setCandleStyle, setTZ, applyHeatmapSettings, sendAlert, registerServiceWorker as _mdRegisterSW, checkLiqAlert, testNotification, saveAlerts, applySR, cloudClear as _mdCloudClear, injectFakeWhale, setLiqSym, setLiqUsd, setLiqTW, hashEmail, cloudSave as _mdCloudSave, cloudLoad as _mdCloudLoad, initCloudSettings, applySessionSettings, applyZS, clearZS, renderZS } from '../data/marketDataWS'
+// Phase 7F-D1: marketData feeds (chunk D1 — TF, API fetches, metrics, coexist with bridge)
+import { setTF, setTf, ztfToggle, ztfPick, toggleFS, updatePriceDisplay, calcFrCd, safeFetch, throttledMainMetrics, fetchRSI, fetchAllRSI, fetchFG, fetchATR, fetchOI, fetchLS, fetch24h, setDtTf, updateMetrics, renderRSI, calcSRTable } from '../data/marketDataFeeds'
+// Phase 7F-C: marketData overlays (chunk C — chart overlays, coexist with bridge marketData.js)
+import { updOvrs, togOvr, clearHeatmap, clearSR, renderTradeMarkers, llvEnsureCanvas, llvResizeCanvas, llvClearCanvas, llvRequestRender, clearLiqLevels, renderLiqLevels, llvSaveSettings, llvLoadSettings, _llvPressStart, _llvPressEnd, calcHeatmapPockets, renderHeatmapOverlay, renderSROverlay } from '../data/marketDataOverlays'
+// Phase 7F-A: marketData helpers (chunk A — pure functions, coexist with bridge marketData.js)
+import { _escHtml as _mdEscHtml, fmtTime as _mdFmtTime, fmtTimeSec as _mdFmtTimeSec, fmtDate as _mdFmtDate, fmtFull as _mdFmtFull, fmtNow as _mdFmtNow, toast as _mdToast, _calcATRSeries, calcRSI as _mdCalcRSI } from '../data/marketDataHelpers'
 // Phase 7E: foundation — state + config. earlyShims already set _ZI on window.
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w._ZI)
@@ -198,6 +214,94 @@ export function installPhase1Adapters(): void {
   w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
   w.resetDailyPnl = resetDailyPnl
+
+  // ── Phase 7F-G: closeDemoPos (coexist) ──
+  w.closeDemoPos = closeDemoPos
+
+  // ── Phase 7F-F: marketData positions (coexist) ──
+  w.checkPendingOrders = checkPendingOrders; w.cancelPendingOrder = cancelPendingOrder
+  w.modifyPendingPrice = modifyPendingPrice; w.renderPendingOrders = renderPendingOrders
+  w._startLivePendingSync = _startLivePendingSync; w._stopLivePendingSync = _stopLivePendingSync
+  w._resumeLivePendingSyncIfNeeded = _resumeLivePendingSyncIfNeeded
+  w.savePosSLTP = savePosSLTP; w.checkDemoPositionsSLTP = checkDemoPositionsSLTP
+  w.renderDemoPositions = renderDemoPositions; w.calcPosPnL = calcPosPnL
+  w.updateLiveBalance = updateLiveBalance; w.renderLivePositions = renderLivePositions
+  w.closeLivePos = closeLivePos; w.getSymPrice = _mdGetSymPriceFull
+
+  // ── Phase 7F-E: marketData trading (coexist) ──
+  w.switchGlobalMode = switchGlobalMode; w._applyGlobalModeUI = _applyGlobalModeUI
+  w._showConfirmDialog = _showConfirmDialog; w.promptAddFunds = promptAddFunds; w.promptResetDemo = promptResetDemo
+  w.toggleTradePanel = toggleTradePanel; w.setDemoSide = setDemoSide; w.setLiveSide = setLiveSide
+  w.onDemoOrdTypeChange = onDemoOrdTypeChange; w.getDemoLev = getDemoLev; w.getLiveLev = getLiveLev
+  w.onDemoLevChange = onDemoLevChange; w.onLiveLevChange = onLiveLevChange
+  w.calcLiqPrice = calcLiqPrice; w.updateDemoLiqPrice = updateDemoLiqPrice; w.updateLiveLiqPrice = updateLiveLiqPrice
+  w.setDemoPct = setDemoPct; w.setLivePct = setLivePct; w.updateDemoBalance = updateDemoBalance
+  w.placeDemoOrder = placeDemoOrder; w.getSymPrice = getSymPrice
+
+  // ── Phase 7F-B: marketData chart (coexist) ──
+  w.getChartH = getChartH; w.getChartW = getChartW
+  w.initCharts = initCharts; w.fetchKlines = fetchKlines; w.renderChart = renderChart
+
+  // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
+  w.connectBNB = connectBNB; w.connectBYB = connectBYB
+  w.updConn = _mdUpdConn; w.procLiq = procLiq
+  w.updLiqStats = updLiqStats; w.updLiqSourceMetrics = updLiqSourceMetrics
+  w.updBybHealth = updBybHealth; w.renderOB = renderOB
+  w.renderHotZones = renderHotZones; w.updMarketPressure = updMarketPressure
+  w.setLiqSrcFilter = setLiqSrcFilter; w.updLiqFilterBtns = updLiqFilterBtns; w.renderFeed = renderFeed
+  w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
+  w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
+  w.updateMainMetrics = updateMainMetrics; w.showTab = showTab
+  w.applyChartColors = _mdApplyChartColors; w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
+  w.applyHeatmapSettings = applyHeatmapSettings
+  w.sendAlert = sendAlert; w.registerServiceWorker = _mdRegisterSW
+  w.checkLiqAlert = checkLiqAlert; w.testNotification = testNotification; w.saveAlerts = saveAlerts
+  w.applySR = applySR; w.cloudClear = _mdCloudClear; w.injectFakeWhale = injectFakeWhale
+  w.setLiqSym = setLiqSym; w.setLiqUsd = setLiqUsd; w.setLiqTW = setLiqTW
+  w.hashEmail = hashEmail; w.cloudSave = _mdCloudSave; w.cloudLoad = _mdCloudLoad
+  w.initCloudSettings = initCloudSettings; w.applySessionSettings = applySessionSettings
+  w.applyZS = applyZS; w.clearZS = clearZS; w.renderZS = renderZS
+
+  // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
+  w.setTF = setTF; w.setTf = setTf
+  w.ztfToggle = ztfToggle; w.ztfPick = ztfPick
+  w.toggleFS = toggleFS
+  w.updatePriceDisplay = updatePriceDisplay
+  w.calcFrCd = calcFrCd; w.safeFetch = safeFetch; w.throttledMainMetrics = throttledMainMetrics
+  w.fetchRSI = fetchRSI; w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
+  w.fetchATR = fetchATR; w.fetchOI = fetchOI; w.fetchLS = fetchLS; w.fetch24h = fetch24h
+  w.setDtTf = setDtTf; w.updateMetrics = updateMetrics; w.renderRSI = renderRSI; w.calcSRTable = calcSRTable
+
+  // ── Phase 7F-C: marketData overlays (coexist — old JS re-declares same functions) ──
+  w.updOvrs = updOvrs
+  w.togOvr = togOvr
+  w.clearHeatmap = clearHeatmap
+  w.clearSR = clearSR
+  w.renderTradeMarkers = renderTradeMarkers
+  w.llvEnsureCanvas = llvEnsureCanvas
+  w.llvResizeCanvas = llvResizeCanvas
+  w.llvClearCanvas = llvClearCanvas
+  w.llvRequestRender = llvRequestRender
+  w.clearLiqLevels = clearLiqLevels
+  w.renderLiqLevels = renderLiqLevels
+  w.llvSaveSettings = llvSaveSettings
+  w.llvLoadSettings = llvLoadSettings
+  w._llvPressStart = _llvPressStart
+  w._llvPressEnd = _llvPressEnd
+  w.calcHeatmapPockets = calcHeatmapPockets
+  w.renderHeatmapOverlay = renderHeatmapOverlay
+  w.renderSROverlay = renderSROverlay
+
+  // ── Phase 7F-A: marketData helpers (coexist — old JS re-declares same functions) ──
+  // These are set early so ported modules can use them.
+  // marketData.js in bridge will overwrite some of these — that's fine (same logic).
+  w._calcATRSeries = _calcATRSeries
+  w.fmtNow = _mdFmtNow
+  w.toast = _mdToast
+  w.calcRSI = _mdCalcRSI
+  // fmtTime/fmtDate/fmtFull already set from format.ts (Phase 1)
+  // _escHtml already set from dom.ts (Phase 1)
+  void _mdEscHtml; void _mdFmtTime; void _mdFmtTimeSec; void _mdFmtDate; void _mdFmtFull
 
   // ── Phase 7B: panels + render ──
   w.scanLiquidityMagnets = scanLiquidityMagnets
