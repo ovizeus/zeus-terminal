@@ -42,10 +42,8 @@ const SCRIPT_PHASES: string[][] = [
   // [EMPTY — all state/config scripts ported]
   // Phase 1C — UI & Dev (tabLeader.js ported Phase 3; guards.js, dev.js, theme.js, decisionLog.js ported Phase 6A)
   // [EMPTY — all utility scripts ported]
-  // Phase 2 — Data layer (storage.js + symbols.js ported Phase 3; klines.js ported Phase 7A)
-  [
-    'js/data/marketData.js',
-  ],
+  // Phase 2 — Data layer (all ported: storage/symbols Phase 3, klines Phase 7A, marketData Phase 7F — DECOMMISSIONED)
+  // [EMPTY — marketData.js removed]
   // Phase 3 — Brain engine (all ported to React Phase 5: signals, confluence, forecast, regime, phaseFilter, deepdive, brain)
   // [EMPTY — all brain scripts ported]
   // Phase 4 — Trading (all ported: dsl/risk/positions/orders/liveApi Phase 6B, autotrade Phase 6C)
