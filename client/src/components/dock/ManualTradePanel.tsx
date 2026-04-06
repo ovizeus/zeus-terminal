@@ -1,12 +1,11 @@
-import { useState } from 'react'
-import { usePositionsStore, useMarketStore } from '../../stores'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
-/** 1:1 port of #panelDemo from public/index.html lines 2050-2204 */
+const w = window as any
+
+/** 1:1 port of #panelDemo from public/index.html lines 2050-2204
+ *  Syncs bidirectionally with w.TP for trading functions in marketDataTrading.ts */
 export function ManualTradePanel() {
-  const demoBalance = usePositionsStore((s) => s.demoBalance)
-  const price = useMarketStore((s) => s.market.price)
-
-  const [side, setSide] = useState<'LONG' | 'SHORT'>('LONG')
+  const [side, setSideLocal] = useState<'LONG' | 'SHORT'>(() => w.TP?.demoSide || 'LONG')
   const [ordType, setOrdType] = useState('market')
   const [marginMode, setMarginMode] = useState('cross')
   const [lev, setLev] = useState('5')
@@ -15,26 +14,86 @@ export function ManualTradePanel() {
   const [size, setSize] = useState('100')
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
+  const [balance, setBalance] = useState(() => w.TP?.demoBalance ?? 10000)
+  // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
+  // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
+  const setSide = useCallback((s: 'LONG' | 'SHORT') => {
+    setSideLocal(s)
+    if (w.TP) w.TP.demoSide = s
+    if (typeof w.updateDemoLiqPrice === 'function') w.updateDemoLiqPrice()
+  }, [])
+
+  // Sync ordType to DOM + call onDemoOrdTypeChange
+  const handleOrdTypeChange = useCallback((val: string) => {
+    setOrdType(val)
+    // onDemoOrdTypeChange reads from DOM, React controlled inputs handle that
+    if (typeof w.onDemoOrdTypeChange === 'function') {
+      setTimeout(() => w.onDemoOrdTypeChange(), 0)
+    }
+  }, [])
+
+  // Sync leverage to TP + call onDemoLevChange
+  const handleLevChange = useCallback((val: string) => {
+    setLev(val)
+    if (typeof w.onDemoLevChange === 'function') {
+      setTimeout(() => w.onDemoLevChange(), 0)
+    }
+  }, [])
+
+  const handleCustomLevChange = useCallback((val: number) => {
+    setCustomLev(val)
+    if (typeof w.updateDemoLiqPrice === 'function') {
+      setTimeout(() => w.updateDemoLiqPrice(), 0)
+    }
+  }, [])
+
+  // Poll w.TP.demoBalance periodically to keep React in sync
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (w.TP && w.TP.demoBalance !== balance) {
+        setBalance(w.TP.demoBalance)
+      }
+    }, 500)
+    return () => clearInterval(iv)
+  }, [balance])
+
+  // Init side from TP on mount
+  useEffect(() => {
+    if (w.TP?.demoSide) setSideLocal(w.TP.demoSide)
+    if (w.TP) setBalance(w.TP.demoBalance)
+  }, [])
 
   const showCustomLev = lev === 'custom'
   const effectiveLev = showCustomLev ? customLev : +lev
 
-  // Liquidation price estimate
+  // Liquidation price estimate (local, for instant preview)
+  const price = w.S?.price || 0
   const entryPrice = ordType === 'market' ? price : (+entry || 0)
   let liqPrice = 0
   if (entryPrice > 0 && effectiveLev > 0) {
-    if (side === 'LONG') liqPrice = entryPrice * (1 - 1 / effectiveLev)
-    else liqPrice = entryPrice * (1 + 1 / effectiveLev)
+    const mm = 0.004
+    if (side === 'LONG') liqPrice = entryPrice * (1 - 1 / effectiveLev + mm)
+    else liqPrice = entryPrice * (1 + 1 / effectiveLev - mm)
   }
 
   function setPct(pct: number) {
-    setSize(((demoBalance * pct / 100)).toFixed(0))
+    const bal = w.TP?.demoBalance ?? balance
+    setSize((bal * pct / 100).toFixed(0))
   }
+
+  // Attach confirm-close pattern on CLOSE ALL button
+  const closeAllRef = useRef<HTMLButtonElement>(null)
+  const closeAllAttached = useRef(false)
+  useEffect(() => {
+    if (closeAllRef.current && !closeAllAttached.current && typeof w.attachConfirmClose === 'function') {
+      w.attachConfirmClose(closeAllRef.current, w.closeAllDemoPos)
+      closeAllAttached.current = true
+    }
+  })
 
   return (
     <>
-    {/* Mode toggle separator — NOT shown in pageview (old pageview.js only moves #panelDemo, skips .trade-sep).
-         Kept in DOM so old JS switchGlobalMode() can find btnDemo/btnLive, but hidden via CSS below. */}
+    {/* Mode toggle separator — hidden, old JS switchGlobalMode() finds btnDemo/btnLive */}
     <div className="trade-sep" style={{ display: 'none' }}>
       <div className="trade-line" />
       <div className="trade-btns">
@@ -51,9 +110,9 @@ export function ManualTradePanel() {
       <div className="tp-hdr demo-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
         <span>MANUAL TRADE</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span id="demoBalance" className="tp-bal">BAL: ${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-          <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => (window as any).promptAddFunds?.()}>+ ADD</button>
-          <button id="btnResetDemo" style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000" onClick={() => (window as any).promptResetDemo?.()}>↻ RESET</button>
+          <span id="demoBalance" className="tp-bal">{`BAL: $${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+          <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => w.promptAddFunds?.()}>+ ADD</button>
+          <button id="btnResetDemo" style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000" onClick={() => w.promptResetDemo?.()}>↻ RESET</button>
         </span>
       </div>
       <div className="tp-body">
@@ -67,7 +126,7 @@ export function ManualTradePanel() {
         <div className="tp-row">
           <div className="tp-field">
             <div className="tp-lbl">ORDER TYPE</div>
-            <select id="demoOrdType" className="tp-sel" value={ordType} onChange={e => setOrdType(e.target.value)}>
+            <select id="demoOrdType" className="tp-sel" value={ordType} onChange={e => handleOrdTypeChange(e.target.value)}>
               <option value="market">MARKET</option>
               <option value="limit">LIMIT</option>
             </select>
@@ -81,7 +140,7 @@ export function ManualTradePanel() {
           </div>
           <div className="tp-field">
             <div className="tp-lbl">LEVERAGE</div>
-            <select id="demoLev" className="tp-sel" value={lev} onChange={e => setLev(e.target.value)}>
+            <select id="demoLev" className="tp-sel" value={lev} onChange={e => handleLevChange(e.target.value)}>
               <option value="1">1x</option>
               <option value="2">2x</option>
               <option value="5">5x</option>
@@ -99,7 +158,7 @@ export function ManualTradePanel() {
           <div className="tp-row" id="demoCustomLevRow">
             <div className="tp-field" style={{ width: '100%' }}>
               <div className="tp-lbl">LEVIER CUSTOM (1 — 150x)</div>
-              <input type="number" id="demoCustomLev" className="tp-inp" value={customLev} onChange={e => setCustomLev(+e.target.value)} min={1} max={150} step={1} placeholder="ex: 75" style={{ width: '100%' }} />
+              <input type="number" id="demoCustomLev" className="tp-inp" value={customLev} onChange={e => handleCustomLevChange(+e.target.value)} min={1} max={150} step={1} placeholder="ex: 75" style={{ width: '100%' }} />
             </div>
           </div>
         )}
@@ -147,21 +206,31 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { const w = window as any; if (typeof w.placeDemoOrder === 'function') w.placeDemoOrder() }}>PLACE DEMO ORDER</button>
+        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { if (typeof w.placeDemoOrder === 'function') w.placeDemoOrder() }}>
+          {(() => {
+            const mode = w.AT?._serverMode || 'demo'
+            const env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
+            if (mode === 'live' && !w._apiConfigured) return '🔒 PLACE ORDER (EXEC LOCKED)'
+            if (mode === 'live') { const tag = env === 'TESTNET' ? 'TESTNET' : 'LIVE'; return side === 'LONG' ? `▲ OPEN LONG (${tag})` : `▼ OPEN SHORT (${tag})` }
+            return side === 'LONG' ? '▲ OPEN LONG' : '▼ OPEN SHORT'
+          })()}
+        </button>
 
         {/* PENDING ORDERS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h8v3L9 8l3 3v3H4v-3l3-3-3-3V2" /></svg> PENDING ORDERS</span>
           <span style={{ fontSize: '9px', color: 'var(--dim)' }}>0</span>
         </div>
-        <div style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center', padding: '4px' }}>No pending orders</div>
+        {/* TS renderPendingOrders() owns this div via innerHTML — no React children allowed */}
+        <div id="pendingOrdersTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:4px">No pending orders</div>' }} />
 
         {/* OPEN POSITIONS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>OPEN POSITIONS</span>
-          <button id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
+          <button ref={closeAllRef} id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
         </div>
-        <div style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center', padding: '8px' }}>No open positions</div>
+        {/* TS renderDemoPositions() owns this div via innerHTML — no React children allowed */}
+        <div id="demoPosTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:8px">No open positions</div>' }} />
 
         {/* P&L STATS */}
         <div className="tp-pnl-row">
@@ -173,21 +242,20 @@ export function ManualTradePanel() {
         {/* LIVE/TESTNET OPEN POSITIONS (shown when mode=live, hidden in demo) */}
         <div id="livePositionsInDemo" style={{ display: 'none', borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
           <div style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '6px' }}>EXCHANGE POSITIONS</div>
-          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center' }}>&mdash;</div>
+          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
         </div>
 
         {/* TRADE JOURNAL */}
         <div style={{ borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2px 6px' }}>
             <span style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--dim)' }}>TRADE JOURNAL</span>
-            <button className="csv-btn" onClick={() => (window as any).exportJournalCSV?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> CSV</button>
+            <button className="csv-btn" onClick={() => w.exportJournalCSV?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> CSV</button>
           </div>
           <div className="jl-hdr">
             <span>TIME</span><span>SIDE</span><span>ENTRY→EXIT</span><span>PnL</span><span>REASON</span>
           </div>
-          <div className="journal-wrap" id="journalBody">
-            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>No trades yet</div>
-          </div>
+          {/* TS renderTradeJournal() owns this div via innerHTML — no React children allowed */}
+          <div className="journal-wrap" id="journalBody" dangerouslySetInnerHTML={{ __html: '<div style="padding:10px;text-align:center;font-size:8px;color:var(--dim)">No trades yet</div>' }} />
         </div>
       </div>
     </div>
@@ -208,8 +276,8 @@ export function ManualTradePanel() {
         </div>
         <div id="liveOrderForm" style={{ display: 'none' }}>
           <div className="tp-sides">
-            <button className="tp-side-btn long-btn act" id="liveLongBtn">LONG ▲</button>
-            <button className="tp-side-btn short-btn" id="liveShortBtn">SHORT ▼</button>
+            <button className="tp-side-btn long-btn act" id="liveLongBtn" onClick={() => w.setLiveSide?.('LONG')}>LONG ▲</button>
+            <button className="tp-side-btn short-btn" id="liveShortBtn" onClick={() => w.setLiveSide?.('SHORT')}>SHORT ▼</button>
           </div>
           <div className="tp-row">
             <div className="tp-field">
@@ -221,7 +289,7 @@ export function ManualTradePanel() {
             </div>
             <div className="tp-field">
               <div className="tp-lbl">LEVERAGE</div>
-              <select id="liveLev" className="tp-sel" defaultValue="20">
+              <select id="liveLev" className="tp-sel" defaultValue="20" onChange={() => w.onLiveLevChange?.()}>
                 <option value="1">1x</option><option value="2">2x</option><option value="5">5x</option>
                 <option value="10">10x</option><option value="20">20x</option><option value="50">50x</option>
                 <option value="100">100x</option><option value="custom">✏ Custom</option>
@@ -255,11 +323,13 @@ export function ManualTradePanel() {
             <div className="tp-field"><div className="tp-lbl">SL</div><input type="number" id="liveSL" className="tp-inp" placeholder="—" step={0.1} /></div>
           </div>
           <div className="tp-pcts">
-            <button className="tp-pct">25%</button><button className="tp-pct">50%</button>
-            <button className="tp-pct">75%</button><button className="tp-pct">100%</button>
+            <button className="tp-pct" onClick={() => w.setLivePct?.(25)}>25%</button>
+            <button className="tp-pct" onClick={() => w.setLivePct?.(50)}>50%</button>
+            <button className="tp-pct" onClick={() => w.setLivePct?.(75)}>75%</button>
+            <button className="tp-pct" onClick={() => w.setLivePct?.(100)}>100%</button>
           </div>
-          <button className="tp-exec live-exec"><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
-          <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }}>—</div>
+          <button className="tp-exec live-exec" onClick={() => w.placeDemoOrder?.()}><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
+          <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
         </div>
       </div>
     </div>

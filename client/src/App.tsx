@@ -33,7 +33,12 @@ export function App() {
   useEffect(() => {
     if (authenticated) {
       wsService.connect()
-      return () => wsService.disconnect()
+      return () => {
+        wsService.disconnect()
+        const w = window as any
+        if (w.Intervals?.clearAll) w.Intervals.clearAll()
+        if (w.Timeouts?.clearAll) w.Timeouts.clearAll()
+      }
     }
   }, [authenticated])
 

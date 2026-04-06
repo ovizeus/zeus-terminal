@@ -1063,7 +1063,7 @@ export const ZState = (() => {
               const pid = String(p.id)
               if (serverClosedIds2.has(pid) || _closedSet.has(pid)) {
                 toRemove.push(pid)
-              } else if (!p.closed && !serverIds.has(pid) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 30000) {
+              } else if (!p.closed && !serverIds.has(pid) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 120000) {
                 toRemove.push(pid)
               }
             })

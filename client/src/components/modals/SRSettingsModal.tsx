@@ -23,13 +23,13 @@ export function SRSettingsModal({ visible, onClose }: Props) {
       </div>
 
       <div className="mbody" style={{display:tab==='main'?'block':'none', padding:'12px'}}>
-        <label className="mchk"><input type="checkbox" id="srEn" defaultChecked onChange={() => {}} /> Enable S/R</label>
+        <label className="mchk"><input type="checkbox" id="srEn" defaultChecked /> Enable S/R</label>
         <div style={{marginTop:'10px'}}>
-          <label className="mchk"><input type="checkbox" defaultChecked onChange={() => {}} /> Show Support</label>
-          <label className="mchk"><input type="checkbox" defaultChecked onChange={() => {}} /> Show Resistance</label>
-          <label className="mchk"><input type="checkbox" defaultChecked onChange={() => {}} /> Show Labels</label>
-          <label className="mchk"><input type="checkbox" defaultChecked onChange={() => {}} /> Width by Strength</label>
-          <label className="mchk"><input type="checkbox" onChange={() => {}} /> Extend Lines</label>
+          <label className="mchk"><input type="checkbox" defaultChecked /> Show Support</label>
+          <label className="mchk"><input type="checkbox" defaultChecked /> Show Resistance</label>
+          <label className="mchk"><input type="checkbox" defaultChecked /> Show Labels</label>
+          <label className="mchk"><input type="checkbox" defaultChecked /> Width by Strength</label>
+          <label className="mchk"><input type="checkbox" /> Extend Lines</label>
         </div>
         <div style={{marginTop:'10px'}}>
           <div className="mrow"><span className="mlbl">Pivot Length</span><input type="number" defaultValue={10} style={inputStyle} /></div>
@@ -46,18 +46,18 @@ export function SRSettingsModal({ visible, onClose }: Props) {
       </div>
 
       <div className="mbody" style={{display:tab==='style'?'block':'none', padding:'12px'}}>
-        <div className="mrow"><span className="mlbl">Support Color</span><input type="color" defaultValue="#00d97a" style={colorStyle} onChange={() => {}} /></div>
-        <div className="mrow"><span className="mlbl">Resistance Color</span><input type="color" defaultValue="#ff3355" style={colorStyle} onChange={() => {}} /></div>
-        <div className="mrow"><span className="mlbl">Line Opacity</span><input type="range" min={0} max={100} defaultValue={70} style={{width:'100%'}} onChange={() => {}} /></div>
-        <div className="mrow"><span className="mlbl">Zone Opacity</span><input type="range" min={0} max={100} defaultValue={20} style={{width:'100%'}} onChange={() => {}} /></div>
+        <div className="mrow"><span className="mlbl">Support Color</span><input type="color" defaultValue="#00d97a" style={colorStyle} /></div>
+        <div className="mrow"><span className="mlbl">Resistance Color</span><input type="color" defaultValue="#ff3355" style={colorStyle} /></div>
+        <div className="mrow"><span className="mlbl">Line Opacity</span><input type="range" min={0} max={100} defaultValue={70} style={{width:'100%'}} /></div>
+        <div className="mrow"><span className="mlbl">Zone Opacity</span><input type="range" min={0} max={100} defaultValue={20} style={{width:'100%'}} /></div>
         <div className="mrow"><span className="mlbl">Min Width</span><input type="number" defaultValue={1} style={inputStyle} /></div>
         <div className="mrow"><span className="mlbl">Max Width</span><input type="number" defaultValue={4} style={inputStyle} /></div>
       </div>
 
       <div className="mbody" style={{display:tab==='filter'?'block':'none', padding:'12px'}}>
-        <div className="mrow"><span className="mlbl">Min Volume</span><input type="range" min={0} max={100} defaultValue={0} style={{width:'100%'}} onChange={() => {}} /></div>
-        <label className="mchk"><input type="checkbox" defaultChecked onChange={() => {}} /> Show Touched</label>
-        <label className="mchk"><input type="checkbox" onChange={() => {}} /> Hide Weak</label>
+        <div className="mrow"><span className="mlbl">Min Volume</span><input type="range" min={0} max={100} defaultValue={0} style={{width:'100%'}} /></div>
+        <label className="mchk"><input type="checkbox" defaultChecked /> Show Touched</label>
+        <label className="mchk"><input type="checkbox" /> Hide Weak</label>
         <div style={{marginTop:'10px'}}>
           <div className="mrow"><span className="mlbl">Display Period</span></div>
           <div className="qbs" style={{marginTop:'4px'}}>

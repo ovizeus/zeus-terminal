@@ -30,41 +30,41 @@ export function OVIPanel({ visible, onClose }: Props) {
         fontSize:'7px', color:'#8899aa', marginBottom:'10px'
       }}>
         <span>Lookback Bars</span>
-        <input type="number" id="oviLookback" defaultValue={400} min={100} max={1200} step={50} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviLookback" defaultValue={400} min={100} max={1200} step={50} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>Swing Width</span>
-        <input type="number" id="oviPivotW" defaultValue={1} min={1} max={10} step={1} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviPivotW" defaultValue={1} min={1} max={10} step={1} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>Secondary Swing Width</span>
-        <input type="number" id="oviSecW" defaultValue={1} min={0} max={10} step={1} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviSecW" defaultValue={1} min={0} max={10} step={1} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>ATR Length</span>
-        <input type="number" id="oviAtrLen" defaultValue={121} min={5} max={2000} step={1} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviAtrLen" defaultValue={121} min={5} max={2000} step={1} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>ATR Band %</span>
-        <input type="number" id="oviAtrBand" defaultValue={1} min={0.05} max={5} step={0.05} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviAtrBand" defaultValue={1} min={0.05} max={5} step={0.05} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>Extend Unhit (bars)</span>
-        <input type="number" id="oviExtend" defaultValue={25} min={0} max={500} step={5} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviExtend" defaultValue={25} min={0} max={500} step={5} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>Min Pocket Weight</span>
-        <input type="number" id="oviMinW" defaultValue={5} min={0} max={100} step={1} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviMinW" defaultValue={5} min={0} max={100} step={1} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
 
         <span>Heat Contrast</span>
-        <input type="number" id="oviContrast" defaultValue={0.7} min={0.1} max={5} step={0.1} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviContrast" defaultValue={0.7} min={0.1} max={5} step={0.1} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
       </div>
 
       {/* WEIGHT SOURCE */}
       <div style={{fontSize:'6px', color:'#f0c04055', letterSpacing:'1px', marginBottom:'6px'}}>WEIGHT SOURCE</div>
       <div id="oviWeightMode" style={{display:'flex', gap:'6px', marginBottom:'10px'}}>
         <label style={{fontSize:'7px', color:'#8899aa', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer'}}>
-          <input type="radio" name="oviWeightMode" defaultValue="Volume" style={{accentColor:'#f0c040'}} onChange={() => {}} /> Volume
+          <input type="radio" name="oviWeightMode" defaultValue="Volume" style={{accentColor:'#f0c040'}} onChange={() => (window as any).oviApplySettings?.()} /> Volume
         </label>
         <label style={{fontSize:'7px', color:'#8899aa', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer'}}>
-          <input type="radio" name="oviWeightMode" defaultValue="Range" style={{accentColor:'#f0c040'}} onChange={() => {}} /> Range
+          <input type="radio" name="oviWeightMode" defaultValue="Range" style={{accentColor:'#f0c040'}} onChange={() => (window as any).oviApplySettings?.()} /> Range
         </label>
         <label style={{fontSize:'7px', color:'#8899aa', display:'flex', alignItems:'center', gap:'4px', cursor:'pointer'}}>
-          <input type="radio" name="oviWeightMode" defaultValue="Vol x Range" defaultChecked style={{accentColor:'#f0c040'}} onChange={() => {}} /> Vol × Range
+          <input type="radio" name="oviWeightMode" defaultValue="Vol x Range" defaultChecked style={{accentColor:'#f0c040'}} onChange={() => (window as any).oviApplySettings?.()} /> Vol × Range
         </label>
       </div>
 
@@ -75,21 +75,21 @@ export function OVIPanel({ visible, onClose }: Props) {
         fontSize:'7px', color:'#8899aa', marginBottom:'10px'
       }}>
         <span>Long Liq Color</span>
-        <input type="color" id="oviLongCol" defaultValue="#01c4fe" style={colorInputStyle} onChange={() => {}} />
+        <input type="color" id="oviLongCol" defaultValue="#01c4fe" style={colorInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
         <span>Short Liq Color</span>
-        <input type="color" id="oviShortCol" defaultValue="#ffe400" style={colorInputStyle} onChange={() => {}} />
+        <input type="color" id="oviShortCol" defaultValue="#ffe400" style={colorInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
         <span>Touched Transparency</span>
-        <input type="number" id="oviTouchT" defaultValue={8} min={0} max={100} step={1} style={numInputStyle} onChange={() => {}} />
+        <input type="number" id="oviTouchT" defaultValue={8} min={0} max={100} step={1} style={numInputStyle} onChange={() => (window as any).oviApplySettings?.()} />
       </div>
 
       {/* DISPLAY */}
       <div style={{fontSize:'6px', color:'#f0c04055', letterSpacing:'1px', marginBottom:'6px'}}>DISPLAY</div>
       <div style={{display:'flex', flexDirection:'column', gap:'5px', marginBottom:'12px'}}>
         <label style={{fontSize:'7px', color:'#8899aa', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer'}}>
-          <input type="checkbox" id="oviShowScale" defaultChecked style={{accentColor:'#f0c040'}} onChange={() => {}} /> Show Scale
+          <input type="checkbox" id="oviShowScale" defaultChecked style={{accentColor:'#f0c040'}} onChange={() => (window as any).oviApplySettings?.()} /> Show Scale
         </label>
         <label style={{fontSize:'7px', color:'#8899aa', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer'}}>
-          <input type="checkbox" id="oviKeepTouched" defaultChecked style={{accentColor:'#f0c040'}} onChange={() => {}} /> Keep Touched Pockets
+          <input type="checkbox" id="oviKeepTouched" defaultChecked style={{accentColor:'#f0c040'}} onChange={() => (window as any).oviApplySettings?.()} /> Keep Touched Pockets
         </label>
       </div>
 
@@ -97,7 +97,7 @@ export function OVIPanel({ visible, onClose }: Props) {
         width:'100%', padding:'6px', background:'#f0c04011', border:'1px solid #f0c04044',
         color:'#f0c040', fontSize:'8px', fontFamily:'var(--ff)', cursor:'pointer',
         borderRadius:'3px', letterSpacing:'1px'
-      }}>✓ APPLY &amp; REFRESH</button>
+      }} onClick={() => { (window as any).oviApplySettings?.(); onClose() }}>✓ APPLY &amp; REFRESH</button>
     </div>
   )
 }

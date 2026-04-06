@@ -889,7 +889,15 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
-// ─── Fallback to index.html (SPA) ───
+// ─── React app at /app/ ───
+app.get('/app', (req, res) => res.redirect('/app/'));
+app.get('/app/{*rest}', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'app', 'index.html'), (err) => {
+    if (err) res.status(500).send('Server error');
+  });
+});
+
+// ─── Fallback to index.html (old app) ───
 app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
     if (err) res.status(500).send('Server error');

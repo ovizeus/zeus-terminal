@@ -34,9 +34,10 @@ function renderTradeJournal() {
   const body = el('journalBody'); if (!body) return;
   if (!TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return; }
   body.innerHTML = TP.journal.map(t => {
-    const win = t.pnl >= 0;
-    const pnlStr = (win ? '+' : '') + '$' + t.pnl.toFixed(2);
-    const ep = '$' + fP(t.entry) + '→$' + fP(t.exit);
+    const _pnl = Number(t.pnl) || 0;
+    const win = _pnl >= 0;
+    const pnlStr = (win ? '+' : '') + '$' + _pnl.toFixed(2);
+    const ep = '$' + fP(t.entry || 0) + '→$' + fP(t.exit || 0);
     // [FIX R11] Sanitize user-sourced fields to prevent stored XSS
     const _time = typeof escHtml === 'function' ? escHtml(t.time || '') : (t.time || '');
     const _side = typeof escHtml === 'function' ? escHtml(t.side || '') : (t.side || '');

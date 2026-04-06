@@ -31,46 +31,46 @@ export function SupremusModal({ visible, onClose }: Props) {
             {/* Market Structure */}
             <div className="msec" style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>MARKET STRUCTURE</div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> HH — Higher High</label>
+              <label className="mchk"><input type="checkbox" defaultChecked id="zshh" /> HH — Higher High</label>
               <div className="mrow"><span className="mlbl">HH Color</span>
-                <input type="color" defaultValue="#00d97a" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> HL — Higher Low</label>
+                <input type="color" defaultValue="#00d97a" id="zshhCol" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+              <label className="mchk"><input type="checkbox" defaultChecked id="zshl" /> HL — Higher Low</label>
               <div className="mrow"><span className="mlbl">HL Color</span>
-                <input type="color" defaultValue="#44aaff" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> LH — Lower High</label>
+                <input type="color" defaultValue="#44aaff" id="zshlCol" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+              <label className="mchk"><input type="checkbox" defaultChecked id="zslh" /> LH — Lower High</label>
               <div className="mrow"><span className="mlbl">LH Color</span>
-                <input type="color" defaultValue="#ff8800" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> LL — Lower Low</label>
+                <input type="color" defaultValue="#ff8800" id="zslhCol" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+              <label className="mchk"><input type="checkbox" defaultChecked id="zsll" /> LL — Lower Low</label>
               <div className="mrow"><span className="mlbl">LL Color</span>
-                <input type="color" defaultValue="#ff3355" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
+                <input type="color" defaultValue="#ff3355" id="zsllCol" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} /></div>
             </div>
 
             {/* Nova Zones */}
             <div className="msec" style={{ marginBottom: 12 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>NOVA ZONES</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label className="mchk"><input type="checkbox" defaultChecked /> Show Zones</label>
-                <label className="mchk"><input type="checkbox" /> Extend Zones</label>
+                <label className="mchk"><input type="checkbox" defaultChecked id="zsShowZones" /> Show Zones</label>
+                <label className="mchk"><input type="checkbox" id="zsExtendZones" /> Extend Zones</label>
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Zone Width</span>
-                <input type="number" defaultValue={6} min={1} max={20} style={{ ...inputStyle, width: 50 }} />
+                <input type="number" defaultValue={6} min={1} max={20} id="zsZoneWidth" style={{ ...inputStyle, width: 50 }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Upper Zone Color</span>
-                <input type="color" defaultValue="#00b8d4" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <input type="color" defaultValue="#00b8d4" id="zsUpperCol" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Lower Zone Color</span>
-                <input type="color" defaultValue="#aa44ff" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <input type="color" defaultValue="#aa44ff" id="zsLowerCol" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Pivot Length</span>
-                <input type="number" defaultValue={8} min={2} max={50} style={{ ...inputStyle, width: 50 }} />
+                <input type="number" defaultValue={8} min={2} max={50} id="zsPivotLen" style={{ ...inputStyle, width: 50 }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Pivot Count</span>
-                <input type="number" defaultValue={3} min={1} max={10} style={{ ...inputStyle, width: 50 }} />
+                <input type="number" defaultValue={3} min={1} max={10} id="zsPivotCount" style={{ ...inputStyle, width: 50 }} />
               </div>
             </div>
 
@@ -200,20 +200,20 @@ export function SupremusModal({ visible, onClose }: Props) {
           <div>
             <div className="msec" style={{ marginBottom: 10 }}>
               <div style={{ fontSize: 10, fontWeight: 700, marginBottom: 6 }}>VWAP</div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> Daily VWAP</label>
+              <label className="mchk"><input type="checkbox" defaultChecked id="zsVwapD" /> Daily VWAP</label>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Daily Color</span>
-                <input type="color" defaultValue="#f0c040" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <input type="color" defaultValue="#f0c040" id="zsVwapDc" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
-              <label className="mchk"><input type="checkbox" defaultChecked /> Weekly VWAP</label>
+              <label className="mchk"><input type="checkbox" defaultChecked id="zsVwapW" /> Weekly VWAP</label>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Weekly Color</span>
-                <input type="color" defaultValue="#00d97a" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <input type="color" defaultValue="#00d97a" id="zsVwapWc" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
-              <label className="mchk"><input type="checkbox" /> Monthly VWAP</label>
+              <label className="mchk"><input type="checkbox" id="zsVwapM" /> Monthly VWAP</label>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">Monthly Color</span>
-                <input type="color" defaultValue="#aa44ff" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
+                <input type="color" defaultValue="#aa44ff" id="zsVwapMc" style={{ width: 22, height: 16, border: 'none', background: 'none', cursor: 'pointer' }} />
               </div>
               <div className="mrow" style={{ marginTop: 6 }}>
                 <span className="mlbl">VWAP Line Width</span>
@@ -223,7 +223,7 @@ export function SupremusModal({ visible, onClose }: Props) {
             </div>
 
             <div className="srow" style={{ justifyContent: 'flex-end' }}>
-              <button className="sbtn2 pri">SAVE &amp; APPLY</button>
+              <button className="sbtn2 pri" onClick={() => { (window as any).applyZS?.(); onClose() }}>SAVE &amp; APPLY</button>
               <button className="sbtn2 sec" onClick={onClose}>CLOSE</button>
             </div>
           </div>

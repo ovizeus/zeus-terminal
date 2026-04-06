@@ -9,13 +9,11 @@ export function AdaptivePanel() {
       <div style={{ padding: '8px 12px' }}>
         {/* Toggle button */}
         <div style={{ marginBottom: '8px' }}>
-          <button id="adaptiveToggleBtn" style={{
+          <button id="adaptiveToggleBtn" onClick={() => (window as any).toggleAdaptive?.()} style={{
             width: '100%', padding: '6px 10px', fontSize: '10px', fontFamily: 'var(--ff)', letterSpacing: '1px',
             background: '#0a1220', border: '1px solid #2a3a4a', color: '#778899', borderRadius: '3px',
             cursor: 'pointer', transition: 'all .2s'
-          }}>
-            ADAPTIVE OFF
-          </button>
+          }} dangerouslySetInnerHTML={{ __html: 'ADAPTIVE OFF' }} />
           <div style={{ fontSize: '8px', color: 'var(--dim)', marginTop: '4px', lineHeight: 1.6 }}>
             OFF = to&#x21B;i multiplieri &#xD7;1.00, engine nu cite&#x219;te nimic.<br />
             Min 30 trades/bucket pentru a activa multiplicatorii.

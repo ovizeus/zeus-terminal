@@ -11,7 +11,7 @@ const { getExchangeCreds } = require('../services/credentialStore');
  */
 function resolveExchange(req, res, next) {
     // Allow status/metrics/config reads without exchange credentials
-    const readOnlyPaths = ['/status', '/metrics', '/audit', '/config', '/exchange', '/user', '/brain']; // [S10] brain analytics don't need exchange keys
+    const readOnlyPaths = ['/status', '/metrics', '/audit', '/config', '/exchange', '/user', '/brain', '/risk']; // [S10] brain analytics + risk PnL tracking don't need exchange keys
     if (readOnlyPaths.some(p => req.path.startsWith(p))) {
         return next();
     }

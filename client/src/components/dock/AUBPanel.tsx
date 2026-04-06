@@ -81,12 +81,12 @@ export function AUBPanel() {
           <div className="aub-row" id="aub-bb-count">Snapshots: 0</div>
           <div className="aub-row" id="aub-bb-last">Last: —</div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-            <button className="aub-btn violet">
+            <button className="aub-btn violet" onClick={() => (window as any).aubBBExport?.()}>
               <svg className="z-i" viewBox="0 0 16 16">
                 <path d="M8 2v8m-3-3l3 3 3-3M3 14h10" />
               </svg> JSON
             </button>
-            <button className="aub-btn violet">
+            <button className="aub-btn violet" onClick={() => (window as any).aubBBClear?.()}>
               <svg className="z-i" viewBox="0 0 16 16">
                 <path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" />
               </svg> Clear
@@ -147,18 +147,18 @@ export function AUBPanel() {
             <div className="aub-row">No events loaded</div>
           </div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
-            <button className="aub-btn yellow">
+            <button className="aub-btn yellow" onClick={() => document.getElementById('aub-macro-file')?.click()}>
               <svg className="z-i" viewBox="0 0 16 16">
                 <path d="M2 5h5l2 2h5v6H2V5z" />
               </svg> Import JSON
             </button>
-            <button className="aub-btn yellow">
+            <button className="aub-btn yellow" onClick={() => (window as any).aubMacroClear?.()}>
               <svg className="z-i" viewBox="0 0 16 16">
                 <path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" />
               </svg> Clear
             </button>
           </div>
-          <input type="file" id="aub-macro-file" accept=".json" style={{ display: 'none' }} />
+          <input type="file" id="aub-macro-file" accept=".json" style={{ display: 'none' }} onChange={() => (window as any).aubMacroFileLoad?.()} />
         </div>
 
         {/* 8: NIGHTLY SIM LAB */}
@@ -168,8 +168,8 @@ export function AUBPanel() {
           <div className="aub-row" id="aub-sim-last">Last run: never</div>
           <div className="aub-sim-result" id="aub-sim-result" style={{ display: 'none' }}></div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-            <button className="aub-btn violet">▶ Run Now</button>
-            <button className="aub-btn violet" id="aub-sim-apply" style={{ display: 'none' }}>✓ Apply</button>
+            <button className="aub-btn violet" onClick={() => (window as any).aubSimRun?.()}>▶ Run Now</button>
+            <button className="aub-btn violet" id="aub-sim-apply" style={{ display: 'none' }} onClick={() => (window as any).aubSimApply?.()}>✓ Apply</button>
           </div>
         </div>
 

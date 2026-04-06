@@ -29,9 +29,10 @@ export function renderTradeJournal(): void {
   const body = w.el('journalBody'); if (!body) return
   if (!w.TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return }
   body.innerHTML = w.TP.journal.map((t: any) => {
-    const win = t.pnl >= 0
-    const pnlStr = (win ? '+' : '') + '$' + t.pnl.toFixed(2)
-    const ep = '$' + w.fP(t.entry) + '→$' + w.fP(t.exit)
+    const pnl = Number(t.pnl) || 0
+    const win = pnl >= 0
+    const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
+    const ep = '$' + w.fP(t.entry || 0) + '→$' + w.fP(t.exit || 0)
     const _time = typeof w.escHtml === 'function' ? w.escHtml(t.time || '') : (t.time || '')
     const _side = typeof w.escHtml === 'function' ? w.escHtml(t.side || '') : (t.side || '')
     const _reason = typeof w.escHtml === 'function' ? w.escHtml(t.reason || '—') : (t.reason || '—')
@@ -61,7 +62,7 @@ export function exportJournalCSV(): void {
   const hdr = 'Time,Side,Symbol,Entry,Exit,PnL,Leverage,Reason\n'
   function csvSafe(v: unknown): string { const s = String(v || ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s }
   const rows = w.TP.journal.map((t: any) =>
-    `${csvSafe(t.time)},${csvSafe(t.side)},${csvSafe(t.sym || w.S.symbol.replace('USDT', ''))},${t.entry},${t.exit},${t.pnl.toFixed(2)},${csvSafe(t.lev || '—')},${csvSafe(t.reason || 'Manual')}`
+    `${csvSafe(t.time)},${csvSafe(t.side)},${csvSafe(t.sym || w.S.symbol.replace('USDT', ''))},${t.entry || 0},${t.exit || 0},${(Number(t.pnl) || 0).toFixed(2)},${csvSafe(t.lev || '—')},${csvSafe(t.reason || 'Manual')}`
   ).join('\n')
   const blob = new Blob([hdr + rows], { type: 'text/csv' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)

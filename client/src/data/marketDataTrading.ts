@@ -53,16 +53,16 @@ export function _applyGlobalModeUI(mode: string): void {
   const af = w.el('btnAddFunds'), rd = w.el('btnResetDemo')
   if (af) af.style.display = mode === 'demo' ? '' : 'none'
   if (rd) rd.style.display = mode === 'demo' ? '' : 'none'
+  // NOTE: #demoExec, #panelDemo header, #demoBalance are React-controlled.
+  // Do NOT set innerHTML on them — React owns those DOM nodes.
+  // Only set non-destructive properties (disabled, opacity, dataset).
   const execBtn = w.el('demoExec')
   if (execBtn) {
-    if (mode === 'live') { if (w._apiConfigured) { const _btnLabel = _env === 'TESTNET' ? ' PLACE TESTNET ORDER' : ' PLACE REAL ORDER'; const _btnIcon = _env === 'TESTNET' ? w._ZI.dYlw : w._ZI.dRed; execBtn.innerHTML = _btnIcon + _btnLabel; execBtn.disabled = false; execBtn.style.opacity = '' } else { execBtn.innerHTML = w._ZI.lock + ' PLACE ORDER (EXEC LOCKED)'; execBtn.disabled = false; execBtn.style.opacity = '0.6' } }
-    else { execBtn.innerHTML = w._ZI.pad + ' PLACE DEMO ORDER'; execBtn.disabled = false; execBtn.style.opacity = '' }
+    if (mode === 'live' && !w._apiConfigured) { execBtn.disabled = false; execBtn.style.opacity = '0.6'; execBtn.dataset.execMode = 'locked' }
+    else if (mode === 'live') { execBtn.disabled = false; execBtn.style.opacity = ''; execBtn.dataset.execMode = 'live' }
+    else { execBtn.disabled = false; execBtn.style.opacity = ''; execBtn.dataset.execMode = 'demo' }
   }
-  const panelHdr = document.querySelector('#panelDemo .tp-hdr span:first-child') as HTMLElement | null
-  if (panelHdr) { if (mode === 'live') { const _hdrLabel = _env === 'TESTNET' ? ' MANUAL TRADE (TESTNET)' : ' MANUAL TRADE (LIVE)'; const _hdrIcon = _env === 'TESTNET' ? w._ZI.dYlw : w._ZI.dRed; panelHdr.innerHTML = _hdrIcon + _hdrLabel } else { panelHdr.innerHTML = w._ZI.pad + ' MANUAL TRADE' } }
   if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
-  const balSpan = w.el('demoBalance')
-  if (balSpan) { if (mode === 'live') { if (w._apiConfigured && typeof w.TP !== 'undefined' && w.TP.liveBalance > 0) { const _balPrefix = _env === 'TESTNET' ? 'BAL (TESTNET): $' : 'BAL: $'; balSpan.textContent = _balPrefix + w.TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } else { balSpan.textContent = 'BAL: Exchange not configured' } } else if (typeof w.updateDemoBalance === 'function') { w.updateDemoBalance() } }
   if (typeof w.updateModeBar === 'function') w.updateModeBar()
 }
 
@@ -105,7 +105,7 @@ export function promptResetDemo(): void {
 }
 
 export function toggleTradePanel(_type: any): void { _toggleManualPanel() }
-export function setDemoSide(side: string): void { w.TP.demoSide = side; w.el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); const de = w.el('demoExec'); if (de) { const _m = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'; const _se = w._resolvedEnv || (_m === 'demo' ? 'DEMO' : 'REAL'); if (_m === 'live' && !w._apiConfigured) { de.innerHTML = w._ZI.lock + ' PLACE ORDER (EXEC LOCKED)' } else if (_m === 'live') { const _sideTag = _se === 'TESTNET' ? 'TESTNET' : 'LIVE'; de.innerHTML = side === 'LONG' ? w._ZI.dGrn + ' OPEN LONG (' + _sideTag + ')' : w._ZI.dRed + ' OPEN SHORT (' + _sideTag + ')' } else { de.innerHTML = side === 'LONG' ? w._ZI.dGrn + ' OPEN LONG' : w._ZI.dRed + ' OPEN SHORT' } } updateDemoLiqPrice() }
+export function setDemoSide(side: string): void { w.TP.demoSide = side; w.el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); updateDemoLiqPrice() }
 export function setLiveSide(side: string): void { w.TP.liveSide = side; w.el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice() }
 
 // ===== ORDER TYPE TOGGLE =====
