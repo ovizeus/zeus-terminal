@@ -454,7 +454,8 @@ export const ZState = (() => {
     try {
       const data = _serialize()
       console.log('[ZState] SAVE — pos:', (data.positions || []).length, 'bal:', data.demoBalance, 'ts:', data.ts, 'v:', data.v)
-      w._safeLocalStorageSet(KEY, data)
+      if (typeof w._safeLocalStorageSet === 'function') w._safeLocalStorageSet(KEY, data)
+      else try { localStorage.setItem(KEY, JSON.stringify(data)) } catch (_) { }
     }
     catch (e: any) { console.warn('[ZState] save failed:', e.message) }
     finally { _saving = false }

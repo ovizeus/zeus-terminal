@@ -57,10 +57,8 @@ const SCRIPT_PHASES: string[][] = [
   // [EMPTY — all teacher scripts ported]
   // Phase 9 — Final modules (all ported: modebar/dock 6E, patch/hotkeys/pageview 7A, orderflow 7D)
   // [EMPTY]
-  // Phase 10 — Bootstrap (defines startApp, must be last)
-  [
-    'js/core/bootstrap.js',
-  ],
+  // Phase 10 — Bootstrap (startApp ported Phase 8B — DECOMMISSIONED)
+  // [EMPTY — bootstrap.js removed]
   // Phase 11 — Post-bootstrap (drawingTools.js ported Phase 6E)
   // [EMPTY]
 ]
