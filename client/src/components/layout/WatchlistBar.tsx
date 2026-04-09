@@ -32,18 +32,34 @@ export default function WatchlistBar() {
   const wsRef = useRef<WebSocket | null>(null)
 
   // Connect to Binance miniTicker for watchlist symbols (1:1 with connectWatchlist in symbols.js)
+  // When the bridge is active, it opens its own WS via connectWatchlist() and emits
+  // 'zeus:wlPrice' events. In that case we close our raw WS to avoid double connections.
   useEffect(() => {
     const streams = WATCHLIST_SYMBOLS.map(s => s.toLowerCase() + '@miniTicker').join('/')
     const url = `wss://fstream.binance.com/stream?streams=${streams}`
 
-    let ws: WebSocket
+    let ws: WebSocket | null = null
     let reconnectTimer: ReturnType<typeof setTimeout>
+    let bridgeActive = false
+
+    function closeRawWs() {
+      clearTimeout(reconnectTimer)
+      if (ws) {
+        ws.onclose = null
+        ws.onerror = null
+        ws.close()
+        ws = null
+        wsRef.current = null
+      }
+    }
 
     function connect() {
-      ws = new WebSocket(url)
-      wsRef.current = ws
+      if (bridgeActive) return
+      const _ws = new WebSocket(url)
+      ws = _ws
+      wsRef.current = _ws
 
-      ws.onmessage = (e) => {
+      _ws.onmessage = (e) => {
         try {
           const j = JSON.parse(e.data)
           if (!j.data) return
@@ -56,23 +72,34 @@ export default function WatchlistBar() {
         } catch { /* ignore parse errors */ }
       }
 
-      ws.onclose = () => {
-        reconnectTimer = setTimeout(connect, 5000)
+      _ws.onclose = () => {
+        if (!bridgeActive) reconnectTimer = setTimeout(connect, 5000)
       }
 
-      ws.onerror = () => {
-        ws.close()
+      _ws.onerror = () => { _ws.close() }
+    }
+
+    // When bridge WS (connectWatchlist) starts sending data it emits 'zeus:wlPrice'.
+    // On first such event: close our raw WS (no more duplicate), keep listening to events.
+    // We do NOT close on zeus:bridgeReady because connectWatchlist() runs 1500ms later
+    // (inside startApp phase-3 setTimeout), so bridgeReady fires too early.
+    function onWlPrice(e: Event) {
+      const { sym, price, chg } = (e as CustomEvent).detail
+      setWlPrice(sym, price, chg)
+      if (!bridgeActive) {
+        // First event from bridge WS → close raw WS to eliminate duplicate connection
+        bridgeActive = true
+        closeRawWs()
       }
     }
 
+    window.addEventListener('zeus:wlPrice', onWlPrice)
     connect()
 
     return () => {
+      window.removeEventListener('zeus:wlPrice', onWlPrice)
       clearTimeout(reconnectTimer)
-      if (wsRef.current) {
-        wsRef.current.onclose = null // prevent reconnect on cleanup
-        wsRef.current.close()
-      }
+      closeRawWs()
     }
   }, [setWlPrice])
 
@@ -85,7 +112,13 @@ export default function WatchlistBar() {
             key={sym}
             id={`wl-${sym}`}
             className={sym === symbol ? 'wl-item act' : 'wl-item'}
-            onClick={() => patch({ symbol: sym })}
+            onClick={() => {
+              const w = window as any
+              // Always update Zustand so WatchlistBar active class + ChartControls select sync
+              patch({ symbol: sym })
+              // switchWLSymbol → w.setSymbol() → full chart/kline/WS reset
+              if (typeof w.switchWLSymbol === 'function') w.switchWLSymbol(sym)
+            }}
           >
             <div className="wl-sym">{shortName(sym)}</div>
             <div className="wl-price" id={`wlp-${sym}`}>

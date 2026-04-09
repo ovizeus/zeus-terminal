@@ -43,6 +43,8 @@ export function connectWatchlist(): void {
       w.wlPrices[sym] = { price, chg, ts: Date.now() }
       w.allPrices[sym] = price
       if (typeof w.onNeuronScanUpdate === 'function') w.onNeuronScanUpdate(sym)
+      // Notify React WatchlistBar so it can update Zustand store without a separate WS
+      window.dispatchEvent(new CustomEvent('zeus:wlPrice', { detail: { sym, price, chg } }))
       const pe = w.el('wlp-' + sym)
       const ce = w.el('wlc-' + sym)
       if (pe) { pe.textContent = '$' + (price >= 1000 ? w.fP(price) : price >= 1 ? price.toFixed(3) : price.toPrecision(4)) }

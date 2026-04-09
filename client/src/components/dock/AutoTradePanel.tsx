@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useATStore, usePositionsStore } from '../../stores'
 import { api } from '../../services/api'
 
@@ -34,6 +34,32 @@ export function AutoTradePanel() {
   const [brainVisionOpen, setBrainVisionOpen] = useState(true)
   const [brainDashOpen, setBrainDashOpen] = useState(true)
   const [symPickerOpen, setSymPickerOpen] = useState(false)
+
+  // Init AT settings from saved user settings (localStorage) so values survive refresh.
+  // Old JS (_usApply in config.ts) also sets DOM input values, but React controlled
+  // inputs reset them on re-render. Reading from localStorage at mount fixes this.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('zeus_user_settings') || '{}')
+      const at = saved.autoTrade
+      if (!at) return
+      if (at.confMin != null)      setConfMin(Number(at.confMin))
+      if (at.sigMin != null)       setSigMin(Number(at.sigMin))
+      if (at.size != null)         setAtSize(Number(at.size))
+      if (at.riskPct != null)      setAtRiskPct(Number(at.riskPct))
+      if (at.maxDay != null)       setAtMaxDay(Number(at.maxDay))
+      if (at.maxPos != null)       setAtMaxPos(Number(at.maxPos))
+      if (at.sl != null)           setAtSL(Number(at.sl))
+      if (at.rr != null)           setAtRR(Number(at.rr))
+      if (at.killPct != null)      setAtKillPct(Number(at.killPct))
+      if (at.lossStreak != null)   setAtLossStreak(Number(at.lossStreak))
+      if (at.maxAddon != null)     setAtMaxAddon(Number(at.maxAddon))
+      if (at.lev != null)          setAtLev(String(at.lev))
+      if (at.adaptEnabled != null) setAdaptEnabled(!!at.adaptEnabled)
+      if (at.adaptLive != null)    setAdaptLive(!!at.adaptLive)
+      if (at.smartExitEnabled != null) setSmartExit(!!at.smartExitEnabled)
+    } catch { /* ignore malformed storage */ }
+  }, [])
 
   async function handleKill() {
     await api.post('/api/at/kill', { reason: 'manual' })
