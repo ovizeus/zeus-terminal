@@ -71,7 +71,16 @@ export function DSLZonePanel() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span id="dslActiveCount" style={{ fontSize: '7px', color: '#00ffcc44' }}>0 active</span>
-          <button className={`dsl-toggle${dslOn ? '' : ' off'}`} id="dslToggleBtn" onClick={() => setDslOn(!dslOn)}>
+          <button className={`dsl-toggle${dslOn ? '' : ' off'}`} id="dslToggleBtn" onClick={() => {
+            const w = window as any
+            if (typeof w.toggleDSL === 'function') {
+              w.toggleDSL()
+              // Sync React state from DSL.enabled (toggleDSL modifies it directly)
+              setDslOn(!!(w.DSL?.enabled))
+            } else {
+              setDslOn(v => !v)
+            }
+          }}>
             {dslOn ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'}
           </button>
         </div>
