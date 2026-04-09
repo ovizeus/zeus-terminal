@@ -61,6 +61,22 @@ export function AutoTradePanel() {
     } catch { /* ignore malformed storage */ }
   }, [])
 
+  function handleSaveAT() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('zeus_user_settings') || '{}')
+      saved.autoTrade = {
+        ...saved.autoTrade,
+        sl: atSL, rr: atRR, size: atSize, riskPct: atRiskPct,
+        maxDay: atMaxDay, maxPos: atMaxPos, killPct: atKillPct,
+        lossStreak: atLossStreak, maxAddon: atMaxAddon, lev: atLev,
+        confMin, sigMin, adaptEnabled, adaptLive, smartExitEnabled: smartExit,
+      }
+      localStorage.setItem('zeus_user_settings', JSON.stringify(saved))
+      const w = window as any
+      if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
+    } catch { /* ignore */ }
+  }
+
   async function handleKill() {
     await api.post('/api/at/kill', { reason: 'manual' })
   }
@@ -320,6 +336,11 @@ export function AutoTradePanel() {
           </div>
           {brainDashOpen && <div id="brainDashBody" style={{ padding: '2px 12px 10px', fontFamily: 'monospace', fontSize: '12px', lineHeight: 1.8 }}></div>}
         </div>
+
+        {/* SAVE SETTINGS */}
+        <button className="sbtn2 pri" style={{ width: '100%', marginBottom: 6 }} onClick={handleSaveAT}>
+          <svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE SETTINGS
+        </button>
 
         {/* KILL SWITCH */}
         <button className={`at-kill${killTriggered ? ' triggered' : ''}`} id="atKillBtn" onClick={handleKill}>
