@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 
@@ -33,6 +33,56 @@ function val(id: string) {
 export function SettingsHubModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('general')
   const openModal = useUiStore((s) => s.openModal)
+  const [exMode, setExMode] = useState<'live'|'testnet'>('testnet')
+  const [exConnected, setExConnected] = useState(false)
+  const [exLoading, setExLoading] = useState(false)
+
+  // Load exchange status whenever exchange tab is opened
+  useEffect(() => {
+    if (tab !== 'exchange') return
+    fetch('/api/exchange/status', { credentials: 'same-origin' })
+      .then(r => r.json())
+      .then(d => {
+        const el = document.getElementById('exStatus')
+        if (!el) return
+        if (d.connected) {
+          setExConnected(true)
+          setExMode(d.mode || 'testnet')
+          el.innerHTML = `<span style="color:#00d97a">● CONECTAT</span><br/>${d.exchange?.toUpperCase()} · ${d.mode?.toUpperCase()}<br/>Key: ${d.maskedKey}<br/>Balance: $${(d.balance||0).toFixed(2)}<br/><span style="color:#556;font-size:8px">Verificat: ${d.lastVerified ? new Date(d.lastVerified).toLocaleString('ro-RO') : '—'}</span>`
+        } else {
+          setExConnected(false)
+          el.innerHTML = '<span style="color:#556">● Nicio conexiune activă</span>'
+        }
+      })
+      .catch(() => {
+        const el = document.getElementById('exStatus')
+        if (el) el.innerHTML = '<span style="color:#ff5566">Eroare la încărcare status</span>'
+      })
+  }, [tab])
+
+  async function exSave() {
+    setExLoading(true)
+    const r = await apiFetch('/api/exchange/save', {
+      apiKey: val('exApiKey'), apiSecret: val('exApiSecret'), mode: exMode
+    })
+    setExLoading(false)
+    const res = document.getElementById('exResult')
+    if (res) { res.textContent = r.ok ? `✓ Conectat! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Eroare'); res.style.color = r.ok ? '#00d97a' : '#ff5566' }
+    if (r.ok) { setExConnected(true); setTab('exchange') /* re-trigger status load */ ; setTab('') ; setTimeout(() => setTab('exchange'), 0) }
+  }
+
+  async function exVerify() {
+    const r = await apiFetch('/api/exchange/verify', {})
+    const res = document.getElementById('exResult')
+    if (res) { res.textContent = r.ok ? `✓ Verificat! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Eroare'); res.style.color = r.ok ? '#00d97a' : '#ff5566' }
+  }
+
+  async function exDisconnect() {
+    if (!confirm('Deconectezi exchange-ul?')) return
+    const r = await apiFetch('/api/exchange/disconnect', {})
+    if (r.ok) { setExConnected(false); setTab(''); setTimeout(() => setTab('exchange'), 0) }
+    else { const res = document.getElementById('exResult'); if (res) { res.textContent = r.error || 'Eroare'; res.style.color = '#ff5566' } }
+  }
 
   async function chpwRequest() {
     const r = await apiFetch('/auth/change-password/request', { currentPassword: val('chpwCurrent') })
@@ -294,8 +344,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <div className="tp-field" style={{width:'100%',marginBottom:'8px'}}>
             <div className="tp-lbl">MODE</div>
             <div style={{display:'flex',gap:'6px'}}>
-              <button className="hub-sbtn" id="exModeLive" style={{flex:1,fontWeight:700,background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={() => w.zeusExchangeSetMode?.('live')}><span className="z-dot z-dot--red"></span> LIVE</button>
-              <button className="hub-sbtn" id="exModeTestnet" style={{flex:1,fontWeight:700}} onClick={() => w.zeusExchangeSetMode?.('testnet')}><span className="z-dot z-dot--ylw"></span> TESTNET</button>
+              <button className="hub-sbtn" id="exModeLive" style={{flex:1,fontWeight:700,background:exMode==='live'?'#ff444433':'transparent',color:'#ff6655',border:`1px solid ${exMode==='live'?'#ff4444':'#ff444433'}`}} onClick={() => setExMode('live')}><span className="z-dot z-dot--red"></span> LIVE</button>
+              <button className="hub-sbtn" id="exModeTestnet" style={{flex:1,fontWeight:700,background:exMode==='testnet'?'#f0c04022':'transparent',border:`1px solid ${exMode==='testnet'?'#f0c040':'#f0c04033'}`}} onClick={() => setExMode('testnet')}><span className="z-dot z-dot--ylw"></span> TESTNET</button>
             </div>
           </div>
           <div style={{fontSize:'8px',color:'#ff8800',margin:'6px 0',lineHeight:'1.6'}}>
@@ -303,12 +353,12 @@ export function SettingsHubModal({ visible, onClose }: Props) {
             Foloseste permisiuni READ + TRADE only (fără withdrawal)<br/>
             Restrictionează API la IP-ul tău pentru securitate maximă
           </div>
-          <button id="zeusExchangeSave" className="hub-sbtn pri" style={{width:'100%',padding:'8px',fontSize:'10px',fontWeight:700}} onClick={() => w.zeusExchangeSave?.()}>VERIFY &amp; SAVE</button>
+          <button id="zeusExchangeSave" className="hub-sbtn pri" style={{width:'100%',padding:'8px',fontSize:'10px',fontWeight:700}} onClick={exSave} disabled={exLoading}>{exLoading ? 'SE VERIFICĂ...' : 'VERIFY & SAVE'}</button>
         </div>
-        <div id="exConnectedBox" style={{display:'none',marginTop:'8px'}}>
+        <div id="exConnectedBox" style={{display: exConnected ? 'block' : 'none', marginTop:'8px'}}>
           <div style={{display:'flex',gap:'6px'}}>
-            <button id="zeusExchangeVerify" className="hub-sbtn" style={{flex:1}} onClick={() => w.zeusExchangeVerify?.()}>RE-VERIFY</button>
-            <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={() => w.zeusExchangeDisconnect?.()}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 1L2 4v4c0 4 3 7 6 8 3-1 6-4 6-8V4L8 1z" /></svg> DISCONNECT</button>
+            <button id="zeusExchangeVerify" className="hub-sbtn" style={{flex:1}} onClick={exVerify}>RE-VERIFY</button>
+            <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={exDisconnect}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 1L2 4v4c0 4 3 7 6 8 3-1 6-4 6-8V4L8 1z" /></svg> DISCONNECT</button>
           </div>
         </div>
         <div id="exResult" style={{marginTop:'8px',fontSize:'9px',color:'var(--dim)',textAlign:'center',minHeight:'14px'}}></div>
