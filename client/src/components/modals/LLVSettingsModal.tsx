@@ -27,13 +27,15 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Price Bucket %</span>
-                <input type="range" min={1} max={20} step={1} defaultValue={3} style={{ flex: 1, accentColor: '#f0c040' }} onChange={() => {}} />
+                <input type="range" min={1} max={20} step={1} defaultValue={3} style={{ flex: 1, accentColor: '#f0c040' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.bucketPct = +e.target.value * 0.1 }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Min Size $</span>
-                <input type="range" min={0} max={50} step={1} defaultValue={0} style={{ flex: 1, accentColor: '#f0c040' }} onChange={() => {}} />
+                <input type="range" min={0} max={50} step={1} defaultValue={0} style={{ flex: 1, accentColor: '#f0c040' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.minSizeUsd = +e.target.value * 1000 }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>

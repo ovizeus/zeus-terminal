@@ -11,9 +11,64 @@ const pinInp: React.CSSProperties = { flex:1, maxWidth:'140px', background:'#0a1
 const codeInp: React.CSSProperties = { flex:1, maxWidth:'120px', background:'#0a121a', border:'1px solid #00afff44', color:'#00ff88', padding:'6px 10px', borderRadius:'4px', fontFamily:'var(--ff)', fontSize:'14px', textAlign:'center', letterSpacing:'4px' }
 const dangerCodeInp: React.CSSProperties = { flex:1, maxWidth:'120px', background:'#0a121a', border:'1px solid #ff444444', color:'#ff6655', padding:'6px 10px', borderRadius:'4px', fontFamily:'var(--ff)', fontSize:'14px', textAlign:'center', letterSpacing:'4px' }
 
+async function apiFetch(url: string, body: Record<string, string>) {
+  const r = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  return r.json()
+}
+
+function setMsg(id: string, text: string, ok: boolean) {
+  const el = document.getElementById(id)
+  if (el) { el.textContent = text; el.style.color = ok ? '#00d97a' : '#ff5566' }
+}
+
+function showEl(id: string, show: boolean) {
+  const el = document.getElementById(id)
+  if (el) el.style.display = show ? 'block' : 'none'
+}
+
+function val(id: string) {
+  return (document.getElementById(id) as HTMLInputElement)?.value || ''
+}
+
 export function SettingsHubModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('general')
   const openModal = useUiStore((s) => s.openModal)
+
+  async function chpwRequest() {
+    const r = await apiFetch('/auth/change-password/request', { currentPassword: val('chpwCurrent') })
+    setMsg('chpw-msg', r.message || r.error || '', !!r.ok)
+    if (r.ok) { showEl('chpw-code-form', true); showEl('chpw-form', false) }
+  }
+
+  async function chpwConfirm() {
+    const r = await apiFetch('/auth/change-password/confirm', { code: val('chpwCode'), newPassword: val('chpwNew') })
+    setMsg('chpw-code-msg', r.message || r.error || '', !!r.ok)
+    if (r.ok) setTimeout(() => { showEl('chpw-code-form', false); showEl('chpw-form', true) }, 1500)
+  }
+
+  async function chemRequest() {
+    const r = await apiFetch('/auth/change-email/request', { currentPassword: val('chemPassword'), newEmail: val('chemNewEmail') })
+    setMsg('chem-msg', r.message || r.error || '', !!r.ok)
+    if (r.ok) { showEl('chem-code-form', true); showEl('chem-form', false) }
+  }
+
+  async function chemConfirm() {
+    const r = await apiFetch('/auth/change-email/confirm', { code: val('chemCode') })
+    setMsg('chem-code-msg', r.message || r.error || '', !!r.ok)
+    if (r.ok) setTimeout(() => { showEl('chem-code-form', false); showEl('chem-form', true) }, 1500)
+  }
+
+  async function clacRequest() {
+    const r = await apiFetch('/auth/close-account/request', { currentPassword: val('clacPassword') })
+    setMsg('clac-msg', r.message || r.error || '', !!r.ok)
+    if (r.ok) { showEl('clac-code-form', true); showEl('clac-form', false) }
+  }
+
+  async function clacConfirm() {
+    const r = await apiFetch('/auth/close-account/confirm', { code: val('clacCode') })
+    setMsg('clac-code-msg', r.message || r.error || '', !!r.ok)
+    if (r.ok) setTimeout(() => { window.location.href = '/login.html' }, 1500)
+  }
 
   return (
     <ModalOverlay id="msettings" visible={visible} onClose={onClose} maxWidth="500px">
@@ -94,14 +149,14 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="chpwCurrent" placeholder="Parola actuală" style={inp} /></div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola nouă</span><input type="password" id="chpwNew" placeholder="Min 12 caractere (A-z, 0-9)" style={inp} /></div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Confirmă parola</span><input type="password" id="chpwConfirm" placeholder="Repetă parola nouă" style={inp} /></div>
-          <button className="hub-sbtn pri" id="chpwRequestBtn" style={{marginTop:'6px'}} onClick={() => w.chpwRequest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod de verificare</button>
+          <button className="hub-sbtn pri" id="chpwRequestBtn" style={{marginTop:'6px'}} onClick={chpwRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod de verificare</button>
           <div id="chpw-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="chpw-code-form" style={{display:'none',marginTop:'10px'}}>
           <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE VERIFICARE</div>
           <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>Am trimis un cod pe emailul tău. Introdu-l mai jos:</div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="chpwCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
-          <button className="hub-sbtn pri" id="chpwConfirmBtn" onClick={() => w.chpwConfirm?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
+          <button className="hub-sbtn pri" id="chpwConfirmBtn" onClick={chpwConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
           <div id="chpw-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
@@ -109,14 +164,14 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div id="chem-form">
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Email nou</span><input type="email" id="chemNewEmail" placeholder="email@exemplu.com" style={inp} /></div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="chemPassword" placeholder="Confirmă cu parola" style={inp} /></div>
-          <button className="hub-sbtn pri" id="chemRequestBtn" style={{marginTop:'6px'}} onClick={() => w.chemRequest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod pe noul email</button>
+          <button className="hub-sbtn pri" id="chemRequestBtn" style={{marginTop:'6px'}} onClick={chemRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod pe noul email</button>
           <div id="chem-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="chem-code-form" style={{display:'none',marginTop:'10px'}}>
           <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE VERIFICARE</div>
           <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>Am trimis un cod pe noul email. Introdu-l mai jos:</div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="chemCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
-          <button className="hub-sbtn pri" id="chemConfirmBtn" onClick={() => w.chemConfirm?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
+          <button className="hub-sbtn pri" id="chemConfirmBtn" onClick={chemConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
           <div id="chem-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
@@ -130,14 +185,14 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Această acțiune este permanentă și nu poate fi anulată. Toate datele tale vor fi șterse.</div>
         <div id="clac-form">
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="clacPassword" placeholder="Confirmă cu parola" style={{...inp, borderColor:'#ff444444'}} /></div>
-          <button className="hub-sbtn" id="clacRequestBtn" style={{marginTop:'6px',background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={() => w.clacRequest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Trimite cod de confirmare</button>
+          <button className="hub-sbtn" id="clacRequestBtn" style={{marginTop:'6px',background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Trimite cod de confirmare</button>
           <div id="clac-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="clac-code-form" style={{display:'none',marginTop:'10px'}}>
           <div className="msec" style={{color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE CONFIRMARE ȘTERGERE</div>
           <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Introdu codul primit pe email pentru a confirma ștergerea contului:</div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="clacCode" maxLength={6} placeholder="000000" style={dangerCodeInp} /></div>
-          <button className="hub-sbtn" id="clacConfirmBtn" style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={() => w.clacConfirm?.()}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> ȘTERGE CONTUL DEFINITIV</button>
+          <button className="hub-sbtn" id="clacConfirmBtn" style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> ȘTERGE CONTUL DEFINITIV</button>
           <div id="clac-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
       </div>
