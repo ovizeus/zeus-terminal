@@ -280,6 +280,11 @@ migrate('014_brain_decisions', () => {
     `);
 });
 
+migrate('015_multi_exchange', () => {
+    // Partial unique index: one active row per (user_id, exchange)
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_user_name ON exchange_accounts(user_id, exchange) WHERE is_active = 1");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -298,10 +303,14 @@ const _stmts = {
 
     // Exchange accounts
     findExchange: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1'),
+    findExchangeByName: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND exchange = ? AND is_active = 1'),
+    findAllExchanges: db.prepare('SELECT * FROM exchange_accounts WHERE user_id = ? AND is_active = 1'),
     findExchangeById: db.prepare('SELECT * FROM exchange_accounts WHERE id = ? AND user_id = ?'),
     insertExchange: db.prepare('INSERT INTO exchange_accounts (user_id, exchange, api_key_encrypted, api_secret_encrypted, mode, status, last_verified_at) VALUES (?, ?, ?, ?, ?, ?, datetime(\'now\'))'),
     updateExchange: db.prepare("UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ?, status = ?, last_verified_at = datetime('now'), updated_at = datetime('now') WHERE user_id = ? AND is_active = 1"),
+    updateExchangeByName: db.prepare("UPDATE exchange_accounts SET api_key_encrypted = ?, api_secret_encrypted = ?, mode = ?, status = ?, last_verified_at = datetime('now'), updated_at = datetime('now') WHERE user_id = ? AND exchange = ? AND is_active = 1"),
     deactivateExchange: db.prepare("UPDATE exchange_accounts SET is_active = 0, status = 'disconnected', updated_at = datetime('now') WHERE user_id = ? AND is_active = 1"),
+    deactivateExchangeByName: db.prepare("UPDATE exchange_accounts SET is_active = 0, status = 'disconnected', updated_at = datetime('now') WHERE user_id = ? AND exchange = ? AND is_active = 1"),
     listAllExchanges: db.prepare(`
     SELECT ea.id, ea.user_id, ea.exchange, ea.mode, ea.status, ea.last_verified_at, ea.is_active, ea.created_at,
            u.email
@@ -448,6 +457,14 @@ function getExchangeAccount(userId) {
     return _stmts.findExchange.get(userId);
 }
 
+function getExchangeByName(userId, exchange) {
+    return _stmts.findExchangeByName.get(userId, exchange);
+}
+
+function getAllExchanges(userId) {
+    return _stmts.findAllExchanges.all(userId);
+}
+
 function saveExchangeAccount(userId, exchange, encKey, encSecret, mode) {
     const existing = _stmts.findExchange.get(userId);
     if (existing) {
@@ -458,8 +475,22 @@ function saveExchangeAccount(userId, exchange, encKey, encSecret, mode) {
     return info.lastInsertRowid;
 }
 
+function saveExchangeByName(userId, exchange, encKey, encSecret, mode) {
+    const existing = _stmts.findExchangeByName.get(userId, exchange);
+    if (existing) {
+        _stmts.updateExchangeByName.run(encKey, encSecret, mode, 'verified', userId, exchange);
+        return existing.id;
+    }
+    const info = _stmts.insertExchange.run(userId, exchange, encKey, encSecret, mode, 'verified');
+    return info.lastInsertRowid;
+}
+
 function disconnectExchange(userId) {
     return _stmts.deactivateExchange.run(userId);
+}
+
+function disconnectExchangeByName(userId, exchange) {
+    return _stmts.deactivateExchangeByName.run(userId, exchange);
 }
 
 function listAllExchangeAccounts() {
@@ -677,8 +708,12 @@ module.exports = {
     banUser,
     unbanUser,
     getExchangeAccount,
+    getExchangeByName,
+    getAllExchanges,
     saveExchangeAccount,
+    saveExchangeByName,
     disconnectExchange,
+    disconnectExchangeByName,
     listAllExchangeAccounts,
     setUserTelegram,
     getUserTelegram,
