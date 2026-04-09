@@ -157,8 +157,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <label className="mchk"><input type="checkbox" id="hubAlertDiv" onChange={(e) => { if (w.S?.alerts) w.S.alerts.divergence = e.target.checked }} /> RSI divergences</label>
         <label className="mchk"><input type="checkbox" id="hubAlertRsi" onChange={(e) => { if (w.S?.alerts) w.S.alerts.rsiAlerts = e.target.checked }} /> RSI extremes (&lt;30 / &gt;70)</label>
         <div className="msec">THRESHOLDS</div>
-        <div className="mrow"><span className="mlbl">Min whale size (BTC)</span><input type="number" id="hubWhaleMin" defaultValue={100} min={10} style={{width:'80px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'3px 6px',borderRadius:'2px',fontFamily:'var(--ff)'}} /></div>
-        <div className="mrow"><span className="mlbl">Min liquidation (BTC)</span><input type="number" id="hubLiqMin" defaultValue={1} min={0.1} step={0.1} style={{width:'80px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'3px 6px',borderRadius:'2px',fontFamily:'var(--ff)'}} /></div>
+        <div className="mrow"><span className="mlbl">Min whale size (BTC)</span><input type="number" id="hubWhaleMin" defaultValue={100} min={10} style={{width:'80px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'3px 6px',borderRadius:'2px',fontFamily:'var(--ff)'}} onChange={(e) => { if (w.S?.alerts) w.S.alerts.whaleMinBtc = +e.target.value }} /></div>
+        <div className="mrow"><span className="mlbl">Min liquidation (BTC)</span><input type="number" id="hubLiqMin" defaultValue={1} min={0.1} step={0.1} style={{width:'80px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'3px 6px',borderRadius:'2px',fontFamily:'var(--ff)'}} onChange={(e) => { if (w.S?.alerts) w.S.alerts.liqMinBtc = +e.target.value }} /></div>
       </div>
 
       {/* ══ TELEGRAM ══ */}

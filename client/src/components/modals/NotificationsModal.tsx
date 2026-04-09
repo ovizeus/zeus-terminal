@@ -10,7 +10,13 @@ export function NotificationsModal({ visible, onClose }: Props) {
 
   const applyFilter = (f: string) => {
     setFilter(f)
-    if (typeof w._ncRenderList === 'function') w._ncRenderList(f === 'all' ? undefined : f)
+    // ncFilter(sev) sets NOTIFICATION_CENTER._filter + calls _ncRenderList()
+    // Pass 'all' as undefined so old JS shows all items
+    if (typeof w.ncFilter === 'function') w.ncFilter(f === 'all' ? 'all' : f)
+    else if (w.NOTIFICATION_CENTER) {
+      w.NOTIFICATION_CENTER._filter = f === 'all' ? 'all' : f
+      if (typeof w._ncRenderList === 'function') w._ncRenderList()
+    }
   }
 
   return (
@@ -37,8 +43,8 @@ export function NotificationsModal({ visible, onClose }: Props) {
 
         {/* Actions */}
         <div className="nc-actions" style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <button className="sbtn2 pri" onClick={() => w._ncMarkAllRead?.()}>Mark all read</button>
-          <button className="sbtn2 sec" onClick={() => w._ncClearAll?.()}>
+          <button className="sbtn2 pri" onClick={() => w.ncMarkAllRead?.()}>Mark all read</button>
+          <button className="sbtn2 sec" onClick={() => w.ncClear?.()}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               style={{ marginRight: 4, verticalAlign: 'middle' }}>
