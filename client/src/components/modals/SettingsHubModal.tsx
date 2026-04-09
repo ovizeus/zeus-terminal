@@ -117,7 +117,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
     <ModalOverlay id="msettings" visible={visible} onClose={onClose} maxWidth="500px">
       <ModalHeader title="SETTINGS HUB" onClose={onClose} />
 
-      <div className="mtabs" id="settings-tabs">
+      <div className="mtabs" id="settings-tabs" style={{ flex: 'none' }}>
         <div className={`mtab${tab==='general'?' act':''}`} onClick={()=>setTab('general')}>GENERAL</div>
         <div className={`mtab${tab==='alerts'?' act':''}`} onClick={()=>setTab('alerts')}>ALERTS</div>
         <div className={`mtab${tab==='telegram'?' act':''}`} onClick={()=>setTab('telegram')}>TELEGRAM</div>
@@ -314,7 +314,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       </div>
 
       {/* ══ EXCHANGE API ══ */}
-      <div className="mbody" id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px', overflowY:'auto', maxHeight:'70vh'}}>
+      <div className="mbody" id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px'}}>
         <div style={{fontSize:'8px',color:'#ff8800',marginBottom:'10px',lineHeight:'1.6'}}>
           Cheile sunt criptate la server · Folosește READ + TRADE only (fără withdrawal) · Restricționează IP
         </div>
@@ -373,7 +373,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       </div>
 
       {/* ══ Footer ══ */}
-      <div style={{padding:'12px 16px',display:'flex',gap:'6px',flexWrap:'wrap',borderTop:'1px solid #1e2530'}}>
+      <div style={{padding:'12px 16px',display:'flex',gap:'6px',flexWrap:'wrap',borderTop:'1px solid #1e2530',flex:'none'}}>
         <button id="hubSaveAll" className="hub-sbtn pri" onClick={() => w.hubSaveAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE ALL</button>
         <button id="hubLoadAll" className="hub-sbtn" onClick={() => w.hubLoadAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> LOAD SAVED</button>
         <button id="hubResetDefaults" className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}} onClick={() => w.hubResetDefaults?.()}>↺ RESET DEFAULTS</button>
