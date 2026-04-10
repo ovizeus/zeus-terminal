@@ -74,9 +74,13 @@ export function AutoTradePanel() {
     await api.post('/api/at/kill', { reason: 'manual' })
   }
 
+  const [toggling, setToggling] = useState(false)
   function handleToggle() {
+    if (toggling) return // guard against rapid double-click
+    setToggling(true)
     const w = window as any
     if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
+    setTimeout(() => setToggling(false), 1000) // unlock after 1s
   }
 
   return (
@@ -162,7 +166,7 @@ export function AutoTradePanel() {
           {' '}ZEUS AUTO TRADE{' '}
           <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
         </div>
-        <button className={`at-main-btn ${enabled ? 'on' : 'off'}`} id="atMainBtn" onClick={handleToggle}>
+        <button className={`at-main-btn ${enabled ? 'on' : 'off'}`} id="atMainBtn" onClick={handleToggle} disabled={toggling}>
           <span id="atBtnDot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: enabled ? '#00ff88' : '#aa44ff', boxShadow: enabled ? '0 0 6px #00ff88' : '0 0 6px #aa44ff' }}></span>
           <span id="atBtnTxt">{enabled ? 'AUTO TRADE ON' : 'AUTO TRADE OFF'}</span>
         </button>

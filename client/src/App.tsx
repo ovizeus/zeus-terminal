@@ -10,6 +10,7 @@ import { useBrainEngine } from './hooks/useBrainEngine'
 import { useForecastEngine } from './hooks/useForecastEngine'
 import { useLegacyBridge } from './bridge'
 import { usePositionsBridge } from './hooks/usePositionsBridge'
+import { useATBridge } from './hooks/useATBridge'
 import { wsService } from './services/ws'
 import './app.css'
 
@@ -61,6 +62,9 @@ export function App() {
 
   // ── POSITIONS BRIDGE — sync engine window.TP → positionsStore ──
   usePositionsBridge()
+
+  // ── AT BRIDGE — sync engine window.AT → atStore ──
+  useATBridge()
 
   if (loading) {
     return (

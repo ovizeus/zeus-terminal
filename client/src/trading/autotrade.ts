@@ -3,6 +3,7 @@
 // AutoTrade engine: conditions, execution, monitoring, kill switch
 
 const w = window as any
+function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
 // AT UI helpers
 export function toggleAutoTrade(): void {
@@ -128,6 +129,7 @@ export function _applyATToggleUI(enabled: any): void {
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = true + push to server for cross-device sync
     if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
+    _emitATChanged()
   } else {
     btn.className = 'at-main-btn off'
     dot.style.background = 'var(--pur)'; dot.style.boxShadow = '0 0 6px var(--pur)'
@@ -138,6 +140,7 @@ export function _applyATToggleUI(enabled: any): void {
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = false + push to server for cross-device sync
     if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
+    _emitATChanged()
   }
 }
 
@@ -805,6 +808,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     return
   }
   w.AT.totalTrades++
+  _emitATChanged()
   // [P0.4] Decision log — AT entry (trade placed)
   if (typeof w.DLog !== 'undefined') w.DLog.record('at_entry', { sym: sym, side: side, entry: entry, size: adaptFinalSize, lev: lev, sl: sl, tp: tp, score: cond?.score, fusionMult: _fusionMult, convMult: _convDangerMult, riskPct: riskPct, riskSize: _riskSizeCapped })
 
@@ -1425,6 +1429,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   // [FIX UI] Update banners immediately after kill trigger
   if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
   if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
+  _emitATChanged()
 }
 
 // Reset manual imediat - fara asteptare de 30s
