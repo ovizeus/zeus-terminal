@@ -270,3 +270,20 @@ export function getMagnets(): { above: any[]; below: any[] } {
   const m = (window as any).S?.magnets
   return m ? { above: m.above || [], below: m.below || [] } : { above: [], below: [] }
 }
+
+// ── Added in 8C-4A2 (autotrade.ts AT cluster final) ──
+
+/** AT Object (w.AT) — TEMP bridge getter
+ *  Returns MUTABLE REFERENCE intentionally.
+ *  Used by autotrade.ts legacy read/write flow.
+ *  Reads + writes go through same object: const AT = getATObject()
+ *  TODO: remove in Phase 9, replace with atStore/atService */
+export function getATObject(): any {
+  return (window as any).AT
+}
+
+/** TC signal minimum — TEMP bridge
+ *  TODO: migrate to settingsStore in 8D */
+export function getTCSignalMin(): number {
+  return (window as any).TC?.sigMin || 3
+}
