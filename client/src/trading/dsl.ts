@@ -85,6 +85,7 @@ export function toggleDSL(): void {
   }
   w.atLog('info', w.DSL.enabled ? '[WARN] ASSIST: DSL oprit de user' : '[OK] ASSIST: DSL pornit de user (USER DSL)')
   w.DSL.enabled = !w.DSL.enabled
+  if (!w.S.dsl) w.S.dsl = {}
   w.S.dsl.active = w.DSL.enabled
   if (!w.DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
   if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) { w.startDSLIntervals() }
