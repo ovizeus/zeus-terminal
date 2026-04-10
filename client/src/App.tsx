@@ -12,6 +12,7 @@ import { useLegacyBridge } from './bridge'
 import { usePositionsBridge } from './hooks/usePositionsBridge'
 import { useATBridge } from './hooks/useATBridge'
 import { useBrainBridge } from './hooks/useBrainBridge'
+import { useDSLBridge } from './hooks/useDSLBridge'
 import { wsService } from './services/ws'
 import './app.css'
 
@@ -69,6 +70,9 @@ export function App() {
 
   // ── BRAIN BRIDGE — sync engine window.BM/BRAIN → brainStore ──
   useBrainBridge()
+
+  // ── DSL BRIDGE — sync engine window.DSL → dslStore ──
+  useDSLBridge()
 
   if (loading) {
     return (

@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useMemo } from 'react'
+import { useDslStore } from '../../stores'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
 function seededRandom(seed: number) {
@@ -9,7 +10,7 @@ function seededRandom(seed: number) {
 /** 1:1 port of #dslZone from public/index.html lines 1573-1681
  *  + initDSLBubbles() from dsl.js lines 181-204 */
 export function DSLZonePanel() {
-  const [dslOn, setDslOn] = useState(() => !!(window as any).DSL?.enabled)
+  const dslOn = useDslStore((s) => s.enabled)
 
   // Generate 12 floating bubbles (same logic as dsl.js initDSLBubbles)
   const bubbles = useMemo(() => {
@@ -72,20 +73,22 @@ export function DSLZonePanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span id="dslActiveCount" style={{ fontSize: '7px', color: '#00ffcc44' }}>0 active</span>
           <button className={`dsl-toggle${dslOn ? '' : ' off'}`} id="dslToggleBtn" onClick={() => {
+            // Flow: React → engine toggleDSL() → engine emits event → dslStore syncs
             const w = window as any
             try {
-              // Toggle DSL state directly
-              if (typeof w.DSL !== 'undefined') {
+              if (typeof w.toggleDSL === 'function') {
+                w.toggleDSL()
+              } else if (typeof w.DSL !== 'undefined') {
+                // Fallback if toggleDSL not mapped yet
                 w.DSL.enabled = !w.DSL.enabled
                 if (!w.S?.dsl) { if (w.S) w.S.dsl = {} }
                 if (w.S?.dsl) w.S.dsl.active = w.DSL.enabled
                 if (!w.DSL.enabled && typeof w.stopDSLIntervals === 'function') w.stopDSLIntervals()
                 if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) w.startDSLIntervals()
                 if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
+                try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {}
               }
             } catch (e) { console.warn('[DSL btn]', e) }
-            // Always sync React state
-            setDslOn(!!w.DSL?.enabled)
           }}>
             {dslOn ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'}
           </button>

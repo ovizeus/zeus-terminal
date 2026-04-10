@@ -96,6 +96,7 @@ export function toggleDSL(): void {
     if (typeof w.atLog === 'function') w.atLog('info', w.DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
     if (typeof w.brainThink === 'function') w.brainThink(w.DSL.enabled ? 'ok' : 'bad', w.DSL.enabled ? (w._ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
+    _emitDSLChanged()
   } catch (e) { console.warn('[DSL] toggleDSL error:', e) }
 }
 
@@ -859,6 +860,7 @@ export function renderDSLWidget(positions: any[]): void {
   }
 
   container.innerHTML = html
+  _emitDSLChanged()
 }
 
 // ── Render a single DSL position card ──────────────────────────
@@ -1126,12 +1128,16 @@ export function _renderDslCard(pos: any): string {
 }
 
 // DSL intervals started via startDSLIntervals() called from startApp()
+function _emitDSLChanged() { try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {} }
+
 export function stopDSLIntervals(): void {
   if (w.DSL.checkInterval) { w.Intervals.clear('dsl'); w.DSL.checkInterval = null }
   if (w.DSL.visualInterval) { w.Intervals.clear('dslVis'); w.DSL.visualInterval = null }
+  _emitDSLChanged()
 }
 export function startDSLIntervals(): void {
   if (w.DSL.checkInterval) return
+  _emitDSLChanged()
   w.DSL.checkInterval = w.Intervals.set('dsl', runDSLBrain, 3000)
   w.DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
