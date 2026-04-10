@@ -218,3 +218,15 @@ export function getMagnetBias(): string {
 export function getBrainMetrics(): any {
   return (window as any).BM
 }
+
+/** Brain Object (w.BRAIN) — TEMP bridge getter
+ *  Returns MUTABLE REFERENCE intentionally.
+ *  Used by brain.ts legacy read/write flow:
+ *    const BR = getBrainObject()
+ *    BR.state = 'ready'  // write through ref
+ *    const s = BR.state   // read through ref
+ *  Do NOT add null guards — BRAIN is guaranteed by config.ts IIFE at import time.
+ *  TODO: remove in Phase 9, replace with brainStore */
+export function getBrainObject(): any {
+  return (window as any).BRAIN
+}
