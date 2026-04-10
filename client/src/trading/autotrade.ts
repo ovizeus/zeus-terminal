@@ -3,11 +3,13 @@
 // AutoTrade engine: conditions, execution, monitoring, kill switch
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getBrainMetrics, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 
-const w = window as any // kept for w.S, w.TP, w.BM, w.el, w._ZI, fn calls
-// [8C-4A2] AT = mutable ref to AT — reads + writes through same object
+const w = window as any // kept for w.S self-ref (mode/profile/alerts), w.TP, w.el, w._ZI, fn calls
+// [8C-4A2] AT = mutable ref to w.AT
 const AT = getATObject()
+// [8C-4B] BM = mutable ref to BM — reads + writes through same object
+const BM = getBrainMetrics()
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
 // AT UI helpers
@@ -86,15 +88,15 @@ export function _applyATToggleUI(enabled: any): void {
     // FIX v118: reset zi dacă s-a schimbat data
     if (typeof w._bmResetDailyIfNeeded === 'function') w._bmResetDailyIfNeeded()
     // ── INIT: Recalculate daily counters from journal (no stale state) ──
-    const _todayRO = new Date().toLocaleDateString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' })
+    const _todayRO = new Date().toLocaleDateString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest' })
     const _jToday = (w.TP.journal || []).filter((j: any) => {
-      try { return new Date(j.time || 0).toLocaleDateString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' }) === _todayRO } catch (_) { return false }
+      try { return new Date(j.time || 0).toLocaleDateString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest' }) === _todayRO } catch (_) { return false }
     })
     // FIX v118: numără DOAR trade-urile AutoTrade (nu Paper) pentru dailyTrades / closedTradesToday
     const _jTodayAT = _jToday.filter((j: any) => j.autoTrade === true)
     AT.realizedDailyPnL = _jTodayAT.reduce((acc: any, j: any) => acc + (Number.isFinite(+j.pnl) ? +j.pnl : 0), 0)
     AT.closedTradesToday = _jTodayAT.length
-    w.BM.dailyTrades = getATClosedToday()
+    BM.dailyTrades = getATClosedToday()
     AT.dailyStart = new Date().toISOString().slice(0, 10)
     // [C3] Kill switch auto-clear REMOVED — require explicit user reset
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
@@ -175,7 +177,7 @@ export function updateATMode(): void {
 }
 
 export function atLog(type: any, msg: any): void {
-  const now = new Date().toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const now = new Date().toLocaleTimeString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   AT.log.unshift({ time: now, type, msg })
   if (AT.log.length > 80) AT.log.pop()
   renderATLog()
@@ -255,24 +257,24 @@ export function updateATStats(): void {
 
 // Condition checker
 export function checkATConditions(): any {
-  const confMin = (typeof w.BM !== 'undefined' ? w.BM.confMin : 65) || 65 // [FIX v85.1 F2] sursă unică — era ||68 inconsistent
+  const confMin = (typeof BM !== 'undefined' ? BM.confMin : 65) || 65 // [FIX v85.1 F2] sursă unică — era ||68 inconsistent
   // [P1] Read from TC (server-safe), DOM fallback
   const sigMin = getTCSignalMin() // TC.sigMin bridge — no dedicated getter yet
 
   // 1. Confluence Score — read from canonical BM state, not DOM
-  const score = (typeof w.BM !== 'undefined' && Number.isFinite(w.BM.confluenceScore)) ? w.BM.confluenceScore : 50
+  const score = (typeof BM !== 'undefined' && Number.isFinite(BM.confluenceScore)) ? BM.confluenceScore : 50
   const isBull = score >= confMin
   const isBear = score <= (100 - confMin)
   setCondUI('atCondConf', isBull || isBear, isBull ? 'BULL ' + score : isBear ? 'BEAR ' + score : score + ' (neutru)')
 
   // 2. Signal count
-  const { bullCount = 0, bearCount = 0 } = w.S.signalData || {}
+  const { bullCount = 0, bearCount = 0 } = getSignalData() || {}
   const sigOk = bullCount >= sigMin || bearCount >= sigMin
   const sigDir = bullCount >= bearCount ? 'bull' : 'bear'
   setCondUI('atCondSig', sigOk, sigOk ? `${Math.max(bullCount, bearCount)}/${sigMin}` : `${Math.max(bullCount, bearCount)}/${sigMin}`)
 
   // 3. Supertrend direction
-  const stFlip = w.S.signalData?.signals?.find((s: any) => s.name.includes('Supertrend'))
+  const stFlip = getSignalData()?.signals?.find((s: any) => s.name.includes('Supertrend'))
   const stDir = stFlip?.dir
   const stOk = !!stFlip
   setCondUI('atCondST', stOk, stOk ? stDir === 'bull' ? 'BULL ✓' : 'BEAR ✓' : 'Nu e flip')
@@ -298,7 +300,7 @@ export function checkATConditions(): any {
   setCondUI('atCondOpp', !hasOpposite, hasOpposite ? 'Pozitie opusa activa' : 'OK')
 
   // 7. Magnet alignment bonus
-  const magnetBias = w.S.magnetBias || 'neut'
+  const magnetBias = getMagnetBias() || 'neut'
   const magnetOk = (isBull && magnetBias === 'bull') || (isBear && magnetBias === 'bear') || magnetBias === 'neut'
   // Not a hard block, but logged
 
@@ -306,12 +308,12 @@ export function checkATConditions(): any {
   const maxPos = getTCMaxPos()
   const openAuto = autoPositions.length
   // BUG FIX: Also prevent opening same symbol twice in single-symbol mode
-  const symAlreadyOpen = autoPositions.some((p: any) => p.sym === w.S.symbol)
+  const symAlreadyOpen = autoPositions.some((p: any) => p.sym === getSymbol())
   const posOk = openAuto < maxPos && !symAlreadyOpen
 
   // Cooldown check — per-symbol in multi-symbol mode
   const nowTs = Date.now()
-  const _symCd = (AT._cooldownBySymbol && AT._cooldownBySymbol[w.S.symbol]) || 0
+  const _symCd = (AT._cooldownBySymbol && AT._cooldownBySymbol[getSymbol()]) || 0
   const coolOk = (nowTs - Math.max(getATLastTradeTs(), _symCd)) > AT.cooldownMs
 
   const allOk = (isBull || isBear) && sigOk && stOk && adxOk && hourOk && !hasOpposite && posOk && coolOk
@@ -374,7 +376,7 @@ export function computeFusionDecision(): any {
   const out: any = { ts: Date.now(), dir: 'neutral', decision: 'NO_TRADE', confidence: 0, score: 0 }
 
   // 1) Confluence (0..100)
-  const conf = Number.isFinite(+w.BM?.confluenceScore) ? +w.BM.confluenceScore : 50
+  const conf = Number.isFinite(+BM?.confluenceScore) ? +BM.confluenceScore : 50
   const confN = _clampFB01((conf - 50) / 50)
   reasons.push('Confluence:' + conf.toFixed(0))
 
@@ -563,7 +565,7 @@ export function runAutoTradeCheck(): void {
     // [PATCH B2] AT_SCAN log for single-symbol path
     {
       const _dir2 = cond.isBull ? 'bull' : cond.isBear ? 'bear' : 'neut'
-      w.atLog('info', 'AT_SCAN ' + (w.S.symbol || '').replace('USDT', '') + ' score=' + cond.score + ' dir=' + _dir2)
+      w.atLog('info', 'AT_SCAN ' + (getSymbol() || '').replace('USDT', '') + ' score=' + cond.score + ' dir=' + _dir2)
     }
 
     // [v119-p7] FUSION_CACHE — actualizat la FIECARE tick, citit de ML vizual (read-only)
@@ -585,17 +587,17 @@ export function runAutoTradeCheck(): void {
       // [PATCH B3] AT_BLOCK log with context
       {
         const _bDir = cond.isBull ? 'bull' : cond.isBear ? 'bear' : 'neut'
-        const _bRe = (typeof w.BM !== 'undefined' && w.BM.regimeEngine) ? w.BM.regimeEngine.regime : '—'
-        const _bPh = (typeof w.BM !== 'undefined' && w.BM.phaseFilter) ? w.BM.phaseFilter.phase : '—'
+        const _bRe = (typeof BM !== 'undefined' && BM.regimeEngine) ? BM.regimeEngine.regime : '—'
+        const _bPh = (typeof BM !== 'undefined' && BM.phaseFilter) ? BM.phaseFilter.phase : '—'
         const _bParts: any[] = []
         if (!cond.posOk) _bParts.push('max_pos')
         if (!cond.coolOk) _bParts.push('cooldown')
         if (!cond.adxOk) _bParts.push('adx_low')
         if (!cond.hourOk) _bParts.push('hour_filter')
         if (!cond.isBull && !cond.isBear) _bParts.push('no_signal')
-        w.atLog('info', 'AT_BLOCK ' + (w.S.symbol || '').replace('USDT', '') + ' regime=' + _bRe + ' phase=' + _bPh + ' score=' + cond.score + ' dir=' + _bDir + ' reason=' + (_bParts.join(',') || 'conds_unmet'))
+        w.atLog('info', 'AT_BLOCK ' + (getSymbol() || '').replace('USDT', '') + ' regime=' + _bRe + ' phase=' + _bPh + ' score=' + cond.score + ' dir=' + _bDir + ' reason=' + (_bParts.join(',') || 'conds_unmet'))
         // [P0.4] Decision log — AT blocked
-        if (typeof w.DLog !== 'undefined') w.DLog.record('at_block', { sym: w.S.symbol, regime: _bRe, phase: _bPh, score: cond.score, dir: _bDir, reasons: _bParts })
+        if (typeof w.DLog !== 'undefined') w.DLog.record('at_block', { sym: getSymbol(), regime: _bRe, phase: _bPh, score: cond.score, dir: _bDir, reasons: _bParts })
       }
       // Update status
       const reasons: any[] = []
@@ -619,7 +621,7 @@ export function runAutoTradeCheck(): void {
 
     // [FIX BUG1] Guard: confluence/signal direction disagree → no clear direction, skip
     if (!cond.isBull && !cond.isBear) {
-      w.atLog('info', 'AT_SKIP ' + (w.S.symbol || '').replace('USDT', '') + ' confluence/signal disagree — no clear direction')
+      w.atLog('info', 'AT_SKIP ' + (getSymbol() || '').replace('USDT', '') + ' confluence/signal disagree — no clear direction')
       { const _oe4 = w.el('atStatus'); if (_oe4) _oe4.innerHTML = w._ZI.mag + ' Confluence/semnale conflict — skip' }
       return
     }
@@ -627,14 +629,14 @@ export function runAutoTradeCheck(): void {
     const side = cond.isBull ? 'LONG' : 'SHORT'
     // [PATCH B4] AT_SIGNAL log for allowed entry
     {
-      const _sPh = (typeof w.BM !== 'undefined' && w.BM.phaseFilter) ? w.BM.phaseFilter.phase : '—'
-      const _sConf = (typeof w.BM !== 'undefined' && w.BM.regimeEngine) ? w.BM.regimeEngine.confidence : 0
-      w.atLog('info', 'AT_SIGNAL ' + (w.S.symbol || '').replace('USDT', '') + ' side=' + side + ' conf=' + _sConf + ' score=' + cond.score + ' phase=' + _sPh)
+      const _sPh = (typeof BM !== 'undefined' && BM.phaseFilter) ? BM.phaseFilter.phase : '—'
+      const _sConf = (typeof BM !== 'undefined' && BM.regimeEngine) ? BM.regimeEngine.confidence : 0
+      w.atLog('info', 'AT_SIGNAL ' + (getSymbol() || '').replace('USDT', '') + ' side=' + side + ' conf=' + _sConf + ' score=' + cond.score + ' phase=' + _sPh)
       // [P0.4] Decision log — AT signal allowed
-      if (typeof w.DLog !== 'undefined') w.DLog.record('at_signal', { sym: w.S.symbol, side: side, conf: _sConf, score: cond.score, phase: _sPh })
+      if (typeof w.DLog !== 'undefined') w.DLog.record('at_signal', { sym: getSymbol(), side: side, conf: _sConf, score: cond.score, phase: _sPh })
     }
     w.atLog(side === 'LONG' ? 'buy' : 'sell',
-      `[SIGNAL] SEMNAL ${side} confirmat! Score:${cond.score} | ${Math.max(cond.bullCount, cond.bearCount)} semnale | ST:${cond.stDir} | Magnet:${w.S.magnetBias || 'neut'}`)
+      `[SIGNAL] SEMNAL ${side} confirmat! Score:${cond.score} | ${Math.max(cond.bullCount, cond.bearCount)} semnale | ST:${cond.stDir} | Magnet:${getMagnetBias() || 'neut'}`)
 
     // ── FUSION BRAIN v1 — final arbiter before exec ──────────────
     try {
@@ -681,8 +683,8 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     w.atLog('warn', '[WARN] Live exec already in flight — skipping duplicate')
     return
   }
-  if (w.BM?.protectMode) {
-    w.BlockReason.set('PROTECT_MODE', w.BM.protectReason || 'Protect mode activ', 'placeAutoTrade')
+  if (BM?.protectMode) {
+    w.BlockReason.set('PROTECT_MODE', BM.protectReason || 'Protect mode activ', 'placeAutoTrade')
     return
   }
 
@@ -764,20 +766,20 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Fusion Brain size multiplier (SMALL=1.0 / MEDIUM=1.35 / LARGE=1.75)
   const _fusionMult = Number.isFinite(+w.FUSION_SIZE_MULT) ? +w.FUSION_SIZE_MULT : 1.0
   // Conviction × Danger sizing multiplier (Adaptive Shield)
-  const _convDangerMult = (typeof w.BM !== 'undefined' && Number.isFinite(w.BM.convictionMult)) ? w.BM.convictionMult : 1.0
+  const _convDangerMult = (typeof BM !== 'undefined' && Number.isFinite(BM.convictionMult)) ? BM.convictionMult : 1.0
   if (_convDangerMult <= 0) {
-    w.BlockReason.set('CONVICTION_LOW', 'Conviction ' + (w.BM.conviction || 0) + '% / Danger ' + (w.BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
-    w.atLog('warn', '[SHIELD] conviction=' + (w.BM.conviction || 0) + '% danger=' + (w.BM.danger || 0) + ' mult=0 → SKIP')
+    w.BlockReason.set('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
+    w.atLog('warn', '[SHIELD] conviction=' + (BM.conviction || 0) + '% danger=' + (BM.danger || 0) + ' mult=0 → SKIP')
     return
   }
-  const _sizeMult = ((w.BM.adapt && w.BM.adapt.enabled) ? (w.BM.positionSizing && w.BM.positionSizing.finalMult ? w.BM.positionSizing.finalMult : 1) : 1) * _fusionMult * _convDangerMult
+  const _sizeMult = ((BM.adapt && BM.adapt.enabled) ? (BM.positionSizing && BM.positionSizing.finalMult ? BM.positionSizing.finalMult : 1) : 1) * _fusionMult * _convDangerMult
   const _sizeRaw = Math.round(_riskSizeCapped * _sizeMult)
   const _sizeMin = Math.round(_riskSizeCapped * 0.5)
   const _sizeMax = Math.round(_riskSizeCapped * 1.6)
   const safeFinalSize = Math.max(_sizeMin, Math.min(_sizeMax, _sizeRaw))
   // [Etapa 5] Adaptive sizeMult — aplicat ca ULTIM în lanț, după Level 5 sizing
   // Gated: BM.adaptive.enabled. Clamp explicit min/max.
-  const _adaptSizeMult = (w.BM.adaptive && w.BM.adaptive.enabled) ? (w.BM.adaptive.sizeMult || 1.0) : 1.0
+  const _adaptSizeMult = (BM.adaptive && BM.adaptive.enabled) ? (BM.adaptive.sizeMult || 1.0) : 1.0
   const _adaptSizeRaw = Math.round(safeFinalSize * _adaptSizeMult)
   const adaptFinalSize = Math.max(_sizeMin, Math.min(_sizeMax, _adaptSizeRaw))
   const slPct = _snap.slPct
@@ -806,10 +808,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // [FIX P14] totalTrades++ AFTER all early validation returns (including price check)
   if (!entry || entry <= 0) {
     w.atLog('warn', '[BLOCK] EXEC FAIL-SAFE: preț invalid → PROTECT activat')
-    w.BM.protectMode = true; w.BM.protectReason = 'BLOCKED: ExecutionRisk (invalid price)'
+    BM.protectMode = true; BM.protectReason = 'BLOCKED: ExecutionRisk (invalid price)'
     if (getATEnabled() && (w.S.mode || 'assist') === 'auto') AT.enabled = false
     const pb = w.el('protectBanner'); if (pb) pb.className = 'znc-protect show'
-    const pbt = w.el('protectBannerTxt'); if (pbt) pbt.textContent = w.BM.protectReason
+    const pbt = w.el('protectBannerTxt'); if (pbt) pbt.textContent = BM.protectReason
     return
   }
   AT.totalTrades++
@@ -818,7 +820,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   if (typeof w.DLog !== 'undefined') w.DLog.record('at_entry', { sym: sym, side: side, entry: entry, size: adaptFinalSize, lev: lev, sl: sl, tp: tp, score: cond?.score, fusionMult: _fusionMult, convMult: _convDangerMult, riskPct: riskPct, riskSize: _riskSizeCapped })
 
   w.atLog(side === 'LONG' ? 'buy' : 'sell',
-    `[EXEC] ${side} ${sym} @$${w.fP(entry)} | Lev:${lev}x | SL:$${w.fP(sl)} | TP:$${w.fP(tp)} | Size:$${safeFinalSize} (risk:${riskPct}%→$${_riskSizeCapped.toFixed(0)} cap:$${size}) | [SH]C:${w.BM.conviction || 0}% D:${w.BM.danger || 0}`)
+    `[EXEC] ${side} ${sym} @$${w.fP(entry)} | Lev:${lev}x | SL:$${w.fP(sl)} | TP:$${w.fP(tp)} | Size:$${safeFinalSize} (risk:${riskPct}%→$${_riskSizeCapped.toFixed(0)} cap:$${size}) | [SH]C:${BM.conviction || 0}% D:${BM.danger || 0}`)
 
   if (getATMode() === 'demo') {
     const pos: any = {
@@ -870,22 +872,22 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     renderATPositions()
     w.onPositionOpened(pos, 'auto_demo')  // 3: DSL attach for auto-trade positions
     w.srLinkTrade(pos)  // [SR] leagă cel mai recent semnal de această poziţie
-    if (typeof w.aubBBSnapshot === 'function') w.aubBBSnapshot('TRADE_OPEN', { sym: pos.sym, side: pos.side, entry: pos.entry, size: pos.size, lev: pos.lev, score: (typeof w.BM !== 'undefined' ? w.BM.entryScore : 0) })
+    if (typeof w.aubBBSnapshot === 'function') w.aubBBSnapshot('TRADE_OPEN', { sym: pos.sym, side: pos.side, entry: pos.entry, size: pos.size, lev: pos.lev, score: (typeof BM !== 'undefined' ? BM.entryScore : 0) })
     w.addTradeToJournal({
       time: w.fmtNow(),
       side, sym: sym.replace('USDT', ''),
       entry, exit: null, pnl: 0, reason: 'AUTO — Score:' + cond.score, lev,
       // [Etapa 4] Journal Context — salvat la OPEN (citit de Etapa 5 doar dacă journalEvent==='CLOSE')
       journalEvent: 'OPEN',
-      regime: w.BM.regime || w.BM.structure?.regime || '—',
-      alignmentScore: w.BM.structure?.score ?? null,
-      volRegime: w.BM.volRegime || '—',
+      regime: BM.regime || BM.structure?.regime || '—',
+      alignmentScore: BM.structure?.score ?? null,
+      volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
     })
     { const _oe5 = w.el('atStatus'); if (_oe5) _oe5.innerHTML = w._ZI.ok + ' ' + w.escHtml(side) + ' deschis @$' + w.fP(entry) }
     w.toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${w.fP(sl)} TP:$${w.fP(tp)}`, 0, w._ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${w.fP(entry)} | SL:$${w.fP(sl)} TP:$${w.fP(tp)}`)  // [NC]
-    if (typeof w.onTradeExecuted === 'function') w.onTradeExecuted({ ...pos, score: cond?.score || w.BM?.entryScore || 0 })
+    if (typeof w.onTradeExecuted === 'function') w.onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
     w.ZState.scheduleSave()  // persist new position
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()  // [CHART MARKERS]
@@ -1038,7 +1040,7 @@ export function canAddOn(pos: any): any {
   const maxAddon = parseInt(w.el('atMaxAddon')?.value) || 3
   if ((pos.addOnCount || 0) >= maxAddon) return false
   // Must be in profit to add on (UI hint — server re-validates)
-  const curPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(pos) : w.S.price
+  const curPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(pos) : getPrice()
   if (!curPrice || curPrice <= 0) return false
   const diff = curPrice - pos.entry
   const inProfit = pos.side === 'LONG' ? diff > 0 : diff < 0
@@ -1105,7 +1107,7 @@ export function scheduleAutoClose(pos: any): void {
   function getPosPrice(): any {
     // BUG2 FIX: use allPrices (works for any symbol, live or demo)
     if (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) return w.allPrices[pos.sym]
-    if (pos.sym === w.S.symbol || !pos.sym) return w.S.price
+    if (pos.sym === getSymbol() || !pos.sym) return getPrice()
     // [v105 FIX Bug3] Verifica freshness wlPrices — nu folosi pret stale pentru SL/TP
     const wlEntry = w.wlPrices[pos.sym] || w.wlPrices[pos.sym + 'USDT']
     if (wlEntry?.price && wlEntry.price > 0) {
@@ -1390,9 +1392,9 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
       reason: 'Emergency Stop', lev: p.lev,
       // [Etapa 4] Journal Context — salvat la CLOSE pentru Historical Regime Memory
       journalEvent: 'CLOSE',
-      regime: w.BM.regime || w.BM.structure?.regime || '—',
-      alignmentScore: w.BM.structure?.score ?? null,
-      volRegime: w.BM.volRegime || '—',
+      regime: BM.regime || BM.structure?.regime || '—',
+      alignmentScore: BM.structure?.score ?? null,
+      volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
       openTs: p.openTs || p.id,
       closedAt: Date.now(),
@@ -1505,7 +1507,7 @@ export function renderATPositions(): void {
   panel.innerHTML = autoPosns.map((pos: any) => {
     // [FIX A5] Use allPrices (consistent with getPosPrice/engine)
     const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
-      : (pos.sym === w.S.symbol ? w.S.price : (w.wlPrices[pos.sym]?.price || pos.entry))
+      : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
     const diff = symPrice - pos.entry
     const pnl = w._safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
     const pnlStr = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2)
@@ -1607,7 +1609,7 @@ export function openPartialClose(posId: any): void {
   if (!pos) return
   const symBase = pos.sym.replace('USDT', '')
   const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
-    : (pos.sym === w.S.symbol ? w.S.price : (w.wlPrices[pos.sym]?.price || pos.entry))
+    : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
   const pnl = (pos.side === 'LONG' ? symPrice - pos.entry : pos.entry - symPrice) / pos.entry * pos.size * pos.lev
 
   // Simple modal overlay
@@ -1645,7 +1647,7 @@ export function execPartialClose(posId: any, pct: any): void {
   if (idx < 0) return
   const pos = _isLivePartial ? w.TP.livePositions[idx] : w.TP.demoPositions[idx]
   const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
-    : (pos.sym === w.S.symbol ? w.S.price : (w.wlPrices[pos.sym]?.price || pos.entry))
+    : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
   const fraction = pct / 100
   const partialSize = pos.size * fraction
   const diff = symPrice - pos.entry
@@ -1666,9 +1668,9 @@ export function execPartialClose(posId: any, pct: any): void {
     pnl: partialPnl, reason: `\u25D1 PARTIAL ${pct}%`, lev: pos.lev,
     // [Etapa 4] Journal Context — salvat la CLOSE pentru Historical Regime Memory
     journalEvent: 'CLOSE',
-    regime: w.BM.regime || w.BM.structure?.regime || '—',
-    alignmentScore: w.BM.structure?.score ?? null,
-    volRegime: w.BM.volRegime || '—',
+    regime: BM.regime || BM.structure?.regime || '—',
+    alignmentScore: BM.structure?.score ?? null,
+    volRegime: BM.volRegime || '—',
     profile: w.S.profile || 'fast',
     openTs: pos.openTs || pos.id,
     closedAt: Date.now(),
