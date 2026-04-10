@@ -209,6 +209,8 @@ export function runBrainUpdate(): void {
   // [PATCH BRAIN-GUARD] Re-entry guard — prevents multi-fire from timer + WS overlap
   if (w.__brainCycleRunning) return
   w.__brainCycleRunning = true
+  // Safety timeout — if try block crashes before finally, unlock after 10s
+  const _brainSafetyTimer = setTimeout(() => { w.__brainCycleRunning = false }, 10000)
   try {
     updateBrainState()
     adaptAutoTradeParams()
@@ -227,7 +229,7 @@ export function runBrainUpdate(): void {
         msgs[w.BRAIN.state] || w.BRAIN.state)
       w.BRAIN._prevState = w.BRAIN.state
     }
-  } finally { w.__brainCycleRunning = false }
+  } finally { clearTimeout(_brainSafetyTimer); w.__brainCycleRunning = false }
 }
 // [runBrainUpdate loop managed in startApp — single instance]
 
@@ -403,6 +405,9 @@ export function setMode(mode: any): void {
     // Show confirmation modal
     // [PATCH MODE-SWITCH] Lock brain during async modal
     w.__brainModeSwitching = true
+    // Safety: auto-unlock after 30s if user closes browser with modal open
+    if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
+    w.__brainModeSwitchTimer = setTimeout(() => { w.__brainModeSwitching = false }, 30000)
     _pendingModeSwitch = mode
     const modal = w.el('brainModeModal')
     const msg = w.el('brainModeModalMsg')
@@ -438,6 +443,7 @@ export function confirmBrainModeSwitch(): void {
     _pendingModeSwitch = null
   }
   // [PATCH MODE-SWITCH] Unlock brain after mode fully applied
+  if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
   w.__brainModeSwitching = false
 }
 
@@ -446,6 +452,7 @@ export function cancelBrainModeSwitch(): void {
   if (modal) modal.style.display = 'none'
   _pendingModeSwitch = null
   // [PATCH MODE-SWITCH] Unlock brain on cancel
+  if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
   w.__brainModeSwitching = false
   // Re-sync radio buttons to current mode
   syncBrainFromState()

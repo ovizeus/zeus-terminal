@@ -845,6 +845,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       w.atLog('warn', '[BLOCK] MARGIN REJECT: need $' + adaptFinalSize.toFixed(2) + ' but demoBalance=$' + w.TP.demoBalance.toFixed(2))
       return
     }
+    if (w.TP.demoPositions.some((p: any) => p.id === pos.id)) { w.atLog('warn', '[DEDUP] Position ' + pos.id + ' already exists'); return }
     w.TP.demoPositions.push(pos)
     w.AT.lastTradeSide = side
     w.AT.lastTradeTs = Date.now()

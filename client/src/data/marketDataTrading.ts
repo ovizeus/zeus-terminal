@@ -175,9 +175,11 @@ function _registerManualOnServer(pos: any): void {
 
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
   if (size > w.TP.demoBalance) { w.toast('Insufficient demo balance', 3000, w._ZI.x); return }
+  if ((w.TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { w.toast('Max 20 demo positions', 3000, w._ZI?.x); return }
   if (orderType === 'MARKET') {
     const fillPrice = w.S.price; const liqPrice = calcLiqPrice(fillPrice, lev, w.TP.demoSide)
     const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
+    if (w.TP.demoPositions.some((p: any) => p.id === pos.id)) return
     w.TP.demoPositions.push(pos); w.TP.demoBalance -= size
     w.updateDemoBalance(); w.renderDemoPositions()
     if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo')
@@ -194,6 +196,8 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
 
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
   if (typeof w.manualLivePlaceOrder !== 'function') { w.toast('Live API not available', 3000, w._ZI.lock); return }
+  if (!w.TP.liveBalance || size > w.TP.liveBalance) { w.toast('Insufficient live balance', 3000, w._ZI?.x); return }
+  if (lev < 1 || lev > 125) { w.toast('Leverage must be 1-125x', 3000, w._ZI?.x); return }
   const refPrice = (orderType === 'MARKET') ? w.S.price : entry; const qty = (size * lev) / refPrice; const binanceSide = (w.TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
   const execBtn = w.el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
   w.manualLivePlaceOrder({ symbol: w.S.symbol, side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: w.S.price }).then(function (result: any) {

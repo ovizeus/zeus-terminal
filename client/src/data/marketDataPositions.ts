@@ -47,6 +47,7 @@ function _fillDemoPendingOrder(ord: any): void {
     dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
+  if (w.TP.demoPositions.some((p: any) => p.id === pos.id)) return
   w.TP.demoPositions.push(pos)
   w.updateDemoBalance(); w.renderDemoPositions(); renderPendingOrders()
   if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo_limit_fill')

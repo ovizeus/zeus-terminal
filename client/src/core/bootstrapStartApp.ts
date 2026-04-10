@@ -131,7 +131,15 @@ export async function startApp(): Promise<void> {
       w.ZState.saveLocal()
       console.log('[sync] Applied — bal: $' + (w.TP.demoBalance || 0).toFixed(2) + ', pos: ' + (w.TP.demoPositions || []).length)
       w.ZState.markSyncReady()
-    }).catch(function () { if (typeof w.AT !== 'undefined' && !w.AT._modeConfirmed) { w.AT._modeConfirmed = true }; w.ZState.markSyncReady() })
+    }).catch(function () {
+      if (typeof w.AT !== 'undefined' && !w.AT._modeConfirmed) { w.AT._modeConfirmed = true }
+      // Fallback: if AT.enabled from localStorage but server unreachable, still start interval
+      if (typeof w.AT !== 'undefined' && w.AT.enabled && !w.AT.killTriggered && !w.AT.interval && typeof w.runAutoTradeCheck === 'function') {
+        w.AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000)
+        console.log('[sync] AT interval started from localStorage fallback')
+      }
+      w.ZState.markSyncReady()
+    })
 
     w.ZState.pullJournalFromServer().then(function (srvJournal: any) {
       if (!srvJournal || !srvJournal.length) return
