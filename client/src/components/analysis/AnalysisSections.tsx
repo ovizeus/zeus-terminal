@@ -692,6 +692,41 @@ export function AnalysisSections() {
       </div>
 
       {/* ===== TICKER WIDGET ===== */}
+      {/* ===== DEVELOPER MODE — TEST HARNESS ===== */}
+      <div className="sec" id="dev-sec" style={{ display: 'none' }}>
+        <div className="slbl" style={{ justifyContent: 'space-between' }}>
+          <span>DEVELOPER MODE — TEST HARNESS</span>
+          <span id="dev-upd" style={{ fontSize: '7px', color: '#aa88ff' }}></span>
+        </div>
+        <div className="dev-content" id="dev-content" dangerouslySetInnerHTML={{ __html:
+          '<div class="dev-section"><div class="dev-title">INJECT EVENTS</div><div class="dev-buttons">'
+          + '<button class="dev-btn" onclick="devInjectSignal(\'LONG\')">LONG SIGNAL</button>'
+          + '<button class="dev-btn" onclick="devInjectSignal(\'SHORT\')">SHORT SIGNAL</button>'
+          + '<button class="dev-btn" onclick="devInjectLiquidation(\'LONG\')">LIQ LONG</button>'
+          + '<button class="dev-btn" onclick="devInjectLiquidation(\'SHORT\')">LIQ SHORT</button>'
+          + '<button class="dev-btn" onclick="devInjectWhale()">FAKE WHALE</button>'
+          + '<button class="dev-btn" onclick="devFeedDisconnect()">FEED DISCONNECT</button>'
+          + '<button class="dev-btn" onclick="devFeedRecover()">FEED RECOVER</button>'
+          + '<button class="dev-btn" onclick="devTriggerKillSwitch()">KILL SWITCH</button>'
+          + '<button class="dev-btn" onclick="devResetProtect()">RESET PROTECT</button>'
+          + '</div></div>'
+          + '<div class="dev-section"><div class="dev-title">EVENT LOG (last 50)</div>'
+          + '<div class="dev-log" id="dev-log"><div class="dev-log-empty">No events yet. Use buttons above to simulate.</div></div>'
+          + '<div style="display:flex;gap:4px;margin-top:4px">'
+          + '<button class="dev-btn small" onclick="devClearLog()">CLEAR LOG</button>'
+          + '<button class="dev-btn small" onclick="devExportLog()">EXPORT CSV</button>'
+          + '</div></div>'
+          + '<div class="dev-section"><div class="dev-title">REPLAY MODE (log-only viewer)</div>'
+          + '<div style="display:flex;gap:4px;align-items:center">'
+          + '<button class="dev-btn small" onclick="devReplayStart()">▶ START</button>'
+          + '<button class="dev-btn small" onclick="devReplayStop()">■ STOP</button>'
+          + '<span style="color:var(--dim);font-size:7px" id="dev-replay-status">Idle</span></div>'
+          + '<div style="margin-top:4px;font-size:7px;color:var(--dim)">'
+          + '<input type="number" id="dev-replay-speed" value="1" min="0.1" max="10" step="0.1" style="width:50px;background:#0a121a;border:1px solid #2a3a4a;color:#aaccff;padding:2px 4px;border-radius:2px;font-family:var(--ff)">× speed</div>'
+          + '</div>'
+        }} />
+      </div>
+
       <div className="tickw">
         <div className="tick" id="ticker">
           <span className="ti">ZeuS Terminal loading...</span>

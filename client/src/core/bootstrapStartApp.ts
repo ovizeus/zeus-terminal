@@ -38,7 +38,7 @@ export async function startApp(): Promise<void> {
   w.initAUB()
   if (typeof w.initARIANOVA === 'function') w.initARIANOVA()
   w.initPMPanel(); w.initARES()
-  ;(function _relocateFlow() { const flow = document.getElementById('flow-panel'); const pm = document.getElementById('pm-strip'); if (flow && pm && pm.parentNode) pm.parentNode.insertBefore(flow, pm) })()
+  // [FIX] _relocateFlow removed — React PanelShell controls flow-panel position
   setTimeout(w.initAriaBrain, 200)
   if (typeof w.initTeacher === 'function') w.initTeacher()
   try { if (localStorage.getItem('zeus_dsl_strip_open') === '1') { w._dslStripOpen = true; const _ds = document.getElementById('dsl-strip'); if (_ds) _ds.classList.add('dsl-strip-open') } } catch (_) { }

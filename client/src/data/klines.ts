@@ -66,7 +66,7 @@ export function calcRSIFromKlines(klines: any[], p = 14) {
 w.calcRSIFromKlines = calcRSIFromKlines
 
 export function detectMACDDir(klines: any[]) {
-  if (!klines || klines.length < 30) return 'neut'
+  if (!klines || klines.length < 35) return 'neut'
   const closes = klines.map((k: any) => k.close)
   const calcEMA = (data: number[], p: number) => { const k = 2 / (p + 1); let e = data[0]; return data.map(v => { e = v * k + e * (1 - k); return e }) }
   const ema12 = calcEMA(closes, 12)
@@ -74,6 +74,7 @@ export function detectMACDDir(klines: any[]) {
   const macd = ema12.map((v, i) => v - ema26[i])
   // [FIX QA-H11] Compute signal EMA on full MACD array (skip first 25 warmup bars)
   const signal = calcEMA(macd.slice(25), 9)
+  if (signal.length < 2) return 'neut'
   const last = macd[macd.length - 1]
   const prev = macd[macd.length - 2]
   const sig = signal[signal.length - 1]

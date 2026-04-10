@@ -126,7 +126,7 @@ export function onLiveLevChange(): void { const sel = w.el('liveLev'); const row
 // ===== LIQUIDATION PRICE =====
 export function calcLiqPrice(entry: any, lev: any, side: string): number | null {
   const e = w._safe.num(entry, 'liq_entry', 0); const l = w._safe.num(lev, 'liq_lev', 0)
-  if (!e || !l || l <= 0) return null; const mm = 0.004
+  if (!e || !l || l <= 0) return null; const mm = 0.025 // Binance baseline maintenance margin 2.5%
   if (side === 'LONG') return e * (1 - 1 / l + mm); else return e * (1 + 1 / l - mm)
 }
 export function updateDemoLiqPrice(): void { const entry = parseFloat(w.el('demoEntry')?.value) || w.S.price; const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, w.TP.demoSide); const e = w.el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + w.fP(liq) : '\u2014' }

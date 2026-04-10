@@ -2447,7 +2447,7 @@ export function detectMarketRegime(klines: any): string {
   // Volume trend
   const avgVolRecent = vols.slice(-10).reduce((a: number, b: number) => a + b, 0) / 10
   const avgVolOld = vols.slice(-30, -10).reduce((a: number, b: number) => a + b, 0) / 20
-  const volRatio = avgVolRecent / avgVolOld
+  const volRatio = avgVolOld > 0 ? avgVolRecent / avgVolOld : 1
 
   let regime = 'unknown'
   let confidence = 0

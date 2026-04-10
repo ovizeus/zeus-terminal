@@ -1030,6 +1030,8 @@ export const ZState = (() => {
   function pullAndMerge(): Promise<boolean> {
     if (_saving) { console.log('[sync] pullAndMerge deferred — save in progress'); return Promise.resolve(false) }
     _merging = true
+    // 15s safety timeout — prevents _merging lock if server hangs
+    const _mergeTimeout = setTimeout(function () { _merging = false }, 15000)
     return pullFromServer().then(function (serverSnap: any) {
       if (!serverSnap || !serverSnap.ts) return false
       const TP = w.TP
@@ -1136,7 +1138,7 @@ export const ZState = (() => {
       }
       return changed
     }).catch(function (e: any) { console.warn('[sync] pullAndMerge failed:', e); return false })
-      .finally(function () { _merging = false })
+      .finally(function () { clearTimeout(_mergeTimeout); _merging = false })
   }
 
   function syncBeacon() {

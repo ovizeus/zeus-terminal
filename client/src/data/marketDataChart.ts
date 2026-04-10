@@ -92,9 +92,10 @@ export async function fetchKlines(tf: any): Promise<void> {
     w.S.wsK = w.WS.open('kline', `wss://fstream.binance.com/ws/${symLow}@kline_${tf}`, {
       onmessage: (e: any) => {
         if (w.__wsGen !== _klineGen) return
-        const j = JSON.parse(e.data); const k = j.k
+        let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
+        const k = j.k; if (!k) return
         const bar = { time: Math.floor(k.t / 1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v }
-        const last = w.S.klines[w.S.klines.length - 1]
+        const last = w.S.klines?.[w.S.klines.length - 1]
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
         if (typeof w._resetKlineWatchdog === 'function') w._resetKlineWatchdog()

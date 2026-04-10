@@ -10,7 +10,7 @@ export function calcFLOW(): void {
 
   // VAC
   if (buf.length >= 15) {
-    const v1 = (buf[buf.length - 1] - buf[buf.length - 2]) / buf[buf.length - 2] * 100
+    const v1 = buf[buf.length - 2] ? (buf[buf.length - 1] - buf[buf.length - 2]) / buf[buf.length - 2] * 100 : 0
     c._qmVacVel = v1; c._qmVacDir = v1 > 0.015 ? 'UP' : v1 < -0.015 ? 'DOWN' : 'FLAT'
     c._qmVacPct = v1; c._qmVacTs = c._qmVacDir !== 'FLAT' ? now : (c._qmVacTs || now)
   }
@@ -28,8 +28,8 @@ export function calcFLOW(): void {
   // FLIP
   if (buf.length >= 30) {
     const prv = buf.slice(-30, -15), cur = buf.slice(-15)
-    const pd = (prv[prv.length - 1] - prv[0]) / prv[0] * 100
-    const cd2 = (cur[cur.length - 1] - cur[0]) / cur[0] * 100
+    const pd = prv[0] ? (prv[prv.length - 1] - prv[0]) / prv[0] * 100 : 0
+    const cd2 = cur[0] ? (cur[cur.length - 1] - cur[0]) / cur[0] * 100 : 0
     c._qmFlipPrv = pd; c._qmFlipCur = cd2
     c._qmFlipZ = pd * cd2 < 0 ? +Math.abs(pd - cd2).toFixed(3) : 0
     c._qmFlipActive = c._qmFlipZ > 0.05; c._qmFlipTs = c._qmFlipActive ? now : (c._qmFlipTs || now)
@@ -39,10 +39,11 @@ export function calcFLOW(): void {
   c._qmMmtrapHist = c._qmMmtrapHist || []
   if (buf.length >= 30) {
     const win = buf.slice(-30)
-    const hi = Math.max(...win.slice(0, -3)), lo = Math.min(...win.slice(0, -3))
+    const winSlice = win.slice(0, -3); if (winSlice.length < 1) return
+    const hi = Math.max(...winSlice), lo = Math.min(...winSlice)
     const lp = buf[buf.length - 1], pp = buf[buf.length - 4]
-    if (pp > hi * (1 + 0.0002) && lp < hi) c._qmMmtrapHist.push({ type: 'SHORT', pct: ((lp - pp) / pp * 100), time: now })
-    if (pp < lo * (1 - 0.0002) && lp > lo) c._qmMmtrapHist.push({ type: 'LONG', pct: ((lp - pp) / pp * 100), time: now })
+    if (pp && pp > hi * (1 + 0.0002) && lp < hi) c._qmMmtrapHist.push({ type: 'SHORT', pct: ((lp - pp) / pp * 100), time: now })
+    if (pp && pp < lo * (1 - 0.0002) && lp > lo) c._qmMmtrapHist.push({ type: 'LONG', pct: ((lp - pp) / pp * 100), time: now })
     c._qmMmtrapHist = c._qmMmtrapHist.filter((t: any) => now - t.time < 300000)
     if (c._qmMmtrapHist.length > 10) c._qmMmtrapHist.shift()
   }

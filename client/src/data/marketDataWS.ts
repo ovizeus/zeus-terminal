@@ -27,7 +27,7 @@ export function connectBNB(): void {
     onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; w.updConn() },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bnbGen) return
-      const j = JSON.parse(e.data)
+      let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
       if (j.stream) {
         const d = j.data; const st = j.stream
         if (st.includes('markPrice')) {
@@ -70,7 +70,7 @@ export function connectBYB(): void {
     onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror') },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bybGen) return
-      const j = JSON.parse(e.data)
+      let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
       if (j.topic && j.topic.includes('liquidation') && j.data) {
         const d = j.data; const o = { s: d.symbol, S: d.side === 'Buy' ? 'SELL' : 'BUY', q: +d.size, p: +d.price }
         w.S.liqMetrics.byb.msgCount++; procLiq(o, 'byb')

@@ -7,14 +7,14 @@ const w = window as any
 export function calcConfluenceScore(): void {
   // [PATCH5 BRAIN-OFF] No confluence scoring when AT is disabled
   // [FIX R9] Reset scores to neutral on AT disable — prevents stale cache on re-enable
-  if (!w.AT.enabled) {
+  if (!w.AT || !w.AT.enabled) {
     if (typeof w.BM !== 'undefined') w.BM.confluenceScore = 50
     w.CORE_STATE.score = 50
     w.CORE_STATE.lastUpdate = Date.now()
     return
   }
   // FIX: ruleaza mereu, nu mai returneaza devreme
-  const { bullCount = 0, bearCount = 0 } = w.S.signalData || {}
+  const { bullCount = 0, bearCount = 0 } = w.S?.signalData || {}
   const total = bullCount + bearCount
   const rsiV = (w.S.rsi && w.S.rsi['5m']) || 50
   const rsiScore = rsiV > 70 ? 80 : rsiV < 30 ? 80 : rsiV > 55 ? 60 : rsiV < 45 ? 60 : 50
