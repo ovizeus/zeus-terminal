@@ -78,7 +78,7 @@ body {
 /* ── Fixed top wrapper (header + status bar) ── */
 .zeus-fixed-top {
   position: fixed;
-  top: env(safe-area-inset-top, 0px);
+  top: 0;
   left: 0;
   right: 0;
   z-index: 200;
@@ -606,7 +606,7 @@ body {
   flex-direction: column;
   gap: 0;
   padding: 0;
-  padding-top: calc(126px + env(safe-area-inset-top, 0px)); /* header + status bar + safe area */
+  padding-top: 126px; /* ~94px header + ~26px status bar + ~6px breathing room */
   min-height: 100vh;
 }
 .zr-panel {
@@ -1388,7 +1388,7 @@ body {
     border-radius: 5px;
   }
   .sbtn svg { width: 13px; height: 13px; }
-  .zr-panels { padding-top: calc(104px + env(safe-area-inset-top, 0px)); }
+  .zr-panels { padding-top: 104px; }
 }
 @media (max-width: 600px) {
   .zr-panel__body { padding: 6px; font-size: 11px; }
