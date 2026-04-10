@@ -102,12 +102,14 @@ function createSessionAuth(jwtSecret) {
                 } catch (_) {}
             }
 
-            // Inactivity timeout check
+            // Inactivity timeout check (in-memory, resets on server restart)
             if (req.user.id) {
                 const last = _activity.get(req.user.id);
                 if (last && (Date.now() - last) > INACTIVITY_TIMEOUT_MS) {
                     _activity.delete(req.user.id);
                     res.clearCookie('zeus_token', { path: '/' });
+                    const db = require('../services/database');
+                    try { db.auditLog(req.user.id, 'INACTIVITY_TIMEOUT', { inactiveMs: Date.now() - last }, req.ip); } catch (_) {}
                     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired due to inactivity' });
                     return res.redirect('/login.html');
                 }

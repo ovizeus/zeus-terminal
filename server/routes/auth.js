@@ -34,7 +34,7 @@ const LOGIN_MAX = 10; // max attempts per window
 // ─── Verify-Code Rate Limit (per-IP) ───
 const verifyAttempts = new Map(); // ip → { count, resetAt }
 const VERIFY_WINDOW = 15 * 60 * 1000;
-const VERIFY_MAX = 10;
+const VERIFY_MAX = 3; // Reduced from 10 — 6-digit code + 3 attempts is sufficient
 
 // ─── PIN Rate Limit (per-user) ───
 const pinAttempts = new Map(); // userId → { count, resetAt }
