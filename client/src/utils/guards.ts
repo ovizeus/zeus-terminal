@@ -387,9 +387,7 @@ window.addEventListener('error', (e) => {
   }
 })
 
-window.addEventListener('unhandledrejection', (e) => {
-  console.warn('[ZEUS PROMISE]', e.reason)
-})
+// unhandledrejection: single handler at line 330 (error reporting IIFE) — no duplicate needed
 
 // ── INIT SAFETY ENGINE ───────────────────────────────────────
 export function initSafetyEngine(): void {

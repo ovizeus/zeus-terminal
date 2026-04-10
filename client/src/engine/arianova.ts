@@ -1686,7 +1686,8 @@ if (!w._ARIA_NOVA_LOADED) {
     }
     function throttledLog(payload: any) { const t = now(); if (t - ST.lastLogTs < CFG.logThrottleMs) return; ST.lastLogTs = t; try { console.log("[WVE_v2]", payload) } catch (_) { } }
 
-    setInterval(function () { try { const core = updateCoreState(); const out = evaluateDecision(core); throttledLog({ decision: out.decision, dir: out.dir, score: ST.lastScore, conf: ST.lastConf, valid: ST.lastValid, reasons: out.reason }) } catch (_) { } }, 2000)
+    if (w.__wveInterval) clearInterval(w.__wveInterval)
+    w.__wveInterval = setInterval(function () { try { const core = updateCoreState(); const out = evaluateDecision(core); throttledLog({ decision: out.decision, dir: out.dir, score: ST.lastScore, conf: ST.lastConf, valid: ST.lastValid, reasons: out.reason }) } catch (_) { } }, 2000)
 
     const fnName = "placeAutoTrade", orig = w[fnName]
     if (typeof orig === "function") {

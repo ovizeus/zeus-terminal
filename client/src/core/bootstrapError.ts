@@ -70,8 +70,9 @@ function _showUpdateBanner(data: any): void {
       if (typeof w.updateModeBar === 'function') w.updateModeBar()
     } catch (_) { }
   }
-  if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', function () { setInterval(_updateStatusBar, 2000); _updateStatusBar() }) }
-  else { setInterval(_updateStatusBar, 2000); _updateStatusBar() }
+  function _startStatusBar() { if (w.__statusBarInterval) clearInterval(w.__statusBarInterval); w.__statusBarInterval = setInterval(_updateStatusBar, 2000); _updateStatusBar() }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _startStatusBar)
+  else _startStatusBar()
 })()
 
 // ===== DECISION LOG PANEL =====
