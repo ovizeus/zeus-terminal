@@ -62,3 +62,33 @@ export function getOI(): { oi: number | null; oiPrev: number | null; oiTs: numbe
   const w = window as any
   return { oi: w.S?.oi ?? null, oiPrev: w.S?.oiPrev ?? null, oiTs: w.S?.oiTs ?? null }
 }
+
+// ── Added in 8B-rest ──
+
+/** Timezone — TEMP bridge getter
+ *  TODO: migrate to settingsStore in 8D */
+export function getTimezone(): string {
+  return (window as any).S?.tz || 'Europe/Bucharest'
+}
+
+/** Performance tracker data — TEMP bridge getter (read-only snapshot)
+ *  Returns shallow copy of PERF object. Writes remain on window.PERF.
+ *  TODO: migrate to dedicated perfStore in 8D */
+export function getPerf(): Record<string, any> {
+  const w = window as any
+  if (!w.PERF) return {}
+  const snap: Record<string, any> = {}
+  for (const k of Object.keys(w.PERF)) {
+    const p = w.PERF[k]
+    snap[k] = { wins: p.wins || 0, losses: p.losses || 0, weight: p.weight || 1, pnlSum: p.pnlSum || 0, feeSum: p.feeSum || 0, winPnl: p.winPnl || 0, lossPnl: p.lossPnl || 0 }
+  }
+  return snap
+}
+
+/** Journal entries — TEMP bridge getter (read-only copy)
+ *  TODO: migrate to journalStore in 8D */
+export function getJournal(): any[] {
+  const w = window as any
+  const j = w.TP?.journal
+  return Array.isArray(j) ? [...j] : []
+}

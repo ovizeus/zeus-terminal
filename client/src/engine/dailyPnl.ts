@@ -1,16 +1,18 @@
 /**
  * Zeus Terminal — Daily PnL aggregation (ported from public/js/analytics/dailyPnl.js)
- * Reads/writes DAILY_STATS global (defined in config.js, still bridge-loaded)
+ * [8B-rest] READS migrated to stateAccessors. WRITES remain on window.* (bridge).
  */
 
-const w = window as Record<string, any>
+import { getTimezone, getJournal } from '../services/stateAccessors'
+
+const w = window as Record<string, any> // kept for WRITES (w.DAILY_STATS)
 const _DAILY_PNL_KEY = 'zeus_daily_pnl_v1'
 const _DAILY_MAX_DAYS = 90
 
 function _todayKey(tsOrDate?: number | Date): string {
   let d = tsOrDate instanceof Date ? tsOrDate : new Date(tsOrDate || Date.now())
   if (isNaN(d.getTime())) d = new Date()
-  return new Intl.DateTimeFormat('en-CA', { timeZone: w.S?.tz || 'Europe/Bucharest' }).format(d)
+  return new Intl.DateTimeFormat('en-CA', { timeZone: getTimezone() }).format(d)
 }
 
 function _updateDrawdown(ds: any): void {
@@ -47,14 +49,14 @@ export function recordDailyClose(trade: any): void {
 export function rebuildDailyFromJournal(): void {
   const ds = w.DAILY_STATS; if (!ds) return
   if (ds.days && Object.keys(ds.days).length > 0) { _reconcileJournalIntoDailyStats(ds); return }
-  const journal = (w.TP && Array.isArray(w.TP.journal)) ? w.TP.journal : []
+  const journal = getJournal()
   ds.days = {}; ds.peak = 0; ds.currentDD = 0; ds.maxDD = 0; ds.cumPnl = 0
   journal.filter((t: any) => t.journalEvent === 'CLOSE' && t.exit !== null && Number.isFinite(t.pnl)).reverse().forEach((t: any) => _addTradeToDailyStats(ds, t))
   _pruneOldDays(ds); saveDailyPnl()
 }
 
 function _reconcileJournalIntoDailyStats(ds: any): void {
-  const journal = (w.TP && Array.isArray(w.TP.journal)) ? w.TP.journal : []
+  const journal = getJournal()
   const closed = journal.filter((t: any) => t.journalEvent === 'CLOSE' && t.exit !== null && Number.isFinite(t.pnl))
   const journalCounts: Record<string, number> = {}
   closed.forEach((t: any) => { const dk = _todayKey(t.closedAt || t.time || Date.now()); journalCounts[dk] = (journalCounts[dk] || 0) + 1 })

@@ -1,14 +1,19 @@
 /**
  * Zeus Terminal — PERF persistence + expectancy (ported from public/js/analytics/perfStore.js)
- * Reads/writes PERF global (defined in config.js, still bridge-loaded)
+ * [8B-rest] READ functions use getPerf()/getJournal() accessors.
+ *          WRITE functions remain on window.PERF (bridge).
  */
 
-const w = window as Record<string, any>
+import { getPerf, getJournal } from '../services/stateAccessors'
+
+const w = window as Record<string, any> // kept for WRITES only
+
 const _PERF_STORAGE_KEY = 'zeus_perf_v1'
 
 export function savePerfToStorage(): void {
   try {
     const payload: Record<string, any> = {}
+    // WRITE path: reads w.PERF directly (needs live mutable ref for save)
     Object.keys(w.PERF).forEach(k => {
       const p = w.PERF[k]
       payload[k] = { wins: p.wins, losses: p.losses, weight: p.weight, pnlSum: p.pnlSum || 0, feeSum: p.feeSum || 0, winPnl: p.winPnl || 0, lossPnl: p.lossPnl || 0 }
@@ -23,6 +28,7 @@ export function loadPerfFromStorage(): void {
   try {
     const raw = localStorage.getItem(_PERF_STORAGE_KEY); if (!raw) return
     const data = JSON.parse(raw); if (!data || typeof data !== 'object') return
+    // WRITE path: writes into w.PERF
     Object.keys(data).forEach(k => {
       if (!w.PERF[k]) return
       const d = data[k]
@@ -34,6 +40,7 @@ export function loadPerfFromStorage(): void {
 }
 
 export function recordIndicatorPnl(indicatorId: string, pnl: number, fees: number): void {
+  // WRITE path: mutates w.PERF[id] directly
   const p = w.PERF[indicatorId]; if (!p) return
   const pnlVal = Number.isFinite(pnl) ? pnl : 0
   const feeVal = Number.isFinite(fees) ? fees : 0
@@ -43,7 +50,9 @@ export function recordIndicatorPnl(indicatorId: string, pnl: number, fees: numbe
 }
 
 export function calcExpectancy(indicatorId: string): number {
-  const p = w.PERF[indicatorId]; if (!p) return 0
+  // READ path: uses accessor snapshot
+  const perf = getPerf()
+  const p = perf[indicatorId]; if (!p) return 0
   const tot = p.wins + p.losses; if (tot < 1) return 0
   const wr = p.wins / tot
   const avgWin = p.wins > 0 ? (p.winPnl || 0) / p.wins : 0
@@ -52,15 +61,18 @@ export function calcExpectancy(indicatorId: string): number {
 }
 
 export function calcGlobalExpectancy(): number {
+  // READ path: uses accessor snapshot
+  const perf = getPerf()
   let totalWins = 0, totalLosses = 0, totalWinPnl = 0, totalLossPnl = 0
-  Object.values(w.PERF).forEach((p: any) => { totalWins += p.wins || 0; totalLosses += p.losses || 0; totalWinPnl += p.winPnl || 0; totalLossPnl += p.lossPnl || 0 })
+  Object.values(perf).forEach((p: any) => { totalWins += p.wins || 0; totalLosses += p.losses || 0; totalWinPnl += p.winPnl || 0; totalLossPnl += p.lossPnl || 0 })
   const tot = totalWins + totalLosses; if (tot < 1) return 0
   const wr = totalWins / tot
   return (wr * (totalWins > 0 ? totalWinPnl / totalWins : 0)) - ((1 - wr) * (totalLosses > 0 ? totalLossPnl / totalLosses : 0))
 }
 
 export function calcExpectancyByProfile(profile: string): { expectancy: number; trades: number; wr: number } {
-  const journal = (w.TP && Array.isArray(w.TP.journal)) ? w.TP.journal : []
+  // READ path: uses accessor snapshot
+  const journal = getJournal()
   const trades = journal.filter((t: any) => t.journalEvent === 'CLOSE' && t.exit !== null && Number.isFinite(t.pnl) && (t.profile || 'fast') === profile)
   if (!trades.length) return { expectancy: 0, trades: 0, wr: 0 }
   const wins = trades.filter((t: any) => t.pnl >= 0)
@@ -72,6 +84,7 @@ export function calcExpectancyByProfile(profile: string): { expectancy: number; 
 }
 
 export function resetPerfStore(): void {
+  // WRITE path: resets w.PERF directly
   Object.keys(w.PERF).forEach(k => { w.PERF[k].wins = 0; w.PERF[k].losses = 0; w.PERF[k].weight = 1.0; w.PERF[k].pnlSum = 0; w.PERF[k].feeSum = 0; w.PERF[k].winPnl = 0; w.PERF[k].lossPnl = 0 })
   savePerfToStorage()
   if (typeof w.renderPerfTracker === 'function') w.renderPerfTracker()

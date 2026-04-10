@@ -1,8 +1,11 @@
 // Zeus — engine/signals.ts
 // Ported 1:1 from public/js/brain/signals.js (Phase 5A)
 // Signal rendering
+// [8B-rest] READS migrated to stateAccessors.
 
-const w = window as any
+import { getTimezone } from '../services/stateAccessors'
+
+const w = window as any // kept for w.runBrainUpdate, w.brainThink calls
 
 export function renderSignals(signals: any[], bullCount: number, bearCount: number): void {
   const grid = document.getElementById('sigGrid')
@@ -10,7 +13,7 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
   const timeEl = document.getElementById('sigScanTime')
   if (!grid) return
 
-  const now = new Date().toLocaleTimeString('ro-RO', { timeZone: w.S?.tz || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  const now = new Date().toLocaleTimeString('ro-RO', { timeZone: getTimezone(), hour: '2-digit', minute: '2-digit', second: '2-digit' })
   if (timeEl) timeEl.textContent = 'UPD ' + now
 
   // Mega signal
