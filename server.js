@@ -889,7 +889,15 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
-// ─── React app at /app/ ───
+// ─── Legacy old app at /legacy/ (backup — can be removed later) ───
+app.get('/legacy', (req, res) => res.redirect('/legacy/'));
+app.get('/legacy/{*rest}', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'legacy', 'index.html'), (err) => {
+    if (err) res.status(500).send('Server error');
+  });
+});
+
+// ─── React app at /app/ (kept for backwards compat) ───
 app.get('/app', (req, res) => res.redirect('/app/'));
 app.get('/app/{*rest}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'app', 'index.html'), (err) => {
@@ -897,9 +905,9 @@ app.get('/app/{*rest}', (req, res) => {
   });
 });
 
-// ─── Fallback to index.html (old app) ───
+// ─── Fallback: React app is now the main app ───
 app.get('/{*splat}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'), (err) => {
+  res.sendFile(path.join(__dirname, 'public', 'app', 'index.html'), (err) => {
     if (err) res.status(500).send('Server error');
   });
 });

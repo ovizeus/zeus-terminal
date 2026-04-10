@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zeus Terminal — Trade Journal</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/journal.css">
+</head>
+<body>
+<div class="j-page" id="journalApp">
+
+  <!-- Header -->
+  <div class="j-header">
+    <h1>Trade Journal</h1>
+    <div style="display:flex;gap:8px">
+      <button class="j-btn--dim j-btn" onclick="exportCSV()">Export CSV</button>
+    </div>
+  </div>
+
+  <!-- Mode Tabs -->
+  <div class="j-tabs">
+    <button class="j-tab active" data-mode="all" onclick="setMode('all')">All</button>
+    <button class="j-tab" data-mode="demo" onclick="setMode('demo')">Demo</button>
+    <button class="j-tab" data-mode="live" onclick="setMode('live')">Live</button>
+  </div>
+
+  <!-- Stats -->
+  <div class="j-stats" id="statsGrid">
+    <div class="j-stat"><div class="j-stat-label">Total Trades</div><div class="j-stat-value" id="sTrades">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Win Rate</div><div class="j-stat-value" id="sWinRate">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Total PnL</div><div class="j-stat-value" id="sPnl">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Avg PnL</div><div class="j-stat-value" id="sAvgPnl">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Best Trade</div><div class="j-stat-value" id="sBest">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Worst Trade</div><div class="j-stat-value" id="sWorst">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Avg Hold Time</div><div class="j-stat-value" id="sHold">—</div></div>
+    <div class="j-stat"><div class="j-stat-label">Volume</div><div class="j-stat-value" id="sVolume">—</div></div>
+  </div>
+
+  <!-- PnL Chart -->
+  <div class="j-chart-wrap">
+    <div class="j-chart-title">Cumulative PnL</div>
+    <canvas id="pnlChart" class="j-chart"></canvas>
+  </div>
+
+  <!-- Filters -->
+  <div class="j-filters">
+    <select id="fSide" onchange="applyFilters()">
+      <option value="">All Sides</option>
+      <option value="LONG">Long</option>
+      <option value="SHORT">Short</option>
+    </select>
+    <input type="date" id="fFrom" onchange="applyFilters()" title="From date">
+    <input type="date" id="fTo" onchange="applyFilters()" title="To date">
+    <select id="fReason" onchange="applyFilters()">
+      <option value="">All Exit Reasons</option>
+      <option value="HIT_SL">Hit SL</option>
+      <option value="HIT_TP">Hit TP</option>
+      <option value="DSL_PL">DSL Profit Lock</option>
+      <option value="DSL_TTP">DSL Trailing TP</option>
+      <option value="MANUAL_CLIENT">Manual</option>
+    </select>
+    <button class="j-btn--dim j-btn" onclick="clearFilters()">Clear</button>
+  </div>
+
+  <!-- Table -->
+  <div class="j-table-wrap">
+    <table class="j-table">
+      <thead>
+        <tr>
+          <th>#</th><th>Date</th><th>Symbol</th><th>Side</th><th>Mode</th>
+          <th>Entry</th><th>Exit</th><th>Size</th><th>Lev</th>
+          <th>PnL</th><th>Exit Reason</th><th>Hold Time</th><th>SL</th><th>TP</th><th>Notes</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+  <div id="emptyState" class="j-empty" style="display:none">No trades found</div>
+
+  <!-- Pagination -->
+  <div class="j-pagination" id="pagination"></div>
+
+</div>
+
+<!-- Fixed bottom bar (mobile) -->
+<a href="/" class="j-back-fixed">BACK TO TERMINAL</a>
+
+<script src="/js/journal.js"></script>
+</body>
+</html>
