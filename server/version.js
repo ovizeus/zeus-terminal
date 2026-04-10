@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.6.0',
-    build: 25,
-    date: '2026-04-03',
-    changelog: 'Theme system: 3 themes (Obsidian/Onyx/Ivory), 400+ color migrations, theme engine + selector'
+    build: 26,
+    date: '2026-04-10',
+    changelog: 'Fix chart controls: toggleFS delegates to old JS, T&S calls window.toggleTimeSales, Exposure calls _fetchExposure'
 };

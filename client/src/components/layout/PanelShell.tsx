@@ -134,7 +134,7 @@ export function PanelShell() {
         <WatchlistBar />
 
         {/* ── Chart section — 1:1 from original #csec .chart-section ── */}
-        <section className="zr-panel zr-panel--chart" data-panel="chart">
+        <section className="zr-panel zr-panel--chart chart-section" id="csec" data-panel="chart">
           <ErrorBoundary><ChartControls /></ErrorBoundary>
           <div id="mc" className="zr-panel__body zr-panel__body--chart">
             <ErrorBoundary><TradingChart /></ErrorBoundary>

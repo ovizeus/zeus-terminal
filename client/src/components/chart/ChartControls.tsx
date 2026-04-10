@@ -147,12 +147,19 @@ export function ChartControls() {
     patch({ symbol: val })
   }
 
-  // Fullscreen — toggle fsm class on chart section (1:1 with toggleFS in marketData.js)
+  // Fullscreen — delegate to old JS toggleFS (handles chart canvas resize too)
   function toggleFS() {
-    const sec = document.querySelector('.zr-panel--chart')
-    if (!sec) return
-    const isFull = sec.classList.toggle('fsm')
-    setFsMode(isFull)
+    const w = window as any
+    if (typeof w.toggleFS === 'function') {
+      w.toggleFS()
+      const sec = document.getElementById('csec')
+      setFsMode(sec ? sec.classList.contains('fsm') : false)
+    } else {
+      const sec = document.querySelector('.zr-panel--chart')
+      if (!sec) return
+      const isFull = sec.classList.toggle('fsm')
+      setFsMode(isFull)
+    }
   }
 
   // Session toggles — delegate to old JS toggleSession(sess, btn)
@@ -177,10 +184,15 @@ export function ChartControls() {
     setVwapOn(v => !v)
   }
 
-  // T&S toggle
+  // T&S toggle — delegate to old JS (starts trade stream + renders tape)
   function toggleTimeSales() {
-    const wrap = document.getElementById('ts-wrap')
-    if (wrap) wrap.style.display = tsOn ? 'none' : 'block'
+    const w = window as any
+    if (typeof w.toggleTimeSales === 'function') {
+      w.toggleTimeSales()
+    } else {
+      const wrap = document.getElementById('ts-wrap')
+      if (wrap) wrap.style.display = tsOn ? 'none' : 'block'
+    }
     setTsOn(t => !t)
   }
 
@@ -249,7 +261,7 @@ export function ChartControls() {
               </optgroup>
             ))}
           </select>
-          <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => openModal('exposure')}>EXP</button>
+          <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => { openModal('exposure'); (window as any)._fetchExposure?.() }}>EXP</button>
         </div>
 
         {/* Exposure inline panel (hidden by default) */}
