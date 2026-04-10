@@ -2,60 +2,153 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 2804-3191 (Chunk F)
 // Brain Vision (V2) + Brain Dashboard (Reflection Engine) — both IIFEs with polling
 
-// ===== BRAIN VISION V2 =====
+// ===== BRAIN VISION V2 — LOCAL REAL-TIME (reads from window.BM/BRAIN/S/AT) =====
 ;(function () {
+  const w = window as any
   let _bvTimer: any = null
-  let _bvData: any = null
 
-  function _bvColor(dir: any) { if (dir === 'bull' || dir === 'up' || dir === 'LONG' || dir === 'bullish') return 'var(--grn-bright)'; if (dir === 'bear' || dir === 'down' || dir === 'SHORT' || dir === 'bearish') return 'var(--red)'; return 'rgba(255,255,255,0.35)' }
-  function _bvArrow(dir: any) { if (dir === 'bull' || dir === 'up' || dir === 'LONG') return '\u2191'; if (dir === 'bear' || dir === 'down' || dir === 'SHORT') return '\u2193'; return '\u2194' }
-  function _bvDot(dir: any) { return '<span style="color:' + _bvColor(dir) + '">\u25CF</span>' }
-  function _bvDelta(v: any) { if (!v && v !== 0) return '\u2014'; const sign = v >= 0 ? '+' : ''; const color = v > 0 ? 'var(--grn-bright)' : v < 0 ? 'var(--red)' : 'rgba(255,255,255,0.35)'; return '<span style="color:' + color + '">' + sign + (v >= 1000 || v <= -1000 ? (v / 1000).toFixed(1) + 'K' : v) + '</span>' }
+  function _c(dir: any) { return dir === 'bull' || dir === 'up' || dir === 'LONG' ? '#00ff88' : dir === 'bear' || dir === 'down' || dir === 'SHORT' ? '#ff3355' : '#556677' }
+  function _dot(status: any) { return status === 'ok' ? '<span style="color:#00ff88">\u25CF</span>' : status === 'fail' ? '<span style="color:#ff3355">\u25CF</span>' : '<span style="color:#f0c040">\u25CF</span>' }
+  function _badge(text: string, color: string, bg?: string) { return '<span style="background:' + (bg || color + '22') + ';color:' + color + ';font-size:8px;padding:1px 5px;border-radius:2px;letter-spacing:1px;font-weight:600">' + text + '</span>' }
+  function _row(label: string, value: string) { return '<div style="padding:1px 0"><span style="color:#556677;width:72px;display:inline-block;font-weight:600;font-size:10px">' + label + '</span>' + value + '</div>' }
 
-  function _bvRender() {
-    const body = document.getElementById('brainVisionBody'); const cycleEl = document.getElementById('brainVisionCycle')
-    if (!body || !_bvData) return; if (cycleEl) cycleEl.textContent = 'C' + (_bvData.cycle || 0)
-    const syms = _bvData.symbols; if (!syms || Object.keys(syms).length === 0) { body.innerHTML = '<div style="color:var(--dim);padding:4px 0">Waiting for data...</div>'; return }
-    let html = ''
-    for (const sym in syms) {
-      const d = syms[sym]; const short = sym.replace('USDT', '')
-      html += '<div style="border-top:1px solid rgba(120,80,220,0.1);padding:5px 0 2px;margin-top:3px"><span style="color:#aa88ff;font-weight:bold;font-size:9px;letter-spacing:1px">' + short + '</span> <span style="color:var(--dim);font-size:7px">$' + (d.price || 0).toLocaleString() + '</span> <span style="background:rgba(120,80,220,0.15);color:#cc88ff;font-size:7px;padding:1px 4px;border-radius:2px;letter-spacing:1px">' + (d.regime || '?') + '</span></div>'
-      let mtfHtml = ''; const tfOrder = ['4h', '1h', '15m', '5m']; for (let i = 0; i < tfOrder.length; i++) { const tf = tfOrder[i]; const m = d.mtf[tf]; if (!m) continue; mtfHtml += '<span style="margin-right:5px">' + tf + ':' + _bvDot(m.st) + '</span>' }
-      if (mtfHtml) html += '<div style="padding:1px 0;color:rgba(255,255,255,0.5)"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">MTF</span>' + mtfHtml + '</div>'
-      const structColor = _bvColor(d.structure.trend); let structLabel = d.structure.trend || 'none'; if (d.structure.choch) structLabel = 'CHoCH ' + _bvArrow(d.structure.choch); else if (d.structure.bos) structLabel = 'BOS ' + _bvArrow(d.structure.bos)
-      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">STRUCT</span><span style="color:' + structColor + '">' + structLabel + '</span> <span style="color:var(--dim)">(' + d.structure.score + '%)</span></div>'
-      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">FLOW</span>CVD:' + _bvDelta(d.flow.delta5m); if (d.flow.poc) html += ' <span style="color:var(--dim)">POC:$' + d.flow.poc.toLocaleString() + '</span>'; if (d.flow.absorption > 30) html += ' <span style="color:#ffaa00">ABS:' + d.flow.absorption + '%</span>'; html += '</div>'
-      const sentColor = d.sentiment.score > 15 ? '#00ff88' : d.sentiment.score < -15 ? '#ff4466' : 'rgba(255,255,255,0.35)'; html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">SENT</span><span style="color:' + sentColor + '">' + (d.sentiment.score > 0 ? '+' : '') + d.sentiment.score + '</span> <span style="color:var(--dim)">crowd:' + (d.sentiment.crowd || '?') + ' fund:' + (d.sentiment.funding || '?') + '</span></div>'
-      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">LIQ</span>'; if (d.liquidity.above) html += '<span style="color:#ff4466">\u2191$' + d.liquidity.above.toLocaleString() + '</span> '; if (d.liquidity.below) html += '<span style="color:#00ff88">\u2193$' + d.liquidity.below.toLocaleString() + '</span> '; html += '<span style="color:var(--dim)">' + d.liquidity.zones + 'z</span>'; if (d.liquidity.grabRisk > 30) html += ' <span style="color:#ffaa00">GRAB:' + d.liquidity.grabRisk + '%</span>'; html += '</div>'
-      html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">PARAMS</span><span style="color:rgba(255,255,255,0.45)">conf\u2265' + d.regimeParams.confMin + ' SL\u00D7' + d.regimeParams.slMult + ' RR\u2265' + d.regimeParams.rrMin + ' DSL:' + d.regimeParams.dsl + ' size:' + (d.regimeParams.sizeScale * 100) + '%</span></div>'
-      if (d.knn) { const knnColor = d.knn.winRate >= 60 ? '#00ff88' : d.knn.winRate <= 40 ? '#ff4466' : '#ffaa00'; html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">KNN</span><span style="color:' + knnColor + '">' + d.knn.winRate + '% WIN</span> <span style="color:var(--dim)">dir:' + (d.knn.dir || '?') + ' sim:' + (d.knn.similarity || '?') + '% ' + d.knn.patterns + ' patterns</span></div>' }
-      if (d.journal) { const jColor = d.journal.winRate >= 50 ? '#00ff88' : '#ff4466'; html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">LEARN</span><span style="color:' + jColor + '">WR:' + d.journal.winRate + '%</span> <span style="color:var(--dim)">' + d.journal.trades + ' trades</span>'; if (d.journal.bestRegime) html += ' <span style="color:#00ff88">best:' + d.journal.bestRegime + '</span>'; if (d.journal.worstRegime) html += ' <span style="color:#ff4466">avoid:' + d.journal.worstRegime + '</span>'; html += '</div>' }
-      if (d.volatility && d.volatility.score > 10) { const vol = d.volatility; const volCol = vol.level === 'EXTREME' ? '#ff2244' : vol.level === 'HIGH' ? '#ff6644' : vol.level === 'ELEVATED' ? '#ffaa00' : '#668899'; html += '<div style="padding:1px 0"><span style="color:' + volCol + ';width:65px;display:inline-block;font-weight:600">VOL</span><span style="color:' + volCol + '">' + vol.level + '</span> <span style="color:var(--dim)">ATR:P' + (vol.atrPct || 50) + ' SL\u00D7' + (vol.slMult || 1) + '</span></div>' }
-      if (d.regimeTransition && d.regimeTransition.transitioning) { const rt = d.regimeTransition; html += '<div style="padding:1px 0"><span style="color:#ffaa00;width:65px;display:inline-block;font-weight:600">\u26A1 SHIFT</span><span style="color:#ffaa00">' + rt.from + ' \u2192 ' + rt.to + '</span></div>' }
-      if (d.volatilityForecast && d.volatilityForecast.score > 15) { const vf = d.volatilityForecast; const vfCol = vf.level === 'high' ? '#ff3355' : '#ffaa00'; html += '<div style="padding:1px 0"><span style="color:' + vfCol + ';width:65px;display:inline-block;font-weight:600">\u26A1 VOL</span><span style="color:' + vfCol + '">' + vf.level.toUpperCase() + ' (' + vf.score + ')</span></div>' }
+  function _bvRenderLocal() {
+    const body = document.getElementById('brainVisionBody')
+    const cycleEl = document.getElementById('brainVisionCycle')
+    if (!body) return
+    const BM = w.BM; const BR = w.BRAIN; const S = w.S; const AT = w.AT
+    if (!BM || !S) { body.innerHTML = '<div style="color:#334455;padding:4px 0">Initializing brain...</div>'; return }
+
+    if (cycleEl) cycleEl.textContent = (BR?.state || 'idle').toUpperCase()
+    let h = ''
+
+    // ── HEADER: Symbol + Price + Regime
+    const sym = (S.symbol || 'BTCUSDT').replace('USDT', '')
+    const price = S.price ? '$' + Number(S.price).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '$—'
+    const regime = BM.regimeEngine?.regime || BM.structure?.regime || '—'
+    const regimeConf = BM.regimeEngine?.confidence || BM.structure?.score || 0
+    h += '<div style="padding:3px 0 4px;border-bottom:1px solid rgba(120,80,220,0.15)">'
+    h += '<span style="color:#aa88ff;font-weight:bold;font-size:10px;letter-spacing:1px">' + sym + '</span> '
+    h += '<span style="color:#8899aa;font-size:9px">' + price + '</span> '
+    h += _badge(regime, '#cc88ff')
+    h += ' <span style="color:#556677;font-size:8px">' + regimeConf + '%</span>'
+    h += '</div>'
+
+    // ── BRAIN STATE + CONFLUENCE
+    const state = BR?.state || 'scanning'
+    const stateCol = state === 'ready' ? '#00ff88' : state === 'trading' ? '#f0c040' : state === 'blocked' ? '#ff3355' : state === 'analyzing' ? '#00aaff' : '#556677'
+    const conf = BM.confluenceScore || 0
+    const confCol = conf >= 68 ? '#00ff88' : conf >= 50 ? '#f0c040' : '#ff3355'
+    h += _row('STATE', _badge(state.toUpperCase(), stateCol) + ' <span style="color:' + confCol + ';font-weight:700;font-size:11px">CONF:' + conf + '</span>')
+
+    // ── AT STATUS
+    const atOn = AT?.enabled ? 'ON' : 'OFF'
+    const atCol = AT?.enabled ? '#00ff88' : '#ff3355'
+    const killOn = AT?.killTriggered
+    h += _row('AT', _badge(atOn, atCol) + (killOn ? ' ' + _badge('KILL', '#ff3355') : '') + ' <span style="color:#556677">trades:' + (AT?.totalTrades || 0) + ' W:' + (AT?.wins || 0) + '</span>')
+
+    // ── GATES (7 gates)
+    const gates = BM.gates || {}
+    const gateNames = ['mtf', 'flow', 'trigger', 'session', 'adx', 'risk', 'news']
+    let gateHtml = ''
+    for (let i = 0; i < gateNames.length; i++) {
+      const g = gateNames[i]; const val = gates[g] || 'wait'
+      gateHtml += _dot(val) + '<span style="color:#445566;font-size:8px;margin:0 4px 0 1px">' + g.toUpperCase() + '</span>'
     }
-    const v3 = _bvData.v3
-    if (v3) {
-      html += '<div style="border-top:1px solid rgba(120,80,220,0.2);margin-top:5px;padding-top:5px"><span style="color:#44aaff;font-size:9px;letter-spacing:1.5px;font-weight:600">BRAIN V3 INTELLIGENCE</span>'
-      if (v3.session && v3.session.current) { const sess = v3.session; const sessCol = sess.modifier >= 1.05 ? '#00ff88' : sess.modifier <= 0.90 ? '#ff4466' : 'rgba(255,255,255,0.45)'; html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">SESS</span><span style="color:#aa88ff">' + sess.current.name + '</span> <span style="color:' + sessCol + '">\u00D7' + sess.modifier + '</span>' + (sess.current.overlap ? ' <span style="color:#ffaa00">OVERLAP</span>' : '') + '</div>' }
-      if (v3.drawdown) { const dd = v3.drawdown; const ddCol = dd.tier === 'GREEN' ? '#00ff88' : dd.tier === 'CAUTION' ? '#ffaa00' : dd.tier === 'WARNING' ? '#ff8844' : dd.tier === 'DANGER' ? '#ff3355' : '#668899'; html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">DD</span><span style="color:' + ddCol + '">' + dd.tier + '</span> <span style="color:var(--dim)">-' + dd.drawdownPct + '% max:-' + dd.maxDrawdown + '%</span></div>' }
-      if (v3.sizing && v3.sizing.sufficient) { const sz = v3.sizing; const szCol = sz.winRate >= 55 ? '#00ff88' : sz.winRate < 45 ? '#ff4466' : '#ffaa00'; html += '<div style="padding:1px 0"><span style="color:var(--dim);width:65px;display:inline-block;font-weight:600">EDGE</span><span style="color:' + szCol + '">WR:' + sz.winRate + '%</span> <span style="color:var(--dim)">Kelly:' + sz.quarterKelly + '% n=' + sz.sampleSize + '</span></div>' }
-      if (v3.correlation && v3.correlation.warning) { html += '<div style="padding:1px 0"><span style="color:#ff4466;width:65px;display:inline-block;font-weight:600">\u26A0 CORR</span><span style="color:#ff8844">' + v3.correlation.warning + '</span></div>' }
-      html += '</div>'
+    h += _row('GATES', gateHtml)
+
+    // ── SIGNALS
+    const sd = S.signalData || {}
+    const bulls = sd.bullCount || 0; const bears = sd.bearCount || 0
+    const sigCol = (bulls + bears) >= 3 ? '#00ff88' : '#f0c040'
+    h += _row('SIGNALS', '<span style="color:#00ff88">\u25B2' + bulls + '</span> <span style="color:#ff3355">\u25BC' + bears + '</span> <span style="color:' + sigCol + '">= ' + (bulls + bears) + '</span>')
+
+    // ── MTF ALIGNMENT
+    const mtf = BM.mtf || {}
+    let mtfHtml = ''
+    const tfs = ['4h', '1h', '15m']
+    for (let i = 0; i < tfs.length; i++) { const tf = tfs[i]; const dir = mtf[tf] || 'neut'; mtfHtml += '<span style="color:' + _c(dir) + ';margin-right:4px">' + tf + ':' + (dir === 'bull' ? '\u2191' : dir === 'bear' ? '\u2193' : '\u2194') + '</span>' }
+    h += _row('MTF', mtfHtml)
+
+    // ── REGIME DETAIL
+    const re = BM.regimeEngine || {}
+    const bias = re.trendBias || 'neutral'
+    h += _row('REGIME', '<span style="color:' + _c(bias) + '">' + (re.regime || '—') + '</span> <span style="color:#556677">bias:' + bias + ' trap:' + (re.trapRisk || 0) + '%</span>')
+
+    // ── ATMOSPHERE
+    const atm = BM.atmosphere || {}
+    if (atm.category) {
+      const atmCol = atm.allowEntry ? '#00ff88' : atm.cautionLevel === 'high' ? '#ff3355' : '#f0c040'
+      h += _row('ATMOS', _badge(atm.category, atmCol) + ' <span style="color:#556677">' + (atm.reasons || []).slice(0, 2).join(', ') + '</span>')
     }
-    body.innerHTML = html
+
+    // ── FLOW
+    const flow = BM.flow || {}
+    if (flow.cvd || flow.delta) {
+      h += _row('FLOW', 'CVD:<span style="color:' + _c(flow.cvd) + '">' + (flow.cvd || '—') + '</span> \u0394:<span style="color:' + (flow.delta > 0 ? '#00ff88' : flow.delta < 0 ? '#ff3355' : '#556677') + '">' + (flow.delta || 0) + '</span> OFI:<span style="color:' + _c(flow.ofi) + '">' + (flow.ofi || '—') + '</span>')
+    }
+
+    // ── DANGER + CONVICTION
+    const danger = BM.danger || 0; const conv = BM.conviction || 0; const convMult = BM.convictionMult || 0
+    const dangerCol = danger > 60 ? '#ff3355' : danger > 30 ? '#f0c040' : '#00ff88'
+    const convCol = conv > 70 ? '#00ff88' : conv > 40 ? '#f0c040' : '#ff3355'
+    h += _row('DANGER', '<span style="color:' + dangerCol + ';font-weight:700">' + danger + '</span> <span style="color:#445566">|</span> <span style="color:#556677">CONV:</span><span style="color:' + convCol + ';font-weight:700">' + conv + '</span> <span style="color:#556677">\u00D7' + convMult.toFixed(2) + '</span>')
+
+    // ── VOLATILITY
+    const volR = BM.volRegime || '—'; const volP = BM.volPct || 0
+    const volCol = volR === 'EXTREME' ? '#ff2244' : volR === 'HIGH' ? '#ff6644' : volR === 'MED' ? '#f0c040' : '#668899'
+    h += _row('VOL', '<span style="color:' + volCol + '">' + volR + '</span> <span style="color:#556677">P' + volP + '</span>')
+
+    // ── PHASE FILTER
+    const pf = BM.phaseFilter || {}
+    if (pf.phase) {
+      const pfCol = pf.allow ? '#00ff88' : '#ff3355'
+      h += _row('PHASE', _badge(pf.phase, pfCol) + ' <span style="color:#556677">' + (pf.riskMode || '') + ' size:\u00D7' + (pf.sizeMultiplier || 1) + '</span>')
+    }
+
+    // ── PROTECT MODE
+    if (BM.protectMode) {
+      h += _row('PROTECT', _badge('ACTIVE', '#ff3355', '#ff335533') + ' <span style="color:#ff6655">' + (BM.protectReason || '—') + '</span>')
+    }
+
+    // ── BLOCK REASON
+    const block = typeof w.BlockReason !== 'undefined' ? w.BlockReason.get() : null
+    if (block && block.code) {
+      h += _row('BLOCK', '<span style="color:#ff3355;font-weight:700">' + block.code + '</span> <span style="color:#ff8866">' + (block.text || '') + '</span>')
+    }
+
+    // ── ADAPT PARAMS
+    const adapt = BR?.adaptParams
+    if (adapt && adapt.adjustCount > 0) {
+      h += _row('ADAPT', '<span style="color:#f0c040">SL:' + (adapt.sl || '—') + '% Size:$' + (adapt.size || '—') + ' (\u00D7' + adapt.adjustCount + ' adj)</span>')
+    }
+
+    // ── THOUGHTS (last 5)
+    const thoughts = BR?.thoughts || []
+    if (thoughts.length > 0) {
+      h += '<div style="border-top:1px solid rgba(120,80,220,0.1);margin-top:4px;padding-top:3px">'
+      h += '<span style="color:#aa88ff;font-size:8px;letter-spacing:1.5px;font-weight:600">THOUGHTS</span>'
+      const recent = thoughts.slice(-5)
+      for (let i = recent.length - 1; i >= 0; i--) {
+        const t = recent[i]
+        const col = t.type === 'ok' ? '#00ff88' : t.type === 'bad' ? '#ff3355' : t.type === 'warn' ? '#f0c040' : '#668899'
+        const ago = Math.round((Date.now() - (t.time || 0)) / 60000)
+        h += '<div style="color:' + col + ';font-size:9px;padding:0 0 1px;opacity:' + (1 - i * 0.15) + '"><span style="color:#445566">' + ago + 'm</span> ' + (t.msg || '').replace(/</g, '&lt;').slice(0, 80) + '</div>'
+      }
+      h += '</div>'
+    }
+
+    body.innerHTML = h
   }
 
-  function _bvPoll() { fetch('/api/brain/vision', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null }).then(function (data: any) { if (data && data.symbols) { _bvData = data; _bvRender() } }).catch(function () { }) }
-
-  // DOMContentLoaded already fired in React SPA — start directly
   function _bvInit() {
     const wrap = document.getElementById('brainVisionWrap'); if (!wrap) return
-    setTimeout(_bvPoll, 3000); _bvTimer = setInterval(_bvPoll, 30000)
-    void _bvTimer
+    setTimeout(_bvRenderLocal, 3000)
+    if (_bvTimer) clearInterval(_bvTimer)
+    _bvTimer = setInterval(_bvRenderLocal, 5000) // refresh every 5s
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _bvInit)
-  else setTimeout(_bvInit, 500)
+  else setTimeout(_bvInit, 1000)
 })()
 
 // ===== BRAIN DASHBOARD (Reflection Engine) =====
