@@ -4,6 +4,7 @@ import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'
 import { BrainCockpit } from '../brain/BrainCockpit'
 import { ErrorBoundary } from '../ErrorBoundary'
+import { StatusBar } from './StatusBar'
 import WatchlistBar from './WatchlistBar'
 import { ZeusDock } from './ZeusDock'
 import { PageView } from './PageView'
@@ -237,6 +238,9 @@ export function PanelShell() {
       </div>
 
       <main className="zr-panels" ref={mainRef}>
+        {/* ── Status Bar — first element in content area (1:1 from old app .page) ── */}
+        <StatusBar />
+
         {/* ── Watchlist Bar (above ModeBar — 1:1 order from old app) ── */}
         <WatchlistBar />
 
