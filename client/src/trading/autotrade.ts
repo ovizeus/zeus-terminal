@@ -1,13 +1,16 @@
 // Zeus — trading/autotrade.ts
 // Ported 1:1 from public/js/trading/autotrade.js (Phase 6C)
 // AutoTrade engine: conditions, execution, monitoring, kill switch
+// [8C-4A1] w.AT/TC/DSL/BRAIN reads migrated to accessors. w.AT writes remain.
 
-const w = window as any
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject } from '../services/stateAccessors'
+
+const w = window as any // kept for w.AT writes, w.S, w.TP, w.BM, w.el, w._ZI, fn calls
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
 // AT UI helpers
 export function toggleAutoTrade(): void {
-  if (w.AT.killTriggered) {
+  if (getATKillTriggered()) {
     w.toast('Kill switch activ — apasa butonul RESET din status sau asteapta', 0, w._ZI.noent)
     // Afiseaza butonul de reset daca nu e deja afisat
     const st = w.el('atStatus')
@@ -17,14 +20,14 @@ export function toggleAutoTrade(): void {
     return
   }
   // [ZT-AUD-001] Block AT enable if server hasn't confirmed mode yet
-  if (!w.AT.enabled && !w.AT._modeConfirmed) {
+  if (!getATEnabled() && !w.AT._modeConfirmed) {
     w.toast('Waiting for server mode confirmation...', 0, w._ZI.timer)
     if (typeof w.ZState !== 'undefined' && w.ZState.startATPolling) w.ZState.startATPolling()
     return
   }
   // ── Live mode confirmation gate ──
-  const _atGlobalMode = (typeof w.AT !== 'undefined' && w.AT.mode) ? w.AT.mode : 'demo'
-  if (!w.AT.enabled && _atGlobalMode === 'live') {
+  const _atGlobalMode = (typeof w.AT !== 'undefined' && getATMode()) ? getATMode() : 'demo'
+  if (!getATEnabled() && _atGlobalMode === 'live') {
     // Block without API keys
     if (!w._apiConfigured) {
       w.toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, w._ZI.w)
@@ -50,7 +53,7 @@ export function toggleAutoTrade(): void {
 }
 
 export function _doEnableAT(): void {
-  var _newState = !w.AT.enabled
+  var _newState = !getATEnabled()
   // [AT-TOGGLE-FIX] Server-authoritative toggle — call dedicated endpoint
   fetch('/api/at/toggle', {
     method: 'POST',
@@ -77,7 +80,7 @@ export function _applyATToggleUI(enabled: any): void {
   const txt = w.el('atBtnTxt')
   const panel = w.el('atPanel')
   if (enabled) {
-    const _atGlobalMode = (typeof w.AT !== 'undefined' && w.AT.mode) ? w.AT.mode : 'demo'
+    const _atGlobalMode = (typeof w.AT !== 'undefined' && getATMode()) ? getATMode() : 'demo'
     // FIX v118: reset zi dacă s-a schimbat data
     if (typeof w._bmResetDailyIfNeeded === 'function') w._bmResetDailyIfNeeded()
     // ── INIT: Recalculate daily counters from journal (no stale state) ──
@@ -89,11 +92,11 @@ export function _applyATToggleUI(enabled: any): void {
     const _jTodayAT = _jToday.filter((j: any) => j.autoTrade === true)
     w.AT.realizedDailyPnL = _jTodayAT.reduce((acc: any, j: any) => acc + (Number.isFinite(+j.pnl) ? +j.pnl : 0), 0)
     w.AT.closedTradesToday = _jTodayAT.length
-    w.BM.dailyTrades = w.AT.closedTradesToday
+    w.BM.dailyTrades = getATClosedToday()
     w.AT.dailyStart = new Date().toISOString().slice(0, 10)
     // [C3] Kill switch auto-clear REMOVED — require explicit user reset
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
-    if (w.AT.killTriggered) {
+    if (getATKillTriggered()) {
       w.AT.enabled = false
       w.toast('Kill switch activ — apasă RESET sau așteaptă ziua următoare', 0, w._ZI.noent)
       return
@@ -102,14 +105,14 @@ export function _applyATToggleUI(enabled: any): void {
     dot.style.background = 'var(--grn-bright)'; dot.style.boxShadow = '0 0 10px var(--grn-bright)'
     txt.textContent = 'AUTO TRADE ON'
     { const _oe = w.el('atStatus'); if (_oe) _oe.innerHTML = w._ZI.dGrn + ' Activ — scan la 30s' }
-    w.atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${w.AT.realizedDailyPnL.toFixed(2)} | Trades: ${w.AT.closedTradesToday}`)
+    w.atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
     if (!w.AT.interval) w.AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
     if (typeof w.runSignalScan === 'function') try { w.runSignalScan() } catch (_) {}
     if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}
     setTimeout(runAutoTradeCheck, 2000) // first check with fresh confluence
     // [FIX] Force balance sync when AT starts in LIVE mode — prevents $10k fallback
-    if (w.AT.mode === 'live' && typeof w.liveApiSyncState === 'function') {
+    if (getATMode() === 'live' && typeof w.liveApiSyncState === 'function') {
       w.liveApiSyncState().then(function () {
         if (w.TP.liveBalance <= 0) {
           w.atLog('warn', '[WARN] LIVE balance = $0 after sync — AT blocked until balance confirmed')
@@ -252,7 +255,7 @@ export function updateATStats(): void {
 export function checkATConditions(): any {
   const confMin = (typeof w.BM !== 'undefined' ? w.BM.confMin : 65) || 65 // [FIX v85.1 F2] sursă unică — era ||68 inconsistent
   // [P1] Read from TC (server-safe), DOM fallback
-  const sigMin = (typeof w.TC !== 'undefined' && w.TC.sigMin) || parseInt(w.el('atSigMin')?.value) || 3
+  const sigMin = ((window as any).TC?.sigMin) || 3 // TC.sigMin bridge — no dedicated getter yet
 
   // 1. Confluence Score — read from canonical BM state, not DOM
   const score = (typeof w.BM !== 'undefined' && Number.isFinite(w.BM.confluenceScore)) ? w.BM.confluenceScore : 50
@@ -285,7 +288,7 @@ export function checkATConditions(): any {
 
   // 6. No opposite open position
   // [PATCH P1-1] Include live positions when in live mode (was always [])
-  const autoPositions = w.AT.mode === 'demo'
+  const autoPositions = getATMode() === 'demo'
     ? (w.TP.demoPositions || []).filter((p: any) => p.autoTrade)
     : (w.TP.livePositions || []).filter((p: any) => p.autoTrade)
   const dir = isBull ? 'LONG' : 'SHORT'
@@ -298,7 +301,7 @@ export function checkATConditions(): any {
   // Not a hard block, but logged
 
   // Max positions check — read from TC.maxPos (source: atMaxPos)
-  const maxPos = (typeof w.TC !== 'undefined' && w.TC.maxPos) || 3
+  const maxPos = getTCMaxPos()
   const openAuto = autoPositions.length
   // BUG FIX: Also prevent opening same symbol twice in single-symbol mode
   const symAlreadyOpen = autoPositions.some((p: any) => p.sym === w.S.symbol)
@@ -307,7 +310,7 @@ export function checkATConditions(): any {
   // Cooldown check — per-symbol in multi-symbol mode
   const nowTs = Date.now()
   const _symCd = (w.AT._cooldownBySymbol && w.AT._cooldownBySymbol[w.S.symbol]) || 0
-  const coolOk = (nowTs - Math.max(w.AT.lastTradeTs, _symCd)) > w.AT.cooldownMs
+  const coolOk = (nowTs - Math.max(getATLastTradeTs(), _symCd)) > w.AT.cooldownMs
 
   const allOk = (isBull || isBear) && sigOk && stOk && adxOk && hourOk && !hasOpposite && posOk && coolOk
 
@@ -387,7 +390,7 @@ export function computeFusionDecision(): any {
   if (prob != null) reasons.push('Scenario:' + prob.toFixed(0))
 
   // 3) Regime
-  let regime = (w.BRAIN && w.BRAIN.regime) ? String(w.BRAIN.regime) : 'unknown'
+  let regime = (getBrainObject() && getBrainObject().regime) ? String(getBrainObject().regime) : 'unknown'
   let regimeN = 0.5
   if (regime.includes('trend')) regimeN = 0.75
   if (regime.includes('range')) regimeN = 0.55
@@ -395,8 +398,8 @@ export function computeFusionDecision(): any {
   reasons.push('Regime:' + regime)
 
   // 4) OFI / Orderflow
-  const buy = Number.isFinite(+w.BRAIN?.ofi?.buy) ? +w.BRAIN.ofi.buy : 0
-  const sell = Number.isFinite(+w.BRAIN?.ofi?.sell) ? +w.BRAIN.ofi.sell : 0
+  const buy = Number.isFinite(+getBrainObject()?.ofi?.buy) ? +getBrainObject().ofi.buy : 0
+  const sell = Number.isFinite(+getBrainObject()?.ofi?.sell) ? +getBrainObject().ofi.sell : 0
   const ofi = (buy + sell) > 0 ? (buy - sell) / (buy + sell) : 0
   const ofiN = (ofi + 1) / 2
   if ((buy + sell) > 0) reasons.push('OFI:' + (ofi * 100).toFixed(0) + '%')
@@ -482,7 +485,7 @@ export function runAutoTradeCheck(): void {
       _se('atCondHour', true)
       _se('atCondOpp', true)
       var _oe = w.el('atStatus')
-      if (_oe && w.AT.enabled) _oe.innerHTML = '<span style="color:#00d4ff">SERVER AT ACTIVE</span> — brain controls execution'
+      if (_oe && getATEnabled()) _oe.innerHTML = '<span style="color:#00d4ff">SERVER AT ACTIVE</span> — brain controls execution'
     } catch (_) {}
     return
   }
@@ -493,7 +496,7 @@ export function runAutoTradeCheck(): void {
   // Prevent overlapping AT check cycles
   if (w.AT.running) return
   // AT.enabled gates the entire scan/analysis loop (single command — no more S.runMode)
-  if (!w.AT.enabled || w.AT.killTriggered) return
+  if (!getATEnabled() || getATKillTriggered()) return
   w.AT.running = true
   try {
     // B: Data stall grace period check BEFORE exec lock
@@ -520,12 +523,12 @@ export function runAutoTradeCheck(): void {
     // ── KILL SWITCH — realized + unrealized loss ──
     const killPct = parseFloat(w.el('atKillPct')?.value) || 5
     // [FIX BUG2] No phantom $10k fallback — skip kill check if balance unknown (consistent with checkKillThreshold)
-    const bal = +(w.AT.mode === 'demo' ? w.TP.demoBalance : w.TP.liveBalance) || 0
+    const bal = +(getATMode() === 'demo' ? w.TP.demoBalance : w.TP.liveBalance) || 0
     if (bal <= 0) { /* skip inline kill check — checkKillThreshold handles it when balance loads */ }
-    const _realPnL = +(w.AT.realizedDailyPnL) || 0
+    const _realPnL = +(getATDailyPnL()) || 0
     // [PATCH3 R2] Include unrealized PnL in kill switch check
     let _unrealPnL2 = 0
-    const _openList2 = w.AT.mode === 'demo' ? (w.TP.demoPositions || []) : (w.TP.livePositions || [])
+    const _openList2 = getATMode() === 'demo' ? (w.TP.demoPositions || []) : (w.TP.livePositions || [])
     for (let i = 0; i < _openList2.length; i++) {
       const _p = _openList2[i]
       if (_p.closed || _p.status === 'closing') continue
@@ -537,7 +540,7 @@ export function runAutoTradeCheck(): void {
       }
     }
     const _totalDayPnL2 = _realPnL + _unrealPnL2
-    const _closedToday = +(w.AT.closedTradesToday) || 0
+    const _closedToday = +(getATClosedToday()) || 0
     // Guard: need at least one closed trade OR significant unrealized loss
     if (_closedToday === 0 && _unrealPnL2 >= 0) { /* skip */ }
     else if (bal > 0 && Number.isFinite(_totalDayPnL2) && _totalDayPnL2 < 0 && Math.abs(_totalDayPnL2) / bal * 100 >= killPct) {
@@ -605,7 +608,7 @@ export function runAutoTradeCheck(): void {
     w.ZState.scheduleSave()
 
     // AT gates execution — if AT OFF, scan still shows signals but no trade
-    if (!w.AT.enabled) {
+    if (!getATEnabled()) {
       const _sigDir = cond.isBull ? 'LONG' : 'SHORT'
       w.atLog('info', `[SCAN] Signal ${_sigDir} (score:${cond.score}) but AT OFF — no execution`)
       { const _oe3 = w.el('atStatus'); if (_oe3) _oe3.innerHTML = w._ZI.mag + ' Signal found — AT OFF' }
@@ -667,7 +670,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // [AT-UNIFY] Server handles all trade placement
   if (w._serverATEnabled) { w.atLog('info', '[LOCKED] Server AT active — client trade blocked'); return }
   // ── KILL SWITCH: check before exec (2. kill timing) ──────────
-  if (w.AT.killTriggered) {
+  if (getATKillTriggered()) {
     w.BlockReason.set('KILL_SWITCH', 'Kill switch activ — AT blocat', 'placeAutoTrade')
     return
   }
@@ -682,7 +685,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   }
 
   // [DSL MODE GUARD] Auto-fallback to 'atr' if not set (prevents silent permanent block)
-  if (!w.DSL.mode) {
+  if (!getDSLMode()) {
     w.DSL.mode = 'atr'
     w.atLog('info', '[INFO] DSL mode auto-set to ATR (default)')
     try { localStorage.setItem('zeus_dsl_mode', 'atr') } catch (_) { }
@@ -734,7 +737,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     w.atLog('warn', '[FAIL] Nu am pret curent la exec'); return
   }
   // [FIX H2] Dedup: reject if same symbol already has open AT position
-  const _existingPos = (w.AT.mode === 'demo' ? (w.TP.demoPositions || []) : (w.TP.livePositions || []))
+  const _existingPos = (getATMode() === 'demo' ? (w.TP.demoPositions || []) : (w.TP.livePositions || []))
     .filter((p: any) => p.autoTrade && !p.closed && p.sym === sym)
   if (_existingPos.length > 0) {
     w.atLog('warn', '[DEDUP] ' + sym + ' already has open AT position — skipping')
@@ -750,7 +753,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Formula: riskSize = (balance × riskPct%) / (slPct%)
   // riskSize = margin that, at this SL%, risks exactly riskPct% of balance
   // Capped by TC.size (atSize) as absolute margin ceiling
-  const _rrBalance = (typeof w.AT !== 'undefined' && w.AT.mode === 'live')
+  const _rrBalance = (typeof w.AT !== 'undefined' && getATMode() === 'live')
     ? (+(w.TP.liveBalance) || 0)
     : (+(w.TP.demoBalance) || 1000)
   const _riskSizeRaw = (_rrBalance * (riskPct / 100)) / (slPctForSize / 100)
@@ -802,7 +805,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   if (!entry || entry <= 0) {
     w.atLog('warn', '[BLOCK] EXEC FAIL-SAFE: preț invalid → PROTECT activat')
     w.BM.protectMode = true; w.BM.protectReason = 'BLOCKED: ExecutionRisk (invalid price)'
-    if (w.AT.enabled && (w.S.mode || 'assist') === 'auto') w.AT.enabled = false
+    if (getATEnabled() && (w.S.mode || 'assist') === 'auto') w.AT.enabled = false
     const pb = w.el('protectBanner'); if (pb) pb.className = 'znc-protect show'
     const pbt = w.el('protectBannerTxt'); if (pbt) pbt.textContent = w.BM.protectReason
     return
@@ -815,7 +818,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   w.atLog(side === 'LONG' ? 'buy' : 'sell',
     `[EXEC] ${side} ${sym} @$${w.fP(entry)} | Lev:${lev}x | SL:$${w.fP(sl)} | TP:$${w.fP(tp)} | Size:$${safeFinalSize} (risk:${riskPct}%→$${_riskSizeCapped.toFixed(0)} cap:$${size}) | [SH]C:${w.BM.conviction || 0}% D:${w.BM.danger || 0}`)
 
-  if (w.AT.mode === 'demo') {
+  if (getATMode() === 'demo') {
     const pos: any = {
       id: Date.now(), side, sym, entry, size: adaptFinalSize, lev,
       tp, sl, liqPrice: liq, pnl: 0,
@@ -836,9 +839,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       controlMode: (w.S.mode || 'assist').toLowerCase(),  // mutable — AI or MANUAL
       brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
       dslParams: Object.assign({
-        pivotLeftPct: (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : (parseFloat(w.el('dslTrailPct')?.value) || 0.8),
-        pivotRightPct: (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : (parseFloat(w.el('dslTrailSusPct')?.value) || 1.0),
-        impulseVPct: (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : (parseFloat(w.el('dslExtendPct')?.value) || 20),
+        pivotLeftPct: getTCDslTrailPct(),
+        pivotRightPct: getTCDslTrailSusPct(),
+        impulseVPct: getTCDslExtendPct(),
       }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(side, entry, tp) : {
         openDslPct: 1.5, dslTargetPrice: side === 'LONG' ? entry * 1.015 : entry * 0.985
       }),
@@ -945,9 +948,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           controlMode: (w.S.mode || 'assist').toLowerCase(),  // mutable — AI or MANUAL
           brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
           dslParams: Object.assign({
-            pivotLeftPct: (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : (parseFloat(w.el('dslTrailPct')?.value) || 0.8),
-            pivotRightPct: (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : (parseFloat(w.el('dslTrailSusPct')?.value) || 1.0),
-            impulseVPct: (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : (parseFloat(w.el('dslExtendPct')?.value) || 20),
+            pivotLeftPct: getTCDslTrailPct(),
+            pivotRightPct: getTCDslTrailSusPct(),
+            impulseVPct: getTCDslExtendPct(),
           }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(side, fillPrice, _liveTP) : {
             openDslPct: 1.5, dslTargetPrice: side === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985
           }),
@@ -1136,18 +1139,18 @@ export function scheduleAutoClose(pos: any): void {
     const cur = getPosPrice()
     if (!cur) { return }
 
-    const effectiveSL = (w.DSL.enabled && w.DSL.positions[String(pos.id)]?.active)
-      ? w.DSL.positions[String(pos.id)].currentSL : pos.sl
+    const effectiveSL = (getDSLEnabled() && getDSLPositions()[String(pos.id)]?.active)
+      ? getDSLPositions()[String(pos.id)].currentSL : pos.sl
 
     // Ordinea: TP -> SL/DSL -> LIQ -> TTP
     let reason: any = null
     if (pos.side === 'LONG') {
       if (cur >= pos.tp) reason = 'TP \u2705'
-      else if (cur <= effectiveSL) reason = w.DSL.positions[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
+      else if (cur <= effectiveSL) reason = getDSLPositions()[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
       else if (cur <= pos.liqPrice) reason = '\uD83D\uDC80 LIQ'
     } else {
       if (cur <= pos.tp) reason = 'TP \u2705'
-      else if (cur >= effectiveSL) reason = w.DSL.positions[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
+      else if (cur >= effectiveSL) reason = getDSLPositions()[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
       else if (cur >= pos.liqPrice) reason = '\uD83D\uDC80 LIQ'
     }
 
@@ -1155,7 +1158,7 @@ export function scheduleAutoClose(pos: any): void {
     if (!reason) {
       try {
         const now = Date.now()
-        const origTP = w.DSL.positions[String(pos.id)]?.originalTP
+        const origTP = getDSLPositions()[String(pos.id)]?.originalTP
         const tpManual = (origTP != null && Math.abs(pos.tp - origTP) > 0.01)
 
         if (!tpManual && pos.entry && cur && Number.isFinite(cur)) {
@@ -1319,14 +1322,14 @@ export function scheduleAutoClose(pos: any): void {
 
 // Kill switch
 export function checkKillThreshold(): void {
-  if (w.AT.killTriggered) return
+  if (getATKillTriggered()) return
   const killPct = parseFloat(w.el('atKillPct')?.value) || 5
-  const bal = +(w.AT.mode === 'demo' ? w.TP.demoBalance : w.TP.liveBalance) || 0
+  const bal = +(getATMode() === 'demo' ? w.TP.demoBalance : w.TP.liveBalance) || 0
   if (bal <= 0) return // [FIX BUG4] Skip kill check if balance unknown — prevents $10k fallback distortion
-  const _realPnL = +(w.AT.realizedDailyPnL) || 0
+  const _realPnL = +(getATDailyPnL()) || 0
   // [PATCH3 R2] Include unrealized PnL from open positions in daily loss check
   let _unrealPnL = 0
-  const _openList = w.AT.mode === 'demo' ? (w.TP.demoPositions || []) : (w.TP.livePositions || [])
+  const _openList = getATMode() === 'demo' ? (w.TP.demoPositions || []) : (w.TP.livePositions || [])
   for (let i = 0; i < _openList.length; i++) {
     const _p = _openList[i]
     if (_p.closed || _p.status === 'closing') continue
@@ -1339,15 +1342,15 @@ export function checkKillThreshold(): void {
   }
   const _totalDayPnL = _realPnL + _unrealPnL
   // Guard: need at least one closed trade OR significant unrealized loss
-  if (w.AT.closedTradesToday === 0 && _unrealPnL >= 0) return
+  if (getATClosedToday() === 0 && _unrealPnL >= 0) return
   if (Number.isFinite(_totalDayPnL) && _totalDayPnL < 0 && Math.abs(_totalDayPnL) / bal * 100 >= killPct) {
-    triggerKillSwitch('daily_loss', _totalDayPnL, w.AT.closedTradesToday, killPct, bal)
+    triggerKillSwitch('daily_loss', _totalDayPnL, getATClosedToday(), killPct, bal)
   }
 }
 
 export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, killPct2: any, bal2: any): void {
   // [FIX v85 BUG8] Guard complet: dacă deja triggered, nu mai facem nimic (previne race condition)
-  if (w.AT.killTriggered) return
+  if (getATKillTriggered()) return
   w.AT.killTriggered = true // setăm imediat, înainte de orice operațiune async
   w.AT._killTriggeredTs = Date.now() // [P3-5] timestamp for reset cooldown
   // [P0.4] Decision log — kill switch
@@ -1375,8 +1378,8 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     w.TP.demoBalance += p.size + pnl
     w.AT.totalPnL += pnl; w.AT.dailyPnL += pnl
     if (pnl >= 0) w.AT.wins++; else w.AT.losses++
-    if (w.DSL.positions[p.id]) delete w.DSL.positions[p.id]
-    if (w.DSL._attachedIds) w.DSL._attachedIds.delete(String(p.id))  // 4: cleanup dedupe on close
+    if (getDSLObject()?.positions?.[p.id]) delete getDSLObject().positions[p.id]
+    if (getDSLObject()?._attachedIds) getDSLObject()?._attachedIds.delete(String(p.id))  // 4: cleanup dedupe on close
     w.addTradeToJournal({
       id: p.id,  // [FIX v85.1 F4] necesar pentru closedPosIds la restore
       time: w.fmtNow(),
@@ -1441,7 +1444,7 @@ export function resetKillSwitch(): void {
     return
   }
   // Reset server-side (authoritative source of truth)
-  var _bal = +(w.AT.mode === 'demo' ? w.TP.demoBalance : (w.TP.liveBalance || w.TP.demoBalance)) || 0
+  var _bal = +(getATMode() === 'demo' ? w.TP.demoBalance : (w.TP.liveBalance || w.TP.demoBalance)) || 0
   fetch('/api/at/kill/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1752,8 +1755,8 @@ export function closeAllATPos(): void {
     const pnl = w.calcPosPnL(p, cur)
     w.AT.totalPnL += pnl; w.AT.dailyPnL += pnl
     if (pnl >= 0) w.AT.wins++; else w.AT.losses++
-    w.AT.realizedDailyPnL = (w.AT.realizedDailyPnL || 0) + pnl
-    w.AT.closedTradesToday = (w.AT.closedTradesToday || 0) + 1
+    w.AT.realizedDailyPnL = (getATDailyPnL() || 0) + pnl
+    w.AT.closedTradesToday = (getATClosedToday() || 0) + 1
     w.closeLivePos(p.id, 'Close All AT')
   })
   // ─── Close AT demo positions ───
