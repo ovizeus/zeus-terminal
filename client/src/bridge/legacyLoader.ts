@@ -327,7 +327,7 @@ function reattachOnclickHandlers(): void {
     'btnLive': () => w.switchGlobalMode?.('live'),
     'btnConnectExchange': () => w.connectLiveAPI?.(),
     // ── DSL ──
-    'dslToggleBtn': () => w.toggleDSL?.(),
+    // dslToggleBtn: React DSLZonePanel controls this directly
     'dslAssistArmBtn': () => w.toggleAssistArm?.(),
     // ── Brain cockpit ──
     'bmode-assist': () => w.setBrainMode?.('assist'),
