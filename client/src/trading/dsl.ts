@@ -77,25 +77,26 @@ export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind:
 
 // DSL toggle + assist
 export function toggleDSL(): void {
-  const _mode = (w.S.mode || 'assist').toLowerCase()
-  if (_mode === 'auto') {
-    w.atLog('info', '[AI] AI controls DSL in AUTO — nu poți schimba manual')
-    w.toast('AUTO: DSL e controlat de AI', 0, w._ZI.robot)
-    return
-  }
-  w.atLog('info', w.DSL.enabled ? '[WARN] ASSIST: DSL oprit de user' : '[OK] ASSIST: DSL pornit de user (USER DSL)')
-  w.DSL.enabled = !w.DSL.enabled
-  if (!w.S.dsl) w.S.dsl = {}
-  w.S.dsl.active = w.DSL.enabled
-  if (!w.DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
-  if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) { w.startDSLIntervals() }
-  const btn = w.el('dslToggleBtn')
-  const dot = w.el('dslStatusDot')
-  if (btn) { btn.textContent = w.DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (w.DSL.enabled ? '' : ' off') }
-  if (dot) { dot.style.color = w.DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = w.DSL.enabled ? 'var(--grn-bright)' : '#333' }
-  w.atLog('info', w.DSL.enabled ? '[DSL] Dynamic SL ACTIV — Brain urmareste pozitiile' : '[WARN] Dynamic SL OPRIT')
-  w.brainThink(w.DSL.enabled ? 'ok' : 'bad', w.DSL.enabled ? w._ZI.tgt + ' DSL activat — trailing brain pornit' : 'DSL oprit')
-  w.dslUpdateBanner()
+  try {
+    const _mode = (w.S?.mode || 'assist').toLowerCase()
+    if (_mode === 'auto') {
+      if (typeof w.toast === 'function') w.toast('AUTO: DSL e controlat de AI', 0, w._ZI?.robot)
+      return
+    }
+    if (typeof w.DSL === 'undefined') return
+    w.DSL.enabled = !w.DSL.enabled
+    if (!w.S.dsl) w.S.dsl = {}
+    w.S.dsl.active = w.DSL.enabled
+    if (!w.DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
+    if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) { w.startDSLIntervals() }
+    const btn = typeof w.el === 'function' ? w.el('dslToggleBtn') : document.getElementById('dslToggleBtn')
+    const dot = typeof w.el === 'function' ? w.el('dslStatusDot') : document.getElementById('dslStatusDot')
+    if (btn) { btn.textContent = w.DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (w.DSL.enabled ? '' : ' off') }
+    if (dot) { dot.style.color = w.DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = w.DSL.enabled ? 'var(--grn-bright)' : '#333' }
+    if (typeof w.atLog === 'function') w.atLog('info', w.DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
+    if (typeof w.brainThink === 'function') w.brainThink(w.DSL.enabled ? 'ok' : 'bad', w.DSL.enabled ? (w._ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
+    if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
+  } catch (e) { console.warn('[DSL] toggleDSL error:', e) }
 }
 
 // ── ASSIST ARM TOGGLE ────────────────────────────────────────
