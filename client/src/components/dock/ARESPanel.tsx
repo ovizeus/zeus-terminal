@@ -299,7 +299,7 @@ export function ARESPanel() {
           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <button id="ares-wallet-add-btn" onClick={() => {
               const w = window as any; const amt = prompt('Add funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.add(Number(amt)); setTimeout(() => { w._aresRender?.(); useAresStore.getState().saveToServer() }, 200) }
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.fund(Number(amt)); setTimeout(() => { w._aresRender?.(); useAresStore.getState().saveToServer() }, 200) }
             }} style={{
               background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.35)',
               color: '#00ff88', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
