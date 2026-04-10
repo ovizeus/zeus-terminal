@@ -54,7 +54,9 @@ function _teacherUpdateBarInfo(): void {
    initTeacher()
    ═══════════════════════════════════════════════════════════════ */
 export function initTeacher(): void {
-  if (_tEl('teacher-panel-body')) return
+  // React TeacherDockPanel already renders teacher-panel-body with static HTML.
+  // If body exists, skip innerHTML but still do wiring + refresh.
+  const _bodyExists = !!_tEl('teacher-panel-body')
   if (typeof w._initTeacherState === 'function' && !getTeacher()) w._initTeacherState()
   if (!getTeacher()) return
   if (typeof w.teacherLoadAllPersistent === 'function') w.teacherLoadAllPersistent()
@@ -63,7 +65,7 @@ export function initTeacher(): void {
   try { _teacherPanelOpen = localStorage.getItem('zeus_teacher_panel_open') === '1' } catch (_) { /* silent */ }
   const strip = _tEl('teacher-strip'); if (strip && _teacherPanelOpen) strip.classList.add('teacher-open')
   const body = _tEl('teacher-panel-content'); if (!body) return
-  body.innerHTML = _teacherBuildHTML()
+  if (!_bodyExists) body.innerHTML = _teacherBuildHTML() // skip if React already rendered
   _teacherWireEvents(); _teacherRefreshDashboard(); _teacherUpdateBarInfo()
   if (typeof w.teacherSetV2TickCallback === 'function') { w.teacherSetV2TickCallback(function () { _teacherRefreshDashboard() }) }
   _teacherV2RefreshTimer = setInterval(function () { if (_teacherPanelOpen) _teacherRefreshDashboard(); _teacherUpdateBarInfo() }, 1500)
