@@ -58,8 +58,8 @@ export function TeacherDockPanel() {
 
             {/* ── CONTROL BUTTONS ── */}
             <div className="teacher-controls">
-              <button id="teacher-v2-teach-btn" className="teacher-btn teacher-btn-teach">▶ TEACH</button>
-              <button id="teacher-v2-stop-btn" className="teacher-btn teacher-btn-stop" style={{ display: 'none' }}>■ STOP</button>
+              <button id="teacher-v2-teach-btn" className="teacher-btn teacher-btn-teach" onClick={() => (window as any).teacherUITeach?.()}>▶ TEACH</button>
+              <button id="teacher-v2-stop-btn" className="teacher-btn teacher-btn-stop" onClick={() => (window as any).teacherUIStopV2?.()} style={{ display: 'none' }}>■ STOP</button>
               <button className="teacher-btn teacher-btn-sm" onClick={() => (window as any).teacherExport?.()}>EXPORT</button>
               <button className="teacher-btn teacher-btn-sm teacher-btn-danger" onClick={() => (window as any).teacherReset?.()}>RESET</button>
             </div>

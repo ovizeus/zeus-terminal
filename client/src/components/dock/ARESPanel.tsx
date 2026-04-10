@@ -296,12 +296,18 @@ export function ARESPanel() {
             Avail: <span id="ares-wallet-avail-val">$0</span> · Rest To Trade: <span id="ares-wallet-lock-val">$0</span>
           </div>
           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
-            <button id="ares-wallet-add-btn" style={{
+            <button id="ares-wallet-add-btn" onClick={() => {
+              const w = window as any; const amt = prompt('Add funds ($):')
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.add(Number(amt)); setTimeout(() => w._aresRender?.(), 100) }
+            }} style={{
               background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.35)',
               color: '#00ff88', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
               cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
             }}>[+] ADD</button>
-            <button id="ares-wallet-withdraw-btn" style={{
+            <button id="ares-wallet-withdraw-btn" onClick={() => {
+              const w = window as any; const amt = prompt('Withdraw funds ($):')
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => w._aresRender?.(), 100) }
+            }} style={{
               background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)',
               color: 'rgba(255,110,110,0.8)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
               cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
@@ -333,7 +339,10 @@ export function ARESPanel() {
       <div id="ares-positions-wrap" style={{ margin: '4px 12px 0', padding: '4px 0 2px', borderTop: '1px solid rgba(0,150,255,0.12)' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
           <div className="ares-meta-title" style={{ margin: 0 }}>POSITIONS</div>
-          <button id="ares-close-all-btn" style={{
+          <button id="ares-close-all-btn" onClick={() => {
+            const w = window as any
+            if (typeof w.ARES !== 'undefined' && w.ARES.positions) { w.ARES.positions.closeAll(); setTimeout(() => w._aresRender?.(), 100) }
+          }} style={{
             display: 'none', background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.4)',
             color: 'rgba(255,100,100,0.85)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 7px',
             cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
