@@ -1115,13 +1115,15 @@ export function _pnlLabProfileCard(name: string, data: any) {
   let _oviHold: any;
   const btn = () => typeof w.el === 'function' ? w.el('oviBtn') : document.getElementById('oviBtn');
   const openSettings = () => { const p = typeof w.el === 'function' ? w.el('oviPanel') : document.getElementById('oviPanel'); if (p) (p as HTMLElement).style.display = 'block'; };
-  document.addEventListener('DOMContentLoaded', () => {
+  function _initOviBtn() {
     const b = btn();
     if (!b) return;
     b.addEventListener('contextmenu', (e: any) => { e.preventDefault(); openSettings(); });
     b.addEventListener('touchstart', () => { _oviHold = setTimeout(openSettings, 600); }, { passive: true });
     b.addEventListener('touchend', () => clearTimeout(_oviHold));
-  });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initOviBtn)
+  else setTimeout(_initOviBtn, 500);
 })();
 
 // -- Auto-refresh OVI when klines update --

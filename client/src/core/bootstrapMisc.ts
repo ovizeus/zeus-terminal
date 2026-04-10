@@ -133,10 +133,12 @@ export function masterReset(): void {
 // ===== CLOSE ALL BTN LONG-PRESS =====
 if (!w._closeAllBtnInited) {
   w._closeAllBtnInited = true
-  document.addEventListener('DOMContentLoaded', function () {
+  function _initCloseAllBtn() {
     const btn = document.getElementById('closeAllBtn')
     if (btn && typeof w.attachConfirmClose === 'function') w.attachConfirmClose(btn, w.closeAllDemoPos)
-  })
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initCloseAllBtn)
+  else setTimeout(_initCloseAllBtn, 500)
 }
 
 // ===== DESKTOP CHART RESIZE =====
