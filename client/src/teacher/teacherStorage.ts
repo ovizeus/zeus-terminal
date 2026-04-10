@@ -1,6 +1,8 @@
 // Zeus — teacher/teacherStorage.ts
 // Ported 1:1 from public/js/teacher/teacherStorage.js (Phase 7C)
 // THE TEACHER — LocalStorage persistence layer
+n// [8E-3] w.TEACHER reads migrated to getTeacher()
+import { getTeacher } from '../services/stateAccessors'
 // Uses zeus_teacher_ prefix — fully isolated from live storage keys
 // NO DOM, NO live state reads/writes
 
@@ -45,7 +47,7 @@ export function _teacherStorageRemove(key: any): void {
 // CONFIG — User overrides for trade defaults
 // ══════════════════════════════════════════════════════════════════
 export function teacherSaveConfig(): boolean {
-  const cfg = w.TEACHER && w.TEACHER.config
+  const _Tc = getTeacher(); const cfg = _Tc && _Tc.config
   if (!cfg) return false
   return _teacherStorageSet(w.TEACHER_STORAGE_KEYS.config, cfg)
 }
@@ -53,8 +55,9 @@ export function teacherSaveConfig(): boolean {
 export function teacherLoadConfig(): boolean {
   const saved = _teacherStorageGet(w.TEACHER_STORAGE_KEYS.config)
   if (!saved || typeof saved !== 'object') return false
-  if (w.TEACHER) {
-    const cfg = w.TEACHER.config
+  const _Ts = getTeacher()
+  if (_Ts) {
+    const cfg = _Ts.config
     // Merge saved values into current config (preserves any new fields from updates)
     const keys = Object.keys(saved)
     for (let i = 0; i < keys.length; i++) {
@@ -107,7 +110,7 @@ export function teacherAddLesson(lesson: any): boolean {
   lessons.unshift(lesson)
   if (lessons.length > 200) lessons.length = 200
   teacherSaveLessons(lessons)
-  if (w.TEACHER) w.TEACHER.lessons = lessons
+  const _Tsl = getTeacher(); if (_Tsl) _Tsl.lessons = lessons
   return true
 }
 
@@ -153,11 +156,11 @@ export function teacherLoadMemory(): any {
 // INIT — Load all persistent data into TEACHER state
 // ══════════════════════════════════════════════════════════════════
 export function teacherLoadAllPersistent(): void {
-  if (!w.TEACHER) return
+  if (!getTeacher()) return
   teacherLoadConfig()
-  w.TEACHER.lessons = teacherLoadLessons()
-  w.TEACHER.memory = teacherLoadMemory()
-  w.TEACHER.stats = teacherLoadStats()
+  getTeacher().lessons = teacherLoadLessons()
+  getTeacher().memory = teacherLoadMemory()
+  getTeacher().stats = teacherLoadStats()
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -167,7 +170,7 @@ export function teacherExportAll(): void {
   const payload = {
     version: 'teacher_v2',
     exportedAt: new Date().toISOString(),
-    config: w.TEACHER ? w.TEACHER.config : null,
+    config: getTeacher() ? getTeacher().config : null,
     sessions: teacherLoadSessions(),
     lessons: teacherLoadLessons(),
     stats: teacherLoadStats(),
@@ -225,7 +228,7 @@ export function teacherImportAll(jsonString: string): any {
 // Saves: capability, curriculum, lifetime trades (capped), fail count, capital
 // ══════════════════════════════════════════════════════════════════
 export function teacherSaveV2State(): boolean {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.v2) return false
   const v2 = T.v2
   const toSave = {
@@ -245,7 +248,7 @@ export function teacherSaveV2State(): boolean {
 }
 
 export function teacherLoadV2State(): boolean {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.v2) return false
   const data = _teacherStorageGet(w.TEACHER_STORAGE_KEYS.v2state)
   if (!data || typeof data !== 'object') return false
@@ -273,12 +276,12 @@ export function teacherClearAllStorage(): void {
     _teacherStorageRemove(w.TEACHER_STORAGE_KEYS[keys[i]])
   }
   // Reset state
-  if (w.TEACHER) {
-    w.TEACHER.lessons = []
-    w.TEACHER.memory = { patterns: [], edges: [], mistakes: [] }
-    w.TEACHER.stats = null
-    if (w.TEACHER.v2) {
-      w.TEACHER.v2 = null
+  const _Tr = getTeacher(); if (_Tr) {
+    _Tr.lessons = []
+    _Tr.memory = { patterns: [], edges: [], mistakes: [] }
+    _Tr.stats = null
+    if (_Tr.v2) {
+      _Tr.v2 = null
       w.teacherInitV2State()
     }
   }

@@ -1,6 +1,8 @@
 // Zeus — teacher/teacherPanel.ts
 // Ported 1:1 from public/js/teacher/teacherPanel.js (Phase 7C)
 // THE TEACHER V2 — AUTONOMOUS DASHBOARD PANEL
+n// [8E-3] w.TEACHER reads migrated to getTeacher()
+import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any
 
@@ -34,7 +36,7 @@ export function teacherToggle(): void {
 function _teacherUpdateBarInfo(): void {
   const info = _tEl('teacher-bar-info'); const sum = _tEl('teacher-bar-summary')
   if (!info || !sum) return
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.v2) { info.textContent = 'IDLE · sandbox'; sum.style.display = 'none'; return }
   const v2 = T.v2; const parts: any[] = []
   parts.push(v2.running ? 'TRAINING' : 'IDLE'); parts.push('CAP ' + v2.capability); parts.push(v2.capabilityLabel)
@@ -53,8 +55,8 @@ function _teacherUpdateBarInfo(): void {
    ═══════════════════════════════════════════════════════════════ */
 export function initTeacher(): void {
   if (_tEl('teacher-panel-body')) return
-  if (typeof w._initTeacherState === 'function' && !w.TEACHER) w._initTeacherState()
-  if (!w.TEACHER) return
+  if (typeof w._initTeacherState === 'function' && !getTeacher()) w._initTeacherState()
+  if (!getTeacher()) return
   if (typeof w.teacherLoadAllPersistent === 'function') w.teacherLoadAllPersistent()
   if (typeof w.teacherInitV2State === 'function') w.teacherInitV2State()
   if (typeof w.teacherLoadV2State === 'function') w.teacherLoadV2State()
@@ -107,7 +109,7 @@ function _teacherRenderTabs(): void {
    MAIN REFRESH
    ═══════════════════════════════════════════════════════════════ */
 function _teacherRefreshDashboard(): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; const v2 = T.v2
+  const T = getTeacher(); if (!T || !T.v2) return; const v2 = T.v2
   const scoreEl = _tEl('teacher-cap-score')
   if (scoreEl) { scoreEl.textContent = v2.capability; scoreEl.className = 'teacher-cap-score teacher-cap-' + (v2.capabilityLabel || 'WEAK').toLowerCase() }
   _tText('teacher-cap-label', v2.capabilityLabel || 'WEAK')
@@ -146,7 +148,7 @@ export function teacherUIResetV2(): void {
    TAB: REPLAY
    ═══════════════════════════════════════════════════════════════ */
 function _teacherRenderReplay(): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; const v2 = T.v2
+  const T = getTeacher(); if (!T || !T.v2) return; const v2 = T.v2
   _tText('teacher-v2-tf', v2.currentTF || '—'); _tText('teacher-v2-profile', v2.currentProfile ? v2.currentProfile.name : '—')
   const regEl = _tEl('teacher-v2-regime')
   if (regEl && v2.currentRegime) { regEl.textContent = v2.currentRegime.regime; regEl.className = 'teacher-regime-' + v2.currentRegime.regime.toLowerCase() } else if (regEl) { regEl.textContent = '—' }
@@ -165,7 +167,7 @@ function _teacherRenderReplay(): void {
    TAB: TRADES
    ═══════════════════════════════════════════════════════════════ */
 function _teacherRenderTrades(): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; const trades = T.v2.lifetimeTrades || []
+  const T = getTeacher(); if (!T || !T.v2) return; const trades = T.v2.lifetimeTrades || []
   const empty = _tEl('teacher-v2-trades-empty'); const list = _tEl('teacher-v2-trades-list')
   if (!trades.length) { _tShow(empty); _tHide(list); return }; _tHide(empty); _tShow(list)
   let html = '<div class="teacher-trades-header"><span>#</span><span>SIDE</span><span>PnL</span><span>CLASS</span><span>TF</span><span>REGIME</span></div>'
@@ -182,7 +184,7 @@ function _statCard(label: any, value: any, color?: any): string {
 }
 
 function _teacherRenderStats(): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; const v2 = T.v2
+  const T = getTeacher(); if (!T || !T.v2) return; const v2 = T.v2
   const empty = _tEl('teacher-v2-stats-empty'); const body = _tEl('teacher-v2-stats-body')
   if (!v2.lifetimeTrades.length) { _tShow(empty); _tHide(body); return }; _tHide(empty); _tShow(body)
   const s = v2.lifetimeStats; if (!s) { _tHtml('teacher-v2-stats-body', ''); return }
@@ -209,14 +211,16 @@ function _teacherRenderMemory(): void {
   let html = '<div class="teacher-stats-grid">'; html += _statCard('PATTERNS', mem.totalPatterns); html += _statCard('EDGES', mem.totalEdges); html += _statCard('MISTAKES', mem.totalMistakes); html += '</div>'
   if (mem.topEdge) html += '<div style="font-size:13px;color:#00e676;padding:3px 0">TOP EDGE: ' + mem.topEdge.description + '</div>'
   if (mem.worstMistake) html += '<div style="font-size:13px;color:#ff5252;padding:3px 0">WORST MISTAKE: ' + mem.worstMistake.description + '</div>'
-  if (w.TEACHER && w.TEACHER.memory && w.TEACHER.memory.patterns && w.TEACHER.memory.patterns.length) {
+  const _Tp = getTeacher()
+  if (_Tp && _Tp.memory && _Tp.memory.patterns && _Tp.memory.patterns.length) {
     html += '<div class="teacher-section-title" style="margin-top:4px">PATTERNS</div>'
-    const pats = w.TEACHER.memory.patterns.slice(0, 10)
+    const pats = _Tp.memory.patterns.slice(0, 10)
     for (let i = 0; i < pats.length; i++) { const p = pats[i]; html += '<div class="teacher-memory-row"><span class="teacher-pill">' + (p.name || p.type || '?') + '</span><span style="font-size:13px;color:#88aacc">' + (p.count || 0) + '× · WR ' + _tPct(p.winRate) + '</span></div>' }
   }
-  if (w.TEACHER && w.TEACHER.lessons && w.TEACHER.lessons.length) {
+  const _Tl = getTeacher()
+  if (_Tl && _Tl.lessons && _Tl.lessons.length) {
     html += '<div class="teacher-section-title" style="margin-top:4px">RECENT LESSONS</div>'
-    const les = w.TEACHER.lessons.slice(-5).reverse()
+    const les = _Tl.lessons.slice(-5).reverse()
     for (let j = 0; j < les.length; j++) html += '<div style="font-size:13px;color:#778899;padding:2px 0;border-bottom:1px solid #1a2530">' + les[j].description + '</div>'
   }
   _tHtml('teacher-v2-memory-body', html)
@@ -226,7 +230,7 @@ function _teacherRenderMemory(): void {
    TAB: REVIEW
    ═══════════════════════════════════════════════════════════════ */
 function _teacherRenderReview(): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; const v2 = T.v2; const reviewEl = _tEl('teacher-v2-review-body'); if (!reviewEl) return
+  const T = getTeacher(); if (!T || !T.v2) return; const v2 = T.v2; const reviewEl = _tEl('teacher-v2-review-body'); if (!reviewEl) return
   let html = '<div class="teacher-section-title">CAPABILITY BREAKDOWN</div>'
   if (v2.capabilityBreakdown) { html += '<div class="teacher-cap-breakdown">'; const bd = v2.capabilityBreakdown; for (const key in bd) { const comp = bd[key]; const barWidth = Math.round(comp.fraction * 100); html += '<div class="teacher-cap-row"><span class="teacher-cap-name">' + key + '</span><span class="teacher-cap-bar-wrap"><span class="teacher-cap-bar" style="width:' + barWidth + '%"></span></span><span class="teacher-cap-pts">' + comp.points.toFixed(1) + '/' + comp.weight + '</span></div>' }; html += '</div>' }
   else { html += '<div class="teacher-empty">Train more to see breakdown.</div>' }

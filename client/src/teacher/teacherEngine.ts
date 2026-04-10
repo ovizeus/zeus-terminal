@@ -1,6 +1,8 @@
 // Zeus — teacher/teacherEngine.ts
 // Ported 1:1 from public/js/teacher/teacherEngine.js (Phase 7C)
 // THE TEACHER — Replay engine
+n// [8E-3] w.TEACHER reads migrated to getTeacher()
+import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any
 
@@ -9,7 +11,7 @@ let _teacherOnTick: any = null
 let _teacherOnComplete: any = null
 
 export function teacherInitReplay(dataset: any, opts?: any): any {
-  opts = opts || {}; const T = w.TEACHER; if (!T) throw new Error('TEACHER state not initialized')
+  opts = opts || {}; const T = getTeacher(); if (!T) throw new Error('TEACHER state not initialized')
   const validation = w.teacherValidateDataset(dataset); if (!validation.valid) throw new Error('Invalid dataset: ' + validation.errors.join(', '))
   teacherStopReplay()
   T.dataset = dataset; T.cursor = opts.startBar || Math.min(w.TEACHER_REPLAY_DEFAULTS.lookback, dataset.bars.length - 1)
@@ -21,14 +23,14 @@ export function teacherInitReplay(dataset: any, opts?: any): any {
 }
 
 function _teacherComputeAtCursor(): any {
-  const T = w.TEACHER; if (!T || !T.dataset || !T.dataset.bars) return
+  const T = getTeacher(); if (!T || !T.dataset || !T.dataset.bars) return
   const visibleBars = T.dataset.bars.slice(0, T.cursor + 1)
   T.indicators = w.teacherComputeIndicators(visibleBars)
   return T.indicators
 }
 
 export function teacherStep(n?: any): any {
-  n = n || 1; const T = w.TEACHER; if (!T || !T.dataset) return null
+  n = n || 1; const T = getTeacher(); if (!T || !T.dataset) return null
   const maxCursor = T.dataset.bars.length - 1
   if (T.cursor >= maxCursor) { _teacherReplayEnd(); return null }
   T.cursor = Math.min(T.cursor + n, maxCursor); _teacherComputeAtCursor()
@@ -41,43 +43,43 @@ export function teacherStep(n?: any): any {
 }
 
 export function teacherStepBack(n?: any): any {
-  n = n || 1; const T = w.TEACHER; if (!T || !T.dataset) return null
+  n = n || 1; const T = getTeacher(); if (!T || !T.dataset) return null
   T.cursor = Math.max(0, T.cursor - n); _teacherComputeAtCursor()
   const bar = T.dataset.bars[T.cursor]
   return { barIndex: T.cursor, bar, indicators: T.indicators, progress: T.cursor / (T.dataset.bars.length - 1), barsLeft: T.dataset.bars.length - 1 - T.cursor, openTrade: T.openTrade }
 }
 
 export function teacherJumpTo(index: any): any {
-  const T = w.TEACHER; if (!T || !T.dataset) return null
+  const T = getTeacher(); if (!T || !T.dataset) return null
   index = Math.max(0, Math.min(index, T.dataset.bars.length - 1)); T.cursor = index; _teacherComputeAtCursor()
   const bar = T.dataset.bars[T.cursor]
   return { barIndex: T.cursor, bar, indicators: T.indicators, progress: T.cursor / (T.dataset.bars.length - 1), barsLeft: T.dataset.bars.length - 1 - T.cursor, openTrade: T.openTrade }
 }
 
 export function teacherPlay(): boolean {
-  const T = w.TEACHER; if (!T || !T.dataset) return false; if (T.replaying && !T.paused) return false
+  const T = getTeacher(); if (!T || !T.dataset) return false; if (T.replaying && !T.paused) return false
   T.replaying = true; T.paused = false; const speed = T.config.speedMs || w.TEACHER_REPLAY_DEFAULTS.speedMs
   _teacherPlayTimer = setInterval(function () { const result = teacherStep(1); if (!result) teacherStopReplay() }, speed)
   return true
 }
 
 export function teacherPause(): boolean {
-  const T = w.TEACHER; if (!T) return false; T.paused = true
+  const T = getTeacher(); if (!T) return false; T.paused = true
   if (_teacherPlayTimer) { clearInterval(_teacherPlayTimer); _teacherPlayTimer = null }; return true
 }
 
 export function teacherStopReplay(): void {
-  const T = w.TEACHER; if (T) { T.replaying = false; T.paused = false }
+  const T = getTeacher(); if (T) { T.replaying = false; T.paused = false }
   if (_teacherPlayTimer) { clearInterval(_teacherPlayTimer); _teacherPlayTimer = null }
 }
 
 export function teacherSetSpeed(ms: any): void {
-  const T = w.TEACHER; if (!T) return; ms = Math.max(50, Math.min(5000, ms || 500)); T.config.speedMs = ms
+  const T = getTeacher(); if (!T) return; ms = Math.max(50, Math.min(5000, ms || 500)); T.config.speedMs = ms
   if (T.replaying && !T.paused) { teacherPause(); teacherPlay() }
 }
 
 function _teacherProcessTradeBar(tick: any): void {
-  const T = w.TEACHER; const trade = T.openTrade; if (!trade) return; const bar = tick.bar; const isLong = trade.side === 'LONG'
+  const T = getTeacher(); const trade = T.openTrade; if (!trade) return; const bar = tick.bar; const isLong = trade.side === 'LONG'
   if (trade.dsl && trade.dsl.enabled) {
     const moveFromEntry = isLong ? (bar.high - trade.entry) / trade.entry * 100 : (trade.entry - bar.low) / trade.entry * 100
     if (!trade.dsl.active && moveFromEntry >= trade.dsl.activation) { trade.dsl.active = true; trade.dsl.bestPrice = isLong ? bar.high : bar.low }
@@ -92,7 +94,7 @@ function _teacherProcessTradeBar(tick: any): void {
 }
 
 export function teacherOpenTrade(side: any, overrides?: any): any {
-  const T = w.TEACHER; if (!T || !T.dataset) return null; if (T.openTrade) return null; if (side !== 'LONG' && side !== 'SHORT') return null
+  const T = getTeacher(); if (!T || !T.dataset) return null; if (T.openTrade) return null; if (side !== 'LONG' && side !== 'SHORT') return null
   const bar = T.dataset.bars[T.cursor]; if (!bar) return null
   const cfg = T.config; const ov = overrides || {}; const entry = bar.close
   const leverage = Math.min(ov.leverageX || cfg.leverageX, w.TEACHER_TRADE_DEFAULTS.maxLeverage)
@@ -111,7 +113,7 @@ export function teacherOpenTrade(side: any, overrides?: any): any {
 }
 
 function _teacherCloseTrade(exitPrice: any, reason: any, tick: any): any {
-  const T = w.TEACHER; if (!T || !T.openTrade) return null
+  const T = getTeacher(); if (!T || !T.openTrade) return null
   const trade = T.openTrade; const isLong = trade.side === 'LONG'; const bar = tick ? tick.bar : (T.dataset ? T.dataset.bars[T.cursor] : null)
   const priceDiff = isLong ? (exitPrice - trade.entry) : (trade.entry - exitPrice); const pnlRaw = priceDiff * trade.qty
   const exitFees = w.teacherEstimateFees(trade.notional, trade.orderType, trade.feeProfile); const exitFee = exitFees.exitFee + exitFees.slippage / 2; const totalFees = trade.entryFee + exitFee
@@ -121,7 +123,7 @@ function _teacherCloseTrade(exitPrice: any, reason: any, tick: any): any {
 }
 
 export function teacherCloseTrade(reason?: any): any {
-  const T = w.TEACHER; if (!T || !T.openTrade || !T.dataset) return null
+  const T = getTeacher(); if (!T || !T.openTrade || !T.dataset) return null
   const bar = T.dataset.bars[T.cursor]; if (!bar) return null
   return _teacherCloseTrade(bar.close, reason || 'MANUAL_EXIT', { bar, barIndex: T.cursor })
 }
@@ -146,14 +148,14 @@ function _teacherAutoTagEntry(side: any, ind: any): any[] {
 }
 
 function _teacherReplayEnd(): void {
-  teacherStopReplay(); const T = w.TEACHER; if (!T) return
+  teacherStopReplay(); const T = getTeacher(); if (!T) return
   if (T.openTrade && T.dataset && T.dataset.bars.length) { const lastBar = T.dataset.bars[T.dataset.bars.length - 1]; _teacherCloseTrade(lastBar.close, 'MAX_BARS_EXIT', { bar: lastBar, barIndex: T.dataset.bars.length - 1 }) }
   const summary = _teacherBuildSessionSummary()
   if (_teacherOnComplete) { try { _teacherOnComplete(summary) } catch (e: any) { console.warn('[TEACHER] onComplete error:', e.message) } }
 }
 
 function _teacherBuildSessionSummary(): any {
-  const T = w.TEACHER; if (!T) return null; const trades = T.trades
+  const T = getTeacher(); if (!T) return null; const trades = T.trades
   let wins = 0, losses = 0, breakeven = 0, totalPnl = 0, grossProfit = 0, grossLoss = 0, totalFees = 0
   for (let i = 0; i < trades.length; i++) { const t = trades[i]; totalPnl += t.pnlNet; totalFees += t.totalFees; if (t.outcome === 'WIN') { wins++; grossProfit += t.pnlNet } else if (t.outcome === 'LOSS') { losses++; grossLoss += Math.abs(t.pnlNet) } else breakeven++ }
   const totalTrades = trades.length; const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : 0
@@ -163,7 +165,7 @@ function _teacherBuildSessionSummary(): any {
 }
 
 export function teacherGetSnapshot(): any {
-  const T = w.TEACHER; if (!T || !T.dataset) return null; const maxCursor = T.dataset.bars.length - 1; const bar = T.dataset.bars[T.cursor]
+  const T = getTeacher(); if (!T || !T.dataset) return null; const maxCursor = T.dataset.bars.length - 1; const bar = T.dataset.bars[T.cursor]
   return { cursor: T.cursor, totalBars: T.dataset.bars.length, progress: maxCursor > 0 ? T.cursor / maxCursor : 0, barsLeft: maxCursor - T.cursor, bar, indicators: T.indicators, openTrade: T.openTrade, tradeCount: T.trades.length, replaying: T.replaying, paused: T.paused, tf: T.dataset.tf }
 }
 

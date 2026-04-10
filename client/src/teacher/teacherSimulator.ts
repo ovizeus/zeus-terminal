@@ -1,6 +1,8 @@
 // Zeus — teacher/teacherSimulator.ts
 // Ported 1:1 from public/js/teacher/teacherSimulator.js (Phase 7C)
 // THE TEACHER — Enhanced trade lifecycle
+n// [8E-3] w.TEACHER reads migrated to getTeacher()
+import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any
 
@@ -9,7 +11,7 @@ const w = window as any
 // ══════════════════════════════════════════════════════════════════
 
 export function teacherInitEquity(): void {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T) return
   T._equity = {
     startCapital: T.config.capitalUSD,
@@ -25,7 +27,7 @@ export function teacherInitEquity(): void {
 }
 
 export function _teacherUpdateEquity(closedTrade: any): void {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T._equity) return
   const eq = T._equity
   eq.capital += closedTrade.pnlNet
@@ -41,7 +43,7 @@ export function _teacherUpdateEquity(closedTrade: any): void {
 }
 
 export function teacherGetEquity(): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T._equity) return null
   const eq = T._equity
   return {
@@ -63,7 +65,7 @@ export function teacherGetEquity(): any {
 // ══════════════════════════════════════════════════════════════════
 
 export function teacherCheckSignalExit(): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.openTrade) return null
   const trade = T.openTrade
   const ind = T.indicators
@@ -102,7 +104,7 @@ export function teacherSetMaxBarsInTrade(n: any): void {
 }
 
 export function teacherCheckTimeStop(): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.openTrade) return null
   const barsHeld = T.cursor - T.openTrade.entryBar
   if (barsHeld >= TEACHER_MAX_BARS_IN_TRADE) return 'TIME_STOP'
@@ -121,7 +123,7 @@ export function teacherEnhancedStep(opts?: any): any {
   const tick = w.teacherStep(1)
   if (!tick) return null
 
-  const T = w.TEACHER
+  const T = getTeacher()
 
   if (tick.openTrade === null && T.trades.length > 0) {
     const lastClosed = T.trades[T.trades.length - 1]
@@ -295,7 +297,7 @@ export function teacherCalcRMultiple(trade: any): any {
 // ══════════════════════════════════════════════════════════════════
 
 export function teacherFullSessionAnalytics(): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T) return null
   const trades = T.trades
   const equity = teacherGetEquity()

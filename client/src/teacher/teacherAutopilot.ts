@@ -1,6 +1,8 @@
 // Zeus — teacher/teacherAutopilot.ts
 // Ported 1:1 from public/js/teacher/teacherAutopilot.js (Phase 7C)
 // TEACHER V2 — Main Autonomous Loop
+n// [8E-3] w.TEACHER reads migrated to getTeacher()
+import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any
 
@@ -8,8 +10,7 @@ let _teacherAutoRunning = false
 let _teacherAutoPaused = false
 
 export function teacherInitV2State(): any {
-  if (!w.TEACHER) return
-  const T = w.TEACHER
+  const T = getTeacher(); if (!T) return
   T.v2 = T.v2 || {
     running: false, status: 'IDLE', statusDetail: '', startedAt: 0,
     startCapital: 10000, currentCapital: 10000, failCount: 0, reloadCount: 0, ruinThreshold: 1000,
@@ -23,20 +24,20 @@ export function teacherInitV2State(): any {
 }
 
 function _teacherLog(msg: any, type?: any): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; type = type || 'info'
+  const T = getTeacher(); if (!T || !T.v2) return; type = type || 'info'
   T.v2.recentActivity.unshift({ ts: Date.now(), msg, type }); if (T.v2.recentActivity.length > 30) T.v2.recentActivity.length = 30
 }
 
 function _teacherSetStatus(status: any, detail?: any): void {
-  const T = w.TEACHER; if (!T || !T.v2) return; T.v2.status = status; T.v2.statusDetail = detail || ''
+  const T = getTeacher(); if (!T || !T.v2) return; T.v2.status = status; T.v2.statusDetail = detail || ''
 }
 
 function _teacherCheckRuin(): boolean {
-  const T = w.TEACHER; if (!T || !T.v2 || !T._equity) return false; return T._equity.capital <= T.v2.ruinThreshold
+  const T = getTeacher(); if (!T || !T.v2 || !T._equity) return false; return T._equity.capital <= T.v2.ruinThreshold
 }
 
 function _teacherReloadCapital(): void {
-  const T = w.TEACHER; if (!T || !T.v2) return
+  const T = getTeacher(); if (!T || !T.v2) return
   T.v2.failCount++; T.v2.reloadCount++
   _teacherLog('CAPITAL DESTROYED — Fail #' + T.v2.failCount + ' — Reloading $10,000', 'fail')
   _teacherSetStatus('RELOADING', 'Fail #' + T.v2.failCount)
@@ -44,7 +45,7 @@ function _teacherReloadCapital(): void {
 }
 
 export async function teacherRunOneSession(): Promise<any> {
-  const T = w.TEACHER; if (!T || !T.v2) return null; const v2 = T.v2
+  const T = getTeacher(); if (!T || !T.v2) return null; const v2 = T.v2
   _teacherSetStatus('LOADING', 'Choosing segment...')
   let segment: any
   if (w.teacherShouldForceRotation(v2.curriculum)) { segment = w.teacherForceRotatedSegment(v2.curriculum); _teacherLog('Forced rotation — least-tested TF/regime', 'info') }
@@ -138,8 +139,8 @@ function _teacherPostTradeReview(trade: any, v2: any): void {
 }
 
 export async function teacherStartAutonomous(): Promise<void> {
-  let T = w.TEACHER
-  if (!T) { if (typeof w._initTeacherState === 'function') w.TEACHER = w._initTeacherState(); T = w.TEACHER }
+  let T = getTeacher()
+  if (!T) { if (typeof w._initTeacherState === 'function') w.TEACHER = w._initTeacherState(); T = getTeacher() }
   if (!T) return
   teacherInitV2State(); const v2 = T.v2
   if (typeof w.teacherLoadV2State === 'function') w.teacherLoadV2State()
@@ -157,7 +158,7 @@ export async function teacherStartAutonomous(): Promise<void> {
 }
 
 export function teacherStopAutonomous(): void {
-  _teacherAutoRunning = false; const T = w.TEACHER
+  _teacherAutoRunning = false; const T = getTeacher()
   if (T && T.v2) { T.v2.running = false; _teacherSetStatus('IDLE', 'Stopping...') }
   if (typeof w.teacherStopReplay === 'function') w.teacherStopReplay()
 }

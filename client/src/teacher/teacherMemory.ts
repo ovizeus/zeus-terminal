@@ -1,6 +1,8 @@
 // Zeus — teacher/teacherMemory.ts
 // Ported 1:1 from public/js/teacher/teacherMemory.js (Phase 7C)
 // THE TEACHER — Learning memory layer
+n// [8E-3] w.TEACHER reads migrated to getTeacher()
+import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any
 
@@ -18,7 +20,7 @@ function _findMemoryEntry(arr: any, tags: any): any {
 }
 
 export function teacherConsolidateMemory(newLessons: any): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !newLessons || newLessons.length === 0) return { added: 0, updated: 0, skipped: 0 }
   let mem = T.memory
   if (!mem) { mem = { patterns: [], edges: [], mistakes: [] }; T.memory = mem }
@@ -60,7 +62,7 @@ export function teacherConsolidateMemory(newLessons: any): any {
 }
 
 export function teacherUpdatePatternMemory(trades: any): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !trades || trades.length === 0) return { patternsUpdated: 0, newPatterns: 0 }
   const mem = T.memory; if (!mem.patterns) mem.patterns = []
   const patStats: any = {}
@@ -94,7 +96,7 @@ export function teacherUpdatePatternMemory(trades: any): any {
 }
 
 export function teacherPreTradeLookback(side: any, indicators: any): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.memory) return { warnings: [], edges: [], patternInfo: [], memoryScore: 50 }
   const mem = T.memory; const warnings: any[] = [], edges: any[] = [], patternInfo: any[] = []
   const hypotheticalReasons: any[] = []
@@ -153,12 +155,12 @@ export function teacherEndSessionMemoryUpdate(trades: any): any {
   const consolResult = teacherConsolidateMemory(lessons)
   const patResult = teacherUpdatePatternMemory(trades)
   let saved = false
-  if (w.TEACHER && w.TEACHER.memory) saved = w.teacherSaveMemory(w.TEACHER.memory)
+  const _T2 = getTeacher(); if (_T2 && _T2.memory) saved = w.teacherSaveMemory(_T2.memory)
   return { lessonsConsolidated: consolResult, patternsResult: patResult, saved }
 }
 
 export function teacherMemorySummary(): any {
-  const T = w.TEACHER
+  const T = getTeacher()
   if (!T || !T.memory) return { totalPatterns: 0, totalEdges: 0, totalMistakes: 0, topEdge: null, worstMistake: null, activeMistakes: 0 }
   const mem = T.memory; const patterns = mem.patterns || []; const edges2 = mem.edges || []; const mistakes = mem.mistakes || []
   let topEdge: any = null
@@ -178,19 +180,19 @@ export function teacherMemorySummary(): any {
 }
 
 export function teacherResolveMistake(mistakeId: any): boolean {
-  const T = w.TEACHER; if (!T || !T.memory || !T.memory.mistakes) return false
+  const T = getTeacher(); if (!T || !T.memory || !T.memory.mistakes) return false
   for (let i = 0; i < T.memory.mistakes.length; i++) { if (T.memory.mistakes[i].id === mistakeId) { T.memory.mistakes[i].resolved = true; return true } }
   return false
 }
 
 export function teacherDeactivateEdge(edgeId: any): boolean {
-  const T = w.TEACHER; if (!T || !T.memory || !T.memory.edges) return false
+  const T = getTeacher(); if (!T || !T.memory || !T.memory.edges) return false
   for (let i = 0; i < T.memory.edges.length; i++) { if (T.memory.edges[i].id === edgeId) { T.memory.edges[i].active = false; return true } }
   return false
 }
 
 export function teacherClearMemory(): boolean {
-  const T = w.TEACHER; if (!T) return false
+  const T = getTeacher(); if (!T) return false
   T.memory = { patterns: [], edges: [], mistakes: [] }
   w.teacherSaveMemory(T.memory)
   return true
