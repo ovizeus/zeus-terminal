@@ -261,3 +261,12 @@ export function getTCDslExtendPct(): number {
   const w = window as any
   return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : 1.30
 }
+
+// ── Added in 8C-3B (dsl.ts market + positions reads) ──
+
+/** Magnet levels — TEMP bridge getter
+ *  TODO: remove in 8D/9 */
+export function getMagnets(): { above: any[]; below: any[] } {
+  const m = (window as any).S?.magnets
+  return m ? { above: m.above || [], below: m.below || [] } : { above: [], below: [] }
+}

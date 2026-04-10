@@ -3,9 +3,9 @@
 // Dynamic Stop Loss — brain logic, widget render, intervals
 // [8C-3A] DSL/TC/BM/BRAIN reads migrated to accessors
 
-import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode } from '../services/stateAccessors'
+import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
 
-const w = window as any // kept for w.S, w.TP, w.el, w._ZI, w.AT writes, function calls
+const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.el, w._ZI, w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
 const DSL = getDSLObject()
 
@@ -14,7 +14,7 @@ const DSL = getDSLObject()
 // ══════════════════════════════════════════════════════
 export function dslToggleMagnet(posId: any): void {
   posId = String(posId)
-  const pos = [...(w.TP.demoPositions || []), ...(w.TP.livePositions || [])].find((p: any) => String(p.id) === posId)
+  const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   if (!pos.dslParams) pos.dslParams = {}
   pos.dslParams.magnetEnabled = !pos.dslParams.magnetEnabled
@@ -38,7 +38,7 @@ export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind:
     const maxSnapDist = cur * atrPct / 100 * 0.2
     const minSafetyDist = cur * 0.001
 
-    const magnets = (typeof w.S !== 'undefined' && w.S.magnets) ? w.S.magnets : { above: [], below: [] }
+    const magnets = getMagnets()
     const candidates: any[] = []
 
     if (kind === 'PL') {
@@ -243,8 +243,8 @@ export function runDSLBrain(): void {
   // [AT-UNIFY] When server AT is active, server DSL handles SL management.
   if (w._serverATEnabled) {
     const allOpenPosns = [
-      ...(w.TP.demoPositions || []),
-      ...(w.TP.livePositions || [])
+      ...(getDemoPositions()),
+      ...(getLivePositions())
     ].filter((p: any) => !p.closed)
     if (!allOpenPosns.length) { renderDSLWidget([]); return }
 
@@ -257,7 +257,7 @@ export function runDSLBrain(): void {
       const serverDsl = pos._dsl
       DSL.positions[_dslKey] = DSL.positions[_dslKey] || {}
       const dsl = DSL.positions[_dslKey]
-      const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
+      const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
 
       // [ZT-AUD-008] Stale detection
       if (serverDsl.lastTickTs && Date.now() - serverDsl.lastTickTs > 60000) {
@@ -297,7 +297,7 @@ export function runDSLBrain(): void {
       if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) delete DSL.positions[id]
     })
 
-    if (!_manualPositions.length || !Number.isFinite(w.S.price) || w.S.price <= 0
+    if (!_manualPositions.length || !Number.isFinite(getPrice()) || getPrice() <= 0
         || w._SAFETY.dataStalled || w._SAFETY.isReconnecting) {
       renderDSLWidget(allOpenPosns)
       w.renderATPositions()
@@ -310,11 +310,11 @@ export function runDSLBrain(): void {
     return
   }
   if (!DSL.enabled) return
-  if (!Number.isFinite(w.S.price) || w.S.price <= 0) return
+  if (!Number.isFinite(getPrice()) || getPrice() <= 0) return
   if (w._SAFETY.dataStalled || w._SAFETY.isReconnecting) return
   const allOpenPosns = [
-    ...(w.TP.demoPositions || []),
-    ...(w.TP.livePositions || [])
+    ...(getDemoPositions()),
+    ...(getLivePositions())
   ].filter((p: any) => !p.closed)
   if (!allOpenPosns.length) { renderDSLWidget([]); return }
 
@@ -362,7 +362,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
     const _posMode = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
     const _canMoveSL = _posMode === 'auto' || _posMode === 'paper'
       || (_posMode === 'assist' && w.S.assistArmed)
-    const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
+    const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
     if (!cur || cur <= 0) return
     const _wasRestored = !!pos._restored
     if (pos._restored) { pos._restored = false }
@@ -617,7 +617,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
 // ── Take Control handler (AUTO + ASSIST positions) ─────────────
 export function dslTakeControl(posId: any): void {
   posId = String(posId)
-  const pos = [...(w.TP.demoPositions || []), ...(w.TP.livePositions || [])].find((p: any) => String(p.id) === posId)
+  const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
   if (_cm !== 'auto' && _cm !== 'assist') { w.toast('Take Control: doar pentru AUTO/ASSIST'); return }
@@ -636,7 +636,7 @@ export function dslTakeControl(posId: any): void {
 // ── Let AI Control handler ───────────
 export function dslReleaseControl(posId: any): void {
   posId = String(posId)
-  const pos = [...(w.TP.demoPositions || []), ...(w.TP.livePositions || [])].find((p: any) => String(p.id) === posId)
+  const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   if ((pos.controlMode || 'paper') !== 'user') { w.toast('Această poziție nu e în MANUAL'); return }
   const _origSource = (pos.sourceMode || pos.brainModeAtOpen || 'assist').toLowerCase()
@@ -663,7 +663,7 @@ export function dslReleaseControl(posId: any): void {
 // ── Manual DSL param update ───
 export function dslManualParam(posId: any, param: any, value: any): void {
   posId = String(posId)
-  const pos = [...(w.TP.demoPositions || []), ...(w.TP.livePositions || [])].find((p: any) => String(p.id) === posId)
+  const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
   if (_cm !== 'user' && _cm !== 'paper') return
@@ -681,7 +681,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
   if (param === 'openDslPct') {
     const _dslCheck = DSL.positions[posId]
     if (!_dslCheck?.active) {
-      const _livePr = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
+      const _livePr = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
       if (_livePr > 0) {
         pos.dslParams.dslTargetPrice = pos.side === 'LONG'
           ? _livePr * (1 + v / 100)
@@ -707,7 +707,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
       pivotRightPct: _pp.pivotRightPct ?? _gPR,
       impulseVPct: _pp.impulseVPct ?? _gIV,
     }, posId)
-    const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
+    const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
     if (cur > 0) {
       const isLong = pos.side === 'LONG'
       _dsl.pivotLeft = isLong ? cur * (1 - _san.pivotLeftPct / 100) : cur * (1 + _san.pivotLeftPct / 100)
@@ -726,7 +726,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
 
   if (typeof w.ZState !== 'undefined') w.ZState.save()
 
-  var _allOpen = [...(w.TP.demoPositions || []), ...(w.TP.livePositions || [])].filter(function (p: any) { return !p.closed })
+  var _allOpen = [...(getDemoPositions()), ...(getLivePositions())].filter(function (p: any) { return !p.closed })
   renderDSLWidget(_allOpen)
 
   pos._dslParamsPushedAt = Date.now()
@@ -871,7 +871,7 @@ export function renderDSLWidget(positions: any[]): void {
 // ── Render a single DSL position card ──────────────────────────
 export function _renderDslCard(pos: any): string {
   const dsl = DSL.positions[String(pos.id)]
-  const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
+  const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
   const symBase = pos.sym.replace('USDT', '')
   const isActive = dsl?.active || false
   const isLong = pos.side === 'LONG'
@@ -1147,8 +1147,8 @@ export function startDSLIntervals(): void {
   DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
-      ...(w.TP.demoPositions || []),
-      ...(w.TP.livePositions || [])
+      ...(getDemoPositions()),
+      ...(getLivePositions())
     ].filter((p: any) => !p.closed)
     if (!posns.length || !DSL.enabled) return
     renderDSLWidget(posns)
@@ -1172,8 +1172,7 @@ export function _dslTrimAll(): void {
   if (Array.isArray(DSL.history) && DSL.history.length > 50) {
     DSL.history = DSL.history.slice(-50)
   }
-  const _allPos = [...(typeof w.TP !== 'undefined' && Array.isArray(w.TP.demoPositions) ? w.TP.demoPositions : []),
-  ...(typeof w.TP !== 'undefined' && Array.isArray(w.TP.livePositions) ? w.TP.livePositions : [])]
+  const _allPos = [...getDemoPositions(), ...getLivePositions()]
   _allPos.forEach(function (p: any) {
     if (Array.isArray(p.dslHistory) && p.dslHistory.length > 30) {
       p.dslHistory = p.dslHistory.slice(-30)
