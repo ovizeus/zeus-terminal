@@ -1,6 +1,7 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useState } from 'react'
 
+const w = window as any
 interface Props { visible: boolean; onClose: () => void }
 
 const tabs = ['DISPLAY', 'APPEARANCE'] as const
@@ -26,13 +27,15 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Price Bucket %</span>
-                <input type="range" min={1} max={20} step={1} defaultValue={3} style={{ flex: 1, accentColor: '#f0c040' }} onChange={() => {}} />
+                <input type="range" min={1} max={20} step={1} defaultValue={3} style={{ flex: 1, accentColor: '#f0c040' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.bucketPct = +e.target.value * 0.1 }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Min Size $</span>
-                <input type="range" min={0} max={50} step={1} defaultValue={0} style={{ flex: 1, accentColor: '#f0c040' }} onChange={() => {}} />
+                <input type="range" min={0} max={50} step={1} defaultValue={0} style={{ flex: 1, accentColor: '#f0c040' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.minSizeUsd = +e.target.value * 1000 }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
@@ -62,33 +65,39 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Long Liq Color</span>
-                <input type="color" defaultValue="#00d4aa" style={{ width: 44, height: 26, border: '1px solid #333', borderRadius: 3, cursor: 'pointer' }} />
+                <input type="color" defaultValue="#00d4aa" style={{ width: 44, height: 26, border: '1px solid #333', borderRadius: 3, cursor: 'pointer' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.longCol = e.target.value }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Short Liq Color</span>
-                <input type="color" defaultValue="#ff4466" style={{ width: 44, height: 26, border: '1px solid #333', borderRadius: 3, cursor: 'pointer' }} />
+                <input type="color" defaultValue="#ff4466" style={{ width: 44, height: 26, border: '1px solid #333', borderRadius: 3, cursor: 'pointer' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.shortCol = e.target.value }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Max Bar Width %</span>
-                <input type="range" min={5} max={60} step={1} defaultValue={30} style={{ flex: 1, accentColor: '#f0c040' }} onChange={() => {}} />
+                <input type="range" min={5} max={60} step={1} defaultValue={30} style={{ flex: 1, accentColor: '#f0c040' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.maxBarWidthPct = +e.target.value }} />
               </div>
             </div>
             <div className="msec" style={{ marginBottom: 10 }}>
               <div className="mrow">
                 <span className="mlbl">Opacity %</span>
-                <input type="range" min={5} max={100} step={1} defaultValue={70} style={{ flex: 1, accentColor: '#f0c040' }} onChange={() => {}} />
+                <input type="range" min={5} max={100} step={1} defaultValue={70} style={{ flex: 1, accentColor: '#f0c040' }}
+                  onChange={(e) => { if (w.S?.llvSettings) w.S.llvSettings.opacity = +e.target.value }} />
               </div>
             </div>
 
             <div className="msec" style={{ marginBottom: 10 }}>DATA</div>
-            <button className="sbtn2 sec" style={{ width: '100%', color: '#ff4466', borderColor: '#ff446644', marginTop: 4 }}>
+            <button className="sbtn2 sec" style={{ width: '100%', color: '#ff4466', borderColor: '#ff446644', marginTop: 4 }}
+              onClick={() => { w.llvClearCanvas?.(); if (w.S?.llvBuckets) w.S.llvBuckets = {} }}>
               RESET &amp; CLEAR ALL DATA
             </button>
-            <button className="sbtn2" style={{ width: '100%', marginTop: 8, background: '#f0c04022', borderColor: '#f0c04055', color: '#f0c040' }}>
+            <button className="sbtn2" style={{ width: '100%', marginTop: 8, background: '#f0c04022', borderColor: '#f0c04055', color: '#f0c040' }}
+              onClick={() => { w.llvSaveSettings?.(); onClose() }}>
               SAVE &amp; CLOSE
             </button>
           </div>
