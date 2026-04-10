@@ -53,10 +53,9 @@ export function ManualTradePanel() {
 
   // Balance now from positionsStore (reactive, no polling needed)
 
-  // Init side from TP on mount
+  // Init side from TP on mount (balance comes from positionsStore reactively)
   useEffect(() => {
     if (w.TP?.demoSide) setSideLocal(w.TP.demoSide)
-    if (w.TP) setBalance(w.TP.demoBalance)
   }, [])
 
   const showCustomLev = lev === 'custom'
