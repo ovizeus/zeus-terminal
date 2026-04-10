@@ -93,44 +93,81 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  // ── Pull-to-refresh (mobile) ──
-  const ptrRef = useRef<{ startY: number; pulling: boolean }>({ startY: 0, pulling: false })
+  // ── Pull-to-refresh (native-style, mobile only) ──
+  const ptrState = useRef({ startY: 0, active: false, canPull: false })
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    const el = mainRef.current
-    if (!el) return
-    const indicator = document.getElementById('ptr-indicator')
+    const THRESHOLD = 90 // px to pull before triggering refresh
+    const MAX_PULL = 120
+
+    function getScrollTop(): number {
+      // Check both the main element and window scroll
+      const el = mainRef.current
+      return Math.min(el ? el.scrollTop : 0, window.scrollY || document.documentElement.scrollTop || 0)
+    }
 
     function onTouchStart(e: TouchEvent) {
-      if (el!.scrollTop <= 0) {
-        ptrRef.current.startY = e.touches[0].clientY
-        ptrRef.current.pulling = true
-      }
-    }
-    function onTouchMove(e: TouchEvent) {
-      if (!ptrRef.current.pulling) return
-      const dy = e.touches[0].clientY - ptrRef.current.startY
-      if (dy > 10 && indicator) {
-        indicator.style.transform = `translateX(-50%) translateY(${Math.min(dy - 10, 60)}px)`
-        indicator.classList.add('visible')
-      }
-    }
-    function onTouchEnd(e: TouchEvent) {
-      if (!ptrRef.current.pulling) return
-      const dy = e.changedTouches[0].clientY - ptrRef.current.startY
-      ptrRef.current.pulling = false
-      if (indicator) { indicator.classList.remove('visible'); indicator.style.transform = '' }
-      if (dy > 80) location.reload()
+      // Only activate if at very top of scroll
+      if (getScrollTop() > 2) return
+      ptrState.current.startY = e.touches[0].clientY
+      ptrState.current.canPull = true
+      ptrState.current.active = false
     }
 
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: true })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    function onTouchMove(e: TouchEvent) {
+      if (!ptrState.current.canPull) return
+      const dy = e.touches[0].clientY - ptrState.current.startY
+      // Only pull downward, and only if still at top
+      if (dy < 5 || getScrollTop() > 2) {
+        ptrState.current.canPull = false
+        return
+      }
+      ptrState.current.active = true
+      const indicator = document.getElementById('ptr-indicator')
+      if (!indicator) return
+      const pull = Math.min(dy, MAX_PULL)
+      const progress = Math.min(pull / THRESHOLD, 1)
+      const ty = pull * 0.5 - 40 // starts hidden, slides down
+      indicator.classList.add('pulling')
+      indicator.classList.remove('refreshing')
+      indicator.style.transform = `translateX(-50%) translateY(${ty}px) scale(${0.6 + progress * 0.4})`
+      // Rotate spinner proportional to pull
+      const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
+      if (spinner) spinner.style.transform = `rotate(${pull * 3}deg)`
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (!ptrState.current.active) { ptrState.current.canPull = false; return }
+      const dy = e.changedTouches[0].clientY - ptrState.current.startY
+      const indicator = document.getElementById('ptr-indicator')
+      ptrState.current.active = false
+      ptrState.current.canPull = false
+
+      if (dy >= THRESHOLD && indicator) {
+        // Trigger refresh
+        indicator.classList.remove('pulling')
+        indicator.classList.add('refreshing')
+        indicator.style.transform = ''
+        const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
+        if (spinner) spinner.style.transform = ''
+        setTimeout(() => location.reload(), 400)
+      } else if (indicator) {
+        // Cancel — snap back
+        indicator.classList.remove('pulling', 'refreshing')
+        indicator.style.transform = ''
+        indicator.style.opacity = '0'
+        setTimeout(() => { indicator.style.opacity = '' }, 300)
+      }
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: true })
+    document.addEventListener('touchend', onTouchEnd, { passive: true })
     return () => {
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
     }
   }, [])
 
@@ -167,8 +204,8 @@ export function PanelShell() {
       <ExposurePanel visible={activeModal === 'exposure'} onClose={closeModal} />
       <DecisionLogPanel visible={activeModal === 'decisionlog'} onClose={closeModal} />
 
-      {/* Pull-to-refresh indicator (CSS in app.css) */}
-      <div id="ptr-indicator">↻</div>
+      {/* Pull-to-refresh indicator (native-style, CSS in app.css) */}
+      <div id="ptr-indicator"><div className="ptr-spinner" /></div>
 
       <main className="zr-panels" ref={mainRef}>
         {/* ── Mode Bar — 1:1 from original zeus-mode-bar ── */}
