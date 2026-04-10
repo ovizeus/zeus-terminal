@@ -48,11 +48,14 @@
 
   function _bvPoll() { fetch('/api/brain/vision', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null }).then(function (data: any) { if (data && data.symbols) { _bvData = data; _bvRender() } }).catch(function () { }) }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  // DOMContentLoaded already fired in React SPA — start directly
+  function _bvInit() {
     const wrap = document.getElementById('brainVisionWrap'); if (!wrap) return
     setTimeout(_bvPoll, 3000); _bvTimer = setInterval(_bvPoll, 30000)
     void _bvTimer
-  })
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _bvInit)
+  else setTimeout(_bvInit, 500)
 })()
 
 // ===== BRAIN DASHBOARD (Reflection Engine) =====
@@ -86,11 +89,14 @@
 
   function _bdPoll() { fetch('/api/brain/dashboard', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null }).then(function (data: any) { if (data) { _bdData = data; _bdRender() } }).catch(function () { }) }
 
-  document.addEventListener('DOMContentLoaded', function () {
+  // DOMContentLoaded already fired in React SPA — start directly
+  function _bdInit() {
     const wrap = document.getElementById('brainDashWrap'); if (!wrap) return
     setTimeout(_bdPoll, 5000); _bdTimer = setInterval(_bdPoll, 30000)
     void _bdTimer
-  })
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _bdInit)
+  else setTimeout(_bdInit, 500)
 })()
 
 export {}
