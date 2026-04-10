@@ -65,7 +65,7 @@ app.use(helmet({
       scriptSrc: ["'self'", "'unsafe-inline'", "https://unpkg.com", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com", "https://browser.sentry-cdn.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
-      connectSrc: ["'self'", "wss://fstream.binance.com", "wss://stream.bybit.com", "https://fapi.binance.com", "https://api.binance.com", "https://testnet.binancefuture.com", "https://api.alternative.me", "https://*.ingest.de.sentry.io", "https://api.bybit.com", "https://www.okx.com", "https://api.coingecko.com"],
+      connectSrc: ["'self'", "wss://fstream.binance.com", "wss://stream.bybit.com", "wss://ws.okx.com:8443", "https://fapi.binance.com", "https://api.binance.com", "https://testnet.binancefuture.com", "https://api.alternative.me", "https://*.ingest.de.sentry.io", "https://api.bybit.com", "https://www.okx.com", "https://api.coingecko.com"],
       imgSrc: ["'self'", "data:", "blob:"],
       manifestSrc: ["'self'", "blob:"],
       frameAncestors: ["'none'"],
