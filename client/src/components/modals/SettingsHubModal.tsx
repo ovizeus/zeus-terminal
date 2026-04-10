@@ -314,7 +314,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       </div>
 
       {/* ══ EXCHANGE API ══ */}
-      <div className="mbody" id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px'}}>
+      <div id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px', overflowY:'auto', flex:'1 1 auto'}}>
         <div style={{fontSize:'8px',color:'#ff8800',marginBottom:'10px',lineHeight:'1.6'}}>
           Cheile sunt criptate la server · Folosește READ + TRADE only (fără withdrawal) · Restricționează IP
         </div>
