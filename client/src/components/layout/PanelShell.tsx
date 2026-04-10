@@ -126,7 +126,8 @@ export function PanelShell() {
       const progress = Math.min(pull / THRESHOLD, 1)
       indicator.classList.add('pulling')
       indicator.classList.remove('refreshing')
-      indicator.style.transform = `translateX(-50%) translateY(${pull * 0.6 - 30}px)`
+      const ty = Math.min(pull * 0.4, 30) - 40 // slides from -40px to -10px max
+      indicator.style.transform = `translateX(-50%) translateY(${ty}px)`
       indicator.style.opacity = String(Math.min(progress * 1.5, 1))
       // Rotate arrow proportional to pull, flip at threshold
       const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
@@ -146,7 +147,7 @@ export function PanelShell() {
       if (dy >= THRESHOLD && indicator) {
         indicator.classList.remove('pulling')
         indicator.classList.add('refreshing')
-        indicator.style.transform = 'translateX(-50%) translateY(20px)'
+        indicator.style.transform = 'translateX(-50%) translateY(-5px)'
         const lbl = indicator.querySelector('.ptr-label') as HTMLElement
         if (lbl) lbl.textContent = 'Refreshing...'
         const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement

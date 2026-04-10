@@ -67,6 +67,7 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+html, body { overscroll-behavior-y: contain; } /* disable native pull-to-refresh */
 body {
   font-family: var(--ff);
   background: var(--bg);
@@ -5569,18 +5570,22 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   #zeus-dock .zd-item:not(.zd-disabled):hover .zd-label { color: #8ab4d4 }
 }
 
-/* ── Pull-to-refresh (Bybit-style branded) ── */
+/* ── Pull-to-refresh (Bybit-style branded, below header) ── */
 #ptr-indicator {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 50px);
+  top: calc(env(safe-area-inset-top, 0px) + 126px); /* below fixed header */
   left: 50%;
-  transform: translateX(-50%) translateY(-60px);
+  transform: translateX(-50%) translateY(-50px);
   display: flex; align-items: center; gap: 8px;
   background: #0d1117; border: 1px solid #f0c04044;
   border-radius: 20px; padding: 6px 16px 6px 10px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 8px rgba(240,192,64,0.08);
-  z-index: 20000; opacity: 0; pointer-events: none;
+  z-index: 199; /* below header (200), above content */
+  opacity: 0; pointer-events: none;
   transition: transform .3s cubic-bezier(.2,.8,.4,1), opacity .25s ease;
+}
+@media (max-width: 900px) {
+  #ptr-indicator { top: calc(env(safe-area-inset-top, 0px) + 104px); }
 }
 #ptr-indicator.pulling { transition: none; }
 #ptr-indicator.refreshing {
