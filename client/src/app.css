@@ -3429,29 +3429,29 @@ body {
 #zeus-groups .zpv-active-panel #flow-panel { display: block !important; }
 #zeus-groups .zpv-active-panel #flow-panel-hdr { display: none !important; }
 #zeus-groups .zpv-active-panel #flow-panel-body { display: block !important; }
-/* ── MTF — old CSS: #mtf-strip { display:none !important } ── */
-.zpv-active-panel #mtf-strip { display: block !important; }
-.zpv-active-panel #mtf-strip-bar { display: none !important; }
-.zpv-active-panel #mtf-strip-panel { display: block !important; max-height: none !important; overflow: visible !important; }
+/* ── MTF ── */
+#zeus-groups .zpv-active-panel #mtf-strip { display: block !important; }
+#zeus-groups .zpv-active-panel #mtf-strip-bar { display: none !important; }
+#zeus-groups .zpv-active-panel #mtf-strip-panel { display: block !important; max-height: none !important; overflow: visible !important; }
 /* ── Teacher — old CSS: #teacher-strip { display:none !important } ── */
-.zpv-active-panel #teacher-strip { display: block !important; }
-.zpv-active-panel .teacher-strip-bar { display: none !important; }
-.zpv-active-panel #teacher-strip-panel { display: block !important; max-height: none !important; overflow: visible !important; }
-/* ── Signal Registry — old CSS: #sr-strip { display:none !important } ── */
-.zpv-active-panel #sr-strip { display: block !important; }
-.zpv-active-panel #sr-strip-bar { display: none !important; }
-.zpv-active-panel #sr-strip-panel { display: block !important; }
-/* ── Activity Feed — old CSS: #actfeed-strip { display:none !important } ── */
-.zpv-active-panel #actfeed-strip { display: block !important; }
-.zpv-active-panel .actfeed-bar { display: none !important; }
-.zpv-active-panel #actfeed-panel { display: block !important; }
-/* ── AUB (Alien) — old CSS: .zpv-content #aub-hdr{display:none} .zpv-content #aub{max-height:none} ── */
-.zpv-active-panel #aub { display: block !important; max-height: none !important; overflow: visible !important; }
-.zpv-active-panel #aub-hdr { display: none !important; }
-.zpv-active-panel #aub-body { display: grid !important; }
-/* ── Adaptive — old CSS: #adaptive-strip { display:none !important } ── */
-.zpv-active-panel #adaptive-strip { display: block !important; }
-.zpv-active-panel #adaptive-strip .adaptive-bar { display: none !important; }
+#zeus-groups .zpv-active-panel #teacher-strip { display: block !important; }
+#zeus-groups .zpv-active-panel .teacher-strip-bar { display: none !important; }
+#zeus-groups .zpv-active-panel #teacher-strip-panel { display: block !important; max-height: none !important; overflow: visible !important; }
+/* ── Signal Registry ── */
+#zeus-groups .zpv-active-panel #sr-strip { display: block !important; }
+#zeus-groups .zpv-active-panel #sr-strip-bar { display: none !important; }
+#zeus-groups .zpv-active-panel #sr-strip-panel { display: block !important; }
+/* ── Activity Feed ── */
+#zeus-groups .zpv-active-panel #actfeed-strip { display: block !important; }
+#zeus-groups .zpv-active-panel .actfeed-bar { display: none !important; }
+#zeus-groups .zpv-active-panel #actfeed-panel { display: block !important; }
+/* ── AUB (Alien) ── */
+#zeus-groups .zpv-active-panel #aub { display: block !important; max-height: none !important; overflow: visible !important; }
+#zeus-groups .zpv-active-panel #aub-hdr { display: none !important; }
+#zeus-groups .zpv-active-panel #aub-body { display: grid !important; }
+/* ── Adaptive ── */
+#zeus-groups .zpv-active-panel #adaptive-sec { display: block !important; }
+#zeus-groups .zpv-active-panel #adaptive-strip .adaptive-bar { display: none !important; }
 .zpv-active-panel #adaptive-strip-panel { display: block !important; }
 
 /* ══════════════════════════════════════════════════════════════════
