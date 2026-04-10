@@ -1,5 +1,9 @@
+import { useState } from 'react'
+
 /** Adaptive Control dock page view — 1:1 from #adaptive-sec in index.html lines 4435-4471 */
 export function AdaptivePanel() {
+  const [adaptiveOn, setAdaptiveOn] = useState(() => !!(window as any).BM?.adaptive?.enabled)
+
   return (
     <div className="sec" id="adaptive-sec">
       <div className="slbl" style={{ justifyContent: 'space-between' }}>
@@ -9,11 +13,23 @@ export function AdaptivePanel() {
       <div style={{ padding: '8px 12px' }}>
         {/* Toggle button */}
         <div style={{ marginBottom: '8px' }}>
-          <button id="adaptiveToggleBtn" onClick={() => (window as any).toggleAdaptive?.()} style={{
+          <button id="adaptiveToggleBtn" onClick={() => {
+            const w = window as any
+            if (typeof w.toggleAdaptive === 'function') {
+              w.toggleAdaptive()
+              setAdaptiveOn(!!(w.BM?.adaptive?.enabled))
+            } else {
+              setAdaptiveOn(v => !v)
+            }
+          }} style={{
             width: '100%', padding: '6px 10px', fontSize: '10px', fontFamily: 'var(--ff)', letterSpacing: '1px',
-            background: '#0a1220', border: '1px solid #2a3a4a', color: '#778899', borderRadius: '3px',
+            background: adaptiveOn ? '#0a2a1a' : '#0a1220',
+            border: `1px solid ${adaptiveOn ? '#00ffcc44' : '#2a3a4a'}`,
+            color: adaptiveOn ? '#00ffcc' : '#778899', borderRadius: '3px',
             cursor: 'pointer', transition: 'all .2s'
-          }} dangerouslySetInnerHTML={{ __html: 'ADAPTIVE OFF' }} />
+          }}>
+            {adaptiveOn ? 'ADAPTIVE ON' : 'ADAPTIVE OFF'}
+          </button>
           <div style={{ fontSize: '8px', color: 'var(--dim)', marginTop: '4px', lineHeight: 1.6 }}>
             OFF = to&#x21B;i multiplieri &#xD7;1.00, engine nu cite&#x219;te nimic.<br />
             Min 30 trades/bucket pentru a activa multiplicatorii.

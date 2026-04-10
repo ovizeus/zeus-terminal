@@ -9,7 +9,7 @@ function seededRandom(seed: number) {
 /** 1:1 port of #dslZone from public/index.html lines 1573-1681
  *  + initDSLBubbles() from dsl.js lines 181-204 */
 export function DSLZonePanel() {
-  const [dslOn, setDslOn] = useState(false)
+  const [dslOn, setDslOn] = useState(() => !!(window as any).DSL?.enabled)
 
   // Generate 12 floating bubbles (same logic as dsl.js initDSLBubbles)
   const bubbles = useMemo(() => {
