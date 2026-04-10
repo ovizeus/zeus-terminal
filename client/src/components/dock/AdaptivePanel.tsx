@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useBrainStore } from '../../stores'
 
 /** Adaptive Control dock page view — 1:1 from #adaptive-sec in index.html lines 4435-4471 */
 export function AdaptivePanel() {
-  const [adaptiveOn, setAdaptiveOn] = useState(() => !!(window as any).BM?.adaptive?.enabled)
+  const adaptiveOn = useBrainStore((s) => !!s.brain.adaptive?.enabled)
 
   return (
     <div className="sec" id="adaptive-sec">
@@ -17,9 +17,7 @@ export function AdaptivePanel() {
             const w = window as any
             if (typeof w.toggleAdaptive === 'function') {
               w.toggleAdaptive()
-              setAdaptiveOn(!!(w.BM?.adaptive?.enabled))
-            } else {
-              setAdaptiveOn(v => !v)
+              // brainStore syncs via useBrainBridge event — no manual setAdaptiveOn needed
             }
           }} style={{
             width: '100%', padding: '6px 10px', fontSize: '10px', fontFamily: 'var(--ff)', letterSpacing: '1px',

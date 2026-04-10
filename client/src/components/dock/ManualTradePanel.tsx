@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useUiStore, usePositionsStore } from '../../stores'
+import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 
 const w = window as any
 
@@ -62,7 +62,7 @@ export function ManualTradePanel() {
   const effectiveLev = showCustomLev ? customLev : +lev
 
   // Liquidation price estimate (local, for instant preview)
-  const price = w.S?.price || 0
+  const price = useMarketStore((s) => s.market.price) || 0
   const entryPrice = ordType === 'market' ? price : (+entry || 0)
   let liqPrice = 0
   if (entryPrice > 0 && effectiveLev > 0) {
@@ -72,7 +72,7 @@ export function ManualTradePanel() {
   }
 
   function setPct(pct: number) {
-    const bal = w.TP?.demoBalance ?? balance
+    const bal = balance // from positionsStore (reactive)
     setSize((bal * pct / 100).toFixed(0))
   }
 
