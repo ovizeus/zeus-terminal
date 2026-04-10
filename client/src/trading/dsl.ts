@@ -1,8 +1,13 @@
 // Zeus — trading/dsl.ts
 // Ported 1:1 from public/js/trading/dsl.js (Phase 6B)
 // Dynamic Stop Loss — brain logic, widget render, intervals
+// [8C-3A] DSL/TC/BM/BRAIN reads migrated to accessors
 
-const w = window as any
+import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode } from '../services/stateAccessors'
+
+const w = window as any // kept for w.S, w.TP, w.el, w._ZI, w.AT writes, function calls
+// [8C-3A] DSL = mutable ref to DSL
+const DSL = getDSLObject()
 
 // ══════════════════════════════════════════════════════
 // [DSL MAGNET] Per-position toggle
@@ -29,7 +34,7 @@ export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind:
     const cur = ctx.cur
     if (!cur || cur <= 0 || !Number.isFinite(basePrice) || basePrice <= 0) return out
 
-    const atrPct = (typeof w.BRAIN !== 'undefined' ? w.BRAIN.regimeAtrPct : 0) || 1
+    const atrPct = getBrainObject()?.regimeAtrPct || 1
     const maxSnapDist = cur * atrPct / 100 * 0.2
     const minSafetyDist = cur * 0.001
 
@@ -57,9 +62,9 @@ export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind:
     const best = candidates[0]
 
     let conf = Math.round(Math.max(20, 100 - (best.dist / maxSnapDist * 80)))
-    const atmos = (typeof w.BM !== 'undefined' && w.BM.atmosphere) ? w.BM.atmosphere : null
+    const atmos = getBrainMetrics()?.atmosphere || null
     if (atmos && !atmos.allow) conf = Math.max(10, conf - 30)
-    const sweep = (typeof w.BM !== 'undefined' && w.BM.sweep) ? w.BM.sweep : null
+    const sweep = getBrainMetrics()?.sweep || null
     if (sweep && sweep.type && sweep.type !== 'none') conf = Math.max(10, conf - 15)
 
     if (conf < 30) return out
@@ -83,18 +88,18 @@ export function toggleDSL(): void {
       if (typeof w.toast === 'function') w.toast('AUTO: DSL e controlat de AI', 0, w._ZI?.robot)
       return
     }
-    if (typeof w.DSL === 'undefined') return
-    w.DSL.enabled = !w.DSL.enabled
+    if (typeof DSL === 'undefined') return
+    DSL.enabled = !DSL.enabled
     if (!w.S.dsl) w.S.dsl = {}
-    w.S.dsl.active = w.DSL.enabled
-    if (!w.DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
-    if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) { w.startDSLIntervals() }
+    w.S.dsl.active = DSL.enabled
+    if (!DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
+    if (DSL.enabled && typeof w.startDSLIntervals === 'function' && !DSL.checkInterval) { w.startDSLIntervals() }
     const btn = typeof w.el === 'function' ? w.el('dslToggleBtn') : document.getElementById('dslToggleBtn')
     const dot = typeof w.el === 'function' ? w.el('dslStatusDot') : document.getElementById('dslStatusDot')
-    if (btn) { btn.textContent = w.DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (w.DSL.enabled ? '' : ' off') }
-    if (dot) { dot.style.color = w.DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = w.DSL.enabled ? 'var(--grn-bright)' : '#333' }
-    if (typeof w.atLog === 'function') w.atLog('info', w.DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
-    if (typeof w.brainThink === 'function') w.brainThink(w.DSL.enabled ? 'ok' : 'bad', w.DSL.enabled ? (w._ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
+    if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off') }
+    if (dot) { dot.style.color = DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = DSL.enabled ? 'var(--grn-bright)' : '#333' }
+    if (typeof w.atLog === 'function') w.atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
+    if (typeof w.brainThink === 'function') w.brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (w._ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
     _emitDSLChanged()
   } catch (e) { console.warn('[DSL] toggleDSL error:', e) }
@@ -130,14 +135,14 @@ export function _syncDslAssistUI(): void {
     if (dz) dz.style.pointerEvents = ''
     dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
     const dslBtn2 = w.el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = w.DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = 'Global DSL defaults for new positions' }
+    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = 'Global DSL defaults for new positions' }
   } else if (_m === 'assist') {
     if (assistBar) assistBar.classList.add('show')
     const dz = w.el('dslZone')
     if (dz) dz.style.pointerEvents = ''
     dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
     const dslBtn2 = w.el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = w.DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
+    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
     if (armBtn) {
       armBtn.innerHTML = w.S.assistArmed ? w._ZI.dYlw + ' ASSIST ARMAT' : w._ZI.lock + ' ARM ASSIST'
       armBtn.className = 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : '')
@@ -151,7 +156,7 @@ export function _syncDslAssistUI(): void {
     if (dz) dz.style.pointerEvents = ''
     dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
     const dslBtn2 = w.el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = w.DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
+    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
   }
 }
 
@@ -250,8 +255,8 @@ export function runDSLBrain(): void {
     _atPositions.forEach((pos: any) => {
       const _dslKey = String(pos.id)
       const serverDsl = pos._dsl
-      w.DSL.positions[_dslKey] = w.DSL.positions[_dslKey] || {}
-      const dsl = w.DSL.positions[_dslKey]
+      DSL.positions[_dslKey] = DSL.positions[_dslKey] || {}
+      const dsl = DSL.positions[_dslKey]
       const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
 
       // [ZT-AUD-008] Stale detection
@@ -288,8 +293,8 @@ export function runDSLBrain(): void {
     })
 
     // Cleanup DSL states for closed positions
-    Object.keys(w.DSL.positions).forEach((id: string) => {
-      if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) delete w.DSL.positions[id]
+    Object.keys(DSL.positions).forEach((id: string) => {
+      if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) delete DSL.positions[id]
     })
 
     if (!_manualPositions.length || !Number.isFinite(w.S.price) || w.S.price <= 0
@@ -304,7 +309,7 @@ export function runDSLBrain(): void {
     w.renderATPositions()
     return
   }
-  if (!w.DSL.enabled) return
+  if (!DSL.enabled) return
   if (!Number.isFinite(w.S.price) || w.S.price <= 0) return
   if (w._SAFETY.dataStalled || w._SAFETY.isReconnecting) return
   const allOpenPosns = [
@@ -315,10 +320,10 @@ export function runDSLBrain(): void {
 
   _runClientDSLOnPositions(allOpenPosns)
 
-  Object.keys(w.DSL.positions).forEach((id: string) => {
+  Object.keys(DSL.positions).forEach((id: string) => {
     if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) {
-      delete w.DSL.positions[id]
-      if (w.DSL._attachedIds) w.DSL._attachedIds.delete(String(id))
+      delete DSL.positions[id]
+      if (DSL._attachedIds) DSL._attachedIds.delete(String(id))
     }
   })
 
@@ -328,10 +333,10 @@ export function runDSLBrain(): void {
 
 // ── Client-side DSL engine — runs activation + phases on given positions ──
 export function _runClientDSLOnPositions(positions: any[]): void {
-  const _globalDslPct = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslActivatePct)) ? w.TC.dslActivatePct : (parseFloat(w.el('dslActivatePct')?.value) || 0.50)
-  const _globalPivotL = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : (parseFloat(w.el('dslTrailPct')?.value) || 0.70)
-  const _globalPivotR = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : (parseFloat(w.el('dslTrailSusPct')?.value) || 1.00)
-  const _globalImpulseV = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : (parseFloat(w.el('dslExtendPct')?.value) || 1.30)
+  const _globalDslPct = getTCDslActivatePct()
+  const _globalPivotL = getTCDslTrailPct()
+  const _globalPivotR = getTCDslTrailSusPct()
+  const _globalImpulseV = getTCDslExtendPct()
 
   positions.forEach((pos: any) => {
     const _pp = pos.dslParams || {}
@@ -365,8 +370,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
 
     // ── INIT DSL state ──
     const _dslKey = String(pos.id)
-    w.DSL.positions[_dslKey] = w.DSL.positions[_dslKey] || {}
-    const _rb = w.DSL.positions[_dslKey]
+    DSL.positions[_dslKey] = DSL.positions[_dslKey] || {}
+    const _rb = DSL.positions[_dslKey]
     if (_rb.active == null) _rb.active = false
     if (_rb.pivotLeft == null) _rb.pivotLeft = null
     if (_rb.pivotRight == null) _rb.pivotRight = null
@@ -380,7 +385,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
     if (pos.dslHistory.length > 30) pos.dslHistory = pos.dslHistory.slice(-30)
     if (_rb.log.length > 20) _rb.log = _rb.log.slice(-20)
 
-    const dsl = w.DSL.positions[_dslKey]
+    const dsl = DSL.positions[_dslKey]
 
     // ── DSL activation target (STORED, not recalculated per tick) ──
     if (!pos.dslParams) pos.dslParams = {}
@@ -674,7 +679,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
     }
   }
   if (param === 'openDslPct') {
-    const _dslCheck = w.DSL.positions[posId]
+    const _dslCheck = DSL.positions[posId]
     if (!_dslCheck?.active) {
       const _livePr = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
       if (_livePr > 0) {
@@ -689,13 +694,13 @@ export function dslManualParam(posId: any, param: any, value: any): void {
 
   // ── LIVE RECALC ──
   const _dslKey = String(posId)
-  const _dsl = w.DSL.positions[_dslKey]
+  const _dsl = DSL.positions[_dslKey]
   if (_dsl?.active) {
     const _pp = pos.dslParams
-    const _gDsl = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslActivatePct)) ? w.TC.dslActivatePct : (parseFloat(w.el('dslActivatePct')?.value) || 40)
-    const _gPL = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : (parseFloat(w.el('dslTrailPct')?.value) || 0.8)
-    const _gPR = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : (parseFloat(w.el('dslTrailSusPct')?.value) || 1.0)
-    const _gIV = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : (parseFloat(w.el('dslExtendPct')?.value) || 20)
+    const _gDsl = getTCDslActivatePct()
+    const _gPL = getTCDslTrailPct()
+    const _gPR = getTCDslTrailSusPct()
+    const _gIV = getTCDslExtendPct()
     const _san = _dslSanitizeParams({
       openDslPct: _pp.openDslPct ?? _gDsl,
       pivotLeftPct: _pp.pivotLeftPct ?? _gPL,
@@ -809,19 +814,19 @@ export function renderDSLWidget(positions: any[]): void {
   const countEl = w.el('dslActiveCount')
   if (!container) return
 
-  const _activeMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
+  const _activeMode = getATMode() || 'demo'
   const modeFiltered = positions.filter(function (p: any) {
     var posMode = p.mode || 'demo'
     return posMode === _activeMode
   })
 
   if (container.contains(document.activeElement) && document.activeElement!.tagName === 'INPUT') {
-    if (countEl) countEl.textContent = modeFiltered.filter((p: any) => w.DSL.positions[String(p.id)]?.active).length + ' active'
+    if (countEl) countEl.textContent = modeFiltered.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active'
     return
   }
 
   const allDisplayPosns = modeFiltered
-  const activeCount = allDisplayPosns.filter((p: any) => w.DSL.positions[String(p.id)]?.active).length
+  const activeCount = allDisplayPosns.filter((p: any) => DSL.positions[String(p.id)]?.active).length
   if (countEl) countEl.textContent = activeCount + ' active'
 
   if (!allDisplayPosns.length) {
@@ -865,7 +870,7 @@ export function renderDSLWidget(positions: any[]): void {
 
 // ── Render a single DSL position card ──────────────────────────
 export function _renderDslCard(pos: any): string {
-  const dsl = w.DSL.positions[String(pos.id)]
+  const dsl = DSL.positions[String(pos.id)]
   const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
   const symBase = pos.sym.replace('USDT', '')
   const isActive = dsl?.active || false
@@ -874,10 +879,10 @@ export function _renderDslCard(pos: any): string {
   const cardCls = isLong ? 'long' : 'short'
 
   const _pp = pos.dslParams || {}
-  const openDSLpct = _pp.openDslPct ?? ((typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslActivatePct)) ? w.TC.dslActivatePct : (parseFloat(w.el('dslActivatePct')?.value) || 0.50))
-  const pivotLeftPct = _pp.pivotLeftPct ?? ((typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : (parseFloat(w.el('dslTrailPct')?.value) || 0.70))
-  const pivotRightPct = _pp.pivotRightPct ?? ((typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : (parseFloat(w.el('dslTrailSusPct')?.value) || 1.00))
-  const impulseValPct = _pp.impulseVPct ?? ((typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : (parseFloat(w.el('dslExtendPct')?.value) || 1.30))
+  const openDSLpct = _pp.openDslPct ?? (getTCDslActivatePct())
+  const pivotLeftPct = _pp.pivotLeftPct ?? (getTCDslTrailPct())
+  const pivotRightPct = _pp.pivotRightPct ?? (getTCDslTrailSusPct())
+  const impulseValPct = _pp.impulseVPct ?? (getTCDslExtendPct())
 
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
   const _isManual = _cm === 'user'
@@ -1131,21 +1136,21 @@ export function _renderDslCard(pos: any): string {
 function _emitDSLChanged() { try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {} }
 
 export function stopDSLIntervals(): void {
-  if (w.DSL.checkInterval) { w.Intervals.clear('dsl'); w.DSL.checkInterval = null }
-  if (w.DSL.visualInterval) { w.Intervals.clear('dslVis'); w.DSL.visualInterval = null }
+  if (DSL.checkInterval) { w.Intervals.clear('dsl'); DSL.checkInterval = null }
+  if (DSL.visualInterval) { w.Intervals.clear('dslVis'); DSL.visualInterval = null }
   _emitDSLChanged()
 }
 export function startDSLIntervals(): void {
-  if (w.DSL.checkInterval) return
+  if (DSL.checkInterval) return
   _emitDSLChanged()
-  w.DSL.checkInterval = w.Intervals.set('dsl', runDSLBrain, 3000)
-  w.DSL.visualInterval = w.Intervals.set('dslVis', () => {
+  DSL.checkInterval = w.Intervals.set('dsl', runDSLBrain, 3000)
+  DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
       ...(w.TP.demoPositions || []),
       ...(w.TP.livePositions || [])
     ].filter((p: any) => !p.closed)
-    if (!posns.length || !w.DSL.enabled) return
+    if (!posns.length || !DSL.enabled) return
     renderDSLWidget(posns)
   }, 3000)
   setTimeout(() => { initDSLBubbles(); runDSLBrain() }, 2000)
@@ -1154,18 +1159,18 @@ export function startDSLIntervals(): void {
 
 // ─── DSL Trim (cap logs/history) ────────────────────────────
 export function _dslTrimLogs(posId: any): void {
-  if (typeof w.DSL === 'undefined' || !w.DSL.positions?.[posId]) return
-  const pos = w.DSL.positions[posId]
+  if (typeof DSL === 'undefined' || !DSL.positions?.[posId]) return
+  const pos = DSL.positions[posId]
   if (Array.isArray(pos.log) && pos.log.length > 20) {
     pos.log = pos.log.slice(-20)
   }
 }
 
 export function _dslTrimAll(): void {
-  if (typeof w.DSL === 'undefined' || !w.DSL.positions) return
-  Object.keys(w.DSL.positions).forEach((id: string) => _dslTrimLogs(id))
-  if (Array.isArray(w.DSL.history) && w.DSL.history.length > 50) {
-    w.DSL.history = w.DSL.history.slice(-50)
+  if (typeof DSL === 'undefined' || !DSL.positions) return
+  Object.keys(DSL.positions).forEach((id: string) => _dslTrimLogs(id))
+  if (Array.isArray(DSL.history) && DSL.history.length > 50) {
+    DSL.history = DSL.history.slice(-50)
   }
   const _allPos = [...(typeof w.TP !== 'undefined' && Array.isArray(w.TP.demoPositions) ? w.TP.demoPositions : []),
   ...(typeof w.TP !== 'undefined' && Array.isArray(w.TP.livePositions) ? w.TP.livePositions : [])]
@@ -1175,7 +1180,7 @@ export function _dslTrimAll(): void {
     }
   })
   const _openIds = new Set(_allPos.filter(function (p: any) { return !p.closed }).map(function (p: any) { return String(p.id) }))
-  Object.keys(w.DSL.positions).forEach(function (id: string) {
-    if (!_openIds.has(id)) delete w.DSL.positions[id]
+  Object.keys(DSL.positions).forEach(function (id: string) {
+    if (!_openIds.has(id)) delete DSL.positions[id]
   })
 }

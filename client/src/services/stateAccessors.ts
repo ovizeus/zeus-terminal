@@ -230,3 +230,34 @@ export function getBrainMetrics(): any {
 export function getBrainObject(): any {
   return (window as any).BRAIN
 }
+
+// ── Added in 8C-3A (dsl.ts) ──
+
+/** DSL Object (w.DSL) — TEMP bridge getter
+ *  Returns MUTABLE REFERENCE intentionally.
+ *  Used by dsl.ts legacy read/write flow.
+ *  TODO: remove in Phase 9 */
+export function getDSLObject(): any {
+  return (window as any).DSL
+}
+
+/** TC DSL activate pct — TEMP bridge */
+export function getTCDslActivatePct(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslActivatePct)) ? w.TC.dslActivatePct : 0.50
+}
+/** TC DSL trail pct (pivot left) — TEMP bridge */
+export function getTCDslTrailPct(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : 0.70
+}
+/** TC DSL trail sus pct (pivot right) — TEMP bridge */
+export function getTCDslTrailSusPct(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : 1.00
+}
+/** TC DSL extend pct (impulse) — TEMP bridge */
+export function getTCDslExtendPct(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : 1.30
+}
