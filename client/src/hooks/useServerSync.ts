@@ -158,6 +158,10 @@ export function useServerSync(authenticated: boolean) {
       })
       pullATState()
       pullJournal()
+      // Load settings from server (single source of truth)
+      import('../stores/settingsStore').then(({ useSettingsStore }) => {
+        useSettingsStore.getState().loadFromServer()
+      }).catch(() => {})
     }, 8000)
 
     // 4. WS subscription — handles at_update and sync messages

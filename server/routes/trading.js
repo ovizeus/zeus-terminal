@@ -377,6 +377,57 @@ router.get('/user/telegram', (req, res) => {
   }
 });
 
+// ─── GET /api/user/settings ─── Load per-user settings ───
+router.get('/user/settings', (req, res) => {
+  try {
+    const db = require('../services/database');
+    const data = db.getUserSettings(req.user.id);
+    res.json({ ok: true, settings: data || {} });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Failed to load settings' });
+  }
+});
+
+// ─── POST /api/user/settings ─── Save per-user settings (whitelist + UPSERT) ───
+const SETTINGS_WHITELIST = new Set([
+  // AT
+  'confMin', 'sigMin', 'size', 'riskPct', 'maxDay', 'maxPos', 'sl', 'rr',
+  'killPct', 'lossStreak', 'maxAddon', 'lev', 'adaptEnabled', 'adaptLive', 'smartExitEnabled',
+  // UI
+  'theme', 'uiScale', 'soundEnabled',
+  // Chart
+  'chartTf', 'chartType', 'candleColors', 'heatmapSettings', 'timezoneOffset',
+  // Indicators
+  'indSettings',
+  // Liq / LLV / Supremus / S-R
+  'liqSettings', 'llvSettings', 'zsSettings', 'srSettings',
+  // Alerts
+  'alertSettings',
+]);
+
+router.post('/user/settings', (req, res) => {
+  try {
+    const db = require('../services/database');
+    const raw = req.body.settings;
+    if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing settings object' });
+
+    // Whitelist: only allowed keys pass through
+    const clean = {};
+    for (const key of Object.keys(raw)) {
+      if (SETTINGS_WHITELIST.has(key)) clean[key] = raw[key];
+    }
+
+    // Merge with existing (so partial updates don't wipe other keys)
+    const existing = db.getUserSettings(req.user.id) || {};
+    const merged = { ...existing, ...clean };
+
+    db.saveUserSettings(req.user.id, merged);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Failed to save settings' });
+  }
+});
+
 // ─── POST /api/user/telegram/test ─── Send a test message ───
 router.post('/user/telegram/test', async (req, res) => {
   const telegram = require('../services/telegram');

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useATStore, usePositionsStore } from '../../stores'
+import { useATStore, usePositionsStore, useSettingsStore } from '../../stores'
 import { api } from '../../services/api'
 
 /** 1:1 port of .at-sep + #atPanel from public/index.html lines 1684-2033 */
@@ -35,46 +35,39 @@ export function AutoTradePanel() {
   const [brainDashOpen, setBrainDashOpen] = useState(true)
   const [symPickerOpen, setSymPickerOpen] = useState(false)
 
-  // Init AT settings from saved user settings (localStorage) so values survive refresh.
-  // Old JS (_usApply in config.ts) also sets DOM input values, but React controlled
-  // inputs reset them on re-render. Reading from localStorage at mount fixes this.
+  // Init AT settings from settingsStore (loaded from server at boot)
   useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('zeus_user_settings') || '{}')
-      const at = saved.autoTrade
-      if (!at) return
-      if (at.confMin != null)      setConfMin(Number(at.confMin))
-      if (at.sigMin != null)       setSigMin(Number(at.sigMin))
-      if (at.size != null)         setAtSize(Number(at.size))
-      if (at.riskPct != null)      setAtRiskPct(Number(at.riskPct))
-      if (at.maxDay != null)       setAtMaxDay(Number(at.maxDay))
-      if (at.maxPos != null)       setAtMaxPos(Number(at.maxPos))
-      if (at.sl != null)           setAtSL(Number(at.sl))
-      if (at.rr != null)           setAtRR(Number(at.rr))
-      if (at.killPct != null)      setAtKillPct(Number(at.killPct))
-      if (at.lossStreak != null)   setAtLossStreak(Number(at.lossStreak))
-      if (at.maxAddon != null)     setAtMaxAddon(Number(at.maxAddon))
-      if (at.lev != null)          setAtLev(String(at.lev))
-      if (at.adaptEnabled != null) setAdaptEnabled(!!at.adaptEnabled)
-      if (at.adaptLive != null)    setAdaptLive(!!at.adaptLive)
-      if (at.smartExitEnabled != null) setSmartExit(!!at.smartExitEnabled)
-    } catch { /* ignore malformed storage */ }
+    const s = useSettingsStore.getState().settings
+    if (s.confMin != null)      setConfMin(Number(s.confMin))
+    if (s.sigMin != null)       setSigMin(Number(s.sigMin))
+    if (s.size != null)         setAtSize(Number(s.size))
+    if (s.riskPct != null)      setAtRiskPct(Number(s.riskPct))
+    if (s.maxDay != null)       setAtMaxDay(Number(s.maxDay))
+    if (s.maxPos != null)       setAtMaxPos(Number(s.maxPos))
+    if (s.sl != null)           setAtSL(Number(s.sl))
+    if (s.rr != null)           setAtRR(Number(s.rr))
+    if (s.killPct != null)      setAtKillPct(Number(s.killPct))
+    if (s.lossStreak != null)   setAtLossStreak(Number(s.lossStreak))
+    if (s.maxAddon != null)     setAtMaxAddon(Number(s.maxAddon))
+    if (s.lev != null)          setAtLev(String(s.lev))
+    if (s.adaptEnabled != null) setAdaptEnabled(!!s.adaptEnabled)
+    if (s.adaptLive != null)    setAdaptLive(!!s.adaptLive)
+    if (s.smartExitEnabled != null) setSmartExit(!!s.smartExitEnabled)
   }, [])
 
   function handleSaveAT() {
-    try {
-      const saved = JSON.parse(localStorage.getItem('zeus_user_settings') || '{}')
-      saved.autoTrade = {
-        ...saved.autoTrade,
-        sl: atSL, rr: atRR, size: atSize, riskPct: atRiskPct,
-        maxDay: atMaxDay, maxPos: atMaxPos, killPct: atKillPct,
-        lossStreak: atLossStreak, maxAddon: atMaxAddon, lev: atLev,
-        confMin, sigMin, adaptEnabled, adaptLive, smartExitEnabled: smartExit,
-      }
-      localStorage.setItem('zeus_user_settings', JSON.stringify(saved))
-      const w = window as any
-      if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
-    } catch { /* ignore */ }
+    // Save to settingsStore + server (explicit save on button click)
+    const store = useSettingsStore.getState()
+    store.patch({
+      sl: atSL, rr: atRR, size: atSize, riskPct: atRiskPct,
+      maxDay: atMaxDay, maxPos: atMaxPos, killPct: atKillPct,
+      lossStreak: atLossStreak, maxAddon: atMaxAddon, lev: atLev,
+      confMin, sigMin, adaptEnabled, adaptLive, smartExitEnabled: smartExit,
+    })
+    store.saveToServer()
+    // Also notify old engine (bridge invers — will be removed in Phase 8)
+    const w = window as any
+    if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
   }
 
   async function handleKill() {

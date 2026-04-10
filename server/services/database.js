@@ -285,6 +285,16 @@ migrate('015_multi_exchange', () => {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_user_name ON exchange_accounts(user_id, exchange) WHERE is_active = 1");
 });
 
+migrate('016_user_settings', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS user_settings (
+            user_id     INTEGER PRIMARY KEY,
+            data        TEXT NOT NULL DEFAULT '{}',
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -360,6 +370,9 @@ const _stmts = {
     annotationUpsert: db.prepare("INSERT INTO trade_annotations (seq, user_id, notes, tags, rating, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now')) ON CONFLICT(seq, user_id) DO UPDATE SET notes = excluded.notes, tags = excluded.tags, rating = excluded.rating, updated_at = datetime('now')"),
     annotationGet: db.prepare('SELECT notes, tags, rating FROM trade_annotations WHERE seq = ? AND user_id = ?'),
     annotationsByUser: db.prepare('SELECT seq, notes, tags, rating FROM trade_annotations WHERE user_id = ? ORDER BY seq DESC'),
+    // User settings (per-user, UPSERT)
+    settingsGet: db.prepare('SELECT data FROM user_settings WHERE user_id = ?'),
+    settingsUpsert: db.prepare("INSERT INTO user_settings (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
     // Brain decisions (ML data layer)
     bdInsert: db.prepare('INSERT INTO brain_decisions (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, linked_seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     bdLinkSeq: db.prepare('UPDATE brain_decisions SET linked_seq = ? WHERE snap_id = ?'),
@@ -772,6 +785,15 @@ module.exports = {
             try { r.tags = JSON.parse(r.tags); } catch (_) { r.tags = []; }
             return r;
         });
+    },
+    // User settings (per-user UPSERT)
+    getUserSettings: (userId) => {
+        const row = _stmts.settingsGet.get(userId);
+        if (!row) return null;
+        try { return JSON.parse(row.data); } catch (_) { return null; }
+    },
+    saveUserSettings: (userId, data) => {
+        _stmts.settingsUpsert.run(userId, JSON.stringify(data));
     },
     // Missed trades
     saveMissedTrade: (userId, symbol, side, reason, price, confidence, tier, regime, data) => {
