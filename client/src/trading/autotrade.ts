@@ -103,7 +103,10 @@ export function _applyATToggleUI(enabled: any): void {
     { const _oe = w.el('atStatus'); if (_oe) _oe.innerHTML = w._ZI.dGrn + ' Activ — scan la 30s' }
     w.atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${w.AT.realizedDailyPnL.toFixed(2)} | Trades: ${w.AT.closedTradesToday}`)
     if (!w.AT.interval) w.AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
-    setTimeout(runAutoTradeCheck, 2000) // first check immediately
+    // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
+    if (typeof w.runSignalScan === 'function') try { w.runSignalScan() } catch (_) {}
+    if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}
+    setTimeout(runAutoTradeCheck, 2000) // first check with fresh confluence
     // [FIX] Force balance sync when AT starts in LIVE mode — prevents $10k fallback
     if (w.AT.mode === 'live' && typeof w.liveApiSyncState === 'function') {
       w.liveApiSyncState().then(function () {
