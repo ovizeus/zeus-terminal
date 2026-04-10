@@ -5569,36 +5569,33 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   #zeus-dock .zd-item:not(.zd-disabled):hover .zd-label { color: #8ab4d4 }
 }
 
-/* ── Pull-to-refresh indicator (native-style) ── */
+/* ── Pull-to-refresh (Bybit-style branded) ── */
 #ptr-indicator {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 60px);
+  top: calc(env(safe-area-inset-top, 0px) + 50px);
   left: 50%;
-  transform: translateX(-50%) translateY(-80px) scale(0.6);
-  width: 40px; height: 40px; border-radius: 50%;
-  background: #141820; border: 2px solid #f0c04066;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.6), 0 0 12px rgba(240,192,64,0.1);
-  display: flex; align-items: center; justify-content: center;
+  transform: translateX(-50%) translateY(-60px);
+  display: flex; align-items: center; gap: 8px;
+  background: #0d1117; border: 1px solid #f0c04044;
+  border-radius: 20px; padding: 6px 16px 6px 10px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 8px rgba(240,192,64,0.08);
   z-index: 20000; opacity: 0; pointer-events: none;
-  transition: transform .25s cubic-bezier(.2,.8,.4,1), opacity .2s ease;
+  transition: transform .3s cubic-bezier(.2,.8,.4,1), opacity .25s ease;
 }
-#ptr-indicator.pulling {
-  opacity: 1;
-  transition: none;
-}
+#ptr-indicator.pulling { transition: none; }
 #ptr-indicator.refreshing {
   opacity: 1;
-  transform: translateX(-50%) translateY(0px) scale(1);
-  transition: transform .3s cubic-bezier(.2,.8,.4,1);
+  transition: transform .3s cubic-bezier(.2,.8,.4,1), opacity .2s ease;
 }
 #ptr-indicator .ptr-spinner {
-  width: 22px; height: 22px;
-  border: 2.5px solid #f0c04033;
-  border-top-color: #f0c040;
-  border-radius: 50%;
+  width: 18px; height: 18px; flex-shrink: 0;
+  border: 2px solid #f0c04033; border-top-color: #f0c040;
+  border-radius: 50%; transition: transform .15s ease;
 }
-#ptr-indicator.refreshing .ptr-spinner {
-  animation: ptr-spin .7s linear infinite;
+#ptr-indicator.refreshing .ptr-spinner { animation: ptr-spin .6s linear infinite; }
+#ptr-indicator .ptr-label {
+  font-family: var(--ff); font-size: 11px; letter-spacing: 0.5px;
+  color: #f0c040; white-space: nowrap;
 }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
 

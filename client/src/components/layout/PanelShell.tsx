@@ -93,76 +93,80 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  // ── Pull-to-refresh (native-style, mobile only) ──
-  const ptrState = useRef({ startY: 0, active: false, canPull: false })
+  // ── Pull-to-refresh (Bybit-style: only from top, branded banner) ──
+  const ptrState = useRef({ startY: 0, active: false, locked: false })
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    const THRESHOLD = 90 // px to pull before triggering refresh
-    const MAX_PULL = 120
+    const THRESHOLD = 70
+    const MAX_PULL = 130
 
-    function getScrollTop(): number {
-      // Check both the main element and window scroll
-      const el = mainRef.current
-      return Math.min(el ? el.scrollTop : 0, window.scrollY || document.documentElement.scrollTop || 0)
+    function isAtTop(): boolean {
+      return window.scrollY <= 0 && document.documentElement.scrollTop <= 0
     }
 
     function onTouchStart(e: TouchEvent) {
-      // Only activate if at very top of scroll
-      if (getScrollTop() > 2) return
+      if (!isAtTop()) { ptrState.current.locked = true; return }
       ptrState.current.startY = e.touches[0].clientY
-      ptrState.current.canPull = true
       ptrState.current.active = false
+      ptrState.current.locked = false
     }
 
     function onTouchMove(e: TouchEvent) {
-      if (!ptrState.current.canPull) return
+      if (ptrState.current.locked) return
       const dy = e.touches[0].clientY - ptrState.current.startY
-      // Only pull downward, and only if still at top
-      if (dy < 5 || getScrollTop() > 2) {
-        ptrState.current.canPull = false
-        return
-      }
+      // Must be pulling down AND still at top
+      if (dy < 8 || !isAtTop()) { ptrState.current.locked = true; resetIndicator(); return }
+      // Prevent native scroll while pulling
+      e.preventDefault()
       ptrState.current.active = true
       const indicator = document.getElementById('ptr-indicator')
       if (!indicator) return
       const pull = Math.min(dy, MAX_PULL)
       const progress = Math.min(pull / THRESHOLD, 1)
-      const ty = pull * 0.5 - 40 // starts hidden, slides down
       indicator.classList.add('pulling')
       indicator.classList.remove('refreshing')
-      indicator.style.transform = `translateX(-50%) translateY(${ty}px) scale(${0.6 + progress * 0.4})`
-      // Rotate spinner proportional to pull
+      indicator.style.transform = `translateX(-50%) translateY(${pull * 0.6 - 30}px)`
+      indicator.style.opacity = String(Math.min(progress * 1.5, 1))
+      // Rotate arrow proportional to pull, flip at threshold
       const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
-      if (spinner) spinner.style.transform = `rotate(${pull * 3}deg)`
+      if (spinner) spinner.style.transform = `rotate(${progress >= 1 ? 180 : pull * 2}deg)`
+      // Update label
+      const lbl = indicator.querySelector('.ptr-label') as HTMLElement
+      if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Pull to refresh'
     }
 
     function onTouchEnd(e: TouchEvent) {
-      if (!ptrState.current.active) { ptrState.current.canPull = false; return }
+      if (!ptrState.current.active) { ptrState.current.locked = false; return }
       const dy = e.changedTouches[0].clientY - ptrState.current.startY
       const indicator = document.getElementById('ptr-indicator')
       ptrState.current.active = false
-      ptrState.current.canPull = false
+      ptrState.current.locked = false
 
       if (dy >= THRESHOLD && indicator) {
-        // Trigger refresh
         indicator.classList.remove('pulling')
         indicator.classList.add('refreshing')
-        indicator.style.transform = ''
+        indicator.style.transform = 'translateX(-50%) translateY(20px)'
+        const lbl = indicator.querySelector('.ptr-label') as HTMLElement
+        if (lbl) lbl.textContent = 'Refreshing...'
         const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
         if (spinner) spinner.style.transform = ''
-        setTimeout(() => location.reload(), 400)
-      } else if (indicator) {
-        // Cancel — snap back
-        indicator.classList.remove('pulling', 'refreshing')
-        indicator.style.transform = ''
-        indicator.style.opacity = '0'
-        setTimeout(() => { indicator.style.opacity = '' }, 300)
+        setTimeout(() => location.reload(), 500)
+      } else {
+        resetIndicator()
       }
     }
 
+    function resetIndicator() {
+      const indicator = document.getElementById('ptr-indicator')
+      if (!indicator) return
+      indicator.classList.remove('pulling', 'refreshing')
+      indicator.style.transform = ''
+      indicator.style.opacity = ''
+    }
+
     document.addEventListener('touchstart', onTouchStart, { passive: true })
-    document.addEventListener('touchmove', onTouchMove, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: false })
     document.addEventListener('touchend', onTouchEnd, { passive: true })
     return () => {
       document.removeEventListener('touchstart', onTouchStart)
@@ -204,8 +208,11 @@ export function PanelShell() {
       <ExposurePanel visible={activeModal === 'exposure'} onClose={closeModal} />
       <DecisionLogPanel visible={activeModal === 'decisionlog'} onClose={closeModal} />
 
-      {/* Pull-to-refresh indicator (native-style, CSS in app.css) */}
-      <div id="ptr-indicator"><div className="ptr-spinner" /></div>
+      {/* Pull-to-refresh indicator (Bybit-style branded) */}
+      <div id="ptr-indicator">
+        <div className="ptr-spinner" />
+        <span className="ptr-label">Pull to refresh</span>
+      </div>
 
       <main className="zr-panels" ref={mainRef}>
         {/* ── Mode Bar — 1:1 from original zeus-mode-bar ── */}
