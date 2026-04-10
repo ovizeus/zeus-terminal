@@ -1,7 +1,7 @@
 // Zeus — teacher/teacherAutopilot.ts
 // Ported 1:1 from public/js/teacher/teacherAutopilot.js (Phase 7C)
 // TEACHER V2 — Main Autonomous Loop
-n// [8E-3] w.TEACHER reads migrated to getTeacher()
+// [8E-3] w.TEACHER reads migrated to getTeacher()
 import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any

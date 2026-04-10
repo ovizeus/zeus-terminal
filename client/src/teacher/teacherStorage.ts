@@ -1,7 +1,7 @@
 // Zeus — teacher/teacherStorage.ts
 // Ported 1:1 from public/js/teacher/teacherStorage.js (Phase 7C)
 // THE TEACHER — LocalStorage persistence layer
-n// [8E-3] w.TEACHER reads migrated to getTeacher()
+// [8E-3] w.TEACHER reads migrated to getTeacher()
 import { getTeacher } from '../services/stateAccessors'
 // Uses zeus_teacher_ prefix — fully isolated from live storage keys
 // NO DOM, NO live state reads/writes

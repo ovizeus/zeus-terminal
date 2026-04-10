@@ -1,7 +1,7 @@
 // Zeus — teacher/teacherSimulator.ts
 // Ported 1:1 from public/js/teacher/teacherSimulator.js (Phase 7C)
 // THE TEACHER — Enhanced trade lifecycle
-n// [8E-3] w.TEACHER reads migrated to getTeacher()
+// [8E-3] w.TEACHER reads migrated to getTeacher()
 import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any

@@ -1,7 +1,7 @@
 // Zeus — teacher/teacherPanel.ts
 // Ported 1:1 from public/js/teacher/teacherPanel.js (Phase 7C)
 // THE TEACHER V2 — AUTONOMOUS DASHBOARD PANEL
-n// [8E-3] w.TEACHER reads migrated to getTeacher()
+// [8E-3] w.TEACHER reads migrated to getTeacher()
 import { getTeacher } from '../services/stateAccessors'
 
 const w = window as any
