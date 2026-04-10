@@ -2,6 +2,7 @@
  *  Entire panel is JS-generated in original. This is the visual shell
  *  including the strip bar, neural brain SVG, and all sections. */
 import { useEffect, useRef, useState } from 'react'
+import { useAresStore } from '../../stores'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -298,7 +299,7 @@ export function ARESPanel() {
           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <button id="ares-wallet-add-btn" onClick={() => {
               const w = window as any; const amt = prompt('Add funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.add(Number(amt)); setTimeout(() => w._aresRender?.(), 100) }
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.add(Number(amt)); setTimeout(() => { w._aresRender?.(); useAresStore.getState().saveToServer() }, 200) }
             }} style={{
               background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.35)',
               color: '#00ff88', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
@@ -306,7 +307,7 @@ export function ARESPanel() {
             }}>[+] ADD</button>
             <button id="ares-wallet-withdraw-btn" onClick={() => {
               const w = window as any; const amt = prompt('Withdraw funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => w._aresRender?.(), 100) }
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => { w._aresRender?.(); useAresStore.getState().saveToServer() }, 200) }
             }} style={{
               background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)',
               color: 'rgba(255,110,110,0.8)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',

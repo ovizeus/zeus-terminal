@@ -43,6 +43,7 @@ const ARES_WALLET = (function () {
     try { localStorage.setItem(WK, JSON.stringify(_w)) } catch (_) { }
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aresData')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
+    try { window.dispatchEvent(new CustomEvent('zeus:aresStateChanged')) } catch (_) { }
   }
   recalc()
   if (_w.locked > 0) { _w.locked = 0; _save() }
@@ -92,6 +93,7 @@ const ARES_POSITIONS = (function () {
     try { localStorage.setItem(POS_LS_KEY, JSON.stringify(_positions)) } catch (_) { }
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aresData')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
+    try { window.dispatchEvent(new CustomEvent('zeus:aresStateChanged')) } catch (_) { }
   }
   function _makeClientId() { return 'ARES_' + Date.now() + '_' + Math.floor(Math.random() * 9999) }
   function calcUPnL(pos: any, markPrice: number) {

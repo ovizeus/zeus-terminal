@@ -428,6 +428,33 @@ router.post('/user/settings', (req, res) => {
   }
 });
 
+// ─── GET /api/user/ares ─── Load per-user ARES state ───
+router.get('/user/ares', (req, res) => {
+  try {
+    const db = require('../services/database');
+    const data = db.getAresState(req.user.id);
+    res.json({ ok: true, ares: data || {} });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Failed to load ARES state' });
+  }
+});
+
+// ─── POST /api/user/ares ─── Save per-user ARES state (UPSERT) ───
+router.post('/user/ares', (req, res) => {
+  try {
+    const db = require('../services/database');
+    const raw = req.body.ares;
+    if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing ares object' });
+    // Merge with existing
+    const existing = db.getAresState(req.user.id) || {};
+    const merged = { ...existing, ...raw };
+    db.saveAresState(req.user.id, merged);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: 'Failed to save ARES state' });
+  }
+});
+
 // ─── POST /api/user/telegram/test ─── Send a test message ───
 router.post('/user/telegram/test', async (req, res) => {
   const telegram = require('../services/telegram');

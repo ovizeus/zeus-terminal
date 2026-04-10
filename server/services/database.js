@@ -295,6 +295,16 @@ migrate('016_user_settings', () => {
     `);
 });
 
+migrate('017_ares_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ares_state (
+            user_id     INTEGER PRIMARY KEY,
+            data        TEXT NOT NULL DEFAULT '{}',
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -373,6 +383,9 @@ const _stmts = {
     // User settings (per-user, UPSERT)
     settingsGet: db.prepare('SELECT data FROM user_settings WHERE user_id = ?'),
     settingsUpsert: db.prepare("INSERT INTO user_settings (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
+    // ARES state (per-user, UPSERT)
+    aresGet: db.prepare('SELECT data FROM ares_state WHERE user_id = ?'),
+    aresUpsert: db.prepare("INSERT INTO ares_state (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
     // Brain decisions (ML data layer)
     bdInsert: db.prepare('INSERT INTO brain_decisions (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, linked_seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     bdLinkSeq: db.prepare('UPDATE brain_decisions SET linked_seq = ? WHERE snap_id = ?'),
@@ -794,6 +807,15 @@ module.exports = {
     },
     saveUserSettings: (userId, data) => {
         _stmts.settingsUpsert.run(userId, JSON.stringify(data));
+    },
+    // ARES state (per-user UPSERT)
+    getAresState: (userId) => {
+        const row = _stmts.aresGet.get(userId);
+        if (!row) return null;
+        try { return JSON.parse(row.data); } catch (_) { return null; }
+    },
+    saveAresState: (userId, data) => {
+        _stmts.aresUpsert.run(userId, JSON.stringify(data));
     },
     // Missed trades
     saveMissedTrade: (userId, symbol, side, reason, price, confidence, tier, regime, data) => {
