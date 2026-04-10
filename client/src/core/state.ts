@@ -34,7 +34,7 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_postmortem_v1': 1, 'zeus_daily_pnl_v1': 1, 'zeus_adaptive_v1': 1,
     'zeus_signal_registry': 1, 'zeus_notifications': 1,
     'zeus_perf_v1': 1, 'zeus_ind_settings': 1,
-    'zeus_tg_bot_token': 1, 'zeus_tg_chat_id': 1,
+    // zeus_tg_bot_token/chat_id removed — stored server-side only
     'zeus_uc_beacon_pending': 1, 'zeus_uc_dirty_ts': 1,
     'zeus_groups': 1, 'zeus_ui_context': 1,
     'zt_cloud_last_hash': 1,

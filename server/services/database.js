@@ -740,14 +740,15 @@ module.exports = {
     atPruneClosed,
     // [B2] Startup ghost cleanup helpers
     runRaw: (sql) => { const r = db.prepare(sql).run(); return r.changes; },
+    deleteGhostPosition: (seq, userId) => { return db.prepare('DELETE FROM at_positions WHERE seq = ? AND user_id = ?').run(seq, userId).changes; },
     getGhostCandidates: () => {
         // Returns seqs that exist in BOTH at_positions AND at_closed, with timestamps for comparison
         return db.prepare(`
-            SELECT p.seq,
+            SELECT p.seq, p.user_id,
                    COALESCE(json_extract(p.data, '$.ts'), 0) as openTs,
                    COALESCE(c.closed_at, json_extract(c.data, '$.closeTs'), 0) as closedTs
             FROM at_positions p
-            INNER JOIN at_closed c ON p.seq = c.seq
+            INNER JOIN at_closed c ON p.seq = c.seq AND p.user_id = c.user_id
         `).all();
     },
     // [S2] Max seq across positions + closed — prevents seq collision after reset

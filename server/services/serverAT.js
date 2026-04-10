@@ -194,7 +194,7 @@ function _restoreFromDb() {
                     : (Number(c.closedTs) || 0);
                 // Only delete if closed entry is NEWER than open entry (= open is the stale ghost)
                 if (closedMs > 0 && openMs > 0 && closedMs >= openMs) {
-                    db.runRaw('DELETE FROM at_positions WHERE seq = ' + Number(c.seq));
+                    db.deleteGhostPosition(Number(c.seq), c.user_id);
                     cleaned++;
                 }
             }

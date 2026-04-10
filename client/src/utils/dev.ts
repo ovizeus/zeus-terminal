@@ -716,8 +716,7 @@ export function hubTgSave(): void {
     if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' Completeaza ambele campuri</span>'
     return
   }
-  localStorage.setItem('zeus_tg_bot_token', token)
-  localStorage.setItem('zeus_tg_chat_id', chatId)
+  // Token saved server-side only (encrypted) — never store in localStorage
   // Push to server runtime config
   fetch('/api/user/telegram', {
     method: 'POST',
@@ -759,15 +758,14 @@ export function hubTgTest(): void {
 w.hubTgTest = hubTgTest
 
 export function hubTgPopulate(): void {
-  const token = localStorage.getItem('zeus_tg_bot_token') || ''
-  const chatId = localStorage.getItem('zeus_tg_chat_id') || ''
   const tokenEl = document.getElementById('hubTgBotToken') as HTMLInputElement | null
   const chatEl = document.getElementById('hubTgChatId') as HTMLInputElement | null
-  if (tokenEl) tokenEl.value = token
-  if (chatEl) chatEl.value = chatId
-  // Also fetch server-side config to show if configured
+  // Fetch server-side config (token stored encrypted server-side, never in browser)
   fetch('/api/user/telegram').then(function (r) { return r.json() }).then(function (d: any) {
-    if (d.configured && chatEl && !chatEl.value) chatEl.value = d.chatId || ''
+    if (d.configured) {
+      if (chatEl) chatEl.value = d.chatId || ''
+      if (tokenEl) tokenEl.placeholder = '(saved on server)'
+    }
     const statusElInner = document.getElementById('hubTgStatus')
     if (statusElInner && d.configured) statusElInner.innerHTML = '<span style="color:#4fc3f7">' + w._ZI?.inf + ' Telegram configurat (chat: ' + d.chatId + ')</span>'
   }).catch(function () { /* */ })
