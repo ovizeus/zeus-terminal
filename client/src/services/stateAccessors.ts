@@ -138,3 +138,55 @@ export function getAsks(): any[] {
 export function getTeacher(): any | null {
   return (window as any).TEACHER || null
 }
+
+// ── Added in 8C-2A1 (brain.ts safe lot) ──
+
+/** AT kill triggered — store-backed
+ *  TODO: migrate fully to atStore in 8D */
+export function getATKillTriggered(): boolean {
+  try { const { useATStore } = require('../stores/atStore'); return useATStore.getState().killTriggered } catch (_) {}
+  return !!(window as any).AT?.killTriggered
+}
+
+/** AT last trade timestamp — TEMP bridge
+ *  TODO: migrate to atStore in 8D */
+export function getATLastTradeTs(): number {
+  return (window as any).AT?.lastTradeTs || 0
+}
+
+/** AT closed trades today — TEMP bridge
+ *  TODO: migrate to atStore in 8D */
+export function getATClosedToday(): number {
+  return (window as any).AT?.closedTradesToday || 0
+}
+
+/** AT daily PnL — TEMP bridge
+ *  TODO: migrate to atStore in 8D */
+export function getATDailyPnL(): number {
+  return (window as any).AT?.dailyPnL || (window as any).AT?.realizedDailyPnL || 0
+}
+
+/** TC max positions — TEMP bridge
+ *  TODO: migrate to settingsStore in 8D */
+export function getTCMaxPos(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && w.TC.maxPos) || 3
+}
+
+/** TC stop loss pct — TEMP bridge */
+export function getTCSL(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.slPct)) ? w.TC.slPct : 1.5
+}
+
+/** TC size per trade — TEMP bridge */
+export function getTCSize(): number {
+  const w = window as any
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.size)) ? w.TC.size : 200
+}
+
+/** DSL mode — TEMP bridge
+ *  TODO: migrate to dslStore in 8D */
+export function getDSLMode(): string {
+  return (window as any).DSL?.mode || 'atr'
+}

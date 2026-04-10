@@ -1,9 +1,12 @@
 // Zeus — engine/brain.ts
 // Ported 1:1 from public/js/brain/brain.js (Phase 5B4)
 // Brain state machine, neurons, update loop, cockpit
+// [8C-2A1] w.AT/TC/DSL/TP reads migrated to stateAccessors
 'use strict'
 
-const w = window as any
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal } from '../services/stateAccessors'
+
+const w = window as any // kept for w.S, w.BM, w.BRAIN, w.el, w._ZI, function calls, writes
 
 // Neuron updater
 export function updateNeurons(): void {
@@ -121,26 +124,26 @@ export function updateBrainState(): void {
   const bulls = w.S.signalData?.bullCount || 0
   const bears = w.S.signalData?.bearCount || 0
   const sigs = bulls + bears
-  const hasAutoPos = (w.TP.demoPositions || []).some((p: any) => p.autoTrade && !p.closed) || (w.TP.livePositions || []).some((p: any) => p.autoTrade && !p.closed) // [FIX M2+LIVE]
+  const hasAutoPos = (getDemoPositions()).some((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).some((p: any) => p.autoTrade && !p.closed) // [FIX M2+LIVE]
 
   let state = 'scanning'
   let ticker = ''
 
   if (hasAutoPos) {
     state = 'trading'
-    const pos = (w.TP.demoPositions || []).find((p: any) => p.autoTrade && !p.closed) || (w.TP.livePositions || []).find((p: any) => p.autoTrade && !p.closed)
+    const pos = (getDemoPositions()).find((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).find((p: any) => p.autoTrade && !p.closed)
     const pnl = pos ? ((pos.side === 'LONG' ? w.S.price - pos.entry : pos.entry - w.S.price) / pos.entry * pos.size * (pos.lev || 1)) : 0
     ticker = `POZITIE ACTIVA ${pos?.side} @$${w.fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORIZEZ TP/SL...`
   } else if (score >= 68 && sigs >= 3) {
     state = 'ready'
     const dir = bulls >= bears ? 'LONG' : 'SHORT'
-    ticker = `SEMNAL ${dir} CONFIRMAT! Score:${score} | ${Math.max(bulls, bears)} semnale | REGIM:${w.BRAIN.regime.toUpperCase()} | ${w.AT.enabled ? 'TRIMIT ORDIN...' : 'AUTO TRADE OPRIT'}`
+    ticker = `SEMNAL ${dir} CONFIRMAT! Score:${score} | ${Math.max(bulls, bears)} semnale | REGIM:${w.BRAIN.regime.toUpperCase()} | ${getATEnabled() ? 'TRIMIT ORDIN...' : 'AUTO TRADE OPRIT'}`
   } else if (score > 0 && sigs >= 1) {
     state = 'analyzing'
     const needing = 3 - sigs
     const confNeed = Math.max(0, 68 - score)
     ticker = `ANALIZEZ... Score:${score}/68 | ${sigs}/3 semnale | Mai trebuie: ${confNeed > 0 ? '+' + confNeed + ' confluenta' : ''}${needing > 0 ? ' +' + needing + ' semnale' : ''} | OFI:${(w.BRAIN.ofi.blendBuy || 50).toFixed(0)}%B`
-  } else if (w.AT.killTriggered) {
+  } else if (getATKillTriggered()) {
     state = 'blocked'
     ticker = `KILL SWITCH ACTIV — BLOCAT. Asteapt reset 30s...`
   } else {
@@ -149,7 +152,7 @@ export function updateBrainState(): void {
   }
 
   // [PATCH BRAIN-AT-IDLE] No READY/decision state when AT is OFF
-  if (!w.AT.enabled && state === 'ready') {
+  if (!getATEnabled() && state === 'ready') {
     state = 'analyzing'
     ticker = `ANALIZEZ... Score:${score}/68 | ${sigs} semnale | AT OFF`
   }
@@ -358,7 +361,7 @@ export function syncBrainFromState(): void {
   _setRadio(['prof-fast', 'prof-swing', 'prof-defensive'], 'prof-' + prof, 'znc-pbtn', 'act-' + prof)
 
   // DSL mode radio sync
-  const dslMode = w.DSL.mode
+  const dslMode = getDSLMode()
   if (dslMode) {
     _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + dslMode, 'znc-dbtn', 'act-dsl-' + dslMode)
   }
@@ -402,8 +405,8 @@ export function setMode(mode: any): void {
 
   // Check if there are open AT positions
   const openAT = [
-    ...(w.TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed),
-    ...(w.TP.livePositions || []).filter((p: any) => !p.closed),
+    ...(getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed),
+    ...(getLivePositions()).filter((p: any) => !p.closed),
   ]
   if (openAT.length > 0) {
     // Show confirmation modal
@@ -479,7 +482,7 @@ export function setDslMode(mode: any): void {
   const valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
   mode = (mode || '').toLowerCase()
   if (!valid.includes(mode)) return
-  w.DSL.mode = mode
+  getDSLMode() = mode
   try { localStorage.setItem('zeus_dsl_mode', mode) } catch (_) { }
   const labels: any = { atr: w._ZI.plug + ' ATR', fast: w._ZI.bolt + ' FAST', swing: w._ZI.wave + ' SWING', defensive: w._ZI.sh + ' DEF', tp: w._ZI.tgt + ' TP' }
   brainThink('info', w._ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
@@ -489,7 +492,7 @@ export function setDslMode(mode: any): void {
 // ── DSL TARGET PRICE CALCULATOR ──────────────────────────────────
 // Returns { openDslPct, dslTargetPrice } based on DSL.mode
 export function calcDslTargetPrice(side: any, entry: any, tp: any): any {
-  const mode = w.DSL.mode || 'atr'
+  const mode = getDSLMode() || 'atr'
   let pct: number
   switch (mode) {
     case 'fast': pct = 0.5; break
@@ -711,7 +714,7 @@ export function computeGates(dir: any): any {
   const sessionOk = (h >= 7 && h < 11) || (h >= 13 && h < 17) || (h >= 19 && h < 23) // London/NY/Asia overlap
 
   // Cooldown
-  const lastTradeTs = w.AT.lastTradeTs || 0
+  const lastTradeTs = getATLastTradeTs() || 0
   const cooldownMs = profile === 'fast' ? 5 * 60 * 1000 : profile === 'swing' ? 30 * 60 * 1000 : 60 * 60 * 1000
   const cooldownOff = (Date.now() - lastTradeTs) > cooldownMs
 
@@ -730,10 +733,10 @@ export function computeGates(dir: any): any {
 
   // Risk limits
   const maxDay = parseInt(w.el('atMaxDay')?.value) || 5
-  const maxConc = (typeof w.TC !== 'undefined' && w.TC.maxPos) || 3
+  const maxConc = getTCMaxPos()
   const lossLim = parseInt(w.el('atLossStreak')?.value) || 3
   // [RISK RAILS FIX] Count positions per AT.mode (not always demo)
-  const _rrPosList = (typeof w.AT !== 'undefined' && w.AT.mode === 'live') ? (w.TP.livePositions || []) : (w.TP.demoPositions || [])
+  const _rrPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _rrPosList.filter((p: any) => p.autoTrade && !p.closed).length
   // [RISK RAILS] DD removed from client gate — server kill switch is sole authority
   const riskOk = !w.BM.protectMode &&
@@ -1011,7 +1014,7 @@ export function updateNewsShield(): void {
 export function checkProtectMode(): void {
   const lossLim = parseInt(w.el('atLossStreak')?.value) || 3
   const maxDay = parseInt(w.el('atMaxDay')?.value) || 5
-  const _closedToday = +(w.AT.closedTradesToday) || 0
+  const _closedToday = +(getATClosedToday()) || 0
 
   let reason: any = null
   // Loss streak — only if we actually have closed trades
@@ -1025,13 +1028,13 @@ export function checkProtectMode(): void {
   if (w.BM.newsRisk === 'high' && (w.S.mode || 'assist') === 'auto')
     reason = `PROTECT: NEWS HIGH — volatilitate extremă`
   // Kill switch — only if already triggered legitimately
-  if (w.AT.killTriggered) reason = 'BLOCKED: KILL SWITCH'
+  if (getATKillTriggered()) reason = 'BLOCKED: KILL SWITCH'
 
   if (reason && !w.BM.protectMode) {
     w.BM.protectMode = true
     w.BM.protectReason = reason
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[BRAIN PROTECT] ON ' + reason)
-    if (w.AT.enabled && (w.S.mode || 'assist') === 'auto') { w.AT.enabled = false }
+    if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { getATEnabled() = false }
     brainThink('bad', reason)
     w.toast(reason)
   }
@@ -1058,9 +1061,9 @@ export function resetProtectMode(): void {
 // DSL telemetry
 export function updateDSLTelemetry(): void {
   const tele = w.el('dslTelemetry'); if (!tele) return
-  const posns = (w.TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
+  const posns = (getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed)
 
-  if (!posns.length || !w.DSL.enabled) {
+  if (!posns.length || !getDSLEnabled()) {
     tele.innerHTML = `<div class="dsl-tele-title">DSL TELEMETRY — BRAIN READ</div><div style="font-size:11px;color:#00ffcc22">No active DSL positions</div>`
     return
   }
@@ -1071,7 +1074,7 @@ export function updateDSLTelemetry(): void {
 
   let html = `<div class="dsl-tele-title">DSL TELEMETRY — BRAIN READ</div>`
   posns.forEach((pos: any) => {
-    const dsl = w.DSL.positions[String(pos.id)]
+    const dsl = getDSLPositions()[String(pos.id)]
     const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry) // [FIX v85 B7]
     const sym = pos.sym.replace('USDT', '')
     const isActive = dsl?.active || false
@@ -1165,10 +1168,10 @@ export function checkAntiFakeout(klines: any, dir: any): boolean {
 // Safety gates
 export function computeSafetyGates(dir: any): any {
   const maxDay = parseInt(w.el('atMaxDay')?.value) || 5
-  const maxConc = (typeof w.TC !== 'undefined' && w.TC.maxPos) || 3
+  const maxConc = getTCMaxPos()
   const lossLim = parseInt(w.el('atLossStreak')?.value) || 3
   // [RISK RAILS FIX] Count positions per AT.mode
-  const _sgPosList = (typeof w.AT !== 'undefined' && w.AT.mode === 'live') ? (w.TP.livePositions || []) : (w.TP.demoPositions || [])
+  const _sgPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _sgPosList.filter((p: any) => p.autoTrade && !p.closed).length
   const hasOpposite = _sgPosList.some((p: any) => p.autoTrade && !p.closed && p.side !== (dir === 'long' ? 'LONG' : 'SHORT'))
   // [RISK RAILS] DD removed from client gate — server kill switch is sole authority
@@ -1189,7 +1192,7 @@ export function computeSafetyGates(dir: any): any {
   return {
     risk: riskOk,
     spread: true, // no real spread data
-    cooldown: (Date.now() - (w.AT.lastTradeTs || 0)) > _getCooldownMs(),
+    cooldown: (Date.now() - (getATLastTradeTs() || 0)) > _getCooldownMs(),
     news: w.BM.newsRisk !== 'high',
     session: sessionOk,
     noOpposite: !hasOpposite,
@@ -1357,7 +1360,7 @@ export function renderBrainCockpit(): void {
 
   // 6. Entry score
   // [PATCH BRAIN-AT-IDLE] Skip decision score pipeline when AT is OFF
-  if (w.AT.enabled) {
+  if (getATEnabled()) {
     const gates = computeGates(dir)
     computeEntryScore(gates, dir)
   } else {
@@ -1594,11 +1597,11 @@ export function renderBrainCockpit(): void {
   updateChaosBar()
 
   // 8. Protect mode
-  const activePnL = (w.TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed).reduce((a: number, p: any) => {
+  const activePnL = (getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed).reduce((a: number, p: any) => {
     const cur = p.sym === w.S.symbol ? w.S.price : (w.wlPrices[p.sym]?.price || p.entry)
     return a + (p.side === 'LONG' ? cur - p.entry : p.entry - cur) / p.entry * p.size * p.lev
   }, 0)
-  w.BM.dailyPnL = (w.AT.dailyPnL || 0) + activePnL
+  w.BM.dailyPnL = (getATDailyPnL()) + activePnL
   checkProtectMode()
 
   // 9. Determine ARM state
@@ -1613,16 +1616,16 @@ export function renderBrainCockpit(): void {
   // [ATMOSPHERE] Pre-filter: block ARM if atmosphere forbids entry
   const atmosAllow = w.BM.atmosphere ? w.BM.atmosphere.allowEntry !== false : true
   const isArmed = !w.BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
-  const hasPos = (w.TP.demoPositions || []).some((p: any) => p.autoTrade && !p.closed)
+  const hasPos = (getDemoPositions()).some((p: any) => p.autoTrade && !p.closed)
   const mode = w.S.mode || 'manual'
 
   // DSL WAIT > 10min → raise threshold hint
-  const anyDSLWait = (w.TP.demoPositions || []).some((p: any) => {
-    const d = w.DSL.positions?.[p.id]
+  const anyDSLWait = (getDemoPositions()).some((p: any) => {
+    const d = getDSLPositions()?.[p.id]
     return d && !d.active && p.autoTrade && !p.closed
   })
 
-  let state = w.BM.protectMode ? 'protect' : w.AT.killTriggered ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'
+  let state = w.BM.protectMode ? 'protect' : getATKillTriggered() ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'
   w.BRAIN.state = state === 'armed' ? 'ready' : state
 
   // ── SAFETY LED ROWS ──
@@ -1768,7 +1771,7 @@ export function renderBrainCockpit(): void {
 
   // ── ARM DETAIL + TOP BLOCK REASON (uses S.* canonical) ──
   const trigType = sw.reclaim ? 'Sweep+Reclaim' : sw.displacement ? 'Displacement' : '—'
-  const cdLeft = Math.max(0, Math.round((_getCooldownMs() - (Date.now() - (w.AT.lastTradeTs || 0))) / 60000))
+  const cdLeft = Math.max(0, Math.round((_getCooldownMs() - (Date.now() - (getATLastTradeTs() || 0))) / 60000))
   const _ad = (id: any, v: any, arm?: any) => { const e = w.el(id); if (e) { e.textContent = v; if (arm !== undefined) e.style.color = arm ? '#39ff14' : '#2a4030' } }
   _ad('zad-mode', mode.toUpperCase(), isArmed)
   _ad('zad-profile', prof.toUpperCase() + '  ' + tfMap.trigger + '/' + tfMap.context + '/' + tfMap.bias)
@@ -1788,7 +1791,7 @@ export function renderBrainCockpit(): void {
   let topReason = ''
   let reasonCls = 'wait'
   if (w.BM.protectMode) { topReason = `AUTO BLOCKED: ${w.BM.protectReason}`; reasonCls = 'block' }
-  else if (w.AT.killTriggered) { topReason = 'AUTO BLOCKED: Kill switch activ'; reasonCls = 'block' }
+  else if (getATKillTriggered()) { topReason = 'AUTO BLOCKED: Kill switch activ'; reasonCls = 'block' }
   else if (!safety.news) { topReason = 'AUTO BLOCKED: NewsRisk HIGH → prea periculos'; reasonCls = 'block' }
   else if (!safety.regime) { topReason = 'AUTO WAIT: Regime unstable (not locked 3 closes)'; reasonCls = 'wait' }
   else if (!safety.cooldown) { topReason = `AUTO WAIT: Cooldown ${cdLeft}m rămas (${prof})`; reasonCls = 'wait' }
@@ -1802,7 +1805,7 @@ export function renderBrainCockpit(): void {
   else if (score < scoreThresh) { topReason = `AUTO WAIT: EntryScore ${score} < ${scoreThresh} (${prof})`; reasonCls = 'wait' }
   else if (confluenceScore < confThresh) { topReason = `AUTO WAIT: Confluence ${confluenceScore} < ${confThresh}`; reasonCls = 'wait' }
   else if (!atmosAllow) { topReason = `AUTO BLOCK: Atmosphere ${(w.BM.atmosphere?.category || '?').toUpperCase()} — ${(w.BM.atmosphere?.reasons || []).slice(0, 2).join(', ')}`; reasonCls = 'block' }
-  else if (mode === 'assist' && !w.AT.enabled) { topReason = 'ASSIST: Brain monitoring — enable AutoTrade to execute'; reasonCls = 'wait' }
+  else if (mode === 'assist' && !getATEnabled()) { topReason = 'ASSIST: Brain monitoring — enable AutoTrade to execute'; reasonCls = 'wait' }
   else if (mode === 'assist') { topReason = isArmAssistValid() ? 'ASSIST ARMED: Waiting user confirm' : 'ASSIST: Needs ARM + manual confirm'; reasonCls = 'wait' }
   else if (isArmed) { topReason = `AUTO ARMED: Entry score ${score} ✓ — waiting close`; reasonCls = 'ok' }
   else { topReason = `AUTO SCANNING: Score ${score} | ${w.BRAIN.regime?.toUpperCase() || '—'}`; reasonCls = 'wait' }
@@ -1821,10 +1824,10 @@ export function renderBrainCockpit(): void {
   if (dslEl) {
     const _dslMode = (w.S.mode || 'assist').toLowerCase()
     const _modeTag = _dslMode === 'auto' ? '<span style="color:#39ff14;font-size:10px">●AI</span>' : _dslMode === 'assist' ? '<span style="color:#f0c040;font-size:10px">●USR</span>' : '<span style="color:#2a4030;font-size:10px">●MAN</span>'
-    const autoPosnsAll = (w.TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
-    const activeDSLPosns = autoPosnsAll.filter((p: any) => w.DSL.positions?.[p.id]?.active)
-    const waitDSLPosns = autoPosnsAll.filter((p: any) => w.DSL.positions?.[p.id] && !w.DSL.positions[p.id].active)
-    if (!w.DSL.enabled) {
+    const autoPosnsAll = (getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed)
+    const activeDSLPosns = autoPosnsAll.filter((p: any) => getDSLPositions()?.[p.id]?.active)
+    const waitDSLPosns = autoPosnsAll.filter((p: any) => getDSLPositions()?.[p.id] && !getDSLPositions()[p.id].active)
+    if (!getDSLEnabled()) {
       // Engine completely off
       dslEl.innerHTML = `DSL ENGINE: <b style="color:#aa2233">OFF</b> ${_modeTag} | Activează engine-ul.`
     } else if (!autoPosnsAll.length) {
@@ -1835,7 +1838,7 @@ export function renderBrainCockpit(): void {
       dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">WAIT</b> ${_modeTag} · ${waitDSLPosns.length} poz. asteaptă activare`
     } else if (activeDSLPosns.length) {
       // At least one position actively trailed
-      const p = activeDSLPosns[0], dsl = w.DSL.positions[p.id]
+      const p = activeDSLPosns[0], dsl = getDSLPositions()[p.id]
       const steps = dsl.log?.filter((l: any) => l.msg?.includes('IMPULSE')).length || 0
       const sym2 = (p.sym || '').replace('USDT', '')
       dslEl.innerHTML = `DSL: <b style="color:#00ffcc">TRAILING</b> ${_modeTag} · ${sym2} PL:<b>$${w.fP(dsl.pivotLeft)}</b> PR:<b>$${w.fP(dsl.pivotRight)}</b> · Steps:<b>${steps}</b>`
@@ -2127,7 +2130,7 @@ export function getBrainViewSnapshot(): any {
 
   const mode = (_s.mode || 'assist').toUpperCase()
   const profile = (_s.profile || 'fast').toUpperCase()
-  const runMode = !!(typeof w.AT !== 'undefined' && w.AT.enabled)
+  const runMode = !!getATEnabled()
 
   // Data feed — aceeași sursă ca bannerul
   const price = _s.price || 0
@@ -2224,7 +2227,7 @@ export function renderCircuitBrain(): void {
     const allOk = gTotal > 0 && gOk === gTotal
     const gCls = allOk ? 'ok' : gOk >= gTotal - 1 ? 'warn' : 'bad'
     // sub-linie: spread + news + cooldown din state real
-    const cdLeft = (typeof _getCooldownMs === 'function') ? Math.max(0, Math.round((_getCooldownMs() - (Date.now() - ((typeof w.AT !== 'undefined' ? w.AT.lastTradeTs : 0) || 0))) / 60000)) : 0
+    const cdLeft = (typeof _getCooldownMs === 'function') ? Math.max(0, Math.round((_getCooldownMs() - (Date.now() - ((getATLastTradeTs()) || 0))) / 60000)) : 0
     const gSub = [
       _sf ? ('Spread:' + (_sf.spread ? 'OK' : 'FAIL')) : '—',
       _sf ? ('News:' + (_sf.news ? 'OK' : 'BLK')) : '—',
@@ -2274,10 +2277,10 @@ export function renderCircuitBrain(): void {
   // ── 4. RISK RAILS (cooldown, kill, protect) ──
   try {
     // FIX v118: cooldown din calcul real, NU din cdEl.textContent (DOM)
-    const kill = (typeof w.AT !== 'undefined' && w.AT.killTriggered)
+    const kill = getATKillTriggered()
     const prot = (typeof w.BM !== 'undefined' && w.BM.protectMode)
     const cdMs = (typeof _getCooldownMs === 'function') ? _getCooldownMs() : 0
-    const cdLeft = Math.max(0, Math.round((cdMs - (Date.now() - ((typeof w.AT !== 'undefined' ? w.AT.lastTradeTs : 0) || 0))) / 60000))
+    const cdLeft = Math.max(0, Math.round((cdMs - (Date.now() - ((getATLastTradeTs()) || 0))) / 60000))
     const riskCls = kill || prot ? 'bad' : cdLeft > 0 ? 'warn' : 'vis'
     const riskVal = kill ? 'KILL' : prot ? 'PROTECT' : cdLeft > 0 ? cdLeft + 'm WAIT' : 'OK'
     const riskSub = 'Cooldown ' + (cdLeft > 0 ? cdLeft + 'm' : 'OFF') + ' · DD%'
@@ -2394,7 +2397,7 @@ export function _initBrainCockpit(): void {
   // Restore DSL mode from localStorage
   try {
     const savedDsl = localStorage.getItem('zeus_dsl_mode')
-    if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) w.DSL.mode = savedDsl
+    if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) getDSLMode() = savedDsl
   } catch (_) { }
 
   // Single sync from S.* canonical state
@@ -2531,13 +2534,13 @@ export function updateOrderFlow(): any {
 
 // ─── Adaptive Auto-Trade Params ──────────────────────────────
 export function adaptAutoTradeParams(): void {
-  if (!w.AT.enabled) return
+  if (!getATEnabled()) return
   // FIX debounce — only adapt max once every 5 minutes
   const now = Date.now()
   if (w.BRAIN._lastAdaptTs && now - w.BRAIN._lastAdaptTs < 300000) return
   w.BRAIN._lastAdaptTs = now
 
-  const recentTrades = (w.TP.journal || []).filter((t: any) => t.reason?.includes('AUTO')).slice(-6)
+  const recentTrades = getJournal().filter((t: any) => t.reason?.includes('AUTO')).slice(-6)
   if (recentTrades.length < 3) return
 
   const wins = recentTrades.filter((t: any) => t.pnl > 0).length
@@ -2545,8 +2548,8 @@ export function adaptAutoTradeParams(): void {
   const wr = wins / recentTrades.length
 
   const regime = w.BRAIN.regime
-  let newSL = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.slPct)) ? w.TC.slPct : (parseFloat(w.el('atSL')?.value) || 1.5)
-  let newSize = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.size)) ? w.TC.size : (parseFloat(w.el('atSize')?.value) || 200)
+  let newSL = getTCSL()
+  let newSize = getTCSize()
   let adapted = false
   let reason = ''
 
