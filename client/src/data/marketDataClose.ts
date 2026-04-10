@@ -87,6 +87,7 @@ export function closeDemoPos(id: any, reason?: string): void {
     w.renderDemoPositions()
     w.renderATPositions()
     w.TP.demoPositions = (w.TP.demoPositions || []).filter((p: any) => !p.closed)
+    try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     const autoPosns = w.TP.demoPositions.filter((p: any) => p.autoTrade)
     if (autoPosns.length === 0) { const el = document.getElementById('atPosCount'); if (el) el.textContent = '0 pozitii' }
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()

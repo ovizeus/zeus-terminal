@@ -850,6 +850,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     }
     if (w.TP.demoPositions.some((p: any) => p.id === pos.id)) { w.atLog('warn', '[DEDUP] Position ' + pos.id + ' already exists'); return }
     w.TP.demoPositions.push(pos)
+    try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     w.AT.lastTradeSide = side
     w.AT.lastTradeTs = Date.now()
     if (!w.AT._cooldownBySymbol) w.AT._cooldownBySymbol = {}
@@ -950,6 +951,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           dslHistory: [],
         }
         w.TP.livePositions.push(pos)
+        try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
         _livePosPushed = true // [PATCH2 B2] mark: position now in array
         w.TP.liveBalance -= adaptFinalSize // [FIX BUG2] Optimistic balance deduction prevents duplicate trades
         w.AT.lastTradeSide = side

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useUiStore } from '../../stores'
+import { useUiStore, usePositionsStore } from '../../stores'
 
 const w = window as any
 
@@ -18,7 +18,7 @@ export function ManualTradePanel() {
   const [size, setSize] = useState('100')
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
-  const [balance, setBalance] = useState(() => w.TP?.demoBalance ?? 10000)
+  const balance = usePositionsStore((s) => s.demoBalance)
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {
@@ -51,15 +51,7 @@ export function ManualTradePanel() {
     }
   }, [])
 
-  // Poll w.TP.demoBalance periodically to keep React in sync
-  useEffect(() => {
-    const iv = setInterval(() => {
-      if (w.TP && w.TP.demoBalance !== balance) {
-        setBalance(w.TP.demoBalance)
-      }
-    }, 500)
-    return () => clearInterval(iv)
-  }, [balance])
+  // Balance now from positionsStore (reactive, no polling needed)
 
   // Init side from TP on mount
   useEffect(() => {

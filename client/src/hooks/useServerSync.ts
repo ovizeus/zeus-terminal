@@ -146,14 +146,13 @@ export function useServerSync(authenticated: boolean) {
         if (res.ok && res.data) {
           const snap = res.data
           const all = filterOpen(snap.positions || [])
-          const demo = all.filter((p) => p.mode !== 'live')
-          const live = all.filter((p) => p.mode === 'live')
-          usePositionsStore.getState().setDemoPositions(demo)
-          usePositionsStore.getState().setLivePositions(live)
-          if (snap.demoBalance) {
-            const bal = extractBalance(snap.demoBalance)
-            usePositionsStore.getState().setDemoBalance(bal.balance)
-          }
+          // Atomic snapshot — server is final truth
+          usePositionsStore.getState().syncSnapshot({
+            demoPositions: all.filter((p) => p.mode !== 'live'),
+            livePositions: all.filter((p) => p.mode === 'live'),
+            demoBalance: snap.demoBalance ? extractBalance(snap.demoBalance).balance : undefined,
+            source: 'server',
+          })
         }
       })
       pullATState()

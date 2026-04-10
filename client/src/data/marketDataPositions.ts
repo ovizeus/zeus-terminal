@@ -52,6 +52,7 @@ function _fillDemoPendingOrder(ord: any): void {
   w.updateDemoBalance(); w.renderDemoPositions(); renderPendingOrders()
   if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo_limit_fill')
   w.ZState.save(); if (typeof w._registerManualOnServer === 'function') w._registerManualOnServer(pos)
+  try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
   if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
   w.toast('LIMIT FILLED: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + w.fP(ord.limitPrice))
   w.addTradeToJournal({ id: pos.id, time: (typeof w.fmtNow === 'function' ? w.fmtNow() : new Date().toISOString()), side: pos.side, sym: pos.sym.replace('USDT', ''), entry: pos.entry, exit: null, pnl: 0, reason: 'LIMIT Fill', lev: pos.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'demo', openTs: pos.openTs, createdAt: ord.createdAt, filledAt: pos.filledAt })

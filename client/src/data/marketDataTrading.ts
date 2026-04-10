@@ -184,6 +184,7 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     w.updateDemoBalance(); w.renderDemoPositions()
     if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo')
     w.ZState.save(); _registerManualOnServer(pos)
+    try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
     w.toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + w.fmt(size) + ' @$' + w.fP(fillPrice) + ' ' + lev + 'x MARKET')
   } else {
@@ -208,6 +209,7 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       w.TP.livePositions.push(pos); w.renderLivePositions()
       if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_live')
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
+      try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
       w.toast('LIVE MARKET ' + binanceSide + ' filled @$' + w.fP(fillPrice))
       if (sl) { w.manualLiveSetSL({ symbol: w.S.symbol, side: w.TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { w.toast('SL failed: ' + (e.message || e)) }) }

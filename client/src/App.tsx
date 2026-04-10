@@ -9,6 +9,7 @@ import { useServerSync } from './hooks/useServerSync'
 import { useBrainEngine } from './hooks/useBrainEngine'
 import { useForecastEngine } from './hooks/useForecastEngine'
 import { useLegacyBridge } from './bridge'
+import { usePositionsBridge } from './hooks/usePositionsBridge'
 import { wsService } from './services/ws'
 import './app.css'
 
@@ -57,6 +58,9 @@ export function App() {
   // Old JS populates React DOM elements via getElementById().
   // Runs old brain, orderflow, trading, UI engines.
   useLegacyBridge(authenticated)
+
+  // ── POSITIONS BRIDGE — sync engine window.TP → positionsStore ──
+  usePositionsBridge()
 
   if (loading) {
     return (
