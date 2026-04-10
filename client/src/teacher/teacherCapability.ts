@@ -1,8 +1,11 @@
 // Zeus — teacher/teacherCapability.ts
 // Ported 1:1 from public/js/teacher/teacherCapability.js (Phase 7C)
 // TEACHER V2 — Capability Score (0-100)
+// [8E-2] w.TEACHER reads migrated to getTeacher()
 
-const w = window as any
+import { getTeacher } from '../services/stateAccessors'
+
+const w = window as any // kept for w.TEACHER_CAPABILITY_WEIGHTS export
 
 export const TEACHER_CAPABILITY_WEIGHTS: any = {
   survivalRate: 15, drawdownControl: 12, profitFactor: 12, expectancy: 10,
@@ -29,7 +32,7 @@ function _capExpectancy(v2: any): number { if (!v2.lifetimeStats) return 0; cons
 function _capWinRate(v2: any): number { if (!v2.lifetimeStats) return 0; const wr = v2.lifetimeStats.winRate || 0; if (wr <= 30) return 0; if (wr >= 70) return 1; return (wr - 30) / 40 }
 
 function _capCalibrationQuality(_v2: any): number {
-  if (!w.TEACHER) return 0; const T = w.TEACHER
+  const T = getTeacher(); if (!T) return 0
   if (!T.calibration || typeof T.calibration.realWR !== 'number') return 0.3
   const gap = Math.abs(T.calibration.predictedWR - T.calibration.realWR)
   if (gap <= 2) return 1; if (gap >= 20) return 0; return 1 - (gap - 2) / 18
@@ -117,7 +120,7 @@ export function teacherComputeCapability(v2: any): any {
 }
 
 export function teacherGetCapabilitySummary(): any {
-  const T = w.TEACHER; if (!T || !T.v2) return null; const v2 = T.v2
+  const T = getTeacher(); if (!T || !T.v2) return null; const v2 = T.v2
   return { score: v2.capability, label: v2.capabilityLabel, sessions: v2.lifetimeSessions, totalTrades: v2.lifetimeTrades.length, failCount: v2.failCount, capital: v2.currentCapital, status: v2.status, statusDetail: v2.statusDetail }
 }
 

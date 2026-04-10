@@ -1,8 +1,11 @@
 // Zeus — teacher/teacherBrain.ts
 // Ported 1:1 from public/js/teacher/teacherBrain.js (Phase 7C)
 // TEACHER V2 — Autonomous Decision Brain
+// [8E-2] w.TEACHER reads migrated to getTeacher()
 
-const w = window as any
+import { getTeacher } from '../services/stateAccessors'
+
+const w = window as any // kept for w.TEACHER_PROFILES export + other window.* calls
 
 // ══════════════════════════════════════════════════════════════════
 // PROFILE DEFINITIONS — FAST / SWING / DEFENSE
@@ -362,7 +365,8 @@ export function teacherDecideExit(trade: any, ind: any, regimeInfo: any, profile
   if (regimeInfo && regimeInfo.regime === 'CAPITULATION') return 'REGIME_CAPITULATION'
 
   if (profile && trade.barsHeld !== undefined) {
-    const barsHeld = (w.TEACHER && w.TEACHER.cursor) ? w.TEACHER.cursor - trade.entryBar : 0
+    const _T = getTeacher()
+    const barsHeld = (_T && _T.cursor) ? _T.cursor - trade.entryBar : 0
     if (barsHeld >= profile.maxBarsInTrade) return 'TIME_STOP'
   }
 
@@ -385,7 +389,7 @@ export function teacherAutoSize(profile: any, equity: any, ind: any): any {
   let slPct = profile.slPct
   if (ind && ind.atr && ind.atr > 0) {
     let lastClose = 0
-    const T = w.TEACHER
+    const T = getTeacher()
     if (T && T.dataset && T.dataset.bars && T.cursor >= 0) {
       lastClose = T.dataset.bars[T.cursor].close
     }

@@ -127,3 +127,14 @@ export function getAsks(): any[] {
   const a = (window as any).S?.asks
   return Array.isArray(a) ? [...a] : []
 }
+
+// ── Added in 8E-2 (Teacher simple files) ──
+
+/** Teacher state — TEMP bridge getter
+ *  Returns MUTABLE REFERENCE intentionally for Teacher legacy flow.
+ *  Teacher files read + write on the same object via `const T = getTeacher()`.
+ *  Do NOT extend this mutable-reference pattern to other modules.
+ *  TODO: replace with teacherStore in 8D/9 */
+export function getTeacher(): any | null {
+  return (window as any).TEACHER || null
+}
