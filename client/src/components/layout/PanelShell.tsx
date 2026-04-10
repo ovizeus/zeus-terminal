@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
 import { useUiStore } from '../../stores'
 import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'
@@ -93,6 +93,47 @@ export function PanelShell() {
     setDockActive(null)
   }
 
+  // ── Pull-to-refresh (mobile) ──
+  const ptrRef = useRef<{ startY: number; pulling: boolean }>({ startY: 0, pulling: false })
+  const mainRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const el = mainRef.current
+    if (!el) return
+    const indicator = document.getElementById('ptr-indicator')
+
+    function onTouchStart(e: TouchEvent) {
+      if (el!.scrollTop <= 0) {
+        ptrRef.current.startY = e.touches[0].clientY
+        ptrRef.current.pulling = true
+      }
+    }
+    function onTouchMove(e: TouchEvent) {
+      if (!ptrRef.current.pulling) return
+      const dy = e.touches[0].clientY - ptrRef.current.startY
+      if (dy > 10 && indicator) {
+        indicator.style.transform = `translateX(-50%) translateY(${Math.min(dy - 10, 60)}px)`
+        indicator.classList.add('visible')
+      }
+    }
+    function onTouchEnd(e: TouchEvent) {
+      if (!ptrRef.current.pulling) return
+      const dy = e.changedTouches[0].clientY - ptrRef.current.startY
+      ptrRef.current.pulling = false
+      if (indicator) { indicator.classList.remove('visible'); indicator.style.transform = '' }
+      if (dy > 80) location.reload()
+    }
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true })
+    el.addEventListener('touchmove', onTouchMove, { passive: true })
+    el.addEventListener('touchend', onTouchEnd, { passive: true })
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart)
+      el.removeEventListener('touchmove', onTouchMove)
+      el.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
+
   // 1:1 with old pageview.js — manual-trade title includes environment
   const activeTitle = dockActive
     ? (dockActive === 'manual-trade'
@@ -126,7 +167,10 @@ export function PanelShell() {
       <ExposurePanel visible={activeModal === 'exposure'} onClose={closeModal} />
       <DecisionLogPanel visible={activeModal === 'decisionlog'} onClose={closeModal} />
 
-      <main className="zr-panels">
+      {/* Pull-to-refresh indicator (CSS in app.css) */}
+      <div id="ptr-indicator">↻</div>
+
+      <main className="zr-panels" ref={mainRef}>
         {/* ── Mode Bar — 1:1 from original zeus-mode-bar ── */}
         <ModeBar />
 
