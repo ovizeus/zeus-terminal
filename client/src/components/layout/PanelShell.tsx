@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { useUiStore } from '../../stores'
 import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'
@@ -93,98 +93,138 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  // ── Pull-to-refresh (Bybit-style: whole app slides down, reveal indicator behind) ──
-  // Decision made ONCE at touchstart: if not at top, entire gesture is ignored.
-  const ptrState = useRef({ startY: 0, startedAtTop: false, active: false })
+  // ── Pull-to-refresh — state machine, built from zero ──
+  // States: idle → tracking → pulling → armed → refreshing → idle
+  // Rule: eligibility decided ONCE at touchstart. Never re-armed mid-gesture.
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    const THRESHOLD = 65
-    const MAX_PULL = 100
+    const THRESHOLD = 70   // px of finger movement to arm refresh
+    const MAX_VISUAL = 80  // max px the header slides down
+    const DAMPING = 0.4    // resistance factor
 
-    function getAppShell(): HTMLElement | null { return document.querySelector('.zeus-fixed-top') }
-    function getIndicator(): HTMLElement | null { return document.getElementById('ptr-indicator') }
+    // State — single source of truth
+    let state: 'idle' | 'tracking' | 'pulling' | 'armed' | 'refreshing' = 'idle'
+    let startY = 0
+    let lastScrollTime = 0
 
-    function setShellOffset(px: number) {
-      const val = px > 0 ? `translateY(${px}px)` : ''
-      const shell = getAppShell()
-      if (shell) shell.style.transform = val
-      if (mainRef.current) mainRef.current.style.transform = val
+    // Track scroll activity — any scroll means momentum is happening
+    function onScroll() { lastScrollTime = Date.now() }
+    window.addEventListener('scroll', onScroll, { passive: true })
+
+    function getShell(): HTMLElement | null { return document.querySelector('.zeus-fixed-top') }
+    function getInd(): HTMLElement | null { return document.getElementById('ptr-indicator') }
+
+    function slideShell(px: number, animate: boolean) {
+      const shell = getShell()
+      if (!shell) return
+      if (animate) { shell.style.transition = 'transform .3s cubic-bezier(.2,.8,.4,1)' }
+      else { shell.style.transition = 'none' }
+      shell.style.transform = px > 0 ? `translateY(${px}px)` : ''
+    }
+
+    function updateIndicator(progress: number, dy: number) {
+      const ind = getInd()
+      if (!ind) return
+      ind.style.opacity = String(Math.min(progress, 1))
+      const lbl = ind.querySelector('.ptr-label') as HTMLElement
+      const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
+      if (progress >= 1) {
+        if (lbl) lbl.textContent = 'Release to refresh'
+        ind.classList.add('armed')
+      } else {
+        if (lbl) lbl.textContent = 'Zeus Terminal'
+        ind.classList.remove('armed')
+      }
+      if (spinner) spinner.style.transform = `rotate(${dy * 2.5}deg)`
+      ind.classList.add('visible')
+    }
+
+    function resetAll(animate: boolean) {
+      slideShell(0, animate)
+      const ind = getInd()
+      if (ind) {
+        ind.classList.remove('visible', 'armed', 'refreshing')
+        ind.style.opacity = ''
+      }
+      if (animate) setTimeout(() => { const s = getShell(); if (s) s.style.transition = '' }, 350)
+      state = 'idle'
     }
 
     function onTouchStart(e: TouchEvent) {
-      // CRITICAL: decide once — is the page at absolute top right now?
-      const atTop = window.scrollY <= 0 && document.documentElement.scrollTop <= 0
-      ptrState.current.startedAtTop = atTop
-      ptrState.current.startY = e.touches[0].clientY
-      ptrState.current.active = false
+      if (state === 'refreshing') return
+
+      // ── CRITICAL: three guards that must ALL pass ──
+      // 1. Page must be at absolute top
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || 0
+      if (scrollTop > 0) { state = 'idle'; return }
+      // 2. No recent scroll momentum (300ms cooldown after last scroll event)
+      if (Date.now() - lastScrollTime < 300) { state = 'idle'; return }
+      // 3. Touch must be a single finger
+      if (e.touches.length !== 1) { state = 'idle'; return }
+
+      // All guards passed — start tracking this gesture
+      state = 'tracking'
+      startY = e.touches[0].clientY
     }
 
     function onTouchMove(e: TouchEvent) {
-      // If gesture didn't start at top, never activate — no re-checking
-      if (!ptrState.current.startedAtTop) return
-      const dy = e.touches[0].clientY - ptrState.current.startY
-      // Only pulling DOWN, ignore up-swipes
-      if (dy < 8) return
-      // If somehow page scrolled during this gesture (shouldn't happen), bail
-      if (window.scrollY > 0) { ptrState.current.startedAtTop = false; resetPTR(); return }
-      e.preventDefault()
-      ptrState.current.active = true
-      const pull = Math.min(dy * 0.45, MAX_PULL)
-      const progress = Math.min(pull / (THRESHOLD * 0.45), 1)
-      // Slide entire shell down
-      setShellOffset(pull)
-      // Update indicator
-      const ind = getIndicator()
-      if (ind) {
-        ind.style.opacity = String(Math.min(progress * 1.5, 1))
-        ind.classList.add('pulling')
-        ind.classList.remove('refreshing')
-        const lbl = ind.querySelector('.ptr-label') as HTMLElement
-        if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Zeus Terminal'
-        const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
-        if (spinner) spinner.style.transform = `rotate(${dy * 3}deg)`
+      if (state !== 'tracking' && state !== 'pulling' && state !== 'armed') return
+      const dy = e.touches[0].clientY - startY
+
+      // Pulling UP or sideways → cancel
+      if (dy < 5) {
+        if (state !== 'tracking') resetAll(true)
+        state = dy < -10 ? 'idle' : state // cancel on clear upswipe
+        return
       }
+
+      // Double check: if page somehow scrolled, abort permanently
+      if ((window.scrollY || document.documentElement.scrollTop || 0) > 0) {
+        resetAll(false)
+        return
+      }
+
+      // We're pulling down from top — prevent native scroll
+      e.preventDefault()
+
+      const pull = Math.min(dy * DAMPING, MAX_VISUAL)
+      const progress = Math.min(dy / THRESHOLD, 1)
+
+      state = progress >= 1 ? 'armed' : 'pulling'
+
+      // Slide header down — ONLY the header, not main content
+      slideShell(pull, false)
+      updateIndicator(progress, dy)
     }
 
-    function onTouchEnd(e: TouchEvent) {
-      if (!ptrState.current.active) return
-      const dy = e.changedTouches[0].clientY - ptrState.current.startY
-      ptrState.current.active = false
-
-      if (dy >= THRESHOLD) {
-        const ind = getIndicator()
+    function onTouchEnd() {
+      if (state === 'armed') {
+        // ── REFRESH ──
+        state = 'refreshing'
+        const ind = getInd()
         if (ind) {
-          ind.classList.remove('pulling')
+          ind.classList.remove('armed')
           ind.classList.add('refreshing')
           const lbl = ind.querySelector('.ptr-label') as HTMLElement
           if (lbl) lbl.textContent = 'Refreshing...'
           const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
           if (spinner) spinner.style.transform = ''
         }
-        setTimeout(() => location.reload(), 400)
-      } else {
-        resetPTR()
+        // Hold position briefly then reload
+        slideShell(MAX_VISUAL * 0.6, true)
+        setTimeout(() => location.reload(), 500)
+      } else if (state === 'pulling' || state === 'tracking') {
+        // ── CANCEL — snap back ──
+        resetAll(true)
       }
-    }
-
-    function resetPTR() {
-      const shell = getAppShell()
-      if (shell) { shell.style.transition = 'transform .25s ease'; shell.style.transform = '' }
-      if (mainRef.current) { mainRef.current.style.transition = 'transform .25s ease'; mainRef.current.style.transform = '' }
-      const ind = getIndicator()
-      if (ind) { ind.classList.remove('pulling', 'refreshing'); ind.style.opacity = '' }
-      setTimeout(() => {
-        const s = getAppShell()
-        if (s) s.style.transition = ''
-        if (mainRef.current) mainRef.current.style.transition = ''
-      }, 300)
     }
 
     document.addEventListener('touchstart', onTouchStart, { passive: true })
     document.addEventListener('touchmove', onTouchMove, { passive: false })
     document.addEventListener('touchend', onTouchEnd, { passive: true })
     return () => {
+      window.removeEventListener('scroll', onScroll)
       document.removeEventListener('touchstart', onTouchStart)
       document.removeEventListener('touchmove', onTouchMove)
       document.removeEventListener('touchend', onTouchEnd)

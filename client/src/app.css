@@ -5570,27 +5570,26 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   #zeus-dock .zd-item:not(.zd-disabled):hover .zd-label { color: #8ab4d4 }
 }
 
-/* ── Pull-to-refresh (Bybit-style: fixed at top, revealed when shell slides down) ── */
+/* ── Pull-to-refresh indicator — fixed behind header, revealed by header slideDown ── */
 #ptr-indicator {
-  position: fixed;
-  top: 0; left: 0; right: 0;
+  position: fixed; top: 0; left: 0; right: 0; height: 56px;
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  height: 60px;
-  padding-top: env(safe-area-inset-top, 0px);
   background: #080c14;
-  z-index: 100; /* behind header (200) — visible only when header slides down */
-  opacity: 0; pointer-events: none;
+  z-index: 100; /* below .zeus-fixed-top (z:200) */
+  opacity: 0; pointer-events: none; transition: opacity .15s ease;
 }
+#ptr-indicator.visible { opacity: 1; }
 #ptr-indicator .ptr-spinner {
   width: 16px; height: 16px; flex-shrink: 0;
-  border: 2px solid #f0c04033; border-top-color: #f0c040;
-  border-radius: 50%;
+  border: 2.5px solid #f0c04030; border-top-color: #f0c040; border-radius: 50%;
 }
-#ptr-indicator.refreshing .ptr-spinner { animation: ptr-spin .6s linear infinite; }
+#ptr-indicator.armed .ptr-spinner { border-top-color: #00ff88; }
+#ptr-indicator.refreshing .ptr-spinner { animation: ptr-spin .55s linear infinite; border-top-color: #f0c040; }
 #ptr-indicator .ptr-label {
-  font-family: var(--ff); font-size: 11px; letter-spacing: 1px;
+  font-family: var(--ff); font-size: 11px; letter-spacing: 1.5px;
   color: #f0c040; text-transform: uppercase;
 }
+#ptr-indicator.armed .ptr-label { color: #00ff88; }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
 
 /* ── Liq Source Metrics Panel ── */
