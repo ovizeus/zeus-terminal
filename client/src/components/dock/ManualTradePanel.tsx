@@ -1,10 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useUiStore } from '../../stores'
 
 const w = window as any
 
 /** 1:1 port of #panelDemo from public/index.html lines 2050-2204
  *  Syncs bidirectionally with w.TP for trading functions in marketDataTrading.ts */
 export function ManualTradePanel() {
+  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
+  const apiConfigured = useUiStore((s) => s.apiConfigured)
+  const exchangeMode = useUiStore((s) => s.exchangeMode)
   const [side, setSideLocal] = useState<'LONG' | 'SHORT'>(() => w.TP?.demoSide || 'LONG')
   const [ordType, setOrdType] = useState('market')
   const [marginMode, setMarginMode] = useState('cross')
@@ -208,11 +212,11 @@ export function ManualTradePanel() {
         {/* PLACE ORDER */}
         <button id="demoExec" className="tp-exec demo-exec" onClick={() => { if (typeof w.placeDemoOrder === 'function') w.placeDemoOrder() }}>
           {(() => {
-            const mode = w.AT?._serverMode || 'demo'
-            const env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
-            if (mode === 'live' && !w._apiConfigured) return '🔒 PLACE ORDER (EXEC LOCKED)'
-            if (mode === 'live') { const tag = env === 'TESTNET' ? 'TESTNET' : 'LIVE'; return side === 'LONG' ? `▲ OPEN LONG (${tag})` : `▼ OPEN SHORT (${tag})` }
-            return side === 'LONG' ? '▲ OPEN LONG' : '▼ OPEN SHORT'
+            const mode = exchangeMode || 'demo'
+            const env = resolvedEnv || 'DEMO'
+            if (mode === 'live' && !apiConfigured) return '\uD83D\uDD12 PLACE ORDER (EXEC LOCKED)'
+            if (mode === 'live') { const tag = env === 'TESTNET' ? 'TESTNET' : 'LIVE'; return side === 'LONG' ? `\u25B2 OPEN LONG (${tag})` : `\u25BC OPEN SHORT (${tag})` }
+            return side === 'LONG' ? '\u25B2 OPEN LONG' : '\u25BC OPEN SHORT'
           })()}
         </button>
 
