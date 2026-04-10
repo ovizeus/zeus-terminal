@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { toggleDSL as toggleDSLDirect } from '../../trading/dsl'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
 function seededRandom(seed: number) {
@@ -73,8 +72,20 @@ export function DSLZonePanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span id="dslActiveCount" style={{ fontSize: '7px', color: '#00ffcc44' }}>0 active</span>
           <button className={`dsl-toggle${dslOn ? '' : ' off'}`} id="dslToggleBtn" onClick={() => {
-            toggleDSLDirect()
-            setDslOn(!!((window as any).DSL?.enabled))
+            const w = window as any
+            try {
+              // Toggle DSL state directly
+              if (typeof w.DSL !== 'undefined') {
+                w.DSL.enabled = !w.DSL.enabled
+                if (!w.S?.dsl) { if (w.S) w.S.dsl = {} }
+                if (w.S?.dsl) w.S.dsl.active = w.DSL.enabled
+                if (!w.DSL.enabled && typeof w.stopDSLIntervals === 'function') w.stopDSLIntervals()
+                if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) w.startDSLIntervals()
+                if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
+              }
+            } catch (e) { console.warn('[DSL btn]', e) }
+            // Always sync React state
+            setDslOn(!!w.DSL?.enabled)
           }}>
             {dslOn ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'}
           </button>
