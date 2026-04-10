@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { toggleDSL as toggleDSLDirect } from '../../trading/dsl'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
 function seededRandom(seed: number) {
@@ -72,14 +73,8 @@ export function DSLZonePanel() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span id="dslActiveCount" style={{ fontSize: '7px', color: '#00ffcc44' }}>0 active</span>
           <button className={`dsl-toggle${dslOn ? '' : ' off'}`} id="dslToggleBtn" onClick={() => {
-            const w = window as any
-            if (typeof w.toggleDSL === 'function') {
-              w.toggleDSL()
-              // Sync React state from DSL.enabled (toggleDSL modifies it directly)
-              setDslOn(!!(w.DSL?.enabled))
-            } else {
-              setDslOn(v => !v)
-            }
+            toggleDSLDirect()
+            setDslOn(!!((window as any).DSL?.enabled))
           }}>
             {dslOn ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'}
           </button>
