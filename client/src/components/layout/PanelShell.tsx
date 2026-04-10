@@ -237,11 +237,11 @@ export function PanelShell() {
       </div>
 
       <main className="zr-panels" ref={mainRef}>
+        {/* ── Watchlist Bar (above ModeBar — 1:1 order from old app) ── */}
+        <WatchlistBar />
+
         {/* ── Mode Bar — 1:1 from original zeus-mode-bar ── */}
         <ModeBar />
-
-        {/* ── Watchlist Bar ── */}
-        <WatchlistBar />
 
         {/* ── Chart section — 1:1 from original #csec .chart-section ── */}
         <section className="zr-panel zr-panel--chart chart-section" id="csec" data-panel="chart">
