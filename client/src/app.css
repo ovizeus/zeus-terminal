@@ -3388,7 +3388,20 @@ body {
 .zpv-active-panel .trade-panel { display: block !important; }
 /* ── DSL ── */
 .zpv-active-panel .dsl-zone { display: block !important; }
-/* ── ARES — old CSS: #zeus-groups #ares-strip { display:none !important } (specificity 0,2,0) ── */
+/* ── Default: hide ALL strip panels inside #zeus-groups unless active ── */
+#zeus-groups #ares-strip,
+#zeus-groups #nova-strip,
+#zeus-groups #aria-strip,
+#zeus-groups #pnl-lab-strip,
+#zeus-groups #pm-strip,
+#zeus-groups #mtf-strip,
+#zeus-groups #teacher-strip,
+#zeus-groups #sr-strip,
+#zeus-groups #actfeed-strip,
+#zeus-groups #aub,
+#zeus-groups #adaptive-sec { display: none !important; }
+
+/* ── ARES ── */
 #zeus-groups .zpv-active-panel #ares-strip { display: block !important; }
 #zeus-groups .zpv-active-panel #ares-strip-bar { display: none !important; }
 #zeus-groups .zpv-active-panel #ares-wound-line { display: none !important; }
@@ -3410,7 +3423,8 @@ body {
 #zeus-groups .zpv-active-panel #pm-strip { display: block !important; }
 #zeus-groups .zpv-active-panel #pm-strip-bar { display: none !important; }
 #zeus-groups .zpv-active-panel #pm-strip-panel { max-height: none !important; overflow: visible !important; }
-/* ── Flow — old CSS: #zeus-groups #flow-panel { display:none !important } ── */
+/* ── Flow — hide by default, show only in active panel ── */
+#zeus-groups #flow-panel { display: none !important; }
 #zeus-groups .zpv-active-panel #flow-panel { display: block !important; }
 #zeus-groups .zpv-active-panel #flow-panel-hdr { display: none !important; }
 #zeus-groups .zpv-active-panel #flow-panel-body { display: block !important; }
