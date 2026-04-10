@@ -92,3 +92,38 @@ export function getJournal(): any[] {
   const j = w.TP?.journal
   return Array.isArray(j) ? [...j] : []
 }
+
+// ── Added in 8E-1 (QM state redirect) ──
+
+/** Current price — TEMP bridge getter
+ *  TODO: migrate to marketStore in 8D */
+export function getPrice(): number {
+  return (window as any).S?.price || 0
+}
+
+/** Current symbol — TEMP bridge getter
+ *  TODO: migrate to marketStore in 8D */
+export function getSymbol(): string {
+  return (window as any).S?.symbol || 'BTCUSDT'
+}
+
+/** Kline bars — TEMP bridge getter (read-only copy)
+ *  TODO: migrate to marketStore in 8D */
+export function getKlines(): any[] {
+  const kl = (window as any).S?.klines
+  return Array.isArray(kl) ? [...kl] : []
+}
+
+/** Order book bids — TEMP bridge getter (read-only copy)
+ *  TODO: migrate to marketStore in 8D */
+export function getBids(): any[] {
+  const b = (window as any).S?.bids
+  return Array.isArray(b) ? [...b] : []
+}
+
+/** Order book asks — TEMP bridge getter (read-only copy)
+ *  TODO: migrate to marketStore in 8D */
+export function getAsks(): any[] {
+  const a = (window as any).S?.asks
+  return Array.isArray(a) ? [...a] : []
+}

@@ -1,6 +1,6 @@
 // Quantitative Monitor — State layer
-// Reads from Zeus w.S where available, manages QM-specific state locally
-const w = window as any
+// [8E-1] Market getters redirected to stateAccessors (no direct w.S reads)
+import { getPrice as _getPrice, getSymbol as _getSymbol, getKlines as _getKlines, getBids as _getBids, getAsks as _getAsks } from '../services/stateAccessors'
 
 // QM-local state that doesn't belong on w.S
 export const QM = {
@@ -61,9 +61,9 @@ export function getLiqTotals(): { total: number; count: number } {
   return { total, count }
 }
 
-// Bridge: read Zeus data or QM-local data
-export function getPrice(): number { return w.S?.price || 0 }
-export function getKlines(): any[] { return w.S?.klines || [] }
-export function getBids(): any[] { return w.S?.bids || [] }
-export function getAsks(): any[] { return w.S?.asks || [] }
-export function getSymbol(): string { return w.S?.symbol || 'BTCUSDT' }
+// Market getters — redirected to stateAccessors (8E-1)
+export const getPrice = _getPrice
+export const getKlines = _getKlines
+export const getBids = _getBids
+export const getAsks = _getAsks
+export const getSymbol = _getSymbol
