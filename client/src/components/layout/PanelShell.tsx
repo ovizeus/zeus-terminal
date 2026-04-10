@@ -93,77 +93,59 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  // ── Pull-to-refresh — state machine, built from zero ──
-  // States: idle → tracking → pulling → armed → refreshing → idle
-  // Rule: eligibility decided ONCE at touchstart. Never re-armed mid-gesture.
+  // ── Pull-to-refresh — content slides down, header stays fixed ──
+  // Transform ONLY on <main> (content). Header NEVER moves.
+  // PTR slot sits between fixed header and content, revealed by content sliding.
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    const THRESHOLD = 70   // px of finger movement to arm refresh
-    const MAX_VISUAL = 80  // max px the header slides down
-    const DAMPING = 0.4    // resistance factor
+    const THRESHOLD = 70
+    const MAX_PULL = 80
+    const DAMPING = 0.4
 
-    // State — single source of truth
     let state: 'idle' | 'tracking' | 'pulling' | 'armed' | 'refreshing' = 'idle'
     let startY = 0
     let lastScrollTime = 0
 
-    // Track scroll activity — any scroll means momentum is happening
     function onScroll() { lastScrollTime = Date.now() }
     window.addEventListener('scroll', onScroll, { passive: true })
 
-    function getShell(): HTMLElement | null { return document.querySelector('.zeus-fixed-top') }
-    function getInd(): HTMLElement | null { return document.getElementById('ptr-indicator') }
-
-    function slideShell(px: number, animate: boolean) {
-      const shell = getShell()
-      if (!shell) return
-      if (animate) { shell.style.transition = 'transform .3s cubic-bezier(.2,.8,.4,1)' }
-      else { shell.style.transition = 'none' }
-      shell.style.transform = px > 0 ? `translateY(${px}px)` : ''
+    function slideContent(px: number, animate: boolean) {
+      const el = mainRef.current
+      if (!el) return
+      el.style.transition = animate ? 'transform .3s cubic-bezier(.2,.8,.4,1)' : 'none'
+      el.style.transform = px > 0 ? `translateY(${px}px)` : ''
     }
 
-    function updateIndicator(progress: number, dy: number) {
-      const ind = getInd()
+    function updateInd(progress: number, dy: number) {
+      const ind = document.getElementById('ptr-indicator')
       if (!ind) return
-      ind.style.opacity = String(Math.min(progress, 1))
-      const lbl = ind.querySelector('.ptr-label') as HTMLElement
-      const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
-      if (progress >= 1) {
-        if (lbl) lbl.textContent = 'Release to refresh'
-        ind.classList.add('armed')
-      } else {
-        if (lbl) lbl.textContent = 'Zeus Terminal'
-        ind.classList.remove('armed')
-      }
-      if (spinner) spinner.style.transform = `rotate(${dy * 2.5}deg)`
       ind.classList.add('visible')
+      ind.classList.toggle('armed', progress >= 1)
+      ind.classList.remove('refreshing')
+      const lbl = ind.querySelector('.ptr-label') as HTMLElement
+      if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Zeus Terminal'
+      const sp = ind.querySelector('.ptr-spinner') as HTMLElement
+      if (sp) sp.style.transform = `rotate(${dy * 2.5}deg)`
     }
 
     function resetAll(animate: boolean) {
-      slideShell(0, animate)
-      const ind = getInd()
-      if (ind) {
-        ind.classList.remove('visible', 'armed', 'refreshing')
-        ind.style.opacity = ''
-      }
-      if (animate) setTimeout(() => { const s = getShell(); if (s) s.style.transition = '' }, 350)
+      slideContent(0, animate)
+      const ind = document.getElementById('ptr-indicator')
+      if (ind) ind.classList.remove('visible', 'armed', 'refreshing')
+      if (animate) setTimeout(() => { if (mainRef.current) mainRef.current.style.transition = '' }, 350)
       state = 'idle'
     }
 
     function onTouchStart(e: TouchEvent) {
       if (state === 'refreshing') return
-
-      // ── CRITICAL: three guards that must ALL pass ──
-      // 1. Page must be at absolute top
       const scrollTop = window.scrollY || document.documentElement.scrollTop || 0
+      // Guard 1: must be at absolute top
       if (scrollTop > 0) { state = 'idle'; return }
-      // 2. No recent scroll momentum (300ms cooldown after last scroll event)
+      // Guard 2: no momentum (300ms after last scroll)
       if (Date.now() - lastScrollTime < 300) { state = 'idle'; return }
-      // 3. Touch must be a single finger
+      // Guard 3: single finger
       if (e.touches.length !== 1) { state = 'idle'; return }
-
-      // All guards passed — start tracking this gesture
       state = 'tracking'
       startY = e.touches[0].clientY
     }
@@ -171,51 +153,35 @@ export function PanelShell() {
     function onTouchMove(e: TouchEvent) {
       if (state !== 'tracking' && state !== 'pulling' && state !== 'armed') return
       const dy = e.touches[0].clientY - startY
-
-      // Pulling UP or sideways → cancel
       if (dy < 5) {
         if (state !== 'tracking') resetAll(true)
-        state = dy < -10 ? 'idle' : state // cancel on clear upswipe
+        if (dy < -10) state = 'idle'
         return
       }
-
-      // Double check: if page somehow scrolled, abort permanently
-      if ((window.scrollY || document.documentElement.scrollTop || 0) > 0) {
-        resetAll(false)
-        return
-      }
-
-      // We're pulling down from top — prevent native scroll
+      if ((window.scrollY || document.documentElement.scrollTop || 0) > 0) { resetAll(false); return }
       e.preventDefault()
-
-      const pull = Math.min(dy * DAMPING, MAX_VISUAL)
+      const pull = Math.min(dy * DAMPING, MAX_PULL)
       const progress = Math.min(dy / THRESHOLD, 1)
-
       state = progress >= 1 ? 'armed' : 'pulling'
-
-      // Slide header down — ONLY the header, not main content
-      slideShell(pull, false)
-      updateIndicator(progress, dy)
+      slideContent(pull, false)
+      updateInd(progress, dy)
     }
 
     function onTouchEnd() {
       if (state === 'armed') {
-        // ── REFRESH ──
         state = 'refreshing'
-        const ind = getInd()
+        const ind = document.getElementById('ptr-indicator')
         if (ind) {
           ind.classList.remove('armed')
           ind.classList.add('refreshing')
           const lbl = ind.querySelector('.ptr-label') as HTMLElement
           if (lbl) lbl.textContent = 'Refreshing...'
-          const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
-          if (spinner) spinner.style.transform = ''
+          const sp = ind.querySelector('.ptr-spinner') as HTMLElement
+          if (sp) sp.style.transform = ''
         }
-        // Hold position briefly then reload
-        slideShell(MAX_VISUAL * 0.6, true)
+        slideContent(MAX_PULL * 0.6, true)
         setTimeout(() => location.reload(), 500)
       } else if (state === 'pulling' || state === 'tracking') {
-        // ── CANCEL — snap back ──
         resetAll(true)
       }
     }
