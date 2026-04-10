@@ -94,93 +94,89 @@ export function PanelShell() {
   }
 
   // ── Pull-to-refresh (Bybit-style: whole app slides down, reveal indicator behind) ──
-  const ptrState = useRef({ startY: 0, active: false, locked: false })
+  // Decision made ONCE at touchstart: if not at top, entire gesture is ignored.
+  const ptrState = useRef({ startY: 0, startedAtTop: false, active: false })
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const THRESHOLD = 65
     const MAX_PULL = 100
-    // The entire app shell (header + content) slides down to reveal the indicator behind it
-    const appShell = document.querySelector('.zeus-fixed-top') as HTMLElement
-    const indicator = document.getElementById('ptr-indicator')
 
-    function isAtTop(): boolean {
-      return window.scrollY <= 0 && document.documentElement.scrollTop <= 0
-    }
+    function getAppShell(): HTMLElement | null { return document.querySelector('.zeus-fixed-top') }
+    function getIndicator(): HTMLElement | null { return document.getElementById('ptr-indicator') }
 
     function setShellOffset(px: number) {
       const val = px > 0 ? `translateY(${px}px)` : ''
-      if (appShell) appShell.style.transform = val
+      const shell = getAppShell()
+      if (shell) shell.style.transform = val
       if (mainRef.current) mainRef.current.style.transform = val
     }
 
     function onTouchStart(e: TouchEvent) {
-      if (!isAtTop()) { ptrState.current.locked = true; return }
+      // CRITICAL: decide once — is the page at absolute top right now?
+      const atTop = window.scrollY <= 0 && document.documentElement.scrollTop <= 0
+      ptrState.current.startedAtTop = atTop
       ptrState.current.startY = e.touches[0].clientY
       ptrState.current.active = false
-      ptrState.current.locked = false
     }
 
     function onTouchMove(e: TouchEvent) {
-      if (ptrState.current.locked) return
+      // If gesture didn't start at top, never activate — no re-checking
+      if (!ptrState.current.startedAtTop) return
       const dy = e.touches[0].clientY - ptrState.current.startY
-      if (dy < 5 || !isAtTop()) { ptrState.current.locked = true; resetPTR(); return }
+      // Only pulling DOWN, ignore up-swipes
+      if (dy < 8) return
+      // If somehow page scrolled during this gesture (shouldn't happen), bail
+      if (window.scrollY > 0) { ptrState.current.startedAtTop = false; resetPTR(); return }
       e.preventDefault()
       ptrState.current.active = true
-      const pull = Math.min(dy * 0.45, MAX_PULL) // dampened pull
+      const pull = Math.min(dy * 0.45, MAX_PULL)
       const progress = Math.min(pull / (THRESHOLD * 0.45), 1)
-      // Slide entire app down
+      // Slide entire shell down
       setShellOffset(pull)
-      // Show indicator
-      if (indicator) {
-        indicator.style.opacity = String(Math.min(progress * 1.5, 1))
-        const lbl = indicator.querySelector('.ptr-label') as HTMLElement
+      // Update indicator
+      const ind = getIndicator()
+      if (ind) {
+        ind.style.opacity = String(Math.min(progress * 1.5, 1))
+        ind.classList.add('pulling')
+        ind.classList.remove('refreshing')
+        const lbl = ind.querySelector('.ptr-label') as HTMLElement
         if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Zeus Terminal'
-        const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
+        const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
         if (spinner) spinner.style.transform = `rotate(${dy * 3}deg)`
-        indicator.classList.add('pulling')
-        indicator.classList.remove('refreshing')
       }
     }
 
     function onTouchEnd(e: TouchEvent) {
-      if (!ptrState.current.active) { ptrState.current.locked = false; return }
+      if (!ptrState.current.active) return
       const dy = e.changedTouches[0].clientY - ptrState.current.startY
       ptrState.current.active = false
-      ptrState.current.locked = false
 
       if (dy >= THRESHOLD) {
-        // Trigger refresh — hold position briefly
-        if (indicator) {
-          indicator.classList.remove('pulling')
-          indicator.classList.add('refreshing')
-          const lbl = indicator.querySelector('.ptr-label') as HTMLElement
+        const ind = getIndicator()
+        if (ind) {
+          ind.classList.remove('pulling')
+          ind.classList.add('refreshing')
+          const lbl = ind.querySelector('.ptr-label') as HTMLElement
           if (lbl) lbl.textContent = 'Refreshing...'
-          const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
+          const spinner = ind.querySelector('.ptr-spinner') as HTMLElement
           if (spinner) spinner.style.transform = ''
         }
-        // Snap shell to fixed refresh position
-        const holdPx = Math.min(dy * 0.45, MAX_PULL)
-        setShellOffset(holdPx)
-        if (appShell) appShell.style.transition = 'transform .2s ease'
-        if (mainRef.current) mainRef.current.style.transition = 'transform .2s ease'
-        setTimeout(() => location.reload(), 500)
+        setTimeout(() => location.reload(), 400)
       } else {
         resetPTR()
       }
     }
 
     function resetPTR() {
-      // Animate shell back
-      if (appShell) { appShell.style.transition = 'transform .25s ease'; appShell.style.transform = '' }
+      const shell = getAppShell()
+      if (shell) { shell.style.transition = 'transform .25s ease'; shell.style.transform = '' }
       if (mainRef.current) { mainRef.current.style.transition = 'transform .25s ease'; mainRef.current.style.transform = '' }
-      if (indicator) {
-        indicator.classList.remove('pulling', 'refreshing')
-        indicator.style.opacity = ''
-      }
-      // Clean transition after animation
+      const ind = getIndicator()
+      if (ind) { ind.classList.remove('pulling', 'refreshing'); ind.style.opacity = '' }
       setTimeout(() => {
-        if (appShell) appShell.style.transition = ''
+        const s = getAppShell()
+        if (s) s.style.transition = ''
         if (mainRef.current) mainRef.current.style.transition = ''
       }, 300)
     }

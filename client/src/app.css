@@ -5570,15 +5570,15 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   #zeus-dock .zd-item:not(.zd-disabled):hover .zd-label { color: #8ab4d4 }
 }
 
-/* ── Pull-to-refresh (Bybit-style: fixed behind header, revealed by shell slide) ── */
+/* ── Pull-to-refresh (Bybit-style: fixed at top, revealed when shell slides down) ── */
 #ptr-indicator {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 30px);
-  left: 0; right: 0;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  height: 44px;
-  background: var(--bg);
-  z-index: 100; /* behind header (200) — revealed when header slides down */
+  top: 0; left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  height: 60px;
+  padding-top: env(safe-area-inset-top, 0px);
+  background: #080c14;
+  z-index: 100; /* behind header (200) — visible only when header slides down */
   opacity: 0; pointer-events: none;
 }
 #ptr-indicator .ptr-spinner {
