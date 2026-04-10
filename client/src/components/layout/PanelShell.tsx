@@ -20,6 +20,7 @@ import { ARIAPanel } from '../dock/ARIAPanel'
 import { NovaPanel } from '../dock/NovaPanel'
 import { AdaptivePanel } from '../dock/AdaptivePanel'
 import { FlowPanel } from '../dock/FlowPanel'
+import { QuantMonitorPanel } from '../dock/QuantMonitorPanel'
 import { MTFPanel } from '../dock/MTFPanel'
 import { TeacherDockPanel } from '../dock/TeacherDockPanel'
 import { SignalRegistryPanel } from '../dock/SignalRegistryPanel'
@@ -69,6 +70,7 @@ const DOCK_TITLES: Record<string, string> = {
   'nova': 'Nova',
   'adaptive': 'Adaptive',
   'flow': 'Flow',
+  'quantmonitor': 'Quantitative Monitor',
   'mtf': 'MTF',
   'teacher': 'Teacher',
   'sigreg': 'Signals',
@@ -199,6 +201,9 @@ export function PanelShell() {
           </div>
           <div data-panel-id="flow" className={dockActive === 'flow' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <FlowPanel />
+          </div>
+          <div data-panel-id="quantmonitor" className={dockActive === 'quantmonitor' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <QuantMonitorPanel />
           </div>
           <div data-panel-id="mtf" className={dockActive === 'mtf' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <MTFPanel />
