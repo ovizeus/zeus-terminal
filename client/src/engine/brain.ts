@@ -4,17 +4,17 @@
 // [8C-2A1] w.AT/TC/DSL/TP reads migrated to stateAccessors
 'use strict'
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias } from '../services/stateAccessors'
 
-const w = window as any // kept for w.S, w.BM, w.BRAIN, w.el, w._ZI, function calls, writes
+const w = window as any // kept for w.BM, w.BRAIN, w.el, w._ZI, function calls, w.S writes + self-ref
 
 // Neuron updater
 export function updateNeurons(): void {
-  const rsiV = w.S.rsi?.['5m']
-  const rsi1h = w.S.rsi?.['1h']
-  const sigs = w.S.signalData?.signals || []
-  const bullC = w.S.signalData?.bullCount || 0
-  const bearC = w.S.signalData?.bearCount || 0
+  const rsiV = getRSI('5m')
+  const rsi1h = getRSI('1h')
+  const sigs = getSignalData().signals
+  const bullC = getSignalData().bullCount
+  const bearC = getSignalData().bearCount
 
   // RSI neuron
   if (rsiV !== null && rsiV !== undefined) {
@@ -35,18 +35,18 @@ export function updateNeurons(): void {
 
   // Volume neuron
   const hasVol = sigs.some((s: any) => s.name.toLowerCase().includes('vol'))
-  setNeuron('vol', hasVol ? 'ok' : 'wait', w.S.vol24h ? '↑' : '—')
+  setNeuron('vol', hasVol ? 'ok' : 'wait', getVol24h() ? '↑' : '—')
 
   // Funding Rate neuron
-  if (w.S.fr !== null && w.S.fr !== undefined) {
-    const frBull = w.S.fr < 0
-    const frExtreme = Math.abs(w.S.fr) * 10000 > 5
+  if (getFR() !== null) {
+    const frBull = getFR()! < 0
+    const frExtreme = Math.abs(getFR()!) * 10000 > 5
     setNeuron('fr', frExtreme ? (frBull ? 'ok' : 'fail') : 'wait',
-      (w.S.fr >= 0 ? '+' : '') + (w.S.fr * 100).toFixed(3) + '%')
+      ((getFR() || 0) >= 0 ? '+' : '') + ((getFR() || 0) * 100).toFixed(3) + '%')
   }
 
   // Magnet neuron
-  const mb = w.S.magnetBias
+  const mb = getMagnetBias()
   setNeuron('mag', mb === 'bull' ? 'ok' : mb === 'bear' ? 'fail' : 'wait',
     mb === 'bull' ? '↑BULL' : mb === 'bear' ? '↓BEAR' : 'NEUT')
 
@@ -121,8 +121,8 @@ export function updateBrainState(): void {
   // FIX: Calculeaza scorul direct, nu citeste din DOM (poate fi stale)
   w.calcConfluenceScore()
   const score = (typeof w.BM !== 'undefined' ? w.BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
-  const bulls = w.S.signalData?.bullCount || 0
-  const bears = w.S.signalData?.bearCount || 0
+  const bulls = getSignalData().bullCount
+  const bears = getSignalData().bearCount
   const sigs = bulls + bears
   const hasAutoPos = (getDemoPositions()).some((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).some((p: any) => p.autoTrade && !p.closed) // [FIX M2+LIVE]
 
@@ -132,7 +132,7 @@ export function updateBrainState(): void {
   if (hasAutoPos) {
     state = 'trading'
     const pos = (getDemoPositions()).find((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).find((p: any) => p.autoTrade && !p.closed)
-    const pnl = pos ? ((pos.side === 'LONG' ? w.S.price - pos.entry : pos.entry - w.S.price) / pos.entry * pos.size * (pos.lev || 1)) : 0
+    const pnl = pos ? ((pos.side === 'LONG' ? getPrice() - pos.entry : pos.entry - getPrice()) / pos.entry * pos.size * (pos.lev || 1)) : 0
     ticker = `POZITIE ACTIVA ${pos?.side} @$${w.fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORIZEZ TP/SL...`
   } else if (score >= 68 && sigs >= 3) {
     state = 'ready'
@@ -148,7 +148,7 @@ export function updateBrainState(): void {
     ticker = `KILL SWITCH ACTIV — BLOCAT. Asteapt reset 30s...`
   } else {
     state = 'scanning'
-    ticker = `SCANEZ... RSI:${(w.S.rsi?.['5m'] || 0).toFixed(0)} | FR:${w.S.fr !== null ? (w.S.fr * 100).toFixed(3) + '%' : '—'} | REGIM:${w.BRAIN.regime.toUpperCase()} | MAGNET:${(w.S.magnetBias || 'neut').toUpperCase()} | ${w.fmtNow(true)}`
+    ticker = `SCANEZ... RSI:${(getRSI('5m') || 0).toFixed(0)} | FR:${getFR() !== null ? ((getFR() || 0) * 100).toFixed(3) + '%' : '—'} | REGIM:${w.BRAIN.regime.toUpperCase()} | MAGNET:${(getMagnetBias() || 'neut').toUpperCase()} | ${w.fmtNow(true)}`
   }
 
   // [PATCH BRAIN-AT-IDLE] No READY/decision state when AT is OFF
@@ -172,7 +172,7 @@ export function updateBrainState(): void {
   { const _oe = w.el('brainTickerText'); if (_oe) _oe.textContent = ticker }
 
   // Regime badge
-  const regime = detectMarketRegime(w.S.klines || [])
+  const regime = detectMarketRegime(getKlines())
   const regimeBadge = w.el('brainRegimeBadge')
   const regimeLabels: any = { trend: w._ZI.tup + ' TREND', range: w._ZI.chart + ' RANGE', volatile: w._ZI.bolt + ' VOLATIL', unknown: w._ZI.clock + ' LOADING' }
   if (regimeBadge) {
@@ -204,7 +204,7 @@ export function brainThink(type: any, msg: any): void {
 
 // Brain main loop
 export function runBrainUpdate(): void {
-  if (!w.S.price) return
+  if (!getPrice()) return
   // [FIX H6] Removed unconditional AT.enabled gate — brain must observe even when AT is off
   // Entry scoring and param adaptation are independently gated inside their own functions
   // [PATCH MODE-SWITCH] Skip brain cycle while mode switch modal is open
@@ -614,7 +614,7 @@ export function detectRegimeEnhanced(klines: any): any {
 export function updateMTFAlignment(): void {
   const tfs = ['15m', '1h', '4h']
   tfs.forEach(tf => {
-    const rsi = w.S.rsi?.[tf] || 50
+    const rsi = getRSI(tf) || 50
     const dir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
     w.BM.mtf[tf] = dir
     const badge = w.el('mtf' + tf)
@@ -696,18 +696,18 @@ export function updateFlowEngine(klines: any): void {
 export function computeGates(dir: any): any {
   const regime = w.BRAIN.regime || 'unknown'
   const ofi = w.BRAIN.ofi?.blendBuy || 50
-  const rsi5m = w.S.rsi?.['5m'] || 50
-  const rsi1h = w.S.rsi?.['1h'] || 50
-  const rsi4h = w.S.rsi?.['4h'] || 50
+  const rsi5m = getRSI('5m') || 50
+  const rsi1h = getRSI('1h') || 50
+  const rsi4h = getRSI('4h') || 50
   const adx = w.BRAIN.liveADX || 0
-  const fr = w.S.fr || 0
+  const fr = getFR() || 0
   const oi = w.S.oi || 0
   const oiPrev = w.S.oiPrev || oi
-  const vol = w.S.vol24h || 0
+  const vol = getVol24h() || 0
   const isLong = dir === 'long'
   const sw = w.BM.sweep
   const profile = w.BM.profile
-  const regDat = detectRegimeEnhanced(w.S.klines || [])
+  const regDat = detectRegimeEnhanced(getKlines())
 
   // Current session
   const h = new Date().getUTCHours()
@@ -719,7 +719,7 @@ export function computeGates(dir: any): any {
   const cooldownOff = (Date.now() - lastTradeTs) > cooldownMs
 
   // Volume
-  const klines = w.S.klines || []
+  const klines = getKlines()
   let volConfirm = false
   if (klines.length >= 20) {
     const recent = klines.slice(-5).reduce((a: number, k: any) => a + k.volume, 0) / 5
@@ -820,7 +820,7 @@ export function computeEntryScore(gates: any, dir: any): any {
   // Bonuses
   if (w.BM.sweep.reclaim && w.BM.sweep.displacement) { score += 10; reasons.push({ pos: true, txt: '+ Sweep+Reclaim+Disp' }) }
   // RUN is now a scan gate (not a score bonus) — removed legacy +8 bonus
-  const rsi5m = w.S.rsi?.['5m'] || 50
+  const rsi5m = getRSI('5m') || 50
   if (dir === 'long' && rsi5m > 55 && rsi5m < 70) { score += 5; reasons.push({ pos: true, txt: '+ RSI bullish zone' }) }
   if (dir === 'short' && rsi5m < 45 && rsi5m > 30) { score += 5; reasons.push({ pos: true, txt: '+ RSI bearish zone' }) }
 
@@ -1075,7 +1075,7 @@ export function updateDSLTelemetry(): void {
   let html = `<div class="dsl-tele-title">DSL TELEMETRY — BRAIN READ</div>`
   posns.forEach((pos: any) => {
     const dsl = getDSLPositions()[String(pos.id)]
-    const cur = pos.sym === w.S.symbol ? w.S.price : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry) // [FIX v85 B7]
+    const cur = pos.sym === w.S.symbol ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry) // [FIX v85 B7]
     const sym = pos.sym.replace('USDT', '')
     const isActive = dsl?.active || false
     const pnl = w._safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false)
@@ -1326,9 +1326,9 @@ export function onNeuronScanUpdate(sym: any): void {
 
 // Brain Cockpit render (massive)
 export function renderBrainCockpit(): void {
-  if (!w.S.price) return
-  const klines = w.S.klines || []
-  const dir = (w.S.signalData?.bullCount || 0) >= (w.S.signalData?.bearCount || 0) ? 'long' : 'short'
+  if (!getPrice()) return
+  const klines = getKlines()
+  const dir = (getSignalData().bullCount) >= (getSignalData().bearCount) ? 'long' : 'short'
 
   // 1. Timezone
   applyTimezone(w.S.tz || 'Europe/Bucharest')
@@ -1380,16 +1380,16 @@ export function renderBrainCockpit(): void {
       const _regime = w.BRAIN.regime || 'unknown'
       const _regConf = w.BRAIN.regimeConfidence || 0
       const _atrPct = w.BRAIN.regimeAtrPct || 0
-      const _rsi5m = w.S.rsi?.['5m'] || 50
-      const _rsi1h = w.S.rsi?.['1h'] || 50
+      const _rsi5m = getRSI('5m') || 50
+      const _rsi1h = getRSI('1h') || 50
       const _ofi = w.BRAIN.ofi?.blendBuy || 50
       const _sw = w.BM.sweep || {}
-      const _fr = w.S.fr || 0
+      const _fr = getFR() || 0
       const _oi = w.S.oi || 0
       const _oiPrev = w.S.oiPrev || _oi
       const _oiDelta = _oiPrev > 0 ? ((_oi - _oiPrev) / _oiPrev * 100) : 0
       const _atmo = w.BM.atmosphere || {}
-      const _sigs = w.S.signalData || {}
+      const _sigs = getSignalData()
       const _bulls = _sigs.bullCount || 0
       const _bears = _sigs.bearCount || 0
       const _sigTotal = _bulls + _bears
@@ -1527,7 +1527,7 @@ export function renderBrainCockpit(): void {
       const _atrP = w.BRAIN.regimeAtrPct || 0
       _db.volatility = _atrP > 3.0 ? 25 : _atrP > 2.0 ? 18 : _atrP > 1.5 ? 12 : _atrP > 1.0 ? 6 : 0
       // Volume anomaly component (0-20) — recent volume spike vs baseline
-      const _kl = w.S.klines || []
+      const _kl = getKlines()
       if (_kl.length >= 20) {
         const _r5 = _kl.slice(-5).reduce((a: number, k: any) => a + (k.volume || 0), 0) / 5
         const _b15 = _kl.slice(-20, -5).reduce((a: number, k: any) => a + (k.volume || 0), 0) / 15
@@ -1535,7 +1535,7 @@ export function renderBrainCockpit(): void {
         _db.volume = _vRatio > 3.0 ? 20 : _vRatio > 2.0 ? 14 : _vRatio > 1.5 ? 8 : 0
       }
       // Funding rate spike component (0-20)
-      const _frAbs = Math.abs(w.S.fr || 0)
+      const _frAbs = Math.abs(getFR() || 0)
       _db.funding = _frAbs > 0.002 ? 20 : _frAbs > 0.001 ? 14 : _frAbs > 0.0005 ? 7 : 0
       // Liquidation cascade component (0-20) — trap rate from liq cycle
       const _tr = w.BM.liqCycle?.trapRate
@@ -1578,7 +1578,7 @@ export function renderBrainCockpit(): void {
       if ((dir === 'long' && _ofi > 57) || (dir === 'short' && _ofi < 43)) _cv += 10
       else if ((dir === 'long' && _ofi < 43) || (dir === 'short' && _ofi > 57)) _cv -= 5
       // Signal consensus (0-5)
-      const _sd = w.S.signalData || {}
+      const _sd = getSignalData()
       const _bul = _sd.bullCount || 0, _ber = _sd.bearCount || 0
       if ((dir === 'long' && _bul > _ber) || (dir === 'short' && _ber > _bul)) _cv += 5
       // Clamp 0-100
@@ -1598,7 +1598,7 @@ export function renderBrainCockpit(): void {
 
   // 8. Protect mode
   const activePnL = (getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed).reduce((a: number, p: any) => {
-    const cur = p.sym === w.S.symbol ? w.S.price : (w.wlPrices[p.sym]?.price || p.entry)
+    const cur = p.sym === w.S.symbol ? getPrice() : (w.wlPrices[p.sym]?.price || p.entry)
     return a + (p.side === 'LONG' ? cur - p.entry : p.entry - cur) / p.entry * p.size * p.lev
   }, 0)
   w.BM.dailyPnL = (getATDailyPnL()) + activePnL
@@ -1667,7 +1667,7 @@ export function renderBrainCockpit(): void {
   ['mtf15m', 'mtf1h', 'mtf4h'].forEach((id, i) => {
     const b = w.el(id); if (!b) return
     const tf = tfsToShow[i] || mtfTFs[i]
-    const rsi = w.S.rsi?.[tf] || 50
+    const rsi = getRSI(tf) || 50
     const tdir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
     w.BM.mtf[tf] = tdir
     b.textContent = tf + ' ' + (tdir === 'bull' ? '▲' : tdir === 'bear' ? '▼' : '—')
@@ -1736,7 +1736,7 @@ export function renderBrainCockpit(): void {
     if (si) si.textContent = s
   }
   _card('card-flow', 'card-flow-t', 'card-flow-s', 'Flow ' + (ctx.flow ? 'CONFIRM' : 'WEAK'), 'Delta ' + (delta >= 0 ? '+' : '') + delta, ctx.flow ? 'ok' : 'fail')
-  _card('card-sweep', 'card-sweep-t', 'card-sweep-s', sw.type !== 'none' ? 'Sweep ' + sw.type.toUpperCase() + ' ✦' : 'Sweep NONE', sw.reclaim ? '$' + w.fP(w.S.price) + ' reclaimed' : 'No reclaim', sw.reclaim ? 'ok' : 'warn')
+  _card('card-sweep', 'card-sweep-t', 'card-sweep-s', sw.type !== 'none' ? 'Sweep ' + sw.type.toUpperCase() + ' ✦' : 'Sweep NONE', sw.reclaim ? '$' + w.fP(getPrice()) + ' reclaimed' : 'No reclaim', sw.reclaim ? 'ok' : 'warn')
   _card('card-mtf', 'card-mtf-t', 'card-mtf-s', 'MTF ' + mtfAlignCount + '/3', tfMap.trigger + ' – ' + tfMap.bias, mtfAlignCount >= 2 ? 'ok' : 'warn')
   _card('card-chaos', 'card-chaos-t', 'card-chaos-s', 'Chaos ' + (chaos < 33 ? 'OK' : chaos < 66 ? 'MED' : 'HIGH'), 'ATR ' + (w.BRAIN.regimeAtrPct || 0).toFixed(2) + '%', chaos < 33 ? 'ok' : chaos < 66 ? 'warn' : 'fail')
 
@@ -1940,7 +1940,7 @@ export function renderBrainCockpit(): void {
       // --- TREND (0→1): ADX/50 + abs(slope)/2 + SuperTrend confirm ---
       const _mcrAdx = regDat.adx || 0
       const _mcrSlope = regDat.slope20 || 0
-      const _stDir = (w.S.signalData?.signals || []).find((s: any) => s.name && s.name.toLowerCase().includes('supertrend'))
+      const _stDir = (getSignalData().signals).find((s: any) => s.name && s.name.toLowerCase().includes('supertrend'))
       const _stMatch = _stDir ? (_stDir.direction === dir || _stDir.side === dir) : false
       const _trendVal = clamp(_mcrAdx / 50, 0, 1) * 0.6 + clamp(Math.abs(_mcrSlope) / 2, 0, 1) * 0.3 + (_stMatch ? 0.1 : 0)
 
@@ -1970,9 +1970,9 @@ export function renderBrainCockpit(): void {
       const _volatVal = clamp(_atrPct2 / 3, 0, 1) * 0.5 + clamp(_wickChaos / 80, 0, 1) * 0.3 + _volExpansion
 
       // --- MOMENTUM (0→1): RSI distance + signal ratio + slope ---
-      const _rsi5m2 = (w.S.rsi && w.S.rsi['5m']) || 50
-      const _bullC = w.S.signalData?.bullCount || 0
-      const _bearC = w.S.signalData?.bearCount || 0
+      const _rsi5m2 = (getRSI('5m')) || 50
+      const _bullC = getSignalData().bullCount
+      const _bearC = getSignalData().bearCount
       const _sigTotal2 = _bullC + _bearC || 1
       const _momVal = clamp(Math.abs(_rsi5m2 - 50) / 50, 0, 1) * 0.4
         + clamp(Math.abs(_bullC - _bearC) / _sigTotal2, 0, 1) * 0.3
@@ -1980,9 +1980,9 @@ export function renderBrainCockpit(): void {
 
       // --- STRUCTURE (0→1): magnet proximity + organization + range ---
       let _magnetScore = 0.5
-      if (w.S.magnets && w.S.magnets.above && w.S.magnets.above.length && w.S.magnets.below && w.S.magnets.below.length && w.S.price > 0) {
-        const _nearAbove = Math.min.apply(null, w.S.magnets.above.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - w.S.price) / w.S.price }))
-        const _nearBelow = Math.min.apply(null, w.S.magnets.below.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - w.S.price) / w.S.price }))
+      if (w.S.magnets && w.S.magnets.above && w.S.magnets.above.length && w.S.magnets.below && w.S.magnets.below.length && getPrice() > 0) {
+        const _nearAbove = Math.min.apply(null, w.S.magnets.above.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - getPrice()) / getPrice() }))
+        const _nearBelow = Math.min.apply(null, w.S.magnets.below.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - getPrice()) / getPrice() }))
         _magnetScore = 1 - clamp(Math.min(_nearAbove, _nearBelow) / 0.02, 0, 1)
       }
       const _orgScore = 1 - clamp(_wickChaos / 100, 0, 1)
@@ -1991,7 +1991,7 @@ export function renderBrainCockpit(): void {
         const _rKl = klines.slice(-20)
         const _hh = Math.max.apply(null, _rKl.map(function (k: any) { return k.high }))
         const _ll = Math.min.apply(null, _rKl.map(function (k: any) { return k.low }))
-        const _rangePct = w.S.price > 0 ? (_hh - _ll) / w.S.price : 0
+        const _rangePct = getPrice() > 0 ? (_hh - _ll) / getPrice() : 0
         _rangeScore = clamp(_rangePct / 0.04, 0, 1)
       }
       const _structVal = clamp(0.35 * _magnetScore + 0.35 * _orgScore + 0.30 * _rangeScore, 0, 1)
@@ -2292,7 +2292,7 @@ export function renderCircuitBrain(): void {
   try {
     // FIX v118: aceeași sursă ca bannerul de feed (S.bnbOk/S.bybOk/S.dataStalled/_SAFETY.isReconnecting)
     // S.reconnecting era NICIODATĂ setat — fix: folosim _SAFETY.isReconnecting
-    const price = (typeof w.S !== 'undefined' && w.S.price) ? w.S.price : 0
+    const price = (typeof w.S !== 'undefined' && getPrice()) ? getPrice() : 0
     const stall = (typeof w.S !== 'undefined' && w.S.dataStalled) || (typeof w._SAFETY !== 'undefined' && w._SAFETY.dataStalled)
     const recon = (typeof w._SAFETY !== 'undefined' && w._SAFETY.isReconnecting)
     const hasWS = (typeof w.S !== 'undefined') && (w.S.bnbOk || w.S.bybOk)

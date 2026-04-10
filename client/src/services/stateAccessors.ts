@@ -190,3 +190,17 @@ export function getTCSize(): number {
 export function getDSLMode(): string {
   return (window as any).DSL?.mode || 'atr'
 }
+
+// ── Added in 8C-2A2 (brain.ts market reads) ──
+
+/** 24h volume — TEMP bridge getter
+ *  TODO: migrate to marketStore in 8D */
+export function getVol24h(): number {
+  return (window as any).S?.vol24h || 0
+}
+
+/** Magnet bias direction — TEMP bridge getter
+ *  TODO: migrate to brainStore in 8D */
+export function getMagnetBias(): string {
+  return (window as any).S?.magnetBias || 'neut'
+}
