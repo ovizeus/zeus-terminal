@@ -229,7 +229,11 @@ export function runBrainUpdate(): void {
         msgs[w.BRAIN.state] || w.BRAIN.state)
       w.BRAIN._prevState = w.BRAIN.state
     }
-  } finally { clearTimeout(_brainSafetyTimer); w.__brainCycleRunning = false }
+  } finally {
+    clearTimeout(_brainSafetyTimer); w.__brainCycleRunning = false
+    // Notify React brainStore — one event per complete brain cycle
+    try { window.dispatchEvent(new CustomEvent('zeus:brainStateChanged')) } catch (_) {}
+  }
 }
 // [runBrainUpdate loop managed in startApp — single instance]
 

@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 2804-3191 (Chunk F)
 // Brain Vision (V2) + Brain Dashboard (Reflection Engine) — both IIFEs with polling
 
-// ===== BRAIN VISION V2 — LOCAL REAL-TIME (reads from window.BM/BRAIN/S/AT) =====
+// ===== BRAIN VISION V2 — LOCAL REAL-TIME (reads from brainStore/atStore, fallback window.*) =====
 ;(function () {
   const w = window as any
   let _bvTimer: any = null
@@ -16,10 +16,27 @@
     const body = document.getElementById('brainVisionBody')
     const cycleEl = document.getElementById('brainVisionCycle')
     if (!body) return
-    const BM = w.BM; const BR = w.BRAIN; const S = w.S; const AT = w.AT
+    // Read from Zustand stores (single source of truth in React)
+    let BM: any, _brainState: string, _thoughts: any[], _adaptParams: any, _blockReason: any, _atEnabled: boolean, _atKill: boolean, _atTrades: number, _atWins: number
+    try {
+      const { useBrainStore } = require('../stores/brainStore')
+      const { useATStore } = require('../stores/atStore')
+      const bs = useBrainStore.getState()
+      const as2 = useATStore.getState()
+      BM = bs.brain; _brainState = bs.brainState
+      _thoughts = bs.thoughts; _adaptParams = bs.adaptParams; _blockReason = bs.blockReason
+      _atEnabled = as2.enabled; _atKill = as2.killTriggered; _atTrades = as2.totalTrades; _atWins = as2.wins
+    } catch (_) {
+      // Fallback to window.* if stores not loaded yet
+      BM = w.BM; _brainState = w.BRAIN?.state || 'scanning'
+      _thoughts = w.BRAIN?.thoughts || []; _adaptParams = w.BRAIN?.adaptParams; _blockReason = null
+      _atEnabled = w.AT?.enabled || false; _atKill = w.AT?.killTriggered || false
+      _atTrades = w.AT?.totalTrades || 0; _atWins = w.AT?.wins || 0
+    }
+    const S = w.S // S still needed for price/symbol (will be migrated in Phase 8)
     if (!BM || !S) { body.innerHTML = '<div style="color:#334455;padding:4px 0">Initializing brain...</div>'; return }
 
-    if (cycleEl) cycleEl.textContent = (BR?.state || 'idle').toUpperCase()
+    if (cycleEl) cycleEl.textContent = (_brainState || 'idle').toUpperCase()
     let h = ''
 
     // ── HEADER: Symbol + Price + Regime
@@ -35,17 +52,16 @@
     h += '</div>'
 
     // ── BRAIN STATE + CONFLUENCE
-    const state = BR?.state || 'scanning'
+    const state = _brainState || 'scanning'
     const stateCol = state === 'ready' ? '#00ff88' : state === 'trading' ? '#f0c040' : state === 'blocked' ? '#ff3355' : state === 'analyzing' ? '#00aaff' : '#556677'
     const conf = BM.confluenceScore || 0
     const confCol = conf >= 68 ? '#00ff88' : conf >= 50 ? '#f0c040' : '#ff3355'
     h += _row('STATE', _badge(state.toUpperCase(), stateCol) + ' <span style="color:' + confCol + ';font-weight:700;font-size:11px">CONF:' + conf + '</span>')
 
     // ── AT STATUS
-    const atOn = AT?.enabled ? 'ON' : 'OFF'
-    const atCol = AT?.enabled ? '#00ff88' : '#ff3355'
-    const killOn = AT?.killTriggered
-    h += _row('AT', _badge(atOn, atCol) + (killOn ? ' ' + _badge('KILL', '#ff3355') : '') + ' <span style="color:#556677">trades:' + (AT?.totalTrades || 0) + ' W:' + (AT?.wins || 0) + '</span>')
+    const atOn = _atEnabled ? 'ON' : 'OFF'
+    const atCol = _atEnabled ? '#00ff88' : '#ff3355'
+    h += _row('AT', _badge(atOn, atCol) + (_atKill ? ' ' + _badge('KILL', '#ff3355') : '') + ' <span style="color:#556677">trades:' + _atTrades + ' W:' + _atWins + '</span>')
 
     // ── GATES (7 gates)
     const gates = BM.gates || {}
@@ -112,23 +128,21 @@
     }
 
     // ── BLOCK REASON
-    const block = typeof w.BlockReason !== 'undefined' ? w.BlockReason.get() : null
-    if (block && block.code) {
-      h += _row('BLOCK', '<span style="color:#ff3355;font-weight:700">' + block.code + '</span> <span style="color:#ff8866">' + (block.text || '') + '</span>')
+    if (_blockReason && _blockReason.code) {
+      h += _row('BLOCK', '<span style="color:#ff3355;font-weight:700">' + _blockReason.code + '</span> <span style="color:#ff8866">' + (_blockReason.text || '') + '</span>')
     }
 
     // ── ADAPT PARAMS
-    const adapt = BR?.adaptParams
-    if (adapt && adapt.adjustCount > 0) {
-      h += _row('ADAPT', '<span style="color:#f0c040">SL:' + (adapt.sl || '—') + '% Size:$' + (adapt.size || '—') + ' (\u00D7' + adapt.adjustCount + ' adj)</span>')
+    if (_adaptParams && _adaptParams.adjustCount > 0) {
+      h += _row('ADAPT', '<span style="color:#f0c040">SL:' + (_adaptParams.sl || '—') + '% Size:$' + (_adaptParams.size || '—') + ' (\u00D7' + _adaptParams.adjustCount + ' adj)</span>')
     }
 
     // ── THOUGHTS (last 5)
-    const thoughts = BR?.thoughts || []
-    if (thoughts.length > 0) {
+    const _recentThoughts = _thoughts || []
+    if (_recentThoughts.length > 0) {
       h += '<div style="border-top:1px solid rgba(120,80,220,0.1);margin-top:4px;padding-top:3px">'
       h += '<span style="color:#aa88ff;font-size:8px;letter-spacing:1.5px;font-weight:600">THOUGHTS</span>'
-      const recent = thoughts.slice(-5)
+      const recent = _recentThoughts.slice(-5)
       for (let i = recent.length - 1; i >= 0; i--) {
         const t = recent[i]
         const col = t.type === 'ok' ? '#00ff88' : t.type === 'bad' ? '#ff3355' : t.type === 'warn' ? '#f0c040' : '#668899'
