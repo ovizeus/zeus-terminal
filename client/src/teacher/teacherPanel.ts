@@ -53,10 +53,10 @@ function _teacherUpdateBarInfo(): void {
 /* ═══════════════════════════════════════════════════════════════
    initTeacher()
    ═══════════════════════════════════════════════════════════════ */
+let _teacherInited = false
 export function initTeacher(): void {
-  // React TeacherDockPanel already renders teacher-panel-body with static HTML.
-  // If body exists, skip innerHTML but still do wiring + refresh.
-  const _bodyExists = !!_tEl('teacher-panel-body')
+  if (_teacherInited) return
+  // Ensure TEACHER state exists
   if (typeof w._initTeacherState === 'function' && !getTeacher()) w._initTeacherState()
   if (!getTeacher()) return
   if (typeof w.teacherLoadAllPersistent === 'function') w.teacherLoadAllPersistent()
@@ -64,11 +64,16 @@ export function initTeacher(): void {
   if (typeof w.teacherLoadV2State === 'function') w.teacherLoadV2State()
   try { _teacherPanelOpen = localStorage.getItem('zeus_teacher_panel_open') === '1' } catch (_) { /* silent */ }
   const strip = _tEl('teacher-strip'); if (strip && _teacherPanelOpen) strip.classList.add('teacher-open')
-  const body = _tEl('teacher-panel-content'); if (!body) return
-  if (!_bodyExists) body.innerHTML = _teacherBuildHTML() // skip if React already rendered
+  // React TeacherDockPanel renders teacher-panel-body with static HTML — skip innerHTML
+  const body = _tEl('teacher-panel-content')
+  if (body && !_tEl('teacher-v2-status-text')?.textContent) {
+    // DOM exists but empty — build HTML (old app path)
+    body.innerHTML = _teacherBuildHTML()
+  }
   _teacherWireEvents(); _teacherRefreshDashboard(); _teacherUpdateBarInfo()
   if (typeof w.teacherSetV2TickCallback === 'function') { w.teacherSetV2TickCallback(function () { _teacherRefreshDashboard() }) }
-  _teacherV2RefreshTimer = setInterval(function () { if (_teacherPanelOpen) _teacherRefreshDashboard(); _teacherUpdateBarInfo() }, 1500)
+  _teacherV2RefreshTimer = setInterval(function () { _teacherRefreshDashboard(); _teacherUpdateBarInfo() }, 1500)
+  _teacherInited = true
 }
 
 /* ═══════════════════════════════════════════════════════════════
