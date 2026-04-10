@@ -93,16 +93,25 @@ export function PanelShell() {
     setDockActive(null)
   }
 
-  // ── Pull-to-refresh (Bybit-style: only from top, branded banner) ──
+  // ── Pull-to-refresh (Bybit-style: whole app slides down, reveal indicator behind) ──
   const ptrState = useRef({ startY: 0, active: false, locked: false })
   const mainRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
-    const THRESHOLD = 70
-    const MAX_PULL = 130
+    const THRESHOLD = 65
+    const MAX_PULL = 100
+    // The entire app shell (header + content) slides down to reveal the indicator behind it
+    const appShell = document.querySelector('.zeus-fixed-top') as HTMLElement
+    const indicator = document.getElementById('ptr-indicator')
 
     function isAtTop(): boolean {
       return window.scrollY <= 0 && document.documentElement.scrollTop <= 0
+    }
+
+    function setShellOffset(px: number) {
+      const val = px > 0 ? `translateY(${px}px)` : ''
+      if (appShell) appShell.style.transform = val
+      if (mainRef.current) mainRef.current.style.transform = val
     }
 
     function onTouchStart(e: TouchEvent) {
@@ -115,55 +124,65 @@ export function PanelShell() {
     function onTouchMove(e: TouchEvent) {
       if (ptrState.current.locked) return
       const dy = e.touches[0].clientY - ptrState.current.startY
-      // Must be pulling down AND still at top
-      if (dy < 8 || !isAtTop()) { ptrState.current.locked = true; resetIndicator(); return }
-      // Prevent native scroll while pulling
+      if (dy < 5 || !isAtTop()) { ptrState.current.locked = true; resetPTR(); return }
       e.preventDefault()
       ptrState.current.active = true
-      const indicator = document.getElementById('ptr-indicator')
-      if (!indicator) return
-      const pull = Math.min(dy, MAX_PULL)
-      const progress = Math.min(pull / THRESHOLD, 1)
-      indicator.classList.add('pulling')
-      indicator.classList.remove('refreshing')
-      const ty = Math.min(pull * 0.4, 30) - 40 // slides from -40px to -10px max
-      indicator.style.transform = `translateX(-50%) translateY(${ty}px)`
-      indicator.style.opacity = String(Math.min(progress * 1.5, 1))
-      // Rotate arrow proportional to pull, flip at threshold
-      const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
-      if (spinner) spinner.style.transform = `rotate(${progress >= 1 ? 180 : pull * 2}deg)`
-      // Update label
-      const lbl = indicator.querySelector('.ptr-label') as HTMLElement
-      if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Pull to refresh'
+      const pull = Math.min(dy * 0.45, MAX_PULL) // dampened pull
+      const progress = Math.min(pull / (THRESHOLD * 0.45), 1)
+      // Slide entire app down
+      setShellOffset(pull)
+      // Show indicator
+      if (indicator) {
+        indicator.style.opacity = String(Math.min(progress * 1.5, 1))
+        const lbl = indicator.querySelector('.ptr-label') as HTMLElement
+        if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Zeus Terminal'
+        const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
+        if (spinner) spinner.style.transform = `rotate(${dy * 3}deg)`
+        indicator.classList.add('pulling')
+        indicator.classList.remove('refreshing')
+      }
     }
 
     function onTouchEnd(e: TouchEvent) {
       if (!ptrState.current.active) { ptrState.current.locked = false; return }
       const dy = e.changedTouches[0].clientY - ptrState.current.startY
-      const indicator = document.getElementById('ptr-indicator')
       ptrState.current.active = false
       ptrState.current.locked = false
 
-      if (dy >= THRESHOLD && indicator) {
-        indicator.classList.remove('pulling')
-        indicator.classList.add('refreshing')
-        indicator.style.transform = 'translateX(-50%) translateY(-5px)'
-        const lbl = indicator.querySelector('.ptr-label') as HTMLElement
-        if (lbl) lbl.textContent = 'Refreshing...'
-        const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
-        if (spinner) spinner.style.transform = ''
+      if (dy >= THRESHOLD) {
+        // Trigger refresh — hold position briefly
+        if (indicator) {
+          indicator.classList.remove('pulling')
+          indicator.classList.add('refreshing')
+          const lbl = indicator.querySelector('.ptr-label') as HTMLElement
+          if (lbl) lbl.textContent = 'Refreshing...'
+          const spinner = indicator.querySelector('.ptr-spinner') as HTMLElement
+          if (spinner) spinner.style.transform = ''
+        }
+        // Snap shell to fixed refresh position
+        const holdPx = Math.min(dy * 0.45, MAX_PULL)
+        setShellOffset(holdPx)
+        if (appShell) appShell.style.transition = 'transform .2s ease'
+        if (mainRef.current) mainRef.current.style.transition = 'transform .2s ease'
         setTimeout(() => location.reload(), 500)
       } else {
-        resetIndicator()
+        resetPTR()
       }
     }
 
-    function resetIndicator() {
-      const indicator = document.getElementById('ptr-indicator')
-      if (!indicator) return
-      indicator.classList.remove('pulling', 'refreshing')
-      indicator.style.transform = ''
-      indicator.style.opacity = ''
+    function resetPTR() {
+      // Animate shell back
+      if (appShell) { appShell.style.transition = 'transform .25s ease'; appShell.style.transform = '' }
+      if (mainRef.current) { mainRef.current.style.transition = 'transform .25s ease'; mainRef.current.style.transform = '' }
+      if (indicator) {
+        indicator.classList.remove('pulling', 'refreshing')
+        indicator.style.opacity = ''
+      }
+      // Clean transition after animation
+      setTimeout(() => {
+        if (appShell) appShell.style.transition = ''
+        if (mainRef.current) mainRef.current.style.transition = ''
+      }, 300)
     }
 
     document.addEventListener('touchstart', onTouchStart, { passive: true })

@@ -5570,37 +5570,26 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   #zeus-dock .zd-item:not(.zd-disabled):hover .zd-label { color: #8ab4d4 }
 }
 
-/* ── Pull-to-refresh (Bybit-style branded, below header) ── */
+/* ── Pull-to-refresh (Bybit-style: fixed behind header, revealed by shell slide) ── */
 #ptr-indicator {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 126px); /* below fixed header */
-  left: 50%;
-  transform: translateX(-50%) translateY(-50px);
-  display: flex; align-items: center; gap: 8px;
-  background: #0d1117; border: 1px solid #f0c04044;
-  border-radius: 20px; padding: 6px 16px 6px 10px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.7), 0 0 8px rgba(240,192,64,0.08);
-  z-index: 199; /* below header (200), above content */
+  top: calc(env(safe-area-inset-top, 0px) + 30px);
+  left: 0; right: 0;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 44px;
+  background: var(--bg);
+  z-index: 100; /* behind header (200) — revealed when header slides down */
   opacity: 0; pointer-events: none;
-  transition: transform .3s cubic-bezier(.2,.8,.4,1), opacity .25s ease;
-}
-@media (max-width: 900px) {
-  #ptr-indicator { top: calc(env(safe-area-inset-top, 0px) + 104px); }
-}
-#ptr-indicator.pulling { transition: none; }
-#ptr-indicator.refreshing {
-  opacity: 1;
-  transition: transform .3s cubic-bezier(.2,.8,.4,1), opacity .2s ease;
 }
 #ptr-indicator .ptr-spinner {
-  width: 18px; height: 18px; flex-shrink: 0;
+  width: 16px; height: 16px; flex-shrink: 0;
   border: 2px solid #f0c04033; border-top-color: #f0c040;
-  border-radius: 50%; transition: transform .15s ease;
+  border-radius: 50%;
 }
 #ptr-indicator.refreshing .ptr-spinner { animation: ptr-spin .6s linear infinite; }
 #ptr-indicator .ptr-label {
-  font-family: var(--ff); font-size: 11px; letter-spacing: 0.5px;
-  color: #f0c040; white-space: nowrap;
+  font-family: var(--ff); font-size: 11px; letter-spacing: 1px;
+  color: #f0c040; text-transform: uppercase;
 }
 @keyframes ptr-spin { to { transform: rotate(360deg); } }
 
