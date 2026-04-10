@@ -204,3 +204,17 @@ export function getVol24h(): number {
 export function getMagnetBias(): string {
   return (window as any).S?.magnetBias || 'neut'
 }
+
+// ── Added in 8C-2B1 (brain.ts BM reads) ──
+
+/** Brain Metrics (w.BM) — TEMP bridge getter
+ *  Returns MUTABLE REFERENCE intentionally.
+ *  Used by brain.ts legacy read/write flow:
+ *    const BM = getBrainMetrics()
+ *    BM.confluenceScore = X  // write through ref
+ *    const score = BM.confluenceScore  // read through ref
+ *  Do NOT add null guards — BM is guaranteed by config.ts IIFE at import time.
+ *  TODO: remove in Phase 9, replace with brainStore */
+export function getBrainMetrics(): any {
+  return (window as any).BM
+}

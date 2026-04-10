@@ -4,9 +4,11 @@
 // [8C-2A1] w.AT/TC/DSL/TP reads migrated to stateAccessors
 'use strict'
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics } from '../services/stateAccessors'
 
-const w = window as any // kept for w.BM, w.BRAIN, w.el, w._ZI, function calls, w.S writes + self-ref
+const w = window as any // kept for w.BRAIN, w.el, w._ZI, function calls, w.S writes + self-ref
+// [8C-2B1] BM = mutable ref to BM — reads + writes go through same object
+const BM = getBrainMetrics()
 
 // Neuron updater
 export function updateNeurons(): void {
@@ -120,7 +122,7 @@ export function updateBrainArc(score: any): void {
 export function updateBrainState(): void {
   // FIX: Calculeaza scorul direct, nu citeste din DOM (poate fi stale)
   w.calcConfluenceScore()
-  const score = (typeof w.BM !== 'undefined' ? w.BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
+  const score = (typeof BM !== 'undefined' ? BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
   const bulls = getSignalData().bullCount
   const bears = getSignalData().bearCount
   const sigs = bulls + bears
@@ -313,7 +315,7 @@ export function syncDslFromProfile(): void {
   if (p === 'fast') { w.S.dsl.pivotL = 0.8; w.S.dsl.pivotR = 1.0; w.S.dsl.impulseV = 85; w.S.dsl.openDsl = 40 }
   else if (p === 'swing') { w.S.dsl.pivotL = 1.2; w.S.dsl.pivotR = 1.4; w.S.dsl.impulseV = 70; w.S.dsl.openDsl = 50 }
   else { w.S.dsl.pivotL = 1.6; w.S.dsl.pivotR = 1.8; w.S.dsl.impulseV = 55; w.S.dsl.openDsl = 60 }
-  w.BM.profile = p // keep mirror in sync
+  BM.profile = p // keep mirror in sync
   // Update DSL UI inputs + labels if they exist
   const dslInputs: any = {
     dslPivotL: w.S.dsl.pivotL, dslPivotR: w.S.dsl.pivotR,
@@ -352,8 +354,8 @@ export function syncBrainFromState(): void {
   const prof = (w.S.profile || 'fast').toLowerCase()
 
   // Mirror to BM (read-only; engine uses S.*)
-  w.BM.mode = mode
-  w.BM.profile = prof
+  BM.mode = mode
+  BM.profile = prof
   // [B2] BM.runMode removed — AT.enabled is sole command
 
   // Radio buttons — exact one active (no more manual)
@@ -616,7 +618,7 @@ export function updateMTFAlignment(): void {
   tfs.forEach(tf => {
     const rsi = getRSI(tf) || 50
     const dir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
-    w.BM.mtf[tf] = dir
+    BM.mtf[tf] = dir
     const badge = w.el('mtf' + tf)
     if (badge) {
       badge.textContent = tf + ' ' + (dir === 'bull' ? '▲' : dir === 'bear' ? '▼' : '—')
@@ -651,7 +653,7 @@ export function detectSweepDisplacement(klines: any): any {
     sweep.liqDist = ((cur.close - cur.low) / cur.close * 100).toFixed(2)
   }
 
-  w.BM.sweep = sweep
+  BM.sweep = sweep
   return sweep
 }
 
@@ -676,7 +678,7 @@ export function updateFlowEngine(klines: any): void {
   const ofi = w.BRAIN.ofi?.blendBuy || 50
   const ofiDir = ofi > 57 ? 'buy' : ofi < 43 ? 'sell' : 'neut'
 
-  w.BM.flow = { cvd: cvdDir, delta: parseFloat(delta), ofi: ofiDir }
+  BM.flow = { cvd: cvdDir, delta: parseFloat(delta), ofi: ofiDir }
 
   // Update UI
   const cvdEl = w.el('flowCVD'); if (cvdEl) { cvdEl.textContent = cvdDir.toUpperCase(); cvdEl.className = 'flow-cell-val ' + (cvdDir === 'rising' ? 'ok' : 'fail') }
@@ -684,7 +686,7 @@ export function updateFlowEngine(klines: any): void {
   const ofiEl = w.el('flowOFI'); if (ofiEl) { ofiEl.textContent = ofiDir.toUpperCase(); ofiEl.className = 'flow-cell-val ' + (ofiDir === 'buy' ? 'ok' : ofiDir === 'sell' ? 'fail' : 'neut') }
 
   // Sweep UI
-  const sw = w.BM.sweep
+  const sw = BM.sweep
   const swEl = w.el('flowSweep'); if (swEl) { swEl.textContent = sw.type === 'none' ? 'NONE' : sw.type.toUpperCase(); swEl.className = 'flow-cell-val ' + (sw.type !== 'none' ? 'ok' : 'neut') }
   const rclEl = w.el('flowReclaim'); if (rclEl) { rclEl.textContent = sw.reclaim ? 'OK' : '—'; rclEl.className = 'flow-cell-val ' + (sw.reclaim ? 'ok' : 'neut') }
   const dispEl = w.el('flowDisplacement'); if (dispEl) { dispEl.textContent = sw.displacement ? 'OK' : '—'; dispEl.className = 'flow-cell-val ' + (sw.displacement ? 'ok' : 'neut') }
@@ -705,8 +707,8 @@ export function computeGates(dir: any): any {
   const oiPrev = w.S.oiPrev || oi
   const vol = getVol24h() || 0
   const isLong = dir === 'long'
-  const sw = w.BM.sweep
-  const profile = w.BM.profile
+  const sw = BM.sweep
+  const profile = BM.profile
   const regDat = detectRegimeEnhanced(getKlines())
 
   // Current session
@@ -739,14 +741,14 @@ export function computeGates(dir: any): any {
   const _rrPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _rrPosList.filter((p: any) => p.autoTrade && !p.closed).length
   // [RISK RAILS] DD removed from client gate — server kill switch is sole authority
-  const riskOk = !w.BM.protectMode &&
-    w.BM.dailyTrades < maxDay &&
+  const riskOk = !BM.protectMode &&
+    BM.dailyTrades < maxDay &&
     concurrent < maxConc &&
-    w.BM.lossStreak < lossLim
+    BM.lossStreak < lossLim
 
   const gates: any = {
     regime: regime === 'trend' || regime === 'breakout' ? 'ok' : regime === 'range' ? 'wait' : 'fail',
-    mtf: (w.BM.mtf['1h'] === dir && w.BM.mtf['4h'] !== (isLong ? 'bear' : 'bull')) ? 'ok' : w.BM.mtf['1h'] === 'neut' ? 'wait' : 'fail',
+    mtf: (BM.mtf['1h'] === dir && BM.mtf['4h'] !== (isLong ? 'bear' : 'bull')) ? 'ok' : BM.mtf['1h'] === 'neut' ? 'wait' : 'fail',
     volume: volConfirm ? 'ok' : 'wait',
     oi: oiConfirm ? 'ok' : 'wait',
     orderflow: isLong ? (ofi > 57 ? 'ok' : ofi < 43 ? 'fail' : 'wait') : (ofi < 43 ? 'ok' : ofi > 57 ? 'fail' : 'wait'),
@@ -756,10 +758,10 @@ export function computeGates(dir: any): any {
     spread: 'ok', // assume ok without real data
     cooldown: cooldownOff ? 'ok' : 'fail',
     risk: riskOk ? 'ok' : 'fail',
-    news: w.BM.newsRisk === 'low' ? 'ok' : w.BM.newsRisk === 'med' ? 'wait' : 'fail'
+    news: BM.newsRisk === 'low' ? 'ok' : BM.newsRisk === 'med' ? 'wait' : 'fail'
   }
 
-  w.BM.gates = gates
+  BM.gates = gates
   return gates
 }
 
@@ -798,7 +800,7 @@ export function renderGates(gates: any): void {
 
 // ── ENTRY SCORE ENGINE ────────────────────────────────────────────
 export function computeEntryScore(gates: any, dir: any): any {
-  const profile = w.BM.profile
+  const profile = BM.profile
   const readyThreshold = profile === 'fast' ? 65 : profile === 'defensive' ? 80 : 75
 
   // Base score from gates
@@ -818,7 +820,7 @@ export function computeEntryScore(gates: any, dir: any): any {
   })
 
   // Bonuses
-  if (w.BM.sweep.reclaim && w.BM.sweep.displacement) { score += 10; reasons.push({ pos: true, txt: '+ Sweep+Reclaim+Disp' }) }
+  if (BM.sweep.reclaim && BM.sweep.displacement) { score += 10; reasons.push({ pos: true, txt: '+ Sweep+Reclaim+Disp' }) }
   // RUN is now a scan gate (not a score bonus) — removed legacy +8 bonus
   const rsi5m = getRSI('5m') || 50
   if (dir === 'long' && rsi5m > 55 && rsi5m < 70) { score += 5; reasons.push({ pos: true, txt: '+ RSI bullish zone' }) }
@@ -829,8 +831,8 @@ export function computeEntryScore(gates: any, dir: any): any {
   const label = score >= readyThreshold ? 'READY' : score >= 60 ? 'WAIT' : 'BLOCK'
   const col = score >= readyThreshold ? '#39ff14' : score >= 60 ? '#f0c040' : '#ff3355'
 
-  w.BM.entryScore = score
-  w.BM.entryReady = score >= readyThreshold
+  BM.entryScore = score
+  BM.entryReady = score >= readyThreshold
 
   // Update UI
   const numEl = w.el('entryScoreNum')
@@ -853,9 +855,9 @@ export function computeEntryScore(gates: any, dir: any): any {
 // Priority: trap_risk > toxic_volatility > range > clean_trend > neutral
 export function computeMarketAtmosphere(): void {
   try {
-    const re = w.BM.regimeEngine || {}
-    const pf = w.BM.phaseFilter || {}
-    const sw = w.BM.sweep || {}
+    const re = BM.regimeEngine || {}
+    const pf = BM.phaseFilter || {}
+    const sw = BM.sweep || {}
     const fakeBlocked = (typeof w._fakeout !== 'undefined') ? !!w._fakeout.invalid : false
     const ofTrap = (typeof w.OF !== 'undefined' && w.OF.trap) ? !!w.OF.trap.active : false
     const ofCascade = (typeof w.OF !== 'undefined' && w.OF.cascade) ? (w.OF.cascade.state === 'fired') : false
@@ -867,7 +869,7 @@ export function computeMarketAtmosphere(): void {
     const reConf = re.confidence || 0
     const brainRegime = (typeof w.BRAIN !== 'undefined' && w.BRAIN.regime) ? w.BRAIN.regime : 'unknown'
     const atrPct = (typeof w.BRAIN !== 'undefined') ? (w.BRAIN.regimeAtrPct || 0) : 0
-    const volRegime = (typeof w.BM !== 'undefined') ? (w.BM.volRegime || 'MED') : 'MED'
+    const volRegime = (typeof BM !== 'undefined') ? (BM.volRegime || 'MED') : 'MED'
     const sweepNoDisp = sw.type !== 'none' && !sw.displacement
 
     const reasons: string[] = []
@@ -946,7 +948,7 @@ export function computeMarketAtmosphere(): void {
 
     if (reasons.length === 0) reasons.push('data insufficient')
 
-    w.BM.atmosphere = {
+    BM.atmosphere = {
       category: category,
       allowEntry: allowEntry,
       cautionLevel: cautionLevel,
@@ -956,7 +958,7 @@ export function computeMarketAtmosphere(): void {
     }
   } catch (e: any) {
     console.warn('[Atmosphere] error:', e.message)
-    w.BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['error: ' + (e.message || 'unknown')], sizeMultiplier: 1.0 }
+    BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['error: ' + (e.message || 'unknown')], sizeMultiplier: 1.0 }
   }
 }
 
@@ -965,7 +967,7 @@ export function computeMarketAtmosphere(): void {
 // Chaos bar, news shield, protect mode
 export function updateChaosBar(): void {
   const atrPct = w.BRAIN.regimeAtrPct || 0
-  const newsW = w.BM.newsRisk === 'high' ? 40 : w.BM.newsRisk === 'med' ? 20 : 0
+  const newsW = BM.newsRisk === 'high' ? 40 : BM.newsRisk === 'med' ? 20 : 0
   const spreadW = 0 // no real spread data
   const chaos = Math.min(100, Math.round(atrPct * 15 + newsW + spreadW))
 
@@ -986,25 +988,25 @@ export function updateNewsShield(): void {
 
   // Check macro events countdown
   let macroMsg = ''
-  w.BM.macroEvents.forEach((ev: any) => {
+  BM.macroEvents.forEach((ev: any) => {
     const diff = ev.time - now
     if (diff > 0 && diff < 30 * 60 * 1000) {
       macroMsg = `${ev.name} in ${Math.ceil(diff / 60000)}m`
-      w.BM.newsRisk = 'high'
+      BM.newsRisk = 'high'
     }
   })
 
   // Simulated: high volatility → raise news risk
-  if (atrPct > 2.0) w.BM.newsRisk = 'high'
-  else if (atrPct > 1.2) w.BM.newsRisk = 'med'
-  else w.BM.newsRisk = w.BM.newsRisk === 'high' ? 'med' : 'low' // slow decay
+  if (atrPct > 2.0) BM.newsRisk = 'high'
+  else if (atrPct > 1.2) BM.newsRisk = 'med'
+  else BM.newsRisk = BM.newsRisk === 'high' ? 'med' : 'low' // slow decay
 
   const badge = w.el('newsRiskBadge')
   const headline = w.el('newsHeadline')
   const macroCd = w.el('macroCd')
 
-  if (badge) { badge.textContent = w.BM.newsRisk.toUpperCase(); badge.className = 'news-risk-badge ' + w.BM.newsRisk }
-  if (headline) headline.textContent = macroMsg || (w.BM.newsRisk === 'high' ? 'High volatility detected — caution' : 'No significant news detected')
+  if (badge) { badge.textContent = BM.newsRisk.toUpperCase(); badge.className = 'news-risk-badge ' + BM.newsRisk }
+  if (headline) headline.textContent = macroMsg || (BM.newsRisk === 'high' ? 'High volatility detected — caution' : 'No significant news detected')
   if (macroCd) macroCd.textContent = macroMsg
 }
 
@@ -1018,21 +1020,21 @@ export function checkProtectMode(): void {
 
   let reason: any = null
   // Loss streak — only if we actually have closed trades
-  if (_closedToday > 0 && w.BM.lossStreak >= lossLim)
+  if (_closedToday > 0 && BM.lossStreak >= lossLim)
     reason = `PROTECT: ${lossLim} CONSECUTIVE LOSSES (${_closedToday} trades)`
   // Max daily trades
-  if (w.BM.dailyTrades >= maxDay)
-    reason = `PROTECT: MAX TRADES/DAY (${w.BM.dailyTrades}/${maxDay})`
+  if (BM.dailyTrades >= maxDay)
+    reason = `PROTECT: MAX TRADES/DAY (${BM.dailyTrades}/${maxDay})`
   // [RISK RAILS] Daily DD condition REMOVED — server kill switch is sole authority
   // News HIGH — block not protect (keep compatible but only in auto)
-  if (w.BM.newsRisk === 'high' && (w.S.mode || 'assist') === 'auto')
+  if (BM.newsRisk === 'high' && (w.S.mode || 'assist') === 'auto')
     reason = `PROTECT: NEWS HIGH — volatilitate extremă`
   // Kill switch — only if already triggered legitimately
   if (getATKillTriggered()) reason = 'BLOCKED: KILL SWITCH'
 
-  if (reason && !w.BM.protectMode) {
-    w.BM.protectMode = true
-    w.BM.protectReason = reason
+  if (reason && !BM.protectMode) {
+    BM.protectMode = true
+    BM.protectReason = reason
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[BRAIN PROTECT] ON ' + reason)
     if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { getATEnabled() = false }
     brainThink('bad', reason)
@@ -1041,15 +1043,15 @@ export function checkProtectMode(): void {
 
   const banner = w.el('protectBanner')
   const bannerTxt = w.el('protectBannerTxt')
-  if (banner) banner.className = 'protect-banner' + (w.BM.protectMode ? ' show' : '')
-  if (bannerTxt && w.BM.protectMode) bannerTxt.textContent = w.BM.protectReason
+  if (banner) banner.className = 'protect-banner' + (BM.protectMode ? ' show' : '')
+  if (bannerTxt && BM.protectMode) bannerTxt.textContent = BM.protectReason
 }
 
 export function resetProtectMode(): void {
-  w.BM.protectMode = false
-  w.BM.protectReason = ''
+  BM.protectMode = false
+  BM.protectReason = ''
   if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[BRAIN PROTECT] OFF')
-  w.BM.lossStreak = 0
+  BM.lossStreak = 0
   const banner = w.el('protectBanner')
   if (banner) banner.className = 'protect-banner'
   brainThink('ok', w._ZI.ok + ' Protect mode resetat manual')
@@ -1175,7 +1177,7 @@ export function computeSafetyGates(dir: any): any {
   const concurrent = _sgPosList.filter((p: any) => p.autoTrade && !p.closed).length
   const hasOpposite = _sgPosList.some((p: any) => p.autoTrade && !p.closed && p.side !== (dir === 'long' ? 'LONG' : 'SHORT'))
   // [RISK RAILS] DD removed from client gate — server kill switch is sole authority
-  const riskOk = !w.BM.protectMode && w.BM.dailyTrades < maxDay && concurrent < maxConc && w.BM.lossStreak < lossLim
+  const riskOk = !BM.protectMode && BM.dailyTrades < maxDay && concurrent < maxConc && BM.lossStreak < lossLim
   const h = new Date().getUTCHours()
   // C: Session gate only applies when session filter checkbox is ON
   const sessionFilterEnabled = w.el('dhfEnabled')?.checked !== false  // default ON
@@ -1193,7 +1195,7 @@ export function computeSafetyGates(dir: any): any {
     risk: riskOk,
     spread: true, // no real spread data
     cooldown: (Date.now() - (getATLastTradeTs() || 0)) > _getCooldownMs(),
-    news: w.BM.newsRisk !== 'high',
+    news: BM.newsRisk !== 'high',
     session: sessionOk,
     noOpposite: !hasOpposite,
     regime: regimeOk
@@ -1208,7 +1210,7 @@ export function _getCooldownMs(): number {
   const tfMs: any = { '1m': 60000, '3m': 180000, '5m': 300000, '15m': 900000, '30m': 1800000, '1h': 3600000, '4h': 14400000, '1D': 86400000 }
   const candleMs = tfMs[trigTf] || 300000
   const base = closes * candleMs
-  return w.BM.lossStreak > 0 ? base * 2 : base
+  return BM.lossStreak > 0 ? base * 2 : base
 }
 
 export function allSafetyPass(safety: any): boolean {
@@ -1219,9 +1221,9 @@ export function allSafetyPass(safety: any): boolean {
 export function computeContextGates(dir: any, klines: any): any {
   const ofi = w.BRAIN.ofi?.blendBuy || 50
   const isLong = dir === 'long'
-  const mtfCount = ['15m', '1h', '4h'].filter(tf => w.BM.mtf[tf] === (isLong ? 'bull' : 'bear')).length
-  const flowOk = isLong ? (ofi > 57 && w.BM.flow.cvd === 'rising') : (ofi < 43 && w.BM.flow.cvd === 'falling')
-  const sw = w.BM.sweep
+  const mtfCount = ['15m', '1h', '4h'].filter(tf => BM.mtf[tf] === (isLong ? 'bull' : 'bear')).length
+  const flowOk = isLong ? (ofi > 57 && BM.flow.cvd === 'rising') : (ofi < 43 && BM.flow.cvd === 'falling')
+  const sw = BM.sweep
   const triggerOk = sw.type !== 'none' && (isLong ? sw.type === 'below' : sw.type === 'above') && sw.reclaim
   const antiFakeout = checkAntiFakeout(klines, dir)
   return {
@@ -1340,7 +1342,7 @@ export function renderBrainCockpit(): void {
   // [FIX R8] regimeConfidence from same detector as regime (single writer)
   w.BRAIN.regimeConfidence = regDat.confidence || 0
   // [PATCH 6] Wire BM.regime from BRAIN.regime so state.js/deepdive consumers see real value
-  w.BM.regime = regDat.regime
+  BM.regime = regDat.regime
 
   // 3. MTF + Flow + Sweep
   updateMTFAlignment()
@@ -1364,7 +1366,7 @@ export function renderBrainCockpit(): void {
     const gates = computeGates(dir)
     computeEntryScore(gates, dir)
   } else {
-    w.BM.entryScore = 0; w.BM.entryReady = false
+    BM.entryScore = 0; BM.entryReady = false
   }
 
   // 6b. Market Atmosphere (aggregator — reads all existing signals)
@@ -1383,17 +1385,17 @@ export function renderBrainCockpit(): void {
       const _rsi5m = getRSI('5m') || 50
       const _rsi1h = getRSI('1h') || 50
       const _ofi = w.BRAIN.ofi?.blendBuy || 50
-      const _sw = w.BM.sweep || {}
+      const _sw = BM.sweep || {}
       const _fr = getFR() || 0
       const _oi = w.S.oi || 0
       const _oiPrev = w.S.oiPrev || _oi
       const _oiDelta = _oiPrev > 0 ? ((_oi - _oiPrev) / _oiPrev * 100) : 0
-      const _atmo = w.BM.atmosphere || {}
+      const _atmo = BM.atmosphere || {}
       const _sigs = getSignalData()
       const _bulls = _sigs.bullCount || 0
       const _bears = _sigs.bearCount || 0
       const _sigTotal = _bulls + _bears
-      const _gates = w.BM.gates || {}
+      const _gates = BM.gates || {}
 
       // ── WHY REASONS (bullish/bearish confirmation) ──
       // Regime
@@ -1431,8 +1433,8 @@ export function renderBrainCockpit(): void {
       }
       // MTF alignment
       if (_gates.mtf === 'ok') {
-        const _1h = w.BM.mtf?.['1h'] || '?'
-        const _4h = w.BM.mtf?.['4h'] || '?'
+        const _1h = BM.mtf?.['1h'] || '?'
+        const _4h = BM.mtf?.['4h'] || '?'
         _whyReasons.push('MTF aligned: 1h ' + _1h + ' + 4h ' + _4h)
       }
       // Volume confirm
@@ -1464,9 +1466,9 @@ export function renderBrainCockpit(): void {
         _whyRisks.push('Funding rate against direction (' + (_fr * 100).toFixed(3) + '%)')
       }
       // News risk
-      if (w.BM.newsRisk === 'high') {
+      if (BM.newsRisk === 'high') {
         _whyRisks.push('High news/macro risk active')
-      } else if (w.BM.newsRisk === 'med') {
+      } else if (BM.newsRisk === 'med') {
         _whyRisks.push('Medium news risk — caution advised')
       }
       // Trap risk from atmosphere
@@ -1501,8 +1503,8 @@ export function renderBrainCockpit(): void {
       }
 
       // ── Determine state from score + reasons ──
-      const _score = w.BM.entryScore || 0
-      const _whyState = _score >= (w.BM.profile === 'fast' ? 65 : 75) ? 'READY'
+      const _score = BM.entryScore || 0
+      const _whyState = _score >= (BM.profile === 'fast' ? 65 : 75) ? 'READY'
         : _score >= 50 ? 'ANALYZING'
           : _whyReasons.length === 0 ? 'SCANNING'
             : 'WAIT'
@@ -1538,17 +1540,17 @@ export function renderBrainCockpit(): void {
       const _frAbs = Math.abs(getFR() || 0)
       _db.funding = _frAbs > 0.002 ? 20 : _frAbs > 0.001 ? 14 : _frAbs > 0.0005 ? 7 : 0
       // Liquidation cascade component (0-20) — trap rate from liq cycle
-      const _tr = w.BM.liqCycle?.trapRate
+      const _tr = BM.liqCycle?.trapRate
       _db.liquidations = typeof _tr === 'number' ? Math.round(_tr * 20) : 0
       // Spread/regime chaos component (0-15)
       const _reg = w.BRAIN.regime || 'unknown'
       _db.spread = (_reg === 'panic' || _reg === 'chaos') ? 15
         : _reg === 'range' ? 8
-          : w.BM.atmosphere?.category === 'trap_risk' ? 10 : 0
+          : BM.atmosphere?.category === 'trap_risk' ? 10 : 0
       // Sum all components (0-100)
-      w.BM.danger = Math.min(100, _db.volatility + _db.spread + _db.liquidations + _db.volume + _db.funding)
-      w.BM.dangerBreakdown = _db
-    } catch (_de) { w.BM.danger = 0 }
+      BM.danger = Math.min(100, _db.volatility + _db.spread + _db.liquidations + _db.volume + _db.funding)
+      BM.dangerBreakdown = _db
+    } catch (_de) { BM.danger = 0 }
   })()
 
   // 6e. CONVICTION SCORE (0-100) — how confident Brain is in the current direction
@@ -1556,10 +1558,10 @@ export function renderBrainCockpit(): void {
     try {
       let _cv = 0
       // Gate score contribution (0-40) — entry score normalized
-      const _es = w.BM.entryScore || 0
+      const _es = BM.entryScore || 0
       _cv += Math.min(40, _es * 0.4)
       // Atmosphere confidence (0-15)
-      const _ac = w.BM.atmosphere?.confidence || 0
+      const _ac = BM.atmosphere?.confidence || 0
       _cv += Math.min(15, _ac * 0.15)
       // ARIA pattern match (0-15) — aligned pattern boosts conviction
       const _ap = (typeof w.ARIA_STATE !== 'undefined' && w.ARIA_STATE.pattern) ? w.ARIA_STATE.pattern : null
@@ -1568,8 +1570,8 @@ export function renderBrainCockpit(): void {
         _cv += _aligned ? Math.min(15, _ap.conf * 0.15) : -5
       }
       // MTF alignment (0-15)
-      const _1h = w.BM.mtf?.['1h'] || 'neut'
-      const _4h = w.BM.mtf?.['4h'] || 'neut'
+      const _1h = BM.mtf?.['1h'] || 'neut'
+      const _4h = BM.mtf?.['4h'] || 'neut'
       const _mtfDir = dir === 'long' ? 'bull' : 'bear'
       if (_1h === _mtfDir) _cv += 7
       if (_4h === _mtfDir) _cv += 8
@@ -1582,14 +1584,14 @@ export function renderBrainCockpit(): void {
       const _bul = _sd.bullCount || 0, _ber = _sd.bearCount || 0
       if ((dir === 'long' && _bul > _ber) || (dir === 'short' && _ber > _bul)) _cv += 5
       // Clamp 0-100
-      w.BM.conviction = Math.max(0, Math.min(100, Math.round(_cv)))
+      BM.conviction = Math.max(0, Math.min(100, Math.round(_cv)))
       // Compute sizing multiplier from conviction + danger
       // Conviction: <40%=skip(0.0), 40-60%=half(0.5), 60-80%=normal(1.0), >80%=full(1.0)
       // Danger: >80=pause(0.0), 60-80=reduce(0.6), 40-60=caution(0.85), <40=normal(1.0)
-      let _cMult = w.BM.conviction >= 60 ? 1.0 : w.BM.conviction >= 40 ? 0.5 : 0.0
-      let _dMult = w.BM.danger >= 80 ? 0.0 : w.BM.danger >= 60 ? 0.6 : w.BM.danger >= 40 ? 0.85 : 1.0
-      w.BM.convictionMult = Math.round((_cMult * _dMult) * 100) / 100
-    } catch (_ce) { w.BM.conviction = 0; w.BM.convictionMult = 1.0 }
+      let _cMult = BM.conviction >= 60 ? 1.0 : BM.conviction >= 40 ? 0.5 : 0.0
+      let _dMult = BM.danger >= 80 ? 0.0 : BM.danger >= 60 ? 0.6 : BM.danger >= 40 ? 0.85 : 1.0
+      BM.convictionMult = Math.round((_cMult * _dMult) * 100) / 100
+    } catch (_ce) { BM.conviction = 0; BM.convictionMult = 1.0 }
   })()
 
   // 7. News + chaos
@@ -1601,21 +1603,21 @@ export function renderBrainCockpit(): void {
     const cur = p.sym === w.S.symbol ? getPrice() : (w.wlPrices[p.sym]?.price || p.entry)
     return a + (p.side === 'LONG' ? cur - p.entry : p.entry - cur) / p.entry * p.size * p.lev
   }, 0)
-  w.BM.dailyPnL = (getATDailyPnL()) + activePnL
+  BM.dailyPnL = (getATDailyPnL()) + activePnL
   checkProtectMode()
 
   // 9. Determine ARM state
-  const score = w.BM.entryScore || 0
-  const profile = w.BM.profile
+  const score = BM.entryScore || 0
+  const profile = BM.profile
   const thresholds: any = { fast: [65, 55], swing: [72, 60], defensive: [80, 65] }
   const prof = w.S.profile || 'fast'
   const [scoreThresh, confThresh] = thresholds[prof] || [65, 55]
   const tfMap = w.PROFILE_TF[prof] || w.PROFILE_TF.fast
-  const confluenceScore = (typeof w.BM !== 'undefined' ? w.BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
+  const confluenceScore = (typeof BM !== 'undefined' ? BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
   const triggerOk = ctx.trigger
   // [ATMOSPHERE] Pre-filter: block ARM if atmosphere forbids entry
-  const atmosAllow = w.BM.atmosphere ? w.BM.atmosphere.allowEntry !== false : true
-  const isArmed = !w.BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
+  const atmosAllow = BM.atmosphere ? BM.atmosphere.allowEntry !== false : true
+  const isArmed = !BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
   const hasPos = (getDemoPositions()).some((p: any) => p.autoTrade && !p.closed)
   const mode = w.S.mode || 'manual'
 
@@ -1625,7 +1627,7 @@ export function renderBrainCockpit(): void {
     return d && !d.active && p.autoTrade && !p.closed
   })
 
-  let state = w.BM.protectMode ? 'protect' : getATKillTriggered() ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'
+  let state = BM.protectMode ? 'protect' : getATKillTriggered() ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'
   w.BRAIN.state = state === 'armed' ? 'ready' : state
 
   // ── SAFETY LED ROWS ──
@@ -1647,7 +1649,7 @@ export function renderBrainCockpit(): void {
 
   // ── CONTEXT LED ROWS ──
   const mtfTFs = ['15m', '1h', '4h']
-  const mtfAlignCount = mtfTFs.filter(tf => w.BM.mtf[tf] === (dir === 'long' ? 'bull' : 'bear')).length
+  const mtfAlignCount = mtfTFs.filter(tf => BM.mtf[tf] === (dir === 'long' ? 'bull' : 'bear')).length
   const ctxMap: any = {
     mtf: { led: 'led-mtf', lbl: 'lbl-mtf', txt: `MTF Align ${mtfAlignCount}/3`, pass: ctx.mtf },
     flow: { led: 'led-flow', lbl: 'lbl-flow', txt: `Flow ${ctx.flow ? 'CONFIRM' : 'WEAK'}`, pass: ctx.flow },
@@ -1669,12 +1671,12 @@ export function renderBrainCockpit(): void {
     const tf = tfsToShow[i] || mtfTFs[i]
     const rsi = getRSI(tf) || 50
     const tdir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
-    w.BM.mtf[tf] = tdir
+    BM.mtf[tf] = tdir
     b.textContent = tf + ' ' + (tdir === 'bull' ? '▲' : tdir === 'bear' ? '▼' : '—')
     b.className = 'znc-tf-badge ' + tdir + (i === 0 ? ' trigger' : '')
   })
   const trigBadge = w.el('mtfTrig')
-  if (trigBadge) { trigBadge.textContent = 'TRIG:' + tfMap.trigger + ' ' + (w.BM.flow?.cvd === 'rising' ? '▲' : w.BM.flow?.cvd === 'falling' ? '▼' : '—') }
+  if (trigBadge) { trigBadge.textContent = 'TRIG:' + tfMap.trigger + ' ' + (BM.flow?.cvd === 'rising' ? '▲' : BM.flow?.cvd === 'falling' ? '▼' : '—') }
 
   // ── ORB SCORE ARC ──
   const arc = w.el('zncScoreArc')
@@ -1702,9 +1704,9 @@ export function renderBrainCockpit(): void {
   if (badge) { badge.innerHTML = stLabels[state] || state.toUpperCase(); badge.className = 'znc-state ' + state }
   const armBadge = w.el('zncArmBadge')
   if (armBadge) {
-    const armTxt = isArmed ? 'ARMED' : w.BM.protectMode ? 'PROTECT' : hasPos ? 'TRADING' : 'SCANNING'
+    const armTxt = isArmed ? 'ARMED' : BM.protectMode ? 'PROTECT' : hasPos ? 'TRADING' : 'SCANNING'
     armBadge.textContent = armTxt
-    armBadge.className = 'znc-arm-badge ' + (isArmed ? 'armed' : w.BM.protectMode ? 'protect' : hasPos ? 'trading' : 'scanning')
+    armBadge.className = 'znc-arm-badge ' + (isArmed ? 'armed' : BM.protectMode ? 'protect' : hasPos ? 'trading' : 'scanning')
   }
 
   // ── CONTROL SOURCE ──
@@ -1726,9 +1728,9 @@ export function renderBrainCockpit(): void {
   if (rd) rd.textContent = `ADX: ${regDat.adx || '—'} | VOL: ${regDat.volMode || '—'} | ${regDat.structure || '—'}${regDat.squeeze ? ' | SQZ' : ''}`
 
   // ── INSIGHT CARDS (use card IDs directly) ──
-  const sw = w.BM.sweep
-  const delta = w.BM.flow?.delta || 0
-  const chaos = Math.round((w.BRAIN.regimeAtrPct || 0) * 15 + (w.BM.newsRisk === 'high' ? 40 : w.BM.newsRisk === 'med' ? 20 : 0))
+  const sw = BM.sweep
+  const delta = BM.flow?.delta || 0
+  const chaos = Math.round((w.BRAIN.regimeAtrPct || 0) * 15 + (BM.newsRisk === 'high' ? 40 : BM.newsRisk === 'med' ? 20 : 0))
   const _card = (cardId: any, titleId: any, subId: any, t: any, s: any, cls: any) => {
     const ca = w.el(cardId), ti = w.el(titleId), si = w.el(subId)
     if (ca) ca.className = 'znc-card ' + cls
@@ -1741,7 +1743,7 @@ export function renderBrainCockpit(): void {
   _card('card-chaos', 'card-chaos-t', 'card-chaos-s', 'Chaos ' + (chaos < 33 ? 'OK' : chaos < 66 ? 'MED' : 'HIGH'), 'ATR ' + (w.BRAIN.regimeAtrPct || 0).toFixed(2) + '%', chaos < 33 ? 'ok' : chaos < 66 ? 'warn' : 'fail')
 
   // ── ATMOSPHERE CARD ──
-  const atmos = w.BM.atmosphere || {}
+  const atmos = BM.atmosphere || {}
   const aCat = (atmos.category || 'neutral').toLowerCase()
   const aCls = aCat === 'clean_trend' ? 'ok' : aCat === 'range' ? 'warn' : aCat === 'toxic_volatility' ? 'toxic' : aCat === 'trap_risk' ? 'fail' : 'neut'
   const aLabel = (atmos.category || 'NEUTRAL').toUpperCase().replace('_', ' ')
@@ -1753,7 +1755,7 @@ export function renderBrainCockpit(): void {
   if (orbWrap) orbWrap.style.animation = chaos > 80 ? 'zHeat .15s infinite' : ''
 
   // ── THREAT CIRCLES ──
-  const newsScore = w.BM.newsRisk === 'high' ? 80 : w.BM.newsRisk === 'med' ? 40 : 10
+  const newsScore = BM.newsRisk === 'high' ? 80 : BM.newsRisk === 'med' ? 40 : 10
   const liqScore = Math.round((w.BRAIN.ofi?.sell || 50) / 100 * 60)
   const volScore = Math.round(Math.min(100, (w.BRAIN.regimeAtrPct || 0) * 20));
   [[newsScore, 'threat-news', 'threatNewsVal'], [liqScore, 'threat-liq', 'threatLiqVal'], [volScore, 'threat-vol', 'threatVolVal']].forEach(([v, cid, vid]: any) => {
@@ -1790,7 +1792,7 @@ export function renderBrainCockpit(): void {
   // Compute single TOP REASON why not entering
   let topReason = ''
   let reasonCls = 'wait'
-  if (w.BM.protectMode) { topReason = `AUTO BLOCKED: ${w.BM.protectReason}`; reasonCls = 'block' }
+  if (BM.protectMode) { topReason = `AUTO BLOCKED: ${BM.protectReason}`; reasonCls = 'block' }
   else if (getATKillTriggered()) { topReason = 'AUTO BLOCKED: Kill switch activ'; reasonCls = 'block' }
   else if (!safety.news) { topReason = 'AUTO BLOCKED: NewsRisk HIGH → prea periculos'; reasonCls = 'block' }
   else if (!safety.regime) { topReason = 'AUTO WAIT: Regime unstable (not locked 3 closes)'; reasonCls = 'wait' }
@@ -1804,7 +1806,7 @@ export function renderBrainCockpit(): void {
   else if (!ctx.mtf) { topReason = `AUTO WAIT: MTF Align ${mtfAlignCount}/3 (min 2 cerut)`; reasonCls = 'wait' }
   else if (score < scoreThresh) { topReason = `AUTO WAIT: EntryScore ${score} < ${scoreThresh} (${prof})`; reasonCls = 'wait' }
   else if (confluenceScore < confThresh) { topReason = `AUTO WAIT: Confluence ${confluenceScore} < ${confThresh}`; reasonCls = 'wait' }
-  else if (!atmosAllow) { topReason = `AUTO BLOCK: Atmosphere ${(w.BM.atmosphere?.category || '?').toUpperCase()} — ${(w.BM.atmosphere?.reasons || []).slice(0, 2).join(', ')}`; reasonCls = 'block' }
+  else if (!atmosAllow) { topReason = `AUTO BLOCK: Atmosphere ${(BM.atmosphere?.category || '?').toUpperCase()} — ${(BM.atmosphere?.reasons || []).slice(0, 2).join(', ')}`; reasonCls = 'block' }
   else if (mode === 'assist' && !getATEnabled()) { topReason = 'ASSIST: Brain monitoring — enable AutoTrade to execute'; reasonCls = 'wait' }
   else if (mode === 'assist') { topReason = isArmAssistValid() ? 'ASSIST ARMED: Waiting user confirm' : 'ASSIST: Needs ARM + manual confirm'; reasonCls = 'wait' }
   else if (isArmed) { topReason = `AUTO ARMED: Entry score ${score} ✓ — waiting close`; reasonCls = 'ok' }
@@ -1815,9 +1817,9 @@ export function renderBrainCockpit(): void {
 
   // ── PROTECT BANNER ──
   const pb = w.el('protectBanner')
-  if (pb) pb.className = 'znc-protect' + (w.BM.protectMode ? ' show' : '')
+  if (pb) pb.className = 'znc-protect' + (BM.protectMode ? ' show' : '')
   const pbt = w.el('protectBannerTxt')
-  if (pbt && w.BM.protectMode) pbt.textContent = w.BM.protectReason
+  if (pbt && BM.protectMode) pbt.textContent = BM.protectReason
 
   // ── DSL STATUS (clear, non-ambiguous) ──
   const dslEl = w.el('zncDslContract')
@@ -2006,7 +2008,7 @@ export function renderBrainCockpit(): void {
       const _mcrDir = _bullC >= _bearC ? 'LONG' : 'SHORT'
 
       // --- CONFIDENCE (confluence score, 0-100) ---
-      const _confScore = w.BM.confluenceScore || 0
+      const _confScore = BM.confluenceScore || 0
 
       w.MarketCoreReactor.update({
         trend: _trendVal,
@@ -2019,7 +2021,7 @@ export function renderBrainCockpit(): void {
         gatesTotal: 7,
         direction: _mcrDir,
         confidence: _confScore,
-        entryScore: w.BM.entryScore || 0
+        entryScore: BM.entryScore || 0
       })
     } catch (_mcrErr) { /* silently continue */ }
   }
@@ -2073,7 +2075,7 @@ export function zAnimFrame(ts: any): void {
   if (core) core.setAttribute('opacity', 0.6 + w.ZANIM.orbScale * 0.12)
 
   // SCORE ARC GLOW synapse intensity
-  const score = w.BM.entryScore || 0
+  const score = BM.entryScore || 0
   const synapseOpacity = 0.1 + (score / 100) * 0.5
   for (let i = 0; i < 9; i++) {
     const syn = w.el('zsyn' + i)
@@ -2123,7 +2125,7 @@ export function _brainSafeSet(elId: any, val: any, attr: string = 'textContent')
 // Dacă un câmp nu există încă, returnează '—' (nu 0, nu fake).
 export function getBrainViewSnapshot(): any {
   const _s = typeof w.S !== 'undefined' ? w.S : {}
-  const _bm = typeof w.BM !== 'undefined' ? w.BM : {}
+  const _bm = typeof BM !== 'undefined' ? BM : {}
   const _at = typeof w.AT !== 'undefined' ? w.AT : {}
   const _sf = typeof w._SAFETY !== 'undefined' ? w._SAFETY : {}
   const _br = typeof w.BRAIN !== 'undefined' ? w.BRAIN : {}
@@ -2247,7 +2249,7 @@ export function renderCircuitBrain(): void {
       ? ({ trend: 'ok', range: 'neutral', breakout: 'ok', squeeze: 'warn', panic: 'bad', unknown: 'neutral' } as any)[_reg] || 'neutral'
       : 'neutral'
     // ADX/VOL din BM.structure (calculat de detectRegimeEnhanced)
-    const _st = (typeof w.BM !== 'undefined' && w.BM.structure) ? w.BM.structure : null
+    const _st = (typeof BM !== 'undefined' && BM.structure) ? BM.structure : null
     const adxVal = (_st && _st.adx) ? _st.adx.toFixed(1) : '—'
     const volVal = (_st && _st.volMode) ? _st.volMode : '—'
     const strVal = (_st && _st.structureLabel) ? _st.structureLabel : '—'
@@ -2258,7 +2260,7 @@ export function renderCircuitBrain(): void {
 
   // ── 3. SCORE (zncScoreNum & zncScoreLbl already updated by renderBrainCockpit) ──
   try {
-    const score = (typeof w.BM !== 'undefined' ? w.BM.entryScore : 0) || 0
+    const score = (typeof BM !== 'undefined' ? BM.entryScore : 0) || 0
     const scoreLbl2 = document.getElementById('zncScoreLbl')
     const scoreCls = score >= 65 ? 'ok' : score >= 50 ? 'warn' : 'bad'
     const scoreBox = cbn('cbn-score-box')
@@ -2278,7 +2280,7 @@ export function renderCircuitBrain(): void {
   try {
     // FIX v118: cooldown din calcul real, NU din cdEl.textContent (DOM)
     const kill = getATKillTriggered()
-    const prot = (typeof w.BM !== 'undefined' && w.BM.protectMode)
+    const prot = (typeof BM !== 'undefined' && BM.protectMode)
     const cdMs = (typeof _getCooldownMs === 'function') ? _getCooldownMs() : 0
     const cdLeft = Math.max(0, Math.round((cdMs - (Date.now() - ((getATLastTradeTs()) || 0))) / 60000))
     const riskCls = kill || prot ? 'bad' : cdLeft > 0 ? 'warn' : 'vis'
@@ -2330,16 +2332,16 @@ export function renderCircuitBrain(): void {
   try {
     const elFn = (id: string, v: any) => { const e = cbn(id); if (e) e.textContent = v }
     // Flow
-    const flowVal = (typeof w.BM !== 'undefined' && w.BM.flow != null) ? (typeof w.BM.flow === 'object' ? (w.BM.flow.cvd || '—').toUpperCase() : (typeof w.BM.flow === 'number' ? w.BM.flow.toFixed(1) : '—')) : '—'
+    const flowVal = (typeof BM !== 'undefined' && BM.flow != null) ? (typeof BM.flow === 'object' ? (BM.flow.cvd || '—').toUpperCase() : (typeof BM.flow === 'number' ? BM.flow.toFixed(1) : '—')) : '—'
     elFn('nc-flow-val', flowVal)
     // Volume mode
-    const volMode = (typeof w.BM !== 'undefined' && w.BM.structure && w.BM.structure.volMode) ? w.BM.structure.volMode : '—'
+    const volMode = (typeof BM !== 'undefined' && BM.structure && BM.structure.volMode) ? BM.structure.volMode : '—'
     elFn('nc-vol-val', volMode)
     // Structure label
-    const structLbl = (typeof w.BM !== 'undefined' && w.BM.structure && w.BM.structure.structureLabel) ? w.BM.structure.structureLabel : '—'
+    const structLbl = (typeof BM !== 'undefined' && BM.structure && BM.structure.structureLabel) ? BM.structure.structureLabel : '—'
     elFn('nc-struct-val', structLbl)
     // Liquidity (from atmosphere if available)
-    const liqVal = (typeof w.BM !== 'undefined' && w.BM.atmosphere && w.BM.atmosphere.liquidityScore != null) ? w.BM.atmosphere.liquidityScore.toFixed(0) : '—'
+    const liqVal = (typeof BM !== 'undefined' && BM.atmosphere && BM.atmosphere.liquidityScore != null) ? BM.atmosphere.liquidityScore.toFixed(0) : '—'
     elFn('nc-liq-val', liqVal)
     // Risk (from BRAIN neurons or safety)
     const riskN = (typeof w.BRAIN !== 'undefined' && w.BRAIN.neurons && w.BRAIN.neurons.risk != null) ? w.BRAIN.neurons.risk.toFixed(0) : '—'
@@ -2361,12 +2363,12 @@ export function renderCircuitBrain(): void {
       regimeEl.textContent = reg
     }
     if (confEl) {
-      const atm = (typeof w.BM !== 'undefined' && w.BM.atmosphere) ? w.BM.atmosphere : null
+      const atm = (typeof BM !== 'undefined' && BM.atmosphere) ? BM.atmosphere : null
       confEl.textContent = atm && atm.confidence != null ? 'CONF ' + atm.confidence.toFixed(0) + '%' : ''
     }
     // Score num colour class
     if (scoreNumEl) {
-      const sc = (typeof w.BM !== 'undefined' ? w.BM.entryScore : 0) || 0
+      const sc = (typeof BM !== 'undefined' ? BM.entryScore : 0) || 0
       scoreNumEl.className = 'nc-score-num ' + (sc >= 65 ? 'ok' : sc >= 50 ? 'warn' : 'bad')
     }
   } catch (_) { }
