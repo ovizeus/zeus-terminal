@@ -6,10 +6,11 @@ import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _sessLastBt } from '../core/config'
-import { calcExpectancy } from '../engine/perfStore'
+import { _sessLastBt, SESS_CFG } from '../core/config'
+import { calcExpectancy, calcGlobalExpectancy } from '../engine/perfStore'
+import { calcADX } from '../data/klines'
 import { scheduleAutoClose } from '../trading/autotrade'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.calcADX, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -96,7 +97,7 @@ export function renderPerfTracker() {
     </div>`;
   }).join('');
   // Global expectancy row
-  const gExp = typeof w.calcGlobalExpectancy === 'function' ? w.calcGlobalExpectancy() : 0;
+  const gExp = typeof calcGlobalExpectancy === 'function' ? calcGlobalExpectancy() : 0;
   const gExpColor = gExp > 0 ? 'var(--grn)' : gExp < 0 ? 'var(--red)' : 'var(--dim)';
   body.innerHTML += `<div class="perf-row perf-total-row">
     <div class="perf-name" style="color:var(--cyan)">GLOBAL</div>
@@ -115,7 +116,7 @@ export const _origAutoClose_recordPerf = scheduleAutoClose;
 
 // Brain extension UI
 export function getCurrentADX() {
-  return w.calcADX(getKlines());
+  return calcADX(getKlines());
 }
 
 // ===================================================================
@@ -190,7 +191,7 @@ export function getSessionKey(hUTC: number) {
 // [MOVED TO TOP] SESS_CFG
 
 export function updateSessionBacktest(hUTC: number) {
-  const SESS_CFG = w.SESS_CFG;
+  const _SESS_CFG = SESS_CFG;
   const box = el('sessBacktestBox'); if (!box) return;
 
   const nowTs = Date.now();

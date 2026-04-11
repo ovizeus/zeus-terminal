@@ -9,6 +9,7 @@ import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
 import { _applyATToggleUI, updateATMode } from '../trading/autotrade'
+import { _dslTrimAll } from '../trading/dsl'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -636,7 +637,7 @@ export const ZState = (() => {
       if (snap.blockReason) BlockReason._current = snap.blockReason
 
       console.log('[ZState] Restored:', snap.positions?.length || 0, 'positions, kill:', snap.at?.killTriggered)
-      if (typeof w._dslTrimAll === 'function') w._dslTrimAll()
+      if (typeof _dslTrimAll === 'function') _dslTrimAll()
       return true
     } catch (e: any) {
       console.warn('[ZState.restore] Failed:', e.message)

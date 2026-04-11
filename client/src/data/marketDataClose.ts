@@ -5,6 +5,7 @@
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { fmtNow, toast } from './marketDataHelpers'
 import { checkKillThreshold } from '../trading/autotrade'
+import { _bmPostClose } from '../trading/orders'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -34,7 +35,7 @@ export function closeDemoPos(id: any, reason?: string): void {
   }
 
   // _bmPostClose
-  if (typeof w._bmPostClose === 'function') w._bmPostClose(pos, reason)
+  _bmPostClose(pos, reason)
 
   // [FIX P10] Guard null/stale price — use entry as fallback
   const curPrice = (typeof w.getSymPrice === 'function' ? w.getSymPrice(pos) : null) || pos.entry

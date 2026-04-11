@@ -1,5 +1,6 @@
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { _AN_KEY_A } from '../core/config'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -19,7 +20,7 @@ if (!w._ARIA_NOVA_LOADED) {
 
   function _anLoad() {
     try {
-      const a = JSON.parse(localStorage.getItem(w._AN_KEY_A) || '{}')
+      const a = JSON.parse(localStorage.getItem(_AN_KEY_A) || '{}')
       w.ARIA_STATE.expanded = !!a.expanded
       if (a.pattern) w.ARIA_STATE.pattern = a.pattern
     } catch (_) { }
@@ -33,7 +34,7 @@ if (!w._ARIA_NOVA_LOADED) {
 
   function _anSave() {
     try {
-      localStorage.setItem(w._AN_KEY_A, JSON.stringify({
+      localStorage.setItem(_AN_KEY_A, JSON.stringify({
         expanded: w.ARIA_STATE.expanded,
         pattern: w.ARIA_STATE.pattern
           ? {

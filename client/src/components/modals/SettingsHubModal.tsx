@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate } from '../../core/bootstrapMisc'
+import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults } from '../../utils/dev'
 
 const w = window as any
 
@@ -132,9 +133,9 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="msec">CLOUD SYNC</div>
         <div className="mrow"><span className="mlbl">Email</span><input type="email" id="hubCloudEmail" placeholder="your@email.com" style={inp} /></div>
         <div style={{display:'flex',gap:'4px',marginTop:'6px'}}>
-          <button className="hub-sbtn pri" onClick={() => w.hubCloudSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> Save to Cloud</button>
-          <button className="hub-sbtn" onClick={() => w.hubCloudLoad?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> Load</button>
-          <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff6655'}} onClick={() => w.hubCloudClear?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear</button>
+          <button className="hub-sbtn pri" onClick={() => hubCloudSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> Save to Cloud</button>
+          <button className="hub-sbtn" onClick={() => hubCloudLoad?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> Load</button>
+          <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff6655'}} onClick={() => hubCloudClear?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear</button>
         </div>
         <div className="msec">NOTIFICATIONS</div>
         <label className="mchk"><input type="checkbox" id="hubNotifyEnabled" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.enabled = e.target.checked }} /> Enable alerts &amp; notifications</label>
@@ -375,9 +376,9 @@ export function SettingsHubModal({ visible, onClose }: Props) {
 
       {/* ══ Footer ══ */}
       <div style={{padding:'12px 16px',display:'flex',gap:'6px',flexWrap:'wrap',borderTop:'1px solid #1e2530',flex:'none'}}>
-        <button id="hubSaveAll" className="hub-sbtn pri" onClick={() => w.hubSaveAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE ALL</button>
-        <button id="hubLoadAll" className="hub-sbtn" onClick={() => w.hubLoadAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> LOAD SAVED</button>
-        <button id="hubResetDefaults" className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}} onClick={() => w.hubResetDefaults?.()}>↺ RESET DEFAULTS</button>
+        <button id="hubSaveAll" className="hub-sbtn pri" onClick={() => hubSaveAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE ALL</button>
+        <button id="hubLoadAll" className="hub-sbtn" onClick={() => hubLoadAll?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> LOAD SAVED</button>
+        <button id="hubResetDefaults" className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}} onClick={() => hubResetDefaults?.()}>↺ RESET DEFAULTS</button>
         <button className="hub-sbtn" onClick={onClose} style={{marginLeft:'auto'}}>✕ CLOSE</button>
       </div>
     </ModalOverlay>

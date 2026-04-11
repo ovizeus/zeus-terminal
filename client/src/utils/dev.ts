@@ -8,7 +8,7 @@ import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from './dom'
 import { _ZI } from '../constants/icons'
-import { updLiqStats, renderFeed } from '../data/marketDataWS'
+import { updLiqStats, renderFeed, cloudSave, cloudClear } from '../data/marketDataWS'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -556,7 +556,7 @@ export function _devEnsureVisible(): void {
     console.warn('[DEV] Fallback _devEnsureVisible error:', e.message)
   }
 }
-w._devEnsureVisible = _devEnsureVisible
+// _devEnsureVisible — exported, consumers import directly
 
 // ════════════════════════════════════════════════════════════════
 // UI SCALE — CSS variable + localStorage persistence
@@ -695,7 +695,7 @@ export function hubSaveAll(): void {
     toast('Save error — check console')
   }
 }
-w.hubSaveAll = hubSaveAll
+// hubSaveAll — exported, consumers import directly
 
 export function hubLoadAll(): void {
   try {
@@ -706,7 +706,7 @@ export function hubLoadAll(): void {
     console.warn('[Hub] hubLoadAll error:', e)
   }
 }
-w.hubLoadAll = hubLoadAll
+// hubLoadAll — exported, consumers import directly
 
 // ── Telegram Settings ─────────────────────────────────────────────
 export function hubTgSave(): void {
@@ -807,7 +807,7 @@ export function hubResetDefaults(): void {
     console.warn('[Hub] hubResetDefaults error:', e)
   }
 }
-w.hubResetDefaults = hubResetDefaults
+// hubResetDefaults — exported, consumers import directly
 
 // ── Hub helpers ───────────────────────────────────────────────────
 export function hubSetTf(_tf: string, btn: HTMLElement | null): void {
@@ -846,11 +846,11 @@ export function hubCloudSave(): void {
     if (!email) { toast('Enter an email address'); return }
     // [FIX v85 BUG1] Nu salvam emailul in S.cloudEmail
     const mainEmailEl = el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
-    if (typeof w.cloudSave === 'function') { w.cloudSave() }
+    if (typeof cloudSave === 'function') { cloudSave() }
     else toast('cloudSave not available')
   } catch (e) { console.warn('[Hub] hubCloudSave error:', e) }
 }
-w.hubCloudSave = hubCloudSave
+// hubCloudSave — exported, consumers import directly
 
 export function hubCloudLoad(): void {
   try {
@@ -862,14 +862,14 @@ export function hubCloudLoad(): void {
     else toast('cloudLoad not available')
   } catch (e) { console.warn('[Hub] hubCloudLoad error:', e) }
 }
-w.hubCloudLoad = hubCloudLoad
+// hubCloudLoad — exported, consumers import directly
 
 export function hubCloudClear(): void {
   try {
     const emailEl = document.getElementById('hubCloudEmail') as HTMLInputElement | null
     if (emailEl) emailEl.value = ''
     // [FIX v85 BUG1] Nu resetam S.cloudEmail (nu mai e folosit)
-    if (typeof w.cloudClear === 'function') { w.cloudClear() }
+    if (typeof cloudClear === 'function') { cloudClear() }
   } catch (e) { console.warn('[Hub] hubCloudClear error:', e) }
 }
-w.hubCloudClear = hubCloudClear
+// hubCloudClear — exported, consumers import directly

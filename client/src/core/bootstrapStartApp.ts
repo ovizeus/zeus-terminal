@@ -7,21 +7,24 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _checkAppUpdate } from './bootstrapError'
-import { _renderBuildInfo, setPWAVersion } from './bootstrapMisc'
-import { _waitForFeedThenStartExtras, runHealthChecks } from './bootstrapInit'
+import { _renderBuildInfo, setPWAVersion, _showWelcomeModal } from './bootstrapMisc'
+import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
 import { _resumeLivePendingSyncIfNeeded } from '../data/marketDataPositions'
-import { _renderAdaptivePanel, initAdaptiveStrip } from '../trading/risk'
+import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex } from '../trading/risk'
 import { _initBrainCockpit, startZAnim } from '../engine/brain'
 import { initARES, initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
-import { initCloudSettings } from '../data/marketDataWS'
-import { initPMPanel } from '../engine/postMortem'
+import { initCloudSettings, connectBNB } from '../data/marketDataWS'
+import { initPMPanel, _pmCheckRegimeTransition } from '../engine/postMortem'
 import { loadSavedAPI } from '../engine/indicators'
 import { rebuildDailyFromJournal } from '../engine/dailyPnl'
 import { runBacktest } from '../ui/panels'
 import { savePerfToStorage } from '../engine/perfStore'
 import { startFRCountdown } from '../services/storage'
+import { fetchSymbolKlines } from '../data/klines'
+import { _devEnsureVisible } from '../utils/dev'
+import { connectWatchlist } from '../services/symbols'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -87,7 +90,7 @@ export async function startApp(): Promise<void> {
       console.log('[ZState] Late-restore applied:', _pend.length, 'pending positions after journal load')
     }
   } catch (_pendErr: any) { console.warn('[ZState late-restore]', _pendErr.message) }
-  w._adaptLoad()
+  _adaptLoad()
   if (typeof _resumeLivePendingSyncIfNeeded === 'function') _resumeLivePendingSyncIfNeeded()
   if (typeof w.onDemoOrdTypeChange === 'function') setTimeout(w.onDemoOrdTypeChange, 200)
   if (typeof w.renderPendingOrders === 'function') setTimeout(w.renderPendingOrders, 400)
@@ -114,7 +117,7 @@ export async function startApp(): Promise<void> {
   w.fetchOI = w.safeAsync(w.fetchOI, 'fetchOI', { silent: true })
   w.fetchLS = w.safeAsync(w.fetchLS, 'fetchLS', { silent: true })
   w.fetch24h = w.safeAsync(w.fetch24h, 'fetch24h', { silent: true })
-  w.fetchSymbolKlines = w.safeAsync(w.fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
+  w.fetchSymbolKlines = w.safeAsync(fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
   w.runMultiSymbolScan = w.safeAsync(w.runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
   w.runBacktest = w.safeAsync(runBacktest, 'runBacktest', { silent: false })
   w.ZLOG.push('INFO', '[ZLOG v90] installed \u2014 safeAsync hooks active on 10 functions')
@@ -132,8 +135,8 @@ export async function startApp(): Promise<void> {
   w.Intervals.set('ls', w.fetchLS, 60000); w.Intervals.set('h24', w.fetch24h, 60000)
   w.Intervals.set('oidelta', w.trackOIDelta, 30000); w.Intervals.set('clock', w.updateQuantumClock, 1000)
   setTimeout(function () { if (BM.adaptive && BM.adaptive.enabled) w.recalcAdaptive(true); _renderAdaptivePanel() }, 2000)
-  w.Intervals.set('adaptiveRecalc', function () { w.recalcAdaptive(false); w._pmCheckRegimeTransition() }, 60 * 60 * 1000)
-  w.Intervals.set('regimeWatch', function () { w._pmCheckRegimeTransition(); if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 5 * 60 * 1000)
+  w.Intervals.set('adaptiveRecalc', function () { w.recalcAdaptive(false); _pmCheckRegimeTransition() }, 60 * 60 * 1000)
+  w.Intervals.set('regimeWatch', function () { _pmCheckRegimeTransition(); if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 5 * 60 * 1000)
 
   // ═══ PHASE 3 — STATE ═══
   setTimeout(() => {
@@ -175,8 +178,8 @@ export async function startApp(): Promise<void> {
     w.Intervals.set('syncPull', function () { if (typeof w.ZState.pullAndMerge === 'function') w.ZState.pullAndMerge(); if (typeof w._userCtxPull === 'function') w._userCtxPull() }, 10000)
 
     console.log('[startApp] phase 3: connecting WebSockets | __wsGen=', w.__wsGen)
-    w.connectBNB(); w.connectBYB()
-    if (typeof w.connectWatchlist === 'function') w.connectWatchlist()
+    connectBNB(); w.connectBYB()
+    if (typeof connectWatchlist === 'function') connectWatchlist()
   }, 1500)
 
   // ═══ PHASE 4 — UI ═══
@@ -198,8 +201,8 @@ export async function startApp(): Promise<void> {
   // Multi-sym symbols loader
   setTimeout(function () { fetch('/api/sd/symbols', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null }).then(function (data: any) { if (!data || !data.configured || data.configured.length <= 1) return; const section = document.getElementById('atSymbolSection'); const grid = document.getElementById('atSymbolGrid'); if (!section || !grid) return; section.style.display = ''; w._atSelectedSymbols = null; const mscanRow = document.getElementById('atMscanRow'); if (mscanRow) mscanRow.style.display = 'none'; const shortNames: any = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', DOGEUSDT: 'DOGE', ADAUSDT: 'ADA', AVAXUSDT: 'AVAX' }; data.configured.forEach(function (sym: string) { const label = document.createElement('label'); label.className = 'mchk'; label.style.cssText = 'padding:3px 8px;font-size:10px;letter-spacing:1px;border:1px solid #aa44ff44;border-radius:4px;cursor:pointer'; const cb = document.createElement('input') as HTMLInputElement; cb.type = 'checkbox'; cb.checked = true; cb.dataset.sym = sym; cb.onchange = function () { const checked: string[] = []; grid.querySelectorAll('input[type=checkbox]').forEach(function (c: any) { if (c.checked) checked.push(c.dataset.sym) }); w._atSelectedSymbols = checked.length === data.configured.length ? null : checked; if (typeof w._tcPushDebounced === 'function') w._tcPushDebounced() }; label.appendChild(cb); label.appendChild(document.createTextNode(' ' + (shortNames[sym] || sym.replace('USDT', '')))); grid.appendChild(label) }) }).catch(function () { }) }, 3000)
 
-  w.Intervals.set('perfSave', function () { if (typeof savePerfToStorage === 'function') savePerfToStorage(); w._updatePnlLabCondensed() }, 60000)
-  setTimeout(w._updatePnlLabCondensed, 3000)
+  w.Intervals.set('perfSave', function () { if (typeof savePerfToStorage === 'function') savePerfToStorage(); _updatePnlLabCondensed() }, 60000)
+  setTimeout(_updatePnlLabCondensed, 3000)
 
   setTimeout(w.runBrainUpdate, 2500); w.Intervals.set('brain', w.runBrainUpdate, 5000)
   w.Intervals.set('dslBanner', w.dslUpdateBanner, 2000); w.Intervals.set('atBanner', w.atUpdateBanner, 2000); w.Intervals.set('ptBanner', w.ptUpdateBanner, 2000)
@@ -213,7 +216,7 @@ export async function startApp(): Promise<void> {
   setTimeout(w.runSignalScan, 4000); setTimeout(w.calcConfluenceScore, 5500)
   setTimeout(w.scanLiquidityMagnets, 9000); setTimeout(w.updateDeepDive, 11000)
   setTimeout(w.runQuantumExitUpdate, 12000); setTimeout(w.updateScenarioUI, 13000)
-  setTimeout(w.computeMacroCortex, 8000)
+  setTimeout(computeMacroCortex, 8000)
   setTimeout(function () { try { w.devLog('Developer Mode ready.', 'info') } catch (_) { } }, 5000)
   setTimeout(function () { try { w.hubPopulate() } catch (_) { } }, 3000)
 
@@ -222,7 +225,7 @@ export async function startApp(): Promise<void> {
   w.Intervals.set('deepdive', w.updateDeepDive, 10000)
   w.Intervals.set('qexit', w.runQuantumExitUpdate, 5000)
   w.Intervals.set('scenario', w.updateScenarioUI, 3000)
-  w.Intervals.set('macroCortex', w.computeMacroCortex, 6 * 60 * 60 * 1000)
+  w.Intervals.set('macroCortex', computeMacroCortex, 6 * 60 * 60 * 1000)
 
   // ═══ PHASE 5 — EXTRAS ═══
   _waitForFeedThenStartExtras()
@@ -271,8 +274,8 @@ export async function startApp(): Promise<void> {
 
   // Mark fully booted
   setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); w.atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); w._pinUpdateUI() }, 15000)
-  setTimeout(() => { w._showWelcomeModal() }, 2500)
+  setTimeout(() => { _showWelcomeModal() }, 2500)
   setTimeout(w._srEnsureVisible, 3000)
-  setTimeout(w._devEnsureVisible, 3500)
+  setTimeout(_devEnsureVisible, 3500)
   setTimeout(() => { w.atLog('info', '[AT] Zeus Auto Trade Engine initializat.') }, 6000)
 }

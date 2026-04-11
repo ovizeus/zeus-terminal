@@ -59,7 +59,7 @@ export function calcADX(klines: any[], period = 14) {
   if (dxCount === 0) return null
   return Math.round(smoothADX)
 }
-w.calcADX = calcADX
+// calcADX — exported, consumers import directly
 
 
 // RSI from klines
@@ -202,7 +202,7 @@ export async function fetchSymbolKlines(sym: string, tf = '5m', limit = 100) {
     return parsed
   } catch (_e) { return null }
 }
-w.fetchSymbolKlines = fetchSymbolKlines
+// fetchSymbolKlines — exported, consumers import directly
 
 
 // Multi-symbol scan functions
@@ -529,7 +529,7 @@ export function _mscanUpdateLabel() {
   const active = _mscanGetActive()
   lbl.textContent = 'ACTIV \u2014 ' + active.length + ' simboluri'
 }
-w._mscanUpdateLabel = _mscanUpdateLabel
+// _mscanUpdateLabel — exported, consumers import directly
 
 export function getActiveMscanSyms() {
   const on = el('atMultiSym')?.checked

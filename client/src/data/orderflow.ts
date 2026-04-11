@@ -1,4 +1,5 @@
 import { toast } from './marketDataHelpers'
+import { computeFusionDecision } from '../trading/autotrade'
 /**
  * Zeus Terminal — Orderflow (ported from public/js/data/orderflow.js)
  * Orderflow Modules P1-P15 + Patch Layer v122.3
@@ -97,8 +98,8 @@ export function _initAresMLUI() {
           snap.dir = d.includes('long') ? 'LONG' : d.includes('short') ? 'SHORT' : 'NEUTRAL'
           return snap
         }
-        if (typeof w.computeFusionDecision === 'function') {
-          const r = w.computeFusionDecision()
+        if (typeof computeFusionDecision === 'function') {
+          const r = computeFusionDecision()
           if (r) {
             snap.mode = 'FUSION'
             snap.conf = Number.isFinite(+r.confidence) ? +r.confidence : 0

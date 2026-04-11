@@ -6,6 +6,7 @@ import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { perfRecordTrade } from './risk'
+import { _queueExecOverlay } from './orders'
 
 const w = window as any
 
@@ -80,7 +81,7 @@ export function onTradeExecuted(pos: any): void {
     <div class="zeus-exec-corner">ENGINE: ${escHtml(mode)}</div>
     ${simTag}`
 
-  w._queueExecOverlay(html, 'entry', 2500)
+  _queueExecOverlay(html, 'entry', 2500)
 
   // Orb pulse green
   const core = el('zncCore')
@@ -120,7 +121,7 @@ export function onTradeClosed(result: any): void {
     </div>
     ${simTag}`
 
-  w._queueExecOverlay(html, cssClass, 2200)
+  _queueExecOverlay(html, cssClass, 2200)
 
   // Flash on loss
   if (!isProfit) {

@@ -9,7 +9,7 @@ import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { clearAllSessionOverlays } from '../ui/panels'
-import { llvRequestRender, renderHeatmapOverlay, renderSROverlay } from './marketDataOverlays'
+import { llvRequestRender, renderHeatmapOverlay, renderSROverlay, clearSR } from './marketDataOverlays'
 import { resetForecast } from '../engine/forecast'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
@@ -331,7 +331,7 @@ export function registerServiceWorker(): void { if (!('serviceWorker' in navigat
 export function checkLiqAlert(usd: number, qty: number, side: string, sym: string): void { if (!w.S.alerts.liqAlerts) return; if (qty < w.S.alerts.liqMinBtc) return; if (!(checkLiqAlert as any)._last || Date.now() - (checkLiqAlert as any)._last > 5000) { (checkLiqAlert as any)._last = Date.now(); sendAlert(`${sym} LIQUIDATION`, `$${fmt(usd)} ${side}`, 'liq') } }
 export function testNotification(): void { sendAlert('ZeuS Terminal', 'Test alert working!', 'test') }
 export function saveAlerts(): void { w.S.alerts.liqAlerts = el('aLiqEn')?.checked !== false; w.S.alerts.rsiAlerts = el('aDivEn')?.checked !== false; const liqMin = el('aLiqMin'); if (liqMin) w.S.alerts.liqMinBtc = +liqMin.value || 0; toast('Alert settings saved'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
-export function applySR(): void { const en = el('srEn')?.checked !== false; w.S.overlays.sr = en; w.clearSR(); if (en) renderSROverlay(); const btn = el('bsr'); if (btn) btn.classList.toggle('act', en); toast('S/R settings applied') }
+export function applySR(): void { const en = el('srEn')?.checked !== false; w.S.overlays.sr = en; clearSR(); if (en) renderSROverlay(); const btn = el('bsr'); if (btn) btn.classList.toggle('act', en); toast('S/R settings applied') }
 
 // ===== MISC (cloud, inject, filters, supremus) =====
 export function cloudClear(): void { const ei = el('cloudEmail'); if (ei) ei.value = ''; toast('Email cleared') }

@@ -6,6 +6,8 @@ import { getATObject, getTPObject } from '../services/stateAccessors'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { initModeBar } from '../ui/modebar'
+import { _dslTrimAll } from '../trading/dsl'
+import { calcGlobalExpectancy } from '../engine/perfStore'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
@@ -73,7 +75,7 @@ export function _waitForFeedThenStartExtras(): void {
 
 export function _startExtras(): void {
   w.startDSLIntervals()
-  w.Intervals.set('dslTrim', w._dslTrimAll, 300000)
+  w.Intervals.set('dslTrim', _dslTrimAll, 300000)
   setTimeout(w.runMultiSymbolScan, 3000)
   w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
   w.Intervals.set('bbSave', () => { if (typeof w._aubSaveBB === 'function') w._aubSaveBB() }, 30000)
@@ -128,6 +130,6 @@ export function _updatePnlLabCondensed(): void {
     const hasData = ds && (ds.cumPnl !== 0 || ds.peak !== 0 || (ds.days && Object.keys(ds.days).length > 0))
     if (cumEl) { if (!hasData) { cumEl.textContent = 'PnL: \u2014'; cumEl.style.color = 'var(--dim)' } else { const c = ds.cumPnl || 0; cumEl.textContent = 'PnL: ' + (c >= 0 ? '+' : '') + '$' + c.toFixed(2); cumEl.style.color = c >= 0 ? 'var(--grn)' : 'var(--red)' } }
     if (ddEl) { if (!hasData) { ddEl.textContent = 'DD: \u2014'; ddEl.style.color = 'var(--dim)' } else { ddEl.textContent = 'DD: $' + (ds.currentDD || 0).toFixed(2); ddEl.style.color = ds.currentDD > 0 ? 'var(--red)' : 'var(--dim)' } }
-    if (expEl) { if (typeof w.calcGlobalExpectancy !== 'function') { expEl.textContent = 'E: \u2014'; expEl.style.color = 'var(--dim)' } else { const e = w.calcGlobalExpectancy(); if (e === 0 && !hasData) { expEl.textContent = 'E: \u2014'; expEl.style.color = 'var(--dim)' } else { expEl.textContent = 'E: ' + (e >= 0 ? '+' : '') + '$' + e.toFixed(2); expEl.style.color = e > 0 ? 'var(--grn)' : e < 0 ? 'var(--red)' : 'var(--dim)' } } }
+    if (expEl) { if (typeof calcGlobalExpectancy !== 'function') { expEl.textContent = 'E: \u2014'; expEl.style.color = 'var(--dim)' } else { const e = calcGlobalExpectancy(); if (e === 0 && !hasData) { expEl.textContent = 'E: \u2014'; expEl.style.color = 'var(--dim)' } else { expEl.textContent = 'E: ' + (e >= 0 ? '+' : '') + '$' + e.toFixed(2); expEl.style.color = e > 0 ? 'var(--grn)' : e < 0 ? 'var(--red)' : 'var(--dim)' } } }
   } catch (_) { }
 }

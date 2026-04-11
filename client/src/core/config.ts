@@ -6,7 +6,9 @@
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
-import { updateMTFAlignment } from '../engine/brain'
+import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere } from '../engine/brain'
+import { _adaptLoad } from '../trading/risk'
+import { _mscanUpdateLabel } from '../data/klines'
 import { renderATLog } from '../trading/autotrade'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -673,7 +675,7 @@ export function _userCtxPull() {
       _restoreJSON('perfStats', 'zeus_perf_v1', function () { if (typeof w.loadPerfFromStorage === 'function') w.loadPerfFromStorage() })
       _restoreJSON('dailyPnl', 'zeus_daily_pnl_v1', function () { if (typeof w.loadDailyPnl === 'function') w.loadDailyPnl() })
       _restoreJSON('postmortem', 'zeus_postmortem_v1', null)
-      _restoreJSON('adaptive', 'zeus_adaptive_v1', function () { if (typeof w._adaptLoad === 'function') w._adaptLoad() })
+      _restoreJSON('adaptive', 'zeus_adaptive_v1', function () { if (typeof _adaptLoad === 'function') _adaptLoad() })
       _restoreJSON('notifications', 'zeus_notifications', function () { if (typeof _ncLoad === 'function') { _ncLoad(); _ncRenderList(); _ncUpdateBadge() } })
       _restoreJSON('scannerSyms', 'zeus_mscan_syms', null)
       _restoreJSON('midstackOrder', 'zt_midstack_order', null)
@@ -985,8 +987,8 @@ export function updateLiqCycle() {
       return
     }
     const workKlines = klines.slice(-200)
-    const sweep = (typeof w.detectSweepDisplacement === 'function')
-      ? w.detectSweepDisplacement(workKlines)
+    const sweep = (typeof detectSweepDisplacement === 'function')
+      ? detectSweepDisplacement(workKlines)
       : { type: 'none', reclaim: false, displacement: false }
     lc.currentSweep = sweep.type || 'none'
     lc.sweepDisplacement = !!sweep.displacement
@@ -1219,8 +1221,8 @@ export function _coreTickMI() {
     if (typeof w.PhaseFilter !== 'undefined') {
       BM.phaseFilter = w.PhaseFilter.evaluate(BM.regimeEngine)
     }
-    if (typeof w.computeMarketAtmosphere === 'function') {
-      w.computeMarketAtmosphere()
+    if (typeof computeMarketAtmosphere === 'function') {
+      computeMarketAtmosphere()
     }
     refreshLiqCycleLight()
     refreshSweepLight()
@@ -1628,7 +1630,7 @@ export function _usApply() {
     const multiChk = document.getElementById('atMultiSym') as any
     if (multiChk) {
       multiChk.checked = at.multiSym
-      if (typeof w._mscanUpdateLabel === 'function') w._mscanUpdateLabel()
+      if (typeof _mscanUpdateLabel === 'function') _mscanUpdateLabel()
       else {
         const lbl = document.getElementById('atMultiSymLbl')
         if (lbl) lbl.textContent = at.multiSym ? 'ACTIV' : 'DEZACTIVAT'

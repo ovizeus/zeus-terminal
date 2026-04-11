@@ -7,7 +7,8 @@ import { fmtTime, fmtDate, calcRSI } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _demoTick } from '../engine/aresUI'
-import { clearHeatmap } from './marketDataOverlays'
+import { clearHeatmap, clearSR } from './marketDataOverlays'
+import { getChartH } from './marketDataChart'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -19,7 +20,7 @@ export function setTF(tf: any, btn: any): void {
   if (_ztfLbl) _ztfLbl.textContent = tf
   const _ztfDd = document.getElementById('ztfDropdown')
   if (_ztfDd) _ztfDd.querySelectorAll('.ztf-item').forEach(function (b: any) { b.classList.toggle('act', b.textContent.trim() === tf) })
-  clearHeatmap(); if (typeof w.clearSR === 'function') w.clearSR()
+  clearHeatmap(); clearSR()
   w.FetchLock.release('klines')
   if (typeof w.fetchKlines === 'function') w.fetchKlines(tf)
   setTimeout(() => {
@@ -76,7 +77,7 @@ export function toggleFS(): void {
     if (w.mainChart) w.mainChart.applyOptions({ height: h })
     if (cc) cc.style.display = 'none'
   } else {
-    if (w.mainChart) w.mainChart.applyOptions({ height: w.getChartH() })
+    if (w.mainChart) w.mainChart.applyOptions({ height: getChartH() })
     if (w.cvdChart) w.cvdChart.applyOptions({ height: 60 })
     if (cc) cc.style.display = (w.S.activeInds && w.S.activeInds.cvd) ? '' : 'none'
   }

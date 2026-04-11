@@ -5,6 +5,7 @@
 
 import { getTimezone, getJournal } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
+import { estimateRoundTripFees } from '../trading/risk'
 
 const w = window as Record<string, any> // kept for WRITES (w.DAILY_STATS)
 const _DAILY_PNL_KEY = 'zeus_daily_pnl_v1'
@@ -36,7 +37,7 @@ function _addTradeToDailyStats(ds: any, trade: any): void {
   day.grossPnl += trade.pnl
   let fees = 0
   if (Number.isFinite(trade.fees)) fees = trade.fees
-  else if (typeof w.estimateRoundTripFees === 'function' && Number.isFinite(trade.notional)) fees = (w.estimateRoundTripFees(trade.notional, 'taker', trade.profile || 'fast').total || 0)
+  else if (typeof estimateRoundTripFees === 'function' && Number.isFinite(trade.notional)) fees = (estimateRoundTripFees(trade.notional, 'taker', trade.profile || 'fast').total || 0)
   day.fees += fees; day.netPnl = day.grossPnl - day.fees
   ds.cumPnl += trade.pnl - fees; _updateDrawdown(ds)
 }

@@ -1,5 +1,6 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { masterReset } from '../../core/bootstrapMisc'
+import { cloudSave, cloudClear } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -42,7 +43,7 @@ export function CloudSyncModal({ visible, onClose }: Props) {
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: 8, flexDirection: 'column' }}>
           <button className="sbtn2 pri" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}
-            onClick={() => w.cloudSave?.()}>Save to Cloud</button>
+            onClick={() => cloudSave?.()}>Save to Cloud</button>
           <button className="sbtn2" style={{
             background: '#1a2530', border: '1px solid var(--brd)', color: 'var(--txt)',
             padding: 10, borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'var(--ff)'
@@ -53,7 +54,7 @@ export function CloudSyncModal({ visible, onClose }: Props) {
           <button className="sbtn2" style={{
             background: '#2a1010', border: '1px solid #ff335533', color: 'var(--red)',
             padding: 10, borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'var(--ff)'
-          }} onClick={() => w.cloudClear?.()}>
+          }} onClick={() => cloudClear?.()}>
             <svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg>
             {' '}Clear Email
           </button>

@@ -5,6 +5,10 @@
 import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } from '../services/stateAccessors'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { connectBNB } from '../data/marketDataWS'
+import { connectWatchlist } from '../services/symbols'
+import { getChartH } from '../data/marketDataChart'
+import { closeAllDemoPos } from '../trading/autotrade'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
 const TP = getTPObject()
@@ -33,7 +37,7 @@ export async function pinUnlock(): Promise<void> {
   try {
     const r = await fetch('/auth/pin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok === true) { sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof w._showWelcomeModal === 'function') w._showWelcomeModal() }, 300) } }
+    if (d.ok === true) { sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof _showWelcomeModal === 'function') _showWelcomeModal() }, 300) } }
     else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN nu este configurat'; sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
     else if (d.error === 'session_invalid') { if (msg) msg.textContent = 'Sesiune expirat\u0103 \u2014 re-autentific\u0103-te' }
     else { if (msg) msg.textContent = 'PIN incorect!'; inp.value = ''; inp.focus(); inp.classList.add('pin-lock-shake'); setTimeout(function () { inp.classList.remove('pin-lock-shake') }, 500) }
@@ -132,7 +136,7 @@ export function masterReset(): void {
     if (!_armed) return
     if (Date.now() - _lastTick > 10000) {
       console.warn('[ZEUS] Heartbeat: no tick for 10s \u2014 forcing reconnect')
-      try { if (typeof w.connectBNB === 'function') w.connectBNB(); if (typeof w.connectWatchlist === 'function') w.connectWatchlist() } catch (e) { console.error('[ZEUS] Reconnect error', e) }
+      try { connectBNB(); connectWatchlist() } catch (e) { console.error('[ZEUS] Reconnect error', e) }
       _lastTick = Date.now()
     }
   }, 5000)
@@ -143,7 +147,7 @@ if (!w._closeAllBtnInited) {
   w._closeAllBtnInited = true
   function _initCloseAllBtn() {
     const btn = document.getElementById('closeAllBtn')
-    if (btn && typeof w.attachConfirmClose === 'function') w.attachConfirmClose(btn, w.closeAllDemoPos)
+    if (btn && typeof w.attachConfirmClose === 'function') w.attachConfirmClose(btn, closeAllDemoPos)
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initCloseAllBtn)
   else setTimeout(_initCloseAllBtn, 500)
@@ -154,7 +158,7 @@ if (!w._closeAllBtnInited) {
   let _rzTimer: any = null
   function _resizeCharts() {
     if (typeof w.mainChart === 'undefined' || !w.mainChart) return
-    const width = w.getChartW(); const h = w.getChartH()
+    const width = w.getChartW(); const h = getChartH()
     try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { if (typeof w._macdChart !== 'undefined' && w._macdChart) w._macdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }
   window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(_resizeCharts, 120) })

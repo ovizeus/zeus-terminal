@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
+import { closeAllDemoPos } from '../../trading/autotrade'
 
 const w = window as any
 
@@ -82,7 +83,7 @@ export function ManualTradePanel() {
   const closeAllAttached = useRef(false)
   useEffect(() => {
     if (closeAllRef.current && !closeAllAttached.current && typeof w.attachConfirmClose === 'function') {
-      w.attachConfirmClose(closeAllRef.current, w.closeAllDemoPos)
+      w.attachConfirmClose(closeAllRef.current, closeAllDemoPos)
       closeAllAttached.current = true
     }
   })

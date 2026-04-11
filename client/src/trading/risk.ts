@@ -163,7 +163,7 @@ export function estimateRoundTripFees(notional: any, orderType: any, profile: an
   var slippage = n * slipPct * 2
   return { entryFee: entryFee, exitFee: exitFee, slippage: slippage, total: entryFee + exitFee + slippage }
 }
-w.estimateRoundTripFees = estimateRoundTripFees
+// estimateRoundTripFees — exported, consumers import directly
 
 // ══════════════════════════════════════════════════════════════════
 // ETAPA 5 — ADAPTIVE CONTROL ENGINE

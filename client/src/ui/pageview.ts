@@ -4,6 +4,7 @@
  */
 
 import { aubRefreshAll } from '../engine/aub'
+import { dockClearActive } from './dock'
 
 const w = window as any
 
@@ -354,9 +355,7 @@ export function closePageView() {
   home.style.display = ''
 
   // Clear dock active state
-  if (typeof w.dockClearActive === 'function') {
-    w.dockClearActive()
-  }
+  dockClearActive()
 
   // Clear persisted dock
   try { sessionStorage.removeItem('zeusDock') } catch (_e) { /* */ }

@@ -3,14 +3,15 @@
 // ARES LIVE EXECUTION — Connects decision engine → live orders
 
 import { safeLastKline } from '../utils/dom'
-import { aresSetTakeProfit } from '../trading/liveApi'
+import { aresSetTakeProfit, aresPlaceOrder, aresSetStopLoss } from '../trading/liveApi'
+import { ARES_JOURNAL } from './aresJournal'
 
 const w = window as any
 
 export async function ARES_EXECUTE(decision: any): Promise<any> {
   if (!decision || !decision.shouldTrade || !decision.side) return null
   if (typeof w.ARES === 'undefined') return null
-  if (typeof w.aresPlaceOrder !== 'function') { console.error('[ARES_EXECUTE] aresPlaceOrder not available'); return null }
+  if (typeof aresPlaceOrder !== 'function') { console.error('[ARES_EXECUTE] aresPlaceOrder not available'); return null }
 
   const wallet = w.ARES.wallet, positions = w.ARES.positions
   const bal = wallet.balance, avail = wallet.available, confidence = decision.confidence
@@ -49,7 +50,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
 
   try {
     w.ARES.push('[EXEC] Placing ' + decision.side + ' BTCUSDT x' + leverage + ' stake=$' + stakeVirtual.toFixed(2) + ' qty=' + qty)
-    const fill = await w.aresPlaceOrder({ symbol: 'BTCUSDT', side: binanceSide, quantity: qty, leverage })
+    const fill = await aresPlaceOrder({ symbol: 'BTCUSDT', side: binanceSide, quantity: qty, leverage })
     const fillPrice = fill.avgPrice || markPrice
     const fillQty = fill.executedQty || qty
 
@@ -63,7 +64,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
     const slDistance = markPrice * (atrPct / 100) * 1.5
     const slPrice = decision.side === 'LONG' ? Math.round((fillPrice - slDistance) * 100) / 100 : Math.round((fillPrice + slDistance) * 100) / 100
     try {
-      const slResult = await w.aresSetStopLoss({ symbol: 'BTCUSDT', side: binanceSide, quantity: fillQty, stopPrice: slPrice })
+      const slResult = await aresSetStopLoss({ symbol: 'BTCUSDT', side: binanceSide, quantity: fillQty, stopPrice: slPrice })
       positions.updatePos(pos.id, { slPrice, slOrderId: slResult.orderId })
       w.ARES.push('[SL SET] ' + decision.side + ' SL @ $' + slPrice.toFixed(2))
     } catch (slErr: any) { w.ARES.push('[SL FAIL] ' + (slErr.message || slErr) + ' \u2014 monitor client-side'); positions.updatePos(pos.id, { slPrice, slOrderId: null }) }
@@ -77,7 +78,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
     } catch (tpErr: any) { w.ARES.push('[TP FAIL] ' + (tpErr.message || tpErr) + ' \u2014 monitor client-side'); positions.updatePos(pos.id, { tpPrice, tpOrderId: null }) }
 
     w.ARES_DECISION.recordTrade()
-    if (typeof w.ARES_JOURNAL !== 'undefined') w.ARES_JOURNAL.recordOpen(decision, pos, fillPrice)
+    if (typeof ARES_JOURNAL !== 'undefined') ARES_JOURNAL.recordOpen(decision, pos, fillPrice)
     w.ARES.push('[ARES LIVE OPEN] ' + decision.side + ' BTCUSDT x' + leverage + ' @ $' + fillPrice.toFixed(2) + ' qty=' + fillQty + ' stake=$' + stakeVirtual.toFixed(2) + ' SL=$' + slPrice.toFixed(2) + ' TP=$' + tpPrice.toFixed(2))
     try { if (typeof w._aresRender === 'function') w._aresRender() } catch (_) { }
     return pos

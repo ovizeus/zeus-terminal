@@ -9,7 +9,8 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _neuroLastScan } from '../core/config'
+import { _neuroLastScan, _SESS_DEF } from '../core/config'
+import { getCurrentADX } from '../ui/render'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
@@ -70,7 +71,7 @@ export function updateNeurons(): void {
     ofi.toFixed(0) + '%B')
 
   // ADX neuron — update with live value
-  const liveADX = w.getCurrentADX()
+  const liveADX = getCurrentADX()
   if (liveADX !== null) {
     setNeuron('adx', liveADX >= 25 ? 'ok' : liveADX >= 18 ? 'wait' : liveADX > 0 ? 'fail' : 'wait',
       'ADX ' + (liveADX || '—'))
@@ -1256,8 +1257,8 @@ export function computeContextGates(dir: any, klines: any): any {
 // Session management
 export function _getActiveSessions(hUTC: any): any {
   const active: string[] = []
-  if (!w._SESS_DEF) return { active: [], primary: null }
-  Object.entries(w._SESS_DEF).forEach(([key, def]: any) => {
+  if (!_SESS_DEF) return { active: [], primary: null }
+  Object.entries(_SESS_DEF).forEach(([key, def]: any) => {
     if (hUTC >= def.start && hUTC < def.end) active.push(key)
   })
   // Determine primary (highest priority in active list)

@@ -3,6 +3,7 @@
  * Intervals, WS, FetchLock, ingestPrice, Timeouts — all set on window.*
  */
 
+import { _resetWatchdog } from '../utils/guards'
 const w = window as Record<string, any>
 
 // FIX: Initialize __wsGen to 0 immediately — undefined !== 0 would kill all WS connections
@@ -112,7 +113,7 @@ export const ingestPrice = w.ingestPrice = w.ingestPrice || function (_raw: any,
     w.S.price = p
     if (w.S.symbol) w.allPrices[w.S.symbol] = p // BUG1: track main symbol
   }
-  if (typeof w._resetWatchdog === 'function') w._resetWatchdog()
+  _resetWatchdog()
   return true
 }
 

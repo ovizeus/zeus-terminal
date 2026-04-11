@@ -11,8 +11,12 @@ import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
 import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
-import { getTimeUTC } from '../ui/render'
+import { getTimeUTC, getCurrentADX } from '../ui/render'
 import { onTradeExecuted } from '../trading/positions'
+import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
+import { _isExecAllowed } from '../utils/guards'
+import { _showConfirmDialog } from '../data/marketDataTrading'
+import { computeProbScore } from '../engine/forecast'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -50,10 +54,10 @@ export function toggleAutoTrade(): void {
       return
     }
     // [MODE-P4] Require explicit confirmation — wording matches resolved environment
-    if (typeof w._showConfirmDialog === 'function') {
+    if (typeof _showConfirmDialog === 'function') {
       var _atEnv = w._resolvedEnv || 'REAL'
       var _atTest = _atEnv === 'TESTNET'
-      w._showConfirmDialog(
+      _showConfirmDialog(
         _atTest ? 'Enable AutoTrade in TESTNET Mode?' : 'Enable AutoTrade in LIVE Mode?',
         _atTest
           ? 'You are about to enable AutoTrade on Binance TESTNET.\n\nThe system will automatically execute orders with TEST funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings are configured before proceeding.'
@@ -97,7 +101,7 @@ export function _applyATToggleUI(enabled: any): void {
   if (enabled) {
     const _atGlobalMode = (typeof AT !== 'undefined' && getATMode()) ? getATMode() : 'demo'
     // FIX v118: reset zi dacă s-a schimbat data
-    if (typeof w._bmResetDailyIfNeeded === 'function') w._bmResetDailyIfNeeded()
+    _bmResetDailyIfNeeded()
     // ── INIT: Recalculate daily counters from journal (no stale state) ──
     const _todayRO = new Date().toLocaleDateString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest' })
     const _jToday = (TP.journal || []).filter((j: any) => {
@@ -291,7 +295,7 @@ export function checkATConditions(): any {
   setCondUI('atCondST', stOk, stOk ? stDir === 'bull' ? 'BULL ✓' : 'BEAR ✓' : 'Nu e flip')
 
   // 4. ADX filter
-  const adxVal = w.getCurrentADX()
+  const adxVal = getCurrentADX()
   const adxOk = adxVal === null || adxVal >= 18
   setCondUI('atCondADX', adxOk, adxVal !== null ? 'ADX ' + adxVal + (adxOk ? ' ✓' : ' ← slab') : 'Se calc...')
 
@@ -394,8 +398,8 @@ export function computeFusionDecision(): any {
   // 2) Scenario / ProbScore
   let prob: any = null
   try {
-    if (typeof w.computeProbScore === 'function') {
-      const r = w.computeProbScore()
+    if (typeof computeProbScore === 'function') {
+      const r = computeProbScore()
       if (Number.isFinite(+r)) prob = +r
       else if (r && Number.isFinite(+r.score)) prob = +r.score
       else if (r && Number.isFinite(+r.confidence)) prob = +r.confidence
@@ -520,7 +524,7 @@ export function runAutoTradeCheck(): void {
       return
     }
     // Safety engine check
-    const [_execOk, _execReason] = w._isExecAllowed()
+    const [_execOk, _execReason] = _isExecAllowed()
     if (!_execOk) { w.atLog('wait', `[WAIT] AT wait: ${_execReason}`); return }
 
     // Reset daily P&L if new day
@@ -1412,7 +1416,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     })
     closedCount++
     // [FIX C4] Fire side-effects skipped by inline close
-    if (typeof w._bmPostClose === 'function') w._bmPostClose(p, 'Emergency Stop')
+    if (typeof _bmPostClose === 'function') _bmPostClose(p, 'Emergency Stop')
     if (typeof w.srUpdateOutcome === 'function') w.srUpdateOutcome(p, pnl)
     if (typeof w.runPostMortem === 'function') setTimeout(function () { w.runPostMortem(p, pnl, closePrice) }, 200)
     if (Array.isArray(w._demoCloseHooks)) { var _hp = p, _hpnl = pnl; w._demoCloseHooks.forEach(function (fn: any) { try { fn(_hp, _hpnl, 'Emergency Stop') } catch (_) { } }) }

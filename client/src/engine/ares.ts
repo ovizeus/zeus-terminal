@@ -5,6 +5,8 @@
 
 import { safeLastKline } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { ARES_EXECUTE } from './aresExecute'
+import { _bmResetDailyIfNeeded } from '../trading/orders'
 
 const w = window as any
 
@@ -353,7 +355,7 @@ async function _reconcile() {
 function tick() {
   try {
     if (!_reconciled) _reconcile()
-    if (typeof w._bmResetDailyIfNeeded === 'function') w._bmResetDailyIfNeeded()
+    _bmResetDailyIfNeeded()
     const balance = _balance()
     const traj = _calcTrajectory(balance)
     const prevState = _state.current
@@ -397,11 +399,11 @@ function tick() {
     } catch (monErr: any) { console.warn('[ARES] monitor error:', monErr.message) }
 
     try {
-      if (typeof w.ARES_DECISION !== 'undefined' && typeof w.ARES_EXECUTE === 'function') {
+      if (typeof w.ARES_DECISION !== 'undefined' && typeof ARES_EXECUTE === 'function') {
         const decision = w.ARES_DECISION.evaluate()
         if (decision.shouldTrade) {
           _push('[DECISION] GO ' + decision.side + ' \u2014 ' + decision.reasons.join(', '))
-          w.ARES_EXECUTE(decision).catch(function (e: any) { _push('[EXEC ERROR] ' + (e.message || e)); console.error('[ARES] execution async error:', e) })
+          ARES_EXECUTE(decision).catch(function (e: any) { _push('[EXEC ERROR] ' + (e.message || e)); console.error('[ARES] execution async error:', e) })
         }
       }
     } catch (decErr: any) { console.warn('[ARES] decision error:', decErr.message) }

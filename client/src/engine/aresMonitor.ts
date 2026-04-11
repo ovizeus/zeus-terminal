@@ -3,7 +3,8 @@
 // ARES POSITION MONITOR + DSL (Dynamic Stop Loss Manager)
 // + Hook ARES in closeDemoPos
 
-import { aresClosePosition } from '../trading/liveApi'
+import { aresClosePosition, aresSetStopLoss } from '../trading/liveApi'
+import { ARES_JOURNAL } from './aresJournal'
 
 const w = window as any
 
@@ -61,7 +62,7 @@ async function check(): Promise<void> {
           const newSl = Math.round(idealSl * 100) / 100
           try {
             if (pos.slOrderId) await w.aresCancelOrder('BTCUSDT', pos.slOrderId)
-            const slResult = await w.aresSetStopLoss({ symbol: 'BTCUSDT', side: pos.side === 'LONG' ? 'BUY' : 'SELL', quantity: pos.liveQty || pos.qty, stopPrice: newSl })
+            const slResult = await aresSetStopLoss({ symbol: 'BTCUSDT', side: pos.side === 'LONG' ? 'BUY' : 'SELL', quantity: pos.liveQty || pos.qty, stopPrice: newSl })
             const phase = _computeDslStop(pos, markPrice) !== null ? 'DSL' : 'BE'
             w.ARES.positions.updatePos(pos.id, { slPrice: newSl, slOrderId: slResult.orderId, _slMovedBE: true, _dslPhase: phase })
             w.ARES.push('[DSL] ' + pos.side + ' SL \u2192 $' + newSl.toFixed(2) + ' (was $' + pos.slPrice.toFixed(2) + ')')
@@ -96,7 +97,7 @@ async function _closeLivePosition(pos: any, markPrice: number, reason: string): 
     w.ARES.positions.updatePos(pos.id, { closePrice, closeReason: reason, grossPnl, netPnl, fees })
     w.ARES.positions.closePosition(pos.id)
     w.ARES.onTradeClosed(netPnl, pos)
-    if (typeof w.ARES_JOURNAL !== 'undefined') w.ARES_JOURNAL.recordClose(pos.id, { closePrice, netPnl, closeReason: reason })
+    if (typeof ARES_JOURNAL !== 'undefined') ARES_JOURNAL.recordClose(pos.id, { closePrice, netPnl, closeReason: reason })
     w.ARES.push('[ARES CLOSE] ' + pos.side + ' @ $' + closePrice.toFixed(2) + ' PnL=$' + netPnl.toFixed(2) + ' reason=' + reason)
     try { if (typeof w._aresRender === 'function') w._aresRender() } catch (_) { }
     return { netPnl, closePrice }

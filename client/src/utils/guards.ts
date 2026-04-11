@@ -159,7 +159,7 @@ export function _resetWatchdog(): void {
     const sb = el('dataStallBanner'); if (sb) sb.style.display = 'none'
   }
 }
-w._resetWatchdog = _resetWatchdog
+// _resetWatchdog — exported, consumers import directly
 
 export function _resetKlineWatchdog(): void {
   _SAFETY.lastKlineTs = Date.now()
@@ -376,7 +376,7 @@ export function _isExecAllowed(): [boolean, string] {
   }
   return [true, 'ok']
 }
-w._isExecAllowed = _isExecAllowed
+// _isExecAllowed — exported, consumers import directly
 
 // ── 10. GLOBAL ERROR HANDLING ────────────────────────────────
 window.addEventListener('error', (e) => {
