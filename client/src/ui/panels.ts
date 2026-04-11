@@ -1,6 +1,8 @@
 // Zeus v122 — ui/panels.ts
 // Panel toggles, strip UI, eye panel
 // Ported 1:1 from public/js/ui/panels.js
+import { fmtNow } from '../data/marketDataHelpers'
+
 const w = window as any;
 
 // [REMOVED] Eye panel — indicator control is now unified in "Select Indicator" panel
@@ -450,7 +452,7 @@ export async function runBacktest() {
   { const _oe = w.el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
   w.el('btProgress')?.style && (w.el('btProgress').style.display = 'none');
   { const _oe = w.el('btResults'); if (_oe) _oe.style.display = 'block'; }
-  { const _oe = w.el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${w.fmtNow()}`; }
+  { const _oe = w.el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
 }
 
 export function renderBacktestResults(results: any, equityCurve: any, fwdBars: any, lookback: any, minMovePct: any) {

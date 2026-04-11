@@ -3,6 +3,8 @@
 // AUB Analytics & Monitoring module — Alien Upgrade Bay
 'use strict'
 
+import { _safeLocalStorageSet } from '../services/storage'
+
 const w = window as any
 
 // ── TOGGLE ───────────────────────────────────────────────────────
@@ -198,7 +200,7 @@ export function _aubUpdatePerfCard(): void {
 let _bbDirty = false
 export function _aubSaveBB(): void {
   if (!_bbDirty) return
-  w._safeLocalStorageSet('aub_bb', w.AUB.bb.slice(0, 50))
+  _safeLocalStorageSet('aub_bb', w.AUB.bb.slice(0, 50))
   _bbDirty = false
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
@@ -377,7 +379,7 @@ export function aubMacroFileLoad(input: any): void {
           impact: ev.impact || 'medium', // low/medium/high
           risk: ev.risk || 0.5,      // risk reduce factor 0–1
         }))
-        w._safeLocalStorageSet('aub_macro', w.AUB.macroEvents) // FIX 22
+        _safeLocalStorageSet('aub_macro', w.AUB.macroEvents) // FIX 22
         if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
         if (typeof w._userCtxPush === 'function') w._userCtxPush()
         _aubRenderMacroEvents()
@@ -477,7 +479,7 @@ export function _aubSimWorker(): void {
     w.AUB.simResult = best
     w.AUB.simPendingApply = best
     const ts = new Date().toLocaleTimeString()
-    w._safeLocalStorageSet(w.AUB_SIM_KEY, { best, ts }) // FIX 22
+    _safeLocalStorageSet(w.AUB_SIM_KEY, { best, ts }) // FIX 22
 
     w.AUB_PERF.setDOM('aub-sim-status', 'Status: Done (' + ts + ')')
     w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + ts)

@@ -4,6 +4,8 @@
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getBrainMetrics, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone, getTPObject } from '../services/stateAccessors'
+import { isValidMarketPrice } from '../utils/dom'
+import { fmtNow } from '../data/marketDataHelpers'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), w.el, w._ZI, fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -738,7 +740,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Use snapshot values exclusively — never re-read global state
   const sym = _sym || _snap.symbol
   const entry = _price || _snap.price
-  if (!w.isValidMarketPrice(entry)) {
+  if (!isValidMarketPrice(entry)) {
     w.BlockReason.set('INVALID_PRICE', 'Preț invalid la exec', 'placeAutoTrade')
     w.atLog('warn', '[FAIL] Nu am pret curent la exec'); return
   }
@@ -876,7 +878,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     w.srLinkTrade(pos)  // [SR] leagă cel mai recent semnal de această poziţie
     if (typeof w.aubBBSnapshot === 'function') w.aubBBSnapshot('TRADE_OPEN', { sym: pos.sym, side: pos.side, entry: pos.entry, size: pos.size, lev: pos.lev, score: (typeof BM !== 'undefined' ? BM.entryScore : 0) })
     w.addTradeToJournal({
-      time: w.fmtNow(),
+      time: fmtNow(),
       side, sym: sym.replace('USDT', ''),
       entry, exit: null, pnl: 0, reason: 'AUTO — Score:' + cond.score, lev,
       // [Etapa 4] Journal Context — salvat la OPEN (citit de Etapa 5 doar dacă journalEvent==='CLOSE')
@@ -1388,7 +1390,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     if (getDSLObject()?._attachedIds) getDSLObject()?._attachedIds.delete(String(p.id))  // 4: cleanup dedupe on close
     w.addTradeToJournal({
       id: p.id,  // [FIX v85.1 F4] necesar pentru closedPosIds la restore
-      time: w.fmtNow(),
+      time: fmtNow(),
       side: p.side, sym: p.sym.replace('USDT', ''),
       entry: p.entry, exit: closePrice, pnl,
       reason: 'Emergency Stop', lev: p.lev,
@@ -1667,7 +1669,7 @@ export function execPartialClose(posId: any, pct: any): void {
   if (partialPnl >= 0) { if (!_isLivePartial) TP.demoWins++ } else { if (!_isLivePartial) TP.demoLosses++ }
 
   w.addTradeToJournal({
-    time: w.fmtNow(),
+    time: fmtNow(),
     side: pos.side, sym: pos.sym.replace('USDT', ''),
     entry: pos.entry, exit: symPrice,
     pnl: partialPnl, reason: `\u25D1 PARTIAL ${pct}%`, lev: pos.lev,

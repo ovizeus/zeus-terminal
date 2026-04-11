@@ -5,6 +5,7 @@
  */
 
 import { getPerf, getJournal } from '../services/stateAccessors'
+import { _safeLocalStorageSet } from '../services/storage'
 
 const w = window as Record<string, any> // kept for WRITES only
 
@@ -18,7 +19,7 @@ export function savePerfToStorage(): void {
       const p = w.PERF[k]
       payload[k] = { wins: p.wins, losses: p.losses, weight: p.weight, pnlSum: p.pnlSum || 0, feeSum: p.feeSum || 0, winPnl: p.winPnl || 0, lossPnl: p.lossPnl || 0 }
     })
-    if (typeof w._safeLocalStorageSet === 'function') w._safeLocalStorageSet(_PERF_STORAGE_KEY, payload)
+    _safeLocalStorageSet(_PERF_STORAGE_KEY, payload)
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('perfStats')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
   } catch (e: any) { console.warn('[perfStore] save failed:', e.message) }

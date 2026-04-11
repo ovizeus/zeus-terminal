@@ -5,6 +5,7 @@
 'use strict'
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
+import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
 
 const w = window as any // kept for w.el, w._ZI, function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
@@ -152,7 +153,7 @@ export function updateBrainState(): void {
     ticker = `KILL SWITCH ACTIV — BLOCAT. Asteapt reset 30s...`
   } else {
     state = 'scanning'
-    ticker = `SCANEZ... RSI:${(getRSI('5m') || 0).toFixed(0)} | FR:${getFR() !== null ? ((getFR() || 0) * 100).toFixed(3) + '%' : '—'} | REGIM:${BR.regime.toUpperCase()} | MAGNET:${(getMagnetBias() || 'neut').toUpperCase()} | ${w.fmtNow(true)}`
+    ticker = `SCANEZ... RSI:${(getRSI('5m') || 0).toFixed(0)} | FR:${getFR() !== null ? ((getFR() || 0) * 100).toFixed(3) + '%' : '—'} | REGIM:${BR.regime.toUpperCase()} | MAGNET:${(getMagnetBias() || 'neut').toUpperCase()} | ${fmtNow(true)}`
   }
 
   // [PATCH BRAIN-AT-IDLE] No READY/decision state when AT is OFF
@@ -195,7 +196,7 @@ export function updateBrainState(): void {
 export function brainThink(type: any, msg: any): void {
   const log = w.el('brainThoughtLog')
   if (!log) return
-  const now = w.fmtNow(true)
+  const now = fmtNow(true)
   BR.thoughts.unshift({ time: now, type, msg })
   if (BR.thoughts.length > 5) BR.thoughts.pop()
   log.innerHTML = BR.thoughts.map((t: any, i: number) =>
@@ -535,7 +536,7 @@ export function applyTimezone(tz: any): void {
   tz = tz || w.S.tz || 'Europe/Bucharest'
   w.S.tz = tz
   // Re-apply localization to all charts so crosshair + labels use new TZ
-  const lf = { timeFormatter: (ts: any) => w.fmtTime(ts), dateFormatter: (ts: any) => w.fmtDate(ts) };
+  const lf = { timeFormatter: (ts: any) => fmtTime(ts), dateFormatter: (ts: any) => fmtDate(ts) };
   [w.mainChart, w.cvdChart].forEach((ch: any) => { try { if (ch) ch.applyOptions({ localization: lf }) } catch (_) { } })
   const fmt = {
     timeFormatter: (ts: any) => new Date(ts * 1000).toLocaleTimeString('ro-RO', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false }),

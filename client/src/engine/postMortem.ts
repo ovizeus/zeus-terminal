@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/brain/deepdive.js lines 6-396 (Phase 5B1)
 // PM (Post-Mortem) — pattern matcher + visual panel
 
+import { _safeLocalStorageSet } from '../services/storage'
+
 const w = window as any
 
 // ── PM Module (IIFE → object) ───────────────────────────────────
@@ -16,7 +18,7 @@ function _load(): any[] {
 }
 
 function _save(records: any[]): void {
-  try { if (typeof w._safeLocalStorageSet === 'function') w._safeLocalStorageSet(KEY, records.slice(0, MAX_REC)) }
+  try { _safeLocalStorageSet(KEY, records.slice(0, MAX_REC)) }
   catch (_) { }
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('postmortem')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()

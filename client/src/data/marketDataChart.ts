@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/data/marketData.js lines 111-312 (Chunk B)
 // Chart init, fetchKlines, renderChart
 
+import { fmtTime, fmtDate } from './marketDataHelpers'
+
 const w = window as any
 
 // ===== CHART INIT =====
@@ -14,7 +16,7 @@ export function getChartW(): number {
 
 export function initCharts(): void {
   const W = getChartW()
-  const locFmt = { timeFormatter: (ts: any) => w.fmtTime(ts), dateFormatter: (ts: any) => w.fmtDate(ts) }
+  const locFmt = { timeFormatter: (ts: any) => fmtTime(ts), dateFormatter: (ts: any) => fmtDate(ts) }
   const base = (h: number) => ({
     width: W, height: h,
     layout: { background: { color: '#0a0f16' }, textColor: '#7a9ab8' },

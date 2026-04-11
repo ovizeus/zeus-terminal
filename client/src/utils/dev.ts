@@ -4,6 +4,7 @@
  */
 
 import { getBrainMetrics } from '../services/stateAccessors'
+import { fmtNow } from '../data/marketDataHelpers'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, w.toast, fn calls
 
 export const DEV: Record<string, any> = {
@@ -21,7 +22,7 @@ w.DEV = DEV
 export function devLog(msg: string, type?: string): void {
   try {
     type = type || 'info'
-    const time = (typeof w.fmtNow === 'function') ? w.fmtNow(true) : new Date().toLocaleTimeString()
+    const time = fmtNow(true)
     DEV.log.unshift({ time, msg, type })
     if (DEV.log.length > DEV.maxLog) DEV.log.pop()
     _devRenderLog()

@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/trading/liveApi.js (Phase 6B)
 // Live exchange API proxy functions
 
+import { fmtNow } from '../data/marketDataHelpers'
+
 const w = window as any
 
 const _LIVE_API_BASE = ''  // Same origin
@@ -179,7 +181,7 @@ export async function liveApiSyncState(): Promise<any> {
           var _exitPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(gone) : 0
           if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
           var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
-          w.addTradeToJournal({ id: gone.id, time: (typeof w.fmtNow === 'function' ? w.fmtNow() : new Date().toISOString()), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
+          w.addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
         }
       }
     })

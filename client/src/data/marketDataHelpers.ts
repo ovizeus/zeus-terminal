@@ -12,6 +12,8 @@
 // NOT included (already ported):
 //   - _escHtml → identical to escHtml in utils/dom.ts (Phase 1)
 
+import { _TZ } from '../utils/format'
+
 const w = window as any
 
 // ═══ DYNAMIC TIME HELPERS — use S.tz (changeable from UI) ═══════
@@ -20,22 +22,22 @@ const w = window as any
 export function fmtTime(ts: any): string {
   if (!ts) return '\u2014'
   const ms = ts > 1e10 ? ts : ts * 1000
-  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || w._TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms))
+  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || _TZ, hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms))
 }
 export function fmtTimeSec(ts: any): string {
   if (!ts) return '\u2014'
   const ms = ts > 1e10 ? ts : ts * 1000
-  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || w._TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ms))
+  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || _TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(ms))
 }
 export function fmtDate(ts: any): string {
   if (!ts) return '\u2014'
   const ms = ts > 1e10 ? ts : ts * 1000
-  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || w._TZ, day: '2-digit', month: 'short', year: '2-digit' }).format(new Date(ms))
+  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || _TZ, day: '2-digit', month: 'short', year: '2-digit' }).format(new Date(ms))
 }
 export function fmtFull(ts: any): string {
   if (!ts) return '\u2014'
   const ms = ts > 1e10 ? ts : ts * 1000
-  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || w._TZ, day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms))
+  return new Intl.DateTimeFormat('ro-RO', { timeZone: (typeof w.S !== 'undefined' && w.S?.tz) || _TZ, day: '2-digit', month: 'short', year: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms))
 }
 export function fmtNow(sec?: any): string {
   return sec ? fmtTimeSec(Date.now()) : fmtTime(Date.now())

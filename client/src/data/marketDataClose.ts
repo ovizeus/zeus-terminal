@@ -3,6 +3,7 @@
 // closeDemoPos — the most critical function in the trading engine
 
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+import { fmtNow } from './marketDataHelpers'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, w.el, w.toast, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -64,7 +65,7 @@ export function closeDemoPos(id: any, reason?: string): void {
   // Journal
   w.addTradeToJournal({
     id: pos.id,
-    time: w.fmtNow(),
+    time: fmtNow(),
     side: pos.side, sym: pos.sym.replace('USDT', ''),
     entry: pos.entry, exit: curPrice,
     pnl, reason: reason || 'Manual', lev: pos.lev,

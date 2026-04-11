@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/brain/forecast.js (Phase 5A)
 // Quantum Exit Brain, scenario engine, probability score
 
+import { fmtNow } from '../data/marketDataHelpers'
+
 const w = window as any
 
 // QEB swing pivots
@@ -640,7 +642,7 @@ export function updateScenarioUI(): void {
       + '<div class="sc-text">' + sc.failure + '</div>'
       + '</div>'
 
-    if (upd) upd.textContent = 'updated ' + (typeof w.fmtNow === 'function' ? w.fmtNow() : '')
+    if (upd) upd.textContent = 'updated ' + fmtNow()
   } catch (e: any) {
     console.warn('[QEB] updateScenarioUI error:', e.message)
   }

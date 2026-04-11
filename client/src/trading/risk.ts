@@ -2,6 +2,10 @@
 // Ported 1:1 from public/js/trading/risk.js (Phase 6B)
 // Macro cortex, adaptive parameters, performance tracking
 
+import { fmtNow } from '../data/marketDataHelpers'
+import { _clamp } from '../utils/math'
+import { _safeLocalStorageSet } from '../services/storage'
+
 const w = window as any
 
 // Macro cortex computation
@@ -12,7 +16,7 @@ export function computeMacroCortex(): void {
 
     // Regime component (0..40)
     var reg = (typeof w.BRAIN !== 'undefined') ? (w.BRAIN.regime || 'unknown') : 'unknown'
-    var regConf = w._clamp((typeof w.BRAIN !== 'undefined' ? (w.BRAIN.regimeConfidence || 0) : 0), 0, 100) / 100
+    var regConf = _clamp((typeof w.BRAIN !== 'undefined' ? (w.BRAIN.regimeConfidence || 0) : 0), 0, 100) / 100
     var regScore: any = 20
     if (reg.includes('trend')) regScore = 30
     if (reg.includes('breakout')) regScore = 34
@@ -21,8 +25,8 @@ export function computeMacroCortex(): void {
     regScore *= (0.6 + 0.4 * regConf)
 
     // Volatility penalty via ATR% (0..25)
-    var atrPct = w._clamp((typeof w.BRAIN !== 'undefined' ? (w.BRAIN.regimeAtrPct || 0) : 0) * 100, 0, 8)
-    var volScore = w._clamp(25 - atrPct * 3, 0, 25)
+    var atrPct = _clamp((typeof w.BRAIN !== 'undefined' ? (w.BRAIN.regimeAtrPct || 0) : 0) * 100, 0, 8)
+    var volScore = _clamp(25 - atrPct * 3, 0, 25)
 
     // Flow score from OFI (0..20)
     var flowScore = 10
@@ -39,20 +43,20 @@ export function computeMacroCortex(): void {
       var fgEl = document.getElementById('fgval')
       var fgRaw = fgEl ? parseInt(fgEl.textContent!) : NaN
       if (!isNaN(fgRaw) && fgRaw >= 0 && fgRaw <= 100) {
-        sentScore = w._clamp(Math.round((fgRaw / 100) * 15), 0, 15)
+        sentScore = _clamp(Math.round((fgRaw / 100) * 15), 0, 15)
       }
     } catch (_) { }
 
-    var composite = w._clamp(Math.round(regScore + volScore + flowScore + sentScore), 0, 100)
-    var slope = w._clamp((composite - prev) / 25, -1, 1)
+    var composite = _clamp(Math.round(regScore + volScore + flowScore + sentScore), 0, 100)
+    var slope = _clamp((composite - prev) / 25, -1, 1)
 
     w.BM.macro.cycleScore = composite
-    w.BM.macro.flowScore = w._clamp(Math.round(flowScore * 5), 0, 100)
-    w.BM.macro.sentimentScore = w._clamp(Math.round(sentScore * 6.6), 0, 100)
+    w.BM.macro.flowScore = _clamp(Math.round(flowScore * 5), 0, 100)
+    w.BM.macro.sentimentScore = _clamp(Math.round(sentScore * 6.6), 0, 100)
     w.BM.macro.composite = composite
     w.BM.macro.slope = parseFloat(slope.toFixed(3))
     w.BM.macro.phase = _macroPhaseFromComposite(composite)
-    w.BM.macro.confidence = w._clamp(Math.round(30 + (typeof w.BRAIN !== 'undefined' ? (w.BRAIN.regimeConfidence || 0) : 0) * 0.7), 0, 100)
+    w.BM.macro.confidence = _clamp(Math.round(30 + (typeof w.BRAIN !== 'undefined' ? (w.BRAIN.regimeConfidence || 0) : 0) * 0.7), 0, 100)
     w.BM.macro.lastUpdate = now
 
     // Update adapt.lastPhase if changed
@@ -127,7 +131,7 @@ export function updateMacroUI(): void {
     }
 
     var upd = document.getElementById('macro-upd')
-    if (upd && m.lastUpdate) upd.textContent = 'updated ' + (typeof w.fmtNow === 'function' ? w.fmtNow() : '')
+    if (upd && m.lastUpdate) upd.textContent = 'updated ' + fmtNow()
 
   } catch (e) { /* silent */ }
 }
@@ -175,7 +179,7 @@ export function _adaptSave(): void {
       exitMult: w.BM.adaptive.exitMult,
       buckets: w.BM.adaptive.buckets,
     }
-    w._safeLocalStorageSet('zeus_adaptive_v1', payload)
+    _safeLocalStorageSet('zeus_adaptive_v1', payload)
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('adaptive')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
   } catch (_) { }
@@ -429,7 +433,7 @@ export function macroAdjustExitRisk(risk: any): any {
     if (!w.BM.adapt || !w.BM.adapt.enabled) return risk
     var ph = (w.BM.macro && w.BM.macro.phase) ? w.BM.macro.phase : 'NEUTRAL'
     var m = w.MACRO_MULT[ph] || w.MACRO_MULT.NEUTRAL
-    return w._clamp(Math.round(risk * (m.exitRisk || 1)), 0, 100)
+    return _clamp(Math.round(risk * (m.exitRisk || 1)), 0, 100)
   } catch (e) { return risk }
 }
 
@@ -441,9 +445,9 @@ export function computePositionSizingMult(): void {
     var pm = (w.BM.performance && w.BM.performance.byRegime && w.BM.performance.byRegime[ph])
       ? (w.BM.performance.byRegime[ph].mult || 1.0)
       : 1.0
-    w.BM.positionSizing.regimeMult = w._clamp(rm, 0.5, 1.5)
-    w.BM.positionSizing.perfMult = w._clamp(pm, 0.7, 1.3)
-    w.BM.positionSizing.finalMult = w._clamp(
+    w.BM.positionSizing.regimeMult = _clamp(rm, 0.5, 1.5)
+    w.BM.positionSizing.perfMult = _clamp(pm, 0.7, 1.3)
+    w.BM.positionSizing.finalMult = _clamp(
       w.BM.positionSizing.baseRiskPct * w.BM.positionSizing.regimeMult * w.BM.positionSizing.perfMult,
       0.5, 1.6
     )
@@ -463,8 +467,8 @@ export function perfRecordTrade(ph: any, R: any): void {
     var winrate = m.wins / m.trades
     var mult = 1.0
       + (winrate - 0.5) * 0.30
-      + w._clamp(m.avgR, -1, 1) * 0.10
-    m.mult = w._clamp(parseFloat(mult.toFixed(3)), 0.80, 1.20)
+      + _clamp(m.avgR, -1, 1) * 0.10
+    m.mult = _clamp(parseFloat(mult.toFixed(3)), 0.80, 1.20)
     computePositionSizingMult()
   } catch (e) { }
 }

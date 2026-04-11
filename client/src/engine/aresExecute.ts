@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/brain/deepdive.js lines 1467-1653 (Phase 5B2)
 // ARES LIVE EXECUTION — Connects decision engine → live orders
 
+import { safeLastKline } from '../utils/dom'
+
 const w = window as any
 
 export async function ARES_EXECUTE(decision: any): Promise<any> {
@@ -13,7 +15,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
   const bal = wallet.balance, avail = wallet.available, confidence = decision.confidence
 
   let markPrice = 0
-  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof w.safeLastKline === 'function') ? w.safeLastKline() : null; if (_lk) markPrice = _lk.close } } catch (_) { }
+  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = _lk.close } } catch (_) { }
   if (!markPrice || markPrice <= 0) { console.warn('[ARES_EXECUTE] No mark price'); return null }
 
   const openCount = positions.getOpen().length

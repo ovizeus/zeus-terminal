@@ -3,6 +3,8 @@
 // ARES 1.0 — Adaptive Reinforcement Engine for Strategic growth
 // + ARES_openPosition (DEBUG-ONLY)
 
+import { safeLastKline } from '../utils/dom'
+
 const w = window as any
 
 const TARGET = 1_000_000
@@ -358,7 +360,7 @@ function tick() {
     try {
       let markPrice = 0
       if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price
-      else { const _lk = (typeof w.safeLastKline === 'function') ? w.safeLastKline() : null; if (_lk) markPrice = _lk.close }
+      else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = _lk.close }
       if (markPrice > 0) ARES_POSITIONS.updatePrices(markPrice)
     } catch (_) { }
 
@@ -445,7 +447,7 @@ export function ARES_openPosition(opts: any): any {
   if (!wallet || !positions) return null
   try { if (typeof w.AT !== 'undefined' && (w.AT.killTriggered || w.AT.killSwitch)) { console.warn('[ARES] Kill-switch active \u2014 blocking open'); return null } } catch (_) { }
   let markPrice = 0
-  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof w.safeLastKline === 'function') ? w.safeLastKline() : null; if (_lk) markPrice = _lk.close } } catch (_) { }
+  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = _lk.close } } catch (_) { }
   if (!markPrice || markPrice <= 0) { console.warn('[ARES] No mark price \u2014 blocking open'); return null }
   const confidence = Math.min(100, Math.max(0, opts.confidence || 50))
   const bal = wallet.balance, avail = wallet.available, openCount = positions.getOpen().length

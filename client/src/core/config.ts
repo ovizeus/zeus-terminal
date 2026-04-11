@@ -5,6 +5,7 @@
  */
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
+import { _safeLocalStorageSet } from '../services/storage'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -225,7 +226,7 @@ export function _srRenderList() {
 }
 
 export function _srSave() {
-  w._safeLocalStorageSet('zeus_signal_registry', {
+  _safeLocalStorageSet('zeus_signal_registry', {
     signals: SIGNAL_REGISTRY.signals.slice(0, 100),
     stats: SIGNAL_REGISTRY.stats,
   })
@@ -392,7 +393,7 @@ export function ncClear() {
 }
 
 function _ncSave() {
-  w._safeLocalStorageSet('zeus_notifications', {
+  _safeLocalStorageSet('zeus_notifications', {
     items: NOTIFICATION_CENTER.items.slice(0, 100),
   })
   w._ucMarkDirty('notifications')
@@ -417,7 +418,7 @@ export function _ctxSave() {
     try {
       const S = w.S
       const AT = getATObject()
-      w._safeLocalStorageSet('zeus_ui_context', {
+      _safeLocalStorageSet('zeus_ui_context', {
         _v: 1,
         ts: Date.now(),
         soundOn: typeof S !== 'undefined' ? !!S.soundOn : false,

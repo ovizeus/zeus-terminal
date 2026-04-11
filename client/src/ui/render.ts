@@ -2,7 +2,8 @@
 // Chart and main rendering functions
 // Ported 1:1 from public/js/ui/render.js
 import { getKlines, getTimezone, getSymbol, getPrice, getFR, getFG, getOI, getLS, getTPObject, getBrainObject, getBrainMetrics, getTCMaxPos } from '../services/stateAccessors'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.fP, w.fmt, w.fmtNow, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
+import { fmtNow } from '../data/marketDataHelpers'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.fP, w.fmt, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -98,7 +99,7 @@ export function renderPerfTracker() {
     <div class="perf-exp" style="color:${gExpColor};font-weight:700">E: $${gExp.toFixed(2)}</div>
     <div class="perf-net"></div><div class="perf-fees"></div>
   </div>`;
-  { const _oe = w.el('perfUpdTime'); if (_oe) _oe.textContent = `Upd ${w.fmtNow()}`; }
+  { const _oe = w.el('perfUpdTime'); if (_oe) _oe.textContent = `Upd ${fmtNow()}`; }
 }
 
 // Hook into existing closeDemoPos to record performance

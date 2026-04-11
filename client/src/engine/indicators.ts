@@ -3,6 +3,8 @@
 // Live API stubs, PWA, Indicator panel, Overlay/Oscillator indicators,
 // Signal scanner, Deep Dive narrative generator
 
+import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
+
 const w = window as any
 
 // ═══════════════════════════════════════════════════════════════
@@ -423,7 +425,7 @@ function _createSubChart(containerId: string, height?: number): any {
     handleScroll: { mouseWheel: true, pressedMouseMove: true },
     handleScale: { mouseWheel: true, pinch: true },
   })
-  chart.applyOptions({ localization: { timeFormatter: (ts: number) => typeof w.fmtTime === 'function' ? w.fmtTime(ts) : '', dateFormatter: (ts: number) => typeof w.fmtDate === 'function' ? w.fmtDate(ts) : '' } })
+  chart.applyOptions({ localization: { timeFormatter: (ts: number) => fmtTime(ts), dateFormatter: (ts: number) => fmtDate(ts) } })
   if (w.mainChart) {
     try {
       const tr = w.mainChart.timeScale().getVisibleLogicalRange()
@@ -697,7 +699,7 @@ export function initMACDChart(): void {
     handleScroll: { mouseWheel: true, pressedMouseMove: true },
     handleScale: { mouseWheel: true, pinch: true },
   })
-  w._macdChart.applyOptions({ localization: { timeFormatter: (ts: number) => w.fmtTime(ts), dateFormatter: (ts: number) => w.fmtDate(ts) } })
+  w._macdChart.applyOptions({ localization: { timeFormatter: (ts: number) => fmtTime(ts), dateFormatter: (ts: number) => fmtDate(ts) } })
   w._macdChart.timeScale().applyOptions({ visible: false, rightOffset: 12 })
   w._macdChart.applyOptions({ rightPriceScale: { visible: true, borderColor: '#1e2530', width: 70 } })
   w._macdLineSeries = w._macdChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'MACD' })
@@ -1012,7 +1014,7 @@ export function updateDeepDive(): void {
       const el_t = document.getElementById('deepdive-upd')
       if (!el_c) return
       el_c.innerHTML = generateDeepDive()
-      if (el_t) el_t.textContent = 'updated ' + (typeof w.fmtNow === 'function' ? w.fmtNow() : '')
+      if (el_t) el_t.textContent = 'updated ' + fmtNow()
     } catch (err) {
       console.warn('[DeepDive] updateDeepDive error:', err)
     }

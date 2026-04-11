@@ -4,6 +4,7 @@
 // modals, alerts, cloud, chart settings, sound
 
 import { getTPObject, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
+import { fmtTime } from './marketDataHelpers'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, w.el, w._ZI, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -294,7 +295,7 @@ export function updateMainMetrics(): void {
   const fr = w.el('frv'), frs_el = w.el('frs'), oi = w.el('oiv'), ois_el = w.el('ois'), atr = w.el('atrv'), ls = w.el('lsv'), lss_el = w.el('lss')
   if (fr) fr.textContent = w.S.fr !== null && w.S.fr !== undefined ? (w.S.fr * 100).toFixed(4) + '%' : '\u2014'
   if (fr) fr.style.color = w.S.fr > 0 ? 'var(--red)' : w.S.fr < 0 ? 'var(--grn)' : 'var(--dim)'
-  if (frs_el) { if (w.S.frCd) { const d = new Date(w.S.frCd); frs_el.textContent = 'next: ' + w.fmtTime(d.getTime()) } else frs_el.textContent = 'next: \u2014' }
+  if (frs_el) { if (w.S.frCd) { const d = new Date(w.S.frCd); frs_el.textContent = 'next: ' + fmtTime(d.getTime()) } else frs_el.textContent = 'next: \u2014' }
   if (oi) oi.textContent = w.S.oi ? '$' + w.fmt(w.S.oi) : '\u2014'
   if (ois_el) { if (w.S.oiPrev && w.S.oi) { const ch = ((w.S.oi - w.S.oiPrev) / w.S.oiPrev * 100).toFixed(2); ois_el.textContent = (+ch > 0 ? '\u25B2' : +ch < 0 ? '\u25BC' : '') + ch + '%'; ois_el.style.color = +ch > 0 ? 'var(--grn)' : 'var(--red)' } else ois_el.textContent = '\u2014' }
   if (atr) atr.textContent = w.S.atr ? '$' + w.fP(w.S.atr) : '\u2014'

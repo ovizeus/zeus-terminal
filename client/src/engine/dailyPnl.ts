@@ -4,6 +4,7 @@
  */
 
 import { getTimezone, getJournal } from '../services/stateAccessors'
+import { _safeLocalStorageSet } from '../services/storage'
 
 const w = window as Record<string, any> // kept for WRITES (w.DAILY_STATS)
 const _DAILY_PNL_KEY = 'zeus_daily_pnl_v1'
@@ -109,7 +110,7 @@ export function saveDailyPnl(): void {
   try {
     if (!w.DAILY_STATS) return
     const payload = { days: w.DAILY_STATS.days, peak: w.DAILY_STATS.peak, currentDD: w.DAILY_STATS.currentDD, maxDD: w.DAILY_STATS.maxDD, cumPnl: w.DAILY_STATS.cumPnl }
-    if (typeof w._safeLocalStorageSet === 'function') w._safeLocalStorageSet(_DAILY_PNL_KEY, payload)
+    _safeLocalStorageSet(_DAILY_PNL_KEY, payload)
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('dailyPnl')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
   } catch (e: any) { console.warn('[dailyPnl] save failed:', e.message) }

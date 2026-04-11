@@ -5,6 +5,8 @@
  */
 
 import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+import { isValidMarketPrice } from '../utils/dom'
+import { _safeLocalStorageSet } from '../services/storage'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -288,7 +290,7 @@ export function buildExecSnapshot(side: any, cond: any) {
   const pS = (S && isFinite(S.price)) ? +S.price : NaN
   const price = isFinite(pCore) ? pCore : (isFinite(pS) ? pS : NaN)
 
-  if (!w.isValidMarketPrice(price)) {
+  if (!isValidMarketPrice(price)) {
     console.error('[buildExecSnapshot] REJECTED — invalid price:', price, '| CORE:', w.CORE_STATE?.price, '| S:', S?.price)
     return null
   }
@@ -455,7 +457,7 @@ export const ZState = (() => {
     try {
       const data = _serialize()
       console.log('[ZState] SAVE — pos:', (data.positions || []).length, 'bal:', data.demoBalance, 'ts:', data.ts, 'v:', data.v)
-      if (typeof w._safeLocalStorageSet === 'function') w._safeLocalStorageSet(KEY, data)
+      if (typeof _safeLocalStorageSet === 'function') _safeLocalStorageSet(KEY, data)
       else try { localStorage.setItem(KEY, JSON.stringify(data)) } catch (_) { }
     }
     catch (e: any) { console.warn('[ZState] save failed:', e.message) }
@@ -1244,7 +1246,7 @@ export let zsSeries: any[] = []
 export function _indSettingsSave() {
   try {
     const data = JSON.stringify(IND_SETTINGS)
-    if (typeof w._safeLocalStorageSet === 'function') w._safeLocalStorageSet('zeus_ind_settings', data)
+    if (typeof _safeLocalStorageSet === 'function') _safeLocalStorageSet('zeus_ind_settings', data)
     else localStorage.setItem('zeus_ind_settings', data)
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('indSettings')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()

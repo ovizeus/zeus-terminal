@@ -3,6 +3,7 @@
 // TF picker, fullscreen, price display, API fetches, metrics, RSI display, SR table
 
 import { getTPObject } from '../services/stateAccessors'
+import { fmtTime, fmtDate } from './marketDataHelpers'
 const w = window as any // kept for w.S (producer), w.el, w.fP, w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -18,7 +19,7 @@ export function setTF(tf: any, btn: any): void {
   w.FetchLock.release('klines')
   if (typeof w.fetchKlines === 'function') w.fetchKlines(tf)
   setTimeout(() => {
-    const lf = { timeFormatter: (ts: any) => w.fmtTime(ts), dateFormatter: (ts: any) => w.fmtDate(ts) }
+    const lf = { timeFormatter: (ts: any) => fmtTime(ts), dateFormatter: (ts: any) => fmtDate(ts) }
     ;[w.mainChart, w.cvdChart].forEach((ch: any) => { try { if (ch) ch.applyOptions({ localization: lf }) } catch (_) { } })
   }, 200)
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave()

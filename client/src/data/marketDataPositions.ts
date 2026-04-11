@@ -3,6 +3,7 @@
 // Pending orders, SL/TP edit, render positions, closeLivePos
 
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+import { fmtNow } from './marketDataHelpers'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, w.el, w._ZI, w.toast, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -61,7 +62,7 @@ function _fillDemoPendingOrder(ord: any): void {
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
   if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
   w.toast('LIMIT FILLED: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + w.fP(ord.limitPrice))
-  w.addTradeToJournal({ id: pos.id, time: (typeof w.fmtNow === 'function' ? w.fmtNow() : new Date().toISOString()), side: pos.side, sym: pos.sym.replace('USDT', ''), entry: pos.entry, exit: null, pnl: 0, reason: 'LIMIT Fill', lev: pos.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'demo', openTs: pos.openTs, createdAt: ord.createdAt, filledAt: pos.filledAt })
+  w.addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: pos.sym.replace('USDT', ''), entry: pos.entry, exit: null, pnl: 0, reason: 'LIMIT Fill', lev: pos.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'demo', openTs: pos.openTs, createdAt: ord.createdAt, filledAt: pos.filledAt })
 }
 
 export function cancelPendingOrder(id: any): void {
@@ -125,7 +126,7 @@ function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
     w.toast('LIVE LIMIT FILLED: ' + ord.side + ' @$' + w.fP(ord.limitPrice))
     if (ord.tp && typeof w.manualLiveSetTP === 'function') { const _qty = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); w.manualLiveSetTP({ symbol: ord.sym, side: ord.side, quantity: _qty.toFixed(8), stopPrice: ord.tp }).catch(function (e: any) { w.toast('TP failed: ' + (e.message || e)) }) }
     if (ord.sl && typeof w.manualLiveSetSL === 'function') { const _qty2 = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); w.manualLiveSetSL({ symbol: ord.sym, side: ord.side, quantity: _qty2.toFixed(8), stopPrice: ord.sl }).catch(function (e: any) { w.toast('SL failed: ' + (e.message || e)) }) }
-    w.addTradeToJournal({ id: ord.id, time: (typeof w.fmtNow === 'function' ? w.fmtNow() : new Date().toISOString()), side: ord.side, sym: (ord.sym || '').replace('USDT', ''), entry: ord.limitPrice, exit: null, pnl: 0, reason: 'LIVE LIMIT Fill', lev: ord.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'live', isLive: true, openTs: Date.now(), createdAt: ord.createdAt, filledAt: Date.now() })
+    w.addTradeToJournal({ id: ord.id, time: fmtNow(), side: ord.side, sym: (ord.sym || '').replace('USDT', ''), entry: ord.limitPrice, exit: null, pnl: 0, reason: 'LIVE LIMIT Fill', lev: ord.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'live', isLive: true, openTs: Date.now(), createdAt: ord.createdAt, filledAt: Date.now() })
   })
   if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 500)
   renderPendingOrders(); w.ZState.save()
@@ -269,7 +270,7 @@ export function closeLivePos(id: any, reason?: string): void {
       pos.closed = true; pos.status = 'closed'
       const fillPrice = (res && parseFloat(res.avgPrice)) || cur; const fillPnl = calcPosPnL(pos, fillPrice); pos.pnl = fillPnl
       const finalIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1)
-      if (typeof w.addTradeToJournal === 'function') w.addTradeToJournal({ id: pos.id, time: w.fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
+      if (typeof w.addTradeToJournal === 'function') w.addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
       if (typeof DSL !== 'undefined') { delete DSL.positions[String(pos.id)]; if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id)) }
       w.atLog('info', '[LIVE] CLOSE CONFIRMED: ' + pos.sym + ' fillPrice=' + fillPrice)
       renderLivePositions()

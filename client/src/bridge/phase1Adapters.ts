@@ -146,18 +146,11 @@ export function installPhase1Adapters(): void {
   // ── Phase 1: helpers.js ──
   w.el = el
   w.escHtml = escHtml
-  w.isValidMarketPrice = isValidMarketPrice
-  w.safeLastKline = safeLastKline
 
   // ── Phase 1: formatters.js ──
   w.fmt = fmt
   w.fP = fP
-  w.fmtTime = fmtTime
-  w.fmtDate = fmtDate
-  w._TZ = _TZ
 
-  // ── Phase 1: math.js ──
-  w._clamp = _clamp
 
   // ── Phase 1: icons.js ──
   w._ZI = _ZI
@@ -181,7 +174,6 @@ export function installPhase1Adapters(): void {
   w.TabLeader = TabLeader
 
   // ── Phase 3: storage.js ──
-  w._safeLocalStorageSet = _safeLocalStorageSet
   w.addTradeToJournal = addTradeToJournal
   w.renderTradeJournal = renderTradeJournal
   w.loadJournalFromStorage = loadJournalFromStorage
@@ -342,9 +334,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-A: marketData helpers ──
   // Dynamic timezone versions REPLACE the static ones from format.ts
   // Old JS and ported TS modules consume these via window.*
-  w.fmtTime = _dynFmtTime
-  w.fmtDate = _dynFmtDate
-  w.fmtNow = fmtNow
   w.toast = toast
   w._calcATRSeries = _calcATRSeries
   w.calcRSI = calcRSI

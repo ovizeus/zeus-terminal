@@ -3,6 +3,7 @@
 // startApp() — THE core boot sequence
 
 import { getATObject, getTPObject, getBrainMetrics, getATR, getKlines } from '../services/stateAccessors'
+import { _safeLocalStorageSet } from '../services/storage'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, w.el, w._ZI, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -149,7 +150,7 @@ export async function startApp(): Promise<void> {
     w.ZState.pullJournalFromServer().then(function (srvJournal: any) {
       if (!srvJournal || !srvJournal.length) return
       if (!TP.journal || TP.journal.length === 0) { TP.journal = srvJournal; if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Journal pulled:', srvJournal.length) }
-      else { const localIds = new Set(TP.journal.map(function (j: any) { return j.id }).filter(Boolean).map(String)); let added = 0; srvJournal.forEach(function (j: any) { if (j.id && !localIds.has(String(j.id))) { TP.journal.push(j); added++ } }); if (added > 0) { TP.journal.sort(function (a: any, b: any) { return (b.id || 0) - (a.id || 0) }); if (TP.journal.length > 200) TP.journal.length = 200; w._safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50)); if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Merged', added, 'journal entries') } }
+      else { const localIds = new Set(TP.journal.map(function (j: any) { return j.id }).filter(Boolean).map(String)); let added = 0; srvJournal.forEach(function (j: any) { if (j.id && !localIds.has(String(j.id))) { TP.journal.push(j); added++ } }); if (added > 0) { TP.journal.sort(function (a: any, b: any) { return (b.id || 0) - (a.id || 0) }); if (TP.journal.length > 200) TP.journal.length = 200; _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50)); if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Merged', added, 'journal entries') } }
     }).catch(function (err: any) { console.warn('[sync] Journal pull failed:', err?.message || err) })
 
     w.Intervals.set('stateSave', function () { w.ZState.saveLocal() }, 30000)
