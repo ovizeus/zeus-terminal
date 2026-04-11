@@ -15,7 +15,7 @@ import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, runS
 import { initARES, initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
-import { initCloudSettings, connectBNB } from '../data/marketDataWS'
+import { initCloudSettings, connectBNB, connectBYB } from '../data/marketDataWS'
 import { initPMPanel, _pmCheckRegimeTransition } from '../engine/postMortem'
 import { loadSavedAPI } from '../engine/indicators'
 import { rebuildDailyFromJournal, loadDailyPnl } from '../engine/dailyPnl'
@@ -190,7 +190,7 @@ export async function startApp(): Promise<void> {
     w.Intervals.set('syncPull', function () { if (typeof w.ZState.pullAndMerge === 'function') w.ZState.pullAndMerge(); if (typeof w._userCtxPull === 'function') w._userCtxPull() }, 10000)
 
     console.log('[startApp] phase 3: connecting WebSockets | __wsGen=', w.__wsGen)
-    connectBNB(); w.connectBYB()
+    connectBNB(); connectBYB()
     if (typeof connectWatchlist === 'function') connectWatchlist()
   }, 1500)
 

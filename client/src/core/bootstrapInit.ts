@@ -6,7 +6,7 @@ import { getATObject, getTPObject } from '../services/stateAccessors'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { initModeBar } from '../ui/modebar'
-import { _dslTrimAll } from '../trading/dsl'
+import { _dslTrimAll, startDSLIntervals } from '../trading/dsl'
 import { calcGlobalExpectancy } from '../engine/perfStore'
 import { openPageView } from '../ui/pageview'
 import { DEV } from '../utils/dev'
@@ -78,7 +78,7 @@ export function _waitForFeedThenStartExtras(): void {
 }
 
 export function _startExtras(): void {
-  w.startDSLIntervals()
+  startDSLIntervals()
   w.Intervals.set('dslTrim', _dslTrimAll, 300000)
   setTimeout(w.runMultiSymbolScan, 3000)
   w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)

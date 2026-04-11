@@ -5,6 +5,7 @@
 
 import { aubRefreshAll } from '../engine/aub'
 import { dockClearActive } from './dock'
+import { renderPnlLab } from './panels'
 
 const w = window as any
 
@@ -188,7 +189,7 @@ export function openPageView(dockId: string) {
     if (pnlWrap && !pnlWrap.classList.contains('open')) {
       pnlWrap.classList.add('open')
     }
-    if (typeof w.renderPnlLab === 'function') w.renderPnlLab()
+    if (typeof renderPnlLab === 'function') renderPnlLab()
   }
 
   // ── Post-Mortem ──

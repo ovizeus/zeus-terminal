@@ -9,7 +9,7 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _neuroLastScan, _SESS_DEF, _regimeHistory, PROFILE_TF } from '../core/config'
+import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF } from '../core/config'
 import { calcConfluenceScore } from './confluence'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
@@ -1267,7 +1267,7 @@ export function _getActiveSessions(hUTC: any): any {
   })
   // Determine primary (highest priority in active list)
   let primary: any = null
-  w._SESS_PRIORITY.forEach((s: any) => { if (active.includes(s)) primary = s })
+  _SESS_PRIORITY.forEach((s: any) => { if (active.includes(s)) primary = s })
   return { active, primary }
 }
 

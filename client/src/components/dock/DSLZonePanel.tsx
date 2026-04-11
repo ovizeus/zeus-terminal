@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useDslStore } from '../../stores'
-import { toggleDSL, stopDSLIntervals } from '../../trading/dsl'
+import { toggleDSL, stopDSLIntervals, startDSLIntervals } from '../../trading/dsl'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
 function seededRandom(seed: number) {
@@ -85,7 +85,7 @@ export function DSLZonePanel() {
                 if (!w.S?.dsl) { if (w.S) w.S.dsl = {} }
                 if (w.S?.dsl) w.S.dsl.active = w.DSL.enabled
                 if (!w.DSL.enabled && typeof stopDSLIntervals === 'function') stopDSLIntervals()
-                if (w.DSL.enabled && typeof w.startDSLIntervals === 'function' && !w.DSL.checkInterval) w.startDSLIntervals()
+                if (w.DSL.enabled && typeof startDSLIntervals === 'function' && !w.DSL.checkInterval) startDSLIntervals()
                 if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
                 try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {}
               }

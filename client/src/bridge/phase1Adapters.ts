@@ -198,7 +198,7 @@ export function installPhase1Adapters(): void {
   // SESS_CFG — removed (direct import)
   /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
   /* _regimeHistory — removed (direct import) */ w._fakeout = _fakeout
-  w._SESS_PRIORITY = _SESS_PRIORITY; w._NEURO_SYMS = _NEURO_SYMS
+  w._NEURO_SYMS = _NEURO_SYMS
   // _SESS_DEF — removed (direct import)
   w.ZANIM = ZANIM; w._execQueue = _execQueue
   w._srUpdateStats = _srUpdateStats; w._srRenderStats = _srRenderStats
@@ -207,7 +207,6 @@ export function installPhase1Adapters(): void {
   w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
   w._macdChart = _macdChart; w._macdInited = _macdInited
   w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; w.oviPriceSeries = _cfgOviPriceSeries
-  w._execActive = _execActive
   // state.ts exports
   w.BlockReason = BlockReason; w.ZState = ZState
   w.bbUpperS = bbUpperS; w.ichimokuSeries = ichimokuSeries
@@ -237,7 +236,7 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 8C: bootstrap misc (coexist) ──
   w._pinCheckLock = _pinCheckLock
-  w.pinRemove = pinRemove; w._pinUpdateUI = _pinUpdateUI
+  w._pinUpdateUI = _pinUpdateUI
   // _showWelcomeModal — removed (direct import)
   w.setupPWAReloadBtn = setupPWAReloadBtn
 
@@ -279,26 +278,22 @@ export function installPhase1Adapters(): void {
   w.initCharts = initCharts; w.fetchKlines = fetchKlines; w.renderChart = renderChart
 
   // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
-  w.connectBYB = connectBYB
   // connectBNB — removed (direct import)
   /* updConn — removed (direct import) */ w.procLiq = procLiq
-  w.updLiqSourceMetrics = updLiqSourceMetrics
   w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
-  w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
+  w.setTZ = setTZ
   /* sendAlert — removed (direct import) */ w.registerServiceWorker = _mdRegisterSW
   /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; w.saveAlerts = saveAlerts
   // injectFakeWhale — removed (direct import)
   // cloudClear — removed (direct import)
   // cloudLoad — removed (direct import)
   // cloudSave — removed (direct import)
-  w.applySessionSettings = applySessionSettings
 
   // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
   // setTf — removed (direct import)
   // toggleFS — removed (direct import)
-  w.updatePriceDisplay = updatePriceDisplay
   w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
   w.fetchATR = fetchATR; w.fetchOI = fetchOI; w.fetchLS = fetchLS; w.fetch24h = fetch24h
   /* updateMetrics — removed (direct import) */ w.calcSRTable = calcSRTable
@@ -324,7 +319,6 @@ export function installPhase1Adapters(): void {
   // toggleVWAP — removed (direct import)
   // renderOviLiquid — removed (direct import)
 
-  w.renderPnlLab = renderPnlLab
   // toggleSession — removed (direct import)
   w.renderPerfTracker = renderPerfTracker
   // getCurrentADX — removed (direct import)
@@ -398,7 +392,6 @@ export function installPhase1Adapters(): void {
   w.dslManualParam = dslManualParam
   // renderDSLWidget — removed (direct import)
   // stopDSLIntervals — removed (direct import)
-  w.startDSLIntervals = startDSLIntervals
   // _dslTrimAll — removed (direct import)
 
   // ── Phase 6B: trading/risk.js ──

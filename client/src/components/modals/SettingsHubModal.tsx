@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
-import { pinActivate } from '../../core/bootstrapMisc'
+import { pinActivate, pinRemove } from '../../core/bootstrapMisc'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
 
@@ -185,7 +185,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           </div>
           <div style={{display:'flex',gap:'6px',marginTop:'6px'}}>
             <button className="hub-sbtn pri" id="pinActivateBtn" onClick={() => pinActivate?.()}>ACTIVEAZĂ PIN</button>
-            <button className="hub-sbtn" id="pinRemoveBtn" style={{display:'none',borderColor:'#ff335533',color:'#ff6655'}} onClick={() => w.pinRemove?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> DEZACTIVEAZĂ</button>
+            <button className="hub-sbtn" id="pinRemoveBtn" style={{display:'none',borderColor:'#ff335533',color:'#ff6655'}} onClick={() => pinRemove?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> DEZACTIVEAZĂ</button>
           </div>
           <div id="pin-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>

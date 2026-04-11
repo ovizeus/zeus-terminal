@@ -15,7 +15,7 @@ import { trackOIDelta } from '../services/storage'
 import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
-import { fetchATR } from './marketDataFeeds'
+import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -49,7 +49,7 @@ export function connectBNB(): void {
         if (st.includes('markPrice')) {
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
-            w.updatePriceDisplay(); updateMainMetrics()
+            updatePriceDisplay(); updateMainMetrics()
             if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) w.renderATPositions()
           }
         } else if (st.includes('depth20')) {
