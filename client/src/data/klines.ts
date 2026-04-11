@@ -10,6 +10,8 @@ import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { _getCooldownMs, isArmAssistValid } from '../engine/brain'
 import { macroAdjustEntryScore } from '../trading/risk'
+import { isCurrentTimeOK } from '../ui/render'
+import { placeAutoTrade } from '../trading/autotrade'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
@@ -394,7 +396,7 @@ export function manualEnterFromScan(sym: string, side: string, score: number) {
   if (!price) { toast('Nu am pretul pentru ' + sym); return }
 
   const fakeEntry = { score, bullCount: 3, bearCount: 0, stDir: side === 'LONG' ? 'bull' : 'bear' }
-  w.placeAutoTrade(side, fakeEntry, sym, price)
+  placeAutoTrade(side, fakeEntry, sym, price)
 
   setTimeout(() => runMultiSymbolScan(), 1000)
 }
@@ -453,7 +455,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   // suppress unused
   void _confMinConfl; void _sigMin
 
-  if (!w.isCurrentTimeOK()) {
+  if (!isCurrentTimeOK()) {
     w.atLog('warn', '[TIME] Ora curenta are WR scazut \u2014 nu intru (Day/Hour filter)')
     w.brainThink('bad', _ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna')
     return
@@ -486,7 +488,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
       `[MSCAN] ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} ADX:${opp.adx || '\u2014'} | ${opp.signals}`)
     w.brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 intru!`)
 
-    w.placeAutoTrade(side, { score: opp.score, bullCount: opp.dir === 'bull' ? 3 : 0, bearCount: opp.dir === 'bear' ? 3 : 0, stDir: opp.dir }, opp.sym, price)
+    placeAutoTrade(side, { score: opp.score, bullCount: opp.dir === 'bull' ? 3 : 0, bearCount: opp.dir === 'bear' ? 3 : 0, stDir: opp.dir }, opp.sym, price)
   })
 
   setTimeout(() => renderMscanTable(w.MSCAN.sortedResults || results, 0), 500)

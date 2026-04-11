@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { useBrainStore } from '../../stores'
+import { resetProtectMode } from '../../engine/brain'
 
 /** 1:1 port of the ZEUS NEURAL CORE panel from public/index.html lines 1127-1570 */
 export function BrainCockpit() {
@@ -73,7 +74,7 @@ export function BrainCockpit() {
             <path d="M8 1L2 4v4c0 4 3 7 6 8 3-1 6-4 6-8V4L8 1z" />
           </svg> PROTECT MODE ACTIV
         </span>
-        <button style={{ fontSize: '8px', padding: '3px 9px', background: '#200010', border: '1px solid #ff446644', color: '#ff4466', borderRadius: '2px', cursor: 'pointer', fontFamily: 'inherit' }} onClick={() => (window as any).resetProtectMode?.()}>RESET</button>
+        <button style={{ fontSize: '8px', padding: '3px 9px', background: '#200010', border: '1px solid #ff446644', color: '#ff4466', borderRadius: '2px', cursor: 'pointer', fontFamily: 'inherit' }} onClick={() => resetProtectMode?.()}>RESET</button>
       </div>
 
       {/* BODY */}

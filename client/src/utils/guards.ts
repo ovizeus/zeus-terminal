@@ -397,4 +397,4 @@ export function initSafetyEngine(): void {
   window.addEventListener('online', () => { _exitRecoveryMode() })
   window.addEventListener('offline', () => { _enterRecoveryMode('Network') })
 }
-w.initSafetyEngine = initSafetyEngine
+// initSafetyEngine — exported, consumers import directly

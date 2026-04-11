@@ -3,6 +3,7 @@
 // Error boundary, __ZEUS_INIT__ guard, status bar, app update, DLOG panel, activity feed
 
 import { getATObject, getTPObject } from '../services/stateAccessors'
+import { updateModeBar } from '../ui/modebar'
 const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
 // [8D-4A] mutable refs
 const AT = getATObject()
@@ -71,7 +72,7 @@ function _showUpdateBanner(data: any): void {
       const killEl = document.getElementById('zsbKill'); const killSep = document.getElementById('zsbKillSep'); if (killEl && typeof AT !== 'undefined') { const killActive = !!AT.killTriggered; killEl.style.display = killActive ? '' : 'none'; if (killSep) killSep.style.display = killActive ? '' : 'none'; if (killActive) killEl.innerHTML = '<span class="zsb-dot zsb-warn"></span>KILL ACTIVE' }
       const posEl = document.getElementById('zsbPos'); if (posEl && typeof TP !== 'undefined') { const demoCount = (TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length; const liveCount = (TP.livePositions || []).filter(function (p: any) { return !p.closed }).length; const total = demoCount + liveCount; posEl.textContent = total + ' pos'; posEl.style.color = total > 0 ? 'var(--cyan)' : '#555' }
       const pnlEl = document.getElementById('zsbPnl'); if (pnlEl && typeof AT !== 'undefined') { const pnl = AT.totalPnL || AT.realizedDailyPnL || 0; pnlEl.textContent = '$' + pnl.toFixed(2); pnlEl.style.color = pnl > 0 ? 'var(--grn-bright)' : (pnl < 0 ? 'var(--red-bright)' : '#555') }
-      if (typeof w.updateModeBar === 'function') w.updateModeBar()
+      if (typeof updateModeBar === 'function') updateModeBar()
     } catch (_) { }
   }
   function _startStatusBar() { if (w.__statusBarInterval) clearInterval(w.__statusBarInterval); w.__statusBarInterval = setInterval(_updateStatusBar, 2000); _updateStatusBar() }

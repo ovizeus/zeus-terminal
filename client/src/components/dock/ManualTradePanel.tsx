@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
+import { onDemoLevChange, placeDemoOrder, setLiveSide } from '../../data/marketDataTrading'
 
 const w = window as any
 
@@ -41,8 +42,8 @@ export function ManualTradePanel() {
   // Sync leverage to TP + call onDemoLevChange
   const handleLevChange = useCallback((val: string) => {
     setLev(val)
-    if (typeof w.onDemoLevChange === 'function') {
-      setTimeout(() => w.onDemoLevChange(), 0)
+    if (typeof onDemoLevChange === 'function') {
+      setTimeout(() => onDemoLevChange(), 0)
     }
   }, [])
 
@@ -203,7 +204,7 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { if (typeof w.placeDemoOrder === 'function') w.placeDemoOrder() }}>
+        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
           {(() => {
             const mode = exchangeMode || 'demo'
             const env = resolvedEnv || 'DEMO'
@@ -273,8 +274,8 @@ export function ManualTradePanel() {
         </div>
         <div id="liveOrderForm" style={{ display: 'none' }}>
           <div className="tp-sides">
-            <button className="tp-side-btn long-btn act" id="liveLongBtn" onClick={() => w.setLiveSide?.('LONG')}>LONG ▲</button>
-            <button className="tp-side-btn short-btn" id="liveShortBtn" onClick={() => w.setLiveSide?.('SHORT')}>SHORT ▼</button>
+            <button className="tp-side-btn long-btn act" id="liveLongBtn" onClick={() => setLiveSide?.('LONG')}>LONG ▲</button>
+            <button className="tp-side-btn short-btn" id="liveShortBtn" onClick={() => setLiveSide?.('SHORT')}>SHORT ▼</button>
           </div>
           <div className="tp-row">
             <div className="tp-field">
@@ -325,7 +326,7 @@ export function ManualTradePanel() {
             <button className="tp-pct" onClick={() => w.setLivePct?.(75)}>75%</button>
             <button className="tp-pct" onClick={() => w.setLivePct?.(100)}>100%</button>
           </div>
-          <button className="tp-exec live-exec" onClick={() => w.placeDemoOrder?.()}><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
+          <button className="tp-exec live-exec" onClick={() => placeDemoOrder?.()}><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
           <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
         </div>
       </div>

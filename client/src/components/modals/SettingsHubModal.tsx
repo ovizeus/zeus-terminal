@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate } from '../../core/bootstrapMisc'
-import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults } from '../../utils/dev'
+import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale } from '../../utils/dev'
+import { zeusApplyTheme } from '../../ui/theme'
 
 const w = window as any
 
@@ -145,7 +146,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="msec">APPEARANCE</div>
         <div className="mrow" style={{display:'flex',alignItems:'center',gap:'8px'}}>
           <span className="mlbl" style={{flex:'0 0 70px'}}>Theme</span>
-          <select id="themeSelect" style={{flex:1,background:'var(--sf-input,#0a121a)',border:'1px solid var(--brd)',color:'var(--whi)',padding:'6px 8px',borderRadius:'var(--r-sm)',fontFamily:'var(--ff)',fontSize:'10px'}} defaultValue="native" onChange={(e) => w.zeusApplyTheme?.(e.target.value)}>
+          <select id="themeSelect" style={{flex:1,background:'var(--sf-input,#0a121a)',border:'1px solid var(--brd)',color:'var(--whi)',padding:'6px 8px',borderRadius:'var(--r-sm)',fontFamily:'var(--ff)',fontSize:'10px'}} defaultValue="native" onChange={(e) => zeusApplyTheme?.(e.target.value)}>
             <option value="native">⬛ Obsidian</option>
             <option value="dark">🌑 Onyx</option>
             <option value="light">☀️ Ivory</option>
@@ -153,7 +154,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         </div>
         <div className="msec">UI SCALE</div>
         <div className="mrow"><span className="mlbl">Interface size</span>
-          <select id="hubUiScale" style={{flex:1,maxWidth:'90px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'4px 8px',borderRadius:'2px',fontFamily:'var(--ff)',fontSize:'9px'}} defaultValue="1" onChange={(e) => w.setUiScale?.(e.target.value)}>
+          <select id="hubUiScale" style={{flex:1,maxWidth:'90px',background:'#0a121a',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'4px 8px',borderRadius:'2px',fontFamily:'var(--ff)',fontSize:'9px'}} defaultValue="1" onChange={(e) => setUiScale?.(e.target.value)}>
             <option value="0.9">0.9×</option>
             <option value="1">1.0×</option>
             <option value="1.1">1.1×</option>
@@ -271,8 +272,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="mrow"><span className="mlbl">Bot Token</span><input type="password" id="hubTgBotToken" placeholder="123456:ABC-DEF..." style={inp} /></div>
         <div className="mrow"><span className="mlbl">Chat ID</span><input type="text" id="hubTgChatId" placeholder="-100123456789" style={inp} /></div>
         <div style={{display:'flex',gap:'6px',marginTop:'8px'}}>
-          <button id="hubTgSave" className="hub-sbtn pri" onClick={() => w.hubTgSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE</button>
-          <button id="hubTgTest" className="hub-sbtn" onClick={() => w.hubTgTest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> SEND TEST</button>
+          <button id="hubTgSave" className="hub-sbtn pri" onClick={() => hubTgSave?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE</button>
+          <button id="hubTgTest" className="hub-sbtn" onClick={() => hubTgTest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> SEND TEST</button>
         </div>
         <div id="hubTgStatus" style={{marginTop:'6px',fontSize:'8px',color:'var(--dim)',minHeight:'14px'}}></div>
         <div className="msec">CUM OBȚII</div>

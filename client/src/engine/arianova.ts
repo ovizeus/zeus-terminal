@@ -1,6 +1,6 @@
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { _AN_KEY_A } from '../core/config'
+import { _AN_KEY_A, _AN_KEY_N } from '../core/config'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -25,7 +25,7 @@ if (!w._ARIA_NOVA_LOADED) {
       if (a.pattern) w.ARIA_STATE.pattern = a.pattern
     } catch (_) { }
     try {
-      const n = JSON.parse(localStorage.getItem(w._AN_KEY_N) || '{}')
+      const n = JSON.parse(localStorage.getItem(_AN_KEY_N) || '{}')
       w.NOVA_STATE.expanded = !!n.expanded
       if (Array.isArray(n.log)) w.NOVA_STATE.log = n.log.slice(-8)
       w.NOVA_STATE.lastMsg = n.lastMsg || null
@@ -44,7 +44,7 @@ if (!w._ARIA_NOVA_LOADED) {
           }
           : null
       }))
-      localStorage.setItem(w._AN_KEY_N, JSON.stringify({
+      localStorage.setItem(_AN_KEY_N, JSON.stringify({
         expanded: w.NOVA_STATE.expanded,
         log: w.NOVA_STATE.log.slice(-8).map((e: any) => ({ ts: e.ts, severity: e.severity, msg: e.msg })),
         lastMsg: w.NOVA_STATE.lastMsg

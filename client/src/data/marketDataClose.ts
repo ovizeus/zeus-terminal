@@ -6,6 +6,7 @@ import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../serv
 import { fmtNow, toast } from './marketDataHelpers'
 import { checkKillThreshold } from '../trading/autotrade'
 import { _bmPostClose } from '../trading/orders'
+import { runPostMortem } from '../engine/postMortem'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -116,7 +117,7 @@ export function closeDemoPos(id: any, reason?: string): void {
   }
 
   // Post-mortem (async, 200ms delay)
-  setTimeout(function () { if (typeof w.runPostMortem === 'function') w.runPostMortem(pos, pnl, curPrice) }, 200)
+  setTimeout(function () { if (typeof runPostMortem === 'function') runPostMortem(pos, pnl, curPrice) }, 200)
 
   // Close hooks (ARES, extensions)
   if (Array.isArray(w._demoCloseHooks)) {

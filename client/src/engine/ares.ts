@@ -7,6 +7,7 @@ import { safeLastKline } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { ARES_EXECUTE } from './aresExecute'
 import { _bmResetDailyIfNeeded } from '../trading/orders'
+import { liveApiGetPositions } from '../trading/liveApi'
 
 const w = window as any
 
@@ -337,8 +338,8 @@ async function _reconcile() {
   const openLocal = ARES_POSITIONS.getOpen()
   if (openLocal.length === 0) return
   try {
-    if (typeof w.liveApiGetPositions !== 'function') return
-    const exchangePositions = await w.liveApiGetPositions()
+    if (typeof liveApiGetPositions !== 'function') return
+    const exchangePositions = await liveApiGetPositions()
     const btcPos = exchangePositions.find(function (p: any) { return p.symbol === 'BTCUSDT' })
     openLocal.forEach(function (pos: any) {
       const sideMatch = btcPos && btcPos.side === pos.side && btcPos.size > 0

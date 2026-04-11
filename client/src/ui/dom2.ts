@@ -1,7 +1,7 @@
 import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { applyIndVisibility } from '../engine/indicators'
+import { applyIndVisibility, renderActBar } from '../engine/indicators'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
 // DOM utilities, render helpers
 const w = window as any;
@@ -117,7 +117,7 @@ export function applyChartColors(): void {
 export function initActBar(): void {
   if (w._actBarBuilt) return;  // guard: never init twice
   w._actBarBuilt = true;
-  w.renderActBar();
+  renderActBar();
   // Apply initial visibility for ALL indicators — enable active ones + hide disabled ones
   const S = w.S;
   w.INDICATORS.forEach((ind: any) => {
@@ -156,7 +156,7 @@ export function togInd(id: any, btn: any): void {
   if (btn) btn.classList.toggle('act', newVal);
   applyIndVisibility(id, newVal);
   if (newVal && typeof w.renderChart === 'function') w.renderChart();
-  w.renderActBar();
+  renderActBar();
   // [P5 FIX] Persist indicator state so it survives refresh
   if (typeof w._usSave === 'function') w._usSave();
   if (typeof w._userCtxPush === 'function') w._userCtxPush();

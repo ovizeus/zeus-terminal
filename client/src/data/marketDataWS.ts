@@ -11,6 +11,7 @@ import { _ZI } from '../constants/icons'
 import { clearAllSessionOverlays } from '../ui/panels'
 import { llvRequestRender, renderHeatmapOverlay, renderSROverlay, clearSR } from './marketDataOverlays'
 import { resetForecast } from '../engine/forecast'
+import { trackOIDelta } from '../services/storage'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -307,7 +308,7 @@ export function updateMainMetrics(): void {
   if (atr) atr.textContent = w.S.atr ? '$' + fP(w.S.atr) : '\u2014'
   if (ls) ls.textContent = w.S.ls ? w.S.ls.l.toFixed(1) + '% / ' + w.S.ls.s.toFixed(1) + '%' : '\u2014'
   if (lss_el) { if (w.S.ls) { const bull = w.S.ls.l > 55; const bear = w.S.ls.s > 55; lss_el.textContent = bull ? '\u25B2 LONGS' : bear ? '\u25BC SHORTS' : 'BALANCED'; lss_el.style.color = bull ? 'var(--grn)' : bear ? 'var(--red)' : 'var(--dim)' } else lss_el.textContent = '\u2014' }
-  if (typeof w.trackOIDelta === 'function') w.trackOIDelta()
+  if (typeof trackOIDelta === 'function') trackOIDelta()
 }
 
 // ===== CHART SETTINGS =====

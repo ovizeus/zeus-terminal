@@ -9,6 +9,7 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
+import { renderVWAP } from '../ui/panels'
 
 const w = window as any
 
@@ -176,7 +177,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'vwap':
       w.S.vwapOn = show
-      if (show) { if (typeof w.renderVWAP === 'function') w.renderVWAP() }
+      if (show) { if (typeof renderVWAP === 'function') renderVWAP() }
       else { if (typeof w.vwapSeries !== 'undefined') { w.vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.vwapSeries = [] } }
       { const vBtn = document.getElementById('vwapBtn'); if (vBtn) vBtn.classList.toggle('on', show) }
       break

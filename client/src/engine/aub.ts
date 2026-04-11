@@ -6,6 +6,7 @@
 import { _safeLocalStorageSet } from '../services/storage'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { setTf } from '../data/marketDataFeeds'
 
 const w = window as any
 
@@ -143,7 +144,7 @@ export function _aubWrapPublicFunctions(): void {
     }
   }
   // setTf guard
-  const _origSetTf = w.setTf
+  const _origSetTf = setTf
   if (typeof _origSetTf === 'function') {
     w.setTf = function (tf: any, btn: any) {
       const valid = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '5h', '6h', '12h', '1d', '3d', '1w', '1M']

@@ -9,6 +9,8 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere } from '../engine/brain'
 import { _adaptLoad } from '../trading/risk'
 import { _mscanUpdateLabel } from '../data/klines'
+import { loadPerfFromStorage } from '../engine/perfStore'
+import { loadDailyPnl } from '../engine/dailyPnl'
 import { renderATLog } from '../trading/autotrade'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -672,8 +674,8 @@ export function _userCtxPull() {
         }
       }
       _restoreJSON('signalRegistry', 'zeus_signal_registry', function () { if (typeof _srLoad === 'function') _srLoad() })
-      _restoreJSON('perfStats', 'zeus_perf_v1', function () { if (typeof w.loadPerfFromStorage === 'function') w.loadPerfFromStorage() })
-      _restoreJSON('dailyPnl', 'zeus_daily_pnl_v1', function () { if (typeof w.loadDailyPnl === 'function') w.loadDailyPnl() })
+      _restoreJSON('perfStats', 'zeus_perf_v1', function () { if (typeof loadPerfFromStorage === 'function') loadPerfFromStorage() })
+      _restoreJSON('dailyPnl', 'zeus_daily_pnl_v1', function () { if (typeof loadDailyPnl === 'function') loadDailyPnl() })
       _restoreJSON('postmortem', 'zeus_postmortem_v1', null)
       _restoreJSON('adaptive', 'zeus_adaptive_v1', function () { if (typeof _adaptLoad === 'function') _adaptLoad() })
       _restoreJSON('notifications', 'zeus_notifications', function () { if (typeof _ncLoad === 'function') { _ncLoad(); _ncRenderList(); _ncUpdateBadge() } })

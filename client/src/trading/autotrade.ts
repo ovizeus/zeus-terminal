@@ -11,7 +11,8 @@ import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
 import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
-import { getTimeUTC, getCurrentADX } from '../ui/render'
+import { getTimeUTC, getCurrentADX, isCurrentTimeOK, renderDHF } from '../ui/render'
+import { runPostMortem } from '../engine/postMortem'
 import { onTradeExecuted } from '../trading/positions'
 import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
 import { _isExecAllowed } from '../utils/guards'
@@ -300,7 +301,7 @@ export function checkATConditions(): any {
   setCondUI('atCondADX', adxOk, adxVal !== null ? 'ADX ' + adxVal + (adxOk ? ' ✓' : ' ← slab') : 'Se calc...')
 
   // 5. Hour filter - BUG3 FIX: UTC
-  const hourOk = w.isCurrentTimeOK()
+  const hourOk = isCurrentTimeOK()
   const { day: curDay2, hour: curHour2 } = getTimeUTC()
   const hourWR2 = w.DHF.hours[curHour2]?.wr || 60
   setCondUI('atCondHour', hourOk, hourOk ? `${curDay2} ${String(curHour2).padStart(2, '0')}h UTC WR:${hourWR2}% ✓` : `${String(curHour2).padStart(2, '0')}h UTC WR:${hourWR2}% — EVITA`)
@@ -1320,7 +1321,7 @@ export function scheduleAutoClose(pos: any): void {
         const tHour = tradeNow.getUTCHours()
         if (w.DHF.days[tDay]) { w.DHF.days[tDay].trades++; if (won2) w.DHF.days[tDay].wins++; w.DHF.days[tDay].wr = Math.round(w.DHF.days[tDay].wins / w.DHF.days[tDay].trades * 100) }
         if (w.DHF.hours[tHour] !== undefined) { w.DHF.hours[tHour].trades++; if (won2) w.DHF.hours[tHour].wins++; w.DHF.hours[tHour].wr = Math.round(w.DHF.hours[tHour].wins / w.DHF.hours[tHour].trades * 100) }
-        setTimeout(w.renderDHF, 500)
+        setTimeout(renderDHF, 500)
 
         const pnlStr = (pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)
         w.atLog(pnl2 >= 0 ? 'buy' : 'sell', reason + ' — PnL: ' + pnlStr + ' | Close @$' + fP(cur2))
@@ -1418,7 +1419,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     // [FIX C4] Fire side-effects skipped by inline close
     if (typeof _bmPostClose === 'function') _bmPostClose(p, 'Emergency Stop')
     if (typeof w.srUpdateOutcome === 'function') w.srUpdateOutcome(p, pnl)
-    if (typeof w.runPostMortem === 'function') setTimeout(function () { w.runPostMortem(p, pnl, closePrice) }, 200)
+    if (typeof runPostMortem === 'function') setTimeout(function () { runPostMortem(p, pnl, closePrice) }, 200)
     if (Array.isArray(w._demoCloseHooks)) { var _hp = p, _hpnl = pnl; w._demoCloseHooks.forEach(function (fn: any) { try { fn(_hp, _hpnl, 'Emergency Stop') } catch (_) { } }) }
     return false
   })

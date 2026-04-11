@@ -7,7 +7,7 @@ import { fmtNow, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { manualLiveModifyLimit } from '../trading/liveApi'
+import { manualLiveModifyLimit, liveApiClosePosition, manualLiveGetOpenOrders } from '../trading/liveApi'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -115,10 +115,10 @@ export function _stopLivePendingSync(): void { if (_livePendingSyncTimer) { clea
 
 function _syncLivePendingOrders(): void {
   if (!TP.manualLivePending || !TP.manualLivePending.length) { _stopLivePendingSync(); return }
-  if (typeof w.manualLiveGetOpenOrders !== 'function') return
+  if (typeof manualLiveGetOpenOrders !== 'function') return
   const symbols: any = {}; TP.manualLivePending.forEach(function (o: any) { symbols[o.sym] = true })
   const symList = Object.keys(symbols); let _remaining = symList.length; const _exchangeOrderIds = new Set()
-  symList.forEach(function (sym) { w.manualLiveGetOpenOrders(sym).then(function (orders: any) { (orders || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }); _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }).catch(function () { _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }) })
+  symList.forEach(function (sym) { manualLiveGetOpenOrders(sym).then(function (orders: any) { (orders || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }); _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }).catch(function () { _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }) })
 }
 
 function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
@@ -269,8 +269,8 @@ export function closeLivePos(id: any, reason?: string): void {
   const cur = getSymPrice(pos); const pnl = calcPosPnL(pos, cur); pos.pnl = pnl; pos.status = 'closing'
   w.atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
   renderLivePositions()
-  if (typeof w.liveApiClosePosition === 'function') {
-    w.liveApiClosePosition(pos).then(function (res: any) {
+  if (typeof liveApiClosePosition === 'function') {
+    liveApiClosePosition(pos).then(function (res: any) {
       pos.closed = true; pos.status = 'closed'
       const fillPrice = (res && parseFloat(res.avgPrice)) || cur; const fillPnl = calcPosPnL(pos, fillPrice); pos.pnl = fillPnl
       const finalIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1)

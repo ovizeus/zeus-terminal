@@ -45,8 +45,8 @@ function apply(id?: string): string {
 export const zeusApplyTheme = apply
 export const zeusGetTheme = get
 
-w.zeusApplyTheme = apply
-w.zeusGetTheme = get
+// zeusApplyTheme — exported, consumers import directly
+// zeusGetTheme — exported, consumers import directly
 
 // Apply saved theme immediately
 apply(get())

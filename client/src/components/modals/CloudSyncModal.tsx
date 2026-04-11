@@ -1,6 +1,6 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { masterReset } from '../../core/bootstrapMisc'
-import { cloudSave, cloudClear } from '../../data/marketDataWS'
+import { cloudSave, cloudClear, cloudLoad } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -47,7 +47,7 @@ export function CloudSyncModal({ visible, onClose }: Props) {
           <button className="sbtn2" style={{
             background: '#1a2530', border: '1px solid var(--brd)', color: 'var(--txt)',
             padding: 10, borderRadius: 4, fontSize: 10, cursor: 'pointer', fontFamily: 'var(--ff)'
-          }} onClick={() => w.cloudLoad?.()}>
+          }} onClick={() => cloudLoad?.()}>
             <svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg>
             {' '}Load from Cloud
           </button>

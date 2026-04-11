@@ -10,21 +10,24 @@ import { _checkAppUpdate } from './bootstrapError'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal } from './bootstrapMisc'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
 import { _resumeLivePendingSyncIfNeeded } from '../data/marketDataPositions'
-import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex } from '../trading/risk'
-import { _initBrainCockpit, startZAnim } from '../engine/brain'
+import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
+import { _initBrainCockpit, startZAnim, runBrainUpdate } from '../engine/brain'
 import { initARES, initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
 import { initCloudSettings, connectBNB } from '../data/marketDataWS'
 import { initPMPanel, _pmCheckRegimeTransition } from '../engine/postMortem'
 import { loadSavedAPI } from '../engine/indicators'
-import { rebuildDailyFromJournal } from '../engine/dailyPnl'
-import { runBacktest } from '../ui/panels'
-import { savePerfToStorage } from '../engine/perfStore'
-import { startFRCountdown } from '../services/storage'
+import { rebuildDailyFromJournal, loadDailyPnl } from '../engine/dailyPnl'
+import { runBacktest, scanLiquidityMagnets } from '../ui/panels'
+import { savePerfToStorage, loadPerfFromStorage } from '../engine/perfStore'
+import { startFRCountdown, renderTradeJournal, trackOIDelta } from '../services/storage'
 import { fetchSymbolKlines } from '../data/klines'
 import { _devEnsureVisible } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
+import { initSafetyEngine } from '../utils/guards'
+import { updateQuantumClock, updateBrainExtension, renderDHF } from '../ui/render'
+import { runQuantumExitUpdate, updateScenarioUI } from '../engine/forecast'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -75,8 +78,8 @@ export async function startApp(): Promise<void> {
   try { if (localStorage.getItem('zeus_pt_strip_open') === '1') { w._ptStripOpen = true; const _ps = document.getElementById('pt-strip'); if (_ps) _ps.classList.add('pt-strip-open') } } catch (_) { }
   w.ptUpdateBanner()
   initCloudSettings(); loadSavedAPI(); w.loadJournalFromStorage()
-  if (typeof w.loadPerfFromStorage === 'function') w.loadPerfFromStorage()
-  if (typeof w.loadDailyPnl === 'function') w.loadDailyPnl()
+  if (typeof loadPerfFromStorage === 'function') loadPerfFromStorage()
+  if (typeof loadDailyPnl === 'function') loadDailyPnl()
   if (typeof rebuildDailyFromJournal === 'function') rebuildDailyFromJournal()
   // Ghost guard late-restore
   try {
@@ -99,7 +102,7 @@ export async function startApp(): Promise<void> {
   if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC()
 
   // ═══ PHASE 2 — DATA ═══
-  w.initSafetyEngine()
+  initSafetyEngine()
   setTimeout(function () { if (typeof w.computePredatorState === 'function') w.computePredatorState() }, 2000)
 
   // __wsGen tracer
@@ -133,9 +136,9 @@ export async function startApp(): Promise<void> {
   w.Intervals.set('rsi', w.fetchAllRSI, 120000); w.Intervals.set('fg', w.fetchFG, 300000)
   w.Intervals.set('atr', w.fetchATR, 300000); w.Intervals.set('oi', w.fetchOI, 30000)
   w.Intervals.set('ls', w.fetchLS, 60000); w.Intervals.set('h24', w.fetch24h, 60000)
-  w.Intervals.set('oidelta', w.trackOIDelta, 30000); w.Intervals.set('clock', w.updateQuantumClock, 1000)
-  setTimeout(function () { if (BM.adaptive && BM.adaptive.enabled) w.recalcAdaptive(true); _renderAdaptivePanel() }, 2000)
-  w.Intervals.set('adaptiveRecalc', function () { w.recalcAdaptive(false); _pmCheckRegimeTransition() }, 60 * 60 * 1000)
+  w.Intervals.set('oidelta', trackOIDelta, 30000); w.Intervals.set('clock', updateQuantumClock, 1000)
+  setTimeout(function () { if (BM.adaptive && BM.adaptive.enabled) recalcAdaptive(true); _renderAdaptivePanel() }, 2000)
+  w.Intervals.set('adaptiveRecalc', function () { recalcAdaptive(false); _pmCheckRegimeTransition() }, 60 * 60 * 1000)
   w.Intervals.set('regimeWatch', function () { _pmCheckRegimeTransition(); if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 5 * 60 * 1000)
 
   // ═══ PHASE 3 — STATE ═══
@@ -170,8 +173,8 @@ export async function startApp(): Promise<void> {
 
     w.ZState.pullJournalFromServer().then(function (srvJournal: any) {
       if (!srvJournal || !srvJournal.length) return
-      if (!TP.journal || TP.journal.length === 0) { TP.journal = srvJournal; if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Journal pulled:', srvJournal.length) }
-      else { const localIds = new Set(TP.journal.map(function (j: any) { return j.id }).filter(Boolean).map(String)); let added = 0; srvJournal.forEach(function (j: any) { if (j.id && !localIds.has(String(j.id))) { TP.journal.push(j); added++ } }); if (added > 0) { TP.journal.sort(function (a: any, b: any) { return (b.id || 0) - (a.id || 0) }); if (TP.journal.length > 200) TP.journal.length = 200; _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50)); if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Merged', added, 'journal entries') } }
+      if (!TP.journal || TP.journal.length === 0) { TP.journal = srvJournal; if (typeof renderTradeJournal === 'function') renderTradeJournal(); console.log('[sync] Journal pulled:', srvJournal.length) }
+      else { const localIds = new Set(TP.journal.map(function (j: any) { return j.id }).filter(Boolean).map(String)); let added = 0; srvJournal.forEach(function (j: any) { if (j.id && !localIds.has(String(j.id))) { TP.journal.push(j); added++ } }); if (added > 0) { TP.journal.sort(function (a: any, b: any) { return (b.id || 0) - (a.id || 0) }); if (TP.journal.length > 200) TP.journal.length = 200; _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50)); if (typeof renderTradeJournal === 'function') renderTradeJournal(); console.log('[sync] Merged', added, 'journal entries') } }
     }).catch(function (err: any) { console.warn('[sync] Journal pull failed:', err?.message || err) })
 
     w.Intervals.set('stateSave', function () { w.ZState.saveLocal() }, 30000)
@@ -204,27 +207,27 @@ export async function startApp(): Promise<void> {
   w.Intervals.set('perfSave', function () { if (typeof savePerfToStorage === 'function') savePerfToStorage(); _updatePnlLabCondensed() }, 60000)
   setTimeout(_updatePnlLabCondensed, 3000)
 
-  setTimeout(w.runBrainUpdate, 2500); w.Intervals.set('brain', w.runBrainUpdate, 5000)
+  setTimeout(runBrainUpdate, 2500); w.Intervals.set('brain', runBrainUpdate, 5000)
   w.Intervals.set('dslBanner', w.dslUpdateBanner, 2000); w.Intervals.set('atBanner', w.atUpdateBanner, 2000); w.Intervals.set('ptBanner', w.ptUpdateBanner, 2000)
   if (typeof w.ZState !== 'undefined' && w.ZState.startATPolling) w.ZState.startATPolling()
-  w.Intervals.set('brainExt', w.updateBrainExtension, 5000)
-  setTimeout(w.renderDHF, 1200); w.Intervals.set('dhf', w.renderDHF, 60000)
+  w.Intervals.set('brainExt', updateBrainExtension, 5000)
+  setTimeout(renderDHF, 1200); w.Intervals.set('dhf', renderDHF, 60000)
   setTimeout(w.renderPerfTracker, 2000)
-  setTimeout(() => { w.updateQuantumClock(); w.updateBrainExtension() }, 3000)
+  setTimeout(() => { updateQuantumClock(); updateBrainExtension() }, 3000)
   setTimeout(() => { w.brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
 
   setTimeout(w.runSignalScan, 4000); setTimeout(w.calcConfluenceScore, 5500)
-  setTimeout(w.scanLiquidityMagnets, 9000); setTimeout(w.updateDeepDive, 11000)
-  setTimeout(w.runQuantumExitUpdate, 12000); setTimeout(w.updateScenarioUI, 13000)
+  setTimeout(scanLiquidityMagnets, 9000); setTimeout(w.updateDeepDive, 11000)
+  setTimeout(runQuantumExitUpdate, 12000); setTimeout(updateScenarioUI, 13000)
   setTimeout(computeMacroCortex, 8000)
   setTimeout(function () { try { w.devLog('Developer Mode ready.', 'info') } catch (_) { } }, 5000)
   setTimeout(function () { try { w.hubPopulate() } catch (_) { } }, 3000)
 
   w.Intervals.set('scan', function () { w.runSignalScan(); try { w.calcConfluenceScore() } catch (_) { } }, 30000)
-  w.Intervals.set('magnets', w.ZT_safeInterval('magnets', w.scanLiquidityMagnets, 60000), 60000)
+  w.Intervals.set('magnets', w.ZT_safeInterval('magnets', scanLiquidityMagnets, 60000), 60000)
   w.Intervals.set('deepdive', w.updateDeepDive, 10000)
-  w.Intervals.set('qexit', w.runQuantumExitUpdate, 5000)
-  w.Intervals.set('scenario', w.updateScenarioUI, 3000)
+  w.Intervals.set('qexit', runQuantumExitUpdate, 5000)
+  w.Intervals.set('scenario', updateScenarioUI, 3000)
   w.Intervals.set('macroCortex', computeMacroCortex, 6 * 60 * 60 * 1000)
 
   // ═══ PHASE 5 — EXTRAS ═══

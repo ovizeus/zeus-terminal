@@ -8,7 +8,10 @@ import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from './dom'
 import { _ZI } from '../constants/icons'
-import { updLiqStats, renderFeed, cloudSave, cloudClear } from '../data/marketDataWS'
+import { updLiqStats, renderFeed, cloudSave, cloudClear, cloudLoad } from '../data/marketDataWS'
+import { resetProtectMode } from '../engine/brain'
+import { triggerKillSwitch } from '../trading/autotrade'
+import { zeusGetTheme } from '../ui/theme'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -379,8 +382,8 @@ w.devFeedRecover = devFeedRecover
 export function devTriggerKillSwitch(): void {
   if (!_devModuleOk('killSwitch')) return
   try {
-    if (typeof w.triggerKillSwitch === 'function') {
-      w.triggerKillSwitch('manual')
+    if (typeof triggerKillSwitch === 'function') {
+      triggerKillSwitch('manual')
       devLog('Triggered kill switch (manual)', 'warning')
     } else {
       devLog('triggerKillSwitch not available', 'warning')
@@ -392,8 +395,8 @@ w.devTriggerKillSwitch = devTriggerKillSwitch
 export function devResetProtect(): void {
   if (!_devModuleOk('resetProtect')) return
   try {
-    if (typeof w.resetProtectMode === 'function') {
-      w.resetProtectMode()
+    if (typeof resetProtectMode === 'function') {
+      resetProtectMode()
       devLog('Protect mode reset', 'success')
     } else {
       devLog('resetProtectMode not available', 'warning')
@@ -571,7 +574,7 @@ export function setUiScale(val: any): void {
   const sel = document.getElementById('hubUiScale') as HTMLSelectElement | null
   if (sel) sel.value = String(v)
 }
-w.setUiScale = setUiScale
+// setUiScale — exported, consumers import directly
 
 // Restore on script load
 ;(function () {
@@ -603,7 +606,7 @@ export function hubPopulate(): void {
 
     // ── Theme ────────────────────────────────────────────────────
     const _ts = document.getElementById('themeSelect') as HTMLSelectElement | null
-    if (_ts) _ts.value = w.zeusGetTheme ? w.zeusGetTheme() : 'native'
+    if (_ts) _ts.value = zeusGetTheme ? zeusGetTheme() : 'native'
 
     // ── UI Scale ────────────────────────────────────────────────
     const scaleSel = document.getElementById('hubUiScale') as HTMLSelectElement | null
@@ -644,7 +647,7 @@ export function hubPopulate(): void {
     if (atAdaptLiveEl) atAdaptLiveEl.checked = BM?.adapt && BM.adapt.allowLiveAdjust === true
 
     // ── Telegram ──────────────────────────────────────────────────
-    if (typeof w.hubTgPopulate === 'function') w.hubTgPopulate()
+    if (typeof hubTgPopulate === 'function') hubTgPopulate()
 
   } catch (e) {
     console.warn('[Hub] hubPopulate error:', e)
@@ -736,7 +739,7 @@ export function hubTgSave(): void {
     if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' ' + e.message + '</span>'
   })
 }
-w.hubTgSave = hubTgSave
+// hubTgSave — exported, consumers import directly
 
 export function hubTgTest(): void {
   const statusEl = document.getElementById('hubTgStatus')
@@ -758,7 +761,7 @@ export function hubTgTest(): void {
     })
   }, 500)
 }
-w.hubTgTest = hubTgTest
+// hubTgTest — exported, consumers import directly
 
 export function hubTgPopulate(): void {
   const tokenEl = document.getElementById('hubTgBotToken') as HTMLInputElement | null
@@ -773,7 +776,7 @@ export function hubTgPopulate(): void {
     if (statusElInner && d.configured) statusElInner.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.inf + ' Telegram configurat (chat: ' + d.chatId + ')</span>'
   }).catch(function () { /* */ })
 }
-w.hubTgPopulate = hubTgPopulate
+// hubTgPopulate — exported, consumers import directly
 
 export function hubResetDefaults(): void {
   try {
@@ -858,7 +861,7 @@ export function hubCloudLoad(): void {
     if (!email) { toast('Enter an email address'); return }
     // [FIX v85 BUG1] Nu salvam emailul in S.cloudEmail
     const mainEmailEl = el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
-    if (typeof w.cloudLoad === 'function') { w.cloudLoad() }
+    if (typeof cloudLoad === 'function') { cloudLoad() }
     else toast('cloudLoad not available')
   } catch (e) { console.warn('[Hub] hubCloudLoad error:', e) }
 }

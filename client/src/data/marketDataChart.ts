@@ -5,7 +5,8 @@
 import { fmtTime, fmtDate, toast } from './marketDataHelpers'
 import { el } from '../utils/dom'
 import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/indicators'
-import { llvEnsureCanvas, llvLoadSettings } from './marketDataOverlays'
+import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
+import { renderVWAP } from '../ui/panels'
 
 const w = window as any
 
@@ -105,7 +106,7 @@ export async function fetchKlines(tf: any): Promise<void> {
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
         if (typeof w._resetKlineWatchdog === 'function') w._resetKlineWatchdog()
         try { w.cSeries.update(bar) } catch (_) { }
-        if (typeof w.updOvrs === 'function') w.updOvrs()
+        if (typeof updOvrs === 'function') updOvrs()
         if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers() }, 5000) }
       }
     })
@@ -158,8 +159,8 @@ export function renderChart(): void {
     if (w.volS) w.volS.setData(volData)
     if (typeof _macdKlineHook === 'function') _macdKlineHook()
     if (typeof _indRenderHook === 'function') _indRenderHook()
-    if (typeof w.updOvrs === 'function') w.updOvrs()
-    if (w.S.vwapOn && typeof w.renderVWAP === 'function') w.renderVWAP()
+    if (typeof updOvrs === 'function') updOvrs()
+    if (w.S.vwapOn && typeof renderVWAP === 'function') renderVWAP()
     if (w.S.oviOn) { clearTimeout(w.S._oviRefreshT); w.S._oviRefreshT = setTimeout(() => { if (typeof w.renderOviLiquid === 'function') w.renderOviLiquid() }, 15000) }
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
   } catch (e) { console.error('renderChart', e) }

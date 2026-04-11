@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMarketStore, useUiStore } from '../../stores'
 import { setTF } from '../../data/marketDataFeeds'
+import { togInd as togIndFn } from '../../ui/dom2'
+import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
+import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '../../ui/panels'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -121,8 +124,8 @@ export function ChartControls() {
 
   function togInd(key: string) {
     const w = window as any
-    if (typeof w.togInd === 'function') {
-      w.togInd(key, null)
+    if (typeof togIndFn === 'function') {
+      togIndFn(key, null)
     }
     // Sync React state from old JS after toggle
     if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
@@ -133,10 +136,9 @@ export function ChartControls() {
   }
 
   function togOvr(key: keyof typeof overlays) {
-    const w = window as any
-    if (typeof w.togOvr === 'function') {
+    if (typeof togOvrFn === 'function') {
       const btn = document.getElementById('b' + key)
-      try { w.togOvr(key, btn) } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
+      try { togOvrFn(key, btn) } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
     }
     patch({ overlays: { ...overlays, [key]: !overlays[key] } })
   }
@@ -164,9 +166,8 @@ export function ChartControls() {
 
   // Session toggles — delegate to old JS toggleSession(sess, btn)
   function handleSession(key: 'asia' | 'london' | 'ny', btn: HTMLButtonElement) {
-    const w = window as any
-    if (typeof w.toggleSession === 'function') {
-      w.toggleSession(key, btn)
+    if (typeof toggleSessionFn === 'function') {
+      toggleSessionFn(key, btn)
     } else {
       btn.classList.toggle('act')
     }
@@ -175,9 +176,8 @@ export function ChartControls() {
 
   // VWAP toggle — delegate to old JS toggleVWAP(btn)
   function handleVWAP(btn: HTMLButtonElement) {
-    const w = window as any
-    if (typeof w.toggleVWAP === 'function') {
-      w.toggleVWAP(btn)
+    if (typeof toggleVWAPFn === 'function') {
+      toggleVWAPFn(btn)
     } else {
       btn.classList.toggle('act')
     }

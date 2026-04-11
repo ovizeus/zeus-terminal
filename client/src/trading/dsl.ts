@@ -96,8 +96,8 @@ export function toggleDSL(): void {
     DSL.enabled = !DSL.enabled
     if (!w.S.dsl) w.S.dsl = {}
     w.S.dsl.active = DSL.enabled
-    if (!DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
-    if (DSL.enabled && typeof w.startDSLIntervals === 'function' && !DSL.checkInterval) { w.startDSLIntervals() }
+    if (!DSL.enabled && typeof stopDSLIntervals === 'function') { stopDSLIntervals() }
+    if (DSL.enabled && typeof startDSLIntervals === 'function' && !DSL.checkInterval) { startDSLIntervals() }
     const btn = el('dslToggleBtn')
     const dot = el('dslStatusDot')
     if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off') }

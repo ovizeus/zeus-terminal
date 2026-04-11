@@ -9,6 +9,8 @@ import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { _startLivePendingSync } from './marketDataPositions'
 import { runDSLBrain } from '../trading/dsl'
+import { manualLivePlaceOrder } from '../trading/liveApi'
+import { updateModeBar } from '../ui/modebar'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -75,7 +77,7 @@ export function _applyGlobalModeUI(mode: string): void {
     else { execBtn.disabled = false; execBtn.style.opacity = ''; execBtn.dataset.execMode = 'demo' }
   }
   if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
-  if (typeof w.updateModeBar === 'function') w.updateModeBar()
+  if (typeof updateModeBar === 'function') updateModeBar()
 }
 
 function _toggleManualPanel(): void { TP.demoOpen = !TP.demoOpen; const p = el('panelDemo'); if (p) p.style.display = TP.demoOpen ? 'block' : 'none'; if (TP.demoOpen && getPrice()) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
@@ -208,12 +210,12 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
 }
 
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
-  if (typeof w.manualLivePlaceOrder !== 'function') { toast('Live API not available', 3000, _ZI.lock); return }
+  if (typeof manualLivePlaceOrder !== 'function') { toast('Live API not available', 3000, _ZI.lock); return }
   if (!TP.liveBalance || size > TP.liveBalance) { toast('Insufficient live balance', 3000, _ZI?.x); return }
   if (lev < 1 || lev > 125) { toast('Leverage must be 1-125x', 3000, _ZI?.x); return }
   const refPrice = (orderType === 'MARKET') ? getPrice() : entry; const qty = (size * lev) / refPrice; const binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
   const execBtn = el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
-  w.manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
+  manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
     if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }
     if (orderType === 'MARKET') {
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)

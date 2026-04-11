@@ -7,6 +7,8 @@ import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { perfRecordTrade } from './risk'
 import { _queueExecOverlay } from './orders'
+import { renderBrainCockpit } from '../engine/brain'
+import { renderDSLWidget } from './dsl'
 
 const w = window as any
 
@@ -39,11 +41,11 @@ export function onPositionOpened(pos: any, source: any): void {
       ...(w.TP.demoPositions || []),
       ...(w.TP.livePositions || [])
     ].filter((p: any) => !p.closed)
-    if (typeof w.renderDSLWidget === 'function') {
-      try { w.renderDSLWidget(activePosns) } catch (_) { }
+    if (typeof renderDSLWidget === 'function') {
+      try { renderDSLWidget(activePosns) } catch (_) { }
     }
-    if (typeof w.renderBrainCockpit === 'function') {
-      try { setTimeout(w.renderBrainCockpit, 0) } catch (_) { }
+    if (typeof renderBrainCockpit === 'function') {
+      try { setTimeout(renderBrainCockpit, 0) } catch (_) { }
     }
     w.atLog('info', '[DSL] DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']')
     if (typeof w.aubBBSnapshot === 'function') w.aubBBSnapshot('DSL_ATTACH', { sym: pos.sym, side: pos.side, source })
