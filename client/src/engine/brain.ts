@@ -7,9 +7,10 @@
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 
-const w = window as any // kept for w.el, function calls, w.S writes + self-ref
+const w = window as any // kept for function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
 const BM = getBrainMetrics()
 // [8C-2B2] BR = mutable ref to BR — reads + writes go through same object
@@ -80,8 +81,8 @@ export function updateNeurons(): void {
     3: getNeuronColor('vol'), 4: getNeuronColor('fr'), 5: getNeuronColor('mag')
   }
   Object.entries(dotColors).forEach(([i, col]: any) => {
-    const dot = w.el('bdot' + i)
-    const line = w.el('bline' + i)
+    const dot = el('bdot' + i)
+    const line = el('bline' + i)
     if (dot) { dot.setAttribute('fill', col + '33'); dot.setAttribute('stroke', col) }
     if (line) { line.setAttribute('stroke', col); line.setAttribute('opacity', '.6') }
   })
@@ -94,8 +95,8 @@ export function getNeuronColor(id: any): string {
 
 export function setNeuron(id: any, state: any, val: any): void {
   BR.neurons[id] = state
-  const el2 = w.el('bn-' + id)
-  const valEl = w.el('bnv-' + id)
+  const el2 = el('bn-' + id)
+  const valEl = el('bnv-' + id)
   if (el2) el2.className = 'neuron ' + state
   if (valEl) valEl.textContent = val
 }
@@ -103,8 +104,8 @@ export function setNeuron(id: any, state: any, val: any): void {
 
 // Brain arc
 export function updateBrainArc(score: any): void {
-  const arc = w.el('brainScoreArc')
-  const num = w.el('brainScoreNum')
+  const arc = el('brainScoreArc')
+  const num = el('brainScoreNum')
   if (!arc) return
 
   const circumference = 2 * Math.PI * 38 // ~239
@@ -168,7 +169,7 @@ export function updateBrainState(): void {
   updateBrainArc(score)
 
   // State badge
-  const badge = w.el('brainStateBadge')
+  const badge = el('brainStateBadge')
   if (badge) {
     const labels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: _ZI.bolt + ' READY', blocked: _ZI.noent + ' BLOCKED', trading: _ZI.dRed + ' TRADING' }
     badge.innerHTML = labels[state] || state.toUpperCase()
@@ -176,11 +177,11 @@ export function updateBrainState(): void {
   }
 
   // Ticker
-  { const _oe = w.el('brainTickerText'); if (_oe) _oe.textContent = ticker }
+  { const _oe = el('brainTickerText'); if (_oe) _oe.textContent = ticker }
 
   // Regime badge
   const regime = detectMarketRegime(getKlines())
-  const regimeBadge = w.el('brainRegimeBadge')
+  const regimeBadge = el('brainRegimeBadge')
   const regimeLabels: any = { trend: _ZI.tup + ' TREND', range: _ZI.chart + ' RANGE', volatile: _ZI.bolt + ' VOLATIL', unknown: _ZI.clock + ' LOADING' }
   if (regimeBadge) {
     regimeBadge.innerHTML = regimeLabels[regime] || regime
@@ -196,7 +197,7 @@ export function updateBrainState(): void {
 
 // Thought log
 export function brainThink(type: any, msg: any): void {
-  const log = w.el('brainThoughtLog')
+  const log = el('brainThoughtLog')
   if (!log) return
   const now = fmtNow(true)
   BR.thoughts.unshift({ time: now, type, msg })
@@ -304,7 +305,7 @@ export function isArmAssistValid(): boolean {
 export function _setRadio(ids: any, activeId: any, baseClass: any, activeClass: any): void {
   // Force-clear ALL then set one — prevents "stuck" states even after rapid toggling
   ids.forEach((id: any) => {
-    const b = w.el(id)
+    const b = el(id)
     if (!b) return
     // Strip all possible active variants first
     b.className = baseClass
@@ -326,9 +327,9 @@ export function syncDslFromProfile(): void {
     dslPivotL: w.S.dsl.pivotL, dslPivotR: w.S.dsl.pivotR,
     dslImpulse: w.S.dsl.impulseV, dslOpen: w.S.dsl.openDsl
   }
-  Object.entries(dslInputs).forEach(([id, v]: any) => { const e = w.el(id); if (e) e.value = v })
+  Object.entries(dslInputs).forEach(([id, v]: any) => { const e = el(id); if (e) e.value = v })
   // Visual hint: DSL params changed badge
-  const dslProfileHint = w.el('zncDslContract')
+  const dslProfileHint = el('zncDslContract')
   if (dslProfileHint && !w.S.dsl.active) {
     const p2 = (w.S.profile || 'fast').toLowerCase()
     const pLabel: any = { fast: 'FAST↑ trail agresiv', swing: 'SWING moderat', defensive: 'DEF↓ trail larg' }[p2] || p2
@@ -341,7 +342,7 @@ export function syncTFProfile(): void {
   const p = (w.S.profile || 'fast').toLowerCase()
   const tfMap = w.PROFILE_TF[p] || w.PROFILE_TF.fast
   // Update trigger TF badge in cockpit
-  const trig = w.el('mtfTrig')
+  const trig = el('mtfTrig')
   if (trig) trig.textContent = 'TRIG:' + tfMap.trigger + ' —'
   // Store in S for engine use
   w.S.triggerTF = tfMap.trigger
@@ -383,11 +384,11 @@ export function syncBrainFromState(): void {
   })
 
   // Control source badge (no more manual)
-  const src = w.el('znc-src')
+  const src = el('znc-src')
   if (src) { const m: any = { assist: ['ASSIST', 'assist'], auto: ['AI', 'ai'] }; src.textContent = (m[mode] || m.assist)[0]; src.className = 'znc-src ' + (m[mode] || m.assist)[1] }
 
   // DSL zone — always full opacity (no manual mode)
-  const dz = w.el('dslZone')
+  const dz = el('dslZone')
   if (dz) dz.style.opacity = '1'
 
   // Sync TF + DSL params
@@ -423,8 +424,8 @@ export function setMode(mode: any): void {
     if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
     w.__brainModeSwitchTimer = setTimeout(() => { w.__brainModeSwitching = false }, 30000)
     _pendingModeSwitch = mode
-    const modal = w.el('brainModeModal')
-    const msg = w.el('brainModeModalMsg')
+    const modal = el('brainModeModal')
+    const msg = el('brainModeModalMsg')
     if (msg) msg.innerHTML =
       `Switching Brain mode from <b style="color:#00ffcc">${w.S.mode.toUpperCase()}</b> to <b style="color:#f0c040">${mode.toUpperCase()}</b>.<br><br>` +
       `<span style="color:#ffffffaa">${openAT.length} open position${openAT.length > 1 ? 's' : ''} will <b>keep their current control mode</b>.</span><br>` +
@@ -450,7 +451,7 @@ export function _applyModeSwitch(mode: any): void {
 }
 
 export function confirmBrainModeSwitch(): void {
-  const modal = w.el('brainModeModal')
+  const modal = el('brainModeModal')
   if (modal) modal.style.display = 'none'
   if (_pendingModeSwitch) {
     _applyModeSwitch(_pendingModeSwitch)
@@ -462,7 +463,7 @@ export function confirmBrainModeSwitch(): void {
 }
 
 export function cancelBrainModeSwitch(): void {
-  const modal = w.el('brainModeModal')
+  const modal = el('brainModeModal')
   if (modal) modal.style.display = 'none'
   _pendingModeSwitch = null
   // [PATCH MODE-SWITCH] Unlock brain on cancel
@@ -624,7 +625,7 @@ export function updateMTFAlignment(): void {
     const rsi = getRSI(tf) || 50
     const dir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
     BM.mtf[tf] = dir
-    const badge = w.el('mtf' + tf)
+    const badge = el('mtf' + tf)
     if (badge) {
       badge.textContent = tf + ' ' + (dir === 'bull' ? '▲' : dir === 'bear' ? '▼' : '—')
       badge.className = 'mtf-badge ' + dir
@@ -686,15 +687,15 @@ export function updateFlowEngine(klines: any): void {
   BM.flow = { cvd: cvdDir, delta: parseFloat(delta), ofi: ofiDir }
 
   // Update UI
-  const cvdEl = w.el('flowCVD'); if (cvdEl) { cvdEl.textContent = cvdDir.toUpperCase(); cvdEl.className = 'flow-cell-val ' + (cvdDir === 'rising' ? 'ok' : 'fail') }
-  const deltaEl = w.el('flowDelta'); if (deltaEl) { deltaEl.textContent = (parseFloat(delta) >= 0 ? '+' : '') + delta; deltaEl.className = 'flow-cell-val ' + (parseFloat(delta) >= 0 ? 'ok' : 'fail') }
-  const ofiEl = w.el('flowOFI'); if (ofiEl) { ofiEl.textContent = ofiDir.toUpperCase(); ofiEl.className = 'flow-cell-val ' + (ofiDir === 'buy' ? 'ok' : ofiDir === 'sell' ? 'fail' : 'neut') }
+  const cvdEl = el('flowCVD'); if (cvdEl) { cvdEl.textContent = cvdDir.toUpperCase(); cvdEl.className = 'flow-cell-val ' + (cvdDir === 'rising' ? 'ok' : 'fail') }
+  const deltaEl = el('flowDelta'); if (deltaEl) { deltaEl.textContent = (parseFloat(delta) >= 0 ? '+' : '') + delta; deltaEl.className = 'flow-cell-val ' + (parseFloat(delta) >= 0 ? 'ok' : 'fail') }
+  const ofiEl = el('flowOFI'); if (ofiEl) { ofiEl.textContent = ofiDir.toUpperCase(); ofiEl.className = 'flow-cell-val ' + (ofiDir === 'buy' ? 'ok' : ofiDir === 'sell' ? 'fail' : 'neut') }
 
   // Sweep UI
   const sw = BM.sweep
-  const swEl = w.el('flowSweep'); if (swEl) { swEl.textContent = sw.type === 'none' ? 'NONE' : sw.type.toUpperCase(); swEl.className = 'flow-cell-val ' + (sw.type !== 'none' ? 'ok' : 'neut') }
-  const rclEl = w.el('flowReclaim'); if (rclEl) { rclEl.textContent = sw.reclaim ? 'OK' : '—'; rclEl.className = 'flow-cell-val ' + (sw.reclaim ? 'ok' : 'neut') }
-  const dispEl = w.el('flowDisplacement'); if (dispEl) { dispEl.textContent = sw.displacement ? 'OK' : '—'; dispEl.className = 'flow-cell-val ' + (sw.displacement ? 'ok' : 'neut') }
+  const swEl = el('flowSweep'); if (swEl) { swEl.textContent = sw.type === 'none' ? 'NONE' : sw.type.toUpperCase(); swEl.className = 'flow-cell-val ' + (sw.type !== 'none' ? 'ok' : 'neut') }
+  const rclEl = el('flowReclaim'); if (rclEl) { rclEl.textContent = sw.reclaim ? 'OK' : '—'; rclEl.className = 'flow-cell-val ' + (sw.reclaim ? 'ok' : 'neut') }
+  const dispEl = el('flowDisplacement'); if (dispEl) { dispEl.textContent = sw.displacement ? 'OK' : '—'; dispEl.className = 'flow-cell-val ' + (sw.displacement ? 'ok' : 'neut') }
 }
 
 // ── ENTRY GATES ENGINE ────────────────────────────────────────────
@@ -739,9 +740,9 @@ export function computeGates(dir: any): any {
   const oiConfirm = oiChange > 0.05
 
   // Risk limits
-  const maxDay = parseInt(w.el('atMaxDay')?.value) || 5
+  const maxDay = parseInt(el('atMaxDay')?.value) || 5
   const maxConc = getTCMaxPos()
-  const lossLim = parseInt(w.el('atLossStreak')?.value) || 3
+  const lossLim = parseInt(el('atLossStreak')?.value) || 3
   // [RISK RAILS FIX] Count positions per AT.mode (not always demo)
   const _rrPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _rrPosList.filter((p: any) => p.autoTrade && !p.closed).length
@@ -771,23 +772,23 @@ export function computeGates(dir: any): any {
 }
 
 export function renderGates(gates: any): void {
-  const grid = w.el('gatesGrid'); if (!grid) return
+  const grid = el('gatesGrid'); if (!grid) return
   const okCount = Object.values(gates).filter((v: any) => v === 'ok').length
-  const okEl = w.el('gatesOkCount'); if (okEl) okEl.textContent = okCount + '/' + w.GATE_DEFS.length + ' OK'
+  const okEl = el('gatesOkCount'); if (okEl) okEl.textContent = okCount + '/' + w.GATE_DEFS.length + ' OK'
 
   // Animate synapse dots on brain SVG for gate status
   const dotIds = ['bdot0', 'bdot1', 'bdot2', 'bdot3', 'bdot4', 'bdot5', 'bdot6', 'bdot7']
   const lineIds = ['bline0', 'bline1', 'bline2', 'bline3', 'bline4', 'bline5']
   const gateVals = Object.values(gates)
   dotIds.forEach((id, i) => {
-    const dot = w.el(id); if (!dot) return
+    const dot = el(id); if (!dot) return
     const st: any = gateVals[i] || 'wait'
     const c = st === 'ok' ? '#39ff14' : st === 'fail' ? '#ff3355' : '#f0c040'
     dot.setAttribute('fill', c + '33')
     dot.setAttribute('stroke', c)
   })
   lineIds.forEach((id, i) => {
-    const line = w.el(id); if (!line) return
+    const line = el(id); if (!line) return
     const st: any = gateVals[i] || 'wait'
     const c = st === 'ok' ? '#39ff14' : st === 'fail' ? '#ff3355' : '#f0c040'
     line.setAttribute('stroke', c)
@@ -840,10 +841,10 @@ export function computeEntryScore(gates: any, dir: any): any {
   BM.entryReady = score >= readyThreshold
 
   // Update UI
-  const numEl = w.el('entryScoreNum')
-  const fillEl = w.el('entryScoreFill')
-  const lblEl = w.el('entryScoreLabel')
-  const reasonsEl = w.el('entryScoreReasons')
+  const numEl = el('entryScoreNum')
+  const fillEl = el('entryScoreFill')
+  const lblEl = el('entryScoreLabel')
+  const reasonsEl = el('entryScoreReasons')
   if (numEl) { numEl.textContent = score; numEl.style.color = col }
   if (fillEl) { fillEl.style.width = score + '%'; fillEl.style.background = col }
   if (lblEl) { lblEl.textContent = label; lblEl.style.color = col }
@@ -976,8 +977,8 @@ export function updateChaosBar(): void {
   const spreadW = 0 // no real spread data
   const chaos = Math.min(100, Math.round(atrPct * 15 + newsW + spreadW))
 
-  const fill = w.el('chaosBarFill')
-  const val = w.el('chaosVal')
+  const fill = el('chaosBarFill')
+  const val = el('chaosVal')
   const col = chaos < 33 ? '#39ff14' : chaos < 66 ? '#f0c040' : '#ff3355'
   if (fill) { fill.style.width = chaos + '%'; fill.style.background = col }
   if (val) { val.textContent = chaos + '%'; val.style.color = col }
@@ -1006,9 +1007,9 @@ export function updateNewsShield(): void {
   else if (atrPct > 1.2) BM.newsRisk = 'med'
   else BM.newsRisk = BM.newsRisk === 'high' ? 'med' : 'low' // slow decay
 
-  const badge = w.el('newsRiskBadge')
-  const headline = w.el('newsHeadline')
-  const macroCd = w.el('macroCd')
+  const badge = el('newsRiskBadge')
+  const headline = el('newsHeadline')
+  const macroCd = el('macroCd')
 
   if (badge) { badge.textContent = BM.newsRisk.toUpperCase(); badge.className = 'news-risk-badge ' + BM.newsRisk }
   if (headline) headline.textContent = macroMsg || (BM.newsRisk === 'high' ? 'High volatility detected — caution' : 'No significant news detected')
@@ -1019,8 +1020,8 @@ export function updateNewsShield(): void {
 // PROTECT = only: execution risk, news HIGH, REAL risk limit breach
 // NOT: session off, regime unstable (those are BLOCK/WAIT only)
 export function checkProtectMode(): void {
-  const lossLim = parseInt(w.el('atLossStreak')?.value) || 3
-  const maxDay = parseInt(w.el('atMaxDay')?.value) || 5
+  const lossLim = parseInt(el('atLossStreak')?.value) || 3
+  const maxDay = parseInt(el('atMaxDay')?.value) || 5
   const _closedToday = +(getATClosedToday()) || 0
 
   let reason: any = null
@@ -1046,8 +1047,8 @@ export function checkProtectMode(): void {
     toast(reason)
   }
 
-  const banner = w.el('protectBanner')
-  const bannerTxt = w.el('protectBannerTxt')
+  const banner = el('protectBanner')
+  const bannerTxt = el('protectBannerTxt')
   if (banner) banner.className = 'protect-banner' + (BM.protectMode ? ' show' : '')
   if (bannerTxt && BM.protectMode) bannerTxt.textContent = BM.protectReason
 }
@@ -1057,7 +1058,7 @@ export function resetProtectMode(): void {
   BM.protectReason = ''
   if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[BRAIN PROTECT] OFF')
   BM.lossStreak = 0
-  const banner = w.el('protectBanner')
+  const banner = el('protectBanner')
   if (banner) banner.className = 'protect-banner'
   brainThink('ok', _ZI.ok + ' Protect mode resetat manual')
   toast('Protect mode resetat', 0, _ZI.ok)
@@ -1067,7 +1068,7 @@ export function resetProtectMode(): void {
 
 // DSL telemetry
 export function updateDSLTelemetry(): void {
-  const tele = w.el('dslTelemetry'); if (!tele) return
+  const tele = el('dslTelemetry'); if (!tele) return
   const posns = (getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed)
 
   if (!posns.length || !getDSLEnabled()) {
@@ -1075,9 +1076,9 @@ export function updateDSLTelemetry(): void {
     return
   }
 
-  const pivotLeftPct = parseFloat(w.el('dslTrailPct')?.value) || 0.8
-  const pivotRightPct = parseFloat(w.el('dslTrailSusPct')?.value) || 1.0
-  const impulseValPct = parseFloat(w.el('dslExtendPct')?.value) || 20
+  const pivotLeftPct = parseFloat(el('dslTrailPct')?.value) || 0.8
+  const pivotRightPct = parseFloat(el('dslTrailSusPct')?.value) || 1.0
+  const impulseValPct = parseFloat(el('dslExtendPct')?.value) || 20
 
   let html = `<div class="dsl-tele-title">DSL TELEMETRY — BRAIN READ</div>`
   posns.forEach((pos: any) => {
@@ -1174,9 +1175,9 @@ export function checkAntiFakeout(klines: any, dir: any): boolean {
 
 // Safety gates
 export function computeSafetyGates(dir: any): any {
-  const maxDay = parseInt(w.el('atMaxDay')?.value) || 5
+  const maxDay = parseInt(el('atMaxDay')?.value) || 5
   const maxConc = getTCMaxPos()
-  const lossLim = parseInt(w.el('atLossStreak')?.value) || 3
+  const lossLim = parseInt(el('atLossStreak')?.value) || 3
   // [RISK RAILS FIX] Count positions per AT.mode
   const _sgPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _sgPosList.filter((p: any) => p.autoTrade && !p.closed).length
@@ -1185,7 +1186,7 @@ export function computeSafetyGates(dir: any): any {
   const riskOk = !BM.protectMode && BM.dailyTrades < maxDay && concurrent < maxConc && BM.lossStreak < lossLim
   const h = new Date().getUTCHours()
   // C: Session gate only applies when session filter checkbox is ON
-  const sessionFilterEnabled = w.el('dhfEnabled')?.checked !== false  // default ON
+  const sessionFilterEnabled = el('dhfEnabled')?.checked !== false  // default ON
   const sessionHourOk = (h >= 7 && h < 11) || (h >= 13 && h < 17) || (h >= 19 && h < 23)
   const sessionOk = !sessionFilterEnabled || sessionHourOk  // pass if filter OFF
   // [B7 FIX] Use cached regime from renderBrainCockpit instead of re-calling detectRegimeEnhanced
@@ -1273,7 +1274,7 @@ export function updateSessionPills(): void {
     const isPrimary = (s === primary)
 
     // Orb pills (primary display)
-    const pill = w.el('osess-' + s)
+    const pill = el('osess-' + s)
     if (pill) {
       // Build class string cleanly
       let cls = 'orb-sess'
@@ -1283,7 +1284,7 @@ export function updateSessionPills(): void {
     }
 
     // Bottom bar compat stubs
-    const b1 = w.el('zsess-' + s)
+    const b1 = el('zsess-' + s)
     if (b1) {
       b1.className = isActive ? 'active ' + s : ''
     }
@@ -1306,7 +1307,7 @@ if (!w._sessIntervalId && typeof w.Intervals !== 'undefined') {
 // [MOVED TO TOP] _neuroLastScan
 export function initNeuroCoinLEDs(): void {
   // Primary: inside orb; secondary: legacy stub (hidden)
-  const wrap = w.el('orbNeuroCoin') || w.el('zncNeuroCoin')
+  const wrap = el('orbNeuroCoin') || el('zncNeuroCoin')
   if (!wrap) return
   // Tiny dots only in orb (no label text to save space)
   wrap.innerHTML = w._NEURO_SYMS.map((sym: any) => `<div class="znc-nc" id="zncnc-${sym}" title="${sym}"><div class="znc-nc-dot" id="zncndot-${sym}"></div></div>`).join('')
@@ -1315,7 +1316,7 @@ export function initNeuroCoinLEDs(): void {
 export function pulseNeuronCoin(sym: any): void {
   // sym can be 'BTCUSDT' or 'BTC'
   const base = sym.replace('USDT', '').replace('usdt', '').toUpperCase()
-  const el2 = w.el('zncnc-' + base)
+  const el2 = el('zncnc-' + base)
   if (!el2) return
   el2.classList.add('pulse')
   setTimeout(() => el2.classList.remove('pulse'), 400)
@@ -1647,7 +1648,7 @@ export function renderBrainCockpit(): void {
   }
   Object.entries(safetyMap).forEach(([key, { led, lbl, txt }]: any) => {
     const pass = safety[key]
-    const ledEl = w.el(led), lblEl = w.el(lbl)
+    const ledEl = el(led), lblEl = el(lbl)
     if (ledEl) ledEl.className = 'znc-led ' + (pass ? 'ok' : 'fail')
     if (lblEl) { lblEl.textContent = txt; lblEl.className = 'znc-gate-lbl ' + (pass ? 'ok' : 'fail') }
   })
@@ -1663,7 +1664,7 @@ export function renderBrainCockpit(): void {
   }
   Object.entries(ctxMap).forEach(([, o]: any) => {
     const { led, lbl, txt, pass, wait } = o
-    const ledEl = w.el(led), lblEl = w.el(lbl)
+    const ledEl = el(led), lblEl = el(lbl)
     const cls = pass ? 'ok' : (wait && !pass) ? 'wait' : 'fail'
     if (ledEl) ledEl.className = 'znc-led ' + cls
     if (lblEl) { lblEl.textContent = txt; lblEl.className = 'znc-gate-lbl ' + cls }
@@ -1672,7 +1673,7 @@ export function renderBrainCockpit(): void {
   // ── MTF TF BADGES (per profile) ──
   const tfsToShow = prof === 'fast' ? ['5m', '15m', '1h'] : prof === 'swing' ? ['15m', '1h', '4h'] : ['30m', '1h', '4h'];
   ['mtf15m', 'mtf1h', 'mtf4h'].forEach((id, i) => {
-    const b = w.el(id); if (!b) return
+    const b = el(id); if (!b) return
     const tf = tfsToShow[i] || mtfTFs[i]
     const rsi = getRSI(tf) || 50
     const tdir = rsi > 55 ? 'bull' : rsi < 45 ? 'bear' : 'neut'
@@ -1680,13 +1681,13 @@ export function renderBrainCockpit(): void {
     b.textContent = tf + ' ' + (tdir === 'bull' ? '▲' : tdir === 'bear' ? '▼' : '—')
     b.className = 'znc-tf-badge ' + tdir + (i === 0 ? ' trigger' : '')
   })
-  const trigBadge = w.el('mtfTrig')
+  const trigBadge = el('mtfTrig')
   if (trigBadge) { trigBadge.textContent = 'TRIG:' + tfMap.trigger + ' ' + (BM.flow?.cvd === 'rising' ? '▲' : BM.flow?.cvd === 'falling' ? '▼' : '—') }
 
   // ── ORB SCORE ARC ──
-  const arc = w.el('zncScoreArc')
-  const numEl = w.el('zncScoreNum')
-  const scoreLbl = w.el('zncScoreLbl')
+  const arc = el('zncScoreArc')
+  const numEl = el('zncScoreNum')
+  const scoreLbl = el('zncScoreLbl')
   const circum = 302 // 2π×48
   const col = score >= scoreThresh ? '#39ff14' : score >= 60 ? '#f0c040' : '#ff3355'
   if (arc) { arc.setAttribute('stroke-dasharray', `${score / 100 * circum} ${circum}`); arc.setAttribute('stroke', col) }
@@ -1696,7 +1697,7 @@ export function renderBrainCockpit(): void {
   // ── ORB LED NODES (gate state → LED ring dots) ──
   const ledStates = [safety.risk, safety.spread, safety.cooldown, safety.news, safety.session, ctx.mtf, ctx.flow, ctx.trigger, !w._fakeout.invalid]
   ledStates.forEach((pass: any, i: number) => {
-    const dot = w.el('zled' + i); if (!dot) return
+    const dot = el('zled' + i); if (!dot) return
     const c2 = pass ? '#39ff14' : '#ff3355'
     dot.setAttribute('fill', c2 + '22')
     dot.setAttribute('stroke', c2)
@@ -1704,10 +1705,10 @@ export function renderBrainCockpit(): void {
   })
 
   // ── STATE / ARM BADGES ──
-  const badge = w.el('brainStateBadge')
+  const badge = el('brainStateBadge')
   const stLabels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', armed: _ZI.bolt + ' ARMED', trading: _ZI.dRed + ' TRADING', protect: _ZI.sh + ' PROTECT', blocked: _ZI.noent + ' BLOCKED' }
   if (badge) { badge.innerHTML = stLabels[state] || state.toUpperCase(); badge.className = 'znc-state ' + state }
-  const armBadge = w.el('zncArmBadge')
+  const armBadge = el('zncArmBadge')
   if (armBadge) {
     const armTxt = isArmed ? 'ARMED' : BM.protectMode ? 'PROTECT' : hasPos ? 'TRADING' : 'SCANNING'
     armBadge.textContent = armTxt
@@ -1715,7 +1716,7 @@ export function renderBrainCockpit(): void {
   }
 
   // ── CONTROL SOURCE ──
-  const srcEl = w.el('znc-src')
+  const srcEl = el('znc-src')
   if (srcEl) {
     const srcMap: any = { manual: ['USER', 'user'], assist: ['ASSIST', 'assist'], auto: ['AI', 'ai'] }
     srcEl.textContent = srcMap[mode][0]
@@ -1724,12 +1725,12 @@ export function renderBrainCockpit(): void {
 
   // ── REGIME BADGES ──
   const regLabels: any = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + _ZI.hex, panic: 'PANIC ' + _ZI.fire, unknown: '—' };
-  [w.el('brainRegimeBadge'), w.el('brainRegimeBadge2')].forEach((b: any) => {
+  [el('brainRegimeBadge'), el('brainRegimeBadge2')].forEach((b: any) => {
     if (!b) return
     b.innerHTML = regLabels[BR.regime] || BR.regime
     b.className = 'znc-regime-val ' + (BR.regime || 'unknown')
   })
-  const rd = w.el('zncRegimeDetail')
+  const rd = el('zncRegimeDetail')
   if (rd) rd.textContent = `ADX: ${regDat.adx || '—'} | VOL: ${regDat.volMode || '—'} | ${regDat.structure || '—'}${regDat.squeeze ? ' | SQZ' : ''}`
 
   // ── INSIGHT CARDS (use card IDs directly) ──
@@ -1737,7 +1738,7 @@ export function renderBrainCockpit(): void {
   const delta = BM.flow?.delta || 0
   const chaos = Math.round((BR.regimeAtrPct || 0) * 15 + (BM.newsRisk === 'high' ? 40 : BM.newsRisk === 'med' ? 20 : 0))
   const _card = (cardId: any, titleId: any, subId: any, t: any, s: any, cls: any) => {
-    const ca = w.el(cardId), ti = w.el(titleId), si = w.el(subId)
+    const ca = el(cardId), ti = el(titleId), si = el(subId)
     if (ca) ca.className = 'znc-card ' + cls
     if (ti) ti.innerHTML = t
     if (si) si.textContent = s
@@ -1756,7 +1757,7 @@ export function renderBrainCockpit(): void {
   const aSub = aAllow + ' · conf:' + (atmos.confidence || 0) + ' · ×' + (atmos.sizeMultiplier != null ? atmos.sizeMultiplier : '?')
   _card('card-atmos', 'card-atmos-t', 'card-atmos-s', _ZI.bolt + ' ' + aLabel, aSub, aCls)
   // Chaos shimmer CSS
-  const orbWrap = w.el('zncOrbWrap')
+  const orbWrap = el('zncOrbWrap')
   if (orbWrap) orbWrap.style.animation = chaos > 80 ? 'zHeat .15s infinite' : ''
 
   // ── THREAT CIRCLES ──
@@ -1764,22 +1765,22 @@ export function renderBrainCockpit(): void {
   const liqScore = Math.round((BR.ofi?.sell || 50) / 100 * 60)
   const volScore = Math.round(Math.min(100, (BR.regimeAtrPct || 0) * 20));
   [[newsScore, 'threat-news', 'threatNewsVal'], [liqScore, 'threat-liq', 'threatLiqVal'], [volScore, 'threat-vol', 'threatVolVal']].forEach(([v, cid, vid]: any) => {
-    const c = w.el(cid), vv = w.el(vid)
+    const c = el(cid), vv = el(vid)
     const col2 = v < 33 ? '#39ff14' : v < 66 ? '#f0c040' : '#ff3355'
     if (c) c.className = 'znc-circ ' + (v < 33 ? 'low' : v < 66 ? 'med' : 'high')
     if (vv) { vv.textContent = v; vv.style.color = col2 }
   })
 
   // ── GAUGES ──
-  const na = w.el('newsGaugeArc'); if (na) na.setAttribute('stroke-dasharray', `${newsScore / 100 * 75} 75`)
-  const la = w.el('liqGaugeArc'); if (la) la.setAttribute('stroke-dasharray', `${liqScore / 100 * 75}  75`)
-  const nv = w.el('newsGaugeVal'); if (nv) { nv.textContent = newsScore; nv.style.color = newsScore < 33 ? '#39ff14' : newsScore < 66 ? '#f0c040' : '#ff3355' }
-  const lv = w.el('liqGaugeVal'); if (lv) { lv.textContent = liqScore; lv.style.color = liqScore < 33 ? '#39ff14' : liqScore < 66 ? '#f0c040' : '#ff3355' }
+  const na = el('newsGaugeArc'); if (na) na.setAttribute('stroke-dasharray', `${newsScore / 100 * 75} 75`)
+  const la = el('liqGaugeArc'); if (la) la.setAttribute('stroke-dasharray', `${liqScore / 100 * 75}  75`)
+  const nv = el('newsGaugeVal'); if (nv) { nv.textContent = newsScore; nv.style.color = newsScore < 33 ? '#39ff14' : newsScore < 66 ? '#f0c040' : '#ff3355' }
+  const lv = el('liqGaugeVal'); if (lv) { lv.textContent = liqScore; lv.style.color = liqScore < 33 ? '#39ff14' : liqScore < 66 ? '#f0c040' : '#ff3355' }
 
   // ── ARM DETAIL + TOP BLOCK REASON (uses S.* canonical) ──
   const trigType = sw.reclaim ? 'Sweep+Reclaim' : sw.displacement ? 'Displacement' : '—'
   const cdLeft = Math.max(0, Math.round((_getCooldownMs() - (Date.now() - (getATLastTradeTs() || 0))) / 60000))
-  const _ad = (id: any, v: any, arm?: any) => { const e = w.el(id); if (e) { e.textContent = v; if (arm !== undefined) e.style.color = arm ? '#39ff14' : '#2a4030' } }
+  const _ad = (id: any, v: any, arm?: any) => { const e = el(id); if (e) { e.textContent = v; if (arm !== undefined) e.style.color = arm ? '#39ff14' : '#2a4030' } }
   _ad('zad-mode', mode.toUpperCase(), isArmed)
   _ad('zad-profile', prof.toUpperCase() + '  ' + tfMap.trigger + '/' + tfMap.context + '/' + tfMap.bias)
   _ad('zad-score', score + '/' + (isArmed ? '✓' : scoreThresh + '↑'), isArmed)
@@ -1791,7 +1792,7 @@ export function renderBrainCockpit(): void {
   const allGates = Object.assign({}, safety, { mtfCtx: ctx.mtf, flowCtx: ctx.flow, triggerCtx: ctx.trigger, antifakeCtx: !w._fakeout.invalid })
   const gatesOk = Object.values(allGates).filter(Boolean).length
   const gatesTotal = Object.keys(allGates).length
-  const gatesSumEl = w.el('zad-gates-summary')
+  const gatesSumEl = el('zad-gates-summary')
   if (gatesSumEl) gatesSumEl.textContent = `Gates: ${gatesOk}/${gatesTotal} pass`
 
   // Compute single TOP REASON why not entering
@@ -1817,17 +1818,17 @@ export function renderBrainCockpit(): void {
   else if (isArmed) { topReason = `AUTO ARMED: Entry score ${score} ✓ — waiting close`; reasonCls = 'ok' }
   else { topReason = `AUTO SCANNING: Score ${score} | ${BR.regime?.toUpperCase() || '—'}`; reasonCls = 'wait' }
 
-  const brEl = w.el('zad-block-reason')
+  const brEl = el('zad-block-reason')
   if (brEl) { brEl.textContent = topReason; brEl.className = 'znc-block-reason ' + reasonCls }
 
   // ── PROTECT BANNER ──
-  const pb = w.el('protectBanner')
+  const pb = el('protectBanner')
   if (pb) pb.className = 'znc-protect' + (BM.protectMode ? ' show' : '')
-  const pbt = w.el('protectBannerTxt')
+  const pbt = el('protectBannerTxt')
   if (pbt && BM.protectMode) pbt.textContent = BM.protectReason
 
   // ── DSL STATUS (clear, non-ambiguous) ──
-  const dslEl = w.el('zncDslContract')
+  const dslEl = el('zncDslContract')
   if (dslEl) {
     const _dslMode = (w.S.mode || 'assist').toLowerCase()
     const _modeTag = _dslMode === 'auto' ? '<span style="color:#39ff14;font-size:10px">●AI</span>' : _dslMode === 'assist' ? '<span style="color:#f0c040;font-size:10px">●USR</span>' : '<span style="color:#2a4030;font-size:10px">●MAN</span>'
@@ -1857,15 +1858,15 @@ export function renderBrainCockpit(): void {
   // ── RECEIPT (ARM state) ──
   if (isArmed || hasPos) {
     ['rec-mode', 'rec-score', 'rec-trigger', 'rec-tf'].forEach((id, i) => {
-      const e = w.el(id); if (e) e.textContent = [mode.toUpperCase(), score, trigType, tfMap.trigger + '/' + tfMap.context][i]
+      const e = el(id); if (e) e.textContent = [mode.toUpperCase(), score, trigType, tfMap.trigger + '/' + tfMap.context][i]
     })
   }
 
   // ── Q-FORECAST DISPLAY (pure display — S.quantumForecast set by Brain engine) ──
   ;(function renderQForecast() {
-    const mainEl = w.el('bf-main')
-    const rangeEl = w.el('bf-range')
-    const stateEl = w.el('bf-state')
+    const mainEl = el('bf-main')
+    const rangeEl = el('bf-range')
+    const stateEl = el('bf-state')
     if (!mainEl) return
 
     const qf = w.S.quantumForecast
@@ -1901,8 +1902,8 @@ export function renderBrainCockpit(): void {
 
   // ── WHY ENGINE DISPLAY (pure display — S.why set by brain narrator) ──
   ;(function renderWhyEngine() {
-    const stateEl = w.el('bw-state')
-    const reasonsEl = w.el('bw-reasons')
+    const stateEl = el('bw-state')
+    const reasonsEl = el('bw-reasons')
     if (!stateEl) return
 
     const why = w.S.why
@@ -2043,7 +2044,7 @@ export function renderBrainCockpit(): void {
 
 // Z Particles animation
 export function initZParticles(): void {
-  const wrap = w.el('zncParticles')
+  const wrap = el('zncParticles')
   if (!wrap) return
   wrap.innerHTML = ''
   const colors = ['#39ff14', '#00ffcc', '#f0c040', '#aa44ff', '#ff8800']
@@ -2070,20 +2071,20 @@ export function zAnimFrame(ts: any): void {
 
   // RADAR SWEEP (SVG rotate)
   w.ZANIM.radarAngle = (w.ZANIM.radarAngle + dt * 0.12) % 360
-  const sweep = w.el('zncRadarSweep')
+  const sweep = el('zncRadarSweep')
   if (sweep) sweep.setAttribute('transform', `rotate(${w.ZANIM.radarAngle},110,110)`)
 
   // ORB PULSE (brightness via filter on core circle)
   w.ZANIM.orbScale += w.ZANIM.orbDir
   if (w.ZANIM.orbScale > 1.08 || w.ZANIM.orbScale < 0.95) w.ZANIM.orbDir *= -1
-  const core = w.el('zncCore')
+  const core = el('zncCore')
   if (core) core.setAttribute('opacity', 0.6 + w.ZANIM.orbScale * 0.12)
 
   // SCORE ARC GLOW synapse intensity
   const score = BM.entryScore || 0
   const synapseOpacity = 0.1 + (score / 100) * 0.5
   for (let i = 0; i < 9; i++) {
-    const syn = w.el('zsyn' + i)
+    const syn = el('zsyn' + i)
     if (syn) {
       const base = i < 3 ? '#39ff14' : i < 6 ? '#f0c040' : '#aa44ff'
       syn.setAttribute('stroke', base + Math.round(synapseOpacity * 255).toString(16).padStart(2, '0'))
@@ -2120,7 +2121,7 @@ export function _brainDirtySet(key: any, val: any): boolean {
 // Safe DOM update with dirty flag
 export function _brainSafeSet(elId: any, val: any, attr: string = 'textContent'): void {
   if (!_brainDirtySet(elId, val)) return
-  const e = w.el(elId)
+  const e = el(elId)
   if (e) (e as any)[attr] = val
 }
 
@@ -2528,8 +2529,8 @@ export function updateOrderFlow(): any {
   const blendSell = 100 - blendBuy
 
   // Update UI
-  const buyEl = w.el('ofiBuy'), sellEl = w.el('ofiSell')
-  const buyPctEl = w.el('ofiBuyPct'), sellPctEl = w.el('ofiSellPct')
+  const buyEl = el('ofiBuy'), sellEl = el('ofiSell')
+  const buyPctEl = el('ofiBuyPct'), sellPctEl = el('ofiSellPct')
   if (buyEl) buyEl.style.width = blendBuy.toFixed(0) + '%'
   if (sellEl) sellEl.style.width = blendSell.toFixed(0) + '%'
   if (buyPctEl) buyPctEl.textContent = 'BUY ' + blendBuy.toFixed(0) + '%'
@@ -2586,8 +2587,8 @@ export function adaptAutoTradeParams(): void {
   }
 
   if (adapted) {
-    const slEl = w.el('atSL'); if (slEl) slEl.value = newSL.toFixed(1)
-    const sizeEl = w.el('atSize'); if (sizeEl) sizeEl.value = Math.round(newSize)
+    const slEl = el('atSL'); if (slEl) slEl.value = newSL.toFixed(1)
+    const sizeEl = el('atSize'); if (sizeEl) sizeEl.value = Math.round(newSize)
     BR.adaptParams = { sl: newSL, size: newSize, adjustCount: (BR.adaptParams.adjustCount || 0) + 1 }
     // [P1] Sync adapted values back to TC
     if (typeof w.TC !== 'undefined') { w.TC.slPct = newSL; w.TC.size = newSize }

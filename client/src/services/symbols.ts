@@ -7,8 +7,9 @@
  */
 
 import { getSymbol, getPrice, getBrainMetrics, getATObject, getTPObject, getDSLObject } from './stateAccessors'
+import { el } from '../utils/dom'
 import { fP } from '../utils/format'
-const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, w.el, fn calls
+const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, fn calls
 
 export const ZStore = {
   price: (sym: string) => w.allPrices?.[sym] || (sym === getSymbol() ? getPrice() : null),
@@ -47,8 +48,8 @@ export function connectWatchlist(): void {
       if (typeof w.onNeuronScanUpdate === 'function') w.onNeuronScanUpdate(sym)
       // Notify React WatchlistBar so it can update Zustand store without a separate WS
       window.dispatchEvent(new CustomEvent('zeus:wlPrice', { detail: { sym, price, chg } }))
-      const pe = w.el('wlp-' + sym)
-      const ce = w.el('wlc-' + sym)
+      const pe = el('wlp-' + sym)
+      const ce = el('wlc-' + sym)
       if (pe) { pe.textContent = '$' + (price >= 1000 ? fP(price) : price >= 1 ? price.toFixed(3) : price.toPrecision(4)) }
       if (ce) { ce.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%'; ce.className = 'wl-chg ' + (chg >= 0 ? 'up' : 'dn') }
     },
@@ -62,7 +63,7 @@ export function connectWatchlist(): void {
 
 export function switchWLSymbol(sym: string): void {
   document.querySelectorAll('.wl-item').forEach(i => i.classList.remove('act'))
-  const item = w.el('wl-' + sym); if (item) item.classList.add('act')
+  const item = el('wl-' + sym); if (item) item.classList.add('act')
   const sel = document.querySelector('#symSel') as HTMLSelectElement | null
   if (sel) { sel.value = sym; if (typeof w.setSymbol === 'function') w.setSymbol(sym) }
   else { w.S.symbol = sym; if (typeof w.resetData === 'function') w.resetData() }

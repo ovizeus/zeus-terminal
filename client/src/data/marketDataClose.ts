@@ -4,7 +4,7 @@
 
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { fmtNow, toast } from './marketDataHelpers'
-const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, w.el, fn calls
+const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
 const AT = getATObject()

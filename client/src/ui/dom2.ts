@@ -1,4 +1,5 @@
 import { toast } from '../data/marketDataHelpers'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
 // DOM utilities, render helpers
@@ -27,7 +28,7 @@ export function _initAudio(): void {
 }
 
 export function _updateAudioBadge(): void {
-  const b = w.el('soundBadge');
+  const b = el('soundBadge');
   if (b) {
     b.innerHTML = _audioReady ? _ZI.vol + ' SOUND READY' : _ZI.mute + ' SOUND';
     b.style.color = _audioReady ? 'var(--lime)' : 'var(--orange)';
@@ -69,15 +70,15 @@ export function toggleAlerts(en: any): void {
   const S = w.S;
   S.alerts = S.alerts || {};
   S.alerts.enabled = en;
-  const btn = w.el('bellBtn');
+  const btn = el('bellBtn');
   if (btn) {
     const svgOn = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>';
     const svgOff = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
     btn.innerHTML = en ? svgOn : svgOff;
   }
   // Fix toggle slider visual
-  const dot = w.el('alertToggleDot');
-  const slider = w.el('alertToggleSlider');
+  const dot = el('alertToggleDot');
+  const slider = el('alertToggleSlider');
   if (dot) dot.style.cssText = en ? 'position:absolute;height:18px;width:18px;background:var(--grn);border-radius:50%;bottom:2px;transition:.3s;transform:translateX(22px);box-shadow:0 0 6px var(--grn)' : 'position:absolute;height:18px;width:18px;background:#555;border-radius:50%;bottom:2px;transition:.3s;left:2px';
   if (slider) slider.style.background = en ? '#00d97a33' : '#1e2530';
   if (en && typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -96,12 +97,12 @@ export function toggleAlerts(en: any): void {
 const _origApplyCC = typeof w.applyChartColors === 'undefined' ? null : w.applyChartColors;
 
 export function applyChartColors(): void {
-  const bull = w.el('ccBull')?.value || '#00d97a';
-  const bear = w.el('ccBear')?.value || '#ff3355';
-  const bw = w.el('ccBullW')?.value || '#00d97a';
-  const brw = w.el('ccBearW')?.value || '#ff3355';
-  const pText = w.el('ccPriceText')?.value || '#7a9ab8';
-  const pBg = w.el('ccPriceBg')?.value || '#0a0f16';
+  const bull = el('ccBull')?.value || '#00d97a';
+  const bear = el('ccBear')?.value || '#ff3355';
+  const bw = el('ccBullW')?.value || '#00d97a';
+  const brw = el('ccBearW')?.value || '#ff3355';
+  const pText = el('ccPriceText')?.value || '#7a9ab8';
+  const pBg = el('ccPriceBg')?.value || '#0a0f16';
   if (w.cSeries) { w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bw + '77', wickDownColor: brw + '77' }); }
   if (w.mainChart) { w.mainChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText }, rightPriceScale: { textColor: pText } }); }
   if (w.cvdChart) { w.cvdChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
@@ -161,10 +162,10 @@ export function togInd(id: any, btn: any): void {
 }
 
 export function applyPriceAxisColors(): void {
-  const pText = w.el('ccPriceText2')?.value || '#7a9ab8';
-  const pBg = w.el('ccPriceBg2')?.value || '#0a0f16';
-  const gh = w.el('ccGridH')?.value || '#1a2530';
-  const gv = w.el('ccGridV')?.value || '#1a2530';
+  const pText = el('ccPriceText2')?.value || '#7a9ab8';
+  const pBg = el('ccPriceBg2')?.value || '#0a0f16';
+  const gh = el('ccGridH')?.value || '#1a2530';
+  const gv = el('ccGridV')?.value || '#1a2530';
   [w.mainChart, w.cvdChart].forEach((c: any) => {
     if (c) c.applyOptions({
       layout: { background: { color: pBg }, textColor: pText },

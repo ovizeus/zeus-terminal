@@ -5,7 +5,8 @@
 import { getTPObject } from '../services/stateAccessors'
 import { fmtTime, fmtDate } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
-const w = window as any // kept for w.S (producer), w.el, w.mainChart, w.cvdChart, fn calls
+import { el } from '../utils/dom'
+const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
@@ -63,11 +64,11 @@ document.addEventListener('click', function (e: any) {
 
 // ===== FULLSCREEN =====
 export function toggleFS(): void {
-  const sec = w.el('csec'); const btn = w.el('fsbtn') || w.el('fsBtn')
+  const sec = el('csec'); const btn = el('fsbtn') || el('fsBtn')
   if (!sec) return
   const isFull = sec.classList.toggle('fsm')
   if (btn) btn.textContent = isFull ? '\u2291' : '\u229E'
-  const cc = w.el('cc')
+  const cc = el('cc')
   if (isFull) {
     const h = window.innerHeight - 100
     if (w.mainChart) w.mainChart.applyOptions({ height: h })
@@ -82,9 +83,9 @@ export function toggleFS(): void {
 // ===== PRICE UPDATE =====
 export function updatePriceDisplay(): void {
   if (document.hidden) return
-  const e = w.el('bprice'); if (e) e.textContent = '$' + fP(w.S.price)
+  const e = el('bprice'); if (e) e.textContent = '$' + fP(w.S.price)
   const c = (w.S.price - w.S.prevPrice) / w.S.prevPrice * 100
-  const bc = w.el('bchg')
+  const bc = el('bchg')
   if (bc) { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
   if (typeof w.calcSRTable === 'function') w.calcSRTable()
   if (typeof w.updateMetrics === 'function') w.updateMetrics()
@@ -151,7 +152,7 @@ export async function fetchRSI(tf: string): Promise<void> {
 
 export async function fetchAllRSI(): Promise<void> {
   const now = new Date()
-  const upd = w.el('rsiupd'); if (upd) upd.textContent = 'UPD ' + now.toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' })
+  const upd = el('rsiupd'); if (upd) upd.textContent = 'UPD ' + now.toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' })
   await Promise.all(['5m', '15m', '1h', '3h', '4h', '1d'].map(fetchRSI))
 }
 
@@ -162,11 +163,11 @@ export async function fetchFG(): Promise<void> {
     const val = +d.data[0].value, cls = d.data[0].value_classification
     const colors: any = { 'Fear': '#ff8800', 'Extreme Fear': '#ff3355', 'Greed': '#00cc77', 'Extreme Greed': '#00ff99', 'Neutral': '#7a9ab8' }
     const col = colors[cls] || '#7a9ab8'
-    const ev = w.el('fgval'); if (ev) { ev.textContent = val; ev.style.color = col }
-    const el2 = w.el('fglbl'); if (el2) { el2.textContent = cls.toUpperCase(); el2.style.color = col }
-    const efg = w.el('fgf'); if (efg) { efg.style.width = val + '%'; efg.style.background = col }
-    const ech = w.el('fgch'); if (ech) ech.textContent = 'Yesterday: ' + (d.data[1] ? +d.data[1].value : '\u2014') + ' | Week: \u2014'
-    const arc = w.el('fgarc')
+    const ev = el('fgval'); if (ev) { ev.textContent = val; ev.style.color = col }
+    const el2 = el('fglbl'); if (el2) { el2.textContent = cls.toUpperCase(); el2.style.color = col }
+    const efg = el('fgf'); if (efg) { efg.style.width = val + '%'; efg.style.background = col }
+    const ech = el('fgch'); if (ech) ech.textContent = 'Yesterday: ' + (d.data[1] ? +d.data[1].value : '\u2014') + ' | Week: \u2014'
+    const arc = el('fgarc')
     if (arc) { const circ = 175.93; const offset = circ - (val / 100) * circ; arc.style.strokeDashoffset = offset; arc.style.stroke = col }
   } catch (e: any) { console.warn('[fetchFG]', e.message) }
 }
@@ -210,7 +211,7 @@ export async function fetch24h(): Promise<void> {
     const d = await safeFetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${sym}`)
     if (!d.highPrice) throw new Error('Date 24h invalide')
     w.S.high = +d.highPrice; w.S.low = +d.lowPrice
-    const h = w.el('d24h'); const l = w.el('d24l')
+    const h = el('d24h'); const l = el('d24l')
     if (h) h.textContent = 'H: $' + fP(w.S.high)
     if (l) l.textContent = 'L: $' + fP(w.S.low)
   } catch (e: any) { console.warn('[fetch24h]', e.message) }
@@ -225,23 +226,23 @@ export function setDtTf(tf: any, btn: any): void {
 }
 
 export function updateMetrics(): void {
-  const dtp = w.el('dtp'), dtpc = w.el('dtpc'), dtps = w.el('dtps')
+  const dtp = el('dtp'), dtpc = el('dtpc'), dtps = el('dtps')
   if (dtp) dtp.textContent = w.S.price ? '$' + fP(w.S.price) : '\u2014'
   if (dtpc) { const c = w.S.prevPrice ? ((w.S.price - w.S.prevPrice) / w.S.prevPrice * 100).toFixed(2) + '%' : '\u2014'; dtpc.textContent = c; dtpc.style.color = w.S.price >= w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
   if (dtps) { dtps.textContent = w.S.price > w.S.prevPrice ? 'BULL' : 'BEAR'; dtps.style.color = w.S.price > w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
-  const dtoi = w.el('dtoi'), dtoic = w.el('dtoic'), dtois = w.el('dtois')
+  const dtoi = el('dtoi'), dtoic = el('dtoic'), dtois = el('dtois')
   if (dtoi) dtoi.textContent = w.S.oi ? '$' + fmt(w.S.oi) : '\u2014'
   if (dtoic) dtoic.textContent = w.S.oiPrev && w.S.oi ? (((w.S.oi - w.S.oiPrev) / w.S.oiPrev) * 100).toFixed(2) + '%' : '\u2014'
   if (dtois) { const s = w.S.oi > w.S.oiPrev ? 'RISING' : 'FALLING'; dtois.textContent = s; dtois.style.color = s === 'RISING' ? 'var(--grn)' : 'var(--red)' }
-  const dtfr = w.el('dtfr'), dtfrc = w.el('dtfrc'), dtfrs = w.el('dtfrs')
+  const dtfr = el('dtfr'), dtfrc = el('dtfrc'), dtfrs = el('dtfrs')
   if (dtfr) dtfr.textContent = w.S.fr !== null && w.S.fr !== undefined ? (w.S.fr * 100).toFixed(4) + '%' : '\u2014'
   if (dtfrc) dtfrc.textContent = calcFrCd()
   if (dtfrs) { const s = w.S.fr > 0 ? 'LONGS PAY' : w.S.fr < 0 ? 'SHORTS PAY' : 'NEUTRAL'; dtfrs.textContent = s; dtfrs.style.color = w.S.fr > 0 ? 'var(--red)' : w.S.fr < 0 ? 'var(--grn)' : 'var(--dim)' }
-  const dtls = w.el('dtls'), dtlsc = w.el('dtlsc'), dtlss = w.el('dtlss')
+  const dtls = el('dtls'), dtlsc = el('dtlsc'), dtlss = el('dtlss')
   if (dtls) dtls.textContent = w.S.ls ? w.S.ls.l.toFixed(1) + '% / ' + w.S.ls.s.toFixed(1) + '%' : '\u2014'
   if (dtlsc) dtlsc.textContent = '\u2014'
   if (dtlss) { const s = w.S.ls ? (w.S.ls.l > 55 ? 'LONG HEAVY' : w.S.ls.s > 55 ? 'SHORT HEAVY' : 'BALANCED') : '\u2014'; if (dtlss) dtlss.textContent = s; if (dtlss) dtlss.style.color = s === 'LONG HEAVY' ? 'var(--grn)' : s === 'SHORT HEAVY' ? 'var(--red)' : 'var(--dim)' }
-  const dtrsi = w.el('dtrsi'), dtrsic = w.el('dtrsic'), dtrsis = w.el('dtrsis')
+  const dtrsi = el('dtrsi'), dtrsic = el('dtrsic'), dtrsis = el('dtrsis')
   const rsi5 = w.S.rsi['5m'], rsi1h = w.S.rsi['1h']
   if (dtrsi) dtrsi.textContent = rsi5 ? rsi5.toFixed(1) : '\u2014'
   if (dtrsic) dtrsic.textContent = rsi1h ? rsi1h.toFixed(1) : '\u2014'
@@ -256,12 +257,12 @@ export function renderRSI(): void {
     { eid: 'r4h', bid: 'rb4', tf: '4h' }, { eid: 'r1d', bid: 'rb5', tf: '1d' },
   ]
   map.forEach(({ eid, bid, tf }) => {
-    const e = w.el(eid); if (!e) return
+    const e = el(eid); if (!e) return
     const v = w.S.rsi[tf]
     if (v === null || v === undefined) { e.textContent = '\u2014'; e.className = 'rsiv mid'; return }
     e.textContent = v.toFixed(2)
     e.className = 'rsiv ' + (v > 70 ? 'ob' : v < 30 ? 'os' : 'mid')
-    const bar = w.el(bid)
+    const bar = el(bid)
     const col = v > 70 ? '#ff3355' : v < 30 ? '#00d97a' : '#7a9ab8'
     if (bar) { bar.style.width = Math.max(5, Math.min(100, v)) + '%'; bar.style.background = col }
   })
@@ -280,7 +281,7 @@ export function calcSRTable(): void {
     { pid: 'szl', did: 'sdl', v: p - atr * 4 },
   ]
   levels.forEach((lv: any) => {
-    const ev = w.el(lv.pid), ed = lv.did ? w.el(lv.did) : null
+    const ev = el(lv.pid), ed = lv.did ? el(lv.did) : null
     if (ev) ev.textContent = '$' + fP(lv.v)
     if (ed) { const d = ((lv.v - p) / p * 100); ed.textContent = (d >= 0 ? '+' : '') + d.toFixed(2) + '%'; ed.style.color = d > 0 ? 'var(--grn)' : 'var(--red)' }
   })

@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/trading/positions.js (Phase 6B)
 // Position management, open/close handlers
 
-import { escHtml } from '../utils/dom'
+import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 
@@ -82,7 +82,7 @@ export function onTradeExecuted(pos: any): void {
   w._queueExecOverlay(html, 'entry', 2500)
 
   // Orb pulse green
-  const core = w.el('zncCore')
+  const core = el('zncCore')
   if (core) {
     core.style.filter = 'brightness(2.2) drop-shadow(0 0 18px #00ff9c)'
     setTimeout(() => { if (core) core.style.filter = '' }, 600)
@@ -149,7 +149,7 @@ export function triggerExecCinematic(side: any, sym: any): void {
   setTimeout(() => { try { document.body.removeChild(banner) } catch (_) { } }, 3200)
 
   // Shock ring on SVG
-  const shock = w.el('zncShock')
+  const shock = el('zncShock')
   if (shock) {
     shock.setAttribute('r', '30')
     shock.setAttribute('opacity', '0.9')
@@ -167,7 +167,7 @@ export function triggerExecCinematic(side: any, sym: any): void {
   }
 
   // Orb thump — brightness spike
-  const core2 = w.el('zncCore')
+  const core2 = el('zncCore')
   if (core2) {
     core2.style.filter = 'brightness(2.5) drop-shadow(0 0 20px ' + (side === 'LONG' ? '#39ff14' : '#ff3355') + ')'
     setTimeout(() => { if (core2) core2.style.filter = '' }, 500)
@@ -180,7 +180,7 @@ export function triggerExecCinematic(side: any, sym: any): void {
   const tfMap = w.PROFILE_TF?.[w.S.profile || 'fast']
   if (!tfMap) return
   ;['rec-mode', 'rec-score', 'rec-trigger', 'rec-tf'].forEach((id: string, i: number) => {
-    const e = w.el(id)
+    const e = el(id)
     if (e) e.textContent = [mode, score, trig, tfMap.trigger + '/' + tfMap.context][i]
   })
 }

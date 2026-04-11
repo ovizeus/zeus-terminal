@@ -4,11 +4,12 @@
 // [8C-3A] DSL/TC/BM/BRAIN reads migrated to accessors
 
 import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
+import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 
-const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.el, w.AT writes, function calls
+const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
 const DSL = getDSLObject()
 
@@ -97,8 +98,8 @@ export function toggleDSL(): void {
     w.S.dsl.active = DSL.enabled
     if (!DSL.enabled && typeof w.stopDSLIntervals === 'function') { w.stopDSLIntervals() }
     if (DSL.enabled && typeof w.startDSLIntervals === 'function' && !DSL.checkInterval) { w.startDSLIntervals() }
-    const btn = typeof w.el === 'function' ? w.el('dslToggleBtn') : document.getElementById('dslToggleBtn')
-    const dot = typeof w.el === 'function' ? w.el('dslStatusDot') : document.getElementById('dslStatusDot')
+    const btn = el('dslToggleBtn')
+    const dot = el('dslStatusDot')
     if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off') }
     if (dot) { dot.style.color = DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = DSL.enabled ? 'var(--grn-bright)' : '#333' }
     if (typeof w.atLog === 'function') w.atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
@@ -124,27 +125,27 @@ export function toggleAssistArm(): void {
 
 export function _syncDslAssistUI(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
-  const overlay = w.el('dslLockOverlay')
-  const assistBar = w.el('dslAssistBar')
-  const armBtn = w.el('dslAssistArmBtn')
-  const armStatus = w.el('dslAssistStatus')
+  const overlay = el('dslLockOverlay')
+  const assistBar = el('dslAssistBar')
+  const armBtn = el('dslAssistArmBtn')
+  const armStatus = el('dslAssistStatus')
   const dslConf = document.querySelectorAll('.dsl-config input, .dsl-config select')
 
   if (overlay) overlay.classList.remove('show')
 
   if (_m === 'auto') {
     if (assistBar) assistBar.classList.remove('show')
-    const dz = w.el('dslZone')
+    const dz = el('dslZone')
     if (dz) dz.style.pointerEvents = ''
     dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = w.el('dslToggleBtn')
+    const dslBtn2 = el('dslToggleBtn')
     if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = 'Global DSL defaults for new positions' }
   } else if (_m === 'assist') {
     if (assistBar) assistBar.classList.add('show')
-    const dz = w.el('dslZone')
+    const dz = el('dslZone')
     if (dz) dz.style.pointerEvents = ''
     dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = w.el('dslToggleBtn')
+    const dslBtn2 = el('dslToggleBtn')
     if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
     if (armBtn) {
       armBtn.innerHTML = w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT' : _ZI.lock + ' ARM ASSIST'
@@ -155,18 +156,18 @@ export function _syncDslAssistUI(): void {
     }
   } else {
     if (assistBar) assistBar.classList.remove('show')
-    const dz = w.el('dslZone')
+    const dz = el('dslZone')
     if (dz) dz.style.pointerEvents = ''
     dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = w.el('dslToggleBtn')
+    const dslBtn2 = el('dslToggleBtn')
     if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
   }
 }
 
 // ─── INIT BUBBLES (neon water cooling effect) ────────────────
 export function initDSLBubbles(): void {
-  const bg = w.el('dslLiquidBg')
-  const cascade = w.el('dslCascade')
+  const bg = el('dslLiquidBg')
+  const cascade = el('dslCascade')
   if (!bg || !cascade) return
 
   bg.innerHTML = Array.from({ length: 12 }, (_: any, i: number) => {
@@ -813,8 +814,8 @@ export function _dslPushParamsDebounced(seq: any, dslParams: any): void {
 })()
 
 export function renderDSLWidget(positions: any[]): void {
-  const container = w.el('dslPositionCards')
-  const countEl = w.el('dslActiveCount')
+  const container = el('dslPositionCards')
+  const countEl = el('dslActiveCount')
   if (!container) return
 
   const _activeMode = getATMode() || 'demo'

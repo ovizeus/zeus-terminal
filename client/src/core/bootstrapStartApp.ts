@@ -4,8 +4,9 @@
 
 import { getATObject, getTPObject, getBrainMetrics, getATR, getKlines } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, w.el, boot flags, fn calls
+const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
 const AT = getATObject()
@@ -210,7 +211,7 @@ export async function startApp(): Promise<void> {
   // ═══ PHASE 5 — EXTRAS ═══
   w._waitForFeedThenStartExtras()
 
-  if (w.S.vwapOn) { const vb = w.el('vwapBtn'); if (vb) vb.classList.add('on') }
+  if (w.S.vwapOn) { const vb = el('vwapBtn'); if (vb) vb.classList.add('on') }
   w._ztVisible = !document.hidden
 
   document.addEventListener('visibilitychange', () => {

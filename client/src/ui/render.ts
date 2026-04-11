@@ -4,8 +4,9 @@
 import { getKlines, getTimezone, getSymbol, getPrice, getFR, getFG, getOI, getLS, getTPObject, getBrainObject, getBrainMetrics, getTCMaxPos } from '../services/stateAccessors'
 import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -59,7 +60,7 @@ export function recalcPerfWeights() {
 
 export function renderPerfTracker() {
   const PERF = w.PERF;
-  const body = w.el('perfTrackerBody');
+  const body = el('perfTrackerBody');
   if (!body) return;
   const entries = Object.entries(PERF);
   if (entries.every(([, p]: any) => p.wins + p.losses === 0)) {
@@ -101,7 +102,7 @@ export function renderPerfTracker() {
     <div class="perf-exp" style="color:${gExpColor};font-weight:700">E: $${gExp.toFixed(2)}</div>
     <div class="perf-net"></div><div class="perf-fees"></div>
   </div>`;
-  { const _oe = w.el('perfUpdTime'); if (_oe) _oe.textContent = `Upd ${fmtNow()}`; }
+  { const _oe = el('perfUpdTime'); if (_oe) _oe.textContent = `Upd ${fmtNow()}`; }
 }
 
 // Hook into existing closeDemoPos to record performance
@@ -138,13 +139,13 @@ export function updateQuantumClock() {
   const minDeg = ((m + s / 60) / 60) * 360;
   const hourDeg = ((h % 12 + (m / 60)) / 12) * 360;
 
-  const sh = w.el('qSecHand'), mh = w.el('qMinHand'), hh = w.el('qHourHand');
+  const sh = el('qSecHand'), mh = el('qMinHand'), hh = el('qHourHand');
   if (sh) sh.setAttribute('transform', `rotate(${secDeg},28,28)`);
   if (mh) mh.setAttribute('transform', `rotate(${minDeg},28,28)`);
   if (hh) hh.setAttribute('transform', `rotate(${hourDeg},28,28)`);
 
   // Second arc fills per second in minute (0..60)
-  const secArc = w.el('qSecArc');
+  const secArc = el('qSecArc');
   if (secArc) {
     const circ = 2 * Math.PI * 19;
     const fill = (s / 60) * circ;
@@ -156,11 +157,11 @@ export function updateQuantumClock() {
 
   // Time label
   const _roTz = getTimezone();
-  const ct = w.el('qClockTime');
+  const ct = el('qClockTime');
   if (ct) ct.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 
   // Market phase (session) detection uses UTC
-  const phaseEl = w.el('brainMarketPhase');
+  const phaseEl = el('brainMarketPhase');
   if (phaseEl) {
     if (hUTC >= 0 && hUTC < 8) { phaseEl.textContent = 'ASIA SESSION'; phaseEl.className = 'market-phase asian'; }
     else if (hUTC >= 8 && hUTC < 13) { phaseEl.textContent = 'LONDON SESSION'; phaseEl.className = 'market-phase london'; }
@@ -188,7 +189,7 @@ export function getSessionKey(hUTC: number) {
 export function updateSessionBacktest(hUTC: number) {
   const _sessLastBt = w._sessLastBt;
   const SESS_CFG = w.SESS_CFG;
-  const box = w.el('sessBacktestBox'); if (!box) return;
+  const box = el('sessBacktestBox'); if (!box) return;
 
   const nowTs = Date.now();
   // Refresh max every 90 seconds
@@ -266,7 +267,7 @@ export function updateSymPulseRows() {
   const TP = getTPObject();
   const syms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT'];
   const labels = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'];
-  const container = w.el('symPulseRows'); if (!container) return;
+  const container = el('symPulseRows'); if (!container) return;
   const _sym = getSymbol(), _price = getPrice();
 
   // Track price history for sparklines
@@ -313,7 +314,7 @@ export function updateBrainHeatmap() {
   const MSCAN = w.MSCAN;
   const syms = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'];
   const symsFull = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT'];
-  const container = w.el('brainHeatmap'); if (!container) return;
+  const container = el('brainHeatmap'); if (!container) return;
 
   container.innerHTML = syms.map((sym: string, i: number) => {
     const fullSym = symsFull[i];
@@ -374,7 +375,7 @@ export function updateRiskGauges() {
 }
 
 export function setRiskGauge(id: string, pct: number, col: string, label: string) {
-  const fill = w.el('rg-' + id); const val = w.el('rgv-' + id);
+  const fill = el('rg-' + id); const val = el('rgv-' + id);
   if (fill) { fill.style.width = pct + '%'; fill.style.background = `linear-gradient(90deg,${col}88,${col})`; }
   if (val) { val.textContent = label; val.style.color = col; }
 }
@@ -411,7 +412,7 @@ export function updateDataStream() {
 
   // Duplicate for seamless loop
   const allItems = [...items, ...items];
-  const inner = w.el('dstreamInner');
+  const inner = el('dstreamInner');
   if (inner) inner.innerHTML = allItems.map((it: any) => `<div class="dstream-item ${it.cls}">${it.text}</div>`).join('');
 }
 
@@ -470,7 +471,7 @@ export function getRoTime() {
 
 export function isCurrentTimeOK() {
   const DHF = w.DHF;
-  if (!w.el('dhfEnabled')?.checked) return true;
+  if (!el('dhfEnabled')?.checked) return true;
   const { day, hour } = getTimeUTC();
   const dayWR = DHF.days[day]?.wr || 60;
   const hourWR = DHF.hours[hour]?.wr || 60;
@@ -489,9 +490,9 @@ export function renderDHF() {
   const now = new Date();
   const utcTimeStr = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC`;
 
-  const dayGrid = w.el('dhfDayGrid');
-  const hourGrid = w.el('dhfHourGrid');
-  const curSlot = w.el('dhfCurrentSlot');
+  const dayGrid = el('dhfDayGrid');
+  const hourGrid = el('dhfHourGrid');
+  const curSlot = el('dhfCurrentSlot');
 
   if (curSlot) {
     const dayWR = DHF.days[curDay]?.wr || 60;

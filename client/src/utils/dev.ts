@@ -6,8 +6,9 @@
 import { getBrainMetrics } from '../services/stateAccessors'
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
+import { el } from './dom'
 import { _ZI } from '../constants/icons'
-const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, fn calls
+const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
   enabled: false,
@@ -846,7 +847,7 @@ export function hubCloudSave(): void {
     const email = (document.getElementById('hubCloudEmail') as HTMLInputElement)?.value || ''
     if (!email) { toast('Enter an email address'); return }
     // [FIX v85 BUG1] Nu salvam emailul in S.cloudEmail
-    const mainEmailEl = w.el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
+    const mainEmailEl = el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
     if (typeof w.cloudSave === 'function') { w.cloudSave() }
     else toast('cloudSave not available')
   } catch (e) { console.warn('[Hub] hubCloudSave error:', e) }
@@ -858,7 +859,7 @@ export function hubCloudLoad(): void {
     const email = (document.getElementById('hubCloudEmail') as HTMLInputElement)?.value || ''
     if (!email) { toast('Enter an email address'); return }
     // [FIX v85 BUG1] Nu salvam emailul in S.cloudEmail
-    const mainEmailEl = w.el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
+    const mainEmailEl = el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
     if (typeof w.cloudLoad === 'function') { w.cloudLoad() }
     else toast('cloudLoad not available')
   } catch (e) { console.warn('[Hub] hubCloudLoad error:', e) }

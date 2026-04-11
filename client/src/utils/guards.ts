@@ -4,7 +4,8 @@
  */
 
 import { getATObject, getTPObject, getPrice, getATR } from '../services/stateAccessors'
-const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), w.el, w.atLog, w.ncAdd, w.updConn, fn calls
+import { el } from './dom'
+const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), w.atLog, w.ncAdd, w.updConn, fn calls
 // [8D-6C2] AT = mutable ref to AT — reads + writes through same object
 const AT = getATObject()
 
@@ -16,16 +17,16 @@ export const _SAFETY: Record<string, any> = {
   lastKlineTs: Date.now(),
   lastServerSync: 0,
   serverNow: 0,
-  serverDayId: 0,     // floor(serverTime / 86400000)
+  serverDayId: 0,    // floor(serverTime / 86400000)
   storedDayId: 0,
-  priceHistory: [],   // last N prices for sanity check
+  priceHistory: [],  // last N prices for sanity check
   maxPriceSalt: 0.20, // 20% max jump per tick
-  wsIntervals: new Set(),  // track all intervals for cleanup
+  wsIntervals: new Set(), // track all intervals for cleanup
   autoSuspended: false,
   stallTimer: null,
   // Anti-spam stall counters
-  _stallMissedChecks: 0,   // consecutive missed watchdog ticks
-  _stallLastLogTs: 0,      // last time we logged a stall warning (debounce)
+  _stallMissedChecks: 0,  // consecutive missed watchdog ticks
+  _stallLastLogTs: 0,     // last time we logged a stall warning (debounce)
   dataStalledSince: 0,
   // Degraded mode: tracks which secondary feeds are down (not trading feed)
   degradedFeeds: new Set(),
@@ -127,7 +128,7 @@ export function _onNewUTCDay(_newDayId: number): void {
   // Kill switch: only keep if there was REAL loss today
   if (AT.killTriggered && _closed === 0 && Math.abs(_rPnL) < 0.01) {
     AT.killTriggered = false
-    const kb = w.el('atKillBtn'); if (kb) kb.classList.remove('triggered')
+    const kb = el('atKillBtn'); if (kb) kb.classList.remove('triggered')
     w.atLog('info', '[INFO] Kill switch cleared — no realized loss on new day')
   }
   // [9A-4] Notify React after daily counter reset
@@ -158,7 +159,7 @@ export function _resetWatchdog(): void {
     w.S.dataStalledSince = 0
     _SAFETY.autoSuspended = false
     w.atLog('info', '[OK] Data feed restored — AT resuming')  // logged once here, never repeated
-    const sb = w.el('dataStallBanner'); if (sb) sb.style.display = 'none'
+    const sb = el('dataStallBanner'); if (sb) sb.style.display = 'none'
   }
 }
 w._resetWatchdog = _resetWatchdog
@@ -197,7 +198,7 @@ export function _startWatchdog(): void {
         _SAFETY.dataStalledSince = now
         w.S.dataStalled = true
         w.S.dataStalledSince = now
-        const sb = w.el('dataStallBanner'); if (sb) sb.style.display = 'block'
+        const sb = el('dataStallBanner'); if (sb) sb.style.display = 'block'
       }
 
       // req 3: debounce log — at most once per 30s
@@ -264,7 +265,7 @@ export function _enterRecoveryMode(source: string): void {
   _SAFETY.isReconnecting = true
   _SAFETY.autoSuspended = true
   w.atLog('warn', `[RECOVERY] ${source} disconnected — AT suspended`)
-  const rb = w.el('recoveryBanner'); if (rb) rb.style.display = 'flex'
+  const rb = el('recoveryBanner'); if (rb) rb.style.display = 'flex'
   w.updConn()
   w.ncAdd('critical', 'system', `[RECOVERY] ${source} disconnected`)  // [NC]
 }
@@ -276,7 +277,7 @@ export function _exitRecoveryMode(): void {
   setTimeout(() => {
     _verifyPositionsAfterReconnect()
     _SAFETY.autoSuspended = false
-    const rb = w.el('recoveryBanner'); if (rb) rb.style.display = 'none'
+    const rb = el('recoveryBanner'); if (rb) rb.style.display = 'none'
     w.atLog('info', '[OK] Connection restored — positions verified')
     w.updConn()
   }, 2000)  // 2s settle time before resuming

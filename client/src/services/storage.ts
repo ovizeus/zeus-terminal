@@ -7,11 +7,11 @@
  */
 
 import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
-import { escHtml } from '../utils/dom'
+import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-const w = window as Record<string, any> // kept for w.el, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -32,7 +32,7 @@ export function addTradeToJournal(trade: Record<string, any>): void {
 }
 
 export function renderTradeJournal(): void {
-  const body = w.el('journalBody'); if (!body) return
+  const body = el('journalBody'); if (!body) return
   if (!TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return }
   body.innerHTML = TP.journal.map((t: any) => {
     const pnl = Number(t.pnl) || 0
@@ -80,12 +80,12 @@ export function startFRCountdown(): void {
   w.Intervals.set('frCountdown', () => {
     const frCd = getFRCountdown(); if (!frCd) return
     const now = Date.now(); const rem = frCd - now
-    if (rem <= 0) { const cd = w.el('frCd'); if (cd) cd.style.display = 'none'; return }
+    if (rem <= 0) { const cd = el('frCd'); if (cd) cd.style.display = 'none'; return }
     const mm = Math.floor(rem / 60000); const ss = Math.floor((rem % 60000) / 1000)
     const str = (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss
-    const cd = w.el('frCd')
+    const cd = el('frCd')
     if (cd) { cd.textContent = str; cd.style.display = 'inline'; cd.className = 'fr-cd' + (rem < 300000 ? ' warn' : '') }
-    const dtfrc = w.el('dtfrc'); if (dtfrc) dtfrc.textContent = str
+    const dtfrc = el('dtfrc'); if (dtfrc) dtfrc.textContent = str
   }, 1000)
 }
 
@@ -98,7 +98,7 @@ export function trackOIDelta(): void {
   while (w.oiHistory.length > 0 && w.oiHistory[0].ts < now - 1200000) w.oiHistory.shift()
   const t5 = now - 300000
   const old5 = w.oiHistory.find((h: any) => h.ts >= t5)
-  const delta5 = w.el('oiDelta5m')
+  const delta5 = el('oiDelta5m')
   if (delta5 && old5 && oi) {
     const pct = ((oi - old5.oi) / old5.oi * 100)
     if (Math.abs(pct) > 0.01) {

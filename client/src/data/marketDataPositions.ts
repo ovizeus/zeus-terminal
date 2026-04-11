@@ -5,9 +5,9 @@
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { fmtNow, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
-import { escHtml } from '../utils/dom'
+import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, w.el, fn calls
+const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
 const AT = getATObject()
@@ -54,7 +54,7 @@ function _fillDemoPendingOrder(ord: any): void {
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
   if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
@@ -88,7 +88,7 @@ export function modifyPendingPrice(id: any): void {
 // RENDER PENDING ORDERS
 // ═══════════════════════════════════════════════════════════════
 export function renderPendingOrders(): void {
-  const cont = w.el('pendingOrdersTable'); if (!cont) return
+  const cont = el('pendingOrdersTable'); if (!cont) return
   const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const allPending: any[] = []
   if (_gMode === 'demo') { (TP.pendingOrders || []).forEach(function (o: any) { if (o.status === 'WAITING') allPending.push(o) }) }
@@ -142,7 +142,7 @@ export function _resumeLivePendingSyncIfNeeded(): void { if (TP.manualLivePendin
 // SL/TP EDITING
 // ═══════════════════════════════════════════════════════════════
 export function savePosSLTP(posId: any, mode: string): void {
-  const strId = String(posId); const slInput = w.el('slEdit_' + strId); const tpInput = w.el('tpEdit_' + strId)
+  const strId = String(posId); const slInput = el('slEdit_' + strId); const tpInput = el('tpEdit_' + strId)
   const newSL = slInput ? parseFloat(slInput.value) || null : null; const newTP = tpInput ? parseFloat(tpInput.value) || null : null
   if (mode === 'demo') {
     const pos = TP.demoPositions.find(function (p: any) { return String(p.id) === strId }); if (!pos) { toast('Position not found'); return }
@@ -187,7 +187,7 @@ export function renderDemoPositions(): void {
   const _now = Date.now()
   if (_now - _lastRenderDemo < 500) { if (!_pendingRenderDemo) _pendingRenderDemo = setTimeout(renderDemoPositions, 500 - (_now - _lastRenderDemo)); return }
   _lastRenderDemo = _now; _pendingRenderDemo = 0
-  const table = w.el('demoPosTable'); if (!table) return
+  const table = el('demoPosTable'); if (!table) return
   const _ae = document.activeElement as any
   if (_ae && _ae.tagName === 'INPUT' && (_ae.id && (_ae.id.startsWith('slEdit_') || _ae.id.startsWith('tpEdit_'))) && table.contains(_ae)) return
   const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
@@ -219,22 +219,22 @@ export function renderDemoPositions(): void {
     _jManualLive.forEach(function (j: any) { const _jp = Number(j.pnl) || 0; _statsPnl += _jp; if (_jp >= 0) _statsWins++; else _statsLosses++ })
     _statsTrades = _openManualLive.length + _jManualLive.length
   } else { _statsWins = TP.demoWins || 0; _statsLosses = TP.demoLosses || 0; _statsPnl = totalPnL; _statsTrades = _statsWins + _statsLosses }
-  const pnlEl = w.el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$' + _statsPnl.toFixed(2); pnlEl.className = 'tp-pnl-val ' + (_statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut') }
-  const wr = w.el('demoWR'); if (wr) wr.textContent = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%'
-  const tr = w.el('demoTrades'); if (tr) tr.textContent = _statsTrades
+  const pnlEl = el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$' + _statsPnl.toFixed(2); pnlEl.className = 'tp-pnl-val ' + (_statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut') }
+  const wr = el('demoWR'); if (wr) wr.textContent = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%'
+  const tr = el('demoTrades'); if (tr) tr.textContent = _statsTrades
 }
 
 export function calcPosPnL(pos: any, cur: any): number { return w._safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false) }
 
 export function updateLiveBalance(): void {
-  const balEl = w.el('liveBalanceAmt') || w.el('demoBalanceAmt')
+  const balEl = el('liveBalanceAmt') || el('demoBalanceAmt')
   if (balEl && TP.liveBalance) balEl.textContent = '$' + Number(TP.liveBalance).toFixed(2)
-  const pnlEl = w.el('liveUnrealizedPnl')
+  const pnlEl = el('liveUnrealizedPnl')
   if (pnlEl && typeof TP.liveUnrealizedPnL === 'number') pnlEl.textContent = (TP.liveUnrealizedPnL >= 0 ? '+' : '') + '$' + TP.liveUnrealizedPnL.toFixed(2)
 }
 
 export function renderLivePositions(): void {
-  const cont = w.el('livePositions'); const contDemo = w.el('livePositionsDemo'); const contWrap = w.el('livePositionsInDemo')
+  const cont = el('livePositions'); const contDemo = el('livePositionsDemo'); const contWrap = el('livePositionsInDemo')
   const _isLiveMode = (typeof AT !== 'undefined' && AT._serverMode === 'live')
   if (contWrap) contWrap.style.display = _isLiveMode ? 'block' : 'none'
   const _ae = document.activeElement as any

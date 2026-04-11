@@ -3,7 +3,7 @@
 // Ported 1:1 from public/js/ui/panels.js
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
-import { escHtml } from '../utils/dom'
+import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 
 const w = window as any;
@@ -167,13 +167,13 @@ export function renderMagnets() {
   const p = S.price;
   if (!p) return;
 
-  const nearAboveEl = w.el('magNearAbove');
-  const nearBelowEl = w.el('magNearBelow');
-  const biasEl = w.el('magBias');
-  const cpEl = w.el('magCurrentPrice');
-  const updEl = w.el('magUpdTime');
-  const aboveCntEl = w.el('magAboveCnt');
-  const belowCntEl = w.el('magBelowCnt');
+  const nearAboveEl = el('magNearAbove');
+  const nearBelowEl = el('magNearBelow');
+  const biasEl = el('magBias');
+  const cpEl = el('magCurrentPrice');
+  const updEl = el('magUpdTime');
+  const aboveCntEl = el('magAboveCnt');
+  const belowCntEl = el('magBelowCnt');
 
   if (cpEl) cpEl.textContent = '$' + fP(p);
   if (updEl) updEl.textContent = 'UPD ' + new Date().toLocaleTimeString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -209,7 +209,7 @@ export function renderMagnets() {
 
   // Render lists
   const renderList = (list: any[], containerId: string, isAbove: boolean) => {
-    const c = w.el(containerId); if (!c) return;
+    const c = el(containerId); if (!c) return;
     if (!list.length) { c.innerHTML = `<div style="padding:8px;text-align:center;font-size:13px;color:var(--dim)">Niciun magnet detectat</div>`; return; }
     c.innerHTML = list.map((m: any, i: number) => {
       const dist = isAbove ? ((m.price - p) / p * 100) : (p - m.price) / p * 100 * -1;
@@ -265,15 +265,15 @@ export async function runBacktest() {
   if (!S.klines || S.klines.length < 60) { toast('Niciun date historice. Asteapta chart-ul sa se incarce.'); return; }
 
   BT.running = true;
-  const runBtn = w.el('btRunBtn');
+  const runBtn = el('btRunBtn');
   if (runBtn) runBtn.className = 'bt-btn bt-btn-run running';
-  w.el('btProgress')?.style && (w.el('btProgress').style.display = 'block');
-  { const _oe = w.el('btResults'); if (_oe) _oe.style.display = 'none'; }
-  { const _oe = w.el('btEmpty'); if (_oe) _oe.style.display = 'none'; }
+  el('btProgress')?.style && (el('btProgress').style.display = 'block');
+  { const _oe = el('btResults'); if (_oe) _oe.style.display = 'none'; }
+  { const _oe = el('btEmpty'); if (_oe) _oe.style.display = 'none'; }
 
-  const lookback = parseInt(w.el('btLookback')?.value) || 500;
-  const fwdBars = parseInt(w.el('btFwdBars')?.value) || 5;
-  const minMovePct = parseFloat(w.el('btMinMove')?.value) || 0.5;
+  const lookback = parseInt(el('btLookback')?.value) || 500;
+  const fwdBars = parseInt(el('btFwdBars')?.value) || 5;
+  const minMovePct = parseFloat(el('btMinMove')?.value) || 0.5;
 
   const bars = S.klines.slice(-lookback);
   const results: any = {};
@@ -374,8 +374,8 @@ export async function runBacktest() {
     // Progress update every 50 bars
     if (i % 50 === 0) {
       const pct = Math.round((i - 30) / totalSteps * 100);
-      { const _oe = w.el('btProgressPct'); if (_oe) _oe.textContent = pct; }
-      { const _oe = w.el('btProgressFill'); if (_oe) _oe.style.width = pct + '%'; }
+      { const _oe = el('btProgressPct'); if (_oe) _oe.textContent = pct; }
+      { const _oe = el('btProgressFill'); if (_oe) _oe.style.width = pct + '%'; }
       await new Promise(r => setTimeout(r, 0)); // yield to UI
     }
 
@@ -452,10 +452,10 @@ export async function runBacktest() {
   BT.equityCurve = equityCurve;
 
   renderBacktestResults(results, equityCurve, fwdBars, lookback, minMovePct);
-  { const _oe = w.el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
-  w.el('btProgress')?.style && (w.el('btProgress').style.display = 'none');
-  { const _oe = w.el('btResults'); if (_oe) _oe.style.display = 'block'; }
-  { const _oe = w.el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
+  { const _oe = el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
+  el('btProgress')?.style && (el('btProgress').style.display = 'none');
+  { const _oe = el('btResults'); if (_oe) _oe.style.display = 'block'; }
+  { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
 }
 
 export function renderBacktestResults(results: any, equityCurve: any, fwdBars: any, lookback: any, minMovePct: any) {
@@ -484,15 +484,15 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
   const avgWR = totalTrades ? Math.round(totalWins / totalTrades * 100) : 0;
 
   // Summary
-  { const _oe = w.el('btBestInd'); if (_oe) _oe.textContent = bestName + ' (' + bestWR + '%)'; }
-  { const _oe = w.el('btAvgWR'); if (_oe) _oe.textContent = avgWR + '%'; }
-  { const _oe = w.el('btAvgWR'); if (_oe) _oe.style.color = avgWR >= 55 ? 'var(--grn)' : avgWR >= 45 ? 'var(--ylw)' : 'var(--red)'; }
-  { const _oe = w.el('btTotalSig'); if (_oe) _oe.textContent = totalTrades; }
-  { const _oe = w.el('btConfWR'); if (_oe) _oe.textContent = confWR ? confWR + '%' : '\u2014'; }
-  { const _oe = w.el('btConfWR'); if (_oe) _oe.style.color = confWR >= 60 ? 'var(--grn)' : confWR >= 50 ? 'var(--ylw)' : 'var(--red)'; }
+  { const _oe = el('btBestInd'); if (_oe) _oe.textContent = bestName + ' (' + bestWR + '%)'; }
+  { const _oe = el('btAvgWR'); if (_oe) _oe.textContent = avgWR + '%'; }
+  { const _oe = el('btAvgWR'); if (_oe) _oe.style.color = avgWR >= 55 ? 'var(--grn)' : avgWR >= 45 ? 'var(--ylw)' : 'var(--red)'; }
+  { const _oe = el('btTotalSig'); if (_oe) _oe.textContent = totalTrades; }
+  { const _oe = el('btConfWR'); if (_oe) _oe.textContent = confWR ? confWR + '%' : '\u2014'; }
+  { const _oe = el('btConfWR'); if (_oe) _oe.style.color = confWR >= 60 ? 'var(--grn)' : confWR >= 50 ? 'var(--ylw)' : 'var(--red)'; }
 
   // Table
-  const grid = w.el('btResultGrid');
+  const grid = el('btResultGrid');
   if (grid) {
     grid.innerHTML = rows.map((row: any) => {
       const wrCls = row.wr >= 65 ? 'good' : row.wr >= 55 ? 'ok' : 'bad';
@@ -517,7 +517,7 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
   }
 
   // Equity curve SVG
-  const svgEl = w.el('btEquitySvg');
+  const svgEl = el('btEquitySvg');
   if (svgEl && equityCurve.length > 2) {
     const pts = equityCurve;
     const minV = Math.min(...pts); const maxV = Math.max(...pts);
@@ -536,8 +536,8 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
 
   // Detail note update
   const bestRow = rows[0];
-  if (bestRow && w.el('btDetailNote')) {
-    w.el('btDetailNote').innerHTML = `
+  if (bestRow && el('btDetailNote')) {
+    el('btDetailNote').innerHTML = `
       ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
       ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combina toti indicatorii pentru precizie maxima.<br>
       ${_ZI.w} Backtestul e pe date istorice \u2014 performanta trecuta nu garanteaza rezultate viitoare.
@@ -651,19 +651,19 @@ export function toggleVWAP(btn: any) {
 export function oviReadSettings() {
   const S = w.S;
   const c = S.oviCfg;
-  c.lookback = parseInt(w.el('oviLookback')?.value) || 400;
-  c.pivotW = parseInt(w.el('oviPivotW')?.value) || 1;
-  c.secW = parseInt(w.el('oviSecW')?.value) || 1;
-  c.atrLen = parseInt(w.el('oviAtrLen')?.value) || 121;
-  c.atrBandPct = parseFloat(w.el('oviAtrBand')?.value) || 1.0;
-  c.extend = parseInt(w.el('oviExtend')?.value) || 25;
-  c.minWeight = parseFloat(w.el('oviMinW')?.value) || 0;
-  c.heatContrast = parseFloat(w.el('oviContrast')?.value) || 0.7;
-  c.longCol = w.el('oviLongCol')?.value || '#01c4fe';
-  c.shortCol = w.el('oviShortCol')?.value || '#ffe400';
-  c.touchTransp = parseInt(w.el('oviTouchT')?.value) || 8;
-  c.showScale = w.el('oviShowScale')?.checked !== false;
-  c.keepTouched = w.el('oviKeepTouched')?.checked !== false;
+  c.lookback = parseInt(el('oviLookback')?.value) || 400;
+  c.pivotW = parseInt(el('oviPivotW')?.value) || 1;
+  c.secW = parseInt(el('oviSecW')?.value) || 1;
+  c.atrLen = parseInt(el('oviAtrLen')?.value) || 121;
+  c.atrBandPct = parseFloat(el('oviAtrBand')?.value) || 1.0;
+  c.extend = parseInt(el('oviExtend')?.value) || 25;
+  c.minWeight = parseFloat(el('oviMinW')?.value) || 0;
+  c.heatContrast = parseFloat(el('oviContrast')?.value) || 0.7;
+  c.longCol = el('oviLongCol')?.value || '#01c4fe';
+  c.shortCol = el('oviShortCol')?.value || '#ffe400';
+  c.touchTransp = parseInt(el('oviTouchT')?.value) || 8;
+  c.showScale = el('oviShowScale')?.checked !== false;
+  c.keepTouched = el('oviKeepTouched')?.checked !== false;
   const wm = document.querySelector('input[name="oviWeightMode"]:checked') as any;
   c.weightMode = wm ? wm.value : 'Vol x Range';
 }
@@ -981,14 +981,14 @@ export function toggleOviLiquid(btn: any) {
 // ===================================================================
 
 export function togglePnlLab() {
-  var wrap = w.el('pnlLabWrap');
+  var wrap = el('pnlLabWrap');
   if (!wrap) return;
   var open = wrap.classList.toggle('open');
   if (open) renderPnlLab();
 }
 
 export function renderPnlLab() {
-  var body = w.el('pnlLabBody');
+  var body = el('pnlLabBody');
   if (!body) { console.warn('[PnL Lab] #pnlLabBody not found'); return; }
 
   try {
@@ -1118,8 +1118,8 @@ export function _pnlLabProfileCard(name: string, data: any) {
 // -- Long-press / right-click on OVI button -> open settings --
 (function () {
   let _oviHold: any;
-  const btn = () => typeof w.el === 'function' ? w.el('oviBtn') : document.getElementById('oviBtn');
-  const openSettings = () => { const p = typeof w.el === 'function' ? w.el('oviPanel') : document.getElementById('oviPanel'); if (p) (p as HTMLElement).style.display = 'block'; };
+  const btn = () => el('oviBtn');
+  const openSettings = () => { const p = el('oviPanel'); if (p) (p as HTMLElement).style.display = 'block'; };
   function _initOviBtn() {
     const b = btn();
     if (!b) return;

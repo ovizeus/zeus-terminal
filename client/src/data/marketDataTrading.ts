@@ -4,10 +4,10 @@
 
 import { getTPObject, getATObject, getPrice, getSymbol } from '../services/stateAccessors'
 import { fmt, fP } from '../utils/format'
-import { escHtml } from '../utils/dom'
+import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, w.el, fn calls
+const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
 const AT = getATObject()
@@ -44,11 +44,11 @@ function _executeGlobalModeSwitch(mode: string): void {
 }
 
 export function _applyGlobalModeUI(mode: string): void {
-  const btnD = w.el('btnDemo'), btnL = w.el('btnLive')
+  const btnD = el('btnDemo'), btnL = el('btnLive')
   if (mode === 'live') { if (btnD) btnD.classList.remove('active'); if (btnL) btnL.classList.add('active') }
   else { if (btnD) btnD.classList.add('active'); if (btnL) btnL.classList.remove('active') }
   const _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
-  const atModeDisp = w.el('atModeDisplay'), atModeLbl = w.el('atModeLabel'), atWarn = w.el('atLiveWarn')
+  const atModeDisp = el('atModeDisplay'), atModeLbl = el('atModeLabel'), atWarn = el('atLiveWarn')
   const execLocked = mode === 'live' && !w._apiConfigured
   if (mode === 'live') {
     const _atIsTestnet = _env === 'TESTNET'; const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE'; const _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE'; const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'; const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'; const _atEnvIcon = _atIsTestnet ? _ZI.dYlw : _ZI.dRed
@@ -60,13 +60,13 @@ export function _applyGlobalModeUI(mode: string): void {
     if (atModeLbl) { atModeLbl.innerHTML = _ZI.pad + ' DEMO'; atModeLbl.style.color = 'var(--pur)' }
     if (atWarn) { atWarn.style.display = 'none'; atWarn.style.color = '' }
   }
-  const af = w.el('btnAddFunds'), rd = w.el('btnResetDemo')
+  const af = el('btnAddFunds'), rd = el('btnResetDemo')
   if (af) af.style.display = mode === 'demo' ? '' : 'none'
   if (rd) rd.style.display = mode === 'demo' ? '' : 'none'
   // NOTE: #demoExec, #panelDemo header, #demoBalance are React-controlled.
   // Do NOT set innerHTML on them — React owns those DOM nodes.
   // Only set non-destructive properties (disabled, opacity, dataset).
-  const execBtn = w.el('demoExec')
+  const execBtn = el('demoExec')
   if (execBtn) {
     if (mode === 'live' && !w._apiConfigured) { execBtn.disabled = false; execBtn.style.opacity = '0.6'; execBtn.dataset.execMode = 'locked' }
     else if (mode === 'live') { execBtn.disabled = false; execBtn.style.opacity = ''; execBtn.dataset.execMode = 'live' }
@@ -76,8 +76,8 @@ export function _applyGlobalModeUI(mode: string): void {
   if (typeof w.updateModeBar === 'function') w.updateModeBar()
 }
 
-function _toggleManualPanel(): void { TP.demoOpen = !TP.demoOpen; const p = w.el('panelDemo'); if (p) p.style.display = TP.demoOpen ? 'block' : 'none'; if (TP.demoOpen && getPrice()) { const ei = w.el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
-function _showManualPanel(): void { TP.demoOpen = true; const p = w.el('panelDemo'); if (p) p.style.display = 'block'; if (getPrice()) { const ei = w.el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
+function _toggleManualPanel(): void { TP.demoOpen = !TP.demoOpen; const p = el('panelDemo'); if (p) p.style.display = TP.demoOpen ? 'block' : 'none'; if (TP.demoOpen && getPrice()) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
+function _showManualPanel(): void { TP.demoOpen = true; const p = el('panelDemo'); if (p) p.style.display = 'block'; if (getPrice()) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
 
 // ═══════════════════════════════════════════════════════
 // CONFIRM DIALOG
@@ -115,12 +115,12 @@ export function promptResetDemo(): void {
 }
 
 export function toggleTradePanel(_type: any): void { _toggleManualPanel() }
-export function setDemoSide(side: string): void { TP.demoSide = side; w.el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); updateDemoLiqPrice() }
-export function setLiveSide(side: string): void { TP.liveSide = side; w.el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice() }
+export function setDemoSide(side: string): void { TP.demoSide = side; el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); updateDemoLiqPrice() }
+export function setLiveSide(side: string): void { TP.liveSide = side; el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice() }
 
 // ===== ORDER TYPE TOGGLE =====
 export function onDemoOrdTypeChange(): void {
-  const sel = w.el('demoOrdType'); const entryInput = w.el('demoEntry'); const entryLabel = w.el('demoEntryLabel')
+  const sel = el('demoOrdType'); const entryInput = el('demoEntry'); const entryLabel = el('demoEntryLabel')
   if (!sel || !entryInput) return; const isMarket = sel.value === 'market'
   if (isMarket) { entryInput.readOnly = true; entryInput.value = ''; entryInput.placeholder = 'Market Price'; entryInput.style.opacity = '0.5'; if (entryLabel) entryLabel.textContent = 'ENTRY PRICE (MARKET)' }
   else { entryInput.readOnly = false; entryInput.value = getPrice() ? fP(getPrice()) : ''; entryInput.placeholder = 'Limit Price'; entryInput.style.opacity = '1'; if (entryLabel) entryLabel.textContent = 'LIMIT PRICE' }
@@ -128,10 +128,10 @@ export function onDemoOrdTypeChange(): void {
 }
 
 // ===== LEVERAGE =====
-export function getDemoLev(): number { const sel = w.el('demoLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(w.el('demoCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
-export function getLiveLev(): number { const sel = w.el('liveLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(w.el('liveCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
-export function onDemoLevChange(): void { const sel = w.el('demoLev'); const row = w.el('demoCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateDemoLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
-export function onLiveLevChange(): void { const sel = w.el('liveLev'); const row = w.el('liveCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateLiveLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function getDemoLev(): number { const sel = el('demoLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('demoCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
+export function getLiveLev(): number { const sel = el('liveLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('liveCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
+export function onDemoLevChange(): void { const sel = el('demoLev'); const row = el('demoCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateDemoLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function onLiveLevChange(): void { const sel = el('liveLev'); const row = el('liveCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateLiveLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 
 // ===== LIQUIDATION PRICE =====
 export function calcLiqPrice(entry: any, lev: any, side: string): number | null {
@@ -139,13 +139,13 @@ export function calcLiqPrice(entry: any, lev: any, side: string): number | null 
   if (!e || !l || l <= 0) return null; const mm = 0.025 // Binance baseline maintenance margin 2.5%
   if (side === 'LONG') return e * (1 - 1 / l + mm); else return e * (1 + 1 / l - mm)
 }
-export function updateDemoLiqPrice(): void { const entry = parseFloat(w.el('demoEntry')?.value) || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = w.el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
-export function updateLiveLiqPrice(): void { const entry = parseFloat(w.el('liveEntry')?.value) || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = w.el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
+export function updateDemoLiqPrice(): void { const entry = parseFloat(el('demoEntry')?.value) || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
+export function updateLiveLiqPrice(): void { const entry = parseFloat(el('liveEntry')?.value) || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
 
-export function setDemoPct(pct: number): void { const e = w.el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0) }
-export function setLivePct(pct: number): void { const e = w.el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0) }
+export function setDemoPct(pct: number): void { const e = el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0) }
+export function setLivePct(pct: number): void { const e = el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0) }
 export function updateDemoBalance(): void {
-  const e = w.el('demoBalance'); if (!e) return
+  const e = el('demoBalance'); if (!e) return
   const _gm = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   if (_gm === 'live') { if (w._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) { const _balPrefix = (w._resolvedEnv === 'TESTNET') ? 'BAL (TESTNET): $' : 'BAL: $'; e.textContent = _balPrefix + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } else { e.textContent = 'BAL: Exchange not configured' } }
   else { e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
@@ -162,11 +162,11 @@ export function placeDemoOrder(): void {
 
 function _executePlaceDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  const orderTypeSel = w.el('demoOrdType'); const orderType = (orderTypeSel && orderTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
-  const size = parseFloat(w.el('demoSize')?.value || '100'); const lev = getDemoLev()
-  const tp = parseFloat(w.el('demoTP')?.value) || null; const sl = parseFloat(w.el('demoSL')?.value) || null
+  const orderTypeSel = el('demoOrdType'); const orderType = (orderTypeSel && orderTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
+  const size = parseFloat(el('demoSize')?.value || '100'); const lev = getDemoLev()
+  const tp = parseFloat(el('demoTP')?.value) || null; const sl = parseFloat(el('demoSL')?.value) || null
   let entry: number
-  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(w.el('demoEntry')?.value); if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return } }
+  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(el('demoEntry')?.value); if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return } }
   if (!entry || !size) { toast('Entry price and size required', 3000, _ZI.w); return }
   if (size <= 0) { toast('Size must be positive', 3000, _ZI.w); return }
   if (entry <= 0) { toast('Entry price must be positive', 3000, _ZI.w); return }
@@ -210,7 +210,7 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
   if (!TP.liveBalance || size > TP.liveBalance) { toast('Insufficient live balance', 3000, _ZI?.x); return }
   if (lev < 1 || lev > 125) { toast('Leverage must be 1-125x', 3000, _ZI?.x); return }
   const refPrice = (orderType === 'MARKET') ? getPrice() : entry; const qty = (size * lev) / refPrice; const binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
-  const execBtn = w.el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
+  const execBtn = el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
   w.manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
     if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }
     if (orderType === 'MARKET') {
@@ -238,7 +238,7 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
     id: Date.now(), side: TP.demoSide, sym: getSymbol(), entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
     mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(TP.demoSide, fillPrice, tp) : { openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(TP.demoSide, fillPrice, tp) : { openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(),
   }
 }

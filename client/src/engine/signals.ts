@@ -4,6 +4,7 @@
 // [8B-rest] READS migrated to stateAccessors.
 
 import { getTimezone } from '../services/stateAccessors'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 
 const w = window as any // kept for w.runBrainUpdate, w.brainThink calls
@@ -51,6 +52,6 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
   if (typeof w.runBrainUpdate === 'function') w.runBrainUpdate()
   if (typeof w.brainThink === 'function') {
     w.brainThink(bullCount > bearCount ? 'ok' : bearCount > bullCount ? 'bad' : 'info',
-      `Scan: ${signals.length} semnale | Bull:${bullCount} Bear:${bearCount} | Score:${w.el?.('confScore')?.textContent || '—'}`)
+      `Scan: ${signals.length} semnale | Bull:${bullCount} Bear:${bearCount} | Score:${el('confScore')?.textContent || '—'}`)
   }
 }

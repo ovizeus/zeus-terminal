@@ -13,6 +13,7 @@
 //   - _escHtml → identical to escHtml in utils/dom.ts (Phase 1)
 
 import { _TZ } from '../utils/format'
+import { el } from '../utils/dom'
 
 const w = window as any
 
@@ -45,7 +46,7 @@ export function fmtNow(sec?: any): string {
 
 // ===== TOAST =====
 export function toast(msg: string, dur = 3000, icon?: any): void {
-  let t: any = w.el('toast')
+  let t: any = el('toast')
   if (!t) { t = document.createElement('div'); t.id = 'toast'; t.style.cssText = 'position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#1a2530;border:1px solid #f0c04044;color:#f0c040;padding:8px 16px;border-radius:4px;font-size:10px;z-index:9999;pointer-events:none;transition:.3s;max-width:80%;display:flex;align-items:center;gap:4px'; document.body.appendChild(t) }
   if (icon) { t.innerHTML = ''; const _s = document.createElement('span'); _s.innerHTML = icon; t.appendChild(_s); t.appendChild(document.createTextNode(' ' + msg)) }
   else { t.textContent = msg }

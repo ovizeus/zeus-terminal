@@ -4,10 +4,11 @@
  */
 
 import { getTPObject, getATObject, getBrainMetrics, getBrainObject, getDSLObject, getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
+import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, w.el, fn calls
+const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
 const AT = getATObject()
@@ -269,13 +270,13 @@ w._updateWhyBlocked = _updateWhyBlocked
 
 // ─── MAIN MULTI SYMBOL SCAN ───────────────────────────────────
 export async function runMultiSymbolScan() {
-  if (w.el('atMultiSym')?.checked === false) return
+  if (el('atMultiSym')?.checked === false) return
   if (!w.FetchLock.try('multiScan')) return
   if (w.MSCAN.scanning) { w.FetchLock.release('multiScan'); return }
   w.MSCAN.scanning = true
   const scanSyms = getActiveMscanSyms()
   try {
-    const tbody = w.el('mscanBody')
+    const tbody = el('mscanBody')
     if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">${_ZI.bolt} SCANEZ ${scanSyms.length} SIMBOLURI...</td></tr>`
 
     let opps = 0
@@ -332,9 +333,9 @@ export async function runMultiSymbolScan() {
 w.runMultiSymbolScan = runMultiSymbolScan
 
 export function renderMscanTable(results: any[], opps: number) {
-  const tbody = w.el('mscanBody')
-  const oppsEl = w.el('mscanOpps')
-  const updEl = w.el('mscanUpdTime')
+  const tbody = el('mscanBody')
+  const oppsEl = el('mscanOpps')
+  const updEl = el('mscanUpdTime')
   if (oppsEl) oppsEl.textContent = opps + ' oportunit' + (opps === 1 ? 'ate' : 'ati')
   if (updEl) updEl.textContent = new Date().toLocaleTimeString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' })
   if (!tbody) return
@@ -450,7 +451,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   const [confMin, _confMinConfl] = profileThresh[w.S.profile || 'fast'] || [65, 55]
   const _adaptEntryMult = (BM.adaptive && BM.adaptive.enabled) ? (BM.adaptive.entryMult || 1.0) : 1.0
   const confMinAdj = Math.max(40, Math.min(95, confMin / _adaptEntryMult))
-  const _sigMin = parseInt(w.el('atSigMin')?.value) || 3
+  const _sigMin = parseInt(el('atSigMin')?.value) || 3
 
   // suppress unused
   void _confMinConfl; void _sigMin
@@ -496,7 +497,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 w.runMultiSymbolAutoTrade = runMultiSymbolAutoTrade
 
 export function toggleMultiSymMode() {
-  const on = w.el('atMultiSym')?.checked
+  const on = el('atMultiSym')?.checked
   _mscanUpdateLabel()
   if (on) w.atLog('info', '[MSCAN] Multi-Symbol ACTIV \u2014 ' + _mscanGetActive().length + ' simboluri')
   else w.atLog('warn', 'Multi-Symbol DEZACTIVAT \u2014 doar symbol curent')
@@ -526,9 +527,9 @@ export function _mscanSaveActive(arr: any[]) {
 w._mscanSaveActive = _mscanSaveActive
 
 export function _mscanUpdateLabel() {
-  const lbl = w.el('atMultiSymLbl')
+  const lbl = el('atMultiSymLbl')
   if (!lbl) return
-  const on = w.el('atMultiSym')?.checked
+  const on = el('atMultiSym')?.checked
   if (!on) { lbl.textContent = 'DEZACTIVAT'; return }
   const active = _mscanGetActive()
   lbl.textContent = 'ACTIV \u2014 ' + active.length + ' simboluri'
@@ -536,18 +537,18 @@ export function _mscanUpdateLabel() {
 w._mscanUpdateLabel = _mscanUpdateLabel
 
 export function getActiveMscanSyms() {
-  const on = w.el('atMultiSym')?.checked
+  const on = el('atMultiSym')?.checked
   if (!on) return [typeof w.S !== 'undefined' ? getSymbol() : 'BTCUSDT']
   return _mscanGetActive()
 }
 w.getActiveMscanSyms = getActiveMscanSyms
 
 export function toggleSymPicker() {
-  const drop = w.el('atSymPickerDrop')
+  const drop = el('atSymPickerDrop')
   if (!drop) return
   const vis = drop.style.display !== 'none'
   if (vis) { drop.style.display = 'none'; return }
-  const list = w.el('atSymPickerList')
+  const list = el('atSymPickerList')
   if (!list) return
   const active = _mscanGetActive()
   let html = ''
@@ -579,7 +580,7 @@ w.mscanToggleSym = mscanToggleSym
 export function mscanPickAll(selectAll: boolean) {
   const active = selectAll ? w.MSCAN_SYMS.slice() : []
   _mscanSaveActive(active)
-  const list = w.el('atSymPickerList')
+  const list = el('atSymPickerList')
   if (list) list.querySelectorAll('input[type="checkbox"]').forEach(function (cb: any) { cb.checked = selectAll })
 }
 w.mscanPickAll = mscanPickAll

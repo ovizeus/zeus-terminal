@@ -3,6 +3,7 @@
 // Chart init, fetchKlines, renderChart
 
 import { fmtTime, fmtDate, toast } from './marketDataHelpers'
+import { el } from '../utils/dom'
 
 const w = window as any
 
@@ -27,7 +28,7 @@ export function initCharts(): void {
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
     handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
   })
-  w.mainChart = w.LightweightCharts.createChart(w.el('mc'), base(getChartH()))
+  w.mainChart = w.LightweightCharts.createChart(el('mc'), base(getChartH()))
   w.cSeries = w.mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' })
   // LLV: load persisted settings and ensure canvas is ready
   if (typeof w.llvLoadSettings === 'function') w.llvLoadSettings()
@@ -44,9 +45,9 @@ export function initCharts(): void {
   w.wma50S = w.mainChart.addLineSeries({ color: '#ff8822', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
   w.stS = w.mainChart.addLineSeries({ color: '#ff8800', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
   // CVD
-  if (w.el('cc')) {
+  if (el('cc')) {
     const co = Object.assign(base(60), { rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: .1, bottom: .1 } } })
-    w.cvdChart = w.LightweightCharts.createChart(w.el('cc'), co)
+    w.cvdChart = w.LightweightCharts.createChart(el('cc'), co)
     w.cvdS = w.cvdChart.addLineSeries({ color: '#f0c040', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'CVD' })
   }
   // Volume overlay

@@ -3,8 +3,9 @@
 // initZeusGroups, _waitForFeedThenStartExtras, _startExtras, runHealthChecks, _updatePnlLabCondensed
 
 import { getATObject, getTPObject } from '../services/stateAccessors'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.el, w.atLog, fn calls
+const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
 const TP = getTPObject()
@@ -73,16 +74,16 @@ export function _startExtras(): void {
   w.startDSLIntervals()
   w.Intervals.set('dslTrim', w._dslTrimAll, 300000)
   setTimeout(w.runMultiSymbolScan, 3000)
-  w.Intervals.set('multiscan', () => { if (AT.enabled && w.el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
+  w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
   w.Intervals.set('bbSave', () => { if (typeof w._aubSaveBB === 'function') w._aubSaveBB() }, 30000)
   w.atLog('info', '[INIT] Extras module online')
   w.Intervals.set('livePosSync', function () { if (typeof TP !== 'undefined' && TP.liveConnected && typeof w.liveApiSyncState === 'function') w.liveApiSyncState() }, 30000)
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     console.log('[startApp] AT was enabled before reload — resuming')
-    const _btn = w.el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
-    const _dot = w.el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)' }
-    const _txt = w.el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON'
-    const _st = w.el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s'
+    const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
+    const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)' }
+    const _txt = el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON'
+    const _st = el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s'
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000)
     setTimeout(w.runAutoTradeCheck, 3000)
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()

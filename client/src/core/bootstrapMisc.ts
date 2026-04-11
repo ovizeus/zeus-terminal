@@ -5,7 +5,7 @@
 import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } from '../services/stateAccessors'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, w.el, fn calls, w.mainChart, w.cvdChart
+const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
 const TP = getTPObject()
 const AT = getATObject()

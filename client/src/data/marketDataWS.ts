@@ -6,8 +6,9 @@
 import { getTPObject, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
 import { fmtTime, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
+import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, w.el, fn calls
+const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
 const BR = getBrainObject()
@@ -88,12 +89,12 @@ export function connectBYB(): void {
 
 // ===== CONNECTION STATUS =====
 export function updConn(): void {
-  const dot = w.el('ldot'), lbl = w.el('llbl')
+  const dot = el('ldot'), lbl = el('llbl')
   const ok = w.S.bnbOk || w.S.bybOk
   const degraded = typeof w._isDegradedOnly === 'function' ? w._isDegradedOnly() : false
   if (dot) dot.className = 'ldot' + (ok ? (degraded ? ' degraded' : ' on') : '')
   if (lbl) lbl.textContent = ok ? (degraded ? 'DEGRADED' : 'LIVE') : 'CONNECTING'
-  const bv = w.el('bns'); const byv = w.el('bys')
+  const bv = el('bns'); const byv = el('bys')
   if (bv) bv.textContent = 'BNB:' + (w.S.bnbOk ? 'LIVE' : '\u2014')
   if (byv) byv.textContent = 'BYB:' + (w.S.bybOk ? 'LIVE' : '\u2014' + (degraded ? ' [!]' : ''))
   updBybHealth()
@@ -142,42 +143,42 @@ export function procLiq(o: any, src?: string): void {
 
 // ===== LIQ STATS =====
 export function updLiqStats(): void {
-  const le = w.el('llc'), se = w.el('lsc'); if (le) le.textContent = w.S.longCnt; if (se) se.textContent = w.S.shortCnt
-  const lu = w.el('llu'), su = w.el('lsu'); if (lu) lu.textContent = '$' + fmt(w.S.longUSD); if (su) su.textContent = '$' + fmt(w.S.shortUSD)
-  const avgl = w.el('lla'), avgs = w.el('lsa'); if (avgl) avgl.textContent = w.S.longCnt ? 'avg: $' + fmt(w.S.longUSD / w.S.longCnt) : 'avg: \u2014'; if (avgs) avgs.textContent = w.S.shortCnt ? 'avg: $' + fmt(w.S.shortUSD / w.S.shortCnt) : 'avg: \u2014'
-  const rate = w.el('lrate'); if (rate) rate.textContent = ((w.S.longCnt + w.S.shortCnt) / Math.max(1, (Date.now() - performance.timeOrigin) * 0.001) * 60).toFixed(0)
-  const loss = w.el('lloss'); if (loss) loss.textContent = '$' + fmt(w.S.totalUSD)
-  const t1 = w.el('tv'), tl = w.el('lv'), ts = w.el('sv'), tc = w.el('cv')
+  const le = el('llc'), se = el('lsc'); if (le) le.textContent = w.S.longCnt; if (se) se.textContent = w.S.shortCnt
+  const lu = el('llu'), su = el('lsu'); if (lu) lu.textContent = '$' + fmt(w.S.longUSD); if (su) su.textContent = '$' + fmt(w.S.shortUSD)
+  const avgl = el('lla'), avgs = el('lsa'); if (avgl) avgl.textContent = w.S.longCnt ? 'avg: $' + fmt(w.S.longUSD / w.S.longCnt) : 'avg: \u2014'; if (avgs) avgs.textContent = w.S.shortCnt ? 'avg: $' + fmt(w.S.shortUSD / w.S.shortCnt) : 'avg: \u2014'
+  const rate = el('lrate'); if (rate) rate.textContent = ((w.S.longCnt + w.S.shortCnt) / Math.max(1, (Date.now() - performance.timeOrigin) * 0.001) * 60).toFixed(0)
+  const loss = el('lloss'); if (loss) loss.textContent = '$' + fmt(w.S.totalUSD)
+  const t1 = el('tv'), tl = el('lv'), ts = el('sv'), tc = el('cv')
   if (t1) t1.textContent = '$' + fmt(w.S.totalUSD); if (tl) tl.textContent = '$' + fmt(w.S.longUSD); if (ts) ts.textContent = '$' + fmt(w.S.shortUSD); if (tc) tc.textContent = w.S.cnt
-  const bar = w.el('rfill'); if (bar && w.S.totalUSD > 0) { const lp = w.S.longUSD / w.S.totalUSD * 100; bar.style.width = lp + '%' }
-  const lpc = w.el('lplbl'), spc = w.el('splbl')
+  const bar = el('rfill'); if (bar && w.S.totalUSD > 0) { const lp = w.S.longUSD / w.S.totalUSD * 100; bar.style.width = lp + '%' }
+  const lpc = el('lplbl'), spc = el('splbl')
   if (lpc && w.S.totalUSD > 0) lpc.textContent = 'LONG ' + ((w.S.longUSD / w.S.totalUSD) * 100).toFixed(0) + '%'
   if (spc && w.S.totalUSD > 0) spc.textContent = 'SHORT ' + ((w.S.shortUSD / w.S.totalUSD) * 100).toFixed(0) + '%'
-  const calm = w.el('calm')
+  const calm = el('calm')
   if (calm) { const recent = w.S.events.filter((e: any) => Date.now() - e.ts < 60000); const bigLiq = recent.filter((e: any) => e.usd > 100000).length; calm.innerHTML = bigLiq > 5 ? _ZI.fire + ' HOT' : bigLiq > 2 ? _ZI.bolt + ' ACTIVE' : 'CALM'; calm.style.color = bigLiq > 5 ? 'var(--red)' : bigLiq > 2 ? 'var(--ylw)' : 'var(--dim)' }
   const now = Date.now(); const w1m = w.S.events.filter((e: any) => now - e.ts < 60000); const w5m = w.S.events.filter((e: any) => now - e.ts < 300000); const w15m = w.S.events.filter((e: any) => now - e.ts < 900000)
-  const e1m = w.el('t1l'), e1ms = w.el('t1s'), e1mv = w.el('t1v')
+  const e1m = el('t1l'), e1ms = el('t1s'), e1mv = el('t1v')
   if (e1m) e1m.textContent = w1m.filter((e: any) => e.isLong).length + 'L'; if (e1ms) e1ms.textContent = w1m.filter((e: any) => !e.isLong).length + 'S'; if (e1mv) e1mv.textContent = '$' + fmt(w1m.reduce((a: number, e: any) => a + e.usd, 0))
-  const e5ml = w.el('t5l'), e5ms = w.el('t5s'), e5mv = w.el('t5v')
+  const e5ml = el('t5l'), e5ms = el('t5s'), e5mv = el('t5v')
   if (e5ml) e5ml.textContent = w5m.filter((e: any) => e.isLong).length + 'L'; if (e5ms) e5ms.textContent = w5m.filter((e: any) => !e.isLong).length + 'S'; if (e5mv) e5mv.textContent = '$' + fmt(w5m.reduce((a: number, e: any) => a + e.usd, 0))
-  const e15ml = w.el('t15l'), e15ms = w.el('t15s'), e15mv = w.el('t15v')
+  const e15ml = el('t15l'), e15ms = el('t15s'), e15mv = el('t15v')
   if (e15ml) e15ml.textContent = w15m.filter((e: any) => e.isLong).length + 'L'; if (e15ms) e15ms.textContent = w15m.filter((e: any) => !e.isLong).length + 'S'; if (e15mv) e15mv.textContent = '$' + fmt(w15m.reduce((a: number, e: any) => a + e.usd, 0))
   renderHotZones(); updMarketPressure(); updLiqSourceMetrics()
 }
 
 export function updLiqSourceMetrics(): void {
   const mb = w.S.liqMetrics.bnb, my = w.S.liqMetrics.byb; const total = mb.count + my.count || 1
-  const ebc = w.el('lm-bnb-cnt'), ebu = w.el('lm-bnb-usd'), ebp = w.el('lm-bnb-pct')
-  const eyc = w.el('lm-byb-cnt'), eyu = w.el('lm-byb-usd'), eyp = w.el('lm-byb-pct')
+  const ebc = el('lm-bnb-cnt'), ebu = el('lm-bnb-usd'), ebp = el('lm-bnb-pct')
+  const eyc = el('lm-byb-cnt'), eyu = el('lm-byb-usd'), eyp = el('lm-byb-pct')
   if (ebc) ebc.textContent = mb.count; if (ebu) ebu.textContent = '$' + fmt(mb.usd); if (ebp) ebp.textContent = (mb.count / total * 100).toFixed(0) + '%'
   if (eyc) eyc.textContent = my.count; if (eyu) eyu.textContent = '$' + fmt(my.usd); if (eyp) eyp.textContent = (my.count / total * 100).toFixed(0) + '%'
-  const elast = w.el('lm-last-src'); if (elast) { const lastEvt = w.S.events[0]; if (lastEvt) { elast.textContent = lastEvt.src === 'byb' ? 'BYB' : 'BNB'; elast.style.color = lastEvt.src === 'byb' ? 'var(--ylw)' : 'var(--grn)' } }
-  const edup = w.el('lm-dup-cnt'); if (edup) edup.textContent = w.S.events.filter((e: any) => e.dup).length
+  const elast = el('lm-last-src'); if (elast) { const lastEvt = w.S.events[0]; if (lastEvt) { elast.textContent = lastEvt.src === 'byb' ? 'BYB' : 'BNB'; elast.style.color = lastEvt.src === 'byb' ? 'var(--ylw)' : 'var(--grn)' } }
+  const edup = el('lm-dup-cnt'); if (edup) edup.textContent = w.S.events.filter((e: any) => e.dup).length
 }
 
 export function updBybHealth(): void {
   const my = w.S.liqMetrics.byb
-  const eSt = w.el('byb-h-status'), eRc = w.el('byb-h-reconn'), eRate = w.el('byb-h-rate'), eAge = w.el('byb-h-age')
+  const eSt = el('byb-h-status'), eRc = el('byb-h-reconn'), eRate = el('byb-h-rate'), eAge = el('byb-h-age')
   if (eSt) { const st = w.S.bybOk ? 'CONNECTED' : (my.reconnects > 0 ? 'DEGRADED' : 'DISCONNECTED'); eSt.textContent = st; eSt.style.color = w.S.bybOk ? 'var(--grn)' : 'var(--red)' }
   if (eRc) eRc.textContent = my.reconnects
   if (eRate) { const now = Date.now(); const recent = w.S.events.filter((e: any) => e.src === 'byb' && now - e.ts < 60000); eRate.textContent = recent.length + '/min' }
@@ -193,14 +194,14 @@ export function renderOB(): void {
   const maxSz = Math.max(...w.S.asks.slice(0, top).map((x: any) => x.q), ...w.S.bids.slice(0, top).map((x: any) => x.q), 1)
   w.S.asks.slice(0, top).reverse().forEach((a: any) => { const pct = a.q / maxSz * 100; ah += `<tr><td style="color:var(--red)">${fP(a.p)}</td><td style="color:var(--dim);text-align:right">${a.q.toFixed(3)}</td><td style="width:60px"><div style="height:6px;background:#ff335533;width:${pct}%"></div></td></tr>` })
   w.S.bids.slice(0, top).forEach((b: any) => { const pct = b.q / maxSz * 100; bh += `<tr><td style="color:var(--grn)">${fP(b.p)}</td><td style="color:var(--dim);text-align:right">${b.q.toFixed(3)}</td><td style="width:60px"><div style="height:6px;background:#00d97a33;width:${pct}%"></div></td></tr>` })
-  const ae = w.el('askc'), be = w.el('bidc'); if (ae) ae.innerHTML = ah; if (be) be.innerHTML = bh
+  const ae = el('askc'), be = el('bidc'); if (ae) ae.innerHTML = ah; if (be) be.innerHTML = bh
   const sp = w.S.asks.length && w.S.bids.length ? w.S.asks[0].p - w.S.bids[0].p : 0
-  const spe = w.el('spread'); if (spe) spe.textContent = 'SPREAD: $' + sp.toFixed(2)
+  const spe = el('spread'); if (spe) spe.textContent = 'SPREAD: $' + sp.toFixed(2)
 }
 
 // ===== HOT ZONES =====
 export function renderHotZones(): void {
-  const hz = w.el('hzc'); if (!hz) return
+  const hz = el('hzc'); if (!hz) return
   const clusters: any[] = Object.values(w.S.btcClusters).sort((a: any, b: any) => b.vol - a.vol).slice(0, 5)
   if (!clusters.length) { hz.innerHTML = '<div style="color:var(--dim);font-size:13px;text-align:center;padding:12px">Accumulating data...</div>'; return }
   const maxV = Math.max(...clusters.map((c: any) => c.vol), 1)
@@ -209,7 +210,7 @@ export function renderHotZones(): void {
 
 // ===== MARKET PRESSURE =====
 export function updMarketPressure(): void {
-  const e = w.el('pvv'); if (!e) return
+  const e = el('pvv'); if (!e) return
   const total = w.S.totalUSD; if (!total) { e.textContent = 'NEUTRAL'; e.className = 'pvv neut'; return }
   const ratio = w.S.longUSD / total
   if (ratio > 0.65) { e.textContent = 'SHORT HEAVY'; e.className = 'pvv bears' } else if (ratio < 0.35) { e.textContent = 'LONG HEAVY'; e.className = 'pvv bulls' } else { e.textContent = 'NEUTRAL'; e.className = 'pvv neut' }
@@ -218,15 +219,15 @@ export function updMarketPressure(): void {
 // ===== FEED =====
 let _liqSrcFilter = 'all'
 export function setLiqSrcFilter(v: any): void { _liqSrcFilter = v; renderFeed(); updLiqFilterBtns() }
-export function updLiqFilterBtns(): void { ['all', 'bnb', 'byb'].forEach((k: string) => { const b = w.el('lf-' + k); if (b) b.className = 'liq-fbtn' + (_liqSrcFilter === k ? ' act' : '') }) }
+export function updLiqFilterBtns(): void { ['all', 'bnb', 'byb'].forEach((k: string) => { const b = el('lf-' + k); if (b) b.className = 'liq-fbtn' + (_liqSrcFilter === k ? ' act' : '') }) }
 export function renderFeed(): void {
-  const fd = w.el('fdlist'); if (!fd) return
+  const fd = el('fdlist'); if (!fd) return
   const base = (w.S.symbol || 'BTCUSDT').replace('USDT', '').replace('BUSD', '')
   let filtered = w.S.events.filter((e: any) => e.sym && e.sym.toUpperCase().startsWith(base.toUpperCase()))
   if (_liqSrcFilter !== 'all') filtered = filtered.filter((e: any) => e.src === _liqSrcFilter)
   const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? _ZI.fire : e.usd >= 500000 ? _ZI.boom : _ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${fP(e.price)}</span></div>` }).join('')
   fd.innerHTML = html || `<div style="color:var(--dim);font-size:13px;padding:8px">Waiting for ${base} liquidations...</div>`
-  const cnt = w.el('fcnt'); if (cnt) cnt.textContent = filtered.length + ' events' + (_liqSrcFilter !== 'all' ? ' (' + _liqSrcFilter.toUpperCase() + ')' : '')
+  const cnt = el('fcnt'); if (cnt) cnt.textContent = filtered.length + ' events' + (_liqSrcFilter !== 'all' ? ' (' + _liqSrcFilter.toUpperCase() + ')' : '')
 }
 
 // ===== SYMBOL SWITCH =====
@@ -239,7 +240,7 @@ export function setSymbol(sym: string): void {
     if (typeof w.clearAllSessionOverlays === 'function') w.clearAllSessionOverlays()
     w.S.symbol = sym
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SYM] \u2192 ' + sym)
-    const lbl = w.el('chartTitleLbl'); if (lbl) lbl.textContent = sym
+    const lbl = el('chartTitleLbl'); if (lbl) lbl.textContent = sym
     w.S.klines = []; w.S.btcClusters = {}; w.S.events = []
     w.S.price = 0; w.S.totalUSD = 0; w.S.longUSD = 0; w.S.shortUSD = 0; w.S.cnt = 0; w.S.longCnt = 0; w.S.shortCnt = 0
     w.S.bids = []; w.S.asks = []
@@ -261,12 +262,12 @@ export function setSymbol(sym: string): void {
 export function toggleSnd(): void {
   w.S.soundOn = !w.S.soundOn
   if (typeof w._initAudio === 'function') w._initAudio()
-  const e = w.el('snd'); if (e) e.innerHTML = w.S.soundOn ? _ZI.bell : _ZI.bellX
+  const e = el('snd'); if (e) e.innerHTML = w.S.soundOn ? _ZI.bell : _ZI.bellX
 }
 
 // ===== MODAL =====
-export function openM(id: string): void { const e = w.el(id); if (e) e.style.display = 'flex' }
-export function closeM(id: string): void { const e = w.el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal'); if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
+export function openM(id: string): void { const e = el(id); if (e) e.style.display = 'flex' }
+export function closeM(id: string): void { const e = el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal'); if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
 
 // ===== MODAL DRAG =====
 export function _initModalDrag(): void {
@@ -284,17 +285,17 @@ if (document.readyState === 'loading') document.addEventListener('DOMContentLoad
 else _initModalDrag()
 
 export function swtab(modalId: string, paneId: string, btn: any): void {
-  const modal = w.el(modalId); if (!modal) return
+  const modal = el(modalId); if (!modal) return
   modal.querySelectorAll('.mbody').forEach((p: any) => p.classList.remove('act'))
   modal.querySelectorAll('.mtab').forEach((b: any) => b.classList.remove('act'))
-  const pane = w.el(paneId); if (pane) pane.classList.add('act')
+  const pane = el(paneId); if (pane) pane.classList.add('act')
   if (btn) btn.classList.add('act')
 }
 
 // ===== UPDATE MAIN METRICS =====
 export function updateMainMetrics(): void {
   if (document.hidden) return
-  const fr = w.el('frv'), frs_el = w.el('frs'), oi = w.el('oiv'), ois_el = w.el('ois'), atr = w.el('atrv'), ls = w.el('lsv'), lss_el = w.el('lss')
+  const fr = el('frv'), frs_el = el('frs'), oi = el('oiv'), ois_el = el('ois'), atr = el('atrv'), ls = el('lsv'), lss_el = el('lss')
   if (fr) fr.textContent = w.S.fr !== null && w.S.fr !== undefined ? (w.S.fr * 100).toFixed(4) + '%' : '\u2014'
   if (fr) fr.style.color = w.S.fr > 0 ? 'var(--red)' : w.S.fr < 0 ? 'var(--grn)' : 'var(--dim)'
   if (frs_el) { if (w.S.frCd) { const d = new Date(w.S.frCd); frs_el.textContent = 'next: ' + fmtTime(d.getTime()) } else frs_el.textContent = 'next: \u2014' }
@@ -307,11 +308,11 @@ export function updateMainMetrics(): void {
 }
 
 // ===== CHART SETTINGS =====
-export function showTab(tab: string, btn: any): void { document.querySelectorAll('.ctab-pane').forEach((p: any) => p.classList.remove('act')); document.querySelectorAll('.ctab-btn').forEach((b: any) => b.classList.remove('act')); const pane = w.el('ct-' + tab); if (pane) pane.classList.add('act'); if (btn) btn.classList.add('act') }
-export function applyChartColors(): void { const uc = w.el('ccBull')?.value || '#00d97a'; const dc = w.el('ccBear')?.value || '#ff3355'; const uw = w.el('ccBullW')?.value || '#00d97a77'; const dw = w.el('ccBearW')?.value || '#ff335577'; if (w.cSeries) w.cSeries.applyOptions({ upColor: uc, downColor: dc, borderUpColor: uc, borderDownColor: dc, wickUpColor: uw, wickDownColor: dw }); toast('Colors applied'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function showTab(tab: string, btn: any): void { document.querySelectorAll('.ctab-pane').forEach((p: any) => p.classList.remove('act')); document.querySelectorAll('.ctab-btn').forEach((b: any) => b.classList.remove('act')); const pane = el('ct-' + tab); if (pane) pane.classList.add('act'); if (btn) btn.classList.add('act') }
+export function applyChartColors(): void { const uc = el('ccBull')?.value || '#00d97a'; const dc = el('ccBear')?.value || '#ff3355'; const uw = el('ccBullW')?.value || '#00d97a77'; const dw = el('ccBearW')?.value || '#ff335577'; if (w.cSeries) w.cSeries.applyOptions({ upColor: uc, downColor: dc, borderUpColor: uc, borderDownColor: dc, wickUpColor: uw, wickDownColor: dw }); toast('Colors applied'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function setCandleStyle(style: string, btn: any): void { document.querySelectorAll('#ct-candles .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Style: ' + style) }
-export function setTZ(tz: string, btn: any): void { w.S.tz = tz; document.querySelectorAll('#cst .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); const n: any = { 'Europe/Bucharest': 'RO', 'UTC': 'UTC', 'America/New_York': 'NY', 'Asia/Tokyo': 'TK', 'Europe/London': 'LN' }; const lbl = w.el('chartTZLbl'); if (lbl) lbl.textContent = n[tz] || tz; toast('Timezone: ' + tz); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
-export function applyHeatmapSettings(): void { const hs = w.S.heatmapSettings; const gv = (id: string) => +(w.el(id)?.value) || 0; hs.lookback = gv('hmLookback') || 400; hs.pivotWidth = gv('hmPivotW') || 1; hs.atrLen = gv('hmAtrLen') || 121; hs.atrBandPct = gv('hmAtrBand') || 0.05; hs.extendUnhit = gv('hmExtend') || 30; hs.heatContrast = gv('hmContrast') || 0.3; hs.minWeight = 0; hs.keepTouched = w.el('hmKeepTouched')?.checked !== false; hs.longCol = w.el('hmLongCol')?.value || '#01c4fe'; hs.shortCol = w.el('hmShortCol')?.value || '#ffe400'; if (w.S.overlays.liq) w.renderHeatmapOverlay(); closeM('mcharts'); toast('Heatmap updated'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function setTZ(tz: string, btn: any): void { w.S.tz = tz; document.querySelectorAll('#cst .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); const n: any = { 'Europe/Bucharest': 'RO', 'UTC': 'UTC', 'America/New_York': 'NY', 'Asia/Tokyo': 'TK', 'Europe/London': 'LN' }; const lbl = el('chartTZLbl'); if (lbl) lbl.textContent = n[tz] || tz; toast('Timezone: ' + tz); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function applyHeatmapSettings(): void { const hs = w.S.heatmapSettings; const gv = (id: string) => +(el(id)?.value) || 0; hs.lookback = gv('hmLookback') || 400; hs.pivotWidth = gv('hmPivotW') || 1; hs.atrLen = gv('hmAtrLen') || 121; hs.atrBandPct = gv('hmAtrBand') || 0.05; hs.extendUnhit = gv('hmExtend') || 30; hs.heatContrast = gv('hmContrast') || 0.3; hs.minWeight = 0; hs.keepTouched = el('hmKeepTouched')?.checked !== false; hs.longCol = el('hmLongCol')?.value || '#01c4fe'; hs.shortCol = el('hmShortCol')?.value || '#ffe400'; if (w.S.overlays.liq) w.renderHeatmapOverlay(); closeM('mcharts'); toast('Heatmap updated'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 
 // ===== ALERTS =====
 export function sendAlert(title: string, body: string, tag = 'zt'): void {
@@ -326,24 +327,24 @@ export function registerServiceWorker(): void { if (!('serviceWorker' in navigat
 
 export function checkLiqAlert(usd: number, qty: number, side: string, sym: string): void { if (!w.S.alerts.liqAlerts) return; if (qty < w.S.alerts.liqMinBtc) return; if (!(checkLiqAlert as any)._last || Date.now() - (checkLiqAlert as any)._last > 5000) { (checkLiqAlert as any)._last = Date.now(); sendAlert(`${sym} LIQUIDATION`, `$${fmt(usd)} ${side}`, 'liq') } }
 export function testNotification(): void { sendAlert('ZeuS Terminal', 'Test alert working!', 'test') }
-export function saveAlerts(): void { w.S.alerts.liqAlerts = w.el('aLiqEn')?.checked !== false; w.S.alerts.rsiAlerts = w.el('aDivEn')?.checked !== false; const liqMin = w.el('aLiqMin'); if (liqMin) w.S.alerts.liqMinBtc = +liqMin.value || 0; toast('Alert settings saved'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
-export function applySR(): void { const en = w.el('srEn')?.checked !== false; w.S.overlays.sr = en; w.clearSR(); if (en) w.renderSROverlay(); const btn = w.el('bsr'); if (btn) btn.classList.toggle('act', en); toast('S/R settings applied') }
+export function saveAlerts(): void { w.S.alerts.liqAlerts = el('aLiqEn')?.checked !== false; w.S.alerts.rsiAlerts = el('aDivEn')?.checked !== false; const liqMin = el('aLiqMin'); if (liqMin) w.S.alerts.liqMinBtc = +liqMin.value || 0; toast('Alert settings saved'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function applySR(): void { const en = el('srEn')?.checked !== false; w.S.overlays.sr = en; w.clearSR(); if (en) w.renderSROverlay(); const btn = el('bsr'); if (btn) btn.classList.toggle('act', en); toast('S/R settings applied') }
 
 // ===== MISC (cloud, inject, filters, supremus) =====
-export function cloudClear(): void { const ei = w.el('cloudEmail'); if (ei) ei.value = ''; toast('Email cleared') }
+export function cloudClear(): void { const ei = el('cloudEmail'); if (ei) ei.value = ''; toast('Email cleared') }
 export function injectFakeWhale(): void { const sym = w.S.symbol || 'BTCUSDT'; const side = Math.random() > 0.5; const usd = Math.floor(Math.random() * 5000000) + 500000; const qty = usd / (w.S.price || 67000); const ev = { sym, isLong: side, usd, qty, price: w.S.price || 67000, ts: Date.now() }; w.S.events.unshift(ev); if (w.S.events.length > 200) w.S.events.pop(); renderFeed(); checkLiqAlert(usd, qty, side ? 'LONG' : 'SHORT', sym); toast(`Fake whale: $${fmt(usd)} ${side ? 'LONG' : 'SHORT'} ${sym}`) }
 export function setLiqSym(sym: string, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.sym = sym; const q = document.getElementById('lsymq'); if (q) q.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Filter: ' + sym) }
 export function setLiqUsd(val: number, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.minUsd = val; const container = btn?.parentElement; if (container) container.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Min size: $' + fmt(val)) }
 export function setLiqTW(hours: number, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.tw = hours; const container = btn?.parentElement; if (container) container.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Time window: ' + hours + 'h') }
 
 export async function hashEmail(email: string): Promise<string> { const b = new TextEncoder().encode(email.toLowerCase().trim()); const h = await crypto.subtle.digest('SHA-256', b); return Array.from(new Uint8Array(h)).map(x => x.toString(16).padStart(2, '0')).join('') }
-export async function cloudSave(): Promise<void> { const ei = w.el('cloudEmail'); if (!ei || !ei.value.trim()) { toast('Enter email first'); return }; const hash = await hashEmail(ei.value); const data = { symbol: w.S.symbol, chartTf: w.S.chartTf, tz: w.S.tz, indicators: w.S.indicators, overlays: w.S.overlays, activeInds: w.S.activeInds, heatmapSettings: w.S.heatmapSettings, alerts: w.S.alerts, zsSettings: w.S.zsSettings || {}, sessions: w.S.sessions || { asia: false, london: false, ny: false }, vwapOn: w.S.vwapOn || false, ts: Date.now() }; localStorage.setItem('zt_cloud_' + hash, JSON.stringify(data)); localStorage.setItem('zt_cloud_last_hash', hash); const st = w.el('cloudStatus'); if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' }); toast('Settings saved to cloud!', 3000, _ZI.ok) }
-export async function cloudLoad(): Promise<void> { const ei = w.el('cloudEmail'); if (!ei || !ei.value.trim()) { toast('Enter email first'); return }; const hash = await hashEmail(ei.value); const raw = localStorage.getItem('zt_cloud_' + hash); if (!raw) { toast('No saved data for this email'); return }; try { const data = JSON.parse(raw); if (data.symbol) w.S.symbol = data.symbol; if (data.chartTf) w.S.chartTf = data.chartTf; if (data.tz) w.S.tz = data.tz; if (data.indicators) w.S.indicators = data.indicators; if (data.overlays) w.S.overlays = data.overlays; if (data.activeInds) w.S.activeInds = data.activeInds; if (data.heatmapSettings) w.S.heatmapSettings = data.heatmapSettings; if (data.alerts) w.S.alerts = data.alerts; if (data.zsSettings) w.S.zsSettings = data.zsSettings; if (data.sessions) w.S.sessions = data.sessions; if (data.vwapOn != null) w.S.vwapOn = data.vwapOn; toast('Settings loaded!', 3000, _ZI.ok); const st = w.el('cloudStatus'); if (st) st.textContent = 'Loaded from ' + new Date(data.ts).toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' }) } catch (e: any) { toast('Error loading: ' + e.message) } }
-export function initCloudSettings(): void { const hash = localStorage.getItem('zt_cloud_last_hash'); if (!hash) return; const st = w.el('cloudStatus'); if (st) st.textContent = 'Last sync available' }
+export async function cloudSave(): Promise<void> { const ei = el('cloudEmail'); if (!ei || !ei.value.trim()) { toast('Enter email first'); return }; const hash = await hashEmail(ei.value); const data = { symbol: w.S.symbol, chartTf: w.S.chartTf, tz: w.S.tz, indicators: w.S.indicators, overlays: w.S.overlays, activeInds: w.S.activeInds, heatmapSettings: w.S.heatmapSettings, alerts: w.S.alerts, zsSettings: w.S.zsSettings || {}, sessions: w.S.sessions || { asia: false, london: false, ny: false }, vwapOn: w.S.vwapOn || false, ts: Date.now() }; localStorage.setItem('zt_cloud_' + hash, JSON.stringify(data)); localStorage.setItem('zt_cloud_last_hash', hash); const st = el('cloudStatus'); if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' }); toast('Settings saved to cloud!', 3000, _ZI.ok) }
+export async function cloudLoad(): Promise<void> { const ei = el('cloudEmail'); if (!ei || !ei.value.trim()) { toast('Enter email first'); return }; const hash = await hashEmail(ei.value); const raw = localStorage.getItem('zt_cloud_' + hash); if (!raw) { toast('No saved data for this email'); return }; try { const data = JSON.parse(raw); if (data.symbol) w.S.symbol = data.symbol; if (data.chartTf) w.S.chartTf = data.chartTf; if (data.tz) w.S.tz = data.tz; if (data.indicators) w.S.indicators = data.indicators; if (data.overlays) w.S.overlays = data.overlays; if (data.activeInds) w.S.activeInds = data.activeInds; if (data.heatmapSettings) w.S.heatmapSettings = data.heatmapSettings; if (data.alerts) w.S.alerts = data.alerts; if (data.zsSettings) w.S.zsSettings = data.zsSettings; if (data.sessions) w.S.sessions = data.sessions; if (data.vwapOn != null) w.S.vwapOn = data.vwapOn; toast('Settings loaded!', 3000, _ZI.ok); const st = el('cloudStatus'); if (st) st.textContent = 'Loaded from ' + new Date(data.ts).toLocaleTimeString('ro-RO', { timeZone: w.S.tz || 'Europe/Bucharest' }) } catch (e: any) { toast('Error loading: ' + e.message) } }
+export function initCloudSettings(): void { const hash = localStorage.getItem('zt_cloud_last_hash'); if (!hash) return; const st = el('cloudStatus'); if (st) st.textContent = 'Last sync available' }
 export function applySessionSettings(): void { if (typeof w._usScheduleSave === 'function') w._usScheduleSave(); toast('Session settings saved') }
 
 // ===== SUPREMUS + ZS =====
-export function applyZS(): void { w.S.zsSettings = w.S.zsSettings || {}; const cbIds = ['zshh', 'zshl', 'zsll', 'zslh', 'zsbb', 'zsfi', 'zspi', 'zsvi', 'zsse', 'zsds', 'zspu', 'zspd', 'zspivot', 'zsvwap', 'zsShowZones', 'zsExtendZones']; cbIds.forEach((id: string) => { const e = w.el(id); if (e) w.S.zsSettings[id] = e.checked }); const colIds = ['zshhCol', 'zshlCol', 'zslhCol', 'zsllCol', 'zsUpperCol', 'zsLowerCol', 'zsVwapDc', 'zsVwapWc', 'zsVwapMc']; colIds.forEach((id: string) => { const e = w.el(id); if (e) w.S.zsSettings[id] = e.value }); const numIds = ['zsZoneWidth', 'zsPivotLen', 'zsPivotCount']; numIds.forEach((id: string) => { const e = w.el(id); if (e) w.S.zsSettings[id] = +e.value }); ['zsVwapD', 'zsVwapW', 'zsVwapM'].forEach((id: string) => { const e = w.el(id); if (e) w.S.zsSettings[id] = e.checked }); toast('Supremus settings saved', 3000, _ZI.crown); if (w.S.overlays.zs) { clearZS(); renderZS() } }
+export function applyZS(): void { w.S.zsSettings = w.S.zsSettings || {}; const cbIds = ['zshh', 'zshl', 'zsll', 'zslh', 'zsbb', 'zsfi', 'zspi', 'zsvi', 'zsse', 'zsds', 'zspu', 'zspd', 'zspivot', 'zsvwap', 'zsShowZones', 'zsExtendZones']; cbIds.forEach((id: string) => { const e = el(id); if (e) w.S.zsSettings[id] = e.checked }); const colIds = ['zshhCol', 'zshlCol', 'zslhCol', 'zsllCol', 'zsUpperCol', 'zsLowerCol', 'zsVwapDc', 'zsVwapWc', 'zsVwapMc']; colIds.forEach((id: string) => { const e = el(id); if (e) w.S.zsSettings[id] = e.value }); const numIds = ['zsZoneWidth', 'zsPivotLen', 'zsPivotCount']; numIds.forEach((id: string) => { const e = el(id); if (e) w.S.zsSettings[id] = +e.value }); ['zsVwapD', 'zsVwapW', 'zsVwapM'].forEach((id: string) => { const e = el(id); if (e) w.S.zsSettings[id] = e.checked }); toast('Supremus settings saved', 3000, _ZI.crown); if (w.S.overlays.zs) { clearZS(); renderZS() } }
 export function clearZS(): void { w.zsSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.zsSeries = [] }
 export function renderZS(): void {
   if (!w.S.klines || w.S.klines.length < 20) return

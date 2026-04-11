@@ -144,7 +144,7 @@ export function installPhase1Adapters(): void {
   }
 
   // ── Phase 1: helpers.js ──
-  w.el = el
+  // w.el = el  // REMOVED — consumers now import { el } from utils/dom directly
 
   // ── Phase 1: formatters.js ──
 

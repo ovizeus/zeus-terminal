@@ -5,7 +5,7 @@
 
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
-import { escHtml } from '../utils/dom'
+import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 
 const w = window as any
@@ -15,7 +15,7 @@ const w = window as any
 // ═══════════════════════════════════════════════════════════════
 
 export function connectLiveAPI(): void {
-  const st = w.el('apiStatus')
+  const st = el('apiStatus')
   if (st) { st.innerHTML = _ZI.timer + ' Se verific\u0103 conexiunea exchange...'; st.style.color = 'var(--yel)' }
   fetch('/api/exchange/status', { credentials: 'same-origin' }).then(function (r: Response) { return r.json() }).then(function (data: any) {
     if (!data.ok || !data.connected) {
@@ -32,8 +32,8 @@ export function connectLiveAPI(): void {
       st.innerHTML = _ZI.ok + ' <b>' + exchange.toUpperCase() + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
       st.style.color = 'var(--grn)'
     }
-    const form = w.el('liveOrderForm'); if (form) form.style.display = 'block'
-    const btn = w.el('btnConnectExchange'); if (btn) btn.style.display = 'none'
+    const form = el('liveOrderForm'); if (form) form.style.display = 'block'
+    const btn = el('btnConnectExchange'); if (btn) btn.style.display = 'none'
     if (typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
   }).catch(function (err: any) {
     if (st) { st.innerHTML = _ZI.x + ' Backend unreachable: ' + escHtml(err.message || err); st.style.color = 'var(--red)' }
@@ -59,7 +59,7 @@ export function loadSavedAPI(): void {
 
 export function installPWA(): void {
   const prompt = w._dip || w._deferredPrompt
-  if (prompt) { prompt.prompt(); prompt.userChoice.then(() => { const b = w.el('installBtn'); if (b) b.style.display = 'none'; w._dip = null; w._deferredPrompt = null }) }
+  if (prompt) { prompt.prompt(); prompt.userChoice.then(() => { const b = el('installBtn'); if (b) b.style.display = 'none'; w._dip = null; w._deferredPrompt = null }) }
   else toast('Deschide in Chrome/Brave \u2192 meniu \u2192 Instaleaza aplicatia')
 }
 
