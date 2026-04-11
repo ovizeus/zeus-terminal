@@ -6,7 +6,8 @@ import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { macroAdjustExitRisk as _macroAdjustExitRisk } from '../trading/risk'
-import { DEV } from '../utils/dev'
+import { DEV , devLog } from '../utils/dev'
+import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any
 
@@ -267,7 +268,7 @@ export function applyQuantumExit(pos: any): void {
     const r = _posR(pos)
     if (r !== null && r < 0.25) {
       // Below 0.25R: too early, advisory log only, no action
-      if (DEV?.enabled && action !== 'HOLD') w.devLog?.('[QEB] Profit gate: R=' + r.toFixed(2) + ' < 0.25 → no action', 'info')
+      if (DEV?.enabled && action !== 'HOLD') devLog?.('[QEB] Profit gate: R=' + r.toFixed(2) + ' < 0.25 → no action', 'info')
       return
     }
 
@@ -315,8 +316,8 @@ export function applyQuantumExit(pos: any): void {
       }
       // Extra safety: DSL active → no close unless double-confirmed (handled in decideExitAction)
       // If we reach here: smartOn + action already decided by decideExitAction
-      if (typeof w.closeDemoPos === 'function') {
-        w.closeDemoPos(pos.id, reason)
+      {
+        closeDemoPos(pos.id, reason)
         _qebNotify('EMERGENCY_EXEC', reason, pos)
         if (typeof w.srRecord === 'function') {
           try { w.srRecord('qexit', 'EMERGENCY EXIT', pos.side, risk) } catch (_) { }
@@ -335,7 +336,7 @@ function _qebNotify(action: string, reason: string, pos: any): void {
     const sym = pos ? (pos.sym || w.S.symbol || 'BTC') : (w.S.symbol || 'BTC')
     const msg = 'QEB [' + sym + '] ' + action + ': ' + reason
     if (typeof w.ncAdd === 'function') w.ncAdd('warning', 'qexit', msg)
-    if (typeof w.devLog === 'function') w.devLog(msg, action.includes('EMERGENCY') ? 'error' : 'warning')
+    devLog(msg, action.includes('EMERGENCY') ? 'error' : 'warning')
   } catch (e) { /* silent */ }
 }
 

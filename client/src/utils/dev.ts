@@ -10,7 +10,7 @@ import { el } from './dom'
 import { _ZI } from '../constants/icons'
 import { updLiqStats, renderFeed, cloudSave, cloudClear, cloudLoad, checkLiqAlert, injectFakeWhale } from '../data/marketDataWS'
 import { resetProtectMode } from '../engine/brain'
-import { triggerKillSwitch } from '../trading/autotrade'
+import { triggerKillSwitch , atLog } from '../trading/autotrade'
 import { zeusGetTheme } from '../ui/theme'
 import { _enterRecoveryMode } from './guards'
 import { updateDeepDive } from '../engine/indicators'
@@ -40,7 +40,6 @@ export function devLog(msg: string, type?: string): void {
     }
   } catch (_e) { /* silent */ }
 }
-w.devLog = devLog
 
 function _devRenderLog(): void {
   try {
@@ -273,9 +272,9 @@ export function safeAsync(fn: (...args: any[]) => Promise<any>, name?: string, o
       // Log to ZLOG always
       ZLOG.push('ERROR', msg, { name: name, stack: stack })
       // Log to devLog if available (dev mode)
-      if (typeof w.devLog === 'function') w.devLog(msg, 'error')
+      devLog(msg, 'error')
       // Log to atLog only if not silent (avoids UI spam for fetchers)
-      if (!opts.silent && typeof w.atLog === 'function') w.atLog('warn', msg)
+      if (!opts.silent) atLog('warn', msg)
       // Always console
       console.warn('[safeAsync]', msg, stack)
       // Return null safe — callers must handle null
@@ -283,7 +282,6 @@ export function safeAsync(fn: (...args: any[]) => Promise<any>, name?: string, o
     }
   }
 }
-w.safeAsync = safeAsync
 
 // ── Gate check helper ─────────────────────────────────────────────
 export function _devModuleOk(name: string): boolean {

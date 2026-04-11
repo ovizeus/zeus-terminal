@@ -7,7 +7,7 @@ import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { _startLivePendingSync } from './marketDataPositions'
+import { _startLivePendingSync , renderDemoPositions } from './marketDataPositions'
 import { runDSLBrain } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 import { calcDslTargetPrice } from '../engine/brain'
@@ -200,7 +200,7 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
     if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
     TP.demoPositions.push(pos); TP.demoBalance -= size
-    w.updateDemoBalance(); w.renderDemoPositions()
+    w.updateDemoBalance(); renderDemoPositions()
     if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
     w.ZState.save(); _registerManualOnServer(pos)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}

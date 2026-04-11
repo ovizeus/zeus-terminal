@@ -1,3 +1,4 @@
+import { atLog } from '../trading/autotrade'
 /**
  * Zeus Terminal — AT state + Predator + ConfirmClose (ported from public/js/core/events.js)
  *
@@ -97,7 +98,7 @@ export function computePredatorState(): void {
     if (ns !== PREDATOR._lastState || (now2 - PREDATOR._lastLogTs > 30000)) {
       PREDATOR._lastState = ns; PREDATOR._lastLogTs = now2
       const msg = '[PREDATOR] ' + ns + ' [' + nr + '] vol:' + volRegime + ' streak:' + lossStreak + ' risk:' + riskState + ' mtf:' + alignScore + ' score:' + cscore
-      if (typeof w.atLog === 'function') w.atLog(ns === 'KILL' ? 'ok' : ns === 'HUNT' ? 'wait' : 'warn', msg)
+      atLog(ns === 'KILL' ? 'ok' : ns === 'HUNT' ? 'wait' : 'warn', msg)
     }
   } catch (e) {
     console.warn('[PREDATOR] error:', e)

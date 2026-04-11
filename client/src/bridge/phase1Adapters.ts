@@ -198,7 +198,7 @@ export function installPhase1Adapters(): void {
   // SESS_CFG — removed (direct import)
   /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
   /* _regimeHistory — removed (direct import) */ w._fakeout = _fakeout
-  w._NEURO_SYMS = _NEURO_SYMS
+  // _NEURO_SYMS — removed (direct import)
   // _SESS_DEF — removed (direct import)
   w.ZANIM = ZANIM; w._execQueue = _execQueue
   w._srUpdateStats = _srUpdateStats; w._srRenderStats = _srRenderStats
@@ -236,7 +236,7 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 8C: bootstrap misc (coexist) ──
   w._pinCheckLock = _pinCheckLock
-  w._pinUpdateUI = _pinUpdateUI
+  // _pinUpdateUI — removed (direct import)
   // _showWelcomeModal — removed (direct import)
   w.setupPWAReloadBtn = setupPWAReloadBtn
 
@@ -249,17 +249,17 @@ export function installPhase1Adapters(): void {
   // _updatePnlLabCondensed — removed (direct import)
 
   // ── Phase 7F-G: closeDemoPos (coexist) ──
-  w.closeDemoPos = closeDemoPos
+  // closeDemoPos — removed (direct import)
 
   // ── Phase 7F-F: marketData positions (coexist) ──
   w.cancelPendingOrder = cancelPendingOrder
   w.modifyPendingPrice = modifyPendingPrice; w.renderPendingOrders = renderPendingOrders
 
   w.savePosSLTP = savePosSLTP; w.checkDemoPositionsSLTP = checkDemoPositionsSLTP
-  w.renderDemoPositions = renderDemoPositions; w.calcPosPnL = calcPosPnL
+  /* renderDemoPositions — removed (direct import) */ w.calcPosPnL = calcPosPnL
   // renderLivePositions — removed (direct import)
   // closeLivePos — removed (direct import)
-  w.getSymPrice = _mdGetSymPriceFull
+  // getSymPrice (from positions) — removed (direct import)
 
   // ── Phase 7F-E: marketData trading (coexist) ──
   w.switchGlobalMode = switchGlobalMode; w._applyGlobalModeUI = _applyGlobalModeUI
@@ -270,7 +270,7 @@ export function installPhase1Adapters(): void {
   /* onDemoLevChange — removed (direct import) */ w.onLiveLevChange = onLiveLevChange
   /* calcLiqPrice — removed (direct import) */ w.updateDemoLiqPrice = updateDemoLiqPrice; w.updateLiveLiqPrice = updateLiveLiqPrice
   /* setLivePct — removed (direct import) */ w.updateDemoBalance = updateDemoBalance
-  /* placeDemoOrder — removed (direct import) */ w.getSymPrice = getSymPrice
+  /* placeDemoOrder — removed (direct import) */ /* getSymPrice (from trading) — removed (direct import) */
 
   // ── Phase 7F-B: marketData chart (coexist) ──
   // getChartW — removed (direct import)
@@ -280,10 +280,10 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
   // connectBNB — removed (direct import)
   /* updConn — removed (direct import) */ w.procLiq = procLiq
-  w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
+  /* setSymbol — removed (direct import) */ w.toggleSnd = toggleSnd
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
-  w.setTZ = setTZ
+  // setTZ — removed (direct import)
   /* sendAlert — removed (direct import) */ w.registerServiceWorker = _mdRegisterSW
   /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; w.saveAlerts = saveAlerts
   // injectFakeWhale — removed (direct import)
@@ -368,7 +368,7 @@ export function installPhase1Adapters(): void {
   // ── Phase 6C: trading/autotrade.js ──
   w.toggleAutoTrade = toggleAutoTrade
 
-  w.atLog = atLogFn
+  // atLog — removed (direct import)
 
   // updateATStats — removed (direct import)
   // computeFusionDecision — removed (direct import)
@@ -377,7 +377,7 @@ export function installPhase1Adapters(): void {
   // openAddOn, scheduleAutoClose — removed (direct imports)
   // triggerKillSwitch — removed (direct import)
   w.resetKillSwitch = resetKillSwitch
-  w.renderATPositions = renderATPositions
+  // renderATPositions — removed (direct import)
   w.execPartialClose = execPartialClose
   // closeAllDemoPos — removed (direct import)
 
@@ -433,7 +433,7 @@ export function installPhase1Adapters(): void {
   // ── Phase 6A: guards.js ──
   w._SAFETY = _SAFETY
   w._safe = _safe
-  w._safePnl = _safePnl
+  // _safePnl — removed (direct import)
   // _isPriceSane — removed (direct import)
   // _resetWatchdog — removed (direct import)
   // _resetKlineWatchdog — removed (direct import)
@@ -447,11 +447,11 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 6A: dev.js ──
   // DEV — removed (direct import)
-  w.devLog = devLog
+  // devLog — removed (direct import)
   w.devClearLog = devClearLog
   w.devExportLog = devExportLog
   w.ZLOG = ZLOG
-  w.safeAsync = safeAsync
+  // safeAsync — removed (direct import)
   w.devInjectSignal = devInjectSignal
   w.devInjectLiquidation = devInjectLiquidation
   w.devInjectWhale = devInjectWhale
@@ -536,7 +536,7 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 5B4: brain.js ──
   // updateBrainArc — removed (direct import)
-  w.brainThink = brainThink
+  // brainThink — removed (direct import)
   // runBrainUpdate — removed (direct import)
   // isArmAssistValid — removed (direct import)
   // syncBrainFromState — removed (direct import)

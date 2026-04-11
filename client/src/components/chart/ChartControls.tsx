@@ -5,6 +5,7 @@ import { togInd as togIndFn } from '../../ui/dom2'
 import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
 import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '../../ui/panels'
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
+import { setSymbol } from '../../data/marketDataWS'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -146,7 +147,7 @@ export function ChartControls() {
 
   function handleSymbolChange(val: string) {
     const w = window as any
-    if (typeof w.setSymbol === 'function') w.setSymbol(val)
+    setSymbol(val)
     patch({ symbol: val })
   }
 

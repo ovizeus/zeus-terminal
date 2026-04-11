@@ -9,12 +9,14 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF } from '../core/config'
+import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , _NEURO_SYMS } from '../core/config'
 import { calcConfluenceScore } from './confluence'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
 import { RegimeEngine } from './regime'
+import { atLog } from '../trading/autotrade'
+import { _safePnl } from '../utils/guards'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
@@ -1092,7 +1094,7 @@ export function updateDSLTelemetry(): void {
     const cur = pos.sym === w.S.symbol ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry) // [FIX v85 B7]
     const sym = pos.sym.replace('USDT', '')
     const isActive = dsl?.active || false
-    const pnl = w._safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false)
+    const pnl = _safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false)
     const plPrice = dsl?.pivotLeft || 0
     const plPnl = plPrice ? ((pos.side === 'LONG' ? plPrice - pos.entry : pos.entry - plPrice) / pos.entry * pos.size * pos.lev) : 0
     const steps = dsl?.log?.filter((l: any) => l.msg.includes('IMPULSE')).length || 0
@@ -1316,7 +1318,7 @@ export function initNeuroCoinLEDs(): void {
   const wrap = el('orbNeuroCoin') || el('zncNeuroCoin')
   if (!wrap) return
   // Tiny dots only in orb (no label text to save space)
-  wrap.innerHTML = w._NEURO_SYMS.map((sym: any) => `<div class="znc-nc" id="zncnc-${sym}" title="${sym}"><div class="znc-nc-dot" id="zncndot-${sym}"></div></div>`).join('')
+  wrap.innerHTML = _NEURO_SYMS.map((sym: any) => `<div class="znc-nc" id="zncnc-${sym}" title="${sym}"><div class="znc-nc-dot" id="zncndot-${sym}"></div></div>`).join('')
 }
 
 export function pulseNeuronCoin(sym: any): void {
@@ -2599,6 +2601,6 @@ export function adaptAutoTradeParams(): void {
     // [P1] Sync adapted values back to TC
     if (typeof w.TC !== 'undefined') { w.TC.slPct = newSL; w.TC.size = newSize }
     brainThink('trade', _ZI.bolt + ` ADAPTAT: ${reason}`)
-    w.atLog('info', `[ADAPT] Parametri adaptati: ${reason}`)
+    atLog('info', `[ADAPT] Parametri adaptati: ${reason}`)
   }
 }

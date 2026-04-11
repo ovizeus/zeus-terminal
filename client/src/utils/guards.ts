@@ -7,7 +7,10 @@ import { getATObject, getTPObject, getPrice, getATR } from '../services/stateAcc
 import { el } from './dom'
 import { _updateWhyBlocked } from '../data/klines'
 import { updConn } from '../data/marketDataWS'
-const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), w.atLog, w.ncAdd, fn calls
+import { atLog } from '../trading/autotrade'
+import { closeDemoPos } from '../data/marketDataClose'
+import { getSymPrice } from '../data/marketDataPositions'
+const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), atLog, w.ncAdd, fn calls
 // [8D-6C2] AT = mutable ref to AT — reads + writes through same object
 const AT = getATObject()
 
@@ -66,7 +69,6 @@ export function _safePnl(side: string, curOrDiff: any, entry: any, size: any, le
       : _entry - _safe.num(curOrDiff, null, _entry))
   return _diff / _entry * _size * _lev
 }
-w._safePnl = _safePnl
 
 // Recovery mode state
 let _recoveryMode = false
@@ -125,12 +127,12 @@ export function _onNewUTCDay(_newDayId: number): void {
   const _closed = +(AT?.closedTradesToday) || 0
   AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0
   AT.dailyStart = new Date().toDateString()
-  w.atLog('info', `[DAY] New UTC day (${_newDayId}) — daily counters reset`)
+  atLog('info', `[DAY] New UTC day (${_newDayId}) — daily counters reset`)
   // Kill switch: only keep if there was REAL loss today
   if (AT.killTriggered && _closed === 0 && Math.abs(_rPnL) < 0.01) {
     AT.killTriggered = false
     const kb = el('atKillBtn'); if (kb) kb.classList.remove('triggered')
-    w.atLog('info', '[INFO] Kill switch cleared — no realized loss on new day')
+    atLog('info', '[INFO] Kill switch cleared — no realized loss on new day')
   }
   // [9A-4] Notify React after daily counter reset
   try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
@@ -157,7 +159,7 @@ export function _resetWatchdog(): void {
     w.S.dataStalled = false
     w.S.dataStalledSince = 0
     _SAFETY.autoSuspended = false
-    w.atLog('info', '[OK] Data feed restored — AT resuming')  // logged once here, never repeated
+    atLog('info', '[OK] Data feed restored — AT resuming')  // logged once here, never repeated
     const sb = el('dataStallBanner'); if (sb) sb.style.display = 'none'
   }
 }
@@ -205,14 +207,14 @@ export function _startWatchdog(): void {
       if (timeSinceLastLog >= STALL_LOG_DEBOUNCE) {
         _SAFETY._stallLastLogTs = now
         const stalledForSec = Math.round((now - _SAFETY.dataStalledSince) / 1000)
-        w.atLog('warn', `[STALL] DATA STALLED ${stalledForSec}s — price feed unresponsive`)
+        atLog('warn', `[STALL] DATA STALLED ${stalledForSec}s — price feed unresponsive`)
       }
 
       // req 6: suspend AT only after 20s of confirmed stall
       const stalledMs = now - (_SAFETY.dataStalledSince || now)
       if (stalledMs >= STALL_AT_SUSPEND_MS && !_SAFETY.autoSuspended) {
         _SAFETY.autoSuspended = true
-        w.atLog('warn', '[PAUSE] AUTO-TRADE suspended (stall > 20s)')
+        atLog('warn', '[PAUSE] AUTO-TRADE suspended (stall > 20s)')
       }
     }
     // FIX3: refresh WHY BLOCKED pill every watchdog tick (cooldown countdown)
@@ -229,7 +231,7 @@ export function _enterDegradedMode(source: string): void {
   const now = Date.now()
   if (now - _degradedLogTs.enter >= _DEGRADED_LOG_COOLDOWN) {
     _degradedLogTs.enter = now
-    w.atLog('warn', `[DEGRADED] ${source} feed down — continuing with reduced data`)
+    atLog('warn', `[DEGRADED] ${source} feed down — continuing with reduced data`)
     w.ncAdd('warning', 'system', `Feed degradat: ${source} down`)
   }
   updConn()
@@ -243,7 +245,7 @@ export function _exitDegradedMode(source: string): void {
     const now = Date.now()
     if (now - _degradedLogTs.exit >= _DEGRADED_LOG_COOLDOWN) {
       _degradedLogTs.exit = now
-      w.atLog('info', `[OK] ${source} feed restored — full data mode`)
+      atLog('info', `[OK] ${source} feed restored — full data mode`)
     }
     _updateWhyBlocked()
   }
@@ -262,7 +264,7 @@ export function _enterRecoveryMode(source: string): void {
   _recoveryMode = true
   _SAFETY.isReconnecting = true
   _SAFETY.autoSuspended = true
-  w.atLog('warn', `[RECOVERY] ${source} disconnected — AT suspended`)
+  atLog('warn', `[RECOVERY] ${source} disconnected — AT suspended`)
   const rb = el('recoveryBanner'); if (rb) rb.style.display = 'flex'
   updConn()
   w.ncAdd('critical', 'system', `[RECOVERY] ${source} disconnected`)  // [NC]
@@ -276,7 +278,7 @@ export function _exitRecoveryMode(): void {
     _verifyPositionsAfterReconnect()
     _SAFETY.autoSuspended = false
     const rb = el('recoveryBanner'); if (rb) rb.style.display = 'none'
-    w.atLog('info', '[OK] Connection restored — positions verified')
+    atLog('info', '[OK] Connection restored — positions verified')
     updConn()
   }, 2000)  // 2s settle time before resuming
 }
@@ -287,14 +289,14 @@ export function _verifyPositionsAfterReconnect(): void {
   const autoPosns = (getTPObject()?.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
   if (!autoPosns.length) return
   autoPosns.forEach((pos: any) => {
-    const cur = w.getSymPrice(pos)
+    const cur = getSymPrice(pos)
     if (!cur || !Number.isFinite(cur)) return
     if (pos.side === 'LONG') {
-      if (cur <= pos.sl) { w.closeDemoPos(pos.id, 'SL (reconnect verify)') }
-      else if (pos.tp != null && Number.isFinite(pos.tp) && cur >= pos.tp) { w.closeDemoPos(pos.id, 'TP (reconnect verify)') }
+      if (cur <= pos.sl) { closeDemoPos(pos.id, 'SL (reconnect verify)') }
+      else if (pos.tp != null && Number.isFinite(pos.tp) && cur >= pos.tp) { closeDemoPos(pos.id, 'TP (reconnect verify)') }
     } else {
-      if (cur >= pos.sl) { w.closeDemoPos(pos.id, 'SL (reconnect verify)') }
-      else if (pos.tp != null && Number.isFinite(pos.tp) && cur <= pos.tp) { w.closeDemoPos(pos.id, 'TP (reconnect verify)') }
+      if (cur >= pos.sl) { closeDemoPos(pos.id, 'SL (reconnect verify)') }
+      else if (pos.tp != null && Number.isFinite(pos.tp) && cur <= pos.tp) { closeDemoPos(pos.id, 'TP (reconnect verify)') }
     }
   })
 }
@@ -373,7 +375,7 @@ export function _isExecAllowed(): [boolean, string] {
     const now = Date.now()
     if (now - _degradedLogTs.continues >= _DEGRADED_LOG_COOLDOWN) {
       _degradedLogTs.continues = now
-      w.atLog('warn', `[DEGRADED] feeds: ${[..._SAFETY.degradedFeeds].join(',')} — AT continues (reduced data)`)
+      atLog('warn', `[DEGRADED] feeds: ${[..._SAFETY.degradedFeeds].join(',')} — AT continues (reduced data)`)
     }
   }
   return [true, 'ok']
@@ -385,7 +387,7 @@ window.addEventListener('error', (e) => {
   console.error('[ZEUS ERR]', e.message, e.filename, e.lineno)
   if (AT?.enabled && (w.S?.mode || 'assist') === 'auto') {
     // Don't stop terminal — just log
-    w.atLog('warn', `[ERR] JS Error: ${e.message?.substring(0, 60)}`)
+    atLog('warn', `[ERR] JS Error: ${e.message?.substring(0, 60)}`)
   }
 })
 

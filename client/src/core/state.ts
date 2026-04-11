@@ -8,14 +8,14 @@ import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAcc
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
-import { _applyATToggleUI, updateATMode, updateATStats } from '../trading/autotrade'
+import { _applyATToggleUI, updateATMode, updateATStats , atLog , renderATPositions } from '../trading/autotrade'
 import { _dslTrimAll } from '../trading/dsl'
 import { aubBBSnapshot } from '../engine/aub'
 import { loadJournalFromStorage } from '../services/storage'
 import { syncBrainFromState } from '../engine/brain'
 import { _updateWhyBlocked } from '../data/klines'
 import { onPositionOpened } from '../trading/positions'
-import { renderLivePositions } from '../data/marketDataPositions'
+import { renderLivePositions , renderDemoPositions } from '../data/marketDataPositions'
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
@@ -257,7 +257,7 @@ export const BlockReason: any = {
     const sameKey = (_logKey === this._lastLogKey)
     const debounceElapsed = (now - this._lastLogTs) >= 60000
     if (!sameKey || debounceElapsed) {
-      if (typeof w.atLog === 'function') w.atLog('warn', 'BLOCKED: ' + text)
+      atLog('warn', 'BLOCKED: ' + text)
       this._lastLogCode = code
       this._lastLogKey = _logKey
       this._lastLogTs = now
@@ -584,8 +584,8 @@ export const ZState = (() => {
             if (typeof onPositionOpened === 'function') onPositionOpened(_restoredPos, 'restore')
           }
         })
-        if (typeof w.renderDemoPositions === 'function') setTimeout(w.renderDemoPositions, 500)
-        if (typeof w.renderATPositions === 'function') setTimeout(w.renderATPositions, 500)
+        setTimeout(renderDemoPositions, 500)
+        setTimeout(renderATPositions, 500)
       }
 
       // [PHASE3B] Restore manual live/testnet positions
@@ -902,14 +902,14 @@ export const ZState = (() => {
           if (_txt) _txt.textContent = 'AUTO TRADE OFF'
         }
         if (AT._enabledPerMode[state.mode]) {
-          if (typeof w.atLog === 'function') w.atLog('info', '\u25B6 AT restoring — was ON in ' + state.mode.toUpperCase())
+          atLog('info', '\u25B6 AT restoring — was ON in ' + state.mode.toUpperCase())
           setTimeout(function () {
             if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
           }, 600)
         } else {
           const _st2 = document.getElementById('atStatus')
           if (_st2) _st2.textContent = '\u23F9 AT oprit — mod schimbat la ' + state.mode.toUpperCase()
-          if (typeof w.atLog === 'function') w.atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
+          atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
         }
       }
       if (state.mode) { AT.mode = state.mode; AT._serverMode = state.mode; AT._modeConfirmed = true }
@@ -943,7 +943,7 @@ export const ZState = (() => {
     if (state.mode && typeof w._applyGlobalModeUI === 'function') w._applyGlobalModeUI(state.mode)
     if (typeof updateATMode === 'function') updateATMode()
     updateATStats()
-    if (typeof w.renderATPositions === 'function') w.renderATPositions()
+    renderATPositions()
     if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
     if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
@@ -1146,8 +1146,8 @@ export const ZState = (() => {
         saveLocalOnly()
         setTimeout(function () {
           if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()
-          if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions()
-          if (typeof w.renderATPositions === 'function') w.renderATPositions()
+          renderDemoPositions()
+          renderATPositions()
           syncBrainFromState()
           // [9A-5] Notify React — positions/balance changed from server merge
           try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}

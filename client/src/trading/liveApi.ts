@@ -3,9 +3,10 @@
 // Live exchange API proxy functions
 
 import { fmtNow, toast } from '../data/marketDataHelpers'
-import { updateLiveBalance, renderLivePositions } from '../data/marketDataPositions'
+import { updateLiveBalance, renderLivePositions , getSymPrice } from '../data/marketDataPositions'
 import { onPositionOpened } from './positions'
 import { addTradeToJournal } from '../services/storage'
+import { atLog } from './autotrade'
 
 const w = window as any
 
@@ -49,7 +50,7 @@ export function _liveApiError(err: any, context?: string): void {
   const prefix = context ? ('[' + context + '] ') : ''
   // User-visible alerts
   toast('LIVE API: ' + prefix + msg)
-  if (typeof w.atLog === 'function') w.atLog('warn', '[LIVE] API FAIL: ' + prefix + msg)
+  atLog('warn', '[LIVE] API FAIL: ' + prefix + msg)
   console.error('[liveApi]', context, msg)
 }
 
@@ -181,7 +182,7 @@ export async function liveApiSyncState(): Promise<any> {
         if (typeof w.DSL !== 'undefined' && w.DSL._attachedIds) w.DSL._attachedIds.delete(String(gone.id))
         // [FIX R6] Journal entry for exchange-closed position
         if (typeof addTradeToJournal === 'function') {
-          var _exitPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(gone) : 0
+          var _exitPrice = (true) ? getSymPrice(gone) : 0
           if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
           var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
           addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })

@@ -13,6 +13,7 @@ import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP } from '../ui/panels'
 import { getChartW } from '../data/marketDataChart'
+import { atLog } from '../trading/autotrade'
 
 const w = window as any
 
@@ -48,7 +49,7 @@ export function connectLiveAPI(): void {
 
 export function placeLiveOrder(): void {
   toast('placeLiveOrder disabled \u2014 use standard Live Trading panel', 0, _ZI.x)
-  if (typeof w.atLog === 'function') w.atLog('warn', '[BLOCK] placeLiveOrder is disabled (orphan order path \u2014 use Live Trading panel)')
+  atLog('warn', '[BLOCK] placeLiveOrder is disabled (orphan order path \u2014 use Live Trading panel)')
 }
 
 export function connectLiveExchange(): void {

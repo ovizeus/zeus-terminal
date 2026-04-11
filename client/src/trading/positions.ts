@@ -10,8 +10,9 @@ import { _queueExecOverlay } from './orders'
 import { renderBrainCockpit } from '../engine/brain'
 import { renderDSLWidget } from './dsl'
 import { aubBBSnapshot } from '../engine/aub'
-import { DEV } from '../utils/dev'
+import { DEV , devLog } from '../utils/dev'
 import { PROFILE_TF } from '../core/config'
+import { atLog } from './autotrade'
 
 const w = window as any
 
@@ -50,7 +51,7 @@ export function onPositionOpened(pos: any, source: any): void {
     if (typeof renderBrainCockpit === 'function') {
       try { setTimeout(renderBrainCockpit, 0) } catch (_) { }
     }
-    w.atLog('info', '[DSL] DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']')
+    atLog('info', '[DSL] DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']')
     aubBBSnapshot('DSL_ATTACH', { sym: pos.sym, side: pos.side, source })
   } catch (e) {
     console.warn('[DSL attach failed]', e)
@@ -140,7 +141,7 @@ export function onTradeClosed(result: any): void {
     // Approximate R: use pnl / size as proxy if _posR not available at this point
     var _R = (result.size && result.size > 0) ? pnl / result.size : (isProfit ? 1 : -1)
     perfRecordTrade(_ph, _R)
-    if (DEV.enabled) w.devLog('[Perf] Trade closed — phase:' + _ph + ' R:' + _R.toFixed(2) + ' wins:' + (w.BM.performance.byRegime[_ph] || {}).wins + '/' + (w.BM.performance.byRegime[_ph] || {}).trades, 'info')
+    if (DEV.enabled) devLog('[Perf] Trade closed — phase:' + _ph + ' R:' + _R.toFixed(2) + ' wins:' + (w.BM.performance.byRegime[_ph] || {}).wins + '/' + (w.BM.performance.byRegime[_ph] || {}).trades, 'info')
   } catch (_) { }
 }
 

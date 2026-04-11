@@ -8,8 +8,11 @@ import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { updateATStats } from './autotrade'
+import { updateATStats , atLog , renderATPositions } from './autotrade'
 import { closeLivePos } from '../data/marketDataPositions'
+import { brainThink } from '../engine/brain'
+import { _safePnl } from '../utils/guards'
+import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
@@ -104,8 +107,8 @@ export function toggleDSL(): void {
     const dot = el('dslStatusDot')
     if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off') }
     if (dot) { dot.style.color = DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = DSL.enabled ? 'var(--grn-bright)' : '#333' }
-    if (typeof w.atLog === 'function') w.atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
-    if (typeof w.brainThink === 'function') w.brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
+    atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
+    brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
     _emitDSLChanged()
   } catch (e) { console.warn('[DSL] toggleDSL error:', e) }
@@ -121,7 +124,7 @@ export function toggleAssistArm(): void {
     w.ARM_ASSIST.ts = w.S.assistArmed ? Date.now() : 0
   }
   _syncDslAssistUI()
-  w.brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT — DSL va executa la semnal' : _ZI.unlk + ' ASSIST dezarmat — DSL în preview only')
+  brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT — DSL va executa la semnal' : _ZI.unlk + ' ASSIST dezarmat — DSL în preview only')
   w.dslUpdateBanner()
 }
 
@@ -239,7 +242,7 @@ export function _dslSanitizeParams(raw: any, posId: any): any {
   if (corrected) {
     const msg = `DSL SANITIZE [${posId}]: ` + fixes.join(' | ')
     console.warn(msg)
-    if (typeof w.atLog === 'function') w.atLog('warn', msg)
+    atLog('warn', msg)
   }
   out.corrected = corrected
   return out
@@ -270,7 +273,7 @@ export function runDSLBrain(): void {
         dsl._stale = true
         if (!dsl._staleLogged) {
           dsl._staleLogged = true
-          if (typeof w.atLog === 'function') w.atLog('warn', '[STALE] DSL state stale for pos ' + _dslKey + ' (>' + Math.round((Date.now() - serverDsl.lastTickTs) / 1000) + 's)')
+          atLog('warn', '[STALE] DSL state stale for pos ' + _dslKey + ' (>' + Math.round((Date.now() - serverDsl.lastTickTs) / 1000) + 's)')
         }
       } else {
         dsl._stale = false
@@ -306,13 +309,13 @@ export function runDSLBrain(): void {
     if (!_manualPositions.length || !Number.isFinite(getPrice()) || getPrice() <= 0
         || w._SAFETY.dataStalled || w._SAFETY.isReconnecting) {
       renderDSLWidget(allOpenPosns)
-      w.renderATPositions()
+      renderATPositions()
       return
     }
 
     _runClientDSLOnPositions(_manualPositions)
     renderDSLWidget(allOpenPosns)
-    w.renderATPositions()
+    renderATPositions()
     return
   }
   if (!DSL.enabled) return
@@ -334,7 +337,7 @@ export function runDSLBrain(): void {
   })
 
   renderDSLWidget(allOpenPosns)
-  w.renderATPositions()
+  renderATPositions()
 }
 
 // ── Client-side DSL engine — runs activation + phases on given positions ──
@@ -470,8 +473,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
       pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` })
       if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'activate', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft, pivotRight: dsl.pivotRight, impulseVal: dsl.impulseVal })
-      w.atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
-      w.brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
+      atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
+      brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
     }
 
     // ══════════════════════════════════════════════════════
@@ -495,8 +498,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
           pos.dslHistory.push({ ts: Date.now(), msg: _plReason })
           if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'pl_exit', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft })
-          w.atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
-          w.brainThink('info', _ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
+          atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
+          brainThink('info', _ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           if (pos.isLive && typeof closeLivePos === 'function') {
             closeLivePos(pos.id, _plReason)
@@ -507,8 +510,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
               if (_dslPnl >= 0) w.AT.wins++; else w.AT.losses++
               setTimeout(updateATStats, 50)
             }
-          } else if (typeof w.closeDemoPos === 'function') {
-            w.closeDemoPos(pos.id, _plReason)
+          } else {
+            closeDemoPos(pos.id, _plReason)
           }
           return
         }
@@ -576,8 +579,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
             if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
             pos.dslHistory.push({ ts: Date.now(), msg: `[IMP] Impulse hit — SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)}` })
             if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'impulse', sym: pos.sym, side: pos.side, price: cur, oldPL: oldPL, newPL: dsl.pivotLeft, newIV: dsl.impulseVal })
-            w.atLog('buy', `[IMP] IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV→$${fP(dsl.impulseVal)}`)
-            w.brainThink('ok', _ZI.bolt + ` Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${fP(dsl.pivotLeft)}`)
+            atLog('buy', `[IMP] IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV→$${fP(dsl.impulseVal)}`)
+            brainThink('ok', _ZI.bolt + ` Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${fP(dsl.pivotLeft)}`)
             toast(`${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${fP(dsl.pivotLeft)}`)
           }
         } else {
@@ -634,7 +637,7 @@ export function dslTakeControl(posId: any): void {
   }
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
   pos.dslHistory.push({ ts: Date.now(), msg: '[USER] TOOK CONTROL — manual override active' })
-  w.brainThink('info', _ZI.hand + ` User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`)
+  brainThink('info', _ZI.hand + ` User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`)
   toast(`Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
 }
@@ -661,7 +664,7 @@ export function dslReleaseControl(posId: any): void {
   pos._dslParamsPushedAt = Date.now()
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
   pos.dslHistory.push({ ts: Date.now(), msg: `[AI] CONTROL RESUMED (${_origSource.toUpperCase()}) — continuing from current DSL values` })
-  w.brainThink('ok', _ZI.robot + ` AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`)
+  brainThink('ok', _ZI.robot + ` AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`)
   toast(`AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
 }
@@ -935,7 +938,7 @@ export function _renderDslCard(pos: any): string {
   const pivotRight = isActive ? cur * (isLong ? 1 + pivotRightPct / 100 : 1 - pivotRightPct / 100) : null
   const impulseVal = isActive ? (dsl.impulseVal || 0) : null
 
-  const pnl = w._safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false)
+  const pnl = _safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false)
   const pnlStr = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2)
 
   const pivotLeftPnl = isActive && pivotLeft

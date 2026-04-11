@@ -15,6 +15,9 @@ import { attachConfirmClose } from '../engine/events'
 import { onPositionOpened } from '../trading/positions'
 import { addTradeToJournal } from '../services/storage'
 import { liveApiSyncState } from '../trading/liveApi'
+import { atLog } from '../trading/autotrade'
+import { _safePnl } from '../utils/guards'
+import { closeDemoPos } from './marketDataClose'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -67,7 +70,7 @@ function _fillDemoPendingOrder(ord: any): void {
   }
   if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
   TP.demoPositions.push(pos)
-  w.updateDemoBalance(); w.renderDemoPositions(); renderPendingOrders()
+  w.updateDemoBalance(); renderDemoPositions(); renderPendingOrders()
   if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo_limit_fill')
   w.ZState.save(); if (typeof w._registerManualOnServer === 'function') w._registerManualOnServer(pos)
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
@@ -156,7 +159,7 @@ export function savePosSLTP(posId: any, mode: string): void {
     const pos = TP.demoPositions.find(function (p: any) { return String(p.id) === strId }); if (!pos) { toast('Position not found'); return }
     if (newSL) { if (pos.side === 'LONG' && newSL >= pos.entry) { toast('LONG SL must be below entry'); return }; if (pos.side === 'SHORT' && newSL <= pos.entry) { toast('SHORT SL must be above entry'); return } }
     if (newTP) { if (pos.side === 'LONG' && newTP <= pos.entry) { toast('LONG TP must be above entry'); return }; if (pos.side === 'SHORT' && newTP >= pos.entry) { toast('SHORT TP must be below entry'); return } }
-    pos.sl = newSL; pos.tp = newTP; w.renderDemoPositions(); w.ZState.save(); toast('SL/TP updated')
+    pos.sl = newSL; pos.tp = newTP; renderDemoPositions(); w.ZState.save(); toast('SL/TP updated')
   } else if (mode === 'live') {
     const livePos = TP.livePositions.find(function (p: any) { return String(p.id) === strId }); if (!livePos) { toast('Position not found'); return }
     const _qty = livePos.qty || livePos.size
@@ -183,7 +186,7 @@ export function checkDemoPositionsSLTP(): void {
     else { if (pos.tp && curPrice <= pos.tp) reason = 'TP HIT'; else if (pos.sl && curPrice >= pos.sl) reason = 'SL HIT'; else if (pos.liqPrice && curPrice >= pos.liqPrice) reason = 'LIQUIDATED' }
     if (reason) toClose.push({ id: pos.id, reason })
   })
-  toClose.forEach(({ id, reason }: any) => w.closeDemoPos(id, reason))
+  toClose.forEach(({ id, reason }: any) => closeDemoPos(id, reason))
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -206,7 +209,7 @@ export function renderDemoPositions(): void {
     const html = manualPos.map((pos: any) => {
       const curPrice = getSymPrice(pos)
       if (!curPrice || !Number.isFinite(curPrice) || curPrice <= 0) { pos.pnl = 0; const symBase = escHtml((pos.sym || 'BTC').replace('USDT', '')); return `<div class="pos-row"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x</span><button data-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;min-height:52px;font-weight:700">\u2715 CLOSE</button></div><div style="font-size:13px;margin-top:3px;color:#ff8800">Price unavailable</div></div>` }
-      const diff = curPrice - pos.entry; pos.pnl = w._safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true); totalPnL += pos.pnl
+      const diff = curPrice - pos.entry; pos.pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true); totalPnL += pos.pnl
       const pnlPct = pos.size > 0 ? (pos.pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00'
       const margin = w._safe.num(pos.size, null, 0); const lev = w._safe.num(pos.lev, null, 1); const notional = margin * lev; const feeRate = w._safe.num(typeof w.S !== 'undefined' ? w.S.feeRate : null, null, 0.0004); const estFees = notional * feeRate * 2; const roe = margin > 0 ? (pos.pnl / margin * 100).toFixed(2) : '0.00'
       const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
@@ -215,7 +218,7 @@ export function renderDemoPositions(): void {
       return `<div class="pos-row ${escHtml(pos.side) === 'LONG' ? 'pos-long' : 'pos-short'}"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x${modeBadge}</span><button data-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;min-height:52px;font-weight:700">\u2715 CLOSE</button></div><div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px"><span style="color:var(--dim)">Entry: $${fP(pos.entry)} | Now: $${fP(curPrice)}</span><span style="color:${pos.pnl >= 0 ? 'var(--grn)' : 'var(--red)'}">${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (${pnlPct}%)</span></div><div style="font-size:12px;color:var(--dim);margin-top:1px">Margin: $${fmt(margin)} | Notional: $${fmt(notional)} | Fees\u2248$${fmt(estFees)} | ROE: ${roe}%</div>${_dslActive ? `<div style="font-size:12px;color:${_slColor};margin-top:1px">${_slLabel}: $${fP(_slVal)}${pos.tp ? ' | TP: $' + fP(pos.tp) : ''}</div>` : ''}<div style="display:flex;gap:4px;margin-top:3px;align-items:center"><span style="font-size:10px;color:#ff6644;width:22px">SL:</span><input id="slEdit_${pos.id}" type="number" step="0.1" value="${pos.sl || ''}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"><span style="font-size:10px;color:#00ff88;width:22px">TP:</span><input id="tpEdit_${pos.id}" type="number" step="0.1" value="${pos.tp || ''}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"><button onclick="savePosSLTP('${pos.id}','demo')" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button></div>${pos.liqPrice ? `<div style="font-size:12px;color:${pos.side === 'LONG' ? '#ff3355' : '#00d97a'};margin-top:1px">LIQ: $${fP(pos.liqPrice)}</div>` : ''}</div>`
     }).join('')
     table.innerHTML = html
-    table.querySelectorAll('button[data-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-id'); attachConfirmClose(btn, function () { w.closeDemoPos(posId) }) })
+    table.querySelectorAll('button[data-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-id'); attachConfirmClose(btn, function () { closeDemoPos(posId) }) })
   }
   // Stats
   const _statsMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
@@ -232,7 +235,7 @@ export function renderDemoPositions(): void {
   const tr = el('demoTrades'); if (tr) tr.textContent = _statsTrades
 }
 
-export function calcPosPnL(pos: any, cur: any): number { return w._safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false) }
+export function calcPosPnL(pos: any, cur: any): number { return _safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false) }
 
 export function updateLiveBalance(): void {
   const balEl = el('liveBalanceAmt') || el('demoBalanceAmt')
@@ -274,7 +277,7 @@ export function closeLivePos(id: any, reason?: string): void {
   if (w._serverATEnabled && pos._serverSeq) { if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id); fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq }) }).then(function (r) { return r.json() }).then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) }).catch(function () { }) }
   if (typeof w.Intervals !== 'undefined' && w.Intervals.clear) w.Intervals.clear('posCheck_' + pos.id)
   const cur = getSymPrice(pos); const pnl = calcPosPnL(pos, cur); pos.pnl = pnl; pos.status = 'closing'
-  w.atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
+  atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
   renderLivePositions()
   if (typeof liveApiClosePosition === 'function') {
     liveApiClosePosition(pos).then(function (res: any) {
@@ -283,7 +286,7 @@ export function closeLivePos(id: any, reason?: string): void {
       const finalIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1)
       if (typeof addTradeToJournal === 'function') addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
       if (typeof DSL !== 'undefined') { delete DSL.positions[String(pos.id)]; if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id)) }
-      w.atLog('info', '[LIVE] CLOSE CONFIRMED: ' + pos.sym + ' fillPrice=' + fillPrice)
+      atLog('info', '[LIVE] CLOSE CONFIRMED: ' + pos.sym + ' fillPrice=' + fillPrice)
       renderLivePositions()
       // [9A-5] Notify React — live position closed
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
@@ -292,9 +295,9 @@ export function closeLivePos(id: any, reason?: string): void {
       if (typeof liveApiSyncState === 'function') liveApiSyncState()
     }).catch(function (err: any) {
       pos.status = 'open'; pos.closed = false
-      w.atLog('warn', 'LIVE CLOSE FAILED: ' + (err.message || err)); toast('Close failed: ' + (err.message || 'still open on exchange'))
+      atLog('warn', 'LIVE CLOSE FAILED: ' + (err.message || err)); toast('Close failed: ' + (err.message || 'still open on exchange'))
       renderLivePositions()
-      if (!pos._closeRetried) { pos._closeRetried = true; setTimeout(function () { if (!pos.closed && pos.status === 'open') { w.atLog('info', '[RETRY] RETRYING close...'); closeLivePos(pos.id, reason || 'Retry') } }, 2000) }
+      if (!pos._closeRetried) { pos._closeRetried = true; setTimeout(function () { if (!pos.closed && pos.status === 'open') { atLog('info', '[RETRY] RETRYING close...'); closeLivePos(pos.id, reason || 'Retry') } }, 2000) }
     })
   } else { pos.closed = true; pos.status = 'closed'; TP.livePositions.splice(idx, 1); renderLivePositions(); try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {} }
 }

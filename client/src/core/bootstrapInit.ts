@@ -10,9 +10,9 @@ import { _dslTrimAll, startDSLIntervals } from '../trading/dsl'
 import { calcGlobalExpectancy } from '../engine/perfStore'
 import { openPageView } from '../ui/pageview'
 import { DEV } from '../utils/dev'
-import { runAutoTradeCheck } from '../trading/autotrade'
+import { runAutoTradeCheck , atLog } from '../trading/autotrade'
 import { liveApiSyncState } from '../trading/liveApi'
-const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.atLog, fn calls
+const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
 const TP = getTPObject()
@@ -65,8 +65,8 @@ export function _waitForFeedThenStartExtras(): void {
     waited += CHECK_MS
     if (feedOk || waited >= MAX_WAIT_MS) {
       w.Intervals.clear('feedWait')
-      if (!feedOk) w.atLog('warn', '[WARN] Extras started without confirmed feed (timeout)')
-      else w.atLog('info', '[OK] Feed confirmed — starting DSL + scanner extras')
+      if (!feedOk) atLog('warn', '[WARN] Extras started without confirmed feed (timeout)')
+      else atLog('info', '[OK] Feed confirmed — starting DSL + scanner extras')
       _startExtras()
       if (typeof w._ctxLoad === 'function') w._ctxLoad()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
@@ -83,7 +83,7 @@ export function _startExtras(): void {
   setTimeout(w.runMultiSymbolScan, 3000)
   w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
   w.Intervals.set('bbSave', () => { if (typeof w._aubSaveBB === 'function') w._aubSaveBB() }, 30000)
-  w.atLog('info', '[INIT] Extras module online')
+  atLog('info', '[INIT] Extras module online')
   w.Intervals.set('livePosSync', function () { if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 30000)
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     console.log('[startApp] AT was enabled before reload — resuming')
@@ -95,7 +95,7 @@ export function _startExtras(): void {
     setTimeout(runAutoTradeCheck, 3000)
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
     if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
-    w.atLog('info', '[RESUME] AutoTrade resumed from saved state')
+    atLog('info', '[RESUME] AutoTrade resumed from saved state')
   }
 }
 

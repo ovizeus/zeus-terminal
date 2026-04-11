@@ -4,11 +4,13 @@
 
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { fmtNow, toast } from './marketDataHelpers'
-import { checkKillThreshold } from '../trading/autotrade'
+import { checkKillThreshold , renderATPositions } from '../trading/autotrade'
 import { _bmPostClose } from '../trading/orders'
 import { runPostMortem } from '../engine/postMortem'
 import { renderTradeMarkers } from './marketDataOverlays'
 import { addTradeToJournal } from '../services/storage'
+import { renderDemoPositions , getSymPrice } from './marketDataPositions'
+import { _safePnl } from '../utils/guards'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -20,7 +22,7 @@ export function closeDemoPos(id: any, reason?: string): void {
   const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id)
   const idx = TP.demoPositions.findIndex((p: any) => p.id === numId || p.id === id)
   if (idx < 0) {
-    setTimeout(() => { w.renderDemoPositions(); w.renderATPositions() }, 0)
+    setTimeout(() => { renderDemoPositions(); renderATPositions() }, 0)
     return
   }
   const pos = TP.demoPositions[idx]
@@ -41,9 +43,9 @@ export function closeDemoPos(id: any, reason?: string): void {
   _bmPostClose(pos, reason)
 
   // [FIX P10] Guard null/stale price — use entry as fallback
-  const curPrice = (typeof w.getSymPrice === 'function' ? w.getSymPrice(pos) : null) || pos.entry
+  const curPrice = (true ? getSymPrice(pos) : null) || pos.entry
   const diff = curPrice - pos.entry
-  const pnl = w._safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+  const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
   pos._closePnl = pnl // [FIX BUG4]
 
   if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('AT', '[CLOSE DEMO] ' + pos.side + ' ' + pos.sym + ' PnL=' + pnl.toFixed(2) + ' ' + (reason || 'Manual'), { id: pos.id, sym: pos.sym, side: pos.side, pnl: pnl, reason: reason || 'Manual' })
@@ -96,8 +98,8 @@ export function closeDemoPos(id: any, reason?: string): void {
   // UI sync
   setTimeout(() => {
     w.updateDemoBalance()
-    w.renderDemoPositions()
-    w.renderATPositions()
+    renderDemoPositions()
+    renderATPositions()
     TP.demoPositions = (TP.demoPositions || []).filter((p: any) => !p.closed)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     const autoPosns = TP.demoPositions.filter((p: any) => p.autoTrade)

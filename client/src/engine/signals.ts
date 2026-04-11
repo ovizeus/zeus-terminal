@@ -6,9 +6,9 @@
 import { getTimezone } from '../services/stateAccessors'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { runBrainUpdate } from './brain'
+import { runBrainUpdate , brainThink } from './brain'
 
-const w = window as any // kept for w.brainThink calls
+const w = window as any // kept for brainThink calls
 
 export function renderSignals(signals: any[], bullCount: number, bearCount: number): void {
   const grid = document.getElementById('sigGrid')
@@ -51,8 +51,8 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
       <span class="sig-str ${s.dir}">${s.str}</span>
     </div>`).join('')
   if (typeof runBrainUpdate === 'function') runBrainUpdate()
-  if (typeof w.brainThink === 'function') {
-    w.brainThink(bullCount > bearCount ? 'ok' : bearCount > bullCount ? 'bad' : 'info',
+  {
+    brainThink(bullCount > bearCount ? 'ok' : bearCount > bullCount ? 'bad' : 'info',
       `Scan: ${signals.length} semnale | Bull:${bullCount} Bear:${bearCount} | Score:${el('confScore')?.textContent || '—'}`)
   }
 }

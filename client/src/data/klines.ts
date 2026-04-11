@@ -8,10 +8,10 @@ import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { _getCooldownMs, isArmAssistValid } from '../engine/brain'
+import { _getCooldownMs, isArmAssistValid , brainThink } from '../engine/brain'
 import { macroAdjustEntryScore } from '../trading/risk'
 import { isCurrentTimeOK } from '../ui/render'
-import { placeAutoTrade } from '../trading/autotrade'
+import { placeAutoTrade , atLog } from '../trading/autotrade'
 import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
@@ -299,7 +299,7 @@ export async function runMultiSymbolScan() {
 
         const { score, dir, signals } = calcSymbolScore(sym, klines, rsi, macd, st, adx)
 
-        if (typeof w.atLog === 'function') w.atLog('info', 'AT_SCAN ' + sym.replace('USDT', '') + ' score=' + score + ' dir=' + dir + (adx != null ? ' adx=' + adx : ''))
+        atLog('info', 'AT_SCAN ' + sym.replace('USDT', '') + ' score=' + score + ' dir=' + dir + (adx != null ? ' adx=' + adx : ''))
 
         const confMin = (typeof BM !== 'undefined' ? BM.confMin : 65) || 65
         const isOpp = score >= confMin && (dir === 'bull' || dir === 'bear')
@@ -417,7 +417,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 
   if (_mode === 'assist') {
     if (!isArmAssistValid()) {
-      w.atLog('info', 'ASSIST \u2014 ne\u00eennarmat. Apas\u0103 ARM ASSIST pentru confirmare.')
+      atLog('info', 'ASSIST \u2014 ne\u00eennarmat. Apas\u0103 ARM ASSIST pentru confirmare.')
       return
     }
   }
@@ -430,7 +430,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
     const _anyDSLActive = (TP.demoPositions || []).some((p: any) => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active)
     if (_anyDSLActive && _chaos > 60) {
       w.BlockReason.set('CHAOS', `Chaos ${_chaos} > 60 \u2014 pia\u021B\u0103 prea volatil\u0103 cu DSL activ`, 'autoCheck')
-      w.atLog('warn', '[BLOCK] AUTO BLOCK \u2014 DSL active + chaos>60'); return
+      atLog('warn', '[BLOCK] AUTO BLOCK \u2014 DSL active + chaos>60'); return
     }
 
     const _dslWaitMs = 10 * 60 * 1000
@@ -438,7 +438,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
       const d = DSL.positions?.[p.id]
       return d && !d.active && p.autoTrade && !p.closed && (Date.now() - p.ts) > _dslWaitMs
     })
-    if (_dslWaiting) { w.atLog('warn', '[WARN] AUTO \u2014 DSL WAIT>10min, threshold ridicat') }
+    if (_dslWaiting) { atLog('warn', '[WARN] AUTO \u2014 DSL WAIT>10min, threshold ridicat') }
   }
 
   // suppress unused
@@ -458,8 +458,8 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   void _confMinConfl; void _sigMin
 
   if (!isCurrentTimeOK()) {
-    w.atLog('warn', '[TIME] Ora curenta are WR scazut \u2014 nu intru (Day/Hour filter)')
-    w.brainThink('bad', _ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna')
+    atLog('warn', '[TIME] Ora curenta are WR scazut \u2014 nu intru (Day/Hour filter)')
+    brainThink('bad', _ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna')
     return
   }
 
@@ -484,11 +484,11 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   toEnter.forEach((opp: any) => {
     const side = opp.dir === 'bull' ? 'LONG' : 'SHORT'
     const price = opp.sym === getSymbol() ? getPrice() : (w.wlPrices[opp.sym]?.price || 0)
-    if (!price) { w.atLog('warn', '[ERR] Nu am pret pentru ' + opp.sym); return }
+    if (!price) { atLog('warn', '[ERR] Nu am pret pentru ' + opp.sym); return }
 
-    w.atLog(side === 'LONG' ? 'buy' : 'sell',
+    atLog(side === 'LONG' ? 'buy' : 'sell',
       `[MSCAN] ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} ADX:${opp.adx || '\u2014'} | ${opp.signals}`)
-    w.brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 intru!`)
+    brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 intru!`)
 
     placeAutoTrade(side, { score: opp.score, bullCount: opp.dir === 'bull' ? 3 : 0, bearCount: opp.dir === 'bear' ? 3 : 0, stDir: opp.dir }, opp.sym, price)
   })
@@ -500,8 +500,8 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 export function toggleMultiSymMode() {
   const on = el('atMultiSym')?.checked
   _mscanUpdateLabel()
-  if (on) w.atLog('info', '[MSCAN] Multi-Symbol ACTIV \u2014 ' + _mscanGetActive().length + ' simboluri')
-  else w.atLog('warn', 'Multi-Symbol DEZACTIVAT \u2014 doar symbol curent')
+  if (on) atLog('info', '[MSCAN] Multi-Symbol ACTIV \u2014 ' + _mscanGetActive().length + ' simboluri')
+  else atLog('warn', 'Multi-Symbol DEZACTIVAT \u2014 doar symbol curent')
   w._usScheduleSave()
 }
 // toggleMultiSymMode — self-ref removed (direct call)

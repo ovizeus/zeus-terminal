@@ -1,3 +1,4 @@
+import { brainThink } from './brain'
 // Zeus — engine/regime.ts
 // Ported 1:1 from public/js/brain/regime.js (Phase 5A)
 // Regime Engine — adapter/normalizer layer that REUSES existing detection logic
@@ -213,8 +214,8 @@ function analyzeMarketRegime(): any {
         w.ZLOG.push('INFO', '[RE] ' + _prevRegime + '\u2192' + regime + ' conf=' + confidence + '%',
           { from: _prevRegime, to: regime, conf: confidence, trapRisk: trapRisk, volatilityState: volatilityState })
       }
-      if (typeof w.brainThink === 'function') {
-        w.brainThink('info', '\uD83D\uDD2E Regime: ' + regime + ' (' + confidence + '%)')
+      {
+        brainThink('info', '\uD83D\uDD2E Regime: ' + regime + ' (' + confidence + '%)')
       }
     }
     _prevRegime = regime

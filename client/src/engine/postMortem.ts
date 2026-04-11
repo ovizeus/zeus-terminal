@@ -4,6 +4,7 @@
 
 import { _safeLocalStorageSet } from '../services/storage'
 import { escHtml } from '../utils/dom'
+import { atLog } from '../trading/autotrade'
 
 const w = window as any
 
@@ -344,7 +345,7 @@ export function _pmCheckRegimeTransition(): void {
       if (typeof w.BlockReason !== 'undefined' && !w.BlockReason.get())
         w.BlockReason.set('REGIME_TRANSITION', `Tranzi\u021Bie regim iminenta (scor ${score}) \u2014 intr\u0103ri blocate`)
     } else if (score >= 60) {
-      if (typeof w.atLog === 'function') w.atLog('warn', `[RegimeWatch] Alert\u0103 tranzi\u021Bie regim \u2014 scor ${score}`)
+      atLog('warn', `[RegimeWatch] Alert\u0103 tranzi\u021Bie regim \u2014 scor ${score}`)
     } else {
       if (typeof w.BlockReason !== 'undefined') {
         const br = w.BlockReason.get()

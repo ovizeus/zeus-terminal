@@ -7,11 +7,11 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _checkAppUpdate } from './bootstrapError'
-import { _renderBuildInfo, setPWAVersion, _showWelcomeModal } from './bootstrapMisc'
+import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI } from './bootstrapMisc'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
-import { _resumeLivePendingSyncIfNeeded } from '../data/marketDataPositions'
+import { _resumeLivePendingSyncIfNeeded , renderDemoPositions } from '../data/marketDataPositions'
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
-import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, runSignalScan } from '../engine/brain'
+import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, runSignalScan , brainThink } from '../engine/brain'
 import { initARES, initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
@@ -23,14 +23,14 @@ import { runBacktest, scanLiquidityMagnets } from '../ui/panels'
 import { savePerfToStorage, loadPerfFromStorage } from '../engine/perfStore'
 import { startFRCountdown, renderTradeJournal, trackOIDelta, loadJournalFromStorage } from '../services/storage'
 import { fetchSymbolKlines } from '../data/klines'
-import { _devEnsureVisible } from '../utils/dev'
+import { _devEnsureVisible , safeAsync , devLog } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
 import { initSafetyEngine } from '../utils/guards'
 import { updateQuantumClock, updateBrainExtension, renderDHF, renderPerfTracker } from '../ui/render'
 import { runQuantumExitUpdate, updateScenarioUI } from '../engine/forecast'
 import { computePredatorState } from '../engine/events'
 import { onDemoOrdTypeChange } from '../data/marketDataTrading'
-import { updateATStats, runAutoTradeCheck } from '../trading/autotrade'
+import { updateATStats, runAutoTradeCheck , atLog , renderATPositions } from '../trading/autotrade'
 import { hubPopulate, DEV } from '../utils/dev'
 import { _calcATRSeries } from '../data/marketDataHelpers'
 import { calcConfluenceScore } from '../engine/confluence'
@@ -97,8 +97,8 @@ export async function startApp(): Promise<void> {
       const _existing2 = new Set((TP.demoPositions || []).map((p: any) => String(p.id)))
       const _closed2 = new Set((TP.journal || []).map((j: any) => j.id).filter(Boolean).map(String))
       _pend.forEach((p: any) => { if (p.closed || _closed2.has(String(p.id))) return; if (!_existing2.has(String(p.id))) { TP.demoPositions = TP.demoPositions || []; const _rp = { ...p, _restored: true }; TP.demoPositions.push(_rp); if (typeof onPositionOpened === 'function') onPositionOpened(_rp, 'restore') } })
-      if (typeof w.renderDemoPositions === 'function') setTimeout(w.renderDemoPositions, 300)
-      if (typeof w.renderATPositions === 'function') setTimeout(w.renderATPositions, 300)
+      setTimeout(renderDemoPositions, 300)
+      setTimeout(renderATPositions, 300)
       console.log('[ZState] Late-restore applied:', _pend.length, 'pending positions after journal load')
     }
   } catch (_pendErr: any) { console.warn('[ZState late-restore]', _pendErr.message) }
@@ -122,16 +122,16 @@ export async function startApp(): Promise<void> {
   })()
 
   w.ZLOG.install()
-  w.fetchKlines = w.safeAsync(w.fetchKlines, 'fetchKlines', { silent: true })
-  w.fetchAllRSI = w.safeAsync(w.fetchAllRSI, 'fetchAllRSI', { silent: true })
-  w.fetchFG = w.safeAsync(w.fetchFG, 'fetchFG', { silent: true })
-  w.fetchATR = w.safeAsync(w.fetchATR, 'fetchATR', { silent: true })
-  w.fetchOI = w.safeAsync(w.fetchOI, 'fetchOI', { silent: true })
-  w.fetchLS = w.safeAsync(w.fetchLS, 'fetchLS', { silent: true })
-  w.fetch24h = w.safeAsync(w.fetch24h, 'fetch24h', { silent: true })
-  w.fetchSymbolKlines = w.safeAsync(fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
-  w.runMultiSymbolScan = w.safeAsync(w.runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
-  w.runBacktest = w.safeAsync(runBacktest, 'runBacktest', { silent: false })
+  w.fetchKlines = safeAsync(w.fetchKlines, 'fetchKlines', { silent: true })
+  w.fetchAllRSI = safeAsync(w.fetchAllRSI, 'fetchAllRSI', { silent: true })
+  w.fetchFG = safeAsync(w.fetchFG, 'fetchFG', { silent: true })
+  w.fetchATR = safeAsync(w.fetchATR, 'fetchATR', { silent: true })
+  w.fetchOI = safeAsync(w.fetchOI, 'fetchOI', { silent: true })
+  w.fetchLS = safeAsync(w.fetchLS, 'fetchLS', { silent: true })
+  w.fetch24h = safeAsync(w.fetch24h, 'fetch24h', { silent: true })
+  w.fetchSymbolKlines = safeAsync(fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
+  w.runMultiSymbolScan = safeAsync(w.runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
+  w.runBacktest = safeAsync(runBacktest, 'runBacktest', { silent: false })
   w.ZLOG.push('INFO', '[ZLOG v90] installed \u2014 safeAsync hooks active on 10 functions')
   console.log('[ZLOG v90] install complete | safeAsync hooks: 10 functions wrapped')
 
@@ -152,7 +152,7 @@ export async function startApp(): Promise<void> {
 
   // ═══ PHASE 3 — STATE ═══
   setTimeout(() => {
-    if (_earlyRestored) { w.atLog('info', '[RESTORE] State restaurat din localStorage.'); setTimeout(() => { updateATStats(); w.updateDemoBalance(); w.renderDemoPositions(); w.renderATPositions() }, 200) }
+    if (_earlyRestored) { atLog('info', '[RESTORE] State restaurat din localStorage.'); setTimeout(() => { updateATStats(); w.updateDemoBalance(); renderDemoPositions(); renderATPositions() }, 200) }
     console.log('[sync] Starting pullFromServer...')
     w.ZState.pullFromServer().then(function (serverSnap: any) {
       console.log('[sync] pullFromServer returned:', serverSnap ? 'data (ts=' + serverSnap.ts + ', pos=' + (serverSnap.positions || []).length + ')' : 'null')
@@ -166,7 +166,7 @@ export async function startApp(): Promise<void> {
       }
       if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.enabled === 'boolean') AT.enabled = serverSnap.at.enabled; if (serverSnap.at.mode) { AT.mode = serverSnap.at.mode; AT._modeConfirmed = true }; if (AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + AT.mode + ')') }
       if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; try { runSignalScan() } catch (_) {}; if (typeof calcConfluenceScore === 'function') try { calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000); setTimeout(runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
-      setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); syncBrainFromState() }, 300)
+      setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); renderDemoPositions(); renderATPositions(); syncBrainFromState() }, 300)
       w.ZState.saveLocal()
       console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length)
       w.ZState.markSyncReady()
@@ -223,13 +223,13 @@ export async function startApp(): Promise<void> {
   setTimeout(renderDHF, 1200); w.Intervals.set('dhf', renderDHF, 60000)
   setTimeout(renderPerfTracker, 2000)
   setTimeout(() => { updateQuantumClock(); updateBrainExtension() }, 3000)
-  setTimeout(() => { w.brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
+  setTimeout(() => { brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
 
   setTimeout(runSignalScan, 4000); setTimeout(calcConfluenceScore, 5500)
   setTimeout(scanLiquidityMagnets, 9000); setTimeout(updateDeepDive, 11000)
   setTimeout(runQuantumExitUpdate, 12000); setTimeout(updateScenarioUI, 13000)
   setTimeout(computeMacroCortex, 8000)
-  setTimeout(function () { try { w.devLog('Developer Mode ready.', 'info') } catch (_) { } }, 5000)
+  setTimeout(function () { try { devLog('Developer Mode ready.', 'info') } catch (_) { } }, 5000)
   setTimeout(function () { try { hubPopulate() } catch (_) { } }, 3000)
 
   w.Intervals.set('scan', function () { runSignalScan(); try { calcConfluenceScore() } catch (_) { } }, 30000)
@@ -260,7 +260,7 @@ export async function startApp(): Promise<void> {
           if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined' && !w._serverATEnabled && w._zeusMerge) { TP.demoPositions = TP.demoPositions || []; const closedSet = w._zeusMerge.buildClosedSet(serverSnap.closedIds); w._zeusMerge.mergePositionsInto(TP.demoPositions, serverSnap.positions, closedSet, 'visibility') }
           if (serverSnap.ts > localTs) { if (typeof TP !== 'undefined' && !w._serverATEnabled) { if (typeof serverSnap.demoBalance === 'number') TP.demoBalance = serverSnap.demoBalance }; if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered } }
           w.ZState.saveLocal()
-          setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); syncBrainFromState() }, 200)
+          setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); renderDemoPositions(); renderATPositions(); syncBrainFromState() }, 200)
         }).catch(function (e: any) { console.warn('[sync] visibility pull failed:', e) })
       }
     } else {
@@ -285,9 +285,9 @@ export async function startApp(): Promise<void> {
   })()
 
   // Mark fully booted
-  setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); w.atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); w._pinUpdateUI() }, 15000)
+  setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); _pinUpdateUI() }, 15000)
   setTimeout(() => { _showWelcomeModal() }, 2500)
   setTimeout(w._srEnsureVisible, 3000)
   setTimeout(_devEnsureVisible, 3500)
-  setTimeout(() => { w.atLog('info', '[AT] Zeus Auto Trade Engine initializat.') }, 6000)
+  setTimeout(() => { atLog('info', '[AT] Zeus Auto Trade Engine initializat.') }, 6000)
 }

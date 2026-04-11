@@ -16,6 +16,7 @@ import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
 import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
+import { renderATPositions } from '../trading/autotrade'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -50,7 +51,7 @@ export function connectBNB(): void {
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
             updatePriceDisplay(); updateMainMetrics()
-            if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) w.renderATPositions()
+            if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
           }
         } else if (st.includes('depth20')) {
           w.S.bids = (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q }))

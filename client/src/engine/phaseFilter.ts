@@ -1,3 +1,4 @@
+import { brainThink } from './brain'
 // Zeus — engine/phaseFilter.ts
 // Ported 1:1 from public/js/brain/phaseFilter.js (Phase 5A)
 // Market Phase Filter — analysis-only adapter consuming RegimeEngine output
@@ -196,8 +197,8 @@ function evaluateMarketPhase(input: any): any {
         w.ZLOG.push('INFO', '[PF] ' + _prevPhase + '\u2192' + phase + ' risk=' + riskMode + ' size=' + sizeMultiplier.toFixed(2),
           { from: _prevPhase, to: phase, riskMode: riskMode, sizeMultiplier: sizeMultiplier, allow: allow })
       }
-      if (typeof w.brainThink === 'function') {
-        w.brainThink('info', '\uD83D\uDEE1 Phase: ' + phase + ' | ' + riskMode + ' | \u00D7' + sizeMultiplier.toFixed(2))
+      {
+        brainThink('info', '\uD83D\uDEE1 Phase: ' + phase + ' | ' + riskMode + ' | \u00D7' + sizeMultiplier.toFixed(2))
       }
     }
     _prevPhase = phase

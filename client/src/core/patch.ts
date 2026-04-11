@@ -1,3 +1,4 @@
+import { setSymbol } from '../data/marketDataWS'
 /**
  * Zeus Terminal — Patch Layer (ported from public/js/core/patch.js)
  * v122.3 Patch Layer — final patches
@@ -38,8 +39,8 @@ w.ZEUS.cfg = w.ZEUS.cfg || {
 
 // ── STEP 3A — setSymbol wrapper ──
 w.ZEUS.applyPatch("wrap.setSymbol", function () {
-  const orig = w.setSymbol
-  if (!orig) { console.warn("[PATCH] wrap.setSymbol: window.setSymbol not found"); return }
+  const orig = setSymbol
+  if (!orig) { console.warn("[PATCH] wrap.setSymbol: windosetSymbol not found"); return }
   if (orig.__patched) return
 
   let _ssTimer: any = null
@@ -53,7 +54,7 @@ w.ZEUS.applyPatch("wrap.setSymbol", function () {
     }, 200)
   }
   ;(wrappedSetSymbol as any).__patched = true
-  w.setSymbol = wrappedSetSymbol
+  setSymbol = wrappedSetSymbol
 })
 
 // ── STEP 3B — Tick wrapper ──────────────────────────────────────────

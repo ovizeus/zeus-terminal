@@ -7,6 +7,7 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { setTf } from '../data/marketDataFeeds'
+import { setSymbol } from '../data/marketDataWS'
 
 const w = window as any
 
@@ -136,9 +137,9 @@ export function _aubUpdateGuardUI(): void {
 // Wrap public functions safely
 export function _aubWrapPublicFunctions(): void {
   // setSymbol guard
-  const _origSetSymbol = w.setSymbol
+  const _origSetSymbol = setSymbol
   if (typeof _origSetSymbol === 'function') {
-    w.setSymbol = function (sym: any) {
+    setSymbol = function (sym: any) {
       if (!_aubGuard('setSymbol', sym, (v: any) => typeof v === 'string' && v.length >= 3 && v.length <= 20)) return
       return _origSetSymbol.apply(this, arguments)
     }

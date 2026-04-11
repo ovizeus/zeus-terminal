@@ -11,6 +11,7 @@ import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { onNeuronScanUpdate } from '../engine/brain'
 import { _enterDegradedMode, _exitDegradedMode } from '../utils/guards'
+import { setSymbol } from '../data/marketDataWS'
 const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, fn calls
 
 export const ZStore = {
@@ -67,6 +68,6 @@ export function switchWLSymbol(sym: string): void {
   document.querySelectorAll('.wl-item').forEach(i => i.classList.remove('act'))
   const item = el('wl-' + sym); if (item) item.classList.add('act')
   const sel = document.querySelector('#symSel') as HTMLSelectElement | null
-  if (sel) { sel.value = sym; if (typeof w.setSymbol === 'function') w.setSymbol(sym) }
+  if (sel) { sel.value = sym; setSymbol(sym) }
   else { w.S.symbol = sym; if (typeof w.resetData === 'function') w.resetData() }
 }

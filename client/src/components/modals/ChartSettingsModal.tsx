@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { toast } from '../../data/marketDataHelpers'
 import { renderOviLiquid } from '../../ui/panels'
+import { setTZ } from '../../data/marketDataWS'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -25,7 +26,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
 
   function applyTimezone(zone: string) {
     setTz(zone)
-    if (typeof w.setTZ === 'function') w.setTZ(zone)
+    setTZ(zone)
   }
 
   function applyHeatmap() {

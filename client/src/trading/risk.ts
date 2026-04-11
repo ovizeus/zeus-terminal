@@ -7,7 +7,9 @@ import { _clamp } from '../utils/math'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
 import { MACRO_MULT } from '../constants/trading'
-import { DEV } from '../utils/dev'
+import { DEV , devLog } from '../utils/dev'
+import { atLog } from './autotrade'
+import { getSymPrice } from '../data/marketDataPositions'
 
 const w = window as any
 
@@ -64,7 +66,7 @@ export function computeMacroCortex(): void {
 
     // Update adapt.lastPhase if changed
     if (w.BM.adapt.lastPhase !== w.BM.macro.phase) {
-      if (DEV.enabled) w.devLog('[Macro] Phase: ' + w.BM.adapt.lastPhase + ' → ' + w.BM.macro.phase + ' (' + composite + ')', 'info')
+      if (DEV.enabled) devLog('[Macro] Phase: ' + w.BM.adapt.lastPhase + ' → ' + w.BM.macro.phase + ' (' + composite + ')', 'info')
       w.BM.adapt.lastPhase = w.BM.macro.phase
     }
 
@@ -295,14 +297,14 @@ export function recalcAdaptive(isStartup?: any): void {
     _adaptSave()
     _renderAdaptivePanel()
 
-    if (typeof w.atLog === 'function') {
-      w.atLog('info', '[ADAPT] Adaptive recalc: ' + Object.keys(newBuckets).length + ' buckets | valid:' + validBuckets.length
+    {
+      atLog('info', '[ADAPT] Adaptive recalc: ' + Object.keys(newBuckets).length + ' buckets | valid:' + validBuckets.length
         + ' | entryMult:' + w.BM.adaptive.entryMult.toFixed(2)
         + ' sizeMult:' + w.BM.adaptive.sizeMult.toFixed(2)
         + ' exitMult:' + w.BM.adaptive.exitMult.toFixed(2))
     }
   } catch (e: any) {
-    if (typeof w.atLog === 'function') w.atLog('warn', '[ERR] recalcAdaptive error: ' + e.message)
+    atLog('warn', '[ERR] recalcAdaptive error: ' + e.message)
   }
 }
 
@@ -369,7 +371,7 @@ export function toggleAdaptive(): void {
   }
   _adaptSave()
   _updateAdaptiveBarTxt()
-  if (typeof w.atLog === 'function') w.atLog('info', '[ADAPT] Adaptive Control: ' + (w.BM.adaptive.enabled ? 'ON' : 'OFF'))
+  atLog('info', '[ADAPT] Adaptive Control: ' + (w.BM.adaptive.enabled ? 'ON' : 'OFF'))
 }
 
 export function _updateAdaptiveBarTxt(): void {
@@ -483,7 +485,7 @@ export function _posR(pos: any): any {
     if (!sl) return null
     var risk = Math.abs(pos.entry - sl)
     if (risk <= 0) return null
-    var cur = (typeof w.getSymPrice === 'function') ? w.getSymPrice(pos) : (w.S.price || pos.entry)
+    var cur = (true) ? getSymPrice(pos) : (w.S.price || pos.entry)
     var pnl = (pos.side === 'LONG') ? (cur - pos.entry) : (pos.entry - cur)
     var commissionPct = 0.0004
     var commission = pos.entry * commissionPct * 2

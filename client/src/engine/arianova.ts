@@ -1,6 +1,8 @@
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { _AN_KEY_A, _AN_KEY_N } from '../core/config'
+import { atLog } from '../trading/autotrade'
+import { _safePnl } from '../utils/guards'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -142,7 +144,7 @@ if (!w._ARIA_NOVA_LOADED) {
     autoPosns.forEach((p: any) => {
       const price = (p.sym === (typeof w.S !== 'undefined' ? w.S.symbol : '') ? (w.S.price || p.entry) : p.entry)
       const diff = price - p.entry
-      livePnl += w._safePnl(p.side, diff, p.entry, p.size || 0, p.lev || 1, true)
+      livePnl += _safePnl(p.side, diff, p.entry, p.size || 0, p.lev || 1, true)
     })
 
     // Color theme on strip
@@ -222,7 +224,7 @@ if (!w._ARIA_NOVA_LOADED) {
     allPosns.forEach((p: any) => {
       const price = (p.sym === (typeof w.S !== 'undefined' ? w.S.symbol : '') ? (w.S.price || p.entry) : p.entry)
       const diff = price - p.entry
-      livePnl += w._safePnl(p.side, diff, p.entry, p.size || 0, p.lev || 1, true)
+      livePnl += _safePnl(p.side, diff, p.entry, p.size || 0, p.lev || 1, true)
     })
 
     // Color theme
@@ -291,8 +293,8 @@ if (!w._ARIA_NOVA_LOADED) {
     w.NOVA_STATE.lastMsg = { severity, msg }
 
     // Feed to atLog only for danger/warn (anti-spam)
-    if ((severity === 'danger' || severity === 'warn') && typeof w.atLog === 'function') {
-      w.atLog('warn', '[NOVA] ' + msg)
+    if ((severity === 'danger' || severity === 'warn') && true) {
+      atLog('warn', '[NOVA] ' + msg)
     }
     _novaRenderBar()
     _novaRenderLog()
@@ -1199,8 +1201,8 @@ if (!w._ARIA_NOVA_LOADED) {
       if (chosen.name !== prevName || Math.abs(cfAdj - (w.ARIA_STATE.pattern?.conf || 0)) > 12) {
         const sev = cfAdj >= 75 ? 'ok' : cfAdj >= 60 ? 'warn' : 'info'
         novaLog(sev, `ARIA: ${chosen.name} (${chosen.dir.toUpperCase()}) ${cfAdj}% @ ${w.S.chartTf || '5m'}`)
-        if (cfAdj >= 72 && typeof w.atLog === 'function')
-          w.atLog('info', `[ARIA] ${chosen.name} ${chosen.dir === 'bull' ? 'BULL' : 'BEAR'} ${cfAdj}%`)
+        if (cfAdj >= 72 && true)
+          atLog('info', `[ARIA] ${chosen.name} ${chosen.dir === 'bull' ? 'BULL' : 'BEAR'} ${cfAdj}%`)
       }
 
       w.ARIA_STATE.pattern = {
@@ -1700,13 +1702,13 @@ if (!w._ARIA_NOVA_LOADED) {
         if (out && out.decision === "BLOCK") {
           throttledLog({ blocked: true, reason: out.reason })
           try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_BLOCK', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2') } catch (_e) { }
-          try { if (typeof w.atLog === 'function') w.atLog('warn', '[WVE] BLOCK: ' + ((out.reason || []).join(', '))) } catch (_e) { }
+          try { atLog('warn', '[WVE] BLOCK: ' + ((out.reason || []).join(', '))) } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "BLOCK" }
         }
         if (out && out.decision === "NO_TRADE") {
           throttledLog({ blocked: true, reason: out.reason })
           try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_NO_TRADE', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2') } catch (_e) { }
-          try { if (typeof w.atLog === 'function') w.atLog('warn', '[WVE] NO_TRADE: ' + ((out.reason || []).join(', '))) } catch (_e) { }
+          try { atLog('warn', '[WVE] NO_TRADE: ' + ((out.reason || []).join(', '))) } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "NO_TRADE" }
         }
         if (out && out.decision === "ADVISORY_ONLY") {

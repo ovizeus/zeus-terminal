@@ -1,3 +1,4 @@
+import { atLog } from './autotrade'
 // Zeus — trading/orders.ts
 // Ported 1:1 from public/js/trading/orders.js (Phase 6B)
 // Order execution flow, confirm close
@@ -49,7 +50,7 @@ export function _bmResetDailyIfNeeded(): void {
     // reset protect automat la schimbare zi
     w.BM.protectMode = false
     w.BM.protectReason = ''
-    w.atLog('info', `[DAY] Zi nouă (${k}) — dailyTrades/lossStreak/protect resetate automat`)
+    atLog('info', `[DAY] Zi nouă (${k}) — dailyTrades/lossStreak/protect resetate automat`)
   }
 }
 
