@@ -6,6 +6,7 @@ import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { macroAdjustExitRisk as _macroAdjustExitRisk } from '../trading/risk'
+import { DEV } from '../utils/dev'
 
 const w = window as any
 
@@ -266,7 +267,7 @@ export function applyQuantumExit(pos: any): void {
     const r = _posR(pos)
     if (r !== null && r < 0.25) {
       // Below 0.25R: too early, advisory log only, no action
-      if (w.DEV?.enabled && action !== 'HOLD') w.devLog?.('[QEB] Profit gate: R=' + r.toFixed(2) + ' < 0.25 → no action', 'info')
+      if (DEV?.enabled && action !== 'HOLD') w.devLog?.('[QEB] Profit gate: R=' + r.toFixed(2) + ' < 0.25 → no action', 'info')
       return
     }
 

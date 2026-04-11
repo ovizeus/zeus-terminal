@@ -2,6 +2,7 @@ import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { applyIndVisibility, renderActBar } from '../engine/indicators'
+import { sendAlert } from '../data/marketDataWS'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
 // DOM utilities, render helpers
 const w = window as any;
@@ -64,7 +65,7 @@ export function playEntrySound(): void { _safePlayTone([440, 660, 880], 0.4); }
 export function playExitSound(win: any): void { _safePlayTone(win ? [880, 1100] : [440, 330], 0.4); }
 
 // ===== ALERT SOUND ON NOTIFICATIONS =====
-const _origSendAlert = typeof w.sendAlert !== 'undefined' ? w.sendAlert : null;
+const _origSendAlert = typeof sendAlert !== 'undefined' ? sendAlert : null;
 
 // ===== FIX: Toggle alert button visual =====
 export function toggleAlerts(en: any): void {

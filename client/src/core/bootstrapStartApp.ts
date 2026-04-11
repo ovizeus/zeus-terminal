@@ -30,8 +30,13 @@ import { updateQuantumClock, updateBrainExtension, renderDHF, renderPerfTracker 
 import { runQuantumExitUpdate, updateScenarioUI } from '../engine/forecast'
 import { computePredatorState } from '../engine/events'
 import { onDemoOrdTypeChange } from '../data/marketDataTrading'
-import { updateATStats } from '../trading/autotrade'
-import { hubPopulate } from '../utils/dev'
+import { updateATStats, runAutoTradeCheck } from '../trading/autotrade'
+import { hubPopulate, DEV } from '../utils/dev'
+import { _calcATRSeries } from '../data/marketDataHelpers'
+import { calcConfluenceScore } from '../engine/confluence'
+import { updateDeepDive } from '../engine/indicators'
+import { onPositionOpened } from '../trading/positions'
+import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -61,7 +66,7 @@ export async function startApp(): Promise<void> {
 
   // ═══ PHASE 1 — CORE ═══
   w.initCharts()
-  try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { w.DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
+  try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
   w.initZeusGroups()
   initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
@@ -91,7 +96,7 @@ export async function startApp(): Promise<void> {
       const _pend = w.ZState._pendingPositions; delete w.ZState._pendingPositions
       const _existing2 = new Set((TP.demoPositions || []).map((p: any) => String(p.id)))
       const _closed2 = new Set((TP.journal || []).map((j: any) => j.id).filter(Boolean).map(String))
-      _pend.forEach((p: any) => { if (p.closed || _closed2.has(String(p.id))) return; if (!_existing2.has(String(p.id))) { TP.demoPositions = TP.demoPositions || []; const _rp = { ...p, _restored: true }; TP.demoPositions.push(_rp); if (typeof w.onPositionOpened === 'function') w.onPositionOpened(_rp, 'restore') } })
+      _pend.forEach((p: any) => { if (p.closed || _closed2.has(String(p.id))) return; if (!_existing2.has(String(p.id))) { TP.demoPositions = TP.demoPositions || []; const _rp = { ...p, _restored: true }; TP.demoPositions.push(_rp); if (typeof onPositionOpened === 'function') onPositionOpened(_rp, 'restore') } })
       if (typeof w.renderDemoPositions === 'function') setTimeout(w.renderDemoPositions, 300)
       if (typeof w.renderATPositions === 'function') setTimeout(w.renderATPositions, 300)
       console.log('[ZState] Late-restore applied:', _pend.length, 'pending positions after journal load')
@@ -134,7 +139,7 @@ export async function startApp(): Promise<void> {
 
   // ATR parity check
   setTimeout(function () {
-    try { const atrLive = getATR() || null; const _kl = getKlines(); const atrFrom5m = (_kl.length >= 16) ? w._calcATRSeries(_kl.slice(-32), 14, 'wilder').last : null; const diffPct = (atrLive && atrFrom5m) ? Math.abs(atrLive - atrFrom5m) / atrLive * 100 : null; console.log('[ATR PARITY v88]', { atrLive_1h: atrLive ? atrLive.toFixed(4) : null, atrFrom5m: atrFrom5m ? atrFrom5m.toFixed(4) : null, diffPct: diffPct ? diffPct.toFixed(1) + '%' : 'N/A', note: 'TF mismatch normal (live=1h, check=5m). Backtest uses same Wilder fn.' }) } catch (e: any) { console.warn('[ATR PARITY]', e.message) }
+    try { const atrLive = getATR() || null; const _kl = getKlines(); const atrFrom5m = (_kl.length >= 16) ? _calcATRSeries(_kl.slice(-32), 14, 'wilder').last : null; const diffPct = (atrLive && atrFrom5m) ? Math.abs(atrLive - atrFrom5m) / atrLive * 100 : null; console.log('[ATR PARITY v88]', { atrLive_1h: atrLive ? atrLive.toFixed(4) : null, atrFrom5m: atrFrom5m ? atrFrom5m.toFixed(4) : null, diffPct: diffPct ? diffPct.toFixed(1) + '%' : 'N/A', note: 'TF mismatch normal (live=1h, check=5m). Backtest uses same Wilder fn.' }) } catch (e: any) { console.warn('[ATR PARITY]', e.message) }
   }, 8000)
 
   w.Intervals.set('rsi', w.fetchAllRSI, 120000); w.Intervals.set('fg', w.fetchFG, 300000)
@@ -160,7 +165,7 @@ export async function startApp(): Promise<void> {
         if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered; if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL; if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday }
       }
       if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.enabled === 'boolean') AT.enabled = serverSnap.at.enabled; if (serverSnap.at.mode) { AT.mode = serverSnap.at.mode; AT._modeConfirmed = true }; if (AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + AT.mode + ')') }
-      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; try { runSignalScan() } catch (_) {}; if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; try { runSignalScan() } catch (_) {}; if (typeof calcConfluenceScore === 'function') try { calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000); setTimeout(runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
       setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); syncBrainFromState() }, 300)
       w.ZState.saveLocal()
       console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length)
@@ -168,8 +173,8 @@ export async function startApp(): Promise<void> {
     }).catch(function () {
       if (typeof AT !== 'undefined' && !AT._modeConfirmed) { AT._modeConfirmed = true }
       // Fallback: if AT.enabled from localStorage but server unreachable, still start interval
-      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval && typeof w.runAutoTradeCheck === 'function') {
-        AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000)
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval && typeof runAutoTradeCheck === 'function') {
+        AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000); setTimeout(runAutoTradeCheck, 3000)
         console.log('[sync] AT interval started from localStorage fallback')
       }
       w.ZState.markSyncReady()
@@ -220,16 +225,16 @@ export async function startApp(): Promise<void> {
   setTimeout(() => { updateQuantumClock(); updateBrainExtension() }, 3000)
   setTimeout(() => { w.brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
 
-  setTimeout(runSignalScan, 4000); setTimeout(w.calcConfluenceScore, 5500)
-  setTimeout(scanLiquidityMagnets, 9000); setTimeout(w.updateDeepDive, 11000)
+  setTimeout(runSignalScan, 4000); setTimeout(calcConfluenceScore, 5500)
+  setTimeout(scanLiquidityMagnets, 9000); setTimeout(updateDeepDive, 11000)
   setTimeout(runQuantumExitUpdate, 12000); setTimeout(updateScenarioUI, 13000)
   setTimeout(computeMacroCortex, 8000)
   setTimeout(function () { try { w.devLog('Developer Mode ready.', 'info') } catch (_) { } }, 5000)
   setTimeout(function () { try { hubPopulate() } catch (_) { } }, 3000)
 
-  w.Intervals.set('scan', function () { runSignalScan(); try { w.calcConfluenceScore() } catch (_) { } }, 30000)
+  w.Intervals.set('scan', function () { runSignalScan(); try { calcConfluenceScore() } catch (_) { } }, 30000)
   w.Intervals.set('magnets', w.ZT_safeInterval('magnets', scanLiquidityMagnets, 60000), 60000)
-  w.Intervals.set('deepdive', w.updateDeepDive, 10000)
+  w.Intervals.set('deepdive', updateDeepDive, 10000)
   w.Intervals.set('qexit', runQuantumExitUpdate, 5000)
   w.Intervals.set('scenario', updateScenarioUI, 3000)
   w.Intervals.set('macroCortex', computeMacroCortex, 6 * 60 * 60 * 1000)
@@ -246,7 +251,7 @@ export async function startApp(): Promise<void> {
     if (document.visibilityState === 'visible') {
       w.fetchOI(); w.fetchLS(); w.fetchAllRSI()
       if (typeof w.ZANIM !== 'undefined' && !w.ZANIM.running) startZAnim()
-      if (typeof TP !== 'undefined' && TP.liveConnected && typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
+      if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
       if (typeof w.ZState !== 'undefined' && w.ZState.pullFromServer && !(w.ZState.isMerging && w.ZState.isMerging())) {
         w.ZState.pullFromServer().then(function (serverSnap: any) {

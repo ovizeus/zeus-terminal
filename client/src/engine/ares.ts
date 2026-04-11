@@ -6,6 +6,7 @@
 import { safeLastKline } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { ARES_EXECUTE } from './aresExecute'
+import { ARES_DECISION } from './aresDecision'
 import { _bmResetDailyIfNeeded } from '../trading/orders'
 import { liveApiGetPositions } from '../trading/liveApi'
 import { PM } from './postMortem'
@@ -402,8 +403,8 @@ function tick() {
     } catch (monErr: any) { console.warn('[ARES] monitor error:', monErr.message) }
 
     try {
-      if (typeof w.ARES_DECISION !== 'undefined' && typeof ARES_EXECUTE === 'function') {
-        const decision = w.ARES_DECISION.evaluate()
+      if (typeof ARES_DECISION !== 'undefined' && typeof ARES_EXECUTE === 'function') {
+        const decision = ARES_DECISION.evaluate()
         if (decision.shouldTrade) {
           _push('[DECISION] GO ' + decision.side + ' \u2014 ' + decision.reasons.join(', '))
           ARES_EXECUTE(decision).catch(function (e: any) { _push('[EXEC ERROR] ' + (e.message || e)); console.error('[ARES] execution async error:', e) })

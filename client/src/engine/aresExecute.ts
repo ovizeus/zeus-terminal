@@ -5,6 +5,7 @@
 import { safeLastKline } from '../utils/dom'
 import { aresSetTakeProfit, aresPlaceOrder, aresSetStopLoss } from '../trading/liveApi'
 import { ARES_JOURNAL } from './aresJournal'
+import { ARES_DECISION } from './aresDecision'
 
 const w = window as any
 
@@ -77,7 +78,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
       w.ARES.push('[TP SET] ' + decision.side + ' TP @ $' + tpPrice.toFixed(2))
     } catch (tpErr: any) { w.ARES.push('[TP FAIL] ' + (tpErr.message || tpErr) + ' \u2014 monitor client-side'); positions.updatePos(pos.id, { tpPrice, tpOrderId: null }) }
 
-    w.ARES_DECISION.recordTrade()
+    ARES_DECISION.recordTrade()
     if (typeof ARES_JOURNAL !== 'undefined') ARES_JOURNAL.recordOpen(decision, pos, fillPrice)
     w.ARES.push('[ARES LIVE OPEN] ' + decision.side + ' BTCUSDT x' + leverage + ' @ $' + fillPrice.toFixed(2) + ' qty=' + fillQty + ' stake=$' + stakeVirtual.toFixed(2) + ' SL=$' + slPrice.toFixed(2) + ' TP=$' + tpPrice.toFixed(2))
     try { if (typeof w._aresRender === 'function') w._aresRender() } catch (_) { }

@@ -9,6 +9,7 @@ import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { updateATStats } from './autotrade'
+import { closeLivePos } from '../data/marketDataPositions'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
@@ -497,8 +498,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
           w.atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           w.brainThink('info', _ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
-          if (pos.isLive && typeof w.closeLivePos === 'function') {
-            w.closeLivePos(pos.id, _plReason)
+          if (pos.isLive && typeof closeLivePos === 'function') {
+            closeLivePos(pos.id, _plReason)
             if (pos.autoTrade && typeof w.AT !== 'undefined') {
               const _dslPnl = typeof w.calcPosPnL === 'function' ? w.calcPosPnL(pos, cur) : 0
               w.AT.totalPnL += _dslPnl; w.AT.dailyPnL += _dslPnl

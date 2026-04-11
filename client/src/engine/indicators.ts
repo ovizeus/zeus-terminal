@@ -3,7 +3,9 @@
 // Live API stubs, PWA, Indicator panel, Overlay/Oscillator indicators,
 // Signal scanner, Deep Dive narrative generator
 
-import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
+import { fmtTime, fmtDate, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
+import { sendAlert } from '../data/marketDataWS'
+import { liveApiSyncState } from '../trading/liveApi'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -38,7 +40,7 @@ export function connectLiveAPI(): void {
     }
     const form = el('liveOrderForm'); if (form) form.style.display = 'block'
     const btn = el('btnConnectExchange'); if (btn) btn.style.display = 'none'
-    if (typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
+    if (typeof liveApiSyncState === 'function') liveApiSyncState()
   }).catch(function (err: any) {
     if (st) { st.innerHTML = _ZI.x + ' Backend unreachable: ' + escHtml(err.message || err); st.style.color = 'var(--red)' }
   })
@@ -764,7 +766,7 @@ export function detectSupertrendFlip(bars: any[]): string | null {
   if (!last || !prev) return null
   const lClose = last.close, pClose = prev.close
   const _stBars = bars.slice(-20)
-  const atr14 = (typeof w._calcATRSeries === 'function' ? w._calcATRSeries(_stBars, 14, 'wilder').last : null) || (last.high - last.low)
+  const atr14 = (typeof _calcATRSeries === 'function' ? _calcATRSeries(_stBars, 14, 'wilder').last : null) || (last.high - last.low)
   const mult = 3
   const upperBand = ((last.high + last.low) / 2) + mult * atr14
   const lowerBand = ((last.high + last.low) / 2) - mult * atr14
@@ -831,12 +833,12 @@ export function runSignalScan(): void {
 
   w.S.signalData = { signals, bullCount, bearCount }
   if (typeof renderSignals === 'function') renderSignals(signals, bullCount, bearCount)
-  if (typeof w.updateDeepDive === 'function') w.updateDeepDive()
+  if (typeof updateDeepDive === 'function') updateDeepDive()
 
   if ((bullCount >= 3 || bearCount >= 3) && w.S.alerts?.enabled) {
     if (typeof playAlertSound === 'function') playAlertSound()
-    if (bullCount >= 3 && typeof w.sendAlert === 'function') w.sendAlert('SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan')
-    if (bearCount >= 3 && typeof w.sendAlert === 'function') w.sendAlert('SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan')
+    if (bullCount >= 3 && typeof sendAlert === 'function') sendAlert('SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan')
+    if (bearCount >= 3 && typeof sendAlert === 'function') sendAlert('SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan')
   }
 
   signals.filter((s: any) => s.str.includes('STRONG')).forEach((s: any) => {

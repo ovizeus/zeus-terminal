@@ -268,7 +268,7 @@ export function _updateWhyBlocked(code: any, text: any) {
   pill.className = cls
   pill.style.display = 'block'
 }
-w._updateWhyBlocked = _updateWhyBlocked
+// _updateWhyBlocked — now direct import (no window mapping needed)
 
 // ─── MAIN MULTI SYMBOL SCAN ───────────────────────────────────
 export async function runMultiSymbolScan() {

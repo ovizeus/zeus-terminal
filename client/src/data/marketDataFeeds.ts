@@ -3,13 +3,14 @@
 // TF picker, fullscreen, price display, API fetches, metrics, RSI display, SR table
 
 import { getTPObject } from '../services/stateAccessors'
-import { fmtTime, fmtDate, calcRSI } from './marketDataHelpers'
+import { fmtTime, fmtDate, calcRSI, _calcATRSeries } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _demoTick } from '../engine/aresUI'
 import { clearHeatmap, clearSR } from './marketDataOverlays'
 import { getChartH } from './marketDataChart'
-import { updateMainMetrics } from './marketDataWS'
+import { updateMainMetrics, sendAlert } from './marketDataWS'
+import { updateDeepDive } from '../engine/indicators'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -29,7 +30,7 @@ export function setTF(tf: any, btn: any): void {
     ;[w.mainChart, w.cvdChart].forEach((ch: any) => { try { if (ch) ch.applyOptions({ localization: lf }) } catch (_) { } })
   }, 200)
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
-  setTimeout(() => { if (typeof w.updateDeepDive === 'function') w.updateDeepDive() }, 500)
+  setTimeout(() => { if (typeof updateDeepDive === 'function') updateDeepDive() }, 500)
 }
 export const setTf = setTF
 
@@ -182,7 +183,7 @@ export async function fetchATR(): Promise<void> {
     const d = await safeFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1h&limit=32`)
     if (!Array.isArray(d) || d.length < 16) throw new Error('Date ATR insuficiente')
     const klinesForATR = d.map((k: any) => ({ high: +k[2], low: +k[3], close: +k[4] }))
-    const atrRes = w._calcATRSeries(klinesForATR, 14, 'wilder')
+    const atrRes = _calcATRSeries(klinesForATR, 14, 'wilder')
     if (atrRes.last === null) throw new Error('ATR Wilder: date insuficiente dupa calcul')
     w.S.atr = atrRes.last
     w.S.atrSeries1h = atrRes.series
@@ -297,7 +298,7 @@ function checkRSIAlerts(rsi: number, tf: string): void {
   const key = 'rsi_' + tf
   if (!checkRSIAlerts._last) checkRSIAlerts._last = {} as any
   if ((checkRSIAlerts as any)._last[key] && Date.now() - (checkRSIAlerts as any)._last[key] < 300000) return
-  if (rsi > 70) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof w.sendAlert === 'function') w.sendAlert('RSI OVERBOUGHT', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
-  if (rsi < 30) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof w.sendAlert === 'function') w.sendAlert('RSI OVERSOLD', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
+  if (rsi > 70) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERBOUGHT', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
+  if (rsi < 30) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERSOLD', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
 }
 (checkRSIAlerts as any)._last = {}

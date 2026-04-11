@@ -5,7 +5,9 @@
 
 import { getATObject, getTPObject, getPrice, getATR } from '../services/stateAccessors'
 import { el } from './dom'
-const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), w.atLog, w.ncAdd, w.updConn, fn calls
+import { _updateWhyBlocked } from '../data/klines'
+import { updConn } from '../data/marketDataWS'
+const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), w.atLog, w.ncAdd, fn calls
 // [8D-6C2] AT = mutable ref to AT — reads + writes through same object
 const AT = getATObject()
 
@@ -214,7 +216,7 @@ export function _startWatchdog(): void {
       }
     }
     // FIX3: refresh WHY BLOCKED pill every watchdog tick (cooldown countdown)
-    if (typeof w._updateWhyBlocked === 'function') w._updateWhyBlocked()
+    if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked()
   }, 5000)
 }
 
@@ -230,8 +232,8 @@ export function _enterDegradedMode(source: string): void {
     w.atLog('warn', `[DEGRADED] ${source} feed down — continuing with reduced data`)
     w.ncAdd('warning', 'system', `Feed degradat: ${source} down`)
   }
-  w.updConn()
-  w._updateWhyBlocked()
+  updConn()
+  _updateWhyBlocked()
 }
 // _enterDegradedMode — exported, consumers import directly
 
@@ -243,9 +245,9 @@ export function _exitDegradedMode(source: string): void {
       _degradedLogTs.exit = now
       w.atLog('info', `[OK] ${source} feed restored — full data mode`)
     }
-    w._updateWhyBlocked()
+    _updateWhyBlocked()
   }
-  w.updConn()
+  updConn()
 }
 // _exitDegradedMode — exported, consumers import directly
 
@@ -262,7 +264,7 @@ export function _enterRecoveryMode(source: string): void {
   _SAFETY.autoSuspended = true
   w.atLog('warn', `[RECOVERY] ${source} disconnected — AT suspended`)
   const rb = el('recoveryBanner'); if (rb) rb.style.display = 'flex'
-  w.updConn()
+  updConn()
   w.ncAdd('critical', 'system', `[RECOVERY] ${source} disconnected`)  // [NC]
 }
 // _enterRecoveryMode — exported, consumers import directly
@@ -275,7 +277,7 @@ export function _exitRecoveryMode(): void {
     _SAFETY.autoSuspended = false
     const rb = el('recoveryBanner'); if (rb) rb.style.display = 'none'
     w.atLog('info', '[OK] Connection restored — positions verified')
-    w.updConn()
+    updConn()
   }, 2000)  // 2s settle time before resuming
 }
 // _exitRecoveryMode — exported, consumers import directly

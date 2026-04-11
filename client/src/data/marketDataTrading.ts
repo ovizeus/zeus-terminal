@@ -12,6 +12,10 @@ import { runDSLBrain } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 import { calcDslTargetPrice } from '../engine/brain'
 import { updateModeBar } from '../ui/modebar'
+import { renderTradeMarkers } from './marketDataOverlays'
+import { onPositionOpened } from '../trading/positions'
+import { renderLivePositions } from './marketDataPositions'
+import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -77,7 +81,7 @@ export function _applyGlobalModeUI(mode: string): void {
     else if (mode === 'live') { execBtn.disabled = false; execBtn.style.opacity = ''; execBtn.dataset.execMode = 'live' }
     else { execBtn.disabled = false; execBtn.style.opacity = ''; execBtn.dataset.execMode = 'demo' }
   }
-  if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
+  if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   if (typeof updateModeBar === 'function') updateModeBar()
 }
 
@@ -197,10 +201,10 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
     TP.demoPositions.push(pos); TP.demoBalance -= size
     w.updateDemoBalance(); w.renderDemoPositions()
-    if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo')
+    if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
     w.ZState.save(); _registerManualOnServer(pos)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
-    if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
+    if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
     toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
   } else {
     const pending = { id: Date.now(), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
@@ -221,15 +225,15 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
     if (orderType === 'MARKET') {
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
       const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = parseFloat(result.executedQty) || qty
-      TP.livePositions.push(pos); w.renderLivePositions()
-      if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_live')
+      TP.livePositions.push(pos); renderLivePositions()
+      if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_live')
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
-      if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
+      if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
       toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice))
       if (sl) { manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
       if (tp) { manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
-      if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 1000)
+      if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 1000)
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
       TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()

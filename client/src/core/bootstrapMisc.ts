@@ -9,6 +9,7 @@ import { connectBNB } from '../data/marketDataWS'
 import { connectWatchlist } from '../services/symbols'
 import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
+import { attachConfirmClose } from '../engine/events'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
 const TP = getTPObject()
@@ -147,7 +148,7 @@ if (!w._closeAllBtnInited) {
   w._closeAllBtnInited = true
   function _initCloseAllBtn() {
     const btn = document.getElementById('closeAllBtn')
-    if (btn && typeof w.attachConfirmClose === 'function') w.attachConfirmClose(btn, closeAllDemoPos)
+    if (btn && typeof attachConfirmClose === 'function') attachConfirmClose(btn, closeAllDemoPos)
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _initCloseAllBtn)
   else setTimeout(_initCloseAllBtn, 500)

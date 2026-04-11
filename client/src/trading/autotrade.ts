@@ -22,6 +22,14 @@ import { PREDATOR, computePredatorState } from '../engine/events'
 import { aubBBSnapshot } from '../engine/aub'
 import { calcLiqPrice } from '../data/marketDataTrading'
 import { calcDslTargetPrice, runSignalScan } from '../engine/brain'
+import { calcConfluenceScore } from '../engine/confluence'
+import { renderTradeMarkers } from '../data/marketDataOverlays'
+import { attachConfirmClose } from '../engine/events'
+import { closeLivePos, renderLivePositions } from '../data/marketDataPositions'
+import { onPositionOpened } from '../trading/positions'
+import { sendAlert } from '../data/marketDataWS'
+import { addTradeToJournal } from '../services/storage'
+import { liveApiSyncState } from '../trading/liveApi'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -133,11 +141,11 @@ export function _applyATToggleUI(enabled: any): void {
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
     try { runSignalScan() } catch (_) {}
-    if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}
+    if (typeof calcConfluenceScore === 'function') try { calcConfluenceScore() } catch (_) {}
     setTimeout(runAutoTradeCheck, 2000) // first check with fresh confluence
     // [FIX] Force balance sync when AT starts in LIVE mode — prevents $10k fallback
-    if (getATMode() === 'live' && typeof w.liveApiSyncState === 'function') {
-      w.liveApiSyncState().then(function () {
+    if (getATMode() === 'live' && typeof liveApiSyncState === 'function') {
+      liveApiSyncState().then(function () {
         if (TP.liveBalance <= 0) {
           w.atLog('warn', '[WARN] LIVE balance = $0 after sync — AT blocked until balance confirmed')
           AT.enabled = false
@@ -890,10 +898,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     w.updateDemoBalance()
     w.renderDemoPositions()
     renderATPositions()
-    w.onPositionOpened(pos, 'auto_demo')  // 3: DSL attach for auto-trade positions
+    onPositionOpened(pos, 'auto_demo')  // 3: DSL attach for auto-trade positions
     w.srLinkTrade(pos)  // [SR] leagă cel mai recent semnal de această poziţie
     aubBBSnapshot('TRADE_OPEN', { sym: pos.sym, side: pos.side, entry: pos.entry, size: pos.size, lev: pos.lev, score: (typeof BM !== 'undefined' ? BM.entryScore : 0) })
-    w.addTradeToJournal({
+    addTradeToJournal({
       time: fmtNow(),
       side, sym: sym.replace('USDT', ''),
       entry, exit: null, pnl: 0, reason: 'AUTO — Score:' + cond.score, lev,
@@ -910,7 +918,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     if (typeof onTradeExecuted === 'function') onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
     w.ZState.scheduleSave()  // persist new position
-    if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()  // [CHART MARKERS]
+    if (typeof renderTradeMarkers === 'function') renderTradeMarkers()  // [CHART MARKERS]
   } else {
     if (!TP.liveConnected) {
       w.atLog('warn', '[FAIL] LIVE: API neconectat! Conectati in panoul LIVE TRADING.')
@@ -989,7 +997,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         AT.lastTradeTs = Date.now()
         if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
         AT._cooldownBySymbol[sym] = Date.now()
-        w.renderLivePositions()
+        renderLivePositions()
         w.atLog('buy', '[LIVE] LIVE ORDER FILLED: ' + side + ' ' + sym + ' @$' + fP(fillPrice) + ' qty:' + pos.qty + ' orderId:' + pos.orderId)
         toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + fP(fillPrice), 0, _ZI.dRed)
         w.ncAdd('info', 'trade', 'LIVE ' + side + ' ' + sym.replace('USDT', '') + ' @$' + fP(fillPrice) + ' | SL:$' + fP(_liveSL) + ' TP:$' + fP(_liveTP))
@@ -1028,7 +1036,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         // [FIX C4] Persist live position to local state immediately after push
         w.ZState.save()
         // Sync balance after trade
-        try { await w.liveApiSyncState() } catch (err: any) { console.warn('[AT] Post-trade sync failed:', err && err.message || err) }
+        try { await liveApiSyncState() } catch (err: any) { console.warn('[AT] Post-trade sync failed:', err && err.message || err) }
       } catch (err: any) {
         AT.totalTrades--
         // [PATCH2 B2] If position was pushed but post-processing failed, remove zombie
@@ -1041,7 +1049,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
             TP.livePositions.splice(_zIdx2, 1)
             w.atLog('warn', '[CLEAN] ZOMBIE CLEANUP: removed orphan live position for ' + sym)
           }
-          w.renderLivePositions()
+          renderLivePositions()
         }
         w.atLog('warn', '[FAIL] LIVE ORDER FAILED: ' + (err.message || err))
       } finally {
@@ -1267,7 +1275,7 @@ export function scheduleAutoClose(pos: any): void {
         const liveIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id)
         if (liveIdx < 0 || TP.livePositions[liveIdx].closed) {
           if (liveIdx >= 0) TP.livePositions.splice(liveIdx, 1)
-          setTimeout(function () { w.renderLivePositions(); renderATPositions() }, 0)
+          setTimeout(function () { renderLivePositions(); renderATPositions() }, 0)
           return
         }
         const cur2 = getPosPrice()
@@ -1279,7 +1287,7 @@ export function scheduleAutoClose(pos: any): void {
         if (pos.status === 'closing') return
 
         // Close live position via backend
-        w.closeLivePos(pos.id, 'AUTO ' + reason)
+        closeLivePos(pos.id, 'AUTO ' + reason)
 
         // AT stats — live close accounting done here (closeLivePos does NOT do AT stats)
         AT.totalPnL += pnl2; AT.dailyPnL += pnl2
@@ -1290,7 +1298,7 @@ export function scheduleAutoClose(pos: any): void {
         const pnlStr = (pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)
         w.atLog(pnl2 >= 0 ? 'buy' : 'sell', '[LIVE] ' + reason + ' — PnL: ' + pnlStr + ' | Close @$' + fP(cur2))
         setTimeout(function () { updateATStats() }, 50)
-        if (w.S.alerts?.enabled) w.sendAlert('Zeus LIVE Auto Trade ' + reason, pos.side + ' ' + pos.sym + ' PnL: ' + pnlStr, 'auto')
+        if (w.S.alerts?.enabled) sendAlert('Zeus LIVE Auto Trade ' + reason, pos.side + ' ' + pos.sym + ' PnL: ' + pnlStr, 'auto')
       } else {
         // DEMO: original logic (unchanged)
         // Verifica si daca pozitia exista inca in array (poate a fost inchisa manual din UI)
@@ -1330,7 +1338,7 @@ export function scheduleAutoClose(pos: any): void {
         const pnlStr = (pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)
         w.atLog(pnl2 >= 0 ? 'buy' : 'sell', reason + ' — PnL: ' + pnlStr + ' | Close @$' + fP(cur2))
         setTimeout(() => updateATStats(), 50)
-        if (w.S.alerts?.enabled) w.sendAlert(`Zeus Auto Trade ${reason}`, `${pos.side} ${pos.sym} PnL: ${pnlStr}`, 'auto')
+        if (w.S.alerts?.enabled) sendAlert(`Zeus Auto Trade ${reason}`, `${pos.side} ${pos.sym} PnL: ${pnlStr}`, 'auto')
       } // end DEMO branch
     }
   }, 3000)  // [P2-2] 3s polling for responsive SL/TP detection
@@ -1403,7 +1411,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     if (pnl >= 0) AT.wins++; else AT.losses++
     if (getDSLObject()?.positions?.[p.id]) delete getDSLObject().positions[p.id]
     if (getDSLObject()?._attachedIds) getDSLObject()?._attachedIds.delete(String(p.id))  // 4: cleanup dedupe on close
-    w.addTradeToJournal({
+    addTradeToJournal({
       id: p.id, // [FIX v85.1 F4] necesar pentru closedPosIds la restore
       time: fmtNow(),
       side: p.side, sym: p.sym.replace('USDT', ''),
@@ -1432,7 +1440,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   if (AT._serverMode === 'live' && Array.isArray(TP.livePositions)) {
     var _liveAT = TP.livePositions.filter(function (p: any) { return p.autoTrade && !p.closed && p.status !== 'closing' })
     for (var _li = 0; _li < _liveAT.length; _li++) {
-      w.closeLivePos(_liveAT[_li].id, 'Emergency Stop')
+      closeLivePos(_liveAT[_li].id, 'Emergency Stop')
       closedCount++
     }
   }
@@ -1451,7 +1459,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   { const _oe6 = el('atStatus'); if (_oe6) _oe6.innerHTML = _ZI.siren + ` KILL ACTIV — <button onclick="resetKillSwitch()" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>` }
   w.atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} pozitii inchise | PnL: ${pnlStr}`)
   toast(closedCount + ' pozitii inchise | PnL: ' + pnlStr, 0, _ZI.siren)
-  if (w.S.alerts?.enabled) w.sendAlert('Zeus Kill Switch', msg, 'kill')
+  if (w.S.alerts?.enabled) sendAlert('Zeus Kill Switch', msg, 'kill')
   // [FIX UI] Update banners immediately after kill trigger
   if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
   if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
@@ -1606,17 +1614,17 @@ export function renderATPositions(): void {
   // Long-press attachment - previne inchideri accidentale la scroll
   panel.querySelectorAll('button[data-close-id]').forEach(function (btn: any) {
     const id = parseInt(btn.getAttribute('data-close-id'), 10)
-    w.attachConfirmClose(btn, function () { closeAutoPos(id) })
+    attachConfirmClose(btn, function () { closeAutoPos(id) })
   })
   panel.querySelectorAll('button[data-partial-id]').forEach(function (btn: any) {
     const id = parseInt(btn.getAttribute('data-partial-id'), 10)
-    w.attachConfirmClose(btn, function () { openPartialClose(id) })
+    attachConfirmClose(btn, function () { openPartialClose(id) })
   })
   // [Batch B] Add-on button — single tap with server RPC
   panel.querySelectorAll('button[data-addon-id]').forEach(function (btn: any) {
     if (btn.disabled) return
     const id = parseInt(btn.getAttribute('data-addon-id'), 10)
-    w.attachConfirmClose(btn, function () { openAddOn(id) })
+    attachConfirmClose(btn, function () { openAddOn(id) })
   })
 }
 
@@ -1683,7 +1691,7 @@ export function execPartialClose(posId: any, pct: any): void {
   if (!_isLivePartial) TP.demoBalance += partialSize + partialPnl
   if (partialPnl >= 0) { if (!_isLivePartial) TP.demoWins++ } else { if (!_isLivePartial) TP.demoLosses++ }
 
-  w.addTradeToJournal({
+  addTradeToJournal({
     time: fmtNow(),
     side: pos.side, sym: pos.sym.replace('USDT', ''),
     entry: pos.entry, exit: symPrice,
@@ -1715,11 +1723,11 @@ export function closeAutoPos(id: any): void {
     const cur = w.getSymPrice(livePos)
     const diff = cur - livePos.entry
     const pnl = w._safePnl(livePos.side, diff, livePos.entry, livePos.size, livePos.lev, true)
-    w.closeLivePos(numId, 'Manual inchis')
+    closeLivePos(numId, 'Manual inchis')
     AT.totalPnL += pnl; AT.dailyPnL += pnl
     if (pnl >= 0) AT.wins++; else AT.losses++
     w.atLog(pnl >= 0 ? 'buy' : 'sell', '[LIVE] MANUAL CLOSE: ' + livePos.sym.replace('USDT', '') + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
-    setTimeout(function () { updateATStats(); renderATPositions(); w.renderLivePositions() }, 50)
+    setTimeout(function () { updateATStats(); renderATPositions(); renderLivePositions() }, 50)
     return
   }
 
@@ -1756,7 +1764,7 @@ export function closeAllDemoPos(): void {
     ? [...TP.livePositions].filter((p: any) => !p.closed && !p.autoTrade)
     : []
   livePosns.forEach(function (p: any) {
-    w.closeLivePos(p.id, 'Close All Manual')
+    closeLivePos(p.id, 'Close All Manual')
   })
   // ─── Close MANUAL demo positions only (skip autoTrade) ───
   const posns = _activeMode === 'demo'
@@ -1785,7 +1793,7 @@ export function closeAllATPos(): void {
     if (pnl >= 0) AT.wins++; else AT.losses++
     AT.realizedDailyPnL = (getATDailyPnL() || 0) + pnl
     AT.closedTradesToday = (getATClosedToday() || 0) + 1
-    w.closeLivePos(p.id, 'Close All AT')
+    closeLivePos(p.id, 'Close All AT')
   })
   // ─── Close AT demo positions ───
   const posns = _activeMode === 'demo'

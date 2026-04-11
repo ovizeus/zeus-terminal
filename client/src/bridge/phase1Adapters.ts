@@ -12,25 +12,25 @@ import './earlyShims'
 // Phase 7F-G: marketData close (chunk G — closeDemoPos)
 import { closeDemoPos } from '../data/marketDataClose'
 // Phase 7F-F: marketData positions (chunk F — pending orders, SL/TP, render, closeLivePos)
-import { cancelPendingOrder, modifyPendingPrice, renderPendingOrders, _stopLivePendingSync, savePosSLTP, checkDemoPositionsSLTP, renderDemoPositions, calcPosPnL, updateLiveBalance, renderLivePositions, closeLivePos, getSymPrice as _mdGetSymPriceFull } from '../data/marketDataPositions'
+import { cancelPendingOrder, modifyPendingPrice, renderPendingOrders, _stopLivePendingSync, savePosSLTP, checkDemoPositionsSLTP, renderDemoPositions, calcPosPnL, updateLiveBalance, getSymPrice as _mdGetSymPriceFull } from '../data/marketDataPositions'
 // Phase 7F-E: marketData trading (chunk E — mode switch, orders, leverage, liq price)
 import { switchGlobalMode, _applyGlobalModeUI, _showConfirmDialog, promptAddFunds, promptResetDemo, toggleTradePanel, onDemoOrdTypeChange, getDemoLev, getLiveLev, onDemoLevChange, onLiveLevChange, calcLiqPrice, updateDemoLiqPrice, updateLiveLiqPrice, setDemoPct, setLivePct, updateDemoBalance, placeDemoOrder, getSymPrice } from '../data/marketDataTrading'
 // Phase 7F-B: marketData chart (chunk B — chart init, fetchKlines, renderChart)
 import { getChartH, getChartW, initCharts, fetchKlines, renderChart } from '../data/marketDataChart'
 // Phase 7F-D2: marketData WS (chunk D2 — WS connects, liq, symbol, modals, alerts, cloud)
-import { connectBNB, connectBYB, updConn as _mdUpdConn, procLiq, updLiqStats, updLiqSourceMetrics, updBybHealth, renderOB, renderHotZones, updMarketPressure, setLiqSrcFilter, updLiqFilterBtns, renderFeed, setSymbol as _mdSetSymbol, toggleSnd, openM, closeM, _initModalDrag, swtab, updateMainMetrics, showTab, applyChartColors as _mdApplyChartColors, setCandleStyle, setTZ, applyHeatmapSettings, sendAlert, registerServiceWorker as _mdRegisterSW, checkLiqAlert, testNotification, saveAlerts, cloudClear as _mdCloudClear, injectFakeWhale, setLiqSym, setLiqUsd, setLiqTW, hashEmail, cloudSave as _mdCloudSave, cloudLoad as _mdCloudLoad, initCloudSettings, applySessionSettings, applyZS, renderZS } from '../data/marketDataWS'
+import { connectBNB, connectBYB, procLiq, updLiqStats, updLiqSourceMetrics, updBybHealth, renderOB, renderHotZones, updMarketPressure, setLiqSrcFilter, updLiqFilterBtns, renderFeed, setSymbol as _mdSetSymbol, toggleSnd, openM, closeM, _initModalDrag, swtab, updateMainMetrics, showTab, applyChartColors as _mdApplyChartColors, setCandleStyle, setTZ, applyHeatmapSettings, registerServiceWorker as _mdRegisterSW, checkLiqAlert, testNotification, saveAlerts, cloudClear as _mdCloudClear, injectFakeWhale, setLiqSym, setLiqUsd, setLiqTW, hashEmail, cloudSave as _mdCloudSave, cloudLoad as _mdCloudLoad, initCloudSettings, applySessionSettings, applyZS, renderZS } from '../data/marketDataWS'
 // Phase 7F-D1: marketData feeds (chunk D1 — TF, API fetches, metrics, coexist with bridge)
 import { setTF, ztfToggle, ztfPick, toggleFS, updatePriceDisplay, calcFrCd, safeFetch, throttledMainMetrics, fetchRSI, fetchAllRSI, fetchFG, fetchATR, fetchOI, fetchLS, fetch24h, setDtTf, updateMetrics, renderRSI, calcSRTable } from '../data/marketDataFeeds'
 // Phase 7F-C: marketData overlays (chunk C — chart overlays, coexist with bridge marketData.js)
-import { clearSR, renderTradeMarkers, llvEnsureCanvas, llvResizeCanvas, llvClearCanvas, llvRequestRender, clearLiqLevels, renderLiqLevels, llvSaveSettings, llvLoadSettings, _llvPressStart, _llvPressEnd, calcHeatmapPockets, renderHeatmapOverlay, renderSROverlay } from '../data/marketDataOverlays'
+import { clearSR, llvEnsureCanvas, llvResizeCanvas, llvClearCanvas, llvRequestRender, clearLiqLevels, renderLiqLevels, llvSaveSettings, llvLoadSettings, _llvPressStart, _llvPressEnd, calcHeatmapPockets, renderHeatmapOverlay, renderSROverlay } from '../data/marketDataOverlays'
 // Phase 7F-A: marketData helpers — DYNAMIC timezone versions + unique functions
 // These supersede the static format.ts versions on window.* (S.tz support)
-import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFmtDate, fmtFull as _dynFmtFull, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
+import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFmtDate, fmtFull as _dynFmtFull, fmtNow, toast } from '../data/marketDataHelpers'
 // Phase 7E: foundation — state + config. earlyShims already set _ZI on window.
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (_ZI now direct import)
 // Named imports for config.ts exports that need window.* mapping
-import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESS_CFG, PROFILE_TF, ARM_ASSIST, NEWS, _regimeHistory, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, oviPriceSeries as _cfgOviPriceSeries, _neuroLastScan, _execActive } from '../core/config'
+import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESS_CFG, ARM_ASSIST, NEWS, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, oviPriceSeries as _cfgOviPriceSeries, _neuroLastScan, _execActive } from '../core/config'
 import { BlockReason, ZState, mainChart as _stMainChart, bbUpperS, ichimokuSeries, fibSeries, pivotSeries, vpSeries, _rsiChart, _stochChart, _atrChart, _obvChart, _mfiChart, _cciChart, IND_SETTINGS as _stIND_SETTINGS, liqSeries, zsSeries, oiHistory, WL_SYMS, wlPrices, allPrices } from '../core/state'
 
 import { el, safeSetText, safeSetHTML, isValidMarketPrice, safeLastKline } from '../utils/dom'
@@ -38,22 +38,22 @@ import { fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
 import { _clamp, _clampFB01, _clampFB, calcRSIArr } from '../utils/math'
 import { _ZI } from '../constants/icons'
 import { MACRO_MULT, GATE_DEFS } from '../constants/trading'
-import { AT, PREDATOR, computePredatorState, _pendingClose, attachConfirmClose } from '../engine/events'
-import { _safeLocalStorageSet, addTradeToJournal, loadJournalFromStorage, startFRCountdown } from '../services/storage'
+import { AT, PREDATOR, computePredatorState, _pendingClose } from '../engine/events'
+import { _safeLocalStorageSet, loadJournalFromStorage, startFRCountdown } from '../services/storage'
 import { ZStore, connectWatchlist, switchWLSymbol } from '../services/symbols'
 import { savePerfToStorage, loadPerfFromStorage, recordIndicatorPnl, calcGlobalExpectancy, calcExpectancyByProfile, resetPerfStore } from '../engine/perfStore'
 import { recordDailyClose, rebuildDailyFromJournal, getDailyStats, getMonthlyRollup, saveDailyPnl, loadDailyPnl, resetDailyPnl } from '../engine/dailyPnl'
 import { renderSignals } from '../engine/signals'
-import { calcConfluenceScore } from '../engine/confluence'
-import { RegimeEngine } from '../engine/regime'
+// calcConfluenceScore — now direct import in consumers
+// RegimeEngine — now direct import in consumers
 import { PhaseFilter } from '../engine/phaseFilter'
 import { resetForecast, computeExitRisk, decideExitAction, applyQuantumExit, computeProbScore, updateScenarioData } from '../engine/forecast'
 // Phase 5B: deepdive.js
 import { PM, PM_render, initPMPanel, _pmStripUpdateStat, _pmCheckRegimeTransition } from '../engine/postMortem'
 import { ARES_JOURNAL } from '../engine/aresJournal'
-import { ARES_MIND } from '../engine/aresMind'
+// ARES_MIND — now direct import in consumers
 import { ARES, ARES_openPosition } from '../engine/ares'
-import { ARES_DECISION } from '../engine/aresDecision'
+// ARES_DECISION — now direct import in consumers
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
 import { _aresRender, _aresRenderArc, initAriaBrain, initARES } from '../engine/aresUI'
@@ -81,7 +81,7 @@ import '../core/patch' // side-effect module
 import '../core/hotkeys' // side-effect module
 import { initPageView, openPageView, closePageView } from '../ui/pageview'
 import '../ui/marketCoreReactor' // side-effect, self-registers MarketCoreReactor
-import { calcADX, fetchSymbolKlines, _updateWhyBlocked, runMultiSymbolScan, renderMscanTable, manualEnterFromScan, runMultiSymbolAutoTrade, toggleMultiSymMode, _mscanUpdateLabel, toggleSymPicker, mscanToggleSym, mscanPickAll } from '../data/klines'
+import { calcADX, fetchSymbolKlines, runMultiSymbolScan, renderMscanTable, manualEnterFromScan, runMultiSymbolAutoTrade, toggleMultiSymMode, _mscanUpdateLabel, toggleSymPicker, mscanToggleSym, mscanPickAll } from '../data/klines'
 // Phase 6E: UI leaf files
 import { _initAudio, _updateAudioBadge, _safePlayTone, playAlertSound, playEntrySound, playExitSound, toggleAlerts, initActBar, applyPriceAxisWidth, applyPriceAxisColors } from '../ui/dom2'
 import { _showExecOverlay as _showExecOverlayModal, _queueExecOverlay as _queueExecOverlayModal } from '../ui/modals'
@@ -96,20 +96,20 @@ import '../engine/arianova' // self-registers on window via IIFE
 // Phase 6B: trading files
 import { dslToggleMagnet, _computeDslMagnetSnap, toggleAssistArm, _syncDslAssistUI, initDSLBubbles, _dslSafePrice, _dslSanitizeParams, runDSLBrain, _runClientDSLOnPositions, dslTakeControl, dslReleaseControl, dslManualParam, _dslPushParamsDebounced, _renderDslCard, startDSLIntervals, _dslTrimLogs, _dslTrimAll } from '../trading/dsl'
 import { computeMacroCortex, updateMacroUI, estimateRoundTripFees, _adaptSave, _adaptLoad, _adaptClamp, recalcAdaptive, toggleAdaptive, adaptiveStripToggle, initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, computePositionSizingMult, perfRecordTrade, _posR as _riskPosR, _macroPhaseFromComposite } from '../trading/risk'
-import { onPositionOpened, onTradeExecuted, onTradeClosed as onTradeClosedPos, triggerExecCinematic } from '../trading/positions'
+import { onTradeExecuted, onTradeClosed as onTradeClosedPos, triggerExecCinematic } from '../trading/positions'
 import { _showExecOverlay, _queueExecOverlay, _dayKeyLocal, _bmResetDailyIfNeeded, _bmPostClose } from '../trading/orders'
-import { liveApiSetToken, _liveApiHeaders, _idempotencyKey, _liveApiFetch, _liveApiError, _liveApiParse, liveApiStatus, liveApiGetBalance, liveApiGetPositions, liveApiPlaceOrder, liveApiCancelOrder, liveApiSetLeverage, liveApiClosePosition, liveApiSyncState, aresPlaceOrder, aresSetStopLoss, aresCancelOrder, manualLivePlaceOrder, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveModifyLimit, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
+import { liveApiSetToken, _liveApiHeaders, _idempotencyKey, _liveApiFetch, _liveApiError, _liveApiParse, liveApiStatus, liveApiGetBalance, liveApiGetPositions, liveApiPlaceOrder, liveApiCancelOrder, liveApiSetLeverage, liveApiClosePosition, aresPlaceOrder, aresSetStopLoss, aresCancelOrder, manualLivePlaceOrder, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveModifyLimit, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 // Phase 6C: autotrade.js
-import { toggleAutoTrade, _doEnableAT, updateATMode, atLog as atLogFn, renderATLog, updateATStats, checkATConditions, setCondUI, isDataOkForAutoTrade, computeFusionDecision, runAutoTradeCheck, placeAutoTrade, openAddOn, scheduleAutoClose, resetKillSwitch, renderATPositions, openPartialClose, execPartialClose, closeAutoPos, closeAllDemoPos, closeAllATPos } from '../trading/autotrade'
+import { toggleAutoTrade, _doEnableAT, updateATMode, atLog as atLogFn, renderATLog, updateATStats, checkATConditions, setCondUI, isDataOkForAutoTrade, computeFusionDecision, placeAutoTrade, openAddOn, scheduleAutoClose, resetKillSwitch, renderATPositions, openPartialClose, execPartialClose, closeAutoPos, closeAllDemoPos, closeAllATPos } from '../trading/autotrade'
 // Phase 6A: managers.js, guards.js, dev.js, theme.js, decisionLog.js
 import { Intervals, WS, FetchLock, ingestPrice, Timeouts } from '../core/managers'
 import { _SAFETY, _safe, _safePnl, _isPriceSane, _resetWatchdog, _resetKlineWatchdog, _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode, _isExecAllowed, initSafetyEngine } from '../utils/guards'
-import { DEV, devLog, devClearLog, devExportLog, ZLOG, safeAsync, devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, hubToggleDev, _devEnsureVisible, hubPopulate, hubSaveAll, hubLoadAll, hubTgSave, hubTgTest, hubTgPopulate, hubResetDefaults, hubSetTf, hubSetTZ, hubCloudSave, hubCloudLoad, hubCloudClear } from '../utils/dev'
+import { devLog, devClearLog, devExportLog, ZLOG, safeAsync, devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, hubToggleDev, _devEnsureVisible, hubPopulate, hubSaveAll, hubLoadAll, hubTgSave, hubTgTest, hubTgPopulate, hubResetDefaults, hubSetTf, hubSetTZ, hubCloudSave, hubCloudLoad, hubCloudClear } from '../utils/dev'
 // ui/theme — zeusApplyTheme, zeusGetTheme removed (direct imports)
 import { DLog } from '../utils/decisionLog'
 // Phase 5B4: brain.js
 import { updateNeurons, getNeuronColor, setNeuron, updateBrainArc, updateBrainState, brainThink, armAssist, disarmAssist, isArmAssistValid, _setRadio, syncDslFromProfile, syncTFProfile, syncBrainFromState, setMode, _applyModeSwitch, confirmBrainModeSwitch, cancelBrainModeSwitch, setBrainMode, setProfile, setDslMode, calcDslTargetPrice, _calcAtrPct, detectRegimeEnhanced, updateMTFAlignment, detectSweepDisplacement, updateFlowEngine, computeGates, renderGates, computeEntryScore, computeMarketAtmosphere, updateChaosBar, updateNewsShield, checkProtectMode, updateDSLTelemetry, showExecCinematic, getStableRegime, checkAntiFakeout, computeSafetyGates, allSafetyPass, computeContextGates, _getActiveSessions, updateSessionPills, renderSessionBar, initNeuroCoinLEDs, pulseNeuronCoin, onNeuronScanUpdate, initZParticles, zAnimFrame, startZAnim, _brainDirtySet, _brainSafeSet, getBrainViewSnapshot, renderCircuitBrain, runGrandUpdate, detectMarketRegime, updateOrderFlow, adaptAutoTradeParams } from '../engine/brain'
-import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, installPWA, initIndicatorState, openIndPanel, closeIndPanel, toggleInd, applyIndVisibility, openIndSettings, closeIndSettings, applyIndSettings, initBBSeries, updateBB, initIchimokuSeries, updateIchimoku, updateFib, updatePivot, updateVP, initRSIChart, updateRSI, initStochChart, initATRChart, initOBVChart, initMFIChart, initCCIChart, renderActBar, getIndColor, deactivateInd, toggleActBar, calcMACD, initMACDChart, detectSupertrendFlip, detectRSIDivergence, runSignalScan, generateDeepDive, updateDeepDive } from '../engine/indicators'
+import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, installPWA, initIndicatorState, openIndPanel, closeIndPanel, toggleInd, applyIndVisibility, openIndSettings, closeIndSettings, applyIndSettings, initBBSeries, updateBB, initIchimokuSeries, updateIchimoku, updateFib, updatePivot, updateVP, initRSIChart, updateRSI, initStochChart, initATRChart, initOBVChart, initMFIChart, initCCIChart, renderActBar, getIndColor, deactivateInd, toggleActBar, calcMACD, initMACDChart, detectSupertrendFlip, detectRSIDivergence, runSignalScan, generateDeepDive } from '../engine/indicators'
 
 // Phase 7D: orderflow — MUST be after managers (needs w.Intervals) and after guards (needs w._SAFETY)
 import '../data/orderflow'
@@ -160,12 +160,12 @@ export function installPhase1Adapters(): void {
   w.AT = AT
   // PREDATOR — removed (direct import)
   // computePredatorState — removed (direct import)
-  w.attachConfirmClose = attachConfirmClose
+  // attachConfirmClose — removed (direct import)
 
   // ── Phase 3: tabLeader.js ──
 
   // ── Phase 3: storage.js ──
-  w.addTradeToJournal = addTradeToJournal
+  // addTradeToJournal — removed (direct import)
   // renderTradeJournal — removed (direct import)
   // loadJournalFromStorage — removed (direct import)
 
@@ -196,8 +196,8 @@ export function installPhase1Adapters(): void {
   /* MSCAN_SYMS — removed (direct import) */ w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
   w.DAILY_STATS = DAILY_STATS; w.BEXT = BEXT
   // SESS_CFG — removed (direct import)
-  w.PROFILE_TF = PROFILE_TF; w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
-  w._regimeHistory = _regimeHistory; w._fakeout = _fakeout
+  /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
+  /* _regimeHistory — removed (direct import) */ w._fakeout = _fakeout
   w._SESS_PRIORITY = _SESS_PRIORITY; w._NEURO_SYMS = _NEURO_SYMS
   // _SESS_DEF — removed (direct import)
   w.ZANIM = ZANIM; w._execQueue = _execQueue
@@ -258,8 +258,9 @@ export function installPhase1Adapters(): void {
 
   w.savePosSLTP = savePosSLTP; w.checkDemoPositionsSLTP = checkDemoPositionsSLTP
   w.renderDemoPositions = renderDemoPositions; w.calcPosPnL = calcPosPnL
-  w.renderLivePositions = renderLivePositions
-  w.closeLivePos = closeLivePos; w.getSymPrice = _mdGetSymPriceFull
+  // renderLivePositions — removed (direct import)
+  // closeLivePos — removed (direct import)
+  w.getSymPrice = _mdGetSymPriceFull
 
   // ── Phase 7F-E: marketData trading (coexist) ──
   w.switchGlobalMode = switchGlobalMode; w._applyGlobalModeUI = _applyGlobalModeUI
@@ -280,13 +281,13 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
   w.connectBYB = connectBYB
   // connectBNB — removed (direct import)
-  w.updConn = _mdUpdConn; w.procLiq = procLiq
+  /* updConn — removed (direct import) */ w.procLiq = procLiq
   w.updLiqSourceMetrics = updLiqSourceMetrics
   w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
   w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
-  w.sendAlert = sendAlert; w.registerServiceWorker = _mdRegisterSW
+  /* sendAlert — removed (direct import) */ w.registerServiceWorker = _mdRegisterSW
   /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; w.saveAlerts = saveAlerts
   // injectFakeWhale — removed (direct import)
   // cloudClear — removed (direct import)
@@ -306,13 +307,13 @@ export function installPhase1Adapters(): void {
   // updOvrs — removed (direct import)
   // togOvr — removed (direct import)
   // clearSR — removed (direct import)
-  w.renderTradeMarkers = renderTradeMarkers
+  // renderTradeMarkers — removed (direct import)
   // llv*, renderHeatmapOverlay, renderSROverlay — removed (direct imports)
 
   // ── Phase 7F-A: marketData helpers ──
   // Dynamic timezone versions REPLACE the static ones from format.ts
   // Old JS and ported TS modules consume these via window.*
-  w._calcATRSeries = _calcATRSeries
+  // _calcATRSeries — removed (direct import)
   // _escHtml: NOT set here — escHtml from dom.ts (Phase 1) is already on window
 
   // ── Phase 7B: panels + render ──
@@ -339,7 +340,7 @@ export function installPhase1Adapters(): void {
   w.closePageView = closePageView
   // calcADX — removed (direct import)
   // fetchSymbolKlines — removed (direct import)
-  w._updateWhyBlocked = _updateWhyBlocked
+  // _updateWhyBlocked — removed (direct import)
   w.runMultiSymbolScan = runMultiSymbolScan
 
   w.manualEnterFromScan = manualEnterFromScan
@@ -377,7 +378,7 @@ export function installPhase1Adapters(): void {
 
   // updateATStats — removed (direct import)
   // computeFusionDecision — removed (direct import)
-  w.runAutoTradeCheck = runAutoTradeCheck
+  // runAutoTradeCheck — removed (direct import)
   // placeAutoTrade — removed (direct import)
   // openAddOn, scheduleAutoClose — removed (direct imports)
   // triggerKillSwitch — removed (direct import)
@@ -409,7 +410,7 @@ export function installPhase1Adapters(): void {
   // initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, perfRecordTrade — removed (direct imports)
 
   // ── Phase 6B: trading/positions.js ──
-  w.onPositionOpened = onPositionOpened
+  // onPositionOpened — removed (direct import)
   // onTradeExecuted — removed (direct import)
 
   // ── Phase 6B: trading/orders.js ──
@@ -421,7 +422,7 @@ export function installPhase1Adapters(): void {
   // liveApiGetPositions — removed (direct import)
   // liveApiPlaceOrder, liveApiSetLeverage — removed (direct imports)
   // liveApiClosePosition — removed (direct import)
-  w.liveApiSyncState = liveApiSyncState
+  // liveApiSyncState — removed (direct import)
   // aresPlaceOrder — removed (direct import)
   // aresSetStopLoss — removed (direct import)
   // aresCancelOrder — removed (direct import)
@@ -452,7 +453,7 @@ export function installPhase1Adapters(): void {
   // initSafetyEngine — removed (direct import)
 
   // ── Phase 6A: dev.js ──
-  w.DEV = DEV
+  // DEV — removed (direct import)
   w.devLog = devLog
   w.devClearLog = devClearLog
   w.devExportLog = devExportLog
@@ -493,10 +494,10 @@ export function installPhase1Adapters(): void {
   // renderSignals — removed (direct import)
 
   // ── Phase 5A: confluence.js ──
-  w.calcConfluenceScore = calcConfluenceScore
+  // calcConfluenceScore — removed (direct import)
 
   // ── Phase 5A: regime.js ──
-  w.RegimeEngine = RegimeEngine  // KEPT: circular dep regime↔brain requires w.detectRegimeEnhanced in regime.ts
+  // RegimeEngine — removed (direct import, no w.* refs remain)
 
   // ── Phase 5A: phaseFilter.js ──
   // PhaseFilter — removed (direct import)
@@ -516,11 +517,11 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 5B: deepdive.js — ARES core ──
   w.ARES = ARES
-  w.ARES_DECISION = ARES_DECISION
+  // ARES_DECISION — removed (direct import)
   // ARES_EXECUTE — removed (direct import)
   // ARES_MONITOR — removed (direct import)
   // ARES_JOURNAL — removed (direct import)
-  w.ARES_MIND = ARES_MIND
+  // ARES_MIND — removed (direct import)
 
   // ── Phase 5B: deepdive.js — ARES UI ──
   w._aresRender = _aresRender
@@ -538,7 +539,7 @@ export function installPhase1Adapters(): void {
   // renderActBar — removed (direct import)
   w.deactivateInd = deactivateInd
   // runSignalScan — removed (direct import)
-  w.updateDeepDive = updateDeepDive
+  // updateDeepDive — removed (direct import)
 
   // ── Phase 5B4: brain.js ──
   // updateBrainArc — removed (direct import)

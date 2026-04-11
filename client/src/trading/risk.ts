@@ -7,6 +7,7 @@ import { _clamp } from '../utils/math'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
 import { MACRO_MULT } from '../constants/trading'
+import { DEV } from '../utils/dev'
 
 const w = window as any
 
@@ -63,7 +64,7 @@ export function computeMacroCortex(): void {
 
     // Update adapt.lastPhase if changed
     if (w.BM.adapt.lastPhase !== w.BM.macro.phase) {
-      if (w.DEV.enabled) w.devLog('[Macro] Phase: ' + w.BM.adapt.lastPhase + ' → ' + w.BM.macro.phase + ' (' + composite + ')', 'info')
+      if (DEV.enabled) w.devLog('[Macro] Phase: ' + w.BM.adapt.lastPhase + ' → ' + w.BM.macro.phase + ' (' + composite + ')', 'info')
       w.BM.adapt.lastPhase = w.BM.macro.phase
     }
 

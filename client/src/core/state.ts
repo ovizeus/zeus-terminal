@@ -13,6 +13,11 @@ import { _dslTrimAll } from '../trading/dsl'
 import { aubBBSnapshot } from '../engine/aub'
 import { loadJournalFromStorage } from '../services/storage'
 import { syncBrainFromState } from '../engine/brain'
+import { _updateWhyBlocked } from '../data/klines'
+import { onPositionOpened } from '../trading/positions'
+import { renderLivePositions } from '../data/marketDataPositions'
+import { runAutoTradeCheck } from '../trading/autotrade'
+import { PROFILE_TF } from './config'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -257,7 +262,7 @@ export const BlockReason: any = {
       this._lastLogKey = _logKey
       this._lastLogTs = now
     }
-    if (typeof w._updateWhyBlocked === 'function') w._updateWhyBlocked(code, text)
+    if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked(code, text)
     if ((code === 'KILL' || code === 'PROTECT' || code === 'DATA_STALL')) aubBBSnapshot('BLOCK_' + code, { text })
     return br
   },
@@ -268,7 +273,7 @@ export const BlockReason: any = {
     this._lastLogKey = null
     const el_br = document.getElementById('zad-block-reason')
     if (el_br) { el_br.textContent = ''; el_br.style.display = 'none' }
-    if (typeof w._updateWhyBlocked === 'function') w._updateWhyBlocked(null, null)
+    if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked(null, null)
   },
   get() { return this._current },
   text() { return this._current?.text || '\u2014' },
@@ -279,7 +284,6 @@ export function buildExecSnapshot(side: any, cond: any) {
   const S = w.S
   const TC = w.TC
   const BM = getBrainMetrics()
-  const PROFILE_TF = w.PROFILE_TF
   const _tf = PROFILE_TF?.[S.profile || 'fast'] || { trigger: '5m', context: '15m' }
 
   const _levRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.lev)) ? TC.lev : parseInt(document.getElementById('atLev')?.getAttribute('value') || '')
@@ -577,7 +581,7 @@ export const ZState = (() => {
               if (_d.impulseTriggered == null) _d.impulseTriggered = p.dsl.impulseTriggered ?? false
               if (!Array.isArray(_d.log)) _d.log = Array.isArray(p.dsl.log) ? p.dsl.log : []
             }
-            if (typeof w.onPositionOpened === 'function') w.onPositionOpened(_restoredPos, 'restore')
+            if (typeof onPositionOpened === 'function') onPositionOpened(_restoredPos, 'restore')
           }
         })
         if (typeof w.renderDemoPositions === 'function') setTimeout(w.renderDemoPositions, 500)
@@ -607,9 +611,9 @@ export const ZState = (() => {
             if (_d.source == null) _d.source = p.dsl.source ?? 'restore'
             if (_d.attachedTs == null) _d.attachedTs = p.dsl.attachedTs ?? Date.now()
           }
-          if (typeof w.onPositionOpened === 'function') w.onPositionOpened(_restoredLive, 'restore')
+          if (typeof onPositionOpened === 'function') onPositionOpened(_restoredLive, 'restore')
         })
-        if (typeof w.renderLivePositions === 'function') setTimeout(w.renderLivePositions, 500)
+        if (typeof renderLivePositions === 'function') setTimeout(renderLivePositions, 500)
         console.log('[ZState] Restored', snap.liveManualPositions.length, 'live manual position(s)')
       }
 
@@ -869,7 +873,7 @@ export const ZState = (() => {
       })
       TP.demoPositions = serverATDemo.concat(clientOnlyDemo)
       TP.livePositions = serverATLive.concat(clientOnlyLive)
-      if (typeof w.renderLivePositions === 'function') w.renderLivePositions()
+      if (typeof renderLivePositions === 'function') renderLivePositions()
       if (state.demoBalance) {
         TP.demoBalance = state.demoBalance.balance || TP.demoBalance
         TP.demoPnL = state.demoBalance.pnl || 0
@@ -1115,7 +1119,7 @@ export const ZState = (() => {
                   ;(dot as any).style.background = '#00ff88'; (dot as any).style.boxShadow = '0 0 10px #00ff88'
                   txt.textContent = 'AUTO TRADE ON'
                   const st = document.getElementById('atStatus'); if (st) st.innerHTML = _ZI.dGrn + ' Activ — scan la 30s'
-                  if (!AT.interval && typeof w.runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', w.runAutoTradeCheck, 30000)
+                  if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
                 } else {
                   btn.className = 'at-main-btn off'
                   ;(dot as any).style.background = '#aa44ff'; (dot as any).style.boxShadow = '0 0 6px #aa44ff'

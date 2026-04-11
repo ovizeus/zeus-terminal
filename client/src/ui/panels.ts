@@ -1,7 +1,7 @@
 // Zeus v122 — ui/panels.ts
 // Panel toggles, strip UI, eye panel
 // Ported 1:1 from public/js/ui/panels.js
-import { fmtNow, toast } from '../data/marketDataHelpers'
+import { fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -340,7 +340,7 @@ export async function runBacktest() {
   function buildAtrArray(brs: any, period: number) {
     // Delegate to global _calcATRSeries — same Wilder implementation as live
     try {
-      return w._calcATRSeries(brs, period, 'wilder').series;
+      return _calcATRSeries(brs, period, 'wilder').series;
     } catch (e: any) {
       console.warn('[buildAtrArray] fallback null array:', e.message);
       return new Array(brs ? brs.length : 0).fill(null);

@@ -3,7 +3,9 @@
 // Live exchange API proxy functions
 
 import { fmtNow, toast } from '../data/marketDataHelpers'
-import { updateLiveBalance } from '../data/marketDataPositions'
+import { updateLiveBalance, renderLivePositions } from '../data/marketDataPositions'
+import { onPositionOpened } from './positions'
+import { addTradeToJournal } from '../services/storage'
 
 const w = window as any
 
@@ -178,11 +180,11 @@ export async function liveApiSyncState(): Promise<any> {
         if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]
         if (typeof w.DSL !== 'undefined' && w.DSL._attachedIds) w.DSL._attachedIds.delete(String(gone.id))
         // [FIX R6] Journal entry for exchange-closed position
-        if (typeof w.addTradeToJournal === 'function') {
+        if (typeof addTradeToJournal === 'function') {
           var _exitPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(gone) : 0
           if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
           var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
-          w.addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
+          addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
         }
       }
     })
@@ -300,15 +302,15 @@ export async function liveApiSyncState(): Promise<any> {
         fresh.dslAdaptiveState = 'calm'
         fresh.dslHistory = []
         // [FIX H3] Notify system of new exchange position
-        if (typeof w.onPositionOpened === 'function') {
-          setTimeout(function () { w.onPositionOpened(fresh, 'exchange-sync') }, 0)
+        if (typeof onPositionOpened === 'function') {
+          setTimeout(function () { onPositionOpened(fresh, 'exchange-sync') }, 0)
         }
       }
       return fresh
     })
     // Update UI
     if (typeof updateLiveBalance === 'function') updateLiveBalance()
-    if (typeof w.renderLivePositions === 'function') w.renderLivePositions()
+    if (typeof renderLivePositions === 'function') renderLivePositions()
     // [9A-5] Notify React after live positions full rebuild
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     // [PATCH P2-7] Only log on state change

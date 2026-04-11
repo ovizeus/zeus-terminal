@@ -9,6 +9,9 @@ import { initModeBar } from '../ui/modebar'
 import { _dslTrimAll } from '../trading/dsl'
 import { calcGlobalExpectancy } from '../engine/perfStore'
 import { openPageView } from '../ui/pageview'
+import { DEV } from '../utils/dev'
+import { runAutoTradeCheck } from '../trading/autotrade'
+import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
@@ -40,7 +43,7 @@ export function initZeusGroups(): void {
   mvSec('#tv', mi); mvSec('.fdlist', mi)
   mv('magSec', mi); mv('mscanSec', mi); mv('dhfSec', mi); mv('sigScanSec', mi)
   mv('deepdive-sec', mi); mv('scenario-sec', mi); mv('macro-sec', mi); mv('adaptive-sec', mi)
-  if (w.DEV?.enabled) mv('dev-sec', mi)
+  if (DEV?.enabled) mv('dev-sec', mi)
   const _atPanel = document.getElementById('at-strip-panel')
   if (_atPanel) { mv('atPanel', _atPanel); mvSec('.at-sep', _atPanel) }
   const _ptPanel = document.getElementById('pt-strip-panel')
@@ -81,15 +84,15 @@ export function _startExtras(): void {
   w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
   w.Intervals.set('bbSave', () => { if (typeof w._aubSaveBB === 'function') w._aubSaveBB() }, 30000)
   w.atLog('info', '[INIT] Extras module online')
-  w.Intervals.set('livePosSync', function () { if (typeof TP !== 'undefined' && TP.liveConnected && typeof w.liveApiSyncState === 'function') w.liveApiSyncState() }, 30000)
+  w.Intervals.set('livePosSync', function () { if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 30000)
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     console.log('[startApp] AT was enabled before reload — resuming')
     const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
     const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)' }
     const _txt = el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON'
     const _st = el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s'
-    if (!AT.interval) AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000)
-    setTimeout(w.runAutoTradeCheck, 3000)
+    if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
+    setTimeout(runAutoTradeCheck, 3000)
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
     if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
     w.atLog('info', '[RESUME] AutoTrade resumed from saved state')

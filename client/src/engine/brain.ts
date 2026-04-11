@@ -9,7 +9,8 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _neuroLastScan, _SESS_DEF } from '../core/config'
+import { _neuroLastScan, _SESS_DEF, _regimeHistory, PROFILE_TF } from '../core/config'
+import { calcConfluenceScore } from './confluence'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
@@ -132,7 +133,7 @@ export function updateBrainArc(score: any): void {
 // Brain state machine
 export function updateBrainState(): void {
   // FIX: Calculeaza scorul direct, nu citeste din DOM (poate fi stale)
-  w.calcConfluenceScore()
+  calcConfluenceScore()
   const score = (typeof BM !== 'undefined' ? BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
   const bulls = getSignalData().bullCount
   const bears = getSignalData().bearCount
@@ -345,7 +346,7 @@ export function syncDslFromProfile(): void {
 // ── TF PROFILE SYNC (MTF badges + engine) ────────────────────────
 export function syncTFProfile(): void {
   const p = (w.S.profile || 'fast').toLowerCase()
-  const tfMap = w.PROFILE_TF[p] || w.PROFILE_TF.fast
+  const tfMap = PROFILE_TF[p] || PROFILE_TF.fast
   // Update trigger TF badge in cockpit
   const trig = el('mtfTrig')
   if (trig) trig.textContent = 'TRIG:' + tfMap.trigger + ' —'
@@ -482,7 +483,7 @@ export function setBrainMode(mode: any): void { setMode(mode) }
 
 export function setProfile(profile: any): void {
   w.S.profile = profile.toLowerCase()
-  brainThink('info', _ZI.chart + ` Profile → ${w.S.profile.toUpperCase()} | Trig:${w.PROFILE_TF[w.S.profile]?.trigger || '?'}`)
+  brainThink('info', _ZI.chart + ` Profile → ${w.S.profile.toUpperCase()} | Trig:${PROFILE_TF[w.S.profile]?.trigger || '?'}`)
   syncBrainFromState()
   setTimeout(renderBrainCockpit, 30)
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // persist profile
@@ -1134,13 +1135,13 @@ export function showExecCinematic(side: any, sym: any): void {
 // [MOVED TO TOP] _regimeHistory
 export function getStableRegime(current: any): any {
   // Only add if different from last (candle-close trigger)
-  if (!w._regimeHistory.length || w._regimeHistory[w._regimeHistory.length - 1] !== current) {
-    w._regimeHistory.push(current)
+  if (!_regimeHistory.length || _regimeHistory[_regimeHistory.length - 1] !== current) {
+    _regimeHistory.push(current)
   }
-  if (w._regimeHistory.length > 5) w._regimeHistory.shift()
+  if (_regimeHistory.length > 5) _regimeHistory.shift()
   // Locked = same regime for last 3 consecutive entries
-  if (w._regimeHistory.length < 3) return null
-  const last3 = w._regimeHistory.slice(-3)
+  if (_regimeHistory.length < 3) return null
+  const last3 = _regimeHistory.slice(-3)
   const allSame = last3.every((r: any) => r === last3[0])
   return allSame ? last3[0] : null
 }
@@ -1215,9 +1216,9 @@ export function computeSafetyGates(dir: any): any {
 
 export function _getCooldownMs(): number {
   const prof = (w.S.profile || 'fast').toLowerCase()
-  const closes = w.S.cooldownCloses || w.PROFILE_TF[prof]?.cooldown || 2
+  const closes = w.S.cooldownCloses || PROFILE_TF[prof]?.cooldown || 2
   // Use trigger TF candle size for cooldown period
-  const trigTf = w.S.triggerTF || w.PROFILE_TF[prof]?.trigger || '5m'
+  const trigTf = w.S.triggerTF || PROFILE_TF[prof]?.trigger || '5m'
   const tfMs: any = { '1m': 60000, '3m': 180000, '5m': 300000, '15m': 900000, '30m': 1800000, '1h': 3600000, '4h': 14400000, '1D': 86400000 }
   const candleMs = tfMs[trigTf] || 300000
   const base = closes * candleMs
@@ -1623,7 +1624,7 @@ export function renderBrainCockpit(): void {
   const thresholds: any = { fast: [65, 55], swing: [72, 60], defensive: [80, 65] }
   const prof = w.S.profile || 'fast'
   const [scoreThresh, confThresh] = thresholds[prof] || [65, 55]
-  const tfMap = w.PROFILE_TF[prof] || w.PROFILE_TF.fast
+  const tfMap = PROFILE_TF[prof] || PROFILE_TF.fast
   const confluenceScore = (typeof BM !== 'undefined' ? BM.confluenceScore : 0) || 0 // [FIX v85.1 F3] din memorie
   const triggerOk = ctx.trigger
   // [ATMOSPHERE] Pre-filter: block ARM if atmosphere forbids entry

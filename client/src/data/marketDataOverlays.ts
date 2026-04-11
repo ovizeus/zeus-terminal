@@ -4,6 +4,7 @@
 
 import { clearZS, renderZS } from './marketDataWS'
 import { renderOviLiquid } from '../ui/panels'
+import { _calcATRSeries } from './marketDataHelpers'
 
 const w = window as any
 
@@ -327,7 +328,7 @@ export function calcHeatmapPockets(klines: any[]): any[] {
   if (!klines || klines.length < 50) return []
   const hs = w.S.heatmapSettings
   const closes = klines.map((k: any) => k.close)
-  const _hmAtrRes = w._calcATRSeries(klines, hs.atrLen || 121, 'wilder')
+  const _hmAtrRes = _calcATRSeries(klines, hs.atrLen || 121, 'wilder')
   const A = (_hmAtrRes.last || 0) * hs.atrBandPct
   const width = hs.pivotWidth; const pockets: any[] = []
   for (let i = width; i < klines.length - width; i++) {

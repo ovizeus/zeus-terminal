@@ -6,6 +6,8 @@ import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { checkPendingOrders } from '../data/marketDataPositions'
+import { ARES_DECISION } from './aresDecision'
+import { ARES_MIND } from './aresMind'
 
 const w = window as any
 
@@ -150,9 +152,9 @@ export function _aresRender() {
     const glow = st.current.glow
 
     // Cognitive clarity from ARES_MIND
-    const clarity = w.ARES_MIND.getClarity()
-    const pulseSpeed = w.ARES_MIND.getPulseSpeed()
-    const predAcc = w.ARES_MIND.getPredictionAccuracy()
+    const clarity = ARES_MIND.getClarity()
+    const pulseSpeed = ARES_MIND.getPulseSpeed()
+    const predAcc = ARES_MIND.getPredictionAccuracy()
 
     // Update badge in header
     const badge = document.getElementById('ares-strip-badge')
@@ -222,8 +224,8 @@ export function _aresRender() {
 
     // P0.7) Decision Engine status — show last decision summary
     try {
-      if (typeof w.ARES_DECISION !== 'undefined') {
-        const lastDec = w.ARES_DECISION.getLastDecision()
+      if (typeof ARES_DECISION !== 'undefined') {
+        const lastDec = ARES_DECISION.getLastDecision()
         const decEl = document.getElementById('ares-decision-line')
         if (decEl && lastDec) {
           if (lastDec.shouldTrade) {
@@ -691,7 +693,7 @@ export function _aresRender() {
     // ── THOUGHT STREAM cu date reale + cognitive insights ────────────────
     const thoughtInner = document.getElementById('ares-thought-inner') as any
     if (thoughtInner) {
-      const mindInsight = w.ARES_MIND.getPatternInsight()
+      const mindInsight = ARES_MIND.getPatternInsight()
       const price = (typeof w.S !== 'undefined' && w.S.price > 0) ? fP(w.S.price) : '\u2014'
       const regime = (typeof w.BM !== 'undefined' ? w.BM.regime : null) || '\u2014'
       const cogLines = [
@@ -734,7 +736,7 @@ export function _aresRender() {
 
     // Update lesson + cognitive insight
     const lessonEl = document.getElementById('ares-lesson-text')
-    if (lessonEl) lessonEl.textContent = st2.lastLesson + '  |  ' + w.ARES_MIND.getPatternInsight()
+    if (lessonEl) lessonEl.textContent = st2.lastLesson + '  |  ' + ARES_MIND.getPatternInsight()
 
     // Update history dots
     const histBar = document.getElementById('ares-history-bar')

@@ -3,6 +3,7 @@ import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
 import { onDemoLevChange, placeDemoOrder, setLiveSide, onDemoOrdTypeChange, setLivePct } from '../../data/marketDataTrading'
+import { attachConfirmClose } from '../../engine/events'
 
 const w = window as any
 
@@ -81,8 +82,8 @@ export function ManualTradePanel() {
   const closeAllRef = useRef<HTMLButtonElement>(null)
   const closeAllAttached = useRef(false)
   useEffect(() => {
-    if (closeAllRef.current && !closeAllAttached.current && typeof w.attachConfirmClose === 'function') {
-      w.attachConfirmClose(closeAllRef.current, closeAllDemoPos)
+    if (closeAllRef.current && !closeAllAttached.current && typeof attachConfirmClose === 'function') {
+      attachConfirmClose(closeAllRef.current, closeAllDemoPos)
       closeAllAttached.current = true
     }
   })

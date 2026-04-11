@@ -13,6 +13,7 @@ import { resetProtectMode } from '../engine/brain'
 import { triggerKillSwitch } from '../trading/autotrade'
 import { zeusGetTheme } from '../ui/theme'
 import { _enterRecoveryMode } from './guards'
+import { updateDeepDive } from '../engine/indicators'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -24,7 +25,6 @@ export const DEV: Record<string, any> = {
   replayKlines: [] as any[],
   _errorModules: {} as Record<string, boolean>,
 }
-w.DEV = DEV
 
 // ── Logging ──────────────────────────────────────────────────────
 export function devLog(msg: string, type?: string): void {
@@ -311,7 +311,7 @@ export function devInjectSignal(dir: string): void {
       devLog('srRecord not available', 'warning')
     }
     devLog('Injected ' + dir + ' signal (score ' + score + ')', 'success')
-    if (typeof w.updateDeepDive === 'function') w.updateDeepDive()
+    if (typeof updateDeepDive === 'function') updateDeepDive()
   } catch (e) { _devModuleError('injectSignal', e) }
 }
 w.devInjectSignal = devInjectSignal

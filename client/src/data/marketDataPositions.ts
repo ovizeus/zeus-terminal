@@ -10,6 +10,11 @@ import { _ZI } from '../constants/icons'
 import { manualLiveModifyLimit, liveApiClosePosition, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 import { calcLiqPrice } from './marketDataTrading'
 import { calcDslTargetPrice } from '../engine/brain'
+import { renderTradeMarkers } from './marketDataOverlays'
+import { attachConfirmClose } from '../engine/events'
+import { onPositionOpened } from '../trading/positions'
+import { addTradeToJournal } from '../services/storage'
+import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -63,12 +68,12 @@ function _fillDemoPendingOrder(ord: any): void {
   if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
   TP.demoPositions.push(pos)
   w.updateDemoBalance(); w.renderDemoPositions(); renderPendingOrders()
-  if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo_limit_fill')
+  if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo_limit_fill')
   w.ZState.save(); if (typeof w._registerManualOnServer === 'function') w._registerManualOnServer(pos)
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
-  if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
+  if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   toast('LIMIT FILLED: ' + ord.side + ' ' + ord.sym.replace('USDT', '') + ' @$' + fP(ord.limitPrice))
-  w.addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: pos.sym.replace('USDT', ''), entry: pos.entry, exit: null, pnl: 0, reason: 'LIMIT Fill', lev: pos.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'demo', openTs: pos.openTs, createdAt: ord.createdAt, filledAt: pos.filledAt })
+  addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: pos.sym.replace('USDT', ''), entry: pos.entry, exit: null, pnl: 0, reason: 'LIMIT Fill', lev: pos.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'demo', openTs: pos.openTs, createdAt: ord.createdAt, filledAt: pos.filledAt })
 }
 
 export function cancelPendingOrder(id: any): void {
@@ -132,9 +137,9 @@ function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
     toast('LIVE LIMIT FILLED: ' + ord.side + ' @$' + fP(ord.limitPrice))
     if (ord.tp) { const _qty = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); manualLiveSetTP({ symbol: ord.sym, side: ord.side, quantity: _qty.toFixed(8), stopPrice: ord.tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
     if (ord.sl) { const _qty2 = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); manualLiveSetSL({ symbol: ord.sym, side: ord.side, quantity: _qty2.toFixed(8), stopPrice: ord.sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
-    w.addTradeToJournal({ id: ord.id, time: fmtNow(), side: ord.side, sym: (ord.sym || '').replace('USDT', ''), entry: ord.limitPrice, exit: null, pnl: 0, reason: 'LIVE LIMIT Fill', lev: ord.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'live', isLive: true, openTs: Date.now(), createdAt: ord.createdAt, filledAt: Date.now() })
+    addTradeToJournal({ id: ord.id, time: fmtNow(), side: ord.side, sym: (ord.sym || '').replace('USDT', ''), entry: ord.limitPrice, exit: null, pnl: 0, reason: 'LIVE LIMIT Fill', lev: ord.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'live', isLive: true, openTs: Date.now(), createdAt: ord.createdAt, filledAt: Date.now() })
   })
-  if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 500)
+  if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 500)
   renderPendingOrders(); w.ZState.save()
   if (!TP.manualLivePending.length) _stopLivePendingSync()
 }
@@ -160,7 +165,7 @@ export function savePosSLTP(posId: any, mode: string): void {
     const promises: Promise<any>[] = []
     if (newSL) { promises.push(manualLiveSetSL({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newSL, cancelOrderId: livePos._slOrderId || undefined }).then(function (res: any) { livePos._slOrderId = res.orderId; livePos.sl = newSL })) } else if (livePos._slOrderId) { promises.push(manualLiveCancelOrder(livePos.sym, livePos._slOrderId).then(function () { livePos._slOrderId = null; livePos.sl = null }).catch(function () { })) }
     if (newTP) { promises.push(manualLiveSetTP({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newTP, cancelOrderId: livePos._tpOrderId || undefined }).then(function (res: any) { livePos._tpOrderId = res.orderId; livePos.tp = newTP })) } else if (livePos._tpOrderId) { promises.push(manualLiveCancelOrder(livePos.sym, livePos._tpOrderId).then(function () { livePos._tpOrderId = null; livePos.tp = null }).catch(function () { })) }
-    Promise.all(promises).then(function () { w.renderLivePositions(); toast('LIVE SL/TP updated') }).catch(function (err: any) { toast('SL/TP update failed: ' + (err.message || err)); w.renderLivePositions() })
+    Promise.all(promises).then(function () { renderLivePositions(); toast('LIVE SL/TP updated') }).catch(function (err: any) { toast('SL/TP update failed: ' + (err.message || err)); renderLivePositions() })
   }
 }
 
@@ -210,7 +215,7 @@ export function renderDemoPositions(): void {
       return `<div class="pos-row ${escHtml(pos.side) === 'LONG' ? 'pos-long' : 'pos-short'}"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">${escHtml(pos.side)} ${symBase} ${pos.lev}x${modeBadge}</span><button data-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;min-height:52px;font-weight:700">\u2715 CLOSE</button></div><div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px"><span style="color:var(--dim)">Entry: $${fP(pos.entry)} | Now: $${fP(curPrice)}</span><span style="color:${pos.pnl >= 0 ? 'var(--grn)' : 'var(--red)'}">${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (${pnlPct}%)</span></div><div style="font-size:12px;color:var(--dim);margin-top:1px">Margin: $${fmt(margin)} | Notional: $${fmt(notional)} | Fees\u2248$${fmt(estFees)} | ROE: ${roe}%</div>${_dslActive ? `<div style="font-size:12px;color:${_slColor};margin-top:1px">${_slLabel}: $${fP(_slVal)}${pos.tp ? ' | TP: $' + fP(pos.tp) : ''}</div>` : ''}<div style="display:flex;gap:4px;margin-top:3px;align-items:center"><span style="font-size:10px;color:#ff6644;width:22px">SL:</span><input id="slEdit_${pos.id}" type="number" step="0.1" value="${pos.sl || ''}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"><span style="font-size:10px;color:#00ff88;width:22px">TP:</span><input id="tpEdit_${pos.id}" type="number" step="0.1" value="${pos.tp || ''}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"><button onclick="savePosSLTP('${pos.id}','demo')" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button></div>${pos.liqPrice ? `<div style="font-size:12px;color:${pos.side === 'LONG' ? '#ff3355' : '#00d97a'};margin-top:1px">LIQ: $${fP(pos.liqPrice)}</div>` : ''}</div>`
     }).join('')
     table.innerHTML = html
-    table.querySelectorAll('button[data-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-id'); w.attachConfirmClose(btn, function () { w.closeDemoPos(posId) }) })
+    table.querySelectorAll('button[data-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-id'); attachConfirmClose(btn, function () { w.closeDemoPos(posId) }) })
   }
   // Stats
   const _statsMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
@@ -257,7 +262,7 @@ export function renderLivePositions(): void {
   }).join('')
   const _target = (_isLiveMode && contDemo) ? contDemo : cont
   if (_target) _target.innerHTML = html
-  if (_target) _target.querySelectorAll('button[data-live-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-live-id'); w.attachConfirmClose(btn, function () { w.closeLivePos(posId) }) })
+  if (_target) _target.querySelectorAll('button[data-live-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-live-id'); attachConfirmClose(btn, function () { closeLivePos(posId) }) })
   if (_isLiveMode && cont && cont !== _target) cont.innerHTML = ''
   if (!_isLiveMode && contDemo && contDemo !== _target) contDemo.innerHTML = ''
 }
@@ -276,7 +281,7 @@ export function closeLivePos(id: any, reason?: string): void {
       pos.closed = true; pos.status = 'closed'
       const fillPrice = (res && parseFloat(res.avgPrice)) || cur; const fillPnl = calcPosPnL(pos, fillPrice); pos.pnl = fillPnl
       const finalIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1)
-      if (typeof w.addTradeToJournal === 'function') w.addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
+      if (typeof addTradeToJournal === 'function') addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
       if (typeof DSL !== 'undefined') { delete DSL.positions[String(pos.id)]; if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id)) }
       w.atLog('info', '[LIVE] CLOSE CONFIRMED: ' + pos.sym + ' fillPrice=' + fillPrice)
       renderLivePositions()
@@ -284,7 +289,7 @@ export function closeLivePos(id: any, reason?: string): void {
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       try { if (typeof w.ARES !== 'undefined' && typeof w.ARES.onTradeClosed === 'function') w.ARES.onTradeClosed(fillPnl) } catch (_) { }
       if (pos.autoTrade) { try { fetch('/api/risk/pnl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pnl: fillPnl, owner: 'AT' }) }).catch(function () { }) } catch (_) { } }
-      if (typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
+      if (typeof liveApiSyncState === 'function') liveApiSyncState()
     }).catch(function (err: any) {
       pos.status = 'open'; pos.closed = false
       w.atLog('warn', 'LIVE CLOSE FAILED: ' + (err.message || err)); toast('Close failed: ' + (err.message || 'still open on exchange'))

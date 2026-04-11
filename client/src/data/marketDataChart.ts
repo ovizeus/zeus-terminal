@@ -8,6 +8,7 @@ import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/
 import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
 import { renderVWAP, renderOviLiquid } from '../ui/panels'
 import { _isPriceSane, _resetKlineWatchdog } from '../utils/guards'
+import { renderTradeMarkers } from './marketDataOverlays'
 
 const w = window as any
 
@@ -108,7 +109,7 @@ export async function fetchKlines(tf: any): Promise<void> {
         _resetKlineWatchdog()
         try { w.cSeries.update(bar) } catch (_) { }
         if (typeof updOvrs === 'function') updOvrs()
-        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers() }, 5000) }
+        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
       }
     })
   } catch (e: any) {
@@ -163,6 +164,6 @@ export function renderChart(): void {
     if (typeof updOvrs === 'function') updOvrs()
     if (w.S.vwapOn && typeof renderVWAP === 'function') renderVWAP()
     if (w.S.oviOn) { clearTimeout(w.S._oviRefreshT); w.S._oviRefreshT = setTimeout(() => { renderOviLiquid() }, 15000) }
-    if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
+    if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   } catch (e) { console.error('renderChart', e) }
 }

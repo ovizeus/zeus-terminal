@@ -38,9 +38,9 @@ export function connectBNB(): void {
   const _bnbGen = w.__wsGen
   console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen}`)
   w.WS.open('bnb', url, {
-    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); w.updConn() },
-    onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); w.updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
-    onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; w.updConn() },
+    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); updConn() },
+    onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
+    onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; updConn() },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bnbGen) return
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
@@ -76,13 +76,13 @@ export function connectBYB(): void {
   console.log(`[connectBYB] attempt | sym=${sym} | gen=${_bybGen}`)
   w.WS.open('byb', 'wss://stream.bybit.com/v5/public/linear', {
     onopen: () => {
-      console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); _exitDegradedMode('BYB'); w.updConn()
+      console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); _exitDegradedMode('BYB'); updConn()
       w.S.liqMetrics.byb.connected = true; w.S.liqMetrics.byb.connectedAt = Date.now()
       const wsi = w.WS.get('byb'); if (wsi) wsi.send(JSON.stringify({ op: 'subscribe', args: [`liquidation.${sym}`] }))
       _stopBybPing()
       _bybPingTimer = setInterval(() => { try { const ws = w.WS.get('byb'); if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' })) } catch (_) { } }, 20000)
     },
-    onclose: () => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); w.updConn(); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
+    onclose: () => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); updConn(); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
     onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror') },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bybGen) return

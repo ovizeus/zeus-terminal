@@ -10,6 +10,8 @@ import { _queueExecOverlay } from './orders'
 import { renderBrainCockpit } from '../engine/brain'
 import { renderDSLWidget } from './dsl'
 import { aubBBSnapshot } from '../engine/aub'
+import { DEV } from '../utils/dev'
+import { PROFILE_TF } from '../core/config'
 
 const w = window as any
 
@@ -64,8 +66,8 @@ export function onTradeExecuted(pos: any): void {
   const mode = (w.S.mode || 'assist').toUpperCase()
   const score = w.BM?.entryScore || pos.score || '—'
   const price = pos.entry ? fP(pos.entry) : '—'
-  const tf1 = w.PROFILE_TF?.[w.S.profile || 'fast']?.trigger || w.S.triggerTF || '5m'
-  const tf2 = w.PROFILE_TF?.[w.S.profile || 'fast']?.context || w.S.contextTF || '15m'
+  const tf1 = PROFILE_TF?.[w.S.profile || 'fast']?.trigger || w.S.triggerTF || '5m'
+  const tf2 = PROFILE_TF?.[w.S.profile || 'fast']?.context || w.S.contextTF || '15m'
   const isLive = pos.isLive
   const isSim = w.AT.mode === 'demo'
   var _posEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO')
@@ -138,7 +140,7 @@ export function onTradeClosed(result: any): void {
     // Approximate R: use pnl / size as proxy if _posR not available at this point
     var _R = (result.size && result.size > 0) ? pnl / result.size : (isProfit ? 1 : -1)
     perfRecordTrade(_ph, _R)
-    if (w.DEV.enabled) w.devLog('[Perf] Trade closed — phase:' + _ph + ' R:' + _R.toFixed(2) + ' wins:' + (w.BM.performance.byRegime[_ph] || {}).wins + '/' + (w.BM.performance.byRegime[_ph] || {}).trades, 'info')
+    if (DEV.enabled) w.devLog('[Perf] Trade closed — phase:' + _ph + ' R:' + _R.toFixed(2) + ' wins:' + (w.BM.performance.byRegime[_ph] || {}).wins + '/' + (w.BM.performance.byRegime[_ph] || {}).trades, 'info')
   } catch (_) { }
 }
 
@@ -182,7 +184,7 @@ export function triggerExecCinematic(side: any, sym: any): void {
   const mode = w.S.mode?.toUpperCase() || 'AUTO'
   const score = w.BM.entryScore || 0
   const trig = w.BM.sweep?.type !== 'none' ? 'Sweep+Reclaim' : 'Displacement'
-  const tfMap = w.PROFILE_TF?.[w.S.profile || 'fast']
+  const tfMap = PROFILE_TF?.[w.S.profile || 'fast']
   if (!tfMap) return
   ;['rec-mode', 'rec-score', 'rec-trigger', 'rec-tf'].forEach((id: string, i: number) => {
     const e = el(id)
