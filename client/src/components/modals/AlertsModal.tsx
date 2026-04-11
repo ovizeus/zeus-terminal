@@ -1,6 +1,7 @@
 /** Price Alerts Modal — wired to window.* functions */
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
+import { toggleAlerts } from '../../ui/dom2'
 
 const w = window as any
 
@@ -11,7 +12,7 @@ export function AlertsModal({ visible, onClose }: Props) {
   const symbol = useMarketStore((s) => s.market.symbol)
 
   const toggleMaster = (checked: boolean) => {
-    if (typeof w.toggleAlerts === 'function') w.toggleAlerts(checked)
+    if (typeof toggleAlerts === 'function') toggleAlerts(checked)
     // Also update visual toggle
     const slider = document.getElementById('alertToggleSlider') as HTMLElement | null
     const dot = document.getElementById('alertToggleDot') as HTMLElement | null

@@ -8,7 +8,7 @@ import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAcc
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
-import { _applyATToggleUI } from '../trading/autotrade'
+import { _applyATToggleUI, updateATMode } from '../trading/autotrade'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -933,7 +933,7 @@ export const ZState = (() => {
     }
     w.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive)
     if (state.mode && typeof w._applyGlobalModeUI === 'function') w._applyGlobalModeUI(state.mode)
-    if (typeof w.updateATMode === 'function') w.updateATMode()
+    if (typeof updateATMode === 'function') updateATMode()
     if (typeof w.updateATStats === 'function') w.updateATStats()
     if (typeof w.renderATPositions === 'function') w.renderATPositions()
     if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()

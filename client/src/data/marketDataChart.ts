@@ -5,6 +5,7 @@
 import { fmtTime, fmtDate, toast } from './marketDataHelpers'
 import { el } from '../utils/dom'
 import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/indicators'
+import { llvEnsureCanvas, llvLoadSettings } from './marketDataOverlays'
 
 const w = window as any
 
@@ -32,8 +33,8 @@ export function initCharts(): void {
   w.mainChart = w.LightweightCharts.createChart(el('mc'), base(getChartH()))
   w.cSeries = w.mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' })
   // LLV: load persisted settings and ensure canvas is ready
-  if (typeof w.llvLoadSettings === 'function') w.llvLoadSettings()
-  if (typeof w.llvEnsureCanvas === 'function') w.llvEnsureCanvas()
+  if (typeof llvLoadSettings === 'function') llvLoadSettings()
+  if (typeof llvEnsureCanvas === 'function') llvEnsureCanvas()
   // Reaplică culorile salvate
   if (w.S._savedChartColors) {
     const c = w.S._savedChartColors

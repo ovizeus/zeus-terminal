@@ -7,6 +7,8 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { playAlertSound } from '../ui/dom2'
+import { renderSignals } from './signals'
 
 const w = window as any
 
@@ -826,11 +828,11 @@ export function runSignalScan(): void {
   if (price < sma20 && sma20 < sma50) { signals.push({ name: 'Trend Bearish (SMA)', det: `Pret<${sma20.toFixed(0)} < SMA50:${sma50.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
   w.S.signalData = { signals, bullCount, bearCount }
-  if (typeof w.renderSignals === 'function') w.renderSignals(signals, bullCount, bearCount)
+  if (typeof renderSignals === 'function') renderSignals(signals, bullCount, bearCount)
   if (typeof w.updateDeepDive === 'function') w.updateDeepDive()
 
   if ((bullCount >= 3 || bearCount >= 3) && w.S.alerts?.enabled) {
-    if (typeof w.playAlertSound === 'function') w.playAlertSound()
+    if (typeof playAlertSound === 'function') playAlertSound()
     if (bullCount >= 3 && typeof w.sendAlert === 'function') w.sendAlert('SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan')
     if (bearCount >= 3 && typeof w.sendAlert === 'function') w.sendAlert('SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan')
   }

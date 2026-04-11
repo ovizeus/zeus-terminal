@@ -5,6 +5,7 @@
 import { getATObject, getTPObject } from '../services/stateAccessors'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { initModeBar } from '../ui/modebar'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
@@ -23,7 +24,7 @@ export function initZeusGroups(): void {
   function mv(id: string, target: any) { const el = document.getElementById(id); if (!el) return; _markPending(el); if (!target) { _recoverElement(el); return }; if (el.parentElement === target) { el.classList.remove('zg-pending-move'); return }; target.appendChild(el); el.classList.remove('zg-pending-move') }
   function mvSec(childSel: string, target: any) { try { const child = document.querySelector(childSel); if (!child) return; let node: any = child; while (node && node !== document.body) { if (node.classList && (node.classList.contains('sec') || node.classList.contains('znc') || node.classList.contains('bext') || node.classList.contains('dsl-zone') || node.classList.contains('at-panel') || node.classList.contains('trade-panel') || node.classList.contains('trade-sep') || node.classList.contains('at-sep'))) { _markPending(node); if (!target) { _recoverElement(node); return }; if (node.parentElement === target) { node.classList.remove('zg-pending-move'); return }; target.appendChild(node); node.classList.remove('zg-pending-move'); return }; node = node.parentElement } } catch (_) { } }
 
-  mv('zeus-mode-bar', mi); if (typeof w.initModeBar === 'function') w.initModeBar()
+  mv('zeus-mode-bar', mi); if (typeof initModeBar === 'function') initModeBar()
   mv('aub', mi); mv('sr-strip', mi); mv('csec', mi); mv('zeus-dock', mi)
   if (typeof w.initPageView === 'function') w.initPageView()
   if (typeof w.initZeusDock === 'function') w.initZeusDock()

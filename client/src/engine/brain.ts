@@ -9,6 +9,7 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { _neuroLastScan } from '../core/config'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
@@ -1326,8 +1327,8 @@ export function pulseNeuronCoin(sym: any): void {
 // Called from the wlWS onmessage handler
 export function onNeuronScanUpdate(sym: any): void {
   const now = Date.now()
-  if ((now - (w._neuroLastScan[sym] || 0)) > 1500) { // throttle per coin
-    w._neuroLastScan[sym] = now
+  if ((now - (_neuroLastScan[sym] || 0)) > 1500) { // throttle per coin
+    _neuroLastScan[sym] = now
     pulseNeuronCoin(sym)
   }
 }

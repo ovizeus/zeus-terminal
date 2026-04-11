@@ -10,8 +10,9 @@ import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
-import { atSetStopLoss, atSetTakeProfit } from '../trading/liveApi'
+import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
 import { getTimeUTC } from '../ui/render'
+import { onTradeExecuted } from '../trading/positions'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -897,7 +898,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     { const _oe5 = el('atStatus'); if (_oe5) _oe5.innerHTML = _ZI.ok + ' ' + escHtml(side) + ' deschis @$' + fP(entry) }
     toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
-    if (typeof w.onTradeExecuted === 'function') w.onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
+    if (typeof onTradeExecuted === 'function') onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
     w.ZState.scheduleSave()  // persist new position
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()  // [CHART MARKERS]
@@ -916,12 +917,12 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       let pos: any = null
       try {
         // Set leverage first (best-effort — some exchanges reject if already set)
-        try { await w.liveApiSetLeverage(sym, lev) } catch (_levErr: any) {
+        try { await liveApiSetLeverage(sym, lev) } catch (_levErr: any) {
           w.atLog('warn', '[WARN] Leverage set failed (may already be set): ' + (_levErr.message || _levErr))
         }
         // Place MARKET order through backend proxy → Binance Testnet
         // [FIX P2] quantity must include leverage: (margin × lev) / price = notional / price
-        const result = await w.liveApiPlaceOrder({
+        const result = await liveApiPlaceOrder({
           symbol: sym,
           side: side === 'LONG' ? 'BUY' : 'SELL',
           type: 'MARKET',
@@ -1105,7 +1106,7 @@ export function openAddOn(posId: any): any {
       return false
     })
 }
-w.openAddOn = openAddOn
+// openAddOn — self-ref removed (direct call)
 
 // ─── AUTO-CLOSE MONITOR ────────────────────────────────────────
 

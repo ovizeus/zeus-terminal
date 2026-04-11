@@ -5,6 +5,7 @@
 import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
+import { perfRecordTrade } from './risk'
 
 const w = window as any
 
@@ -132,7 +133,7 @@ export function onTradeClosed(result: any): void {
     var _ph = (w.BM.macro && w.BM.macro.phase) ? w.BM.macro.phase : 'NEUTRAL'
     // Approximate R: use pnl / size as proxy if _posR not available at this point
     var _R = (result.size && result.size > 0) ? pnl / result.size : (isProfit ? 1 : -1)
-    w.perfRecordTrade(_ph, _R)
+    perfRecordTrade(_ph, _R)
     if (w.DEV.enabled) w.devLog('[Perf] Trade closed — phase:' + _ph + ' R:' + _R.toFixed(2) + ' wins:' + (w.BM.performance.byRegime[_ph] || {}).wins + '/' + (w.BM.performance.byRegime[_ph] || {}).trades, 'info')
   } catch (_) { }
 }

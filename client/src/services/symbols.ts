@@ -9,6 +9,7 @@
 import { getSymbol, getPrice, getBrainMetrics, getATObject, getTPObject, getDSLObject } from './stateAccessors'
 import { el } from '../utils/dom'
 import { fP } from '../utils/format'
+import { onNeuronScanUpdate } from '../engine/brain'
 const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, fn calls
 
 export const ZStore = {
@@ -45,7 +46,7 @@ export function connectWatchlist(): void {
       const chg = ((price - open) / open * 100)
       w.wlPrices[sym] = { price, chg, ts: Date.now() }
       w.allPrices[sym] = price
-      if (typeof w.onNeuronScanUpdate === 'function') w.onNeuronScanUpdate(sym)
+      if (typeof onNeuronScanUpdate === 'function') onNeuronScanUpdate(sym)
       // Notify React WatchlistBar so it can update Zustand store without a separate WS
       window.dispatchEvent(new CustomEvent('zeus:wlPrice', { detail: { sym, price, chg } }))
       const pe = el('wlp-' + sym)

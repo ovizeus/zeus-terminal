@@ -168,22 +168,22 @@ export function installPhase1Adapters(): void {
   w.addTradeToJournal = addTradeToJournal
   w.renderTradeJournal = renderTradeJournal
   w.loadJournalFromStorage = loadJournalFromStorage
-  w.startFRCountdown = startFRCountdown
+
   w.trackOIDelta = trackOIDelta
 
   // ── Phase 3: symbols.js ──
   w.connectWatchlist = connectWatchlist
-  w.switchWLSymbol = switchWLSymbol
+  // switchWLSymbol — removed (direct import)
 
   // ── Phase 4: perfStore.js ──
-  w.savePerfToStorage = savePerfToStorage
+
   w.loadPerfFromStorage = loadPerfFromStorage
   w.calcGlobalExpectancy = calcGlobalExpectancy
   w.calcExpectancyByProfile = calcExpectancyByProfile
 
   // ── Phase 4: dailyPnl.js ──
-  w.recordDailyClose = recordDailyClose
-  w.rebuildDailyFromJournal = rebuildDailyFromJournal
+
+
   w.loadDailyPnl = loadDailyPnl
 
   // ── config.ts exports → window.* ──
@@ -205,7 +205,7 @@ export function installPhase1Adapters(): void {
   w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
   w._macdChart = _macdChart; w._macdInited = _macdInited
   w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; w.oviPriceSeries = _cfgOviPriceSeries
-  w._neuroLastScan = _neuroLastScan; w._execActive = _execActive
+  w._execActive = _execActive
   // state.ts exports
   w.BlockReason = BlockReason; w.ZState = ZState
   w.bbUpperS = bbUpperS; w.ichimokuSeries = ichimokuSeries
@@ -235,17 +235,16 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 8C: bootstrap misc (coexist) ──
   w._pinCheckLock = _pinCheckLock
-  w.pinActivate = pinActivate; w.pinRemove = pinRemove; w._pinUpdateUI = _pinUpdateUI
+  w.pinRemove = pinRemove; w._pinUpdateUI = _pinUpdateUI
   w._showWelcomeModal = _showWelcomeModal
-  w.setPWAVersion = setPWAVersion; w.setupPWAReloadBtn = setupPWAReloadBtn
-  w.masterReset = masterReset
+  w.setupPWAReloadBtn = setupPWAReloadBtn
 
   // ── Phase 8B: startApp (coexist — bootstrap.js still defines startApp for bridge) ──
   w.startApp = startApp
 
   // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
   w.initZeusGroups = initZeusGroups
-  w.runHealthChecks = runHealthChecks
+
   w._updatePnlLabCondensed = _updatePnlLabCondensed
 
   // ── Phase 7F-G: closeDemoPos (coexist) ──
@@ -254,10 +253,10 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-F: marketData positions (coexist) ──
   w.cancelPendingOrder = cancelPendingOrder
   w.modifyPendingPrice = modifyPendingPrice; w.renderPendingOrders = renderPendingOrders
-  w._stopLivePendingSync = _stopLivePendingSync
+
   w.savePosSLTP = savePosSLTP; w.checkDemoPositionsSLTP = checkDemoPositionsSLTP
   w.renderDemoPositions = renderDemoPositions; w.calcPosPnL = calcPosPnL
-  w.updateLiveBalance = updateLiveBalance; w.renderLivePositions = renderLivePositions
+  w.renderLivePositions = renderLivePositions
   w.closeLivePos = closeLivePos; w.getSymPrice = _mdGetSymPriceFull
 
   // ── Phase 7F-E: marketData trading (coexist) ──
@@ -277,21 +276,19 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
   w.connectBNB = connectBNB; w.connectBYB = connectBYB
   w.updConn = _mdUpdConn; w.procLiq = procLiq
-  w.updLiqStats = updLiqStats; w.updLiqSourceMetrics = updLiqSourceMetrics
-  w.renderFeed = renderFeed
+  w.updLiqSourceMetrics = updLiqSourceMetrics
   w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   w.updateMainMetrics = updateMainMetrics; w.showTab = showTab
-  w.applyChartColors = _mdApplyChartColors; w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
+  w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
   w.sendAlert = sendAlert; w.registerServiceWorker = _mdRegisterSW
   w.checkLiqAlert = checkLiqAlert; w.testNotification = testNotification; w.saveAlerts = saveAlerts
   w.cloudClear = _mdCloudClear; w.injectFakeWhale = injectFakeWhale
   w.cloudSave = _mdCloudSave; w.cloudLoad = _mdCloudLoad
-  w.initCloudSettings = initCloudSettings; w.applySessionSettings = applySessionSettings
-  w.renderZS = renderZS
+  w.applySessionSettings = applySessionSettings
 
   // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
-  w.setTF = setTF; w.setTf = setTf
+  w.setTf = setTf
   w.toggleFS = toggleFS
   w.updatePriceDisplay = updatePriceDisplay
   w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
@@ -303,13 +300,7 @@ export function installPhase1Adapters(): void {
   w.togOvr = togOvr
   w.clearSR = clearSR
   w.renderTradeMarkers = renderTradeMarkers
-  w.llvEnsureCanvas = llvEnsureCanvas
-  w.llvClearCanvas = llvClearCanvas
-  w.llvRequestRender = llvRequestRender
-  w.llvSaveSettings = llvSaveSettings
-  w.llvLoadSettings = llvLoadSettings
-  w.renderHeatmapOverlay = renderHeatmapOverlay
-  w.renderSROverlay = renderSROverlay
+  // llv*, renderHeatmapOverlay, renderSROverlay — removed (direct imports)
 
   // ── Phase 7F-A: marketData helpers ──
   // Dynamic timezone versions REPLACE the static ones from format.ts
@@ -320,11 +311,11 @@ export function installPhase1Adapters(): void {
   // ── Phase 7B: panels + render ──
   w.scanLiquidityMagnets = scanLiquidityMagnets
   w.jumpToMagnet = jumpToMagnet
-  w.runBacktest = runBacktest
+
   w.renderVWAP = renderVWAP
   w.toggleVWAP = toggleVWAP
   w.renderOviLiquid = renderOviLiquid
-  w.togglePnlLab = togglePnlLab
+
   w.renderPnlLab = renderPnlLab
   w.toggleSession = toggleSession
   w.renderPerfTracker = renderPerfTracker
@@ -343,23 +334,20 @@ export function installPhase1Adapters(): void {
   w.fetchSymbolKlines = fetchSymbolKlines
   w._updateWhyBlocked = _updateWhyBlocked
   w.runMultiSymbolScan = runMultiSymbolScan
-  w.renderMscanTable = renderMscanTable
+
   w.manualEnterFromScan = manualEnterFromScan
-  w.runMultiSymbolAutoTrade = runMultiSymbolAutoTrade
-  w.toggleMultiSymMode = toggleMultiSymMode
+  // runMultiSymbolAutoTrade, toggleMultiSymMode — removed (self-ref)
   w._mscanUpdateLabel = _mscanUpdateLabel
-  w.toggleSymPicker = toggleSymPicker
+
   w.mscanToggleSym = mscanToggleSym
-  w.mscanPickAll = mscanPickAll
+  // mscanPickAll — removed (self-ref)
 
   // ── Phase 6E: ui leaf files ──
   w._initAudio = _initAudio
-  w.playAlertSound = playAlertSound
-  w.toggleAlerts = toggleAlerts
-  w.initActBar = initActBar
+  // playAlertSound, toggleAlerts, initActBar — removed (direct imports)
   w.togInd = togInd
   w.toggleTimeSales = toggleTimeSales
-  w.initModeBar = initModeBar
+
   w.updateModeBar = updateModeBar
   w._modeBarSwitch = _modeBarSwitch
   w.initZeusDock = initZeusDock
@@ -372,20 +360,19 @@ export function installPhase1Adapters(): void {
   w.aubToggle = aubToggle
   w.aubToggleSFX = aubToggleSFX
   w.aubBBSnapshot = aubBBSnapshot
-  w.initAUB = initAUB
+  // initAUB — removed (direct import)
   // arianova.js — self-registers on window via IIFE import above
 
   // ── Phase 6C: trading/autotrade.js ──
   w.toggleAutoTrade = toggleAutoTrade
-  w.updateATMode = updateATMode
+
   w.atLog = atLogFn
-  w.renderATLog = renderATLog
+
   w.updateATStats = updateATStats
   w.computeFusionDecision = computeFusionDecision
   w.runAutoTradeCheck = runAutoTradeCheck
   w.placeAutoTrade = placeAutoTrade
-  w.openAddOn = openAddOn
-  w.scheduleAutoClose = scheduleAutoClose
+  // openAddOn, scheduleAutoClose — removed (direct imports)
   w.triggerKillSwitch = triggerKillSwitch
   w.resetKillSwitch = resetKillSwitch
   w.renderATPositions = renderATPositions
@@ -397,7 +384,7 @@ export function installPhase1Adapters(): void {
   w.toggleDSL = toggleDSL
   w.toggleAssistArm = toggleAssistArm
   w._syncDslAssistUI = _syncDslAssistUI
-  w.runDSLBrain = runDSLBrain
+
   w.dslTakeControl = dslTakeControl
   w.dslReleaseControl = dslReleaseControl
   w.dslManualParam = dslManualParam
@@ -412,14 +399,11 @@ export function installPhase1Adapters(): void {
   w._adaptLoad = _adaptLoad
   w.recalcAdaptive = recalcAdaptive
   w.toggleAdaptive = toggleAdaptive
-  w.initAdaptiveStrip = initAdaptiveStrip
-  w.macroAdjustEntryScore = macroAdjustEntryScore
-  w.macroAdjustExitRisk = macroAdjustExitRisk
-  w.perfRecordTrade = perfRecordTrade
+  // initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, perfRecordTrade — removed (direct imports)
 
   // ── Phase 6B: trading/positions.js ──
   w.onPositionOpened = onPositionOpened
-  w.onTradeExecuted = onTradeExecuted
+  // onTradeExecuted — removed (direct import)
 
   // ── Phase 6B: trading/orders.js ──
   w._queueExecOverlay = _queueExecOverlay
@@ -428,8 +412,7 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 6B: trading/liveApi.js ──
   w.liveApiGetPositions = liveApiGetPositions
-  w.liveApiPlaceOrder = liveApiPlaceOrder
-  w.liveApiSetLeverage = liveApiSetLeverage
+  // liveApiPlaceOrder, liveApiSetLeverage — removed (direct imports)
   w.liveApiClosePosition = liveApiClosePosition
   w.liveApiSyncState = liveApiSyncState
   w.aresPlaceOrder = aresPlaceOrder
@@ -438,7 +421,7 @@ export function installPhase1Adapters(): void {
   w.manualLivePlaceOrder = manualLivePlaceOrder
   w.manualLiveGetOpenOrders = manualLiveGetOpenOrders
   w.manualLiveCancelOrder = manualLiveCancelOrder
-  w.manualLiveModifyLimit = manualLiveModifyLimit
+
   w.manualLiveSetSL = manualLiveSetSL
   w.manualLiveSetTP = manualLiveSetTP
 
@@ -487,8 +470,7 @@ export function installPhase1Adapters(): void {
   w.hubTgTest = hubTgTest
   w.hubTgPopulate = hubTgPopulate
   w.hubResetDefaults = hubResetDefaults
-  w.hubSetTf = hubSetTf
-  w.hubSetTZ = hubSetTZ
+  // hubSetTf, hubSetTZ — removed (self-ref)
   w.hubCloudSave = hubCloudSave
   w.hubCloudLoad = hubCloudLoad
   w.hubCloudClear = hubCloudClear
@@ -501,7 +483,7 @@ export function installPhase1Adapters(): void {
   w.DLog = DLog
 
   // ── Phase 5A: signals.js ──
-  w.renderSignals = renderSignals
+  // renderSignals — removed (direct import)
 
   // ── Phase 5A: confluence.js ──
   w.calcConfluenceScore = calcConfluenceScore
@@ -513,7 +495,7 @@ export function installPhase1Adapters(): void {
   w.PhaseFilter = PhaseFilter
 
   // ── Phase 5A: forecast.js ──
-  w.resetForecast = resetForecast
+
   w.runQuantumExitUpdate = runQuantumExitUpdate
   w.computeProbScore = computeProbScore
   w.updateScenarioUI = updateScenarioUI
@@ -522,7 +504,7 @@ export function installPhase1Adapters(): void {
   w.PM = PM
   w.runPostMortem = runPostMortem
   w.PM_render = PM_render
-  w.initPMPanel = initPMPanel
+
   w._pmCheckRegimeTransition = _pmCheckRegimeTransition
 
   // ── Phase 5B: deepdive.js — ARES core ──
@@ -535,12 +517,11 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 5B: deepdive.js — ARES UI ──
   w._aresRender = _aresRender
-  w.initAriaBrain = initAriaBrain
-  w.initARES = initARES
+  // initAriaBrain, initARES — removed (direct imports)
 
   // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──
   w.connectLiveAPI = connectLiveAPI
-  w.loadSavedAPI = loadSavedAPI
+
   initIndicatorState()
   w.toggleInd = toggleInd
   w.applyIndVisibility = applyIndVisibility
@@ -553,21 +534,21 @@ export function installPhase1Adapters(): void {
   w.updateDeepDive = updateDeepDive
 
   // ── Phase 5B4: brain.js ──
-  w.updateBrainArc = updateBrainArc
+  // updateBrainArc — removed (direct import)
   w.brainThink = brainThink
   w.runBrainUpdate = runBrainUpdate
-  w.isArmAssistValid = isArmAssistValid
+  // isArmAssistValid — removed (direct import)
   w.syncBrainFromState = syncBrainFromState
   w.setBrainMode = setBrainMode
   w.setProfile = setProfile
   w.setDslMode = setDslMode
   w.calcDslTargetPrice = calcDslTargetPrice
   w.detectRegimeEnhanced = detectRegimeEnhanced
-  w.updateMTFAlignment = updateMTFAlignment
+  // updateMTFAlignment — removed (direct import)
   w.detectSweepDisplacement = detectSweepDisplacement
   w.computeMarketAtmosphere = computeMarketAtmosphere
   w.resetProtectMode = resetProtectMode
-  w.onNeuronScanUpdate = onNeuronScanUpdate
+  // onNeuronScanUpdate — removed (direct import)
   w.renderBrainCockpit = renderBrainCockpit
-  w.startZAnim = startZAnim
+  // startZAnim — removed (direct import)
 }

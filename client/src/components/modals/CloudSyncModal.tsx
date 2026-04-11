@@ -1,4 +1,5 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
+import { masterReset } from '../../core/bootstrapMisc'
 
 const w = window as any
 
@@ -69,7 +70,7 @@ export function CloudSyncModal({ visible, onClose }: Props) {
             width: '100%', padding: 10, background: '#2a0000', border: '2px solid #ff335555',
             color: '#ff4466', borderRadius: 4, fontSize: 9, fontWeight: 700,
             cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: 1.5
-          }} onClick={() => w.masterReset?.()}>
+          }} onClick={() => masterReset?.()}>
             <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff4466' }}><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> MASTER RESET — ȘTERGE TOT
           </button>
           <div style={{ fontSize: 7, color: '#ff335544', textAlign: 'center', marginTop: 4 }}>

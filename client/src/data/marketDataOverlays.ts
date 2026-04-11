@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/data/marketData.js lines 314-798 (Chunk C)
 // Overlays, Trade Markers, LLV Canvas, Heatmap, S/R
 
-import { clearZS } from './marketDataWS'
+import { clearZS, renderZS } from './marketDataWS'
 
 const w = window as any
 
@@ -18,7 +18,7 @@ export function togOvr(o: any, btn: any): void {
   if (btn) btn.classList.toggle('act', w.S.overlays[o])
   if (o === 'liq') { clearHeatmap(); if (w.S.overlays.liq) renderHeatmapOverlay() }
   if (o === 'sr') { clearSR(); if (w.S.overlays.sr) renderSROverlay() }
-  if (o === 'zs') { clearZS(); if (w.S.overlays.zs && typeof w.renderZS === 'function') w.renderZS() }
+  if (o === 'zs') { clearZS(); if (w.S.overlays.zs) renderZS() }
   if (o === 'llv') { clearLiqLevels(); if (w.S.overlays.llv) renderLiqLevels() }
 }
 

@@ -8,6 +8,7 @@ import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { _startLivePendingSync } from './marketDataPositions'
+import { runDSLBrain } from '../trading/dsl'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -36,7 +37,7 @@ function _executeGlobalModeSwitch(mode: string): void {
       if (mode === 'demo') { toast('Demo Mode Activated', 3000, _ZI.ok) }
       else { const _toastEnv = w._resolvedEnv || (w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'); if (!w._apiConfigured) toast('Live Mode Locked \u2014 Execution unavailable until API keys are configured', 3000, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else toast('Real Trading Mode Activated', 3000, _ZI.ok) }
       _showManualPanel()
-      if (typeof w.runDSLBrain === 'function') w.runDSLBrain()
+      if (typeof runDSLBrain === 'function') runDSLBrain()
       if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)
       // [9A-4] Notify React after mode switch
       try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}

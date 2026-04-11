@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { useMarketStore } from '../../stores'
+import { switchWLSymbol } from '../../services/symbols'
 
 const WATCHLIST_SYMBOLS = [
   'BTCUSDT',
@@ -113,11 +114,10 @@ export default function WatchlistBar() {
             id={`wl-${sym}`}
             className={sym === symbol ? 'wl-item act' : 'wl-item'}
             onClick={() => {
-              const w = window as any
               // Always update Zustand so WatchlistBar active class + ChartControls select sync
               patch({ symbol: sym })
-              // switchWLSymbol → w.setSymbol() → full chart/kline/WS reset
-              if (typeof w.switchWLSymbol === 'function') w.switchWLSymbol(sym)
+              // switchWLSymbol → setSymbol() → full chart/kline/WS reset
+              if (typeof switchWLSymbol === 'function') switchWLSymbol(sym)
             }}
           >
             <div className="wl-sym">{shortName(sym)}</div>

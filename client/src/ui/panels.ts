@@ -1110,11 +1110,7 @@ export function _pnlLabProfileCard(name: string, data: any) {
     '<div class="pnl-lab-card-sub">' + data.trades + 't \u00b7 WR ' + data.wr + '%</div></div>';
 }
 
-// Assign to window
-(function () {
-  w.togglePnlLab = togglePnlLab;
-  w.renderPnlLab = renderPnlLab;
-})();
+// togglePnlLab, renderPnlLab — self-ref removed (direct calls)
 
 // -- Long-press / right-click on OVI button -> open settings --
 (function () {

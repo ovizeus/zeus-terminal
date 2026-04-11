@@ -8,7 +8,8 @@ import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { _getCooldownMs } from '../engine/brain'
+import { _getCooldownMs, isArmAssistValid } from '../engine/brain'
+import { macroAdjustEntryScore } from '../trading/risk'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
@@ -381,7 +382,7 @@ export function renderMscanTable(results: any[], opps: number) {
     </tr>`
   }).join('')
 }
-w.renderMscanTable = renderMscanTable
+// renderMscanTable — self-ref removed (direct call)
 
 // ─── MANUAL ENTRY FROM SCANNER ─────────────────────────────────
 export function manualEnterFromScan(sym: string, side: string, score: number) {
@@ -411,7 +412,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   if (_mode !== 'assist' && _mode !== 'auto') return
 
   if (_mode === 'assist') {
-    if (!w.isArmAssistValid()) {
+    if (!isArmAssistValid()) {
       w.atLog('info', 'ASSIST \u2014 ne\u00eennarmat. Apas\u0103 ARM ASSIST pentru confirmare.')
       return
     }
@@ -460,7 +461,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 
   const opps = results.filter((r: any) => {
     if (!r.isOpp || r.alreadyOpen) return false
-    const adjScore = (typeof w.macroAdjustEntryScore === 'function') ? w.macroAdjustEntryScore(r.dir, r.score) : r.score
+    const adjScore = (typeof macroAdjustEntryScore === 'function') ? macroAdjustEntryScore(r.dir, r.score) : r.score
     r.scoreAdj = adjScore
     if (adjScore < confMinAdj) return false
     if (r.adx !== null && r.adx < 18) return false
@@ -490,7 +491,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 
   setTimeout(() => renderMscanTable(w.MSCAN.sortedResults || results, 0), 500)
 }
-w.runMultiSymbolAutoTrade = runMultiSymbolAutoTrade
+// runMultiSymbolAutoTrade — self-ref removed (direct call)
 
 export function toggleMultiSymMode() {
   const on = el('atMultiSym')?.checked
@@ -499,7 +500,7 @@ export function toggleMultiSymMode() {
   else w.atLog('warn', 'Multi-Symbol DEZACTIVAT \u2014 doar symbol curent')
   w._usScheduleSave()
 }
-w.toggleMultiSymMode = toggleMultiSymMode
+// toggleMultiSymMode — self-ref removed (direct call)
 
 /* ── Symbol Picker for MSCAN ── */
 export function _mscanGetActive() {
@@ -556,7 +557,7 @@ export function toggleSymPicker() {
   list.innerHTML = html
   drop.style.display = 'block'
 }
-w.toggleSymPicker = toggleSymPicker
+// toggleSymPicker — self-ref removed (direct call)
 
 export function mscanToggleSym(cb: any) {
   const sym = cb.dataset.sym
@@ -576,7 +577,7 @@ export function mscanPickAll(selectAll: boolean) {
   const list = el('atSymPickerList')
   if (list) list.querySelectorAll('input[type="checkbox"]').forEach(function (cb: any) { cb.checked = selectAll })
 }
-w.mscanPickAll = mscanPickAll
+// mscanPickAll — self-ref removed (direct call)
 
 // Close picker on outside click
 document.addEventListener('click', function (e) {

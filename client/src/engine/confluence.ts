@@ -5,6 +5,7 @@
 
 import { getATEnabled, getSignalData, getRSI, getLS, getFR, getOI } from '../services/stateAccessors'
 import { el } from '../utils/dom'
+import { updateBrainArc } from './brain'
 
 const w = window as any // kept for WRITES only (w.BM, w.CORE_STATE, w.DLog, w.srRecord)
 
@@ -62,7 +63,7 @@ export function calcConfluenceScore(): void {
     labelEl.textContent = txt; labelEl.style.color = col
   }
   if (fillEl) { fillEl.style.width = finalScore + '%'; fillEl.style.background = col }
-  if (typeof w.updateBrainArc === 'function') w.updateBrainArc(finalScore)
+  if (typeof updateBrainArc === 'function') updateBrainArc(finalScore)
   const setBar = (id: string, sc: number, dir: string) => { const b = el(id); if (b) { b.style.width = sc + '%'; b.style.background = dir === 'bull' ? 'var(--grn)' : 'var(--red)' } }
   setBar('cbRSI', rsiScore, rsiDir); setBar('cbMACD', signalRatioScore, bullCount >= bearCount ? 'bull' : 'bear')
   setBar('cbST', stScore, stDir); setBar('cbLS', lsScore, lsDir)

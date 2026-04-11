@@ -7,11 +7,21 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _checkAppUpdate } from './bootstrapError'
-import { _renderBuildInfo } from './bootstrapMisc'
-import { _waitForFeedThenStartExtras } from './bootstrapInit'
+import { _renderBuildInfo, setPWAVersion } from './bootstrapMisc'
+import { _waitForFeedThenStartExtras, runHealthChecks } from './bootstrapInit'
 import { _resumeLivePendingSyncIfNeeded } from '../data/marketDataPositions'
-import { _renderAdaptivePanel } from '../trading/risk'
-import { _initBrainCockpit } from '../engine/brain'
+import { _renderAdaptivePanel, initAdaptiveStrip } from '../trading/risk'
+import { _initBrainCockpit, startZAnim } from '../engine/brain'
+import { initARES, initAriaBrain } from '../engine/aresUI'
+import { initAUB } from '../engine/aub'
+import { initActBar } from '../ui/dom2'
+import { initCloudSettings } from '../data/marketDataWS'
+import { initPMPanel } from '../engine/postMortem'
+import { loadSavedAPI } from '../engine/indicators'
+import { rebuildDailyFromJournal } from '../engine/dailyPnl'
+import { runBacktest } from '../ui/panels'
+import { savePerfToStorage } from '../engine/perfStore'
+import { startFRCountdown } from '../services/storage'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -43,17 +53,17 @@ export async function startApp(): Promise<void> {
   w.initCharts()
   try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { w.DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
   w.initZeusGroups()
-  w.initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
+  initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
-  setTimeout(w.runHealthChecks, 700)
+  setTimeout(runHealthChecks, 700)
   setTimeout(() => { w._srUpdateStats(); w._srRenderList(); w.srStripUpdateBar() }, 800)
   if (typeof w._ncUpdateBadge === 'function') setTimeout(w._ncUpdateBadge, 900)
   setTimeout(_checkAppUpdate, 2000)
-  w.initAUB()
+  initAUB()
   if (typeof w.initARIANOVA === 'function') w.initARIANOVA()
-  w.initPMPanel(); w.initARES()
+  initPMPanel(); initARES()
   // [FIX] _relocateFlow removed — React PanelShell controls flow-panel position
-  setTimeout(w.initAriaBrain, 200)
+  setTimeout(initAriaBrain, 200)
   if (typeof w.initTeacher === 'function') w.initTeacher()
   try { if (localStorage.getItem('zeus_dsl_strip_open') === '1') { w._dslStripOpen = true; const _ds = document.getElementById('dsl-strip'); if (_ds) _ds.classList.add('dsl-strip-open') } } catch (_) { }
   w.dslUpdateBanner()
@@ -61,10 +71,10 @@ export async function startApp(): Promise<void> {
   w.atUpdateBanner()
   try { if (localStorage.getItem('zeus_pt_strip_open') === '1') { w._ptStripOpen = true; const _ps = document.getElementById('pt-strip'); if (_ps) _ps.classList.add('pt-strip-open') } } catch (_) { }
   w.ptUpdateBanner()
-  w.initCloudSettings(); w.loadSavedAPI(); w.loadJournalFromStorage()
+  initCloudSettings(); loadSavedAPI(); w.loadJournalFromStorage()
   if (typeof w.loadPerfFromStorage === 'function') w.loadPerfFromStorage()
   if (typeof w.loadDailyPnl === 'function') w.loadDailyPnl()
-  if (typeof w.rebuildDailyFromJournal === 'function') w.rebuildDailyFromJournal()
+  if (typeof rebuildDailyFromJournal === 'function') rebuildDailyFromJournal()
   // Ghost guard late-restore
   try {
     if (w.ZState._pendingPositions && Array.isArray(w.ZState._pendingPositions) && w.ZState._pendingPositions.length) {
@@ -81,7 +91,7 @@ export async function startApp(): Promise<void> {
   if (typeof _resumeLivePendingSyncIfNeeded === 'function') _resumeLivePendingSyncIfNeeded()
   if (typeof w.onDemoOrdTypeChange === 'function') setTimeout(w.onDemoOrdTypeChange, 200)
   if (typeof w.renderPendingOrders === 'function') setTimeout(w.renderPendingOrders, 400)
-  w.registerServiceWorker(); w.setPWAVersion(); w.setupPWAReloadBtn()
+  w.registerServiceWorker(); setPWAVersion(); w.setupPWAReloadBtn()
   _initBrainCockpit()
   if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC()
 
@@ -106,7 +116,7 @@ export async function startApp(): Promise<void> {
   w.fetch24h = w.safeAsync(w.fetch24h, 'fetch24h', { silent: true })
   w.fetchSymbolKlines = w.safeAsync(w.fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
   w.runMultiSymbolScan = w.safeAsync(w.runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
-  w.runBacktest = w.safeAsync(w.runBacktest, 'runBacktest', { silent: false })
+  w.runBacktest = w.safeAsync(runBacktest, 'runBacktest', { silent: false })
   w.ZLOG.push('INFO', '[ZLOG v90] installed \u2014 safeAsync hooks active on 10 functions')
   console.log('[ZLOG v90] install complete | safeAsync hooks: 10 functions wrapped')
 
@@ -170,7 +180,7 @@ export async function startApp(): Promise<void> {
   }, 1500)
 
   // ═══ PHASE 4 — UI ═══
-  w.initActBar(); w.startFRCountdown()
+  initActBar(); startFRCountdown()
 
   document.addEventListener('change', function (e: any) {
     const t = e.target; const AT_INPUT_IDS = ['atLev', 'atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin', 'atMultiSym', 'atRiskPct', 'atMaxDay', 'atLossStreak', 'atMaxAddon']
@@ -188,7 +198,7 @@ export async function startApp(): Promise<void> {
   // Multi-sym symbols loader
   setTimeout(function () { fetch('/api/sd/symbols', { credentials: 'same-origin' }).then(function (r) { return r.ok ? r.json() : null }).then(function (data: any) { if (!data || !data.configured || data.configured.length <= 1) return; const section = document.getElementById('atSymbolSection'); const grid = document.getElementById('atSymbolGrid'); if (!section || !grid) return; section.style.display = ''; w._atSelectedSymbols = null; const mscanRow = document.getElementById('atMscanRow'); if (mscanRow) mscanRow.style.display = 'none'; const shortNames: any = { BTCUSDT: 'BTC', ETHUSDT: 'ETH', SOLUSDT: 'SOL', BNBUSDT: 'BNB', XRPUSDT: 'XRP', DOGEUSDT: 'DOGE', ADAUSDT: 'ADA', AVAXUSDT: 'AVAX' }; data.configured.forEach(function (sym: string) { const label = document.createElement('label'); label.className = 'mchk'; label.style.cssText = 'padding:3px 8px;font-size:10px;letter-spacing:1px;border:1px solid #aa44ff44;border-radius:4px;cursor:pointer'; const cb = document.createElement('input') as HTMLInputElement; cb.type = 'checkbox'; cb.checked = true; cb.dataset.sym = sym; cb.onchange = function () { const checked: string[] = []; grid.querySelectorAll('input[type=checkbox]').forEach(function (c: any) { if (c.checked) checked.push(c.dataset.sym) }); w._atSelectedSymbols = checked.length === data.configured.length ? null : checked; if (typeof w._tcPushDebounced === 'function') w._tcPushDebounced() }; label.appendChild(cb); label.appendChild(document.createTextNode(' ' + (shortNames[sym] || sym.replace('USDT', '')))); grid.appendChild(label) }) }).catch(function () { }) }, 3000)
 
-  w.Intervals.set('perfSave', function () { if (typeof w.savePerfToStorage === 'function') w.savePerfToStorage(); w._updatePnlLabCondensed() }, 60000)
+  w.Intervals.set('perfSave', function () { if (typeof savePerfToStorage === 'function') savePerfToStorage(); w._updatePnlLabCondensed() }, 60000)
   setTimeout(w._updatePnlLabCondensed, 3000)
 
   setTimeout(w.runBrainUpdate, 2500); w.Intervals.set('brain', w.runBrainUpdate, 5000)
@@ -225,7 +235,7 @@ export async function startApp(): Promise<void> {
     if (document.hidden && typeof w._usFlush === 'function') w._usFlush()
     if (document.visibilityState === 'visible') {
       w.fetchOI(); w.fetchLS(); w.fetchAllRSI()
-      if (typeof w.ZANIM !== 'undefined' && !w.ZANIM.running) w.startZAnim()
+      if (typeof w.ZANIM !== 'undefined' && !w.ZANIM.running) startZAnim()
       if (typeof TP !== 'undefined' && TP.liveConnected && typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
       if (typeof w.ZState !== 'undefined' && w.ZState.pullFromServer && !(w.ZState.isMerging && w.ZState.isMerging())) {

@@ -1,5 +1,6 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useState } from 'react'
+import { llvClearCanvas, llvSaveSettings } from '../../data/marketDataOverlays'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -93,11 +94,11 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
 
             <div className="msec" style={{ marginBottom: 10 }}>DATA</div>
             <button className="sbtn2 sec" style={{ width: '100%', color: '#ff4466', borderColor: '#ff446644', marginTop: 4 }}
-              onClick={() => { w.llvClearCanvas?.(); if (w.S?.llvBuckets) w.S.llvBuckets = {} }}>
+              onClick={() => { llvClearCanvas?.(); if (w.S?.llvBuckets) w.S.llvBuckets = {} }}>
               RESET &amp; CLEAR ALL DATA
             </button>
             <button className="sbtn2" style={{ width: '100%', marginTop: 8, background: '#f0c04022', borderColor: '#f0c04055', color: '#f0c040' }}
-              onClick={() => { w.llvSaveSettings?.(); onClose() }}>
+              onClick={() => { llvSaveSettings?.(); onClose() }}>
               SAVE &amp; CLOSE
             </button>
           </div>

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMarketStore, useUiStore } from '../../stores'
+import { setTF } from '../../data/marketDataFeeds'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -113,8 +114,7 @@ export function ChartControls() {
   }, [])
 
   function pickTf(tf: string) {
-    const w = window as any
-    if (typeof w.setTF === 'function') w.setTF(tf, null)
+    if (typeof setTF === 'function') setTF(tf, null)
     patch({ chartTf: tf })
     setTfOpen(false)
   }

@@ -7,6 +7,7 @@ import { fmtNow, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { manualLiveModifyLimit } from '../trading/liveApi'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -81,7 +82,7 @@ export function modifyPendingPrice(id: any): void {
   const demoOrd = TP.pendingOrders.find(function (o: any) { return String(o.id) === strId })
   if (demoOrd && demoOrd.mode === 'demo') { const newPrice = prompt('New limit price:', fP(demoOrd.limitPrice)); if (!newPrice) return; const np = parseFloat(newPrice); if (!np || np <= 0) { toast('Invalid price'); return }; demoOrd.limitPrice = np; renderPendingOrders(); w.ZState.save(); toast('Limit price updated to $' + fP(np)); return }
   const liveOrd = TP.manualLivePending.find(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
-  if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!_np || _np <= 0) { toast('Invalid price'); return }; if (typeof w.manualLiveModifyLimit !== 'function') { toast('Live API not available'); return }; w.manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); toast('LIVE LIMIT modified @$' + fP(_np)) }).catch(function (err: any) { toast('Modify failed: ' + (err.message || err)) }) }
+  if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!_np || _np <= 0) { toast('Invalid price'); return }; if (typeof manualLiveModifyLimit !== 'function') { toast('Live API not available'); return }; manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); toast('LIVE LIMIT modified @$' + fP(_np)) }).catch(function (err: any) { toast('Modify failed: ' + (err.message || err)) }) }
 }
 
 // ═══════════════════════════════════════════════════════════════

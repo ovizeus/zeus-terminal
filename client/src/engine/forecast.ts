@@ -5,6 +5,7 @@
 import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
+import { macroAdjustExitRisk as _macroAdjustExitRisk } from '../trading/risk'
 
 const w = window as any
 
@@ -339,8 +340,8 @@ function _qebNotify(action: string, reason: string, pos: any): void {
 
 // ── Macro-adjust exit risk ────────────────────────────────────────
 function macroAdjustExitRisk(rawRisk: number): number {
-  // This function is called but defined in brain.js — delegate to window
-  if (typeof w.macroAdjustExitRisk === 'function') return w.macroAdjustExitRisk(rawRisk)
+  // This function is called but defined in trading/risk — delegate to direct import
+  if (typeof _macroAdjustExitRisk === 'function') return _macroAdjustExitRisk(rawRisk)
   return rawRisk
 }
 

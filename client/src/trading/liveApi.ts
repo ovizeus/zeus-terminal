@@ -3,6 +3,7 @@
 // Live exchange API proxy functions
 
 import { fmtNow, toast } from '../data/marketDataHelpers'
+import { updateLiveBalance } from '../data/marketDataPositions'
 
 const w = window as any
 
@@ -306,7 +307,7 @@ export async function liveApiSyncState(): Promise<any> {
       return fresh
     })
     // Update UI
-    if (typeof w.updateLiveBalance === 'function') w.updateLiveBalance()
+    if (typeof updateLiveBalance === 'function') updateLiveBalance()
     if (typeof w.renderLivePositions === 'function') w.renderLivePositions()
     // [9A-5] Notify React after live positions full rebuild
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}

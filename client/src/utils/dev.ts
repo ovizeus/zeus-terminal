@@ -8,6 +8,7 @@ import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from './dom'
 import { _ZI } from '../constants/icons'
+import { updLiqStats, renderFeed } from '../data/marketDataWS'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -322,8 +323,8 @@ export function devInjectLiquidation(side: string): void {
     if (w.S && w.S.events) {
       w.S.events.unshift(ev)
       if (w.S.events.length > 100) w.S.events.pop()
-      if (typeof w.updLiqStats === 'function') w.updLiqStats()
-      if (typeof w.renderFeed === 'function') w.renderFeed()
+      if (typeof updLiqStats === 'function') updLiqStats()
+      if (typeof renderFeed === 'function') renderFeed()
     } else {
       devLog('S.events not available', 'warning')
     }
@@ -815,7 +816,7 @@ export function hubSetTf(_tf: string, btn: HTMLElement | null): void {
     if (btn) btn.classList.add('act')
   } catch (_e) { /* */ }
 }
-w.hubSetTf = hubSetTf
+// hubSetTf — self-ref removed (direct call)
 
 export function hubSetTZ(_tz: string, btn: HTMLElement | null): void {
   try {
@@ -823,7 +824,7 @@ export function hubSetTZ(_tz: string, btn: HTMLElement | null): void {
     if (btn) btn.classList.add('act')
   } catch (_e) { /* */ }
 }
-w.hubSetTZ = hubSetTZ
+// hubSetTZ — self-ref removed (direct call)
 
 export function hubApplyChartColors(): void {
   try {

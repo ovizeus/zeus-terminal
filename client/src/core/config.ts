@@ -6,6 +6,8 @@
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
+import { updateMTFAlignment } from '../engine/brain'
+import { renderATLog } from '../trading/autotrade'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
@@ -445,7 +447,7 @@ export function _ctxLoad() {
     }
     if (typeof AT !== 'undefined' && Array.isArray(ctx.atLog) && ctx.atLog.length > 0 && AT.log.length === 0) {
       AT.log = ctx.atLog
-      if (typeof w.renderATLog === 'function') w.renderATLog()
+      if (typeof renderATLog === 'function') renderATLog()
     }
     console.log('[CTX] UI context restored (sound:', ctx.soundOn, ', atLog:', (ctx.atLog || []).length, 'entries)')
   } catch (_) { /* */ }
@@ -920,7 +922,7 @@ export function buildMTFStructure() {
     BM.structure.squeeze = !!reg.squeeze
     BM.structure.volMode = reg.volMode || '\u2014'
     BM.structure.structureLabel = reg.structure || '\u2014'
-    if (typeof w.updateMTFAlignment === 'function') w.updateMTFAlignment()
+    if (typeof updateMTFAlignment === 'function') updateMTFAlignment()
     BM.structure.mtfAlign = {
       '15m': BM.mtf?.['15m'] || 'neut',
       '1h': BM.mtf?.['1h'] || 'neut',

@@ -11,7 +11,8 @@ import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+import { recordDailyClose } from '../engine/dailyPnl'
+const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -28,7 +29,7 @@ export function addTradeToJournal(trade: Record<string, any>): void {
   if (TP.journal.length > 200) TP.journal.length = 200
   renderTradeJournal()
   _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50))
-  if (trade.journalEvent === 'CLOSE' && typeof w.recordDailyClose === 'function') w.recordDailyClose(trade)
+  if (trade.journalEvent === 'CLOSE' && typeof recordDailyClose === 'function') recordDailyClose(trade)
 }
 
 export function renderTradeJournal(): void {

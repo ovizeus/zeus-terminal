@@ -8,7 +8,8 @@ import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _sessLastBt } from '../core/config'
 import { calcExpectancy } from '../engine/perfStore'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.calcADX, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w.scheduleAutoClose
+import { scheduleAutoClose } from '../trading/autotrade'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.calcADX, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -108,7 +109,7 @@ export function renderPerfTracker() {
 }
 
 // Hook into existing closeDemoPos to record performance
-export const _origAutoClose_recordPerf = w.scheduleAutoClose;
+export const _origAutoClose_recordPerf = scheduleAutoClose;
 
 // --- ADX NEURON INTEGRATION ---
 
