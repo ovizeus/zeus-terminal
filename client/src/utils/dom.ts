@@ -2,6 +2,7 @@
  * Zeus Terminal — DOM helpers (ported from public/js/utils/helpers.js)
  * Exposes: el, safeSetText, safeSetHTML, escHtml, isValidMarketPrice, safeLastKline
  */
+import { getKlines } from '../services/stateAccessors'
 
 /** getElementById shortcut — returns null in headless/SSR */
 export const el = typeof document !== 'undefined'
@@ -38,8 +39,7 @@ export function isValidMarketPrice(p: unknown): boolean {
 
 /** Safe accessor for last kline — returns null if S.klines is empty */
 export function safeLastKline(): Record<string, unknown> | null {
-  const w = window as Record<string, unknown>
-  const S = w.S as Record<string, unknown> | undefined
-  if (!S || !Array.isArray(S.klines) || !S.klines.length) return null
-  return S.klines[S.klines.length - 1]
+  const klines = getKlines()
+  if (!klines.length) return null
+  return klines[klines.length - 1] as Record<string, unknown>
 }

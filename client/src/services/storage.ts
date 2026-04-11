@@ -6,7 +6,9 @@
  * via window.* — these are still managed by bridge-loaded old JS.
  */
 
-const w = window as Record<string, any>
+import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
+const w = window as Record<string, any> // kept for w.el, w.fP, w.escHtml, w.toast, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
   try {
@@ -18,17 +20,17 @@ export function _safeLocalStorageSet(key: string, data: unknown): boolean {
 }
 
 export function addTradeToJournal(trade: Record<string, any>): void {
-  w.TP.journal.unshift(trade)
-  if (w.TP.journal.length > 200) w.TP.journal.length = 200
+  TP.journal.unshift(trade)
+  if (TP.journal.length > 200) TP.journal.length = 200
   renderTradeJournal()
-  _safeLocalStorageSet('zt_journal', w.TP.journal.slice(0, 50))
+  _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50))
   if (trade.journalEvent === 'CLOSE' && typeof w.recordDailyClose === 'function') w.recordDailyClose(trade)
 }
 
 export function renderTradeJournal(): void {
   const body = w.el('journalBody'); if (!body) return
-  if (!w.TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return }
-  body.innerHTML = w.TP.journal.map((t: any) => {
+  if (!TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return }
+  body.innerHTML = TP.journal.map((t: any) => {
     const pnl = Number(t.pnl) || 0
     const win = pnl >= 0
     const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
@@ -49,20 +51,20 @@ export function renderTradeJournal(): void {
 export function loadJournalFromStorage(): void {
   try {
     const raw = localStorage.getItem('zt_journal')
-    if (raw) { w.TP.journal = JSON.parse(raw); renderTradeJournal() }
+    if (raw) { TP.journal = JSON.parse(raw); renderTradeJournal() }
   } catch (e: any) {
     console.warn('[loadJournalFromStorage] Parse failed:', e.message)
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('ERROR', '[loadJournalFromStorage] ' + e.message)
-    w.TP.journal = []
+    TP.journal = []
   }
 }
 
 export function exportJournalCSV(): void {
-  if (!w.TP.journal.length) { if (typeof w.toast === 'function') w.toast('No trades to export'); return }
+  if (!TP.journal.length) { if (typeof w.toast === 'function') w.toast('No trades to export'); return }
   const hdr = 'Time,Side,Symbol,Entry,Exit,PnL,Leverage,Reason\n'
   function csvSafe(v: unknown): string { const s = String(v || ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s }
-  const rows = w.TP.journal.map((t: any) =>
-    `${csvSafe(t.time)},${csvSafe(t.side)},${csvSafe(t.sym || w.S.symbol.replace('USDT', ''))},${t.entry || 0},${t.exit || 0},${(Number(t.pnl) || 0).toFixed(2)},${csvSafe(t.lev || '—')},${csvSafe(t.reason || 'Manual')}`
+  const rows = TP.journal.map((t: any) =>
+    `${csvSafe(t.time)},${csvSafe(t.side)},${csvSafe(t.sym || getSymbol().replace('USDT', ''))},${t.entry || 0},${t.exit || 0},${(Number(t.pnl) || 0).toFixed(2)},${csvSafe(t.lev || '—')},${csvSafe(t.reason || 'Manual')}`
   ).join('\n')
   const blob = new Blob([hdr + rows], { type: 'text/csv' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
@@ -72,8 +74,8 @@ export function exportJournalCSV(): void {
 
 export function startFRCountdown(): void {
   w.Intervals.set('frCountdown', () => {
-    if (!w.S.frCd) return
-    const now = Date.now(); const rem = w.S.frCd - now
+    const frCd = getFRCountdown(); if (!frCd) return
+    const now = Date.now(); const rem = frCd - now
     if (rem <= 0) { const cd = w.el('frCd'); if (cd) cd.style.display = 'none'; return }
     const mm = Math.floor(rem / 60000); const ss = Math.floor((rem % 60000) / 1000)
     const str = (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss
@@ -84,16 +86,17 @@ export function startFRCountdown(): void {
 }
 
 export function trackOIDelta(): void {
-  if (!w.S.oi) return
+  const oi = getOI().oi
+  if (!oi) return
   const now = Date.now()
-  w.oiHistory.push({ oi: w.S.oi, ts: now })
+  w.oiHistory.push({ oi: oi, ts: now })
   if (typeof w.ZT_capArr === 'function') w.ZT_capArr(w.oiHistory, 2000)
   while (w.oiHistory.length > 0 && w.oiHistory[0].ts < now - 1200000) w.oiHistory.shift()
   const t5 = now - 300000
   const old5 = w.oiHistory.find((h: any) => h.ts >= t5)
   const delta5 = w.el('oiDelta5m')
-  if (delta5 && old5 && w.S.oi) {
-    const pct = ((w.S.oi - old5.oi) / old5.oi * 100)
+  if (delta5 && old5 && oi) {
+    const pct = ((oi - old5.oi) / old5.oi * 100)
     if (Math.abs(pct) > 0.01) {
       delta5.style.display = 'inline'
       delta5.textContent = (pct > 0 ? '▲' : pct < 0 ? '▼' : '') + (pct > 0 ? '+' : '') + pct.toFixed(2) + '%'

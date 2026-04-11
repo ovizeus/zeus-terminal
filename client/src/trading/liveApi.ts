@@ -306,6 +306,8 @@ export async function liveApiSyncState(): Promise<any> {
     // Update UI
     if (typeof w.updateLiveBalance === 'function') w.updateLiveBalance()
     if (typeof w.renderLivePositions === 'function') w.renderLivePositions()
+    // [9A-5] Notify React after live positions full rebuild
+    try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     // [PATCH P2-7] Only log on state change
     var _syncKey = (+bal.totalBalance || 0).toFixed(2) + '|' + positions.length
     if (typeof (liveApiSyncState as any)._prevSnap === 'undefined') (liveApiSyncState as any)._prevSnap = ''

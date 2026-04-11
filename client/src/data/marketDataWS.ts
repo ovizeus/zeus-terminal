@@ -3,7 +3,11 @@
 // WS connections, liq processing, symbol switch, order book, feed,
 // modals, alerts, cloud, chart settings, sound
 
-const w = window as any
+import { getTPObject, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
+const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, w.el, w._ZI, fn calls
+// [8D-1] BM/BR = mutable refs for setSymbol reset
+const BM = getBrainMetrics()
+const BR = getBrainObject()
 
 // ===== WS RECONNECT BACKOFF =====
 const _wsBackoff: any = { bnb: 0, byb: 0, wl: 0 }
@@ -34,7 +38,7 @@ export function connectBNB(): void {
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
             w.updatePriceDisplay(); w.updateMainMetrics()
-            if (w.TP.demoPositions?.some((p: any) => p.autoTrade)) w.renderATPositions()
+            if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) w.renderATPositions()
           }
         } else if (st.includes('depth20')) {
           w.S.bids = (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q }))
@@ -239,9 +243,11 @@ export function setSymbol(sym: string): void {
     if (typeof w.RegimeEngine !== 'undefined' && w.RegimeEngine.reset) w.RegimeEngine.reset()
     if (typeof w.PhaseFilter !== 'undefined' && w.PhaseFilter.reset) w.PhaseFilter.reset()
     if (typeof w.resetForecast === 'function') w.resetForecast()
-    if (typeof w.BM !== 'undefined') { w.BM.regimeEngine = { regime: 'RANGE', confidence: 0, trendBias: 'neutral', volatilityState: 'normal', trapRisk: 0, notes: ['switching symbol'] }; w.BM.phaseFilter = { allow: false, phase: 'RANGE', reason: 'switching symbol', riskMode: 'reduced', sizeMultiplier: 0.5, allowedSetups: [], blockedSetups: [] }; w.BM.confluenceScore = 50; w.BM.probScore = 0; w.BM.probBreakdown = { regime: 0, liquidity: 0, signals: 0, flow: 0 }; w.BM.entryScore = 0; w.BM.entryReady = false; w.BM.gates = {}; w.BM.sweep = { type: 'none', reclaim: false, displacement: false }; w.BM.flow = { cvd: 'neut', delta: 0, ofi: 'neut' }; w.BM.mtf = { '15m': 'neut', '1h': 'neut', '4h': 'neut' }; w.BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['switching symbol'], sizeMultiplier: 1.0 }; w.BM.qexit = { risk: 0, signals: { divergence: { type: null, conf: 0 }, climax: { dir: null, mult: 0 }, regimeFlip: { from: null, to: null, conf: 0 }, liquidity: { nearestAboveDistPct: null, nearestBelowDistPct: null, bias: 'neutral' } }, action: 'HOLD', lastTs: 0, lastReason: '', shadowStop: null, confirm: { div: 0, climax: 0 } }; w.BM.danger = 0; w.BM.dangerBreakdown = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 }; w.BM.conviction = 0; w.BM.convictionMult = 1.0; w.BM.structure = { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '\u2014', structureLabel: '\u2014', mtfAlign: { '15m': 'neut', '1h': 'neut', '4h': 'neut' }, score: 0, lastUpdate: 0 } }
-    if (typeof w.BRAIN !== 'undefined') { w.BRAIN.state = 'scanning'; w.BRAIN.regime = 'unknown'; w.BRAIN.regimeConfidence = 0; w.BRAIN.score = 0; w.BRAIN.thoughts = []; w.BRAIN.neurons = {}; w.BRAIN.ofi = { buy: 0, sell: 0, blendBuy: 50, tape: [] } }
+    if (typeof BM !== 'undefined') { BM.regimeEngine = { regime: 'RANGE', confidence: 0, trendBias: 'neutral', volatilityState: 'normal', trapRisk: 0, notes: ['switching symbol'] }; BM.phaseFilter = { allow: false, phase: 'RANGE', reason: 'switching symbol', riskMode: 'reduced', sizeMultiplier: 0.5, allowedSetups: [], blockedSetups: [] }; BM.confluenceScore = 50; BM.probScore = 0; BM.probBreakdown = { regime: 0, liquidity: 0, signals: 0, flow: 0 }; BM.entryScore = 0; BM.entryReady = false; BM.gates = {}; BM.sweep = { type: 'none', reclaim: false, displacement: false }; BM.flow = { cvd: 'neut', delta: 0, ofi: 'neut' }; BM.mtf = { '15m': 'neut', '1h': 'neut', '4h': 'neut' }; BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['switching symbol'], sizeMultiplier: 1.0 }; BM.qexit = { risk: 0, signals: { divergence: { type: null, conf: 0 }, climax: { dir: null, mult: 0 }, regimeFlip: { from: null, to: null, conf: 0 }, liquidity: { nearestAboveDistPct: null, nearestBelowDistPct: null, bias: 'neutral' } }, action: 'HOLD', lastTs: 0, lastReason: '', shadowStop: null, confirm: { div: 0, climax: 0 } }; BM.danger = 0; BM.dangerBreakdown = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 }; BM.conviction = 0; BM.convictionMult = 1.0; BM.structure = { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '\u2014', structureLabel: '\u2014', mtfAlign: { '15m': 'neut', '1h': 'neut', '4h': 'neut' }, score: 0, lastUpdate: 0 } }
+    if (typeof BR !== 'undefined') { BR.state = 'scanning'; BR.regime = 'unknown'; BR.regimeConfidence = 0; BR.score = 0; BR.thoughts = []; BR.neurons = {}; BR.ofi = { buy: 0, sell: 0, blendBuy: 50, tape: [] } }
     if (typeof w.CORE_STATE !== 'undefined') { w.CORE_STATE.score = 50; w.CORE_STATE.lastUpdate = Date.now() }
+    // [9A-2] Notify React brainStore — BM/BR fully reset on symbol switch
+    try { window.dispatchEvent(new CustomEvent('zeus:brainStateChanged')) } catch (_) {}
     w.FetchLock.release('klines')
     w.fetchKlines(w.S.chartTf); w.fetchATR(); w.fetchOI(); w.fetchLS(); w.fetch24h(); w.fetchAllRSI()
     connectBNB(); connectBYB()

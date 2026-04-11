@@ -2,7 +2,12 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 369-1113 (Chunk B)
 // startApp() — THE core boot sequence
 
-const w = window as any
+import { getATObject, getTPObject, getBrainMetrics, getATR, getKlines } from '../services/stateAccessors'
+const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, w.el, w._ZI, boot flags, fn calls
+// [8D-4B] mutable refs
+const TP = getTPObject()
+const AT = getATObject()
+const BM = getBrainMetrics()
 
 export async function startApp(): Promise<void> {
   w._zeusBootTs = Date.now()
@@ -55,9 +60,9 @@ export async function startApp(): Promise<void> {
   try {
     if (w.ZState._pendingPositions && Array.isArray(w.ZState._pendingPositions) && w.ZState._pendingPositions.length) {
       const _pend = w.ZState._pendingPositions; delete w.ZState._pendingPositions
-      const _existing2 = new Set((w.TP.demoPositions || []).map((p: any) => String(p.id)))
-      const _closed2 = new Set((w.TP.journal || []).map((j: any) => j.id).filter(Boolean).map(String))
-      _pend.forEach((p: any) => { if (p.closed || _closed2.has(String(p.id))) return; if (!_existing2.has(String(p.id))) { w.TP.demoPositions = w.TP.demoPositions || []; const _rp = { ...p, _restored: true }; w.TP.demoPositions.push(_rp); if (typeof w.onPositionOpened === 'function') w.onPositionOpened(_rp, 'restore') } })
+      const _existing2 = new Set((TP.demoPositions || []).map((p: any) => String(p.id)))
+      const _closed2 = new Set((TP.journal || []).map((j: any) => j.id).filter(Boolean).map(String))
+      _pend.forEach((p: any) => { if (p.closed || _closed2.has(String(p.id))) return; if (!_existing2.has(String(p.id))) { TP.demoPositions = TP.demoPositions || []; const _rp = { ...p, _restored: true }; TP.demoPositions.push(_rp); if (typeof w.onPositionOpened === 'function') w.onPositionOpened(_rp, 'restore') } })
       if (typeof w.renderDemoPositions === 'function') setTimeout(w.renderDemoPositions, 300)
       if (typeof w.renderATPositions === 'function') setTimeout(w.renderATPositions, 300)
       console.log('[ZState] Late-restore applied:', _pend.length, 'pending positions after journal load')
@@ -100,14 +105,14 @@ export async function startApp(): Promise<void> {
 
   // ATR parity check
   setTimeout(function () {
-    try { const atrLive = w.S.atr || null; const atrFrom5m = (w.S.klines && w.S.klines.length >= 16) ? w._calcATRSeries(w.S.klines.slice(-32), 14, 'wilder').last : null; const diffPct = (atrLive && atrFrom5m) ? Math.abs(atrLive - atrFrom5m) / atrLive * 100 : null; console.log('[ATR PARITY v88]', { atrLive_1h: atrLive ? atrLive.toFixed(4) : null, atrFrom5m: atrFrom5m ? atrFrom5m.toFixed(4) : null, diffPct: diffPct ? diffPct.toFixed(1) + '%' : 'N/A', note: 'TF mismatch normal (live=1h, check=5m). Backtest uses same Wilder fn.' }) } catch (e: any) { console.warn('[ATR PARITY]', e.message) }
+    try { const atrLive = getATR() || null; const _kl = getKlines(); const atrFrom5m = (_kl.length >= 16) ? w._calcATRSeries(_kl.slice(-32), 14, 'wilder').last : null; const diffPct = (atrLive && atrFrom5m) ? Math.abs(atrLive - atrFrom5m) / atrLive * 100 : null; console.log('[ATR PARITY v88]', { atrLive_1h: atrLive ? atrLive.toFixed(4) : null, atrFrom5m: atrFrom5m ? atrFrom5m.toFixed(4) : null, diffPct: diffPct ? diffPct.toFixed(1) + '%' : 'N/A', note: 'TF mismatch normal (live=1h, check=5m). Backtest uses same Wilder fn.' }) } catch (e: any) { console.warn('[ATR PARITY]', e.message) }
   }, 8000)
 
   w.Intervals.set('rsi', w.fetchAllRSI, 120000); w.Intervals.set('fg', w.fetchFG, 300000)
   w.Intervals.set('atr', w.fetchATR, 300000); w.Intervals.set('oi', w.fetchOI, 30000)
   w.Intervals.set('ls', w.fetchLS, 60000); w.Intervals.set('h24', w.fetch24h, 60000)
   w.Intervals.set('oidelta', w.trackOIDelta, 30000); w.Intervals.set('clock', w.updateQuantumClock, 1000)
-  setTimeout(function () { if (w.BM.adaptive && w.BM.adaptive.enabled) w.recalcAdaptive(true); w._renderAdaptivePanel() }, 2000)
+  setTimeout(function () { if (BM.adaptive && BM.adaptive.enabled) w.recalcAdaptive(true); w._renderAdaptivePanel() }, 2000)
   w.Intervals.set('adaptiveRecalc', function () { w.recalcAdaptive(false); w._pmCheckRegimeTransition() }, 60 * 60 * 1000)
   w.Intervals.set('regimeWatch', function () { w._pmCheckRegimeTransition(); if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 5 * 60 * 1000)
 
@@ -117,25 +122,25 @@ export async function startApp(): Promise<void> {
     console.log('[sync] Starting pullFromServer...')
     w.ZState.pullFromServer().then(function (serverSnap: any) {
       console.log('[sync] pullFromServer returned:', serverSnap ? 'data (ts=' + serverSnap.ts + ', pos=' + (serverSnap.positions || []).length + ')' : 'null')
-      if (!serverSnap || !serverSnap.ts) { if (typeof w.AT !== 'undefined' && !w.AT._modeConfirmed) { w.AT._modeConfirmed = true; console.log('[sync] P4 — no server state, confirming default mode') }; w.ZState.markSyncReady(); return }
-      if (serverSnap.positions && serverSnap.positions.length && typeof w.TP !== 'undefined' && !w._serverATEnabled && w._zeusMerge) { w.TP.demoPositions = w.TP.demoPositions || []; const closedSet = w._zeusMerge.buildClosedSet(serverSnap.closedIds); w._zeusMerge.mergePositionsInto(w.TP.demoPositions, serverSnap.positions, closedSet, 'boot') }
+      if (!serverSnap || !serverSnap.ts) { if (typeof AT !== 'undefined' && !AT._modeConfirmed) { AT._modeConfirmed = true; console.log('[sync] P4 — no server state, confirming default mode') }; w.ZState.markSyncReady(); return }
+      if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined' && !w._serverATEnabled && w._zeusMerge) { TP.demoPositions = TP.demoPositions || []; const closedSet = w._zeusMerge.buildClosedSet(serverSnap.closedIds); w._zeusMerge.mergePositionsInto(TP.demoPositions, serverSnap.positions, closedSet, 'boot') }
       const localSnap = w.ZState.load(); const localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0
       const _bootFresh = true // simplified — full logic preserved in original
-      if (_bootFresh && (serverSnap.ts > localTs || ((w.TP.demoPositions || []).length === 0 && (serverSnap.positions || []).length > 0))) {
-        if (typeof w.TP !== 'undefined' && !w._serverATEnabled) { if (typeof serverSnap.demoBalance === 'number' && isFinite(serverSnap.demoBalance)) w.TP.demoBalance = serverSnap.demoBalance; if (typeof serverSnap.demoWins === 'number') w.TP.demoWins = serverSnap.demoWins; if (typeof serverSnap.demoLosses === 'number') w.TP.demoLosses = serverSnap.demoLosses }
-        if (serverSnap.at && typeof w.AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') w.AT.killTriggered = serverSnap.at.killTriggered; if (typeof serverSnap.at.realizedDailyPnL === 'number') w.AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL; if (typeof serverSnap.at.closedTradesToday === 'number') w.AT.closedTradesToday = serverSnap.at.closedTradesToday }
+      if (_bootFresh && (serverSnap.ts > localTs || ((TP.demoPositions || []).length === 0 && (serverSnap.positions || []).length > 0))) {
+        if (typeof TP !== 'undefined' && !w._serverATEnabled) { if (typeof serverSnap.demoBalance === 'number' && isFinite(serverSnap.demoBalance)) TP.demoBalance = serverSnap.demoBalance; if (typeof serverSnap.demoWins === 'number') TP.demoWins = serverSnap.demoWins; if (typeof serverSnap.demoLosses === 'number') TP.demoLosses = serverSnap.demoLosses }
+        if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered; if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL; if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday }
       }
-      if (serverSnap.at && typeof w.AT !== 'undefined') { if (typeof serverSnap.at.enabled === 'boolean') w.AT.enabled = serverSnap.at.enabled; if (serverSnap.at.mode) { w.AT.mode = serverSnap.at.mode; w.AT._modeConfirmed = true }; if (w.AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + w.AT.mode + ')') }
-      if (typeof w.AT !== 'undefined' && w.AT.enabled && !w.AT.killTriggered && !w.AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; if (typeof w.runSignalScan === 'function') try { w.runSignalScan() } catch (_) {}; if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}; w.AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
+      if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.enabled === 'boolean') AT.enabled = serverSnap.at.enabled; if (serverSnap.at.mode) { AT.mode = serverSnap.at.mode; AT._modeConfirmed = true }; if (AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + AT.mode + ')') }
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; if (typeof w.runSignalScan === 'function') try { w.runSignalScan() } catch (_) {}; if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
       setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); if (typeof w.syncBrainFromState === 'function') w.syncBrainFromState() }, 300)
       w.ZState.saveLocal()
-      console.log('[sync] Applied — bal: $' + (w.TP.demoBalance || 0).toFixed(2) + ', pos: ' + (w.TP.demoPositions || []).length)
+      console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length)
       w.ZState.markSyncReady()
     }).catch(function () {
-      if (typeof w.AT !== 'undefined' && !w.AT._modeConfirmed) { w.AT._modeConfirmed = true }
+      if (typeof AT !== 'undefined' && !AT._modeConfirmed) { AT._modeConfirmed = true }
       // Fallback: if AT.enabled from localStorage but server unreachable, still start interval
-      if (typeof w.AT !== 'undefined' && w.AT.enabled && !w.AT.killTriggered && !w.AT.interval && typeof w.runAutoTradeCheck === 'function') {
-        w.AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000)
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval && typeof w.runAutoTradeCheck === 'function') {
+        AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000)
         console.log('[sync] AT interval started from localStorage fallback')
       }
       w.ZState.markSyncReady()
@@ -143,8 +148,8 @@ export async function startApp(): Promise<void> {
 
     w.ZState.pullJournalFromServer().then(function (srvJournal: any) {
       if (!srvJournal || !srvJournal.length) return
-      if (!w.TP.journal || w.TP.journal.length === 0) { w.TP.journal = srvJournal; if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Journal pulled:', srvJournal.length) }
-      else { const localIds = new Set(w.TP.journal.map(function (j: any) { return j.id }).filter(Boolean).map(String)); let added = 0; srvJournal.forEach(function (j: any) { if (j.id && !localIds.has(String(j.id))) { w.TP.journal.push(j); added++ } }); if (added > 0) { w.TP.journal.sort(function (a: any, b: any) { return (b.id || 0) - (a.id || 0) }); if (w.TP.journal.length > 200) w.TP.journal.length = 200; w._safeLocalStorageSet('zt_journal', w.TP.journal.slice(0, 50)); if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Merged', added, 'journal entries') } }
+      if (!TP.journal || TP.journal.length === 0) { TP.journal = srvJournal; if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Journal pulled:', srvJournal.length) }
+      else { const localIds = new Set(TP.journal.map(function (j: any) { return j.id }).filter(Boolean).map(String)); let added = 0; srvJournal.forEach(function (j: any) { if (j.id && !localIds.has(String(j.id))) { TP.journal.push(j); added++ } }); if (added > 0) { TP.journal.sort(function (a: any, b: any) { return (b.id || 0) - (a.id || 0) }); if (TP.journal.length > 200) TP.journal.length = 200; w._safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50)); if (typeof w.renderTradeJournal === 'function') w.renderTradeJournal(); console.log('[sync] Merged', added, 'journal entries') } }
     }).catch(function (err: any) { console.warn('[sync] Journal pull failed:', err?.message || err) })
 
     w.Intervals.set('stateSave', function () { w.ZState.saveLocal() }, 30000)
@@ -160,12 +165,12 @@ export async function startApp(): Promise<void> {
 
   document.addEventListener('change', function (e: any) {
     const t = e.target; const AT_INPUT_IDS = ['atLev', 'atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin', 'atMultiSym', 'atRiskPct', 'atMaxDay', 'atLossStreak', 'atMaxAddon']
-    if (AT_INPUT_IDS.includes(t.id)) { if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC(); if (t.id === 'atConfMin' && typeof w.BM !== 'undefined') w.BM.confMin = parseFloat(t.value) || 65; if (t.id === 'atKillPct') { const _kp = parseFloat(t.value); if (Number.isFinite(_kp) && _kp >= 1 && _kp <= 50) { const _curBal = +(w.AT?.mode === 'live' ? (w.TP?.liveBalance || 0) : (w.TP?.demoBalance || 0)) || 0; fetch('/api/at/kill/pct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ pct: _kp, balanceRef: _curBal }) }).catch(function () { }) } }; if (typeof w._tcPushDebounced === 'function') w._tcPushDebounced(); w._usScheduleSave() }
+    if (AT_INPUT_IDS.includes(t.id)) { if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC(); if (t.id === 'atConfMin' && typeof BM !== 'undefined') BM.confMin = parseFloat(t.value) || 65; if (t.id === 'atKillPct') { const _kp = parseFloat(t.value); if (Number.isFinite(_kp) && _kp >= 1 && _kp <= 50) { const _curBal = +(AT?.mode === 'live' ? (TP?.liveBalance || 0) : (TP?.demoBalance || 0)) || 0; fetch('/api/at/kill/pct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ pct: _kp, balanceRef: _curBal }) }).catch(function () { }) } }; if (typeof w._tcPushDebounced === 'function') w._tcPushDebounced(); w._usScheduleSave() }
     if (t.id && (t.id.startsWith('dsl') || t.id === 'atLev')) { if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC() }
   })
   document.addEventListener('input', function (e: any) {
     const t = e.target; const AT_INPUT_IDS = ['atSL', 'atRR', 'atSize', 'atMaxPos', 'atKillPct', 'atConfMin', 'atSigMin', 'atRiskPct', 'atMaxDay', 'atLossStreak', 'atMaxAddon']
-    if (AT_INPUT_IDS.includes(t.id)) { if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC(); if (t.id === 'atConfMin' && typeof w.BM !== 'undefined') w.BM.confMin = parseFloat(t.value) || 65; if (t.id === 'atKillPct') { const _kp2 = parseFloat(t.value); if (Number.isFinite(_kp2) && _kp2 >= 1 && _kp2 <= 50) { const _curBal2 = +(w.AT?.mode === 'live' ? (w.TP?.liveBalance || 0) : (w.TP?.demoBalance || 0)) || 0; fetch('/api/at/kill/pct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ pct: _kp2, balanceRef: _curBal2 }) }).catch(function () { }) } }; if (typeof w._tcPushDebounced === 'function') w._tcPushDebounced(); w._usScheduleSave() }
+    if (AT_INPUT_IDS.includes(t.id)) { if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC(); if (t.id === 'atConfMin' && typeof BM !== 'undefined') BM.confMin = parseFloat(t.value) || 65; if (t.id === 'atKillPct') { const _kp2 = parseFloat(t.value); if (Number.isFinite(_kp2) && _kp2 >= 1 && _kp2 <= 50) { const _curBal2 = +(AT?.mode === 'live' ? (TP?.liveBalance || 0) : (TP?.demoBalance || 0)) || 0; fetch('/api/at/kill/pct', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ pct: _kp2, balanceRef: _curBal2 }) }).catch(function () { }) } }; if (typeof w._tcPushDebounced === 'function') w._tcPushDebounced(); w._usScheduleSave() }
   })
 
   w.Intervals.set('userSettingsSave', w._usSave, 300000)
@@ -212,14 +217,14 @@ export async function startApp(): Promise<void> {
     if (document.visibilityState === 'visible') {
       w.fetchOI(); w.fetchLS(); w.fetchAllRSI()
       if (typeof w.ZANIM !== 'undefined' && !w.ZANIM.running) w.startZAnim()
-      if (typeof w.TP !== 'undefined' && w.TP.liveConnected && typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
+      if (typeof TP !== 'undefined' && TP.liveConnected && typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
       if (typeof w.ZState !== 'undefined' && w.ZState.pullFromServer && !(w.ZState.isMerging && w.ZState.isMerging())) {
         w.ZState.pullFromServer().then(function (serverSnap: any) {
           if (!serverSnap || !serverSnap.ts) return
           const localSnap = w.ZState.load(); const localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0
-          if (serverSnap.positions && serverSnap.positions.length && typeof w.TP !== 'undefined' && !w._serverATEnabled && w._zeusMerge) { w.TP.demoPositions = w.TP.demoPositions || []; const closedSet = w._zeusMerge.buildClosedSet(serverSnap.closedIds); w._zeusMerge.mergePositionsInto(w.TP.demoPositions, serverSnap.positions, closedSet, 'visibility') }
-          if (serverSnap.ts > localTs) { if (typeof w.TP !== 'undefined' && !w._serverATEnabled) { if (typeof serverSnap.demoBalance === 'number') w.TP.demoBalance = serverSnap.demoBalance }; if (serverSnap.at && typeof w.AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') w.AT.killTriggered = serverSnap.at.killTriggered } }
+          if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined' && !w._serverATEnabled && w._zeusMerge) { TP.demoPositions = TP.demoPositions || []; const closedSet = w._zeusMerge.buildClosedSet(serverSnap.closedIds); w._zeusMerge.mergePositionsInto(TP.demoPositions, serverSnap.positions, closedSet, 'visibility') }
+          if (serverSnap.ts > localTs) { if (typeof TP !== 'undefined' && !w._serverATEnabled) { if (typeof serverSnap.demoBalance === 'number') TP.demoBalance = serverSnap.demoBalance }; if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered } }
           w.ZState.saveLocal()
           setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); if (typeof w.syncBrainFromState === 'function') w.syncBrainFromState() }, 200)
         }).catch(function (e: any) { console.warn('[sync] visibility pull failed:', e) })

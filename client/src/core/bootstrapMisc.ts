@@ -2,7 +2,13 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 1121-1720 (Chunk C)
 // PIN lock, build info, welcome modal, PWA, master reset, heartbeat, resize
 
-const w = window as any
+import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } from '../services/stateAccessors'
+const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, w._ZI, w.el, fn calls, w.mainChart, w.cvdChart
+// [8D-4A] mutable refs
+const TP = getTPObject()
+const AT = getATObject()
+const BM = getBrainMetrics()
+const DSL = getDSLObject()
 
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null
@@ -68,19 +74,19 @@ export function _showWelcomeModal(): void {
   try {
     if (_wlcShown) return; if (_pinIsSet() && !sessionStorage.getItem('zeus_pin_unlocked')) return; _wlcShown = true
     const m = document.getElementById('mwelcome'); if (!m) return; m.style.display = 'flex'
-    const isLive = (typeof w.AT !== 'undefined' && w.AT.mode === 'live'); const _wlcEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO'); const modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO')
+    const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO'); const modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO')
     const greetEl = document.getElementById('wlcGreeting'); if (greetEl) greetEl.textContent = 'Welcome back, Commander'
     const badgeEl = document.getElementById('wlcModeBadge'); if (badgeEl) { badgeEl.textContent = modeLabel; badgeEl.className = 'wlc-mode-badge ' + (_wlcEnv === 'TESTNET' ? 'wlc-testnet' : (isLive ? 'wlc-live' : 'wlc-demo')) }
     const verEl = document.getElementById('wlcVersion'); const b = w.BUILD || {}; if (verEl) verEl.textContent = 'ZEUS TERMINAL ' + (b.version || '').toUpperCase()
-    const balEl = document.getElementById('wlcBalance'); if (balEl) { let bal = 0; if (typeof w.TP !== 'undefined') bal = isLive ? (w.TP.liveBalance || 0) : (w.TP.demoBalance || 0); balEl.textContent = '$' + bal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
+    const balEl = document.getElementById('wlcBalance'); if (balEl) { let bal = 0; if (typeof TP !== 'undefined') bal = isLive ? (TP.liveBalance || 0) : (TP.demoBalance || 0); balEl.textContent = '$' + bal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
     let todayTrades = 0, todayWins = 0, todayPnl = 0
-    if (typeof w.TP !== 'undefined' && Array.isArray(w.TP.journal)) { const tz = (typeof w.S !== 'undefined' && w.S.tz) || 'Europe/Bucharest'; const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); const closed = w.TP.journal.filter(function (t: any) { if (t.journalEvent !== 'CLOSE' || !Number.isFinite(t.pnl)) return false; if ((t.mode || 'demo') !== (isLive ? 'live' : 'demo')) return false; const ts = t.closedAt || t.time || 0; if (!ts) return false; const dk = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(ts)); return dk === todayStr }); todayTrades = closed.length; closed.forEach(function (t: any) { todayPnl += (t.pnl || 0); if (t.pnl >= 0) todayWins++ }) }
+    if (typeof TP !== 'undefined' && Array.isArray(TP.journal)) { const tz = (typeof w.S !== 'undefined' && getTimezone()) || 'Europe/Bucharest'; const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); const closed = TP.journal.filter(function (t: any) { if (t.journalEvent !== 'CLOSE' || !Number.isFinite(t.pnl)) return false; if ((t.mode || 'demo') !== (isLive ? 'live' : 'demo')) return false; const ts = t.closedAt || t.time || 0; if (!ts) return false; const dk = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(ts)); return dk === todayStr }); todayTrades = closed.length; closed.forEach(function (t: any) { todayPnl += (t.pnl || 0); if (t.pnl >= 0) todayWins++ }) }
     const pnlEl = document.getElementById('wlcDailyPnl'); if (pnlEl) { if (todayTrades > 0) { pnlEl.textContent = (todayPnl >= 0 ? '+' : '') + '$' + todayPnl.toFixed(0); pnlEl.className = 'wlc-value ' + (todayPnl > 0 ? 'wlc-pos' : todayPnl < 0 ? 'wlc-neg' : '') } else { pnlEl.textContent = 'no trades yet'; pnlEl.className = 'wlc-value' } }
     const trEl = document.getElementById('wlcTrades'); if (trEl) trEl.textContent = String(todayTrades)
     const wrEl = document.getElementById('wlcWinRate'); if (wrEl) { if (todayTrades > 0) { const wr = Math.round(todayWins / todayTrades * 100); wrEl.textContent = wr + '%'; wrEl.className = 'wlc-value ' + (wr >= 50 ? 'wlc-pos' : 'wlc-neg') } else { wrEl.textContent = 'N/A'; wrEl.className = 'wlc-value' } }
-    const posEl = document.getElementById('wlcPositions'); if (posEl) { let openCount = 0; if (typeof w.TP !== 'undefined') { const arr = isLive ? (w.TP.livePositions || []) : (w.TP.demoPositions || []); openCount = arr.filter(function (p: any) { return !p.closed }).length }; posEl.textContent = String(openCount); posEl.className = 'wlc-value' + (openCount > 0 ? ' wlc-gold' : '') }
-    const atEl = document.getElementById('wlcAT'); if (atEl) { if (typeof w.AT !== 'undefined') { atEl.textContent = w.AT.enabled ? 'ON' : 'OFF'; atEl.className = 'wlc-value ' + (w.AT.enabled ? 'wlc-on' : 'wlc-off') } else { atEl.textContent = 'OFF'; atEl.className = 'wlc-value wlc-off' } }
-    const brEl = document.getElementById('wlcBrain'); if (brEl) { if (typeof w.BM !== 'undefined') { brEl.textContent = (w.BM.mode || 'assist').toUpperCase(); brEl.className = 'wlc-value wlc-gold' } else { brEl.textContent = 'N/A'; brEl.className = 'wlc-value' } }
+    const posEl = document.getElementById('wlcPositions'); if (posEl) { let openCount = 0; if (typeof TP !== 'undefined') { const arr = isLive ? (TP.livePositions || []) : (TP.demoPositions || []); openCount = arr.filter(function (p: any) { return !p.closed }).length }; posEl.textContent = String(openCount); posEl.className = 'wlc-value' + (openCount > 0 ? ' wlc-gold' : '') }
+    const atEl = document.getElementById('wlcAT'); if (atEl) { if (typeof AT !== 'undefined') { atEl.textContent = AT.enabled ? 'ON' : 'OFF'; atEl.className = 'wlc-value ' + (AT.enabled ? 'wlc-on' : 'wlc-off') } else { atEl.textContent = 'OFF'; atEl.className = 'wlc-value wlc-off' } }
+    const brEl = document.getElementById('wlcBrain'); if (brEl) { if (typeof BM !== 'undefined') { brEl.textContent = (BM.mode || 'assist').toUpperCase(); brEl.className = 'wlc-value wlc-gold' } else { brEl.textContent = 'N/A'; brEl.className = 'wlc-value' } }
     m.addEventListener('click', function (e: any) { if (e.target === m) w.closeM('mwelcome') })
     const _wlcEsc = function (e: any) { if (e.key === 'Escape') { w.closeM('mwelcome'); document.removeEventListener('keydown', _wlcEsc) } }; document.addEventListener('keydown', _wlcEsc)
   } catch (e) { console.warn('[WLC]', e) }
@@ -102,12 +108,12 @@ export function setupPWAReloadBtn(): void { const btn = document.getElementById(
 export function masterReset(): void {
   if (!window.confirm('MASTER RESET\n\u0218terge TOATE datele \u0219i reporne\u0219te Zeus Terminal?')) return
   try { localStorage.clear() } catch (e) { }
-  if (typeof w.TP !== 'undefined') { w.TP.demoPositions = []; w.TP.livePositions = []; w.TP.demoBalance = 10000; w.TP.demoPnL = 0; w.TP.demoWins = 0; w.TP.demoLosses = 0 }
-  if (typeof w.AT !== 'undefined') { w.AT.enabled = false; w.AT.killTriggered = false; w.AT.totalTrades = 0; w.AT.wins = 0; w.AT.losses = 0; w.AT.totalPnL = 0; w.AT.dailyPnL = 0; w.AT.realizedDailyPnL = 0; w.AT.closedTradesToday = 0; w.AT.lastTradeTs = 0; w.AT.lastTradeSide = null }
-  if (typeof w.DSL !== 'undefined') { w.DSL.positions = {}; w.DSL.enabled = false }
+  if (typeof TP !== 'undefined') { TP.demoPositions = []; TP.livePositions = []; TP.demoBalance = 10000; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0 }
+  if (typeof AT !== 'undefined') { AT.enabled = false; AT.killTriggered = false; AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0; AT.lastTradeTs = 0; AT.lastTradeSide = null }
+  if (typeof DSL !== 'undefined') { DSL.positions = {}; DSL.enabled = false }
   if (typeof w.PERF !== 'undefined') { Object.keys(w.PERF).forEach((k: string) => { w.PERF[k].wins = 0; w.PERF[k].losses = 0; w.PERF[k].weight = 1.0 }) }
   if (typeof w.DHF !== 'undefined') { ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d: string) => { if (w.DHF.days[d]) { w.DHF.days[d].wins = w.DHF.days[d].losses = w.DHF.days[d].trades = 0; w.DHF.days[d].wr = 60 } }); Object.keys(w.DHF.hours || {}).forEach((h: string) => { w.DHF.hours[h].wins = w.DHF.hours[h].losses = w.DHF.hours[h].trades = 0; w.DHF.hours[h].wr = 60 }) }
-  if (typeof w.BM !== 'undefined') { w.BM.protectMode = false; w.BM.protectReason = '' }
+  if (typeof BM !== 'undefined') { BM.protectMode = false; BM.protectReason = '' }
   if (typeof w.BlockReason !== 'undefined') w.BlockReason.clear()
   if (typeof w.Intervals !== 'undefined') w.Intervals.clearAll()
   if (typeof w.WS !== 'undefined') w.WS.closeAll()

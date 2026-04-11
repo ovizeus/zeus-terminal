@@ -2,13 +2,17 @@
 // Ported 1:1 from public/js/data/marketData.js lines 2036-2660 (Chunk E)
 // Trading panel UI: mode switch, add funds, demo/live orders, leverage, liq price
 
-const w = window as any
+import { getTPObject, getATObject, getPrice, getSymbol } from '../services/stateAccessors'
+const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, w.el, w._ZI, w.toast, w.fP, w.fmt, fn calls
+// [8D-2C] mutable refs — reads + writes through same objects
+const TP = getTPObject()
+const AT = getATObject()
 
 // ═══════════════════════════════════════════════════════
 // GLOBAL MODE SWITCH
 // ═══════════════════════════════════════════════════════
 export function switchGlobalMode(mode: any): void {
-  const currentMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
+  const currentMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   if (currentMode === mode) { _toggleManualPanel(); return }
   if (mode === 'demo') {
     _showConfirmDialog('Activate Demo Mode?', 'You are about to switch the entire system to DEMO mode.\n\nAll new manual and auto trades will run in simulated mode.\nNo real Binance orders will be executed.\nLive mode will be turned off.\n\nExisting live positions will remain live and continue independently.', 'Cancel', 'Activate Demo', function () { _executeGlobalModeSwitch('demo') })
@@ -22,13 +26,15 @@ export function switchGlobalMode(mode: any): void {
 function _executeGlobalModeSwitch(mode: string): void {
   fetch('/api/at/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ mode }) }).then(function (r) { return r.json() }).then(function (data: any) {
     if (data.ok) {
-      if (typeof w.AT !== 'undefined') w.AT._serverMode = mode
+      if (typeof AT !== 'undefined') AT._serverMode = mode
       _applyGlobalModeUI(mode)
       if (mode === 'demo') { w.toast('Demo Mode Activated', 3000, w._ZI.ok) }
       else { const _toastEnv = w._resolvedEnv || (w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'); if (!w._apiConfigured) w.toast('Live Mode Locked \u2014 Execution unavailable until API keys are configured', 3000, w._ZI.w); else if (_toastEnv === 'TESTNET') w.toast('Testnet Trading Mode Activated', 3000, w._ZI.ok); else w.toast('Real Trading Mode Activated', 3000, w._ZI.ok) }
       _showManualPanel()
       if (typeof w.runDSLBrain === 'function') w.runDSLBrain()
       if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)
+      // [9A-4] Notify React after mode switch
+      try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
     } else { const _fails = (data.checks || []).filter(function (c: any) { return !c.ok }); const _reason = _fails.length > 0 ? _fails.slice(0, 2).map(function (c: any) { return c.detail }).join('. ') : (data.error || 'Unknown error'); w.toast('Cannot switch to LIVE: ' + _reason, 5000, w._ZI.lock) }
   }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
 }
@@ -66,8 +72,8 @@ export function _applyGlobalModeUI(mode: string): void {
   if (typeof w.updateModeBar === 'function') w.updateModeBar()
 }
 
-function _toggleManualPanel(): void { w.TP.demoOpen = !w.TP.demoOpen; const p = w.el('panelDemo'); if (p) p.style.display = w.TP.demoOpen ? 'block' : 'none'; if (w.TP.demoOpen && w.S.price) { const ei = w.el('demoEntry'); if (ei) ei.placeholder = '$' + w.fP(w.S.price) } }
-function _showManualPanel(): void { w.TP.demoOpen = true; const p = w.el('panelDemo'); if (p) p.style.display = 'block'; if (w.S.price) { const ei = w.el('demoEntry'); if (ei) ei.placeholder = '$' + w.fP(w.S.price) } }
+function _toggleManualPanel(): void { TP.demoOpen = !TP.demoOpen; const p = w.el('panelDemo'); if (p) p.style.display = TP.demoOpen ? 'block' : 'none'; if (TP.demoOpen && getPrice()) { const ei = w.el('demoEntry'); if (ei) ei.placeholder = '$' + w.fP(getPrice()) } }
+function _showManualPanel(): void { TP.demoOpen = true; const p = w.el('panelDemo'); if (p) p.style.display = 'block'; if (getPrice()) { const ei = w.el('demoEntry'); if (ei) ei.placeholder = '$' + w.fP(getPrice()) } }
 
 // ═══════════════════════════════════════════════════════
 // CONFIRM DIALOG
@@ -95,25 +101,25 @@ export function _showConfirmDialog(title: string, message: string, cancelText: s
 export function promptAddFunds(): void {
   const amount = prompt('Enter amount to add to demo balance (USD):', '5000'); if (!amount) return
   const num = parseFloat(amount); if (!num || num <= 0 || num > 1000000) { w.toast('Invalid amount', 3000, w._ZI.w); return }
-  fetch('/api/at/demo/add-funds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ amount: num }) }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { w.TP.demoBalance = data.balance; w.updateDemoBalance(); w.toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
+  fetch('/api/at/demo/add-funds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ amount: num }) }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); w.toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
 }
 
 export function promptResetDemo(): void {
   _showConfirmDialog('Reset Demo Balance?', 'This will reset your demo balance to $10,000 and clear all trading statistics.\n\nOpen positions will NOT be closed.\n\nThis action cannot be undone.', 'Cancel', 'Reset Demo', function () {
-    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { w.TP.demoBalance = data.balance; w.TP._serverStartBalance = data.startBalance; w.updateDemoBalance(); w.toast('Demo balance reset to $10,000', 3000, w._ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Reset failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
+    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; w.updateDemoBalance(); w.toast('Demo balance reset to $10,000', 3000, w._ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Reset failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
   })
 }
 
 export function toggleTradePanel(_type: any): void { _toggleManualPanel() }
-export function setDemoSide(side: string): void { w.TP.demoSide = side; w.el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); updateDemoLiqPrice() }
-export function setLiveSide(side: string): void { w.TP.liveSide = side; w.el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice() }
+export function setDemoSide(side: string): void { TP.demoSide = side; w.el('demoLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('demoShortBtn')?.classList.toggle('act', side === 'SHORT'); updateDemoLiqPrice() }
+export function setLiveSide(side: string): void { TP.liveSide = side; w.el('liveLongBtn')?.classList.toggle('act', side === 'LONG'); w.el('liveShortBtn')?.classList.toggle('act', side === 'SHORT'); updateLiveLiqPrice() }
 
 // ===== ORDER TYPE TOGGLE =====
 export function onDemoOrdTypeChange(): void {
   const sel = w.el('demoOrdType'); const entryInput = w.el('demoEntry'); const entryLabel = w.el('demoEntryLabel')
   if (!sel || !entryInput) return; const isMarket = sel.value === 'market'
   if (isMarket) { entryInput.readOnly = true; entryInput.value = ''; entryInput.placeholder = 'Market Price'; entryInput.style.opacity = '0.5'; if (entryLabel) entryLabel.textContent = 'ENTRY PRICE (MARKET)' }
-  else { entryInput.readOnly = false; entryInput.value = w.S.price ? w.fP(w.S.price) : ''; entryInput.placeholder = 'Limit Price'; entryInput.style.opacity = '1'; if (entryLabel) entryLabel.textContent = 'LIMIT PRICE' }
+  else { entryInput.readOnly = false; entryInput.value = getPrice() ? w.fP(getPrice()) : ''; entryInput.placeholder = 'Limit Price'; entryInput.style.opacity = '1'; if (entryLabel) entryLabel.textContent = 'LIMIT PRICE' }
   updateDemoLiqPrice()
 }
 
@@ -129,21 +135,21 @@ export function calcLiqPrice(entry: any, lev: any, side: string): number | null 
   if (!e || !l || l <= 0) return null; const mm = 0.025 // Binance baseline maintenance margin 2.5%
   if (side === 'LONG') return e * (1 - 1 / l + mm); else return e * (1 + 1 / l - mm)
 }
-export function updateDemoLiqPrice(): void { const entry = parseFloat(w.el('demoEntry')?.value) || w.S.price; const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, w.TP.demoSide); const e = w.el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + w.fP(liq) : '\u2014' }
-export function updateLiveLiqPrice(): void { const entry = parseFloat(w.el('liveEntry')?.value) || w.S.price; const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, w.TP.liveSide); const e = w.el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + w.fP(liq) : '\u2014' }
+export function updateDemoLiqPrice(): void { const entry = parseFloat(w.el('demoEntry')?.value) || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = w.el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + w.fP(liq) : '\u2014' }
+export function updateLiveLiqPrice(): void { const entry = parseFloat(w.el('liveEntry')?.value) || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = w.el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + w.fP(liq) : '\u2014' }
 
-export function setDemoPct(pct: number): void { const e = w.el('demoSize'); if (e) e.value = (w.TP.demoBalance * pct / 100).toFixed(0) }
-export function setLivePct(pct: number): void { const e = w.el('liveSize'); if (e) e.value = ((w.TP.liveBalance || 100) * pct / 100).toFixed(0) }
+export function setDemoPct(pct: number): void { const e = w.el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0) }
+export function setLivePct(pct: number): void { const e = w.el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0) }
 export function updateDemoBalance(): void {
   const e = w.el('demoBalance'); if (!e) return
-  const _gm = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
-  if (_gm === 'live') { if (w._apiConfigured && typeof w.TP !== 'undefined' && w.TP.liveBalance > 0) { const _balPrefix = (w._resolvedEnv === 'TESTNET') ? 'BAL (TESTNET): $' : 'BAL: $'; e.textContent = _balPrefix + w.TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } else { e.textContent = 'BAL: Exchange not configured' } }
-  else { e.textContent = 'BAL: $' + w.TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+  const _gm = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
+  if (_gm === 'live') { if (w._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) { const _balPrefix = (w._resolvedEnv === 'TESTNET') ? 'BAL (TESTNET): $' : 'BAL: $'; e.textContent = _balPrefix + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } else { e.textContent = 'BAL: Exchange not configured' } }
+  else { e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 }
 
 // ===== PLACE ORDER =====
 export function placeDemoOrder(): void {
-  const _curMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
+  const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const _curEnv = w._resolvedEnv || (_curMode === 'demo' ? 'DEMO' : 'REAL')
   if (_curMode === 'live' && !w._apiConfigured) { w.toast('Cannot place order \u2014 exchange not configured', 3000, w._ZI.lock); return }
   if (_curMode === 'live' && w._apiConfigured) { const _isTestnet = _curEnv === 'TESTNET'; _showConfirmDialog(_isTestnet ? 'Place Testnet Order?' : 'Place Real Order?', _isTestnet ? 'You are about to place an order on Binance TESTNET with TEST funds.' : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.', 'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order', function () { _executePlaceDemoOrder() }); return }
@@ -151,19 +157,19 @@ export function placeDemoOrder(): void {
 }
 
 function _executePlaceDemoOrder(): void {
-  const _curMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
+  const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const orderTypeSel = w.el('demoOrdType'); const orderType = (orderTypeSel && orderTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
   const size = parseFloat(w.el('demoSize')?.value || '100'); const lev = getDemoLev()
   const tp = parseFloat(w.el('demoTP')?.value) || null; const sl = parseFloat(w.el('demoSL')?.value) || null
   let entry: number
-  if (orderType === 'MARKET') { entry = w.S.price } else { entry = parseFloat(w.el('demoEntry')?.value); if (!entry || entry <= 0) { w.toast('Limit price is required', 3000, w._ZI.w); return } }
+  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(w.el('demoEntry')?.value); if (!entry || entry <= 0) { w.toast('Limit price is required', 3000, w._ZI.w); return } }
   if (!entry || !size) { w.toast('Entry price and size required', 3000, w._ZI.w); return }
   if (size <= 0) { w.toast('Size must be positive', 3000, w._ZI.w); return }
   if (entry <= 0) { w.toast('Entry price must be positive', 3000, w._ZI.w); return }
-  if (orderType === 'LIMIT') { if (w.TP.demoSide === 'LONG' && entry >= w.S.price) { w.toast('LONG LIMIT must be below current price'); return }; if (w.TP.demoSide === 'SHORT' && entry <= w.S.price) { w.toast('SHORT LIMIT must be above current price'); return } }
-  const _valEntry = (orderType === 'LIMIT') ? entry : w.S.price
-  if (sl) { if (w.TP.demoSide === 'LONG' && sl >= _valEntry) { w.toast('LONG SL must be below entry'); return }; if (w.TP.demoSide === 'SHORT' && sl <= _valEntry) { w.toast('SHORT SL must be above entry'); return } }
-  if (tp) { if (w.TP.demoSide === 'LONG' && tp <= _valEntry) { w.toast('LONG TP must be above entry'); return }; if (w.TP.demoSide === 'SHORT' && tp >= _valEntry) { w.toast('SHORT TP must be below entry'); return } }
+  if (orderType === 'LIMIT') { if (TP.demoSide === 'LONG' && entry >= getPrice()) { w.toast('LONG LIMIT must be below current price'); return }; if (TP.demoSide === 'SHORT' && entry <= getPrice()) { w.toast('SHORT LIMIT must be above current price'); return } }
+  const _valEntry = (orderType === 'LIMIT') ? entry : getPrice()
+  if (sl) { if (TP.demoSide === 'LONG' && sl >= _valEntry) { w.toast('LONG SL must be below entry'); return }; if (TP.demoSide === 'SHORT' && sl <= _valEntry) { w.toast('SHORT SL must be above entry'); return } }
+  if (tp) { if (TP.demoSide === 'LONG' && tp <= _valEntry) { w.toast('LONG TP must be above entry'); return }; if (TP.demoSide === 'SHORT' && tp >= _valEntry) { w.toast('SHORT TP must be below entry'); return } }
   if (_curMode === 'live') { _executeLiveManualOrder(orderType, size, entry, lev, tp, sl) } else { _executeDemoManualOrder(orderType, size, entry, lev, tp, sl) }
 }
 
@@ -174,13 +180,13 @@ function _registerManualOnServer(pos: any): void {
 }
 
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
-  if (size > w.TP.demoBalance) { w.toast('Insufficient demo balance', 3000, w._ZI.x); return }
-  if ((w.TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { w.toast('Max 20 demo positions', 3000, w._ZI?.x); return }
+  if (size > TP.demoBalance) { w.toast('Insufficient demo balance', 3000, w._ZI.x); return }
+  if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { w.toast('Max 20 demo positions', 3000, w._ZI?.x); return }
   if (orderType === 'MARKET') {
-    const fillPrice = w.S.price; const liqPrice = calcLiqPrice(fillPrice, lev, w.TP.demoSide)
+    const fillPrice = getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
     const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
-    if (w.TP.demoPositions.some((p: any) => p.id === pos.id)) return
-    w.TP.demoPositions.push(pos); w.TP.demoBalance -= size
+    if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
+    TP.demoPositions.push(pos); TP.demoBalance -= size
     w.updateDemoBalance(); w.renderDemoPositions()
     if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo')
     w.ZState.save(); _registerManualOnServer(pos)
@@ -188,8 +194,8 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
     w.toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + w.fmt(size) + ' @$' + w.fP(fillPrice) + ' ' + lev + 'x MARKET')
   } else {
-    const pending = { id: Date.now(), side: w.TP.demoSide, sym: w.S.symbol, limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
-    w.TP.pendingOrders.push(pending); w.TP.demoBalance -= size
+    const pending = { id: Date.now(), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
+    TP.pendingOrders.push(pending); TP.demoBalance -= size
     w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
     w.toast(' LIMIT ' + pending.side + ' @$' + w.fP(entry) + ' $' + w.fmt(size) + ' ' + lev + 'x \u2014 waiting')
   }
@@ -197,38 +203,38 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
 
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
   if (typeof w.manualLivePlaceOrder !== 'function') { w.toast('Live API not available', 3000, w._ZI.lock); return }
-  if (!w.TP.liveBalance || size > w.TP.liveBalance) { w.toast('Insufficient live balance', 3000, w._ZI?.x); return }
+  if (!TP.liveBalance || size > TP.liveBalance) { w.toast('Insufficient live balance', 3000, w._ZI?.x); return }
   if (lev < 1 || lev > 125) { w.toast('Leverage must be 1-125x', 3000, w._ZI?.x); return }
-  const refPrice = (orderType === 'MARKET') ? w.S.price : entry; const qty = (size * lev) / refPrice; const binanceSide = (w.TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
+  const refPrice = (orderType === 'MARKET') ? getPrice() : entry; const qty = (size * lev) / refPrice; const binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
   const execBtn = w.el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
-  w.manualLivePlaceOrder({ symbol: w.S.symbol, side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: w.S.price }).then(function (result: any) {
-    if (execBtn) { execBtn.disabled = false; setDemoSide(w.TP.demoSide) }
+  w.manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
+    if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }
     if (orderType === 'MARKET') {
-      const fillPrice = parseFloat(result.avgPrice) || w.S.price; const liqPrice = calcLiqPrice(fillPrice, lev, w.TP.demoSide)
+      const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
       const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = parseFloat(result.executedQty) || qty
-      w.TP.livePositions.push(pos); w.renderLivePositions()
+      TP.livePositions.push(pos); w.renderLivePositions()
       if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_live')
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
       w.toast('LIVE MARKET ' + binanceSide + ' filled @$' + w.fP(fillPrice))
-      if (sl) { w.manualLiveSetSL({ symbol: w.S.symbol, side: w.TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { w.toast('SL failed: ' + (e.message || e)) }) }
-      if (tp) { w.manualLiveSetTP({ symbol: w.S.symbol, side: w.TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { w.toast('TP failed: ' + (e.message || e)) }) }
+      if (sl) { w.manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { w.toast('SL failed: ' + (e.message || e)) }) }
+      if (tp) { w.manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { w.toast('TP failed: ' + (e.message || e)) }) }
       if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 1000)
     } else {
-      const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: w.TP.demoSide, binanceSide, sym: w.S.symbol, limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
-      w.TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()
+      const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
+      TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()
       w.toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); w._startLivePendingSync()
     }
-  }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(w.TP.demoSide) }; w.toast('LIVE order failed: ' + (err.message || err)) })
+  }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }; w.toast('LIVE order failed: ' + (err.message || err)) })
 }
 
 function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: any, sl: any, liqPrice: any, mode: string, orderType: string): any {
   return {
-    id: Date.now(), side: w.TP.demoSide, sym: w.S.symbol, entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
+    id: Date.now(), side: TP.demoSide, sym: getSymbol(), entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
     mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(w.TP.demoSide, fillPrice, tp) : { openDslPct: 1.5, dslTargetPrice: w.TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(TP.demoSide, fillPrice, tp) : { openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(),
   }
 }
@@ -236,8 +242,8 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
 // ===== getSymPrice (used by many modules) =====
 export function getSymPrice(pos: any): number {
   if (!pos) return 0
-  const sym = pos.sym || pos.symbol || w.S.symbol
-  if (sym === w.S.symbol && w.S.price > 0) return w.S.price
+  const sym = pos.sym || pos.symbol || getSymbol()
+  if (sym === getSymbol() && getPrice() > 0) return getPrice()
   if (w.allPrices && w.allPrices[sym] > 0) return w.allPrices[sym]
   if (w.wlPrices && w.wlPrices[sym]?.price > 0) return w.wlPrices[sym].price
   return pos.entry || 0

@@ -2,7 +2,8 @@
 // Ported 1:1 from public/js/data/marketData.js lines 800-1127 (Chunk D1)
 // TF picker, fullscreen, price display, API fetches, metrics, RSI display, SR table
 
-const w = window as any
+import { getTPObject } from '../services/stateAccessors'
+const w = window as any // kept for w.S (producer), w.el, w.fP, w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
@@ -85,8 +86,9 @@ export function updatePriceDisplay(): void {
   if (bc) { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
   if (typeof w.calcSRTable === 'function') w.calcSRTable()
   if (typeof w.updateMetrics === 'function') w.updateMetrics()
-  if (w.TP.demoOpen) w.updateDemoLiqPrice()
-  if (w.TP.liveOpen) w.updateLiveLiqPrice()
+  const _tp = getTPObject()
+  if (_tp?.demoOpen) w.updateDemoLiqPrice()
+  if (_tp?.liveOpen) w.updateLiveLiqPrice()
   if (typeof w._demoTick === 'function') w._demoTick()
 }
 

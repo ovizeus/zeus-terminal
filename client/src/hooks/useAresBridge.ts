@@ -2,7 +2,7 @@
  * useAresBridge — syncs aresStore from engine ARES events.
  * Engine emits 'zeus:aresStateChanged' after wallet/position changes.
  * Reads complete snapshot from engine → aresStore atomic.
- * Safety: cleanup, useRef guard, polling 10s fallback.
+ * [9A-1] Event-only — polling removed (ARES has full event coverage).
  */
 import { useEffect, useRef } from 'react'
 import { useAresStore } from '../stores'
@@ -19,12 +19,11 @@ export function useAresBridge() {
     }
 
     window.addEventListener('zeus:aresStateChanged', onAresChanged)
-    const pollTimer = setInterval(onAresChanged, 10000) // ARES is slow cadence
+    // Initial sync on mount (engine may have state from boot)
     setTimeout(onAresChanged, 4000)
 
     return () => {
       window.removeEventListener('zeus:aresStateChanged', onAresChanged)
-      clearInterval(pollTimer)
       registeredRef.current = false
     }
   }, [])

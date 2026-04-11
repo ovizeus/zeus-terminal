@@ -1,18 +1,13 @@
 /**
  * useATBridge — syncs atStore from engine events.
  *
- * Engine (autotrade.ts) emits 'zeus:atStateChanged' after toggle, kill,
- * position open/close, stats update. This hook reads a COMPLETE SNAPSHOT
- * from window.AT and applies it atomically to atStore via patch().
+ * Dispatch sites for 'zeus:atStateChanged':
+ * - autotrade.ts _emitATChanged(): toggle, kill, trade placed, resetKillSwitch
+ * - guards.ts _onNewUTCDay(): daily counter reset
+ * - marketDataTrading.ts: mode switch
+ * - state.ts pullAndMerge(): server diff applied
  *
- * Rule: server is final truth at boot/refresh. Engine events are fast local sync.
- * Stats are mirrored, not recalculated — React is a pure observer.
- *
- * Safety:
- * - cleanup on unmount
- * - useRef guard against double registration in StrictMode
- * - snapshot read is atomic
- * - polling fallback every 5s
+ * [9A-4] Event-only — polling removed (all AT write paths now emit events).
  */
 import { useEffect, useRef } from 'react'
 import { useATStore } from '../stores'
@@ -43,21 +38,12 @@ export function useATBridge() {
       })
     }
 
-    function onATChanged() {
-      readATSnapshot()
-    }
-
-    window.addEventListener('zeus:atStateChanged', onATChanged)
-
-    // Polling fallback every 5s (safety net)
-    const pollTimer = setInterval(readATSnapshot, 5000)
-
+    window.addEventListener('zeus:atStateChanged', readATSnapshot)
     // Initial read after bridge loads
     setTimeout(readATSnapshot, 3000)
 
     return () => {
-      window.removeEventListener('zeus:atStateChanged', onATChanged)
-      clearInterval(pollTimer)
+      window.removeEventListener('zeus:atStateChanged', readATSnapshot)
       registeredRef.current = false
     }
   }, [])

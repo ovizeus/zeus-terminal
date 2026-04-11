@@ -2,7 +2,11 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 1722-2108 (Chunk D)
 // Error boundary, __ZEUS_INIT__ guard, status bar, app update, DLOG panel, activity feed
 
-const w = window as any
+import { getATObject, getTPObject } from '../services/stateAccessors'
+const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
+// [8D-4A] mutable refs
+const AT = getATObject()
+const TP = getTPObject()
 
 // ===== GLOBAL ERROR BOUNDARY =====
 window.addEventListener('error', function (e: any) {
@@ -60,13 +64,13 @@ function _showUpdateBanner(data: any): void {
   function _updateStatusBar() {
     try {
       const modeEl = document.getElementById('zsbMode')
-      if (modeEl && typeof w.AT !== 'undefined') { const mode = w.AT._serverMode || w.AT.mode || 'demo'; const _sbEnv = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL'); modeEl.textContent = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase(); modeEl.className = 'zsb-item zsb-mode ' + (_sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo')) }
-      const atEl = document.getElementById('zsbAT'); if (atEl && typeof w.AT !== 'undefined') { const on = !!w.AT.enabled; atEl.innerHTML = '<span class="zsb-dot ' + (on ? 'zsb-on' : 'zsb-off') + '"></span>AT ' + (on ? 'ON' : 'OFF') }
+      if (modeEl && typeof AT !== 'undefined') { const mode = AT._serverMode || AT.mode || 'demo'; const _sbEnv = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL'); modeEl.textContent = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase(); modeEl.className = 'zsb-item zsb-mode ' + (_sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo')) }
+      const atEl = document.getElementById('zsbAT'); if (atEl && typeof AT !== 'undefined') { const on = !!AT.enabled; atEl.innerHTML = '<span class="zsb-dot ' + (on ? 'zsb-on' : 'zsb-off') + '"></span>AT ' + (on ? 'ON' : 'OFF') }
       const wsEl = document.getElementById('zsbWS'); if (wsEl) { const wsOk = !!(w._zeusWS && w._zeusWS.readyState === 1); wsEl.innerHTML = '<span class="zsb-dot ' + (wsOk ? 'zsb-on' : 'zsb-warn') + '"></span>' + (wsOk ? 'WS' : 'WS...') }
       const dataEl = document.getElementById('zsbData'); if (dataEl && typeof w._SAFETY !== 'undefined') { const stale = !!w._SAFETY.dataStalled; const degraded = w._SAFETY.degradedFeeds && w._SAFETY.degradedFeeds.size > 0; const cls = stale ? 'zsb-warn' : (degraded ? 'zsb-stale' : 'zsb-on'); const txt = stale ? 'STALE' : (degraded ? 'DEGRADED' : 'DATA'); dataEl.innerHTML = '<span class="zsb-dot ' + cls + '"></span>' + txt }
-      const killEl = document.getElementById('zsbKill'); const killSep = document.getElementById('zsbKillSep'); if (killEl && typeof w.AT !== 'undefined') { const killActive = !!w.AT.killTriggered; killEl.style.display = killActive ? '' : 'none'; if (killSep) killSep.style.display = killActive ? '' : 'none'; if (killActive) killEl.innerHTML = '<span class="zsb-dot zsb-warn"></span>KILL ACTIVE' }
-      const posEl = document.getElementById('zsbPos'); if (posEl && typeof w.TP !== 'undefined') { const demoCount = (w.TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length; const liveCount = (w.TP.livePositions || []).filter(function (p: any) { return !p.closed }).length; const total = demoCount + liveCount; posEl.textContent = total + ' pos'; posEl.style.color = total > 0 ? 'var(--cyan)' : '#555' }
-      const pnlEl = document.getElementById('zsbPnl'); if (pnlEl && typeof w.AT !== 'undefined') { const pnl = w.AT.totalPnL || w.AT.realizedDailyPnL || 0; pnlEl.textContent = '$' + pnl.toFixed(2); pnlEl.style.color = pnl > 0 ? 'var(--grn-bright)' : (pnl < 0 ? 'var(--red-bright)' : '#555') }
+      const killEl = document.getElementById('zsbKill'); const killSep = document.getElementById('zsbKillSep'); if (killEl && typeof AT !== 'undefined') { const killActive = !!AT.killTriggered; killEl.style.display = killActive ? '' : 'none'; if (killSep) killSep.style.display = killActive ? '' : 'none'; if (killActive) killEl.innerHTML = '<span class="zsb-dot zsb-warn"></span>KILL ACTIVE' }
+      const posEl = document.getElementById('zsbPos'); if (posEl && typeof TP !== 'undefined') { const demoCount = (TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length; const liveCount = (TP.livePositions || []).filter(function (p: any) { return !p.closed }).length; const total = demoCount + liveCount; posEl.textContent = total + ' pos'; posEl.style.color = total > 0 ? 'var(--cyan)' : '#555' }
+      const pnlEl = document.getElementById('zsbPnl'); if (pnlEl && typeof AT !== 'undefined') { const pnl = AT.totalPnL || AT.realizedDailyPnL || 0; pnlEl.textContent = '$' + pnl.toFixed(2); pnlEl.style.color = pnl > 0 ? 'var(--grn-bright)' : (pnl < 0 ? 'var(--red-bright)' : '#555') }
       if (typeof w.updateModeBar === 'function') w.updateModeBar()
     } catch (_) { }
   }

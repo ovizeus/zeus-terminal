@@ -1,7 +1,8 @@
 // Zeus v122 — ui/render.ts
 // Chart and main rendering functions
 // Ported 1:1 from public/js/ui/render.js
-const w = window as any;
+import { getKlines, getTimezone, getSymbol, getPrice, getFR, getFG, getOI, getLS, getTPObject, getBrainObject, getBrainMetrics, getTCMaxPos } from '../services/stateAccessors'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.fP, w.fmt, w.fmtNow, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -107,8 +108,7 @@ export const _origAutoClose_recordPerf = w.scheduleAutoClose;
 
 // Brain extension UI
 export function getCurrentADX() {
-  const S = w.S;
-  return w.calcADX(S.klines || []);
+  return w.calcADX(getKlines());
 }
 
 // ===================================================================
@@ -122,9 +122,8 @@ export function getCurrentADX() {
 
 // --- QUANTUM CLOCK ---
 export function updateQuantumClock() {
-  const S = w.S;
   const now = new Date();
-  const tz = S.tz || 'Europe/Bucharest';
+  const tz = getTimezone();
   // Use canonical S.tz for Romania time
   const roTime = new Date(now.toLocaleString('en-US', { timeZone: tz }));
   const h = roTime.getHours(), m = roTime.getMinutes(), s = roTime.getSeconds();
@@ -153,7 +152,7 @@ export function updateQuantumClock() {
   }
 
   // Time label
-  const _roTz = S.tz || 'Europe/Bucharest';
+  const _roTz = getTimezone();
   const ct = w.el('qClockTime');
   if (ct) ct.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 
@@ -184,7 +183,6 @@ export function getSessionKey(hUTC: number) {
 // [MOVED TO TOP] SESS_CFG
 
 export function updateSessionBacktest(hUTC: number) {
-  const S = w.S;
   const _sessLastBt = w._sessLastBt;
   const SESS_CFG = w.SESS_CFG;
   const box = w.el('sessBacktestBox'); if (!box) return;
@@ -194,7 +192,7 @@ export function updateSessionBacktest(hUTC: number) {
   if ((nowTs - _sessLastBt.ts) < 90000 && box.innerHTML) return;
   _sessLastBt.ts = nowTs;
 
-  const klines = S.klines || [];
+  const klines = getKlines();
   if (klines.length < 20) { box.innerHTML = ''; return; }
 
   const yearMs = 365 * 24 * 3600 * 1000;
@@ -261,16 +259,16 @@ export function updateSessionBacktest(hUTC: number) {
 
 // --- SYMBOL PULSE BARS ---
 export function updateSymPulseRows() {
-  const S = w.S;
   const BEXT = w.BEXT;
-  const TP = w.TP;
+  const TP = getTPObject();
   const syms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT'];
   const labels = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'];
   const container = w.el('symPulseRows'); if (!container) return;
+  const _sym = getSymbol(), _price = getPrice();
 
   // Track price history for sparklines
   syms.forEach((sym: string, i: number) => {
-    const p = sym === S.symbol ? S.price : (w.wlPrices[sym]?.price || 0);
+    const p = sym === _sym ? _price : (w.wlPrices[sym]?.price || 0);
     if (!p) return;
     if (!BEXT.priceHistory[sym]) BEXT.priceHistory[sym] = [];
     BEXT.priceHistory[sym].push(p);
@@ -309,7 +307,6 @@ export function updateSymPulseRows() {
 
 // --- NEURAL HEATMAP ---
 export function updateBrainHeatmap() {
-  const S = w.S;
   const MSCAN = w.MSCAN;
   const syms = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'];
   const symsFull = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT'];
@@ -342,10 +339,9 @@ export function updateBrainHeatmap() {
 
 // --- RISK GAUGES ---
 export function updateRiskGauges() {
-  const S = w.S;
-  const BRAIN = w.BRAIN;
-  const TP = w.TP;
-  const BM = w.BM;
+  const BRAIN = getBrainObject();
+  const TP = getTPObject();
+  const BM = getBrainMetrics();
   // Volatility gauge (from ATR%)
   const atrPct = BRAIN.regimeAtrPct || 1;
   const volPct = Math.min(100, atrPct * 30);
@@ -354,14 +350,15 @@ export function updateRiskGauges() {
 
   // Position risk gauge
   const openAuto = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed).length; // [FIX M2]
-  const maxPos = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.maxPos)) ? w.TC.maxPos : (parseInt(w.el('atMaxPos')?.value) || 4);
+  const maxPos = getTCMaxPos();
   const posPct = openAuto / maxPos * 100;
   const posCol = posPct >= 100 ? 'var(--red)' : posPct >= 50 ? 'var(--gold)' : 'var(--grn)';
   setRiskGauge('pos', posPct, posCol, openAuto + '/' + maxPos);
 
   // Sentiment gauge (FR + LS + fear&greed combined)
-  const frVal = S.fr ? Math.abs(S.fr) * 10000 : 0;
-  const fg = S.fg || 50;
+  const fr = getFR();
+  const frVal = fr ? Math.abs(fr) * 10000 : 0;
+  const fg = getFG();
   const sentimentBull = fg > 50 ? fg : (100 - fg);
   const sentPct = Math.min(100, sentimentBull);
   const sentCol = sentPct > 65 ? 'var(--grn)' : sentPct > 40 ? 'var(--gold)' : 'var(--red)';
@@ -381,16 +378,16 @@ export function setRiskGauge(id: string, pct: number, col: string, label: string
 
 // --- DATA STREAM TICKER ---
 export function updateDataStream() {
-  const S = w.S;
-  const BRAIN = w.BRAIN;
+  const BRAIN = getBrainObject();
   const syms = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT'];
   const labels = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ADA'];
+  const _sym = getSymbol(), _price = getPrice();
 
   const items: any[] = [];
 
   // Symbol prices
   syms.forEach((sym: string, i: number) => {
-    const p = sym === S.symbol ? S.price : (w.wlPrices[sym]?.price || 0);
+    const p = sym === _sym ? _price : (w.wlPrices[sym]?.price || 0);
     const chg = w.wlPrices[sym]?.chg || 0;
     const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'neut';
     const arrow = chg > 0 ? '\u25b2' : chg < 0 ? '\u25bc' : '\u2014';
@@ -398,9 +395,12 @@ export function updateDataStream() {
   });
 
   // Extra brain data
-  if (S.fr !== null && S.fr !== undefined) items.push({ text: `FR ${(S.fr * 100).toFixed(4)}%`, cls: S.fr < 0 ? 'up' : 'down' });
-  if (S.oi) items.push({ text: `OI $${w.fmt(S.oi)}`, cls: 'neut' });
-  if (S.ls) items.push({ text: `L/S ${S.ls.l?.toFixed(0)}%/${S.ls.s?.toFixed(0)}%`, cls: S.ls.l > 50 ? 'up' : 'down' });
+  const fr = getFR();
+  if (fr !== null) items.push({ text: `FR ${(fr * 100).toFixed(4)}%`, cls: fr < 0 ? 'up' : 'down' });
+  const oi = getOI().oi;
+  if (oi) items.push({ text: `OI $${w.fmt(oi)}`, cls: 'neut' });
+  const ls = getLS();
+  if (ls) items.push({ text: `L/S ${ls.l?.toFixed(0)}%/${ls.s?.toFixed(0)}%`, cls: ls.l > 50 ? 'up' : 'down' });
   items.push({ text: `REGIM ${BRAIN.regime.toUpperCase()}`, cls: 'neut' });
   items.push({ text: `ADX ${getCurrentADX() || '\u2014'}`, cls: 'neut' });
   items.push({ text: `BRAIN ${BRAIN.state.toUpperCase()}`, cls: BRAIN.state === 'ready' ? 'up' : BRAIN.state === 'blocked' ? 'down' : 'neut' });

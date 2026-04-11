@@ -2,7 +2,8 @@
    Zeus Terminal — Drawing Tools v4.0 | 2026-03-27
    Ported from drawingTools.js — IIFE runs on import.
    ─────────────────────────────────────────────────────────────── */
-const w = window as any;
+import { getKlines } from '../services/stateAccessors'
+const w = window as any; // kept for w._zMainChart, w._zCSeries, w._dtToastTimer, w.__ZEUS_DRAW__, fn calls
 
 export function drawToolActivate(tool: any): void { w.drawToolActivate(tool); }
 export function drawToolClearAll(): void { w.drawToolClearAll(); }
@@ -53,9 +54,10 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var x = clientX - mc.getBoundingClientRect().left;
     try {
       var log = _chart().timeScale().coordinateToLogical(x);
-      if (log != null && typeof w.S !== 'undefined' && w.S.klines) {
+      var klines = getKlines();
+      if (log != null && klines.length) {
         var idx = Math.round(log);
-        if (idx >= 0 && idx < w.S.klines.length) return w.S.klines[idx].time;
+        if (idx >= 0 && idx < klines.length) return klines[idx].time;
       }
     } catch(_) {}
     return null;

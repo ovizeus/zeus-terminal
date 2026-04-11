@@ -2,7 +2,13 @@
 // Ported 1:1 from public/js/data/marketData.js lines 2662-3361 (Chunk F)
 // Pending orders, SL/TP edit, render positions, closeLivePos
 
-const w = window as any
+import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, w.el, w._ZI, w.toast, fn calls
+// [8D-2B] mutable refs — reads + writes through same objects
+const TP = getTPObject()
+const AT = getATObject()
+const BM = getBrainMetrics()
+const DSL = getDSLObject()
 
 // getSymPrice — full version with staleness check
 export function getSymPrice(pos: any): number | null {
@@ -23,9 +29,9 @@ export function getSymPrice(pos: any): number | null {
 // PENDING ORDERS ENGINE
 // ═══════════════════════════════════════════════════════════════
 export function checkPendingOrders(): void {
-  if (!w.TP.pendingOrders || !w.TP.pendingOrders.length) return
+  if (!TP.pendingOrders || !TP.pendingOrders.length) return
   const toFill: any[] = []
-  w.TP.pendingOrders.forEach(function (ord: any) {
+  TP.pendingOrders.forEach(function (ord: any) {
     if (ord.status !== 'WAITING' || ord.mode !== 'demo') return
     const cur = getSymPrice(ord) || (w.allPrices[ord.sym] ? w.allPrices[ord.sym] : null)
     if (!cur || cur <= 0) return
@@ -39,7 +45,7 @@ export function checkPendingOrders(): void {
 
 function _fillDemoPendingOrder(ord: any): void {
   ord.status = 'FILLED'; ord.filledAt = Date.now()
-  const idx = w.TP.pendingOrders.indexOf(ord); if (idx >= 0) w.TP.pendingOrders.splice(idx, 1)
+  const idx = TP.pendingOrders.indexOf(ord); if (idx >= 0) TP.pendingOrders.splice(idx, 1)
   const liqPrice = w.calcLiqPrice(ord.limitPrice, ord.lev, ord.side)
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
@@ -47,8 +53,8 @@ function _fillDemoPendingOrder(ord: any): void {
     dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
-  if (w.TP.demoPositions.some((p: any) => p.id === pos.id)) return
-  w.TP.demoPositions.push(pos)
+  if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
+  TP.demoPositions.push(pos)
   w.updateDemoBalance(); w.renderDemoPositions(); renderPendingOrders()
   if (typeof w.onPositionOpened === 'function') w.onPositionOpened(pos, 'manual_demo_limit_fill')
   w.ZState.save(); if (typeof w._registerManualOnServer === 'function') w._registerManualOnServer(pos)
@@ -60,17 +66,17 @@ function _fillDemoPendingOrder(ord: any): void {
 
 export function cancelPendingOrder(id: any): void {
   const strId = String(id)
-  const idx = w.TP.pendingOrders.findIndex(function (o: any) { return String(o.id) === strId })
-  if (idx >= 0) { const ord = w.TP.pendingOrders[idx]; if (ord.mode === 'demo') { w.TP.demoBalance += ord.size; w.updateDemoBalance() }; w.TP.pendingOrders.splice(idx, 1); renderPendingOrders(); w.ZState.save(); w.toast('Pending LIMIT cancelled'); return }
-  const liveIdx = w.TP.manualLivePending.findIndex(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
-  if (liveIdx >= 0) { const liveOrd = w.TP.manualLivePending[liveIdx]; if (typeof w.manualLiveCancelOrder === 'function' && liveOrd.exchangeOrderId) { w.manualLiveCancelOrder(liveOrd.sym, liveOrd.exchangeOrderId).then(function () { w.TP.manualLivePending.splice(liveIdx, 1); renderPendingOrders(); w.ZState.save(); w.toast('LIVE LIMIT cancelled') }).catch(function (err: any) { w.toast('Cancel failed: ' + (err.message || err)) }) } }
+  const idx = TP.pendingOrders.findIndex(function (o: any) { return String(o.id) === strId })
+  if (idx >= 0) { const ord = TP.pendingOrders[idx]; if (ord.mode === 'demo') { TP.demoBalance += ord.size; w.updateDemoBalance() }; TP.pendingOrders.splice(idx, 1); renderPendingOrders(); w.ZState.save(); w.toast('Pending LIMIT cancelled'); return }
+  const liveIdx = TP.manualLivePending.findIndex(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
+  if (liveIdx >= 0) { const liveOrd = TP.manualLivePending[liveIdx]; if (typeof w.manualLiveCancelOrder === 'function' && liveOrd.exchangeOrderId) { w.manualLiveCancelOrder(liveOrd.sym, liveOrd.exchangeOrderId).then(function () { TP.manualLivePending.splice(liveIdx, 1); renderPendingOrders(); w.ZState.save(); w.toast('LIVE LIMIT cancelled') }).catch(function (err: any) { w.toast('Cancel failed: ' + (err.message || err)) }) } }
 }
 
 export function modifyPendingPrice(id: any): void {
   const strId = String(id)
-  const demoOrd = w.TP.pendingOrders.find(function (o: any) { return String(o.id) === strId })
+  const demoOrd = TP.pendingOrders.find(function (o: any) { return String(o.id) === strId })
   if (demoOrd && demoOrd.mode === 'demo') { const newPrice = prompt('New limit price:', w.fP(demoOrd.limitPrice)); if (!newPrice) return; const np = parseFloat(newPrice); if (!np || np <= 0) { w.toast('Invalid price'); return }; demoOrd.limitPrice = np; renderPendingOrders(); w.ZState.save(); w.toast('Limit price updated to $' + w.fP(np)); return }
-  const liveOrd = w.TP.manualLivePending.find(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
+  const liveOrd = TP.manualLivePending.find(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
   if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', w.fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!_np || _np <= 0) { w.toast('Invalid price'); return }; if (typeof w.manualLiveModifyLimit !== 'function') { w.toast('Live API not available'); return }; w.manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); w.toast('LIVE LIMIT modified @$' + w.fP(_np)) }).catch(function (err: any) { w.toast('Modify failed: ' + (err.message || err)) }) }
 }
 
@@ -79,10 +85,10 @@ export function modifyPendingPrice(id: any): void {
 // ═══════════════════════════════════════════════════════════════
 export function renderPendingOrders(): void {
   const cont = w.el('pendingOrdersTable'); if (!cont) return
-  const _gMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
+  const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const allPending: any[] = []
-  if (_gMode === 'demo') { (w.TP.pendingOrders || []).forEach(function (o: any) { if (o.status === 'WAITING') allPending.push(o) }) }
-  if (_gMode === 'live') { (w.TP.manualLivePending || []).forEach(function (o: any) { if (o.status === 'WAITING') allPending.push(o) }) }
+  if (_gMode === 'demo') { (TP.pendingOrders || []).forEach(function (o: any) { if (o.status === 'WAITING') allPending.push(o) }) }
+  if (_gMode === 'live') { (TP.manualLivePending || []).forEach(function (o: any) { if (o.status === 'WAITING') allPending.push(o) }) }
   if (!allPending.length) { cont.innerHTML = '<div style="color:var(--dim);text-align:center;padding:4px;font-size:9px">No pending orders</div>'; return }
   cont.innerHTML = allPending.map(function (ord: any) {
     const symBase = w.escHtml((ord.sym || '').replace('USDT', ''))
@@ -103,18 +109,18 @@ export function _startLivePendingSync(): void { if (_livePendingSyncTimer) retur
 export function _stopLivePendingSync(): void { if (_livePendingSyncTimer) { clearInterval(_livePendingSyncTimer); _livePendingSyncTimer = null } }
 
 function _syncLivePendingOrders(): void {
-  if (!w.TP.manualLivePending || !w.TP.manualLivePending.length) { _stopLivePendingSync(); return }
+  if (!TP.manualLivePending || !TP.manualLivePending.length) { _stopLivePendingSync(); return }
   if (typeof w.manualLiveGetOpenOrders !== 'function') return
-  const symbols: any = {}; w.TP.manualLivePending.forEach(function (o: any) { symbols[o.sym] = true })
+  const symbols: any = {}; TP.manualLivePending.forEach(function (o: any) { symbols[o.sym] = true })
   const symList = Object.keys(symbols); let _remaining = symList.length; const _exchangeOrderIds = new Set()
   symList.forEach(function (sym) { w.manualLiveGetOpenOrders(sym).then(function (orders: any) { (orders || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }); _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }).catch(function () { _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }) })
 }
 
 function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
-  const toRemove: any[] = []; w.TP.manualLivePending.forEach(function (ord: any) { if (!exchangeOrderIds.has(String(ord.exchangeOrderId))) toRemove.push(ord) })
+  const toRemove: any[] = []; TP.manualLivePending.forEach(function (ord: any) { if (!exchangeOrderIds.has(String(ord.exchangeOrderId))) toRemove.push(ord) })
   if (!toRemove.length) return
   toRemove.forEach(function (ord: any) {
-    const idx = w.TP.manualLivePending.indexOf(ord); if (idx >= 0) w.TP.manualLivePending.splice(idx, 1)
+    const idx = TP.manualLivePending.indexOf(ord); if (idx >= 0) TP.manualLivePending.splice(idx, 1)
     ord.status = 'FILLED'; ord.filledAt = Date.now()
     w.toast('LIVE LIMIT FILLED: ' + ord.side + ' @$' + w.fP(ord.limitPrice))
     if (ord.tp && typeof w.manualLiveSetTP === 'function') { const _qty = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); w.manualLiveSetTP({ symbol: ord.sym, side: ord.side, quantity: _qty.toFixed(8), stopPrice: ord.tp }).catch(function (e: any) { w.toast('TP failed: ' + (e.message || e)) }) }
@@ -123,10 +129,10 @@ function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
   })
   if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 500)
   renderPendingOrders(); w.ZState.save()
-  if (!w.TP.manualLivePending.length) _stopLivePendingSync()
+  if (!TP.manualLivePending.length) _stopLivePendingSync()
 }
 
-export function _resumeLivePendingSyncIfNeeded(): void { if (w.TP.manualLivePending && w.TP.manualLivePending.length > 0) _startLivePendingSync() }
+export function _resumeLivePendingSyncIfNeeded(): void { if (TP.manualLivePending && TP.manualLivePending.length > 0) _startLivePendingSync() }
 
 // ═══════════════════════════════════════════════════════════════
 // SL/TP EDITING
@@ -135,12 +141,12 @@ export function savePosSLTP(posId: any, mode: string): void {
   const strId = String(posId); const slInput = w.el('slEdit_' + strId); const tpInput = w.el('tpEdit_' + strId)
   const newSL = slInput ? parseFloat(slInput.value) || null : null; const newTP = tpInput ? parseFloat(tpInput.value) || null : null
   if (mode === 'demo') {
-    const pos = w.TP.demoPositions.find(function (p: any) { return String(p.id) === strId }); if (!pos) { w.toast('Position not found'); return }
+    const pos = TP.demoPositions.find(function (p: any) { return String(p.id) === strId }); if (!pos) { w.toast('Position not found'); return }
     if (newSL) { if (pos.side === 'LONG' && newSL >= pos.entry) { w.toast('LONG SL must be below entry'); return }; if (pos.side === 'SHORT' && newSL <= pos.entry) { w.toast('SHORT SL must be above entry'); return } }
     if (newTP) { if (pos.side === 'LONG' && newTP <= pos.entry) { w.toast('LONG TP must be above entry'); return }; if (pos.side === 'SHORT' && newTP >= pos.entry) { w.toast('SHORT TP must be below entry'); return } }
     pos.sl = newSL; pos.tp = newTP; w.renderDemoPositions(); w.ZState.save(); w.toast('SL/TP updated')
   } else if (mode === 'live') {
-    const livePos = w.TP.livePositions.find(function (p: any) { return String(p.id) === strId }); if (!livePos) { w.toast('Position not found'); return }
+    const livePos = TP.livePositions.find(function (p: any) { return String(p.id) === strId }); if (!livePos) { w.toast('Position not found'); return }
     const _qty = livePos.qty || livePos.size
     if (newSL) { if (livePos.side === 'LONG' && newSL >= livePos.entry) { w.toast('LONG SL must be below entry'); return }; if (livePos.side === 'SHORT' && newSL <= livePos.entry) { w.toast('SHORT SL must be above entry'); return } }
     if (newTP) { if (livePos.side === 'LONG' && newTP <= livePos.entry) { w.toast('LONG TP must be above entry'); return }; if (livePos.side === 'SHORT' && newTP >= livePos.entry) { w.toast('SHORT TP must be below entry'); return } }
@@ -155,9 +161,9 @@ export function savePosSLTP(posId: any, mode: string): void {
 // CHECK DEMO POSITIONS SL/TP
 // ═══════════════════════════════════════════════════════════════
 export function checkDemoPositionsSLTP(): void {
-  if (!w.TP.demoPositions.length) return
+  if (!TP.demoPositions.length) return
   const toClose: any[] = []
-  w.TP.demoPositions.forEach((pos: any) => {
+  TP.demoPositions.forEach((pos: any) => {
     if (pos.closed) return; if (pos.autoTrade) return
     const curPrice = getSymPrice(pos); if (!curPrice || !Number.isFinite(curPrice) || curPrice <= 0) return
     let reason: string | null = null
@@ -180,8 +186,8 @@ export function renderDemoPositions(): void {
   const table = w.el('demoPosTable'); if (!table) return
   const _ae = document.activeElement as any
   if (_ae && _ae.tagName === 'INPUT' && (_ae.id && (_ae.id.startsWith('slEdit_') || _ae.id.startsWith('tpEdit_'))) && table.contains(_ae)) return
-  const _gMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
-  const manualPos = w.TP.demoPositions.filter((p: any) => !p.closed && !p.autoTrade && (p.mode || 'demo') === _gMode)
+  const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
+  const manualPos = TP.demoPositions.filter((p: any) => !p.closed && !p.autoTrade && (p.mode || 'demo') === _gMode)
   let totalPnL = 0
   if (!manualPos.length) { table.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px">No open positions</div>' }
   else {
@@ -193,22 +199,22 @@ export function renderDemoPositions(): void {
       const margin = w._safe.num(pos.size, null, 0); const lev = w._safe.num(pos.lev, null, 1); const notional = margin * lev; const feeRate = w._safe.num(typeof w.S !== 'undefined' ? w.S.feeRate : null, null, 0.0004); const estFees = notional * feeRate * 2; const roe = margin > 0 ? (pos.pnl / margin * 100).toFixed(2) : '0.00'
       const symBase = w.escHtml((pos.sym || 'BTC').replace('USDT', ''))
       const modeBadge = (pos.mode || 'demo') === 'live' ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>' : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>'
-      const _dslSt = typeof w.DSL !== 'undefined' && w.DSL.positions ? w.DSL.positions[String(pos.id)] : null; const _dslActive = _dslSt && _dslSt.active; const _slVal = _dslActive && _dslSt.currentSL > 0 ? _dslSt.currentSL : pos.sl; const _slLabel = _dslActive ? 'DSL' : 'SL'; const _slColor = _dslActive ? '#39ff14' : '#ff6644'
+      const _dslSt = typeof DSL !== 'undefined' && DSL.positions ? DSL.positions[String(pos.id)] : null; const _dslActive = _dslSt && _dslSt.active; const _slVal = _dslActive && _dslSt.currentSL > 0 ? _dslSt.currentSL : pos.sl; const _slLabel = _dslActive ? 'DSL' : 'SL'; const _slColor = _dslActive ? '#39ff14' : '#ff6644'
       return `<div class="pos-row ${w.escHtml(pos.side) === 'LONG' ? 'pos-long' : 'pos-short'}"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700">${w.escHtml(pos.side)} ${symBase} ${pos.lev}x${modeBadge}</span><button data-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;min-height:52px;font-weight:700">\u2715 CLOSE</button></div><div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px"><span style="color:var(--dim)">Entry: $${w.fP(pos.entry)} | Now: $${w.fP(curPrice)}</span><span style="color:${pos.pnl >= 0 ? 'var(--grn)' : 'var(--red)'}">${pos.pnl >= 0 ? '+' : ''}$${pos.pnl.toFixed(2)} (${pnlPct}%)</span></div><div style="font-size:12px;color:var(--dim);margin-top:1px">Margin: $${w.fmt(margin)} | Notional: $${w.fmt(notional)} | Fees\u2248$${w.fmt(estFees)} | ROE: ${roe}%</div>${_dslActive ? `<div style="font-size:12px;color:${_slColor};margin-top:1px">${_slLabel}: $${w.fP(_slVal)}${pos.tp ? ' | TP: $' + w.fP(pos.tp) : ''}</div>` : ''}<div style="display:flex;gap:4px;margin-top:3px;align-items:center"><span style="font-size:10px;color:#ff6644;width:22px">SL:</span><input id="slEdit_${pos.id}" type="number" step="0.1" value="${pos.sl || ''}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"><span style="font-size:10px;color:#00ff88;width:22px">TP:</span><input id="tpEdit_${pos.id}" type="number" step="0.1" value="${pos.tp || ''}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"><button onclick="savePosSLTP('${pos.id}','demo')" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button></div>${pos.liqPrice ? `<div style="font-size:12px;color:${pos.side === 'LONG' ? '#ff3355' : '#00d97a'};margin-top:1px">LIQ: $${w.fP(pos.liqPrice)}</div>` : ''}</div>`
     }).join('')
     table.innerHTML = html
     table.querySelectorAll('button[data-id]').forEach(function (btn: any) { const posId = btn.getAttribute('data-id'); w.attachConfirmClose(btn, function () { w.closeDemoPos(posId) }) })
   }
   // Stats
-  const _statsMode = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
+  const _statsMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   let _statsWins = 0, _statsLosses = 0, _statsPnl = 0, _statsTrades = 0
   if (_statsMode === 'live') {
-    const _openManualLive = (w.TP.livePositions || []).filter(function (p: any) { return !p.closed && !p.autoTrade })
+    const _openManualLive = (TP.livePositions || []).filter(function (p: any) { return !p.closed && !p.autoTrade })
     _openManualLive.forEach(function (p: any) { const _cur = getSymPrice(p); const _pnl = (_cur && _cur > 0) ? calcPosPnL(p, _cur) : (Number.isFinite(p.pnl) ? p.pnl : 0); _statsPnl += _pnl })
-    const _jManualLive = (Array.isArray(w.TP.journal) ? w.TP.journal : []).filter(function (j: any) { return j.mode === 'live' && !j.autoTrade })
+    const _jManualLive = (Array.isArray(TP.journal) ? TP.journal : []).filter(function (j: any) { return j.mode === 'live' && !j.autoTrade })
     _jManualLive.forEach(function (j: any) { const _jp = Number(j.pnl) || 0; _statsPnl += _jp; if (_jp >= 0) _statsWins++; else _statsLosses++ })
     _statsTrades = _openManualLive.length + _jManualLive.length
-  } else { _statsWins = w.TP.demoWins || 0; _statsLosses = w.TP.demoLosses || 0; _statsPnl = totalPnL; _statsTrades = _statsWins + _statsLosses }
+  } else { _statsWins = TP.demoWins || 0; _statsLosses = TP.demoLosses || 0; _statsPnl = totalPnL; _statsTrades = _statsWins + _statsLosses }
   const pnlEl = w.el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$' + _statsPnl.toFixed(2); pnlEl.className = 'tp-pnl-val ' + (_statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut') }
   const wr = w.el('demoWR'); if (wr) wr.textContent = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%'
   const tr = w.el('demoTrades'); if (tr) tr.textContent = _statsTrades
@@ -218,18 +224,18 @@ export function calcPosPnL(pos: any, cur: any): number { return w._safePnl(pos.s
 
 export function updateLiveBalance(): void {
   const balEl = w.el('liveBalanceAmt') || w.el('demoBalanceAmt')
-  if (balEl && w.TP.liveBalance) balEl.textContent = '$' + Number(w.TP.liveBalance).toFixed(2)
+  if (balEl && TP.liveBalance) balEl.textContent = '$' + Number(TP.liveBalance).toFixed(2)
   const pnlEl = w.el('liveUnrealizedPnl')
-  if (pnlEl && typeof w.TP.liveUnrealizedPnL === 'number') pnlEl.textContent = (w.TP.liveUnrealizedPnL >= 0 ? '+' : '') + '$' + w.TP.liveUnrealizedPnL.toFixed(2)
+  if (pnlEl && typeof TP.liveUnrealizedPnL === 'number') pnlEl.textContent = (TP.liveUnrealizedPnL >= 0 ? '+' : '') + '$' + TP.liveUnrealizedPnL.toFixed(2)
 }
 
 export function renderLivePositions(): void {
   const cont = w.el('livePositions'); const contDemo = w.el('livePositionsDemo'); const contWrap = w.el('livePositionsInDemo')
-  const _isLiveMode = (typeof w.AT !== 'undefined' && w.AT._serverMode === 'live')
+  const _isLiveMode = (typeof AT !== 'undefined' && AT._serverMode === 'live')
   if (contWrap) contWrap.style.display = _isLiveMode ? 'block' : 'none'
   const _ae = document.activeElement as any
   if (_ae && _ae.tagName === 'INPUT' && (_ae.id && (_ae.id.startsWith('slEdit_') || _ae.id.startsWith('tpEdit_'))) && cont && cont.contains(_ae)) return
-  const live = w.TP.livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && !p.autoTrade)
+  const live = TP.livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && !p.autoTrade)
   if (!live.length) {
     const _emptyTarget = (_isLiveMode && contDemo) ? contDemo : cont
     if (_emptyTarget) _emptyTarget.innerHTML = '<div style="color:var(--dim);text-align:center;padding:8px;font-size:9px">No exchange positions</div>'
@@ -251,8 +257,8 @@ export function renderLivePositions(): void {
 
 // closeLivePos — included here since it's tightly coupled with renderLivePositions
 export function closeLivePos(id: any, reason?: string): void {
-  const strId = String(id); const idx = w.TP.livePositions.findIndex((p: any) => String(p.id) === strId); if (idx < 0) return
-  const pos = w.TP.livePositions[idx]; if (pos.status === 'closing' || pos.closed) return
+  const strId = String(id); const idx = TP.livePositions.findIndex((p: any) => String(p.id) === strId); if (idx < 0) return
+  const pos = TP.livePositions[idx]; if (pos.status === 'closing' || pos.closed) return
   if (w._serverATEnabled && pos._serverSeq) { if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id); fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq }) }).then(function (r) { return r.json() }).then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) }).catch(function () { }) }
   if (typeof w.Intervals !== 'undefined' && w.Intervals.clear) w.Intervals.clear('posCheck_' + pos.id)
   const cur = getSymPrice(pos); const pnl = calcPosPnL(pos, cur); pos.pnl = pnl; pos.status = 'closing'
@@ -262,11 +268,13 @@ export function closeLivePos(id: any, reason?: string): void {
     w.liveApiClosePosition(pos).then(function (res: any) {
       pos.closed = true; pos.status = 'closed'
       const fillPrice = (res && parseFloat(res.avgPrice)) || cur; const fillPnl = calcPosPnL(pos, fillPrice); pos.pnl = fillPnl
-      const finalIdx = w.TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) w.TP.livePositions.splice(finalIdx, 1)
-      if (typeof w.addTradeToJournal === 'function') w.addTradeToJournal({ id: pos.id, time: w.fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof w.BM !== 'undefined' ? w.BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
-      if (typeof w.DSL !== 'undefined') { delete w.DSL.positions[String(pos.id)]; if (w.DSL._attachedIds) w.DSL._attachedIds.delete(String(pos.id)) }
+      const finalIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1)
+      if (typeof w.addTradeToJournal === 'function') w.addTradeToJournal({ id: pos.id, time: w.fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
+      if (typeof DSL !== 'undefined') { delete DSL.positions[String(pos.id)]; if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id)) }
       w.atLog('info', '[LIVE] CLOSE CONFIRMED: ' + pos.sym + ' fillPrice=' + fillPrice)
       renderLivePositions()
+      // [9A-5] Notify React — live position closed
+      try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       try { if (typeof w.ARES !== 'undefined' && typeof w.ARES.onTradeClosed === 'function') w.ARES.onTradeClosed(fillPnl) } catch (_) { }
       if (pos.autoTrade) { try { fetch('/api/risk/pnl', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pnl: fillPnl, owner: 'AT' }) }).catch(function () { }) } catch (_) { } }
       if (typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
@@ -276,5 +284,5 @@ export function closeLivePos(id: any, reason?: string): void {
       renderLivePositions()
       if (!pos._closeRetried) { pos._closeRetried = true; setTimeout(function () { if (!pos.closed && pos.status === 'open') { w.atLog('info', '[RETRY] RETRYING close...'); closeLivePos(pos.id, reason || 'Retry') } }, 2000) }
     })
-  } else { pos.closed = true; pos.status = 'closed'; w.TP.livePositions.splice(idx, 1); renderLivePositions() }
+  } else { pos.closed = true; pos.status = 'closed'; TP.livePositions.splice(idx, 1); renderLivePositions(); try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {} }
 }

@@ -4,7 +4,8 @@
  * Phase 7E — HIGH RISK foundation file
  */
 
-const w = window as any
+import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
 console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
@@ -182,7 +183,7 @@ let _tcPushTimer: any = null
 let _tcPushVersion = 0
 export function pushTCtoServer() {
   const TC = w.TC
-  const DSL = w.DSL
+  const DSL = getDSLObject()
   if (typeof TC === 'undefined') return
   const payload: any = {
     confMin: TC.confMin,
@@ -269,7 +270,7 @@ export const BlockReason: any = {
 export function buildExecSnapshot(side: any, cond: any) {
   const S = w.S
   const TC = w.TC
-  const BM = w.BM
+  const BM = getBrainMetrics()
   const PROFILE_TF = w.PROFILE_TF
   const _tf = PROFILE_TF?.[S.profile || 'fast'] || { trigger: '5m', context: '15m' }
 
@@ -329,8 +330,8 @@ export const ZState = (() => {
 
   function _serialize(): any {
     const TP = w.TP
-    const DSL = w.DSL
-    const AT = w.AT
+    const DSL = getDSLObject()
+    const AT = getATObject()
     return {
       ts: Date.now(),
       v: _stateVersion,
@@ -473,8 +474,8 @@ export const ZState = (() => {
     try {
       const snap = load()
       const TP = w.TP
-      const AT = w.AT
-      const DSL = w.DSL
+      const AT = getATObject()
+      const DSL = getDSLObject()
       console.log('[ZState] RESTORE — snap:', snap ? ('pos:' + (snap.positions || []).length + ' bal:' + snap.demoBalance + ' ts:' + snap.ts) : 'NULL')
       if (!snap) return false
 
@@ -801,7 +802,7 @@ export const ZState = (() => {
   function _applyServerATState(state: any) {
     if (!state) return
     const TP = w.TP
-    const AT = w.AT
+    const AT = getATObject()
     const Intervals = w.Intervals
     w._serverATEnabled = true
     const _now = Date.now()
@@ -1035,7 +1036,7 @@ export const ZState = (() => {
     return pullFromServer().then(function (serverSnap: any) {
       if (!serverSnap || !serverSnap.ts) return false
       const TP = w.TP
-      const AT = w.AT
+      const AT = getATObject()
       const Intervals = w.Intervals
       const _ZI = w._ZI
       if (typeof TP === 'undefined') return false
@@ -1124,6 +1125,8 @@ export const ZState = (() => {
           if (typeof serverSnap.at.losses === 'number') AT.losses = serverSnap.at.losses
           if (typeof serverSnap.at.totalPnL === 'number') AT.totalPnL = serverSnap.at.totalPnL
           if (typeof serverSnap.at.lastTradeTs === 'number') AT.lastTradeTs = serverSnap.at.lastTradeTs
+          // [9A-4] Notify React after server AT diff applied
+          try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
         }
       }
 
@@ -1134,6 +1137,8 @@ export const ZState = (() => {
           if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions()
           if (typeof w.renderATPositions === 'function') w.renderATPositions()
           if (typeof w.syncBrainFromState === 'function') w.syncBrainFromState()
+          // [9A-5] Notify React — positions/balance changed from server merge
+          try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
         }, 100)
       }
       return changed

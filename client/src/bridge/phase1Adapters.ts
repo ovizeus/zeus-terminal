@@ -145,8 +145,6 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 1: helpers.js ──
   w.el = el
-  w.safeSetText = safeSetText
-  w.safeSetHTML = safeSetHTML
   w.escHtml = escHtml
   w.isValidMarketPrice = isValidMarketPrice
   w.safeLastKline = safeLastKline
@@ -155,20 +153,11 @@ export function installPhase1Adapters(): void {
   w.fmt = fmt
   w.fP = fP
   w.fmtTime = fmtTime
-  w.fmtTimeSec = fmtTimeSec
   w.fmtDate = fmtDate
-  w.fmtFull = fmtFull
   w._TZ = _TZ
-  w._dtfTime = { format: (d: Date) => fmtTime(d.getTime() / 1000) }
-  w._dtfTimeSec = { format: (d: Date) => fmtTimeSec(d.getTime() / 1000) }
-  w._dtfDate = { format: (d: Date) => fmtDate(d.getTime() / 1000) }
-  w._dtfFull = { format: (d: Date) => fmtFull(d.getTime() / 1000) }
 
   // ── Phase 1: math.js ──
   w._clamp = _clamp
-  w._clampFB01 = _clampFB01
-  w._clampFB = _clampFB
-  w.calcRSIArr = calcRSIArr
 
   // ── Phase 1: icons.js ──
   w._ZI = _ZI
@@ -184,7 +173,6 @@ export function installPhase1Adapters(): void {
   w.AT = AT
   w.PREDATOR = PREDATOR
   w.computePredatorState = computePredatorState
-  w._pendingClose = _pendingClose
   w.attachConfirmClose = attachConfirmClose
   w._safeSetInterval = _safeSetInterval
   w._clearAllIntervals = _clearAllIntervals
@@ -202,30 +190,23 @@ export function installPhase1Adapters(): void {
   w.trackOIDelta = trackOIDelta
 
   // ── Phase 3: symbols.js ──
-  w.ZStore = ZStore
   w.connectWatchlist = connectWatchlist
   w.switchWLSymbol = switchWLSymbol
 
   // ── Phase 4: perfStore.js ──
   w.savePerfToStorage = savePerfToStorage
   w.loadPerfFromStorage = loadPerfFromStorage
-  w.recordIndicatorPnl = recordIndicatorPnl
   w.calcExpectancy = calcExpectancy
   w.calcGlobalExpectancy = calcGlobalExpectancy
   w.calcExpectancyByProfile = calcExpectancyByProfile
-  w.resetPerfStore = resetPerfStore
 
   // ── Phase 4: dailyPnl.js ──
   w.recordDailyClose = recordDailyClose
   w.rebuildDailyFromJournal = rebuildDailyFromJournal
-  w.getDailyStats = getDailyStats
   w.getLastNDays = getLastNDays
   w.getWeeklyRollup = getWeeklyRollup
-  w.getMonthlyRollup = getMonthlyRollup
   w.getDrawdownStats = getDrawdownStats
-  w.saveDailyPnl = saveDailyPnl
   w.loadDailyPnl = loadDailyPnl
-  w.resetDailyPnl = resetDailyPnl
 
   // ── config.ts exports → window.* ──
   w.AUB = AUB; w.AUB_COMPAT = AUB_COMPAT; w.AUB_PERF = AUB_PERF; w.AUB_SIM_KEY = AUB_SIM_KEY
@@ -245,7 +226,7 @@ export function installPhase1Adapters(): void {
   w._srEnsureVisible = _srEnsureVisible; w.srStripUpdateBar = srStripUpdateBar
   w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
   w._macdChart = _macdChart; w._macdInited = _macdInited
-  w._audioCtx = _audioCtx; w._audioReady = _audioReady
+  w._audioReady = _audioReady
   w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; w.oviPriceSeries = _cfgOviPriceSeries
   w._sessLastBt = _sessLastBt; w._neuroLastScan = _neuroLastScan; w._execActive = _execActive
   // state.ts exports
@@ -271,20 +252,16 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 8E: bootstrap panels (coexist) ──
   w._toggleExposurePanel = _toggleExposurePanel; w._toggleExpoInline = _toggleExpoInline
-  w._toggleCmdPalette = _toggleCmdPalette; w._showMissedTrades = _showMissedTrades
-  w._showSessionReview = _showSessionReview; w._showRegimeHistory = _showRegimeHistory
   w._showPerformance = _showPerformance; w._showCompare = _showCompare
 
   // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
   w._checkAppUpdate = _checkAppUpdate
   w._toggleDecisionPanel = _toggleDecisionPanel
-  w._actfeedToggle = _actfeedToggle
 
   // ── Phase 8C: bootstrap misc (coexist) ──
-  w._pinIsSet = _pinIsSet; w._pinCheckLock = _pinCheckLock
-  w.pinUnlock = pinUnlock; w.pinActivate = pinActivate; w.pinRemove = pinRemove; w._pinUpdateUI = _pinUpdateUI
+  w._pinCheckLock = _pinCheckLock
+  w.pinActivate = pinActivate; w.pinRemove = pinRemove; w._pinUpdateUI = _pinUpdateUI
   w._renderBuildInfo = _renderBuildInfo; w._showWelcomeModal = _showWelcomeModal
-  w.showPWAUpdateBanner = showPWAUpdateBanner; w.hidePWAUpdateBanner = hidePWAUpdateBanner
   w.setPWAVersion = setPWAVersion; w.setupPWAReloadBtn = setupPWAReloadBtn
   w.masterReset = masterReset
 
@@ -294,7 +271,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
   w.initZeusGroups = initZeusGroups
   w._waitForFeedThenStartExtras = _waitForFeedThenStartExtras
-  w._startExtras = _startExtras
   w.runHealthChecks = runHealthChecks
   w._updatePnlLabCondensed = _updatePnlLabCondensed
 
@@ -314,11 +290,11 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-E: marketData trading (coexist) ──
   w.switchGlobalMode = switchGlobalMode; w._applyGlobalModeUI = _applyGlobalModeUI
   w._showConfirmDialog = _showConfirmDialog; w.promptAddFunds = promptAddFunds; w.promptResetDemo = promptResetDemo
-  w.toggleTradePanel = toggleTradePanel; w.setDemoSide = setDemoSide; w.setLiveSide = setLiveSide
+  w.setDemoSide = setDemoSide; w.setLiveSide = setLiveSide
   w.onDemoOrdTypeChange = onDemoOrdTypeChange; w.getDemoLev = getDemoLev; w.getLiveLev = getLiveLev
   w.onDemoLevChange = onDemoLevChange; w.onLiveLevChange = onLiveLevChange
   w.calcLiqPrice = calcLiqPrice; w.updateDemoLiqPrice = updateDemoLiqPrice; w.updateLiveLiqPrice = updateLiveLiqPrice
-  w.setDemoPct = setDemoPct; w.setLivePct = setLivePct; w.updateDemoBalance = updateDemoBalance
+  w.setLivePct = setLivePct; w.updateDemoBalance = updateDemoBalance
   w.placeDemoOrder = placeDemoOrder; w.getSymPrice = getSymPrice
 
   // ── Phase 7F-B: marketData chart (coexist) ──
@@ -329,31 +305,25 @@ export function installPhase1Adapters(): void {
   w.connectBNB = connectBNB; w.connectBYB = connectBYB
   w.updConn = _mdUpdConn; w.procLiq = procLiq
   w.updLiqStats = updLiqStats; w.updLiqSourceMetrics = updLiqSourceMetrics
-  w.updBybHealth = updBybHealth; w.renderOB = renderOB
-  w.renderHotZones = renderHotZones; w.updMarketPressure = updMarketPressure
-  w.setLiqSrcFilter = setLiqSrcFilter; w.updLiqFilterBtns = updLiqFilterBtns; w.renderFeed = renderFeed
+  w.renderFeed = renderFeed
   w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   w.updateMainMetrics = updateMainMetrics; w.showTab = showTab
   w.applyChartColors = _mdApplyChartColors; w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
-  w.applyHeatmapSettings = applyHeatmapSettings
   w.sendAlert = sendAlert; w.registerServiceWorker = _mdRegisterSW
   w.checkLiqAlert = checkLiqAlert; w.testNotification = testNotification; w.saveAlerts = saveAlerts
   w.applySR = applySR; w.cloudClear = _mdCloudClear; w.injectFakeWhale = injectFakeWhale
-  w.setLiqSym = setLiqSym; w.setLiqUsd = setLiqUsd; w.setLiqTW = setLiqTW
-  w.hashEmail = hashEmail; w.cloudSave = _mdCloudSave; w.cloudLoad = _mdCloudLoad
+  w.cloudSave = _mdCloudSave; w.cloudLoad = _mdCloudLoad
   w.initCloudSettings = initCloudSettings; w.applySessionSettings = applySessionSettings
-  w.applyZS = applyZS; w.clearZS = clearZS; w.renderZS = renderZS
+  w.clearZS = clearZS; w.renderZS = renderZS
 
   // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
   w.setTF = setTF; w.setTf = setTf
-  w.ztfToggle = ztfToggle; w.ztfPick = ztfPick
   w.toggleFS = toggleFS
   w.updatePriceDisplay = updatePriceDisplay
-  w.calcFrCd = calcFrCd; w.safeFetch = safeFetch; w.throttledMainMetrics = throttledMainMetrics
-  w.fetchRSI = fetchRSI; w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
+  w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
   w.fetchATR = fetchATR; w.fetchOI = fetchOI; w.fetchLS = fetchLS; w.fetch24h = fetch24h
-  w.setDtTf = setDtTf; w.updateMetrics = updateMetrics; w.renderRSI = renderRSI; w.calcSRTable = calcSRTable
+  w.updateMetrics = updateMetrics; w.calcSRTable = calcSRTable
 
   // ── Phase 7F-C: marketData overlays (coexist — old JS re-declares same functions) ──
   w.updOvrs = updOvrs
@@ -362,16 +332,10 @@ export function installPhase1Adapters(): void {
   w.clearSR = clearSR
   w.renderTradeMarkers = renderTradeMarkers
   w.llvEnsureCanvas = llvEnsureCanvas
-  w.llvResizeCanvas = llvResizeCanvas
   w.llvClearCanvas = llvClearCanvas
   w.llvRequestRender = llvRequestRender
-  w.clearLiqLevels = clearLiqLevels
-  w.renderLiqLevels = renderLiqLevels
   w.llvSaveSettings = llvSaveSettings
   w.llvLoadSettings = llvLoadSettings
-  w._llvPressStart = _llvPressStart
-  w._llvPressEnd = _llvPressEnd
-  w.calcHeatmapPockets = calcHeatmapPockets
   w.renderHeatmapOverlay = renderHeatmapOverlay
   w.renderSROverlay = renderSROverlay
 
@@ -379,9 +343,7 @@ export function installPhase1Adapters(): void {
   // Dynamic timezone versions REPLACE the static ones from format.ts
   // Old JS and ported TS modules consume these via window.*
   w.fmtTime = _dynFmtTime
-  w.fmtTimeSec = _dynFmtTimeSec
   w.fmtDate = _dynFmtDate
-  w.fmtFull = _dynFmtFull
   w.fmtNow = fmtNow
   w.toast = toast
   w._calcATRSeries = _calcATRSeries
@@ -390,45 +352,19 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 7B: panels + render ──
   w.scanLiquidityMagnets = scanLiquidityMagnets
-  w.renderMagnets = renderMagnets
-  w.updateMagnetBias = updateMagnetBias
   w.jumpToMagnet = jumpToMagnet
   w.runBacktest = runBacktest
-  w.renderBacktestResults = renderBacktestResults
-  w.calcVWAPBands = calcVWAPBands
   w.renderVWAP = renderVWAP
   w.toggleVWAP = toggleVWAP
-  w.oviReadSettings = oviReadSettings
-  w.oviApplySettings = oviApplySettings
-  w.oviCalcATR = oviCalcATR
-  w.oviPivots = oviPivots
-  w.oviWeightAt = oviWeightAt
-  w.oviColor = oviColor
-  w.oviCalcPockets = oviCalcPockets
   w.renderOviLiquid = renderOviLiquid
-  w.oviRenderScale = oviRenderScale
-  w.clearOviLiquid = clearOviLiquid
-  w.toggleOviLiquid = toggleOviLiquid
   w.togglePnlLab = togglePnlLab
   w.renderPnlLab = renderPnlLab
-  w._pnlLabCard = _pnlLabCard
-  w._pnlLabProfileCard = _pnlLabProfileCard
   w.toggleSession = toggleSession
   w.clearAllSessionOverlays = clearAllSessionOverlays
-  w.renderSessionOverlay = renderSessionOverlay
-  w.recordIndicatorPerformance = recordIndicatorPerformance
   w.recordAllIndicators = recordAllIndicators
-  w.recalcPerfWeights = recalcPerfWeights
   w.renderPerfTracker = renderPerfTracker
   w.getCurrentADX = getCurrentADX
   w.updateQuantumClock = updateQuantumClock
-  w.getSessionKey = getSessionKey
-  w.updateSessionBacktest = updateSessionBacktest
-  w.updateSymPulseRows = updateSymPulseRows
-  w.updateBrainHeatmap = updateBrainHeatmap
-  w.updateRiskGauges = updateRiskGauges
-  w.setRiskGauge = setRiskGauge
-  w.updateDataStream = updateDataStream
   w.updateBrainExtension = updateBrainExtension
   w.getTimeUTC = getTimeUTC
   w.getRoTime = getRoTime
@@ -464,17 +400,11 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 6E: ui leaf files ──
   w._initAudio = _initAudio
-  w._updateAudioBadge = _updateAudioBadge
-  w._safePlayTone = _safePlayTone
   w.playAlertSound = playAlertSound
-  w.playEntrySound = playEntrySound
-  w.playExitSound = playExitSound
   w.toggleAlerts = toggleAlerts
   w.applyChartColors = applyChartColors
   w.initActBar = initActBar
-  w.applyPriceAxisWidth = applyPriceAxisWidth
   w.togInd = togInd
-  w.applyPriceAxisColors = applyPriceAxisColors
   w.toggleTimeSales = toggleTimeSales
   w.initModeBar = initModeBar
   w.updateModeBar = updateModeBar
@@ -488,33 +418,18 @@ export function installPhase1Adapters(): void {
   // ── Phase 6D: brain/aub.js ──
   w.aubToggle = aubToggle
   w.aubToggleSFX = aubToggleSFX
-  w.aubCheckCompat = aubCheckCompat
   w.aubBBSnapshot = aubBBSnapshot
-  w.aubBBExport = aubBBExport
-  w.aubBBClear = aubBBClear
-  w.aubCalcMTFStrength = aubCalcMTFStrength
-  w.aubCalcCorrelation = aubCalcCorrelation
-  w.aubMacroImport = aubMacroImport
-  w.aubMacroClear = aubMacroClear
-  w.aubMacroFileLoad = aubMacroFileLoad
-  w.aubGetActiveMacroRisk = aubGetActiveMacroRisk
-  w.aubSimRun = aubSimRun
-  w.aubSimApply = aubSimApply
   w.aubRefreshAll = aubRefreshAll
   w.initAUB = initAUB
   // arianova.js — self-registers on window via IIFE import above
 
   // ── Phase 6C: trading/autotrade.js ──
   w.toggleAutoTrade = toggleAutoTrade
-  w._doEnableAT = _doEnableAT
   w._applyATToggleUI = _applyATToggleUI
   w.updateATMode = updateATMode
   w.atLog = atLogFn
   w.renderATLog = renderATLog
   w.updateATStats = updateATStats
-  w.checkATConditions = checkATConditions
-  w.setCondUI = setCondUI
-  w.isDataOkForAutoTrade = isDataOkForAutoTrade
   w.computeFusionDecision = computeFusionDecision
   w.runAutoTradeCheck = runAutoTradeCheck
   w.placeAutoTrade = placeAutoTrade
@@ -525,79 +440,49 @@ export function installPhase1Adapters(): void {
   w.triggerKillSwitch = triggerKillSwitch
   w.resetKillSwitch = resetKillSwitch
   w.renderATPositions = renderATPositions
-  w.openPartialClose = openPartialClose
   w.execPartialClose = execPartialClose
-  w.closeAutoPos = closeAutoPos
   w.closeAllDemoPos = closeAllDemoPos
-  w.closeAllATPos = closeAllATPos
 
   // ── Phase 6B: trading/dsl.js ──
   w.dslToggleMagnet = dslToggleMagnet
-  w._computeDslMagnetSnap = _computeDslMagnetSnap
   w.toggleDSL = toggleDSL
   w.toggleAssistArm = toggleAssistArm
   w._syncDslAssistUI = _syncDslAssistUI
-  w.initDSLBubbles = initDSLBubbles
-  w._dslSafePrice = _dslSafePrice
-  w._dslSanitizeParams = _dslSanitizeParams
   w.runDSLBrain = runDSLBrain
-  w._runClientDSLOnPositions = _runClientDSLOnPositions
   w.dslTakeControl = dslTakeControl
   w.dslReleaseControl = dslReleaseControl
   w.dslManualParam = dslManualParam
-  w._dslPushParamsDebounced = _dslPushParamsDebounced
   w.renderDSLWidget = renderDSLWidget
-  w._renderDslCard = _renderDslCard
   w.stopDSLIntervals = stopDSLIntervals
   w.startDSLIntervals = startDSLIntervals
-  w._dslTrimLogs = _dslTrimLogs
   w._dslTrimAll = _dslTrimAll
 
   // ── Phase 6B: trading/risk.js ──
   w.computeMacroCortex = computeMacroCortex
-  w.updateMacroUI = updateMacroUI
   w.FEE_MODEL = FEE_MODEL
   w.estimateRoundTripFees = estimateRoundTripFees
-  w._adaptSave = _adaptSave
   w._adaptLoad = _adaptLoad
-  w._adaptClamp = _adaptClamp
   w.recalcAdaptive = recalcAdaptive
   w._renderAdaptivePanel = _renderAdaptivePanel
   w.toggleAdaptive = toggleAdaptive
   w._updateAdaptiveBarTxt = _updateAdaptiveBarTxt
-  w.adaptiveStripToggle = adaptiveStripToggle
   w.initAdaptiveStrip = initAdaptiveStrip
   w.macroAdjustEntryScore = macroAdjustEntryScore
   w.macroAdjustExitRisk = macroAdjustExitRisk
-  w.computePositionSizingMult = computePositionSizingMult
   w.perfRecordTrade = perfRecordTrade
-  w._macroPhaseFromComposite = _macroPhaseFromComposite
 
   // ── Phase 6B: trading/positions.js ──
   w.onPositionOpened = onPositionOpened
   w.onTradeExecuted = onTradeExecuted
-  w.onTradeClosedPos = onTradeClosedPos
-  w.triggerExecCinematic = triggerExecCinematic
 
   // ── Phase 6B: trading/orders.js ──
-  w._showExecOverlay = _showExecOverlay
   w._queueExecOverlay = _queueExecOverlay
-  w._dayKeyLocal = _dayKeyLocal
   w._bmResetDailyIfNeeded = _bmResetDailyIfNeeded
   w._bmPostClose = _bmPostClose
 
   // ── Phase 6B: trading/liveApi.js ──
-  w.liveApiSetToken = liveApiSetToken
-  w._liveApiHeaders = _liveApiHeaders
-  w._idempotencyKey = _idempotencyKey
-  w._liveApiFetch = _liveApiFetch
-  w._liveApiError = _liveApiError
-  w._liveApiParse = _liveApiParse
-  w.liveApiStatus = liveApiStatus
-  w.liveApiGetBalance = liveApiGetBalance
   w.liveApiGetPositions = liveApiGetPositions
   w.liveApiPlaceOrder = liveApiPlaceOrder
-  w.liveApiCancelOrder = liveApiCancelOrder
   w.liveApiSetLeverage = liveApiSetLeverage
   w.liveApiClosePosition = liveApiClosePosition
   w.liveApiSyncState = liveApiSyncState
@@ -695,12 +580,8 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 5A: forecast.js ──
   w.resetForecast = resetForecast
-  w.computeExitRisk = computeExitRisk
-  w.decideExitAction = decideExitAction
-  w.applyQuantumExit = applyQuantumExit
   w.runQuantumExitUpdate = runQuantumExitUpdate
   w.computeProbScore = computeProbScore
-  w.updateScenarioData = updateScenarioData
   w.updateScenarioUI = updateScenarioUI
 
   // ── Phase 5B: deepdive.js — PM ──
@@ -708,12 +589,10 @@ export function installPhase1Adapters(): void {
   w.runPostMortem = runPostMortem
   w.PM_render = PM_render
   w.initPMPanel = initPMPanel
-  w._pmStripUpdateStat = _pmStripUpdateStat
   w._pmCheckRegimeTransition = _pmCheckRegimeTransition
 
   // ── Phase 5B: deepdive.js — ARES core ──
   w.ARES = ARES
-  w.ARES_openPosition = ARES_openPosition
   w.ARES_DECISION = ARES_DECISION
   w.ARES_EXECUTE = ARES_EXECUTE
   w.ARES_MONITOR = ARES_MONITOR
@@ -722,116 +601,46 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 5B: deepdive.js — ARES UI ──
   w._aresRender = _aresRender
-  w._aresRenderArc = _aresRenderArc
   w.initAriaBrain = initAriaBrain
   w.initARES = initARES
   w._demoTick = _demoTick
 
   // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──
   w.connectLiveAPI = connectLiveAPI
-  w.placeLiveOrder = placeLiveOrder
-  w.connectLiveExchange = connectLiveExchange
   w.loadSavedAPI = loadSavedAPI
-  w.installPWA = installPWA
   initIndicatorState()
-  w.openIndPanel = openIndPanel
-  w.closeIndPanel = closeIndPanel
   w.toggleInd = toggleInd
   w.applyIndVisibility = applyIndVisibility
   w.openIndSettings = openIndSettings
   w.closeIndSettings = closeIndSettings
   w.applyIndSettings = applyIndSettings
-  w.initBBSeries = initBBSeries
-  w.updateBB = updateBB
-  w.initIchimokuSeries = initIchimokuSeries
-  w.updateIchimoku = updateIchimoku
-  w.updateFib = updateFib
-  w.updatePivot = updatePivot
-  w.updateVP = updateVP
-  w.initRSIChart = initRSIChart
-  w.updateRSI = updateRSI
-  w.initStochChart = initStochChart
-  w.initATRChart = initATRChart
-  w.initOBVChart = initOBVChart
-  w.initMFIChart = initMFIChart
-  w.initCCIChart = initCCIChart
   w._indRenderHook = _indRenderHook
   w.renderActBar = renderActBar
-  w.getIndColor = getIndColor
   w.deactivateInd = deactivateInd
-  w.toggleActBar = toggleActBar
-  w.calcMACD = calcMACD
-  w.initMACDChart = initMACDChart
   w._macdKlineHook = _macdKlineHook
-  w.detectSupertrendFlip = detectSupertrendFlip
-  w.detectRSIDivergence = detectRSIDivergence
   w.runSignalScan = runSignalScan
-  w.generateDeepDive = generateDeepDive
   w.updateDeepDive = updateDeepDive
   w._syncSubChartsToMain = _syncSubChartsToMain
 
   // ── Phase 5B4: brain.js ──
-  w.updateNeurons = updateNeurons
-  w.getNeuronColor = getNeuronColor
-  w.setNeuron = setNeuron
   w.updateBrainArc = updateBrainArc
-  w.updateBrainState = updateBrainState
   w.brainThink = brainThink
   w.runBrainUpdate = runBrainUpdate
-  w.armAssist = armAssist
-  w.disarmAssist = disarmAssist
   w.isArmAssistValid = isArmAssistValid
-  w._setRadio = _setRadio
-  w.syncDslFromProfile = syncDslFromProfile
-  w.syncTFProfile = syncTFProfile
   w.syncBrainFromState = syncBrainFromState
-  w.setMode = setMode
-  w._applyModeSwitch = _applyModeSwitch
-  w.confirmBrainModeSwitch = confirmBrainModeSwitch
-  w.cancelBrainModeSwitch = cancelBrainModeSwitch
   w.setBrainMode = setBrainMode
   w.setProfile = setProfile
   w.setDslMode = setDslMode
   w.calcDslTargetPrice = calcDslTargetPrice
-  w._calcAtrPct = _calcAtrPct
   w.applyTimezone = applyTimezone
   w.detectRegimeEnhanced = detectRegimeEnhanced
   w.updateMTFAlignment = updateMTFAlignment
   w.detectSweepDisplacement = detectSweepDisplacement
-  w.updateFlowEngine = updateFlowEngine
-  w.computeGates = computeGates
-  w.renderGates = renderGates
-  w.computeEntryScore = computeEntryScore
   w.computeMarketAtmosphere = computeMarketAtmosphere
-  w.updateChaosBar = updateChaosBar
-  w.updateNewsShield = updateNewsShield
-  w.checkProtectMode = checkProtectMode
   w.resetProtectMode = resetProtectMode
-  w.updateDSLTelemetry = updateDSLTelemetry
-  w.showExecCinematic = showExecCinematic
-  w.getStableRegime = getStableRegime
-  w.checkAntiFakeout = checkAntiFakeout
-  w.computeSafetyGates = computeSafetyGates
   w._getCooldownMs = _getCooldownMs
-  w.allSafetyPass = allSafetyPass
-  w.computeContextGates = computeContextGates
-  w._getActiveSessions = _getActiveSessions
-  w.updateSessionPills = updateSessionPills
-  w.renderSessionBar = renderSessionBar
-  w.initNeuroCoinLEDs = initNeuroCoinLEDs
-  w.pulseNeuronCoin = pulseNeuronCoin
   w.onNeuronScanUpdate = onNeuronScanUpdate
   w.renderBrainCockpit = renderBrainCockpit
-  w.initZParticles = initZParticles
-  w.zAnimFrame = zAnimFrame
   w.startZAnim = startZAnim
-  w._brainDirtySet = _brainDirtySet
-  w._brainSafeSet = _brainSafeSet
-  w.getBrainViewSnapshot = getBrainViewSnapshot
-  w.renderCircuitBrain = renderCircuitBrain
-  w.runGrandUpdate = runGrandUpdate
   w._initBrainCockpit = _initBrainCockpit
-  w.detectMarketRegime = detectMarketRegime
-  w.updateOrderFlow = updateOrderFlow
-  w.adaptAutoTradeParams = adaptAutoTradeParams
 }

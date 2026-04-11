@@ -63,6 +63,24 @@ export function getOI(): { oi: number | null; oiPrev: number | null; oiTs: numbe
   return { oi: w.S?.oi ?? null, oiPrev: w.S?.oiPrev ?? null, oiTs: w.S?.oiTs ?? null }
 }
 
+/** Funding rate countdown timestamp — TEMP bridge getter
+ *  TODO: remove in 8D/9 */
+export function getFRCountdown(): number {
+  return (window as any).S?.frCd || 0
+}
+
+/** Fear & Greed index — TEMP bridge getter
+ *  TODO: remove in 8D/9 */
+export function getFG(): number {
+  return (window as any).S?.fg || 50
+}
+
+/** ATR (Average True Range) — TEMP bridge getter
+ *  TODO: remove in 8D/9 */
+export function getATR(): number {
+  return (window as any).S?.atr || 0
+}
+
 // ── Added in 8B-rest ──
 
 /** Timezone — TEMP bridge getter
@@ -286,4 +304,13 @@ export function getATObject(): any {
  *  TODO: migrate to settingsStore in 8D */
 export function getTCSignalMin(): number {
   return (window as any).TC?.sigMin || 3
+}
+
+/** TP Object (w.TP) — TEMP bridge getter
+ *  Returns MUTABLE REFERENCE intentionally.
+ *  Used by autotrade.ts legacy read/write flow.
+ *  Reads + writes go through same object: const TP = getTPObject()
+ *  TODO: remove in Phase 9, replace with positionsStore */
+export function getTPObject(): any {
+  return (window as any).TP
 }

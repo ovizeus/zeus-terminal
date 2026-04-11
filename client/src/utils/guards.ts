@@ -3,7 +3,10 @@
  * (ported from public/js/utils/guards.js)
  */
 
-const w = window as Record<string, any>
+import { getATObject, getTPObject, getPrice, getATR } from '../services/stateAccessors'
+const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), w.el, w.atLog, w.ncAdd, w.updConn, fn calls
+// [8D-6C2] AT = mutable ref to AT — reads + writes through same object
+const AT = getATObject()
 
 // Safety configuration
 export const _SAFETY: Record<string, any> = {
@@ -40,7 +43,7 @@ export const _safe: Record<string, any> = {
     if (key) _safe._last[key] = n
     return n
   },
-  price(v: any) { return _safe.num(v, 'price', w.S?.price || 0) },
+  price(v: any) { return _safe.num(v, 'price', getPrice()) },
   pct(v: any) { return Math.max(-100, Math.min(100, _safe.num(v, 'pct', 0))) },
   rsi(v: any) { return Math.max(0, Math.min(100, _safe.num(v, 'rsi', 50))) },
   atr(v: any) { return _safe.num(v, 'atr', 0) },
@@ -68,13 +71,14 @@ let _recoveryMode = false
 // Price sanity check
 export function _isPriceSane(newPrice: number): boolean {
   if (!Number.isFinite(newPrice) || newPrice <= 0) return false
-  const last = w.S?.price
+  const last = getPrice()
   if (!last || last <= 0) return true  // first price always accepted
   const pctChange = Math.abs(newPrice - last) / last
   // [FIX v85 BUG2] Prag dinamic: max 5% default, sau 3xATR% daca ATR disponibil
   let maxAllowed = 0.05 // 5% default
-  if (w.S?.atr && last > 0) {
-    const atrPct = w.S.atr / last
+  const _atr = getATR()
+  if (_atr && last > 0) {
+    const atrPct = _atr / last
     maxAllowed = Math.max(0.05, atrPct * 3) // cel putin 5%, mai mare in perioade volatile
   }
   if (pctChange > maxAllowed) {
@@ -115,17 +119,19 @@ export async function _syncServerTime(): Promise<void> {
 w._syncServerTime = _syncServerTime
 
 export function _onNewUTCDay(_newDayId: number): void {
-  const _rPnL = +(w.AT?.realizedDailyPnL) || 0
-  const _closed = +(w.AT?.closedTradesToday) || 0
-  w.AT.dailyPnL = 0; w.AT.realizedDailyPnL = 0; w.AT.closedTradesToday = 0
-  w.AT.dailyStart = new Date().toDateString()
+  const _rPnL = +(AT?.realizedDailyPnL) || 0
+  const _closed = +(AT?.closedTradesToday) || 0
+  AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0
+  AT.dailyStart = new Date().toDateString()
   w.atLog('info', `[DAY] New UTC day (${_newDayId}) — daily counters reset`)
   // Kill switch: only keep if there was REAL loss today
-  if (w.AT.killTriggered && _closed === 0 && Math.abs(_rPnL) < 0.01) {
-    w.AT.killTriggered = false
+  if (AT.killTriggered && _closed === 0 && Math.abs(_rPnL) < 0.01) {
+    AT.killTriggered = false
     const kb = w.el('atKillBtn'); if (kb) kb.classList.remove('triggered')
     w.atLog('info', '[INFO] Kill switch cleared — no realized loss on new day')
   }
+  // [9A-4] Notify React after daily counter reset
+  try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
 }
 w._onNewUTCDay = _onNewUTCDay
 
@@ -279,7 +285,7 @@ w._exitRecoveryMode = _exitRecoveryMode
 
 export function _verifyPositionsAfterReconnect(): void {
   // In demo mode: check if SL/TP were hit during offline by current price
-  const autoPosns = (w.TP?.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
+  const autoPosns = (getTPObject()?.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
   if (!autoPosns.length) return
   autoPosns.forEach((pos: any) => {
     const cur = w.getSymPrice(pos)
@@ -364,7 +370,7 @@ export function _isExecAllowed(): [boolean, string] {
   if (_SAFETY.isReconnecting) return [false, 'reconnecting']
   if (_SAFETY.dataStalled) return [false, 'data stalled']
   if (_SAFETY.autoSuspended) return [false, 'AT suspended']
-  if (!Number.isFinite(w.S?.price) || w.S.price <= 0) return [false, 'price invalid']
+  const _p = getPrice(); if (!Number.isFinite(_p) || _p <= 0) return [false, 'price invalid']
   // FIX1: degraded = secondary feed down → still allowed (log warning only)
   // [FIX] Debounce: max 1 log per 60s to prevent AT tick spam
   if (_isDegradedOnly()) {
@@ -381,7 +387,7 @@ w._isExecAllowed = _isExecAllowed
 // ── 10. GLOBAL ERROR HANDLING ────────────────────────────────
 window.addEventListener('error', (e) => {
   console.error('[ZEUS ERR]', e.message, e.filename, e.lineno)
-  if (w.AT?.enabled && (w.S?.mode || 'assist') === 'auto') {
+  if (AT?.enabled && (w.S?.mode || 'assist') === 'auto') {
     // Don't stop terminal — just log
     w.atLog('warn', `[ERR] JS Error: ${e.message?.substring(0, 60)}`)
   }

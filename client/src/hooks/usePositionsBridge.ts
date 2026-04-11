@@ -1,19 +1,15 @@
 /**
  * usePositionsBridge — syncs positionsStore from engine events.
  *
- * Engines (autotrade.ts, marketDataTrading.ts, marketDataClose.ts) emit
- * 'zeus:positionsChanged' after every push/close on window.TP.
+ * Dispatch sites for 'zeus:positionsChanged':
+ * - autotrade.ts: demo/live open, triggerKillSwitch mass close, execPartialClose
+ * - marketDataTrading.ts: manual demo/live MARKET + LIMIT open
+ * - marketDataPositions.ts: LIMIT fill, live close (async + sync paths)
+ * - marketDataClose.ts: demo close
+ * - liveApi.ts: live positions full rebuild from exchange sync
+ * - state.ts: pullAndMerge server diff (on changed path)
  *
- * This hook reads a COMPLETE SNAPSHOT from window.TP (not incremental delta)
- * and applies it atomically to positionsStore via syncSnapshot().
- *
- * Rule: server is final truth at boot/refresh. Bridge events are fast local sync.
- *
- * Safety:
- * - cleanup on unmount (removeEventListener)
- * - useRef guard against duplicate registration in StrictMode
- * - snapshot read is atomic (no partial state)
- * - polling fallback every 5s as safety net
+ * [9A-5] Event-only — polling removed (all TP write paths now emit events).
  */
 import { useEffect, useRef } from 'react'
 import { usePositionsStore } from '../stores'
@@ -22,7 +18,6 @@ export function usePositionsBridge() {
   const registeredRef = useRef(false)
 
   useEffect(() => {
-    // Guard against double-register in React StrictMode
     if (registeredRef.current) return
     registeredRef.current = true
 
@@ -39,22 +34,12 @@ export function usePositionsBridge() {
       })
     }
 
-    function onPositionsChanged() {
-      readSnapshotFromWindow()
-    }
-
-    // Listen for engine events
-    window.addEventListener('zeus:positionsChanged', onPositionsChanged)
-
-    // Polling fallback every 5s (safety net if engine misses event)
-    const pollTimer = setInterval(readSnapshotFromWindow, 5000)
-
+    window.addEventListener('zeus:positionsChanged', readSnapshotFromWindow)
     // Initial read after bridge loads
     setTimeout(readSnapshotFromWindow, 2000)
 
     return () => {
-      window.removeEventListener('zeus:positionsChanged', onPositionsChanged)
-      clearInterval(pollTimer)
+      window.removeEventListener('zeus:positionsChanged', readSnapshotFromWindow)
       registeredRef.current = false
     }
   }, [])

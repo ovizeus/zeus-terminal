@@ -1,6 +1,7 @@
 // Zeus Terminal — ui/modebar.ts (ported from ui/modebar.js)
 // Global Execution Mode Bar — visual control for demo/live mode
-const w = window as any;
+import { getATObject } from '../services/stateAccessors'
+const w = window as any; // kept for w._resolvedEnv, w._apiConfigured, w.toast, w.switchGlobalMode
 
 // ── RENDER ─────────────────────────────────────────────────────
 export function initModeBar(): void {
@@ -28,7 +29,7 @@ export function updateModeBar(): void {
   var bar = document.getElementById('zeus-mode-bar');
   if (!modeEl || !btnEl || !bar) return;
 
-  var AT = w.AT;
+  var AT = getATObject();
   var mode = (typeof AT !== 'undefined' && AT && AT._serverMode) ? AT._serverMode : 'demo';
   var env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL');
   var apiConfigured = !!w._apiConfigured;
@@ -65,7 +66,7 @@ export function updateModeBar(): void {
 
 // ── SWITCH ACTION (delegates to existing switchGlobalMode) ──────
 export function _modeBarSwitch(): void {
-  var AT = w.AT;
+  var AT = getATObject();
   var mode = (typeof AT !== 'undefined' && AT && AT._serverMode) ? AT._serverMode : 'demo';
   var apiConfigured = !!w._apiConfigured;
 

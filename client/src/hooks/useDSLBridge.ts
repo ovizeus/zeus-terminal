@@ -2,10 +2,11 @@
  * useDSLBridge — syncs dslStore from engine DSL events.
  *
  * Engine (dsl.ts) emits 'zeus:dslStateChanged' after toggle, interval
- * start/stop, and at end of renderDSLWidget. This hook reads a COMPLETE
- * SNAPSHOT from window.DSL and applies atomically to dslStore.
+ * start/stop, and at end of renderDSLWidget (every 3s tick cycle).
+ * This hook reads a COMPLETE SNAPSHOT from window.DSL and applies
+ * atomically to dslStore.
  *
- * Safety: cleanup on unmount, useRef guard, polling 5s fallback.
+ * [9A-3] Event-only — polling removed (DSL tick emits every 3s via renderDSLWidget).
  */
 import { useEffect, useRef } from 'react'
 import { useDslStore } from '../stores'
@@ -22,12 +23,11 @@ export function useDSLBridge() {
     }
 
     window.addEventListener('zeus:dslStateChanged', onDSLChanged)
-    const pollTimer = setInterval(onDSLChanged, 5000)
+    // Initial sync on mount (engine may have state from boot)
     setTimeout(onDSLChanged, 3000)
 
     return () => {
       window.removeEventListener('zeus:dslStateChanged', onDSLChanged)
-      clearInterval(pollTimer)
       registeredRef.current = false
     }
   }, [])

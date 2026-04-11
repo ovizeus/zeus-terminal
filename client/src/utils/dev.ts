@@ -3,7 +3,8 @@
  * (ported from public/js/utils/dev.js)
  */
 
-const w = window as Record<string, any>
+import { getBrainMetrics } from '../services/stateAccessors'
+const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, w.toast, fn calls
 
 export const DEV: Record<string, any> = {
   enabled: false,
@@ -636,9 +637,10 @@ export function hubPopulate(): void {
     const atSeEl = document.getElementById('atSmartExit') as HTMLInputElement | null
     if (atSeEl) atSeEl.checked = at.smartExitEnabled === true
     const atAdaptEl = document.getElementById('atAdaptEnabled') as HTMLInputElement | null
-    if (atAdaptEl) atAdaptEl.checked = w.BM?.adapt && w.BM.adapt.enabled === true
+    const BM = getBrainMetrics()
+    if (atAdaptEl) atAdaptEl.checked = BM?.adapt && BM.adapt.enabled === true
     const atAdaptLiveEl = document.getElementById('atAdaptLive') as HTMLInputElement | null
-    if (atAdaptLiveEl) atAdaptLiveEl.checked = w.BM?.adapt && w.BM.adapt.allowLiveAdjust === true
+    if (atAdaptLiveEl) atAdaptLiveEl.checked = BM?.adapt && BM.adapt.allowLiveAdjust === true
 
     // ── Telegram ──────────────────────────────────────────────────
     if (typeof w.hubTgPopulate === 'function') w.hubTgPopulate()

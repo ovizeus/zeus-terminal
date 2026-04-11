@@ -2,16 +2,22 @@
 // Ported 1:1 from public/js/data/marketData.js lines 3362-3471 (Chunk G)
 // closeDemoPos — the most critical function in the trading engine
 
-const w = window as any
+import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, w.el, w.toast, fn calls
+// [8D-2A] mutable refs — reads + writes through same objects
+const TP = getTPObject()
+const AT = getATObject()
+const BM = getBrainMetrics()
+const DSL = getDSLObject()
 
 export function closeDemoPos(id: any, reason?: string): void {
   const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id)
-  const idx = w.TP.demoPositions.findIndex((p: any) => p.id === numId || p.id === id)
+  const idx = TP.demoPositions.findIndex((p: any) => p.id === numId || p.id === id)
   if (idx < 0) {
     setTimeout(() => { w.renderDemoPositions(); w.renderATPositions() }, 0)
     return
   }
-  const pos = w.TP.demoPositions[idx]
+  const pos = TP.demoPositions[idx]
   if (pos.closed || pos.status === 'closing') return // [FIX H3]
   pos.closed = true
   pos.status = 'closing' // [FIX H3]
@@ -37,23 +43,23 @@ export function closeDemoPos(id: any, reason?: string): void {
   if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('AT', '[CLOSE DEMO] ' + pos.side + ' ' + pos.sym + ' PnL=' + pnl.toFixed(2) + ' ' + (reason || 'Manual'), { id: pos.id, sym: pos.sym, side: pos.side, pnl: pnl, reason: reason || 'Manual' })
 
   // Return margin + PnL
-  w.TP.demoBalance += pos.size + pnl
-  if (w.TP.demoBalance < 0) w.TP.demoBalance = 0 // [FIX P13]
-  if (pnl >= 0) w.TP.demoWins++; else w.TP.demoLosses++
+  TP.demoBalance += pos.size + pnl
+  if (TP.demoBalance < 0) TP.demoBalance = 0 // [FIX P13]
+  if (pnl >= 0) TP.demoWins++; else TP.demoLosses++
 
   // [SR] outcome update
   if (typeof w.srUpdateOutcome === 'function') w.srUpdateOutcome(pos, pnl)
 
   // Kill switch check after realized loss
   if (pos.autoTrade && Number.isFinite(pnl)) {
-    w.AT.realizedDailyPnL = (w.AT.realizedDailyPnL || 0) + pnl
-    w.AT.closedTradesToday = (w.AT.closedTradesToday || 0) + 1
+    AT.realizedDailyPnL = (AT.realizedDailyPnL || 0) + pnl
+    AT.closedTradesToday = (AT.closedTradesToday || 0) + 1
     if (typeof w.checkKillThreshold === 'function') w.checkKillThreshold()
   }
 
   // Clean DSL state
-  delete w.DSL.positions[String(pos.id)]
-  if (w.DSL._attachedIds) w.DSL._attachedIds.delete(String(pos.id))
+  delete DSL.positions[String(pos.id)]
+  if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id))
 
   // Journal
   w.addTradeToJournal({
@@ -64,16 +70,16 @@ export function closeDemoPos(id: any, reason?: string): void {
     pnl, reason: reason || 'Manual', lev: pos.lev,
     autoTrade: !!pos.autoTrade,
     journalEvent: 'CLOSE',
-    regime: w.BM.regime || w.BM.structure?.regime || '\u2014',
-    alignmentScore: w.BM.structure?.score ?? null,
-    volRegime: w.BM.volRegime || '\u2014',
+    regime: BM.regime || BM.structure?.regime || '\u2014',
+    alignmentScore: BM.structure?.score ?? null,
+    volRegime: BM.volRegime || '\u2014',
     profile: w.S.profile || 'fast',
     openTs: pos.openTs || pos.id,
     closedAt: Date.now(),
-    mode: pos.mode || ((typeof w.AT !== 'undefined' && w.AT._serverMode) || 'demo'),
+    mode: pos.mode || ((typeof AT !== 'undefined' && AT._serverMode) || 'demo'),
   })
 
-  w.TP.demoPositions.splice(idx, 1)
+  TP.demoPositions.splice(idx, 1)
 
   // Track recently closed IDs
   w._zeusRecentlyClosed = w._zeusRecentlyClosed || []
@@ -86,9 +92,9 @@ export function closeDemoPos(id: any, reason?: string): void {
     w.updateDemoBalance()
     w.renderDemoPositions()
     w.renderATPositions()
-    w.TP.demoPositions = (w.TP.demoPositions || []).filter((p: any) => !p.closed)
+    TP.demoPositions = (TP.demoPositions || []).filter((p: any) => !p.closed)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
-    const autoPosns = w.TP.demoPositions.filter((p: any) => p.autoTrade)
+    const autoPosns = TP.demoPositions.filter((p: any) => p.autoTrade)
     if (autoPosns.length === 0) { const el = document.getElementById('atPosCount'); if (el) el.textContent = '0 pozitii' }
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
   }, 0)

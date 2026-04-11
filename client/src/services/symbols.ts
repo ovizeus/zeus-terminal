@@ -6,15 +6,16 @@
  * wlPrices, allPrices, WS, Timeouts, etc.) via window.*.
  */
 
-const w = window as Record<string, any>
+import { getSymbol, getPrice, getBrainMetrics, getATObject, getTPObject, getDSLObject } from './stateAccessors'
+const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, w.el, w.fP, fn calls
 
 export const ZStore = {
-  price: (sym: string) => w.allPrices?.[sym] || (sym === w.S?.symbol ? w.S?.price : null),
+  price: (sym: string) => w.allPrices?.[sym] || (sym === getSymbol() ? getPrice() : null),
   state: () => w.S,
-  brain: () => w.BM,
-  at: () => typeof w.AT !== 'undefined' ? w.AT : null,
-  tp: () => w.TP,
-  dsl: () => typeof w.DSL !== 'undefined' ? w.DSL : null,
+  brain: () => getBrainMetrics(),
+  at: () => getATObject() ?? null,
+  tp: () => getTPObject(),
+  dsl: () => getDSLObject() ?? null,
   perf: () => typeof w.PERF !== 'undefined' ? w.PERF : null,
   dhf: () => typeof w.DHF !== 'undefined' ? w.DHF : null,
   _listeners: {} as Record<string, Array<(data: unknown) => void>>,

@@ -4,7 +4,8 @@
  * Phase 7E — HIGH RISK foundation file
  */
 
-const w = window as any
+import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
+const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
 export const AUB: any = {
@@ -193,7 +194,6 @@ export function _srRenderStats() {
 }
 
 export function _srRenderList() {
-  const S = w.S
   const el_l = document.getElementById('sr-list')
   if (!el_l) return
   const items = SIGNAL_REGISTRY.signals.slice(0, 30)
@@ -203,7 +203,7 @@ export function _srRenderList() {
   }
   el_l.innerHTML = items.map((s: any) => {
     const t = new Date(s.ts).toLocaleTimeString('ro-RO', {
-      timeZone: S.tz || 'Europe/Bucharest',
+      timeZone: getTimezone(),
       hour: '2-digit', minute: '2-digit'
     })
     const _type = typeof w.escHtml === 'function' ? w.escHtml(s.type || '') : (s.type || '')
@@ -325,7 +325,6 @@ export function ncAdd(severity: any, type: any, message: any) {
 }
 
 export function _ncRenderList() {
-  const S = w.S
   const list = document.getElementById('nc-list')
   if (!list) return
 
@@ -342,7 +341,7 @@ export function _ncRenderList() {
 
   list.innerHTML = items.map((i: any) => {
     const t = new Date(i.ts).toLocaleTimeString('ro-RO', {
-      timeZone: (typeof S !== 'undefined' && S.tz) || 'Europe/Bucharest',
+      timeZone: getTimezone(),
       hour: '2-digit', minute: '2-digit', second: '2-digit'
     })
     const ico = i.severity === 'critical' ? _ZI.dRed :
@@ -417,7 +416,7 @@ export function _ctxSave() {
   _ctxSaveTimer = setTimeout(function _ctxSaveNow() {
     try {
       const S = w.S
-      const AT = w.AT
+      const AT = getATObject()
       w._safeLocalStorageSet('zeus_ui_context', {
         _v: 1,
         ts: Date.now(),
@@ -432,7 +431,7 @@ export function _ctxSave() {
 export function _ctxLoad() {
   try {
     const S = w.S
-    const AT = w.AT
+    const AT = getATObject()
     const raw = localStorage.getItem('zeus_ui_context')
     if (!raw) return
     const ctx = JSON.parse(raw)
@@ -903,9 +902,8 @@ export function srStripUpdateBar() {
 // ═══════════════════════════════════════════════════════════════════
 export function buildMTFStructure() {
   try {
-    const S = w.S
     const BM = w.BM
-    const klines = (typeof S !== 'undefined' && S.klines) ? S.klines : []
+    const klines = getKlines()
     if (!klines.length || klines.length < 50) {
       BM.structure.regime = 'insufficient data'
       BM.structure.score = 0
@@ -973,10 +971,9 @@ export function updateVolRegime(atrPct: number) {
 
 export function updateLiqCycle() {
   try {
-    const S = w.S
     const BM = w.BM
-    const klines = (typeof S !== 'undefined' && S.klines) ? S.klines : []
-    const curPrice = (typeof S !== 'undefined' && S.price) ? S.price : 0
+    const klines = getKlines()
+    const curPrice = getPrice()
     const lc = BM.liqCycle
     if (klines.length < 20) {
       lc.currentSweep = 'none'
@@ -1230,6 +1227,8 @@ export function _coreTickMI() {
   } catch (e: any) {
     console.warn('[CORE] _coreTickMI error:', e.message)
   }
+  // [9A-2] Notify React brainStore — MI tick writes BM.regimeEngine/phaseFilter/atmosphere
+  try { window.dispatchEvent(new CustomEvent('zeus:brainStateChanged')) } catch (_) {}
 }
 
 export function refreshLiqCycleLight() {
@@ -1287,9 +1286,9 @@ export function detectSweepSimple(bars: any, lookback?: number) {
 export function refreshSweepLight() {
   try {
     const BM = w.BM
-    const S = w.S
     if (!BM.liqCycle) BM.liqCycle = {}
-    const bars = (S && S.klines && S.klines.length > 22) ? S.klines.slice(-100) : null
+    const _kl = getKlines()
+    const bars = _kl.length > 22 ? _kl.slice(-100) : null
     const sw = bars ? detectSweepSimple(bars, 20) : { dir: '\u2014', strength: 0 }
     BM.liqCycle.sweepSimple = sw
     if (sw.dir === 'BEAR') {
@@ -1552,7 +1551,7 @@ export function _usApply() {
     const S = w.S
     const BM = w.BM
     const ARM_ASSIST = w.ARM_ASSIST
-    const AT = w.AT
+    const AT = getATObject()
     _usApplyDone = true
     if (USER_SETTINGS.chart.tf && USER_SETTINGS.chart.tf !== S.chartTf) {
       S.chartTf = USER_SETTINGS.chart.tf
