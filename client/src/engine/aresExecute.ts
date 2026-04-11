@@ -3,6 +3,7 @@
 // ARES LIVE EXECUTION — Connects decision engine → live orders
 
 import { safeLastKline } from '../utils/dom'
+import { aresSetTakeProfit } from '../trading/liveApi'
 
 const w = window as any
 
@@ -70,7 +71,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
     const tpDistance = markPrice * (atrPct / 100) * 2.0
     const tpPrice = decision.side === 'LONG' ? Math.round((fillPrice + tpDistance) * 100) / 100 : Math.round((fillPrice - tpDistance) * 100) / 100
     try {
-      const tpResult = await w.aresSetTakeProfit({ symbol: 'BTCUSDT', side: binanceSide, quantity: fillQty, stopPrice: tpPrice })
+      const tpResult = await aresSetTakeProfit({ symbol: 'BTCUSDT', side: binanceSide, quantity: fillQty, stopPrice: tpPrice })
       positions.updatePos(pos.id, { tpPrice, tpOrderId: tpResult.orderId })
       w.ARES.push('[TP SET] ' + decision.side + ' TP @ $' + tpPrice.toFixed(2))
     } catch (tpErr: any) { w.ARES.push('[TP FAIL] ' + (tpErr.message || tpErr) + ' \u2014 monitor client-side'); positions.updatePos(pos.id, { tpPrice, tpOrderId: null }) }

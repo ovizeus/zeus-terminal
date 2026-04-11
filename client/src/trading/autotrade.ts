@@ -8,6 +8,10 @@ import { isValidMarketPrice, escHtml, el } from '../utils/dom'
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
+import { STALL_GRACE_MS } from '../constants/trading'
+import { TabLeader } from '../services/tabLeader'
+import { atSetStopLoss, atSetTakeProfit } from '../trading/liveApi'
+import { getTimeUTC } from '../ui/render'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -292,7 +296,7 @@ export function checkATConditions(): any {
 
   // 5. Hour filter - BUG3 FIX: UTC
   const hourOk = w.isCurrentTimeOK()
-  const { day: curDay2, hour: curHour2 } = w.getTimeUTC()
+  const { day: curDay2, hour: curHour2 } = getTimeUTC()
   const hourWR2 = w.DHF.hours[curHour2]?.wr || 60
   setCondUI('atCondHour', hourOk, hourOk ? `${curDay2} ${String(curHour2).padStart(2, '0')}h UTC WR:${hourWR2}% ✓` : `${String(curHour2).padStart(2, '0')}h UTC WR:${hourWR2}% — EVITA`)
 
@@ -365,7 +369,7 @@ export function isDataOkForAutoTrade(): any {
   // [P2-5] Tab restore grace: wait 5s after tab becomes visible for fresh data
   if (w._SAFETY.tabRestoreTs && (Date.now() - w._SAFETY.tabRestoreTs) < 5000) return false
   if (!w._SAFETY.dataStalled) return true
-  return (Date.now() - (w._SAFETY.dataStalledSince || 0)) < w.STALL_GRACE_MS
+  return (Date.now() - (w._SAFETY.dataStalledSince || 0)) < STALL_GRACE_MS
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -500,7 +504,7 @@ export function runAutoTradeCheck(): void {
     return
   }
   // [B1] Multi-tab protection — only leader tab runs AT
-  if (typeof w.TabLeader !== 'undefined' && !w.TabLeader.checkLeader()) return
+  if (typeof TabLeader !== 'undefined' && !TabLeader.checkLeader()) return
   // [p19] Predator state refresh — always runs
   if (typeof w.computePredatorState === 'function') { w.computePredatorState() }
   // Prevent overlapping AT check cycles
@@ -719,7 +723,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   try {
     const _wrCfg = (w.WVE_CONFIG && w.WVE_CONFIG.wrFilter) || null
     if (_wrCfg && _wrCfg.enabled) {
-      const _utcHour = w.getTimeUTC().hour                    // lookup UTC — consistent cu DHF
+      const _utcHour = getTimeUTC().hour                    // lookup UTC — consistent cu DHF
       const _wrVal = w.DHF.hours?.[_utcHour]?.wr
       if (typeof _wrVal === 'number' && _wrVal < _wrCfg.minWR) {
         w.BlockReason.set('WR_FILTER', 'WR ' + _wrVal + '% < ' + _wrCfg.minWR + '% @ UTC' + String(_utcHour).padStart(2, '0') + 'h', 'placeAutoTrade')
@@ -985,7 +989,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         let _slOk = false, _tpOk = false
         for (let _slRetry = 0; _slRetry < 3 && !_slOk; _slRetry++) {
           try {
-            await w.atSetStopLoss({ symbol: sym, side: side === 'LONG' ? 'BUY' : 'SELL', quantity: String(pos.qty), stopPrice: _liveSL })
+            await atSetStopLoss({ symbol: sym, side: side === 'LONG' ? 'BUY' : 'SELL', quantity: String(pos.qty), stopPrice: _liveSL })
             _slOk = true
             w.atLog('info', '[OK] LIVE SL set @$' + fP(_liveSL))
           } catch (_slErr: any) {
@@ -995,7 +999,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         }
         for (let _tpRetry = 0; _tpRetry < 3 && !_tpOk; _tpRetry++) {
           try {
-            await w.atSetTakeProfit({ symbol: sym, side: side === 'LONG' ? 'BUY' : 'SELL', quantity: String(pos.qty), stopPrice: _liveTP })
+            await atSetTakeProfit({ symbol: sym, side: side === 'LONG' ? 'BUY' : 'SELL', quantity: String(pos.qty), stopPrice: _liveTP })
             _tpOk = true
             w.atLog('info', '[OK] LIVE TP set @$' + fP(_liveTP))
           } catch (_tpErr: any) {
@@ -1101,7 +1105,6 @@ export function openAddOn(posId: any): any {
       return false
     })
 }
-w.canAddOn = canAddOn
 w.openAddOn = openAddOn
 
 // ─── AUTO-CLOSE MONITOR ────────────────────────────────────────

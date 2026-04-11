@@ -3,6 +3,8 @@
 // ARES POSITION MONITOR + DSL (Dynamic Stop Loss Manager)
 // + Hook ARES in closeDemoPos
 
+import { aresClosePosition } from '../trading/liveApi'
+
 const w = window as any
 
 // DSL configuration
@@ -84,7 +86,7 @@ async function _closeLivePosition(pos: any, markPrice: number, reason: string): 
     if (pos.slOrderId) try { await w.aresCancelOrder('BTCUSDT', pos.slOrderId) } catch (_) { }
     if (pos.tpOrderId) try { await w.aresCancelOrder('BTCUSDT', pos.tpOrderId) } catch (_) { }
 
-    const closeResult = await w.aresClosePosition({ symbol: 'BTCUSDT', side: pos.side, qty: pos.liveQty || pos.qty })
+    const closeResult = await aresClosePosition({ symbol: 'BTCUSDT', side: pos.side, qty: pos.liveQty || pos.qty })
     const closePrice = closeResult.avgPrice || markPrice
     const dir = pos.side === 'LONG' ? 1 : -1
     const grossPnl = ((closePrice - pos.entryPrice) * dir / pos.entryPrice) * (pos.notional || 0)

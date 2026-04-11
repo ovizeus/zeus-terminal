@@ -7,6 +7,7 @@ import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { _startLivePendingSync } from './marketDataPositions'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -228,7 +229,7 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
       TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()
-      toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); w._startLivePendingSync()
+      toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); _startLivePendingSync()
     }
   }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }; toast('LIVE order failed: ' + (err.message || err)) })
 }

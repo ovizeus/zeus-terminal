@@ -150,7 +150,6 @@ export const FEE_MODEL: any = {
     defensive: 0.0001,
   },
 }
-w.FEE_MODEL = FEE_MODEL
 
 export function estimateRoundTripFees(notional: any, orderType: any, profile: any): any {
   var n = Math.abs(notional) || 0
@@ -348,7 +347,7 @@ export function _renderAdaptivePanel(): void {
     if (tsEl && ad.lastRecalcTs) {
       tsEl.textContent = 'upd ' + new Date(ad.lastRecalcTs).toLocaleTimeString()
     }
-    if (typeof w._updateAdaptiveBarTxt === 'function') w._updateAdaptiveBarTxt()
+    if (typeof _updateAdaptiveBarTxt === 'function') _updateAdaptiveBarTxt()
   } catch (_) { }
 }
 

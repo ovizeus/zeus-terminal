@@ -3,6 +3,7 @@
 // 7 analytic panels: Exposure, ExpoInline, CmdPalette, MissedTrades, SessionReview, RegimeHistory, Performance, Compare
 
 import { escHtml } from '../utils/dom'
+import { _toggleDecisionPanel } from './bootstrapError'
 
 const w = window as any
 
@@ -62,7 +63,7 @@ const _CMD_ACTIONS: any[] = [
   { cat: 'symbol', label: 'ETH \u2014 Ethereum', icon: '\u039E', action: function () { if (typeof w.setSymbol === 'function') w.setSymbol('ETHUSDT') }, keys: 'eth ethereum' },
   { cat: 'symbol', label: 'SOL \u2014 Solana', icon: '\u25CE', action: function () { if (typeof w.setSymbol === 'function') w.setSymbol('SOLUSDT') }, keys: 'sol solana' },
   { cat: 'nav', label: 'Open Settings', icon: '\u2699', action: function () { if (typeof w.openM === 'function') { w.openM('msettings'); if (typeof w.hubPopulate === 'function') w.hubPopulate() } }, keys: 'settings config preferences' },
-  { cat: 'nav', label: 'Open Decision Log', icon: '\uD83D\uDCCB', action: function () { if (typeof w._toggleDecisionPanel === 'function') w._toggleDecisionPanel() }, keys: 'decisions dlog brain' },
+  { cat: 'nav', label: 'Open Decision Log', icon: '\uD83D\uDCCB', action: function () { if (typeof _toggleDecisionPanel === 'function') _toggleDecisionPanel() }, keys: 'decisions dlog brain' },
   { cat: 'nav', label: 'View Missed Trades', icon: '\uD83D\uDEAB', action: function () { _showMissedTrades() }, keys: 'missed trades blocked' },
   { cat: 'nav', label: 'Session Review', icon: '\uD83D\uDCD1', action: function () { _showSessionReview() }, keys: 'session review summary today' },
   { cat: 'nav', label: 'Regime History', icon: '\uD83C\uDF10', action: function () { _showRegimeHistory() }, keys: 'regime history timeline' },

@@ -5,6 +5,7 @@ import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { getDrawdownStats, getLastNDays, getWeeklyRollup } from '../engine/dailyPnl'
 
 const w = window as any;
 
@@ -993,9 +994,9 @@ export function renderPnlLab() {
 
   try {
     // Gather data
-    var dd = typeof w.getDrawdownStats === 'function' ? w.getDrawdownStats() : { peak: 0, currentDD: 0, maxDD: 0, cumPnl: 0, recoveryFactor: 0 };
-    var last7 = typeof w.getLastNDays === 'function' ? w.getLastNDays(7) : [];
-    var weekly = typeof w.getWeeklyRollup === 'function' ? w.getWeeklyRollup() : [];
+    var dd = typeof getDrawdownStats === 'function' ? getDrawdownStats() : { peak: 0, currentDD: 0, maxDD: 0, cumPnl: 0, recoveryFactor: 0 };
+    var last7 = typeof getLastNDays === 'function' ? getLastNDays(7) : [];
+    var weekly = typeof getWeeklyRollup === 'function' ? getWeeklyRollup() : [];
 
     // Profile expectancies
     var profFast = typeof w.calcExpectancyByProfile === 'function' ? w.calcExpectancyByProfile('fast') : { expectancy: 0, trades: 0, wr: 0 };

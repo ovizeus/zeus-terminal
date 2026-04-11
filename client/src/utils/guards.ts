@@ -117,7 +117,6 @@ export async function _syncServerTime(): Promise<void> {
     _SAFETY.serverDayId = dayId
   } catch (_e) { /* network fail — use local as fallback */ }
 }
-w._syncServerTime = _syncServerTime
 
 export function _onNewUTCDay(_newDayId: number): void {
   const _rPnL = +(AT?.realizedDailyPnL) || 0
@@ -134,14 +133,12 @@ export function _onNewUTCDay(_newDayId: number): void {
   // [9A-4] Notify React after daily counter reset
   try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
 }
-w._onNewUTCDay = _onNewUTCDay
 
 // Init server time sync interval
 export function _startServerTimeSync(): void {
   _syncServerTime() // immediate
   w.Intervals.set('serverTime', _syncServerTime, 60000)
 }
-w._startServerTimeSync = _startServerTimeSync
 
 // ── 5. DATA WATCHDOG ─────────────────────────────────────────
 
@@ -220,7 +217,6 @@ export function _startWatchdog(): void {
     if (typeof w._updateWhyBlocked === 'function') w._updateWhyBlocked()
   }, 5000)
 }
-w._startWatchdog = _startWatchdog
 
 // ── DEGRADED MODE — secondary feed down, AT continues ────────────
 const _degradedLogTs: Record<string, number> = { enter: 0, exit: 0, continues: 0 }
@@ -300,7 +296,6 @@ export function _verifyPositionsAfterReconnect(): void {
     }
   })
 }
-w._verifyPositionsAfterReconnect = _verifyPositionsAfterReconnect
 
 // ── 7. MEMORY / INTERVAL SAFETY ──────────────────────────────
 export function _safeSetInterval(fn: any, ms: number, name?: string): any {
@@ -308,13 +303,11 @@ export function _safeSetInterval(fn: any, ms: number, name?: string): any {
   const key = name || ('_safe_' + Math.random().toString(36).slice(2, 7))
   return w.Intervals.set(key, fn, ms)
 }
-w._safeSetInterval = _safeSetInterval
 
 export function _clearAllIntervals(): void {
   // Delegates to Intervals manager
   w.Intervals.clearAll()
 }
-w._clearAllIntervals = _clearAllIntervals
 
 // [C7] Client error forwarding — send uncaught errors to server
 ;(function () {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
+import { applySR } from '../../data/marketDataWS'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -65,7 +66,7 @@ export function SRSettingsModal({ visible, onClose }: Props) {
           </div>
         </div>
         <div style={{marginTop:'12px', display:'flex', gap:'6px', justifyContent:'flex-end'}}>
-          <button className="hub-sbtn pri" onClick={() => { w.applySR?.(); onClose() }}>SAVE</button>
+          <button className="hub-sbtn pri" onClick={() => { applySR?.(); onClose() }}>SAVE</button>
           <button className="hub-sbtn" onClick={onClose}>CLOSE</button>
         </div>
       </div>

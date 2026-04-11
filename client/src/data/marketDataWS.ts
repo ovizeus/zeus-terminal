@@ -8,6 +8,7 @@ import { fmtTime, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { clearAllSessionOverlays } from '../ui/panels'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -237,7 +238,7 @@ export function setSymbol(sym: string): void {
     w.__wsGen = (w.__wsGen || 0) + 1
     w.WS.closeSymbolFeeds()
     if (w.S.wsK) { try { w.S.wsK.close() } catch (_) { } w.S.wsK = null }
-    if (typeof w.clearAllSessionOverlays === 'function') w.clearAllSessionOverlays()
+    if (typeof clearAllSessionOverlays === 'function') clearAllSessionOverlays()
     w.S.symbol = sym
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SYM] \u2192 ' + sym)
     const lbl = el('chartTitleLbl'); if (lbl) lbl.textContent = sym

@@ -3,9 +3,11 @@
 // TF picker, fullscreen, price display, API fetches, metrics, RSI display, SR table
 
 import { getTPObject } from '../services/stateAccessors'
-import { fmtTime, fmtDate } from './marketDataHelpers'
+import { fmtTime, fmtDate, calcRSI } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
+import { _demoTick } from '../engine/aresUI'
+import { clearHeatmap } from './marketDataOverlays'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -17,7 +19,7 @@ export function setTF(tf: any, btn: any): void {
   if (_ztfLbl) _ztfLbl.textContent = tf
   const _ztfDd = document.getElementById('ztfDropdown')
   if (_ztfDd) _ztfDd.querySelectorAll('.ztf-item').forEach(function (b: any) { b.classList.toggle('act', b.textContent.trim() === tf) })
-  if (typeof w.clearHeatmap === 'function') w.clearHeatmap(); if (typeof w.clearSR === 'function') w.clearSR()
+  clearHeatmap(); if (typeof w.clearSR === 'function') w.clearSR()
   w.FetchLock.release('klines')
   if (typeof w.fetchKlines === 'function') w.fetchKlines(tf)
   setTimeout(() => {
@@ -92,7 +94,7 @@ export function updatePriceDisplay(): void {
   const _tp = getTPObject()
   if (_tp?.demoOpen) w.updateDemoLiqPrice()
   if (_tp?.liveOpen) w.updateLiveLiqPrice()
-  if (typeof w._demoTick === 'function') w._demoTick()
+  if (typeof _demoTick === 'function') _demoTick()
 }
 
 // ===== FUNDING COUNTDOWN =====
@@ -141,7 +143,7 @@ export async function fetchRSI(tf: string): Promise<void> {
     const d = await safeFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${itf}&limit=50`)
     if (!Array.isArray(d)) throw new Error('R\u0103spuns invalid RSI')
     const closes = d.map((k: any) => +k[4])
-    const rsi = w.calcRSI(closes)
+    const rsi = calcRSI(closes)
     w.S.rsi[tf] = rsi
     if (!w.S.rsiData) w.S.rsiData = {}
     w.S.rsiData[tf] = rsi

@@ -8,6 +8,7 @@ import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { _getCooldownMs } from '../engine/brain'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
@@ -74,7 +75,6 @@ export function calcRSIFromKlines(klines: any[], p = 14) {
   }
   return al === 0 ? 100 : parseFloat((100 - (100 / (1 + (ag / al)))).toFixed(1))
 }
-w.calcRSIFromKlines = calcRSIFromKlines
 
 export function detectMACDDir(klines: any[]) {
   if (!klines || klines.length < 35) return 'neut'
@@ -94,7 +94,6 @@ export function detectMACDDir(klines: any[]) {
   if (last < sig && prev >= prevSig) return 'bear'
   return last > sig ? 'bull' : 'bear'
 }
-w.detectMACDDir = detectMACDDir
 
 export function detectSTDir(klines: any[], mult = 3) {
   if (!klines || klines.length < 20) return 'neut'
@@ -123,7 +122,6 @@ export function detectSTDir(klines: any[], mult = 3) {
   void closes; void _upper
   return stDir === 1 ? 'bull' : 'bear'
 }
-w.detectSTDir = detectSTDir
 
 // Symbol score
 export function calcSymbolScore(_sym: any, _klines: any, rsi: any, macd: any, stDir: any, adx: any) {
@@ -177,7 +175,6 @@ export function calcSymbolScore(_sym: any, _klines: any, rsi: any, macd: any, st
 
   return { score, dir, signals: signals.join(' ') }
 }
-w.calcSymbolScore = calcSymbolScore
 
 // ─── FETCH KLINES FOR A SYMBOL ────────────────────────────────
 const _klineCache: Record<string, any> = {}
@@ -257,7 +254,7 @@ export function _updateWhyBlocked(code: any, text: any) {
 
   // Cooldown: add live countdown if applicable
   if (cls === 'cooldown') {
-    const cdMs = Math.max(0, w._getCooldownMs() - (Date.now() - (AT.lastTradeTs || 0)))
+    const cdMs = Math.max(0, _getCooldownMs() - (Date.now() - (AT.lastTradeTs || 0)))
     const cdMin = Math.ceil(cdMs / 60000)
     label = _ZI.clock + ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
   }
@@ -404,7 +401,6 @@ w.manualEnterFromScan = manualEnterFromScan
 
 // ─── MULTI-SYMBOL AUTO TRADE ───────────────────────────────────
 export function _endMultiScan() { w.FetchLock.release('multiScan') }
-w._endMultiScan = _endMultiScan
 
 export function runMultiSymbolAutoTrade(results: any[]) {
   if (!AT.enabled || AT.killTriggered) return
@@ -516,7 +512,6 @@ export function _mscanGetActive() {
   } catch (_) { /* */ }
   return w.MSCAN_SYMS.slice()
 }
-w._mscanGetActive = _mscanGetActive
 
 export function _mscanSaveActive(arr: any[]) {
   localStorage.setItem('zeus_mscan_syms', JSON.stringify(arr))
@@ -524,7 +519,6 @@ export function _mscanSaveActive(arr: any[]) {
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
   _mscanUpdateLabel()
 }
-w._mscanSaveActive = _mscanSaveActive
 
 export function _mscanUpdateLabel() {
   const lbl = el('atMultiSymLbl')
@@ -541,7 +535,6 @@ export function getActiveMscanSyms() {
   if (!on) return [typeof w.S !== 'undefined' ? getSymbol() : 'BTCUSDT']
   return _mscanGetActive()
 }
-w.getActiveMscanSyms = getActiveMscanSyms
 
 export function toggleSymPicker() {
   const drop = el('atSymPickerDrop')

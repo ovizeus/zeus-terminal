@@ -6,7 +6,9 @@ import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
+import { _sessLastBt } from '../core/config'
+import { calcExpectancy } from '../engine/perfStore'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.calcADX, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -75,7 +77,7 @@ export function renderPerfTracker() {
     // v122 analytics: expectancy + pnl
     const avgW = p.wins > 0 ? ((p.winPnl || 0) / p.wins) : 0;
     const avgL = p.losses > 0 ? ((p.lossPnl || 0) / p.losses) : 0;
-    const exp = typeof w.calcExpectancy === 'function' ? w.calcExpectancy(name) : 0;
+    const exp = typeof calcExpectancy === 'function' ? calcExpectancy(name) : 0;
     const netPnl = (p.pnlSum || 0) - (p.feeSum || 0);
     const expColor = exp > 0 ? 'var(--grn)' : exp < 0 ? 'var(--red)' : 'var(--dim)';
     const pnlColor = netPnl > 0 ? 'var(--grn)' : netPnl < 0 ? 'var(--red)' : 'var(--dim)';
@@ -187,7 +189,6 @@ export function getSessionKey(hUTC: number) {
 // [MOVED TO TOP] SESS_CFG
 
 export function updateSessionBacktest(hUTC: number) {
-  const _sessLastBt = w._sessLastBt;
   const SESS_CFG = w.SESS_CFG;
   const box = el('sessBacktestBox'); if (!box) return;
 

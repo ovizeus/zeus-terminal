@@ -5,6 +5,7 @@
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
+import { checkPendingOrders } from '../data/marketDataPositions'
 
 const w = window as any
 
@@ -1737,7 +1738,7 @@ export function _demoTick() {
     w.renderDemoPositions()
   }
   // Check demo pending limit orders for fill
-  if (typeof w.checkPendingOrders === 'function') w.checkPendingOrders()
+  if (typeof checkPendingOrders === 'function') checkPendingOrders()
   // Render pending orders (live distance update)
   if (typeof w.renderPendingOrders === 'function') w.renderPendingOrders()
 }

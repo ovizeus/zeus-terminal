@@ -3,6 +3,8 @@
  * Full-screen dedicated page view for dock modules
  */
 
+import { aubRefreshAll } from '../engine/aub'
+
 const w = window as any
 
 // ── MODULE REGISTRY ──────────────────────────────────────────
@@ -94,7 +96,6 @@ export function _pvMoveIn(el: any, content: any) {
   })
   content.appendChild(el)
 }
-w._pvMoveIn = _pvMoveIn
 
 // ── OPEN ─────────────────────────────────────────────────────
 export function openPageView(dockId: string) {
@@ -240,7 +241,7 @@ export function openPageView(dockId: string) {
     _pvMoveIn(aubEl, content)
     aubEl.classList.remove('collapsed')
     aubEl.classList.add('expanded')
-    if (typeof w.aubRefreshAll === 'function') w.aubRefreshAll()
+    if (typeof aubRefreshAll === 'function') aubRefreshAll()
   }
 
   // ── Activity ──

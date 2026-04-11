@@ -6,6 +6,12 @@ import { getATObject, getTPObject, getBrainMetrics, getATR, getKlines } from '..
 import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { _checkAppUpdate } from './bootstrapError'
+import { _renderBuildInfo } from './bootstrapMisc'
+import { _waitForFeedThenStartExtras } from './bootstrapInit'
+import { _resumeLivePendingSyncIfNeeded } from '../data/marketDataPositions'
+import { _renderAdaptivePanel } from '../trading/risk'
+import { _initBrainCockpit } from '../engine/brain'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -42,7 +48,7 @@ export async function startApp(): Promise<void> {
   setTimeout(w.runHealthChecks, 700)
   setTimeout(() => { w._srUpdateStats(); w._srRenderList(); w.srStripUpdateBar() }, 800)
   if (typeof w._ncUpdateBadge === 'function') setTimeout(w._ncUpdateBadge, 900)
-  setTimeout(w._checkAppUpdate, 2000)
+  setTimeout(_checkAppUpdate, 2000)
   w.initAUB()
   if (typeof w.initARIANOVA === 'function') w.initARIANOVA()
   w.initPMPanel(); w.initARES()
@@ -72,11 +78,11 @@ export async function startApp(): Promise<void> {
     }
   } catch (_pendErr: any) { console.warn('[ZState late-restore]', _pendErr.message) }
   w._adaptLoad()
-  if (typeof w._resumeLivePendingSyncIfNeeded === 'function') w._resumeLivePendingSyncIfNeeded()
+  if (typeof _resumeLivePendingSyncIfNeeded === 'function') _resumeLivePendingSyncIfNeeded()
   if (typeof w.onDemoOrdTypeChange === 'function') setTimeout(w.onDemoOrdTypeChange, 200)
   if (typeof w.renderPendingOrders === 'function') setTimeout(w.renderPendingOrders, 400)
   w.registerServiceWorker(); w.setPWAVersion(); w.setupPWAReloadBtn()
-  w._initBrainCockpit()
+  _initBrainCockpit()
   if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC()
 
   // ═══ PHASE 2 — DATA ═══
@@ -115,7 +121,7 @@ export async function startApp(): Promise<void> {
   w.Intervals.set('atr', w.fetchATR, 300000); w.Intervals.set('oi', w.fetchOI, 30000)
   w.Intervals.set('ls', w.fetchLS, 60000); w.Intervals.set('h24', w.fetch24h, 60000)
   w.Intervals.set('oidelta', w.trackOIDelta, 30000); w.Intervals.set('clock', w.updateQuantumClock, 1000)
-  setTimeout(function () { if (BM.adaptive && BM.adaptive.enabled) w.recalcAdaptive(true); w._renderAdaptivePanel() }, 2000)
+  setTimeout(function () { if (BM.adaptive && BM.adaptive.enabled) w.recalcAdaptive(true); _renderAdaptivePanel() }, 2000)
   w.Intervals.set('adaptiveRecalc', function () { w.recalcAdaptive(false); w._pmCheckRegimeTransition() }, 60 * 60 * 1000)
   w.Intervals.set('regimeWatch', function () { w._pmCheckRegimeTransition(); if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 5 * 60 * 1000)
 
@@ -209,7 +215,7 @@ export async function startApp(): Promise<void> {
   w.Intervals.set('macroCortex', w.computeMacroCortex, 6 * 60 * 60 * 1000)
 
   // ═══ PHASE 5 — EXTRAS ═══
-  w._waitForFeedThenStartExtras()
+  _waitForFeedThenStartExtras()
 
   if (w.S.vwapOn) { const vb = el('vwapBtn'); if (vb) vb.classList.add('on') }
   w._ztVisible = !document.hidden
@@ -254,7 +260,7 @@ export async function startApp(): Promise<void> {
   })()
 
   // Mark fully booted
-  setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); w.atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); w._renderBuildInfo(); w._pinUpdateUI() }, 15000)
+  setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); w.atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); w._pinUpdateUI() }, 15000)
   setTimeout(() => { w._showWelcomeModal() }, 2500)
   setTimeout(w._srEnsureVisible, 3000)
   setTimeout(w._devEnsureVisible, 3500)

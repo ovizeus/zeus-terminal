@@ -4,6 +4,7 @@
 
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { fmtNow, toast } from './marketDataHelpers'
+import { checkKillThreshold } from '../trading/autotrade'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -55,7 +56,7 @@ export function closeDemoPos(id: any, reason?: string): void {
   if (pos.autoTrade && Number.isFinite(pnl)) {
     AT.realizedDailyPnL = (AT.realizedDailyPnL || 0) + pnl
     AT.closedTradesToday = (AT.closedTradesToday || 0) + 1
-    if (typeof w.checkKillThreshold === 'function') w.checkKillThreshold()
+    if (typeof checkKillThreshold === 'function') checkKillThreshold()
   }
 
   // Clean DSL state

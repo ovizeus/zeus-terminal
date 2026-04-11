@@ -288,13 +288,11 @@ export function _devModuleOk(name: string): boolean {
   }
   return true
 }
-w._devModuleOk = _devModuleOk
 
 export function _devModuleError(name: string, err: any): void {
   DEV._errorModules[name] = true
   devLog('Module "' + name + '" disabled due to error: ' + (err && err.message ? err.message : err), 'error')
 }
-w._devModuleError = _devModuleError
 
 // ── Event Injectors ───────────────────────────────────────────────
 export function devInjectSignal(dir: string): void {
@@ -840,7 +838,6 @@ export function hubApplyChartColors(): void {
     }
   } catch (e) { console.warn('[Hub] hubApplyChartColors error:', e) }
 }
-w.hubApplyChartColors = hubApplyChartColors
 
 export function hubCloudSave(): void {
   try {

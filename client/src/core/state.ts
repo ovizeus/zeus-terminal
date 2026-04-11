@@ -8,6 +8,7 @@ import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAcc
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
+import { _applyATToggleUI } from '../trading/autotrade'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -916,7 +917,7 @@ export const ZState = (() => {
     if (typeof state.atActive === 'boolean' && typeof AT !== 'undefined') {
       if (AT.enabled !== state.atActive) {
         AT.enabled = state.atActive
-        if (typeof w._applyATToggleUI === 'function') w._applyATToggleUI(state.atActive)
+        if (typeof _applyATToggleUI === 'function') _applyATToggleUI(state.atActive)
       }
     }
     w._apiConfigured = !!state.apiConfigured

@@ -4,6 +4,7 @@
 
 import { fmtTime, fmtDate, toast } from './marketDataHelpers'
 import { el } from '../utils/dom'
+import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/indicators'
 
 const w = window as any
 
@@ -59,7 +60,7 @@ export function initCharts(): void {
   w.mainChart.timeScale().subscribeVisibleLogicalRangeChange((r: any) => {
     if (syncing || !r) return; syncing = true
     try { if (w.cvdChart) w.cvdChart.timeScale().setVisibleLogicalRange(r) } catch (_) { }
-    try { if (typeof w._syncSubChartsToMain === 'function') w._syncSubChartsToMain() } catch (_) { }
+    try { if (typeof _syncSubChartsToMain === 'function') _syncSubChartsToMain() } catch (_) { }
     syncing = false
   })
 }
@@ -154,8 +155,8 @@ export function renderChart(): void {
     if (w.cvdS) w.cvdS.setData(cvdData)
     const volData = w.S.klines.map((k: any) => ({ time: k.time, value: k.volume, color: k.close >= k.open ? '#00d97a44' : '#ff335544' }))
     if (w.volS) w.volS.setData(volData)
-    if (typeof w._macdKlineHook === 'function') w._macdKlineHook()
-    if (typeof w._indRenderHook === 'function') w._indRenderHook()
+    if (typeof _macdKlineHook === 'function') _macdKlineHook()
+    if (typeof _indRenderHook === 'function') _indRenderHook()
     if (typeof w.updOvrs === 'function') w.updOvrs()
     if (w.S.vwapOn && typeof w.renderVWAP === 'function') w.renderVWAP()
     if (w.S.oviOn) { clearTimeout(w.S._oviRefreshT); w.S._oviRefreshT = setTimeout(() => { if (typeof w.renderOviLiquid === 'function') w.renderOviLiquid() }, 15000) }
