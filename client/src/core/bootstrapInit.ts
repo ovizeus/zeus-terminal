@@ -3,7 +3,8 @@
 // initZeusGroups, _waitForFeedThenStartExtras, _startExtras, runHealthChecks, _updatePnlLabCondensed
 
 import { getATObject, getTPObject } from '../services/stateAccessors'
-const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.el, w._ZI, w.atLog, fn calls
+import { _ZI } from '../constants/icons'
+const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.el, w.atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
 const TP = getTPObject()
@@ -81,7 +82,7 @@ export function _startExtras(): void {
     const _btn = w.el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
     const _dot = w.el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)' }
     const _txt = w.el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON'
-    const _st = w.el('atStatus'); if (_st) _st.innerHTML = w._ZI.dGrn + ' Active — scanning every 30s'
+    const _st = w.el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s'
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000)
     setTimeout(w.runAutoTradeCheck, 3000)
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
@@ -109,7 +110,7 @@ export function runHealthChecks(): any {
     let banner: any = document.getElementById('zg-health-banner')
     if (!banner) { banner = document.createElement('div'); banner.id = 'zg-health-banner'; const rb = document.getElementById('zg-recovery-banner'); if (rb) rb.insertAdjacentElement('afterend', banner); else document.body.insertAdjacentElement('afterbegin', banner) }
     const failed = Object.entries(checks).filter(([, v]) => !v).map(([k]) => k.toUpperCase()).join(', ')
-    banner.innerHTML = w._ZI.w + ` Incomplete interface — modules [${failed}] failed to load. Refresh the page.`
+    banner.innerHTML = _ZI.w + ` Incomplete interface — modules [${failed}] failed to load. Refresh the page.`
     banner.style.display = 'block'
   } else { const banner = document.getElementById('zg-health-banner'); if (banner) banner.style.display = 'none'; console.log('[HEALTH] All modules mounted OK') }
   return checks

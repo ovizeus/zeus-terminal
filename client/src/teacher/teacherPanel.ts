@@ -3,6 +3,7 @@
 // THE TEACHER V2 — AUTONOMOUS DASHBOARD PANEL
 // [8E-3] w.TEACHER reads migrated to getTeacher()
 import { getTeacher } from '../services/stateAccessors'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -201,7 +202,7 @@ function _teacherRenderStats(): void {
   html += '<div class="teacher-stats-grid" style="margin-top:4px">'; html += _statCard('CAPITAL', _tUSD(v2.currentCapital)); html += _statCard('START', _tUSD(v2.startCapital)); html += _statCard('FAILS', v2.failCount, v2.failCount > 0 ? '#ff5252' : '#778899'); html += _statCard('SESSIONS', v2.lifetimeSessions); html += '</div>'
   if (v2.curriculum && typeof w.teacherComputeCrossValidation === 'function') {
     const cv = w.teacherComputeCrossValidation(v2.curriculum)
-    if (cv && cv.sampleIS >= 5) { html += '<div class="teacher-section-title" style="margin-top:6px">CROSS-VALIDATION</div><div class="teacher-stats-grid">'; html += _statCard('IS WR', _tPct(cv.wrIS)); html += _statCard('OOS WR', _tPct(cv.wrOOS)); html += _statCard('IS PF', _tNum(cv.pfIS, 2)); html += _statCard('OOS PF', _tNum(cv.pfOOS, 2)); html += '</div>'; if (cv.overfitDetected) html += '<div style="font-size:13px;color:#ff9800;padding:3px 0">' + w._ZI.w + ' OVERFIT DETECTED — IS-OOS gap too large</div>' }
+    if (cv && cv.sampleIS >= 5) { html += '<div class="teacher-section-title" style="margin-top:6px">CROSS-VALIDATION</div><div class="teacher-stats-grid">'; html += _statCard('IS WR', _tPct(cv.wrIS)); html += _statCard('OOS WR', _tPct(cv.wrOOS)); html += _statCard('IS PF', _tNum(cv.pfIS, 2)); html += _statCard('OOS PF', _tNum(cv.pfOOS, 2)); html += '</div>'; if (cv.overfitDetected) html += '<div style="font-size:13px;color:#ff9800;padding:3px 0">' + _ZI.w + ' OVERFIT DETECTED — IS-OOS gap too large</div>' }
   }
   _tHtml('teacher-v2-stats-body', html)
 }

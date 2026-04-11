@@ -4,7 +4,8 @@
 
 import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } from '../services/stateAccessors'
 import { toast } from '../data/marketDataHelpers'
-const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, w._ZI, w.el, fn calls, w.mainChart, w.cvdChart
+import { _ZI } from '../constants/icons'
+const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, w.el, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
 const TP = getTPObject()
 const AT = getATObject()
@@ -47,7 +48,7 @@ export async function pinActivate(): Promise<void> {
   try {
     const r = await fetch('/auth/pin/set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = w._ZI.ok + ' PIN activat!' }; _pinUpdateUI(); sessionStorage.setItem('zeus_pin_unlocked', '1') }
+    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activat!' }; _pinUpdateUI(); sessionStorage.setItem('zeus_pin_unlocked', '1') }
     else if (d.error === 'session_invalid') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Sesiune expirat\u0103' } }
     else { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Eroare la setarea PIN-ului' } }
   } catch (err) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Eroare de re\u021Bea' } }
@@ -59,8 +60,8 @@ export async function pinRemove(): Promise<void> {
 
 export async function _pinUpdateUI(): Promise<void> {
   const isSet = await _pinIsSet(); const status = document.getElementById('pinStatus'); const actBtn = document.getElementById('pinActivateBtn'); const remBtn = document.getElementById('pinRemoveBtn')
-  if (status) { status.innerHTML = isSet ? 'ACTIVAT ' + w._ZI.ok : 'DEZACTIVAT'; status.style.color = isSet ? 'var(--grn-bright)' : '#556' }
-  if (actBtn) actBtn.innerHTML = isSet ? w._ZI.rfsh + ' SCHIMB\u0102 PIN' : w._ZI.lock + ' ACTIVEAZ\u0102 PIN'
+  if (status) { status.innerHTML = isSet ? 'ACTIVAT ' + _ZI.ok : 'DEZACTIVAT'; status.style.color = isSet ? 'var(--grn-bright)' : '#556' }
+  if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' SCHIMB\u0102 PIN' : _ZI.lock + ' ACTIVEAZ\u0102 PIN'
   if (remBtn) (remBtn as HTMLElement).style.display = isSet ? '' : 'none'
 }
 

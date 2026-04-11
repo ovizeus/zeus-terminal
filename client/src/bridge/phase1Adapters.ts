@@ -28,7 +28,7 @@ import { updOvrs, togOvr, clearHeatmap, clearSR, renderTradeMarkers, llvEnsureCa
 import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFmtDate, fmtFull as _dynFmtFull, fmtNow, toast, _calcATRSeries, calcRSI } from '../data/marketDataHelpers'
 // Phase 7E: foundation — state + config. earlyShims already set _ZI on window.
 import '../core/state'   // defines w.S, w.TC, w.TP
-import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w._ZI)
+import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (_ZI now direct import)
 // Named imports for config.ts exports that need window.* mapping
 import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, SIGNAL_REGISTRY, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESSION_HOURS_BT, SESS_CFG, PROFILE_TF, ARM_ASSIST, NEWS, _regimeHistory, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, _audioReady, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, oviPriceSeries as _cfgOviPriceSeries, _sessLastBt, _neuroLastScan, _execActive } from '../core/config'
 import { BlockReason, ZState, mainChart as _stMainChart, bbUpperS, ichimokuSeries, fibSeries, pivotSeries, vpSeries, _rsiChart, _stochChart, _atrChart, _obvChart, _mfiChart, _cciChart, IND_SETTINGS as _stIND_SETTINGS, liqSeries, zsSeries, oiHistory, WL_SYMS, wlPrices, allPrices } from '../core/state'
@@ -149,8 +149,7 @@ export function installPhase1Adapters(): void {
   // ── Phase 1: formatters.js ──
 
 
-  // ── Phase 1: icons.js ──
-  w._ZI = _ZI
+  // ── Phase 1: icons.js ──  (moved to direct imports — earlyShims handles window init)
 
   // ── Phase 2: constants.js ──
   w.MACRO_MULT = MACRO_MULT

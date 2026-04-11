@@ -5,6 +5,7 @@
 import { fmtNow } from '../data/marketDataHelpers'
 import { _clamp } from '../utils/math'
 import { _safeLocalStorageSet } from '../services/storage'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -199,7 +200,7 @@ export function _adaptLoad(): void {
     w.BM.adaptive.buckets = (p.buckets && typeof p.buckets === 'object') ? p.buckets : {}
     // Sync UI toggle
     const tog = document.getElementById('adaptiveToggleBtn')
-    if (tog) tog.innerHTML = w.BM.adaptive.enabled ? w._ZI.brain + ' ADAPTIVE ON' : w._ZI.brain + ' ADAPTIVE OFF'
+    if (tog) tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
     if (tog) tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
     if (tog) tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
   } catch (e: any) {
@@ -339,7 +340,7 @@ export function _renderAdaptivePanel(): void {
         + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + k + '">' + k + '</span>'
         + '<span>' + b.trades + 't</span>'
         + '<span style="color:' + wrColor + '">' + (wr !== null ? wr + '%' : '—') + '</span>'
-        + '<span style="color:' + multColor + '">' + (hasData ? '×' + b.mult.toFixed(2) : '<30 ' + w._ZI.lock + '') + '</span>'
+        + '<span style="color:' + multColor + '">' + (hasData ? '×' + b.mult.toFixed(2) : '<30 ' + _ZI.lock + '') + '</span>'
         + '</div>'
     }).join('')
 
@@ -355,7 +356,7 @@ export function toggleAdaptive(): void {
   w.BM.adaptive.enabled = !w.BM.adaptive.enabled
   var tog = document.getElementById('adaptiveToggleBtn')
   if (tog) {
-    tog.innerHTML = w.BM.adaptive.enabled ? w._ZI.brain + ' ADAPTIVE ON' : w._ZI.brain + ' ADAPTIVE OFF'
+    tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
     tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
     tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
   }

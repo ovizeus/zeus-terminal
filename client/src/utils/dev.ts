@@ -6,6 +6,7 @@
 import { getBrainMetrics } from '../services/stateAccessors'
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
+import { _ZI } from '../constants/icons'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, fn calls
 
 export const DEV: Record<string, any> = {
@@ -686,7 +687,7 @@ export function hubSaveAll(): void {
       hubTgSave()
     }
 
-    toast('All settings saved', 0, w._ZI?.ok)
+    toast('All settings saved', 0, _ZI?.ok)
     devLog('Settings saved via Hub', 'info')
 
   } catch (e) {
@@ -700,7 +701,7 @@ export function hubLoadAll(): void {
   try {
     if (typeof w.loadUserSettings === 'function') w.loadUserSettings()
     hubPopulate()
-    toast('Settings loaded', 0, w._ZI?.fold)
+    toast('Settings loaded', 0, _ZI?.fold)
   } catch (e) {
     console.warn('[Hub] hubLoadAll error:', e)
   }
@@ -715,7 +716,7 @@ export function hubTgSave(): void {
   const token = tokenEl ? tokenEl.value.trim() : ''
   const chatId = chatEl ? chatEl.value.trim() : ''
   if (!token || !chatId) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' Completeaza ambele campuri</span>'
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Completeaza ambele campuri</span>'
     return
   }
   // Token saved server-side only (encrypted) — never store in localStorage
@@ -726,13 +727,13 @@ export function hubTgSave(): void {
     body: JSON.stringify({ botToken: token, chatId: chatId })
   }).then(function (r) { return r.json() }).then(function (d: any) {
     if (d.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + w._ZI?.ok + ' Salvat + trimis la server</span>'
-      toast('Telegram saved', 0, w._ZI?.ok)
+      if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Salvat + trimis la server</span>'
+      toast('Telegram saved', 0, _ZI?.ok)
     } else {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' Server: ' + (d.error || 'error') + '</span>'
+      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Server: ' + (d.error || 'error') + '</span>'
     }
   }).catch(function (e: any) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' ' + e.message + '</span>'
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' ' + e.message + '</span>'
   })
 }
 w.hubTgSave = hubTgSave
@@ -742,18 +743,18 @@ export function hubTgTest(): void {
   // Save first to ensure server has the latest creds
   hubTgSave()
   setTimeout(function () {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#4fc3f7">' + w._ZI?.mail + ' Sending test...</span>'
+    if (statusEl) statusEl.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.mail + ' Sending test...</span>'
     fetch('/api/user/telegram/test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     }).then(function (r) { return r.json() }).then(function (d: any) {
       if (d.ok) {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + w._ZI?.ok + ' Test trimis — verifica Telegram!</span>'
+        if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Test trimis — verifica Telegram!</span>'
       } else {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' Mesajul nu s-a trimis — verifica token/chat ID</span>'
+        if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Mesajul nu s-a trimis — verifica token/chat ID</span>'
       }
     }).catch(function (e: any) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' ' + e.message + '</span>'
+      if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' ' + e.message + '</span>'
     })
   }, 500)
 }
@@ -769,7 +770,7 @@ export function hubTgPopulate(): void {
       if (tokenEl) tokenEl.placeholder = '(saved on server)'
     }
     const statusElInner = document.getElementById('hubTgStatus')
-    if (statusElInner && d.configured) statusElInner.innerHTML = '<span style="color:#4fc3f7">' + w._ZI?.inf + ' Telegram configurat (chat: ' + d.chatId + ')</span>'
+    if (statusElInner && d.configured) statusElInner.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.inf + ' Telegram configurat (chat: ' + d.chatId + ')</span>'
   }).catch(function () { /* */ })
 }
 w.hubTgPopulate = hubTgPopulate

@@ -4,6 +4,7 @@
 
 import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -460,8 +461,8 @@ function _qebUpdateRiskUI(): void {
       const smartOn = w.USER_SETTINGS && w.USER_SETTINGS.autoTrade &&
         w.USER_SETTINGS.autoTrade.smartExitEnabled === true
       advEl.innerHTML = smartOn
-        ? w._ZI.bolt + ' Smart Exit ENABLED \u2014 emergency actions may execute.'
-        : w._ZI.eye + ' Advisory mode \u2014 enable Smart Exit in Settings Hub to allow auto-exec.'
+        ? _ZI.bolt + ' Smart Exit ENABLED \u2014 emergency actions may execute.'
+        : _ZI.eye + ' Advisory mode \u2014 enable Smart Exit in Settings Hub to allow auto-exec.'
       ;(advEl as HTMLElement).style.color = smartOn ? 'var(--gold)' : '#556677'
     }
   } catch (e) { /* silent */ }
@@ -564,7 +565,7 @@ export function updateScenarioData(): void {
       : (w.S.magnets && w.S.magnets.below && w.S.magnets.below[0]
         ? '$' + fPFn(w.S.magnets.below[0].price)
         : 'next support')
-    const primary = (isBull ? w._ZI.tup + ' Bullish' : w._ZI.drop + ' Bearish')
+    const primary = (isBull ? _ZI.tup + ' Bullish' : _ZI.drop + ' Bearish')
       + ' \u2014 ' + regime.toUpperCase() + ' regime'
       + (regConf > 0 ? ' (' + regConf + '% conf)' : '')
       + '. Target: ' + nearTarget + '.'
@@ -578,7 +579,7 @@ export function updateScenarioData(): void {
         ? '$' + fPFn(w.S.magnets.above[0].price)
         : 'nearby resistance')
     const altConf = Math.max(10, Math.round(100 - prob))
-    const alternate = (isBull ? w._ZI.drop + ' Bear reversal' : w._ZI.tup + ' Bull reversal')
+    const alternate = (isBull ? _ZI.drop + ' Bear reversal' : _ZI.tup + ' Bull reversal')
       + ' scenario (' + altConf + '% alt conf)'
       + '. Watch ' + altTarget + ' for early signs.'
 
@@ -631,15 +632,15 @@ export function updateScenarioUI(): void {
 
     elSc.innerHTML =
       '<div class="sc-block primary">'
-      + '<div class="sc-label primary">' + w._ZI.dGrn + ' PRIMARY <span class="sc-conf ' + probCls + '">' + probStr + '% prob</span></div>'
+      + '<div class="sc-label primary">' + _ZI.dGrn + ' PRIMARY <span class="sc-conf ' + probCls + '">' + probStr + '% prob</span></div>'
       + '<div class="sc-text">' + sc.primary + '</div>'
       + '</div>'
       + '<div class="sc-block alternate">'
-      + '<div class="sc-label alternate">' + w._ZI.dYlw + ' ALTERNATE</div>'
+      + '<div class="sc-label alternate">' + _ZI.dYlw + ' ALTERNATE</div>'
       + '<div class="sc-text">' + sc.alternate + '</div>'
       + '</div>'
       + '<div class="sc-block failure">'
-      + '<div class="sc-label failure">' + w._ZI.w + ' INVALIDATION</div>'
+      + '<div class="sc-label failure">' + _ZI.w + ' INVALIDATION</div>'
       + '<div class="sc-text">' + sc.failure + '</div>'
       + '</div>'
 

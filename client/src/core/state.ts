@@ -7,6 +7,7 @@
 import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
+import { _ZI } from '../constants/icons'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -1040,7 +1041,7 @@ export const ZState = (() => {
       const TP = w.TP
       const AT = getATObject()
       const Intervals = w.Intervals
-      const _ZI = w._ZI
+
       if (typeof TP === 'undefined') return false
       const localSnap = load()
       const localTs = (localSnap && localSnap.ts) ? localSnap.ts : 0

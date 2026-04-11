@@ -6,7 +6,8 @@
 import { getTPObject, getATObject, getBrainMetrics, getBrainObject, getDSLObject, getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
 import { fP } from '../utils/format'
 import { toast } from './marketDataHelpers'
-const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, w.el, w._ZI, fn calls
+import { _ZI } from '../constants/icons'
+const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, w.el, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
 const AT = getATObject()
@@ -220,7 +221,7 @@ export function _updateWhyBlocked(code: any, text: any) {
   // Degraded feeds override
   if (w._isDegradedOnly() && !code) {
     const feeds = [...w._SAFETY.degradedFeeds].join(',')
-    pill.innerHTML = w._ZI.w + ' DEGRADED: ' + feeds
+    pill.innerHTML = _ZI.w + ' DEGRADED: ' + feeds
     pill.className = 'degraded'
     pill.style.display = 'block'
     return
@@ -234,30 +235,30 @@ export function _updateWhyBlocked(code: any, text: any) {
 
   // Map code → pill class + compact label
   let cls = 'blocked'
-  let label = w._ZI.noent + ' ' + (text || code)
+  let label = _ZI.noent + ' ' + (text || code)
 
   if (code === 'SAFETY_FAIL') {
-    if (text && text.includes('session')) { cls = 'session'; label = w._ZI.timer + ' Session FAIL — outside hours' }
-    else if (text && text.includes('regime')) { cls = 'regime'; label = w._ZI.w + ' Regime UNSTABLE' }
-    else if (text && text.includes('cooldown')) { cls = 'cooldown'; label = w._ZI.clock + ' Cooldown — wait...' }
-    else { cls = 'blocked'; label = w._ZI.noent + ' Safety: ' + (text || 'FAIL') }
+    if (text && text.includes('session')) { cls = 'session'; label = _ZI.timer + ' Session FAIL — outside hours' }
+    else if (text && text.includes('regime')) { cls = 'regime'; label = _ZI.w + ' Regime UNSTABLE' }
+    else if (text && text.includes('cooldown')) { cls = 'cooldown'; label = _ZI.clock + ' Cooldown — wait...' }
+    else { cls = 'blocked'; label = _ZI.noent + ' Safety: ' + (text || 'FAIL') }
   } else if (code === 'DATA_STALL') {
-    cls = 'degraded'; label = w._ZI.w + ' Data stalled'
+    cls = 'degraded'; label = _ZI.w + ' Data stalled'
   } else if (code === 'KILL' || code === 'KILL_SWITCH') {
-    cls = 'blocked'; label = w._ZI.dRed + ' Kill switch activ'
+    cls = 'blocked'; label = _ZI.dRed + ' Kill switch activ'
   } else if (code === 'PROTECT' || code === 'PROTECT_MODE') {
-    cls = 'blocked'; label = w._ZI.sh + ' Protect mode'
+    cls = 'blocked'; label = _ZI.sh + ' Protect mode'
   } else if (code === 'TRIGGER_FAIL') {
-    cls = 'regime'; label = w._ZI.bolt + ' Trigger neatins'
+    cls = 'regime'; label = _ZI.bolt + ' Trigger neatins'
   } else if (code === 'FAKEOUT') {
-    cls = 'regime'; label = w._ZI.noent + ' Anti-fakeout'
+    cls = 'regime'; label = _ZI.noent + ' Anti-fakeout'
   }
 
   // Cooldown: add live countdown if applicable
   if (cls === 'cooldown') {
     const cdMs = Math.max(0, w._getCooldownMs() - (Date.now() - (AT.lastTradeTs || 0)))
     const cdMin = Math.ceil(cdMs / 60000)
-    label = w._ZI.clock + ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
+    label = _ZI.clock + ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
   }
 
   pill.innerHTML = label
@@ -275,7 +276,7 @@ export async function runMultiSymbolScan() {
   const scanSyms = getActiveMscanSyms()
   try {
     const tbody = w.el('mscanBody')
-    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">${w._ZI.bolt} SCANEZ ${scanSyms.length} SIMBOLURI...</td></tr>`
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">${_ZI.bolt} SCANEZ ${scanSyms.length} SIMBOLURI...</td></tr>`
 
     let opps = 0
     const results: any[] = []
@@ -357,7 +358,7 @@ export function renderMscanTable(results: any[], opps: number) {
 
     let actionHtml = ''
     if (r.alreadyOpen) {
-      actionHtml = `<div style="font-size:11px;color:#aa44ff">${w._ZI.dRed} IN POZ</div>`
+      actionHtml = `<div style="font-size:11px;color:#aa44ff">${_ZI.dRed} IN POZ</div>`
     } else if (r.isOpp && r.dir === 'bull') {
       actionHtml = `<button class="mscan-enter-btn long" onclick="manualEnterFromScan('${r.sym}','LONG',${r.score})">\u25B2 LONG</button>`
     } else if (r.isOpp && r.dir === 'bear') {
@@ -456,7 +457,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 
   if (!w.isCurrentTimeOK()) {
     w.atLog('warn', '[TIME] Ora curenta are WR scazut \u2014 nu intru (Day/Hour filter)')
-    w.brainThink('bad', w._ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna')
+    w.brainThink('bad', _ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna')
     return
   }
 
@@ -485,7 +486,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 
     w.atLog(side === 'LONG' ? 'buy' : 'sell',
       `[MSCAN] ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} ADX:${opp.adx || '\u2014'} | ${opp.signals}`)
-    w.brainThink('trade', w._ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 intru!`)
+    w.brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 intru!`)
 
     w.placeAutoTrade(side, { score: opp.score, bullCount: opp.dir === 'bull' ? 3 : 0, bearCount: opp.dir === 'bear' ? 3 : 0, stDir: opp.dir }, opp.sym, price)
   })

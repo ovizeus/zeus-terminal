@@ -5,6 +5,7 @@
 
 import { _safeLocalStorageSet } from '../services/storage'
 import { toast } from '../data/marketDataHelpers'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -30,7 +31,7 @@ export function aubToggle(): void {
 export function aubToggleSFX(): void {
   w.AUB.sfxEnabled = !w.AUB.sfxEnabled
   const btn = document.getElementById('aub-sfx-btn')
-  if (btn) { btn.innerHTML = w.AUB.sfxEnabled ? w._ZI.bell + ' SFX' : w._ZI.bellX + ' SFX'; btn.className = w.AUB.sfxEnabled ? 'on' : '' }
+  if (btn) { btn.innerHTML = w.AUB.sfxEnabled ? _ZI.bell + ' SFX' : _ZI.bellX + ' SFX'; btn.className = w.AUB.sfxEnabled ? 'on' : '' }
   if (w.AUB.sfxEnabled) _aubInitAudio()
 }
 
@@ -100,7 +101,7 @@ export function aubCheckCompat(): void {
   const list = document.getElementById('aub-compat-list')
   if (!list) return
   const row = (pass: any, label: any) =>
-    `<div class="aub-row ${pass ? 'ok' : 'warn'}">${pass ? w._ZI.ok : w._ZI.w} ${label}</div>`
+    `<div class="aub-row ${pass ? 'ok' : 'warn'}">${pass ? _ZI.ok : _ZI.w} ${label}</div>`
 
   list.innerHTML = [
     row(w.AUB_COMPAT.ws, 'WebSocket: ' + (w.AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
@@ -249,14 +250,14 @@ export function aubBBExport(): void {
     a.href = URL.createObjectURL(blob)
     a.download = 'zeus_blackbox_' + new Date().toISOString().slice(0, 10) + '.json'
     a.click()
-    toast('Blackbox exported!', 0, w._ZI.clip)
+    toast('Blackbox exported!', 0, _ZI.clip)
   } catch (e) { console.warn('[AUB BB export]', e) }
 }
 export function aubBBClear(): void {
   w.AUB.bb = []
   try { localStorage.removeItem('aub_bb') } catch (_) { }
   _aubUpdateBBCard()
-  toast('Blackbox cleared', 0, w._ZI.trash)
+  toast('Blackbox cleared', 0, _ZI.trash)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -365,7 +366,7 @@ export function aubMacroClear(): void {
   w.AUB.macroEvents = []
   try { localStorage.removeItem('aub_macro') } catch (_) { }
   _aubRenderMacroEvents()
-  toast('Macro events cleared', 0, w._ZI.trash)
+  toast('Macro events cleared', 0, _ZI.trash)
 }
 export function aubMacroFileLoad(input: any): void {
   const file = input?.files?.[0]; if (!file) return
@@ -386,7 +387,7 @@ export function aubMacroFileLoad(input: any): void {
         _aubRenderMacroEvents()
         toast('Macro events loaded: ' + w.AUB.macroEvents.length)
       }
-    } catch (e) { toast('Invalid JSON', 0, w._ZI.x) }
+    } catch (e) { toast('Invalid JSON', 0, _ZI.x) }
   }
   reader.readAsText(file)
   input.value = ''
@@ -488,7 +489,7 @@ export function _aubSimWorker(): void {
     const res = document.getElementById('aub-sim-result')
     if (res) {
       (res as any).style.display = 'block'
-      res.innerHTML = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">` + w._ZI.w + ` Suggest only — confirm before applying</span>`
+      res.innerHTML = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">` + _ZI.w + ` Suggest only — confirm before applying</span>`
     }
     const applyBtn = document.getElementById('aub-sim-apply')
     if (applyBtn) (applyBtn as any).style.display = 'inline-block'

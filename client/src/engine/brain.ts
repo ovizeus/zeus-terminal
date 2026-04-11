@@ -7,8 +7,9 @@
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
+import { _ZI } from '../constants/icons'
 
-const w = window as any // kept for w.el, w._ZI, function calls, w.S writes + self-ref
+const w = window as any // kept for w.el, function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
 const BM = getBrainMetrics()
 // [8C-2B2] BR = mutable ref to BR — reads + writes go through same object
@@ -169,7 +170,7 @@ export function updateBrainState(): void {
   // State badge
   const badge = w.el('brainStateBadge')
   if (badge) {
-    const labels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: w._ZI.bolt + ' READY', blocked: w._ZI.noent + ' BLOCKED', trading: w._ZI.dRed + ' TRADING' }
+    const labels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', ready: _ZI.bolt + ' READY', blocked: _ZI.noent + ' BLOCKED', trading: _ZI.dRed + ' TRADING' }
     badge.innerHTML = labels[state] || state.toUpperCase()
     badge.className = 'brain-state-badge ' + state
   }
@@ -180,7 +181,7 @@ export function updateBrainState(): void {
   // Regime badge
   const regime = detectMarketRegime(getKlines())
   const regimeBadge = w.el('brainRegimeBadge')
-  const regimeLabels: any = { trend: w._ZI.tup + ' TREND', range: w._ZI.chart + ' RANGE', volatile: w._ZI.bolt + ' VOLATIL', unknown: w._ZI.clock + ' LOADING' }
+  const regimeLabels: any = { trend: _ZI.tup + ' TREND', range: _ZI.chart + ' RANGE', volatile: _ZI.bolt + ' VOLATIL', unknown: _ZI.clock + ' LOADING' }
   if (regimeBadge) {
     regimeBadge.innerHTML = regimeLabels[regime] || regime
     regimeBadge.className = 'brain-regime ' + regime
@@ -228,11 +229,11 @@ export function runBrainUpdate(): void {
     const prevState = BR._prevState
     if (BR.state !== prevState) {
       const msgs: any = {
-        scanning: w._ZI.mag + ' Scanez piata... astept semnale',
-        analyzing: w._ZI.ruler + ' Semnal detectat — verific confluenta',
-        ready: w._ZI.ok + ' Toate conditiile OK — gata de intrare',
-        blocked: w._ZI.noent + ' Kill switch activ — suspendat',
-        trading: w._ZI.dRed + ' Pozitie activa — monitorizez TP/SL'
+        scanning: _ZI.mag + ' Scanez piata... astept semnale',
+        analyzing: _ZI.ruler + ' Semnal detectat — verific confluenta',
+        ready: _ZI.ok + ' Toate conditiile OK — gata de intrare',
+        blocked: _ZI.noent + ' Kill switch activ — suspendat',
+        trading: _ZI.dRed + ' Pozitie activa — monitorizez TP/SL'
       }
       brainThink(BR.state === 'ready' ? 'ok' : BR.state === 'blocked' ? 'bad' : 'info',
         msgs[BR.state] || BR.state)
@@ -285,7 +286,7 @@ if (typeof w.S !== 'undefined' && w.S) {
 export function armAssist(): void {
   w.ARM_ASSIST.armed = true; w.ARM_ASSIST.ts = Date.now()
   w.S.assistArmed = true
-  brainThink('ok', w._ZI.lock + ' ARM ASSIST activ')
+  brainThink('ok', _ZI.lock + ' ARM ASSIST activ')
   if (typeof w._syncDslAssistUI === 'function') w._syncDslAssistUI()
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
@@ -441,7 +442,7 @@ export function _applyModeSwitch(mode: any): void {
   if (mode === 'assist') { armAssist() }
   else { disarmAssist() }
   if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[BRAIN] mode=' + prev + '→' + mode, { prev: prev, next: mode })
-  brainThink('info', w._ZI.bolt + ` Mode → ${w.S.mode.toUpperCase()}`)
+  brainThink('info', _ZI.bolt + ` Mode → ${w.S.mode.toUpperCase()}`)
   syncBrainFromState()
   setTimeout(renderBrainCockpit, 30)
   w.dslUpdateBanner()
@@ -475,7 +476,7 @@ export function setBrainMode(mode: any): void { setMode(mode) }
 
 export function setProfile(profile: any): void {
   w.S.profile = profile.toLowerCase()
-  brainThink('info', w._ZI.chart + ` Profile → ${w.S.profile.toUpperCase()} | Trig:${w.PROFILE_TF[w.S.profile]?.trigger || '?'}`)
+  brainThink('info', _ZI.chart + ` Profile → ${w.S.profile.toUpperCase()} | Trig:${w.PROFILE_TF[w.S.profile]?.trigger || '?'}`)
   syncBrainFromState()
   setTimeout(renderBrainCockpit, 30)
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // persist profile
@@ -490,8 +491,8 @@ export function setDslMode(mode: any): void {
   if (!valid.includes(mode)) return
   getDSLMode() = mode
   try { localStorage.setItem('zeus_dsl_mode', mode) } catch (_) { }
-  const labels: any = { atr: w._ZI.plug + ' ATR', fast: w._ZI.bolt + ' FAST', swing: w._ZI.wave + ' SWING', defensive: w._ZI.sh + ' DEF', tp: w._ZI.tgt + ' TP' }
-  brainThink('info', w._ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
+  const labels: any = { atr: _ZI.plug + ' ATR', fast: _ZI.bolt + ' FAST', swing: _ZI.wave + ' SWING', defensive: _ZI.sh + ' DEF', tp: _ZI.tgt + ' TP' }
+  brainThink('info', _ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
   _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + mode, 'znc-dbtn', 'act-dsl-' + mode)
 }
 
@@ -1058,8 +1059,8 @@ export function resetProtectMode(): void {
   BM.lossStreak = 0
   const banner = w.el('protectBanner')
   if (banner) banner.className = 'protect-banner'
-  brainThink('ok', w._ZI.ok + ' Protect mode resetat manual')
-  toast('Protect mode resetat', 0, w._ZI.ok)
+  brainThink('ok', _ZI.ok + ' Protect mode resetat manual')
+  toast('Protect mode resetat', 0, _ZI.ok)
 }
 
 // ── DSL TELEMETRY UPDATE ──────────────────────────────────────────
@@ -1115,7 +1116,7 @@ export function updateDSLTelemetry(): void {
 export function showExecCinematic(side: any, sym: any): void {
   const banner = document.createElement('div')
   banner.className = 'exec-banner' + (side === 'SHORT' ? ' short' : '')
-  banner.innerHTML = w._ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`
+  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`
   document.body.appendChild(banner)
   setTimeout(() => { try { document.body.removeChild(banner) } catch (_) { } }, 3000)
 }
@@ -1704,7 +1705,7 @@ export function renderBrainCockpit(): void {
 
   // ── STATE / ARM BADGES ──
   const badge = w.el('brainStateBadge')
-  const stLabels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', armed: w._ZI.bolt + ' ARMED', trading: w._ZI.dRed + ' TRADING', protect: w._ZI.sh + ' PROTECT', blocked: w._ZI.noent + ' BLOCKED' }
+  const stLabels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', armed: _ZI.bolt + ' ARMED', trading: _ZI.dRed + ' TRADING', protect: _ZI.sh + ' PROTECT', blocked: _ZI.noent + ' BLOCKED' }
   if (badge) { badge.innerHTML = stLabels[state] || state.toUpperCase(); badge.className = 'znc-state ' + state }
   const armBadge = w.el('zncArmBadge')
   if (armBadge) {
@@ -1722,7 +1723,7 @@ export function renderBrainCockpit(): void {
   }
 
   // ── REGIME BADGES ──
-  const regLabels: any = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + w._ZI.hex, panic: 'PANIC ' + w._ZI.fire, unknown: '—' };
+  const regLabels: any = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + _ZI.hex, panic: 'PANIC ' + _ZI.fire, unknown: '—' };
   [w.el('brainRegimeBadge'), w.el('brainRegimeBadge2')].forEach((b: any) => {
     if (!b) return
     b.innerHTML = regLabels[BR.regime] || BR.regime
@@ -1753,7 +1754,7 @@ export function renderBrainCockpit(): void {
   const aLabel = (atmos.category || 'NEUTRAL').toUpperCase().replace('_', ' ')
   const aAllow = atmos.allowEntry !== false ? 'ALLOW' : 'BLOCK'
   const aSub = aAllow + ' · conf:' + (atmos.confidence || 0) + ' · ×' + (atmos.sizeMultiplier != null ? atmos.sizeMultiplier : '?')
-  _card('card-atmos', 'card-atmos-t', 'card-atmos-s', w._ZI.bolt + ' ' + aLabel, aSub, aCls)
+  _card('card-atmos', 'card-atmos-t', 'card-atmos-s', _ZI.bolt + ' ' + aLabel, aSub, aCls)
   // Chaos shimmer CSS
   const orbWrap = w.el('zncOrbWrap')
   if (orbWrap) orbWrap.style.animation = chaos > 80 ? 'zHeat .15s infinite' : ''
@@ -1922,11 +1923,11 @@ export function renderBrainCockpit(): void {
       let html = ''
       if (whyList.length > 0) {
         html += '<div class="bw-section-label why-label">WHY:</div>'
-        html += whyList.slice(0, 4).map(function (r: any) { return '<span class="bw-why">' + w._ZI.ok + ' ' + String(r).replace(/</g, '&lt;') + '</span>' }).join('')
+        html += whyList.slice(0, 4).map(function (r: any) { return '<span class="bw-why">' + _ZI.ok + ' ' + String(r).replace(/</g, '&lt;') + '</span>' }).join('')
       }
       if (riskList.length > 0) {
         html += '<div class="bw-section-label risk-label">RISK:</div>'
-        html += riskList.slice(0, 3).map(function (r: any) { return '<span class="bw-risk">' + w._ZI.w + ' ' + String(r).replace(/</g, '&lt;') + '</span>' }).join('')
+        html += riskList.slice(0, 3).map(function (r: any) { return '<span class="bw-risk">' + _ZI.w + ' ' + String(r).replace(/</g, '&lt;') + '</span>' }).join('')
       }
       if (!html) html = '<span>Scanning market...</span>'
       reasonsEl.innerHTML = html
@@ -2590,7 +2591,7 @@ export function adaptAutoTradeParams(): void {
     BR.adaptParams = { sl: newSL, size: newSize, adjustCount: (BR.adaptParams.adjustCount || 0) + 1 }
     // [P1] Sync adapted values back to TC
     if (typeof w.TC !== 'undefined') { w.TC.slPct = newSL; w.TC.size = newSize }
-    brainThink('trade', w._ZI.bolt + ` ADAPTAT: ${reason}`)
+    brainThink('trade', _ZI.bolt + ` ADAPTAT: ${reason}`)
     w.atLog('info', `[ADAPT] Parametri adaptati: ${reason}`)
   }
 }

@@ -4,7 +4,8 @@
 import { getKlines, getTimezone, getSymbol, getPrice, getFR, getFG, getOI, getLS, getTPObject, getBrainObject, getBrainMetrics, getTCMaxPos } from '../services/stateAccessors'
 import { fmtNow } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
+import { _ZI } from '../constants/icons'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -498,7 +499,7 @@ export function renderDHF() {
     // [FIX BUG5] Use same _wrMin threshold as isCurrentTimeOK gate — prevents misleading green
     const _wrMinRender = (w.WVE_CONFIG && w.WVE_CONFIG.wrFilter && w.WVE_CONFIG.wrFilter.minWR) || 55;
     const isOK = dayWR >= 50 && hourWR >= _wrMinRender;
-    curSlot.innerHTML = `${curDay} ${String(curHour).padStart(2, '0')}:00 UTC (${utcTimeStr}) \u2014 WR:${Math.min(dayWR, hourWR)}% \u2014 ${isOK ? w._ZI.ok + ' OK' : w._ZI.noent + ' EVITA'}`;
+    curSlot.innerHTML = `${curDay} ${String(curHour).padStart(2, '0')}:00 UTC (${utcTimeStr}) \u2014 WR:${Math.min(dayWR, hourWR)}% \u2014 ${isOK ? _ZI.ok + ' OK' : _ZI.noent + ' EVITA'}`;
     curSlot.style.color = isOK ? 'var(--grn-bright)' : 'var(--red)';
   }
 

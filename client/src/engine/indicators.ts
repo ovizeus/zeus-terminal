@@ -6,6 +6,7 @@
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -15,11 +16,11 @@ const w = window as any
 
 export function connectLiveAPI(): void {
   const st = w.el('apiStatus')
-  if (st) { st.innerHTML = w._ZI.timer + ' Se verific\u0103 conexiunea exchange...'; st.style.color = 'var(--yel)' }
+  if (st) { st.innerHTML = _ZI.timer + ' Se verific\u0103 conexiunea exchange...'; st.style.color = 'var(--yel)' }
   fetch('/api/exchange/status', { credentials: 'same-origin' }).then(function (r: Response) { return r.json() }).then(function (data: any) {
     if (!data.ok || !data.connected) {
       if (st) {
-        st.innerHTML = w._ZI.w + ' Nicio conexiune exchange configurat\u0103.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + w._ZI.bolt + ' Configureaz\u0103 \u00EEn Settings \u2192 Exchange API</span>'
+        st.innerHTML = _ZI.w + ' Nicio conexiune exchange configurat\u0103.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configureaz\u0103 \u00EEn Settings \u2192 Exchange API</span>'
         st.style.color = '#f0c040'
       }
       return
@@ -28,24 +29,24 @@ export function connectLiveAPI(): void {
     const mode = data.mode || 'live'
     w.TP.liveConnected = true; w.TP.liveExchange = exchange
     if (st) {
-      st.innerHTML = w._ZI.ok + ' <b>' + exchange.toUpperCase() + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
+      st.innerHTML = _ZI.ok + ' <b>' + exchange.toUpperCase() + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
       st.style.color = 'var(--grn)'
     }
     const form = w.el('liveOrderForm'); if (form) form.style.display = 'block'
     const btn = w.el('btnConnectExchange'); if (btn) btn.style.display = 'none'
     if (typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
   }).catch(function (err: any) {
-    if (st) { st.innerHTML = w._ZI.x + ' Backend unreachable: ' + escHtml(err.message || err); st.style.color = 'var(--red)' }
+    if (st) { st.innerHTML = _ZI.x + ' Backend unreachable: ' + escHtml(err.message || err); st.style.color = 'var(--red)' }
   })
 }
 
 export function placeLiveOrder(): void {
-  toast('placeLiveOrder disabled \u2014 use standard Live Trading panel', 0, w._ZI.x)
+  toast('placeLiveOrder disabled \u2014 use standard Live Trading panel', 0, _ZI.x)
   if (typeof w.atLog === 'function') w.atLog('warn', '[BLOCK] placeLiveOrder is disabled (orphan order path \u2014 use Live Trading panel)')
 }
 
 export function connectLiveExchange(): void {
-  toast('LIVE TRADING DEZACTIVAT \u2014 backend necesar.', 0, w._ZI.dRed)
+  toast('LIVE TRADING DEZACTIVAT \u2014 backend necesar.', 0, _ZI.dRed)
 }
 
 export function loadSavedAPI(): void {
@@ -102,7 +103,7 @@ export function openIndPanel(): void {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <span class="ind-gear" onclick="event.stopPropagation();openIndSettings('${ind.id}')" title="Settings">${w._ZI.bolt}</span>
+        <span class="ind-gear" onclick="event.stopPropagation();openIndSettings('${ind.id}')" title="Settings">${_ZI.bolt}</span>
         <div class="ind-toggle ${on ? 'on' : ''}" onclick="toggleInd('${ind.id}',this)">
           <div class="ind-toggle-dot"></div>
         </div>
@@ -218,7 +219,7 @@ export function openIndSettings(id: string): void {
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type'
   }
-  let html = `<div class="ind-set-title">${ind ? ind.ico : w._ZI.bolt} ${ind ? ind.name : id.toUpperCase()} Settings</div>`
+  let html = `<div class="ind-set-title">${ind ? ind.ico : _ZI.bolt} ${ind ? ind.name : id.toUpperCase()} Settings</div>`
   for (const [key, val] of Object.entries(cfg)) {
     if (key === 'levels' || key === 'type') continue
     html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="1" max="500" step="any" class="ind-set-input"></div>`
@@ -255,7 +256,7 @@ export function applyIndSettings(id: string): void {
     if (typeof w.renderChart === 'function') w.renderChart()
     applyIndVisibility(id, true)
   }
-  toast(id.toUpperCase() + ' settings updated', 0, w._ZI.bolt)
+  toast(id.toUpperCase() + ' settings updated', 0, _ZI.bolt)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -870,7 +871,7 @@ export function generateDeepDive(): string {
     const confStr = regConf > 0 ? ` <span class="dd-hl-dim">(conf ${regConf}%)</span>` : ''
     const atrStr = regAtrPct > 0 ? ` \u00B7 ATR <span class="dd-hl-neut">${regAtrPct.toFixed(2)}%</span>` : ''
 
-    const secRegime = `<div class="dd-section"><div class="dd-title">${w._ZI.chart} REGIME</div><div class="dd-body"><span class="dd-badge ${regCls}">${regLabel}</span>${confStr}${atrStr}</div></div>`
+    const secRegime = `<div class="dd-section"><div class="dd-title">${_ZI.chart} REGIME</div><div class="dd-body"><span class="dd-badge ${regCls}">${regLabel}</span>${confStr}${atrStr}</div></div>`
 
     // 2. LIQUIDITY
     let secLiq = ''
@@ -892,9 +893,9 @@ export function generateDeepDive(): string {
         const volB = nearBelow.usd > 0 ? ` \u00B7 $${fmt(nearBelow.usd)}` : ''
         belowStr = `<span class="dd-hl-bull">$${fP(nearBelow.price)}</span> <span class="dd-hl-dim">(-${distB}%${volB})</span>`
       }
-      secLiq = `<div class="dd-section"><div class="dd-title">${w._ZI.mag} LIQUIDITY</div><div class="dd-body">Bias: <span class="${biasCls}">${biasLbl}</span><br>Nearest above: ${aboveStr}<br>Nearest below: ${belowStr}</div></div>`
+      secLiq = `<div class="dd-section"><div class="dd-title">${_ZI.mag} LIQUIDITY</div><div class="dd-body">Bias: <span class="${biasCls}">${biasLbl}</span><br>Nearest above: ${aboveStr}<br>Nearest below: ${belowStr}</div></div>`
     } catch (_) {
-      secLiq = `<div class="dd-section"><div class="dd-title">${w._ZI.mag} LIQUIDITY</div><div class="dd-body"><span class="dd-hl-dim">Scanning magnets...</span></div></div>`
+      secLiq = `<div class="dd-section"><div class="dd-title">${_ZI.mag} LIQUIDITY</div><div class="dd-body"><span class="dd-hl-dim">Scanning magnets...</span></div></div>`
     }
 
     // 3. INDICATORS
@@ -944,9 +945,9 @@ export function generateDeepDive(): string {
       const ofiCls = ofi > 55 ? 'dd-hl-bull' : ofi < 45 ? 'dd-hl-bear' : 'dd-hl-neut'
       const ofiStr = `<span class="${ofiCls}">${ofi.toFixed(0)}% buy</span>`
 
-      secInd = `<div class="dd-section"><div class="dd-title">${w._ZI.ruler} INDICATORS</div><div class="dd-body">RSI 5m: <span class="${rsiCls(rsi5m)}">${rsi5m.toFixed(0)}</span> <span class="dd-hl-dim">(${rsiLbl(rsi5m)})</span> \u00B7 1h: <span class="${rsiCls(rsi1h)}">${rsi1h.toFixed(0)}</span> \u00B7 4h: <span class="${rsiCls(rsi4h)}">${rsi4h.toFixed(0)}</span><br>MACD: ${macdStr} \u00B7 ST: ${stStr}<br>Funding: ${frStr} \u00B7 OI \u0394: ${oiStr}<br>Order Flow: ${ofiStr}</div></div>`
+      secInd = `<div class="dd-section"><div class="dd-title">${_ZI.ruler} INDICATORS</div><div class="dd-body">RSI 5m: <span class="${rsiCls(rsi5m)}">${rsi5m.toFixed(0)}</span> <span class="dd-hl-dim">(${rsiLbl(rsi5m)})</span> \u00B7 1h: <span class="${rsiCls(rsi1h)}">${rsi1h.toFixed(0)}</span> \u00B7 4h: <span class="${rsiCls(rsi4h)}">${rsi4h.toFixed(0)}</span><br>MACD: ${macdStr} \u00B7 ST: ${stStr}<br>Funding: ${frStr} \u00B7 OI \u0394: ${oiStr}<br>Order Flow: ${ofiStr}</div></div>`
     } catch (_) {
-      secInd = `<div class="dd-section"><div class="dd-title">${w._ZI.ruler} INDICATORS</div><div class="dd-body"><span class="dd-hl-dim">Calculating...</span></div></div>`
+      secInd = `<div class="dd-section"><div class="dd-title">${_ZI.ruler} INDICATORS</div><div class="dd-body"><span class="dd-hl-dim">Calculating...</span></div></div>`
     }
 
     // 4. CONCLUSION
@@ -974,9 +975,9 @@ export function generateDeepDive(): string {
       } else if (regime === 'range') { verdict = `Market ranging with no clear directional edge. Wait for breakout confirmation.`; verdictCls = 'dd-hl-neut' }
       else { verdict = `Mixed signals \u2014 no strong directional conviction. Neutral stance advised.`; verdictCls = 'dd-hl-neut' }
 
-      secConc = `<div class="dd-section"><div class="dd-title">${w._ZI.brain} CONCLUSION</div><div class="dd-body"><span class="${verdictCls}">${verdict}</span></div></div>`
+      secConc = `<div class="dd-section"><div class="dd-title">${_ZI.brain} CONCLUSION</div><div class="dd-body"><span class="${verdictCls}">${verdict}</span></div></div>`
     } catch (_) {
-      secConc = `<div class="dd-section"><div class="dd-title">${w._ZI.brain} CONCLUSION</div><div class="dd-body"><span class="dd-hl-dim">Analyzing...</span></div></div>`
+      secConc = `<div class="dd-section"><div class="dd-title">${_ZI.brain} CONCLUSION</div><div class="dd-body"><span class="dd-hl-dim">Analyzing...</span></div></div>`
     }
 
     // 5. INVALIDATION
@@ -995,9 +996,9 @@ export function generateDeepDive(): string {
       else if (regime === 'volatile') invalStr = `Volatility cool-down below ATR <span class="dd-hl-neut">${(regAtrPct * 0.5).toFixed(2)}%</span> needed for trend confirmation.`
       else invalStr = `Regime shift or sudden OFI reversal would invalidate current read.`
 
-      secInval = `<div class="dd-section"><div class="dd-title">${w._ZI.w} INVALIDATION</div><div class="dd-body">${invalStr}</div></div>`
+      secInval = `<div class="dd-section"><div class="dd-title">${_ZI.w} INVALIDATION</div><div class="dd-body">${invalStr}</div></div>`
     } catch (_) {
-      secInval = `<div class="dd-section"><div class="dd-title">${w._ZI.w} INVALIDATION</div><div class="dd-body"><span class="dd-hl-dim">\u2014</span></div></div>`
+      secInval = `<div class="dd-section"><div class="dd-title">${_ZI.w} INVALIDATION</div><div class="dd-body"><span class="dd-hl-dim">\u2014</span></div></div>`
     }
 
     return secRegime + secLiq + secInd + secConc + secInval

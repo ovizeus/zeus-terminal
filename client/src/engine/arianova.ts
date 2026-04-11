@@ -1,4 +1,5 @@
 import { toast } from '../data/marketDataHelpers'
+import { _ZI } from '../constants/icons'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -90,19 +91,19 @@ if (!w._ARIA_NOVA_LOADED) {
       el_s.textContent = 'DSL OFFLINE'
       el_s.className = 'dsls-off'
     } else if (mode === 'auto' && atOn) {
-      el_s.innerHTML = w._ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIV'
+      el_s.innerHTML = _ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIV'
       el_s.className = 'dsls-auto'
     } else if (mode === 'auto') {
-      el_s.innerHTML = w._ZI.robot + ' AUTO MODE · AT OPRIT'
+      el_s.innerHTML = _ZI.robot + ' AUTO MODE · AT OPRIT'
       el_s.className = 'dsls-auto'
     } else if (mode === 'assist' && armed) {
-      el_s.innerHTML = w._ZI.dYlw + ' ASSIST ARMAT · DSL EXECUTĂ'
+      el_s.innerHTML = _ZI.dYlw + ' ASSIST ARMAT · DSL EXECUTĂ'
       el_s.className = 'dsls-assist-armed'
     } else if (mode === 'assist') {
-      el_s.innerHTML = w._ZI.lock + ' ASSIST MANUAL · DEZARMAT'
+      el_s.innerHTML = _ZI.lock + ' ASSIST MANUAL · DEZARMAT'
       el_s.className = 'dsls-assist'
     } else {
-      el_s.innerHTML = w._ZI.hand + ' MANUAL · DSL MONITOR'
+      el_s.innerHTML = _ZI.hand + ' MANUAL · DSL MONITOR'
       el_s.className = 'dsls-manual'
     }
     if (el_c) el_c.textContent = nPos > 0 ? nPos + ' poz·' : ''
@@ -154,24 +155,24 @@ if (!w._ARIA_NOVA_LOADED) {
     // State badge
     el_state.className = ''
     if (killed) {
-      el_state.innerHTML = w._ZI.skull + ' KILL SWITCH'
+      el_state.innerHTML = _ZI.skull + ' KILL SWITCH'
       el_state.className = 'atbs-kill'
     } else if (atOn) {
       if (nPos === 0) el_state.className = 'atbs-on-neutral'
       else if (livePnl > 0) el_state.className = 'atbs-on-profit'
       else el_state.className = 'atbs-on-loss'
       var _arEnv: any = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE')
-      el_state.innerHTML = w._ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
+      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
     } else {
       var _arEnv2: any = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE')
-      el_state.innerHTML = w._ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
+      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
       el_state.className = 'atbs-off'
     }
 
     // Info
     const modeTag = brMode === 'auto' ? 'AUTO' : brMode === 'assist' ? 'ASSIST' : 'MANUAL'
     const execLocked = mode === 'live' && !w._apiConfigured
-    el_info.innerHTML = modeTag + (execLocked ? ' · ' + w._ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții')
+    el_info.innerHTML = modeTag + (execLocked ? ' · ' + _ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții')
 
     // PnL
     if (el_pnl) {
@@ -237,13 +238,13 @@ if (!w._ARIA_NOVA_LOADED) {
     var modeLabel: any = globalMode === 'demo' ? 'DEMO MODE' : (_ptEnv === 'TESTNET' ? 'TESTNET MODE' : 'LIVE MODE')
     el_state.className = ''
     if (nPos === 0) {
-      el_state.innerHTML = w._ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-empty'
+      el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-empty'
     } else if (livePnl > 0) {
-      el_state.innerHTML = w._ZI.tup + ' ' + modeLabel + ' PROFIT'; el_state.className = 'ptbs-profit'
+      el_state.innerHTML = _ZI.tup + ' ' + modeLabel + ' PROFIT'; el_state.className = 'ptbs-profit'
     } else if (livePnl < 0) {
-      el_state.innerHTML = w._ZI.drop + ' ' + modeLabel + ' LOSS'; el_state.className = 'ptbs-loss'
+      el_state.innerHTML = _ZI.drop + ' ' + modeLabel + ' LOSS'; el_state.className = 'ptbs-loss'
     } else {
-      el_state.innerHTML = w._ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-neutral'
+      el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-neutral'
     }
 
     // Info: balance + positions
@@ -917,7 +918,7 @@ if (!w._ARIA_NOVA_LOADED) {
       dot.className = 'aria-dot aria-scan'; return
     }
     const cls = pat.dir === 'bull' ? 'aria-bar-bull' : pat.dir === 'bear' ? 'aria-bar-bear' : 'aria-bar-watch'
-    const ic = pat.dir === 'bull' ? w._ZI.dGrn : pat.dir === 'bear' ? w._ZI.dRed : w._ZI.dYlw
+    const ic = pat.dir === 'bull' ? _ZI.dGrn : pat.dir === 'bear' ? _ZI.dRed : _ZI.dYlw
     txt.innerHTML = `${ic} PATTERN: ${pat.name} \u2014 ${pat.conf}%`
     txt.className = cls
     dot.className = 'aria-dot ' + (pat.dir === 'bull' ? 'aria-bull' : pat.dir === 'bear' ? 'aria-bear' : 'aria-watch')
@@ -1006,7 +1007,7 @@ if (!w._ARIA_NOVA_LOADED) {
           ;(trapEl as any).style.color = '#00ffcc44'
         } else {
           const trPct = Math.round(tr * 100)
-          trapEl.innerHTML = trPct + '%' + (tr >= 0.55 ? ' ' + w._ZI.w : '')
+          trapEl.innerHTML = trPct + '%' + (tr >= 0.55 ? ' ' + _ZI.w : '')
           ;(trapEl as any).style.color = tr >= 0.65 ? '#ff3355' : tr >= 0.55 ? '#f0c040' : '#00d97a'
         }
       }
@@ -1267,11 +1268,11 @@ if (!w._ARIA_NOVA_LOADED) {
 
   // ── NOVA CLIPBOARD EXPORT ──────────────────────────────────────────
   function novaCopyLog() {
-    if (!w.NOVA_STATE.log.length) { toast('NOVA log empty', 0, w._ZI.brain); return }
+    if (!w.NOVA_STATE.log.length) { toast('NOVA log empty', 0, _ZI.brain); return }
     const txt = w.NOVA_STATE.log.map((e: any) => `[${e.ts}] [${e.severity.toUpperCase()}] ${e.msg}`).join('\n')
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(txt).then(() => toast('NOVA log copied', 0, w._ZI.clip)).catch(() => toast('Copy failed', 0, w._ZI.x))
-    } else { toast('Clipboard unavailable', 0, w._ZI.x) }
+      navigator.clipboard.writeText(txt).then(() => toast('NOVA log copied', 0, _ZI.clip)).catch(() => toast('Copy failed', 0, _ZI.x))
+    } else { toast('Clipboard unavailable', 0, _ZI.x) }
   }
 
   // ── NOVA IMPROVEMENT 1: ARIA mini-summary in NOVA bar + panel ────
@@ -1280,7 +1281,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const barEl = document.getElementById('nova-bar-aria')
     if (barEl) {
       barEl.innerHTML = pat
-        ? `${pat.dir === 'bull' ? w._ZI.dGrn : pat.dir === 'bear' ? w._ZI.dRed : w._ZI.dYlw} ${pat.name} ${pat.conf}%`
+        ? `${pat.dir === 'bull' ? _ZI.dGrn : pat.dir === 'bear' ? _ZI.dRed : _ZI.dYlw} ${pat.name} ${pat.conf}%`
         : ''
     }
     const nameEl = document.getElementById('nova-aria-name')
@@ -1289,7 +1290,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const tfEl = document.getElementById('nova-aria-tf')
     if (nameEl) nameEl.textContent = pat ? pat.name : '\u2014'
     if (dirEl) {
-      dirEl.innerHTML = pat ? (pat.dir === 'bull' ? w._ZI.dGrn + ' BULL' : pat.dir === 'bear' ? w._ZI.dRed + ' BEAR' : w._ZI.dYlw + ' WATCH') : ''
+      dirEl.innerHTML = pat ? (pat.dir === 'bull' ? _ZI.dGrn + ' BULL' : pat.dir === 'bear' ? _ZI.dRed + ' BEAR' : _ZI.dYlw + ' WATCH') : ''
     }
     if (confEl) {
       confEl.textContent = pat ? `${pat.conf}%` : ''
@@ -1304,7 +1305,7 @@ if (!w._ARIA_NOVA_LOADED) {
     if (!el) return
     if (!_ariaHist.length) { el.innerHTML = '<span style="opacity:.3">\u2014</span>'; return }
     el.innerHTML = _ariaHist.map((h: any) => {
-      const ic = h.dir === 'bull' ? w._ZI.dGrn : h.dir === 'bear' ? w._ZI.dRed : w._ZI.dYlw
+      const ic = h.dir === 'bull' ? _ZI.dGrn : h.dir === 'bear' ? _ZI.dRed : _ZI.dYlw
       const cc = h.dir === 'bull' ? '#00d97a' : h.dir === 'bear' ? '#ff3355' : '#f0c040'
       return `<div style="display:flex;gap:4px;padding:1px 0">`
         + `<span style="opacity:.4">${h.ts}</span>`
@@ -1333,7 +1334,7 @@ if (!w._ARIA_NOVA_LOADED) {
     if (!el) return
     if (!_ariaHist.length) { el.innerHTML = '<span style="opacity:.3">\u2014</span>'; return }
     el.innerHTML = _ariaHist.map((h: any) => {
-      const ic = h.dir === 'bull' ? w._ZI.dGrn : h.dir === 'bear' ? w._ZI.dRed : w._ZI.dYlw
+      const ic = h.dir === 'bull' ? _ZI.dGrn : h.dir === 'bear' ? _ZI.dRed : _ZI.dYlw
       const cc = h.dir === 'bull' ? '#00d97a' : h.dir === 'bear' ? '#ff3355' : '#f0c040'
       return `<div style="display:flex;gap:4px;padding:1px 0">`
         + `<span style="opacity:.4">${h.ts}</span>`

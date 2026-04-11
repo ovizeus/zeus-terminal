@@ -1,4 +1,5 @@
 import { toast } from '../data/marketDataHelpers'
+import { _ZI } from '../constants/icons'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
 // DOM utilities, render helpers
 const w = window as any;
@@ -28,7 +29,7 @@ export function _initAudio(): void {
 export function _updateAudioBadge(): void {
   const b = w.el('soundBadge');
   if (b) {
-    b.innerHTML = _audioReady ? w._ZI.vol + ' SOUND READY' : w._ZI.mute + ' SOUND';
+    b.innerHTML = _audioReady ? _ZI.vol + ' SOUND READY' : _ZI.mute + ' SOUND';
     b.style.color = _audioReady ? 'var(--lime)' : 'var(--orange)';
     b.style.cursor = _audioReady ? 'default' : 'pointer';
   }
@@ -83,7 +84,7 @@ export function toggleAlerts(en: any): void {
     try { Notification.requestPermission(); } catch (_) { }
   }
   if (en) playAlertSound();
-  toast(en ? 'Alerte ON' : 'Alerte OFF', 0, en ? w._ZI.bell : w._ZI.bellX);
+  toast(en ? 'Alerte ON' : 'Alerte OFF', 0, en ? _ZI.bell : _ZI.bellX);
 }
 
 

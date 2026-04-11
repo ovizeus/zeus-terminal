@@ -4,6 +4,7 @@
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
+import { _ZI } from '../constants/icons'
 
 const w = window as any;
 
@@ -198,9 +199,9 @@ export function renderMagnets() {
     const scoreA = nearAbove.strength / (distA + 0.1);
     const scoreB = nearBelow.strength / (distB + 0.1);
     let biasDir: any, biasClass: any, biasLabel: any;
-    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = w._ZI.dGrn + ' BULL \u2014 Magnet jos atrage'; }
-    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = w._ZI.dRed + ' BEAR \u2014 Magnet sus atrage'; }
-    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = w._ZI.bolt + ' NEUTRU'; }
+    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = _ZI.dGrn + ' BULL \u2014 Magnet jos atrage'; }
+    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = _ZI.dRed + ' BEAR \u2014 Magnet sus atrage'; }
+    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = _ZI.bolt + ' NEUTRU'; }
     biasEl.innerHTML = biasLabel;
     biasEl.className = 'mag-bias ' + biasClass;
     S.magnets.bias = biasDir;
@@ -219,7 +220,7 @@ export function renderMagnets() {
       const srcTag = m.sources ? (m.sources.join(' + ')) : m.source;
       return `<div class="mag-level ${cls}" onclick="jumpToMagnet(${m.price})">
         <div class="mag-bar-fill" style="width:${m.strength}%"></div>
-        <div class="mag-icon">${m.type === 'ob_wall' ? w._ZI.whale : m.type === 'liq_cluster' ? w._ZI.boom : m.type === 'vol_node' ? w._ZI.chart : w._ZI.ruler}</div>
+        <div class="mag-icon">${m.type === 'ob_wall' ? _ZI.whale : m.type === 'liq_cluster' ? _ZI.boom : m.type === 'vol_node' ? _ZI.chart : _ZI.ruler}</div>
         <div class="mag-info">
           <div class="mag-price">$${fP(m.price)}</div>
           <div class="mag-desc">${srcTag} ${m.usd > 0 ? '\u00b7 $' + fmt(m.usd) : ''}</div>
@@ -537,9 +538,9 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
   const bestRow = rows[0];
   if (bestRow && w.el('btDetailNote')) {
     w.el('btDetailNote').innerHTML = `
-      ${w._ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
-      ${w._ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combina toti indicatorii pentru precizie maxima.<br>
-      ${w._ZI.w} Backtestul e pe date istorice \u2014 performanta trecuta nu garanteaza rezultate viitoare.
+      ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
+      ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combina toti indicatorii pentru precizie maxima.<br>
+      ${_ZI.w} Backtestul e pe date istorice \u2014 performanta trecuta nu garanteaza rezultate viitoare.
     `;
   }
 }
@@ -968,7 +969,7 @@ export function toggleOviLiquid(btn: any) {
   if (S.oviOn) {
     oviReadSettings();
     renderOviLiquid();
-    toast('OVI LIQUID ON', 0, w._ZI.drop);
+    toast('OVI LIQUID ON', 0, _ZI.drop);
   } else {
     clearOviLiquid();
     toast('OVI LIQUID OFF');

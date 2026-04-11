@@ -4,6 +4,7 @@
 // [8B-rest] READS migrated to stateAccessors.
 
 import { getTimezone } from '../services/stateAccessors'
+import { _ZI } from '../constants/icons'
 
 const w = window as any // kept for w.runBrainUpdate, w.brainThink calls
 
@@ -22,7 +23,7 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
     if (total >= 3) {
       const isBull = bullCount >= bearCount
       mega.innerHTML = `<div class="mega-sig ${isBull ? 'bull' : 'bear'}">
-        <span class="mega-sig-ico">${isBull ? w._ZI.tup : w._ZI.drop}</span>
+        <span class="mega-sig-ico">${isBull ? _ZI.tup : _ZI.drop}</span>
         <div class="mega-sig-txt">
           <div class="mega-type">${isBull ? 'SEMNAL BULLISH' : 'SEMNAL BEARISH'} (${isBull ? bullCount : bearCount}/${total})</div>
           <div class="mega-det">${isBull ? bullCount : bearCount} indicatori aliniati · Confluenta ${(isBull ? bullCount : bearCount) >= 4 ? 'PUTERNICA' : 'MEDIE'}</div>

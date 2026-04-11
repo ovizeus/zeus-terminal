@@ -10,7 +10,8 @@ import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
-const w = window as Record<string, any> // kept for w.el, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+import { _ZI } from '../constants/icons'
+const w = window as Record<string, any> // kept for w.el, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -72,7 +73,7 @@ export function exportJournalCSV(): void {
   const blob = new Blob([hdr + rows], { type: 'text/csv' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
   a.download = `zeus_journal_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click(); toast('Journal exported!', 0, w._ZI?.ok)
+  a.click(); toast('Journal exported!', 0, _ZI?.ok)
 }
 
 export function startFRCountdown(): void {

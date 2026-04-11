@@ -4,6 +4,7 @@
 
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -200,7 +201,7 @@ export function _aresRender() {
         const isWounded = (st.current.id === 'DEFENSIVE' || st.current.id === 'REVENGE_GUARD') && st.consecutiveLoss >= 3
         if (isWounded) {
           woundEl.style.display = 'block'
-          woundEl.innerHTML = w._ZI.w + ' MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced'
+          woundEl.innerHTML = _ZI.w + ' MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced'
         } else {
           woundEl.style.display = 'none'
         }
@@ -214,7 +215,7 @@ export function _aresRender() {
       if (woundEl && bal < 5 && bal >= 0) {
         woundEl.style.display = 'block'
         woundEl.style.color = '#ff0044'
-        woundEl.innerHTML = w._ZI.skull + ' MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.'
+        woundEl.innerHTML = _ZI.skull + ' MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.'
       }
     } catch (_) { }
 
@@ -227,11 +228,11 @@ export function _aresRender() {
           if (lastDec.shouldTrade) {
             decEl.style.display = 'block'
             decEl.style.color = '#00ff88'
-            decEl.innerHTML = w._ZI.ok + ' DECISION: ' + escHtml(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map(escHtml).join(' · ')
+            decEl.innerHTML = _ZI.ok + ' DECISION: ' + escHtml(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map(escHtml).join(' · ')
           } else {
             decEl.style.display = 'block'
             decEl.style.color = '#ff8800'
-            decEl.innerHTML = w._ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map(escHtml).join(' · ')
+            decEl.innerHTML = _ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map(escHtml).join(' · ')
           }
         }
       }
@@ -1596,13 +1597,13 @@ export function initARES() {
           <span style="font-size:11px;color:#00d9ff44;letter-spacing:1px">NEURAL COMMAND</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <span id="ares-strip-badge" style="color:#00d9ff;border-color:#00d9ff88">${w._ZI.bolt} DETERMINED</span>
+          <span id="ares-strip-badge" style="color:#00d9ff;border-color:#00d9ff88">${_ZI.bolt} DETERMINED</span>
           <span id="ares-strip-conf" style="font-size:11px;color:#00d9ff66">CONF \u2014%</span><span id="ares-imm-span"> \u00b7 IMM \u2014%</span><span id="ares-emotion-span"></span>
           <span id="ares-strip-chev">\u25bc</span>
         </div>
       </div>
     </div>
-    <div id="ares-wound-line">${w._ZI.w} \u2014</div>
+    <div id="ares-wound-line">${_ZI.w} \u2014</div>
     <div id="ares-decision-line" style="display:none;font-size:12px;padding:2px 8px;font-family:monospace;"></div>
     <div id="ares-strip-panel">
       <div id="ares-panel">

@@ -4,6 +4,7 @@
 // + ARES_openPosition (DEBUG-ONLY)
 
 import { safeLastKline } from '../utils/dom'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -11,14 +12,14 @@ const TARGET = 1_000_000
 const DAYS_MAX = 365
 
 const STATES: Record<string, any> = {
-  DETERMINED: { id: 'DETERMINED', color: '#00d9ff', glow: '#00d9ff', label: 'DETERMINED', emoji: w._ZI?.bolt || '' },
-  RESILIENT: { id: 'RESILIENT', color: '#00ff88', glow: '#00ff88', label: 'RESILIENT', emoji: w._ZI?.rfsh || '' },
-  FOCUSED: { id: 'FOCUSED', color: '#f0c040', glow: '#f0c040', label: 'FOCUSED', emoji: w._ZI?.tgt || '' },
-  STRATEGIC: { id: 'STRATEGIC', color: '#aa44ff', glow: '#aa44ff', label: 'STRATEGIC', emoji: w._ZI?.hex || '' },
-  MOMENTUM: { id: 'MOMENTUM', color: '#00ff44', glow: '#00ff44', label: 'MOMENTUM', emoji: w._ZI?.tup || '' },
-  FRUSTRATED: { id: 'FRUSTRATED', color: '#ff8800', glow: '#ff8800', label: 'FRUSTRATED', emoji: w._ZI?.w || '' },
-  DEFENSIVE: { id: 'DEFENSIVE', color: '#ff3355', glow: '#ff3355', label: 'DEFENSIVE', emoji: w._ZI?.sh || '' },
-  REVENGE_GUARD: { id: 'REVENGE_GUARD', color: '#ff0044', glow: '#ff0044', label: 'REVENGE GUARD', emoji: w._ZI?.noent || '' },
+  DETERMINED: { id: 'DETERMINED', color: '#00d9ff', glow: '#00d9ff', label: 'DETERMINED', emoji: _ZI?.bolt || '' },
+  RESILIENT: { id: 'RESILIENT', color: '#00ff88', glow: '#00ff88', label: 'RESILIENT', emoji: _ZI?.rfsh || '' },
+  FOCUSED: { id: 'FOCUSED', color: '#f0c040', glow: '#f0c040', label: 'FOCUSED', emoji: _ZI?.tgt || '' },
+  STRATEGIC: { id: 'STRATEGIC', color: '#aa44ff', glow: '#aa44ff', label: 'STRATEGIC', emoji: _ZI?.hex || '' },
+  MOMENTUM: { id: 'MOMENTUM', color: '#00ff44', glow: '#00ff44', label: 'MOMENTUM', emoji: _ZI?.tup || '' },
+  FRUSTRATED: { id: 'FRUSTRATED', color: '#ff8800', glow: '#ff8800', label: 'FRUSTRATED', emoji: _ZI?.w || '' },
+  DEFENSIVE: { id: 'DEFENSIVE', color: '#ff3355', glow: '#ff3355', label: 'DEFENSIVE', emoji: _ZI?.sh || '' },
+  REVENGE_GUARD: { id: 'REVENGE_GUARD', color: '#ff0044', glow: '#ff0044', label: 'REVENGE GUARD', emoji: _ZI?.noent || '' },
 }
 
 // ══════════════════════════════════════════════════════════════

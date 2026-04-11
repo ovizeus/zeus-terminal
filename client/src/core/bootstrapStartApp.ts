@@ -4,7 +4,8 @@
 
 import { getATObject, getTPObject, getBrainMetrics, getATR, getKlines } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
-const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, w.el, w._ZI, boot flags, fn calls
+import { _ZI } from '../constants/icons'
+const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, w.el, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
 const AT = getATObject()
@@ -190,7 +191,7 @@ export async function startApp(): Promise<void> {
   setTimeout(w.renderDHF, 1200); w.Intervals.set('dhf', w.renderDHF, 60000)
   setTimeout(w.renderPerfTracker, 2000)
   setTimeout(() => { w.updateQuantumClock(); w.updateBrainExtension() }, 3000)
-  setTimeout(() => { w.brainThink('info', w._ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
+  setTimeout(() => { w.brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
 
   setTimeout(w.runSignalScan, 4000); setTimeout(w.calcConfluenceScore, 5500)
   setTimeout(w.scanLiquidityMagnets, 9000); setTimeout(w.updateDeepDive, 11000)
@@ -244,7 +245,7 @@ export async function startApp(): Promise<void> {
       if (w.__ZT_SENTINEL_V1__) return; w.__ZT_SENTINEL_V1__ = true
       function _onVisibilityChange() { try { const hidden = document.hidden; if (typeof w._SAFETY !== 'undefined') w._SAFETY.tabHidden = hidden; if (hidden) { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('TAB_HIDDEN', 'Tab in background \u2014 AT paused', 'sentinel'); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SENTINEL] Tab hidden \u2192 AT paused') } else { if (typeof w._SAFETY !== 'undefined') { w._SAFETY.tabHidden = false; w._SAFETY.tabRestoreTs = Date.now() }; if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SENTINEL] Tab visible \u2192 AT va relua') }; _updateSentinelBar() } catch (_) { } }
       document.addEventListener('visibilitychange', _onVisibilityChange)
-      function _updateSentinelBar() { try { const bar = document.getElementById('zt-sentinel-bar'); if (!bar) return; const hidden = document.hidden; const sf = (typeof w._SAFETY !== 'undefined') ? w._SAFETY : {} as any; const lastTs = sf.lastPriceTs || 0; const dataAge = lastTs ? Math.round((Date.now() - lastTs) / 1000) : null; const stalled = !!sf.dataStalled; let txt: string, bg: string, col: string; if (hidden) { txt = w._ZI.bellX + ' TAB HIDDEN \u2014 AT PAUSED'; bg = 'rgba(180,100,0,0.18)'; col = '#FFB000' } else if (stalled) { txt = w._ZI.w + ' DATA STALLED \u2014 AT PAUSED'; bg = 'rgba(255,0,51,0.15)'; col = '#ff3355' } else if (dataAge !== null && dataAge > 8) { txt = w._ZI.clock + ' DATA LAG ' + dataAge + 's'; bg = 'rgba(180,100,0,0.12)'; col = '#f0c040' } else if (dataAge !== null) { txt = w._ZI.ok + ' FEED OK ' + dataAge + 's'; bg = 'rgba(0,200,100,0.10)'; col = '#00cc66' } else { txt = '\u2014 SENTINEL \u2014'; bg = 'rgba(60,80,100,0.10)'; col = '#445566' }; bar.style.display = 'block'; bar.style.background = bg; bar.style.color = col; bar.style.border = '1px solid ' + col + '44'; bar.innerHTML = txt } catch (_) { } }
+      function _updateSentinelBar() { try { const bar = document.getElementById('zt-sentinel-bar'); if (!bar) return; const hidden = document.hidden; const sf = (typeof w._SAFETY !== 'undefined') ? w._SAFETY : {} as any; const lastTs = sf.lastPriceTs || 0; const dataAge = lastTs ? Math.round((Date.now() - lastTs) / 1000) : null; const stalled = !!sf.dataStalled; let txt: string, bg: string, col: string; if (hidden) { txt = _ZI.bellX + ' TAB HIDDEN \u2014 AT PAUSED'; bg = 'rgba(180,100,0,0.18)'; col = '#FFB000' } else if (stalled) { txt = _ZI.w + ' DATA STALLED \u2014 AT PAUSED'; bg = 'rgba(255,0,51,0.15)'; col = '#ff3355' } else if (dataAge !== null && dataAge > 8) { txt = _ZI.clock + ' DATA LAG ' + dataAge + 's'; bg = 'rgba(180,100,0,0.12)'; col = '#f0c040' } else if (dataAge !== null) { txt = _ZI.ok + ' FEED OK ' + dataAge + 's'; bg = 'rgba(0,200,100,0.10)'; col = '#00cc66' } else { txt = '\u2014 SENTINEL \u2014'; bg = 'rgba(60,80,100,0.10)'; col = '#445566' }; bar.style.display = 'block'; bar.style.background = bg; bar.style.color = col; bar.style.border = '1px solid ' + col + '44'; bar.innerHTML = txt } catch (_) { } }
       if (typeof w._SAFETY !== 'undefined') w._SAFETY.tabHidden = document.hidden
       if (!w.__ZT_SENTINEL_TMR__) { w.__ZT_SENTINEL_TMR__ = w.Intervals.set('sentinel', function () { try { _updateSentinelBar() } catch (_) { } }, 3000) }
       setTimeout(_updateSentinelBar, 500)

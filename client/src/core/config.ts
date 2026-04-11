@@ -7,6 +7,7 @@
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
 import { escHtml } from '../utils/dom'
+import { _ZI } from '../constants/icons'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -74,7 +75,6 @@ export let _atStripOpen = false
 export let _ptStripOpen = false
 
 // Indicators array
-const _ZI = w._ZI
 export const INDICATORS: any[] = [
   { id: 'ema', ico: _ZI.tup, name: 'EMA 50/200', desc: 'Exponential Moving Average', cat: 'trend', def: true },
   { id: 'wma', ico: _ZI.wave, name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },

@@ -4,6 +4,7 @@
 
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
+import { _ZI } from '../constants/icons'
 
 const w = window as any
 
@@ -68,7 +69,7 @@ export function onTradeExecuted(pos: any): void {
     : `<div class="zeus-exec-sim">SIMULATION</div>`
 
   const html = `
-    <div class="zeus-exec-label">${w._ZI.bolt} ZEUS EXECUTION</div>
+    <div class="zeus-exec-label">${_ZI.bolt} ZEUS EXECUTION</div>
     <div class="zeus-exec-title">${escHtml(dir)} ${escHtml(sym)}</div>
     <div class="zeus-exec-info">
       ${escHtml(mode)} · SCORE: ${escHtml(String(score))}<br>
@@ -143,7 +144,7 @@ export function triggerExecCinematic(side: any, sym: any): void {
   // Banner
   const banner = document.createElement('div')
   banner.className = 'exec-banner' + (side === 'SHORT' ? ' short' : '')
-  banner.innerHTML = w._ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`
+  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`
   document.body.appendChild(banner)
   setTimeout(() => { try { document.body.removeChild(banner) } catch (_) { } }, 3200)
 
