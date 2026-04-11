@@ -5,6 +5,7 @@
 
 import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
 import { fP } from '../utils/format'
+import { toast } from '../data/marketDataHelpers'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.el, w._ZI, w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
@@ -86,7 +87,7 @@ export function toggleDSL(): void {
   try {
     const _mode = (w.S?.mode || 'assist').toLowerCase()
     if (_mode === 'auto') {
-      if (typeof w.toast === 'function') w.toast('AUTO: DSL e controlat de AI', 0, w._ZI?.robot)
+      toast('AUTO: DSL e controlat de AI', 0, w._ZI?.robot)
       return
     }
     if (typeof DSL === 'undefined') return
@@ -109,7 +110,7 @@ export function toggleDSL(): void {
 // ── ASSIST ARM TOGGLE ────────────────────────────────────────
 export function toggleAssistArm(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
-  if (_m !== 'assist') { w.toast('ARM disponibil doar în ASSIST mode'); return }
+  if (_m !== 'assist') { toast('ARM disponibil doar în ASSIST mode'); return }
   w.S.assistArmed = !w.S.assistArmed
   if (typeof w.ARM_ASSIST !== 'undefined') {
     w.ARM_ASSIST.armed = w.S.assistArmed
@@ -492,7 +493,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
           if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'pl_exit', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft })
           w.atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           w.brainThink('info', w._ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
-          w.toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
+          toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           if (pos.isLive && typeof w.closeLivePos === 'function') {
             w.closeLivePos(pos.id, _plReason)
             if (pos.autoTrade && typeof w.AT !== 'undefined') {
@@ -573,7 +574,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
             if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'impulse', sym: pos.sym, side: pos.side, price: cur, oldPL: oldPL, newPL: dsl.pivotLeft, newIV: dsl.impulseVal })
             w.atLog('buy', `[IMP] IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV→$${fP(dsl.impulseVal)}`)
             w.brainThink('ok', w._ZI.bolt + ` Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${fP(dsl.pivotLeft)}`)
-            w.toast(`${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${fP(dsl.pivotLeft)}`)
+            toast(`${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${fP(dsl.pivotLeft)}`)
           }
         } else {
           if (dsl.impulseTriggered) {
@@ -621,7 +622,7 @@ export function dslTakeControl(posId: any): void {
   const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
-  if (_cm !== 'auto' && _cm !== 'assist') { w.toast('Take Control: doar pentru AUTO/ASSIST'); return }
+  if (_cm !== 'auto' && _cm !== 'assist') { toast('Take Control: doar pentru AUTO/ASSIST'); return }
   if (!pos.sourceMode) pos.sourceMode = _cm
   pos.controlMode = 'user'
   if (w._serverATEnabled && pos._serverSeq) {
@@ -630,7 +631,7 @@ export function dslTakeControl(posId: any): void {
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
   pos.dslHistory.push({ ts: Date.now(), msg: '[USER] TOOK CONTROL — manual override active' })
   w.brainThink('info', w._ZI.hand + ` User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`)
-  w.toast(`Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`)
+  toast(`Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
 }
 
@@ -639,7 +640,7 @@ export function dslReleaseControl(posId: any): void {
   posId = String(posId)
   const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
-  if ((pos.controlMode || 'paper') !== 'user') { w.toast('Această poziție nu e în MANUAL'); return }
+  if ((pos.controlMode || 'paper') !== 'user') { toast('Această poziție nu e în MANUAL'); return }
   const _origSource = (pos.sourceMode || pos.brainModeAtOpen || 'assist').toLowerCase()
   pos.controlMode = _origSource
   if (w._serverATEnabled && pos._serverSeq) {
@@ -657,7 +658,7 @@ export function dslReleaseControl(posId: any): void {
   if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
   pos.dslHistory.push({ ts: Date.now(), msg: `[AI] CONTROL RESUMED (${_origSource.toUpperCase()}) — continuing from current DSL values` })
   w.brainThink('ok', w._ZI.robot + ` AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`)
-  w.toast(`AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`)
+  toast(`AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
 }
 

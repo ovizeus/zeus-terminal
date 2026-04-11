@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
+import { toast } from '../../data/marketDataHelpers'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -18,7 +19,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
     if (w.cSeries) {
       w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bullW, wickDownColor: bearW })
     }
-    w.toast?.('Candle colors applied')
+    toast('Candle colors applied')
   }
 
   function applyTimezone(zone: string) {
@@ -42,7 +43,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       }
     }
     if (typeof w.renderOviLiquid === 'function' && w.S?.oviOn) w.renderOviLiquid()
-    w.toast?.('Heatmap settings applied')
+    toast('Heatmap settings applied')
   }
 
   function applyPriceAxis() {
@@ -58,7 +59,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       })
     }
     if (w.cvdChart) w.cvdChart.applyOptions({ rightPriceScale: { width: axisWidth } })
-    w.toast?.('Price axis applied')
+    toast('Price axis applied')
   }
 
   return (

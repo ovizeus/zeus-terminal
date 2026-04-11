@@ -3,7 +3,7 @@
 // Live API stubs, PWA, Indicator panel, Overlay/Oscillator indicators,
 // Signal scanner, Deep Dive narrative generator
 
-import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
+import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
 
@@ -40,12 +40,12 @@ export function connectLiveAPI(): void {
 }
 
 export function placeLiveOrder(): void {
-  w.toast('placeLiveOrder disabled \u2014 use standard Live Trading panel', 0, w._ZI.x)
+  toast('placeLiveOrder disabled \u2014 use standard Live Trading panel', 0, w._ZI.x)
   if (typeof w.atLog === 'function') w.atLog('warn', '[BLOCK] placeLiveOrder is disabled (orphan order path \u2014 use Live Trading panel)')
 }
 
 export function connectLiveExchange(): void {
-  w.toast('LIVE TRADING DEZACTIVAT \u2014 backend necesar.', 0, w._ZI.dRed)
+  toast('LIVE TRADING DEZACTIVAT \u2014 backend necesar.', 0, w._ZI.dRed)
 }
 
 export function loadSavedAPI(): void {
@@ -59,7 +59,7 @@ export function loadSavedAPI(): void {
 export function installPWA(): void {
   const prompt = w._dip || w._deferredPrompt
   if (prompt) { prompt.prompt(); prompt.userChoice.then(() => { const b = w.el('installBtn'); if (b) b.style.display = 'none'; w._dip = null; w._deferredPrompt = null }) }
-  else w.toast('Deschide in Chrome/Brave \u2192 meniu \u2192 Instaleaza aplicatia')
+  else toast('Deschide in Chrome/Brave \u2192 meniu \u2192 Instaleaza aplicatia')
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -128,7 +128,7 @@ export function toggleInd(id: string, toggleEl: HTMLElement): void {
   applyIndVisibility(id, w.S.activeInds[id])
   if (w.S.activeInds[id] && typeof w.renderChart === 'function') w.renderChart()
   renderActBar()
-  w.toast(w.S.activeInds[id] ? w.INDICATORS.find((i: any) => i.id === id)?.name + ' ON' : w.INDICATORS.find((i: any) => i.id === id)?.name + ' OFF')
+  toast(w.S.activeInds[id] ? w.INDICATORS.find((i: any) => i.id === id)?.name + ' ON' : w.INDICATORS.find((i: any) => i.id === id)?.name + ' OFF')
   if (typeof w._usSave === 'function') w._usSave()
   if (typeof w._userCtxPushNow === 'function') w._userCtxPushNow()
 }
@@ -210,7 +210,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
 
 export function openIndSettings(id: string): void {
   const cfg = w.IND_SETTINGS[id]
-  if (!cfg || Object.keys(cfg).length === 0) { w.toast('No settings for ' + id.toUpperCase()); return }
+  if (!cfg || Object.keys(cfg).length === 0) { toast('No settings for ' + id.toUpperCase()); return }
   const ind = w.INDICATORS.find((i: any) => i.id === id)
   const labels: Record<string, string> = {
     p1: 'Period 1', p2: 'Period 2', period: 'Period', mult: 'Multiplier',
@@ -255,7 +255,7 @@ export function applyIndSettings(id: string): void {
     if (typeof w.renderChart === 'function') w.renderChart()
     applyIndVisibility(id, true)
   }
-  w.toast(id.toUpperCase() + ' settings updated', 0, w._ZI.bolt)
+  toast(id.toUpperCase() + ' settings updated', 0, w._ZI.bolt)
 }
 
 // ═══════════════════════════════════════════════════════════════

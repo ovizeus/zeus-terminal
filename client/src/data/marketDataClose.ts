@@ -3,8 +3,8 @@
 // closeDemoPos — the most critical function in the trading engine
 
 import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
-import { fmtNow } from './marketDataHelpers'
-const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, w.el, w.toast, fn calls
+import { fmtNow, toast } from './marketDataHelpers'
+const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, w.el, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
 const TP = getTPObject()
 const AT = getATObject()
@@ -100,7 +100,7 @@ export function closeDemoPos(id: any, reason?: string): void {
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
   }, 0)
 
-  w.toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
   w.ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade', `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
 
   w.ZState.syncNow()

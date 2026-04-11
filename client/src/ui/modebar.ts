@@ -1,7 +1,8 @@
 // Zeus Terminal — ui/modebar.ts (ported from ui/modebar.js)
 // Global Execution Mode Bar — visual control for demo/live mode
 import { getATObject } from '../services/stateAccessors'
-const w = window as any; // kept for w._resolvedEnv, w._apiConfigured, w.toast, w.switchGlobalMode
+import { toast } from '../data/marketDataHelpers'
+const w = window as any; // kept for w._resolvedEnv, w._apiConfigured, w.switchGlobalMode
 
 // ── RENDER ─────────────────────────────────────────────────────
 export function initModeBar(): void {
@@ -72,9 +73,7 @@ export function _modeBarSwitch(): void {
 
   // LOCKED state: no API keys — guide user to settings
   if (mode === 'live' && !apiConfigured) {
-    if (typeof w.toast === 'function') {
-      w.toast('Live trading unavailable \u2014 configure API keys in Settings first.', 3000);
-    }
+    toast('Live trading unavailable \u2014 configure API keys in Settings first.', 3000);
     return;
   }
 

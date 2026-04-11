@@ -1,3 +1,4 @@
+import { toast } from '../data/marketDataHelpers'
 // Zeus Terminal — ui/dock.ts (ported from ui/dock.js)
 // Icon Dock: module shortcuts grid (Faza A — visual only, no navigation)
 const w = window as any;
@@ -107,9 +108,7 @@ export function initZeusDock(): void {
 
     // Disabled icons -> toast
     if (item.classList.contains('zd-disabled')) {
-      if (typeof w.toast === 'function') {
-        w.toast('Coming soon', 1500);
-      }
+      toast('Coming soon', 1500);
       return;
     }
 

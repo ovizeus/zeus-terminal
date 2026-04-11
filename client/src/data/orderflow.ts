@@ -1,3 +1,4 @@
+import { toast } from './marketDataHelpers'
 /**
  * Zeus Terminal — Orderflow (ported from public/js/data/orderflow.js)
  * Orderflow Modules P1-P15 + Patch Layer v122.3
@@ -339,13 +340,13 @@ export function _initErrorTelemetry() {
       ta.focus(); ta.select()
       const ok = document.execCommand('copy')
       document.body.removeChild(ta)
-      if (ok) { if (typeof w.toast === 'function') w.toast('\uD83E\uDE7A Diag Pack copied (fallback)'); return }
+      if (ok) { toast('\uD83E\uDE7A Diag Pack copied (fallback)'); return }
     } catch (_) { }
     try {
       w.prompt('Copy Diag Pack (Ctrl+C / Cmd+C):', text.substring(0, 2000))
     } catch (_) {
       console.dir({ diagPack: text.substring(0, 5000) })
-      if (typeof w.toast === 'function') w.toast('Diag Pack: vezi Console (F12)')
+      toast('Diag Pack: vezi Console (F12)')
     }
   }
 
@@ -373,7 +374,7 @@ export function _initErrorTelemetry() {
           const text = JSON.stringify(pack, null, 2)
           if (navigator.clipboard && navigator.clipboard.writeText) {
             navigator.clipboard.writeText(text)
-              .then(function () { if (typeof w.toast === 'function') w.toast('\uD83E\uDE7A Diag Pack copied') })
+              .then(function () { toast('\uD83E\uDE7A Diag Pack copied') })
               .catch(function () { _ztClipboardFallback(text) })
           } else { _ztClipboardFallback(text) }
         } catch (ex: any) { console.warn('[ZT_DIAG]', ex && ex.message) }

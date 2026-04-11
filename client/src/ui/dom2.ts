@@ -1,3 +1,4 @@
+import { toast } from '../data/marketDataHelpers'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
 // DOM utilities, render helpers
 const w = window as any;
@@ -82,7 +83,7 @@ export function toggleAlerts(en: any): void {
     try { Notification.requestPermission(); } catch (_) { }
   }
   if (en) playAlertSound();
-  w.toast(en ? 'Alerte ON' : 'Alerte OFF', 0, en ? w._ZI.bell : w._ZI.bellX);
+  toast(en ? 'Alerte ON' : 'Alerte OFF', 0, en ? w._ZI.bell : w._ZI.bellX);
 }
 
 
@@ -103,7 +104,7 @@ export function applyChartColors(): void {
   if (w.cSeries) { w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bw + '77', wickDownColor: brw + '77' }); }
   if (w.mainChart) { w.mainChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText }, rightPriceScale: { textColor: pText } }); }
   if (w.cvdChart) { w.cvdChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
-  w.closeM('mcharts'); w.toast('Culori aplicate \u2713');
+  w.closeM('mcharts'); toast('Culori aplicate \u2713');
   // Save + IMMEDIATE push to server (no debounce — explicit user action)
   if (typeof w._usSave === 'function') w._usSave();
   if (typeof w._userCtxPushNow === 'function') w._userCtxPushNow();
@@ -170,7 +171,7 @@ export function applyPriceAxisColors(): void {
       rightPriceScale: { borderColor: gh }
     });
   });
-  w.closeM('mcharts'); w.toast('Culori price axis aplicate \u2713');
+  w.closeM('mcharts'); toast('Culori price axis aplicate \u2713');
 }
 // ===== TRADE JOURNAL =====
 // IIFE: guarded — TP may not exist yet at import time

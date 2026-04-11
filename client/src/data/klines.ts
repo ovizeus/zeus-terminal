@@ -5,6 +5,7 @@
 
 import { getTPObject, getATObject, getBrainMetrics, getBrainObject, getDSLObject, getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
 import { fP } from '../utils/format'
+import { toast } from './marketDataHelpers'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, w.el, w._ZI, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
@@ -387,10 +388,10 @@ w.renderMscanTable = renderMscanTable
 export function manualEnterFromScan(sym: string, side: string, score: number) {
   const maxPos = getTCMaxPos()
   const openAuto = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed).length
-  if (openAuto >= maxPos) { w.toast('Max pozitii atinse (' + maxPos + ')'); return }
+  if (openAuto >= maxPos) { toast('Max pozitii atinse (' + maxPos + ')'); return }
 
   const price = sym === getSymbol() ? getPrice() : (w.wlPrices[sym]?.price || 0)
-  if (!price) { w.toast('Nu am pretul pentru ' + sym); return }
+  if (!price) { toast('Nu am pretul pentru ' + sym); return }
 
   const fakeEntry = { score, bullCount: 3, bearCount: 0, stDir: side === 'LONG' ? 'bull' : 'bear' }
   w.placeAutoTrade(side, fakeEntry, sym, price)

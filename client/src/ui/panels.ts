@@ -1,7 +1,7 @@
 // Zeus v122 — ui/panels.ts
 // Panel toggles, strip UI, eye panel
 // Ported 1:1 from public/js/ui/panels.js
-import { fmtNow } from '../data/marketDataHelpers'
+import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
 
@@ -243,7 +243,7 @@ export function updateMagnetBias() {
 export function jumpToMagnet(price: any) {
   const S = w.S;
   // Flash a toast with the price level
-  w.toast(`Magnet: $${fP(price)} | Dist: ${((Math.abs(price - S.price) / S.price) * 100).toFixed(2)}%`);
+  toast(`Magnet: $${fP(price)} | Dist: ${((Math.abs(price - S.price) / S.price) * 100).toFixed(2)}%`);
 }
 
 
@@ -261,7 +261,7 @@ export async function runBacktest() {
   const BT = w.BT;
   const BT_INDICATORS = w.BT_INDICATORS;
   if (BT.running) return;
-  if (!S.klines || S.klines.length < 60) { w.toast('Niciun date historice. Asteapta chart-ul sa se incarce.'); return; }
+  if (!S.klines || S.klines.length < 60) { toast('Niciun date historice. Asteapta chart-ul sa se incarce.'); return; }
 
   BT.running = true;
   const runBtn = w.el('btRunBtn');
@@ -615,7 +615,7 @@ export function toggleVWAP(btn: any) {
   if (btn) btn.classList.toggle('on', S.vwapOn);
   if (S.vwapOn) renderVWAP();
   else { w.vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } }); w.vwapSeries = []; }
-  w.toast(S.vwapOn ? 'VWAP + Bands ON' : 'VWAP OFF');
+  toast(S.vwapOn ? 'VWAP + Bands ON' : 'VWAP OFF');
 }
 
 // =================================================================
@@ -968,10 +968,10 @@ export function toggleOviLiquid(btn: any) {
   if (S.oviOn) {
     oviReadSettings();
     renderOviLiquid();
-    w.toast('OVI LIQUID ON', 0, w._ZI.drop);
+    toast('OVI LIQUID ON', 0, w._ZI.drop);
   } else {
     clearOviLiquid();
-    w.toast('OVI LIQUID OFF');
+    toast('OVI LIQUID OFF');
   }
 }
 
@@ -1159,7 +1159,7 @@ export function toggleSession(sess: string, btn: any) {
   S.sessions[sess] = !S.sessions[sess];
   if (btn) btn.classList.toggle('on', S.sessions[sess]);
   renderSessionOverlay(sess, S.sessions[sess]);
-  w.toast(`${SESSIONS[sess].label} session ${S.sessions[sess] ? 'ON' : 'OFF'}`);
+  toast(`${SESSIONS[sess].label} session ${S.sessions[sess] ? 'ON' : 'OFF'}`);
 }
 
 // [FIX v85 BUG10] Functie de curatare completa a tuturor seriilor de sesiune (apelata la schimb simbol)

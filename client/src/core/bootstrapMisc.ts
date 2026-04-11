@@ -3,6 +3,7 @@
 // PIN lock, build info, welcome modal, PWA, master reset, heartbeat, resize
 
 import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } from '../services/stateAccessors'
+import { toast } from '../data/marketDataHelpers'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, w._ZI, w.el, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
 const TP = getTPObject()
@@ -117,7 +118,7 @@ export function masterReset(): void {
   if (typeof w.BlockReason !== 'undefined') w.BlockReason.clear()
   if (typeof w.Intervals !== 'undefined') w.Intervals.clearAll()
   if (typeof w.WS !== 'undefined') w.WS.closeAll()
-  w.toast('Master Reset complet \u2014 re\u00EEnc\u0103rcare...')
+  toast('Master Reset complet \u2014 re\u00EEnc\u0103rcare...')
   setTimeout(() => location.reload(), 800)
 }
 

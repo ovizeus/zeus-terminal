@@ -331,7 +331,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-A: marketData helpers ──
   // Dynamic timezone versions REPLACE the static ones from format.ts
   // Old JS and ported TS modules consume these via window.*
-  w.toast = toast
   w._calcATRSeries = _calcATRSeries
   w.calcRSI = calcRSI
   // _escHtml: NOT set here — escHtml from dom.ts (Phase 1) is already on window

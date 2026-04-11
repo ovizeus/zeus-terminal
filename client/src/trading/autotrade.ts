@@ -5,7 +5,7 @@
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getBrainMetrics, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone, getTPObject } from '../services/stateAccessors'
 import { isValidMarketPrice, escHtml } from '../utils/dom'
-import { fmtNow } from '../data/marketDataHelpers'
+import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), w.el, w._ZI, fn calls
@@ -20,7 +20,7 @@ function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atS
 // AT UI helpers
 export function toggleAutoTrade(): void {
   if (getATKillTriggered()) {
-    w.toast('Kill switch activ — apasa butonul RESET din status sau asteapta', 0, w._ZI.noent)
+    toast('Kill switch activ — apasa butonul RESET din status sau asteapta', 0, w._ZI.noent)
     // Afiseaza butonul de reset daca nu e deja afisat
     const st = w.el('atStatus')
     if (st && !st.innerHTML.includes('resetKillSwitch')) {
@@ -30,7 +30,7 @@ export function toggleAutoTrade(): void {
   }
   // [ZT-AUD-001] Block AT enable if server hasn't confirmed mode yet
   if (!getATEnabled() && !AT._modeConfirmed) {
-    w.toast('Waiting for server mode confirmation...', 0, w._ZI.timer)
+    toast('Waiting for server mode confirmation...', 0, w._ZI.timer)
     if (typeof w.ZState !== 'undefined' && w.ZState.startATPolling) w.ZState.startATPolling()
     return
   }
@@ -39,7 +39,7 @@ export function toggleAutoTrade(): void {
   if (!getATEnabled() && _atGlobalMode === 'live') {
     // Block without API keys
     if (!w._apiConfigured) {
-      w.toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, w._ZI.w)
+      toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, w._ZI.w)
       const _oe = w.el('atStatus'); if (_oe) _oe.innerHTML = w._ZI.lock + ' EXEC LOCKED — Exchange not configured'
       return
     }
@@ -71,7 +71,7 @@ export function _doEnableAT(): void {
     body: JSON.stringify({ active: _newState })
   }).then(function(r: any) { return r.json() }).then(function(data: any) {
     if (!data.ok) {
-      w.toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, w._ZI.x)
+      toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, w._ZI.x)
       return
     }
     // Server confirmed — now update client state
@@ -79,7 +79,7 @@ export function _doEnableAT(): void {
     _applyATToggleUI(_newState)
     if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)
   }).catch(function(_err: any) {
-    w.toast('AT toggle failed: network error', 3000, w._ZI.x)
+    toast('AT toggle failed: network error', 3000, w._ZI.x)
   })
 }
 
@@ -107,7 +107,7 @@ export function _applyATToggleUI(enabled: any): void {
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
     if (getATKillTriggered()) {
       AT.enabled = false
-      w.toast('Kill switch activ — apasă RESET sau așteaptă ziua următoare', 0, w._ZI.noent)
+      toast('Kill switch activ — apasă RESET sau așteaptă ziua următoare', 0, w._ZI.noent)
       return
     }
     btn.className = 'at-main-btn on'
@@ -890,7 +890,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       profile: w.S.profile || 'fast',
     })
     { const _oe5 = w.el('atStatus'); if (_oe5) _oe5.innerHTML = w._ZI.ok + ' ' + escHtml(side) + ' deschis @$' + fP(entry) }
-    w.toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, w._ZI.robot)
+    toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, w._ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
     if (typeof w.onTradeExecuted === 'function') w.onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
@@ -899,7 +899,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   } else {
     if (!TP.liveConnected) {
       w.atLog('warn', '[FAIL] LIVE: API neconectat! Conectati in panoul LIVE TRADING.')
-      w.toast('API neconectat — Auto trade anulat', 0, w._ZI.x)
+      toast('API neconectat — Auto trade anulat', 0, w._ZI.x)
       AT.totalTrades--
       return
     }
@@ -976,7 +976,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         AT._cooldownBySymbol[sym] = Date.now()
         w.renderLivePositions()
         w.atLog('buy', '[LIVE] LIVE ORDER FILLED: ' + side + ' ' + sym + ' @$' + fP(fillPrice) + ' qty:' + pos.qty + ' orderId:' + pos.orderId)
-        w.toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + fP(fillPrice), 0, w._ZI.dRed)
+        toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + fP(fillPrice), 0, w._ZI.dRed)
         w.ncAdd('info', 'trade', 'LIVE ' + side + ' ' + sym.replace('USDT', '') + ' @$' + fP(fillPrice) + ' | SL:$' + fP(_liveSL) + ' TP:$' + fP(_liveTP))
         scheduleAutoClose(pos)
         // [FIX QA-H2 + R4] Place exchange-level SL/TP with retry logic
@@ -1008,7 +1008,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           pos._unprotectedReason = (!_slOk && !_tpOk) ? 'SL+TP failed' : !_slOk ? 'SL failed' : 'TP failed'
           w.atLog('warn', '[ALERT] LIVE POSITION UNPROTECTED: ' + pos._unprotectedReason + ' for ' + sym + ' after 3 retries each')
           w.ncAdd('critical', 'alert', 'UNPROTECTED LIVE: ' + sym + ' ' + side + ' — ' + pos._unprotectedReason + '. Check exchange manually!')
-          w.toast(sym + ' UNPROTECTED — ' + pos._unprotectedReason, 0, w._ZI.siren)
+          toast(sym + ' UNPROTECTED — ' + pos._unprotectedReason, 0, w._ZI.siren)
         }
         // [FIX C4] Persist live position to local state immediately after push
         w.ZState.save()
@@ -1090,13 +1090,13 @@ export function openAddOn(posId: any): any {
         return true
       } else {
         w.atLog('warn', '[ADD-ON] Server rejected: ' + (j.error || 'unknown'))
-        w.toast('Add-on rejected: ' + (j.error || 'unknown'), 0, '⚠️')
+        toast('Add-on rejected: ' + (j.error || 'unknown'), 0, '⚠️')
         return false
       }
     })
     .catch(function (err: any) {
       w.atLog('warn', '[ADD-ON] Network error: ' + (err.message || err))
-      w.toast('Add-on failed: network error', 0, '⚠️')
+      toast('Add-on failed: network error', 0, '⚠️')
       return false
     })
 }
@@ -1436,7 +1436,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   const pnlStr = (totalEmergencyPnL >= 0 ? '+' : '') + '$' + totalEmergencyPnL.toFixed(2)
   { const _oe6 = w.el('atStatus'); if (_oe6) _oe6.innerHTML = w._ZI.siren + ` KILL ACTIV — <button onclick="resetKillSwitch()" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + w._ZI.ok + ` RESET & REPORNESTE AT</button>` }
   w.atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} pozitii inchise | PnL: ${pnlStr}`)
-  w.toast(closedCount + ' pozitii inchise | PnL: ' + pnlStr, 0, w._ZI.siren)
+  toast(closedCount + ' pozitii inchise | PnL: ' + pnlStr, 0, w._ZI.siren)
   if (w.S.alerts?.enabled) w.sendAlert('Zeus Kill Switch', msg, 'kill')
   // [FIX UI] Update banners immediately after kill trigger
   if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
@@ -1451,7 +1451,7 @@ export function resetKillSwitch(): void {
   // [P3-5] Minimum 30s cooldown after kill was triggered
   if (AT._killTriggeredTs && (Date.now() - AT._killTriggeredTs) < 30000) {
     var _remaining = Math.ceil((30000 - (Date.now() - AT._killTriggeredTs)) / 1000)
-    w.toast('Kill switch reset blocat — asteapta ' + _remaining + 's', 0, w._ZI.timer)
+    toast('Kill switch reset blocat — asteapta ' + _remaining + 's', 0, w._ZI.timer)
     return
   }
   // Reset server-side (authoritative source of truth)
@@ -1482,7 +1482,7 @@ export function resetKillSwitch(): void {
   var _killPct = parseFloat(w.el('atKillPct')?.value) || 5
   { const _oe7 = w.el('atStatus'); if (_oe7) _oe7.innerHTML = w._ZI.bolt + ' Resetat — re-armed la ' + _killPct + '% loss threshold' }
   w.atLog('info', '[OK] Kill switch resetat manual — re-armed la ' + _killPct + '% threshold')
-  w.toast('Kill switch resetat — re-armed la ' + _killPct + '%', 0, w._ZI.ok)
+  toast('Kill switch resetat — re-armed la ' + _killPct + '%', 0, w._ZI.ok)
   // Persist reset immediately so it survives reload and syncs to server
   if (typeof w.ZState !== 'undefined') w.ZState.save()
   w.atUpdateBanner(); w.ptUpdateBanner()
@@ -1647,7 +1647,7 @@ export function openPartialClose(posId: any): void {
 
 export function execPartialClose(posId: any, pct: any): void {
   document.getElementById('partialCloseModal')?.remove()
-  if (!pct || pct <= 0 || pct >= 100) { w.toast('Procent invalid'); return }
+  if (!pct || pct <= 0 || pct >= 100) { toast('Procent invalid'); return }
   // [FIX A3] Search both demo and live positions
   let idx = (TP.demoPositions || []).findIndex((p: any) => p.id === posId)
   let _isLivePartial = false
@@ -1686,7 +1686,7 @@ export function execPartialClose(posId: any, pct: any): void {
   })
 
   w.atLog('info', `\u25D1 Partial close ${pct}% — ${pos.sym.replace('USDT', '')} PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
-  w.toast(`\u25D1 ${pct}% inchis — PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
+  toast(`\u25D1 ${pct}% inchis — PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
   w.updateDemoBalance(); w.renderDemoPositions(); renderATPositions(); updateATStats()
   // [9A-5] Notify React — partial close updated balance + position size
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
@@ -1749,12 +1749,12 @@ export function closeAllDemoPos(): void {
     ? [...TP.demoPositions].filter((p: any) => !p.closed && !p.autoTrade)
     : []
   const totalClosed = livePosns.length + posns.length
-  if (!totalClosed) { w.toast('Nu exista pozitii manuale deschise', 0, w._ZI.clip); return }
+  if (!totalClosed) { toast('Nu exista pozitii manuale deschise', 0, w._ZI.clip); return }
   posns.forEach((p: any) => {
     w.closeDemoPos(p.id, 'Close All Manual')
   })
   setTimeout(() => { renderATPositions(); updateATStats(); w.renderDemoPositions() }, 100)
-  w.toast('Inchis ' + totalClosed + ' pozitii manuale', 0, w._ZI.ok)
+  toast('Inchis ' + totalClosed + ' pozitii manuale', 0, w._ZI.ok)
 }
 
 // Inchide TOATE pozitiile AT (apelat din panoul AT / Emergency Stop)
@@ -1784,10 +1784,10 @@ export function closeAllATPos(): void {
     if (pnl >= 0) AT.wins++; else AT.losses++
   })
   const totalClosed = livePosns.length + posns.length
-  if (!totalClosed) { w.toast('Nu exista pozitii AT deschise', 0, w._ZI.clip); return }
+  if (!totalClosed) { toast('Nu exista pozitii AT deschise', 0, w._ZI.clip); return }
   if (livePosns.length > 0) checkKillThreshold()
   setTimeout(() => { renderATPositions(); updateATStats() }, 100)
-  w.toast('Inchis ' + totalClosed + ' pozitii AT', 0, w._ZI.ok)
+  toast('Inchis ' + totalClosed + ' pozitii AT', 0, w._ZI.ok)
 }
 
 // ===================================================================

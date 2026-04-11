@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/trading/liveApi.js (Phase 6B)
 // Live exchange API proxy functions
 
-import { fmtNow } from '../data/marketDataHelpers'
+import { fmtNow, toast } from '../data/marketDataHelpers'
 
 const w = window as any
 
@@ -45,7 +45,7 @@ export function _liveApiError(err: any, context?: string): void {
   const msg = (err && err.message) ? err.message : String(err)
   const prefix = context ? ('[' + context + '] ') : ''
   // User-visible alerts
-  if (typeof w.toast === 'function') w.toast('LIVE API: ' + prefix + msg)
+  toast('LIVE API: ' + prefix + msg)
   if (typeof w.atLog === 'function') w.atLog('warn', '[LIVE] API FAIL: ' + prefix + msg)
   console.error('[liveApi]', context, msg)
 }

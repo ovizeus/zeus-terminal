@@ -5,7 +5,7 @@
 'use strict'
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
-import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
+import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 
 const w = window as any // kept for w.el, w._ZI, function calls, w.S writes + self-ref
@@ -1042,7 +1042,7 @@ export function checkProtectMode(): void {
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[BRAIN PROTECT] ON ' + reason)
     if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { getATEnabled() = false }
     brainThink('bad', reason)
-    w.toast(reason)
+    toast(reason)
   }
 
   const banner = w.el('protectBanner')
@@ -1059,7 +1059,7 @@ export function resetProtectMode(): void {
   const banner = w.el('protectBanner')
   if (banner) banner.className = 'protect-banner'
   brainThink('ok', w._ZI.ok + ' Protect mode resetat manual')
-  w.toast('Protect mode resetat', 0, w._ZI.ok)
+  toast('Protect mode resetat', 0, w._ZI.ok)
 }
 
 // ── DSL TELEMETRY UPDATE ──────────────────────────────────────────

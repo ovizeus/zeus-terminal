@@ -9,7 +9,8 @@
 import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
-const w = window as Record<string, any> // kept for w.el, w.toast, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+import { toast } from '../data/marketDataHelpers'
+const w = window as Record<string, any> // kept for w.el, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -62,7 +63,7 @@ export function loadJournalFromStorage(): void {
 }
 
 export function exportJournalCSV(): void {
-  if (!TP.journal.length) { if (typeof w.toast === 'function') w.toast('No trades to export'); return }
+  if (!TP.journal.length) { toast('No trades to export'); return }
   const hdr = 'Time,Side,Symbol,Entry,Exit,PnL,Leverage,Reason\n'
   function csvSafe(v: unknown): string { const s = String(v || ''); return /^[=+\-@\t\r]/.test(s) ? "'" + s : s }
   const rows = TP.journal.map((t: any) =>
@@ -71,7 +72,7 @@ export function exportJournalCSV(): void {
   const blob = new Blob([hdr + rows], { type: 'text/csv' })
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
   a.download = `zeus_journal_${new Date().toISOString().slice(0, 10)}.csv`
-  a.click(); if (typeof w.toast === 'function') w.toast('Journal exported!', 0, w._ZI?.ok)
+  a.click(); toast('Journal exported!', 0, w._ZI?.ok)
 }
 
 export function startFRCountdown(): void {

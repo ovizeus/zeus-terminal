@@ -5,7 +5,8 @@
 import { getTPObject, getATObject, getPrice, getSymbol } from '../services/stateAccessors'
 import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
-const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, w.el, w._ZI, w.toast, fn calls
+import { toast } from './marketDataHelpers'
+const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, w.el, w._ZI, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
 const AT = getATObject()
@@ -30,15 +31,15 @@ function _executeGlobalModeSwitch(mode: string): void {
     if (data.ok) {
       if (typeof AT !== 'undefined') AT._serverMode = mode
       _applyGlobalModeUI(mode)
-      if (mode === 'demo') { w.toast('Demo Mode Activated', 3000, w._ZI.ok) }
-      else { const _toastEnv = w._resolvedEnv || (w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'); if (!w._apiConfigured) w.toast('Live Mode Locked \u2014 Execution unavailable until API keys are configured', 3000, w._ZI.w); else if (_toastEnv === 'TESTNET') w.toast('Testnet Trading Mode Activated', 3000, w._ZI.ok); else w.toast('Real Trading Mode Activated', 3000, w._ZI.ok) }
+      if (mode === 'demo') { toast('Demo Mode Activated', 3000, w._ZI.ok) }
+      else { const _toastEnv = w._resolvedEnv || (w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'); if (!w._apiConfigured) toast('Live Mode Locked \u2014 Execution unavailable until API keys are configured', 3000, w._ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, w._ZI.ok); else toast('Real Trading Mode Activated', 3000, w._ZI.ok) }
       _showManualPanel()
       if (typeof w.runDSLBrain === 'function') w.runDSLBrain()
       if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)
       // [9A-4] Notify React after mode switch
       try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
-    } else { const _fails = (data.checks || []).filter(function (c: any) { return !c.ok }); const _reason = _fails.length > 0 ? _fails.slice(0, 2).map(function (c: any) { return c.detail }).join('. ') : (data.error || 'Unknown error'); w.toast('Cannot switch to LIVE: ' + _reason, 5000, w._ZI.lock) }
-  }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
+    } else { const _fails = (data.checks || []).filter(function (c: any) { return !c.ok }); const _reason = _fails.length > 0 ? _fails.slice(0, 2).map(function (c: any) { return c.detail }).join('. ') : (data.error || 'Unknown error'); toast('Cannot switch to LIVE: ' + _reason, 5000, w._ZI.lock) }
+  }).catch(function () { toast('Network error', 3000, w._ZI.x) })
 }
 
 export function _applyGlobalModeUI(mode: string): void {
@@ -102,13 +103,13 @@ export function _showConfirmDialog(title: string, message: string, cancelText: s
 // ═══════════════════════════════════════════════════════
 export function promptAddFunds(): void {
   const amount = prompt('Enter amount to add to demo balance (USD):', '5000'); if (!amount) return
-  const num = parseFloat(amount); if (!num || num <= 0 || num > 1000000) { w.toast('Invalid amount', 3000, w._ZI.w); return }
-  fetch('/api/at/demo/add-funds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ amount: num }) }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); w.toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
+  const num = parseFloat(amount); if (!num || num <= 0 || num > 1000000) { toast('Invalid amount', 3000, w._ZI.w); return }
+  fetch('/api/at/demo/add-funds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ amount: num }) }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, w._ZI.x) } }).catch(function () { toast('Network error', 3000, w._ZI.x) })
 }
 
 export function promptResetDemo(): void {
   _showConfirmDialog('Reset Demo Balance?', 'This will reset your demo balance to $10,000 and clear all trading statistics.\n\nOpen positions will NOT be closed.\n\nThis action cannot be undone.', 'Cancel', 'Reset Demo', function () {
-    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; w.updateDemoBalance(); w.toast('Demo balance reset to $10,000', 3000, w._ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Reset failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
+    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; w.updateDemoBalance(); toast('Demo balance reset to $10,000', 3000, w._ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Reset failed'), 3000, w._ZI.x) } }).catch(function () { toast('Network error', 3000, w._ZI.x) })
   })
 }
 
@@ -153,7 +154,7 @@ export function updateDemoBalance(): void {
 export function placeDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const _curEnv = w._resolvedEnv || (_curMode === 'demo' ? 'DEMO' : 'REAL')
-  if (_curMode === 'live' && !w._apiConfigured) { w.toast('Cannot place order \u2014 exchange not configured', 3000, w._ZI.lock); return }
+  if (_curMode === 'live' && !w._apiConfigured) { toast('Cannot place order \u2014 exchange not configured', 3000, w._ZI.lock); return }
   if (_curMode === 'live' && w._apiConfigured) { const _isTestnet = _curEnv === 'TESTNET'; _showConfirmDialog(_isTestnet ? 'Place Testnet Order?' : 'Place Real Order?', _isTestnet ? 'You are about to place an order on Binance TESTNET with TEST funds.' : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.', 'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order', function () { _executePlaceDemoOrder() }); return }
   _executePlaceDemoOrder()
 }
@@ -164,14 +165,14 @@ function _executePlaceDemoOrder(): void {
   const size = parseFloat(w.el('demoSize')?.value || '100'); const lev = getDemoLev()
   const tp = parseFloat(w.el('demoTP')?.value) || null; const sl = parseFloat(w.el('demoSL')?.value) || null
   let entry: number
-  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(w.el('demoEntry')?.value); if (!entry || entry <= 0) { w.toast('Limit price is required', 3000, w._ZI.w); return } }
-  if (!entry || !size) { w.toast('Entry price and size required', 3000, w._ZI.w); return }
-  if (size <= 0) { w.toast('Size must be positive', 3000, w._ZI.w); return }
-  if (entry <= 0) { w.toast('Entry price must be positive', 3000, w._ZI.w); return }
-  if (orderType === 'LIMIT') { if (TP.demoSide === 'LONG' && entry >= getPrice()) { w.toast('LONG LIMIT must be below current price'); return }; if (TP.demoSide === 'SHORT' && entry <= getPrice()) { w.toast('SHORT LIMIT must be above current price'); return } }
+  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(w.el('demoEntry')?.value); if (!entry || entry <= 0) { toast('Limit price is required', 3000, w._ZI.w); return } }
+  if (!entry || !size) { toast('Entry price and size required', 3000, w._ZI.w); return }
+  if (size <= 0) { toast('Size must be positive', 3000, w._ZI.w); return }
+  if (entry <= 0) { toast('Entry price must be positive', 3000, w._ZI.w); return }
+  if (orderType === 'LIMIT') { if (TP.demoSide === 'LONG' && entry >= getPrice()) { toast('LONG LIMIT must be below current price'); return }; if (TP.demoSide === 'SHORT' && entry <= getPrice()) { toast('SHORT LIMIT must be above current price'); return } }
   const _valEntry = (orderType === 'LIMIT') ? entry : getPrice()
-  if (sl) { if (TP.demoSide === 'LONG' && sl >= _valEntry) { w.toast('LONG SL must be below entry'); return }; if (TP.demoSide === 'SHORT' && sl <= _valEntry) { w.toast('SHORT SL must be above entry'); return } }
-  if (tp) { if (TP.demoSide === 'LONG' && tp <= _valEntry) { w.toast('LONG TP must be above entry'); return }; if (TP.demoSide === 'SHORT' && tp >= _valEntry) { w.toast('SHORT TP must be below entry'); return } }
+  if (sl) { if (TP.demoSide === 'LONG' && sl >= _valEntry) { toast('LONG SL must be below entry'); return }; if (TP.demoSide === 'SHORT' && sl <= _valEntry) { toast('SHORT SL must be above entry'); return } }
+  if (tp) { if (TP.demoSide === 'LONG' && tp <= _valEntry) { toast('LONG TP must be above entry'); return }; if (TP.demoSide === 'SHORT' && tp >= _valEntry) { toast('SHORT TP must be below entry'); return } }
   if (_curMode === 'live') { _executeLiveManualOrder(orderType, size, entry, lev, tp, sl) } else { _executeDemoManualOrder(orderType, size, entry, lev, tp, sl) }
 }
 
@@ -182,8 +183,8 @@ function _registerManualOnServer(pos: any): void {
 }
 
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
-  if (size > TP.demoBalance) { w.toast('Insufficient demo balance', 3000, w._ZI.x); return }
-  if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { w.toast('Max 20 demo positions', 3000, w._ZI?.x); return }
+  if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, w._ZI.x); return }
+  if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { toast('Max 20 demo positions', 3000, w._ZI?.x); return }
   if (orderType === 'MARKET') {
     const fillPrice = getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
     const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
@@ -194,19 +195,19 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     w.ZState.save(); _registerManualOnServer(pos)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
-    w.toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
+    toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
   } else {
     const pending = { id: Date.now(), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
     TP.pendingOrders.push(pending); TP.demoBalance -= size
     w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
-    w.toast(' LIMIT ' + pending.side + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
+    toast(' LIMIT ' + pending.side + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
   }
 }
 
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
-  if (typeof w.manualLivePlaceOrder !== 'function') { w.toast('Live API not available', 3000, w._ZI.lock); return }
-  if (!TP.liveBalance || size > TP.liveBalance) { w.toast('Insufficient live balance', 3000, w._ZI?.x); return }
-  if (lev < 1 || lev > 125) { w.toast('Leverage must be 1-125x', 3000, w._ZI?.x); return }
+  if (typeof w.manualLivePlaceOrder !== 'function') { toast('Live API not available', 3000, w._ZI.lock); return }
+  if (!TP.liveBalance || size > TP.liveBalance) { toast('Insufficient live balance', 3000, w._ZI?.x); return }
+  if (lev < 1 || lev > 125) { toast('Leverage must be 1-125x', 3000, w._ZI?.x); return }
   const refPrice = (orderType === 'MARKET') ? getPrice() : entry; const qty = (size * lev) / refPrice; const binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
   const execBtn = w.el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
   w.manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
@@ -219,16 +220,16 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
-      w.toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice))
-      if (sl) { w.manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { w.toast('SL failed: ' + (e.message || e)) }) }
-      if (tp) { w.manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { w.toast('TP failed: ' + (e.message || e)) }) }
+      toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice))
+      if (sl) { w.manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
+      if (tp) { w.manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
       if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 1000)
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
       TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()
-      w.toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); w._startLivePendingSync()
+      toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); w._startLivePendingSync()
     }
-  }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }; w.toast('LIVE order failed: ' + (err.message || err)) })
+  }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }; toast('LIVE order failed: ' + (err.message || err)) })
 }
 
 function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: any, sl: any, liqPrice: any, mode: string, orderType: string): any {

@@ -4,6 +4,7 @@
 'use strict'
 
 import { _safeLocalStorageSet } from '../services/storage'
+import { toast } from '../data/marketDataHelpers'
 
 const w = window as any
 
@@ -248,14 +249,14 @@ export function aubBBExport(): void {
     a.href = URL.createObjectURL(blob)
     a.download = 'zeus_blackbox_' + new Date().toISOString().slice(0, 10) + '.json'
     a.click()
-    if (typeof w.toast === 'function') w.toast('Blackbox exported!', 0, w._ZI.clip)
+    toast('Blackbox exported!', 0, w._ZI.clip)
   } catch (e) { console.warn('[AUB BB export]', e) }
 }
 export function aubBBClear(): void {
   w.AUB.bb = []
   try { localStorage.removeItem('aub_bb') } catch (_) { }
   _aubUpdateBBCard()
-  if (typeof w.toast === 'function') w.toast('Blackbox cleared', 0, w._ZI.trash)
+  toast('Blackbox cleared', 0, w._ZI.trash)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -364,7 +365,7 @@ export function aubMacroClear(): void {
   w.AUB.macroEvents = []
   try { localStorage.removeItem('aub_macro') } catch (_) { }
   _aubRenderMacroEvents()
-  if (typeof w.toast === 'function') w.toast('Macro events cleared', 0, w._ZI.trash)
+  toast('Macro events cleared', 0, w._ZI.trash)
 }
 export function aubMacroFileLoad(input: any): void {
   const file = input?.files?.[0]; if (!file) return
@@ -383,9 +384,9 @@ export function aubMacroFileLoad(input: any): void {
         if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
         if (typeof w._userCtxPush === 'function') w._userCtxPush()
         _aubRenderMacroEvents()
-        if (typeof w.toast === 'function') w.toast('Macro events loaded: ' + w.AUB.macroEvents.length)
+        toast('Macro events loaded: ' + w.AUB.macroEvents.length)
       }
-    } catch (e) { if (typeof w.toast === 'function') w.toast('Invalid JSON', 0, w._ZI.x) }
+    } catch (e) { toast('Invalid JSON', 0, w._ZI.x) }
   }
   reader.readAsText(file)
   input.value = ''
@@ -508,7 +509,7 @@ export function aubSimApply(): void {
   const rrInput = document.getElementById('atRR') as any
   if (slInput) slInput.value = w.AUB.simPendingApply.sl
   if (rrInput) rrInput.value = w.AUB.simPendingApply.rr
-  if (typeof w.toast === 'function') w.toast('Suggestion applied to fields — review before enabling AT')
+  toast('Suggestion applied to fields — review before enabling AT')
   ;(document.getElementById('aub-sim-apply') as any).style.display = 'none'
   w.AUB.simPendingApply = null
   aubBBSnapshot('SIM_APPLIED', { sl: w.AUB.simResult.sl, rr: w.AUB.simResult.rr })

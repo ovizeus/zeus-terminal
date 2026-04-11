@@ -1,3 +1,4 @@
+import { toast } from '../data/marketDataHelpers'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -1266,11 +1267,11 @@ if (!w._ARIA_NOVA_LOADED) {
 
   // ── NOVA CLIPBOARD EXPORT ──────────────────────────────────────────
   function novaCopyLog() {
-    if (!w.NOVA_STATE.log.length) { w.toast('NOVA log empty', 0, w._ZI.brain); return }
+    if (!w.NOVA_STATE.log.length) { toast('NOVA log empty', 0, w._ZI.brain); return }
     const txt = w.NOVA_STATE.log.map((e: any) => `[${e.ts}] [${e.severity.toUpperCase()}] ${e.msg}`).join('\n')
     if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(txt).then(() => w.toast('NOVA log copied', 0, w._ZI.clip)).catch(() => w.toast('Copy failed', 0, w._ZI.x))
-    } else { w.toast('Clipboard unavailable', 0, w._ZI.x) }
+      navigator.clipboard.writeText(txt).then(() => toast('NOVA log copied', 0, w._ZI.clip)).catch(() => toast('Copy failed', 0, w._ZI.x))
+    } else { toast('Clipboard unavailable', 0, w._ZI.x) }
   }
 
   // ── NOVA IMPROVEMENT 1: ARIA mini-summary in NOVA bar + panel ────

@@ -4,9 +4,9 @@
  */
 
 import { getBrainMetrics } from '../services/stateAccessors'
-import { fmtNow } from '../data/marketDataHelpers'
+import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
-const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, w.toast, fn calls
+const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, fn calls
 
 export const DEV: Record<string, any> = {
   enabled: false,
@@ -68,7 +68,7 @@ w.devClearLog = devClearLog
 
 export function devExportLog(): void {
   try {
-    if (!DEV.log.length) { if (typeof w.toast === 'function') w.toast('No log to export'); return }
+    if (!DEV.log.length) { toast('No log to export'); return }
     const csv = 'Time,Message,Type\n' + DEV.log.map(function (e: any) {
       return '"' + e.time + '","' + e.msg.replace(/"/g, '\'') + '","' + e.type + '"'
     }).join('\n')
@@ -160,12 +160,12 @@ export const ZLOG = (function () {
 
   function copyCSV(): void {
     try {
-      if (!_buf.length) { if (typeof w.toast === 'function') w.toast('ZLOG empty'); return }
+      if (!_buf.length) { toast('ZLOG empty'); return }
       const text = _toCSV()
       // [v119-p14] clipboard fallback: writeText → execCommand → prompt
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function () {
-          if (typeof w.toast === 'function') w.toast('ZLOG CSV copied (' + _buf.length + ' entries)')
+          toast('ZLOG CSV copied (' + _buf.length + ' entries)')
         }).catch(function () { _clipboardFallback(text, 'ZLOG CSV') })
       } else { _clipboardFallback(text, 'ZLOG CSV') }
     } catch (e: any) { console.warn('[ZLOG] copyCSV error:', e.message) }
@@ -173,12 +173,12 @@ export const ZLOG = (function () {
 
   function copyJSON(): void {
     try {
-      if (!_buf.length) { if (typeof w.toast === 'function') w.toast('ZLOG empty'); return }
+      if (!_buf.length) { toast('ZLOG empty'); return }
       const text = _toJSON()
       // [v119-p14] clipboard fallback
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(function () {
-          if (typeof w.toast === 'function') w.toast('ZLOG JSON copied (' + _buf.length + ' entries)')
+          toast('ZLOG JSON copied (' + _buf.length + ' entries)')
         }).catch(function () { _clipboardFallback(text, 'ZLOG JSON') })
       } else { _clipboardFallback(text, 'ZLOG JSON') }
     } catch (e: any) { console.warn('[ZLOG] copyJSON error:', e.message) }
@@ -189,7 +189,7 @@ export const ZLOG = (function () {
       _buf.length = 0
       _lastMsg = ''; _lastLvl = ''; _lastTs = 0
       _updateCounter()
-      if (typeof w.toast === 'function') w.toast('ZLOG cleared')
+      toast('ZLOG cleared')
     } catch (_e) { /* */ }
   }
 
@@ -236,7 +236,7 @@ export const ZLOG = (function () {
       const ok = document.execCommand('copy')
       document.body.removeChild(ta)
       if (ok) {
-        if (typeof w.toast === 'function') w.toast((label || 'Text') + ' copied (fallback)')
+        toast((label || 'Text') + ' copied (fallback)')
         return
       }
     } catch (_e) { /* */ }
@@ -246,7 +246,7 @@ export const ZLOG = (function () {
     } catch (_e2) {
       // Incercare 3: console.dir ca ultima instanta
       console.dir({ label: label, data: text.substring(0, 5000) })
-      if (typeof w.toast === 'function') w.toast((label || 'Text') + ': vezi Console (F12)')
+      toast((label || 'Text') + ': vezi Console (F12)')
     }
   }
 
@@ -686,12 +686,12 @@ export function hubSaveAll(): void {
       hubTgSave()
     }
 
-    if (typeof w.toast === 'function') w.toast('All settings saved', 0, w._ZI?.ok)
+    toast('All settings saved', 0, w._ZI?.ok)
     devLog('Settings saved via Hub', 'info')
 
   } catch (e) {
     console.warn('[Hub] hubSaveAll error:', e)
-    if (typeof w.toast === 'function') w.toast('Save error — check console')
+    toast('Save error — check console')
   }
 }
 w.hubSaveAll = hubSaveAll
@@ -700,7 +700,7 @@ export function hubLoadAll(): void {
   try {
     if (typeof w.loadUserSettings === 'function') w.loadUserSettings()
     hubPopulate()
-    if (typeof w.toast === 'function') w.toast('Settings loaded', 0, w._ZI?.fold)
+    toast('Settings loaded', 0, w._ZI?.fold)
   } catch (e) {
     console.warn('[Hub] hubLoadAll error:', e)
   }
@@ -727,7 +727,7 @@ export function hubTgSave(): void {
   }).then(function (r) { return r.json() }).then(function (d: any) {
     if (d.ok) {
       if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + w._ZI?.ok + ' Salvat + trimis la server</span>'
-      if (typeof w.toast === 'function') w.toast('Telegram saved', 0, w._ZI?.ok)
+      toast('Telegram saved', 0, w._ZI?.ok)
     } else {
       if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + w._ZI?.w + ' Server: ' + (d.error || 'error') + '</span>'
     }
@@ -801,7 +801,7 @@ export function hubResetDefaults(): void {
     }
     hubPopulate()
     hubSaveAll()
-    if (typeof w.toast === 'function') w.toast('Defaults restored')
+    toast('Defaults restored')
   } catch (e) {
     console.warn('[Hub] hubResetDefaults error:', e)
   }
@@ -843,11 +843,11 @@ w.hubApplyChartColors = hubApplyChartColors
 export function hubCloudSave(): void {
   try {
     const email = (document.getElementById('hubCloudEmail') as HTMLInputElement)?.value || ''
-    if (!email) { if (typeof w.toast === 'function') w.toast('Enter an email address'); return }
+    if (!email) { toast('Enter an email address'); return }
     // [FIX v85 BUG1] Nu salvam emailul in S.cloudEmail
     const mainEmailEl = w.el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
     if (typeof w.cloudSave === 'function') { w.cloudSave() }
-    else if (typeof w.toast === 'function') w.toast('cloudSave not available')
+    else toast('cloudSave not available')
   } catch (e) { console.warn('[Hub] hubCloudSave error:', e) }
 }
 w.hubCloudSave = hubCloudSave
@@ -855,11 +855,11 @@ w.hubCloudSave = hubCloudSave
 export function hubCloudLoad(): void {
   try {
     const email = (document.getElementById('hubCloudEmail') as HTMLInputElement)?.value || ''
-    if (!email) { if (typeof w.toast === 'function') w.toast('Enter an email address'); return }
+    if (!email) { toast('Enter an email address'); return }
     // [FIX v85 BUG1] Nu salvam emailul in S.cloudEmail
     const mainEmailEl = w.el('cloudEmail'); if (mainEmailEl) mainEmailEl.value = email
     if (typeof w.cloudLoad === 'function') { w.cloudLoad() }
-    else if (typeof w.toast === 'function') w.toast('cloudLoad not available')
+    else toast('cloudLoad not available')
   } catch (e) { console.warn('[Hub] hubCloudLoad error:', e) }
 }
 w.hubCloudLoad = hubCloudLoad

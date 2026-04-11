@@ -1,5 +1,6 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useState } from 'react'
+import { toast } from '../../data/marketDataHelpers'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -26,7 +27,7 @@ export function LiqSettingsModal({ visible, onClose }: Props) {
       w.S.liqSettings.timeWindow = timeWindow
       w.S.liqSettings.labelFormat = labelFormat
     }
-    w.toast?.('Liq settings applied')
+    toast('Liq settings applied')
     onClose()
   }
 

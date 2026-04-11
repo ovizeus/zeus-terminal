@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/data/marketData.js lines 111-312 (Chunk B)
 // Chart init, fetchKlines, renderChart
 
-import { fmtTime, fmtDate } from './marketDataHelpers'
+import { fmtTime, fmtDate, toast } from './marketDataHelpers'
 
 const w = window as any
 
@@ -108,7 +108,7 @@ export async function fetchKlines(tf: any): Promise<void> {
     })
   } catch (e: any) {
     console.error('[fetchKlines]', e.message)
-    w.toast(`Chart: nu pot \u00EEnc\u0103rca datele (${e.message})`)
+    toast(`Chart: nu pot \u00EEnc\u0103rca datele (${e.message})`)
   } finally { w.FetchLock.release('klines') }
 }
 
