@@ -7,7 +7,8 @@
  */
 
 import { getSymbol, getPrice, getBrainMetrics, getATObject, getTPObject, getDSLObject } from './stateAccessors'
-const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, w.el, w.fP, fn calls
+import { fP } from '../utils/format'
+const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, w.el, fn calls
 
 export const ZStore = {
   price: (sym: string) => w.allPrices?.[sym] || (sym === getSymbol() ? getPrice() : null),
@@ -48,7 +49,7 @@ export function connectWatchlist(): void {
       window.dispatchEvent(new CustomEvent('zeus:wlPrice', { detail: { sym, price, chg } }))
       const pe = w.el('wlp-' + sym)
       const ce = w.el('wlc-' + sym)
-      if (pe) { pe.textContent = '$' + (price >= 1000 ? w.fP(price) : price >= 1 ? price.toFixed(3) : price.toPrecision(4)) }
+      if (pe) { pe.textContent = '$' + (price >= 1000 ? fP(price) : price >= 1 ? price.toFixed(3) : price.toPrecision(4)) }
       if (ce) { ce.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%'; ce.className = 'wl-chg ' + (chg >= 0 ? 'up' : 'dn') }
     },
     onclose: () => {

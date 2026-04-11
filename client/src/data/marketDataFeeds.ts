@@ -4,8 +4,8 @@
 
 import { getTPObject } from '../services/stateAccessors'
 import { fmtTime, fmtDate } from './marketDataHelpers'
-import { fmt } from '../utils/format'
-const w = window as any // kept for w.S (producer), w.el, w.fP, w.mainChart, w.cvdChart, fn calls
+import { fmt, fP } from '../utils/format'
+const w = window as any // kept for w.S (producer), w.el, w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
@@ -82,7 +82,7 @@ export function toggleFS(): void {
 // ===== PRICE UPDATE =====
 export function updatePriceDisplay(): void {
   if (document.hidden) return
-  const e = w.el('bprice'); if (e) e.textContent = '$' + w.fP(w.S.price)
+  const e = w.el('bprice'); if (e) e.textContent = '$' + fP(w.S.price)
   const c = (w.S.price - w.S.prevPrice) / w.S.prevPrice * 100
   const bc = w.el('bchg')
   if (bc) { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
@@ -211,8 +211,8 @@ export async function fetch24h(): Promise<void> {
     if (!d.highPrice) throw new Error('Date 24h invalide')
     w.S.high = +d.highPrice; w.S.low = +d.lowPrice
     const h = w.el('d24h'); const l = w.el('d24l')
-    if (h) h.textContent = 'H: $' + w.fP(w.S.high)
-    if (l) l.textContent = 'L: $' + w.fP(w.S.low)
+    if (h) h.textContent = 'H: $' + fP(w.S.high)
+    if (l) l.textContent = 'L: $' + fP(w.S.low)
   } catch (e: any) { console.warn('[fetch24h]', e.message) }
 }
 
@@ -226,7 +226,7 @@ export function setDtTf(tf: any, btn: any): void {
 
 export function updateMetrics(): void {
   const dtp = w.el('dtp'), dtpc = w.el('dtpc'), dtps = w.el('dtps')
-  if (dtp) dtp.textContent = w.S.price ? '$' + w.fP(w.S.price) : '\u2014'
+  if (dtp) dtp.textContent = w.S.price ? '$' + fP(w.S.price) : '\u2014'
   if (dtpc) { const c = w.S.prevPrice ? ((w.S.price - w.S.prevPrice) / w.S.prevPrice * 100).toFixed(2) + '%' : '\u2014'; dtpc.textContent = c; dtpc.style.color = w.S.price >= w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
   if (dtps) { dtps.textContent = w.S.price > w.S.prevPrice ? 'BULL' : 'BEAR'; dtps.style.color = w.S.price > w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
   const dtoi = w.el('dtoi'), dtoic = w.el('dtoic'), dtois = w.el('dtois')
@@ -281,7 +281,7 @@ export function calcSRTable(): void {
   ]
   levels.forEach((lv: any) => {
     const ev = w.el(lv.pid), ed = lv.did ? w.el(lv.did) : null
-    if (ev) ev.textContent = '$' + w.fP(lv.v)
+    if (ev) ev.textContent = '$' + fP(lv.v)
     if (ed) { const d = ((lv.v - p) / p * 100); ed.textContent = (d >= 0 ? '+' : '') + d.toFixed(2) + '%'; ed.style.color = d > 0 ? 'var(--grn)' : 'var(--red)' }
   })
 }

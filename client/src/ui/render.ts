@@ -3,8 +3,8 @@
 // Ported 1:1 from public/js/ui/render.js
 import { getKlines, getTimezone, getSymbol, getPrice, getFR, getFG, getOI, getLS, getTPObject, getBrainObject, getBrainMetrics, getTCMaxPos } from '../services/stateAccessors'
 import { fmtNow } from '../data/marketDataHelpers'
-import { fmt } from '../utils/format'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.fP, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
+import { fmt, fP } from '../utils/format'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -301,7 +301,7 @@ export function updateSymPulseRows() {
     return `<div class="sym-pulse-row">
       <div class="sym-pulse-label">${openDot}${labels[i]}</div>
       <div class="sym-pulse-bars">${bars || '<div style="flex:1;background:#0d1520;border-radius:1px;height:3px"></div>'}</div>
-      <div class="sym-pulse-price" style="color:${col}">${curP ? '$' + w.fP(curP) : '\u2014'}</div>
+      <div class="sym-pulse-price" style="color:${col}">${curP ? '$' + fP(curP) : '\u2014'}</div>
       <div class="sym-pulse-chg" style="color:${col}">${chg ? (chg > 0 ? '+' : '') + chg.toFixed(2) + '%' : '\u2014'}</div>
     </div>`;
   }).join('');
@@ -393,7 +393,7 @@ export function updateDataStream() {
     const chg = w.wlPrices[sym]?.chg || 0;
     const cls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'neut';
     const arrow = chg > 0 ? '\u25b2' : chg < 0 ? '\u25bc' : '\u2014';
-    if (p) items.push({ text: `${labels[i]} $${w.fP(p)} ${arrow}${Math.abs(chg).toFixed(2)}%`, cls });
+    if (p) items.push({ text: `${labels[i]} $${fP(p)} ${arrow}${Math.abs(chg).toFixed(2)}%`, cls });
   });
 
   // Extra brain data

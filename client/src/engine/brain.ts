@@ -6,6 +6,7 @@
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
 import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
+import { fP } from '../utils/format'
 
 const w = window as any // kept for w.el, w._ZI, function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
@@ -138,7 +139,7 @@ export function updateBrainState(): void {
     state = 'trading'
     const pos = (getDemoPositions()).find((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).find((p: any) => p.autoTrade && !p.closed)
     const pnl = pos ? ((pos.side === 'LONG' ? getPrice() - pos.entry : pos.entry - getPrice()) / pos.entry * pos.size * (pos.lev || 1)) : 0
-    ticker = `POZITIE ACTIVA ${pos?.side} @$${w.fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORIZEZ TP/SL...`
+    ticker = `POZITIE ACTIVA ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORIZEZ TP/SL...`
   } else if (score >= 68 && sigs >= 3) {
     state = 'ready'
     const dir = bulls >= bears ? 'LONG' : 'SHORT'
@@ -1098,7 +1099,7 @@ export function updateDSLTelemetry(): void {
       </div>
       <div class="dsl-tele-grid">
         <div class="dsl-tele-cell"><div class="dsl-tele-lbl">DSL STATE</div><div class="dsl-tele-val">${isActive ? 'ACTIVE' : 'WAIT'}</div></div>
-        <div class="dsl-tele-cell"><div class="dsl-tele-lbl">PIVOT LEFT</div><div class="dsl-tele-val" style="color:#ff69b4">${pivotLeftPct}% / $${w.fP(plPrice)}</div></div>
+        <div class="dsl-tele-cell"><div class="dsl-tele-lbl">PIVOT LEFT</div><div class="dsl-tele-val" style="color:#ff69b4">${pivotLeftPct}% / $${fP(plPrice)}</div></div>
         <div class="dsl-tele-cell"><div class="dsl-tele-lbl">PIVOT RIGHT</div><div class="dsl-tele-val" style="color:#39ff14">${pivotRightPct}%</div></div>
         <div class="dsl-tele-cell"><div class="dsl-tele-lbl">IMPULSE V</div><div class="dsl-tele-val" style="color:#aa44ff">${impulseValPct}%</div></div>
         <div class="dsl-tele-cell"><div class="dsl-tele-lbl">STEPS DONE</div><div class="dsl-tele-val">${steps}</div></div>
@@ -1741,7 +1742,7 @@ export function renderBrainCockpit(): void {
     if (si) si.textContent = s
   }
   _card('card-flow', 'card-flow-t', 'card-flow-s', 'Flow ' + (ctx.flow ? 'CONFIRM' : 'WEAK'), 'Delta ' + (delta >= 0 ? '+' : '') + delta, ctx.flow ? 'ok' : 'fail')
-  _card('card-sweep', 'card-sweep-t', 'card-sweep-s', sw.type !== 'none' ? 'Sweep ' + sw.type.toUpperCase() + ' ✦' : 'Sweep NONE', sw.reclaim ? '$' + w.fP(getPrice()) + ' reclaimed' : 'No reclaim', sw.reclaim ? 'ok' : 'warn')
+  _card('card-sweep', 'card-sweep-t', 'card-sweep-s', sw.type !== 'none' ? 'Sweep ' + sw.type.toUpperCase() + ' ✦' : 'Sweep NONE', sw.reclaim ? '$' + fP(getPrice()) + ' reclaimed' : 'No reclaim', sw.reclaim ? 'ok' : 'warn')
   _card('card-mtf', 'card-mtf-t', 'card-mtf-s', 'MTF ' + mtfAlignCount + '/3', tfMap.trigger + ' – ' + tfMap.bias, mtfAlignCount >= 2 ? 'ok' : 'warn')
   _card('card-chaos', 'card-chaos-t', 'card-chaos-s', 'Chaos ' + (chaos < 33 ? 'OK' : chaos < 66 ? 'MED' : 'HIGH'), 'ATR ' + (BR.regimeAtrPct || 0).toFixed(2) + '%', chaos < 33 ? 'ok' : chaos < 66 ? 'warn' : 'fail')
 
@@ -1846,7 +1847,7 @@ export function renderBrainCockpit(): void {
       const p = activeDSLPosns[0], dsl = getDSLPositions()[p.id]
       const steps = dsl.log?.filter((l: any) => l.msg?.includes('IMPULSE')).length || 0
       const sym2 = (p.sym || '').replace('USDT', '')
-      dslEl.innerHTML = `DSL: <b style="color:#00ffcc">TRAILING</b> ${_modeTag} · ${sym2} PL:<b>$${w.fP(dsl.pivotLeft)}</b> PR:<b>$${w.fP(dsl.pivotRight)}</b> · Steps:<b>${steps}</b>`
+      dslEl.innerHTML = `DSL: <b style="color:#00ffcc">TRAILING</b> ${_modeTag} · ${sym2} PL:<b>$${fP(dsl.pivotLeft)}</b> PR:<b>$${fP(dsl.pivotRight)}</b> · Steps:<b>${steps}</b>`
     } else {
       dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">READY</b> ${_modeTag} · ${autoPosnsAll.length} poz. monitorizate`
     }
@@ -1891,7 +1892,7 @@ export function renderBrainCockpit(): void {
 
     if (rangeEl) {
       rangeEl.textContent = (rangeLow && rangeHigh)
-        ? w.fP(rangeLow) + ' – ' + w.fP(rangeHigh)
+        ? fP(rangeLow) + ' – ' + fP(rangeHigh)
         : '—'
     }
     if (stateEl) stateEl.textContent = strength > 0 ? qfState : '—'

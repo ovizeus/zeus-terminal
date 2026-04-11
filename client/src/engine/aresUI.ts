@@ -3,6 +3,7 @@
 // ARES UI: CSS injections, _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick, ARES_BRAIN_COLOR_OVERRIDE
 
 import { escHtml } from '../utils/dom'
+import { fP } from '../utils/format'
 
 const w = window as any
 
@@ -689,7 +690,7 @@ export function _aresRender() {
     const thoughtInner = document.getElementById('ares-thought-inner') as any
     if (thoughtInner) {
       const mindInsight = w.ARES_MIND.getPatternInsight()
-      const price = (typeof w.S !== 'undefined' && w.S.price > 0) ? w.fP(w.S.price) : '\u2014'
+      const price = (typeof w.S !== 'undefined' && w.S.price > 0) ? fP(w.S.price) : '\u2014'
       const regime = (typeof w.BM !== 'undefined' ? w.BM.regime : null) || '\u2014'
       const cogLines = [
         `COGNITIV: ${mindInsight}`,

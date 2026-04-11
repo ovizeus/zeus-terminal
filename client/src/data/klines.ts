@@ -4,6 +4,7 @@
  */
 
 import { getTPObject, getATObject, getBrainMetrics, getBrainObject, getDSLObject, getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
+import { fP } from '../utils/format'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, w.el, w._ZI, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
@@ -340,7 +341,7 @@ export function renderMscanTable(results: any[], opps: number) {
 
   tbody.innerHTML = results.map((r: any) => {
     const symBase = r.sym.replace('USDT', '')
-    const priceStr = r.price ? '$' + w.fP(r.price) : '\u2014'
+    const priceStr = r.price ? '$' + fP(r.price) : '\u2014'
     const chgCls = r.chg > 0 ? 'pos' : r.chg < 0 ? 'neg' : 'neu'
     const chgStr = r.chg ? (r.chg > 0 ? '+' : '') + r.chg.toFixed(2) + '%' : '\u2014'
     const rsiCls = r.rsi ? r.rsi > 65 ? 'ob' : r.rsi < 35 ? 'os' : 'neu' : 'neu'

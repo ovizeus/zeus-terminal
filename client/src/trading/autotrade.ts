@@ -6,6 +6,7 @@
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getBrainMetrics, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone, getTPObject } from '../services/stateAccessors'
 import { isValidMarketPrice, escHtml } from '../utils/dom'
 import { fmtNow } from '../data/marketDataHelpers'
+import { fP } from '../utils/format'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), w.el, w._ZI, fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -824,7 +825,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   if (typeof w.DLog !== 'undefined') w.DLog.record('at_entry', { sym: sym, side: side, entry: entry, size: adaptFinalSize, lev: lev, sl: sl, tp: tp, score: cond?.score, fusionMult: _fusionMult, convMult: _convDangerMult, riskPct: riskPct, riskSize: _riskSizeCapped })
 
   w.atLog(side === 'LONG' ? 'buy' : 'sell',
-    `[EXEC] ${side} ${sym} @$${w.fP(entry)} | Lev:${lev}x | SL:$${w.fP(sl)} | TP:$${w.fP(tp)} | Size:$${safeFinalSize} (risk:${riskPct}%→$${_riskSizeCapped.toFixed(0)} cap:$${size}) | [SH]C:${BM.conviction || 0}% D:${BM.danger || 0}`)
+    `[EXEC] ${side} ${sym} @$${fP(entry)} | Lev:${lev}x | SL:$${fP(sl)} | TP:$${fP(tp)} | Size:$${safeFinalSize} (risk:${riskPct}%→$${_riskSizeCapped.toFixed(0)} cap:$${size}) | [SH]C:${BM.conviction || 0}% D:${BM.danger || 0}`)
 
   if (getATMode() === 'demo') {
     const pos: any = {
@@ -888,9 +889,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
     })
-    { const _oe5 = w.el('atStatus'); if (_oe5) _oe5.innerHTML = w._ZI.ok + ' ' + escHtml(side) + ' deschis @$' + w.fP(entry) }
-    w.toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${w.fP(sl)} TP:$${w.fP(tp)}`, 0, w._ZI.robot)
-    w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${w.fP(entry)} | SL:$${w.fP(sl)} TP:$${w.fP(tp)}`)  // [NC]
+    { const _oe5 = w.el('atStatus'); if (_oe5) _oe5.innerHTML = w._ZI.ok + ' ' + escHtml(side) + ' deschis @$' + fP(entry) }
+    w.toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, w._ZI.robot)
+    w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
     if (typeof w.onTradeExecuted === 'function') w.onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
     w.ZState.scheduleSave()  // persist new position
@@ -974,9 +975,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
         AT._cooldownBySymbol[sym] = Date.now()
         w.renderLivePositions()
-        w.atLog('buy', '[LIVE] LIVE ORDER FILLED: ' + side + ' ' + sym + ' @$' + w.fP(fillPrice) + ' qty:' + pos.qty + ' orderId:' + pos.orderId)
-        w.toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + w.fP(fillPrice), 0, w._ZI.dRed)
-        w.ncAdd('info', 'trade', 'LIVE ' + side + ' ' + sym.replace('USDT', '') + ' @$' + w.fP(fillPrice) + ' | SL:$' + w.fP(_liveSL) + ' TP:$' + w.fP(_liveTP))
+        w.atLog('buy', '[LIVE] LIVE ORDER FILLED: ' + side + ' ' + sym + ' @$' + fP(fillPrice) + ' qty:' + pos.qty + ' orderId:' + pos.orderId)
+        w.toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + fP(fillPrice), 0, w._ZI.dRed)
+        w.ncAdd('info', 'trade', 'LIVE ' + side + ' ' + sym.replace('USDT', '') + ' @$' + fP(fillPrice) + ' | SL:$' + fP(_liveSL) + ' TP:$' + fP(_liveTP))
         scheduleAutoClose(pos)
         // [FIX QA-H2 + R4] Place exchange-level SL/TP with retry logic
         // If both SL and TP fail after retries, mark position as UNPROTECTED
@@ -985,7 +986,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           try {
             await w.atSetStopLoss({ symbol: sym, side: side === 'LONG' ? 'BUY' : 'SELL', quantity: String(pos.qty), stopPrice: _liveSL })
             _slOk = true
-            w.atLog('info', '[OK] LIVE SL set @$' + w.fP(_liveSL))
+            w.atLog('info', '[OK] LIVE SL set @$' + fP(_liveSL))
           } catch (_slErr: any) {
             w.atLog('warn', '[WARN] LIVE SL attempt ' + (_slRetry + 1) + '/3 failed: ' + (_slErr.message || _slErr))
             if (_slRetry < 2) await new Promise(r => setTimeout(r, 1000))
@@ -995,7 +996,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           try {
             await w.atSetTakeProfit({ symbol: sym, side: side === 'LONG' ? 'BUY' : 'SELL', quantity: String(pos.qty), stopPrice: _liveTP })
             _tpOk = true
-            w.atLog('info', '[OK] LIVE TP set @$' + w.fP(_liveTP))
+            w.atLog('info', '[OK] LIVE TP set @$' + fP(_liveTP))
           } catch (_tpErr: any) {
             w.atLog('warn', '[WARN] LIVE TP attempt ' + (_tpRetry + 1) + '/3 failed: ' + (_tpErr.message || _tpErr))
             if (_tpRetry < 2) await new Promise(r => setTimeout(r, 1000))
@@ -1273,7 +1274,7 @@ export function scheduleAutoClose(pos: any): void {
         if (won2) AT.wins++; else AT.losses++
 
         const pnlStr = (pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)
-        w.atLog(pnl2 >= 0 ? 'buy' : 'sell', '[LIVE] ' + reason + ' — PnL: ' + pnlStr + ' | Close @$' + w.fP(cur2))
+        w.atLog(pnl2 >= 0 ? 'buy' : 'sell', '[LIVE] ' + reason + ' — PnL: ' + pnlStr + ' | Close @$' + fP(cur2))
         setTimeout(function () { updateATStats() }, 50)
         if (w.S.alerts?.enabled) w.sendAlert('Zeus LIVE Auto Trade ' + reason, pos.side + ' ' + pos.sym + ' PnL: ' + pnlStr, 'auto')
       } else {
@@ -1313,7 +1314,7 @@ export function scheduleAutoClose(pos: any): void {
         setTimeout(w.renderDHF, 500)
 
         const pnlStr = (pnl2 >= 0 ? '+' : '') + '$' + pnl2.toFixed(2)
-        w.atLog(pnl2 >= 0 ? 'buy' : 'sell', reason + ' — PnL: ' + pnlStr + ' | Close @$' + w.fP(cur2))
+        w.atLog(pnl2 >= 0 ? 'buy' : 'sell', reason + ' — PnL: ' + pnlStr + ' | Close @$' + fP(cur2))
         setTimeout(() => updateATStats(), 50)
         if (w.S.alerts?.enabled) w.sendAlert(`Zeus Auto Trade ${reason}`, `${pos.side} ${pos.sym} PnL: ${pnlStr}`, 'auto')
       } // end DEMO branch
@@ -1546,12 +1547,12 @@ export function renderATPositions(): void {
         <span style="color:${pnl >= 0 ? '#00ff88' : '#ff4466'};font-size:16px;font-weight:700">${pnlStr} <span style="font-size:12px;opacity:.8">(${pnlPct}%)</span></span>
       </div>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px">
-        <div style="color:var(--dim);font-size:11px">${(pos.addOnCount || 0) > 0 ? 'Avg Entry' : 'Entry'}<br><span style="color:var(--whi);font-size:13px;font-weight:700">$${w.fP(pos.entry)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Now (${symBase})<br><span style="color:${col};font-size:13px;font-weight:700">$${w.fP(symPrice)}</span></div>
+        <div style="color:var(--dim);font-size:11px">${(pos.addOnCount || 0) > 0 ? 'Avg Entry' : 'Entry'}<br><span style="color:var(--whi);font-size:13px;font-weight:700">$${fP(pos.entry)}</span></div>
+        <div style="color:var(--dim);font-size:11px">Now (${symBase})<br><span style="color:${col};font-size:13px;font-weight:700">$${fP(symPrice)}</span></div>
         <div style="color:var(--dim);font-size:11px">Leverage<br><span style="color:#f0c040;font-size:13px;font-weight:700">${pos.lev}x</span></div>
       </div>
             ${(pos.addOnCount || 0) > 0 ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px;padding:4px 6px;background:#0d0a1a;border-radius:3px;border:1px solid #2a1a40">
-        <div style="color:var(--dim);font-size:11px">Orig Entry<br><span style="color:#f0c040;font-size:12px;font-weight:700">$${w.fP(pos.originalEntry || pos.entry)}</span></div>
+        <div style="color:var(--dim);font-size:11px">Orig Entry<br><span style="color:#f0c040;font-size:12px;font-weight:700">$${fP(pos.originalEntry || pos.entry)}</span></div>
         <div style="color:var(--dim);font-size:11px">Add-Ons<br><span style="color:#00b8d4;font-size:12px;font-weight:700">${pos.addOnCount}x</span></div>
         <div style="color:var(--dim);font-size:11px">Orig Size<br><span style="color:#aa44ff;font-size:12px;font-weight:700">$${(pos.originalSize || pos.size).toFixed(0)}</span></div>
       </div>` : ''}
@@ -1563,15 +1564,15 @@ export function renderATPositions(): void {
         <div style="padding:3px 5px;background:#00d97a0a;border:1px solid #00d97a22;border-radius:3px">
           <div style="font-size:10px;color:#00d97a55;letter-spacing:1px">TP PROFIT</div>
           <div style="font-size:13px;color:#00d97a;font-weight:700">+$${tpPnl2.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--dim)">@$${w.fP(pos.tp)} ${distToTP ? '(' + distToTP + '%)' : ''}</div>
+          <div style="font-size:11px;color:var(--dim)">@$${fP(pos.tp)} ${distToTP ? '(' + distToTP + '%)' : ''}</div>
         </div>
         <div style="padding:3px 5px;background:#ff446608;border:1px solid #ff446622;border-radius:3px">
           <div style="font-size:10px;color:#ff446655;letter-spacing:1px">SL RISC</div>
           <div style="font-size:13px;color:#ff4466;font-weight:700">$${slPnl2.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--dim)">@$${w.fP(pos.sl)} ${distToSL ? '(' + distToSL + '%)' : ''}</div>
+          <div style="font-size:11px;color:var(--dim)">@$${fP(pos.sl)} ${distToSL ? '(' + distToSL + '%)' : ''}</div>
         </div>
       </div>
-            ${pos.liqPrice ? `<div style="font-size:11px;color:#ff8800;margin-bottom:5px">${w._ZI.skull} LIQ: $${w.fP(pos.liqPrice)}</div>` : ''}
+            ${pos.liqPrice ? `<div style="font-size:11px;color:#ff8800;margin-bottom:5px">${w._ZI.skull} LIQ: $${fP(pos.liqPrice)}</div>` : ''}
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
         <button data-close-id="${pos.id}"
           style="padding:10px 6px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;">

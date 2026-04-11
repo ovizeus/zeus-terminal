@@ -4,7 +4,7 @@
 // Signal scanner, Deep Dive narrative generator
 
 import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
-import { fmt } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
 
 const w = window as any
@@ -885,12 +885,12 @@ export function generateDeepDive(): string {
       if (nearAbove && nearAbove.price) {
         const distA = ((nearAbove.price - price) / price * 100).toFixed(2)
         const volA = nearAbove.usd > 0 ? ` \u00B7 $${fmt(nearAbove.usd)}` : ''
-        aboveStr = `<span class="dd-hl-bear">$${w.fP(nearAbove.price)}</span> <span class="dd-hl-dim">(+${distA}%${volA})</span>`
+        aboveStr = `<span class="dd-hl-bear">$${fP(nearAbove.price)}</span> <span class="dd-hl-dim">(+${distA}%${volA})</span>`
       }
       if (nearBelow && nearBelow.price) {
         const distB = ((price - nearBelow.price) / price * 100).toFixed(2)
         const volB = nearBelow.usd > 0 ? ` \u00B7 $${fmt(nearBelow.usd)}` : ''
-        belowStr = `<span class="dd-hl-bull">$${w.fP(nearBelow.price)}</span> <span class="dd-hl-dim">(-${distB}%${volB})</span>`
+        belowStr = `<span class="dd-hl-bull">$${fP(nearBelow.price)}</span> <span class="dd-hl-dim">(-${distB}%${volB})</span>`
       }
       secLiq = `<div class="dd-section"><div class="dd-title">${w._ZI.mag} LIQUIDITY</div><div class="dd-body">Bias: <span class="${biasCls}">${biasLbl}</span><br>Nearest above: ${aboveStr}<br>Nearest below: ${belowStr}</div></div>`
     } catch (_) {
@@ -965,11 +965,11 @@ export function generateDeepDive(): string {
       if (regime === 'volatile') { verdict = 'Highly volatile conditions \u2014 avoid new entries until regime stabilizes.'; verdictCls = 'dd-hl-neut' }
       else if (bullScore > bearScore + 2) {
         const nearRes = w.S.magnets?.above?.[0]
-        const resWarn = nearRes ? ` Price approaching resistance at $${w.fP(nearRes.price)} \u2014 wait for retest.` : ''
+        const resWarn = nearRes ? ` Price approaching resistance at $${fP(nearRes.price)} \u2014 wait for retest.` : ''
         verdict = `Bullish bias with ${bullC} aligned signal(s).${resWarn}`; verdictCls = 'dd-hl-bull'
       } else if (bearScore > bullScore + 2) {
         const nearSup = w.S.magnets?.below?.[0]
-        const supWarn = nearSup ? ` Watch support at $${w.fP(nearSup.price)}.` : ''
+        const supWarn = nearSup ? ` Watch support at $${fP(nearSup.price)}.` : ''
         verdict = `Bearish pressure with ${bearC} aligned signal(s).${supWarn}`; verdictCls = 'dd-hl-bear'
       } else if (regime === 'range') { verdict = `Market ranging with no clear directional edge. Wait for breakout confirmation.`; verdictCls = 'dd-hl-neut' }
       else { verdict = `Mixed signals \u2014 no strong directional conviction. Neutral stance advised.`; verdictCls = 'dd-hl-neut' }
@@ -990,8 +990,8 @@ export function generateDeepDive(): string {
       const isBull = (bullC > bearC) || (ofi > 55)
 
       let invalStr = ''
-      if (isBull && nearBelow && nearBelow.price) invalStr = `Daily close below <span class="dd-hl-bear">$${w.fP(nearBelow.price)}</span> invalidates bullish scenario.`
-      else if (!isBull && nearAbove && nearAbove.price) invalStr = `Reclaim above <span class="dd-hl-bull">$${w.fP(nearAbove.price)}</span> would invalidate bearish scenario.`
+      if (isBull && nearBelow && nearBelow.price) invalStr = `Daily close below <span class="dd-hl-bear">$${fP(nearBelow.price)}</span> invalidates bullish scenario.`
+      else if (!isBull && nearAbove && nearAbove.price) invalStr = `Reclaim above <span class="dd-hl-bull">$${fP(nearAbove.price)}</span> would invalidate bearish scenario.`
       else if (regime === 'volatile') invalStr = `Volatility cool-down below ATR <span class="dd-hl-neut">${(regAtrPct * 0.5).toFixed(2)}%</span> needed for trend confirmation.`
       else invalStr = `Regime shift or sudden OFI reversal would invalidate current read.`
 

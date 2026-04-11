@@ -3,7 +3,7 @@
 // Quantum Exit Brain, scenario engine, probability score
 
 import { fmtNow } from '../data/marketDataHelpers'
-import { fmt } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 
 const w = window as any
 
@@ -430,7 +430,7 @@ function _qebUpdateRiskUI(): void {
     // Signal details
     if (sigsEl) {
       const sigs = w.BM.qexit.signals
-      const fmtPFn = typeof w.fP === 'function' ? w.fP : function (n: number) { return n.toFixed(1) }
+      const fmtPFn = fP
       const rows: string[] = []
       if (sigs.divergence.type) {
         rows.push('<span class="qexit-sig-name">DIVERGENCE</span> '
@@ -549,7 +549,7 @@ export function updateScenarioData(): void {
     const liq = _qebLiquidityProximity()
     const bullC = (w.S.signalData && w.S.signalData.bullCount) || 0
     const bearC = (w.S.signalData && w.S.signalData.bearCount) || 0
-    const fPFn = typeof w.fP === 'function' ? w.fP : function (n: number) { return n.toFixed(1) }
+    const fPFn = fP
     const fmtFn = fmt
 
     const prob = w.BM.probScore

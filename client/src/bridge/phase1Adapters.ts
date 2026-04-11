@@ -147,7 +147,6 @@ export function installPhase1Adapters(): void {
   w.el = el
 
   // ── Phase 1: formatters.js ──
-  w.fP = fP
 
 
   // ── Phase 1: icons.js ──

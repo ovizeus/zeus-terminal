@@ -4,6 +4,7 @@
 // [8C-3A] DSL/TC/BM/BRAIN reads migrated to accessors
 
 import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
+import { fP } from '../utils/format'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.el, w._ZI, w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
@@ -73,7 +74,7 @@ export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind:
     out.snappedPrice = best.price
     out.source = best.source
     out.confidence = conf
-    out.reason = kind + ' snap ' + (isLong ? 'up' : 'dn') + ' $' + (typeof w.fP === 'function' ? w.fP(basePrice) : basePrice.toFixed(2)) + '→$' + (typeof w.fP === 'function' ? w.fP(best.price) : best.price.toFixed(2)) + ' (' + best.source + ' conf:' + conf + ')'
+    out.reason = kind + ' snap ' + (isLong ? 'up' : 'dn') + ' $' + fP(basePrice) + '→$' + fP(best.price) + ' (' + best.source + ' conf:' + conf + ')'
     return out
   } catch (e) {
     return out
@@ -460,12 +461,12 @@ export function _runClientDSLOnPositions(positions: any[]): void {
 
       dsl.currentSL = dsl.pivotLeft
 
-      dsl.log.push({ ts: Date.now(), msg: `DSL activat @$${w.fP(cur)} | PL=$${w.fP(dsl.pivotLeft)} | PR=$${w.fP(dsl.pivotRight)} | IV=$${w.fP(dsl.impulseVal)}` })
+      dsl.log.push({ ts: Date.now(), msg: `DSL activat @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` })
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
-      pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${w.fP(cur)} — SL→$${w.fP(dsl.pivotLeft)}` })
+      pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` })
       if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'activate', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft, pivotRight: dsl.pivotRight, impulseVal: dsl.impulseVal })
-      w.atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${w.fP(cur)} | Pivot Left(SL)=$${w.fP(dsl.pivotLeft)} | Impulse=$${w.fP(dsl.impulseVal)}`)
-      w.brainThink('ok', w._ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${w.fP(dsl.pivotLeft)}`)
+      w.atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
+      w.brainThink('ok', w._ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
     }
 
     // ══════════════════════════════════════════════════════
@@ -484,14 +485,14 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       if (_canMoveSL && dsl.pivotLeft > 0 && !_wasRestored) {
         const _plHit = isLong ? (cur <= dsl.pivotLeft) : (cur >= dsl.pivotLeft)
         if (_plHit) {
-          const _plReason = `DSL PL Exit @$${w.fP(cur)} (PL=$${w.fP(dsl.pivotLeft)})`
+          const _plReason = `DSL PL Exit @$${fP(cur)} (PL=$${fP(dsl.pivotLeft)})`
           dsl.log.push({ ts: Date.now(), msg: _plReason })
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
           pos.dslHistory.push({ ts: Date.now(), msg: _plReason })
           if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'pl_exit', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft })
-          w.atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${w.fP(cur)}`)
-          w.brainThink('info', w._ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${w.fP(cur)}`)
-          w.toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${w.fP(cur)}`)
+          w.atLog('sell', `[DSL] PL EXIT: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
+          w.brainThink('info', w._ZI.tgt + ` DSL PL exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
+          w.toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           if (pos.isLive && typeof w.closeLivePos === 'function') {
             w.closeLivePos(pos.id, _plReason)
             if (pos.autoTrade && typeof w.AT !== 'undefined') {
@@ -566,13 +567,13 @@ export function _runClientDSLOnPositions(positions: any[]): void {
 
             dsl.currentSL = dsl.pivotLeft
 
-            dsl.log.push({ ts: Date.now(), msg: `[IMP] IMPULSE: PL $${w.fP(oldPL)}→$${w.fP(dsl.pivotLeft)} | IV $${w.fP(oldIV)}→$${w.fP(dsl.impulseVal)}` })
+            dsl.log.push({ ts: Date.now(), msg: `[IMP] IMPULSE: PL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV $${fP(oldIV)}→$${fP(dsl.impulseVal)}` })
             if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
-            pos.dslHistory.push({ ts: Date.now(), msg: `[IMP] Impulse hit — SL $${w.fP(oldPL)}→$${w.fP(dsl.pivotLeft)}` })
+            pos.dslHistory.push({ ts: Date.now(), msg: `[IMP] Impulse hit — SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)}` })
             if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'impulse', sym: pos.sym, side: pos.side, price: cur, oldPL: oldPL, newPL: dsl.pivotLeft, newIV: dsl.impulseVal })
-            w.atLog('buy', `[IMP] IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${w.fP(oldPL)}→$${w.fP(dsl.pivotLeft)} | IV→$${w.fP(dsl.impulseVal)}`)
-            w.brainThink('ok', w._ZI.bolt + ` Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${w.fP(dsl.pivotLeft)}`)
-            w.toast(`${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${w.fP(dsl.pivotLeft)}`)
+            w.atLog('buy', `[IMP] IMPULSE HIT: ${pos.sym.replace('USDT', '')} | SL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV→$${fP(dsl.impulseVal)}`)
+            w.brainThink('ok', w._ZI.bolt + ` Impulse atins pe ${pos.sym.replace('USDT', '')} — SL mutat la $${fP(dsl.pivotLeft)}`)
+            w.toast(`${pos.sym.replace('USDT', '')} Impulse Validation atins! SL → $${fP(dsl.pivotLeft)}`)
           }
         } else {
           if (dsl.impulseTriggered) {
@@ -720,7 +721,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
       _dsl.yellowLine = cur
       var _ivReached = isLong ? (cur >= _dsl.impulseVal) : (cur <= _dsl.impulseVal)
       if (!_ivReached) _dsl.impulseTriggered = false
-      _dsl.log.push({ ts: Date.now(), msg: `[EDIT] LIVE recalc: PL=$${w.fP(_dsl.pivotLeft)} PR=$${w.fP(_dsl.pivotRight)} IV=$${w.fP(_dsl.impulseVal)}` })
+      _dsl.log.push({ ts: Date.now(), msg: `[EDIT] LIVE recalc: PL=$${fP(_dsl.pivotLeft)} PR=$${fP(_dsl.pivotRight)} IV=$${fP(_dsl.impulseVal)}` })
     }
   }
 
@@ -965,16 +966,16 @@ export function _renderDslCard(pos: any): string {
   const _magnetOn = !!(pos.dslParams && pos.dslParams.magnetEnabled)
   const _magnetPreview = dsl?._magnetPreview || null
   const _magnetPreviewTxt = (_magnetOn && _magnetPreview && _magnetPreview.applied)
-    ? 'MAG SNAP -> $' + (typeof w.fP === 'function' ? w.fP(_magnetPreview.snappedPrice) : _magnetPreview.snappedPrice.toFixed(2)) + ' (' + _magnetPreview.source + ' conf:' + _magnetPreview.confidence + ')'
+    ? 'MAG SNAP -> $' + fP(_magnetPreview.snappedPrice) + ' (' + _magnetPreview.source + ' conf:' + _magnetPreview.confidence + ')'
     : null
   const _canMoveSL_render = _cm === 'auto' || _cm === 'paper'
     || (_cm === 'assist' && (typeof w.S !== 'undefined' ? w.S.assistArmed : false))
 
-  const _liqStr = pos.liqPrice ? '$' + w.fP(pos.liqPrice) : '-'
+  const _liqStr = pos.liqPrice ? '$' + fP(pos.liqPrice) : '-'
   const _dslActivationPrice = dsl?._activationPrice || (pos.dslParams?.dslTargetPrice > 0
     ? pos.dslParams.dslTargetPrice
     : (isLong ? cur * (1 + openDSLpct / 100) : cur * (1 - openDSLpct / 100)))
-  const _dslPriceSub = isActive ? '$' + w.fP(cur) : '$' + w.fP(_dslActivationPrice)
+  const _dslPriceSub = isActive ? '$' + fP(cur) : '$' + fP(_dslActivationPrice)
   const _estPL = _dslActivationPrice > 0
     ? (isLong ? _dslActivationPrice * (1 - pivotLeftPct / 100) : _dslActivationPrice * (1 + pivotLeftPct / 100))
     : (pos.sl || 0)
@@ -984,9 +985,9 @@ export function _renderDslCard(pos: any): string {
   const _estIV = _dslActivationPrice > 0
     ? (isLong ? _dslActivationPrice * (1 + impulseValPct / 100) : _dslActivationPrice * (1 - impulseValPct / 100))
     : 0
-  const _plPriceSub = isActive && pivotLeft ? '$' + w.fP(pivotLeft) : '$' + w.fP(_estPL)
-  const _prPriceSub = isActive && pivotRight ? '$' + w.fP(pivotRight) : (_estPR > 0 ? '$' + w.fP(_estPR) : '-')
-  const _ivPriceSub = isActive && impulseVal ? '$' + w.fP(impulseVal) : (_estIV > 0 ? '$' + w.fP(_estIV) : '-')
+  const _plPriceSub = isActive && pivotLeft ? '$' + fP(pivotLeft) : '$' + fP(_estPL)
+  const _prPriceSub = isActive && pivotRight ? '$' + fP(pivotRight) : (_estPR > 0 ? '$' + fP(_estPR) : '-')
+  const _ivPriceSub = isActive && impulseVal ? '$' + fP(impulseVal) : (_estIV > 0 ? '$' + fP(_estIV) : '-')
   return `<div class="dsl-pos-card ${cardCls}" style="${isActive ? 'box-shadow:0 0 12px #00ffcc18' : ''}${_isAT ? ';border-left:2px solid ' + _sb.color : ''}">
   <!-- ROW 1: Source badge + Control badge + symbol + DSL status + PnL -->
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -1006,10 +1007,10 @@ export function _renderDslCard(pos: any): string {
 
   <!-- ROW 2: Entry / SL / TP / DSL Pivot / Loss@SL / Profit@TP / LIQ -->
   <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffffff55;margin-bottom:4px;flex-wrap:wrap;gap:4px">
-    <span>Entry: <b style="color:#ffffffaa">$${w.fP(pos.entry)}</b></span>
-    ${pos.sl ? `<span>SL: <b style="color:#ff4466">$${w.fP(pos.sl)}</b></span>` : ''}
-    ${pos.tp ? `<span>TP: <b style="color:#00ff88">$${w.fP(pos.tp)}</b></span>` : ''}
-    ${isActive && pivotLeft ? `<span>DSL PL: <b style="color:#39ff14">$${w.fP(pivotLeft)}</b></span>` : ''}
+    <span>Entry: <b style="color:#ffffffaa">$${fP(pos.entry)}</b></span>
+    ${pos.sl ? `<span>SL: <b style="color:#ff4466">$${fP(pos.sl)}</b></span>` : ''}
+    ${pos.tp ? `<span>TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>` : ''}
+    ${isActive && pivotLeft ? `<span>DSL PL: <b style="color:#39ff14">$${fP(pivotLeft)}</b></span>` : ''}
     ${(() => { const _slRef = isActive && pivotLeft ? pivotLeft : pos.sl; if (!_slRef) return ''; const _lossAmt = Math.abs((isLong ? _slRef - pos.entry : pos.entry - _slRef) / pos.entry * pos.size * pos.lev); return '<span>Loss@SL: <b style="color:#ff4466">-$' + _lossAmt.toFixed(2) + '</b></span>' })()}
     ${pos.tp ? (() => { const _profAmt = Math.abs((isLong ? pos.tp - pos.entry : pos.entry - pos.tp) / pos.entry * pos.size * pos.lev); return '<span>Profit@TP: <b style="color:#00ff88">+$' + _profAmt.toFixed(2) + '</b></span>' })() : ''}
     <span>LIQ: <b style="color:#ff446688">${_liqStr}</b></span>
@@ -1020,7 +1021,7 @@ export function _renderDslCard(pos: any): string {
 
   <!-- ROW 3: Progress bar -->
   <div style="font-size:12px;color:#00ffcc44;letter-spacing:1px;margin-bottom:3px">
-    PROGRESS - ${progress.toFixed(1)}% | OPEN DSL: ${openDSLpct}% ${!isActive ? '(@$' + w.fP(_dslActivationPrice) + ')' : '(ACTIVATED)'}
+    PROGRESS - ${progress.toFixed(1)}% | OPEN DSL: ${openDSLpct}% ${!isActive ? '(@$' + fP(_dslActivationPrice) + ')' : '(ACTIVATED)'}
   </div>
   <div class="dsl-prog-bar" data-dsl-drag="${pos.id}" data-dsl-editable="${(_showReleaseControl || _showPaperControls) && !isActive ? '1' : '0'}" style="height:7px;background:#0d1520;border-radius:4px;position:relative;margin-bottom:12px;cursor:${(_showReleaseControl || _showPaperControls) && !isActive ? 'ew-resize' : 'default'}">
     <div style="position:absolute;left:0;top:0;height:100%;width:${priceProgress}%;background:linear-gradient(90deg,#00ffcc22,${isActive ? '#00ffcc66' : '#00ff8866'});border-radius:3px;transition:width 0.3s ease"></div>
@@ -1035,38 +1036,38 @@ export function _renderDslCard(pos: any): string {
     ${isActive ?
       `<div style="position:absolute;left:${plPos}%;top:-1px;width:3px;height:calc(100%+2px);background:#39ff14;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 8px #39ff14cc">
         <div style="position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:11px;color:#39ff14;white-space:nowrap;letter-spacing:0.5px;font-weight:700">PL -${pivotLeftPct}%</div>
-        <div style="position:absolute;bottom:-27px;left:50%;transform:translateX(-50%);font-size:11px;color:#39ff14bb;white-space:nowrap">$${w.fP(pivotLeft)}</div>
+        <div style="position:absolute;bottom:-27px;left:50%;transform:translateX(-50%);font-size:11px;color:#39ff14bb;white-space:nowrap">$${fP(pivotLeft)}</div>
       </div>` :
       `<div style="position:absolute;left:${slPos}%;top:0;width:3px;height:100%;background:#ff4466;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 6px #ff466699">
         <div style="position:absolute;bottom:-14px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff4466;white-space:nowrap">SL</div>
-        <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff446699;white-space:nowrap">$${w.fP(currentSL)}</div>
+        <div style="position:absolute;top:-14px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff446699;white-space:nowrap">$${fP(currentSL)}</div>
       </div>`
     }
     <div style="position:absolute;left:${curPos}%;top:-2px;width:3px;height:calc(100%+4px);background:#f0c040;border-radius:2px;transform:translateX(-50%);box-shadow:0 0 8px #f0c040cc;transition:left 0.3s ease">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:11px;color:#f0c040;white-space:nowrap;font-weight:700">${isActive ? 'ODSL' : ''}</div>
-      <div style="position:absolute;top:-27px;left:50%;transform:translateX(-50%);font-size:11px;color:#f0c04099;white-space:nowrap">$${w.fP(cur)}</div>
+      <div style="position:absolute;top:-27px;left:50%;transform:translateX(-50%);font-size:11px;color:#f0c04099;white-space:nowrap">$${fP(cur)}</div>
     </div>
     ${isActive && prPos !== null ? `<div style="position:absolute;left:${prPos}%;top:-1px;width:2px;height:calc(100%+2px);background:#39ff14;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 8px #39ff14cc;transition:left 0.3s ease">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff14;white-space:nowrap">PR +${pivotRightPct}%</div>
-      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff1499;white-space:nowrap">$${w.fP(pivotRight)}</div>
+      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff1499;white-space:nowrap">$${fP(pivotRight)}</div>
     </div>` : ''}
     ${isActive && ivPos !== null ? `<div style="position:absolute;left:${ivPos}%;top:-1px;width:2px;height:calc(100%+2px);background:#ff4466;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 6px #ff4466aa">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff4466;white-space:nowrap;font-weight:700">IV +${impulseValPct}%</div>
-      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff446699;white-space:nowrap">$${w.fP(impulseVal)}</div>
+      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff446699;white-space:nowrap">$${fP(impulseVal)}</div>
     </div>` : ''}
   </div>
 
   <!-- ROW 5: Price levels -->
   <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;flex-wrap:wrap;gap:4px">
     ${isActive
-      ? `<span style="color:#39ff14">PL: <b>$${w.fP(pivotLeft)}</b></span>
-        <span style="color:#f0c040;font-weight:700">ODSL $${w.fP(cur)}</span>
-        <span style="color:#39ff14">PR: $${w.fP(pivotRight)}</span>
-        <span style="color:#ff4466bb">IV: $${w.fP(impulseVal)}</span>
-        <span style="color:#00ff8855">TP: <b style="color:#00ff88">$${w.fP(pos.tp)}</b></span>`
-      : `<span style="color:#ff4466aa">SL: <b style="color:#ff4466">$${w.fP(currentSL)}</b></span>
-        <span style="color:#ffffff88">$${w.fP(cur)}</span>
-        <span style="color:#00ff8855">TP: <b style="color:#00ff88">$${w.fP(pos.tp)}</b></span>`
+      ? `<span style="color:#39ff14">PL: <b>$${fP(pivotLeft)}</b></span>
+        <span style="color:#f0c040;font-weight:700">ODSL $${fP(cur)}</span>
+        <span style="color:#39ff14">PR: $${fP(pivotRight)}</span>
+        <span style="color:#ff4466bb">IV: $${fP(impulseVal)}</span>
+        <span style="color:#00ff8855">TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>`
+      : `<span style="color:#ff4466aa">SL: <b style="color:#ff4466">$${fP(currentSL)}</b></span>
+        <span style="color:#ffffff88">$${fP(cur)}</span>
+        <span style="color:#00ff8855">TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>`
     }
   </div>
 

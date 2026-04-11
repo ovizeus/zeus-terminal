@@ -5,7 +5,7 @@
 
 import { getTPObject, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
 import { fmtTime } from './marketDataHelpers'
-import { fmt } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, w.el, w._ZI, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -190,8 +190,8 @@ export function renderOB(): void {
   if (!w.S.asks.length && !w.S.bids.length) return
   const top = 5; let ah = '', bh = ''
   const maxSz = Math.max(...w.S.asks.slice(0, top).map((x: any) => x.q), ...w.S.bids.slice(0, top).map((x: any) => x.q), 1)
-  w.S.asks.slice(0, top).reverse().forEach((a: any) => { const pct = a.q / maxSz * 100; ah += `<tr><td style="color:var(--red)">${w.fP(a.p)}</td><td style="color:var(--dim);text-align:right">${a.q.toFixed(3)}</td><td style="width:60px"><div style="height:6px;background:#ff335533;width:${pct}%"></div></td></tr>` })
-  w.S.bids.slice(0, top).forEach((b: any) => { const pct = b.q / maxSz * 100; bh += `<tr><td style="color:var(--grn)">${w.fP(b.p)}</td><td style="color:var(--dim);text-align:right">${b.q.toFixed(3)}</td><td style="width:60px"><div style="height:6px;background:#00d97a33;width:${pct}%"></div></td></tr>` })
+  w.S.asks.slice(0, top).reverse().forEach((a: any) => { const pct = a.q / maxSz * 100; ah += `<tr><td style="color:var(--red)">${fP(a.p)}</td><td style="color:var(--dim);text-align:right">${a.q.toFixed(3)}</td><td style="width:60px"><div style="height:6px;background:#ff335533;width:${pct}%"></div></td></tr>` })
+  w.S.bids.slice(0, top).forEach((b: any) => { const pct = b.q / maxSz * 100; bh += `<tr><td style="color:var(--grn)">${fP(b.p)}</td><td style="color:var(--dim);text-align:right">${b.q.toFixed(3)}</td><td style="width:60px"><div style="height:6px;background:#00d97a33;width:${pct}%"></div></td></tr>` })
   const ae = w.el('askc'), be = w.el('bidc'); if (ae) ae.innerHTML = ah; if (be) be.innerHTML = bh
   const sp = w.S.asks.length && w.S.bids.length ? w.S.asks[0].p - w.S.bids[0].p : 0
   const spe = w.el('spread'); if (spe) spe.textContent = 'SPREAD: $' + sp.toFixed(2)
@@ -203,7 +203,7 @@ export function renderHotZones(): void {
   const clusters: any[] = Object.values(w.S.btcClusters).sort((a: any, b: any) => b.vol - a.vol).slice(0, 5)
   if (!clusters.length) { hz.innerHTML = '<div style="color:var(--dim);font-size:13px;text-align:center;padding:12px">Accumulating data...</div>'; return }
   const maxV = Math.max(...clusters.map((c: any) => c.vol), 1)
-  hz.innerHTML = clusters.map((c: any) => { const pct = c.vol / maxV * 100; const col = c.isLong ? 'var(--red)' : 'var(--grn)'; const dist = w.S.price ? ((c.price - w.S.price) / w.S.price * 100) : 0; return `<div class="hzrow"><div style="color:${col};font-size:13px">${c.isLong ? 'LONG' : 'SHORT'} $${w.fP(c.price)} <span style="color:var(--dim)">${dist >= 0 ? '+' : ''}${dist.toFixed(2)}%</span></div><div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:#1a2530;border-radius:2px"><div style="height:4px;background:${col};width:${pct}%;border-radius:2px"></div></div><span style="color:var(--whi);font-size:12px">$${fmt(c.vol)}</span></div></div>` }).join('')
+  hz.innerHTML = clusters.map((c: any) => { const pct = c.vol / maxV * 100; const col = c.isLong ? 'var(--red)' : 'var(--grn)'; const dist = w.S.price ? ((c.price - w.S.price) / w.S.price * 100) : 0; return `<div class="hzrow"><div style="color:${col};font-size:13px">${c.isLong ? 'LONG' : 'SHORT'} $${fP(c.price)} <span style="color:var(--dim)">${dist >= 0 ? '+' : ''}${dist.toFixed(2)}%</span></div><div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:#1a2530;border-radius:2px"><div style="height:4px;background:${col};width:${pct}%;border-radius:2px"></div></div><span style="color:var(--whi);font-size:12px">$${fmt(c.vol)}</span></div></div>` }).join('')
 }
 
 // ===== MARKET PRESSURE =====
@@ -223,7 +223,7 @@ export function renderFeed(): void {
   const base = (w.S.symbol || 'BTCUSDT').replace('USDT', '').replace('BUSD', '')
   let filtered = w.S.events.filter((e: any) => e.sym && e.sym.toUpperCase().startsWith(base.toUpperCase()))
   if (_liqSrcFilter !== 'all') filtered = filtered.filter((e: any) => e.src === _liqSrcFilter)
-  const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? w._ZI.fire : e.usd >= 500000 ? w._ZI.boom : w._ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${w.fP(e.price)}</span></div>` }).join('')
+  const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? w._ZI.fire : e.usd >= 500000 ? w._ZI.boom : w._ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${fP(e.price)}</span></div>` }).join('')
   fd.innerHTML = html || `<div style="color:var(--dim);font-size:13px;padding:8px">Waiting for ${base} liquidations...</div>`
   const cnt = w.el('fcnt'); if (cnt) cnt.textContent = filtered.length + ' events' + (_liqSrcFilter !== 'all' ? ' (' + _liqSrcFilter.toUpperCase() + ')' : '')
 }
@@ -299,7 +299,7 @@ export function updateMainMetrics(): void {
   if (frs_el) { if (w.S.frCd) { const d = new Date(w.S.frCd); frs_el.textContent = 'next: ' + fmtTime(d.getTime()) } else frs_el.textContent = 'next: \u2014' }
   if (oi) oi.textContent = w.S.oi ? '$' + fmt(w.S.oi) : '\u2014'
   if (ois_el) { if (w.S.oiPrev && w.S.oi) { const ch = ((w.S.oi - w.S.oiPrev) / w.S.oiPrev * 100).toFixed(2); ois_el.textContent = (+ch > 0 ? '\u25B2' : +ch < 0 ? '\u25BC' : '') + ch + '%'; ois_el.style.color = +ch > 0 ? 'var(--grn)' : 'var(--red)' } else ois_el.textContent = '\u2014' }
-  if (atr) atr.textContent = w.S.atr ? '$' + w.fP(w.S.atr) : '\u2014'
+  if (atr) atr.textContent = w.S.atr ? '$' + fP(w.S.atr) : '\u2014'
   if (ls) ls.textContent = w.S.ls ? w.S.ls.l.toFixed(1) + '% / ' + w.S.ls.s.toFixed(1) + '%' : '\u2014'
   if (lss_el) { if (w.S.ls) { const bull = w.S.ls.l > 55; const bear = w.S.ls.s > 55; lss_el.textContent = bull ? '\u25B2 LONGS' : bear ? '\u25BC SHORTS' : 'BALANCED'; lss_el.style.color = bull ? 'var(--grn)' : bear ? 'var(--red)' : 'var(--dim)' } else lss_el.textContent = '\u2014' }
   if (typeof w.trackOIDelta === 'function') w.trackOIDelta()

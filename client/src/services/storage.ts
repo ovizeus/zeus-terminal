@@ -8,7 +8,8 @@
 
 import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
 import { escHtml } from '../utils/dom'
-const w = window as Record<string, any> // kept for w.el, w.fP, w.toast, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+import { fP } from '../utils/format'
+const w = window as Record<string, any> // kept for w.el, w.toast, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -35,7 +36,7 @@ export function renderTradeJournal(): void {
     const pnl = Number(t.pnl) || 0
     const win = pnl >= 0
     const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
-    const ep = '$' + w.fP(t.entry || 0) + '→$' + w.fP(t.exit || 0)
+    const ep = '$' + fP(t.entry || 0) + '→$' + fP(t.exit || 0)
     const _time = escHtml(t.time || '')
     const _side = escHtml(t.side || '')
     const _reason = escHtml(t.reason || '—')

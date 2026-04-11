@@ -3,6 +3,7 @@
 // Position management, open/close handlers
 
 import { escHtml } from '../utils/dom'
+import { fP } from '../utils/format'
 
 const w = window as any
 
@@ -56,7 +57,7 @@ export function onTradeExecuted(pos: any): void {
   const dir = pos.side || 'LONG'
   const mode = (w.S.mode || 'assist').toUpperCase()
   const score = w.BM?.entryScore || pos.score || '—'
-  const price = pos.entry ? w.fP(pos.entry) : '—'
+  const price = pos.entry ? fP(pos.entry) : '—'
   const tf1 = w.PROFILE_TF?.[w.S.profile || 'fast']?.trigger || w.S.triggerTF || '5m'
   const tf2 = w.PROFILE_TF?.[w.S.profile || 'fast']?.context || w.S.contextTF || '15m'
   const isLive = pos.isLive

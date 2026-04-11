@@ -5,7 +5,7 @@
 
 import { getBrainMetrics } from '../services/stateAccessors'
 import { fmtNow } from '../data/marketDataHelpers'
-import { fmt } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, w.toast, fn calls
 
 export const DEV: Record<string, any> = {
@@ -331,8 +331,7 @@ export function devInjectLiquidation(side: string): void {
       w.checkLiqAlert(usd, qty, side, sym.replace('USDT', ''))
     }
     const fmtFn = fmt
-    const fPFn = typeof w.fP === 'function' ? w.fP : function (n: number) { return n.toFixed(1) }
-    devLog('Injected ' + side + ' liquidation $' + fmtFn(usd) + ' @ $' + fPFn(price), 'success')
+    devLog('Injected ' + side + ' liquidation $' + fmtFn(usd) + ' @ $' + fP(price), 'success')
   } catch (e) { _devModuleError('injectLiq', e) }
 }
 w.devInjectLiquidation = devInjectLiquidation
@@ -421,10 +420,9 @@ export function devReplayStart(): void {
       try {
         if (DEV.replayIndex >= DEV.replayKlines.length) { devReplayStop(); devLog('Replay finished', 'success'); return }
         const bar = DEV.replayKlines[DEV.replayIndex]
-        const fPFn = typeof w.fP === 'function' ? w.fP : function (n: number) { return n.toFixed(1) }
         devLog('Bar ' + (DEV.replayIndex + 1) + '/' + DEV.replayKlines.length
-          + ' O=' + fPFn(bar.open) + ' H=' + fPFn(bar.high)
-          + ' L=' + fPFn(bar.low) + ' C=' + fPFn(bar.close), 'info')
+          + ' O=' + fP(bar.open) + ' H=' + fP(bar.high)
+          + ' L=' + fP(bar.low) + ' C=' + fP(bar.close), 'info')
         DEV.replayIndex++
         if (statusEl) statusEl.textContent = 'Playing ' + DEV.replayIndex + '/' + DEV.replayKlines.length
       } catch (e) { devReplayStop(); _devModuleError('replay', e) }

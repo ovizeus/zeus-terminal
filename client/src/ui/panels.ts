@@ -2,7 +2,7 @@
 // Panel toggles, strip UI, eye panel
 // Ported 1:1 from public/js/ui/panels.js
 import { fmtNow } from '../data/marketDataHelpers'
-import { fmt } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 import { escHtml } from '../utils/dom'
 
 const w = window as any;
@@ -174,7 +174,7 @@ export function renderMagnets() {
   const aboveCntEl = w.el('magAboveCnt');
   const belowCntEl = w.el('magBelowCnt');
 
-  if (cpEl) cpEl.textContent = '$' + w.fP(p);
+  if (cpEl) cpEl.textContent = '$' + fP(p);
   if (updEl) updEl.textContent = 'UPD ' + new Date().toLocaleTimeString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   if (aboveCntEl) aboveCntEl.textContent = above.length + ' magneti';
   if (belowCntEl) belowCntEl.textContent = below.length + ' magneti';
@@ -184,11 +184,11 @@ export function renderMagnets() {
   const nearBelow = below[0];
   if (nearAboveEl && nearAbove) {
     const distPct = ((nearAbove.price - p) / p * 100).toFixed(2);
-    nearAboveEl.textContent = '$' + w.fP(nearAbove.price) + ' (+' + distPct + '%)';
+    nearAboveEl.textContent = '$' + fP(nearAbove.price) + ' (+' + distPct + '%)';
   }
   if (nearBelowEl && nearBelow) {
     const distPct = ((p - nearBelow.price) / p * 100).toFixed(2);
-    nearBelowEl.textContent = '$' + w.fP(nearBelow.price) + ' (-' + distPct + '%)';
+    nearBelowEl.textContent = '$' + fP(nearBelow.price) + ' (-' + distPct + '%)';
   }
 
   // Bias: nearer & stronger magnet determines bias
@@ -221,7 +221,7 @@ export function renderMagnets() {
         <div class="mag-bar-fill" style="width:${m.strength}%"></div>
         <div class="mag-icon">${m.type === 'ob_wall' ? w._ZI.whale : m.type === 'liq_cluster' ? w._ZI.boom : m.type === 'vol_node' ? w._ZI.chart : w._ZI.ruler}</div>
         <div class="mag-info">
-          <div class="mag-price">$${w.fP(m.price)}</div>
+          <div class="mag-price">$${fP(m.price)}</div>
           <div class="mag-desc">${srcTag} ${m.usd > 0 ? '\u00b7 $' + fmt(m.usd) : ''}</div>
           <div class="mag-strength">${dots}</div>
         </div>
@@ -243,7 +243,7 @@ export function updateMagnetBias() {
 export function jumpToMagnet(price: any) {
   const S = w.S;
   // Flash a toast with the price level
-  w.toast(`Magnet: $${w.fP(price)} | Dist: ${((Math.abs(price - S.price) / S.price) * 100).toFixed(2)}%`);
+  w.toast(`Magnet: $${fP(price)} | Dist: ${((Math.abs(price - S.price) / S.price) * 100).toFixed(2)}%`);
 }
 
 
