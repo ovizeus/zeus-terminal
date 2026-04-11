@@ -33,8 +33,8 @@ import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (needs w.
 import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, SIGNAL_REGISTRY, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESSION_HOURS_BT, SESS_CFG, PROFILE_TF, ARM_ASSIST, NEWS, _regimeHistory, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, _audioReady, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, oviPriceSeries as _cfgOviPriceSeries, _sessLastBt, _neuroLastScan, _execActive } from '../core/config'
 import { BlockReason, ZState, mainChart as _stMainChart, bbUpperS, ichimokuSeries, fibSeries, pivotSeries, vpSeries, _rsiChart, _stochChart, _atrChart, _obvChart, _mfiChart, _cciChart, IND_SETTINGS as _stIND_SETTINGS, liqSeries, zsSeries, oiHistory, WL_SYMS, wlPrices, allPrices } from '../core/state'
 
-import { el, safeSetText, safeSetHTML, escHtml, isValidMarketPrice, safeLastKline } from '../utils/dom'
-import { fmt, fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
+import { el, safeSetText, safeSetHTML, isValidMarketPrice, safeLastKline } from '../utils/dom'
+import { fP, fmtTime, fmtTimeSec, fmtDate, fmtFull, _TZ } from '../utils/format'
 import { _clamp, _clampFB01, _clampFB, calcRSIArr } from '../utils/math'
 import { _ZI } from '../constants/icons'
 import { MACRO_MULT, STALL_GRACE_MS, GATE_DEFS } from '../constants/trading'
@@ -145,10 +145,8 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 1: helpers.js ──
   w.el = el
-  w.escHtml = escHtml
 
   // ── Phase 1: formatters.js ──
-  w.fmt = fmt
   w.fP = fP
 
 

@@ -4,6 +4,7 @@
 
 import { getTPObject } from '../services/stateAccessors'
 import { fmtTime, fmtDate } from './marketDataHelpers'
+import { fmt } from '../utils/format'
 const w = window as any // kept for w.S (producer), w.el, w.fP, w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -229,7 +230,7 @@ export function updateMetrics(): void {
   if (dtpc) { const c = w.S.prevPrice ? ((w.S.price - w.S.prevPrice) / w.S.prevPrice * 100).toFixed(2) + '%' : '\u2014'; dtpc.textContent = c; dtpc.style.color = w.S.price >= w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
   if (dtps) { dtps.textContent = w.S.price > w.S.prevPrice ? 'BULL' : 'BEAR'; dtps.style.color = w.S.price > w.S.prevPrice ? 'var(--grn)' : 'var(--red)' }
   const dtoi = w.el('dtoi'), dtoic = w.el('dtoic'), dtois = w.el('dtois')
-  if (dtoi) dtoi.textContent = w.S.oi ? '$' + w.fmt(w.S.oi) : '\u2014'
+  if (dtoi) dtoi.textContent = w.S.oi ? '$' + fmt(w.S.oi) : '\u2014'
   if (dtoic) dtoic.textContent = w.S.oiPrev && w.S.oi ? (((w.S.oi - w.S.oiPrev) / w.S.oiPrev) * 100).toFixed(2) + '%' : '\u2014'
   if (dtois) { const s = w.S.oi > w.S.oiPrev ? 'RISING' : 'FALLING'; dtois.textContent = s; dtois.style.color = s === 'RISING' ? 'var(--grn)' : 'var(--red)' }
   const dtfr = w.el('dtfr'), dtfrc = w.el('dtfrc'), dtfrs = w.el('dtfrs')

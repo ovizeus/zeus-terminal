@@ -3,7 +3,9 @@
 // Trading panel UI: mode switch, add funds, demo/live orders, leverage, liq price
 
 import { getTPObject, getATObject, getPrice, getSymbol } from '../services/stateAccessors'
-const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, w.el, w._ZI, w.toast, w.fP, w.fmt, fn calls
+import { fmt } from '../utils/format'
+import { escHtml } from '../utils/dom'
+const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, w.el, w._ZI, w.toast, w.fP, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
 const TP = getTPObject()
 const AT = getATObject()
@@ -82,10 +84,10 @@ export function _showConfirmDialog(title: string, message: string, cancelText: s
   const old = document.getElementById('zeusConfirmOverlay'); if (old) old.remove()
   const overlay = document.createElement('div'); overlay.id = 'zeusConfirmOverlay'
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px'
-  const safeTitle = typeof w.escHtml === 'function' ? w.escHtml(title) : title
-  const safeMsg = (typeof w.escHtml === 'function' ? w.escHtml(message) : message).replace(/\n/g, '<br>')
-  const safeCancelText = typeof w.escHtml === 'function' ? w.escHtml(cancelText) : cancelText
-  const safeConfirmText = typeof w.escHtml === 'function' ? w.escHtml(confirmText) : confirmText
+  const safeTitle = escHtml(title)
+  const safeMsg = escHtml(message).replace(/\n/g, '<br>')
+  const safeCancelText = escHtml(cancelText)
+  const safeConfirmText = escHtml(confirmText)
   const isLive = confirmText.toLowerCase().includes('live') || confirmText.toLowerCase().includes('real')
   const confirmColor = isLive ? 'var(--red-bright)' : 'var(--cyan)'; const confirmBg = isLive ? '#2a0000' : '#001a33'; const confirmBorder = isLive ? '#ff4444' : '#00aaff'
   overlay.innerHTML = '<div style="background:#0a0a1a;border:1px solid ' + confirmBorder + '66;border-radius:8px;max-width:420px;width:100%;padding:24px;font-family:var(--ff,monospace)"><div style="font-size:14px;font-weight:700;color:' + confirmColor + ';margin-bottom:16px;letter-spacing:1px">' + safeTitle + '</div><div style="font-size:11px;color:#ccc;line-height:1.7;margin-bottom:24px">' + safeMsg + '</div><div style="display:flex;gap:12px;justify-content:flex-end"><button id="zeusConfirmCancel" style="padding:8px 20px;background:#1a1a2e;border:1px solid #333;color:#888;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;letter-spacing:1px">' + safeCancelText + '</button><button id="zeusConfirmOk" style="padding:8px 20px;background:' + confirmBg + ';border:1px solid ' + confirmBorder + ';color:' + confirmColor + ';border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:1px">' + safeConfirmText + '</button></div></div>'
@@ -192,12 +194,12 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     w.ZState.save(); _registerManualOnServer(pos)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
-    w.toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + w.fmt(size) + ' @$' + w.fP(fillPrice) + ' ' + lev + 'x MARKET')
+    w.toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + w.fP(fillPrice) + ' ' + lev + 'x MARKET')
   } else {
     const pending = { id: Date.now(), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
     TP.pendingOrders.push(pending); TP.demoBalance -= size
     w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
-    w.toast(' LIMIT ' + pending.side + ' @$' + w.fP(entry) + ' $' + w.fmt(size) + ' ' + lev + 'x \u2014 waiting')
+    w.toast(' LIMIT ' + pending.side + ' @$' + w.fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
   }
 }
 

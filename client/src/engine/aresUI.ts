@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/brain/deepdive.js lines 2003-3732 (Phase 5B3)
 // ARES UI: CSS injections, _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick, ARES_BRAIN_COLOR_OVERRIDE
 
+import { escHtml } from '../utils/dom'
+
 const w = window as any
 
 const TARGET = 1_000_000
@@ -224,11 +226,11 @@ export function _aresRender() {
           if (lastDec.shouldTrade) {
             decEl.style.display = 'block'
             decEl.style.color = '#00ff88'
-            decEl.innerHTML = w._ZI.ok + ' DECISION: ' + w.escHtml(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map(w.escHtml).join(' · ')
+            decEl.innerHTML = w._ZI.ok + ' DECISION: ' + escHtml(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map(escHtml).join(' · ')
           } else {
             decEl.style.display = 'block'
             decEl.style.color = '#ff8800'
-            decEl.innerHTML = w._ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map(w.escHtml).join(' · ')
+            decEl.innerHTML = w._ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map(escHtml).join(' · ')
           }
         }
       }
@@ -701,7 +703,7 @@ export function _aresRender() {
         const isCog = i < cogLines.length || (i >= st.thoughtLines.length + cogLines.length && i < combined.length - st.thoughtLines.length)
         const isAlert = l.toLowerCase().includes('alert\u0103') || l.toLowerCase().includes('recalib')
         return `<div class="ares-thought-line${i === 0 ? ' new' : isAlert ? ' alert' : isCog ? ' new' : ''}">
-        <span style="color:${col}66">\u203a</span> ${w.escHtml(l)}
+        <span style="color:${col}66">\u203a</span> ${escHtml(l)}
       </div>`
       }).join('')
     }

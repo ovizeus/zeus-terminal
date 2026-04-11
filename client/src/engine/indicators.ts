@@ -4,6 +4,8 @@
 // Signal scanner, Deep Dive narrative generator
 
 import { fmtTime, fmtDate, fmtNow } from '../data/marketDataHelpers'
+import { fmt } from '../utils/format'
+import { escHtml } from '../utils/dom'
 
 const w = window as any
 
@@ -33,7 +35,7 @@ export function connectLiveAPI(): void {
     const btn = w.el('btnConnectExchange'); if (btn) btn.style.display = 'none'
     if (typeof w.liveApiSyncState === 'function') w.liveApiSyncState()
   }).catch(function (err: any) {
-    if (st) { st.innerHTML = w._ZI.x + ' Backend unreachable: ' + w.escHtml(err.message || err); st.style.color = 'var(--red)' }
+    if (st) { st.innerHTML = w._ZI.x + ' Backend unreachable: ' + escHtml(err.message || err); st.style.color = 'var(--red)' }
   })
 }
 
@@ -882,12 +884,12 @@ export function generateDeepDive(): string {
       let aboveStr = '\u2014', belowStr = '\u2014'
       if (nearAbove && nearAbove.price) {
         const distA = ((nearAbove.price - price) / price * 100).toFixed(2)
-        const volA = nearAbove.usd > 0 ? ` \u00B7 $${w.fmt(nearAbove.usd)}` : ''
+        const volA = nearAbove.usd > 0 ? ` \u00B7 $${fmt(nearAbove.usd)}` : ''
         aboveStr = `<span class="dd-hl-bear">$${w.fP(nearAbove.price)}</span> <span class="dd-hl-dim">(+${distA}%${volA})</span>`
       }
       if (nearBelow && nearBelow.price) {
         const distB = ((price - nearBelow.price) / price * 100).toFixed(2)
-        const volB = nearBelow.usd > 0 ? ` \u00B7 $${w.fmt(nearBelow.usd)}` : ''
+        const volB = nearBelow.usd > 0 ? ` \u00B7 $${fmt(nearBelow.usd)}` : ''
         belowStr = `<span class="dd-hl-bull">$${w.fP(nearBelow.price)}</span> <span class="dd-hl-dim">(-${distB}%${volB})</span>`
       }
       secLiq = `<div class="dd-section"><div class="dd-title">${w._ZI.mag} LIQUIDITY</div><div class="dd-body">Bias: <span class="${biasCls}">${biasLbl}</span><br>Nearest above: ${aboveStr}<br>Nearest below: ${belowStr}</div></div>`

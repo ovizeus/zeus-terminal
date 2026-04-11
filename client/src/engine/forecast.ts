@@ -3,6 +3,7 @@
 // Quantum Exit Brain, scenario engine, probability score
 
 import { fmtNow } from '../data/marketDataHelpers'
+import { fmt } from '../utils/format'
 
 const w = window as any
 
@@ -549,7 +550,7 @@ export function updateScenarioData(): void {
     const bullC = (w.S.signalData && w.S.signalData.bullCount) || 0
     const bearC = (w.S.signalData && w.S.signalData.bearCount) || 0
     const fPFn = typeof w.fP === 'function' ? w.fP : function (n: number) { return n.toFixed(1) }
-    const fmtFn = typeof w.fmt === 'function' ? w.fmt : function (n: number) { return n.toFixed(0) }
+    const fmtFn = fmt
 
     const prob = w.BM.probScore
     const isBull = (bullC >= bearC) && ((typeof w.BRAIN !== 'undefined') ? regSlope >= 0 : true)

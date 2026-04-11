@@ -3,7 +3,8 @@
 // Ported 1:1 from public/js/ui/render.js
 import { getKlines, getTimezone, getSymbol, getPrice, getFR, getFG, getOI, getLS, getTPObject, getBrainObject, getBrainMetrics, getTCMaxPos } from '../services/stateAccessors'
 import { fmtNow } from '../data/marketDataHelpers'
-const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.fP, w.fmt, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
+import { fmt } from '../utils/format'
+const w = window as any; // kept for w.PERF (self-ref SKIP), w.el, w.fP, w._ZI, w.calcADX, w.calcExpectancy, w.calcGlobalExpectancy, w.BEXT, w.MSCAN, w.wlPrices, w.DHF, w.WVE_CONFIG, w.SESS_CFG, w._sessLastBt, w.scheduleAutoClose
 
 // Indicator performance render
 export function recordIndicatorPerformance(indicatorId: any, won: any) {
@@ -399,7 +400,7 @@ export function updateDataStream() {
   const fr = getFR();
   if (fr !== null) items.push({ text: `FR ${(fr * 100).toFixed(4)}%`, cls: fr < 0 ? 'up' : 'down' });
   const oi = getOI().oi;
-  if (oi) items.push({ text: `OI $${w.fmt(oi)}`, cls: 'neut' });
+  if (oi) items.push({ text: `OI $${fmt(oi)}`, cls: 'neut' });
   const ls = getLS();
   if (ls) items.push({ text: `L/S ${ls.l?.toFixed(0)}%/${ls.s?.toFixed(0)}%`, cls: ls.l > 50 ? 'up' : 'down' });
   items.push({ text: `REGIM ${BRAIN.regime.toUpperCase()}`, cls: 'neut' });

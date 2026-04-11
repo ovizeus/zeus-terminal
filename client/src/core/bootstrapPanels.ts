@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 2109-2803 (Chunk E)
 // 7 analytic panels: Exposure, ExpoInline, CmdPalette, MissedTrades, SessionReview, RegimeHistory, Performance, Compare
 
+import { escHtml } from '../utils/dom'
+
 const w = window as any
 
 // ===== EXPOSURE DASHBOARD =====
@@ -11,7 +13,7 @@ function _fetchExposure(): void {
   const content = document.getElementById('exposureContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333">Loading...</div>'
   fetch('/api/exposure', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
-    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">Error: ' + w.escHtml(data.error || 'unknown') + '</div>'; return }
+    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">Error: ' + escHtml(data.error || 'unknown') + '</div>'; return }
     let html = ''
     html += '<div class="expo-row"><span class="expo-label">Mode</span><span class="expo-val" style="color:' + (data.mode === 'live' ? '#ff4444' : '#00d4ff') + '">' + data.mode.toUpperCase() + '</span></div>'
     html += '<div class="expo-row"><span class="expo-label">Balance</span><span class="expo-val">$' + data.balance.toFixed(2) + '</span></div>'
@@ -26,7 +28,7 @@ function _fetchExposure(): void {
     html += '<div class="expo-row"><span class="expo-label">Kill Switch</span><span class="expo-val" style="color:' + (data.killActive ? '#ff4444' : '#00ff88') + '">' + (data.killActive ? 'ACTIVE' : 'OK') + '</span></div>'
     if (data.bySymbol && data.bySymbol.length > 0) { html += '<div class="expo-sym"><div class="expo-sym-hdr">PER-SYMBOL EXPOSURE</div>'; data.bySymbol.forEach(function (s: any) { html += '<div class="expo-sym-row"><span>' + s.symbol.replace('USDT', '') + ' <span style="color:#555">(' + s.sides.join('/') + ')</span></span><span>$' + s.margin.toFixed(0) + ' <span style="color:#555">' + s.concentrationPct.toFixed(0) + '%</span></span></div>'; html += '<div class="expo-bar"><div class="expo-bar-fill" style="width:' + Math.min(100, s.concentrationPct) + '%"></div></div>' }); html += '</div>' }
     content.innerHTML = html
-  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444">Failed to load: ' + w.escHtml(err.message) + '</div>' })
+  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444">Failed to load: ' + escHtml(err.message) + '</div>' })
 }
 
 // ===== EXPOSURE INLINE =====
@@ -36,7 +38,7 @@ function _fetchExpoInline(): void {
   const content = document.getElementById('expoInlineContent'); if (!content) return
   content.innerHTML = '<span style="color:#333">Loading...</span>'
   fetch('/api/exposure', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
-    if (!data.ok) { content.innerHTML = '<span style="color:#ff4444">' + w.escHtml(data.error || 'Error') + '</span>'; return }
+    if (!data.ok) { content.innerHTML = '<span style="color:#ff4444">' + escHtml(data.error || 'Error') + '</span>'; return }
     let html = '<div style="display:flex;flex-wrap:wrap;gap:8px 16px">'
     html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Mode</span> <span class="expo-val" style="color:' + (data.mode === 'live' ? '#ff4444' : '#00d4ff') + '">' + data.mode.toUpperCase() + '</span></div>'
     html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Bal</span> <span class="expo-val">$' + data.balance.toFixed(0) + '</span></div>'
@@ -49,7 +51,7 @@ function _fetchExpoInline(): void {
     html += '</div>'
     if (data.bySymbol && data.bySymbol.length > 0) { html += '<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px 12px">'; data.bySymbol.forEach(function (s: any) { html += '<span style="color:#666">' + s.symbol.replace('USDT', '') + ' <span style="color:#999">$' + s.margin.toFixed(0) + '</span> <span style="color:#444">' + s.concentrationPct.toFixed(0) + '%</span></span>' }); html += '</div>' }
     content.innerHTML = html
-  }).catch(function (err: any) { content.innerHTML = '<span style="color:#ff4444">' + w.escHtml(err.message) + '</span>' })
+  }).catch(function (err: any) { content.innerHTML = '<span style="color:#ff4444">' + escHtml(err.message) + '</span>' })
 }
 
 // ===== COMMAND PALETTE =====
@@ -108,7 +110,7 @@ export function _showMissedTrades(): void {
     statsHtml += '</div>'
     const rowsHtml = data.trades.map(function (t: any) { const sideColor = t.side === 'LONG' ? '#00ff88' : '#ff4444'; const reasonColor = t.reason === 'KILL_SWITCH' ? '#ff4444' : (t.reason === 'AT_DISABLED' ? '#aa44ff' : '#ff8800'); const ts = new Date(t.created_at).toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); return '<div class="dlog-entry-row"><span class="dlog-ts">' + ts + '</span><span style="color:' + sideColor + ';font-weight:700;font-size:9px;margin-right:4px">' + t.side + '</span><span style="color:#ccc;margin-right:6px">' + (t.symbol || '').replace('USDT', '') + '</span><span style="color:' + reasonColor + ';font-size:9px;font-weight:600">' + t.reason.replace(/_/g, ' ') + '</span><span style="color:#555;margin-left:auto;font-size:9px">$' + (t.price || 0).toFixed(0) + ' | ' + (t.tier || '?') + ' | conf=' + (t.confidence || 0) + '%</span></div>' }).join('')
     content.innerHTML = statsHtml + rowsHtml
-  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(err.message) + '</div>' })
+  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>' })
 }
 
 // ===== SESSION REVIEW =====
@@ -117,7 +119,7 @@ export function _showSessionReview(): void {
   const content = document.getElementById('sessionContent'); const dateEl = document.getElementById('sessionDate')
   if (!content) return; content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
   fetch('/api/session-review', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
-    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">' + w.escHtml(data.error || 'Error') + '</div>'; return }
+    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">' + escHtml(data.error || 'Error') + '</div>'; return }
     if (dateEl) dateEl.textContent = data.date; const s = data.summary; let html = ''
     const pnlClass = s.totalPnl > 0 ? 'positive' : (s.totalPnl < 0 ? 'negative' : 'zero')
     html += '<div class="sr-hero"><div class="sr-pnl ' + pnlClass + '">$' + s.totalPnl.toFixed(2) + '</div>'
@@ -132,7 +134,7 @@ export function _showSessionReview(): void {
     if (data.symbols && Object.keys(data.symbols).length > 0) { html += '<div class="sr-section"><div class="sr-section-title">PER SYMBOL</div>'; const maxSymPnl = Math.max.apply(null, Object.values(data.symbols).map(function (v: any) { return Math.abs(v.pnl) })) || 1; for (const sym in data.symbols) { const sv = data.symbols[sym]; const pct = Math.abs(sv.pnl) / maxSymPnl * 100; const color = sv.pnl >= 0 ? '#00ff88' : '#ff4444'; html += '<div class="sr-bar-row"><span class="sr-bar-label">' + sym.replace('USDT', '') + '</span><div class="sr-bar-track"><div class="sr-bar-fill" style="width:' + pct + '%;background:' + color + '"></div></div><span class="sr-bar-val" style="color:' + color + '">$' + sv.pnl.toFixed(2) + ' (' + sv.count + ')</span></div>' }; html += '</div>' }
     if (s.totalTrades === 0) html = '<div style="text-align:center;padding:30px;color:#333;font-size:12px">No trades closed today yet.</div>'
     content.innerHTML = html
-  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(err.message) + '</div>' })
+  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>' })
 }
 
 // ===== REGIME HISTORY =====
@@ -147,7 +149,7 @@ export function _showRegimeHistory(): void {
     for (const reg in counts) { statsHtml += '<span><span class="rh-regime rh-regime-' + reg + '">' + reg + '</span> ' + counts[reg] + '</span>' }; statsHtml += '</div>'
     const rowsHtml = data.history.map(function (h: any) { const ts = h.created_at ? new Date(h.created_at + 'Z').toLocaleString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '?'; return '<div class="rh-row"><span class="rh-ts">' + ts + '</span><span class="rh-sym">' + (h.symbol || '').replace('USDT', '') + '</span>' + (h.prev_regime ? '<span class="rh-regime rh-regime-' + h.prev_regime + '">' + h.prev_regime + '</span>' : '') + '<span class="rh-arrow">&rarr;</span><span class="rh-regime rh-regime-' + h.regime + '">' + h.regime + '</span><span class="rh-conf">' + (h.confidence || 0) + '%</span><span class="rh-price">$' + (h.price || 0).toFixed(h.price >= 100 ? 0 : 2) + '</span></div>' }).join('')
     content.innerHTML = statsHtml + rowsHtml
-  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(err.message) + '</div>' })
+  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>' })
 }
 
 // ===== PERFORMANCE =====
@@ -159,14 +161,14 @@ export function _showPerformance(mode?: string): void {
   const content = document.getElementById('perfContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
   fetch('/api/performance' + (_perfMode ? '?mode=' + _perfMode : ''), { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
-    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(data.error || 'Error') + '</div>'; return }
+    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(data.error || 'Error') + '</div>'; return }
     if (data.empty) { content.innerHTML = '<div style="text-align:center;color:#333;padding:30px;font-size:11px">No trades yet.</div>'; return }
     let html = ''; const pnlColor = data.totalPnl > 0 ? '#00ff88' : (data.totalPnl < 0 ? '#ff4444' : '#555')
     html += '<div class="perf-hero"><div class="perf-stat"><div class="perf-stat-val" style="color:' + pnlColor + '">$' + data.totalPnl.toFixed(2) + '</div><div class="perf-stat-lbl">TOTAL PNL</div></div><div class="perf-stat"><div class="perf-stat-val">' + data.totalTrades + '</div><div class="perf-stat-lbl">TRADES</div></div><div class="perf-stat"><div class="perf-stat-val" style="color:#ff4444">-$' + data.maxDrawdown.toFixed(2) + '</div><div class="perf-stat-lbl">MAX DD</div></div><div class="perf-stat"><div class="perf-stat-val" style="color:#00ff88">' + data.bestWinStreak + '</div><div class="perf-stat-lbl">WIN STREAK</div></div><div class="perf-stat"><div class="perf-stat-val" style="color:#ff4444">' + data.worstLossStreak + '</div><div class="perf-stat-lbl">LOSS STREAK</div></div></div>'
     if (data.equity && data.equity.length > 0) { const eqRange = Math.max(Math.abs(Math.min.apply(null, data.equity.map(function (e: any) { return e.pnl }))), Math.abs(Math.max.apply(null, data.equity.map(function (e: any) { return e.pnl })))) || 1; html += '<div class="perf-eq"><div class="perf-eq-title">EQUITY CURVE</div><div class="perf-eq-bar">'; const step = Math.max(1, Math.floor(data.equity.length / 80)); for (let ei = 0; ei < data.equity.length; ei += step) { const e = data.equity[ei]; const h = Math.abs(e.pnl) / eqRange * 36; const c = e.pnl >= 0 ? '#00ff88' : '#ff4444'; html += '<div class="perf-eq-col" style="height:' + Math.max(1, h) + 'px;background:' + c + '" title="$' + e.pnl.toFixed(2) + '"></div>' }; html += '</div></div>' }
     if (data.calendar && Object.keys(data.calendar).length > 0) { const days = Object.keys(data.calendar).sort(); const calMax = Math.max.apply(null, Object.values(data.calendar).map(function (d: any) { return Math.abs(d.pnl) })) || 1; html += '<div class="perf-cal"><div class="perf-eq-title">P&L CALENDAR</div><div class="perf-cal-grid">'; days.forEach(function (day) { const d = (data.calendar as any)[day]; const intensity = Math.min(1, Math.abs(d.pnl) / calMax); const bg = d.pnl >= 0 ? 'rgba(0,255,136,' + (0.15 + intensity * 0.7) + ')' : 'rgba(255,68,68,' + (0.15 + intensity * 0.7) + ')'; html += '<div class="perf-cal-day" style="background:' + bg + '" title="' + day + ': $' + d.pnl.toFixed(2) + '">' + day.slice(8) + '</div>' }); html += '</div></div>' }
     content.innerHTML = html
-  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(err.message) + '</div>' })
+  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>' })
 }
 
 // ===== STRATEGY COMPARISON =====
@@ -175,13 +177,13 @@ export function _showCompare(): void {
   const content = document.getElementById('compareContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
   fetch('/api/compare', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
-    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(data.error || 'Error') + '</div>'; return }
+    if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(data.error || 'Error') + '</div>'; return }
     let html = ''
     html += _cmpSection('DEMO vs LIVE', ['Metric', 'DEMO', 'LIVE'], data.demoVsLive.demo, data.demoVsLive.live)
     html += _cmpSection(data.thisVsLast.thisLabel + ' vs ' + data.thisVsLast.lastLabel, ['Metric', 'THIS MONTH', 'LAST MONTH'], data.thisVsLast.thisMonth, data.thisVsLast.lastMonth)
     if (!data.demoVsLive.demo.trades && !data.demoVsLive.live.trades) html = '<div style="text-align:center;color:#333;padding:30px;font-size:11px">No trades yet to compare.</div>'
     content.innerHTML = html
-  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + w.escHtml(err.message) + '</div>' })
+  }).catch(function (err: any) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(err.message) + '</div>' })
 }
 
 function _cmpSection(title: string, headers: string[], setA: any, setB: any): string {

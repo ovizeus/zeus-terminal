@@ -2,6 +2,8 @@
 // Panel toggles, strip UI, eye panel
 // Ported 1:1 from public/js/ui/panels.js
 import { fmtNow } from '../data/marketDataHelpers'
+import { fmt } from '../utils/format'
+import { escHtml } from '../utils/dom'
 
 const w = window as any;
 
@@ -41,7 +43,7 @@ export async function scanLiquidityMagnets() {
         magnets.push({
           price: a.p, type: 'ob_wall', direction: 'above',
           strength: Math.min(100, Math.round(a.q / avgQ * 20)),
-          usd, label: `Perete ASK $${w.fmt(usd)}`,
+          usd, label: `Perete ASK $${fmt(usd)}`,
           source: 'Order Book', qty: a.q.toFixed(2)
         });
       }
@@ -52,7 +54,7 @@ export async function scanLiquidityMagnets() {
         magnets.push({
           price: b.p, type: 'ob_wall', direction: 'below',
           strength: Math.min(100, Math.round(b.q / avgQ * 20)),
-          usd, label: `Perete BID $${w.fmt(usd)}`,
+          usd, label: `Perete BID $${fmt(usd)}`,
           source: 'Order Book', qty: b.q.toFixed(2)
         });
       }
@@ -70,7 +72,7 @@ export async function scanLiquidityMagnets() {
       magnets.push({
         price: c.price, type: 'liq_cluster', direction: dir,
         strength, usd: c.vol,
-        label: `Cluster LIQ $${w.fmt(c.vol)} ${c.isLong ? 'LONG' : 'SHORT'}`,
+        label: `Cluster LIQ $${fmt(c.vol)} ${c.isLong ? 'LONG' : 'SHORT'}`,
         source: 'Liq Clusters', qty: null
       });
     });
@@ -220,7 +222,7 @@ export function renderMagnets() {
         <div class="mag-icon">${m.type === 'ob_wall' ? w._ZI.whale : m.type === 'liq_cluster' ? w._ZI.boom : m.type === 'vol_node' ? w._ZI.chart : w._ZI.ruler}</div>
         <div class="mag-info">
           <div class="mag-price">$${w.fP(m.price)}</div>
-          <div class="mag-desc">${srcTag} ${m.usd > 0 ? '\u00b7 $' + w.fmt(m.usd) : ''}</div>
+          <div class="mag-desc">${srcTag} ${m.usd > 0 ? '\u00b7 $' + fmt(m.usd) : ''}</div>
           <div class="mag-strength">${dots}</div>
         </div>
         <div class="mag-dist ${distCls}">${distStr}</div>
@@ -1085,8 +1087,8 @@ export function renderPnlLab() {
     body.innerHTML = html;
   } catch (err: any) {
     console.error('[PnL Lab] renderPnlLab error:', err);
-    var _errMsg = typeof w.escHtml === 'function' ? w.escHtml(err.message || 'Unknown error') : (err.message || 'Unknown error');
-    var _errStack = typeof w.escHtml === 'function' ? w.escHtml((err.stack || '').split('\n').slice(0, 3).join('\n')) : '';
+    var _errMsg = escHtml(err.message || 'Unknown error');
+    var _errStack = escHtml((err.stack || '').split('\n').slice(0, 3).join('\n'));
     body.innerHTML = '<div class="pnl-lab-section" style="text-align:center;padding:16px 10px">' +
       '<div style="color:#ff4466;font-size:12px;font-weight:700">PnL Lab Error</div>' +
       '<div style="color:#3a5068;font-size:11px;margin-top:4px">' + _errMsg + '</div>' +

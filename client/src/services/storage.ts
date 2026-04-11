@@ -7,7 +7,8 @@
  */
 
 import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
-const w = window as Record<string, any> // kept for w.el, w.fP, w.escHtml, w.toast, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
+import { escHtml } from '../utils/dom'
+const w = window as Record<string, any> // kept for w.el, w.fP, w.toast, w._ZI, w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr, w.recordDailyClose
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -35,9 +36,9 @@ export function renderTradeJournal(): void {
     const win = pnl >= 0
     const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
     const ep = '$' + w.fP(t.entry || 0) + '→$' + w.fP(t.exit || 0)
-    const _time = typeof w.escHtml === 'function' ? w.escHtml(t.time || '') : (t.time || '')
-    const _side = typeof w.escHtml === 'function' ? w.escHtml(t.side || '') : (t.side || '')
-    const _reason = typeof w.escHtml === 'function' ? w.escHtml(t.reason || '—') : (t.reason || '—')
+    const _time = escHtml(t.time || '')
+    const _side = escHtml(t.side || '')
+    const _reason = escHtml(t.reason || '—')
     return `<div class="journal-row ${win ? 'win' : 'loss'}">
       <span style="color:var(--dim)">${_time}</span>
       <span style="color:${t.side === 'LONG' ? 'var(--grn)' : 'var(--red)'}">${_side}</span>

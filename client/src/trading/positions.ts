@@ -2,6 +2,8 @@
 // Ported 1:1 from public/js/trading/positions.js (Phase 6B)
 // Position management, open/close handlers
 
+import { escHtml } from '../utils/dom'
+
 const w = window as any
 
 // On position opened
@@ -66,13 +68,13 @@ export function onTradeExecuted(pos: any): void {
 
   const html = `
     <div class="zeus-exec-label">${w._ZI.bolt} ZEUS EXECUTION</div>
-    <div class="zeus-exec-title">${typeof w.escHtml === 'function' ? w.escHtml(dir) : dir} ${typeof w.escHtml === 'function' ? w.escHtml(sym) : sym}</div>
+    <div class="zeus-exec-title">${escHtml(dir)} ${escHtml(sym)}</div>
     <div class="zeus-exec-info">
-      ${typeof w.escHtml === 'function' ? w.escHtml(mode) : mode} · SCORE: ${typeof w.escHtml === 'function' ? w.escHtml(String(score)) : score}<br>
-      SIGNAL TF: ${typeof w.escHtml === 'function' ? w.escHtml(tf1) : tf1} / ${typeof w.escHtml === 'function' ? w.escHtml(tf2) : tf2}<br>
+      ${escHtml(mode)} · SCORE: ${escHtml(String(score))}<br>
+      SIGNAL TF: ${escHtml(tf1)} / ${escHtml(tf2)}<br>
       PRICE: $${price}
     </div>
-    <div class="zeus-exec-corner">ENGINE: ${typeof w.escHtml === 'function' ? w.escHtml(mode) : mode}</div>
+    <div class="zeus-exec-corner">ENGINE: ${escHtml(mode)}</div>
     ${simTag}`
 
   w._queueExecOverlay(html, 'entry', 2500)
@@ -107,11 +109,11 @@ export function onTradeClosed(result: any): void {
 
   const html = `
     <div class="zeus-exec-label">ZEUS EXIT</div>
-    <div class="zeus-exec-title">${typeof w.escHtml === 'function' ? w.escHtml(sym) : sym} CLOSED</div>
+    <div class="zeus-exec-title">${escHtml(sym)} CLOSED</div>
     <div class="zeus-exec-sub">${pnlStr} · ${pctStr}</div>
     <div class="zeus-exec-info">
-      Duration: ${typeof w.escHtml === 'function' ? w.escHtml(dur) : dur}<br>
-      Reason: ${typeof w.escHtml === 'function' ? w.escHtml(reason.toUpperCase()) : reason.toUpperCase()}
+      Duration: ${escHtml(dur)}<br>
+      Reason: ${escHtml(reason.toUpperCase())}
     </div>
     ${simTag}`
 

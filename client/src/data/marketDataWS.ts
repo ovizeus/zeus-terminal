@@ -5,6 +5,7 @@
 
 import { getTPObject, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
 import { fmtTime } from './marketDataHelpers'
+import { fmt } from '../utils/format'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, w.el, w._ZI, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -141,12 +142,12 @@ export function procLiq(o: any, src?: string): void {
 // ===== LIQ STATS =====
 export function updLiqStats(): void {
   const le = w.el('llc'), se = w.el('lsc'); if (le) le.textContent = w.S.longCnt; if (se) se.textContent = w.S.shortCnt
-  const lu = w.el('llu'), su = w.el('lsu'); if (lu) lu.textContent = '$' + w.fmt(w.S.longUSD); if (su) su.textContent = '$' + w.fmt(w.S.shortUSD)
-  const avgl = w.el('lla'), avgs = w.el('lsa'); if (avgl) avgl.textContent = w.S.longCnt ? 'avg: $' + w.fmt(w.S.longUSD / w.S.longCnt) : 'avg: \u2014'; if (avgs) avgs.textContent = w.S.shortCnt ? 'avg: $' + w.fmt(w.S.shortUSD / w.S.shortCnt) : 'avg: \u2014'
+  const lu = w.el('llu'), su = w.el('lsu'); if (lu) lu.textContent = '$' + fmt(w.S.longUSD); if (su) su.textContent = '$' + fmt(w.S.shortUSD)
+  const avgl = w.el('lla'), avgs = w.el('lsa'); if (avgl) avgl.textContent = w.S.longCnt ? 'avg: $' + fmt(w.S.longUSD / w.S.longCnt) : 'avg: \u2014'; if (avgs) avgs.textContent = w.S.shortCnt ? 'avg: $' + fmt(w.S.shortUSD / w.S.shortCnt) : 'avg: \u2014'
   const rate = w.el('lrate'); if (rate) rate.textContent = ((w.S.longCnt + w.S.shortCnt) / Math.max(1, (Date.now() - performance.timeOrigin) * 0.001) * 60).toFixed(0)
-  const loss = w.el('lloss'); if (loss) loss.textContent = '$' + w.fmt(w.S.totalUSD)
+  const loss = w.el('lloss'); if (loss) loss.textContent = '$' + fmt(w.S.totalUSD)
   const t1 = w.el('tv'), tl = w.el('lv'), ts = w.el('sv'), tc = w.el('cv')
-  if (t1) t1.textContent = '$' + w.fmt(w.S.totalUSD); if (tl) tl.textContent = '$' + w.fmt(w.S.longUSD); if (ts) ts.textContent = '$' + w.fmt(w.S.shortUSD); if (tc) tc.textContent = w.S.cnt
+  if (t1) t1.textContent = '$' + fmt(w.S.totalUSD); if (tl) tl.textContent = '$' + fmt(w.S.longUSD); if (ts) ts.textContent = '$' + fmt(w.S.shortUSD); if (tc) tc.textContent = w.S.cnt
   const bar = w.el('rfill'); if (bar && w.S.totalUSD > 0) { const lp = w.S.longUSD / w.S.totalUSD * 100; bar.style.width = lp + '%' }
   const lpc = w.el('lplbl'), spc = w.el('splbl')
   if (lpc && w.S.totalUSD > 0) lpc.textContent = 'LONG ' + ((w.S.longUSD / w.S.totalUSD) * 100).toFixed(0) + '%'
@@ -155,11 +156,11 @@ export function updLiqStats(): void {
   if (calm) { const recent = w.S.events.filter((e: any) => Date.now() - e.ts < 60000); const bigLiq = recent.filter((e: any) => e.usd > 100000).length; calm.innerHTML = bigLiq > 5 ? w._ZI.fire + ' HOT' : bigLiq > 2 ? w._ZI.bolt + ' ACTIVE' : 'CALM'; calm.style.color = bigLiq > 5 ? 'var(--red)' : bigLiq > 2 ? 'var(--ylw)' : 'var(--dim)' }
   const now = Date.now(); const w1m = w.S.events.filter((e: any) => now - e.ts < 60000); const w5m = w.S.events.filter((e: any) => now - e.ts < 300000); const w15m = w.S.events.filter((e: any) => now - e.ts < 900000)
   const e1m = w.el('t1l'), e1ms = w.el('t1s'), e1mv = w.el('t1v')
-  if (e1m) e1m.textContent = w1m.filter((e: any) => e.isLong).length + 'L'; if (e1ms) e1ms.textContent = w1m.filter((e: any) => !e.isLong).length + 'S'; if (e1mv) e1mv.textContent = '$' + w.fmt(w1m.reduce((a: number, e: any) => a + e.usd, 0))
+  if (e1m) e1m.textContent = w1m.filter((e: any) => e.isLong).length + 'L'; if (e1ms) e1ms.textContent = w1m.filter((e: any) => !e.isLong).length + 'S'; if (e1mv) e1mv.textContent = '$' + fmt(w1m.reduce((a: number, e: any) => a + e.usd, 0))
   const e5ml = w.el('t5l'), e5ms = w.el('t5s'), e5mv = w.el('t5v')
-  if (e5ml) e5ml.textContent = w5m.filter((e: any) => e.isLong).length + 'L'; if (e5ms) e5ms.textContent = w5m.filter((e: any) => !e.isLong).length + 'S'; if (e5mv) e5mv.textContent = '$' + w.fmt(w5m.reduce((a: number, e: any) => a + e.usd, 0))
+  if (e5ml) e5ml.textContent = w5m.filter((e: any) => e.isLong).length + 'L'; if (e5ms) e5ms.textContent = w5m.filter((e: any) => !e.isLong).length + 'S'; if (e5mv) e5mv.textContent = '$' + fmt(w5m.reduce((a: number, e: any) => a + e.usd, 0))
   const e15ml = w.el('t15l'), e15ms = w.el('t15s'), e15mv = w.el('t15v')
-  if (e15ml) e15ml.textContent = w15m.filter((e: any) => e.isLong).length + 'L'; if (e15ms) e15ms.textContent = w15m.filter((e: any) => !e.isLong).length + 'S'; if (e15mv) e15mv.textContent = '$' + w.fmt(w15m.reduce((a: number, e: any) => a + e.usd, 0))
+  if (e15ml) e15ml.textContent = w15m.filter((e: any) => e.isLong).length + 'L'; if (e15ms) e15ms.textContent = w15m.filter((e: any) => !e.isLong).length + 'S'; if (e15mv) e15mv.textContent = '$' + fmt(w15m.reduce((a: number, e: any) => a + e.usd, 0))
   renderHotZones(); updMarketPressure(); updLiqSourceMetrics()
 }
 
@@ -167,8 +168,8 @@ export function updLiqSourceMetrics(): void {
   const mb = w.S.liqMetrics.bnb, my = w.S.liqMetrics.byb; const total = mb.count + my.count || 1
   const ebc = w.el('lm-bnb-cnt'), ebu = w.el('lm-bnb-usd'), ebp = w.el('lm-bnb-pct')
   const eyc = w.el('lm-byb-cnt'), eyu = w.el('lm-byb-usd'), eyp = w.el('lm-byb-pct')
-  if (ebc) ebc.textContent = mb.count; if (ebu) ebu.textContent = '$' + w.fmt(mb.usd); if (ebp) ebp.textContent = (mb.count / total * 100).toFixed(0) + '%'
-  if (eyc) eyc.textContent = my.count; if (eyu) eyu.textContent = '$' + w.fmt(my.usd); if (eyp) eyp.textContent = (my.count / total * 100).toFixed(0) + '%'
+  if (ebc) ebc.textContent = mb.count; if (ebu) ebu.textContent = '$' + fmt(mb.usd); if (ebp) ebp.textContent = (mb.count / total * 100).toFixed(0) + '%'
+  if (eyc) eyc.textContent = my.count; if (eyu) eyu.textContent = '$' + fmt(my.usd); if (eyp) eyp.textContent = (my.count / total * 100).toFixed(0) + '%'
   const elast = w.el('lm-last-src'); if (elast) { const lastEvt = w.S.events[0]; if (lastEvt) { elast.textContent = lastEvt.src === 'byb' ? 'BYB' : 'BNB'; elast.style.color = lastEvt.src === 'byb' ? 'var(--ylw)' : 'var(--grn)' } }
   const edup = w.el('lm-dup-cnt'); if (edup) edup.textContent = w.S.events.filter((e: any) => e.dup).length
 }
@@ -202,7 +203,7 @@ export function renderHotZones(): void {
   const clusters: any[] = Object.values(w.S.btcClusters).sort((a: any, b: any) => b.vol - a.vol).slice(0, 5)
   if (!clusters.length) { hz.innerHTML = '<div style="color:var(--dim);font-size:13px;text-align:center;padding:12px">Accumulating data...</div>'; return }
   const maxV = Math.max(...clusters.map((c: any) => c.vol), 1)
-  hz.innerHTML = clusters.map((c: any) => { const pct = c.vol / maxV * 100; const col = c.isLong ? 'var(--red)' : 'var(--grn)'; const dist = w.S.price ? ((c.price - w.S.price) / w.S.price * 100) : 0; return `<div class="hzrow"><div style="color:${col};font-size:13px">${c.isLong ? 'LONG' : 'SHORT'} $${w.fP(c.price)} <span style="color:var(--dim)">${dist >= 0 ? '+' : ''}${dist.toFixed(2)}%</span></div><div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:#1a2530;border-radius:2px"><div style="height:4px;background:${col};width:${pct}%;border-radius:2px"></div></div><span style="color:var(--whi);font-size:12px">$${w.fmt(c.vol)}</span></div></div>` }).join('')
+  hz.innerHTML = clusters.map((c: any) => { const pct = c.vol / maxV * 100; const col = c.isLong ? 'var(--red)' : 'var(--grn)'; const dist = w.S.price ? ((c.price - w.S.price) / w.S.price * 100) : 0; return `<div class="hzrow"><div style="color:${col};font-size:13px">${c.isLong ? 'LONG' : 'SHORT'} $${w.fP(c.price)} <span style="color:var(--dim)">${dist >= 0 ? '+' : ''}${dist.toFixed(2)}%</span></div><div style="display:flex;align-items:center;gap:4px"><div style="flex:1;height:4px;background:#1a2530;border-radius:2px"><div style="height:4px;background:${col};width:${pct}%;border-radius:2px"></div></div><span style="color:var(--whi);font-size:12px">$${fmt(c.vol)}</span></div></div>` }).join('')
 }
 
 // ===== MARKET PRESSURE =====
@@ -222,7 +223,7 @@ export function renderFeed(): void {
   const base = (w.S.symbol || 'BTCUSDT').replace('USDT', '').replace('BUSD', '')
   let filtered = w.S.events.filter((e: any) => e.sym && e.sym.toUpperCase().startsWith(base.toUpperCase()))
   if (_liqSrcFilter !== 'all') filtered = filtered.filter((e: any) => e.src === _liqSrcFilter)
-  const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? w._ZI.fire : e.usd >= 500000 ? w._ZI.boom : w._ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${w.fmt(e.usd)}</span><span style="color:var(--dim)">@${w.fP(e.price)}</span></div>` }).join('')
+  const html = filtered.slice(0, 30).map((e: any) => { const col = e.isLong ? 'var(--red)' : 'var(--grn)'; const icon = e.usd >= 1e6 ? w._ZI.fire : e.usd >= 500000 ? w._ZI.boom : w._ZI.drop; const srcTag = e.src === 'byb' ? '<span class="liq-src-byb">BYB</span>' : '<span class="liq-src-bnb">BNB</span>'; const dupTag = e.dup ? '<span class="liq-dup">DUP?</span>' : ''; return `<div class="fdrow" style="border-left:2px solid ${col};padding-left:6px"><span style="color:${col}">${icon} ${e.sym} ${e.isLong ? 'LONG LIQ' : 'SHORT LIQ'}</span>${srcTag}${dupTag}<span style="color:var(--whi)">$${fmt(e.usd)}</span><span style="color:var(--dim)">@${w.fP(e.price)}</span></div>` }).join('')
   fd.innerHTML = html || `<div style="color:var(--dim);font-size:13px;padding:8px">Waiting for ${base} liquidations...</div>`
   const cnt = w.el('fcnt'); if (cnt) cnt.textContent = filtered.length + ' events' + (_liqSrcFilter !== 'all' ? ' (' + _liqSrcFilter.toUpperCase() + ')' : '')
 }
@@ -296,7 +297,7 @@ export function updateMainMetrics(): void {
   if (fr) fr.textContent = w.S.fr !== null && w.S.fr !== undefined ? (w.S.fr * 100).toFixed(4) + '%' : '\u2014'
   if (fr) fr.style.color = w.S.fr > 0 ? 'var(--red)' : w.S.fr < 0 ? 'var(--grn)' : 'var(--dim)'
   if (frs_el) { if (w.S.frCd) { const d = new Date(w.S.frCd); frs_el.textContent = 'next: ' + fmtTime(d.getTime()) } else frs_el.textContent = 'next: \u2014' }
-  if (oi) oi.textContent = w.S.oi ? '$' + w.fmt(w.S.oi) : '\u2014'
+  if (oi) oi.textContent = w.S.oi ? '$' + fmt(w.S.oi) : '\u2014'
   if (ois_el) { if (w.S.oiPrev && w.S.oi) { const ch = ((w.S.oi - w.S.oiPrev) / w.S.oiPrev * 100).toFixed(2); ois_el.textContent = (+ch > 0 ? '\u25B2' : +ch < 0 ? '\u25BC' : '') + ch + '%'; ois_el.style.color = +ch > 0 ? 'var(--grn)' : 'var(--red)' } else ois_el.textContent = '\u2014' }
   if (atr) atr.textContent = w.S.atr ? '$' + w.fP(w.S.atr) : '\u2014'
   if (ls) ls.textContent = w.S.ls ? w.S.ls.l.toFixed(1) + '% / ' + w.S.ls.s.toFixed(1) + '%' : '\u2014'
@@ -322,16 +323,16 @@ export function sendAlert(title: string, body: string, tag = 'zt'): void {
 
 export function registerServiceWorker(): void { if (!('serviceWorker' in navigator)) return; const proto = location.protocol; const host = location.hostname; const isSecure = (proto === 'https:') || (host === 'localhost') || (host === '127.0.0.1'); if (!isSecure || proto === 'file:' || proto === 'content:') return; try { navigator.serviceWorker.register('./sw.js').then(() => { w.Intervals.set('swKeepalive', () => { if (navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage({ type: 'KEEPALIVE' }) }, 20000) }).catch((err: any) => console.warn('[SW] register failed:', err)) } catch (err: any) { console.warn('[SW] error:', err) } }
 
-export function checkLiqAlert(usd: number, qty: number, side: string, sym: string): void { if (!w.S.alerts.liqAlerts) return; if (qty < w.S.alerts.liqMinBtc) return; if (!(checkLiqAlert as any)._last || Date.now() - (checkLiqAlert as any)._last > 5000) { (checkLiqAlert as any)._last = Date.now(); sendAlert(`${sym} LIQUIDATION`, `$${w.fmt(usd)} ${side}`, 'liq') } }
+export function checkLiqAlert(usd: number, qty: number, side: string, sym: string): void { if (!w.S.alerts.liqAlerts) return; if (qty < w.S.alerts.liqMinBtc) return; if (!(checkLiqAlert as any)._last || Date.now() - (checkLiqAlert as any)._last > 5000) { (checkLiqAlert as any)._last = Date.now(); sendAlert(`${sym} LIQUIDATION`, `$${fmt(usd)} ${side}`, 'liq') } }
 export function testNotification(): void { sendAlert('ZeuS Terminal', 'Test alert working!', 'test') }
 export function saveAlerts(): void { w.S.alerts.liqAlerts = w.el('aLiqEn')?.checked !== false; w.S.alerts.rsiAlerts = w.el('aDivEn')?.checked !== false; const liqMin = w.el('aLiqMin'); if (liqMin) w.S.alerts.liqMinBtc = +liqMin.value || 0; w.toast('Alert settings saved'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function applySR(): void { const en = w.el('srEn')?.checked !== false; w.S.overlays.sr = en; w.clearSR(); if (en) w.renderSROverlay(); const btn = w.el('bsr'); if (btn) btn.classList.toggle('act', en); w.toast('S/R settings applied') }
 
 // ===== MISC (cloud, inject, filters, supremus) =====
 export function cloudClear(): void { const ei = w.el('cloudEmail'); if (ei) ei.value = ''; w.toast('Email cleared') }
-export function injectFakeWhale(): void { const sym = w.S.symbol || 'BTCUSDT'; const side = Math.random() > 0.5; const usd = Math.floor(Math.random() * 5000000) + 500000; const qty = usd / (w.S.price || 67000); const ev = { sym, isLong: side, usd, qty, price: w.S.price || 67000, ts: Date.now() }; w.S.events.unshift(ev); if (w.S.events.length > 200) w.S.events.pop(); renderFeed(); checkLiqAlert(usd, qty, side ? 'LONG' : 'SHORT', sym); w.toast(`Fake whale: $${w.fmt(usd)} ${side ? 'LONG' : 'SHORT'} ${sym}`) }
+export function injectFakeWhale(): void { const sym = w.S.symbol || 'BTCUSDT'; const side = Math.random() > 0.5; const usd = Math.floor(Math.random() * 5000000) + 500000; const qty = usd / (w.S.price || 67000); const ev = { sym, isLong: side, usd, qty, price: w.S.price || 67000, ts: Date.now() }; w.S.events.unshift(ev); if (w.S.events.length > 200) w.S.events.pop(); renderFeed(); checkLiqAlert(usd, qty, side ? 'LONG' : 'SHORT', sym); w.toast(`Fake whale: $${fmt(usd)} ${side ? 'LONG' : 'SHORT'} ${sym}`) }
 export function setLiqSym(sym: string, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.sym = sym; const q = document.getElementById('lsymq'); if (q) q.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); w.toast('Filter: ' + sym) }
-export function setLiqUsd(val: number, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.minUsd = val; const container = btn?.parentElement; if (container) container.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); w.toast('Min size: $' + w.fmt(val)) }
+export function setLiqUsd(val: number, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.minUsd = val; const container = btn?.parentElement; if (container) container.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); w.toast('Min size: $' + fmt(val)) }
 export function setLiqTW(hours: number, btn: any): void { w.S.liqFilter = w.S.liqFilter || { sym: 'BTC', minUsd: 0, tw: 24 }; w.S.liqFilter.tw = hours; const container = btn?.parentElement; if (container) container.querySelectorAll('.qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); w.toast('Time window: ' + hours + 'h') }
 
 export async function hashEmail(email: string): Promise<string> { const b = new TextEncoder().encode(email.toLowerCase().trim()); const h = await crypto.subtle.digest('SHA-256', b); return Array.from(new Uint8Array(h)).map(x => x.toString(16).padStart(2, '0')).join('') }

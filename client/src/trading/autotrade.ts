@@ -4,7 +4,7 @@
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getBrainMetrics, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone, getTPObject } from '../services/stateAccessors'
-import { isValidMarketPrice } from '../utils/dom'
+import { isValidMarketPrice, escHtml } from '../utils/dom'
 import { fmtNow } from '../data/marketDataHelpers'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), w.el, w._ZI, fn calls
@@ -197,9 +197,9 @@ export function atLog(type: any, msg: any): void {
 export function renderATLog(): void {
   const c = w.el('atLog'); if (!c) return
   c.innerHTML = AT.log.map((l: any) => {
-    const _time = typeof w.escHtml === 'function' ? w.escHtml(l.time) : l.time
-    const _msg = typeof w.escHtml === 'function' ? w.escHtml(l.msg) : l.msg
-    const _type = typeof w.escHtml === 'function' ? w.escHtml(l.type) : l.type
+    const _time = escHtml(l.time)
+    const _msg = escHtml(l.msg)
+    const _type = escHtml(l.type)
     return `<div class="at-log-row">
     <span class="at-log-time">${_time}</span>
     <span class="at-log-msg ${_type}">${_msg}</span>
@@ -607,7 +607,7 @@ export function runAutoTradeCheck(): void {
       const reasons: any[] = []
       if (!cond.posOk) reasons.push('max pozitii atins')
       if (!cond.coolOk) reasons.push('cooldown')
-      { const _oe2 = w.el('atStatus'); if (_oe2) _oe2.innerHTML = reasons.length ? w._ZI.timer + ' Wait: ' + w.escHtml(reasons.join(', ')) : w._ZI.mag + ' Scan... conditii neatinse' }
+      { const _oe2 = w.el('atStatus'); if (_oe2) _oe2.innerHTML = reasons.length ? w._ZI.timer + ' Wait: ' + escHtml(reasons.join(', ')) : w._ZI.mag + ' Scan... conditii neatinse' }
       return
     }
 
@@ -888,7 +888,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
     })
-    { const _oe5 = w.el('atStatus'); if (_oe5) _oe5.innerHTML = w._ZI.ok + ' ' + w.escHtml(side) + ' deschis @$' + w.fP(entry) }
+    { const _oe5 = w.el('atStatus'); if (_oe5) _oe5.innerHTML = w._ZI.ok + ' ' + escHtml(side) + ' deschis @$' + w.fP(entry) }
     w.toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${w.fP(sl)} TP:$${w.fP(tp)}`, 0, w._ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${w.fP(entry)} | SL:$${w.fP(sl)} TP:$${w.fP(tp)}`)  // [NC]
     if (typeof w.onTradeExecuted === 'function') w.onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
@@ -1520,8 +1520,8 @@ export function renderATPositions(): void {
     const pnlStr = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2)
     const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
     const col = pos.side === 'LONG' ? '#00ff88' : '#ff4466'
-    const symBase = w.escHtml((pos.sym || 'BTC').replace('USDT', ''))  // [v105 FIX Bug6] escHtml
-    const safeSide = w.escHtml(pos.side)                           // [v105 FIX Bug6] escHtml
+    const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))  // [v105 FIX Bug6] escHtml
+    const safeSide = escHtml(pos.side)                           // [v105 FIX Bug6] escHtml
     const posMode = (pos.mode || pos._serverMode || 'demo')
     var _atPosEnv = w._resolvedEnv || (posMode === 'demo' ? 'DEMO' : 'REAL')
     const modeBadge = posMode === 'live'

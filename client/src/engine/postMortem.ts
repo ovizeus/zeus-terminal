@@ -3,6 +3,7 @@
 // PM (Post-Mortem) — pattern matcher + visual panel
 
 import { _safeLocalStorageSet } from '../services/storage'
+import { escHtml } from '../utils/dom'
 
 const w = window as any
 
@@ -203,7 +204,7 @@ export function PM_render(): void {
   const last = stats.lastRecord
   const insightHtml = last
     ? `<div style="padding:5px 10px 3px;font-size:11px;color:#f0c04099;letter-spacing:.5px;border-bottom:1px solid #0a1520;line-height:1.7">
-        <b style="color:#f0c040">LAST:</b> ${w.escHtml(last.insight)}
+        <b style="color:#f0c040">LAST:</b> ${escHtml(last.insight)}
        </div>`
     : ''
 
@@ -232,12 +233,12 @@ export function PM_render(): void {
     const sideCol = r.side === 'LONG' ? '#00ff88' : '#ff3355'
     return `<div style="padding:5px 10px;border-bottom:1px solid #06080e;font-size:11px;line-height:1.8">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">
-        <span style="color:${sideCol};font-weight:700">${w.escHtml(r.side)}</span>
-        <span style="color:#778899">${w.escHtml(r.sym.replace('USDT', ''))}</span>
-        <span style="color:#445566">${w.escHtml(r.regime)}</span>
+        <span style="color:${sideCol};font-weight:700">${escHtml(r.side)}</span>
+        <span style="color:#778899">${escHtml(r.sym.replace('USDT', ''))}</span>
+        <span style="color:#445566">${escHtml(r.regime)}</span>
         <span style="color:${pnlCol};font-weight:700">${r.pnl >= 0 ? '+' : ''}$${r.pnl.toFixed(2)}</span>
       </div>
-      <div style="color:#556677;font-size:11px;line-height:1.6">${w.escHtml(r.insight)}</div>
+      <div style="color:#556677;font-size:11px;line-height:1.6">${escHtml(r.insight)}</div>
     </div>`
   }).join('')
 

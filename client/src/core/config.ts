@@ -6,6 +6,7 @@
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
+import { escHtml } from '../utils/dom'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -207,7 +208,7 @@ export function _srRenderList() {
       timeZone: getTimezone(),
       hour: '2-digit', minute: '2-digit'
     })
-    const _type = typeof w.escHtml === 'function' ? w.escHtml(s.type || '') : (s.type || '')
+    const _type = escHtml(s.type || '')
     const _typeShort = _type.length > 18 ? _type.slice(0, 16) + '\u2026' : _type
     const dirCls = s.direction === 'LONG' ? 'sr-long' : s.direction === 'SHORT' ? 'sr-short' : 'sr-neut'
     const outCls = s.outcome === 'win' ? 'sr-win' : s.outcome === 'loss' ? 'sr-loss' : 'sr-pend'
@@ -347,7 +348,7 @@ export function _ncRenderList() {
     })
     const ico = i.severity === 'critical' ? _ZI.dRed :
       i.severity === 'warning' ? _ZI.dYlw : '<span class="z-dot" style="background:#4488ff;box-shadow:0 0 4px #4488ff66"></span>'
-    const _esc = typeof w.escHtml === 'function' ? w.escHtml : function (s: any) { return s }
+    const _esc = escHtml
     return `<div class="nc-item ${_esc(i.severity)} ${i.read ? 'nc-read' : ''}" data-id="${_esc(i.id)}">
       <div class="nc-item-hdr">
         <span class="nc-ico">${ico}</span>

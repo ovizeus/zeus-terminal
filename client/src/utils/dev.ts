@@ -5,6 +5,7 @@
 
 import { getBrainMetrics } from '../services/stateAccessors'
 import { fmtNow } from '../data/marketDataHelpers'
+import { fmt } from '../utils/format'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), w.el, w.toast, fn calls
 
 export const DEV: Record<string, any> = {
@@ -329,7 +330,7 @@ export function devInjectLiquidation(side: string): void {
     if (typeof w.checkLiqAlert === 'function') {
       w.checkLiqAlert(usd, qty, side, sym.replace('USDT', ''))
     }
-    const fmtFn = typeof w.fmt === 'function' ? w.fmt : function (n: number) { return n.toFixed(0) }
+    const fmtFn = fmt
     const fPFn = typeof w.fP === 'function' ? w.fP : function (n: number) { return n.toFixed(1) }
     devLog('Injected ' + side + ' liquidation $' + fmtFn(usd) + ' @ $' + fPFn(price), 'success')
   } catch (e) { _devModuleError('injectLiq', e) }
