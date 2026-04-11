@@ -9,6 +9,7 @@ import { el } from '../utils/dom'
 import { _demoTick } from '../engine/aresUI'
 import { clearHeatmap, clearSR } from './marketDataOverlays'
 import { getChartH } from './marketDataChart'
+import { updateMainMetrics } from './marketDataWS'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
 // ===== TIMEFRAME =====
@@ -91,7 +92,7 @@ export function updatePriceDisplay(): void {
   const bc = el('bchg')
   if (bc) { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
   if (typeof w.calcSRTable === 'function') w.calcSRTable()
-  if (typeof w.updateMetrics === 'function') w.updateMetrics()
+  updateMetrics()
   const _tp = getTPObject()
   if (_tp?.demoOpen) w.updateDemoLiqPrice()
   if (_tp?.liveOpen) w.updateLiveLiqPrice()
@@ -132,7 +133,7 @@ export function throttledMainMetrics(): void {
   const now = Date.now()
   if (now - _lastMainMetricsUpdate < 500) return
   _lastMainMetricsUpdate = now
-  if (typeof w.updateMainMetrics === 'function') w.updateMainMetrics()
+  updateMainMetrics()
 }
 
 // ===== API FETCHES =====
@@ -196,7 +197,7 @@ export async function fetchOI(): Promise<void> {
     if (!d.openInterest) throw new Error('Date OI invalide')
     w.S.oiPrev = w.S.oi; w.S.oi = +d.openInterest * (w.S.price || 1)
     w.S.oiTs = Date.now()
-    if (typeof w.updateMetrics === 'function') w.updateMetrics(); throttledMainMetrics()
+    updateMetrics(); throttledMainMetrics()
   } catch (e: any) { console.warn('[fetchOI]', e.message) }
 }
 
@@ -204,7 +205,7 @@ export async function fetchLS(): Promise<void> {
   try {
     const sym = w.S.symbol || 'BTCUSDT'
     const d = await safeFetch(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${sym}&period=5m&limit=1`)
-    if (Array.isArray(d) && d[0]) { w.S.ls = { l: +d[0].longAccount, s: +d[0].shortAccount }; if (typeof w.updateMetrics === 'function') w.updateMetrics(); if (typeof w.updateMainMetrics === 'function') w.updateMainMetrics() }
+    if (Array.isArray(d) && d[0]) { w.S.ls = { l: +d[0].longAccount, s: +d[0].shortAccount }; updateMetrics(); updateMainMetrics() }
   } catch (e: any) { console.warn('[fetchLS]', e.message) }
 }
 

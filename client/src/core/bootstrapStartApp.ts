@@ -11,7 +11,7 @@ import { _renderBuildInfo, setPWAVersion, _showWelcomeModal } from './bootstrapM
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
 import { _resumeLivePendingSyncIfNeeded } from '../data/marketDataPositions'
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
-import { _initBrainCockpit, startZAnim, runBrainUpdate } from '../engine/brain'
+import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, runSignalScan } from '../engine/brain'
 import { initARES, initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
@@ -21,13 +21,17 @@ import { loadSavedAPI } from '../engine/indicators'
 import { rebuildDailyFromJournal, loadDailyPnl } from '../engine/dailyPnl'
 import { runBacktest, scanLiquidityMagnets } from '../ui/panels'
 import { savePerfToStorage, loadPerfFromStorage } from '../engine/perfStore'
-import { startFRCountdown, renderTradeJournal, trackOIDelta } from '../services/storage'
+import { startFRCountdown, renderTradeJournal, trackOIDelta, loadJournalFromStorage } from '../services/storage'
 import { fetchSymbolKlines } from '../data/klines'
 import { _devEnsureVisible } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
 import { initSafetyEngine } from '../utils/guards'
-import { updateQuantumClock, updateBrainExtension, renderDHF } from '../ui/render'
+import { updateQuantumClock, updateBrainExtension, renderDHF, renderPerfTracker } from '../ui/render'
 import { runQuantumExitUpdate, updateScenarioUI } from '../engine/forecast'
+import { computePredatorState } from '../engine/events'
+import { onDemoOrdTypeChange } from '../data/marketDataTrading'
+import { updateATStats } from '../trading/autotrade'
+import { hubPopulate } from '../utils/dev'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
 const TP = getTPObject()
@@ -77,7 +81,7 @@ export async function startApp(): Promise<void> {
   w.atUpdateBanner()
   try { if (localStorage.getItem('zeus_pt_strip_open') === '1') { w._ptStripOpen = true; const _ps = document.getElementById('pt-strip'); if (_ps) _ps.classList.add('pt-strip-open') } } catch (_) { }
   w.ptUpdateBanner()
-  initCloudSettings(); loadSavedAPI(); w.loadJournalFromStorage()
+  initCloudSettings(); loadSavedAPI(); loadJournalFromStorage()
   if (typeof loadPerfFromStorage === 'function') loadPerfFromStorage()
   if (typeof loadDailyPnl === 'function') loadDailyPnl()
   if (typeof rebuildDailyFromJournal === 'function') rebuildDailyFromJournal()
@@ -95,7 +99,7 @@ export async function startApp(): Promise<void> {
   } catch (_pendErr: any) { console.warn('[ZState late-restore]', _pendErr.message) }
   _adaptLoad()
   if (typeof _resumeLivePendingSyncIfNeeded === 'function') _resumeLivePendingSyncIfNeeded()
-  if (typeof w.onDemoOrdTypeChange === 'function') setTimeout(w.onDemoOrdTypeChange, 200)
+  setTimeout(onDemoOrdTypeChange, 200)
   if (typeof w.renderPendingOrders === 'function') setTimeout(w.renderPendingOrders, 400)
   w.registerServiceWorker(); setPWAVersion(); w.setupPWAReloadBtn()
   _initBrainCockpit()
@@ -103,7 +107,7 @@ export async function startApp(): Promise<void> {
 
   // ═══ PHASE 2 — DATA ═══
   initSafetyEngine()
-  setTimeout(function () { if (typeof w.computePredatorState === 'function') w.computePredatorState() }, 2000)
+  setTimeout(function () { computePredatorState() }, 2000)
 
   // __wsGen tracer
   ;(function () {
@@ -143,7 +147,7 @@ export async function startApp(): Promise<void> {
 
   // ═══ PHASE 3 — STATE ═══
   setTimeout(() => {
-    if (_earlyRestored) { w.atLog('info', '[RESTORE] State restaurat din localStorage.'); setTimeout(() => { w.updateATStats(); w.updateDemoBalance(); w.renderDemoPositions(); w.renderATPositions() }, 200) }
+    if (_earlyRestored) { w.atLog('info', '[RESTORE] State restaurat din localStorage.'); setTimeout(() => { updateATStats(); w.updateDemoBalance(); w.renderDemoPositions(); w.renderATPositions() }, 200) }
     console.log('[sync] Starting pullFromServer...')
     w.ZState.pullFromServer().then(function (serverSnap: any) {
       console.log('[sync] pullFromServer returned:', serverSnap ? 'data (ts=' + serverSnap.ts + ', pos=' + (serverSnap.positions || []).length + ')' : 'null')
@@ -156,8 +160,8 @@ export async function startApp(): Promise<void> {
         if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered; if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL; if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday }
       }
       if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.enabled === 'boolean') AT.enabled = serverSnap.at.enabled; if (serverSnap.at.mode) { AT.mode = serverSnap.at.mode; AT._modeConfirmed = true }; if (AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + AT.mode + ')') }
-      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; if (typeof w.runSignalScan === 'function') try { w.runSignalScan() } catch (_) {}; if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
-      setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); if (typeof w.syncBrainFromState === 'function') w.syncBrainFromState() }, 300)
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; try { runSignalScan() } catch (_) {}; if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', w.runAutoTradeCheck, 30000); setTimeout(w.runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
+      setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); syncBrainFromState() }, 300)
       w.ZState.saveLocal()
       console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length)
       w.ZState.markSyncReady()
@@ -212,18 +216,18 @@ export async function startApp(): Promise<void> {
   if (typeof w.ZState !== 'undefined' && w.ZState.startATPolling) w.ZState.startATPolling()
   w.Intervals.set('brainExt', updateBrainExtension, 5000)
   setTimeout(renderDHF, 1200); w.Intervals.set('dhf', renderDHF, 60000)
-  setTimeout(w.renderPerfTracker, 2000)
+  setTimeout(renderPerfTracker, 2000)
   setTimeout(() => { updateQuantumClock(); updateBrainExtension() }, 3000)
   setTimeout(() => { w.brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
 
-  setTimeout(w.runSignalScan, 4000); setTimeout(w.calcConfluenceScore, 5500)
+  setTimeout(runSignalScan, 4000); setTimeout(w.calcConfluenceScore, 5500)
   setTimeout(scanLiquidityMagnets, 9000); setTimeout(w.updateDeepDive, 11000)
   setTimeout(runQuantumExitUpdate, 12000); setTimeout(updateScenarioUI, 13000)
   setTimeout(computeMacroCortex, 8000)
   setTimeout(function () { try { w.devLog('Developer Mode ready.', 'info') } catch (_) { } }, 5000)
-  setTimeout(function () { try { w.hubPopulate() } catch (_) { } }, 3000)
+  setTimeout(function () { try { hubPopulate() } catch (_) { } }, 3000)
 
-  w.Intervals.set('scan', function () { w.runSignalScan(); try { w.calcConfluenceScore() } catch (_) { } }, 30000)
+  w.Intervals.set('scan', function () { runSignalScan(); try { w.calcConfluenceScore() } catch (_) { } }, 30000)
   w.Intervals.set('magnets', w.ZT_safeInterval('magnets', scanLiquidityMagnets, 60000), 60000)
   w.Intervals.set('deepdive', w.updateDeepDive, 10000)
   w.Intervals.set('qexit', runQuantumExitUpdate, 5000)
@@ -251,7 +255,7 @@ export async function startApp(): Promise<void> {
           if (serverSnap.positions && serverSnap.positions.length && typeof TP !== 'undefined' && !w._serverATEnabled && w._zeusMerge) { TP.demoPositions = TP.demoPositions || []; const closedSet = w._zeusMerge.buildClosedSet(serverSnap.closedIds); w._zeusMerge.mergePositionsInto(TP.demoPositions, serverSnap.positions, closedSet, 'visibility') }
           if (serverSnap.ts > localTs) { if (typeof TP !== 'undefined' && !w._serverATEnabled) { if (typeof serverSnap.demoBalance === 'number') TP.demoBalance = serverSnap.demoBalance }; if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered } }
           w.ZState.saveLocal()
-          setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); if (typeof w.syncBrainFromState === 'function') w.syncBrainFromState() }, 200)
+          setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions(); if (typeof w.renderATPositions === 'function') w.renderATPositions(); syncBrainFromState() }, 200)
         }).catch(function (e: any) { console.warn('[sync] visibility pull failed:', e) })
       }
     } else {

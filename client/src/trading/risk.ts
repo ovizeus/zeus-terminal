@@ -6,6 +6,7 @@ import { fmtNow } from '../data/marketDataHelpers'
 import { _clamp } from '../utils/math'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
+import { MACRO_MULT } from '../constants/trading'
 
 const w = window as any
 
@@ -421,7 +422,7 @@ export function macroAdjustEntryScore(dir: any, score: any): any {
   try {
     if (!w.BM.adapt || !w.BM.adapt.enabled) return score
     var ph = (w.BM.macro && w.BM.macro.phase) ? w.BM.macro.phase : 'NEUTRAL'
-    var m = w.MACRO_MULT[ph] || w.MACRO_MULT.NEUTRAL
+    var m = MACRO_MULT[ph] || MACRO_MULT.NEUTRAL
     var mult = (dir === 'bull') ? m.long : m.short
     return Math.round(score * mult)
   } catch (e) { return score }
@@ -432,7 +433,7 @@ export function macroAdjustExitRisk(risk: any): any {
   try {
     if (!w.BM.adapt || !w.BM.adapt.enabled) return risk
     var ph = (w.BM.macro && w.BM.macro.phase) ? w.BM.macro.phase : 'NEUTRAL'
-    var m = w.MACRO_MULT[ph] || w.MACRO_MULT.NEUTRAL
+    var m = MACRO_MULT[ph] || MACRO_MULT.NEUTRAL
     return _clamp(Math.round(risk * (m.exitRisk || 1)), 0, 100)
   } catch (e) { return risk }
 }
@@ -441,7 +442,7 @@ export function macroAdjustExitRisk(risk: any): any {
 export function computePositionSizingMult(): void {
   try {
     var ph = (w.BM.macro && w.BM.macro.phase) ? w.BM.macro.phase : 'NEUTRAL'
-    var rm = (w.MACRO_MULT[ph] && w.MACRO_MULT[ph].risk) ? w.MACRO_MULT[ph].risk : 1.0
+    var rm = (MACRO_MULT[ph] && MACRO_MULT[ph].risk) ? MACRO_MULT[ph].risk : 1.0
     var pm = (w.BM.performance && w.BM.performance.byRegime && w.BM.performance.byRegime[ph])
       ? (w.BM.performance.byRegime[ph].mult || 1.0)
       : 1.0

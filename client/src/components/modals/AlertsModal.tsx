@@ -2,6 +2,7 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
 import { toggleAlerts } from '../../ui/dom2'
+import { injectFakeWhale } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -129,7 +130,7 @@ export function AlertsModal({ visible, onClose }: Props) {
             <button style={{
               flex: 1, padding: 8, background: '#00b8d4', color: '#000', border: 'none',
               borderRadius: 4, fontSize: 9, cursor: 'pointer', fontFamily: 'var(--ff)'
-            }} onClick={() => w.injectFakeWhale?.()}>Inject Fake Whale</button>
+            }} onClick={() => injectFakeWhale()}>Inject Fake Whale</button>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
+import { NOTIFICATION_CENTER } from '../../core/config'
 
 const w = window as any
 
@@ -13,8 +14,8 @@ export function NotificationsModal({ visible, onClose }: Props) {
     // ncFilter(sev) sets NOTIFICATION_CENTER._filter + calls _ncRenderList()
     // Pass 'all' as undefined so old JS shows all items
     if (typeof w.ncFilter === 'function') w.ncFilter(f === 'all' ? 'all' : f)
-    else if (w.NOTIFICATION_CENTER) {
-      w.NOTIFICATION_CENTER._filter = f === 'all' ? 'all' : f
+    else if (NOTIFICATION_CENTER) {
+      NOTIFICATION_CENTER._filter = f === 'all' ? 'all' : f
       if (typeof w._ncRenderList === 'function') w._ncRenderList()
     }
   }

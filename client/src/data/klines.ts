@@ -12,7 +12,9 @@ import { _getCooldownMs, isArmAssistValid } from '../engine/brain'
 import { macroAdjustEntryScore } from '../trading/risk'
 import { isCurrentTimeOK } from '../ui/render'
 import { placeAutoTrade } from '../trading/autotrade'
-const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, w.MSCAN_SYMS, fn calls
+import { _isDegradedOnly } from '../utils/guards'
+import { MSCAN_SYMS } from '../core/config'
+const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
 // [8D-3] mutable refs
 const TP = getTPObject()
 const AT = getATObject()
@@ -220,7 +222,7 @@ export function _updateWhyBlocked(code: any, text: any) {
   }
 
   // Degraded feeds override
-  if (w._isDegradedOnly() && !code) {
+  if (_isDegradedOnly() && !code) {
     const feeds = [...w._SAFETY.degradedFeeds].join(',')
     pill.innerHTML = _ZI.w + ' DEGRADED: ' + feeds
     pill.className = 'degraded'
@@ -513,7 +515,7 @@ export function _mscanGetActive() {
       if (Array.isArray(arr) && arr.length > 0) return arr
     }
   } catch (_) { /* */ }
-  return w.MSCAN_SYMS.slice()
+  return MSCAN_SYMS.slice()
 }
 
 export function _mscanSaveActive(arr: any[]) {
@@ -548,7 +550,7 @@ export function toggleSymPicker() {
   if (!list) return
   const active = _mscanGetActive()
   let html = ''
-  w.MSCAN_SYMS.forEach(function (sym: string) {
+  MSCAN_SYMS.forEach(function (sym: string) {
     const short = sym.replace('USDT', '')
     const checked = active.indexOf(sym) !== -1 ? 'checked' : ''
     html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:3px;font-size:8px;color:#ccd" onmouseenter="this.style.background=\'#1a1030\'" onmouseleave="this.style.background=\'transparent\'">' +
@@ -574,7 +576,7 @@ export function mscanToggleSym(cb: any) {
 w.mscanToggleSym = mscanToggleSym
 
 export function mscanPickAll(selectAll: boolean) {
-  const active = selectAll ? w.MSCAN_SYMS.slice() : []
+  const active = selectAll ? MSCAN_SYMS.slice() : []
   _mscanSaveActive(active)
   const list = el('atSymPickerList')
   if (list) list.querySelectorAll('input[type="checkbox"]').forEach(function (cb: any) { cb.checked = selectAll })

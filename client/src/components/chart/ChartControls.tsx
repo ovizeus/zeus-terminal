@@ -4,6 +4,7 @@ import { setTF } from '../../data/marketDataFeeds'
 import { togInd as togIndFn } from '../../ui/dom2'
 import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
 import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '../../ui/panels'
+import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -151,17 +152,9 @@ export function ChartControls() {
 
   // Fullscreen — delegate to old JS toggleFS (handles chart canvas resize too)
   function toggleFS() {
-    const w = window as any
-    if (typeof w.toggleFS === 'function') {
-      w.toggleFS()
-      const sec = document.getElementById('csec')
-      setFsMode(sec ? sec.classList.contains('fsm') : false)
-    } else {
-      const sec = document.querySelector('.zr-panel--chart')
-      if (!sec) return
-      const isFull = sec.classList.toggle('fsm')
-      setFsMode(isFull)
-    }
+    toggleFSFn()
+    const sec = document.getElementById('csec')
+    setFsMode(sec ? sec.classList.contains('fsm') : false)
   }
 
   // Session toggles — delegate to old JS toggleSession(sess, btn)

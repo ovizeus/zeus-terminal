@@ -88,7 +88,7 @@ export function _isPriceSane(newPrice: number): boolean {
   }
   return true
 }
-w._isPriceSane = _isPriceSane
+// _isPriceSane — exported, consumers import directly
 
 // ── 3. SERVER TIME SYNC ──────────────────────────────────────
 export async function _syncServerTime(): Promise<void> {
@@ -164,7 +164,7 @@ export function _resetWatchdog(): void {
 export function _resetKlineWatchdog(): void {
   _SAFETY.lastKlineTs = Date.now()
 }
-w._resetKlineWatchdog = _resetKlineWatchdog
+// _resetKlineWatchdog — exported, consumers import directly
 
 export function _startWatchdog(): void {
   // Watchdog fires every 5s — we require 2 consecutive misses = 10s min before stall
@@ -233,7 +233,7 @@ export function _enterDegradedMode(source: string): void {
   w.updConn()
   w._updateWhyBlocked()
 }
-w._enterDegradedMode = _enterDegradedMode
+// _enterDegradedMode — exported, consumers import directly
 
 export function _exitDegradedMode(source: string): void {
   _SAFETY.degradedFeeds.delete(source)
@@ -247,13 +247,13 @@ export function _exitDegradedMode(source: string): void {
   }
   w.updConn()
 }
-w._exitDegradedMode = _exitDegradedMode
+// _exitDegradedMode — exported, consumers import directly
 
 export function _isDegradedOnly(): boolean {
   // True if only secondary feeds are down (BYB liq) — not the price feed
   return _SAFETY.degradedFeeds.size > 0 && !_SAFETY.dataStalled && !_SAFETY.isReconnecting
 }
-w._isDegradedOnly = _isDegradedOnly
+// _isDegradedOnly — exported, consumers import directly
 
 export function _enterRecoveryMode(source: string): void {
   if (_recoveryMode) return
@@ -265,7 +265,7 @@ export function _enterRecoveryMode(source: string): void {
   w.updConn()
   w.ncAdd('critical', 'system', `[RECOVERY] ${source} disconnected`)  // [NC]
 }
-w._enterRecoveryMode = _enterRecoveryMode
+// _enterRecoveryMode — exported, consumers import directly
 
 export function _exitRecoveryMode(): void {
   _recoveryMode = false
@@ -278,7 +278,7 @@ export function _exitRecoveryMode(): void {
     w.updConn()
   }, 2000)  // 2s settle time before resuming
 }
-w._exitRecoveryMode = _exitRecoveryMode
+// _exitRecoveryMode — exported, consumers import directly
 
 export function _verifyPositionsAfterReconnect(): void {
   // In demo mode: check if SL/TP were hit during offline by current price

@@ -11,6 +11,9 @@ import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF } from '../core/config'
 import { getCurrentADX } from '../ui/render'
+import { GATE_DEFS } from '../constants/trading'
+import { _syncDslAssistUI } from '../trading/dsl'
+import { RegimeEngine } from './regime'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
 // [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
@@ -290,13 +293,13 @@ export function armAssist(): void {
   w.ARM_ASSIST.armed = true; w.ARM_ASSIST.ts = Date.now()
   w.S.assistArmed = true
   brainThink('ok', _ZI.lock + ' ARM ASSIST activ')
-  if (typeof w._syncDslAssistUI === 'function') w._syncDslAssistUI()
+  _syncDslAssistUI()
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
 export function disarmAssist(): void {
   w.ARM_ASSIST.armed = false; w.ARM_ASSIST.ts = 0
   w.S.assistArmed = false
-  if (typeof w._syncDslAssistUI === 'function') w._syncDslAssistUI()
+  _syncDslAssistUI()
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
 export function isArmAssistValid(): boolean {
@@ -398,7 +401,7 @@ export function syncBrainFromState(): void {
   syncDslFromProfile()
 
   // ── DSL UI control — delegated to _syncDslAssistUI ──
-  if (typeof w._syncDslAssistUI === 'function') w._syncDslAssistUI()
+  _syncDslAssistUI()
   // ── Trigger cockpit render (single render path) ──
   requestAnimationFrame(() => { if (typeof renderBrainCockpit === 'function') renderBrainCockpit() })
 }
@@ -776,7 +779,7 @@ export function computeGates(dir: any): any {
 export function renderGates(gates: any): void {
   const grid = el('gatesGrid'); if (!grid) return
   const okCount = Object.values(gates).filter((v: any) => v === 'ok').length
-  const okEl = el('gatesOkCount'); if (okEl) okEl.textContent = okCount + '/' + w.GATE_DEFS.length + ' OK'
+  const okEl = el('gatesOkCount'); if (okEl) okEl.textContent = okCount + '/' + GATE_DEFS.length + ' OK'
 
   // Animate synapse dots on brain SVG for gate status
   const dotIds = ['bdot0', 'bdot1', 'bdot2', 'bdot3', 'bdot4', 'bdot5', 'bdot6', 'bdot7']
@@ -797,7 +800,7 @@ export function renderGates(gates: any): void {
     line.setAttribute('opacity', st === 'ok' ? '0.8' : '0.3')
   })
 
-  grid.innerHTML = w.GATE_DEFS.map((g: any) => {
+  grid.innerHTML = GATE_DEFS.map((g: any) => {
     const st = gates[g.id] || 'wait'
     return `<div class="gate-row">
       <div class="gate-led ${st}"></div>
@@ -820,7 +823,7 @@ export function computeEntryScore(gates: any, dir: any): any {
     session: 8, spread: 4, cooldown: 5, risk: 10, news: 5
   }
 
-  w.GATE_DEFS.forEach((g: any) => {
+  GATE_DEFS.forEach((g: any) => {
     const st = gates[g.id]
     const wt = weights[g.id] || 5
     if (st === 'ok') { score += wt; reasons.push({ pos: true, txt: '+ ' + g.label }) }
@@ -1975,7 +1978,7 @@ export function renderBrainCockpit(): void {
 
       // --- VOLATILITY (0→1): ATR% + wickChaos + volMode ---
       const _atrPct2 = BR.regimeAtrPct || 0
-      const _wickChaos = (typeof w.RegimeEngine !== 'undefined' && w.RegimeEngine._wickChaos) ? w.RegimeEngine._wickChaos(klines, 10) : 0
+      const _wickChaos = (typeof RegimeEngine !== 'undefined' && RegimeEngine._wickChaos) ? RegimeEngine._wickChaos(klines, 10) : 0
       const _volExpansion = (regDat.volMode === 'expansion') ? 0.2 : 0
       const _volatVal = clamp(_atrPct2 / 3, 0, 1) * 0.5 + clamp(_wickChaos / 80, 0, 1) * 0.3 + _volExpansion
 

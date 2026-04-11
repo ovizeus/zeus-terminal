@@ -9,7 +9,8 @@ import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { _startLivePendingSync } from './marketDataPositions'
 import { runDSLBrain } from '../trading/dsl'
-import { manualLivePlaceOrder } from '../trading/liveApi'
+import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
+import { calcDslTargetPrice } from '../engine/brain'
 import { updateModeBar } from '../ui/modebar'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
@@ -226,8 +227,8 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
       toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice))
-      if (sl) { w.manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
-      if (tp) { w.manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
+      if (sl) { manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
+      if (tp) { manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
       if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 1000)
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
@@ -242,7 +243,7 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
     id: Date.now(), side: TP.demoSide, sym: getSymbol(), entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
     mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(TP.demoSide, fillPrice, tp) : { openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(TP.demoSide, fillPrice, tp) : { openDslPct: 1.5, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(),
   }
 }

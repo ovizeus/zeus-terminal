@@ -12,6 +12,10 @@ import { clearAllSessionOverlays } from '../ui/panels'
 import { llvRequestRender, renderHeatmapOverlay, renderSROverlay, clearSR } from './marketDataOverlays'
 import { resetForecast } from '../engine/forecast'
 import { trackOIDelta } from '../services/storage'
+import { PhaseFilter } from '../engine/phaseFilter'
+import { RegimeEngine } from '../engine/regime'
+import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
+import { fetchATR } from './marketDataFeeds'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -34,8 +38,8 @@ export function connectBNB(): void {
   const _bnbGen = w.__wsGen
   console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen}`)
   w.WS.open('bnb', url, {
-    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); if (typeof w._exitRecoveryMode === 'function') w._exitRecoveryMode(); w.updConn() },
-    onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; if (typeof w._enterRecoveryMode === 'function') w._enterRecoveryMode('BNB'); w.updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; if (typeof w._exitRecoveryMode === 'function') w._exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
+    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); w.updConn() },
+    onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); w.updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
     onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; w.updConn() },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bnbGen) return
@@ -45,7 +49,7 @@ export function connectBNB(): void {
         if (st.includes('markPrice')) {
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
-            w.updatePriceDisplay(); w.updateMainMetrics()
+            w.updatePriceDisplay(); updateMainMetrics()
             if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) w.renderATPositions()
           }
         } else if (st.includes('depth20')) {
@@ -72,13 +76,13 @@ export function connectBYB(): void {
   console.log(`[connectBYB] attempt | sym=${sym} | gen=${_bybGen}`)
   w.WS.open('byb', 'wss://stream.bybit.com/v5/public/linear', {
     onopen: () => {
-      console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); if (typeof w._exitDegradedMode === 'function') w._exitDegradedMode('BYB'); w.updConn()
+      console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); _exitDegradedMode('BYB'); w.updConn()
       w.S.liqMetrics.byb.connected = true; w.S.liqMetrics.byb.connectedAt = Date.now()
       const wsi = w.WS.get('byb'); if (wsi) wsi.send(JSON.stringify({ op: 'subscribe', args: [`liquidation.${sym}`] }))
       _stopBybPing()
       _bybPingTimer = setInterval(() => { try { const ws = w.WS.get('byb'); if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' })) } catch (_) { } }, 20000)
     },
-    onclose: () => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; if (typeof w._enterDegradedMode === 'function') w._enterDegradedMode('BYB'); w.updConn(); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
+    onclose: () => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); w.updConn(); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
     onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror') },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bybGen) return
@@ -95,7 +99,7 @@ export function connectBYB(): void {
 export function updConn(): void {
   const dot = el('ldot'), lbl = el('llbl')
   const ok = w.S.bnbOk || w.S.bybOk
-  const degraded = typeof w._isDegradedOnly === 'function' ? w._isDegradedOnly() : false
+  const degraded = _isDegradedOnly()
   if (dot) dot.className = 'ldot' + (ok ? (degraded ? ' degraded' : ' on') : '')
   if (lbl) lbl.textContent = ok ? (degraded ? 'DEGRADED' : 'LIVE') : 'CONNECTING'
   const bv = el('bns'); const byv = el('bys')
@@ -142,7 +146,7 @@ export function procLiq(o: any, src?: string): void {
     w.S.llvBuckets[_pkey].ts = Date.now()
     if (w.S.overlays.llv && typeof llvRequestRender === 'function') llvRequestRender()
   }
-  if (typeof w.checkLiqAlert === 'function') w.checkLiqAlert(usd, qty, isLong ? 'LONG' : 'SHORT', sym)
+  checkLiqAlert(usd, qty, isLong ? 'LONG' : 'SHORT', sym)
 }
 
 // ===== LIQ STATS =====
@@ -248,8 +252,8 @@ export function setSymbol(sym: string): void {
     w.S.klines = []; w.S.btcClusters = {}; w.S.events = []
     w.S.price = 0; w.S.totalUSD = 0; w.S.longUSD = 0; w.S.shortUSD = 0; w.S.cnt = 0; w.S.longCnt = 0; w.S.shortCnt = 0
     w.S.bids = []; w.S.asks = []
-    if (typeof w.RegimeEngine !== 'undefined' && w.RegimeEngine.reset) w.RegimeEngine.reset()
-    if (typeof w.PhaseFilter !== 'undefined' && w.PhaseFilter.reset) w.PhaseFilter.reset()
+    if (typeof RegimeEngine !== 'undefined' && RegimeEngine.reset) RegimeEngine.reset()
+    if (typeof PhaseFilter !== 'undefined' && PhaseFilter.reset) PhaseFilter.reset()
     if (typeof resetForecast === 'function') resetForecast()
     if (typeof BM !== 'undefined') { BM.regimeEngine = { regime: 'RANGE', confidence: 0, trendBias: 'neutral', volatilityState: 'normal', trapRisk: 0, notes: ['switching symbol'] }; BM.phaseFilter = { allow: false, phase: 'RANGE', reason: 'switching symbol', riskMode: 'reduced', sizeMultiplier: 0.5, allowedSetups: [], blockedSetups: [] }; BM.confluenceScore = 50; BM.probScore = 0; BM.probBreakdown = { regime: 0, liquidity: 0, signals: 0, flow: 0 }; BM.entryScore = 0; BM.entryReady = false; BM.gates = {}; BM.sweep = { type: 'none', reclaim: false, displacement: false }; BM.flow = { cvd: 'neut', delta: 0, ofi: 'neut' }; BM.mtf = { '15m': 'neut', '1h': 'neut', '4h': 'neut' }; BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['switching symbol'], sizeMultiplier: 1.0 }; BM.qexit = { risk: 0, signals: { divergence: { type: null, conf: 0 }, climax: { dir: null, mult: 0 }, regimeFlip: { from: null, to: null, conf: 0 }, liquidity: { nearestAboveDistPct: null, nearestBelowDistPct: null, bias: 'neutral' } }, action: 'HOLD', lastTs: 0, lastReason: '', shadowStop: null, confirm: { div: 0, climax: 0 } }; BM.danger = 0; BM.dangerBreakdown = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 }; BM.conviction = 0; BM.convictionMult = 1.0; BM.structure = { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '\u2014', structureLabel: '\u2014', mtfAlign: { '15m': 'neut', '1h': 'neut', '4h': 'neut' }, score: 0, lastUpdate: 0 } }
     if (typeof BR !== 'undefined') { BR.state = 'scanning'; BR.regime = 'unknown'; BR.regimeConfidence = 0; BR.score = 0; BR.thoughts = []; BR.neurons = {}; BR.ofi = { buy: 0, sell: 0, blendBuy: 50, tape: [] } }
@@ -257,7 +261,7 @@ export function setSymbol(sym: string): void {
     // [9A-2] Notify React brainStore — BM/BR fully reset on symbol switch
     try { window.dispatchEvent(new CustomEvent('zeus:brainStateChanged')) } catch (_) {}
     w.FetchLock.release('klines')
-    w.fetchKlines(w.S.chartTf); w.fetchATR(); w.fetchOI(); w.fetchLS(); w.fetch24h(); w.fetchAllRSI()
+    w.fetchKlines(w.S.chartTf); fetchATR(); w.fetchOI(); w.fetchLS(); w.fetch24h(); w.fetchAllRSI()
     connectBNB(); connectBYB()
   } catch (_setSymErr: any) { console.error('[setSymbol] error:', _setSymErr.message || _setSymErr) }
 }

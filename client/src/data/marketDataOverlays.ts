@@ -3,6 +3,7 @@
 // Overlays, Trade Markers, LLV Canvas, Heatmap, S/R
 
 import { clearZS, renderZS } from './marketDataWS'
+import { renderOviLiquid } from '../ui/panels'
 
 const w = window as any
 
@@ -10,7 +11,7 @@ const w = window as any
 export function updOvrs(): void {
   if (w.S.overlays.liq) renderHeatmapOverlay()
   if (w.S.overlays.sr) renderSROverlay()
-  if (w.S.oviOn && typeof w.renderOviLiquid === 'function') w.renderOviLiquid()
+  if (w.S.oviOn) renderOviLiquid()
 }
 
 export function togOvr(o: any, btn: any): void {

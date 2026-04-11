@@ -8,10 +8,11 @@ import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from './dom'
 import { _ZI } from '../constants/icons'
-import { updLiqStats, renderFeed, cloudSave, cloudClear, cloudLoad } from '../data/marketDataWS'
+import { updLiqStats, renderFeed, cloudSave, cloudClear, cloudLoad, checkLiqAlert, injectFakeWhale } from '../data/marketDataWS'
 import { resetProtectMode } from '../engine/brain'
 import { triggerKillSwitch } from '../trading/autotrade'
 import { zeusGetTheme } from '../ui/theme'
+import { _enterRecoveryMode } from './guards'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -331,9 +332,7 @@ export function devInjectLiquidation(side: string): void {
     } else {
       devLog('S.events not available', 'warning')
     }
-    if (typeof w.checkLiqAlert === 'function') {
-      w.checkLiqAlert(usd, qty, side, sym.replace('USDT', ''))
-    }
+    checkLiqAlert(usd, qty, side, sym.replace('USDT', ''))
     const fmtFn = fmt
     devLog('Injected ' + side + ' liquidation $' + fmtFn(usd) + ' @ $' + fP(price), 'success')
   } catch (e) { _devModuleError('injectLiq', e) }
@@ -343,12 +342,8 @@ w.devInjectLiquidation = devInjectLiquidation
 export function devInjectWhale(): void {
   if (!_devModuleOk('injectWhale')) return
   try {
-    if (typeof w.injectFakeWhale === 'function') {
-      w.injectFakeWhale()
-      devLog('Injected fake whale event', 'success')
-    } else {
-      devLog('injectFakeWhale not available', 'warning')
-    }
+    injectFakeWhale()
+    devLog('Injected fake whale event', 'success')
   } catch (e) { _devModuleError('injectWhale', e) }
 }
 w.devInjectWhale = devInjectWhale
@@ -356,12 +351,8 @@ w.devInjectWhale = devInjectWhale
 export function devFeedDisconnect(): void {
   if (!_devModuleOk('feedDisconnect')) return
   try {
-    if (typeof w._enterRecoveryMode === 'function') {
-      w._enterRecoveryMode('DEV')
-      devLog('Simulated feed disconnect (recovery mode)', 'warning')
-    } else {
-      devLog('_enterRecoveryMode not available', 'warning')
-    }
+    _enterRecoveryMode('DEV')
+    devLog('Simulated feed disconnect (recovery mode)', 'warning')
   } catch (e) { _devModuleError('feedDisconnect', e) }
 }
 w.devFeedDisconnect = devFeedDisconnect
@@ -486,7 +477,7 @@ export function hubToggleDev(enabled: any): void {
     console.warn('[DEV] hubToggleDev error:', e)
   }
 }
-w.hubToggleDev = hubToggleDev
+// hubToggleDev — exported, consumers import directly
 
 // ── _devEnsureVisible — same pattern as _srEnsureVisible ─────────
 export function _devEnsureVisible(): void {
@@ -653,7 +644,7 @@ export function hubPopulate(): void {
     console.warn('[Hub] hubPopulate error:', e)
   }
 }
-w.hubPopulate = hubPopulate
+// hubPopulate — exported, consumers import directly
 
 export function hubSaveAll(): void {
   try {

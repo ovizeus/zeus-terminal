@@ -6,7 +6,8 @@ import { fmtTime, fmtDate, toast } from './marketDataHelpers'
 import { el } from '../utils/dom'
 import { _indRenderHook, _macdKlineHook, _syncSubChartsToMain } from '../engine/indicators'
 import { llvEnsureCanvas, llvLoadSettings, updOvrs } from './marketDataOverlays'
-import { renderVWAP } from '../ui/panels'
+import { renderVWAP, renderOviLiquid } from '../ui/panels'
+import { _isPriceSane, _resetKlineWatchdog } from '../utils/guards'
 
 const w = window as any
 
@@ -87,11 +88,11 @@ export async function fetchKlines(tf: any): Promise<void> {
       if (!k.open || !k.high || !k.low || !k.close) return false
       if (k.high < k.low || k.close < k.low || k.close > k.high) return false
       if (k.open <= 0 || k.close <= 0) return false
-      if (typeof w._isPriceSane === 'function' && !w._isPriceSane(k.close)) return false
+      if (!_isPriceSane(k.close)) return false
       return true
     })
     if (!w.S.klines.length) { console.warn('[fetchKlines] all candles failed sanity'); return }
-    if (typeof w._resetKlineWatchdog === 'function') w._resetKlineWatchdog()
+    _resetKlineWatchdog()
     renderChart()
     const symLow = sym.toLowerCase()
     const _klineGen = w.__wsGen
@@ -104,7 +105,7 @@ export async function fetchKlines(tf: any): Promise<void> {
         const last = w.S.klines?.[w.S.klines.length - 1]
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
-        if (typeof w._resetKlineWatchdog === 'function') w._resetKlineWatchdog()
+        _resetKlineWatchdog()
         try { w.cSeries.update(bar) } catch (_) { }
         if (typeof updOvrs === 'function') updOvrs()
         if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers() }, 5000) }
@@ -161,7 +162,7 @@ export function renderChart(): void {
     if (typeof _indRenderHook === 'function') _indRenderHook()
     if (typeof updOvrs === 'function') updOvrs()
     if (w.S.vwapOn && typeof renderVWAP === 'function') renderVWAP()
-    if (w.S.oviOn) { clearTimeout(w.S._oviRefreshT); w.S._oviRefreshT = setTimeout(() => { if (typeof w.renderOviLiquid === 'function') w.renderOviLiquid() }, 15000) }
+    if (w.S.oviOn) { clearTimeout(w.S._oviRefreshT); w.S._oviRefreshT = setTimeout(() => { renderOviLiquid() }, 15000) }
     if (typeof w.renderTradeMarkers === 'function') w.renderTradeMarkers()
   } catch (e) { console.error('renderChart', e) }
 }

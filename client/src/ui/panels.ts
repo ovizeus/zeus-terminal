@@ -6,6 +6,7 @@ import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { getDrawdownStats, getLastNDays, getWeeklyRollup } from '../engine/dailyPnl'
+import { calcExpectancyByProfile } from '../engine/perfStore'
 
 const w = window as any;
 
@@ -999,9 +1000,9 @@ export function renderPnlLab() {
     var weekly = typeof getWeeklyRollup === 'function' ? getWeeklyRollup() : [];
 
     // Profile expectancies
-    var profFast = typeof w.calcExpectancyByProfile === 'function' ? w.calcExpectancyByProfile('fast') : { expectancy: 0, trades: 0, wr: 0 };
-    var profSwing = typeof w.calcExpectancyByProfile === 'function' ? w.calcExpectancyByProfile('swing') : { expectancy: 0, trades: 0, wr: 0 };
-    var profDef = typeof w.calcExpectancyByProfile === 'function' ? w.calcExpectancyByProfile('defensive') : { expectancy: 0, trades: 0, wr: 0 };
+    var profFast = calcExpectancyByProfile('fast');
+    var profSwing = calcExpectancyByProfile('swing');
+    var profDef = calcExpectancyByProfile('defensive');
 
     // [FIX BUG2] Check if we have ANY data at all
     var totalTrades = (profFast.trades || 0) + (profSwing.trades || 0) + (profDef.trades || 0);

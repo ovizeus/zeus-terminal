@@ -82,6 +82,7 @@ function analyzeMarketRegime(): any {
     if (typeof w.detectRegimeEnhanced === 'function') {
       enhanced = w.detectRegimeEnhanced(klines) || enhanced
     }
+    // NOTE: kept on w.* — circular dep with engine/brain
 
     // ═══ 2. REUSE: BM.volRegime (config.js updateVolRegime) ═══
     const volRegime = (typeof w.BM !== 'undefined' && w.BM.volRegime) ? w.BM.volRegime : '—'

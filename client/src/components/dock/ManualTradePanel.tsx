@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
-import { onDemoLevChange, placeDemoOrder, setLiveSide } from '../../data/marketDataTrading'
+import { onDemoLevChange, placeDemoOrder, setLiveSide, onDemoOrdTypeChange, setLivePct } from '../../data/marketDataTrading'
 
 const w = window as any
 
@@ -34,9 +34,7 @@ export function ManualTradePanel() {
   const handleOrdTypeChange = useCallback((val: string) => {
     setOrdType(val)
     // onDemoOrdTypeChange reads from DOM, React controlled inputs handle that
-    if (typeof w.onDemoOrdTypeChange === 'function') {
-      setTimeout(() => w.onDemoOrdTypeChange(), 0)
-    }
+    setTimeout(() => onDemoOrdTypeChange(), 0)
   }, [])
 
   // Sync leverage to TP + call onDemoLevChange
@@ -321,10 +319,10 @@ export function ManualTradePanel() {
             <div className="tp-field"><div className="tp-lbl">SL</div><input type="number" id="liveSL" className="tp-inp" placeholder="—" step={0.1} /></div>
           </div>
           <div className="tp-pcts">
-            <button className="tp-pct" onClick={() => w.setLivePct?.(25)}>25%</button>
-            <button className="tp-pct" onClick={() => w.setLivePct?.(50)}>50%</button>
-            <button className="tp-pct" onClick={() => w.setLivePct?.(75)}>75%</button>
-            <button className="tp-pct" onClick={() => w.setLivePct?.(100)}>100%</button>
+            <button className="tp-pct" onClick={() => setLivePct(25)}>25%</button>
+            <button className="tp-pct" onClick={() => setLivePct(50)}>50%</button>
+            <button className="tp-pct" onClick={() => setLivePct(75)}>75%</button>
+            <button className="tp-pct" onClick={() => setLivePct(100)}>100%</button>
           </div>
           <button className="tp-exec live-exec" onClick={() => placeDemoOrder?.()}><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
           <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />

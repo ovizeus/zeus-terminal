@@ -7,7 +7,7 @@ import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { connectBNB } from '../data/marketDataWS'
 import { connectWatchlist } from '../services/symbols'
-import { getChartH } from '../data/marketDataChart'
+import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
@@ -158,7 +158,7 @@ if (!w._closeAllBtnInited) {
   let _rzTimer: any = null
   function _resizeCharts() {
     if (typeof w.mainChart === 'undefined' || !w.mainChart) return
-    const width = w.getChartW(); const h = getChartH()
+    const width = getChartW(); const h = getChartH()
     try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { if (typeof w._macdChart !== 'undefined' && w._macdChart) w._macdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }
   window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(_resizeCharts, 120) })

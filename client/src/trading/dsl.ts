@@ -8,6 +8,7 @@ import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { updateATStats } from './autotrade'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
@@ -503,7 +504,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
               w.AT.totalPnL += _dslPnl; w.AT.dailyPnL += _dslPnl
               if (Number.isFinite(_dslPnl)) { w.AT.realizedDailyPnL += _dslPnl; w.AT.closedTradesToday++ }
               if (_dslPnl >= 0) w.AT.wins++; else w.AT.losses++
-              if (typeof w.updateATStats === 'function') setTimeout(w.updateATStats, 50)
+              setTimeout(updateATStats, 50)
             }
           } else if (typeof w.closeDemoPos === 'function') {
             w.closeDemoPos(pos.id, _plReason)

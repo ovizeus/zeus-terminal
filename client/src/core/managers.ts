@@ -3,7 +3,7 @@
  * Intervals, WS, FetchLock, ingestPrice, Timeouts — all set on window.*
  */
 
-import { _resetWatchdog } from '../utils/guards'
+import { _resetWatchdog, _isPriceSane } from '../utils/guards'
 const w = window as Record<string, any>
 
 // FIX: Initialize __wsGen to 0 immediately — undefined !== 0 would kill all WS connections
@@ -107,7 +107,7 @@ export const FetchLock = w.FetchLock = w.FetchLock || (function () {
 export const ingestPrice = w.ingestPrice = w.ingestPrice || function (_raw: any, _source: any) {
   const p = +_raw
   if (!Number.isFinite(p) || p <= 0) return false
-  if (typeof w._isPriceSane === 'function' && !w._isPriceSane(p)) return false
+  if (!_isPriceSane(p)) return false
   if (typeof w.S !== 'undefined') {
     w.S.prevPrice = w.S.price || p
     w.S.price = p

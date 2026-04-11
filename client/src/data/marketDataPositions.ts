@@ -7,7 +7,9 @@ import { fmtNow, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { manualLiveModifyLimit, liveApiClosePosition, manualLiveGetOpenOrders } from '../trading/liveApi'
+import { manualLiveModifyLimit, liveApiClosePosition, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
+import { calcLiqPrice } from './marketDataTrading'
+import { calcDslTargetPrice } from '../engine/brain'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
 const TP = getTPObject()
@@ -51,11 +53,11 @@ export function checkPendingOrders(): void {
 function _fillDemoPendingOrder(ord: any): void {
   ord.status = 'FILLED'; ord.filledAt = Date.now()
   const idx = TP.pendingOrders.indexOf(ord); if (idx >= 0) TP.pendingOrders.splice(idx, 1)
-  const liqPrice = w.calcLiqPrice(ord.limitPrice, ord.lev, ord.side)
+  const liqPrice = calcLiqPrice(ord.limitPrice, ord.lev, ord.side)
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
   if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
@@ -74,7 +76,7 @@ export function cancelPendingOrder(id: any): void {
   const idx = TP.pendingOrders.findIndex(function (o: any) { return String(o.id) === strId })
   if (idx >= 0) { const ord = TP.pendingOrders[idx]; if (ord.mode === 'demo') { TP.demoBalance += ord.size; w.updateDemoBalance() }; TP.pendingOrders.splice(idx, 1); renderPendingOrders(); w.ZState.save(); toast('Pending LIMIT cancelled'); return }
   const liveIdx = TP.manualLivePending.findIndex(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
-  if (liveIdx >= 0) { const liveOrd = TP.manualLivePending[liveIdx]; if (typeof w.manualLiveCancelOrder === 'function' && liveOrd.exchangeOrderId) { w.manualLiveCancelOrder(liveOrd.sym, liveOrd.exchangeOrderId).then(function () { TP.manualLivePending.splice(liveIdx, 1); renderPendingOrders(); w.ZState.save(); toast('LIVE LIMIT cancelled') }).catch(function (err: any) { toast('Cancel failed: ' + (err.message || err)) }) } }
+  if (liveIdx >= 0) { const liveOrd = TP.manualLivePending[liveIdx]; if (liveOrd.exchangeOrderId) { manualLiveCancelOrder(liveOrd.sym, liveOrd.exchangeOrderId).then(function () { TP.manualLivePending.splice(liveIdx, 1); renderPendingOrders(); w.ZState.save(); toast('LIVE LIMIT cancelled') }).catch(function (err: any) { toast('Cancel failed: ' + (err.message || err)) }) } }
 }
 
 export function modifyPendingPrice(id: any): void {
@@ -128,8 +130,8 @@ function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
     const idx = TP.manualLivePending.indexOf(ord); if (idx >= 0) TP.manualLivePending.splice(idx, 1)
     ord.status = 'FILLED'; ord.filledAt = Date.now()
     toast('LIVE LIMIT FILLED: ' + ord.side + ' @$' + fP(ord.limitPrice))
-    if (ord.tp && typeof w.manualLiveSetTP === 'function') { const _qty = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); w.manualLiveSetTP({ symbol: ord.sym, side: ord.side, quantity: _qty.toFixed(8), stopPrice: ord.tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
-    if (ord.sl && typeof w.manualLiveSetSL === 'function') { const _qty2 = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); w.manualLiveSetSL({ symbol: ord.sym, side: ord.side, quantity: _qty2.toFixed(8), stopPrice: ord.sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
+    if (ord.tp) { const _qty = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); manualLiveSetTP({ symbol: ord.sym, side: ord.side, quantity: _qty.toFixed(8), stopPrice: ord.tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
+    if (ord.sl) { const _qty2 = ord.qty || ((ord.size * ord.lev) / ord.limitPrice); manualLiveSetSL({ symbol: ord.sym, side: ord.side, quantity: _qty2.toFixed(8), stopPrice: ord.sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
     w.addTradeToJournal({ id: ord.id, time: fmtNow(), side: ord.side, sym: (ord.sym || '').replace('USDT', ''), entry: ord.limitPrice, exit: null, pnl: 0, reason: 'LIVE LIMIT Fill', lev: ord.lev, autoTrade: false, journalEvent: 'OPEN', orderType: 'LIMIT', mode: 'live', isLive: true, openTs: Date.now(), createdAt: ord.createdAt, filledAt: Date.now() })
   })
   if (typeof w.liveApiSyncState === 'function') setTimeout(w.liveApiSyncState, 500)
@@ -156,8 +158,8 @@ export function savePosSLTP(posId: any, mode: string): void {
     if (newSL) { if (livePos.side === 'LONG' && newSL >= livePos.entry) { toast('LONG SL must be below entry'); return }; if (livePos.side === 'SHORT' && newSL <= livePos.entry) { toast('SHORT SL must be above entry'); return } }
     if (newTP) { if (livePos.side === 'LONG' && newTP <= livePos.entry) { toast('LONG TP must be above entry'); return }; if (livePos.side === 'SHORT' && newTP >= livePos.entry) { toast('SHORT TP must be below entry'); return } }
     const promises: Promise<any>[] = []
-    if (typeof w.manualLiveSetSL === 'function') { if (newSL) { promises.push(w.manualLiveSetSL({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newSL, cancelOrderId: livePos._slOrderId || undefined }).then(function (res: any) { livePos._slOrderId = res.orderId; livePos.sl = newSL })) } else if (livePos._slOrderId) { promises.push(w.manualLiveCancelOrder(livePos.sym, livePos._slOrderId).then(function () { livePos._slOrderId = null; livePos.sl = null }).catch(function () { })) } }
-    if (typeof w.manualLiveSetTP === 'function') { if (newTP) { promises.push(w.manualLiveSetTP({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newTP, cancelOrderId: livePos._tpOrderId || undefined }).then(function (res: any) { livePos._tpOrderId = res.orderId; livePos.tp = newTP })) } else if (livePos._tpOrderId) { promises.push(w.manualLiveCancelOrder(livePos.sym, livePos._tpOrderId).then(function () { livePos._tpOrderId = null; livePos.tp = null }).catch(function () { })) } }
+    if (newSL) { promises.push(manualLiveSetSL({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newSL, cancelOrderId: livePos._slOrderId || undefined }).then(function (res: any) { livePos._slOrderId = res.orderId; livePos.sl = newSL })) } else if (livePos._slOrderId) { promises.push(manualLiveCancelOrder(livePos.sym, livePos._slOrderId).then(function () { livePos._slOrderId = null; livePos.sl = null }).catch(function () { })) }
+    if (newTP) { promises.push(manualLiveSetTP({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newTP, cancelOrderId: livePos._tpOrderId || undefined }).then(function (res: any) { livePos._tpOrderId = res.orderId; livePos.tp = newTP })) } else if (livePos._tpOrderId) { promises.push(manualLiveCancelOrder(livePos.sym, livePos._tpOrderId).then(function () { livePos._tpOrderId = null; livePos.tp = null }).catch(function () { })) }
     Promise.all(promises).then(function () { w.renderLivePositions(); toast('LIVE SL/TP updated') }).catch(function (err: any) { toast('SL/TP update failed: ' + (err.message || err)); w.renderLivePositions() })
   }
 }

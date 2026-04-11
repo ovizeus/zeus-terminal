@@ -8,6 +8,8 @@ import { _ZI } from '../constants/icons'
 import { ARES_EXECUTE } from './aresExecute'
 import { _bmResetDailyIfNeeded } from '../trading/orders'
 import { liveApiGetPositions } from '../trading/liveApi'
+import { PM } from './postMortem'
+import { ARES_MONITOR } from './aresMonitor'
 
 const w = window as any
 
@@ -291,7 +293,7 @@ function _computeConfidence(traj: any) {
 
 function _updateNodes(traj: any, balance: number) {
   const regime = _regime(), es = _entryScore(), session = _session()
-  const pmStats = (typeof w.PM !== 'undefined') ? w.PM.getStats() : null
+  const pmStats = (typeof PM !== 'undefined') ? PM.getStats() : null
   const n_traj = _state.nodes.trajectory
   n_traj.value = (traj.delta >= 0 ? '+' : '') + traj.delta + '%'; n_traj.score = traj.delta; n_traj.active = Math.abs(traj.delta) > 1
   const n_reg = _state.nodes.regime
@@ -322,7 +324,7 @@ function _generateThought(traj: any, prevState: any, newState: any) {
   thoughts.push(`Session: ${session} \u2192 ${session === 'LONDON' || session === 'NEW YORK' ? 'prime liquidity window' : session === 'ASIA' ? 'reduced volume' : 'low activity period'}`)
   if (_state.winRate10 > 0) thoughts.push(`Win rate last 10: ${_state.winRate10}% \u2192 ${_state.winRate10 >= 60 ? 'edge confirmed' : _state.winRate10 >= 50 ? 'edge marginal' : 'edge degraded \u2014 reassess'}`)
   if (prevState && prevState.id !== newState.id) thoughts.push(`STATE TRANSITION: ${prevState.label} \u2192 ${newState.label}`)
-  const pmStats = (typeof w.PM !== 'undefined') ? w.PM.getStats() : null
+  const pmStats = (typeof PM !== 'undefined') ? PM.getStats() : null
   if (pmStats && pmStats.slTightPct > 60) thoughts.push(`Memory alert: ${pmStats.slTightPct}% losses had SL < 1\u00D7ATR \u2014 widening threshold recommended`)
   if (pmStats && pmStats.reboundPct > 50) thoughts.push(`Memory alert: ${pmStats.reboundPct}% SL hits reversed \u2014 noise filtering needed`)
   const pctToTarget = balance > 0 ? ((balance / TARGET) * 100).toFixed(4) : '0'
@@ -376,8 +378,8 @@ function tick() {
         const openPos = ARES_POSITIONS.getOpen()
         let liveClosed = 0, virtualClosed = 0
         for (const pos of openPos) {
-          if (pos.isLive && typeof w.ARES_MONITOR !== 'undefined' && w.ARES_MONITOR.closeLivePosition) {
-            try { w.ARES_MONITOR.closeLivePosition(pos, markPrice || pos.markPrice || 0, 'kill_switch'); liveClosed++ }
+          if (pos.isLive && typeof ARES_MONITOR !== 'undefined' && ARES_MONITOR.closeLivePosition) {
+            try { ARES_MONITOR.closeLivePosition(pos, markPrice || pos.markPrice || 0, 'kill_switch'); liveClosed++ }
             catch (ksErr: any) { _push('[KILL] Live close failed for ' + (pos.symbol || 'pos') + ' \u2014 ' + (ksErr.message || ksErr)) }
           } else { ARES_POSITIONS.closePosition(pos.id); virtualClosed++ }
         }
@@ -391,11 +393,11 @@ function tick() {
     _state.confidence = _computeConfidence(traj)
     _generateThought(traj, prevState, newState)
 
-    try { const pmR = w.PM?.load(); if (pmR && pmR[0] && pmR[0].insight) _state.lastLesson = pmR[0].insight } catch (_) { }
+    try { const pmR = PM?.load(); if (pmR && pmR[0] && pmR[0].insight) _state.lastLesson = pmR[0].insight } catch (_) { }
 
     try {
-      if (typeof w.ARES_MONITOR !== 'undefined' && w.ARES_MONITOR.check) {
-        w.ARES_MONITOR.check().catch(function (e: any) { console.warn('[ARES] monitor async error:', e.message) })
+      if (typeof ARES_MONITOR !== 'undefined' && ARES_MONITOR.check) {
+        ARES_MONITOR.check().catch(function (e: any) { console.warn('[ARES] monitor async error:', e.message) })
       }
     } catch (monErr: any) { console.warn('[ARES] monitor error:', monErr.message) }
 

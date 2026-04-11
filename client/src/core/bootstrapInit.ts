@@ -8,6 +8,7 @@ import { _ZI } from '../constants/icons'
 import { initModeBar } from '../ui/modebar'
 import { _dslTrimAll } from '../trading/dsl'
 import { calcGlobalExpectancy } from '../engine/perfStore'
+import { openPageView } from '../ui/pageview'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, w.atLog, fn calls
 // [8D-4B] mutable refs
 const AT = getATObject()
@@ -67,7 +68,7 @@ export function _waitForFeedThenStartExtras(): void {
       if (typeof w._ctxLoad === 'function') w._ctxLoad()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
       if (typeof w._ucRetryPendingBeacon === 'function') w._ucRetryPendingBeacon()
-      try { const _sd = sessionStorage.getItem('zeusDock'); if (_sd && typeof w.openPageView === 'function') w.openPageView(_sd) } catch (_) { }
+      try { const _sd = sessionStorage.getItem('zeusDock'); if (_sd) openPageView(_sd) } catch (_) { }
       const _sp = document.getElementById('_dockSplash'); if (_sp) _sp.remove()
     }
   }, CHECK_MS)

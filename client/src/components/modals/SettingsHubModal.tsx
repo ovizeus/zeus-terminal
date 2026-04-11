@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate } from '../../core/bootstrapMisc'
-import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale } from '../../utils/dev'
+import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
 
 const w = window as any
@@ -141,7 +141,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="msec">NOTIFICATIONS</div>
         <label className="mchk"><input type="checkbox" id="hubNotifyEnabled" defaultChecked onChange={(e) => { if (w.S?.alerts) w.S.alerts.enabled = e.target.checked }} /> Enable alerts &amp; notifications</label>
         <div className="msec">DEVELOPER MODE</div>
-        <label className="mchk"><input type="checkbox" id="hubDevEnabled" onChange={(e) => w.hubToggleDev?.(e.target.checked)} /> Enable Developer Mode panel</label>
+        <label className="mchk"><input type="checkbox" id="hubDevEnabled" onChange={(e) => hubToggleDev(e.target.checked)} /> Enable Developer Mode panel</label>
         <div className="hub-disabled-notice">Developer panel appears in Market Intelligence when enabled.</div>
         <div className="msec">APPEARANCE</div>
         <div className="mrow" style={{display:'flex',alignItems:'center',gap:'8px'}}>
@@ -289,7 +289,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       {/* ══ DEVELOPER ══ */}
       <div className="mbody" id="set-dev" style={{display:tab==='developer'?'block':'none'}}>
         <div className="msec">DEVELOPER MODE</div>
-        <label className="mchk"><input type="checkbox" id="hubDevEnabled2" onChange={(e) => w.hubToggleDev?.(e.target.checked)} /> Enable Developer Mode</label>
+        <label className="mchk"><input type="checkbox" id="hubDevEnabled2" onChange={(e) => hubToggleDev(e.target.checked)} /> Enable Developer Mode</label>
         <div className="hub-disabled-notice">Shows test harness panel in Market Intelligence.</div>
         <div className="msec">DEV LOG ACTIONS</div>
         <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'4px'}}>

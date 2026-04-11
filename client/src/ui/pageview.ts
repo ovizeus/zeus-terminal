@@ -302,7 +302,7 @@ export function openPageView(dockId: string) {
   // Persist active dock for refresh survival
   try { sessionStorage.setItem('zeusDock', dockId) } catch (_e) { /* */ }
 }
-w.openPageView = openPageView
+// openPageView — exported, consumers import directly
 
 // ── CLOSE ────────────────────────────────────────────────────
 export function closePageView() {

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { toast } from '../../data/marketDataHelpers'
+import { renderOviLiquid } from '../../ui/panels'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -42,7 +43,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
         minWeight: 0,
       }
     }
-    if (typeof w.renderOviLiquid === 'function' && w.S?.oviOn) w.renderOviLiquid()
+    if (w.S?.oviOn) renderOviLiquid()
     toast('Heatmap settings applied')
   }
 

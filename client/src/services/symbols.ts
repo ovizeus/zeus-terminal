@@ -10,6 +10,7 @@ import { getSymbol, getPrice, getBrainMetrics, getATObject, getTPObject, getDSLO
 import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { onNeuronScanUpdate } from '../engine/brain'
+import { _enterDegradedMode, _exitDegradedMode } from '../utils/guards'
 const w = window as Record<string, any> // kept for w.S (state ref), w.PERF, w.DHF, w.allPrices, w.WL_SYMS, w.__wsGen, w.wlPrices, w.WS, w.Timeouts, fn calls
 
 export const ZStore = {
@@ -35,7 +36,7 @@ export function connectWatchlist(): void {
     onopen: () => {
       console.log(`[connectWatchlist] onopen | gen=${w.__wsGen} (my gen=${_wlGen})`)
       if (typeof w._resetBackoff === 'function') w._resetBackoff('wl')
-      if (typeof w._exitDegradedMode === 'function') w._exitDegradedMode('WL')
+      _exitDegradedMode('WL')
     },
     onmessage: (e: MessageEvent) => {
       if (w.__wsGen !== _wlGen) return
@@ -56,7 +57,7 @@ export function connectWatchlist(): void {
     },
     onclose: () => {
       console.log('[connectWatchlist] onclose')
-      if (typeof w._enterDegradedMode === 'function') w._enterDegradedMode('WL')
+      _enterDegradedMode('WL')
       if (w.Timeouts?.set) w.Timeouts.set('wlReconnect', connectWatchlist, typeof w._nextBackoff === 'function' ? w._nextBackoff('wl', 5000, 30000) : 5000)
     },
   })

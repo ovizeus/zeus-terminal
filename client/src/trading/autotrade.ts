@@ -18,6 +18,10 @@ import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
 import { _isExecAllowed } from '../utils/guards'
 import { _showConfirmDialog } from '../data/marketDataTrading'
 import { computeProbScore } from '../engine/forecast'
+import { PREDATOR, computePredatorState } from '../engine/events'
+import { aubBBSnapshot } from '../engine/aub'
+import { calcLiqPrice } from '../data/marketDataTrading'
+import { calcDslTargetPrice, runSignalScan } from '../engine/brain'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 // [8C-4A2] AT = mutable ref to w.AT
@@ -128,7 +132,7 @@ export function _applyATToggleUI(enabled: any): void {
     w.atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
-    if (typeof w.runSignalScan === 'function') try { w.runSignalScan() } catch (_) {}
+    try { runSignalScan() } catch (_) {}
     if (typeof w.calcConfluenceScore === 'function') try { w.calcConfluenceScore() } catch (_) {}
     setTimeout(runAutoTradeCheck, 2000) // first check with fresh confluence
     // [FIX] Force balance sync when AT starts in LIVE mode — prevents $10k fallback
@@ -512,7 +516,7 @@ export function runAutoTradeCheck(): void {
   // [B1] Multi-tab protection — only leader tab runs AT
   if (typeof TabLeader !== 'undefined' && !TabLeader.checkLeader()) return
   // [p19] Predator state refresh — always runs
-  if (typeof w.computePredatorState === 'function') { w.computePredatorState() }
+  computePredatorState()
   // Prevent overlapping AT check cycles
   if (AT.running) return
   // AT.enabled gates the entire scan/analysis loop (single command — no more S.runMode)
@@ -714,10 +718,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // [p19 PREDATOR VETO]
   // PREDATOR semantics: KILL=green/all-clear, HUNT=caution, SLEEP=danger
   // Block trades when NOT in KILL (clear) state
-  if (typeof w.PREDATOR !== 'undefined' && w.PREDATOR.state !== 'KILL') {
-    var _pr = 'PREDATOR ' + w.PREDATOR.state + ' [' + w.PREDATOR.reason + ']'
+  if (typeof PREDATOR !== 'undefined' && PREDATOR.state !== 'KILL') {
+    var _pr = 'PREDATOR ' + PREDATOR.state + ' [' + PREDATOR.reason + ']'
     w.BlockReason.set('PREDATOR', _pr, 'placeAutoTrade')
-    if (typeof w.atLog === 'function') { w.atLog('warn', '[PREDATOR] VETO: ' + w.PREDATOR.state + ' / ' + w.PREDATOR.reason) }
+    if (typeof w.atLog === 'function') { w.atLog('warn', '[PREDATOR] VETO: ' + PREDATOR.state + ' / ' + PREDATOR.reason) }
     return
   }
   // [/p19 PREDATOR VETO]
@@ -808,7 +812,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
 
   const sl = side === 'LONG' ? entry - slDist : entry + slDist
   const tp = side === 'LONG' ? entry + tpDist : entry - tpDist
-  const liq = w.calcLiqPrice(entry, lev, side)
+  const liq = calcLiqPrice(entry, lev, side)
 
   // [FIX P8] QTY = notional / price (with leverage), margin = adaptFinalSize (IS the margin)
   const qty = (adaptFinalSize * lev) / entry   // contracts/coins (notional / price)
@@ -862,7 +866,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         pivotLeftPct: getTCDslTrailPct(),
         pivotRightPct: getTCDslTrailSusPct(),
         impulseVPct: getTCDslExtendPct(),
-      }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(side, entry, tp) : {
+      }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(side, entry, tp) : {
         openDslPct: 1.5, dslTargetPrice: side === 'LONG' ? entry * 1.015 : entry * 0.985
       }),
       dslAdaptiveState: 'calm',
@@ -888,7 +892,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     renderATPositions()
     w.onPositionOpened(pos, 'auto_demo')  // 3: DSL attach for auto-trade positions
     w.srLinkTrade(pos)  // [SR] leagă cel mai recent semnal de această poziţie
-    if (typeof w.aubBBSnapshot === 'function') w.aubBBSnapshot('TRADE_OPEN', { sym: pos.sym, side: pos.side, entry: pos.entry, size: pos.size, lev: pos.lev, score: (typeof BM !== 'undefined' ? BM.entryScore : 0) })
+    aubBBSnapshot('TRADE_OPEN', { sym: pos.sym, side: pos.side, entry: pos.entry, size: pos.size, lev: pos.lev, score: (typeof BM !== 'undefined' ? BM.entryScore : 0) })
     w.addTradeToJournal({
       time: fmtNow(),
       side, sym: sym.replace('USDT', ''),
@@ -941,7 +945,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         const _liveTpDist = _liveSlDist * rr
         const _liveSL = side === 'LONG' ? fillPrice - _liveSlDist : fillPrice + _liveSlDist
         const _liveTP = side === 'LONG' ? fillPrice + _liveTpDist : fillPrice - _liveTpDist
-        const _liveLiq = w.calcLiqPrice(fillPrice, lev, side)
+        const _liveLiq = calcLiqPrice(fillPrice, lev, side)
         pos = {
           id: result.orderId || Date.now(),
           orderId: result.orderId,
@@ -971,7 +975,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
             pivotLeftPct: getTCDslTrailPct(),
             pivotRightPct: getTCDslTrailSusPct(),
             impulseVPct: getTCDslExtendPct(),
-          }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(side, fillPrice, _liveTP) : {
+          }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(side, fillPrice, _liveTP) : {
             openDslPct: 1.5, dslTargetPrice: side === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985
           }),
           dslAdaptiveState: 'calm',

@@ -8,8 +8,11 @@ import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAcc
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
-import { _applyATToggleUI, updateATMode } from '../trading/autotrade'
+import { _applyATToggleUI, updateATMode, updateATStats } from '../trading/autotrade'
 import { _dslTrimAll } from '../trading/dsl'
+import { aubBBSnapshot } from '../engine/aub'
+import { loadJournalFromStorage } from '../services/storage'
+import { syncBrainFromState } from '../engine/brain'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -255,7 +258,7 @@ export const BlockReason: any = {
       this._lastLogTs = now
     }
     if (typeof w._updateWhyBlocked === 'function') w._updateWhyBlocked(code, text)
-    if (typeof w.aubBBSnapshot === 'function' && (code === 'KILL' || code === 'PROTECT' || code === 'DATA_STALL')) w.aubBBSnapshot('BLOCK_' + code, { text })
+    if ((code === 'KILL' || code === 'PROTECT' || code === 'DATA_STALL')) aubBBSnapshot('BLOCK_' + code, { text })
     return br
   },
   clear() {
@@ -534,8 +537,8 @@ export const ZState = (() => {
                 console.warn('[ZState] Corrupted journal in localStorage — clearing')
                 try { localStorage.removeItem('zt_journal') } catch (_) { /* */ }
               }
-              if (typeof w.loadJournalFromStorage === 'function') {
-                try { w.loadJournalFromStorage() } catch (_) { /* */ }
+              {
+                try { loadJournalFromStorage() } catch (_) { /* */ }
                 if (Array.isArray(TP.journal) && TP.journal.length > 0) jEntries = TP.journal
               }
             }
@@ -935,7 +938,7 @@ export const ZState = (() => {
     w.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive)
     if (state.mode && typeof w._applyGlobalModeUI === 'function') w._applyGlobalModeUI(state.mode)
     if (typeof updateATMode === 'function') updateATMode()
-    if (typeof w.updateATStats === 'function') w.updateATStats()
+    updateATStats()
     if (typeof w.renderATPositions === 'function') w.renderATPositions()
     if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
@@ -1141,7 +1144,7 @@ export const ZState = (() => {
           if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()
           if (typeof w.renderDemoPositions === 'function') w.renderDemoPositions()
           if (typeof w.renderATPositions === 'function') w.renderATPositions()
-          if (typeof w.syncBrainFromState === 'function') w.syncBrainFromState()
+          syncBrainFromState()
           // [9A-5] Notify React — positions/balance changed from server merge
           try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
         }, 100)

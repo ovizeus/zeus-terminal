@@ -3,7 +3,7 @@
 // ARES POSITION MONITOR + DSL (Dynamic Stop Loss Manager)
 // + Hook ARES in closeDemoPos
 
-import { aresClosePosition, aresSetStopLoss } from '../trading/liveApi'
+import { aresClosePosition, aresSetStopLoss, aresCancelOrder } from '../trading/liveApi'
 import { ARES_JOURNAL } from './aresJournal'
 
 const w = window as any
@@ -61,7 +61,7 @@ async function check(): Promise<void> {
         if (isBetter && movePct >= DSL_CFG.MIN_MOVE) {
           const newSl = Math.round(idealSl * 100) / 100
           try {
-            if (pos.slOrderId) await w.aresCancelOrder('BTCUSDT', pos.slOrderId)
+            if (pos.slOrderId) await aresCancelOrder('BTCUSDT', pos.slOrderId)
             const slResult = await aresSetStopLoss({ symbol: 'BTCUSDT', side: pos.side === 'LONG' ? 'BUY' : 'SELL', quantity: pos.liveQty || pos.qty, stopPrice: newSl })
             const phase = _computeDslStop(pos, markPrice) !== null ? 'DSL' : 'BE'
             w.ARES.positions.updatePos(pos.id, { slPrice: newSl, slOrderId: slResult.orderId, _slMovedBE: true, _dslPhase: phase })
@@ -84,8 +84,8 @@ async function check(): Promise<void> {
 
 async function _closeLivePosition(pos: any, markPrice: number, reason: string): Promise<any> {
   try {
-    if (pos.slOrderId) try { await w.aresCancelOrder('BTCUSDT', pos.slOrderId) } catch (_) { }
-    if (pos.tpOrderId) try { await w.aresCancelOrder('BTCUSDT', pos.tpOrderId) } catch (_) { }
+    if (pos.slOrderId) try { await aresCancelOrder('BTCUSDT', pos.slOrderId) } catch (_) { }
+    if (pos.tpOrderId) try { await aresCancelOrder('BTCUSDT', pos.tpOrderId) } catch (_) { }
 
     const closeResult = await aresClosePosition({ symbol: 'BTCUSDT', side: pos.side, qty: pos.liveQty || pos.qty })
     const closePrice = closeResult.avgPrice || markPrice

@@ -9,6 +9,7 @@ import { perfRecordTrade } from './risk'
 import { _queueExecOverlay } from './orders'
 import { renderBrainCockpit } from '../engine/brain'
 import { renderDSLWidget } from './dsl'
+import { aubBBSnapshot } from '../engine/aub'
 
 const w = window as any
 
@@ -48,7 +49,7 @@ export function onPositionOpened(pos: any, source: any): void {
       try { setTimeout(renderBrainCockpit, 0) } catch (_) { }
     }
     w.atLog('info', '[DSL] DSL attached: ' + (pos.sym || '?') + ' ' + (pos.side || '?') + ' @$' + (pos.entry || '?') + ' [' + (source || '?') + ']')
-    if (typeof w.aubBBSnapshot === 'function') w.aubBBSnapshot('DSL_ATTACH', { sym: pos.sym, side: pos.side, source })
+    aubBBSnapshot('DSL_ATTACH', { sym: pos.sym, side: pos.side, source })
   } catch (e) {
     console.warn('[DSL attach failed]', e)
   }

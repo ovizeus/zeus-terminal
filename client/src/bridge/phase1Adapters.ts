@@ -151,15 +151,15 @@ export function installPhase1Adapters(): void {
   // ── Phase 1: icons.js ──  (moved to direct imports — earlyShims handles window init)
 
   // ── Phase 2: constants.js ──
-  w.MACRO_MULT = MACRO_MULT
-  w.GATE_DEFS = GATE_DEFS
+  // MACRO_MULT — removed (direct import)
+  // GATE_DEFS — removed (direct import)
   // NOTE: _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS are defined in config.js (still bridge-loaded)
   // constants.js just re-exported them — config.js will set them on window itself
 
   // ── Phase 2: events.js ──
   w.AT = AT
-  w.PREDATOR = PREDATOR
-  w.computePredatorState = computePredatorState
+  // PREDATOR — removed (direct import)
+  // computePredatorState — removed (direct import)
   w.attachConfirmClose = attachConfirmClose
 
   // ── Phase 3: tabLeader.js ──
@@ -167,7 +167,7 @@ export function installPhase1Adapters(): void {
   // ── Phase 3: storage.js ──
   w.addTradeToJournal = addTradeToJournal
   // renderTradeJournal — removed (direct import)
-  w.loadJournalFromStorage = loadJournalFromStorage
+  // loadJournalFromStorage — removed (direct import)
 
   // trackOIDelta — removed (direct import)
 
@@ -179,7 +179,7 @@ export function installPhase1Adapters(): void {
 
   // loadPerfFromStorage — removed (direct import)
   // calcGlobalExpectancy — removed (direct import)
-  w.calcExpectancyByProfile = calcExpectancyByProfile
+  // calcExpectancyByProfile — removed (direct import)
 
   // ── Phase 4: dailyPnl.js ──
 
@@ -191,9 +191,9 @@ export function installPhase1Adapters(): void {
   w.ARIA_STATE = ARIA_STATE; w.NOVA_STATE = NOVA_STATE
   // _AN_KEY_N — removed (direct import)
   // _AN_KEY_A — removed (direct import)
-  w.NOTIFICATION_CENTER = NOTIFICATION_CENTER
+  // NOTIFICATION_CENTER — removed (direct import)
   w.USER_SETTINGS = USER_SETTINGS; w.BT = BT; w.BT_INDICATORS = BT_INDICATORS
-  w.MSCAN_SYMS = MSCAN_SYMS; w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
+  /* MSCAN_SYMS — removed (direct import) */ w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
   w.DAILY_STATS = DAILY_STATS; w.BEXT = BEXT
   // SESS_CFG — removed (direct import)
   w.PROFILE_TF = PROFILE_TF; w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
@@ -266,14 +266,14 @@ export function installPhase1Adapters(): void {
   w.promptAddFunds = promptAddFunds; w.promptResetDemo = promptResetDemo
   // _showConfirmDialog — removed (direct import)
   // setLiveSide — removed (direct import)
-  w.onDemoOrdTypeChange = onDemoOrdTypeChange; w.getDemoLev = getDemoLev; w.getLiveLev = getLiveLev
+  /* onDemoOrdTypeChange — removed (direct import) */ w.getDemoLev = getDemoLev; w.getLiveLev = getLiveLev
   /* onDemoLevChange — removed (direct import) */ w.onLiveLevChange = onLiveLevChange
-  w.calcLiqPrice = calcLiqPrice; w.updateDemoLiqPrice = updateDemoLiqPrice; w.updateLiveLiqPrice = updateLiveLiqPrice
-  w.setLivePct = setLivePct; w.updateDemoBalance = updateDemoBalance
+  /* calcLiqPrice — removed (direct import) */ w.updateDemoLiqPrice = updateDemoLiqPrice; w.updateLiveLiqPrice = updateLiveLiqPrice
+  /* setLivePct — removed (direct import) */ w.updateDemoBalance = updateDemoBalance
   /* placeDemoOrder — removed (direct import) */ w.getSymPrice = getSymPrice
 
   // ── Phase 7F-B: marketData chart (coexist) ──
-  w.getChartW = getChartW
+  // getChartW — removed (direct import)
   // getChartH — removed (direct import)
   w.initCharts = initCharts; w.fetchKlines = fetchKlines; w.renderChart = renderChart
 
@@ -284,11 +284,11 @@ export function installPhase1Adapters(): void {
   w.updLiqSourceMetrics = updLiqSourceMetrics
   w.setSymbol = _mdSetSymbol; w.toggleSnd = toggleSnd
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
-  w.updateMainMetrics = updateMainMetrics; w.showTab = showTab
+  /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
   w.setCandleStyle = setCandleStyle; w.setTZ = setTZ
   w.sendAlert = sendAlert; w.registerServiceWorker = _mdRegisterSW
-  w.checkLiqAlert = checkLiqAlert; w.testNotification = testNotification; w.saveAlerts = saveAlerts
-  w.injectFakeWhale = injectFakeWhale
+  /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; w.saveAlerts = saveAlerts
+  // injectFakeWhale — removed (direct import)
   // cloudClear — removed (direct import)
   // cloudLoad — removed (direct import)
   // cloudSave — removed (direct import)
@@ -296,11 +296,11 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
   // setTf — removed (direct import)
-  w.toggleFS = toggleFS
+  // toggleFS — removed (direct import)
   w.updatePriceDisplay = updatePriceDisplay
   w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
   w.fetchATR = fetchATR; w.fetchOI = fetchOI; w.fetchLS = fetchLS; w.fetch24h = fetch24h
-  w.updateMetrics = updateMetrics; w.calcSRTable = calcSRTable
+  /* updateMetrics — removed (direct import) */ w.calcSRTable = calcSRTable
 
   // ── Phase 7F-C: marketData overlays (coexist — old JS re-declares same functions) ──
   // updOvrs — removed (direct import)
@@ -321,7 +321,7 @@ export function installPhase1Adapters(): void {
 
   // renderVWAP — removed (direct import)
   // toggleVWAP — removed (direct import)
-  w.renderOviLiquid = renderOviLiquid
+  // renderOviLiquid — removed (direct import)
 
   w.renderPnlLab = renderPnlLab
   // toggleSession — removed (direct import)
@@ -366,7 +366,7 @@ export function installPhase1Adapters(): void {
   // ── Phase 6D: brain/aub.js ──
   w.aubToggle = aubToggle
   w.aubToggleSFX = aubToggleSFX
-  w.aubBBSnapshot = aubBBSnapshot
+  // aubBBSnapshot — removed (direct import)
   // initAUB — removed (direct import)
   // arianova.js — self-registers on window via IIFE import above
 
@@ -375,7 +375,7 @@ export function installPhase1Adapters(): void {
 
   w.atLog = atLogFn
 
-  w.updateATStats = updateATStats
+  // updateATStats — removed (direct import)
   // computeFusionDecision — removed (direct import)
   w.runAutoTradeCheck = runAutoTradeCheck
   // placeAutoTrade — removed (direct import)
@@ -390,7 +390,7 @@ export function installPhase1Adapters(): void {
   w.dslToggleMagnet = dslToggleMagnet
   // toggleDSL — removed (direct import)
   w.toggleAssistArm = toggleAssistArm
-  w._syncDslAssistUI = _syncDslAssistUI
+  // _syncDslAssistUI — removed (direct import)
 
   w.dslTakeControl = dslTakeControl
   w.dslReleaseControl = dslReleaseControl
@@ -424,13 +424,13 @@ export function installPhase1Adapters(): void {
   w.liveApiSyncState = liveApiSyncState
   // aresPlaceOrder — removed (direct import)
   // aresSetStopLoss — removed (direct import)
-  w.aresCancelOrder = aresCancelOrder
+  // aresCancelOrder — removed (direct import)
   // manualLivePlaceOrder — removed (direct import)
   // manualLiveGetOpenOrders — removed (direct import)
-  w.manualLiveCancelOrder = manualLiveCancelOrder
+  // manualLiveCancelOrder — removed (direct import)
 
-  w.manualLiveSetSL = manualLiveSetSL
-  w.manualLiveSetTP = manualLiveSetTP
+  // manualLiveSetSL — removed (direct import)
+  // manualLiveSetTP — removed (direct import)
 
   // ── Phase 6A: managers.js (self-installs on window via import) ──
   // Intervals, WS, FetchLock, ingestPrice, Timeouts already on w.* from import
@@ -440,14 +440,14 @@ export function installPhase1Adapters(): void {
   w._SAFETY = _SAFETY
   w._safe = _safe
   w._safePnl = _safePnl
-  w._isPriceSane = _isPriceSane
+  // _isPriceSane — removed (direct import)
   // _resetWatchdog — removed (direct import)
-  w._resetKlineWatchdog = _resetKlineWatchdog
-  w._enterDegradedMode = _enterDegradedMode
-  w._exitDegradedMode = _exitDegradedMode
-  w._isDegradedOnly = _isDegradedOnly
-  w._enterRecoveryMode = _enterRecoveryMode
-  w._exitRecoveryMode = _exitRecoveryMode
+  // _resetKlineWatchdog — removed (direct import)
+  // _enterDegradedMode — removed (direct import)
+  // _exitDegradedMode — removed (direct import)
+  // _isDegradedOnly — removed (direct import)
+  // _enterRecoveryMode — removed (direct import)
+  // _exitRecoveryMode — removed (direct import)
   // _isExecAllowed — removed (direct import)
   // initSafetyEngine — removed (direct import)
 
@@ -467,10 +467,10 @@ export function installPhase1Adapters(): void {
   w.devResetProtect = devResetProtect
   w.devReplayStart = devReplayStart
   w.devReplayStop = devReplayStop
-  w.hubToggleDev = hubToggleDev
+  // hubToggleDev — removed (direct import)
   // _devEnsureVisible — removed (direct import)
   // setUiScale — removed (direct import)
-  w.hubPopulate = hubPopulate
+  // hubPopulate — removed (direct import)
   // hubSaveAll — removed (direct import)
   // hubLoadAll — removed (direct import)
   // hubTgSave — removed (direct import)
@@ -496,10 +496,10 @@ export function installPhase1Adapters(): void {
   w.calcConfluenceScore = calcConfluenceScore
 
   // ── Phase 5A: regime.js ──
-  w.RegimeEngine = RegimeEngine
+  w.RegimeEngine = RegimeEngine  // KEPT: circular dep regime↔brain requires w.detectRegimeEnhanced in regime.ts
 
   // ── Phase 5A: phaseFilter.js ──
-  w.PhaseFilter = PhaseFilter
+  // PhaseFilter — removed (direct import)
 
   // ── Phase 5A: forecast.js ──
 
@@ -508,7 +508,7 @@ export function installPhase1Adapters(): void {
   // updateScenarioUI — removed (direct import)
 
   // ── Phase 5B: deepdive.js — PM ──
-  w.PM = PM
+  // PM — removed (direct import)
   // runPostMortem — removed (direct import)
   w.PM_render = PM_render
 
@@ -518,7 +518,7 @@ export function installPhase1Adapters(): void {
   w.ARES = ARES
   w.ARES_DECISION = ARES_DECISION
   // ARES_EXECUTE — removed (direct import)
-  w.ARES_MONITOR = ARES_MONITOR
+  // ARES_MONITOR — removed (direct import)
   // ARES_JOURNAL — removed (direct import)
   w.ARES_MIND = ARES_MIND
 
@@ -537,7 +537,7 @@ export function installPhase1Adapters(): void {
   w.applyIndSettings = applyIndSettings
   // renderActBar — removed (direct import)
   w.deactivateInd = deactivateInd
-  w.runSignalScan = runSignalScan
+  // runSignalScan — removed (direct import)
   w.updateDeepDive = updateDeepDive
 
   // ── Phase 5B4: brain.js ──
@@ -545,12 +545,12 @@ export function installPhase1Adapters(): void {
   w.brainThink = brainThink
   // runBrainUpdate — removed (direct import)
   // isArmAssistValid — removed (direct import)
-  w.syncBrainFromState = syncBrainFromState
+  // syncBrainFromState — removed (direct import)
   w.setBrainMode = setBrainMode
   w.setProfile = setProfile
   w.setDslMode = setDslMode
-  w.calcDslTargetPrice = calcDslTargetPrice
-  w.detectRegimeEnhanced = detectRegimeEnhanced
+  // calcDslTargetPrice — removed (direct import)
+  w.detectRegimeEnhanced = detectRegimeEnhanced  // KEPT: circular dep regime↔brain
   // updateMTFAlignment — removed (direct import)
   // detectSweepDisplacement — removed (direct import)
   // computeMarketAtmosphere — removed (direct import)

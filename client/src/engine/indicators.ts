@@ -10,6 +10,7 @@ import { _ZI } from '../constants/icons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
 import { renderVWAP } from '../ui/panels'
+import { getChartW } from '../data/marketDataChart'
 
 const w = window as any
 
@@ -421,7 +422,7 @@ function _createSubChart(containerId: string, height?: number): any {
   if (!container || typeof w.LightweightCharts === 'undefined') return null
   container.style.height = (height || 60) + 'px'
   const chart = w.LightweightCharts.createChart(container, {
-    width: typeof w.getChartW === 'function' ? w.getChartW() : container.offsetWidth,
+    width: getChartW(),
     height: height || 60,
     layout: { background: { color: '#0a0f16' }, textColor: '#7a9ab8' },
     grid: { vertLines: { color: '#1a2030' }, horzLines: { color: '#1a2030' } },
@@ -694,7 +695,7 @@ export function initMACDChart(): void {
   const container = document.getElementById('macdChart')
   if (!container || typeof w.LightweightCharts === 'undefined') return
   container.style.height = '60px'
-  const width = typeof w.getChartW === 'function' ? w.getChartW() : container.offsetWidth
+  const width = getChartW()
   w._macdChart = w.LightweightCharts.createChart(container, {
     width, height: 60,
     layout: { background: { color: '#0a0f16' }, textColor: '#7a9ab8' },

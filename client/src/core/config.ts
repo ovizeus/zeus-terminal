@@ -6,7 +6,10 @@
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
-import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere } from '../engine/brain'
+import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced } from '../engine/brain'
+import { PhaseFilter } from '../engine/phaseFilter'
+import { RegimeEngine } from '../engine/regime'
+import { computePredatorState } from '../engine/events'
 import { _adaptLoad } from '../trading/risk'
 import { _mscanUpdateLabel } from '../data/klines'
 import { loadPerfFromStorage } from '../engine/perfStore'
@@ -918,8 +921,7 @@ export function buildMTFStructure() {
       BM.structure.lastUpdate = Date.now()
       return BM.structure
     }
-    const reg = (typeof w.detectRegimeEnhanced === 'function')
-      ? w.detectRegimeEnhanced(klines) : { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '\u2014', structure: '\u2014' }
+    const reg = detectRegimeEnhanced(klines)
     BM.structure.regime = reg.regime || 'unknown'
     BM.structure.adx = reg.adx || 0
     BM.structure.atrPct = reg.atrPct || 0
@@ -1217,12 +1219,8 @@ export function _coreTickMI() {
       updateLiqCycle()
       BM.core.lastLiqTs = now
     }
-    if (typeof w.RegimeEngine !== 'undefined') {
-      BM.regimeEngine = w.RegimeEngine.compute()
-    }
-    if (typeof w.PhaseFilter !== 'undefined') {
-      BM.phaseFilter = w.PhaseFilter.evaluate(BM.regimeEngine)
-    }
+    BM.regimeEngine = RegimeEngine.compute()
+    BM.phaseFilter = PhaseFilter.evaluate(BM.regimeEngine)
     if (typeof computeMarketAtmosphere === 'function') {
       computeMarketAtmosphere()
     }
@@ -1346,7 +1344,7 @@ export function _safeCoreTickMI() {
   } catch (e) {
     console.warn('[MTF] _coreTickMI error', e)
   }
-  if (typeof w.computePredatorState === 'function') { w.computePredatorState() }
+  computePredatorState()
 }
 
 export function mtfStripToggle() {
