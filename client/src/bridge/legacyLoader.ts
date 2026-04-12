@@ -12,6 +12,17 @@
  */
 
 import { installPhase1Adapters } from './phase1Adapters'
+import { startApp } from '../core/bootstrapStartApp'
+import { _toggleExposurePanel } from '../core/bootstrapPanels'
+import { promptAddFunds, promptResetDemo, switchGlobalMode } from '../data/marketDataTrading'
+import { closeM } from '../data/marketDataWS'
+import { connectLiveAPI } from '../engine/indicators'
+import { toggleAssistArm } from '../trading/dsl'
+import { setBrainMode, setProfile, setDslMode } from '../engine/brain'
+import { _initAudio } from '../ui/dom2'
+import { aubToggleSFX, aubToggle } from '../engine/aub'
+import { toggleAdaptive } from '../trading/risk'
+import { srStripToggle } from '../core/config'
 
 // ── Types ──────────────────────────────────────────────────────────
 interface BridgeState {
@@ -95,35 +106,35 @@ function installShims(): void {
 // ── Onclick re-attacher ──────────────────────────────────────────────
 
 function reattachOnclickHandlers(): void {
-  const w = window as any
+  const w = window as any // kept for w.teacherStart, w.teacherStop, w.novaCopyLog (IIFE-registered, not exported)
 
   const ONCLICK_MAP: Record<string, () => void> = {
-    'btnAddFunds': () => w.promptAddFunds?.(),
-    'btnResetDemo': () => w.promptResetDemo?.(),
-    'btnDemo': () => w.switchGlobalMode?.('demo'),
-    'btnLive': () => w.switchGlobalMode?.('live'),
-    'btnConnectExchange': () => w.connectLiveAPI?.(),
-    'dslAssistArmBtn': () => w.toggleAssistArm?.(),
-    'bmode-assist': () => w.setBrainMode?.('assist'),
-    'bmode-auto': () => w.setBrainMode?.('auto'),
-    'prof-fast': () => w.setProfile?.('fast'),
-    'prof-swing': () => w.setProfile?.('swing'),
-    'prof-defensive': () => w.setProfile?.('defensive'),
-    'dsl-atr': () => w.setDslMode?.('atr'),
-    'dsl-fast': () => w.setDslMode?.('fast'),
-    'dsl-swing': () => w.setDslMode?.('swing'),
-    'dsl-defensive': () => w.setDslMode?.('defensive'),
-    'dsl-tp': () => w.setDslMode?.('tp'),
-    'soundBadge': () => w._initAudio?.(),
-    'aub-sfx-btn': () => { event?.stopPropagation(); w.aubToggleSFX?.() },
-    'aub-toggle-btn': () => { event?.stopPropagation(); w.aubToggle?.() },
-    'teacher-v2-teach-btn': () => w.teacherStart?.(),
-    'teacher-v2-stop-btn': () => w.teacherStop?.(),
-    'nova-copy-btn': () => w.novaCopyLog?.(),
-    'adaptiveToggleBtn': () => w.toggleAdaptive?.(),
-    'sr-strip-bar': () => w.srStripToggle?.(),
-    'wlcEnterBtn': () => w.closeM?.('mwelcome'),
-    'zsbPos': () => w._toggleExposurePanel?.(),
+    'btnAddFunds': () => promptAddFunds(),
+    'btnResetDemo': () => promptResetDemo(),
+    'btnDemo': () => switchGlobalMode('demo'),
+    'btnLive': () => switchGlobalMode('live'),
+    'btnConnectExchange': () => connectLiveAPI(),
+    'dslAssistArmBtn': () => toggleAssistArm(),
+    'bmode-assist': () => setBrainMode('assist'),
+    'bmode-auto': () => setBrainMode('auto'),
+    'prof-fast': () => setProfile('fast'),
+    'prof-swing': () => setProfile('swing'),
+    'prof-defensive': () => setProfile('defensive'),
+    'dsl-atr': () => setDslMode('atr'),
+    'dsl-fast': () => setDslMode('fast'),
+    'dsl-swing': () => setDslMode('swing'),
+    'dsl-defensive': () => setDslMode('defensive'),
+    'dsl-tp': () => setDslMode('tp'),
+    'soundBadge': () => _initAudio(),
+    'aub-sfx-btn': () => { event?.stopPropagation(); aubToggleSFX() },
+    'aub-toggle-btn': () => { event?.stopPropagation(); aubToggle() },
+    'teacher-v2-teach-btn': () => w.teacherStart?.(),  // IIFE-registered in teacherAutopilot
+    'teacher-v2-stop-btn': () => w.teacherStop?.(),    // IIFE-registered in teacherAutopilot
+    'nova-copy-btn': () => w.novaCopyLog?.(),          // IIFE-registered in arianova
+    'adaptiveToggleBtn': () => toggleAdaptive(),
+    'sr-strip-bar': () => srStripToggle(),
+    'wlcEnterBtn': () => closeM('mwelcome'),
+    'zsbPos': () => _toggleExposurePanel(),
   }
 
   let attached = 0
@@ -174,20 +185,15 @@ export async function startLegacyBridge(): Promise<BridgeState> {
     console.log('[BOOT] Chart already ready')
   }
 
-  // Step 4: Call startApp()
-  if (typeof w.startApp === 'function') {
-    console.log('[BOOT] Calling startApp()...')
-    try {
-      await w.startApp()
-      state.startAppCalled = true
-      console.log('[BOOT] startApp() completed')
-    } catch (err) {
-      console.error('[BOOT] startApp() error:', err)
-      state.error = String(err)
-    }
-  } else {
-    state.error = 'startApp() not found'
-    console.error('[BOOT]', state.error)
+  // Step 4: Call startApp() — direct import from core/bootstrapStartApp
+  console.log('[BOOT] Calling startApp()...')
+  try {
+    await startApp()
+    state.startAppCalled = true
+    console.log('[BOOT] startApp() completed')
+  } catch (err) {
+    console.error('[BOOT] startApp() error:', err)
+    state.error = String(err)
   }
 
   // Step 5: _zeusWS proxy for status bar
