@@ -1,6 +1,6 @@
 import { toast } from './marketDataHelpers'
 import { computeFusionDecision , atLog } from '../trading/autotrade'
-import { setSymbol } from './marketDataWS'
+// setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 import { _ucMarkDirty, _userCtxPush, ZT_safeInterval } from '../core/config'
 /**
  * Zeus Terminal — Orderflow (ported from public/js/data/orderflow.js)
@@ -483,8 +483,8 @@ export function _initOrderflowP1() {
     }
   }
 
-  const _prevSetSymbol = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSetSymbol = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSetSymbol === 'function') _prevSetSymbol(sym)
     try { _connect(sym) } catch (_) { }
   }
@@ -629,8 +629,8 @@ export function _initOrderflowP2() {
     } catch (_) { }
   }
 
-  const _prevSetSymbol2 = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSetSymbol2 = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSetSymbol2 === 'function') _prevSetSymbol2(sym)
     try {
       OF_SERIES.delta.length = 0
@@ -721,8 +721,8 @@ export function _initOrderflowP3() {
     }
   }
 
-  const _prevSetSymbol3 = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSetSymbol3 = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSetSymbol3 === 'function') _prevSetSymbol3(sym)
     try { w.OF_PRICE_BUF = [] } catch (_) { }
   }
@@ -856,8 +856,8 @@ export function _initOrderflowP45() {
     try { if (typeof w._tickVoidP14 === 'function') w._tickVoidP14() } catch (e: any) { _log('WARN', '[OF P14-VOI] ' + e.message) }
   }
 
-  const _prevSS45 = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSS45 = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSS45 === 'function') _prevSS45(sym)
     try {
       if (w.OF) { w.OF.abs = { active: false }; w.OF.exhaust = null }
@@ -995,8 +995,8 @@ export function _initOrderflowVacuum() {
     }
   }
 
-  const _prevSSVac = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSSVac = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSSVac === 'function') _prevSSVac(sym)
     try {
       if (w.OF) w.OF.vacuum = { active: false, dir: null, ts: 0, movePct: 0, tps: 0, vol: 0, reason: '', cooldownUntil: 0 }
@@ -1143,8 +1143,8 @@ export function _initOrderflowDFlip() {
     _prevSliceDeltaPct = curPct
   }
 
-  const _prevSSDFlip = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSSDFlip = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSSDFlip === 'function') _prevSSDFlip(sym)
     try {
       _prevSliceDeltaPct = 0
@@ -1316,8 +1316,8 @@ export function _initOrderflowIceberg() {
     return
   }
 
-  const _prevSSIce = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSSIce = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSSIce === 'function') _prevSSIce(sym)
     try {
       _prevActive = false
@@ -2580,8 +2580,8 @@ export function _initOrderflowP7() {
     }
   }
 
-  const _prevSS7 = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSS7 = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSS7 === 'function') _prevSS7(sym)
     try { _reset('symbol_change') } catch (_) { }
   }
@@ -2628,8 +2628,8 @@ export function _initOrderflowP8() {
     } catch (_) { }
   }
 
-  const _prevSS8 = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSS8 = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSS8 === 'function') _prevSS8(sym)
     try {
       if (w.CORE_STATE) w.CORE_STATE.engineStatus = 'NORMAL'
@@ -2970,8 +2970,8 @@ export function _initOrderflowP10() {
     _tickMMTrap()
   }
 
-  const _prevSSMM = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSSMM = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSSMM === 'function') _prevSSMM(sym)
     try {
       if (w.OF) {
@@ -3330,8 +3330,8 @@ export function _initOrderflowP11() {
     document.head.appendChild(s)
   })()
 
-  const _prevSSP11 = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSSP11 = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSSP11 === 'function') _prevSSP11(sym)
     try {
       if (w.OF) { w.OF.absorb = _absDefault(); w.OF.exh = _exhDefault() }
@@ -3485,8 +3485,8 @@ export function _initOrderflowP12() {
   // P12 CSS
   ;(function () { const s = document.createElement('style'); s.id = 'of-sweep-cascade-css'; s.textContent = ['#of-hud .p12-swp-up { color:#00ffa0; border-color:rgba(0,255,160,0.55); box-shadow:0 0 12px rgba(0,255,160,0.30); animation:p12-pulse-g 0.9s ease-in-out infinite; }', '#of-hud .p12-swp-dn { color:#ff4466; border-color:rgba(255,68,102,0.55); box-shadow:0 0 12px rgba(255,68,102,0.30); animation:p12-pulse-r 0.9s ease-in-out infinite; }', '#of-hud .p12-cas-arm { color:#ffc800; border-color:rgba(255,200,0,0.45); box-shadow:0 0 8px rgba(255,200,0,0.25); }', '#of-hud .p12-cas-up { color:#00ffa0; border-color:rgba(0,255,160,0.60); box-shadow:0 0 16px rgba(0,255,160,0.45); animation:p12-flash-g 0.4s ease-in-out infinite; }', '#of-hud .p12-cas-dn { color:#ff4466; border-color:rgba(255,68,102,0.60); box-shadow:0 0 16px rgba(255,68,102,0.45); animation:p12-flash-r 0.4s ease-in-out infinite; }', '@keyframes p12-pulse-g { 0%,100%{opacity:1} 50%{opacity:0.50} }', '@keyframes p12-pulse-r { 0%,100%{opacity:1} 50%{opacity:0.50} }', '@keyframes p12-flash-g { 0%,100%{opacity:1;box-shadow:0 0 16px rgba(0,255,160,0.45)} 50%{opacity:0.65;box-shadow:0 0 30px rgba(0,255,160,0.80)} }', '@keyframes p12-flash-r { 0%,100%{opacity:1;box-shadow:0 0 16px rgba(255,68,102,0.45)} 50%{opacity:0.65;box-shadow:0 0 30px rgba(255,68,102,0.80)} }'].join('\n'); document.head.appendChild(s) })()
 
-  const _prevSSP12 = setSymbol
-  setSymbol = function (sym: any) { if (typeof _prevSSP12 === 'function') _prevSSP12(sym); try { if (w.OF) { w.OF.sweep = _swpDefault(); w.OF.cascade = _casDefault() } } catch (_) { } }
+  const _prevSSP12 = w.setSymbol
+  w.setSymbol = function (sym: any) { if (typeof _prevSSP12 === 'function') _prevSSP12(sym); try { if (w.OF) { w.OF.sweep = _swpDefault(); w.OF.cascade = _casDefault() } } catch (_) { } }
 
   function _start() {
     if (!_patchSnapshot()) { let _r = 0; const _t = setInterval(function () { if (_patchSnapshot() || ++_r >= 20) clearInterval(_t) }, 500) }
@@ -3566,8 +3566,8 @@ export function _initOrderflowP13() {
   // P13 CSS
   ;(function () { const s = document.createElement('style'); s.id = 'of-magnet-css'; s.textContent = ['#of-hud .p13-mag-up { color:#00ffa0; border-color:rgba(0,255,160,0.55); box-shadow:0 0 12px rgba(0,255,160,0.32); animation:p13-pull-g 1.2s ease-in-out infinite; }', '#of-hud .p13-mag-dn { color:#ff4466; border-color:rgba(255,68,102,0.55); box-shadow:0 0 12px rgba(255,68,102,0.32); animation:p13-pull-r 1.2s ease-in-out infinite; }', '#of-hud .p13-conf { color:#cc88ff; border-color:rgba(200,136,255,0.35); box-shadow:0 0 6px rgba(200,136,255,0.18); }', '@keyframes p13-pull-g { 0%{opacity:0.6;box-shadow:0 0 6px rgba(0,255,160,0.15)} 50%{opacity:1;box-shadow:0 0 18px rgba(0,255,160,0.55)} 100%{opacity:0.6;box-shadow:0 0 6px rgba(0,255,160,0.15)} }', '@keyframes p13-pull-r { 0%{opacity:0.6;box-shadow:0 0 6px rgba(255,68,102,0.15)} 50%{opacity:1;box-shadow:0 0 18px rgba(255,68,102,0.55)} 100%{opacity:0.6;box-shadow:0 0 6px rgba(255,68,102,0.15)} }'].join('\n'); document.head.appendChild(s) })()
 
-  const _prevSSP13 = setSymbol
-  setSymbol = function (sym: any) { if (typeof _prevSSP13 === 'function') _prevSSP13(sym); try { if (w.OF) w.OF.magnet = _magDefault() } catch (_) { } }
+  const _prevSSP13 = w.setSymbol
+  w.setSymbol = function (sym: any) { if (typeof _prevSSP13 === 'function') _prevSSP13(sym); try { if (w.OF) w.OF.magnet = _magDefault() } catch (_) { } }
 
   function _start() {
     if (!_patchSnapshot()) { let _r = 0; const _t = setInterval(function () { if (_patchSnapshot() || ++_r >= 20) clearInterval(_t) }, 500) }
@@ -3643,8 +3643,8 @@ export function _initOrderflowP14() {
   // P14 CSS
   ;(function () { const s = document.createElement('style'); s.id = 'of-void-css'; s.textContent = ['#of-hud .p14-voi-up { color:#00e5ff; border-color:rgba(0,229,255,0.50); box-shadow:0 0 12px rgba(0,229,255,0.30); animation:p14-void-c 1.0s ease-in-out infinite; }', '#of-hud .p14-voi-dn { color:#cc44ff; border-color:rgba(204,68,255,0.50); box-shadow:0 0 12px rgba(204,68,255,0.30); animation:p14-void-p 1.0s ease-in-out infinite; }', '#of-hud .p14-voi-un { color:#44aacc; border-color:rgba(68,170,204,0.35); }', '#of-hud .p14-score { color:#00e5ff; border-color:rgba(0,229,255,0.30); }', '@keyframes p14-void-c { 0%,100%{opacity:0.55;box-shadow:0 0 6px rgba(0,229,255,0.15)} 50%{opacity:1;box-shadow:0 0 20px rgba(0,229,255,0.60)} }', '@keyframes p14-void-p { 0%,100%{opacity:0.55;box-shadow:0 0 6px rgba(204,68,255,0.15)} 50%{opacity:1;box-shadow:0 0 20px rgba(204,68,255,0.60)} }'].join('\n'); document.head.appendChild(s) })()
 
-  const _prevSSP14 = setSymbol
-  setSymbol = function (sym: any) { if (typeof _prevSSP14 === 'function') _prevSSP14(sym); try { if (w.OF) w.OF.void = _voiDefault() } catch (_) { } }
+  const _prevSSP14 = w.setSymbol
+  w.setSymbol = function (sym: any) { if (typeof _prevSSP14 === 'function') _prevSSP14(sym); try { if (w.OF) w.OF.void = _voiDefault() } catch (_) { } }
 
   function _start() {
     if (!_patchSnapshot()) { let _r = 0; const _t = setInterval(function () { if (_patchSnapshot() || ++_r >= 20) clearInterval(_t) }, 500) }
@@ -3849,8 +3849,8 @@ export function _initOrderflowP15() {
     try { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[OF P15] OF_DEBUG_SNAPSHOT patched with quant') } catch (_) { }
   })()
 
-  const _prevSetSymbolQ = setSymbol
-  setSymbol = function (sym: any) {
+  const _prevSetSymbolQ = w.setSymbol
+  w.setSymbol = function (sym: any) {
     if (typeof _prevSetSymbolQ === 'function') _prevSetSymbolQ(sym)
     _qState.wall.lastPrice = null; _qState.wall.stableCount = 0; _qState.wall.lastReason = null
     _qState.stopRun.prevPrice = null; _qState.stopRun.prevTs = null; _qState.stopRun.lastReason = null

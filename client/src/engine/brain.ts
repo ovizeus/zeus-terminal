@@ -994,7 +994,7 @@ export function checkProtectMode(): void {
     BM.protectMode = true
     BM.protectReason = reason
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[BRAIN PROTECT] ON ' + reason)
-    if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { getATEnabled() = false }
+    if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { if (typeof w.AT !== 'undefined') w.AT.enabled = false }
     brainThink('bad', reason)
     toast(reason)
   }
