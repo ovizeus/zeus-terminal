@@ -74,18 +74,6 @@ function installShims(): void {
     w.LightweightCharts = { version: () => 'bridge-pending' }
   }
 
-  // Flags for boot flow
-  w.__BRIDGE_SKIP_INIT_CHARTS = true
-  w.__BRIDGE_SKIP_INIT_GROUPS = true
-  w.__BRIDGE_REACT_WS_SYNC = true
-  w.__BRIDGE_OLD_BRAIN_ACTIVE = true
-  w.__ZEUS_INIT__ = true
-
-  // el() fallback
-  if (typeof w.el !== 'function') {
-    w.el = (id: string) => document.getElementById(id)
-  }
-
   // Fetch CSRF patch — adds X-Zeus-Request header to same-origin POST/PUT/DELETE/PATCH
   const _origFetch = w.fetch.bind(w)
   w.fetch = function bridgeFetch(input: RequestInfo | URL, init?: RequestInit) {

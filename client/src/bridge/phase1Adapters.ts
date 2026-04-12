@@ -229,7 +229,7 @@ export function installPhase1Adapters(): void {
   if (w.srSeries === undefined) w.srSeries = []
 
   // ── Phase 8E: bootstrap panels (coexist) ──
-  w._toggleExposurePanel = _toggleExposurePanel; w._toggleExpoInline = _toggleExpoInline
+  w._toggleExpoInline = _toggleExpoInline
   w._showPerformance = _showPerformance; w._showCompare = _showCompare
 
   // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
@@ -241,7 +241,6 @@ export function installPhase1Adapters(): void {
   w.setupPWAReloadBtn = setupPWAReloadBtn
 
   // ── Phase 8B: startApp (coexist — bootstrap.js still defines startApp for bridge) ──
-  w.startApp = startApp
 
   // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
   w.initZeusGroups = initZeusGroups
@@ -359,8 +358,6 @@ export function installPhase1Adapters(): void {
   // drawingTools.ts — self-registers on import
 
   // ── Phase 6D: brain/aub.js ──
-  w.aubToggle = aubToggle
-  w.aubToggleSFX = aubToggleSFX
   // aubBBSnapshot — removed (direct import)
   // initAUB — removed (direct import)
   // arianova.js — self-registers on window via IIFE import above
@@ -384,7 +381,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 6B: trading/dsl.js ──
   w.dslToggleMagnet = dslToggleMagnet
   // toggleDSL — removed (direct import)
-  w.toggleAssistArm = toggleAssistArm
   // _syncDslAssistUI — removed (direct import)
 
   w.dslTakeControl = dslTakeControl
@@ -521,7 +517,6 @@ export function installPhase1Adapters(): void {
   // initAriaBrain, initARES — removed (direct imports)
 
   // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──
-  w.connectLiveAPI = connectLiveAPI
 
   initIndicatorState()
   w.toggleInd = toggleInd
@@ -540,9 +535,7 @@ export function installPhase1Adapters(): void {
   // runBrainUpdate — removed (direct import)
   // isArmAssistValid — removed (direct import)
   // syncBrainFromState — removed (direct import)
-  w.setBrainMode = setBrainMode
   w.setProfile = setProfile
-  w.setDslMode = setDslMode
   // calcDslTargetPrice — removed (direct import)
   w.detectRegimeEnhanced = detectRegimeEnhanced  // KEPT: circular dep regime↔brain
   // updateMTFAlignment — removed (direct import)
