@@ -246,6 +246,8 @@ export function setSymbol(sym: string): void {
   console.log(`[setSymbol] called with '${sym}' | current __wsGen=${w.__wsGen}`)
   try {
     w.__wsGen = (w.__wsGen || 0) + 1
+    w.Timeouts.clear('bnbReconnect'); w.Timeouts.clear('bybReconnect'); w.Timeouts.clear('wlReconnect')
+    _stopBybPing()
     w.WS.closeSymbolFeeds()
     if (typeof w._stopLivePendingSync === 'function') w._stopLivePendingSync()
     if (w.S.wsK) { try { w.S.wsK.close() } catch (_) { } w.S.wsK = null }

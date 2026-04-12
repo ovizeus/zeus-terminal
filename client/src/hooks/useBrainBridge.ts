@@ -9,27 +9,22 @@
  *
  * [9A-2] Event-only — polling removed (3 dispatch sites cover all BM/BRAIN writes).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useBrainStore } from '../stores'
 
 export function useBrainBridge() {
-  const registeredRef = useRef(false)
-
   useEffect(() => {
-    if (registeredRef.current) return
-    registeredRef.current = true
-
     function onBrainChanged() {
       useBrainStore.getState().syncFromEngine()
     }
 
     window.addEventListener('zeus:brainStateChanged', onBrainChanged)
     // Initial read after bridge loads
-    setTimeout(onBrainChanged, 3000)
+    const initTimer = setTimeout(onBrainChanged, 3000)
 
     return () => {
       window.removeEventListener('zeus:brainStateChanged', onBrainChanged)
-      registeredRef.current = false
+      clearTimeout(initTimer)
     }
   }, [])
 }

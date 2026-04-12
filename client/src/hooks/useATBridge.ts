@@ -9,16 +9,11 @@
  *
  * [9A-4] Event-only — polling removed (all AT write paths now emit events).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useATStore } from '../stores'
 
 export function useATBridge() {
-  const registeredRef = useRef(false)
-
   useEffect(() => {
-    if (registeredRef.current) return
-    registeredRef.current = true
-
     const w = window as any
 
     function readATSnapshot() {
@@ -39,12 +34,11 @@ export function useATBridge() {
     }
 
     window.addEventListener('zeus:atStateChanged', readATSnapshot)
-    // Initial read after bridge loads
-    setTimeout(readATSnapshot, 3000)
+    const initTimer = setTimeout(readATSnapshot, 3000)
 
     return () => {
       window.removeEventListener('zeus:atStateChanged', readATSnapshot)
-      registeredRef.current = false
+      clearTimeout(initTimer)
     }
   }, [])
 }
