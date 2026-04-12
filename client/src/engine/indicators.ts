@@ -110,14 +110,27 @@ export function openIndPanel(): void {
         </div>
       </div>
       <div style="display:flex;align-items:center;gap:6px">
-        <span class="ind-gear" onclick="event.stopPropagation();openIndSettings('${ind.id}')" title="Settings">${_ZI.bolt}</span>
-        <div class="ind-toggle ${on ? 'on' : ''}" onclick="toggleInd('${ind.id}',this)">
+        <span class="ind-gear" data-action="openIndSettings" data-id="${ind.id}" title="Settings">${_ZI.bolt}</span>
+        <div class="ind-toggle ${on ? 'on' : ''}" data-action="toggleInd" data-id="${ind.id}">
           <div class="ind-toggle-dot"></div>
         </div>
       </div>
     `
     body.appendChild(row)
   })
+
+  // Event delegation for indicator panel buttons
+  if (!body.dataset.delegated) {
+    body.dataset.delegated = '1'
+    body.addEventListener('click', (e) => {
+      const target = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
+      if (!target) return
+      const action = target.dataset.action
+      const id = target.dataset.id
+      if (action === 'openIndSettings') { e.stopPropagation(); openIndSettings(id) }
+      else if (action === 'toggleInd') toggleInd(id, target)
+    })
+  }
 
   ov.classList.add('open')
   pan.classList.add('open')
@@ -231,7 +244,7 @@ export function openIndSettings(id: string): void {
     if (key === 'levels' || key === 'type') continue
     html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="1" max="500" step="any" class="ind-set-input"></div>`
   }
-  html += `<div style="display:flex;gap:8px;margin-top:10px"><button class="ind-set-btn" onclick="applyIndSettings('${id}')">Apply</button><button class="ind-set-btn cancel" onclick="closeIndSettings()">Cancel</button></div>`
+  html += `<div style="display:flex;gap:8px;margin-top:10px"><button class="ind-set-btn" data-action="applyIndSettings" data-id="${id}">Apply</button><button class="ind-set-btn cancel" data-action="closeIndSettings">Cancel</button></div>`
   let modal = document.getElementById('indSettingsModal')
   if (!modal) {
     modal = document.createElement('div')
@@ -241,6 +254,16 @@ export function openIndSettings(id: string): void {
   }
   modal.innerHTML = html
   ;(modal as HTMLElement).style.display = 'flex'
+  // Event delegation for settings modal buttons
+  if (!modal.dataset.delegated) {
+    modal.dataset.delegated = '1'
+    modal.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
+      if (!btn) return
+      if (btn.dataset.action === 'applyIndSettings') applyIndSettings(btn.dataset.id)
+      else if (btn.dataset.action === 'closeIndSettings') closeIndSettings()
+    })
+  }
 }
 
 export function closeIndSettings(): void {
@@ -647,9 +670,17 @@ export function renderActBar(): void {
   if (cnt) cnt.textContent = active.length
   bar.innerHTML = active.map((i: any) => `
     <span class="act-pill" style="color:${getIndColor(i.id)};border-color:${getIndColor(i.id)}44;background:${getIndColor(i.id)}11"
-      onclick="deactivateInd('${i.id}')">
+      data-action="deactivateInd" data-id="${i.id}">
       ${i.ico} ${i.id.toUpperCase()} <span class="kill">\u2715</span>
     </span>`).join('')
+  // Event delegation for active indicator pills
+  if (!bar.dataset.delegated) {
+    bar.dataset.delegated = '1'
+    bar.addEventListener('click', (e) => {
+      const pill = (e.target as HTMLElement).closest('[data-action="deactivateInd"]') as HTMLElement
+      if (pill) deactivateInd(pill.dataset.id)
+    })
+  }
 }
 
 export function getIndColor(id: string): string {

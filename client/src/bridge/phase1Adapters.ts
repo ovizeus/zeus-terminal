@@ -511,13 +511,8 @@ export function installPhase1Adapters(): void {
   // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──
 
   initIndicatorState()
-  w.toggleInd = toggleInd
   // applyIndVisibility — removed (direct import)
-  w.openIndSettings = openIndSettings
-  w.closeIndSettings = closeIndSettings
-  w.applyIndSettings = applyIndSettings
   // renderActBar — removed (direct import)
-  w.deactivateInd = deactivateInd
   // runSignalScan — removed (direct import)
   // updateDeepDive — removed (direct import)
 
