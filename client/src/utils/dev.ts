@@ -70,7 +70,7 @@ export function devClearLog(): void {
     _devRenderLog()
   } catch (_e) { /* silent */ }
 }
-w.devClearLog = devClearLog
+// devClearLog — window mapping removed (direct import)
 
 export function devExportLog(): void {
   try {
@@ -88,7 +88,7 @@ export function devExportLog(): void {
     devLog('Export failed: ' + e.message, 'error')
   }
 }
-w.devExportLog = devExportLog
+// devExportLog — window mapping removed (direct import)
 
 // ╔══════════════════════════════════════════════════════════════════╗
 // ║  ZLOG — Central Logging Buffer v90                               ║

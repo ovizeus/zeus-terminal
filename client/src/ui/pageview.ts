@@ -6,6 +6,7 @@
 import { aubRefreshAll } from '../engine/aub'
 import { dockClearActive } from './dock'
 import { renderPnlLab } from './panels'
+import { _srRenderStats } from '../core/config'
 
 const w = window as any
 
@@ -267,7 +268,7 @@ export function openPageView(dockId: string) {
       srStrip.classList.add('sr-strip-open')
     }
     if (typeof w._srRenderList === 'function') w._srRenderList()
-    if (typeof w._srRenderStats === 'function') w._srRenderStats()
+    _srRenderStats()
   }
 
   // ── Teacher ──
@@ -369,4 +370,4 @@ export function closePageView() {
   _pvState.originalNextSibling = null
   _pvState.extras = []
 }
-w.closePageView = closePageView
+// closePageView — no window mapping needed (defined in this file)

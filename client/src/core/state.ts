@@ -18,6 +18,7 @@ import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions , renderDemoPositions } from '../data/marketDataPositions'
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
+import { _applyGlobalModeUI } from '../data/marketDataTrading'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -940,7 +941,7 @@ export const ZState = (() => {
       w._resolvedEnv = 'REAL'
     }
     w.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive)
-    if (state.mode && typeof w._applyGlobalModeUI === 'function') w._applyGlobalModeUI(state.mode)
+    if (state.mode) _applyGlobalModeUI(state.mode)
     if (typeof updateATMode === 'function') updateATMode()
     updateATStats()
     renderATPositions()

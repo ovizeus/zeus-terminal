@@ -6,7 +6,8 @@
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
-import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced } from '../engine/brain'
+import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced, setProfile } from '../engine/brain'
+import { getLiveLev } from '../data/marketDataTrading'
 import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
 import { computePredatorState } from '../engine/events'
@@ -1539,7 +1540,7 @@ export function _usSave() {
       tp: _iv('liveTP', null),
     }
     USER_SETTINGS.ptLevDemo = (typeof w.getDemoLev === 'function') ? w.getDemoLev() : null
-    USER_SETTINGS.ptLevLive = (typeof w.getLiveLev === 'function') ? w.getLiveLev() : null
+    USER_SETTINGS.ptLevLive = getLiveLev()
     const _dmm = document.getElementById('demoMarginMode') as any
     if (_dmm) USER_SETTINGS.ptMarginMode = _dmm.value
     USER_SETTINGS._syncTs = Date.now()
@@ -1595,7 +1596,7 @@ export function _usApply() {
     if (USER_SETTINGS.profile) {
       S.profile = USER_SETTINGS.profile
       const _profBtn = document.getElementById('prof-' + S.profile)
-      if (_profBtn && typeof w.setProfile === 'function') {
+      if (_profBtn) {
         document.querySelectorAll('.znc-pbtn').forEach((b: any) => b.className = 'znc-pbtn')
         _profBtn.classList.add('act-' + S.profile)
       }
@@ -1952,7 +1953,7 @@ w.SESS_CFG = SESS_CFG
 w.BRAIN = BRAIN
 w.BM = BM
 w.ARM_ASSIST = ARM_ASSIST
-w.NEWS = NEWS
+// NEWS — no window mapping needed (defined in this file)
 w.ZANIM = ZANIM
 
 // Function exports to window (used globally)

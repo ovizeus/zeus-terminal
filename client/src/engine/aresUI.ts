@@ -5,7 +5,7 @@
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
-import { checkPendingOrders , renderDemoPositions } from '../data/marketDataPositions'
+import { checkPendingOrders , renderDemoPositions, checkDemoPositionsSLTP } from '../data/marketDataPositions'
 import { ARES_DECISION } from './aresDecision'
 import { ARES_MIND } from './aresMind'
 
@@ -1736,7 +1736,7 @@ export function initARES() {
 export function _demoTick() {
   const active = w.TP.demoPositions.filter((p: any) => !p.closed)
   if (active.length) {
-    w.checkDemoPositionsSLTP()
+    checkDemoPositionsSLTP()
     renderDemoPositions()
   }
   // Check demo pending limit orders for fill

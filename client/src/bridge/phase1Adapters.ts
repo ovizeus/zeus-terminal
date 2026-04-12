@@ -12,15 +12,15 @@ import './earlyShims'
 // Phase 7F-G: marketData close (chunk G — closeDemoPos)
 import { closeDemoPos } from '../data/marketDataClose'
 // Phase 7F-F: marketData positions (chunk F — pending orders, SL/TP, render, closeLivePos)
-import { cancelPendingOrder, modifyPendingPrice, renderPendingOrders, _stopLivePendingSync, savePosSLTP, checkDemoPositionsSLTP, renderDemoPositions, calcPosPnL, updateLiveBalance, getSymPrice as _mdGetSymPriceFull } from '../data/marketDataPositions'
+import { cancelPendingOrder, modifyPendingPrice, renderPendingOrders, _stopLivePendingSync, savePosSLTP, renderDemoPositions, calcPosPnL, updateLiveBalance, getSymPrice as _mdGetSymPriceFull } from '../data/marketDataPositions'
 // Phase 7F-E: marketData trading (chunk E — mode switch, orders, leverage, liq price)
-import { switchGlobalMode, _applyGlobalModeUI, _showConfirmDialog, promptAddFunds, promptResetDemo, toggleTradePanel, onDemoOrdTypeChange, getDemoLev, getLiveLev, onDemoLevChange, onLiveLevChange, calcLiqPrice, updateDemoLiqPrice, updateLiveLiqPrice, setDemoPct, setLivePct, updateDemoBalance, placeDemoOrder, getSymPrice } from '../data/marketDataTrading'
+import { switchGlobalMode, _showConfirmDialog, promptAddFunds, toggleTradePanel, onDemoOrdTypeChange, getDemoLev, onDemoLevChange, calcLiqPrice, updateDemoLiqPrice, setDemoPct, setLivePct, updateDemoBalance, placeDemoOrder, getSymPrice } from '../data/marketDataTrading'
 // Phase 7F-B: marketData chart (chunk B — chart init, fetchKlines, renderChart)
 import { getChartH, getChartW, initCharts, fetchKlines, renderChart } from '../data/marketDataChart'
 // Phase 7F-D2: marketData WS (chunk D2 — WS connects, liq, symbol, modals, alerts, cloud)
-import { connectBNB, connectBYB, procLiq, updLiqStats, updLiqSourceMetrics, updBybHealth, renderOB, renderHotZones, updMarketPressure, setLiqSrcFilter, updLiqFilterBtns, renderFeed, setSymbol as _mdSetSymbol, toggleSnd, openM, closeM, _initModalDrag, swtab, updateMainMetrics, showTab, applyChartColors as _mdApplyChartColors, setCandleStyle, setTZ, applyHeatmapSettings, registerServiceWorker as _mdRegisterSW, checkLiqAlert, testNotification, saveAlerts, cloudClear as _mdCloudClear, injectFakeWhale, setLiqSym, setLiqUsd, setLiqTW, hashEmail, cloudSave as _mdCloudSave, cloudLoad as _mdCloudLoad, initCloudSettings, applySessionSettings, applyZS, renderZS } from '../data/marketDataWS'
+import { connectBNB, connectBYB, procLiq, updLiqStats, updLiqSourceMetrics, updBybHealth, renderOB, renderHotZones, updMarketPressure, setLiqSrcFilter, updLiqFilterBtns, renderFeed, setSymbol as _mdSetSymbol, openM, closeM, _initModalDrag, swtab, updateMainMetrics, showTab, applyChartColors as _mdApplyChartColors, setCandleStyle, setTZ, applyHeatmapSettings, checkLiqAlert, testNotification, cloudClear as _mdCloudClear, injectFakeWhale, setLiqSym, setLiqUsd, setLiqTW, hashEmail, cloudSave as _mdCloudSave, cloudLoad as _mdCloudLoad, initCloudSettings, applySessionSettings, applyZS, renderZS } from '../data/marketDataWS'
 // Phase 7F-D1: marketData feeds (chunk D1 — TF, API fetches, metrics, coexist with bridge)
-import { setTF, ztfToggle, ztfPick, toggleFS, updatePriceDisplay, calcFrCd, safeFetch, throttledMainMetrics, fetchRSI, fetchAllRSI, fetchFG, fetchATR, fetchOI, fetchLS, fetch24h, setDtTf, updateMetrics, renderRSI, calcSRTable } from '../data/marketDataFeeds'
+import { setTF, ztfToggle, ztfPick, toggleFS, updatePriceDisplay, calcFrCd, safeFetch, throttledMainMetrics, fetchRSI, fetchAllRSI, fetchFG, fetchATR, fetchOI, fetchLS, fetch24h, setDtTf, updateMetrics, renderRSI } from '../data/marketDataFeeds'
 // Phase 7F-C: marketData overlays (chunk C — chart overlays, coexist with bridge marketData.js)
 import { clearSR, llvEnsureCanvas, llvResizeCanvas, llvClearCanvas, llvRequestRender, clearLiqLevels, renderLiqLevels, llvSaveSettings, llvLoadSettings, _llvPressStart, _llvPressEnd, calcHeatmapPockets, renderHeatmapOverlay, renderSROverlay } from '../data/marketDataOverlays'
 // Phase 7F-A: marketData helpers — DYNAMIC timezone versions + unique functions
@@ -30,7 +30,7 @@ import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFm
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (_ZI now direct import)
 // Named imports for config.ts exports that need window.* mapping
-import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESS_CFG, ARM_ASSIST, NEWS, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _execQueue, _srUpdateStats, _srRenderStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, oviPriceSeries as _cfgOviPriceSeries, _neuroLastScan, _execActive } from '../core/config'
+import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESS_CFG, ARM_ASSIST, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _srUpdateStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, _neuroLastScan, _execActive } from '../core/config'
 import { BlockReason, ZState, mainChart as _stMainChart, bbUpperS, ichimokuSeries, fibSeries, pivotSeries, vpSeries, _rsiChart, _stochChart, _atrChart, _obvChart, _mfiChart, _cciChart, IND_SETTINGS as _stIND_SETTINGS, liqSeries, zsSeries, oiHistory, WL_SYMS, wlPrices, allPrices } from '../core/state'
 
 import { el, safeSetText, safeSetHTML, isValidMarketPrice, safeLastKline } from '../utils/dom'
@@ -79,11 +79,11 @@ import { recordIndicatorPerformance, recalcPerfWeights, renderPerfTracker, getCu
 // Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines
 import '../core/patch' // side-effect module
 import '../core/hotkeys' // side-effect module
-import { initPageView, openPageView, closePageView } from '../ui/pageview'
+import { initPageView, openPageView } from '../ui/pageview'
 import '../ui/marketCoreReactor' // side-effect, self-registers MarketCoreReactor
 import { calcADX, fetchSymbolKlines, runMultiSymbolScan, renderMscanTable, manualEnterFromScan, runMultiSymbolAutoTrade, toggleMultiSymMode, _mscanUpdateLabel, toggleSymPicker, mscanToggleSym, mscanPickAll } from '../data/klines'
 // Phase 6E: UI leaf files
-import { _initAudio, _updateAudioBadge, _safePlayTone, playAlertSound, playEntrySound, playExitSound, toggleAlerts, initActBar, applyPriceAxisWidth, applyPriceAxisColors } from '../ui/dom2'
+import { _updateAudioBadge, _safePlayTone, playAlertSound, playEntrySound, playExitSound, toggleAlerts, initActBar, applyPriceAxisWidth, applyPriceAxisColors } from '../ui/dom2'
 import { _showExecOverlay as _showExecOverlayModal, _queueExecOverlay as _queueExecOverlayModal } from '../ui/modals'
 import '../ui/notifications' // 6 lines, self-registers
 import { toggleTimeSales } from '../ui/timeSales'
@@ -104,11 +104,11 @@ import { toggleAutoTrade, _doEnableAT, updateATMode, atLog as atLogFn, renderATL
 // Phase 6A: managers.js, guards.js, dev.js, theme.js, decisionLog.js
 import { Intervals, WS, FetchLock, ingestPrice, Timeouts } from '../core/managers'
 import { _SAFETY, _safe, _safePnl, _isPriceSane, _resetWatchdog, _resetKlineWatchdog, _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode, _isExecAllowed, initSafetyEngine } from '../utils/guards'
-import { devLog, devClearLog, devExportLog, ZLOG, safeAsync, devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, hubToggleDev, _devEnsureVisible, hubPopulate, hubSaveAll, hubLoadAll, hubTgSave, hubTgTest, hubTgPopulate, hubResetDefaults, hubSetTf, hubSetTZ, hubCloudSave, hubCloudLoad, hubCloudClear } from '../utils/dev'
+import { devLog, ZLOG, safeAsync, devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, hubToggleDev, _devEnsureVisible, hubPopulate, hubSaveAll, hubLoadAll, hubTgSave, hubTgTest, hubTgPopulate, hubResetDefaults, hubSetTf, hubSetTZ, hubCloudSave, hubCloudLoad, hubCloudClear } from '../utils/dev'
 // ui/theme — zeusApplyTheme, zeusGetTheme removed (direct imports)
 import { DLog } from '../utils/decisionLog'
 // Phase 5B4: brain.js
-import { updateNeurons, getNeuronColor, setNeuron, updateBrainArc, updateBrainState, brainThink, armAssist, disarmAssist, isArmAssistValid, _setRadio, syncDslFromProfile, syncTFProfile, syncBrainFromState, setMode, _applyModeSwitch, confirmBrainModeSwitch, cancelBrainModeSwitch, setBrainMode, setProfile, setDslMode, calcDslTargetPrice, _calcAtrPct, detectRegimeEnhanced, updateMTFAlignment, detectSweepDisplacement, updateFlowEngine, computeGates, renderGates, computeEntryScore, computeMarketAtmosphere, updateChaosBar, updateNewsShield, checkProtectMode, updateDSLTelemetry, showExecCinematic, getStableRegime, checkAntiFakeout, computeSafetyGates, allSafetyPass, computeContextGates, _getActiveSessions, updateSessionPills, renderSessionBar, initNeuroCoinLEDs, pulseNeuronCoin, onNeuronScanUpdate, initZParticles, zAnimFrame, startZAnim, _brainDirtySet, _brainSafeSet, getBrainViewSnapshot, renderCircuitBrain, runGrandUpdate, detectMarketRegime, updateOrderFlow, adaptAutoTradeParams } from '../engine/brain'
+import { updateNeurons, getNeuronColor, setNeuron, updateBrainArc, updateBrainState, brainThink, armAssist, disarmAssist, isArmAssistValid, _setRadio, syncDslFromProfile, syncTFProfile, syncBrainFromState, setMode, _applyModeSwitch, confirmBrainModeSwitch, cancelBrainModeSwitch, setBrainMode, setDslMode, calcDslTargetPrice, _calcAtrPct, detectRegimeEnhanced, updateMTFAlignment, detectSweepDisplacement, updateFlowEngine, computeGates, renderGates, computeEntryScore, computeMarketAtmosphere, updateChaosBar, updateNewsShield, checkProtectMode, updateDSLTelemetry, showExecCinematic, getStableRegime, checkAntiFakeout, computeSafetyGates, allSafetyPass, computeContextGates, _getActiveSessions, updateSessionPills, renderSessionBar, initNeuroCoinLEDs, pulseNeuronCoin, onNeuronScanUpdate, initZParticles, zAnimFrame, startZAnim, _brainDirtySet, _brainSafeSet, getBrainViewSnapshot, renderCircuitBrain, runGrandUpdate, detectMarketRegime, updateOrderFlow, adaptAutoTradeParams } from '../engine/brain'
 import { connectLiveAPI, placeLiveOrder, connectLiveExchange, loadSavedAPI, installPWA, initIndicatorState, openIndPanel, closeIndPanel, toggleInd, applyIndVisibility, openIndSettings, closeIndSettings, applyIndSettings, initBBSeries, updateBB, initIchimokuSeries, updateIchimoku, updateFib, updatePivot, updateVP, initRSIChart, updateRSI, initStochChart, initATRChart, initOBVChart, initMFIChart, initCCIChart, renderActBar, getIndColor, deactivateInd, toggleActBar, calcMACD, initMACDChart, detectSupertrendFlip, detectRSIDivergence, runSignalScan, generateDeepDive } from '../engine/indicators'
 
 // Phase 7D: orderflow — MUST be after managers (needs w.Intervals) and after guards (needs w._SAFETY)
@@ -119,7 +119,7 @@ import { startApp } from '../core/bootstrapStartApp'
 import '../core/bootstrapBrainDash'
 import { _showPerformance, _showCompare } from '../core/bootstrapPanels'
 import { _actfeedToggle } from '../core/bootstrapError'
-import { _pinIsSet, _pinCheckLock, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, setupPWAReloadBtn, masterReset } from '../core/bootstrapMisc'
+import { _pinIsSet, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, masterReset } from '../core/bootstrapMisc'
 import { initZeusGroups, _startExtras, runHealthChecks, _updatePnlLabCondensed } from '../core/bootstrapInit'
 
 export function installPhase1Adapters(): void {
@@ -196,17 +196,17 @@ export function installPhase1Adapters(): void {
   /* MSCAN_SYMS — removed (direct import) */ w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
   w.DAILY_STATS = DAILY_STATS; w.BEXT = BEXT
   // SESS_CFG — removed (direct import)
-  /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; w.NEWS = NEWS
+  /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; /* NEWS — removed (self-ref in config.ts) */
   /* _regimeHistory — removed (direct import) */ w._fakeout = _fakeout
   // _NEURO_SYMS — removed (direct import)
   // _SESS_DEF — removed (direct import)
-  w.ZANIM = ZANIM; w._execQueue = _execQueue
-  w._srUpdateStats = _srUpdateStats; w._srRenderStats = _srRenderStats
+  w.ZANIM = ZANIM; /* _execQueue — removed (0 refs) */
+  w._srUpdateStats = _srUpdateStats; /* _srRenderStats — removed (direct import) */
   w._srRenderList = _srRenderList; w._srSave = _srSave; w._srLoad = _srLoad
   w._srEnsureVisible = _srEnsureVisible; w.srStripUpdateBar = srStripUpdateBar
   w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
   w._macdChart = _macdChart; w._macdInited = _macdInited
-  w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; w.oviPriceSeries = _cfgOviPriceSeries
+  w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; /* oviPriceSeries — removed (0 refs) */
   // state.ts exports
   w.BlockReason = BlockReason; w.ZState = ZState
   w.bbUpperS = bbUpperS; w.ichimokuSeries = ichimokuSeries
@@ -234,10 +234,10 @@ export function installPhase1Adapters(): void {
   // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
 
   // ── Phase 8C: bootstrap misc (coexist) ──
-  w._pinCheckLock = _pinCheckLock
+  /* _pinCheckLock — removed (direct import) */
   // _pinUpdateUI — removed (direct import)
   // _showWelcomeModal — removed (direct import)
-  w.setupPWAReloadBtn = setupPWAReloadBtn
+  /* setupPWAReloadBtn — removed (direct import) */
 
   // ── Phase 8B: startApp (coexist — bootstrap.js still defines startApp for bridge) ──
 
@@ -253,20 +253,20 @@ export function installPhase1Adapters(): void {
   w.cancelPendingOrder = cancelPendingOrder
   w.modifyPendingPrice = modifyPendingPrice; w.renderPendingOrders = renderPendingOrders
 
-  w.savePosSLTP = savePosSLTP; w.checkDemoPositionsSLTP = checkDemoPositionsSLTP
+  w.savePosSLTP = savePosSLTP; /* checkDemoPositionsSLTP — removed (direct import) */
   /* renderDemoPositions — removed (direct import) */ w.calcPosPnL = calcPosPnL
   // renderLivePositions — removed (direct import)
   // closeLivePos — removed (direct import)
   // getSymPrice (from positions) — removed (direct import)
 
   // ── Phase 7F-E: marketData trading (coexist) ──
-  w.switchGlobalMode = switchGlobalMode; w._applyGlobalModeUI = _applyGlobalModeUI
-  w.promptAddFunds = promptAddFunds; w.promptResetDemo = promptResetDemo
+  w.switchGlobalMode = switchGlobalMode; /* _applyGlobalModeUI — removed (direct import) */
+  w.promptAddFunds = promptAddFunds; /* promptResetDemo — removed (direct import) */
   // _showConfirmDialog — removed (direct import)
   // setLiveSide — removed (direct import)
-  /* onDemoOrdTypeChange — removed (direct import) */ w.getDemoLev = getDemoLev; w.getLiveLev = getLiveLev
-  /* onDemoLevChange — removed (direct import) */ w.onLiveLevChange = onLiveLevChange
-  /* calcLiqPrice — removed (direct import) */ w.updateDemoLiqPrice = updateDemoLiqPrice; w.updateLiveLiqPrice = updateLiveLiqPrice
+  /* onDemoOrdTypeChange — removed (direct import) */ w.getDemoLev = getDemoLev; /* getLiveLev — removed (direct import) */
+  /* onDemoLevChange — removed (direct import) */ /* onLiveLevChange — removed (direct import) */
+  /* calcLiqPrice — removed (direct import) */ w.updateDemoLiqPrice = updateDemoLiqPrice; /* updateLiveLiqPrice — removed (direct import) */
   /* setLivePct — removed (direct import) */ w.updateDemoBalance = updateDemoBalance
   /* placeDemoOrder — removed (direct import) */ /* getSymPrice (from trading) — removed (direct import) */
 
@@ -278,12 +278,12 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
   // connectBNB — removed (direct import)
   /* updConn — removed (direct import) */ w.procLiq = procLiq
-  /* setSymbol — removed (direct import) */ w.toggleSnd = toggleSnd
+  /* setSymbol — removed (direct import) */ /* toggleSnd — removed (direct import) */
   w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
   // setTZ — removed (direct import)
-  /* sendAlert — removed (direct import) */ w.registerServiceWorker = _mdRegisterSW
-  /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; w.saveAlerts = saveAlerts
+  /* sendAlert — removed (direct import) */ /* registerServiceWorker — removed (direct import) */
+  /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; /* saveAlerts — removed (direct import) */
   // injectFakeWhale — removed (direct import)
   // cloudClear — removed (direct import)
   // cloudLoad — removed (direct import)
@@ -294,7 +294,7 @@ export function installPhase1Adapters(): void {
   // toggleFS — removed (direct import)
   w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
   w.fetchATR = fetchATR; w.fetchOI = fetchOI; w.fetchLS = fetchLS; w.fetch24h = fetch24h
-  /* updateMetrics — removed (direct import) */ w.calcSRTable = calcSRTable
+  /* updateMetrics — removed (direct import) */ /* calcSRTable — removed (self-ref in marketDataFeeds) */
 
   // ── Phase 7F-C: marketData overlays (coexist — old JS re-declares same functions) ──
   // updOvrs — removed (direct import)
@@ -329,7 +329,7 @@ export function installPhase1Adapters(): void {
   // patch.ts, hotkeys.ts, marketCoreReactor.ts — side-effect imports, self-register
   w.initPageView = initPageView
   w.openPageView = openPageView
-  w.closePageView = closePageView
+  /* closePageView — removed (self-ref in pageview.ts) */
   // calcADX — removed (direct import)
   // fetchSymbolKlines — removed (direct import)
   // _updateWhyBlocked — removed (direct import)
@@ -343,7 +343,7 @@ export function installPhase1Adapters(): void {
   // mscanPickAll — removed (self-ref)
 
   // ── Phase 6E: ui leaf files ──
-  w._initAudio = _initAudio
+  /* _initAudio — removed (direct import) */
   // playAlertSound, toggleAlerts, initActBar — removed (direct imports)
   // togInd — removed (direct import)
   w.toggleTimeSales = toggleTimeSales
@@ -443,8 +443,8 @@ export function installPhase1Adapters(): void {
   // ── Phase 6A: dev.js ──
   // DEV — removed (direct import)
   // devLog — removed (direct import)
-  w.devClearLog = devClearLog
-  w.devExportLog = devExportLog
+  /* devClearLog — removed (direct import) */
+  /* devExportLog — removed (direct import) */
   w.ZLOG = ZLOG
   // safeAsync — removed (direct import)
   w.devInjectSignal = devInjectSignal
@@ -534,7 +534,7 @@ export function installPhase1Adapters(): void {
   // runBrainUpdate — removed (direct import)
   // isArmAssistValid — removed (direct import)
   // syncBrainFromState — removed (direct import)
-  w.setProfile = setProfile
+  /* setProfile — removed (direct import) */
   // calcDslTargetPrice — removed (direct import)
   w.detectRegimeEnhanced = detectRegimeEnhanced  // KEPT: circular dep regime↔brain
   // updateMTFAlignment — removed (direct import)

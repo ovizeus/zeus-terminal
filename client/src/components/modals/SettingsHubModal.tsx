@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove } from '../../core/bootstrapMisc'
-import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev } from '../../utils/dev'
+import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
 
 const w = window as any
@@ -293,8 +293,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className="hub-disabled-notice">Shows test harness panel in Market Intelligence.</div>
         <div className="msec">DEV LOG ACTIONS</div>
         <div style={{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'4px'}}>
-          <button className="hub-sbtn" onClick={() => w.devClearLog?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear Dev Log</button>
-          <button className="hub-sbtn" onClick={() => w.devExportLog?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> Export CSV</button>
+          <button className="hub-sbtn" onClick={() => devClearLog()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear Dev Log</button>
+          <button className="hub-sbtn" onClick={() => devExportLog()}><svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> Export CSV</button>
         </div>
         <div className="msec">ZLOG — CENTRAL LOG (v90)</div>
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'6px',padding:'4px 0'}}>

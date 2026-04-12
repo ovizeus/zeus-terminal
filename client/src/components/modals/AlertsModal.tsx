@@ -2,7 +2,7 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
 import { toggleAlerts } from '../../ui/dom2'
-import { injectFakeWhale } from '../../data/marketDataWS'
+import { injectFakeWhale, toggleSnd, saveAlerts } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -78,7 +78,7 @@ export function AlertsModal({ visible, onClose }: Props) {
             <div style={{ fontSize: 8, color: 'var(--dim)', marginTop: 2 }}>Alert sounds on/off</div>
           </div>
           <button className="sndbtn" id="snd" style={{ fontSize: 14, padding: '4px 10px', borderRadius: 6 }}
-            onClick={() => w.toggleSnd?.()}>&#128277;</button>
+            onClick={() => toggleSnd()}>&#128277;</button>
         </div>
 
         {/* Volume Alerts */}
@@ -183,7 +183,7 @@ export function AlertsModal({ visible, onClose }: Props) {
         {/* Save / Close */}
         <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
           <button className="sbtn2 pri" style={{ flex: 1 }}
-            onClick={() => { w.saveAlerts?.(); onClose() }}>
+            onClick={() => { saveAlerts(); onClose() }}>
             <svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> SAVE
           </button>
           <button className="sbtn2 sec" style={{ flex: 1 }} onClick={onClose}>CLOSE</button>

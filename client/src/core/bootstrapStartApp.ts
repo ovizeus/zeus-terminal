@@ -7,7 +7,8 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _checkAppUpdate } from './bootstrapError'
-import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI } from './bootstrapMisc'
+import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
+import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
 import { _resumeLivePendingSyncIfNeeded , renderDemoPositions } from '../data/marketDataPositions'
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
@@ -60,7 +61,7 @@ export async function startApp(): Promise<void> {
   w.BUILD = w.BUILD || { name: 'ZeuS', version: 'v1.2.1', features: ['ServerAT', 'DSL', 'Brain', 'ARES', 'Reconciliation', 'ZLOG'], ts: Date.now() }
   console.log('[startApp] boot sequence starting | __wsGen=', w.__wsGen)
 
-  w._pinCheckLock()
+  _pinCheckLock()
 
   if (typeof w.LightweightCharts === 'undefined') { w.ZEUS_STARTED = false; setTimeout(startApp, 100); return }
 
@@ -106,7 +107,7 @@ export async function startApp(): Promise<void> {
   if (typeof _resumeLivePendingSyncIfNeeded === 'function') _resumeLivePendingSyncIfNeeded()
   setTimeout(onDemoOrdTypeChange, 200)
   if (typeof w.renderPendingOrders === 'function') setTimeout(w.renderPendingOrders, 400)
-  w.registerServiceWorker(); setPWAVersion(); w.setupPWAReloadBtn()
+  _mdRegisterSW(); setPWAVersion(); setupPWAReloadBtn()
   _initBrainCockpit()
   if (typeof w.syncDOMtoTC === 'function') w.syncDOMtoTC()
 

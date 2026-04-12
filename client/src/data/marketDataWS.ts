@@ -17,6 +17,7 @@ import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
 import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
 import { renderATPositions } from '../trading/autotrade'
+import { _initAudio } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
 const BM = getBrainMetrics()
@@ -270,7 +271,7 @@ export function setSymbol(sym: string): void {
 // ===== SOUND =====
 export function toggleSnd(): void {
   w.S.soundOn = !w.S.soundOn
-  if (typeof w._initAudio === 'function') w._initAudio()
+  _initAudio()
   const e = el('snd'); if (e) e.innerHTML = w.S.soundOn ? _ZI.bell : _ZI.bellX
 }
 

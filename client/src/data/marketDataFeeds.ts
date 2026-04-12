@@ -10,6 +10,7 @@ import { _demoTick } from '../engine/aresUI'
 import { clearHeatmap, clearSR } from './marketDataOverlays'
 import { getChartH } from './marketDataChart'
 import { updateMainMetrics, sendAlert } from './marketDataWS'
+import { updateLiveLiqPrice } from './marketDataTrading'
 import { updateDeepDive } from '../engine/indicators'
 const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn calls
 
@@ -92,11 +93,11 @@ export function updatePriceDisplay(): void {
   const c = (w.S.price - w.S.prevPrice) / w.S.prevPrice * 100
   const bc = el('bchg')
   if (bc) { bc.className = 'bchg ' + (c >= 0 ? 'up' : 'dn'); bc.textContent = (c >= 0 ? '\u25B2 ' : '\u25BC ') + Math.abs(c).toFixed(2) + '%' }
-  if (typeof w.calcSRTable === 'function') w.calcSRTable()
+  calcSRTable()
   updateMetrics()
   const _tp = getTPObject()
   if (_tp?.demoOpen) w.updateDemoLiqPrice()
-  if (_tp?.liveOpen) w.updateLiveLiqPrice()
+  if (_tp?.liveOpen) updateLiveLiqPrice()
   if (typeof _demoTick === 'function') _demoTick()
 }
 
