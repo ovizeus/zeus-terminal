@@ -26,19 +26,16 @@ export function NotificationsModal({ visible, onClose }: Props) {
 
       <div style={{ padding: '12px 16px' }}>
         {/* Tabs */}
-        <div className="nc-tabs" style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
-          <button className={`sbtn2${filter==='all'?' act':''}`} onClick={() => applyFilter('all')}>ALL</button>
-          <button className={`sbtn2${filter==='critical'?' act':''}`} onClick={() => applyFilter('critical')}>
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#ff3355', marginRight: 4, verticalAlign: 'middle' }} />
-            CRITICAL
+        <div className="nc-tabs">
+          <button className={`nc-tab${filter==='all'?' act':''}`} onClick={() => applyFilter('all')}>ALL</button>
+          <button className={`nc-tab${filter==='critical'?' act':''}`} onClick={() => applyFilter('critical')}>
+            <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#ff3355',boxShadow:'0 0 4px #ff335566',marginRight:4,verticalAlign:'middle' }} /> CRITICAL
           </button>
-          <button className={`sbtn2${filter==='warning'?' act':''}`} onClick={() => applyFilter('warning')}>
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#f0c040', marginRight: 4, verticalAlign: 'middle' }} />
-            WARN
+          <button className={`nc-tab${filter==='warning'?' act':''}`} onClick={() => applyFilter('warning')}>
+            <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#f0c040',boxShadow:'0 0 4px #f0c04066',marginRight:4,verticalAlign:'middle' }} /> WARN
           </button>
-          <button className={`sbtn2${filter==='info'?' act':''}`} onClick={() => applyFilter('info')}>
-            <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: '#4a90d9', marginRight: 4, verticalAlign: 'middle' }} />
-            INFO
+          <button className={`nc-tab${filter==='info'?' act':''}`} onClick={() => applyFilter('info')}>
+            <span style={{ display:'inline-block',width:6,height:6,borderRadius:'50%',background:'#4488ff',boxShadow:'0 0 4px #4488ff66',marginRight:4,verticalAlign:'middle' }} /> INFO
           </button>
         </div>
 
