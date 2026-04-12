@@ -2,10 +2,12 @@ import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { applyIndVisibility, renderActBar } from '../engine/indicators'
-import { sendAlert } from '../data/marketDataWS'
+import { sendAlert, closeM } from '../data/marketDataWS'
+import { _usSave, _userCtxPush, _userCtxPushNow, INDICATORS } from '../core/config'
+import { renderChart } from '../data/marketDataChart'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
 // DOM utilities, render helpers
-const w = window as any;
+const w = window as any; // kept for w.S (self-ref writes), chart objects (cSeries/mainChart/cvdChart/_macdChart), w.TP, AudioContext
 
 // Audio init & alerts
 let _audioCtx: any = null;
@@ -108,20 +110,21 @@ export function applyChartColors(): void {
   if (w.cSeries) { w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bw + '77', wickDownColor: brw + '77' }); }
   if (w.mainChart) { w.mainChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText }, rightPriceScale: { textColor: pText } }); }
   if (w.cvdChart) { w.cvdChart.applyOptions({ layout: { background: { color: pBg }, textColor: pText } }); }
-  w.closeM('mcharts'); toast('Culori aplicate \u2713');
+  closeM('mcharts'); toast('Culori aplicate \u2713');
   // Save + IMMEDIATE push to server (no debounce — explicit user action)
-  if (typeof w._usSave === 'function') w._usSave();
-  if (typeof w._userCtxPushNow === 'function') w._userCtxPushNow();
+  _usSave();
+  _userCtxPushNow();
 }
 
 // ===== INIT ACT BAR =====
+let _actBarBuilt = false
 export function initActBar(): void {
-  if (w._actBarBuilt) return;  // guard: never init twice
-  w._actBarBuilt = true;
+  if (_actBarBuilt) return;  // guard: never init twice
+  _actBarBuilt = true;
   renderActBar();
   // Apply initial visibility for ALL indicators — enable active ones + hide disabled ones
   const S = w.S;
-  w.INDICATORS.forEach((ind: any) => {
+  INDICATORS.forEach((ind: any) => {
     var on = (ind.id in S.activeInds) ? !!S.activeInds[ind.id] : !!ind.def;
     applyIndVisibility(ind.id, on);
   });
@@ -156,11 +159,11 @@ export function togInd(id: any, btn: any): void {
   S.indicators[id] = newVal;
   if (btn) btn.classList.toggle('act', newVal);
   applyIndVisibility(id, newVal);
-  if (newVal && typeof w.renderChart === 'function') w.renderChart();
+  if (newVal) renderChart();
   renderActBar();
   // [P5 FIX] Persist indicator state so it survives refresh
-  if (typeof w._usSave === 'function') w._usSave();
-  if (typeof w._userCtxPush === 'function') w._userCtxPush();
+  _usSave();
+  _userCtxPush();
 }
 
 export function applyPriceAxisColors(): void {
@@ -175,7 +178,7 @@ export function applyPriceAxisColors(): void {
       rightPriceScale: { borderColor: gh }
     });
   });
-  w.closeM('mcharts'); toast('Culori price axis aplicate \u2713');
+  closeM('mcharts'); toast('Culori price axis aplicate \u2713');
 }
 // ===== TRADE JOURNAL =====
 // IIFE: guarded — TP may not exist yet at import time
