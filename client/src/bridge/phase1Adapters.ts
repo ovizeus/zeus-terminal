@@ -209,7 +209,6 @@ export function installPhase1Adapters(): void {
   // state.ts exports
   w.BlockReason = BlockReason; w.ZState = ZState
   w.IND_SETTINGS = _stIND_SETTINGS; w.liqSeries = liqSeries; w.zsSeries = zsSeries
-  w.oiHistory = oiHistory; w.WL_SYMS = WL_SYMS; w.wlPrices = wlPrices; w.allPrices = allPrices
   // Chart series refs — start as null/undefined, set by initCharts() in marketDataChart.ts
   // Bridge marketData.js renderChart() references these as globals
   if (w.cSeries === undefined) w.cSeries = null
@@ -281,8 +280,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
   // setTf — removed (direct import)
   // toggleFS — removed (direct import)
-  w.fetchAllRSI = fetchAllRSI; w.fetchFG = fetchFG
-  w.fetchATR = fetchATR; w.fetchOI = fetchOI; w.fetchLS = fetchLS; w.fetch24h = fetch24h
   /* updateMetrics — removed (direct import) */ /* calcSRTable — removed (self-ref in marketDataFeeds) */
 
   // ── Phase 7F-C: marketData overlays (coexist — old JS re-declares same functions) ──
@@ -321,7 +318,6 @@ export function installPhase1Adapters(): void {
   // calcADX — removed (direct import)
   // fetchSymbolKlines — removed (direct import)
   // _updateWhyBlocked — removed (direct import)
-  w.runMultiSymbolScan = runMultiSymbolScan
 
   // runMultiSymbolAutoTrade, toggleMultiSymMode — removed (self-ref)
   // _mscanUpdateLabel — removed (direct import)

@@ -25,7 +25,8 @@ import { rebuildDailyFromJournal, loadDailyPnl } from '../engine/dailyPnl'
 import { runBacktest, scanLiquidityMagnets } from '../ui/panels'
 import { savePerfToStorage, loadPerfFromStorage } from '../engine/perfStore'
 import { startFRCountdown, renderTradeJournal, trackOIDelta, loadJournalFromStorage } from '../services/storage'
-import { fetchSymbolKlines } from '../data/klines'
+import { fetchSymbolKlines, runMultiSymbolScan } from '../data/klines'
+import { fetchAllRSI, fetchATR as fetchATRRaw } from '../data/marketDataFeeds'
 import { _devEnsureVisible , safeAsync , devLog } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
 import { initSafetyEngine } from '../utils/guards'
@@ -126,14 +127,14 @@ export async function startApp(): Promise<void> {
 
   w.ZLOG.install()
   w.fetchKlines = safeAsync(w.fetchKlines, 'fetchKlines', { silent: true })
-  w.fetchAllRSI = safeAsync(w.fetchAllRSI, 'fetchAllRSI', { silent: true })
+  w.fetchAllRSI = safeAsync(fetchAllRSI, 'fetchAllRSI', { silent: true })
   w.fetchFG = safeAsync(w.fetchFG, 'fetchFG', { silent: true })
-  w.fetchATR = safeAsync(w.fetchATR, 'fetchATR', { silent: true })
+  w.fetchATR = safeAsync(fetchATRRaw, 'fetchATR', { silent: true })
   w.fetchOI = safeAsync(w.fetchOI, 'fetchOI', { silent: true })
   w.fetchLS = safeAsync(w.fetchLS, 'fetchLS', { silent: true })
   w.fetch24h = safeAsync(w.fetch24h, 'fetch24h', { silent: true })
   w.fetchSymbolKlines = safeAsync(fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
-  w.runMultiSymbolScan = safeAsync(w.runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
+  w.runMultiSymbolScan = safeAsync(runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
   w.runBacktest = safeAsync(runBacktest, 'runBacktest', { silent: false })
   w.ZLOG.push('INFO', '[ZLOG v90] installed \u2014 safeAsync hooks active on 10 functions')
   console.log('[ZLOG v90] install complete | safeAsync hooks: 10 functions wrapped')

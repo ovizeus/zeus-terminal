@@ -332,7 +332,6 @@ export async function runMultiSymbolScan() {
     w.FetchLock.release('multiScan')
   }
 }
-w.runMultiSymbolScan = runMultiSymbolScan
 
 export function renderMscanTable(results: any[], opps: number) {
   const tbody = el('mscanBody')

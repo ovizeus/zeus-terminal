@@ -7,12 +7,13 @@
  */
 
 import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
+import { oiHistory } from '../core/state'
 import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { recordDailyClose } from '../engine/dailyPnl'
-const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, w.oiHistory, w.ZT_capArr
+const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, oiHistory, w.ZT_capArr
 const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -94,11 +95,11 @@ export function trackOIDelta(): void {
   const oi = getOI().oi
   if (!oi) return
   const now = Date.now()
-  w.oiHistory.push({ oi: oi, ts: now })
-  if (typeof w.ZT_capArr === 'function') w.ZT_capArr(w.oiHistory, 2000)
-  while (w.oiHistory.length > 0 && w.oiHistory[0].ts < now - 1200000) w.oiHistory.shift()
+  oiHistory.push({ oi: oi, ts: now })
+  if (typeof w.ZT_capArr === 'function') w.ZT_capArr(oiHistory, 2000)
+  while (oiHistory.length > 0 && oiHistory[0].ts < now - 1200000) oiHistory.shift()
   const t5 = now - 300000
-  const old5 = w.oiHistory.find((h: any) => h.ts >= t5)
+  const old5 = oiHistory.find((h: any) => h.ts >= t5)
   const delta5 = el('oiDelta5m')
   if (delta5 && old5 && oi) {
     const pct = ((oi - old5.oi) / old5.oi * 100)
