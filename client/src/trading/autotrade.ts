@@ -47,8 +47,9 @@ export function toggleAutoTrade(): void {
     toast('Kill switch activ — apasa butonul RESET din status sau asteapta', 0, _ZI.noent)
     // Afiseaza butonul de reset daca nu e deja afisat
     const st = el('atStatus')
-    if (st && !st.innerHTML.includes('resetKillSwitch')) {
-      st.innerHTML = _ZI.siren + ` KILL ACTIV — <button onclick="resetKillSwitch()" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`
+    if (st && !st.innerHTML.includes('data-action')) {
+      st.innerHTML = _ZI.siren + ` KILL ACTIV — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`
+      st.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch())
     }
     return
   }
@@ -1457,7 +1458,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   const reasonMap: any = { manual: 'Stop manual', daily_loss: 'Pierdere zilnica atinsa!' }
   const msg = reasonMap[reason] || reason
   const pnlStr = (totalEmergencyPnL >= 0 ? '+' : '') + '$' + totalEmergencyPnL.toFixed(2)
-  { const _oe6 = el('atStatus'); if (_oe6) _oe6.innerHTML = _ZI.siren + ` KILL ACTIV — <button onclick="resetKillSwitch()" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>` }
+  { const _oe6 = el('atStatus'); if (_oe6) { _oe6.innerHTML = _ZI.siren + ` KILL ACTIV — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`; _oe6.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch()) } }
   atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} pozitii inchise | PnL: ${pnlStr}`)
   toast(closedCount + ' pozitii inchise | PnL: ' + pnlStr, 0, _ZI.siren)
   if (w.S.alerts?.enabled) sendAlert('Zeus Kill Switch', msg, 'kill')
@@ -1654,17 +1655,26 @@ export function openPartialClose(posId: any): void {
       <div style="font-size:12px;color:var(--dim);margin-bottom:12px">PnL curent: <span style="color:${pnl >= 0 ? '#00ff88' : '#ff4466'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>
       <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Procent de inchis:</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
-        ${[25, 50, 75].map((p: any) => `<button onclick="execPartialClose(${posId},${p})" style="padding:6px;background:#0d1520;border:1px solid #aa44ff33;color:#aa44ff;border-radius:3px;font-size:13px;cursor:pointer;font-family:var(--ff)">${p}%</button>`).join('')}
+        ${[25, 50, 75].map((p: any) => `<button data-action="partialClose" data-pct="${p}" style="padding:6px;background:#0d1520;border:1px solid #aa44ff33;color:#aa44ff;border-radius:3px;font-size:13px;cursor:pointer;font-family:var(--ff)">${p}%</button>`).join('')}
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
         <input type="number" id="partialPct" value="50" min="1" max="99" style="flex:1;background:#0a0518;border:1px solid #aa44ff33;color:#cc88ff;padding:5px 8px;font-size:13px;border-radius:3px;font-family:var(--ff)">
         <span style="color:var(--dim);font-size:12px">%</span>
-        <button onclick="execPartialClose(${posId},parseInt(document.getElementById('partialPct').value))"
+        <button data-action="partialCloseCustom"
           style="padding:5px 10px;background:#aa44ff22;border:1px solid #aa44ff44;color:#aa44ff;border-radius:3px;font-size:12px;cursor:pointer;font-family:var(--ff)">OK</button>
       </div>
-      <button onclick="document.getElementById('partialCloseModal').remove()"
+      <button data-action="closeModal"
         style="width:100%;padding:5px;background:#1a0008;border:1px solid #ff335533;color:#ff4466;border-radius:3px;font-size:12px;cursor:pointer;font-family:var(--ff)">ANULEAZA</button>
     </div>`
+  // Event delegation on overlay — replaces onclick="execPartialClose(...)" and close
+  overlay.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
+    if (!btn) return
+    const action = btn.dataset.action
+    if (action === 'partialClose') execPartialClose(posId, parseInt(btn.dataset.pct || '50'))
+    else if (action === 'partialCloseCustom') { const input = document.getElementById('partialPct') as HTMLInputElement; execPartialClose(posId, parseInt(input?.value || '50')) }
+    else if (action === 'closeModal') overlay.remove()
+  })
   document.body.appendChild(overlay)
 }
 

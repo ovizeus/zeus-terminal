@@ -370,9 +370,7 @@ export function installPhase1Adapters(): void {
   // placeAutoTrade — removed (direct import)
   // openAddOn, scheduleAutoClose — removed (direct imports)
   // triggerKillSwitch — removed (direct import)
-  w.resetKillSwitch = resetKillSwitch
   // renderATPositions — removed (direct import)
-  w.execPartialClose = execPartialClose
   // closeAllDemoPos — removed (direct import)
 
   // ── Phase 6B: trading/dsl.js ──
