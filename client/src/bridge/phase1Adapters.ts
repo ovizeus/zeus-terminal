@@ -371,13 +371,9 @@ export function installPhase1Adapters(): void {
   // closeAllDemoPos — removed (direct import)
 
   // ── Phase 6B: trading/dsl.js ──
-  w.dslToggleMagnet = dslToggleMagnet
   // toggleDSL — removed (direct import)
   // _syncDslAssistUI — removed (direct import)
 
-  w.dslTakeControl = dslTakeControl
-  w.dslReleaseControl = dslReleaseControl
-  w.dslManualParam = dslManualParam
   // renderDSLWidget — removed (direct import)
   // stopDSLIntervals — removed (direct import)
   // _dslTrimAll — removed (direct import)

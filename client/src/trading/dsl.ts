@@ -874,6 +874,27 @@ export function renderDSLWidget(positions: any[]): void {
   }
 
   container.innerHTML = html
+
+  // Event delegation for DSL card buttons + inputs
+  if (!container.dataset.dslDelegated) {
+    container.dataset.dslDelegated = '1'
+    // Click delegation: dslToggleMagnet, dslTakeControl, dslReleaseControl
+    container.addEventListener('click', (e: Event) => {
+      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
+      if (!btn) return
+      const action = btn.dataset.action
+      const id = btn.dataset.id
+      if (action === 'dslToggleMagnet') dslToggleMagnet(id)
+      else if (action === 'dslTakeControl') dslTakeControl(id)
+      else if (action === 'dslReleaseControl') dslReleaseControl(id)
+    })
+    // Change delegation: dslManualParam (input onchange)
+    container.addEventListener('change', (e: Event) => {
+      const input = (e.target as HTMLElement).closest('[data-action="dslManualParam"]') as HTMLInputElement
+      if (input) dslManualParam(input.dataset.id, input.dataset.param, input.value)
+    })
+  }
+
   _emitDSLChanged()
 }
 
@@ -1004,7 +1025,7 @@ export function _renderDslCard(pos: any): string {
       ${_isAT ? `<span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_ctrlBg};border:1px solid ${_ctrlBorder};color:${_ctrlColor};font-weight:700;letter-spacing:0.5px">${_ctrlIcon}${_ctrlIcon ? ' ' : ''}${_ctrlLabel}</span>` : ''}
       <span style="color:${isActive ? '#00ffcc' : isLong ? '#00ff88' : '#ff4466'};font-weight:700;font-size:16px">${pos.side} ${symBase}</span>
       <span class="dsl-badge ${isActive ? 'active' : 'waiting'}">${isActive ? 'DSL ON' : 'WAITING'}</span>
-      <button onclick="dslToggleMagnet('${pos.id}')" style="font-size:11px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:0.5px;border:1px solid ${_magnetOn ? '#00ccffaa' : '#ffffff22'};background:${_magnetOn ? '#00ccff18' : 'transparent'};color:${_magnetOn ? '#00ccff' : '#ffffff44'}">${_magnetOn ? 'MAG ON' : 'MAG'}</button>
+      <button data-action="dslToggleMagnet" data-id="${pos.id}" style="font-size:11px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:0.5px;border:1px solid ${_magnetOn ? '#00ccffaa' : '#ffffff22'};background:${_magnetOn ? '#00ccff18' : 'transparent'};color:${_magnetOn ? '#00ccff' : '#ffffff44'}">${_magnetOn ? 'MAG ON' : 'MAG'}</button>
       ${_isAT ? `<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:${_as.color}15;color:${_as.color};border:1px solid ${_as.color}33">${_as.icon}${_as.icon ? ' ' : ''}${_as.label}</span>` : ''}
     </div>
     <div style="display:flex;align-items:center;gap:8px">
@@ -1086,30 +1107,30 @@ export function _renderDslCard(pos: any): string {
   </div>
 
   <!-- ROW 7: Take Control / Let AI Control + manual DSL inputs -->
-  ${_showTakeControl ? `<div style="margin-top:6px;text-align:right"><button onclick="dslTakeControl('${pos.id}')" style="font-size:12px;padding:4px 12px;background:#f0c04012;border:1px solid #f0c04033;color:#f0c040;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">TAKE CONTROL</button></div>` : ''}
+  ${_showTakeControl ? `<div style="margin-top:6px;text-align:right"><button data-action="dslTakeControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#f0c04012;border:1px solid #f0c04033;color:#f0c040;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">TAKE CONTROL</button></div>` : ''}
   ${_showReleaseControl ? `<div style="margin-top:6px;border-top:1px solid #f0c04022;padding-top:6px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <span style="font-size:12px;color:#f0c040;letter-spacing:0.5px">MANUAL CONTROL ACTIVE</span>
-      <button onclick="dslReleaseControl('${pos.id}')" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
+      <button data-action="dslReleaseControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${isActive ? `<div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff22;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" disabled style="width:62px;background:#0a0e14;border:1px solid #ffffff11;color:#ffffff33;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit;cursor:not-allowed"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#f0c04044;letter-spacing:0.3px">ACTIVATED</span>
       </div>` : `<div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','openDslPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="openDslPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#f0c04088;letter-spacing:0.3px">${_dslPriceSub}</span>
       </div>`}
       <div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PL%<input type="number" value="${pivotLeftPct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','pivotLeftPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PL%<input type="number" value="${pivotLeftPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="pivotLeftPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#39ff1488;letter-spacing:0.3px">${_plPriceSub}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PR%<input type="number" value="${pivotRightPct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','pivotRightPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PR%<input type="number" value="${pivotRightPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="pivotRightPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#aa44ff88;letter-spacing:0.3px">${_prPriceSub}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">IV%<input type="number" value="${impulseValPct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','impulseVPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">IV%<input type="number" value="${impulseValPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="impulseVPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#ff446688;letter-spacing:0.3px">${_ivPriceSub}</span>
       </div>
     </div>
@@ -1121,19 +1142,19 @@ export function _renderDslCard(pos: any): string {
         <label style="font-size:11px;color:#ffffff22;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" disabled style="width:62px;background:#0a0e14;border:1px solid #ffffff11;color:#ffffff33;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit;cursor:not-allowed"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#f0c04044;letter-spacing:0.3px">ACTIVATED</span>
       </div>` : `<div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','openDslPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="openDslPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#f0c04088;letter-spacing:0.3px">${_dslPriceSub}</span>
       </div>`}
       <div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PL%<input type="number" value="${pivotLeftPct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','pivotLeftPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PL%<input type="number" value="${pivotLeftPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="pivotLeftPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#39ff1488;letter-spacing:0.3px">${_plPriceSub}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PR%<input type="number" value="${pivotRightPct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','pivotRightPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PR%<input type="number" value="${pivotRightPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="pivotRightPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#aa44ff88;letter-spacing:0.3px">${_prPriceSub}</span>
       </div>
       <div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">IV%<input type="number" value="${impulseValPct}" min="0.01" max="100" step="0.01" onchange="dslManualParam('${pos.id}','impulseVPct',this.value)" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
+        <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">IV%<input type="number" value="${impulseValPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="impulseVPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#ff446688;letter-spacing:0.3px">${_ivPriceSub}</span>
       </div>
     </div>
