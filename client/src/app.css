@@ -4860,6 +4860,7 @@ body {
 .sbtn2 { display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 8px 14px; border-radius: 4px; font-size: 10px; font-weight: 700; cursor: pointer; font-family: var(--ff); letter-spacing: 1px; background: transparent; color: var(--dim); border: 1px solid var(--brd); transition: .15s }
 .sbtn2.pri { background: var(--gold); color: var(--bg); border-color: var(--gold) }
 .sbtn2.sec { background: transparent; color: var(--dim); border: 1px solid var(--brd) }
+.sbtn2.act { border-color: var(--gold); color: var(--gold); background: #f0c04011 }
 
 /* Admin panel badges/buttons */
 .adm-badge { font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 700; border: 1px solid; white-space: nowrap }
