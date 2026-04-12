@@ -1,7 +1,7 @@
 import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { applyIndVisibility, renderActBar } from '../engine/indicators'
+import { applyIndVisibility, renderActBar, getMacdChart } from '../engine/indicators'
 import { sendAlert, closeM } from '../data/marketDataWS'
 import { _usSave, _userCtxPush, _userCtxPushNow, INDICATORS } from '../core/config'
 import { renderChart } from '../data/marketDataChart'
@@ -143,8 +143,7 @@ export function applyPriceAxisWidth(px: any, btn: any): void {
   [w.mainChart, w.cvdChart].forEach((c: any) => {
     if (c) c.applyOptions({ rightPriceScale: { width: width } });
   });
-  if (typeof w._macdChart !== 'undefined' && w._macdChart)
-    w._macdChart.applyOptions({ rightPriceScale: { width: width } });
+  const mc = getMacdChart(); if (mc) mc.applyOptions({ rightPriceScale: { width: width } });
 }
 
 // Store RSI data from fetch

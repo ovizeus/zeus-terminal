@@ -196,8 +196,6 @@ export function installPhase1Adapters(): void {
   // _NEURO_SYMS — removed (direct import)
   // _SESS_DEF — removed (direct import)
   /* _srUpdateStats — removed (direct import) */ /* _srRenderStats — removed (direct import) */
-  w._macdChart = _macdChart; w._macdInited = _macdInited
-  w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; /* oviPriceSeries — removed (0 refs) */
   // state.ts exports
   // Chart series refs — start as null/undefined, set by initCharts() in marketDataChart.ts
   // Bridge marketData.js renderChart() references these as globals
@@ -330,7 +328,6 @@ export function installPhase1Adapters(): void {
   // arianova.js — self-registers on window via IIFE import above
 
   // ── Phase 6C: trading/autotrade.js ──
-  w.toggleAutoTrade = toggleAutoTrade
 
   // atLog — removed (direct import)
 

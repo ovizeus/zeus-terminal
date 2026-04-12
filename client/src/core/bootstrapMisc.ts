@@ -6,6 +6,7 @@ import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } 
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { connectBNB } from '../data/marketDataWS'
+import { getMacdChart } from '../engine/indicators'
 import { connectWatchlist } from '../services/symbols'
 import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
@@ -160,7 +161,7 @@ if (!w._closeAllBtnInited) {
   function _resizeCharts() {
     if (typeof w.mainChart === 'undefined' || !w.mainChart) return
     const width = getChartW(); const h = getChartH()
-    try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { if (typeof w._macdChart !== 'undefined' && w._macdChart) w._macdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
+    try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { const _mc = getMacdChart(); if (_mc) _mc.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }
   window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(_resizeCharts, 120) })
   window.addEventListener('zeusReady', function () { setTimeout(_resizeCharts, 500) })

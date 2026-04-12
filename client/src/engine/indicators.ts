@@ -11,11 +11,15 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { playAlertSound } from '../ui/dom2'
 import { renderSignals } from './signals'
-import { renderVWAP } from '../ui/panels'
+import { renderVWAP, getVwapSeries, resetVwapSeries } from '../ui/panels'
 import { getChartW } from '../data/marketDataChart'
 import { atLog } from '../trading/autotrade'
 
 const w = window as any
+
+// Module-level chart refs (owned by this file)
+let _macdChart: any = null
+export function getMacdChart(): any { return _macdChart }
 
 // ═══════════════════════════════════════════════════════════════
 // LIVE API STUBS
@@ -195,7 +199,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'vwap':
       w.S.vwapOn = show
       if (show) { if (typeof renderVWAP === 'function') renderVWAP() }
-      else { if (typeof w.vwapSeries !== 'undefined') { w.vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.vwapSeries = [] } }
+      else { getVwapSeries().forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); resetVwapSeries() }
       { const vBtn = document.getElementById('vwapBtn'); if (vBtn) vBtn.classList.toggle('on', show) }
       break
     case 'cvd':
@@ -473,7 +477,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[_rsiChart, w._stochChart, w._atrChart, _obvChart, w._mfiChart, w._cciChart, w._macdChart].forEach((ch: any) => {
+    ;[_rsiChart, w._stochChart, w._atrChart, _obvChart, w._mfiChart, w._cciChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -725,12 +729,12 @@ export function calcMACD(closes: number[], fast = 12, slow = 26, signal = 9): an
 }
 
 export function initMACDChart(): void {
-  if (w._macdInited && w._macdChart) { _updateMACDChart(); return }
+  if (w._macdInited && _macdChart) { _updateMACDChart(); return }
   const container = document.getElementById('macdChart')
   if (!container || typeof w.LightweightCharts === 'undefined') return
   container.style.height = '60px'
   const width = getChartW()
-  w._macdChart = w.LightweightCharts.createChart(container, {
+  _macdChart = w.LightweightCharts.createChart(container, {
     width, height: 60,
     layout: { background: { color: '#0a0f16' }, textColor: '#7a9ab8' },
     grid: { vertLines: { color: '#1a2030' }, horzLines: { color: '#1a2030' } },
@@ -740,18 +744,18 @@ export function initMACDChart(): void {
     handleScroll: { mouseWheel: true, pressedMouseMove: true },
     handleScale: { mouseWheel: true, pinch: true },
   })
-  w._macdChart.applyOptions({ localization: { timeFormatter: (ts: number) => fmtTime(ts), dateFormatter: (ts: number) => fmtDate(ts) } })
-  w._macdChart.timeScale().applyOptions({ visible: false, rightOffset: 12 })
-  w._macdChart.applyOptions({ rightPriceScale: { visible: true, borderColor: '#1e2530', width: 70 } })
-  w._macdLineSeries = w._macdChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'MACD' })
-  w._macdSigSeries = w._macdChart.addLineSeries({ color: '#ff8800', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'SIG' })
-  w._macdHistSeries = w._macdChart.addHistogramSeries({ color: '#00d97a44', priceFormat: { type: 'price', precision: 4, minMove: 0.0001 }, priceScaleId: '', scaleMargins: { top: 0.8, bottom: 0 } })
+  _macdChart.applyOptions({ localization: { timeFormatter: (ts: number) => fmtTime(ts), dateFormatter: (ts: number) => fmtDate(ts) } })
+  _macdChart.timeScale().applyOptions({ visible: false, rightOffset: 12 })
+  _macdChart.applyOptions({ rightPriceScale: { visible: true, borderColor: '#1e2530', width: 70 } })
+  w._macdLineSeries = _macdChart.addLineSeries({ color: '#00e5ff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'MACD' })
+  w._macdSigSeries = _macdChart.addLineSeries({ color: '#ff8800', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'SIG' })
+  w._macdHistSeries = _macdChart.addHistogramSeries({ color: '#00d97a44', priceFormat: { type: 'price', precision: 4, minMove: 0.0001 }, priceScaleId: '', scaleMargins: { top: 0.8, bottom: 0 } })
   w._macdInited = true
   _updateMACDChart()
 }
 
 function _updateMACDChart(): void {
-  if (!w._macdInited || !w._macdChart || !w._macdLineSeries) return
+  if (!w._macdInited || !_macdChart || !w._macdLineSeries) return
   const klines = w.S.klines
   if (!klines || klines.length < 35) return
   const closes = klines.map((k: any) => k.close)
@@ -776,15 +780,15 @@ function _updateMACDChart(): void {
     w._macdLineSeries.setData(macdData)
     w._macdSigSeries.setData(sigData)
     w._macdHistSeries.setData(histData)
-    if (w.mainChart && w._macdChart) {
+    if (w.mainChart && _macdChart) {
       const tr = w.mainChart.timeScale().getVisibleRange()
-      if (tr) w._macdChart.timeScale().setVisibleRange(tr)
+      if (tr) _macdChart.timeScale().setVisibleRange(tr)
     }
   } catch (e) { console.warn('[MACD]', e) }
 }
 
 export function _macdKlineHook(): void {
-  if (w._macdInited && w._macdChart) _updateMACDChart()
+  if (w._macdInited && _macdChart) _updateMACDChart()
 }
 
 // ═══════════════════════════════════════════════════════════════
