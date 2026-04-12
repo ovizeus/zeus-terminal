@@ -10,6 +10,7 @@ import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { updateATStats , atLog , renderATPositions } from './autotrade'
 import { closeLivePos } from '../data/marketDataPositions'
+import { manualLiveSetSL } from './liveApi'
 import { brainThink } from '../engine/brain'
 import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from '../data/marketDataClose'
@@ -17,6 +18,15 @@ import { closeDemoPos } from '../data/marketDataClose'
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
 const DSL = getDSLObject()
+
+// Sync DSL SL to exchange for live positions (client-side AT only)
+function _syncLiveSL(pos: any, newSL: number): void {
+  if (!pos.isLive || w._serverATEnabled) return
+  if (!newSL || newSL <= 0 || !Number.isFinite(newSL)) return
+  const qty = pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0)
+  if (!qty) return
+  manualLiveSetSL({ symbol: pos.sym, side: pos.side, quantity: String(qty), stopPrice: newSL }).catch(function (e: any) { atLog('warn', '[DSL] Live SL sync failed: ' + (e.message || e)) })
+}
 
 // ══════════════════════════════════════════════════════
 // [DSL MAGNET] Per-position toggle
@@ -461,6 +471,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
           dsl.log.push({ ts: Date.now(), msg: '[MAG-A] ' + _magSnap.reason })
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
           pos.dslHistory.push({ ts: Date.now(), msg: '[MAG] ' + _magSnap.reason })
+          if (pos.dslParams) pos.dslParams.magnetSnappedPL = dsl.pivotLeft
         }
         dsl._magnetPreview = _magSnap
       } else {
@@ -468,6 +479,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       }
 
       dsl.currentSL = dsl.pivotLeft
+      _syncLiveSL(pos, dsl.currentSL)
 
       dsl.log.push({ ts: Date.now(), msg: `DSL activat @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` })
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
@@ -567,6 +579,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
                 dsl.log.push({ ts: Date.now(), msg: '[MAG-B] ' + _magSnapB.reason })
                 if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
                 pos.dslHistory.push({ ts: Date.now(), msg: '[MAG] ' + _magSnapB.reason })
+                if (pos.dslParams) pos.dslParams.magnetSnappedPL = dsl.pivotLeft
               }
               dsl._magnetPreview = _magSnapB
             } else {
@@ -574,6 +587,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
             }
 
             dsl.currentSL = dsl.pivotLeft
+            _syncLiveSL(pos, dsl.currentSL)
 
             dsl.log.push({ ts: Date.now(), msg: `[IMP] IMPULSE: PL $${fP(oldPL)}→$${fP(dsl.pivotLeft)} | IV $${fP(oldIV)}→$${fP(dsl.impulseVal)}` })
             if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
@@ -726,6 +740,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
       _dsl.pivotRight = _dslSafePrice(_dsl.pivotRight, cur, 'PR-manual')
       _dsl.impulseVal = _dslSafePrice(_dsl.impulseVal, cur, 'IV-manual')
       _dsl.currentSL = _dsl.pivotLeft
+      _syncLiveSL(pos, _dsl.currentSL)
       _dsl.yellowLine = cur
       var _ivReached = isLong ? (cur >= _dsl.impulseVal) : (cur <= _dsl.impulseVal)
       if (!_ivReached) _dsl.impulseTriggered = false
@@ -742,10 +757,14 @@ export function dslManualParam(posId: any, param: any, value: any): void {
   if (pos._serverSeq) {
     _dslPushParamsDebounced(pos._serverSeq, pos.dslParams)
   } else if (pos.isLive || pos.fromExchange) {
-    var _retryPos = pos
-    setTimeout(function () {
-      if (_retryPos._serverSeq) _dslPushParamsDebounced(_retryPos._serverSeq, _retryPos.dslParams)
-    }, 3000)
+    var _retryPos = pos; var _retryAttempt = 0
+    function _retryPush() {
+      _retryAttempt++
+      if (_retryAttempt > 4) { atLog('warn', '[DSL] Server sync params failed after 4 retries for ' + _retryPos.sym); return }
+      if (_retryPos._serverSeq) { _dslPushParamsDebounced(_retryPos._serverSeq, _retryPos.dslParams); return }
+      setTimeout(_retryPush, Math.min(3000 * Math.pow(2, _retryAttempt - 1), 30000))
+    }
+    setTimeout(_retryPush, 3000)
   }
 }
 

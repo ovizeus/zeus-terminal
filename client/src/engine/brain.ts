@@ -501,7 +501,8 @@ export function setDslMode(mode: any): void {
   mode = (mode || '').toLowerCase()
   if (!valid.includes(mode)) return
   const _dsl = (window as any).DSL; if (_dsl) _dsl.mode = mode
-  try { localStorage.setItem('zeus_dsl_mode', mode) } catch (_) { }
+  const _dslKey = (window as any)._zeusUserId ? 'zeus_dsl_mode:' + (window as any)._zeusUserId : 'zeus_dsl_mode'
+  try { localStorage.setItem(_dslKey, mode) } catch (_) { }
   const labels: any = { atr: _ZI.plug + ' ATR', fast: _ZI.bolt + ' FAST', swing: _ZI.wave + ' SWING', defensive: _ZI.sh + ' DEF', tp: _ZI.tgt + ' TP' }
   brainThink('info', _ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
   _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + mode, 'znc-dbtn', 'act-dsl-' + mode)
@@ -2360,9 +2361,10 @@ export function _initBrainCockpit(): void {
   }
   w._brainInitDone = true
 
-  // Restore DSL mode from localStorage
+  // Restore DSL mode from localStorage (user-scoped key)
   try {
-    const savedDsl = localStorage.getItem('zeus_dsl_mode')
+    const _dslKey = w._zeusUserId ? 'zeus_dsl_mode:' + w._zeusUserId : 'zeus_dsl_mode'
+    const savedDsl = localStorage.getItem(_dslKey) || localStorage.getItem('zeus_dsl_mode')
     if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) { const _dsl2 = (window as any).DSL; if (_dsl2) _dsl2.mode = savedDsl }
   } catch (_) { }
 
