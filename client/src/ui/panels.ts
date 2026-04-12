@@ -9,7 +9,12 @@ import { getDrawdownStats, getLastNDays, getWeeklyRollup } from '../engine/daily
 import { calcExpectancyByProfile } from '../engine/perfStore'
 import { refreshLiqCycleLight, refreshSweepLight } from '../core/config'
 
-const w = window as any; // kept for w.S (mixed reads/writes), w.mainChart, w.vwapSeries, w.oviSeries, w.BT, w.BT_INDICATORS, w.renderChart capture
+const w = window as any; // kept for w.S (mixed reads/writes), w.mainChart, w.oviSeries, w.BT, w.BT_INDICATORS, w.renderChart capture
+
+// vwapSeries — owned by this module
+let vwapSeries: any[] = []
+export function getVwapSeries(): any[] { return vwapSeries }
+export function resetVwapSeries(): void { vwapSeries = [] }
 
 // [REMOVED] Eye panel — indicator control is now unified in "Select Indicator" panel
 export function openEyePanel() { /* removed — use openIndPanel() */ }
@@ -604,22 +609,22 @@ export function calcVWAPBands(klines: any) {
 export function renderVWAP() {
   const S = w.S;
   // Clear existing
-  w.vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } });
-  w.vwapSeries = [];
+  vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } });
+  vwapSeries = [];
   if (!S.vwapOn || !S.klines.length) return;
   const res = calcVWAPBands(S.klines);
   if (!res) return;
   try {
     const vw = w.mainChart.addLineSeries({ color: '#00d97a', lineWidth: 2, priceLineVisible: false, lastValueVisible: true, title: 'VWAP' });
-    vw.setData(res.vwap); w.vwapSeries.push(vw);
+    vw.setData(res.vwap); vwapSeries.push(vw);
     const u1 = w.mainChart.addLineSeries({ color: '#00d97a66', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 });
-    u1.setData(res.upper1); w.vwapSeries.push(u1);
+    u1.setData(res.upper1); vwapSeries.push(u1);
     const l1 = w.mainChart.addLineSeries({ color: '#00d97a66', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 });
-    l1.setData(res.lower1); w.vwapSeries.push(l1);
+    l1.setData(res.lower1); vwapSeries.push(l1);
     const u2 = w.mainChart.addLineSeries({ color: '#00d97a33', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 3 });
-    u2.setData(res.upper2); w.vwapSeries.push(u2);
+    u2.setData(res.upper2); vwapSeries.push(u2);
     const l2 = w.mainChart.addLineSeries({ color: '#00d97a33', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 3 });
-    l2.setData(res.lower2); w.vwapSeries.push(l2);
+    l2.setData(res.lower2); vwapSeries.push(l2);
   } catch (_) { }
 }
 
@@ -628,7 +633,7 @@ export function toggleVWAP(btn: any) {
   S.vwapOn = !S.vwapOn;
   if (btn) btn.classList.toggle('on', S.vwapOn);
   if (S.vwapOn) renderVWAP();
-  else { w.vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } }); w.vwapSeries = []; }
+  else { vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } }); vwapSeries = []; }
   toast(S.vwapOn ? 'VWAP + Bands ON' : 'VWAP OFF');
 }
 

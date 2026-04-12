@@ -1829,6 +1829,10 @@ export function closeAllATPos(): void {
 // END AUTO TRADE ENGINE
 // ===================================================================
 
+// Self-registration — makes phase1Adapters mapping redundant
+// aub.ts monkey-patches w.toggleAutoTrade after this, which is correct
+;(window as any).toggleAutoTrade = toggleAutoTrade
+
 // ===================================================================
 // CLOSE PROTECTION — confirmare în 2 pași (state global, rezistent la HTML rebuild)
 // ===================================================================

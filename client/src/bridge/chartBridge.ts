@@ -93,7 +93,7 @@ export function registerChart(refs: ChartRefs): void {
   if (!w.liqSeries) w.liqSeries = []
   if (!w.srSeries) w.srSeries = []
   if (!w.zsSeries) w.zsSeries = []
-  if (!w.vwapSeries) w.vwapSeries = []
+  // vwapSeries owned by panels.ts — no init needed here
   if (!w.oviSeries) w.oviSeries = []
 
   console.log('[CHART-BRIDGE] Chart registered — all refs exposed to window')
