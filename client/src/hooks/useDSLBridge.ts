@@ -8,27 +8,21 @@
  *
  * [9A-3] Event-only — polling removed (DSL tick emits every 3s via renderDSLWidget).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useDslStore } from '../stores'
 
 export function useDSLBridge() {
-  const registeredRef = useRef(false)
-
   useEffect(() => {
-    if (registeredRef.current) return
-    registeredRef.current = true
-
     function onDSLChanged() {
       useDslStore.getState().syncFromEngine()
     }
 
     window.addEventListener('zeus:dslStateChanged', onDSLChanged)
-    // Initial sync on mount (engine may have state from boot)
-    setTimeout(onDSLChanged, 3000)
+    const initTimer = setTimeout(onDSLChanged, 3000)
 
     return () => {
       window.removeEventListener('zeus:dslStateChanged', onDSLChanged)
-      registeredRef.current = false
+      clearTimeout(initTimer)
     }
   }, [])
 }

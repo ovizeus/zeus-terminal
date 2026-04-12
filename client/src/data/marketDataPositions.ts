@@ -25,6 +25,8 @@ const AT = getATObject()
 const BM = getBrainMetrics()
 const DSL = getDSLObject()
 
+function _numOrDefault(val: any, fallback: number): number { const n = parseFloat(val); return Number.isFinite(n) ? n : fallback }
+
 // getSymPrice — full version with staleness check
 export function getSymPrice(pos: any): number | null {
   if (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) return w.allPrices[pos.sym]
@@ -65,7 +67,7 @@ function _fillDemoPendingOrder(ord: any): void {
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 1.30 }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: _numOrDefault(el('dslTrailPct')?.value, 0.70), pivotRightPct: _numOrDefault(el('dslTrailSusPct')?.value, 1.00), impulseVPct: _numOrDefault(el('dslExtendPct')?.value, 1.30) }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
   if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
@@ -89,15 +91,22 @@ export function cancelPendingOrder(id: any): void {
 
 export function modifyPendingPrice(id: any): void {
   const strId = String(id)
-  const demoOrd = TP.pendingOrders.find(function (o: any) { return String(o.id) === strId })
-  if (demoOrd && demoOrd.mode === 'demo') { const newPrice = prompt('New limit price:', fP(demoOrd.limitPrice)); if (!newPrice) return; const np = parseFloat(newPrice); if (!np || np <= 0) { toast('Invalid price'); return }; demoOrd.limitPrice = np; renderPendingOrders(); w.ZState.save(); toast('Limit price updated to $' + fP(np)); return }
+  const demoOrd = (TP.pendingOrders || []).find(function (o: any) { return String(o.id) === strId })
+  if (demoOrd && demoOrd.mode === 'demo') { const newPrice = prompt('New limit price:', fP(demoOrd.limitPrice)); if (!newPrice) return; const np = parseFloat(newPrice); if (!Number.isFinite(np) || np <= 0) { toast('Invalid price'); return }; demoOrd.limitPrice = np; renderPendingOrders(); w.ZState.save(); toast('Limit price updated to $' + fP(np)); return }
   const liveOrd = TP.manualLivePending.find(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
-  if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!_np || _np <= 0) { toast('Invalid price'); return }; if (typeof manualLiveModifyLimit !== 'function') { toast('Live API not available'); return }; manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); toast('LIVE LIMIT modified @$' + fP(_np)) }).catch(function (err: any) { toast('Modify failed: ' + (err.message || err)) }) }
+  if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!Number.isFinite(_np) || _np <= 0) { toast('Invalid price'); return }; if (typeof manualLiveModifyLimit !== 'function') { toast('Live API not available'); return }; manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); toast('LIVE LIMIT modified @$' + fP(_np)) }).catch(function (err: any) { toast('Modify failed: ' + (err.message || err)); renderPendingOrders() }) }
 }
 
 // ═══════════════════════════════════════════════════════════════
 // RENDER PENDING ORDERS
 // ═══════════════════════════════════════════════════════════════
+function _pendingOrderClickHandler(e: Event): void {
+  const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
+  if (!btn) return
+  const id = btn.dataset.id
+  if (btn.dataset.action === 'cancelPendingOrder') cancelPendingOrder(id)
+  else if (btn.dataset.action === 'modifyPendingPrice') modifyPendingPrice(id)
+}
 export function renderPendingOrders(): void {
   const cont = el('pendingOrdersTable'); if (!cont) return
   const _gMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
@@ -114,17 +123,9 @@ export function renderPendingOrders(): void {
     const distPct = curPrice > 0 ? (((ord.limitPrice - curPrice) / curPrice) * 100).toFixed(2) : '?'
     return '<div class="pos-row pos-pending" style="border-color:' + sideColor + '"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;color:' + sideColor + '"><span style="background:#00d4ff22;color:#00d4ff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;margin-right:4px"> WAITING LIMIT</span>' + escHtml(ord.side) + ' ' + symBase + ' ' + ord.lev + 'x' + modeBadge + '</span><div style="display:flex;gap:4px"><button data-action="modifyPendingPrice" data-id="' + ord.id + '" style="padding:6px 10px;background:#001a33;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:36px">EDIT MODIFY</button><button data-action="cancelPendingOrder" data-id="' + ord.id + '" style="padding:6px 10px;background:#2a0010;border:1px solid #ff4466;color:#ff4466;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:36px">\u2715 CANCEL</button></div></div><div style="display:flex;justify-content:space-between;font-size:12px;margin-top:3px;color:var(--dim)"><span>Limit: $' + fP(ord.limitPrice) + ' | Size: $' + fmt(ord.size) + '</span><span>Now: $' + (curPrice > 0 ? fP(curPrice) : '\u2014') + ' (' + distPct + '%)</span></div><div style="font-size:11px;color:var(--dim);margin-top:1px">' + (ord.sl ? 'SL: $' + fP(ord.sl) + ' ' : '') + (ord.tp ? 'TP: $' + fP(ord.tp) + ' ' : '') + '| ' + ageStr + ' ago' + (ord.exchangeOrderId ? ' | OID: ' + ord.exchangeOrderId : '') + '</div></div>'
   }).join('')
-  // Event delegation for pending order buttons
-  if (!cont.dataset.delegated) {
-    cont.dataset.delegated = '1'
-    cont.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
-      if (!btn) return
-      const id = btn.dataset.id
-      if (btn.dataset.action === 'cancelPendingOrder') cancelPendingOrder(id)
-      else if (btn.dataset.action === 'modifyPendingPrice') modifyPendingPrice(id)
-    })
-  }
+  // Event delegation for pending order buttons — re-attach every render to survive React remounts
+  cont.removeEventListener('click', _pendingOrderClickHandler)
+  cont.addEventListener('click', _pendingOrderClickHandler)
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -138,8 +139,14 @@ function _syncLivePendingOrders(): void {
   if (!TP.manualLivePending || !TP.manualLivePending.length) { _stopLivePendingSync(); return }
   if (typeof manualLiveGetOpenOrders !== 'function') return
   const symbols: any = {}; TP.manualLivePending.forEach(function (o: any) { symbols[o.sym] = true })
-  const symList = Object.keys(symbols); let _remaining = symList.length; const _exchangeOrderIds = new Set()
-  symList.forEach(function (sym) { manualLiveGetOpenOrders(sym).then(function (orders: any) { (orders || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }); _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }).catch(function () { _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }) })
+  const symList = Object.keys(symbols)
+  Promise.allSettled(symList.map(function (sym) { return manualLiveGetOpenOrders(sym) })).then(function (results) {
+    const anyFailed = results.some(function (r) { return r.status === 'rejected' })
+    if (anyFailed) return // BUG#4 fix: don't reconcile on API errors — stale tracking is safer than false removal
+    const _exchangeOrderIds = new Set<string>()
+    results.forEach(function (r: any) { (r.value || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }) })
+    _reconcileLivePending(_exchangeOrderIds)
+  })
 }
 
 function _reconcileLivePending(exchangeOrderIds: Set<string>): void {

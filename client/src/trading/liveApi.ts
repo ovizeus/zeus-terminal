@@ -168,14 +168,13 @@ export async function liveApiSyncState(): Promise<any> {
       w.TP.livePositions.forEach(function (pos: any) { if (pos && pos.id) _existingById[pos.id] = pos })
     }
     // [FIX C3] Detect positions closed on exchange — account before rebuild
-    var _newIds: any = {}
-    positions.forEach(function (p: any) { _newIds[p.symbol + '_' + p.side] = true })
+    // Key by sym+side (Binance has max 1 position per symbol+side)
+    var _newSymSides: any = {}
+    positions.forEach(function (p: any) { _newSymSides[p.symbol + '_' + p.side] = true })
     Object.keys(_existingById).forEach(function (eid: string) {
-      if (!_newIds[eid]) {
-        var gone = _existingById[eid]
-        // [FIX SYNC-C1] Before declaring gone, check if exchange still has it by sym+side
-        var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '')
-        if (_newIds[_goneSymSide]) return // Still on exchange, just different key format
+      var gone = _existingById[eid]
+      var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '')
+      if (_newSymSides[_goneSymSide]) return // Still on exchange (size may differ)
         if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side })
         // Clean DSL state for vanished position
         if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]

@@ -11,16 +11,11 @@
  *
  * [9A-5] Event-only — polling removed (all TP write paths now emit events).
  */
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { usePositionsStore } from '../stores'
 
 export function usePositionsBridge() {
-  const registeredRef = useRef(false)
-
   useEffect(() => {
-    if (registeredRef.current) return
-    registeredRef.current = true
-
     const w = window as any
 
     function readSnapshotFromWindow() {
@@ -35,12 +30,11 @@ export function usePositionsBridge() {
     }
 
     window.addEventListener('zeus:positionsChanged', readSnapshotFromWindow)
-    // Initial read after bridge loads
-    setTimeout(readSnapshotFromWindow, 2000)
+    const initTimer = setTimeout(readSnapshotFromWindow, 2000)
 
     return () => {
       window.removeEventListener('zeus:positionsChanged', readSnapshotFromWindow)
-      registeredRef.current = false
+      clearTimeout(initTimer)
     }
   }, [])
 }

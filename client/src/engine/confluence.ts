@@ -35,7 +35,7 @@ export function calcConfluenceScore(): void {
   const frScore = fr !== null ? (Math.abs(fr) * 10000 > 5 ? 70 : 50) : 50
   const frDir = fr !== null ? (fr < 0 ? 'bull' : 'bear') : 'neut'
   // [ZT-AUD-B3] OI stale guard — if last fetch >5min ago, neutralise to prevent stale bias
-  const oi = getOI()
+  const oi = getOI() || {}
   const oiStale = !oi.oiTs || (Date.now() - oi.oiTs > 300000)
   const oiScore = (!oiStale && oi.oiPrev && oi.oi) ? ((Math.abs(oi.oi - oi.oiPrev) / oi.oiPrev) * 100 > 0.1 ? 70 : 50) : 50
   // [FIX R1] Neutral fallback when OI data is missing — prevents hidden bear bias
