@@ -6,7 +6,7 @@
 import { _safeLocalStorageSet } from '../services/storage'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { AUB, AUB_COMPAT, AUB_PERF } from '../core/config'
+import { AUB } from '../core/config'
 import { setTf } from '../data/marketDataFeeds'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 
@@ -83,18 +83,18 @@ export function aubCheckCompat(): void {
   const isSecure = proto === 'https:'
   const isLocal = proto === 'file:' || proto === 'blob:' || proto === 'content:'
 
-  w.AUB_COMPAT.ws = typeof WebSocket !== 'undefined'
-  w.AUB_COMPAT.audio = typeof (w.AudioContext || w.webkitAudioContext) !== 'undefined'
-  w.AUB_COMPAT.crypto = !!(w.crypto && w.crypto.subtle)
-  w.AUB_COMPAT.swDisabled = isLocal || !isSecure
-  w.AUB_COMPAT.sw = !w.AUB_COMPAT.swDisabled && ('serviceWorker' in navigator)
+  w.w.AUB_COMPAT.ws = typeof WebSocket !== 'undefined'
+  w.w.AUB_COMPAT.audio = typeof (w.AudioContext || w.webkitAudioContext) !== 'undefined'
+  w.w.AUB_COMPAT.crypto = !!(w.crypto && w.crypto.subtle)
+  w.w.AUB_COMPAT.swDisabled = isLocal || !isSecure
+  w.w.AUB_COMPAT.sw = !w.w.AUB_COMPAT.swDisabled && ('serviceWorker' in navigator)
 
   // Disable ServiceWorker if non-https
-  if (w.AUB_COMPAT.swDisabled) {
-    w.AUB_COMPAT.sw = false
+  if (w.w.AUB_COMPAT.swDisabled) {
+    w.w.AUB_COMPAT.sw = false
   }
 
-  const allOk = w.AUB_COMPAT.ws && w.AUB_COMPAT.audio && w.AUB_COMPAT.crypto
+  const allOk = w.w.AUB_COMPAT.ws && w.w.AUB_COMPAT.audio && w.w.AUB_COMPAT.crypto
   const badge = document.getElementById('aub-badge-compat')
   if (badge) {
     badge.textContent = allOk ? 'COMPAT: OK' : 'COMPAT: LIMITED'
@@ -107,10 +107,10 @@ export function aubCheckCompat(): void {
     `<div class="aub-row ${pass ? 'ok' : 'warn'}">${pass ? _ZI.ok : _ZI.w} ${label}</div>`
 
   list.innerHTML = [
-    row(w.AUB_COMPAT.ws, 'WebSocket: ' + (w.AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
-    row(w.AUB_COMPAT.audio, 'AudioContext: ' + (w.AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING')),
-    row(w.AUB_COMPAT.crypto, 'crypto.subtle: ' + (w.AUB_COMPAT.crypto ? 'OK' : 'MISSING')),
-    row(w.AUB_COMPAT.sw, 'ServiceWorker: ' + (w.AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : w.AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A')),
+    row(w.w.AUB_COMPAT.ws, 'WebSocket: ' + (w.w.AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
+    row(w.w.AUB_COMPAT.audio, 'AudioContext: ' + (w.w.AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING')),
+    row(w.w.AUB_COMPAT.crypto, 'crypto.subtle: ' + (w.w.AUB_COMPAT.crypto ? 'OK' : 'MISSING')),
+    row(w.w.AUB_COMPAT.sw, 'ServiceWorker: ' + (w.w.AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : w.w.AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A')),
   ].join('')
 }
 
@@ -194,8 +194,8 @@ export function _aubUpdatePerfBadge(): void {
   }
 }
 export function _aubUpdatePerfCard(): void {
-  w.AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + AUB.rafFPS + (AUB._perfHeavy ? ' (!)' : ''))
-  w.AUB_PERF.setDOM('aub-perf-skips', 'DOM skips (no-change): ' + AUB.domSkips)
+  w.w.AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + AUB.rafFPS + (AUB._perfHeavy ? ' (!)' : ''))
+  w.w.AUB_PERF.setDOM('aub-perf-skips', 'DOM skips (no-change): ' + AUB.domSkips)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -239,9 +239,9 @@ export function _aubLoadBB(): void {
 }
 
 export function _aubUpdateBBCard(): void {
-  w.AUB_PERF.setDOM('aub-bb-count', 'Snapshots: ' + AUB.bb.length)
+  w.w.AUB_PERF.setDOM('aub-bb-count', 'Snapshots: ' + AUB.bb.length)
   const last = AUB.bb[0]
-  w.AUB_PERF.setDOM('aub-bb-last', last
+  w.w.AUB_PERF.setDOM('aub-bb-last', last
     ? 'Last: ' + last.event + ' @' + new Date(last.ts).toTimeString().slice(0, 8)
     : 'Last: —')
 }
@@ -306,7 +306,7 @@ export function _aubUpdateMTFCard(s5m: any, s15m: any, s1h: any, s4h: any, penal
     const b = document.getElementById(bid); if (b) b.style.width = pct(val)
     const v = document.getElementById(vid); if (v) v.textContent = Math.round(val * 100)
   })
-  w.AUB_PERF.setDOM('aub-mtf-penalty', penalty ? '(!) PENALTY: 4h bull vs 5m weak' : 'Penalty: none')
+  w.w.AUB_PERF.setDOM('aub-mtf-penalty', penalty ? '(!) PENALTY: 4h bull vs 5m weak' : 'Penalty: none')
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -350,8 +350,8 @@ export function aubCalcCorrelation(): void {
 
 export function _aubUpdateCorrCard(): void {
   const fmt = (v: any) => v !== null ? (v > 0 ? '+' : '') + v.toFixed(2) : '—'
-  w.AUB_PERF.setDOM('aub-corr-eth', fmt(AUB.corr.eth))
-  w.AUB_PERF.setDOM('aub-corr-sol', fmt(AUB.corr.sol))
+  w.w.AUB_PERF.setDOM('aub-corr-eth', fmt(AUB.corr.eth))
+  w.w.AUB_PERF.setDOM('aub-corr-sol', fmt(AUB.corr.sol))
   const pen = document.getElementById('aub-corr-penalty')
   if (pen) {
     pen.textContent = AUB.corrPenalty ? '(!) PENALTY: BTC drag active' : 'Penalty: inactive'
@@ -437,7 +437,7 @@ export function _aubLoadMacro(): void {
 export function aubSimRun(): void {
   if (AUB.simRunning) return
   AUB.simRunning = true
-  w.AUB_PERF.setDOM('aub-sim-status', 'Status: Running...')
+  w.w.AUB_PERF.setDOM('aub-sim-status', 'Status: Running...')
   // Async so UI doesn't freeze
   setTimeout(_aubSimWorker, 100)
 }
@@ -446,7 +446,7 @@ export function _aubSimWorker(): void {
   try {
     const klines = (typeof w.S !== 'undefined' && w.S.klines) ? w.S.klines : []
     if (klines.length < 50) {
-      w.AUB_PERF.setDOM('aub-sim-status', 'Status: Need 50+ bars')
+      w.w.AUB_PERF.setDOM('aub-sim-status', 'Status: Need 50+ bars')
       AUB.simRunning = false; return
     }
 
@@ -486,8 +486,8 @@ export function _aubSimWorker(): void {
     const ts = new Date().toLocaleTimeString()
     _safeLocalStorageSet(w.AUB_SIM_KEY, { best, ts }) // FIX 22
 
-    w.AUB_PERF.setDOM('aub-sim-status', 'Status: Done (' + ts + ')')
-    w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + ts)
+    w.w.AUB_PERF.setDOM('aub-sim-status', 'Status: Done (' + ts + ')')
+    w.w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + ts)
 
     const res = document.getElementById('aub-sim-result')
     if (res) {
@@ -497,7 +497,7 @@ export function _aubSimWorker(): void {
     const applyBtn = document.getElementById('aub-sim-apply')
     if (applyBtn) (applyBtn as any).style.display = 'inline-block'
   } catch (e: any) {
-    w.AUB_PERF.setDOM('aub-sim-status', 'Status: Error — ' + (e.message || '?'))
+    w.w.AUB_PERF.setDOM('aub-sim-status', 'Status: Error — ' + (e.message || '?'))
   }
   AUB.simRunning = false
 }
@@ -525,7 +525,7 @@ export function _aubLoadSim(): void {
     if (raw) {
       const data = JSON.parse(raw)
       AUB.simResult = data.best
-      w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + (data.ts || '—'))
+      w.w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + (data.ts || '—'))
     }
   } catch (_) { }
 }
