@@ -68,6 +68,6 @@ export function switchWLSymbol(sym: string): void {
   document.querySelectorAll('.wl-item').forEach(i => i.classList.remove('act'))
   const item = el('wl-' + sym); if (item) item.classList.add('act')
   const sel = document.querySelector('#symSel') as HTMLSelectElement | null
-  if (sel) { sel.value = sym; setSymbol(sym) }
+  if (sel) { sel.value = sym; if (typeof w.setSymbol === 'function') w.setSymbol(sym); else setSymbol(sym) }
   else { w.S.symbol = sym; if (typeof w.resetData === 'function') w.resetData() }
 }

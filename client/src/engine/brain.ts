@@ -11,6 +11,8 @@ import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , _NEURO_SYMS } from '../core/config'
 import { calcConfluenceScore } from './confluence'
+// Re-export runSignalScan (lives in indicators.ts but consumers import from brain.ts)
+export { runSignalScan } from './indicators'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
@@ -994,7 +996,7 @@ export function checkProtectMode(): void {
     BM.protectMode = true
     BM.protectReason = reason
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[BRAIN PROTECT] ON ' + reason)
-    if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { getATEnabled() = false }
+    if (getATEnabled() && (w.S.mode || 'assist') === 'auto') { if (typeof w.AT !== 'undefined') w.AT.enabled = false }
     brainThink('bad', reason)
     toast(reason)
   }

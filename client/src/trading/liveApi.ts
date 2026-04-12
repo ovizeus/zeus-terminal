@@ -171,21 +171,18 @@ export async function liveApiSyncState(): Promise<any> {
     // Key by sym+side (Binance has max 1 position per symbol+side)
     var _newSymSides: any = {}
     positions.forEach(function (p: any) { _newSymSides[p.symbol + '_' + p.side] = true })
-    Object.keys(_existingById).forEach(function (eid: string) {
+    Object.keys(_existingById).forEach(function (eid) {
       var gone = _existingById[eid]
       var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '')
-      if (_newSymSides[_goneSymSide]) return // Still on exchange (size may differ)
-        if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side })
-        // Clean DSL state for vanished position
-        if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]
-        if (typeof w.DSL !== 'undefined' && w.DSL._attachedIds) w.DSL._attachedIds.delete(String(gone.id))
-        // [FIX R6] Journal entry for exchange-closed position
-        if (typeof addTradeToJournal === 'function') {
-          var _exitPrice = (true) ? getSymPrice(gone) : 0
-          if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
-          var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
-          addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
-        }
+      if (_newSymSides[_goneSymSide]) return
+      if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side })
+      if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]
+      if (typeof w.DSL !== 'undefined' && w.DSL._attachedIds) w.DSL._attachedIds.delete(String(gone.id))
+      if (typeof addTradeToJournal === 'function') {
+        var _exitPrice = getSymPrice(gone) || 0
+        if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
+        var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
+        addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
       }
     })
     w.TP.livePositions = positions.map(function (p: any) {

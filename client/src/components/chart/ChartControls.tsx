@@ -147,7 +147,7 @@ export function ChartControls() {
 
   function handleSymbolChange(val: string) {
     const w = window as any
-    setSymbol(val)
+    if (typeof w.setSymbol === 'function') w.setSymbol(val); else setSymbol(val)
     patch({ symbol: val })
   }
 

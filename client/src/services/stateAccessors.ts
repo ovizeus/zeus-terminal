@@ -314,3 +314,23 @@ export function getTCSignalMin(): number {
 export function getTPObject(): any {
   return (window as any).TP
 }
+
+export function getATMode(): string {
+  return (window as any).AT?.mode || (window as any).AT?._serverMode || 'demo'
+}
+
+export function getDemoPositions(): any[] {
+  return (window as any).TP?.demoPositions || []
+}
+
+export function getLivePositions(): any[] {
+  return (window as any).TP?.livePositions || []
+}
+
+export function getDSLEnabled(): boolean {
+  return !!(window as any).DSL?.enabled
+}
+
+export function getDSLPositions(): Record<string, any> {
+  return (window as any).DSL?.positions || {}
+}

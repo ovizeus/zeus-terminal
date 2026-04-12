@@ -63,9 +63,9 @@ function _fetchExpoInline(): void {
 let _cmdOpen = false
 let _cmdIdx = 0
 const _CMD_ACTIONS: any[] = [
-  { cat: 'symbol', label: 'BTC \u2014 Bitcoin', icon: '\u20BF', action: function () { setSymbol('BTCUSDT') }, keys: 'btc bitcoin' },
-  { cat: 'symbol', label: 'ETH \u2014 Ethereum', icon: '\u039E', action: function () { setSymbol('ETHUSDT') }, keys: 'eth ethereum' },
-  { cat: 'symbol', label: 'SOL \u2014 Solana', icon: '\u25CE', action: function () { setSymbol('SOLUSDT') }, keys: 'sol solana' },
+  { cat: 'symbol', label: 'BTC \u2014 Bitcoin', icon: '\u20BF', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('BTCUSDT') }, keys: 'btc bitcoin' },
+  { cat: 'symbol', label: 'ETH \u2014 Ethereum', icon: '\u039E', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('ETHUSDT') }, keys: 'eth ethereum' },
+  { cat: 'symbol', label: 'SOL \u2014 Solana', icon: '\u25CE', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('SOLUSDT') }, keys: 'sol solana' },
   { cat: 'nav', label: 'Open Settings', icon: '\u2699', action: function () { { openM('msettings'); hubPopulate() } }, keys: 'settings config preferences' },
   { cat: 'nav', label: 'Open Decision Log', icon: '\uD83D\uDCCB', action: function () { if (typeof _toggleDecisionPanel === 'function') _toggleDecisionPanel() }, keys: 'decisions dlog brain' },
   { cat: 'nav', label: 'View Missed Trades', icon: '\uD83D\uDEAB', action: function () { _showMissedTrades() }, keys: 'missed trades blocked' },

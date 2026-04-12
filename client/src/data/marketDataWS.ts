@@ -271,6 +271,8 @@ export function setSymbol(sym: string): void {
     connectBNB(); connectBYB()
   } catch (_setSymErr: any) { console.error('[setSymbol] error:', _setSymErr.message || _setSymErr) }
 }
+// Self-register on window so monkey-patch chains (orderflow, patch, aub) can wrap it
+w.setSymbol = setSymbol
 
 // ===== SOUND =====
 export function toggleSnd(): void {
