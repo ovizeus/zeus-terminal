@@ -191,24 +191,17 @@ export function installPhase1Adapters(): void {
   // _AN_KEY_N — removed (direct import)
   // _AN_KEY_A — removed (direct import)
   // NOTIFICATION_CENTER — removed (direct import)
-  w.USER_SETTINGS = USER_SETTINGS; w.BT = BT; w.BT_INDICATORS = BT_INDICATORS
   /* MSCAN_SYMS — removed (direct import) */ w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
-  w.DAILY_STATS = DAILY_STATS; w.BEXT = BEXT
   // SESS_CFG — removed (direct import)
   /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; /* NEWS — removed (self-ref in config.ts) */
   /* _regimeHistory — removed (direct import) */ w._fakeout = _fakeout
   // _NEURO_SYMS — removed (direct import)
   // _SESS_DEF — removed (direct import)
-  w.ZANIM = ZANIM; /* _execQueue — removed (0 refs) */
   /* _srUpdateStats — removed (direct import) */ /* _srRenderStats — removed (direct import) */
-  w._srRenderList = _srRenderList; w._srSave = _srSave; w._srLoad = _srLoad
-  w._srEnsureVisible = _srEnsureVisible; w.srStripUpdateBar = srStripUpdateBar
   w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
   w._macdChart = _macdChart; w._macdInited = _macdInited
   w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; /* oviPriceSeries — removed (0 refs) */
   // state.ts exports
-  w.BlockReason = BlockReason; w.ZState = ZState
-  w.IND_SETTINGS = _stIND_SETTINGS; w.liqSeries = liqSeries; w.zsSeries = zsSeries
   // Chart series refs — start as null/undefined, set by initCharts() in marketDataChart.ts
   // Bridge marketData.js renderChart() references these as globals
   if (w.cSeries === undefined) w.cSeries = null
@@ -312,7 +305,6 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines ──
   // patch.ts, hotkeys.ts, marketCoreReactor.ts — side-effect imports, self-register
-  w.initPageView = initPageView
   // openPageView — removed (direct import)
   /* closePageView — removed (self-ref in pageview.ts) */
   // calcADX — removed (direct import)
@@ -401,8 +393,6 @@ export function installPhase1Adapters(): void {
   void Intervals; void WS; void FetchLock; void ingestPrice; void Timeouts
 
   // ── Phase 6A: guards.js ──
-  w._SAFETY = _SAFETY
-  w._safe = _safe
   // _safePnl — removed (direct import)
   // _isPriceSane — removed (direct import)
   // _resetWatchdog — removed (direct import)
@@ -420,7 +410,6 @@ export function installPhase1Adapters(): void {
   // devLog — removed (direct import)
   /* devClearLog — removed (direct import) */
   /* devExportLog — removed (direct import) */
-  w.ZLOG = ZLOG
   // safeAsync — removed (direct import)
   // hubToggleDev — removed (direct import)
   // _devEnsureVisible — removed (direct import)
@@ -442,7 +431,6 @@ export function installPhase1Adapters(): void {
   // zeusGetTheme — removed (direct import)
 
   // ── Phase 6A: decisionLog.js ──
-  w.DLog = DLog
 
   // ── Phase 5A: signals.js ──
   // renderSignals — removed (direct import)
