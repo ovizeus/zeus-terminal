@@ -194,7 +194,7 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
 
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
   if (typeof w.manualLivePlaceOrder !== 'function') { w.toast('Live API not available', 3000, w._ZI.lock); return }
-  const refPrice = (orderType === 'MARKET') ? w.S.price : entry; const qty = (size * lev) / refPrice; const binanceSide = (w.TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
+  const refPrice = (orderType === 'MARKET') ? w.S.price : entry; if (!refPrice || refPrice <= 0) { w.toast('Price unavailable — cannot place order', 3000, w._ZI.x); return }; const qty = (size * lev) / refPrice; const binanceSide = (w.TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
   const execBtn = w.el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
   w.manualLivePlaceOrder({ symbol: w.S.symbol, side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: w.S.price }).then(function (result: any) {
     if (execBtn) { execBtn.disabled = false; setDemoSide(w.TP.demoSide) }

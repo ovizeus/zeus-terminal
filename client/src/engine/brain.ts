@@ -1967,9 +1967,13 @@ export function renderBrainCockpit(): void {
       // --- STRUCTURE (0→1): magnet proximity + organization + range ---
       let _magnetScore = 0.5
       if (w.S.magnets && w.S.magnets.above && w.S.magnets.above.length && w.S.magnets.below && w.S.magnets.below.length && w.S.price > 0) {
-        const _nearAbove = Math.min.apply(null, w.S.magnets.above.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - w.S.price) / w.S.price }))
-        const _nearBelow = Math.min.apply(null, w.S.magnets.below.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - w.S.price) / w.S.price }))
-        _magnetScore = 1 - clamp(Math.min(_nearAbove, _nearBelow) / 0.02, 0, 1)
+        const _aboveDists = w.S.magnets.above.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - w.S.price) / w.S.price }).filter(function (d: any) { return Number.isFinite(d) })
+        const _belowDists = w.S.magnets.below.map(function (m: any) { return Math.abs((typeof m === 'number' ? m : m.price || 0) - w.S.price) / w.S.price }).filter(function (d: any) { return Number.isFinite(d) })
+        if (_aboveDists.length && _belowDists.length) {
+          const _nearAbove = Math.min.apply(null, _aboveDists)
+          const _nearBelow = Math.min.apply(null, _belowDists)
+          _magnetScore = 1 - clamp(Math.min(_nearAbove, _nearBelow) / 0.02, 0, 1)
+        }
       }
       const _orgScore = 1 - clamp(_wickChaos / 100, 0, 1)
       let _rangeScore = 0.5

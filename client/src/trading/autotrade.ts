@@ -1268,6 +1268,7 @@ export function scheduleAutoClose(pos: any): void {
         }
 
         const cur2 = getPosPrice()
+        if (!cur2) return // stale price — skip this tick, interval will retry
         const diff2 = cur2 - pos.entry
         const pnl2 = w._safePnl(pos.side, diff2, pos.entry, pos.size || 0, pos.lev || 1, true)
 
@@ -1592,7 +1593,7 @@ export function openPartialClose(posId: any): void {
   const symBase = pos.sym.replace('USDT', '')
   const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
     : (pos.sym === w.S.symbol ? w.S.price : (w.wlPrices[pos.sym]?.price || pos.entry))
-  const pnl = (pos.side === 'LONG' ? symPrice - pos.entry : pos.entry - symPrice) / pos.entry * pos.size * pos.lev
+  const pnl = pos.entry > 0 ? (pos.side === 'LONG' ? symPrice - pos.entry : pos.entry - symPrice) / pos.entry * pos.size * pos.lev : 0
 
   // Simple modal overlay
   const overlay = document.createElement('div')
