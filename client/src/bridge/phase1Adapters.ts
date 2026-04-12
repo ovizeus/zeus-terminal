@@ -250,10 +250,7 @@ export function installPhase1Adapters(): void {
   // closeDemoPos — removed (direct import)
 
   // ── Phase 7F-F: marketData positions (coexist) ──
-  w.cancelPendingOrder = cancelPendingOrder
-  w.modifyPendingPrice = modifyPendingPrice; w.renderPendingOrders = renderPendingOrders
 
-  w.savePosSLTP = savePosSLTP; /* checkDemoPositionsSLTP — removed (direct import) */
   /* renderDemoPositions — removed (direct import) */ w.calcPosPnL = calcPosPnL
   // renderLivePositions — removed (direct import)
   // closeLivePos — removed (direct import)
