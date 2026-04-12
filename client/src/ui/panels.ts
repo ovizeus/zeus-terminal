@@ -221,7 +221,7 @@ export function renderMagnets() {
       const distCls = isAbove ? 'above' : 'below';
       const dots = [...Array(Math.ceil(m.strength / 20))].map(() => `<div class="mag-dot" style="background:${isAbove ? '#ff3355' : '#00d97a'};width:${Math.min(8, 4 + m.strength / 20)}px;height:${Math.min(8, 4 + m.strength / 20)}px;border-radius:50%;box-shadow:0 0 4px ${isAbove ? '#ff3355' : '#00d97a'}"></div>`).join('');
       const srcTag = m.sources ? (m.sources.join(' + ')) : m.source;
-      return `<div class="mag-level ${cls}" onclick="jumpToMagnet(${m.price})">
+      return `<div class="mag-level ${cls}" data-action="jumpToMagnet" data-price="${m.price}">
         <div class="mag-bar-fill" style="width:${m.strength}%"></div>
         <div class="mag-icon">${m.type === 'ob_wall' ? _ZI.whale : m.type === 'liq_cluster' ? _ZI.boom : m.type === 'vol_node' ? _ZI.chart : _ZI.ruler}</div>
         <div class="mag-info">
@@ -236,6 +236,16 @@ export function renderMagnets() {
 
   renderList(above, 'magAboveList', true);
   renderList(below, 'magBelowList', false);
+
+  // Event delegation for jumpToMagnet — replaces onclick="jumpToMagnet(...)"
+  ;['magAboveList', 'magBelowList'].forEach(id => {
+    const c = el(id); if (!c || c.dataset.magDelegated) return
+    c.dataset.magDelegated = '1'
+    c.addEventListener('click', (e) => {
+      const row = (e.target as HTMLElement).closest('[data-action="jumpToMagnet"]')
+      if (row) { const price = parseFloat(row.getAttribute('data-price') || '0'); if (price > 0) jumpToMagnet(price) }
+    })
+  })
 }
 
 export function updateMagnetBias() {

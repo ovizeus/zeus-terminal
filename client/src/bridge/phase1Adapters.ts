@@ -229,7 +229,7 @@ export function installPhase1Adapters(): void {
   if (w.srSeries === undefined) w.srSeries = []
 
   // ── Phase 8E: bootstrap panels (coexist) ──
-  w._showPerformance = _showPerformance; w._showCompare = _showCompare
+  w._showCompare = _showCompare
 
   // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
 
@@ -311,7 +311,6 @@ export function installPhase1Adapters(): void {
 
   // ── Phase 7B: panels + render ──
   // scanLiquidityMagnets — removed (direct import)
-  w.jumpToMagnet = jumpToMagnet
 
   // renderVWAP — removed (direct import)
   // toggleVWAP — removed (direct import)
@@ -349,7 +348,6 @@ export function installPhase1Adapters(): void {
   w.toggleTimeSales = toggleTimeSales
 
   // updateModeBar — removed (direct import)
-  w._modeBarSwitch = _modeBarSwitch
   w.initZeusDock = initZeusDock
   // dockClearActive — removed (direct import)
   // modals.ts — _showExecOverlay already set by orders.ts adapter; modal version as alias

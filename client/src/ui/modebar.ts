@@ -17,7 +17,13 @@ export function initModeBar(): void {
         '<span class="zmb-mode" id="zmbMode">\u2014</span>' +
       '</div>' +
     '</div>' +
-    '<button class="zmb-btn" id="zmbBtn" onclick="_modeBarSwitch()">\u2014</button>';
+    '<button class="zmb-btn" id="zmbBtn" data-action="modeBarSwitch">\u2014</button>';
+
+  // Event delegation — replaces onclick="_modeBarSwitch()"
+  bar.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-action]')
+    if (btn && btn.getAttribute('data-action') === 'modeBarSwitch') _modeBarSwitch()
+  })
 
   updateModeBar();
 }
