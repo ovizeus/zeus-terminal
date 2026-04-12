@@ -100,7 +100,7 @@ export function promptAddFunds(): void {
 
 export function promptResetDemo(): void {
   _showConfirmDialog('Reset Demo Balance?', 'This will reset your demo balance to $10,000 and clear all trading statistics.\n\nOpen positions will NOT be closed.\n\nThis action cannot be undone.', 'Cancel', 'Reset Demo', function () {
-    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { w.TP.demoBalance = data.balance; w.TP._serverStartBalance = data.startBalance; w.updateDemoBalance(); w.toast('Demo balance reset to $10,000', 3000, w._ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Reset failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
+    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { w.TP.demoBalance = data.balance; w.TP._serverStartBalance = data.startBalance; w.TP.demoPnL = 0; w.TP.demoWins = 0; w.TP.demoLosses = 0; if (typeof w.AT !== 'undefined') { w.AT.totalTrades = 0; w.AT.wins = 0; w.AT.losses = 0; w.AT.totalPnL = 0; w.AT.dailyPnL = 0; w.AT.realizedDailyPnL = 0; w.AT.closedTradesToday = 0 }; w.updateDemoBalance(); w.toast('Demo balance reset to $10,000', 3000, w._ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { w.toast((data.error || 'Reset failed'), 3000, w._ZI.x) } }).catch(function () { w.toast('Network error', 3000, w._ZI.x) })
   })
 }
 

@@ -505,7 +505,7 @@ export function runAutoTradeCheck(): void {
     const _serverDay = w._SAFETY.storedDayId ? w._SAFETY.storedDayId : 0
     const _localDay = new Date().toISOString().slice(0, 10)
     if (w.AT.dailyStart !== _localDay || (_serverDay && _serverDay !== w._SAFETY._prevServerDay)) {
-      w.AT.dailyPnL = 0; w.AT.realizedDailyPnL = 0; w.AT.closedTradesToday = 0
+      w.AT.dailyPnL = 0; w.AT.realizedDailyPnL = 0; w.AT.closedTradesToday = 0; w.AT.totalTrades = 0; w.AT.wins = 0; w.AT.losses = 0; w.AT.totalPnL = 0
       w.AT.dailyStart = _localDay
       w._SAFETY._prevServerDay = _serverDay
       w.atLog('info', '[RESET] Daily counters reset (server UTC sync)')
@@ -1241,6 +1241,7 @@ export function scheduleAutoClose(pos: any): void {
 
         // [PATCH P1-3] Guard: if already closing, skip this tick
         if (pos.status === 'closing') return
+        pos.status = 'closing'
 
         // Close live position via backend
         w.closeLivePos(pos.id, 'AUTO ' + reason)
