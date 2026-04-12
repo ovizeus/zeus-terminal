@@ -498,7 +498,7 @@ export function setDslMode(mode: any): void {
   const valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
   mode = (mode || '').toLowerCase()
   if (!valid.includes(mode)) return
-  getDSLMode() = mode
+  const _dsl = (window as any).DSL; if (_dsl) _dsl.mode = mode
   try { localStorage.setItem('zeus_dsl_mode', mode) } catch (_) { }
   const labels: any = { atr: _ZI.plug + ' ATR', fast: _ZI.bolt + ' FAST', swing: _ZI.wave + ' SWING', defensive: _ZI.sh + ' DEF', tp: _ZI.tgt + ' TP' }
   brainThink('info', _ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
@@ -2361,7 +2361,7 @@ export function _initBrainCockpit(): void {
   // Restore DSL mode from localStorage
   try {
     const savedDsl = localStorage.getItem('zeus_dsl_mode')
-    if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) getDSLMode() = savedDsl
+    if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) { const _dsl2 = (window as any).DSL; if (_dsl2) _dsl2.mode = savedDsl }
   } catch (_) { }
 
   // Single sync from S.* canonical state
