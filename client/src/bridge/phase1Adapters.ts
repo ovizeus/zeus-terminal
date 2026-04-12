@@ -117,7 +117,7 @@ import '../data/orderflow'
 // Phase 8 — Bootstrap chunks — MUST be AFTER managers/guards/orderflow (heartbeat IIFE needs w.ingestPrice)
 import { startApp } from '../core/bootstrapStartApp'
 import '../core/bootstrapBrainDash'
-import { _toggleExposurePanel, _toggleExpoInline, _toggleCmdPalette, _showMissedTrades, _showSessionReview, _showRegimeHistory, _showPerformance, _showCompare } from '../core/bootstrapPanels'
+import { _showPerformance, _showCompare } from '../core/bootstrapPanels'
 import { _actfeedToggle } from '../core/bootstrapError'
 import { _pinIsSet, _pinCheckLock, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, setupPWAReloadBtn, masterReset } from '../core/bootstrapMisc'
 import { initZeusGroups, _startExtras, runHealthChecks, _updatePnlLabCondensed } from '../core/bootstrapInit'
@@ -229,7 +229,6 @@ export function installPhase1Adapters(): void {
   if (w.srSeries === undefined) w.srSeries = []
 
   // ── Phase 8E: bootstrap panels (coexist) ──
-  w._toggleExpoInline = _toggleExpoInline
   w._showPerformance = _showPerformance; w._showCompare = _showCompare
 
   // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
