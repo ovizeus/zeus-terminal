@@ -9,6 +9,7 @@ import { initModeBar } from '../ui/modebar'
 import { _dslTrimAll, startDSLIntervals } from '../trading/dsl'
 import { calcGlobalExpectancy } from '../engine/perfStore'
 import { openPageView } from '../ui/pageview'
+import { initZeusDock } from '../ui/dock'
 import { DEV } from '../utils/dev'
 import { runAutoTradeCheck , atLog } from '../trading/autotrade'
 import { liveApiSyncState } from '../trading/liveApi'
@@ -33,7 +34,7 @@ export function initZeusGroups(): void {
   mv('zeus-mode-bar', mi); if (typeof initModeBar === 'function') initModeBar()
   mv('aub', mi); mv('sr-strip', mi); mv('csec', mi); mv('zeus-dock', mi)
   if (typeof w.initPageView === 'function') w.initPageView()
-  if (typeof w.initZeusDock === 'function') w.initZeusDock()
+  initZeusDock()
   mv('aria-strip', mi); mv('teacher-strip', mi); mv('pnl-lab-strip', mi)
   mv('dsl-strip', mi); mv('at-strip', mi); mv('pt-strip', mi); mv('nova-strip', mi)
   mv('mtf-strip', mi); mv('adaptive-strip', mi); mv('actfeed-strip', mi)

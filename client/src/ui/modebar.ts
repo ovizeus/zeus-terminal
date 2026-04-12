@@ -2,7 +2,8 @@
 // Global Execution Mode Bar — visual control for demo/live mode
 import { getATObject } from '../services/stateAccessors'
 import { toast } from '../data/marketDataHelpers'
-const w = window as any; // kept for w._resolvedEnv, w._apiConfigured, w.switchGlobalMode
+import { switchGlobalMode } from '../data/marketDataTrading'
+const w = window as any; // kept for w._resolvedEnv, w._apiConfigured
 
 // ── RENDER ─────────────────────────────────────────────────────
 export function initModeBar(): void {
@@ -83,7 +84,5 @@ export function _modeBarSwitch(): void {
     return;
   }
 
-  if (typeof w.switchGlobalMode === 'function') {
-    w.switchGlobalMode(mode === 'demo' ? 'live' : 'demo');
-  }
+  switchGlobalMode(mode === 'demo' ? 'live' : 'demo');
 }

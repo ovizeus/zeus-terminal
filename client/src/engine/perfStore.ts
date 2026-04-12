@@ -6,6 +6,7 @@
 
 import { getPerf, getJournal } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
+import { renderPerfTracker } from '../ui/render'
 
 const w = window as Record<string, any> // kept for WRITES only
 
@@ -36,7 +37,7 @@ export function loadPerfFromStorage(): void {
       w.PERF[k].wins = d.wins || 0; w.PERF[k].losses = d.losses || 0; w.PERF[k].weight = d.weight || 1.0
       w.PERF[k].pnlSum = d.pnlSum || 0; w.PERF[k].feeSum = d.feeSum || 0; w.PERF[k].winPnl = d.winPnl || 0; w.PERF[k].lossPnl = d.lossPnl || 0
     })
-    if (typeof w.renderPerfTracker === 'function') w.renderPerfTracker()
+    renderPerfTracker()
   } catch (e: any) { console.warn('[perfStore] load failed:', e.message) }
 }
 
@@ -88,5 +89,5 @@ export function resetPerfStore(): void {
   // WRITE path: resets w.PERF directly
   Object.keys(w.PERF).forEach(k => { w.PERF[k].wins = 0; w.PERF[k].losses = 0; w.PERF[k].weight = 1.0; w.PERF[k].pnlSum = 0; w.PERF[k].feeSum = 0; w.PERF[k].winPnl = 0; w.PERF[k].lossPnl = 0 })
   savePerfToStorage()
-  if (typeof w.renderPerfTracker === 'function') w.renderPerfTracker()
+  renderPerfTracker()
 }

@@ -1,4 +1,5 @@
 import { useBrainStore } from '../../stores'
+import { toggleAdaptive } from '../../trading/risk'
 
 /** Adaptive Control dock page view — 1:1 from #adaptive-sec in index.html lines 4435-4471 */
 export function AdaptivePanel() {
@@ -14,11 +15,8 @@ export function AdaptivePanel() {
         {/* Toggle button */}
         <div style={{ marginBottom: '8px' }}>
           <button id="adaptiveToggleBtn" onClick={() => {
-            const w = window as any
-            if (typeof w.toggleAdaptive === 'function') {
-              w.toggleAdaptive()
-              // brainStore syncs via useBrainBridge event — no manual setAdaptiveOn needed
-            }
+            toggleAdaptive()
+            // brainStore syncs via useBrainBridge event — no manual setAdaptiveOn needed
           }} style={{
             width: '100%', padding: '6px 10px', fontSize: '10px', fontFamily: 'var(--ff)', letterSpacing: '1px',
             background: adaptiveOn ? '#0a2a1a' : '#0a1220',

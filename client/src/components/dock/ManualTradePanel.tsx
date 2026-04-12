@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
-import { onDemoLevChange, placeDemoOrder, setLiveSide, onDemoOrdTypeChange, setLivePct, onLiveLevChange, promptResetDemo } from '../../data/marketDataTrading'
+import { onDemoLevChange, placeDemoOrder, setLiveSide, onDemoOrdTypeChange, setLivePct, onLiveLevChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
 
 const w = window as any
@@ -108,7 +108,7 @@ export function ManualTradePanel() {
         <span>MANUAL TRADE</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span id="demoBalance" className="tp-bal">{`BAL: $${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
-          <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => w.promptAddFunds?.()}>+ ADD</button>
+          <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => promptAddFunds()}>+ ADD</button>
           <button id="btnResetDemo" style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000" onClick={() => promptResetDemo()}>↻ RESET</button>
         </span>
       </div>

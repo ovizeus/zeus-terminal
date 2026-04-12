@@ -14,7 +14,7 @@ import { closeDemoPos } from '../data/marketDataClose'
 // Phase 7F-F: marketData positions (chunk F — pending orders, SL/TP, render, closeLivePos)
 import { cancelPendingOrder, modifyPendingPrice, renderPendingOrders, _stopLivePendingSync, savePosSLTP, renderDemoPositions, calcPosPnL, updateLiveBalance, getSymPrice as _mdGetSymPriceFull } from '../data/marketDataPositions'
 // Phase 7F-E: marketData trading (chunk E — mode switch, orders, leverage, liq price)
-import { switchGlobalMode, _showConfirmDialog, promptAddFunds, toggleTradePanel, onDemoOrdTypeChange, getDemoLev, onDemoLevChange, calcLiqPrice, updateDemoLiqPrice, setDemoPct, setLivePct, updateDemoBalance, placeDemoOrder, getSymPrice } from '../data/marketDataTrading'
+import { _showConfirmDialog, toggleTradePanel, onDemoOrdTypeChange, getDemoLev, onDemoLevChange, calcLiqPrice, updateDemoLiqPrice, setDemoPct, setLivePct, updateDemoBalance, placeDemoOrder, getSymPrice } from '../data/marketDataTrading'
 // Phase 7F-B: marketData chart (chunk B — chart init, fetchKlines, renderChart)
 import { getChartH, getChartW, initCharts, fetchKlines, renderChart } from '../data/marketDataChart'
 // Phase 7F-D2: marketData WS (chunk D2 — WS connects, liq, symbol, modals, alerts, cloud)
@@ -30,7 +30,7 @@ import { fmtTime as _dynFmtTime, fmtTimeSec as _dynFmtTimeSec, fmtDate as _dynFm
 import '../core/state'   // defines w.S, w.TC, w.TP
 import '../core/config'  // defines w.BM, w.BRAIN, w.DSL, w.INDICATORS (_ZI now direct import)
 // Named imports for config.ts exports that need window.* mapping
-import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESS_CFG, ARM_ASSIST, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _srUpdateStats, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, _neuroLastScan, _execActive } from '../core/config'
+import { AUB, AUB_COMPAT, AUB_PERF, AUB_SIM_KEY, ARIA_STATE, NOVA_STATE, _AN_KEY_A, _AN_KEY_N, NOTIFICATION_CENTER, USER_SETTINGS, BT, BT_INDICATORS, MSCAN_SYMS, MSCAN, DHF, PERF, DAILY_STATS, BEXT, SESS_CFG, ARM_ASSIST, _fakeout, _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS, ZANIM, _srRenderList, _srSave, _srLoad, _srEnsureVisible, srStripUpdateBar, _dslStripOpen, _atStripOpen, _ptStripOpen, _macdChart, _macdInited, _audioCtx, vwapSeries as _cfgVwapSeries, oviSeries as _cfgOviSeries, _neuroLastScan, _execActive } from '../core/config'
 import { BlockReason, ZState, mainChart as _stMainChart, bbUpperS, ichimokuSeries, fibSeries, pivotSeries, vpSeries, _rsiChart, _stochChart, _atrChart, _obvChart, _mfiChart, _cciChart, IND_SETTINGS as _stIND_SETTINGS, liqSeries, zsSeries, oiHistory, WL_SYMS, wlPrices, allPrices } from '../core/state'
 
 import { el, safeSetText, safeSetHTML, isValidMarketPrice, safeLastKline } from '../utils/dom'
@@ -75,11 +75,11 @@ import '../teacher/teacherEngine'
 import '../teacher/teacherPanel'
 // Phase 7B: panels + render
 import { renderMagnets, updateMagnetBias, jumpToMagnet, runBacktest, renderBacktestResults, calcVWAPBands, oviReadSettings, oviApplySettings, oviCalcATR, oviPivots, oviWeightAt, oviColor, oviCalcPockets, renderOviLiquid, oviRenderScale, clearOviLiquid, toggleOviLiquid, togglePnlLab, renderPnlLab, _pnlLabCard, _pnlLabProfileCard, renderSessionOverlay } from '../ui/panels'
-import { recordIndicatorPerformance, recalcPerfWeights, renderPerfTracker, getCurrentADX, getSessionKey, updateSessionBacktest, updateSymPulseRows, updateBrainHeatmap, updateRiskGauges, setRiskGauge, updateDataStream, isCurrentTimeOK, renderDHF } from '../ui/render'
+import { recordIndicatorPerformance, recalcPerfWeights, getCurrentADX, getSessionKey, updateSessionBacktest, updateSymPulseRows, updateBrainHeatmap, updateRiskGauges, setRiskGauge, updateDataStream, isCurrentTimeOK, renderDHF } from '../ui/render'
 // Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines
 import '../core/patch' // side-effect module
 import '../core/hotkeys' // side-effect module
-import { initPageView, openPageView } from '../ui/pageview'
+import { initPageView } from '../ui/pageview'
 import '../ui/marketCoreReactor' // side-effect, self-registers MarketCoreReactor
 import { calcADX, fetchSymbolKlines, runMultiSymbolScan, renderMscanTable, manualEnterFromScan, runMultiSymbolAutoTrade, toggleMultiSymMode, _mscanUpdateLabel, toggleSymPicker, mscanToggleSym, mscanPickAll } from '../data/klines'
 // Phase 6E: UI leaf files
@@ -88,14 +88,14 @@ import { _showExecOverlay as _showExecOverlayModal, _queueExecOverlay as _queueE
 import '../ui/notifications' // 6 lines, self-registers
 import { toggleTimeSales } from '../ui/timeSales'
 import { initModeBar, _modeBarSwitch } from '../ui/modebar'
-import { initZeusDock, dockClearActive } from '../ui/dock'
+// initZeusDock, dockClearActive — removed (direct imports)
 import '../ui/drawingTools' // self-registers drawing tool functions
 // Phase 6D: brain extensions
 import { aubToggle, aubToggleSFX, aubCheckCompat, aubBBSnapshot, aubBBExport, aubBBClear, aubCalcMTFStrength, aubCalcCorrelation, aubMacroImport, aubMacroClear, aubMacroFileLoad, aubGetActiveMacroRisk, aubSimRun, aubSimApply, initAUB } from '../engine/aub'
 import '../engine/arianova' // self-registers on window via IIFE
 // Phase 6B: trading files
 import { dslToggleMagnet, _computeDslMagnetSnap, toggleAssistArm, _syncDslAssistUI, initDSLBubbles, _dslSafePrice, _dslSanitizeParams, runDSLBrain, _runClientDSLOnPositions, dslTakeControl, dslReleaseControl, dslManualParam, _dslPushParamsDebounced, _renderDslCard, startDSLIntervals, _dslTrimLogs, _dslTrimAll } from '../trading/dsl'
-import { computeMacroCortex, updateMacroUI, estimateRoundTripFees, _adaptSave, _adaptLoad, _adaptClamp, recalcAdaptive, toggleAdaptive, adaptiveStripToggle, initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, computePositionSizingMult, perfRecordTrade, _posR as _riskPosR, _macroPhaseFromComposite } from '../trading/risk'
+import { computeMacroCortex, updateMacroUI, estimateRoundTripFees, _adaptSave, _adaptLoad, _adaptClamp, recalcAdaptive, adaptiveStripToggle, initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, computePositionSizingMult, perfRecordTrade, _posR as _riskPosR, _macroPhaseFromComposite } from '../trading/risk'
 import { onTradeExecuted, onTradeClosed as onTradeClosedPos, triggerExecCinematic } from '../trading/positions'
 import { _showExecOverlay, _queueExecOverlay, _dayKeyLocal, _bmResetDailyIfNeeded, _bmPostClose } from '../trading/orders'
 import { liveApiSetToken, _liveApiHeaders, _idempotencyKey, _liveApiFetch, _liveApiError, _liveApiParse, liveApiStatus, liveApiGetBalance, liveApiGetPositions, liveApiPlaceOrder, liveApiCancelOrder, liveApiSetLeverage, liveApiClosePosition, aresPlaceOrder, aresSetStopLoss, aresCancelOrder, manualLivePlaceOrder, manualLiveGetOpenOrders, manualLiveCancelOrder, manualLiveModifyLimit, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
@@ -201,7 +201,7 @@ export function installPhase1Adapters(): void {
   // _NEURO_SYMS — removed (direct import)
   // _SESS_DEF — removed (direct import)
   w.ZANIM = ZANIM; /* _execQueue — removed (0 refs) */
-  w._srUpdateStats = _srUpdateStats; /* _srRenderStats — removed (direct import) */
+  /* _srUpdateStats — removed (direct import) */ /* _srRenderStats — removed (direct import) */
   w._srRenderList = _srRenderList; w._srSave = _srSave; w._srLoad = _srLoad
   w._srEnsureVisible = _srEnsureVisible; w.srStripUpdateBar = srStripUpdateBar
   w._dslStripOpen = _dslStripOpen; w._atStripOpen = _atStripOpen; w._ptStripOpen = _ptStripOpen
@@ -256,8 +256,8 @@ export function installPhase1Adapters(): void {
   // getSymPrice (from positions) — removed (direct import)
 
   // ── Phase 7F-E: marketData trading (coexist) ──
-  w.switchGlobalMode = switchGlobalMode; /* _applyGlobalModeUI — removed (direct import) */
-  w.promptAddFunds = promptAddFunds; /* promptResetDemo — removed (direct import) */
+  // switchGlobalMode — removed (direct import) /* _applyGlobalModeUI — removed (direct import) */
+  // promptAddFunds — removed (direct import) /* promptResetDemo — removed (direct import) */
   // _showConfirmDialog — removed (direct import)
   // setLiveSide — removed (direct import)
   /* onDemoOrdTypeChange — removed (direct import) */ w.getDemoLev = getDemoLev; /* getLiveLev — removed (direct import) */
@@ -313,7 +313,7 @@ export function installPhase1Adapters(): void {
   // renderOviLiquid — removed (direct import)
 
   // toggleSession — removed (direct import)
-  w.renderPerfTracker = renderPerfTracker
+  // renderPerfTracker — removed (direct import)
   // getCurrentADX — removed (direct import)
   // updateQuantumClock — removed (direct import)
   // updateBrainExtension — removed (direct import)
@@ -323,7 +323,7 @@ export function installPhase1Adapters(): void {
   // ── Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines ──
   // patch.ts, hotkeys.ts, marketCoreReactor.ts — side-effect imports, self-register
   w.initPageView = initPageView
-  w.openPageView = openPageView
+  // openPageView — removed (direct import)
   /* closePageView — removed (self-ref in pageview.ts) */
   // calcADX — removed (direct import)
   // fetchSymbolKlines — removed (direct import)
@@ -344,7 +344,7 @@ export function installPhase1Adapters(): void {
   w.toggleTimeSales = toggleTimeSales
 
   // updateModeBar — removed (direct import)
-  w.initZeusDock = initZeusDock
+  // initZeusDock — removed (direct import)
   // dockClearActive — removed (direct import)
   // modals.ts — _showExecOverlay already set by orders.ts adapter; modal version as alias
   // notifications.ts — self-registers on import
@@ -382,7 +382,7 @@ export function installPhase1Adapters(): void {
   // estimateRoundTripFees — removed (direct import)
   // _adaptLoad — removed (direct import)
   // recalcAdaptive — removed (direct import)
-  w.toggleAdaptive = toggleAdaptive
+  // toggleAdaptive — removed (direct import)
   // initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, perfRecordTrade — removed (direct imports)
 
   // ── Phase 6B: trading/positions.js ──

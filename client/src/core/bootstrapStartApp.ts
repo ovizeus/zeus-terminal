@@ -7,6 +7,7 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _checkAppUpdate } from './bootstrapError'
+import { _srUpdateStats } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
@@ -72,7 +73,7 @@ export async function startApp(): Promise<void> {
   initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
   setTimeout(runHealthChecks, 700)
-  setTimeout(() => { w._srUpdateStats(); w._srRenderList(); w.srStripUpdateBar() }, 800)
+  setTimeout(() => { _srUpdateStats(); w._srRenderList(); w.srStripUpdateBar() }, 800)
   if (typeof w._ncUpdateBadge === 'function') setTimeout(w._ncUpdateBadge, 900)
   setTimeout(_checkAppUpdate, 2000)
   initAUB()

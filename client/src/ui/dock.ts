@@ -1,7 +1,7 @@
 import { toast } from '../data/marketDataHelpers'
+import { openPageView } from './pageview'
 // Zeus Terminal — ui/dock.ts (ported from ui/dock.js)
 // Icon Dock: module shortcuts grid (Faza A — visual only, no navigation)
-const w = window as any;
 
 // ── DOCK REGISTRY ──────────────────────────────────────────────
 // Ordered list of 15 dock items with grouping metadata.
@@ -120,9 +120,7 @@ export function initZeusDock(): void {
     item.classList.add('active');
 
     // Delegate to page view system
-    if (typeof w.openPageView === 'function') {
-      w.openPageView(dockId);
-    }
+    openPageView(dockId);
   });
 }
 
