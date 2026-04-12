@@ -162,25 +162,21 @@ export async function liveApiSyncState(): Promise<any> {
       w.TP.livePositions.forEach(function (pos: any) { if (pos && pos.id) _existingById[pos.id] = pos })
     }
     // [FIX C3] Detect positions closed on exchange — account before rebuild
-    var _newIds: any = {}
-    positions.forEach(function (p: any) { _newIds[p.symbol + '_' + p.side] = true })
-    Object.keys(_existingById).forEach(function (eid: string) {
-      if (!_newIds[eid]) {
-        var gone = _existingById[eid]
-        // [FIX SYNC-C1] Before declaring gone, check if exchange still has it by sym+side
-        var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '')
-        if (_newIds[_goneSymSide]) return // Still on exchange, just different key format
-        if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side })
-        // Clean DSL state for vanished position
-        if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]
-        if (typeof w.DSL !== 'undefined' && w.DSL._attachedIds) w.DSL._attachedIds.delete(String(gone.id))
-        // [FIX R6] Journal entry for exchange-closed position
-        if (typeof w.addTradeToJournal === 'function') {
-          var _exitPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(gone) : 0
-          if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
-          var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
-          w.addTradeToJournal({ id: gone.id, time: (typeof w.fmtNow === 'function' ? w.fmtNow() : new Date().toISOString()), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
-        }
+    // Key by sym+side (Binance has max 1 position per symbol+side)
+    var _newSymSides: any = {}
+    positions.forEach(function (p: any) { _newSymSides[p.symbol + '_' + p.side] = true })
+    Object.keys(_existingById).forEach(function (eid) {
+      var gone = _existingById[eid]
+      var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '')
+      if (_newSymSides[_goneSymSide]) return
+      if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side })
+      if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]
+      if (typeof w.DSL !== 'undefined' && w.DSL._attachedIds) w.DSL._attachedIds.delete(String(gone.id))
+      if (typeof w.addTradeToJournal === 'function') {
+        var _exitPrice = (typeof w.getSymPrice === 'function') ? w.getSymPrice(gone) : 0
+        if (!_exitPrice || _exitPrice <= 0) _exitPrice = gone.entry
+        var _gPnl = (gone.pnl != null && isFinite(gone.pnl)) ? gone.pnl : 0
+        w.addTradeToJournal({ id: gone.id, time: (typeof w.fmtNow === 'function' ? w.fmtNow() : new Date().toISOString()), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
       }
     })
     w.TP.livePositions = positions.map(function (p: any) {

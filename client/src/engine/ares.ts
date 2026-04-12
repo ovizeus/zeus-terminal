@@ -95,19 +95,20 @@ const ARES_POSITIONS = (function () {
   }
   function _makeClientId() { return 'ARES_' + Date.now() + '_' + Math.floor(Math.random() * 9999) }
   function calcUPnL(pos: any, markPrice: number) {
-    if (!pos || !markPrice) return 0
+    if (!pos || !markPrice || !pos.entryPrice || !pos.notional) return 0
     const direction = pos.side === 'LONG' ? 1 : -1
     const priceDiff = (markPrice - pos.entryPrice) * direction
     return (priceDiff / pos.entryPrice) * pos.notional
   }
   function calcLiqPrice(pos: any) {
+    if (!pos.entryPrice || !pos.leverage) return 0
     const marginRatio = 1 / pos.leverage
     if (pos.side === 'LONG') return pos.entryPrice * (1 - marginRatio + 0.005)
     return pos.entryPrice * (1 + marginRatio - 0.005)
   }
 
   function open(params: any) {
-    const id = 'ARES_POS_' + (_posIdCtr++)
+    const id = 'ARES_POS_' + Date.now() + '_' + (_posIdCtr++)
     const clientOrderId = _makeClientId()
     const fees = ARES_WALLET.roundTripFees(params.notional)
     const pos: any = {
@@ -131,7 +132,7 @@ const ARES_POSITIONS = (function () {
     _positions.filter((p: any) => p.status === 'OPEN').forEach((pos: any) => {
       pos.markPrice = markPrice
       pos.uPnL = calcUPnL(pos, markPrice)
-      pos.uPnLPct = (pos.uPnL / pos.notional) * 100
+      pos.uPnLPct = pos.notional ? (pos.uPnL / pos.notional) * 100 : 0
     })
   }
 

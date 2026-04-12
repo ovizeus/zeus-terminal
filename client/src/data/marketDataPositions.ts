@@ -4,6 +4,8 @@
 
 const w = window as any
 
+function _numOrDefault(val: any, fallback: number): number { const n = parseFloat(val); return Number.isFinite(n) ? n : fallback }
+
 // getSymPrice — full version with staleness check
 export function getSymPrice(pos: any): number | null {
   if (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) return w.allPrices[pos.sym]
@@ -44,7 +46,7 @@ function _fillDemoPendingOrder(ord: any): void {
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(w.el('dslTrailPct')?.value) || 0.70, pivotRightPct: parseFloat(w.el('dslTrailSusPct')?.value) || 1.00, impulseVPct: parseFloat(w.el('dslExtendPct')?.value) || 1.30 }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
+    dslParams: Object.assign({ pivotLeftPct: _numOrDefault(w.el('dslTrailPct')?.value, 0.70), pivotRightPct: _numOrDefault(w.el('dslTrailSusPct')?.value, 1.00), impulseVPct: _numOrDefault(w.el('dslExtendPct')?.value, 1.30) }, typeof w.calcDslTargetPrice === 'function' ? w.calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 1.5, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.015 : ord.limitPrice * 0.985 }),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
   w.TP.demoPositions.push(pos)
@@ -66,10 +68,10 @@ export function cancelPendingOrder(id: any): void {
 
 export function modifyPendingPrice(id: any): void {
   const strId = String(id)
-  const demoOrd = w.TP.pendingOrders.find(function (o: any) { return String(o.id) === strId })
-  if (demoOrd && demoOrd.mode === 'demo') { const newPrice = prompt('New limit price:', w.fP(demoOrd.limitPrice)); if (!newPrice) return; const np = parseFloat(newPrice); if (!np || np <= 0) { w.toast('Invalid price'); return }; demoOrd.limitPrice = np; renderPendingOrders(); w.ZState.save(); w.toast('Limit price updated to $' + w.fP(np)); return }
+  const demoOrd = (w.TP.pendingOrders || []).find(function (o: any) { return String(o.id) === strId })
+  if (demoOrd && demoOrd.mode === 'demo') { const newPrice = prompt('New limit price:', w.fP(demoOrd.limitPrice)); if (!newPrice) return; const np = parseFloat(newPrice); if (!Number.isFinite(np) || np <= 0) { w.toast('Invalid price'); return }; demoOrd.limitPrice = np; renderPendingOrders(); w.ZState.save(); w.toast('Limit price updated to $' + w.fP(np)); return }
   const liveOrd = w.TP.manualLivePending.find(function (o: any) { return String(o.id) === strId || String(o.exchangeOrderId) === strId })
-  if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', w.fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!_np || _np <= 0) { w.toast('Invalid price'); return }; if (typeof w.manualLiveModifyLimit !== 'function') { w.toast('Live API not available'); return }; w.manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); w.toast('LIVE LIMIT modified @$' + w.fP(_np)) }).catch(function (err: any) { w.toast('Modify failed: ' + (err.message || err)) }) }
+  if (liveOrd && liveOrd.exchangeOrderId) { const _newPrice = prompt('New limit price:', w.fP(liveOrd.limitPrice)); if (!_newPrice) return; const _np = parseFloat(_newPrice); if (!Number.isFinite(_np) || _np <= 0) { w.toast('Invalid price'); return }; if (typeof w.manualLiveModifyLimit !== 'function') { w.toast('Live API not available'); return }; w.manualLiveModifyLimit(liveOrd.sym, liveOrd.exchangeOrderId, _np, liveOrd.binanceSide).then(function (res: any) { liveOrd.exchangeOrderId = res.orderId; liveOrd.id = res.orderId; liveOrd.limitPrice = _np; renderPendingOrders(); w.ZState.save(); w.toast('LIVE LIMIT modified @$' + w.fP(_np)) }).catch(function (err: any) { w.toast('Modify failed: ' + (err.message || err)); renderPendingOrders() }) }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -104,8 +106,14 @@ function _syncLivePendingOrders(): void {
   if (!w.TP.manualLivePending || !w.TP.manualLivePending.length) { _stopLivePendingSync(); return }
   if (typeof w.manualLiveGetOpenOrders !== 'function') return
   const symbols: any = {}; w.TP.manualLivePending.forEach(function (o: any) { symbols[o.sym] = true })
-  const symList = Object.keys(symbols); let _remaining = symList.length; const _exchangeOrderIds = new Set()
-  symList.forEach(function (sym) { w.manualLiveGetOpenOrders(sym).then(function (orders: any) { (orders || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }); _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }).catch(function () { _remaining--; if (_remaining <= 0) _reconcileLivePending(_exchangeOrderIds) }) })
+  const symList = Object.keys(symbols)
+  Promise.allSettled(symList.map(function (sym) { return w.manualLiveGetOpenOrders(sym) })).then(function (results: any) {
+    const anyFailed = results.some(function (r: any) { return r.status === 'rejected' })
+    if (anyFailed) return
+    const _exchangeOrderIds = new Set<string>()
+    results.forEach(function (r: any) { (r.value || []).forEach(function (o: any) { _exchangeOrderIds.add(String(o.orderId)) }) })
+    _reconcileLivePending(_exchangeOrderIds)
+  })
 }
 
 function _reconcileLivePending(exchangeOrderIds: Set<string>): void {
