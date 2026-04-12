@@ -229,7 +229,6 @@ export function installPhase1Adapters(): void {
   if (w.srSeries === undefined) w.srSeries = []
 
   // ── Phase 8E: bootstrap panels (coexist) ──
-  w._showCompare = _showCompare
 
   // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
 
@@ -436,15 +435,6 @@ export function installPhase1Adapters(): void {
   /* devExportLog — removed (direct import) */
   w.ZLOG = ZLOG
   // safeAsync — removed (direct import)
-  w.devInjectSignal = devInjectSignal
-  w.devInjectLiquidation = devInjectLiquidation
-  w.devInjectWhale = devInjectWhale
-  w.devFeedDisconnect = devFeedDisconnect
-  w.devFeedRecover = devFeedRecover
-  w.devTriggerKillSwitch = devTriggerKillSwitch
-  w.devResetProtect = devResetProtect
-  w.devReplayStart = devReplayStart
-  w.devReplayStop = devReplayStop
   // hubToggleDev — removed (direct import)
   // _devEnsureVisible — removed (direct import)
   // setUiScale — removed (direct import)

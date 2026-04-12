@@ -1,4 +1,33 @@
+import { useEffect } from 'react'
+import { devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, devClearLog, devExportLog } from '../../utils/dev'
+
 export function AnalysisSections() {
+  // Attach delegation for dev tool buttons (dangerouslySetInnerHTML can't use onClick)
+  useEffect(() => {
+    const cont = document.getElementById('dev-content')
+    if (!cont || (cont as any).dataset.devDelegated) return
+    ;(cont as any).dataset.devDelegated = '1'
+    const actions: Record<string, Function> = {
+      devInjectSignalLONG: () => devInjectSignal('LONG'),
+      devInjectSignalSHORT: () => devInjectSignal('SHORT'),
+      devInjectLiquidationLONG: () => devInjectLiquidation('LONG'),
+      devInjectLiquidationSHORT: () => devInjectLiquidation('SHORT'),
+      devInjectWhale: () => devInjectWhale(),
+      devFeedDisconnect: () => devFeedDisconnect(),
+      devFeedRecover: () => devFeedRecover(),
+      devTriggerKillSwitch: () => devTriggerKillSwitch(),
+      devResetProtect: () => devResetProtect(),
+      devReplayStart: () => devReplayStart(),
+      devReplayStop: () => devReplayStop(),
+      devClearLog: () => devClearLog(),
+      devExportLog: () => devExportLog(),
+    }
+    cont.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
+      if (btn) { const fn = actions[btn.dataset.action || '']; if (fn) fn() }
+    })
+  }, [])
+
   return (
     <>
       {/* ===== RSI MULTI-TIMEFRAME ===== */}
@@ -700,26 +729,26 @@ export function AnalysisSections() {
         </div>
         <div className="dev-content" id="dev-content" dangerouslySetInnerHTML={{ __html:
           '<div class="dev-section"><div class="dev-title">INJECT EVENTS</div><div class="dev-buttons">'
-          + '<button class="dev-btn" onclick="devInjectSignal(\'LONG\')">LONG SIGNAL</button>'
-          + '<button class="dev-btn" onclick="devInjectSignal(\'SHORT\')">SHORT SIGNAL</button>'
-          + '<button class="dev-btn" onclick="devInjectLiquidation(\'LONG\')">LIQ LONG</button>'
-          + '<button class="dev-btn" onclick="devInjectLiquidation(\'SHORT\')">LIQ SHORT</button>'
-          + '<button class="dev-btn" onclick="devInjectWhale()">FAKE WHALE</button>'
-          + '<button class="dev-btn" onclick="devFeedDisconnect()">FEED DISCONNECT</button>'
-          + '<button class="dev-btn" onclick="devFeedRecover()">FEED RECOVER</button>'
-          + '<button class="dev-btn" onclick="devTriggerKillSwitch()">KILL SWITCH</button>'
-          + '<button class="dev-btn" onclick="devResetProtect()">RESET PROTECT</button>'
+          + '<button class="dev-btn" data-action="devInjectSignalLONG">LONG SIGNAL</button>'
+          + '<button class="dev-btn" data-action="devInjectSignalSHORT">SHORT SIGNAL</button>'
+          + '<button class="dev-btn" data-action="devInjectLiquidationLONG">LIQ LONG</button>'
+          + '<button class="dev-btn" data-action="devInjectLiquidationSHORT">LIQ SHORT</button>'
+          + '<button class="dev-btn" data-action="devInjectWhale">FAKE WHALE</button>'
+          + '<button class="dev-btn" data-action="devFeedDisconnect">FEED DISCONNECT</button>'
+          + '<button class="dev-btn" data-action="devFeedRecover">FEED RECOVER</button>'
+          + '<button class="dev-btn" data-action="devTriggerKillSwitch">KILL SWITCH</button>'
+          + '<button class="dev-btn" data-action="devResetProtect">RESET PROTECT</button>'
           + '</div></div>'
           + '<div class="dev-section"><div class="dev-title">EVENT LOG (last 50)</div>'
           + '<div class="dev-log" id="dev-log"><div class="dev-log-empty">No events yet. Use buttons above to simulate.</div></div>'
           + '<div style="display:flex;gap:4px;margin-top:4px">'
-          + '<button class="dev-btn small" onclick="devClearLog()">CLEAR LOG</button>'
-          + '<button class="dev-btn small" onclick="devExportLog()">EXPORT CSV</button>'
+          + '<button class="dev-btn small" data-action="devClearLog">CLEAR LOG</button>'
+          + '<button class="dev-btn small" data-action="devExportLog">EXPORT CSV</button>'
           + '</div></div>'
           + '<div class="dev-section"><div class="dev-title">REPLAY MODE (log-only viewer)</div>'
           + '<div style="display:flex;gap:4px;align-items:center">'
-          + '<button class="dev-btn small" onclick="devReplayStart()">▶ START</button>'
-          + '<button class="dev-btn small" onclick="devReplayStop()">■ STOP</button>'
+          + '<button class="dev-btn small" data-action="devReplayStart">▶ START</button>'
+          + '<button class="dev-btn small" data-action="devReplayStop">■ STOP</button>'
           + '<span style="color:var(--dim);font-size:7px" id="dev-replay-status">Idle</span></div>'
           + '<div style="margin-top:4px;font-size:7px;color:var(--dim)">'
           + '<input type="number" id="dev-replay-speed" value="1" min="0.1" max="10" step="0.1" style="width:50px;background:#0a121a;border:1px solid #2a3a4a;color:#aaccff;padding:2px 4px;border-radius:2px;font-family:var(--ff)">× speed</div>'
