@@ -486,3 +486,6 @@ export function ARES_openPosition(opts: any): any {
   try { _aresRender() } catch (_) { }
   return pos
 }
+
+// Self-registration — makes phase1Adapters mapping redundant
+;(window as any).ARES = ARES

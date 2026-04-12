@@ -168,3 +168,6 @@ export function _clearAllIntervals(): void {
   const w = window as Record<string, any>
   if (w.Intervals?.clearAll) w.Intervals.clearAll()
 }
+
+// Self-registration — makes phase1Adapters mapping redundant
+;(window as any).AT = AT

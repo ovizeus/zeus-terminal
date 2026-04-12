@@ -157,7 +157,6 @@ export function installPhase1Adapters(): void {
   // constants.js just re-exported them — config.js will set them on window itself
 
   // ── Phase 2: events.js ──
-  w.AT = AT
   // PREDATOR — removed (direct import)
   // computePredatorState — removed (direct import)
   // attachConfirmClose — removed (direct import)
@@ -187,7 +186,6 @@ export function installPhase1Adapters(): void {
   // loadDailyPnl — removed (direct import)
 
   // ── config.ts exports → window.* ──
-  w.ARIA_STATE = ARIA_STATE; w.NOVA_STATE = NOVA_STATE
   // _AN_KEY_N — removed (direct import)
   // _AN_KEY_A — removed (direct import)
   // NOTIFICATION_CENTER — removed (direct import)
@@ -455,7 +453,6 @@ export function installPhase1Adapters(): void {
   // _pmCheckRegimeTransition — removed (direct import)
 
   // ── Phase 5B: deepdive.js — ARES core ──
-  w.ARES = ARES
   // ARES_DECISION — removed (direct import)
   // ARES_EXECUTE — removed (direct import)
   // ARES_MONITOR — removed (direct import)

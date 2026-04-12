@@ -1997,3 +1997,5 @@ w._usApply = _usApply
 w.loadUserSettings = loadUserSettings
 w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon
+// Self-registration — makes phase1Adapters mapping redundant
+w.ARIA_STATE = ARIA_STATE
