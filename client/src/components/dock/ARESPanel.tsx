@@ -3,6 +3,7 @@
  *  including the strip bar, neural brain SVG, and all sections. */
 import { useEffect, useRef, useState } from 'react'
 import { useAresStore } from '../../stores'
+import { _aresRender } from '../../engine/aresUI'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -299,7 +300,7 @@ export function ARESPanel() {
           <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
             <button id="ares-wallet-add-btn" onClick={() => {
               const w = window as any; const amt = prompt('Add funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.fund(Number(amt)); setTimeout(() => { w._aresRender?.(); useAresStore.getState().saveToServer() }, 200) }
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.fund(Number(amt)); setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200) }
             }} style={{
               background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.35)',
               color: '#00ff88', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
@@ -307,7 +308,7 @@ export function ARESPanel() {
             }}>[+] ADD</button>
             <button id="ares-wallet-withdraw-btn" onClick={() => {
               const w = window as any; const amt = prompt('Withdraw funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => { w._aresRender?.(); useAresStore.getState().saveToServer() }, 200) }
+              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200) }
             }} style={{
               background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)',
               color: 'rgba(255,110,110,0.8)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
@@ -342,7 +343,7 @@ export function ARESPanel() {
           <div className="ares-meta-title" style={{ margin: 0 }}>POSITIONS</div>
           <button id="ares-close-all-btn" onClick={() => {
             const w = window as any
-            if (typeof w.ARES !== 'undefined' && w.ARES.positions) { w.ARES.positions.closeAll(); setTimeout(() => w._aresRender?.(), 100) }
+            if (typeof w.ARES !== 'undefined' && w.ARES.positions) { w.ARES.positions.closeAll(); setTimeout(() => _aresRender(), 100) }
           }} style={{
             display: 'none', background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.4)',
             color: 'rgba(255,100,100,0.85)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 7px',

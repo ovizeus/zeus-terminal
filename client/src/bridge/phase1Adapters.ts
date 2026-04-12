@@ -260,7 +260,6 @@ export function installPhase1Adapters(): void {
   // connectBNB — removed (direct import)
   /* updConn — removed (direct import) */ w.procLiq = procLiq
   /* setSymbol — removed (direct import) */ /* toggleSnd — removed (direct import) */
-  w.openM = openM; w.closeM = closeM; w._initModalDrag = _initModalDrag; w.swtab = swtab
   /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
   // setTZ — removed (direct import)
   /* sendAlert — removed (direct import) */ /* registerServiceWorker — removed (direct import) */
@@ -320,7 +319,6 @@ export function installPhase1Adapters(): void {
   /* _initAudio — removed (direct import) */
   // playAlertSound, toggleAlerts, initActBar — removed (direct imports)
   // togInd — removed (direct import)
-  w.toggleTimeSales = toggleTimeSales
 
   // updateModeBar — removed (direct import)
   // initZeusDock — removed (direct import)
@@ -453,7 +451,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 5B: deepdive.js — PM ──
   // PM — removed (direct import)
   // runPostMortem — removed (direct import)
-  w.PM_render = PM_render
 
   // _pmCheckRegimeTransition — removed (direct import)
 
@@ -466,7 +463,6 @@ export function installPhase1Adapters(): void {
   // ARES_MIND — removed (direct import)
 
   // ── Phase 5B: deepdive.js — ARES UI ──
-  w._aresRender = _aresRender
   // initAriaBrain, initARES — removed (direct imports)
 
   // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──

@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/data/marketData.js lines 314-798 (Chunk C)
 // Overlays, Trade Markers, LLV Canvas, Heatmap, S/R
 
-import { clearZS, renderZS } from './marketDataWS'
+import { clearZS, renderZS, openM } from './marketDataWS'
 import { renderOviLiquid } from '../ui/panels'
 import { _calcATRSeries } from './marketDataHelpers'
 
@@ -317,7 +317,7 @@ let _llvPressTimer: any = null
 let _llvLongFired = false
 export function _llvPressStart(_e: any): void {
   _llvLongFired = false
-  _llvPressTimer = setTimeout(function () { _llvLongFired = true; _llvPressTimer = null; if (typeof w.openM === 'function') w.openM('mllv') }, 500)
+  _llvPressTimer = setTimeout(function () { _llvLongFired = true; _llvPressTimer = null; openM('mllv') }, 500)
 }
 export function _llvPressEnd(_e: any): void {
   if (_llvPressTimer) { clearTimeout(_llvPressTimer); _llvPressTimer = null }

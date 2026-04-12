@@ -5,6 +5,7 @@
 
 import { aresClosePosition, aresSetStopLoss, aresCancelOrder } from '../trading/liveApi'
 import { ARES_JOURNAL } from './aresJournal'
+import { _aresRender } from './aresUI'
 
 const w = window as any
 
@@ -99,7 +100,7 @@ async function _closeLivePosition(pos: any, markPrice: number, reason: string): 
     w.ARES.onTradeClosed(netPnl, pos)
     if (typeof ARES_JOURNAL !== 'undefined') ARES_JOURNAL.recordClose(pos.id, { closePrice, netPnl, closeReason: reason })
     w.ARES.push('[ARES CLOSE] ' + pos.side + ' @ $' + closePrice.toFixed(2) + ' PnL=$' + netPnl.toFixed(2) + ' reason=' + reason)
-    try { if (typeof w._aresRender === 'function') w._aresRender() } catch (_) { }
+    try { _aresRender() } catch (_) { }
     return { netPnl, closePrice }
   } catch (err: any) {
     w.ARES.push('[ARES CLOSE FAIL] ' + (err.message || err))

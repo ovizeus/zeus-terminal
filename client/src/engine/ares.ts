@@ -11,6 +11,7 @@ import { _bmResetDailyIfNeeded } from '../trading/orders'
 import { liveApiGetPositions } from '../trading/liveApi'
 import { PM } from './postMortem'
 import { ARES_MONITOR } from './aresMonitor'
+import { _aresRender } from './aresUI'
 
 const w = window as any
 
@@ -413,7 +414,7 @@ function tick() {
     } catch (decErr: any) { console.warn('[ARES] decision error:', decErr.message) }
 
     _state.lastUpdateTs = Date.now()
-    if (typeof w._aresRender === 'function') w._aresRender()
+    _aresRender()
   } catch (e: any) { console.warn('[ARES] tick error:', e.message) }
 }
 
@@ -482,6 +483,6 @@ export function ARES_openPosition(opts: any): any {
   const targetNetPnL = Math.max(5, Math.round(notional * 0.005))
   const pos = positions.open({ side: opts.side || 'LONG', leverage: L, notional, entryPrice: markPrice, confidence, policy: opts.policy || 'BALANCED', reason: opts.reason || 'signal', targetNetPnL, stakeVirtual })
   console.log(`[ARES] Opened ${pos.side} BTCUSDT x${L} ISO, notional=${notional}, stake=${stakeVirtual}, fees\u2248${feesEst.toFixed(2)}, clientId=${pos.clientOrderId}`)
-  try { if (typeof w._aresRender === 'function') w._aresRender() } catch (_) { }
+  try { _aresRender() } catch (_) { }
   return pos
 }

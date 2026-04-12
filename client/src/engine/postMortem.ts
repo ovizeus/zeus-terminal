@@ -147,7 +147,7 @@ function pmRun(pos: any, pnl: number, exitPrice: number): void {
     records.unshift(record)
     _save(records)
 
-    if (typeof w.PM_render === 'function') w.PM_render()
+    PM_render()
   } catch (e: any) {
     console.warn('[PostMortem] run() error:', e.message)
   }

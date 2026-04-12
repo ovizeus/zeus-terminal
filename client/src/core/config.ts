@@ -16,6 +16,7 @@ import { _mscanUpdateLabel } from '../data/klines'
 import { loadPerfFromStorage } from '../engine/perfStore'
 import { loadDailyPnl } from '../engine/dailyPnl'
 import { renderATLog } from '../trading/autotrade'
+import { _aresRender } from '../engine/aresUI'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
@@ -1229,7 +1230,7 @@ export function _coreTickMI() {
     refreshSweepLight()
     renderMTFPanel()
     if (typeof w.ARES !== 'undefined' && document.getElementById('ares-strip')?.classList.contains('open')) {
-      w._aresRender()
+      _aresRender()
     }
   } catch (e: any) {
     console.warn('[CORE] _coreTickMI error:', e.message)

@@ -7,6 +7,8 @@ import { aubRefreshAll } from '../engine/aub'
 import { dockClearActive } from './dock'
 import { renderPnlLab } from './panels'
 import { _srRenderStats } from '../core/config'
+import { PM_render } from '../engine/postMortem'
+import { _aresRender } from '../engine/aresUI'
 
 const w = window as any
 
@@ -202,7 +204,7 @@ export function openPageView(dockId: string) {
     if (!pmStrip.classList.contains('open')) {
       pmStrip.classList.add('open')
     }
-    if (typeof w.PM_render === 'function') w.PM_render()
+    PM_render()
   }
 
   // ── ARES ──
@@ -214,7 +216,7 @@ export function openPageView(dockId: string) {
     if (!aresStrip.classList.contains('open')) {
       aresStrip.classList.add('open')
     }
-    if (typeof w._aresRender === 'function') w._aresRender()
+    _aresRender()
   }
 
   // ── DSL ──
