@@ -170,7 +170,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'bb':
       if (show) initBBSeries()
-      if (w.bbUpperS) w.bbUpperS.applyOptions({ visible: show })
+      if (bbUpperS) bbUpperS.applyOptions({ visible: show })
       if (w.bbMiddleS) w.bbMiddleS.applyOptions({ visible: show })
       if (w.bbLowerS) w.bbLowerS.applyOptions({ visible: show })
       if (show) updateBB()
@@ -182,7 +182,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'fib':
       if (show) updateFib()
-      else { w.fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.fibSeries = [] }
+      else { fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); fibSeries = [] }
       break
     case 'pivot':
       if (show) updatePivot()
@@ -294,8 +294,8 @@ export function applyIndSettings(id: string): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function initBBSeries(): void {
-  if (w.bbUpperS || !w.mainChart) return
-  w.bbUpperS = w.mainChart.addLineSeries({ color: '#ff668866', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
+  if (bbUpperS || !w.mainChart) return
+  bbUpperS = w.mainChart.addLineSeries({ color: '#ff668866', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
   w.bbMiddleS = w.mainChart.addLineSeries({ color: '#ff6688', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
   w.bbLowerS = w.mainChart.addLineSeries({ color: '#ff668866', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
 }
@@ -315,7 +315,7 @@ export function updateBB(): void {
     upper.push({ time: w.S.klines[i].time, value: avg + sd * stdDev })
     lower.push({ time: w.S.klines[i].time, value: avg - sd * stdDev })
   }
-  try { w.bbMiddleS.setData(middle.filter((d: any) => d.value > 0)); w.bbUpperS.setData(upper.filter((d: any) => d.value > 0)); w.bbLowerS.setData(lower.filter((d: any) => d.value > 0)) } catch (_) { }
+  try { w.bbMiddleS.setData(middle.filter((d: any) => d.value > 0)); bbUpperS.setData(upper.filter((d: any) => d.value > 0)); w.bbLowerS.setData(lower.filter((d: any) => d.value > 0)) } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -359,7 +359,7 @@ export function updateIchimoku(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function updateFib(): void {
-  w.fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.fibSeries = []
+  fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); fibSeries = []
   if (!w.mainChart || !w.S.klines.length) return
   const k = w.S.klines; let swH = -Infinity, swL = Infinity, hiIdx = 0, loIdx = 0
   const start = Math.max(0, k.length - 100)
@@ -372,7 +372,7 @@ export function updateFib(): void {
     const price = isUptrend ? swH - lv * (swH - swL) : swL + lv * (swH - swL)
     const s = w.mainChart.addLineSeries({ color: colors[idx] || '#888', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: (lv * 100).toFixed(1) + '%', lineStyle: 2 })
     s.setData([{ time: k[start].time, value: price }, { time: k[k.length - 1].time, value: price }])
-    w.fibSeries.push(s)
+    fibSeries.push(s)
   })
 }
 
@@ -473,7 +473,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, w._macdChart].forEach((ch: any) => {
+    ;[_rsiChart, w._stochChart, w._atrChart, _obvChart, w._mfiChart, w._cciChart, w._macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
@@ -484,10 +484,10 @@ export function _syncSubChartsToMain(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function initRSIChart(): void {
-  if (w._rsiInited && w._rsiChart) { updateRSI(); return }
-  w._rsiChart = _createSubChart('rsiChart', 60)
-  if (!w._rsiChart) return
-  w._rsiSeries = w._rsiChart.addLineSeries({ color: '#f5c842', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'RSI' })
+  if (w._rsiInited && _rsiChart) { updateRSI(); return }
+  _rsiChart = _createSubChart('rsiChart', 60)
+  if (!_rsiChart) return
+  w._rsiSeries = _rsiChart.addLineSeries({ color: '#f5c842', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'RSI' })
   w._rsiInited = true
   updateRSI()
 }
@@ -577,10 +577,10 @@ export function updateATRInd(): void {
 }
 
 export function initOBVChart(): void {
-  if (w._obvInited && w._obvChart) { updateOBV(); return }
-  w._obvChart = _createSubChart('obvChart', 60)
-  if (!w._obvChart) return
-  w._obvSeries = w._obvChart.addLineSeries({ color: '#00b8d4', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'OBV' })
+  if (w._obvInited && _obvChart) { updateOBV(); return }
+  _obvChart = _createSubChart('obvChart', 60)
+  if (!_obvChart) return
+  w._obvSeries = _obvChart.addLineSeries({ color: '#00b8d4', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'OBV' })
   w._obvInited = true
   updateOBV()
 }

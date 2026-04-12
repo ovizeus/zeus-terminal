@@ -10,7 +10,8 @@ import { _checkAppUpdate } from './bootstrapError'
 import { _srUpdateStats } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
-import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed } from './bootstrapInit'
+import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed, initZeusGroups } from './bootstrapInit'
+import { initCharts } from '../data/marketDataChart'
 import { _resumeLivePendingSyncIfNeeded , renderDemoPositions } from '../data/marketDataPositions'
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
 import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, runSignalScan , brainThink } from '../engine/brain'
@@ -67,9 +68,9 @@ export async function startApp(): Promise<void> {
   if (typeof w.LightweightCharts === 'undefined') { w.ZEUS_STARTED = false; setTimeout(startApp, 100); return }
 
   // ═══ PHASE 1 — CORE ═══
-  w.initCharts()
+  initCharts()
   try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
-  w.initZeusGroups()
+  initZeusGroups()
   initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
   setTimeout(runHealthChecks, 700)

@@ -187,7 +187,6 @@ export function installPhase1Adapters(): void {
   // loadDailyPnl — removed (direct import)
 
   // ── config.ts exports → window.* ──
-  w.AUB = AUB; w.AUB_COMPAT = AUB_COMPAT; w.AUB_PERF = AUB_PERF; w.AUB_SIM_KEY = AUB_SIM_KEY
   w.ARIA_STATE = ARIA_STATE; w.NOVA_STATE = NOVA_STATE
   // _AN_KEY_N — removed (direct import)
   // _AN_KEY_A — removed (direct import)
@@ -209,10 +208,6 @@ export function installPhase1Adapters(): void {
   w.vwapSeries = _cfgVwapSeries; w.oviSeries = _cfgOviSeries; /* oviPriceSeries — removed (0 refs) */
   // state.ts exports
   w.BlockReason = BlockReason; w.ZState = ZState
-  w.bbUpperS = bbUpperS; w.ichimokuSeries = ichimokuSeries
-  w.fibSeries = fibSeries; w.pivotSeries = pivotSeries; w.vpSeries = vpSeries
-  w._rsiChart = _rsiChart; w._stochChart = _stochChart; w._atrChart = _atrChart
-  w._obvChart = _obvChart; w._mfiChart = _mfiChart; w._cciChart = _cciChart
   w.IND_SETTINGS = _stIND_SETTINGS; w.liqSeries = liqSeries; w.zsSeries = zsSeries
   w.oiHistory = oiHistory; w.WL_SYMS = WL_SYMS; w.wlPrices = wlPrices; w.allPrices = allPrices
   // Chart series refs — start as null/undefined, set by initCharts() in marketDataChart.ts
@@ -241,7 +236,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 8B: startApp (coexist — bootstrap.js still defines startApp for bridge) ──
 
   // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
-  w.initZeusGroups = initZeusGroups
 
   // _updatePnlLabCondensed — removed (direct import)
 
@@ -269,7 +263,6 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-B: marketData chart (coexist) ──
   // getChartW — removed (direct import)
   // getChartH — removed (direct import)
-  w.initCharts = initCharts; w.fetchKlines = fetchKlines; w.renderChart = renderChart
 
   // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
   // connectBNB — removed (direct import)
@@ -330,11 +323,9 @@ export function installPhase1Adapters(): void {
   // _updateWhyBlocked — removed (direct import)
   w.runMultiSymbolScan = runMultiSymbolScan
 
-  w.manualEnterFromScan = manualEnterFromScan
   // runMultiSymbolAutoTrade, toggleMultiSymMode — removed (self-ref)
   // _mscanUpdateLabel — removed (direct import)
 
-  w.mscanToggleSym = mscanToggleSym
   // mscanPickAll — removed (self-ref)
 
   // ── Phase 6E: ui leaf files ──

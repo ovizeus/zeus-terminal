@@ -16,25 +16,25 @@ export function aubToggle(): void {
   const el_aub = document.getElementById('aub')
   const txt = document.getElementById('aub-toggle-txt')
   if (!el_aub) return
-  w.AUB.expanded = !w.AUB.expanded
-  el_aub.className = w.AUB.expanded ? 'expanded' : 'collapsed'
-  if (txt) txt.textContent = w.AUB.expanded ? 'COLLAPSE' : 'EXPAND'
-  if (w.AUB.expanded) {
+  AUB.expanded = !AUB.expanded
+  el_aub.className = AUB.expanded ? 'expanded' : 'collapsed'
+  if (txt) txt.textContent = AUB.expanded ? 'COLLAPSE' : 'EXPAND'
+  if (AUB.expanded) {
     _aubHoloSweep()
-    if (w.AUB.sfxEnabled) _aubPlayTone(440, 0.06)
+    if (AUB.sfxEnabled) _aubPlayTone(440, 0.06)
     aubRefreshAll()
   }
   // Mobile: save preference
-  try { localStorage.setItem('aub_expanded', w.AUB.expanded ? '1' : '0') } catch (_) { }
+  try { localStorage.setItem('aub_expanded', AUB.expanded ? '1' : '0') } catch (_) { }
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
 }
 
 export function aubToggleSFX(): void {
-  w.AUB.sfxEnabled = !w.AUB.sfxEnabled
+  AUB.sfxEnabled = !AUB.sfxEnabled
   const btn = document.getElementById('aub-sfx-btn')
-  if (btn) { btn.innerHTML = w.AUB.sfxEnabled ? _ZI.bell + ' SFX' : _ZI.bellX + ' SFX'; btn.className = w.AUB.sfxEnabled ? 'on' : '' }
-  if (w.AUB.sfxEnabled) _aubInitAudio()
+  if (btn) { btn.innerHTML = AUB.sfxEnabled ? _ZI.bell + ' SFX' : _ZI.bellX + ' SFX'; btn.className = AUB.sfxEnabled ? 'on' : '' }
+  if (AUB.sfxEnabled) _aubInitAudio()
 }
 
 // ── HOLO SWEEP FX ───────────────────────────────────────────────
@@ -49,27 +49,27 @@ export function _aubHoloSweep(): void {
 
 // ── AUDIO ────────────────────────────────────────────────────────
 export function _aubInitAudio(): void {
-  if (w.AUB.audioCtx) {
-    if (w.AUB.audioCtx.state === 'suspended') w.AUB.audioCtx.resume().catch(function () { })
+  if (AUB.audioCtx) {
+    if (AUB.audioCtx.state === 'suspended') AUB.audioCtx.resume().catch(function () { })
     return
   }
   try {
-    w.AUB.audioCtx = new (w.AudioContext || w.webkitAudioContext)()
-    if (w.AUB.audioCtx.state === 'suspended') w.AUB.audioCtx.resume().catch(function () { })
-  } catch (_) { w.AUB.sfxEnabled = false }
+    AUB.audioCtx = new (w.AudioContext || w.webkitAudioContext)()
+    if (AUB.audioCtx.state === 'suspended') AUB.audioCtx.resume().catch(function () { })
+  } catch (_) { AUB.sfxEnabled = false }
 }
 export function _aubPlayTone(freq: any, vol: any, dur?: any): void {
   try {
-    if (!w.AUB.audioCtx) _aubInitAudio()
-    if (!w.AUB.audioCtx) return
-    if (w.AUB.audioCtx.state === 'suspended') { w.AUB.audioCtx.resume().catch(function () { }); return }
-    const o = w.AUB.audioCtx.createOscillator()
-    const g = w.AUB.audioCtx.createGain()
-    o.connect(g); g.connect(w.AUB.audioCtx.destination)
+    if (!AUB.audioCtx) _aubInitAudio()
+    if (!AUB.audioCtx) return
+    if (AUB.audioCtx.state === 'suspended') { AUB.audioCtx.resume().catch(function () { }); return }
+    const o = AUB.audioCtx.createOscillator()
+    const g = AUB.audioCtx.createGain()
+    o.connect(g); g.connect(AUB.audioCtx.destination)
     o.frequency.value = freq || 440
-    g.gain.setValueAtTime(vol || 0.05, w.AUB.audioCtx.currentTime)
-    g.gain.exponentialRampToValueAtTime(0.0001, w.AUB.audioCtx.currentTime + (dur || 0.15))
-    o.start(); o.stop(w.AUB.audioCtx.currentTime + (dur || 0.15))
+    g.gain.setValueAtTime(vol || 0.05, AUB.audioCtx.currentTime)
+    g.gain.exponentialRampToValueAtTime(0.0001, AUB.audioCtx.currentTime + (dur || 0.15))
+    o.start(); o.stop(AUB.audioCtx.currentTime + (dur || 0.15))
   } catch (_) { }
 }
 
@@ -117,10 +117,10 @@ export function aubCheckCompat(): void {
 // MODULE 2 — INPUT GUARD
 // ════════════════════════════════════════════════════════════════
 export function _aubGuard(name: any, val: any, test: any): any {
-  w.AUB.guardCount++
+  AUB.guardCount++
   const ok = test(val)
   if (!ok) {
-    w.AUB.guardLast = name + '=' + JSON.stringify(val).slice(0, 20)
+    AUB.guardLast = name + '=' + JSON.stringify(val).slice(0, 20)
     console.warn('[AUB GUARD] Invalid param:', name, val)
   }
   _aubUpdateGuardUI()
@@ -130,8 +130,8 @@ export function _aubGuard(name: any, val: any, test: any): any {
 export function _aubUpdateGuardUI(): void {
   const cnt = document.getElementById('aub-guard-count')
   const last = document.getElementById('aub-guard-last')
-  if (cnt) cnt.textContent = 'Validated: ' + w.AUB.guardCount + ' calls'
-  if (last) last.textContent = 'Last reject: ' + w.AUB.guardLast
+  if (cnt) cnt.textContent = 'Validated: ' + AUB.guardCount + ' calls'
+  if (last) last.textContent = 'Last reject: ' + AUB.guardLast
 }
 
 // Wrap public functions safely
@@ -158,7 +158,7 @@ export function _aubWrapPublicFunctions(): void {
   if (typeof _origToggleAT === 'function') {
     w.toggleAutoTrade = function () {
       if (typeof w.AT === 'undefined') { console.warn('[AUB GUARD] AT not initialized'); return }
-      w.AUB.guardCount++
+      AUB.guardCount++
       _aubUpdateGuardUI()
       return _origToggleAT.apply(this, arguments)
     }
@@ -172,15 +172,15 @@ export function _aubWrapPublicFunctions(): void {
 export function _aubRafTick(ts: any): void {
   // [PERF] skip FPS count + DOM when tab hidden
   if (document.hidden) { requestAnimationFrame(_aubRafTick); return }
-  w.AUB._rafFrames++
-  const elapsed = ts - w.AUB._rafLast
+  AUB._rafFrames++
+  const elapsed = ts - AUB._rafLast
   if (elapsed >= 1000) {
-    w.AUB.rafFPS = Math.round(w.AUB._rafFrames / elapsed * 1000)
-    w.AUB._rafFrames = 0
-    w.AUB._rafLast = ts
-    w.AUB._perfHeavy = w.AUB.rafFPS < 30
+    AUB.rafFPS = Math.round(AUB._rafFrames / elapsed * 1000)
+    AUB._rafFrames = 0
+    AUB._rafLast = ts
+    AUB._perfHeavy = AUB.rafFPS < 30
     _aubUpdatePerfBadge()
-    if (w.AUB.expanded) _aubUpdatePerfCard()
+    if (AUB.expanded) _aubUpdatePerfCard()
   }
   requestAnimationFrame(_aubRafTick)
 }
@@ -188,13 +188,13 @@ export function _aubRafTick(ts: any): void {
 export function _aubUpdatePerfBadge(): void {
   const badge = document.getElementById('aub-badge-perf')
   if (badge) {
-    badge.textContent = w.AUB._perfHeavy ? 'PERF: HEAVY' : 'PERF: OK'
-    badge.className = 'aub-badge ' + (w.AUB._perfHeavy ? 'warn' : 'ok')
+    badge.textContent = AUB._perfHeavy ? 'PERF: HEAVY' : 'PERF: OK'
+    badge.className = 'aub-badge ' + (AUB._perfHeavy ? 'warn' : 'ok')
   }
 }
 export function _aubUpdatePerfCard(): void {
-  w.AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + w.AUB.rafFPS + (w.AUB._perfHeavy ? ' (!)' : ''))
-  w.AUB_PERF.setDOM('aub-perf-skips', 'DOM skips (no-change): ' + w.AUB.domSkips)
+  w.AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + AUB.rafFPS + (AUB._perfHeavy ? ' (!)' : ''))
+  w.AUB_PERF.setDOM('aub-perf-skips', 'DOM skips (no-change): ' + AUB.domSkips)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -204,7 +204,7 @@ export function _aubUpdatePerfCard(): void {
 let _bbDirty = false
 export function _aubSaveBB(): void {
   if (!_bbDirty) return
-  _safeLocalStorageSet('aub_bb', w.AUB.bb.slice(0, 50))
+  _safeLocalStorageSet('aub_bb', AUB.bb.slice(0, 50))
   _bbDirty = false
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
@@ -221,25 +221,25 @@ export function aubBBSnapshot(event: any, extra?: any): void {
       mode: (typeof w.S !== 'undefined' ? w.S.mode : null) || '—',
       blockReason: (typeof w.BlockReason !== 'undefined' ? w.BlockReason.text() : '—'),
     }
-    w.AUB.bb.unshift(snap)
+    AUB.bb.unshift(snap)
     // [FIX v85 BUG5] Redus de la 200 la 100 în memorie, 50 în localStorage
-    if (w.AUB.bb.length > 100) w.AUB.bb.pop()
+    if (AUB.bb.length > 100) AUB.bb.pop()
     // [FIX v85 B6] Setăm dirty flag — salvarea reală se face periodic prin _aubSaveBB
     _bbDirty = true
-    if (w.AUB.expanded) _aubUpdateBBCard()
+    if (AUB.expanded) _aubUpdateBBCard()
   } catch (e) { console.warn('[AUB BB]', e) }
 }
 
 export function _aubLoadBB(): void {
   try {
     const raw = localStorage.getItem('aub_bb')
-    if (raw) w.AUB.bb = JSON.parse(raw)
+    if (raw) AUB.bb = JSON.parse(raw)
   } catch (_) { }
 }
 
 export function _aubUpdateBBCard(): void {
-  w.AUB_PERF.setDOM('aub-bb-count', 'Snapshots: ' + w.AUB.bb.length)
-  const last = w.AUB.bb[0]
+  w.AUB_PERF.setDOM('aub-bb-count', 'Snapshots: ' + AUB.bb.length)
+  const last = AUB.bb[0]
   w.AUB_PERF.setDOM('aub-bb-last', last
     ? 'Last: ' + last.event + ' @' + new Date(last.ts).toTimeString().slice(0, 8)
     : 'Last: —')
@@ -247,7 +247,7 @@ export function _aubUpdateBBCard(): void {
 
 export function aubBBExport(): void {
   try {
-    const blob = new Blob([JSON.stringify(w.AUB.bb, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(AUB.bb, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = 'zeus_blackbox_' + new Date().toISOString().slice(0, 10) + '.json'
@@ -256,7 +256,7 @@ export function aubBBExport(): void {
   } catch (e) { console.warn('[AUB BB export]', e) }
 }
 export function aubBBClear(): void {
-  w.AUB.bb = []
+  AUB.bb = []
   try { localStorage.removeItem('aub_bb') } catch (_) { }
   _aubUpdateBBCard()
   toast('Blackbox cleared', 0, _ZI.trash)
@@ -286,13 +286,13 @@ export function aubCalcMTFStrength(): any {
 
     // Weighted composite (4h heaviest)
     const weighted = s4h * 0.40 + s1h * 0.30 + s15m * 0.20 + s5m * 0.10
-    w.AUB.mtfStrength = { '5m': s5m, '15m': s15m, '1h': s1h, '4h': s4h }
+    AUB.mtfStrength = { '5m': s5m, '15m': s15m, '1h': s1h, '4h': s4h }
 
     // Penalty: if 4h very strong but 5m weak (< 0.35) → penalize score
     const penalty = s4h > 0.7 && s5m < 0.35
-    w.AUB.mtfPenalty = penalty
+    AUB.mtfPenalty = penalty
 
-    if (w.AUB.expanded) _aubUpdateMTFCard(s5m, s15m, s1h, s4h, penalty)
+    if (AUB.expanded) _aubUpdateMTFCard(s5m, s15m, s1h, s4h, penalty)
     return { weighted, penalty }
   } catch (_) { return { weighted: 0.5, penalty: false } }
 }
@@ -333,28 +333,28 @@ export function aubCalcCorrelation(): void {
     }
 
     const btcChg = (typeof w.S !== 'undefined' && w.S.chg) ? w.S.chg : 0
-    w.AUB.corr.eth = eth ? corrProxy(btcChg, eth.chg || 0) : null
-    w.AUB.corr.sol = sol ? corrProxy(btcChg, sol.chg || 0) : null
+    AUB.corr.eth = eth ? corrProxy(btcChg, eth.chg || 0) : null
+    AUB.corr.sol = sol ? corrProxy(btcChg, sol.chg || 0) : null
 
     // Penalty: if active sym is ALT and BTC goes strongly opposite → reduce score
     const sym = (typeof w.S !== 'undefined' && w.S.symbol) ? w.S.symbol : ''
     const isAlt = sym !== 'BTCUSDT'
     const btcStrong = Math.abs(btcChg) > 1
-    const corrPenalty = isAlt && btcStrong && (w.AUB.corr.eth !== null && w.AUB.corr.eth < 0)
-    w.AUB.corrPenalty = corrPenalty
+    const corrPenalty = isAlt && btcStrong && (AUB.corr.eth !== null && AUB.corr.eth < 0)
+    AUB.corrPenalty = corrPenalty
 
-    if (w.AUB.expanded) _aubUpdateCorrCard()
+    if (AUB.expanded) _aubUpdateCorrCard()
   } catch (_) { }
 }
 
 export function _aubUpdateCorrCard(): void {
   const fmt = (v: any) => v !== null ? (v > 0 ? '+' : '') + v.toFixed(2) : '—'
-  w.AUB_PERF.setDOM('aub-corr-eth', fmt(w.AUB.corr.eth))
-  w.AUB_PERF.setDOM('aub-corr-sol', fmt(w.AUB.corr.sol))
+  w.AUB_PERF.setDOM('aub-corr-eth', fmt(AUB.corr.eth))
+  w.AUB_PERF.setDOM('aub-corr-sol', fmt(AUB.corr.sol))
   const pen = document.getElementById('aub-corr-penalty')
   if (pen) {
-    pen.textContent = w.AUB.corrPenalty ? '(!) PENALTY: BTC drag active' : 'Penalty: inactive'
-    pen.className = 'aub-row ' + (w.AUB.corrPenalty ? 'warn' : '')
+    pen.textContent = AUB.corrPenalty ? '(!) PENALTY: BTC drag active' : 'Penalty: inactive'
+    pen.className = 'aub-row ' + (AUB.corrPenalty ? 'warn' : '')
   }
 }
 
@@ -365,7 +365,7 @@ export function _aubUpdateCorrCard(): void {
 // ════════════════════════════════════════════════════════════════
 export function aubMacroImport(): void { document.getElementById('aub-macro-file')?.click() }
 export function aubMacroClear(): void {
-  w.AUB.macroEvents = []
+  AUB.macroEvents = []
   try { localStorage.removeItem('aub_macro') } catch (_) { }
   _aubRenderMacroEvents()
   toast('Macro events cleared', 0, _ZI.trash)
@@ -377,17 +377,17 @@ export function aubMacroFileLoad(input: any): void {
     try {
       const events = JSON.parse(e.target.result)
       if (Array.isArray(events)) {
-        w.AUB.macroEvents = events.map((ev: any) => ({
+        AUB.macroEvents = events.map((ev: any) => ({
           label: ev.label || ev.name || 'Event',
           ts: ev.ts || (ev.time ? new Date(ev.time).getTime() : Date.now()),
           impact: ev.impact || 'medium', // low/medium/high
           risk: ev.risk || 0.5,      // risk reduce factor 0–1
         }))
-        _safeLocalStorageSet('aub_macro', w.AUB.macroEvents) // FIX 22
+        _safeLocalStorageSet('aub_macro', AUB.macroEvents) // FIX 22
         if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
         if (typeof w._userCtxPush === 'function') w._userCtxPush()
         _aubRenderMacroEvents()
-        toast('Macro events loaded: ' + w.AUB.macroEvents.length)
+        toast('Macro events loaded: ' + AUB.macroEvents.length)
       }
     } catch (e) { toast('Invalid JSON', 0, _ZI.x) }
   }
@@ -397,7 +397,7 @@ export function aubMacroFileLoad(input: any): void {
 
 export function aubGetActiveMacroRisk(): any {
   const now = Date.now()
-  for (const ev of w.AUB.macroEvents) {
+  for (const ev of AUB.macroEvents) {
     const diff = ev.ts - now
     if (diff > -3600000 && diff < 7200000) { // -1h to +2h window
       return { active: true, label: ev.label, risk: ev.risk, impact: ev.impact }
@@ -408,11 +408,11 @@ export function aubGetActiveMacroRisk(): any {
 
 export function _aubRenderMacroEvents(): void {
   const el_m = document.getElementById('aub-macro-events'); if (!el_m) return
-  if (!w.AUB.macroEvents.length) {
+  if (!AUB.macroEvents.length) {
     el_m.innerHTML = '<div class="aub-row">No events loaded</div>'; return
   }
   const now = Date.now()
-  el_m.innerHTML = w.AUB.macroEvents.slice(0, 5).map((ev: any) => {
+  el_m.innerHTML = AUB.macroEvents.slice(0, 5).map((ev: any) => {
     const diff = ev.ts - now
     const hrs = Math.round(diff / 3600000)
     const when = Math.abs(hrs) < 1 ? 'NOW' : (hrs > 0 ? 'in ' + hrs + 'h' : Math.abs(hrs) + 'h ago')
@@ -425,7 +425,7 @@ export function _aubRenderMacroEvents(): void {
 export function _aubLoadMacro(): void {
   try {
     const raw = localStorage.getItem('aub_macro')
-    if (raw) w.AUB.macroEvents = JSON.parse(raw)
+    if (raw) AUB.macroEvents = JSON.parse(raw)
   } catch (_) { }
 }
 
@@ -434,8 +434,8 @@ export function _aubLoadMacro(): void {
 // ════════════════════════════════════════════════════════════════
 
 export function aubSimRun(): void {
-  if (w.AUB.simRunning) return
-  w.AUB.simRunning = true
+  if (AUB.simRunning) return
+  AUB.simRunning = true
   w.AUB_PERF.setDOM('aub-sim-status', 'Status: Running...')
   // Async so UI doesn't freeze
   setTimeout(_aubSimWorker, 100)
@@ -446,7 +446,7 @@ export function _aubSimWorker(): void {
     const klines = (typeof w.S !== 'undefined' && w.S.klines) ? w.S.klines : []
     if (klines.length < 50) {
       w.AUB_PERF.setDOM('aub-sim-status', 'Status: Need 50+ bars')
-      w.AUB.simRunning = false; return
+      AUB.simRunning = false; return
     }
 
     const bars = klines.slice(-Math.min(1000, klines.length))
@@ -480,8 +480,8 @@ export function _aubSimWorker(): void {
       }
     }
 
-    w.AUB.simResult = best
-    w.AUB.simPendingApply = best
+    AUB.simResult = best
+    AUB.simPendingApply = best
     const ts = new Date().toLocaleTimeString()
     _safeLocalStorageSet(w.AUB_SIM_KEY, { best, ts }) // FIX 22
 
@@ -498,24 +498,24 @@ export function _aubSimWorker(): void {
   } catch (e: any) {
     w.AUB_PERF.setDOM('aub-sim-status', 'Status: Error — ' + (e.message || '?'))
   }
-  w.AUB.simRunning = false
+  AUB.simRunning = false
 }
 
 export function aubSimApply(): void {
-  if (!w.AUB.simPendingApply) return
+  if (!AUB.simPendingApply) return
   const confirmed = w.confirm(
-    `Apply suggested settings?\nSL: ${w.AUB.simPendingApply.sl}%\nTP ratio: ${w.AUB.simPendingApply.rr}x\n\nThis ONLY sets input fields — you must enable trading manually.`
+    `Apply suggested settings?\nSL: ${AUB.simPendingApply.sl}%\nTP ratio: ${AUB.simPendingApply.rr}x\n\nThis ONLY sets input fields — you must enable trading manually.`
   )
   if (!confirmed) return
   // Set inputs (do NOT toggle AT or execute trades)
   const slInput = document.getElementById('atSL') as any
   const rrInput = document.getElementById('atRR') as any
-  if (slInput) slInput.value = w.AUB.simPendingApply.sl
-  if (rrInput) rrInput.value = w.AUB.simPendingApply.rr
+  if (slInput) slInput.value = AUB.simPendingApply.sl
+  if (rrInput) rrInput.value = AUB.simPendingApply.rr
   toast('Suggestion applied to fields — review before enabling AT')
   ;(document.getElementById('aub-sim-apply') as any).style.display = 'none'
-  w.AUB.simPendingApply = null
-  aubBBSnapshot('SIM_APPLIED', { sl: w.AUB.simResult.sl, rr: w.AUB.simResult.rr })
+  AUB.simPendingApply = null
+  aubBBSnapshot('SIM_APPLIED', { sl: AUB.simResult.sl, rr: AUB.simResult.rr })
 }
 
 export function _aubLoadSim(): void {
@@ -523,7 +523,7 @@ export function _aubLoadSim(): void {
     const raw = localStorage.getItem(w.AUB_SIM_KEY)
     if (raw) {
       const data = JSON.parse(raw)
-      w.AUB.simResult = data.best
+      AUB.simResult = data.best
       w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + (data.ts || '—'))
     }
   } catch (_) { }
@@ -590,14 +590,14 @@ export function initAUB(): void {
   const el_aub = document.getElementById('aub')
   if (el_aub) {
     const saved = localStorage.getItem('aub_expanded')
-    w.AUB.expanded = (saved === '1') && w.innerWidth >= 600
-    el_aub.className = w.AUB.expanded ? 'expanded' : 'collapsed'
+    AUB.expanded = (saved === '1') && w.innerWidth >= 600
+    el_aub.className = AUB.expanded ? 'expanded' : 'collapsed'
     const txt = document.getElementById('aub-toggle-txt')
-    if (txt) txt.textContent = w.AUB.expanded ? 'COLLAPSE' : 'EXPAND'
+    if (txt) txt.textContent = AUB.expanded ? 'COLLAPSE' : 'EXPAND'
   }
 
   // rAF FPS counter — purely visual, always safe (req 6)
-  w.AUB._rafLast = performance.now()
+  AUB._rafLast = performance.now()
   requestAnimationFrame(_aubRafTick)
 
   // Input guards — wrap after engine settles (req 6, visual-safe)

@@ -363,9 +363,9 @@ export function renderMscanTable(results: any[], opps: number) {
     if (r.alreadyOpen) {
       actionHtml = `<div style="font-size:11px;color:#aa44ff">${_ZI.dRed} IN POZ</div>`
     } else if (r.isOpp && r.dir === 'bull') {
-      actionHtml = `<button class="mscan-enter-btn long" onclick="manualEnterFromScan('${r.sym}','LONG',${r.score})">\u25B2 LONG</button>`
+      actionHtml = `<button class="mscan-enter-btn long" data-action="manualEnterFromScan" data-sym="${r.sym}" data-side="LONG" data-score="${r.score}">\u25B2 LONG</button>`
     } else if (r.isOpp && r.dir === 'bear') {
-      actionHtml = `<button class="mscan-enter-btn short" onclick="manualEnterFromScan('${r.sym}','SHORT',${r.score})">\u25BC SHORT</button>`
+      actionHtml = `<button class="mscan-enter-btn short" data-action="manualEnterFromScan" data-sym="${r.sym}" data-side="SHORT" data-score="${r.score}">\u25BC SHORT</button>`
     } else {
       actionHtml = `<span class="mscan-enter-btn dis">\u2014</span>`
     }
@@ -385,8 +385,15 @@ export function renderMscanTable(results: any[], opps: number) {
       <td>${actionHtml}</td>
     </tr>`
   }).join('')
+  // Delegation for manualEnterFromScan buttons
+  if (!tbody.dataset.mscanDelegated) {
+    tbody.dataset.mscanDelegated = '1'
+    tbody.addEventListener('click', (e: Event) => {
+      const btn = (e.target as HTMLElement).closest('[data-action="manualEnterFromScan"]') as HTMLElement
+      if (btn) manualEnterFromScan(btn.dataset.sym || '', btn.dataset.side || '', parseInt(btn.dataset.score || '0'))
+    })
+  }
 }
-// renderMscanTable — self-ref removed (direct call)
 
 // ─── MANUAL ENTRY FROM SCANNER ─────────────────────────────────
 export function manualEnterFromScan(sym: string, side: string, score: number) {
@@ -402,7 +409,6 @@ export function manualEnterFromScan(sym: string, side: string, score: number) {
 
   setTimeout(() => runMultiSymbolScan(), 1000)
 }
-w.manualEnterFromScan = manualEnterFromScan
 
 // ─── MULTI-SYMBOL AUTO TRADE ───────────────────────────────────
 export function _endMultiScan() { w.FetchLock.release('multiScan') }
@@ -554,11 +560,19 @@ export function toggleSymPicker() {
     const short = sym.replace('USDT', '')
     const checked = active.indexOf(sym) !== -1 ? 'checked' : ''
     html += '<label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:3px;font-size:8px;color:#ccd" onmouseenter="this.style.background=\'#1a1030\'" onmouseleave="this.style.background=\'transparent\'">' +
-      '<input type="checkbox" data-sym="' + sym + '" ' + checked + ' onchange="mscanToggleSym(this)" style="accent-color:#aa44ff">' +
+      '<input type="checkbox" data-sym="' + sym + '" ' + checked + ' data-action="mscanToggleSym" style="accent-color:#aa44ff">' +
       '<span style="font-weight:700;color:#fff;min-width:38px">' + short + '</span>' +
       '<span style="color:#556;font-size:6px">' + sym + '</span></label>'
   })
   list.innerHTML = html
+  // Delegation for mscanToggleSym checkboxes
+  if (!list.dataset.symDelegated) {
+    list.dataset.symDelegated = '1'
+    list.addEventListener('change', (e: Event) => {
+      const input = (e.target as HTMLElement).closest('[data-action="mscanToggleSym"]') as HTMLInputElement
+      if (input) mscanToggleSym(input)
+    })
+  }
   drop.style.display = 'block'
 }
 // toggleSymPicker — self-ref removed (direct call)
@@ -573,7 +587,6 @@ export function mscanToggleSym(cb: any) {
   }
   _mscanSaveActive(active)
 }
-w.mscanToggleSym = mscanToggleSym
 
 export function mscanPickAll(selectAll: boolean) {
   const active = selectAll ? MSCAN_SYMS.slice() : []
