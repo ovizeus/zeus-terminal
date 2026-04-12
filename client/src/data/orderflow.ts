@@ -1,6 +1,7 @@
 import { toast } from './marketDataHelpers'
 import { computeFusionDecision , atLog } from '../trading/autotrade'
 import { setSymbol } from './marketDataWS'
+import { _ucMarkDirty, _userCtxPush, ZT_safeInterval } from '../core/config'
 /**
  * Zeus Terminal — Orderflow (ported from public/js/data/orderflow.js)
  * Orderflow Modules P1-P15 + Patch Layer v122.3
@@ -137,15 +138,9 @@ export function _initAresMLUI() {
     const tick = function () { try { render() } catch (_) { } }
     setTimeout(tick, 600)
 
-    if (typeof w.ZT_safeInterval === 'function') {
-      const _wrappedTick = w.ZT_safeInterval('aresMLUI', tick, 2000)
-      if (!w.__ARES_ML_UI_TMR__) {
-        w.__ARES_ML_UI_TMR__ = w.Intervals.set('ares_ml_ui', _wrappedTick, 2000)
-      }
-    } else {
-      if (!w.__ARES_ML_UI_TMR__) {
-        w.__ARES_ML_UI_TMR__ = w.Intervals.set('ares_ml_ui', tick, 2000)
-      }
+    const _wrappedTick = ZT_safeInterval('aresMLUI', tick, 2000)
+    if (!w.__ARES_ML_UI_TMR__) {
+      w.__ARES_ML_UI_TMR__ = w.Intervals.set('ares_ml_ui', _wrappedTick, 2000)
     }
 
   } catch (e: any) {
@@ -2085,8 +2080,8 @@ export function _initOrderflowHUD() {
     if (e.target.classList.contains('hdr-close')) return
     _state.expanded = !_state.expanded
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
-    if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('ofHud')
-    if (typeof w._userCtxPush === 'function') w._userCtxPush()
+    _ucMarkDirty('ofHud')
+    _userCtxPush()
     _render()
   }
 
@@ -2110,8 +2105,8 @@ export function _initOrderflowHUD() {
     _state.debug = !_state.debug
     _state.debugUntil = _state.debug ? Date.now() + 60000 : 0
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
-    if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('ofHud')
-    if (typeof w._userCtxPush === 'function') w._userCtxPush()
+    _ucMarkDirty('ofHud')
+    _userCtxPush()
     _render()
     console.log('[HUD] DBG mode', _state.debug ? 'ON (60s)' : 'OFF')
   }
@@ -2155,8 +2150,8 @@ export function _initOrderflowHUD() {
       ;(anc as any).style.cursor = 'pointer'
       ;(anc as any).style.opacity = '1'
       try { localStorage.setItem(ANCH_POS_KEY, String(parseInt((anc as any).style.left))) } catch (_) { }
-      if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('ofHud')
-      if (typeof w._userCtxPush === 'function') w._userCtxPush()
+      _ucMarkDirty('ofHud')
+      _userCtxPush()
     })
   }
 
@@ -2222,8 +2217,8 @@ export function _initOrderflowHUD() {
     const r = _hudEl.getBoundingClientRect()
     const pos = { top: r.top, left: r.left }
     try { localStorage.setItem(POS_KEY, JSON.stringify(pos)) } catch (_) { }
-    if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('ofHud')
-    if (typeof w._userCtxPush === 'function') w._userCtxPush()
+    _ucMarkDirty('ofHud')
+    _userCtxPush()
     console.log('[HUD] pos saved', pos)
   }
 
@@ -2262,8 +2257,8 @@ export function _initOrderflowHUD() {
   w.ofHudToggle = function () {
     _state.visible = !_state.visible
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
-    if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('ofHud')
-    if (typeof w._userCtxPush === 'function') w._userCtxPush()
+    _ucMarkDirty('ofHud')
+    _userCtxPush()
     if (!_hudEl) _create()
     _hudEl.classList.toggle('hidden', !_state.visible)
     if (_state.visible) {
@@ -2285,8 +2280,8 @@ export function _initOrderflowHUD() {
     if (isCollapsed) {
       _state.visible = true
       try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
-      if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('ofHud')
-      if (typeof w._userCtxPush === 'function') w._userCtxPush()
+      _ucMarkDirty('ofHud')
+      _userCtxPush()
       if (!_hudEl) _create()
       _hudEl.classList.remove('hidden')
       if (!_interval) _interval = w.Intervals.set('of_hud', _render, 1000)

@@ -7,8 +7,9 @@ import { escHtml, el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { getDrawdownStats, getLastNDays, getWeeklyRollup } from '../engine/dailyPnl'
 import { calcExpectancyByProfile } from '../engine/perfStore'
+import { refreshLiqCycleLight, refreshSweepLight } from '../core/config'
 
-const w = window as any;
+const w = window as any; // kept for w.S (mixed reads/writes), w.mainChart, w.vwapSeries, w.oviSeries, w.BT, w.BT_INDICATORS, w.renderChart capture
 
 // [REMOVED] Eye panel — indicator control is now unified in "Select Indicator" panel
 export function openEyePanel() { /* removed — use openIndPanel() */ }
@@ -159,8 +160,8 @@ export async function scanLiquidityMagnets() {
   // Update auto trade with magnet bias
   updateMagnetBias();
   // Recalc BM.liqCycle distances + sweep imediat dupa scan nou
-  w.refreshLiqCycleLight();
-  w.refreshSweepLight();
+  refreshLiqCycleLight();
+  refreshSweepLight();
 }
 
 export function renderMagnets() {
