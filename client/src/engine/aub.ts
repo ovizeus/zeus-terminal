@@ -6,7 +6,7 @@
 import { _safeLocalStorageSet } from '../services/storage'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { AUB } from '../core/config'
+import { AUB, AUB_COMPAT, AUB_PERF } from '../core/config'
 import { setTf } from '../data/marketDataFeeds'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 
