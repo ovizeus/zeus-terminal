@@ -1,4 +1,5 @@
 import { brainThink } from './brain'
+import { detectRegimeEnhanced } from './regimeEnhanced'
 // Zeus — engine/regime.ts
 // Ported 1:1 from public/js/brain/regime.js (Phase 5A)
 // Regime Engine — adapter/normalizer layer that REUSES existing detection logic
@@ -80,9 +81,7 @@ function analyzeMarketRegime(): any {
     // ═══ 1. REUSE: detectRegimeEnhanced (brain.js L468) ═══════
     // Returns: {regime, adx, volMode, structure, squeeze, atrPct, slope20}
     let enhanced: any = { regime: 'unknown', adx: 0, volMode: '—', structure: '—', squeeze: false, atrPct: 0, slope20: 0 }
-    if (typeof w.detectRegimeEnhanced === 'function') {
-      enhanced = w.detectRegimeEnhanced(klines) || enhanced
-    }
+    enhanced = detectRegimeEnhanced(klines) || enhanced
     // NOTE: kept on w.* — circular dep with engine/brain
 
     // ═══ 2. REUSE: BM.volRegime (config.js updateVolRegime) ═══

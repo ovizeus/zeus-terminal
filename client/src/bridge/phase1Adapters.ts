@@ -477,7 +477,6 @@ export function installPhase1Adapters(): void {
   // syncBrainFromState — removed (direct import)
   /* setProfile — removed (direct import) */
   // calcDslTargetPrice — removed (direct import)
-  w.detectRegimeEnhanced = detectRegimeEnhanced  // KEPT: circular dep regime↔brain
   // updateMTFAlignment — removed (direct import)
   // detectSweepDisplacement — removed (direct import)
   // computeMarketAtmosphere — removed (direct import)
