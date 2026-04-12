@@ -11,8 +11,6 @@ import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , _NEURO_SYMS } from '../core/config'
 import { calcConfluenceScore } from './confluence'
-// Re-export runSignalScan (lives in indicators.ts but consumers import from brain.ts)
-export { runSignalScan } from './indicators'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
 import { _syncDslAssistUI } from '../trading/dsl'
