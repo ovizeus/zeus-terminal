@@ -119,6 +119,7 @@ export function procLiq(o: any, src?: string): void {
   if (sym === 'BTC' || sym === w.S.symbol.replace('USDT', '').substring(0, 3)) {
     const _bkt = w.S.llvSettings.bucketPct || 0.3
     const _step = price * _bkt / 100
+    if (!_step || !Number.isFinite(_step) || _step <= 0) return
     let _pkey = Math.round(price / _step) * _step; _pkey = Math.round(_pkey)
     const _pk100 = Math.round(price / 100) * 100
     w.S.btcClusters[_pk100] = w.S.btcClusters[_pk100] || { price: _pk100, vol: 0, isLong, bnbUsd: 0, bybUsd: 0 }
@@ -230,6 +231,7 @@ export function setSymbol(sym: string): void {
     w.Timeouts.clear('bnbReconnect'); w.Timeouts.clear('bybReconnect'); w.Timeouts.clear('wlReconnect')
     _stopBybPing()
     w.WS.closeSymbolFeeds()
+    if (typeof w._stopLivePendingSync === 'function') w._stopLivePendingSync()
     if (w.S.wsK) { try { w.S.wsK.close() } catch (_) { } w.S.wsK = null }
     if (typeof w.clearAllSessionOverlays === 'function') w.clearAllSessionOverlays()
     w.S.symbol = sym

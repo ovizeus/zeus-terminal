@@ -180,7 +180,7 @@ export async function liveApiSyncState(): Promise<any> {
       }
     })
     w.TP.livePositions = positions.map(function (p: any) {
-      var id = p.symbol + '_' + p.side
+      var id = p.symbol + '_' + p.side + '_' + (p.positionAmt || p.size || '')
       var existing = _existingById[id]
       // [FIX H1] Fallback: match by sym+side when existing pos has different ID
       if (!existing) {
