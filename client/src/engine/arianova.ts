@@ -1,6 +1,6 @@
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
-import { _AN_KEY_A, _AN_KEY_N } from '../core/config'
+import { _AN_KEY_A, _AN_KEY_N, _dslStripOpen, setDslStripOpen } from '../core/config'
 import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 // Zeus — engine/arianova.ts
@@ -72,10 +72,10 @@ if (!w._ARIA_NOVA_LOADED) {
 
   // ── DSL STRIP TOGGLE ─────────────────────────────────────────────
   function dslStripToggle() {
-    w._dslStripOpen = !w._dslStripOpen
+    setDslStripOpen(!_dslStripOpen)
     const s = document.getElementById('dsl-strip')
-    if (s) s.classList.toggle('dsl-strip-open', w._dslStripOpen)
-    try { localStorage.setItem('zeus_dsl_strip_open', w._dslStripOpen ? '1' : '0') } catch (_) { }
+    if (s) s.classList.toggle('dsl-strip-open', _dslStripOpen)
+    try { localStorage.setItem('zeus_dsl_strip_open', _dslStripOpen ? '1' : '0') } catch (_) { }
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('panels')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
   }

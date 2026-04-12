@@ -82,6 +82,7 @@ export const NOVA_STATE: any = {
 export const _AN_KEY_A = 'aria_v1'
 export const _AN_KEY_N = 'nova_v1'
 export let _dslStripOpen = false
+export function setDslStripOpen(v: boolean) { _dslStripOpen = v }
 export let _atStripOpen = false
 export let _ptStripOpen = false
 

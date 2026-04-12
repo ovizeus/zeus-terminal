@@ -7,7 +7,7 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _checkAppUpdate } from './bootstrapError'
-import { _srUpdateStats } from './config'
+import { _srUpdateStats, setDslStripOpen } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed, initZeusGroups } from './bootstrapInit'
@@ -84,7 +84,7 @@ export async function startApp(): Promise<void> {
   // [FIX] _relocateFlow removed — React PanelShell controls flow-panel position
   setTimeout(initAriaBrain, 200)
   if (typeof w.initTeacher === 'function') w.initTeacher()
-  try { if (localStorage.getItem('zeus_dsl_strip_open') === '1') { w._dslStripOpen = true; const _ds = document.getElementById('dsl-strip'); if (_ds) _ds.classList.add('dsl-strip-open') } } catch (_) { }
+  try { if (localStorage.getItem('zeus_dsl_strip_open') === '1') { setDslStripOpen(true); const _ds = document.getElementById('dsl-strip'); if (_ds) _ds.classList.add('dsl-strip-open') } } catch (_) { }
   w.dslUpdateBanner()
   try { if (localStorage.getItem('zeus_at_strip_open') === '1') { w._atStripOpen = true; const _as = document.getElementById('at-strip'); if (_as) _as.classList.add('at-strip-open') } } catch (_) { }
   w.atUpdateBanner()
