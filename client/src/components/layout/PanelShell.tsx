@@ -95,12 +95,19 @@ export function PanelShell() {
   const closeModal = useUiStore((s) => s.closeModal)
   const resolvedEnv = useUiStore((s) => s.resolvedEnv)
 
-  // ── Listen for legacy JS requesting modal close ──
+  const openModal = useUiStore((s) => s.openModal)
+
+  // ── Listen for legacy JS requesting modal open/close ──
   useEffect(() => {
-    const handler = () => closeModal()
-    document.addEventListener('zeus:closeModal', handler)
-    return () => document.removeEventListener('zeus:closeModal', handler)
-  }, [closeModal])
+    const handleClose = () => closeModal()
+    const handleOpen = (e: Event) => { const id = (e as CustomEvent).detail; if (id) openModal(id) }
+    document.addEventListener('zeus:closeModal', handleClose)
+    document.addEventListener('zeus:openModal', handleOpen)
+    return () => {
+      document.removeEventListener('zeus:closeModal', handleClose)
+      document.removeEventListener('zeus:openModal', handleOpen)
+    }
+  }, [closeModal, openModal])
 
   function handleDockClick(id: string) {
     if (id === 'more') return
