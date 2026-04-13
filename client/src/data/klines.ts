@@ -3,7 +3,10 @@
  * Kline data processing helpers
  */
 
-import { getTPObject, getATObject, getBrainMetrics, getBrainObject, getDSLObject, getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
+import { getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
+import { BM, BRAIN as BR, DSL } from '../core/config'
 import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from './marketDataHelpers'
@@ -15,12 +18,6 @@ import { placeAutoTrade , atLog } from '../trading/autotrade'
 import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
-// [8D-3] mutable refs
-const TP = getTPObject()
-const AT = getATObject()
-const BM = getBrainMetrics()
-const BR = getBrainObject()
-const DSL = getDSLObject()
 
 // ADX calculator
 export function calcADX(klines: any[], period = 14) {

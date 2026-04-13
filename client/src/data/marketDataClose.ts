@@ -2,7 +2,9 @@
 // Ported 1:1 from public/js/data/marketData.js lines 3362-3471 (Chunk G)
 // closeDemoPos — the most critical function in the trading engine
 
-import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
+import { BM, DSL } from '../core/config'
 import { fmtNow, toast } from './marketDataHelpers'
 import { checkKillThreshold , renderATPositions } from '../trading/autotrade'
 import { _bmPostClose } from '../trading/orders'
@@ -12,11 +14,6 @@ import { addTradeToJournal } from '../services/storage'
 import { renderDemoPositions , getSymPrice } from './marketDataPositions'
 import { _safePnl } from '../utils/guards'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
-// [8D-2A] mutable refs — reads + writes through same objects
-const TP = getTPObject()
-const AT = getATObject()
-const BM = getBrainMetrics()
-const DSL = getDSLObject()
 
 export function closeDemoPos(id: any, reason?: string): void {
   const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id)

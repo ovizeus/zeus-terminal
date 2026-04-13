@@ -2000,3 +2000,9 @@ w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon
 // Self-registration — makes phase1Adapters mapping redundant
 w.ARIA_STATE = ARIA_STATE
+// Recovery fix: expose AUB + NOVA on window (consumed by aub.ts bare refs + arianova.ts w.NOVA_STATE)
+w.AUB = AUB
+w.AUB_COMPAT = AUB_COMPAT
+w.AUB_PERF = AUB_PERF
+w.AUB_SIM_KEY = AUB_SIM_KEY
+w.NOVA_STATE = NOVA_STATE

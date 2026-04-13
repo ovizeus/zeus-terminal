@@ -2,7 +2,9 @@
 // Ported 1:1 from public/js/data/marketData.js lines 2662-3361 (Chunk F)
 // Pending orders, SL/TP edit, render positions, closeLivePos
 
-import { getTPObject, getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
+import { BM, DSL } from '../core/config'
 import { fmtNow, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
@@ -19,11 +21,6 @@ import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from './marketDataClose'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
-// [8D-2B] mutable refs — reads + writes through same objects
-const TP = getTPObject()
-const AT = getATObject()
-const BM = getBrainMetrics()
-const DSL = getDSLObject()
 
 function _numOrDefault(val: any, fallback: number): number { const n = parseFloat(val); return Number.isFinite(n) ? n : fallback }
 

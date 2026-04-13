@@ -2,7 +2,10 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 369-1113 (Chunk B)
 // startApp() — THE core boot sequence
 
-import { getATObject, getTPObject, getBrainMetrics, getATR, getKlines } from '../services/stateAccessors'
+import { getATR, getKlines } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
+import { BM } from '../core/config'
 import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -43,10 +46,6 @@ import { updateDeepDive } from '../engine/indicators'
 import { onPositionOpened } from '../trading/positions'
 import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
-// [8D-4B] mutable refs
-const TP = getTPObject()
-const AT = getATObject()
-const BM = getBrainMetrics()
 
 export async function startApp(): Promise<void> {
   w._zeusBootTs = Date.now()

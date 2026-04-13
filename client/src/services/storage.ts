@@ -6,15 +6,14 @@
  * via window.* — these are still managed by bridge-loaded old JS.
  */
 
-import { getTPObject, getSymbol, getFRCountdown, getOI } from './stateAccessors'
-import { oiHistory } from '../core/state'
+import { getSymbol, getFRCountdown, getOI } from './stateAccessors'
+import { oiHistory, TP } from '../core/state'
 import { escHtml, el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { recordDailyClose } from '../engine/dailyPnl'
 const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, oiHistory, w.ZT_capArr
-const TP = getTPObject()
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
   try {

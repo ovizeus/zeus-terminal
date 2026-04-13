@@ -3,7 +3,8 @@
 // Dynamic Stop Loss — brain logic, widget render, intervals
 // [8C-3A] DSL/TC/BM/BRAIN reads migrated to accessors
 
-import { getDSLObject, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
+import { getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
+import { DSL } from '../core/config'
 import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
@@ -16,8 +17,6 @@ import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
-// [8C-3A] DSL = mutable ref to DSL
-const DSL = getDSLObject()
 
 // Sync DSL SL to exchange for live positions (client-side AT only)
 function _syncLiveSL(pos: any, newSL: number): void {

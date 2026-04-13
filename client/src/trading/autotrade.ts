@@ -3,7 +3,10 @@
 // AutoTrade engine: conditions, execution, monitoring, kill switch
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getATObject, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getBrainMetrics, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone, getTPObject } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
+import { BM } from '../core/config'
 import { isValidMarketPrice, escHtml, el } from '../utils/dom'
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
@@ -34,12 +37,6 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
-// [8C-4A2] AT = mutable ref to w.AT
-const AT = getATObject()
-// [8C-4B] BM = mutable ref to BM — reads + writes through same object
-const BM = getBrainMetrics()
-// [8C-4C] TP = mutable ref to TP — reads + writes through same object
-const TP = getTPObject()
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
 // AT UI helpers

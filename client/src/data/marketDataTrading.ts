@@ -2,7 +2,9 @@
 // Ported 1:1 from public/js/data/marketData.js lines 2036-2660 (Chunk E)
 // Trading panel UI: mode switch, add funds, demo/live orders, leverage, liq price
 
-import { getTPObject, getATObject, getPrice, getSymbol } from '../services/stateAccessors'
+import { getPrice, getSymbol } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
 import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
@@ -17,9 +19,6 @@ import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions } from './marketDataPositions'
 import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
-// [8D-2C] mutable refs — reads + writes through same objects
-const TP = getTPObject()
-const AT = getATObject()
 
 // ═══════════════════════════════════════════════════════
 // GLOBAL MODE SWITCH

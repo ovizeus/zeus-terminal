@@ -2,7 +2,10 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 1121-1720 (Chunk C)
 // PIN lock, build info, welcome modal, PWA, master reset, heartbeat, resize
 
-import { getATObject, getTPObject, getBrainMetrics, getDSLObject, getTimezone } from '../services/stateAccessors'
+import { getTimezone } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
+import { BM, DSL } from '../core/config'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { connectBNB } from '../data/marketDataWS'
@@ -12,11 +15,6 @@ import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
-// [8D-4A] mutable refs
-const TP = getTPObject()
-const AT = getATObject()
-const BM = getBrainMetrics()
-const DSL = getDSLObject()
 
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null

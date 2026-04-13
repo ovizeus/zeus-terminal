@@ -3,7 +3,8 @@
  * (ported from public/js/utils/guards.js)
  */
 
-import { getATObject, getTPObject, getPrice, getATR } from '../services/stateAccessors'
+import { getTPObject, getPrice, getATR } from '../services/stateAccessors'
+import { AT } from '../engine/events'
 import { el } from './dom'
 import { _updateWhyBlocked } from '../data/klines'
 import { updConn } from '../data/marketDataWS'
@@ -11,8 +12,6 @@ import { atLog } from '../trading/autotrade'
 import { closeDemoPos } from '../data/marketDataClose'
 import { getSymPrice } from '../data/marketDataPositions'
 const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), atLog, w.ncAdd, fn calls
-// [8D-6C2] AT = mutable ref to AT — reads + writes through same object
-const AT = getATObject()
 
 // Safety configuration
 export const _SAFETY: Record<string, any> = {

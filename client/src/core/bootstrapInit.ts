@@ -2,7 +2,8 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 6-367 (Chunk A)
 // initZeusGroups, _waitForFeedThenStartExtras, _startExtras, runHealthChecks, _updatePnlLabCondensed
 
-import { getATObject, getTPObject } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { initModeBar } from '../ui/modebar'
@@ -14,9 +15,6 @@ import { DEV } from '../utils/dev'
 import { runAutoTradeCheck , atLog } from '../trading/autotrade'
 import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, atLog, fn calls
-// [8D-4B] mutable refs
-const AT = getATObject()
-const TP = getTPObject()
 
 // ===== INIT ZEUS GROUPS (DOM structure) =====
 export function initZeusGroups(): void {

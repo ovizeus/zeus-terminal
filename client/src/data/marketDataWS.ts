@@ -3,7 +3,8 @@
 // WS connections, liq processing, symbol switch, order book, feed,
 // modals, alerts, cloud, chart settings, sound
 
-import { getTPObject, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
+import { getTPObject } from '../services/stateAccessors'
+import { BM, BRAIN as BR } from '../core/config'
 import { fmtTime, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
@@ -19,9 +20,6 @@ import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
 import { renderATPositions } from '../trading/autotrade'
 import { _initAudio } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
-// [8D-1] BM/BR = mutable refs for setSymbol reset
-const BM = getBrainMetrics()
-const BR = getBrainObject()
 
 // ===== WS RECONNECT BACKOFF =====
 const _wsBackoff: any = { bnb: 0, byb: 0, wl: 0 }

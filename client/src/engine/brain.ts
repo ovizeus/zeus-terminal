@@ -4,12 +4,12 @@
 // [8C-2A1] w.AT/TC/DSL/TP reads migrated to stateAccessors
 'use strict'
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias, getBrainMetrics, getBrainObject } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias } from '../services/stateAccessors'
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , _NEURO_SYMS } from '../core/config'
+import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
 import { calcConfluenceScore } from './confluence'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
@@ -19,10 +19,6 @@ import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
-// [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
-const BM = getBrainMetrics()
-// [8C-2B2] BR = mutable ref to BR — reads + writes go through same object
-const BR = getBrainObject()
 
 // Neuron updater
 export function updateNeurons(): void {

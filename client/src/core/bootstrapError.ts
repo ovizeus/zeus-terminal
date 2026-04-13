@@ -2,12 +2,10 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 1722-2108 (Chunk D)
 // Error boundary, __ZEUS_INIT__ guard, status bar, app update, DLOG panel, activity feed
 
-import { getATObject, getTPObject } from '../services/stateAccessors'
+import { AT } from '../engine/events'
+import { TP } from '../core/state'
 import { updateModeBar } from '../ui/modebar'
 const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
-// [8D-4A] mutable refs
-const AT = getATObject()
-const TP = getTPObject()
 
 // ===== GLOBAL ERROR BOUNDARY =====
 window.addEventListener('error', function (e: any) {
