@@ -19,10 +19,9 @@ import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
-// [8C-2B1] BM = mutable ref to w.BM — reads + writes go through same object
-const BM = getBrainMetrics()
-// [8C-2B2] BR = mutable ref to BR — reads + writes go through same object
-const BR = getBrainObject()
+// [8C-2B1] BM/BR — use window refs directly (Rolldown module init order issue)
+const BM = w.BM || (w.BM = {})
+const BR = w.BRAIN || (w.BRAIN = {})
 
 // Neuron updater
 export function updateNeurons(): void {

@@ -44,9 +44,9 @@ import { onPositionOpened } from '../trading/positions'
 import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S.vwapOn (SKIP), w.ZState, w.Intervals, w.ZLOG, boot flags, fn calls
 // [8D-4B] mutable refs
-const TP = getTPObject()
-const AT = getATObject()
-const BM = getBrainMetrics()
+const TP = (window as any).TP || ((window as any).TP = {})
+const AT = (window as any).AT || ((window as any).AT = {})
+const BM = (window as any).BM || ((window as any).BM = {})
 
 export async function startApp(): Promise<void> {
   w._zeusBootTs = Date.now()

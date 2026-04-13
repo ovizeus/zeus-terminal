@@ -20,8 +20,8 @@ import { renderATPositions } from '../trading/autotrade'
 import { _initAudio } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 // [8D-1] BM/BR = mutable refs for setSymbol reset
-const BM = getBrainMetrics()
-const BR = getBrainObject()
+const BM = (window as any).BM || ((window as any).BM = {})
+const BR = (window as any).BRAIN || ((window as any).BRAIN = {})
 
 // ===== WS RECONNECT BACKOFF =====
 const _wsBackoff: any = { bnb: 0, byb: 0, wl: 0 }

@@ -35,11 +35,11 @@ import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 // [8C-4A2] AT = mutable ref to w.AT
-const AT = getATObject()
+const AT = (window as any).AT || ((window as any).AT = {})
 // [8C-4B] BM = mutable ref to BM — reads + writes through same object
-const BM = getBrainMetrics()
+const BM = (window as any).BM || ((window as any).BM = {})
 // [8C-4C] TP = mutable ref to TP — reads + writes through same object
-const TP = getTPObject()
+const TP = (window as any).TP || ((window as any).TP = {})
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
 // AT UI helpers

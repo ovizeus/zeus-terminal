@@ -6,8 +6,8 @@ import { getATObject, getTPObject } from '../services/stateAccessors'
 import { updateModeBar } from '../ui/modebar'
 const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
 // [8D-4A] mutable refs
-const AT = getATObject()
-const TP = getTPObject()
+const AT = (window as any).AT || ((window as any).AT = {})
+const TP = (window as any).TP || ((window as any).TP = {})
 
 // ===== GLOBAL ERROR BOUNDARY =====
 window.addEventListener('error', function (e: any) {
