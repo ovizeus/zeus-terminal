@@ -745,7 +745,7 @@ export const ZState = (() => {
     }
     const srcMode = sp.mode === 'live' ? 'auto' : 'assist'
     return {
-      id: sp.seq || sp.id || Date.now(),
+      id: (existingPos ? existingPos.id : null) || sp.seq || sp.id || Date.now(),
       side: sp.side,
       sym: sp.symbol || sp.sym,
       entry: sp.price || sp.entry,
