@@ -69,18 +69,22 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     if (saving) return
     set({ saving: true })
     try {
-      await fetch('/api/user/settings', {
+      const res = await fetch('/api/user/settings', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ settings }),
       })
+      if (!res.ok) throw new Error('HTTP ' + res.status)
+      const data = await res.json()
+      if (!data.ok) throw new Error(data.error || 'Save failed')
       // Update localStorage cache
       try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(settings)) } catch (_) {}
       // Bridge invers
       _syncToWindow(settings)
-    } catch (_) {
-      console.warn('[settings] save to server failed')
+    } catch (err) {
+      console.warn('[settings] save to server failed:', err)
+      throw err // propagate so UI can show error
     } finally {
       set({ saving: false })
     }

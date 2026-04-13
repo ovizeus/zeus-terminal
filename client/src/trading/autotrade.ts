@@ -1418,8 +1418,8 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     addTradeToJournal({
       id: p.id, // [FIX v85.1 F4] necesar pentru closedPosIds la restore
       time: fmtNow(),
-      side: p.side, sym: p.sym.replace('USDT', ''),
-      entry: p.entry, exit: closePrice, pnl,
+      side: p.side, sym: p.sym,
+      entry: p.entry, exit: closePrice, size: p.size, pnl,
       reason: 'Emergency Stop', lev: p.lev,
       // [Etapa 4] Journal Context — salvat la CLOSE pentru Historical Regime Memory
       journalEvent: 'CLOSE',
@@ -1705,10 +1705,11 @@ export function execPartialClose(posId: any, pct: any): void {
   if (partialPnl >= 0) { if (!_isLivePartial) TP.demoWins++ } else { if (!_isLivePartial) TP.demoLosses++ }
 
   addTradeToJournal({
+    id: pos.id,
     time: fmtNow(),
-    side: pos.side, sym: pos.sym.replace('USDT', ''),
+    side: pos.side, sym: pos.sym,
     entry: pos.entry, exit: symPrice,
-    pnl: partialPnl, reason: `\u25D1 PARTIAL ${pct}%`, lev: pos.lev,
+    size: partialSize, pnl: partialPnl, reason: `\u25D1 PARTIAL ${pct}%`, lev: pos.lev,
     // [Etapa 4] Journal Context — salvat la CLOSE pentru Historical Regime Memory
     journalEvent: 'CLOSE',
     regime: BM.regime || BM.structure?.regime || '—',

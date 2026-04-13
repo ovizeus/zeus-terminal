@@ -71,9 +71,9 @@ export function closeDemoPos(id: any, reason?: string): void {
   addTradeToJournal({
     id: pos.id,
     time: fmtNow(),
-    side: pos.side, sym: pos.sym.replace('USDT', ''),
+    side: pos.side, sym: pos.sym,
     entry: pos.entry, exit: curPrice,
-    pnl, reason: reason || 'Manual', lev: pos.lev,
+    size: pos.size, pnl, reason: reason || 'Manual', lev: pos.lev,
     autoTrade: !!pos.autoTrade,
     journalEvent: 'CLOSE',
     regime: BM.regime || BM.structure?.regime || '\u2014',

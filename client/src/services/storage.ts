@@ -30,6 +30,20 @@ export function addTradeToJournal(trade: Record<string, any>): void {
   renderTradeJournal()
   _safeLocalStorageSet('zt_journal', TP.journal.slice(0, 50))
   if (trade.journalEvent === 'CLOSE' && typeof recordDailyClose === 'function') recordDailyClose(trade)
+  // Sync closed trades to server SQLite (Full Journal reads from there)
+  if (trade.journalEvent === 'CLOSE') {
+    _reportTradeToServer(trade)
+  }
+}
+
+/** POST closed trade to server so Full Journal (at_closed table) has all trades */
+function _reportTradeToServer(trade: Record<string, any>): void {
+  fetch('/api/journal/report', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
+    body: JSON.stringify(trade),
+  }).catch(() => { /* silent — localStorage is fallback */ })
 }
 
 export function renderTradeJournal(): void {

@@ -55,19 +55,23 @@ export function AutoTradePanel() {
     if (s.smartExitEnabled != null) setSmartExit(!!s.smartExitEnabled)
   }, [])
 
-  function handleSaveAT() {
-    // Save to settingsStore + server (explicit save on button click)
-    const store = useSettingsStore.getState()
-    store.patch({
-      sl: atSL, rr: atRR, size: atSize, riskPct: atRiskPct,
-      maxDay: atMaxDay, maxPos: atMaxPos, killPct: atKillPct,
-      lossStreak: atLossStreak, maxAddon: atMaxAddon, lev: atLev,
-      confMin, sigMin, adaptEnabled, adaptLive, smartExitEnabled: smartExit,
-    })
-    store.saveToServer()
-    // Also notify old engine (bridge invers — will be removed in Phase 8)
+  async function handleSaveAT() {
     const w = window as any
-    if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
+    try {
+      const store = useSettingsStore.getState()
+      store.patch({
+        sl: atSL, rr: atRR, size: atSize, riskPct: atRiskPct,
+        maxDay: atMaxDay, maxPos: atMaxPos, killPct: atKillPct,
+        lossStreak: atLossStreak, maxAddon: atMaxAddon, lev: atLev,
+        confMin, sigMin, adaptEnabled, adaptLive, smartExitEnabled: smartExit,
+      })
+      await store.saveToServer()
+      if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
+      if (typeof w.toast === 'function') w.toast('AT settings saved ✓')
+    } catch (err: any) {
+      console.error('[AT] Save failed:', err)
+      if (typeof w.toast === 'function') w.toast('Save failed: ' + (err?.message || 'unknown'))
+    }
   }
 
   async function handleKill() {

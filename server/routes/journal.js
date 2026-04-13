@@ -191,4 +191,51 @@ router.get('/annotations/all', (req, res) => {
     }
 });
 
+// POST /api/journal/report — client reports a closed trade (demo/live/testnet)
+// Inserts into at_closed so Full Journal shows all trades from all sources
+router.post('/report', (req, res) => {
+    try {
+        const userId = req.user.id;
+        if (!userId) return res.status(400).json({ ok: false, error: 'bad user id' });
+
+        const t = req.body;
+        if (!t || !t.id || !t.side || !t.sym) {
+            return res.status(400).json({ ok: false, error: 'missing required fields (id, side, sym)' });
+        }
+
+        const seq = Number(t.id);
+        if (!Number.isFinite(seq) || seq <= 0) {
+            return res.status(400).json({ ok: false, error: 'invalid trade id' });
+        }
+
+        // Map client trade format → at_closed data JSON (matches GET /api/journal parser)
+        const data = {
+            seq,
+            symbol: String(t.sym || ''),
+            side: String(t.side || ''),
+            mode: String(t.mode || 'demo'),
+            price: Number(t.entry) || 0,
+            size: Number(t.size) || 0,
+            margin: Number(t.size) || 0,
+            lev: Number(t.lev) || 1,
+            sl: Number(t.sl) || 0,
+            tp: Number(t.tp) || 0,
+            closePnl: Number(t.pnl) || 0,
+            closeReason: String(t.reason || 'Manual'),
+            ts: Number(t.openTs) || seq,
+            closeTs: Number(t.closedAt) || Date.now(),
+            regime: t.regime || '—',
+            confluence: Number(t.alignmentScore) || null,
+            tier: t.tier || null,
+            status: 'CLOSED',
+        };
+
+        db.atInsertClosed(seq, JSON.stringify(data), userId);
+        res.json({ ok: true });
+    } catch (err) {
+        console.error('[JOURNAL] Report error:', err.message);
+        res.status(500).json({ ok: false, error: 'Failed to save trade' });
+    }
+});
+
 module.exports = router;

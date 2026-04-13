@@ -758,6 +758,7 @@ module.exports = {
     atSavePosition,
     atRemovePosition,
     atArchiveClosed,
+    atInsertClosed: (seq, data, userId) => _stmts.atInsertClosed.run(seq, data, userId),
     atLoadOpenPositions,
     atGetOpenUserIds,
     atGetState,
