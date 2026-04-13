@@ -2393,7 +2393,7 @@ export function _initBrainCockpit(): void {
 
   // Single grandUpdate interval (req 8)
   // [PERF] 3000→5000ms — cockpit rebuild is heavy, 5s is sufficient
-  if (!w._brainIntervalId) {
+  if (!w._brainIntervalId && typeof w.Intervals !== 'undefined') {
     w._brainIntervalId = w.Intervals.set('grandUpdate', runGrandUpdate, 5000)
   }
 }

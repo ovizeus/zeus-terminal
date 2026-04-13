@@ -583,7 +583,7 @@ export function runAutoTradeCheck(): void {
     // Multi-symbol mode: scan all symbols
     const multiOn = el('atMultiSym')?.checked !== false
     if (multiOn) {
-      w.runMultiSymbolScan()
+      if (typeof w.runMultiSymbolScan === 'function') w.runMultiSymbolScan()
       return // multi-sym scan handles entries
     }
 
@@ -747,7 +747,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         w.BlockReason.set('WR_FILTER', 'WR ' + _wrVal + '% < ' + _wrCfg.minWR + '% @ UTC' + String(_utcHour).padStart(2, '0') + 'h', 'placeAutoTrade')
         if (!AT._wrLogTs || (Date.now() - AT._wrLogTs) > _wrCfg.warnEveryMs) {
           AT._wrLogTs = Date.now()
-          const _roH = w.getRoTime().hh // ora RO doar pentru log
+          const _roH = typeof w.getRoTime === 'function' ? w.getRoTime().hh : _utcHour
           atLog('warn', '[WR] WR_FILTER veto: UTC' + String(_utcHour).padStart(2, '0') + 'h (RO ' + String(_roH).padStart(2, '0') + 'h) WR=' + _wrVal + '% < min=' + _wrCfg.minWR + '%')
         }
         return
@@ -755,7 +755,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     }
   } catch (_wrE) { /* non-blocking — nu oprim execuția dacă filtrul crapă */ }
   // === /WR FILTER ===
-  const _snap = w.buildExecSnapshot(side, cond)
+  const _snap = typeof w.buildExecSnapshot === 'function' ? w.buildExecSnapshot(side, cond) : null
   // [PATCH1 B1] buildExecSnapshot returns null if price invalid — reject early
   if (!_snap) {
     w.BlockReason.set('INVALID_PRICE', 'Snapshot rejected — preț invalid', 'placeAutoTrade')
@@ -887,6 +887,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       atLog('warn', '[BLOCK] MARGIN REJECT: need $' + adaptFinalSize.toFixed(2) + ' but demoBalance=$' + TP.demoBalance.toFixed(2))
       return
     }
+    if (!Array.isArray(TP.demoPositions)) TP.demoPositions = []
     if (TP.demoPositions.some((p: any) => p.id === pos.id)) { atLog('warn', '[DEDUP] Position ' + pos.id + ' already exists'); return }
     TP.demoPositions.push(pos)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
@@ -989,6 +990,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           dslAdaptiveState: 'calm',
           dslHistory: [],
         }
+        if (!Array.isArray(TP.livePositions)) TP.livePositions = []
         TP.livePositions.push(pos)
         try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
         _livePosPushed = true // [PATCH2 B2] mark: position now in array
@@ -1272,7 +1274,7 @@ export function scheduleAutoClose(pos: any): void {
       // ─── LIVE vs DEMO branch ───
       if (pos.isLive) {
         // LIVE: verify position still exists in livePositions
-        const liveIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id)
+        const liveIdx = Array.isArray(TP.livePositions) ? TP.livePositions.findIndex((p: any) => p.id === pos.id) : -1
         if (liveIdx < 0 || TP.livePositions[liveIdx].closed) {
           if (liveIdx >= 0) TP.livePositions.splice(liveIdx, 1)
           setTimeout(function () { renderLivePositions(); renderATPositions() }, 0)
@@ -1328,7 +1330,7 @@ export function scheduleAutoClose(pos: any): void {
         const won2 = _finalPnl2 >= 0
         if (won2) AT.wins++; else AT.losses++
 
-        w.recordAllIndicators(pos, won2) // BUG6 FIX: all indicators from signalData
+        if (typeof w.recordAllIndicators === 'function') w.recordAllIndicators(pos, won2) // BUG6 FIX: all indicators from signalData
         const tradeNow = new Date()
         const dayNms = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         const tDay = dayNms[tradeNow.getUTCDay()]
@@ -1794,12 +1796,12 @@ export function closeAllDemoPos(): void {
 export function closeAllATPos(): void {
   var _activeMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   // ─── Close AT live positions ───
-  const livePosns = _activeMode === 'live'
+  const livePosns = _activeMode === 'live' && Array.isArray(TP.livePositions)
     ? [...TP.livePositions].filter((p: any) => !p.closed && p.autoTrade)
     : []
   livePosns.forEach(function (p: any) {
     const cur = getSymPrice(p) || p.entry
-    const pnl = w.calcPosPnL(p, cur)
+    const pnl = typeof w.calcPosPnL === 'function' ? w.calcPosPnL(p, cur) : 0
     AT.totalPnL += pnl; AT.dailyPnL += pnl
     if (pnl >= 0) AT.wins++; else AT.losses++
     AT.realizedDailyPnL = (getATDailyPnL() || 0) + pnl

@@ -465,8 +465,10 @@ export function _runClientDSLOnPositions(positions: any[]): void {
           const _preMag = dsl.pivotLeft
           dsl.pivotLeft = _magSnap.snappedPrice
           dsl.pivotLeft = _dslSafePrice(dsl.pivotLeft, _preMag, 'PL-mag-A')
-          if (isLong) { dsl.pivotLeft = Math.max(dsl.pivotLeft, pos.sl) }
-          else { dsl.pivotLeft = Math.min(dsl.pivotLeft, pos.sl) }
+          if (typeof pos.sl === 'number' && pos.sl > 0) {
+            if (isLong) { dsl.pivotLeft = Math.max(dsl.pivotLeft, pos.sl) }
+            else { dsl.pivotLeft = Math.min(dsl.pivotLeft, pos.sl) }
+          }
           dsl.log.push({ ts: Date.now(), msg: '[MAG-A] ' + _magSnap.reason })
           if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
           pos.dslHistory.push({ ts: Date.now(), msg: '[MAG] ' + _magSnap.reason })
@@ -514,11 +516,15 @@ export function _runClientDSLOnPositions(positions: any[]): void {
           toast(`DSL PL Exit: ${pos.sym.replace('USDT', '')} ${pos.side} @$${fP(cur)}`)
           if (pos.isLive && typeof closeLivePos === 'function') {
             closeLivePos(pos.id, _plReason)
-            if (pos.autoTrade && typeof w.AT !== 'undefined') {
+            if (pos.autoTrade && w.AT && typeof w.AT === 'object') {
               const _dslPnl = typeof w.calcPosPnL === 'function' ? w.calcPosPnL(pos, cur) : 0
-              w.AT.totalPnL += _dslPnl; w.AT.dailyPnL += _dslPnl
-              if (Number.isFinite(_dslPnl)) { w.AT.realizedDailyPnL += _dslPnl; w.AT.closedTradesToday++ }
-              if (_dslPnl >= 0) w.AT.wins++; else w.AT.losses++
+              if (Number.isFinite(_dslPnl)) {
+                w.AT.totalPnL = (w.AT.totalPnL || 0) + _dslPnl
+                w.AT.dailyPnL = (w.AT.dailyPnL || 0) + _dslPnl
+                w.AT.realizedDailyPnL = (w.AT.realizedDailyPnL || 0) + _dslPnl
+                w.AT.closedTradesToday = (w.AT.closedTradesToday || 0) + 1
+                if (_dslPnl >= 0) w.AT.wins = (w.AT.wins || 0) + 1; else w.AT.losses = (w.AT.losses || 0) + 1
+              }
               setTimeout(updateATStats, 50)
             }
           } else {
@@ -532,8 +538,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       // FAZA 3: IMPULSE VALIDATION trigger
       // ══════════════════════════════════════════════════════
       if (_canMoveSL) {
-        const _prDistPct = Math.abs(cur - dsl.pivotRight) / cur * 100
-        const ivConditionMet = _prDistPct >= 0.05 && (isLong
+        const _prDistPct = cur > 0 ? Math.abs(cur - (dsl.pivotRight || 0)) / cur * 100 : 0
+        const ivConditionMet = _prDistPct >= 0.05 && dsl.pivotRight != null && dsl.impulseVal != null && (isLong
           ? (dsl.pivotRight >= dsl.impulseVal)
           : (dsl.pivotRight <= dsl.impulseVal))
 
