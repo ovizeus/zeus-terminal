@@ -1015,9 +1015,15 @@ export const ZState = (() => {
   function _mergePositionsInto(targetArray: any[], serverPositions: any[], closedSet: Set<string>, label: string) {
     if (!Array.isArray(targetArray) || !Array.isArray(serverPositions)) return 0
     const existingIds = new Set(targetArray.map(function (p: any) { return String(p.id) }))
+    const existingSeqs = new Set(targetArray.filter(function (p: any) { return p._serverSeq }).map(function (p: any) { return String(p._serverSeq) }))
+    const existingSymSide = new Set(targetArray.filter(function (p: any) { return !p.closed }).map(function (p: any) { return (p.sym || p.symbol || '') + '_' + (p.side || '') }))
     let added = 0
     serverPositions.forEach(function (p: any) {
-      if (p.closed || closedSet.has(String(p.id)) || existingIds.has(String(p.id))) return
+      if (p.closed || closedSet.has(String(p.id))) return
+      if (existingIds.has(String(p.id))) return
+      if (p.seq && existingSeqs.has(String(p.seq))) return
+      var _symSide = (p.symbol || p.sym || '') + '_' + (p.side || '')
+      if (existingSymSide.has(_symSide)) return
       targetArray.push(Object.assign({}, p, { _restored: true }))
       added++
     })
@@ -1055,6 +1061,8 @@ export const ZState = (() => {
         }
         {
           const serverIds = new Set((serverSnap.positions || []).map(function (p: any) { return String(p.id) }))
+          const serverSeqs = new Set((serverSnap.positions || []).filter(function (p: any) { return p.seq }).map(function (p: any) { return String(p.seq) }))
+          const serverSymSides = new Set((serverSnap.positions || []).filter(function (p: any) { return !p.closed }).map(function (p: any) { return (p.symbol || p.sym || '') + '_' + (p.side || '') }))
           const serverClosedIds2 = new Set(Array.isArray(serverSnap.closedIds) ? serverSnap.closedIds.map(String) : [])
           const now = Date.now()
           function _cleanArray(arr: any[]) {
@@ -1063,7 +1071,7 @@ export const ZState = (() => {
               const pid = String(p.id)
               if (serverClosedIds2.has(pid) || _closedSet.has(pid)) {
                 toRemove.push(pid)
-              } else if (!p.closed && !serverIds.has(pid) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 120000) {
+              } else if (!p.closed && !serverIds.has(pid) && !(p._serverSeq && serverSeqs.has(String(p._serverSeq))) && !serverSymSides.has((p.sym || p.symbol || '') + '_' + (p.side || '')) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 120000) {
                 toRemove.push(pid)
               }
             })
