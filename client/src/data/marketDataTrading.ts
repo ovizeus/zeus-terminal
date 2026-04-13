@@ -18,8 +18,8 @@ import { renderLivePositions } from './marketDataPositions'
 import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // [8D-2C] mutable refs — reads + writes through same objects
-const TP = (window as any).TP || ((window as any).TP = {})
-const AT = (window as any).AT || ((window as any).AT = {})
+const TP = (window as any).TP
+const AT = (window as any).AT
 
 // ═══════════════════════════════════════════════════════
 // GLOBAL MODE SWITCH

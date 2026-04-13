@@ -16,11 +16,11 @@ import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
 // [8D-3] mutable refs
-const TP = (window as any).TP || ((window as any).TP = {})
-const AT = (window as any).AT || ((window as any).AT = {})
-const BM = (window as any).BM || ((window as any).BM = {})
-const BR = (window as any).BRAIN || ((window as any).BRAIN = {})
-const DSL = (window as any).DSL || ((window as any).DSL = {})
+const TP = (window as any).TP
+const AT = (window as any).AT
+const BM = (window as any).BM
+const BR = (window as any).BRAIN
+const DSL = (window as any).DSL
 
 // ADX calculator
 export function calcADX(klines: any[], period = 14) {

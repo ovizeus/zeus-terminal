@@ -12,7 +12,7 @@ import { closeDemoPos } from '../data/marketDataClose'
 import { getSymPrice } from '../data/marketDataPositions'
 const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), atLog, w.ncAdd, fn calls
 // [8D-6C2] AT = mutable ref to AT — reads + writes through same object
-const AT = (window as any).AT || ((window as any).AT = {})
+const AT = (window as any).AT
 
 // Safety configuration
 export const _SAFETY: Record<string, any> = {

@@ -63,8 +63,8 @@ export const AUB_PERF: any = {
   }
 }
 export const AUB_SIM_KEY = 'aub_sim_last'
-// Expose on window immediately so other modules can access via w.AUB at any time
-w.AUB = AUB; w.AUB_COMPAT = AUB_COMPAT; w.AUB_PERF = AUB_PERF
+// Expose on window immediately so other modules can access via w.X at any time
+w.AUB = AUB; w.AUB_COMPAT = AUB_COMPAT; w.AUB_PERF = AUB_PERF; w.AUB_SIM_KEY = AUB_SIM_KEY
 export const ARIA_STATE: any = {
   expanded: false,
   pattern: null,
@@ -1957,7 +1957,9 @@ w.SESS_CFG = SESS_CFG
 w.BRAIN = BRAIN
 w.BM = BM
 w.ARM_ASSIST = ARM_ASSIST
-// NEWS — no window mapping needed (defined in this file)
+w.ARIA_STATE = ARIA_STATE
+w.NOVA_STATE = NOVA_STATE
+w._fakeout = _fakeout
 w.ZANIM = ZANIM
 
 // Function exports to window (used globally)

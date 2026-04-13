@@ -14,7 +14,7 @@ import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { recordDailyClose } from '../engine/dailyPnl'
 const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, oiHistory, w.ZT_capArr
-const TP = (window as any).TP || ((window as any).TP = {})
+const TP = (window as any).TP
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
   try {

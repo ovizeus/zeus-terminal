@@ -13,10 +13,10 @@ import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 // [8D-4A] mutable refs
-const TP = (window as any).TP || ((window as any).TP = {})
-const AT = (window as any).AT || ((window as any).AT = {})
-const BM = (window as any).BM || ((window as any).BM = {})
-const DSL = (window as any).DSL || ((window as any).DSL = {})
+const TP = (window as any).TP
+const AT = (window as any).AT
+const BM = (window as any).BM
+const DSL = (window as any).DSL
 
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null

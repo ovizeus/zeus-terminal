@@ -15,8 +15,8 @@ import { runAutoTradeCheck , atLog } from '../trading/autotrade'
 import { liveApiSyncState } from '../trading/liveApi'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, atLog, fn calls
 // [8D-4B] mutable refs
-const AT = (window as any).AT || ((window as any).AT = {})
-const TP = (window as any).TP || ((window as any).TP = {})
+const AT = (window as any).AT
+const TP = (window as any).TP
 
 // ===== INIT ZEUS GROUPS (DOM structure) =====
 export function initZeusGroups(): void {

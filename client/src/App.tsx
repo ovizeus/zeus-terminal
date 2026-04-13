@@ -1,3 +1,5 @@
+// Force config.ts to evaluate first — sets window.BM, window.BRAIN, window.DSL etc.
+import './core/config'
 import { useEffect } from 'react'
 import { LoginPage } from './components/auth/LoginPage'
 import { Header } from './components/layout/Header'

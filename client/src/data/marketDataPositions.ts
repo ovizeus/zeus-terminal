@@ -20,10 +20,10 @@ import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from './marketDataClose'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
 // [8D-2B] mutable refs — reads + writes through same objects
-const TP = (window as any).TP || ((window as any).TP = {})
-const AT = (window as any).AT || ((window as any).AT = {})
-const BM = (window as any).BM || ((window as any).BM = {})
-const DSL = (window as any).DSL || ((window as any).DSL = {})
+const TP = (window as any).TP
+const AT = (window as any).AT
+const BM = (window as any).BM
+const DSL = (window as any).DSL
 
 function _numOrDefault(val: any, fallback: number): number { const n = parseFloat(val); return Number.isFinite(n) ? n : fallback }
 

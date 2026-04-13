@@ -16,7 +16,7 @@ import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 // [8C-3A] DSL = mutable ref to DSL
-const DSL = (window as any).DSL || ((window as any).DSL = {})
+const DSL = (window as any).DSL
 
 // ══════════════════════════════════════════════════════
 // [DSL MAGNET] Per-position toggle

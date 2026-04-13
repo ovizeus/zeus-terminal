@@ -13,10 +13,10 @@ import { renderDemoPositions , getSymPrice } from './marketDataPositions'
 import { _safePnl } from '../utils/guards'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 // [8D-2A] mutable refs — reads + writes through same objects
-const TP = (window as any).TP || ((window as any).TP = {})
-const AT = (window as any).AT || ((window as any).AT = {})
-const BM = (window as any).BM || ((window as any).BM = {})
-const DSL = (window as any).DSL || ((window as any).DSL = {})
+const TP = (window as any).TP
+const AT = (window as any).AT
+const BM = (window as any).BM
+const DSL = (window as any).DSL
 
 export function closeDemoPos(id: any, reason?: string): void {
   const numId = (typeof id === 'string') ? parseInt(id, 10) : Number(id)
