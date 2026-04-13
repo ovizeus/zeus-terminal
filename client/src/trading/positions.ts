@@ -24,7 +24,7 @@ export function onPositionOpened(pos: any, source: any): void {
     if (_d.yellowLine == null) _d.yellowLine = null
     if (_d.originalSL == null) _d.originalSL = pos.sl ?? null
     if (_d.originalTP == null) _d.originalTP = pos.tp ?? null
-    if (_d.currentSL == null) _d.currentSL = pos.sl ?? null
+    if (_d.currentSL == null) _d.currentSL = pos.sl || null
     if (!Array.isArray(_d.log)) _d.log = []
     if (_d.source == null) _d.source = source || 'unknown'
     if (_d.attachedTs == null) _d.attachedTs = Date.now()

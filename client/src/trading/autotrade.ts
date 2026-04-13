@@ -1132,13 +1132,13 @@ export function scheduleAutoClose(pos: any): void {
     // Ordinea: TP -> SL/DSL -> LIQ -> TTP
     let reason: any = null
     if (pos.side === 'LONG') {
-      if (cur >= pos.tp) reason = 'TP \u2705'
-      else if (cur <= effectiveSL) reason = w.DSL.positions[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
-      else if (cur <= pos.liqPrice) reason = '\uD83D\uDC80 LIQ'
+      if (pos.tp && cur >= pos.tp) reason = 'TP \u2705'
+      else if (effectiveSL && cur <= effectiveSL) reason = w.DSL.positions[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
+      else if (pos.liqPrice && cur <= pos.liqPrice) reason = '\uD83D\uDC80 LIQ'
     } else {
-      if (cur <= pos.tp) reason = 'TP \u2705'
-      else if (cur >= effectiveSL) reason = w.DSL.positions[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
-      else if (cur >= pos.liqPrice) reason = '\uD83D\uDC80 LIQ'
+      if (pos.tp && cur <= pos.tp) reason = 'TP \u2705'
+      else if (effectiveSL && cur >= effectiveSL) reason = w.DSL.positions[String(pos.id)]?.active ? '\uD83C\uDFAF DSL HIT \uD83D\uDED1' : 'SL \uD83D\uDED1'
+      else if (pos.liqPrice && cur >= pos.liqPrice) reason = '\uD83D\uDC80 LIQ'
     }
 
     // [v119-p18] TTP — ruleaza DOAR daca TP/SL/LIQ nu au decis deja

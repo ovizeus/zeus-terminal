@@ -167,7 +167,8 @@ export async function liveApiSyncState(): Promise<any> {
     positions.forEach(function (p: any) { _newSymSides[p.symbol + '_' + p.side] = true })
     Object.keys(_existingById).forEach(function (eid) {
       var gone = _existingById[eid]
-      var _goneSymSide = (gone.sym || '') + '_' + (gone.side || '')
+      if (!gone || !gone.sym || !gone.side) return
+      var _goneSymSide = gone.sym + '_' + gone.side
       if (_newSymSides[_goneSymSide]) return
       if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SYNC] Position gone from exchange: ' + eid, { id: eid, sym: gone.sym, side: gone.side })
       if (typeof w.DSL !== 'undefined' && w.DSL.positions) delete w.DSL.positions[String(gone.id)]
