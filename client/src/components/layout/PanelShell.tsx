@@ -15,7 +15,7 @@ import { PM_render } from '../../engine/postMortem'
 import { renderPnlLab } from '../../ui/panels'
 import { aubRefreshAll } from '../../engine/aub'
 import { _actfeedRender, _renderDlog } from '../../core/bootstrapError'
-import { _cmdSetOpen, _cmdRender } from '../../core/bootstrapPanels'
+import { _cmdSetOpen, _cmdRender, _fetchExposure } from '../../core/bootstrapPanels'
 import { _srRenderStats } from '../../core/config'
 // ── Dock page panels (1:1 from old Zeus strips → page views) ──
 import { AnalysisSections } from '../analysis/AnalysisSections'
@@ -160,6 +160,9 @@ export function PanelShell() {
   useEffect(() => {
     if (activeModal === 'decisionlog') {
       setTimeout(() => { try { _renderDlog() } catch (e) { console.warn('[ZEUS] Dlog render error:', e) } }, 50)
+    }
+    if (activeModal === 'exposure') {
+      setTimeout(() => { try { _fetchExposure() } catch (e) { console.warn('[ZEUS] Exposure render error:', e) } }, 50)
     }
     if (activeModal === 'cmdpalette') {
       _cmdSetOpen(true)

@@ -14,7 +14,7 @@ const w = window as any
 // ===== EXPOSURE DASHBOARD =====
 let _exposureOpen = false
 export function _toggleExposurePanel(): void { _exposureOpen = !_exposureOpen; const panel = document.getElementById('exposurePanel'); if (!panel) return; panel.style.display = _exposureOpen ? 'flex' : 'none'; if (_exposureOpen) _fetchExposure() }
-function _fetchExposure(): void {
+export function _fetchExposure(): void {
   const content = document.getElementById('exposureContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333">Loading...</div>'
   fetch('/api/exposure', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {

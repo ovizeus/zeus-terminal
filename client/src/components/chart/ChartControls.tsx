@@ -255,7 +255,7 @@ export function ChartControls() {
               </optgroup>
             ))}
           </select>
-          <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => { openModal('exposure'); (window as any)._fetchExposure?.() }}>EXP</button>
+          <button className="tfb ztf-sibling expo-toggle-btn" id="expoToggleBtn" title="Exposure Dashboard" onClick={() => openModal('exposure')}>EXP</button>
         </div>
 
         {/* Exposure inline panel (hidden by default) */}
