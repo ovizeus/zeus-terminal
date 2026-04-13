@@ -52,6 +52,11 @@ import { AdminModal } from '../modals/AdminModal'
 import { CommandPalette } from '../modals/CommandPalette'
 import { ExposurePanel } from '../modals/ExposurePanel'
 import { DecisionLogPanel } from '../modals/DecisionLogPanel'
+import { MissedTradesPanel } from '../modals/MissedTradesPanel'
+import { SessionReviewPanel } from '../modals/SessionReviewPanel'
+import { RegimeHistoryPanel } from '../modals/RegimeHistoryPanel'
+import { PerformancePanel } from '../modals/PerformancePanel'
+import { ComparePanel } from '../modals/ComparePanel'
 import { Footer } from './Footer'
 
 /*
@@ -340,6 +345,11 @@ export function PanelShell() {
       <CommandPalette visible={activeModal === 'cmdpalette'} onClose={closeModal} />
       <ExposurePanel visible={activeModal === 'exposure'} onClose={closeModal} />
       <DecisionLogPanel visible={activeModal === 'decisionlog'} onClose={closeModal} />
+      <MissedTradesPanel visible={activeModal === 'missed'} onClose={closeModal} />
+      <SessionReviewPanel visible={activeModal === 'session'} onClose={closeModal} />
+      <RegimeHistoryPanel visible={activeModal === 'regime'} onClose={closeModal} />
+      <PerformancePanel visible={activeModal === 'performance'} onClose={closeModal} />
+      <ComparePanel visible={activeModal === 'compare'} onClose={closeModal} />
 
       {/* Pull-to-refresh indicator (Bybit-style branded) */}
       <div id="ptr-indicator">

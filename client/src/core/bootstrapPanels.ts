@@ -68,11 +68,11 @@ const _CMD_ACTIONS: any[] = [
   { cat: 'symbol', label: 'SOL \u2014 Solana', icon: '\u25CE', action: function () { (typeof w.setSymbol === 'function' ? w.setSymbol : setSymbol)('SOLUSDT') }, keys: 'sol solana' },
   { cat: 'nav', label: 'Open Settings', icon: '\u2699', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'settings' })); hubPopulate() }, keys: 'settings config preferences' },
   { cat: 'nav', label: 'Open Decision Log', icon: '\uD83D\uDCCB', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'decisionlog' })) }, keys: 'decisions dlog brain' },
-  { cat: 'nav', label: 'View Missed Trades', icon: '\uD83D\uDEAB', action: function () { _showMissedTrades() }, keys: 'missed trades blocked' },
-  { cat: 'nav', label: 'Session Review', icon: '\uD83D\uDCD1', action: function () { _showSessionReview() }, keys: 'session review summary today' },
-  { cat: 'nav', label: 'Regime History', icon: '\uD83C\uDF10', action: function () { _showRegimeHistory() }, keys: 'regime history timeline' },
-  { cat: 'nav', label: 'Performance Dashboard', icon: '\uD83C\uDFC6', action: function () { _showPerformance() }, keys: 'performance stats equity' },
-  { cat: 'nav', label: 'Strategy Comparison', icon: '\u2696', action: function () { _showCompare() }, keys: 'compare strategy' },
+  { cat: 'nav', label: 'View Missed Trades', icon: '\uD83D\uDEAB', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'missed' })); setTimeout(_showMissedTrades, 50) }, keys: 'missed trades blocked' },
+  { cat: 'nav', label: 'Session Review', icon: '\uD83D\uDCD1', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'session' })); setTimeout(_showSessionReview, 50) }, keys: 'session review summary today' },
+  { cat: 'nav', label: 'Regime History', icon: '\uD83C\uDF10', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'regime' })); setTimeout(_showRegimeHistory, 50) }, keys: 'regime history timeline' },
+  { cat: 'nav', label: 'Performance Dashboard', icon: '\uD83C\uDFC6', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'performance' })); setTimeout(function () { _showPerformance() }, 50) }, keys: 'performance stats equity' },
+  { cat: 'nav', label: 'Strategy Comparison', icon: '\u2696', action: function () { document.dispatchEvent(new CustomEvent('zeus:openModal', { detail: 'compare' })); setTimeout(_showCompare, 50) }, keys: 'compare strategy' },
   { cat: 'action', label: 'Toggle AutoTrade', icon: '\u26A1', action: function () { if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade() }, keys: 'at autotrade toggle' },
   { cat: 'action', label: 'Toggle Fullscreen', icon: '\u26F6', action: function () { toggleFS() }, keys: 'fullscreen chart' },
   { cat: 'info', label: 'Keyboard Shortcuts', icon: '\u2328', action: function () { document.dispatchEvent(new KeyboardEvent('keydown', { key: '?' })) }, keys: 'hotkeys shortcuts help' },
@@ -106,7 +106,6 @@ document.addEventListener('click', function (e: any) { const panel = document.ge
 
 // ===== MISSED TRADES =====
 export function _showMissedTrades(): void {
-  const panel = document.getElementById('missedPanel'); if (!panel) return; panel.style.display = 'flex'
   const content = document.getElementById('missedContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:16px">Loading...</div>'
   fetch('/api/missed-trades?limit=100', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
@@ -122,7 +121,6 @@ export function _showMissedTrades(): void {
 
 // ===== SESSION REVIEW =====
 export function _showSessionReview(): void {
-  const panel = document.getElementById('sessionPanel'); if (!panel) return; panel.style.display = 'flex'
   const content = document.getElementById('sessionContent'); const dateEl = document.getElementById('sessionDate')
   if (!content) return; content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
   fetch('/api/session-review', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
@@ -146,7 +144,6 @@ export function _showSessionReview(): void {
 
 // ===== REGIME HISTORY =====
 export function _showRegimeHistory(): void {
-  const panel = document.getElementById('regimePanel'); if (!panel) return; panel.style.display = 'flex'
   const content = document.getElementById('regimeContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
   fetch('/api/regime-history?limit=200', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
@@ -162,7 +159,7 @@ export function _showRegimeHistory(): void {
 // ===== PERFORMANCE =====
 let _perfMode = ''
 export function _showPerformance(mode?: string): void {
-  const panel = document.getElementById('perfPanel'); if (!panel) return; panel.style.display = 'flex'; _perfMode = mode || ''
+  _perfMode = mode || ''
   const tabs = document.getElementById('perfModeTabs') as any
   if (tabs && !tabs.dataset.init) { tabs.dataset.init = '1'; ['all', 'demo', 'live'].forEach(function (m) { const btn = document.createElement('button'); btn.className = 'perf-tab' + (m === '' || m === 'all' ? ' active' : ''); btn.textContent = m === 'all' ? 'ALL' : m.toUpperCase(); btn.onclick = function () { tabs.querySelectorAll('.perf-tab').forEach(function (b: any) { b.classList.remove('active') }); btn.classList.add('active'); _showPerformance(m === 'all' ? '' : m) }; tabs.appendChild(btn) }) }
   const content = document.getElementById('perfContent'); if (!content) return
@@ -180,7 +177,6 @@ export function _showPerformance(mode?: string): void {
 
 // ===== STRATEGY COMPARISON =====
 export function _showCompare(): void {
-  const panel = document.getElementById('comparePanel'); if (!panel) return; panel.style.display = 'flex'
   const content = document.getElementById('compareContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
   fetch('/api/compare', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
