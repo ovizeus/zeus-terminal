@@ -9,6 +9,13 @@ import WatchlistBar from './WatchlistBar'
 import { ZeusDock } from './ZeusDock'
 import { PageView } from './PageView'
 import { ModeBar } from './ModeBar'
+// ── Legacy panel init functions (1:1 from old openPageView in pageview.ts) ──
+import { _aresRender } from '../../engine/aresUI'
+import { PM_render } from '../../engine/postMortem'
+import { renderPnlLab } from '../../ui/panels'
+import { aubRefreshAll } from '../../engine/aub'
+import { _actfeedRender, _renderDlog } from '../../core/bootstrapError'
+import { _srRenderStats } from '../../core/config'
 // ── Dock page panels (1:1 from old Zeus strips → page views) ──
 import { AnalysisSections } from '../analysis/AnalysisSections'
 import { AutoTradePanel } from '../dock/AutoTradePanel'
@@ -80,19 +87,61 @@ const DOCK_TITLES: Record<string, string> = {
 }
 
 export function PanelShell() {
-  const [dockActive, setDockActive] = useState<string | null>(null)
+  const [dockActive, setDockActive] = useState<string | null>(() => {
+    try { return sessionStorage.getItem('zeusDock') || null } catch { return null }
+  })
   const activeModal = useUiStore((s) => s.activeModal)
   const closeModal = useUiStore((s) => s.closeModal)
   const resolvedEnv = useUiStore((s) => s.resolvedEnv)
 
   function handleDockClick(id: string) {
     if (id === 'more') return
-    setDockActive(dockActive === id ? null : id)
+    const next = dockActive === id ? null : id
+    setDockActive(next)
+    try { if (next) sessionStorage.setItem('zeusDock', next); else sessionStorage.removeItem('zeusDock') } catch {}
   }
 
   function closePageView() {
     setDockActive(null)
+    try { sessionStorage.removeItem('zeusDock') } catch {}
   }
+
+  // ── Call legacy panel init functions when a dock panel opens ──
+  // 1:1 from openPageView() in pageview.ts — each panel has specific
+  // render/refresh functions that must run to populate content.
+  useEffect(() => {
+    if (!dockActive) return
+    const w = window as any
+    const timer = setTimeout(() => {
+      try {
+        switch (dockActive) {
+          case 'ares': _aresRender(); break
+          case 'postmortem': PM_render(); break
+          case 'pnllab': renderPnlLab(); break
+          case 'aub': aubRefreshAll(); break
+          case 'activity': _actfeedRender(); break
+          case 'sigreg':
+            if (typeof w._srRenderList === 'function') w._srRenderList()
+            _srRenderStats()
+            break
+          case 'teacher':
+            if (typeof w.initTeacher === 'function') w.initTeacher()
+            break
+          case 'mtf':
+            if (typeof w.renderMTFPanel === 'function') w.renderMTFPanel()
+            break
+        }
+      } catch (e) { console.warn('[ZEUS] Panel init error:', dockActive, e) }
+    }, 50) // short delay so CSS class toggle applies first
+    return () => clearTimeout(timer)
+  }, [dockActive])
+
+  // ── Call legacy render functions when modals open ──
+  useEffect(() => {
+    if (activeModal === 'decisionlog') {
+      setTimeout(() => { try { _renderDlog() } catch (e) { console.warn('[ZEUS] Dlog render error:', e) } }, 50)
+    }
+  }, [activeModal])
 
   // ── Pull-to-refresh — content slides down, header stays fixed ──
   // Transform ONLY on <main> (content). Header NEVER moves.

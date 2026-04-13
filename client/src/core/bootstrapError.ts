@@ -88,7 +88,7 @@ export function _toggleDecisionPanel(): void {
   panel.style.display = _dlogOpen ? 'flex' : 'none'; if (_dlogOpen) _renderDlog()
 }
 
-function _renderDlog(): void {
+export function _renderDlog(): void {
   if (typeof w.DLog === 'undefined') return
   const filtersEl = document.getElementById('dlogFilters')
   if (filtersEl && !filtersEl.dataset.init) {
@@ -134,7 +134,7 @@ const _ACTFEED_ICONS: any = { at_entry: '\uD83D\uDCE5', at_block: '\uD83D\uDEAB'
 
 export function _actfeedToggle(): void { _actfeedOpen = !_actfeedOpen; const panel = document.getElementById('actfeed-panel'); if (panel) panel.style.display = _actfeedOpen ? '' : 'none'; if (_actfeedOpen) _actfeedRender() }
 
-function _actfeedRender(): void {
+export function _actfeedRender(): void {
   if (typeof w.DLog === 'undefined') return; const listEl = document.getElementById('actfeedList'); if (!listEl) return
   const important = ['at_entry', 'at_block', 'at_gate', 'regime', 'kill_switch', 'dsl_move', 'dsl_close', 'fusion']
   const all = w.DLog.entries(500); const filtered = all.filter(function (e: any) { return important.indexOf(e.cat) !== -1 }).slice(0, 50)
