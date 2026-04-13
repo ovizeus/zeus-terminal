@@ -104,8 +104,16 @@ export const FetchLock = w.FetchLock = w.FetchLock || (function () {
 })()
 
 // ── 4. PRICE INGRESS ─────────────────────────────────────────────
-export const ingestPrice = w.ingestPrice = w.ingestPrice || function (_raw: any, _source: any) {
+// [FIX] Heartbeat tracking built directly into ingestPrice — eliminates
+// the wrapper in bootstrapMisc.ts that caused module-order bugs with Rolldown.
+// bootstrapMisc.ts heartbeat interval reads w._hbLastTick / w._hbArmed instead.
+w._hbLastTick = 0
+w._hbArmed = false
+export const ingestPrice = w.ingestPrice = function (_raw: any, _source: any) {
+  w._hbLastTick = Date.now()
+  w._hbArmed = true
   const p = +_raw
+  if (!w._ipLogDone) { w._ipLogDone = true; console.log('[PRICE] ingestPrice called: raw=', _raw, 'p=', p, 'S.price before=', w.S?.price) }
   if (!Number.isFinite(p) || p <= 0) return false
   if (!_isPriceSane(p)) return false
   if (typeof w.S !== 'undefined') {

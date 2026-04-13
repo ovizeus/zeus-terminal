@@ -260,6 +260,18 @@ export function AnalysisSections() {
         </div>
       </div>
 
+      {/* ===== SIGNAL SCANNER SECTION ===== */}
+      <div className="sec sig-scan" id="sigScanSec">
+        <div className="sig-hdr">
+          <span>SCANNER DE SEMNALE</span>
+          <span id="sigScanTime" style={{ fontSize: '7px', color: 'var(--dim)' }}></span>
+        </div>
+        <div id="megaSigBox"></div>
+        <div className="sig-grid" id="sigGrid">
+          <div className="sig-row" style={{ justifyContent: 'center', padding: '14px', color: 'var(--dim)', fontSize: '8px' }}>Se calculeaza semnale...</div>
+        </div>
+      </div>
+
       {/* ===== DAY / HOUR WIN RATE FILTER ===== */}
       <div className="sec" id="dhfSec">
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
@@ -722,6 +734,112 @@ export function AnalysisSections() {
 
       {/* ===== TICKER WIDGET ===== */}
       {/* ===== DEVELOPER MODE — TEST HARNESS ===== */}
+      {/* ===== DEEP DIVE — MARKET CONTEXT ===== */}
+      <div className="sec" id="deepdive-sec">
+        <div className="slbl" style={{ justifyContent: 'space-between' }}>
+          <span>DEEP DIVE &mdash; MARKET CONTEXT</span>
+          <span id="deepdive-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
+        </div>
+        <div className="deepdive-content" id="deepdive-content">
+          <div className="dd-loading">Waiting for market data...</div>
+        </div>
+      </div>
+
+      {/* ===== SCENARIO ENGINE ===== */}
+      <div className="sec" id="scenario-sec">
+        <div className="slbl" style={{ justifyContent: 'space-between' }}>
+          <span>SCENARIO ENGINE</span>
+          <span id="scenario-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
+        </div>
+        <div className="qexit-bar-wrap" id="qexit-risk-strip" style={{ display: 'none' }}>
+          <div className="qexit-bar-row">
+            <span className="qexit-bar-label">EXIT RISK</span>
+            <div className="qexit-bar-track">
+              <div className="qexit-bar-fill" id="qexit-bar-fill" style={{ width: '0%', background: '#556677' }}></div>
+            </div>
+            <span className="qexit-risk-val" id="qexit-risk-val" style={{ color: '#556677' }}>0</span>
+            <span className="qexit-action HOLD" id="qexit-action-badge">HOLD</span>
+          </div>
+          <div className="qexit-sigs" id="qexit-sigs-detail"></div>
+          <div className="qexit-advisory" id="qexit-advisory">Advisory mode &mdash; auto-exec disabled.</div>
+        </div>
+        <div className="scenario-content" id="scenario-content">
+          <div style={{ textAlign: 'center', padding: '14px', color: 'var(--dim)', fontSize: '10px', letterSpacing: '1px' }}>
+            Waiting for market data...
+          </div>
+        </div>
+      </div>
+
+      {/* ===== CYCLE INTELLIGENCE ===== */}
+      <div className="sec" id="macro-sec">
+        <div className="slbl" style={{ justifyContent: 'space-between' }}>
+          <span>CYCLE INTELLIGENCE</span>
+          <span id="macro-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
+        </div>
+        <div style={{ padding: '8px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+            <span id="macro-phase-badge" style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '2px', background: '#0a1a2a', border: '1px solid #2a3a4a', color: '#f0c040', letterSpacing: '1px' }}>NEUTRAL</span>
+            <span id="macro-conf" style={{ fontSize: '9px', color: 'var(--dim)' }}>conf &mdash;</span>
+            <span id="macro-adapt-status" style={{ fontSize: '8px', color: '#3a4a5a', letterSpacing: '1px' }}>ADAPT OFF</span>
+          </div>
+          <div style={{ marginBottom: '6px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8px', color: 'var(--dim)', marginBottom: '2px' }}>
+              <span>COMPOSITE SCORE</span><span id="macro-composite-val">0</span>
+            </div>
+            <div style={{ height: '5px', background: '#0d1520', borderRadius: '3px', overflow: 'hidden' }}>
+              <div id="macro-composite-bar" style={{ height: '100%', borderRadius: '3px', background: '#f0c040', width: '0%', transition: 'width .6s ease' }}></div>
+            </div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '3px', fontSize: '9px', color: '#6a8090', marginBottom: '6px' }}>
+            <span>Regime: <b id="macro-cycle-val" style={{ color: '#9ab' }}>&mdash;</b></span>
+            <span>Flow: <b id="macro-flow-val" style={{ color: '#9ab' }}>&mdash;</b></span>
+            <span>Sentiment: <b id="macro-sent-val" style={{ color: '#9ab' }}>&mdash;</b></span>
+            <span>Slope: <b id="macro-slope-val" style={{ color: '#9ab' }}>&mdash;</b></span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '9px', borderTop: '1px solid #0a1a2a', paddingTop: '5px' }}>
+            <span style={{ color: 'var(--dim)' }}>SIZE MULT</span>
+            <span id="macro-size-mult" style={{ color: '#f0c040', fontWeight: 700 }}>&times;1.00</span>
+            <span style={{ color: 'var(--dim)' }}>PERF MULT</span>
+            <span id="macro-perf-mult" style={{ color: '#9ab' }}>&times;1.00</span>
+          </div>
+          <div style={{ marginTop: '6px', borderTop: '1px solid #0a1a2a', paddingTop: '5px' }}>
+            <div style={{ fontSize: '8px', letterSpacing: '1.5px', color: 'var(--dim)', marginBottom: '4px' }}>PERFORMANCE BY REGIME</div>
+            <div id="macro-perf-table" style={{ fontSize: '10px', color: '#6a8090', lineHeight: 1.8 }}></div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== ADAPTIVE CONTROL — hidden here, rendered inside dock AdaptivePanel ===== */}
+      <div className="sec" id="adaptive-sec" style={{ display: 'none' }}>
+        <div className="slbl" style={{ justifyContent: 'space-between' }}>
+          <span>ADAPTIVE CONTROL</span>
+          <span id="adaptive-last-upd" style={{ fontSize: '8px', color: 'var(--dim)' }}></span>
+        </div>
+        <div style={{ padding: '8px 12px' }}>
+          <div style={{ marginBottom: '8px' }}>
+            <button id="adaptiveToggleBtn" onClick={() => (window as any).toggleAdaptive?.()} style={{ width: '100%', padding: '6px 10px', fontSize: '10px', fontFamily: 'var(--ff)', letterSpacing: '1px', background: '#0a1220', border: '1px solid #2a3a4a', color: '#778899', borderRadius: '3px', cursor: 'pointer', transition: 'all .2s' }}>
+              ADAPTIVE OFF
+            </button>
+            <div style={{ fontSize: '8px', color: 'var(--dim)', marginTop: '4px', lineHeight: 1.6 }}>
+              OFF = toți multiplieri &times;1.00, engine nu citește nimic.<br />
+              Min 30 trades/bucket pentru a activa multiplicatorii.
+            </div>
+          </div>
+          <div id="adaptive-mults-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '3px', fontSize: '9px', background: '#0a1520', border: '1px solid #1a2a3a', borderRadius: '3px', padding: '6px 10px', marginBottom: '8px' }}>
+            <span style={{ color: 'var(--dim)' }}>ENTRY</span><span style={{ color: '#778899', fontWeight: 700 }}>&times;1.00</span>
+            <span style={{ color: 'var(--dim)' }}>SIZE</span><span style={{ color: '#778899', fontWeight: 700 }}>&times;1.00</span>
+            <span style={{ color: 'var(--dim)' }}>EXIT</span><span style={{ color: '#778899', fontWeight: 700 }}>&times;1.00</span>
+          </div>
+          <div style={{ fontSize: '8px', letterSpacing: '1.5px', color: 'var(--dim)', marginBottom: '3px' }}>BUCKETS (regime|profile|vol)</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 42px 42px 48px', gap: '3px', fontSize: '8px', color: '#445566', marginBottom: '3px', padding: '0 0 2px 0', borderBottom: '1px solid #1a2530' }}>
+            <span>BUCKET</span><span>TRADES</span><span>WR</span><span>MULT</span>
+          </div>
+          <div id="adaptive-bucket-table" style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '8px', color: '#6a8090' }}>
+            <div style={{ color: 'var(--dim)', padding: '4px 0' }}>Niciun trade cu context încă.</div>
+          </div>
+        </div>
+      </div>
+
       <div className="sec" id="dev-sec" style={{ display: 'none' }}>
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
           <span>DEVELOPER MODE — TEST HARNESS</span>

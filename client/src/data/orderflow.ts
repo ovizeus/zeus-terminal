@@ -1,7 +1,7 @@
 import { toast } from './marketDataHelpers'
 import { computeFusionDecision , atLog } from '../trading/autotrade'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
-import { _ucMarkDirty, _userCtxPush, ZT_safeInterval } from '../core/config'
+import { _ucMarkDirty, ZT_safeInterval } from '../core/config'
 /**
  * Zeus Terminal — Orderflow (ported from public/js/data/orderflow.js)
  * Orderflow Modules P1-P15 + Patch Layer v122.3
@@ -2081,7 +2081,6 @@ export function _initOrderflowHUD() {
     _state.expanded = !_state.expanded
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
     _ucMarkDirty('ofHud')
-    _userCtxPush()
     _render()
   }
 
@@ -2106,7 +2105,6 @@ export function _initOrderflowHUD() {
     _state.debugUntil = _state.debug ? Date.now() + 60000 : 0
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
     _ucMarkDirty('ofHud')
-    _userCtxPush()
     _render()
     console.log('[HUD] DBG mode', _state.debug ? 'ON (60s)' : 'OFF')
   }
@@ -2151,7 +2149,6 @@ export function _initOrderflowHUD() {
       ;(anc as any).style.opacity = '1'
       try { localStorage.setItem(ANCH_POS_KEY, String(parseInt((anc as any).style.left))) } catch (_) { }
       _ucMarkDirty('ofHud')
-      _userCtxPush()
     })
   }
 
@@ -2218,7 +2215,6 @@ export function _initOrderflowHUD() {
     const pos = { top: r.top, left: r.left }
     try { localStorage.setItem(POS_KEY, JSON.stringify(pos)) } catch (_) { }
     _ucMarkDirty('ofHud')
-    _userCtxPush()
     console.log('[HUD] pos saved', pos)
   }
 
@@ -2246,11 +2242,12 @@ export function _initOrderflowHUD() {
 
   function _create() {
     if (_hudEl) return
+    const mount = document.getElementById('flow-panel-body')
+    if (!mount) return // React hasn't rendered FlowPanel yet — retry later
     _hudEl = document.createElement('div')
     _hudEl.id = 'of-hud'
     _hudEl.addEventListener('pointerdown', _onPointerDown)
     _hudEl.addEventListener('pointerup', _onPointerUp)
-    const mount = document.getElementById('flow-panel-body') || document.body
     mount.appendChild(_hudEl)
   }
 
@@ -2258,7 +2255,6 @@ export function _initOrderflowHUD() {
     _state.visible = !_state.visible
     try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
     _ucMarkDirty('ofHud')
-    _userCtxPush()
     if (!_hudEl) _create()
     _hudEl.classList.toggle('hidden', !_state.visible)
     if (_state.visible) {
@@ -2281,7 +2277,6 @@ export function _initOrderflowHUD() {
       _state.visible = true
       try { localStorage.setItem(LS_KEY, JSON.stringify(_state)) } catch (_) { }
       _ucMarkDirty('ofHud')
-      _userCtxPush()
       if (!_hudEl) _create()
       _hudEl.classList.remove('hidden')
       if (!_interval) _interval = w.Intervals.set('of_hud', _render, 1000)
@@ -2291,6 +2286,11 @@ export function _initOrderflowHUD() {
 
   function _init() {
     _create()
+    if (!_hudEl) {
+      // flow-panel-body not in DOM yet (React hasn't rendered) — retry
+      setTimeout(_init, 500)
+      return
+    }
     _state.visible = true
     _hudEl.classList.remove('hidden')
     _interval = w.Intervals.set('of_hud', _render, 1000)

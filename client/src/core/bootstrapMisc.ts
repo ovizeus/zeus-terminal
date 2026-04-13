@@ -128,16 +128,15 @@ export function masterReset(): void {
 }
 
 // ===== HEARTBEAT RECONNECT =====
+// [FIX] No longer wraps w.ingestPrice — that caused module-order bugs with Rolldown.
+// Heartbeat tracking is now built into ingestPrice in managers.ts (w._hbLastTick, w._hbArmed).
 ;(function () {
-  let _lastTick = 0; let _armed = false
-  const _origIngest = w.ingestPrice
-  w.ingestPrice = function (raw: any, source: any) { _lastTick = Date.now(); _armed = true; return _origIngest ? _origIngest(raw, source) : false }
   setInterval(function () {
-    if (!_armed) return
-    if (Date.now() - _lastTick > 10000) {
+    if (!w._hbArmed) return
+    if (Date.now() - (w._hbLastTick || 0) > 10000) {
       console.warn('[ZEUS] Heartbeat: no tick for 10s \u2014 forcing reconnect')
       try { connectBNB(); connectWatchlist() } catch (e) { console.error('[ZEUS] Reconnect error', e) }
-      _lastTick = Date.now()
+      w._hbLastTick = Date.now()
     }
   }, 5000)
 })()

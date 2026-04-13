@@ -17,6 +17,7 @@ import { _syncDslAssistUI } from '../trading/dsl'
 import { RegimeEngine } from './regime'
 import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
+import { detectRegimeEnhanced } from './regimeEnhanced'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
 
@@ -1283,7 +1284,16 @@ export function onNeuronScanUpdate(sym: any): void {
 
 // Brain Cockpit render (massive)
 export function renderBrainCockpit(): void {
-  if (!getPrice()) return
+  const _price = getPrice()
+  if (!_price) {
+    // [FIX] Still render safety gates + basic UI even without price
+    // Price arrives after WS connects — don't block entire cockpit
+    try {
+      const _ledEl = el('brainStateBadge')
+      if (_ledEl) { _ledEl.textContent = 'WAITING FOR FEED'; _ledEl.className = 'znc-state scanning' }
+    } catch (_) {}
+    return
+  }
   const klines = getKlines()
   const dir = (getSignalData().bullCount) >= (getSignalData().bearCount) ? 'long' : 'short'
 
@@ -1601,7 +1611,6 @@ export function renderBrainCockpit(): void {
     if (ledEl) ledEl.className = 'znc-led ' + (pass ? 'ok' : 'fail')
     if (lblEl) { lblEl.textContent = txt; lblEl.className = 'znc-gate-lbl ' + (pass ? 'ok' : 'fail') }
   })
-
   // ── CONTEXT LED ROWS ──
   const mtfTFs = ['15m', '1h', '4h']
   const mtfAlignCount = mtfTFs.filter(tf => BM.mtf[tf] === (dir === 'long' ? 'bull' : 'bear')).length

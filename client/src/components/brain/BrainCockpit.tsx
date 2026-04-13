@@ -1,13 +1,14 @@
-import { useRef, useEffect } from 'react'
-import { useBrainStore } from '../../stores'
+import { useRef, useEffect, memo } from 'react'
 import { resetProtectMode } from '../../engine/brain'
 
-/** 1:1 port of the ZEUS NEURAL CORE panel from public/index.html lines 1127-1570 */
-export function BrainCockpit() {
-  const brain = useBrainStore((s) => s.brain)
-  const brainMode = useBrainStore((s) => s.brainMode) as 'assist' | 'auto'
-  const profile = brain.profile || 'fast'
-  const dslMode = '' // DSL mode read will be migrated in Phase 6
+/**
+ * 1:1 port of the ZEUS NEURAL CORE panel from public/index.html lines 1127-1570
+ *
+ * IMPORTANT: This is a STATIC DOM SHELL. All visual updates (safety gates, threat
+ * circles, gauges, regime badges, etc.) are done by legacy brain.ts via getElementById.
+ * Do NOT subscribe to React stores here — any re-render wipes out those DOM writes.
+ */
+export const BrainCockpit = memo(function BrainCockpit() {
   const particlesRef = useRef<HTMLDivElement>(null)
 
   // Spawn particles on mount
@@ -48,23 +49,23 @@ export function BrainCockpit() {
         </div>
       </div>
 
-      {/* MODE / PROFILE BAR */}
+      {/* MODE / PROFILE BAR — static shell, legacy JS manages active states via getElementById */}
       <div className="znc-mbar">
         <span className="znc-lbl">MODE:</span>
-        <button id="bmode-assist" className={`znc-mbtn${brainMode === 'assist' ? ' act-assist' : ''}`} onClick={() => (window as any).setBrainMode?.('assist')}>ASSIST</button>
-        <button id="bmode-auto" className={`znc-mbtn${brainMode === 'auto' ? ' act-auto' : ''}`} onClick={() => (window as any).setBrainMode?.('auto')}>AUTO</button>
+        <button id="bmode-assist" className="znc-mbtn act-assist" onClick={() => (window as any).setBrainMode?.('assist')}>ASSIST</button>
+        <button id="bmode-auto" className="znc-mbtn" onClick={() => (window as any).setBrainMode?.('auto')}>AUTO</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">PROFILE:</span>
-        <button id="prof-fast" className={`znc-pbtn${profile === 'fast' ? ' act-fast' : ''}`} onClick={() => (window as any).setProfile?.('fast')}>FAST</button>
-        <button id="prof-swing" className={`znc-pbtn${profile === 'swing' ? ' act-swing' : ''}`} onClick={() => (window as any).setProfile?.('swing')}>SWING</button>
-        <button id="prof-defensive" className={`znc-pbtn${profile === 'defensive' ? ' act-defensive' : ''}`} onClick={() => (window as any).setProfile?.('defensive')}>DEF</button>
+        <button id="prof-fast" className="znc-pbtn act-fast" onClick={() => (window as any).setProfile?.('fast')}>FAST</button>
+        <button id="prof-swing" className="znc-pbtn" onClick={() => (window as any).setProfile?.('swing')}>SWING</button>
+        <button id="prof-defensive" className="znc-pbtn" onClick={() => (window as any).setProfile?.('defensive')}>DEF</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
-        <button id="dsl-atr" className={`znc-dbtn${dslMode === 'atr' ? ' act-dsl-atr' : ''}`} onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
-        <button id="dsl-fast" className={`znc-dbtn${dslMode === 'fast' ? ' act-dsl-fast' : ''}`} onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
-        <button id="dsl-swing" className={`znc-dbtn${dslMode === 'swing' ? ' act-dsl-swing' : ''}`} onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
-        <button id="dsl-defensive" className={`znc-dbtn${dslMode === 'defensive' ? ' act-dsl-defensive' : ''}`} onClick={() => (window as any).setDslMode?.('defensive')}>DEF</button>
-        <button id="dsl-tp" className={`znc-dbtn${dslMode === 'tp' ? ' act-dsl-tp' : ''}`} onClick={() => (window as any).setDslMode?.('tp')}>TP</button>
+        <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
+        <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
+        <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
+        <button id="dsl-defensive" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('defensive')}>DEF</button>
+        <button id="dsl-tp" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('tp')}>TP</button>
       </div>
 
       {/* PROTECT BANNER */}
@@ -404,4 +405,4 @@ export function BrainCockpit() {
 
     </div>
   )
-}
+})
