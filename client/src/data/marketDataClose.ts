@@ -23,7 +23,8 @@ export function closeDemoPos(id: any, reason?: string): void {
     return
   }
   const pos = TP.demoPositions[idx]
-  if (pos.closed || pos.status === 'closing') return // [FIX H3]
+  if (pos.closed || pos.status === 'closing' || pos._closeInFlight) return // [FIX H3] + atomic guard
+  pos._closeInFlight = true
   pos.closed = true
   pos.status = 'closing' // [FIX H3]
 
@@ -84,7 +85,8 @@ export function closeDemoPos(id: any, reason?: string): void {
     mode: pos.mode || ((typeof AT !== 'undefined' && AT._serverMode) || 'demo'),
   })
 
-  TP.demoPositions.splice(idx, 1)
+  // [FIX] Removed splice here — filter at line 100 handles cleanup safely
+  // (double-splice caused wrong position removal in concurrent close scenarios)
 
   // Track recently closed IDs
   w._zeusRecentlyClosed = w._zeusRecentlyClosed || []

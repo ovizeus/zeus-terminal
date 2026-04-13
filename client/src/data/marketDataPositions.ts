@@ -316,6 +316,9 @@ export function closeLivePos(id: any, reason?: string): void {
     liveApiClosePosition(pos).then(function (res: any) {
       pos.closed = true; pos.status = 'closed'
       const fillPrice = (res && parseFloat(res.avgPrice)) || cur; const fillPnl = calcPosPnL(pos, fillPrice); pos.pnl = fillPnl
+      // Restore margin + PnL to live balance (1:1 with closeDemoPos line 51)
+      TP.liveBalance = (TP.liveBalance || 0) + pos.size + fillPnl
+      if (TP.liveBalance < 0) TP.liveBalance = 0
       const finalIdx = TP.livePositions.findIndex((p: any) => p.id === pos.id); if (finalIdx >= 0) TP.livePositions.splice(finalIdx, 1)
       if (typeof addTradeToJournal === 'function') addTradeToJournal({ id: pos.id, time: fmtNow(), side: pos.side, sym: (pos.sym || '').replace('USDT', ''), entry: pos.entry, exit: fillPrice, pnl: fillPnl, reason: reason || 'Manual', lev: pos.lev, autoTrade: !!pos.autoTrade, journalEvent: 'CLOSE', regime: (typeof BM !== 'undefined' ? BM.regime || '\u2014' : '\u2014'), isLive: true, openTs: pos.openTs || pos.id, closedAt: Date.now(), mode: 'live' })
       if (typeof DSL !== 'undefined') { delete DSL.positions[String(pos.id)]; if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id)) }
@@ -332,5 +335,5 @@ export function closeLivePos(id: any, reason?: string): void {
       renderLivePositions()
       if (!pos._closeRetried) { pos._closeRetried = true; setTimeout(function () { if (!pos.closed && pos.status === 'open') { atLog('info', '[RETRY] RETRYING close...'); closeLivePos(pos.id, reason || 'Retry') } }, 2000) }
     })
-  } else { pos.closed = true; pos.status = 'closed'; TP.livePositions.splice(idx, 1); renderLivePositions(); try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {} }
+  } else { pos.closed = true; pos.status = 'closed'; const _fbPnl = calcPosPnL(pos, cur); TP.liveBalance = (TP.liveBalance || 0) + pos.size + _fbPnl; if (TP.liveBalance < 0) TP.liveBalance = 0; TP.livePositions.splice(idx, 1); renderLivePositions(); try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {} }
 }

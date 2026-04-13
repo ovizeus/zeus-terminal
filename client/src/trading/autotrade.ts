@@ -852,7 +852,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
 
   if (getATMode() === 'demo') {
     const pos: any = {
-      id: Date.now(), side, sym, entry, size: adaptFinalSize, lev,
+      id: Date.now() + Math.floor(Math.random() * 1000), side, sym, entry, size: adaptFinalSize, lev,
       tp, sl, liqPrice: liq, pnl: 0,
       slPct: slPct, rr: rr, // [RISK RAILS] stored for add-on SL/TP recalc
       qty, margin, tpPnl, slPnl,
