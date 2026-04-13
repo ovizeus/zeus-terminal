@@ -33,7 +33,8 @@ export function eyeToggle() { /* removed */ }
 
 export async function scanLiquidityMagnets() {
   const S = w.S;
-  if (!S.price) return;
+  if (!S || !S.price) return;
+  if (!S.magnets) S.magnets = { above: [], below: [], lastScan: 0 };
   const now = Date.now();
   S.magnets.lastScan = now;
 

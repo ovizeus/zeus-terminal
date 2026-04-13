@@ -271,6 +271,7 @@ export function _updateWhyBlocked(code: any, text: any) {
 export async function runMultiSymbolScan() {
   if (el('atMultiSym')?.checked === false) return
   if (!w.FetchLock.try('multiScan')) return
+  if (!w.MSCAN) w.MSCAN = { data: {}, wsPool: {}, lastScan: 0, scanning: false }
   if (w.MSCAN.scanning) { w.FetchLock.release('multiScan'); return }
   w.MSCAN.scanning = true
   const scanSyms = getActiveMscanSyms()
@@ -523,7 +524,6 @@ export function _mscanGetActive() {
 export function _mscanSaveActive(arr: any[]) {
   localStorage.setItem('zeus_mscan_syms', JSON.stringify(arr))
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('scannerSyms')
-  if (typeof w._userCtxPush === 'function') w._userCtxPush()
   _mscanUpdateLabel()
 }
 
