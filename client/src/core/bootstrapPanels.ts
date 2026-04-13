@@ -79,8 +79,9 @@ const _CMD_ACTIONS: any[] = [
 ]
 
 export function _toggleCmdPalette(): void { _cmdOpen = !_cmdOpen; const el = document.getElementById('cmdPalette'); if (!el) return; el.style.display = _cmdOpen ? 'flex' : 'none'; if (_cmdOpen) { const input = document.getElementById('cmdInput') as HTMLInputElement | null; if (input) { input.value = ''; setTimeout(function () { input.focus() }, 50); setTimeout(function () { input.focus() }, 200) }; _cmdIdx = 0; _cmdRender('') } }
+export function _cmdSetOpen(v: boolean): void { _cmdOpen = v }
 
-function _cmdRender(query: string): void {
+export function _cmdRender(query: string): void {
   const results = document.getElementById('cmdResults') as any; if (!results) return
   const q = (query || '').toLowerCase().trim()
   const filtered = q ? _CMD_ACTIONS.filter(function (a: any) { return a.label.toLowerCase().indexOf(q) !== -1 || a.keys.indexOf(q) !== -1 }) : _CMD_ACTIONS
@@ -94,13 +95,14 @@ function _cmdRender(query: string): void {
 document.addEventListener('keydown', function (e: any) {
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); _toggleCmdPalette(); return }
   if (!_cmdOpen) return
-  if (e.key === 'Escape') { _toggleCmdPalette(); return }
+  if (e.key === 'Escape') { _closeCmdPalette(); return }
   if (e.key === 'ArrowDown') { e.preventDefault(); _cmdIdx++; _cmdRender((document.getElementById('cmdInput') as any)?.value || ''); return }
   if (e.key === 'ArrowUp') { e.preventDefault(); _cmdIdx = Math.max(0, _cmdIdx - 1); _cmdRender((document.getElementById('cmdInput') as any)?.value || ''); return }
-  if (e.key === 'Enter') { e.preventDefault(); const results = document.getElementById('cmdResults') as any; const filtered = results?._cmdFiltered || []; if (filtered[_cmdIdx]) { _toggleCmdPalette(); filtered[_cmdIdx].action() }; return }
+  if (e.key === 'Enter') { e.preventDefault(); const results = document.getElementById('cmdResults') as any; const filtered = results?._cmdFiltered || []; if (filtered[_cmdIdx]) { _closeCmdPalette(); filtered[_cmdIdx].action() }; return }
 })
 document.addEventListener('input', function (e: any) { if (e.target && e.target.id === 'cmdInput') { _cmdIdx = 0; _cmdRender(e.target.value) } })
-document.addEventListener('click', function (e: any) { if (!_cmdOpen) return; if (e.target && e.target.id === 'cmdPalette') { _toggleCmdPalette(); return }; const item = e.target.closest ? e.target.closest('.cmd-item') : null; if (item && item.dataset.cmdIdx != null) { const idx = parseInt(item.dataset.cmdIdx, 10); const results = document.getElementById('cmdResults') as any; const filtered = results?._cmdFiltered || []; if (filtered[idx]) { _toggleCmdPalette(); filtered[idx].action() } } })
+function _closeCmdPalette(): void { _cmdOpen = false; document.dispatchEvent(new CustomEvent('zeus:closeModal')) }
+document.addEventListener('click', function (e: any) { const panel = document.getElementById('cmdPalette'); if (!panel || panel.style.display === 'none') return; if (e.target && e.target.id === 'cmdPalette') { _closeCmdPalette(); return }; const item = e.target.closest ? e.target.closest('.cmd-item') : null; if (item && item.dataset.cmdIdx != null) { const idx = parseInt(item.dataset.cmdIdx, 10); const results = document.getElementById('cmdResults') as any; const filtered = results?._cmdFiltered || []; if (filtered[idx]) { _closeCmdPalette(); filtered[idx].action() } } })
 
 // ===== MISSED TRADES =====
 export function _showMissedTrades(): void {

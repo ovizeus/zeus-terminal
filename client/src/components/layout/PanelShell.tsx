@@ -15,6 +15,7 @@ import { PM_render } from '../../engine/postMortem'
 import { renderPnlLab } from '../../ui/panels'
 import { aubRefreshAll } from '../../engine/aub'
 import { _actfeedRender, _renderDlog } from '../../core/bootstrapError'
+import { _cmdSetOpen, _cmdRender } from '../../core/bootstrapPanels'
 import { _srRenderStats } from '../../core/config'
 // ── Dock page panels (1:1 from old Zeus strips → page views) ──
 import { AnalysisSections } from '../analysis/AnalysisSections'
@@ -94,6 +95,13 @@ export function PanelShell() {
   const closeModal = useUiStore((s) => s.closeModal)
   const resolvedEnv = useUiStore((s) => s.resolvedEnv)
 
+  // ── Listen for legacy JS requesting modal close ──
+  useEffect(() => {
+    const handler = () => closeModal()
+    document.addEventListener('zeus:closeModal', handler)
+    return () => document.removeEventListener('zeus:closeModal', handler)
+  }, [closeModal])
+
   function handleDockClick(id: string) {
     if (id === 'more') return
     const next = dockActive === id ? null : id
@@ -140,6 +148,16 @@ export function PanelShell() {
   useEffect(() => {
     if (activeModal === 'decisionlog') {
       setTimeout(() => { try { _renderDlog() } catch (e) { console.warn('[ZEUS] Dlog render error:', e) } }, 50)
+    }
+    if (activeModal === 'cmdpalette') {
+      _cmdSetOpen(true)
+      setTimeout(() => {
+        const input = document.getElementById('cmdInput') as HTMLInputElement | null
+        if (input) { input.value = ''; input.focus() }
+        _cmdRender('')
+      }, 50)
+    } else {
+      _cmdSetOpen(false)
     }
   }, [activeModal])
 
