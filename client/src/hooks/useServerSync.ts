@@ -36,20 +36,12 @@ function applyATUpdate(data: ServerATState) {
   const posStore = usePositionsStore.getState()
   const atStore = useATStore.getState()
 
-  // --- Positions ---
-  // Server sends demoPositions/livePositions separately (preferred) OR flat positions array
-  let demo: ServerATState['positions']
-  let live: ServerATState['positions']
-  if (data.demoPositions && data.livePositions) {
-    demo = filterOpen(data.demoPositions)
-    live = filterOpen(data.livePositions)
-  } else {
-    const all = filterOpen(data.positions)
-    demo = all.filter((p) => p.mode !== 'live')
-    live = all.filter((p) => p.mode === 'live')
-  }
-  posStore.setDemoPositions(demo)
-  posStore.setLivePositions(live)
+  // [FIX DUP] Positions are NOT overwritten from server — state.ts _applyServerATState
+  // merges server state into TP.demoPositions with proper handling of manual client
+  // positions (that server doesn't know about). React store is kept in sync via
+  // usePositionsBridge listening to 'zeus:positionsChanged' events on TP writes.
+  // Writing positions here would wipe client-only manual positions before server
+  // registration completes (race condition).
 
   // --- Demo Balance ---
   const bal = extractBalance(data.demoBalance)
@@ -145,14 +137,13 @@ export function useServerSync(authenticated: boolean) {
       syncApi.pullState().then((res) => {
         if (res.ok && res.data) {
           const snap = res.data
-          const all = filterOpen(snap.positions || [])
-          // Atomic snapshot — server is final truth
-          usePositionsStore.getState().syncSnapshot({
-            demoPositions: all.filter((p) => p.mode !== 'live'),
-            livePositions: all.filter((p) => p.mode === 'live'),
-            demoBalance: snap.demoBalance ? extractBalance(snap.demoBalance).balance : undefined,
-            source: 'server',
-          })
+          // [FIX DUP] Only sync demoBalance from initial pull — positions are handled
+          // by state.ts _applyServerATState + usePositionsBridge to avoid race with
+          // client-only manual positions not yet registered on server.
+          if (snap.demoBalance) {
+            const bal = extractBalance(snap.demoBalance)
+            usePositionsStore.getState().setDemoBalance(bal.balance)
+          }
         }
       })
       pullATState()
@@ -173,16 +164,11 @@ export function useServerSync(authenticated: boolean) {
         applyATUpdate(msg.data)
       }
       if (msg.type === 'sync') {
-        // Cross-device sync signal — re-pull everything
+        // Cross-device sync signal — re-pull balance only; positions via state.ts bridge
         syncApi.pullState().then((res) => {
-          if (res.ok && res.data) {
-            const all = filterOpen(res.data.positions || [])
-            usePositionsStore.getState().setDemoPositions(all.filter((p) => p.mode !== 'live'))
-            usePositionsStore.getState().setLivePositions(all.filter((p) => p.mode === 'live'))
-            if (res.data.demoBalance) {
-              const bal = extractBalance(res.data.demoBalance)
-              usePositionsStore.getState().setDemoBalance(bal.balance)
-            }
+          if (res.ok && res.data && res.data.demoBalance) {
+            const bal = extractBalance(res.data.demoBalance)
+            usePositionsStore.getState().setDemoBalance(bal.balance)
           }
         })
         pullJournal()

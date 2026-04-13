@@ -673,6 +673,7 @@ export const ZState = (() => {
     if (!_syncReady) { console.warn('[sync] push blocked — syncReady=false'); return }
     _syncing = true
     _syncQueued = false
+    _lastPushTs = Date.now()
     const data = _serialize()
     const _pushDirtySnapshot = _dirty
     console.log('[sync] PUSHING to server — pos:', (data.positions || []).length, 'bal:', data.demoBalance)
@@ -707,6 +708,9 @@ export const ZState = (() => {
   let _ws: any = null
   let _wsRetry = 0
   let _wsVisListener = false
+  let _lastPushTs = 0 // cooldown: ignore sync signals shortly after our own push
+  w._zsSyncPushTs = function () { return _lastPushTs }
+  w._zsMarkPush = function () { _lastPushTs = Date.now() }
   function _connectWS() {
     if (typeof WebSocket === 'undefined') return
     if (_ws && (_ws.readyState === WebSocket.OPEN || _ws.readyState === WebSocket.CONNECTING)) return
@@ -717,7 +721,10 @@ export const ZState = (() => {
       _ws.onmessage = function (ev: any) {
         try {
           const msg = JSON.parse(ev.data)
-          if (msg.type === 'sync') { console.log('[ws] sync signal — pulling'); pullAndMerge() }
+          if (msg.type === 'sync') {
+            if (Date.now() - _lastPushTs < 3000) { console.log('[ws] sync signal ignored (own push cooldown)'); return }
+            console.log('[ws] sync signal — pulling'); pullAndMerge()
+          }
           if (msg.type === 'at_update' && msg.data) { _applyServerATState(msg.data) }
         } catch (_) { /* */ }
       }
@@ -752,14 +759,20 @@ export const ZState = (() => {
         const _spSym = sp.symbol || sp.sym
         for (let j = 0; j < allClient.length; j++) {
           if ((allClient[j] as any).sym === _spSym && (allClient[j] as any).side === sp.side && !(allClient[j] as any).closed && !(allClient[j] as any)._serverSeq) {
-            existingPos = allClient[j]; break
+            existingPos = allClient[j]
+            // [FIX DUP] Claim this client-opened pos as server-tracked NOW so clientOnlyDemo
+            // filter excludes it — prevents duplicate (client + server-mapped) in TP arrays
+            existingPos._serverSeq = sp.seq
+            break
           }
         }
       }
     }
     const srcMode = sp.mode === 'live' ? 'auto' : 'assist'
     return {
-      id: sp.seq || sp.id || Date.now(),
+      // [FIX DUP] Preserve client id when matched — avoids id change in UI that confuses
+      // render cycles and DSL attachment (DSL is keyed by pos.id)
+      id: (existingPos && existingPos.id) ? existingPos.id : (sp.seq || sp.id || Date.now()),
       side: sp.side,
       sym: sp.symbol || sp.sym,
       entry: sp.price || sp.entry,
@@ -1260,7 +1273,6 @@ export function _indSettingsSave() {
     if (typeof _safeLocalStorageSet === 'function') _safeLocalStorageSet('zeus_ind_settings', data)
     else localStorage.setItem('zeus_ind_settings', data)
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('indSettings')
-    if (typeof w._userCtxPush === 'function') w._userCtxPush()
   } catch (_) { /* */ }
 }
 export function _indSettingsLoad() {
@@ -1290,7 +1302,7 @@ export const oiHistory: any[] = []
 export const WL_SYMS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'ZECUSDT']
 export const wlPrices: any = {}
 export const allPrices: any = {}
-w.S = S; w.allPrices = allPrices
+w.S = S; w.allPrices = allPrices; w.WL_SYMS = WL_SYMS; w.wlPrices = wlPrices
 
 // Window exports for backward compat
 w.BlockReason = BlockReason
