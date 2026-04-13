@@ -850,12 +850,15 @@ export const ZState = (() => {
         if (_rcSet.has(String(p.id))) return false
         if (!p.autoTrade && !p._serverSeq) return true
         if (p.autoTrade && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && p._localOnly) return true
+        // Keep recently opened positions even if they have _serverSeq but server hasn't synced yet
+        if (!p.autoTrade && p._serverSeq && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && p.openTs && (_now - p.openTs) < 30000) return true
         return false
       })
       const clientOnlyLive = (TP.livePositions || []).filter(function (p: any) {
         if (p.closed) return false
         if (_rcSet.has(String(p.id))) return false
         if (!p.autoTrade && !p._serverSeq) return true
+        if (!p.autoTrade && p._serverSeq && !_serverLiveIds.has(String(p.id)) && !_serverLiveIds.has(String(p._serverSeq)) && p.openTs && (_now - p.openTs) < 30000) return true
         return false
       })
       TP.demoPositions = serverATDemo.concat(clientOnlyDemo)
