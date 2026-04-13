@@ -1873,11 +1873,17 @@ function registerManualPosition(userId, data) {
     const size = (lev > 0) ? (qty * price / lev) : (qty * price);
     const side = data.side === 'BUY' ? 'LONG' : (data.side === 'SELL' ? 'SHORT' : data.side);
 
-    // Duplicate guard: no existing position with same userId + symbol + side
-    const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side);
-    if (existing) {
-        logger.info('AT_ENGINE', `[${seq}] Manual position already tracked as seq=${existing.seq} — skipping`);
-        return { ok: true, seq: existing.seq, alreadyTracked: true };
+    // Duplicate guard: only for LIVE (exchange merges same-side positions into one).
+    // DEMO allows multiple independent manual positions on same (symbol, side) —
+    // each gets its own seq, DSL state, and lifecycle. Dedup would collapse them
+    // on the client via _mapServerPos and cause positions to disappear.
+    const mode = data.mode || us.engineMode;
+    if (mode === 'live') {
+        const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side && p.mode === 'live');
+        if (existing) {
+            logger.info('AT_ENGINE', `[${seq}] LIVE manual position already tracked as seq=${existing.seq} — skipping`);
+            return { ok: true, seq: existing.seq, alreadyTracked: true };
+        }
     }
 
     const sl = data.sl ? parseFloat(data.sl) : null;
