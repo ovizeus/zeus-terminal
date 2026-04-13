@@ -63,6 +63,8 @@ export const AUB_PERF: any = {
   }
 }
 export const AUB_SIM_KEY = 'aub_sim_last'
+// Expose on window immediately so other modules can access via w.AUB at any time
+w.AUB = AUB; w.AUB_COMPAT = AUB_COMPAT; w.AUB_PERF = AUB_PERF
 export const ARIA_STATE: any = {
   expanded: false,
   pattern: null,
