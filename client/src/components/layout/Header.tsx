@@ -12,7 +12,7 @@ export function Header() {
 
   function handleLogout() {
     if (!confirm('Sigur vrei să te deloghezi?')) return
-    fetch('/auth/logout', { method: 'POST', credentials: 'same-origin' })
+    fetch('/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Zeus-Request': '1' } })
       .then(() => { clearAuth(); window.location.href = '/login.html' })
       .catch(() => { clearAuth(); window.location.href = '/login.html' })
   }

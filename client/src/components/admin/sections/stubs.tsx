@@ -488,7 +488,7 @@ export function SettingsSection() {
     try {
       const r = await fetch('/auth/admin/flags', {
         method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ key, value: next }),
       })
       const d = await r.json()

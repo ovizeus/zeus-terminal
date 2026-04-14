@@ -126,7 +126,7 @@ export function AdminModal({ visible, onClose }: Props) {
   const adminPost = useCallback((endpoint: string, body: object) => {
     fetch('/auth/admin/' + endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
       body: JSON.stringify(body),
       credentials: 'same-origin'
     }).then(r => r.json())

@@ -178,7 +178,7 @@ export const useAdminStore = create<AdminStore>()((set, get) => ({
     try {
       const r = await fetch('/auth/admin/' + action, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify(body),
         credentials: 'same-origin',
       })

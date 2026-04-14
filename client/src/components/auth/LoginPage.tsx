@@ -611,7 +611,7 @@ export function LoginPage() {
   async function approveUser(userEmail: string) {
     if (!confirm('Approve user ' + userEmail + '?')) return
     try {
-      const res = await fetch('/auth/admin/approve', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: userEmail }) })
+      const res = await fetch('/auth/admin/approve', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ email: userEmail }) })
       if (res.ok) loadUsers()
     } catch { alert('Error') }
   }
@@ -619,7 +619,7 @@ export function LoginPage() {
   async function deleteUser(userEmail: string) {
     if (!confirm('Delete user ' + userEmail + '?')) return
     try {
-      const res = await fetch('/auth/admin/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: userEmail }) })
+      const res = await fetch('/auth/admin/delete', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ email: userEmail }) })
       if (res.ok) loadUsers()
     } catch { alert('Error') }
   }

@@ -70,7 +70,7 @@ export function UsersSection() {
     try {
       const r = await fetch('/auth/admin/bulk', {
         method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ action, ids }),
       })
       const d = await r.json()
@@ -84,7 +84,7 @@ export function UsersSection() {
     try {
       const r = await fetch('/auth/admin/reset-password', {
         method: 'POST', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
         body: JSON.stringify({ email }),
       })
       const d = await r.json()
