@@ -15,6 +15,7 @@ import { useBrainBridge } from './hooks/useBrainBridge'
 import { useDSLBridge } from './hooks/useDSLBridge'
 import { useAresBridge } from './hooks/useAresBridge'
 import { wsService } from './services/ws'
+import { startSettingsRealtime, stopSettingsRealtime } from './services/settingsRealtime'
 import './app.css'
 
 export function App() {
@@ -38,7 +39,10 @@ export function App() {
   useEffect(() => {
     if (authenticated) {
       wsService.connect()
+      // [MIGRATION-F0] settings cross-device sync subscriber (reuses /ws/sync)
+      startSettingsRealtime()
       return () => {
+        stopSettingsRealtime()
         wsService.disconnect()
         const w = window as any
         if (w.Intervals?.clearAll) w.Intervals.clearAll()
