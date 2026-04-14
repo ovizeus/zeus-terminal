@@ -18,8 +18,10 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRY_DAYS = Math.max(1, Math.min(30, parseInt(process.env.JWT_EXPIRY_DAYS, 10) || 7)); // [SC-02] default 7d, env-configurable
-const JWT_EXPIRY = JWT_EXPIRY_DAYS + 'd'; // [SC-02] reduced from 30d
+// [M8] Default 1d (24h). Inactivity timeout (sessionAuth) handles long-lived sessions safely.
+// Env-configurable up to 30d for users who want it.
+const JWT_EXPIRY_DAYS = Math.max(1, Math.min(30, parseInt(process.env.JWT_EXPIRY_DAYS, 10) || 1));
+const JWT_EXPIRY = JWT_EXPIRY_DAYS + 'd';
 const BCRYPT_ROUNDS = 10;
 
 // ─── 2FA Code Store (in-memory, codes expire after 5 min) ───

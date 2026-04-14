@@ -63,6 +63,7 @@ function createSessionAuth(jwtSecret) {
             '/robots.txt',
             '/auth/',
             '/sw.js',
+            '/favicon.ico',
             '/manifest.json',
             '/assets/',
             '/app/assets/',

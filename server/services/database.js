@@ -514,7 +514,17 @@ function atomicEmailUpdate(userId, newEmail) {
     return txn();
 }
 
+// [M6] Allowed user.status values — single source of truth.
+// active  = normal account
+// blocked = admin permanently disabled
+// banned  = temporary ban (with banned_until); see banUser()
+const USER_STATUS = Object.freeze({ ACTIVE: 'active', BLOCKED: 'blocked', BANNED: 'banned' });
+const _ALLOWED_STATUSES = new Set(Object.values(USER_STATUS));
+
 function setUserStatus(userId, status) {
+    if (!_ALLOWED_STATUSES.has(status)) {
+        throw new Error(`setUserStatus: invalid status '${status}' (allowed: ${[..._ALLOWED_STATUSES].join(',')})`);
+    }
     return _stmts.blockUser.run(status, userId);
 }
 
@@ -797,6 +807,7 @@ process.on('exit', closeDb);
 
 module.exports = {
     db,
+    USER_STATUS, // [M6]
     findUserByEmail,
     findUserById,
     countUsers,
