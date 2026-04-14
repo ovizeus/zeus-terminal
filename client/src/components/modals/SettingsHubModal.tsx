@@ -113,7 +113,11 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   async function clacConfirm() {
     const r = await apiFetch('/auth/close-account/confirm', { code: val('clacCode') })
     setMsg('clac-code-msg', r.message || r.error || '', !!r.ok)
-    if (r.ok) setTimeout(() => { window.location.href = '/login.html' }, 1500)
+    if (r.ok) setTimeout(() => {
+      try { localStorage.clear() } catch {}
+      try { sessionStorage.clear() } catch {}
+      window.location.href = '/login.html'
+    }, 1500)
   }
 
   return (

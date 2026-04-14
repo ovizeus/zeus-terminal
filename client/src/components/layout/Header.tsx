@@ -12,9 +12,18 @@ export function Header() {
 
   function handleLogout() {
     if (!confirm('Sigur vrei să te deloghezi?')) return
+    const wipeAndGo = () => {
+      clearAuth()
+      // [ZT-AUD-C4] Wipe per-user client state so the next user on this
+      // browser cannot see cached settings, ARES state, positions, or skip
+      // the PIN gate (sessionStorage survives window.location.href).
+      try { localStorage.clear() } catch {}
+      try { sessionStorage.clear() } catch {}
+      window.location.href = '/login.html'
+    }
     fetch('/auth/logout', { method: 'POST', credentials: 'same-origin', headers: { 'X-Zeus-Request': '1' } })
-      .then(() => { clearAuth(); window.location.href = '/login.html' })
-      .catch(() => { clearAuth(); window.location.href = '/login.html' })
+      .then(wipeAndGo)
+      .catch(wipeAndGo)
   }
 
   const chg = prevPrice > 0 ? (price - prevPrice) / prevPrice * 100 : 0
