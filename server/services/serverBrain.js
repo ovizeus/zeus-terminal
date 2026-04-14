@@ -130,7 +130,9 @@ function _persistCooldowns() {
         const obj = {};
         for (const [k, v] of _cooldowns) obj[k] = v;
         db.atSetState('brain:cooldowns', obj, null);
-    } catch (_) {}
+    } catch (e) {
+        logger.warn('BRAIN', '_persistCooldowns failed: ' + (e && e.message));
+    }
 }
 
 function _restoreCooldowns() {
@@ -148,7 +150,9 @@ function _restoreCooldowns() {
             }
             if (restored > 0) logger.info('BRAIN', `Restored ${restored} cooldown(s) from DB`);
         }
-    } catch (_) {}
+    } catch (e) {
+        logger.warn('BRAIN', '_restoreCooldowns failed: ' + (e && e.message));
+    }
 }
 
 function stop() {
@@ -222,7 +226,10 @@ function _buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fu
         // Extra fields from caller
         if (extra) Object.assign(s, extra);
         return s;
-    } catch (_) { return { userId, symbol, ts: Date.now(), cycle: _cycleCount }; }
+    } catch (e) {
+        logger.warn('BRAIN', '_buildSnapshot failed: ' + (e && e.message));
+        return { userId, symbol, ts: Date.now(), cycle: _cycleCount };
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════

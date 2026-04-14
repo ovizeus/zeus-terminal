@@ -143,7 +143,7 @@ function setEmergencyKill(active, userId) {
   const state = _getUserState(userId);
   state.emergencyKill = !!active;
   _saveToDisk();
-  try { telegram.alertKillSwitch(state.emergencyKill, userId); } catch (_) {}
+  try { telegram.alertKillSwitch(state.emergencyKill, userId); } catch (e) { console.warn('[RISK] alertKillSwitch failed:', e && e.message); }
   if (state.emergencyKill) {
     console.warn('[RISK] EMERGENCY KILL activated — all orders blocked for user ' + userId);
     Sentry.captureMessage('Emergency kill switch activated', { level: 'warning', tags: { module: 'riskGuard' }, user: { id: String(userId) } });
@@ -161,7 +161,7 @@ function setEmergencyKill(active, userId) {
 function _logBlock(order, owner, userId, reason) {
   try {
     audit.record('ORDER_BLOCKED', { symbol: order.symbol, side: order.side, type: order.type, owner: owner, userId: userId, reason: reason }, owner || 'system');
-  } catch (_) { /* audit is best-effort */ }
+  } catch (e) { console.warn('[RISK] audit ORDER_BLOCKED failed:', e && e.message); }
 }
 
 function validateOrder(order, owner, userId) {
