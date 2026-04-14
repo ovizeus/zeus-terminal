@@ -566,10 +566,13 @@ function listAuditLogByUser(userId, limit) {
 }
 
 function listAuditLogByTarget(emailOrId, limit) {
-    // Matches actor (user_id) OR target referenced in details payload
-    const like = '%' + String(emailOrId).toLowerCase() + '%';
+    // Matches actor (user_id) OR target referenced in details payload.
+    // Escape LIKE wildcards (%, _, \) in the caller-supplied value so a value
+    // like "%admin@%" cannot enumerate audit rows it shouldn't see.
+    const escaped = String(emailOrId).toLowerCase().replace(/[\\%_]/g, '\\$&');
+    const like = '%' + escaped + '%';
     const rows = db.prepare(
-      "SELECT * FROM audit_log WHERE user_id = ? OR LOWER(details) LIKE ? ORDER BY created_at DESC LIMIT ?"
+      "SELECT * FROM audit_log WHERE user_id = ? OR LOWER(details) LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?"
     ).all(Number(emailOrId) || -1, like, limit || 100);
     return rows;
 }
