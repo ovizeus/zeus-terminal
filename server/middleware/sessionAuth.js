@@ -127,4 +127,10 @@ function createSessionAuth(jwtSecret) {
     };
 }
 
-module.exports = { createSessionAuth, cookieParser };
+function getActiveSessions() {
+    const out = [];
+    for (const [uid, ts] of _activity) out.push({ userId: uid, lastActive: ts });
+    return out;
+}
+
+module.exports = { createSessionAuth, cookieParser, getActiveSessions };

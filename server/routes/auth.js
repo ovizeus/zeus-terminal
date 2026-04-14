@@ -9,6 +9,7 @@ const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const db = require('../services/database');
 const logger = require('../services/logger');
+const { getActiveSessions } = require('../middleware/sessionAuth');
 function _mask(email) { if (!email) return '?'; const [u, d] = email.split('@'); return u[0] + '***@' + (d || '?'); }
 
 const router = express.Router();
@@ -712,6 +713,44 @@ router.post('/admin/suspend', (req, res) => {
     db.auditLog(guard.caller.id, 'ADMIN_SUSPEND_USER', { targetEmail: normalEmail, reason: reason || 'admin_suspend' }, req.ip);
     logger.info('AUTH', 'Admin suspended user', { target: _mask(normalEmail), reason });
     res.json({ ok: true });
+});
+
+// ─── ADMIN: GET /auth/admin/sessions — list active in-memory sessions ───
+router.get('/admin/sessions', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const sessions = getActiveSessions();
+    const userMap = {};
+    try { db.listUsers().forEach(u => { userMap[u.id] = u; }); } catch (_) {}
+    const enriched = sessions.map(s => {
+        const u = userMap[s.userId];
+        return {
+            userId: s.userId,
+            email: u?.email || '(unknown)',
+            role: u?.role || 'user',
+            status: u?.status || 'unknown',
+            lastActive: new Date(s.lastActive).toISOString(),
+            idleMs: Date.now() - s.lastActive,
+        };
+    }).sort((a, b) => a.idleMs - b.idleMs);
+    res.json({ ok: true, sessions: enriched, count: enriched.length });
+});
+
+// ─── ADMIN: GET /auth/admin/audit/export — export audit log as CSV ───
+router.get('/admin/audit/export', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 1000, 5000);
+    const rows = db.listAuditLog(limit);
+    const headers = ['id', 'created_at', 'user_id', 'action', 'ip', 'details'];
+    const esc = (v) => {
+        if (v == null) return '';
+        const s = String(v).replace(/"/g, '""');
+        return /[",\n]/.test(s) ? `"${s}"` : s;
+    };
+    const csv = [headers.join(','), ...rows.map(r => headers.map(h => esc(r[h])).join(','))].join('\n');
+    const filename = `zeus-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(csv);
 });
 
 // ─── ADMIN: POST /auth/admin/note — add internal note (stored in audit_log) ───
