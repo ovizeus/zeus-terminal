@@ -174,7 +174,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'bb':
       if (show) initBBSeries()
-      if (bbUpperS) bbUpperS.applyOptions({ visible: show })
+      if (w.bbUpperS) w.bbUpperS.applyOptions({ visible: show })
       if (w.bbMiddleS) w.bbMiddleS.applyOptions({ visible: show })
       if (w.bbLowerS) w.bbLowerS.applyOptions({ visible: show })
       if (show) updateBB()
@@ -299,8 +299,8 @@ export function applyIndSettings(id: string): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function initBBSeries(): void {
-  if (bbUpperS || !w.mainChart) return
-  bbUpperS = w.mainChart.addLineSeries({ color: '#ff668866', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
+  if (w.bbUpperS || !w.mainChart) return
+  w.bbUpperS = w.mainChart.addLineSeries({ color: '#ff668866', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
   w.bbMiddleS = w.mainChart.addLineSeries({ color: '#ff6688', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
   w.bbLowerS = w.mainChart.addLineSeries({ color: '#ff668866', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
 }
@@ -320,7 +320,7 @@ export function updateBB(): void {
     upper.push({ time: w.S.klines[i].time, value: avg + sd * stdDev })
     lower.push({ time: w.S.klines[i].time, value: avg - sd * stdDev })
   }
-  try { w.bbMiddleS.setData(middle.filter((d: any) => d.value > 0)); bbUpperS.setData(upper.filter((d: any) => d.value > 0)); w.bbLowerS.setData(lower.filter((d: any) => d.value > 0)) } catch (_) { }
+  try { w.bbMiddleS.setData(middle.filter((d: any) => d.value > 0)); w.bbUpperS.setData(upper.filter((d: any) => d.value > 0)); w.bbLowerS.setData(lower.filter((d: any) => d.value > 0)) } catch (_) { }
 }
 
 // ═══════════════════════════════════════════════════════════════
