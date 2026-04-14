@@ -119,6 +119,15 @@ export function toggleDSL(): void {
     atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
     brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
+    // [DSL-OFF] Propagate DSL on/off to server so new AT + manual positions respect it.
+    try {
+      fetch('/api/dsl/toggle', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: DSL.enabled }),
+      }).catch(function () { /* silent */ })
+    } catch (_) {}
     _emitDSLChanged()
   } catch (e) { console.warn('[DSL] toggleDSL error:', e) }
 }
@@ -861,30 +870,42 @@ export function renderDSLWidget(positions: any[]): void {
     return posMode === _activeMode
   })
 
+  // [DSL-OFF] Panel shows only DSL-attached positions. Positions opened while DSL was OFF
+  // have no DSL state and must NOT appear here — they live only in the positions panel.
+  const dslAttached = modeFiltered.filter((p: any) => DSL.positions[String(p.id)])
+
   if (container.contains(document.activeElement) && document.activeElement!.tagName === 'INPUT') {
-    if (countEl) countEl.textContent = modeFiltered.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active'
+    if (countEl) countEl.textContent = dslAttached.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active'
     return
   }
 
-  const allDisplayPosns = modeFiltered
+  const allDisplayPosns = dslAttached
   const activeCount = allDisplayPosns.filter((p: any) => DSL.positions[String(p.id)]?.active).length
   if (countEl) countEl.textContent = activeCount + ' active'
 
   if (!allDisplayPosns.length) {
-    const _waitLabel = _activeMode === 'live' ? 'SCANNING LIVE POSITIONS FOR ACTIVATION' : 'SCANNING DEMO POSITIONS FOR ACTIVATION'
+    // [DSL-OFF] Distinct waiting text when engine is off vs. scanning for activation
+    const _engineOff = !DSL.enabled
+    const _headline = _engineOff ? 'DSL ENGINE OFF' : 'WAITING DYNAMIC SL...'
+    const _sub = _engineOff
+      ? 'WAITING FOR ACTIVATION — NEW POSITIONS WILL RUN WITH NATIVE TP/SL'
+      : (_activeMode === 'live' ? 'SCANNING LIVE POSITIONS FOR ACTIVATION' : 'SCANNING DEMO POSITIONS FOR ACTIVATION')
+    const _color = _engineOff ? '#f0c04088' : '#00ffcc'
+    const _colorDim = _engineOff ? '#f0c04044' : '#00ffcc22'
+    const _stroke = _engineOff ? '#f0c04022' : '#00ffcc11'
     container.innerHTML = `<div class="dsl-waiting" id="dslWaitingState">
       <div class="dsl-radar">
         <svg class="dsl-radar-svg" viewBox="0 0 80 80">
-          <circle cx="40" cy="40" r="36" fill="none" stroke="#00ffcc11" stroke-width="1"/>
-          <circle cx="40" cy="40" r="26" fill="none" stroke="#00ffcc0d" stroke-width="1"/>
-          <circle cx="40" cy="40" r="16" fill="none" stroke="#00ffcc0a" stroke-width="1"/>
-          <g class="dsl-radar-sweep"><path d="M40,40 L76,40 A36,36,0,0,0,40,4 Z" fill="url(#radarGrad)" opacity=".6"/></g>
-          <circle cx="40" cy="40" r="3" fill="#00ffcc" opacity=".8"><animate attributeName="opacity" values="1;0.2;1" dur="1.5s" repeatCount="indefinite"/></circle>
+          <circle cx="40" cy="40" r="36" fill="none" stroke="${_stroke}" stroke-width="1"/>
+          <circle cx="40" cy="40" r="26" fill="none" stroke="${_stroke}" stroke-width="1"/>
+          <circle cx="40" cy="40" r="16" fill="none" stroke="${_stroke}" stroke-width="1"/>
+          ${_engineOff ? '' : `<g class="dsl-radar-sweep"><path d="M40,40 L76,40 A36,36,0,0,0,40,4 Z" fill="url(#radarGrad)" opacity=".6"/></g>`}
+          <circle cx="40" cy="40" r="3" fill="${_color}" opacity=".8"><animate attributeName="opacity" values="1;0.2;1" dur="1.5s" repeatCount="indefinite"/></circle>
         </svg>
       </div>
       <div>
-        <div class="dsl-radar-txt">WAITING DYNAMIC SL...</div>
-        <div style="font-size:12px;color:#00ffcc22;margin-top:3px;letter-spacing:1px">${_waitLabel}</div>
+        <div class="dsl-radar-txt" style="color:${_color}">${_headline}</div>
+        <div style="font-size:12px;color:${_colorDim};margin-top:3px;letter-spacing:1px">${_sub}</div>
       </div>
     </div>`
     return
@@ -894,6 +915,13 @@ export function renderDSLWidget(positions: any[]): void {
   const paperPositions = allDisplayPosns.filter((p: any) => !p.autoTrade)
 
   let html = ''
+
+  // [DSL-OFF] Warning banner when engine is off but DSL-attached positions are still tracked
+  if (!DSL.enabled) {
+    html += `<div style="background:linear-gradient(90deg,#2a1400,#1a0a00);border:1px solid #f0c04066;border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:#f0c040;letter-spacing:1px;text-align:center">
+      DSL ENGINE OFF — următoarele poziții nu vor trece în DSL
+    </div>`
+  }
 
   if (atPositions.length) {
     html += `<div style="font-size:14px;color:#00ffcc55;letter-spacing:2px;padding:6px 12px 4px;border-bottom:1px solid #00ffcc11;margin-bottom:6px">AT POSITIONS (${atPositions.length})</div>`
@@ -1245,3 +1273,6 @@ export function _dslTrimAll(): void {
     if (!_openIds.has(id)) delete DSL.positions[id]
   })
 }
+
+// [DSL-OFF] Expose toggleDSL on window so other modules (e.g. autotrade) can call without circular import
+;(window as any).toggleDSL = toggleDSL

@@ -52,7 +52,22 @@ function _defaultUserState() {
         dailyPnLLive: 0,
         lastResetDay: -1,
         atActive: true, // [F1] Per-user AT on/off — default ON for backward compat
+        dslEnabled: true, // [DSL-OFF] Per-user DSL engine on/off — default ON
     };
+}
+
+// [DSL-OFF] Toggle per-user DSL engine. When false, new AT + manual positions skip DSL attach
+// and the AT live path places native TP on the exchange.
+function setDslEnabled(userId, enabled) {
+    if (!userId) return { ok: false, error: 'Missing userId' };
+    const us = _uState(userId);
+    us.dslEnabled = !!enabled;
+    logger.info('AT_ENGINE', `uid=${userId} DSL engine ${us.dslEnabled ? 'ENABLED' : 'DISABLED'}`);
+    return { ok: true, dslEnabled: us.dslEnabled };
+}
+
+function getDslEnabled(userId) {
+    return !!_uState(userId).dslEnabled;
 }
 
 function _uState(userId) {
@@ -237,8 +252,11 @@ function _restoreFromDb() {
                         continue;
                     }
                     _positions.push(pos);
-                    // Re-attach DSL with saved params + restored progress (survives restart)
-                    serverDSL.attach(pos, pos.dslParams || serverDSL.DSL_DEFAULTS, pos.dslProgress || null);
+                    // Re-attach DSL with saved params + restored progress (survives restart).
+                    // [DSL-OFF] Skip attach if position was opened with DSL OFF (dslParams === null).
+                    if (pos.dslParams) {
+                        serverDSL.attach(pos, pos.dslParams, pos.dslProgress || null);
+                    }
                     restoredCount++;
                 } catch (e) {
                     logger.error('AT_DB', `[${pos.seq || '?'}] Failed to restore position: ${e.message} — skipping`);
@@ -524,7 +542,9 @@ function processBrainDecision(decision, stc, userId) {
         closeTs: null,
         closePnl: null,
         closeReason: null,
-        dslParams: serverDSL.getPreset(stc.dslMode),
+        // [DSL-OFF] Per-user DSL engine flag: when OFF, skip DSL params so attach + native TP suppression
+        // are bypassed and the position runs purely on exchange TP/SL.
+        dslParams: us.dslEnabled === false ? null : serverDSL.getPreset(stc.dslMode),
         // ── Add-on tracking (Faza 2 Batch A) ──
         originalEntry: price,
         originalSize: finalSize,
@@ -552,8 +572,12 @@ function processBrainDecision(decision, stc, userId) {
     us.stats.entries++;
     if (entry.mode !== 'live') us.demoStats.entries++;
 
-    // ── Attach DSL ──
-    serverDSL.attach(entry, entry.dslParams);
+    // ── Attach DSL (skipped when DSL engine is OFF for this user) ──
+    if (entry.dslParams) {
+        serverDSL.attach(entry, entry.dslParams);
+    } else {
+        logger.info('AT_ENGINE', `[${entry.seq}] AT entry registered with DSL OFF — no DSL attach`);
+    }
 
     // ── Persist — [M5] state FIRST (seq counter), then position
     // If crash between: seq counter is saved (no reuse), position is lost (no ghost)
@@ -887,34 +911,33 @@ async function _executeLiveEntry(entry, stc) {
         return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
     }
 
-    // [DSL-SEMANTIC-FIX] No native TP on exchange for DSL-controlled AT positions.
-    // Rationale: DSL pivots (PR/IV) trail the price to capture the entire move.
-    // A native TP would close prematurely and cap the upside. PL (trailing stop
-    // via DSL) is the only exit path besides the native SL safety net.
+    // [DSL-SEMANTIC-FIX + DSL-OFF]
+    //   DSL ON  → no native TP (DSL pivots trail the price; PL is the only take-profit path).
+    //   DSL OFF → place native TP from RISK MANAGEMENT so the position has full exchange-side protection.
     let tpOrder = null;
     const TP_RETRY_DELAYS = [1000, 3000];
-    /* TP placement intentionally skipped — DSL handles exit via PL trailing.
-    for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
-        try {
-            tpOrder = await _placeConditionalOrder({
-                symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
-                quantity: fillQty,
-                stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
-                reduceOnly: true, newClientOrderId: `SAT_TP_${liveSeq}_${tpAttempt}`,
-            }, creds);
-            if (tpAttempt > 0) logger.info('AT_LIVE', `[${entry.seq}] TP order succeeded on retry #${tpAttempt}`);
-            break;
-        } catch (tpErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] TP order attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
-            if (tpAttempt < TP_RETRY_DELAYS.length) {
-                telegram.sendToUser(userId, `⚠️ TP retry ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${TP_RETRY_DELAYS[tpAttempt] / 1000}s...`);
-                await new Promise(r => setTimeout(r, TP_RETRY_DELAYS[tpAttempt]));
+    if (!entry.dslParams) {
+        for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
+            try {
+                tpOrder = await _placeConditionalOrder({
+                    symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
+                    quantity: fillQty,
+                    stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
+                    reduceOnly: true, newClientOrderId: `SAT_TP_${liveSeq}_${tpAttempt}`,
+                }, creds);
+                if (tpAttempt > 0) logger.info('AT_LIVE', `[${entry.seq}] TP order succeeded on retry #${tpAttempt}`);
+                break;
+            } catch (tpErr) {
+                logger.error('AT_LIVE', `[${entry.seq}] TP order attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
+                if (tpAttempt < TP_RETRY_DELAYS.length) {
+                    telegram.sendToUser(userId, `⚠️ TP retry ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${TP_RETRY_DELAYS[tpAttempt] / 1000}s...`);
+                    await new Promise(r => setTimeout(r, TP_RETRY_DELAYS[tpAttempt]));
+                }
             }
         }
     }
-    */
 
-    if (false && !tpOrder && slOrder) {
+    if (!entry.dslParams && !tpOrder && slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL TP retries exhausted — executing EMERGENCY MARKET CLOSE`);
         Sentry.captureMessage(`EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_tp', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${TP_RETRY_DELAYS.length + 1} TP attempts failed.\nEmergency closing — position cannot stay open without TP protection.`);
@@ -1894,6 +1917,9 @@ function registerManualPosition(userId, data) {
     const tpPnl = tp ? +(tpDist / price * size * lev).toFixed(2) : 0;
     const slPnl = sl ? +(-slDist / price * size * lev).toFixed(2) : 0;
 
+    // [DSL-OFF] Client sends dslParams === null when DSL engine is disabled.
+    // In that case skip DSL attach entirely — position runs purely on exchange TP/SL (or demo tick-exits).
+    const _dslOff = (data.dslParams === null);
     const entry = {
         seq,
         userId,
@@ -1913,8 +1939,8 @@ function registerManualPosition(userId, data) {
         autoTrade: false,
         sourceMode: 'manual',
         controlMode: 'user',
-        // DSL params: use client-provided if available, else defaults
-        dslParams: (data.dslParams && typeof data.dslParams === 'object') ? data.dslParams : serverDSL.DSL_DEFAULTS,
+        // DSL params: null = engine OFF (no DSL), object = user-provided, undefined = use defaults
+        dslParams: _dslOff ? null : ((data.dslParams && typeof data.dslParams === 'object') ? data.dslParams : serverDSL.DSL_DEFAULTS),
         originalEntry: price,
         originalSize: size,
         originalQty: +qty.toFixed(6),
@@ -1933,7 +1959,11 @@ function registerManualPosition(userId, data) {
     };
 
     _positions.push(entry);
-    serverDSL.attach(entry, entry.dslParams);
+    if (!_dslOff) {
+        serverDSL.attach(entry, entry.dslParams);
+    } else {
+        logger.info('AT_ENGINE', `[${seq}] uid=${userId} MANUAL registered with DSL OFF — no DSL attach`);
+    }
     _persistState(userId);
     _persistPosition(entry);
     _notifyChange(userId);
@@ -2257,8 +2287,8 @@ async function addOnPosition(userId, seq, options = {}) {
                 logger.warn('AT_ADDON', `[${seq}] Post-addon reconciliation failed: ${reconErr.message}`);
             }
 
-            // ── Re-attach DSL with new SL ──
-            serverDSL.attach(pos, pos.dslParams);
+            // ── Re-attach DSL with new SL (skip if DSL OFF for this position) ──
+            if (pos.dslParams) serverDSL.attach(pos, pos.dslParams);
 
             // ── Persist + broadcast ──
             _persistPosition(pos);
@@ -2330,8 +2360,8 @@ async function addOnPosition(userId, seq, options = {}) {
             us.demoBalance = +(us.demoBalance - addOnSize).toFixed(2);
         }
 
-        // ── Re-attach DSL with new SL ──
-        serverDSL.attach(pos, pos.dslParams);
+        // ── Re-attach DSL with new SL (skip if DSL OFF for this position) ──
+        if (pos.dslParams) serverDSL.attach(pos, pos.dslParams);
 
         // ── Persist + broadcast ──
         _persistPosition(pos);
@@ -2873,6 +2903,8 @@ module.exports = {
     addOnPosition,
     updateControlMode,
     updateDslParams,
+    setDslEnabled,
+    getDslEnabled,
     // Reconciliation (for manual trigger / testing)
     _runReconciliation,
     // Watchdog (for manual trigger / testing)

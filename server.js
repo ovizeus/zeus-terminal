@@ -314,6 +314,17 @@ app.post('/api/at/reset', (_req, res) => {
   serverAT.reset(_req.user.id);
   res.json({ ok: true, state: serverAT.getFullState(_req.user.id) });
 });
+// [DSL-OFF] Per-user DSL engine on/off — new AT + manual positions respect this flag
+app.post('/api/dsl/toggle', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  const enabled = _req.body.enabled;
+  if (typeof enabled !== 'boolean') return res.status(400).json({ ok: false, error: 'enabled must be boolean' });
+  res.json(serverAT.setDslEnabled(_req.user.id, enabled));
+});
+app.get('/api/dsl/toggle', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  res.json({ ok: true, dslEnabled: serverAT.getDslEnabled(_req.user.id) });
+});
 app.post('/api/at/kill', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   res.json(serverAT.activateKillSwitch(_req.user.id));

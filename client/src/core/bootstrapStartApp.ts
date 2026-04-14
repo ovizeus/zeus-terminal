@@ -14,7 +14,7 @@ import { _srUpdateStats, setDslStripOpen } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed, initZeusGroups } from './bootstrapInit'
-import { initCharts } from '../data/marketDataChart'
+import { initCharts, fetchKlines } from '../data/marketDataChart'
 import { _resumeLivePendingSyncIfNeeded , renderDemoPositions } from '../data/marketDataPositions'
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
 import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, brainThink } from '../engine/brain'
@@ -30,7 +30,7 @@ import { runBacktest, scanLiquidityMagnets } from '../ui/panels'
 import { savePerfToStorage, loadPerfFromStorage } from '../engine/perfStore'
 import { startFRCountdown, renderTradeJournal, trackOIDelta, loadJournalFromStorage } from '../services/storage'
 import { fetchSymbolKlines, runMultiSymbolScan } from '../data/klines'
-import { fetchAllRSI, fetchATR as fetchATRRaw } from '../data/marketDataFeeds'
+import { fetchAllRSI, fetchATR as fetchATRRaw, fetchFG, fetchOI, fetchLS, fetch24h } from '../data/marketDataFeeds'
 import { _devEnsureVisible , safeAsync , devLog } from '../utils/dev'
 import { connectWatchlist } from '../services/symbols'
 import { initSafetyEngine } from '../utils/guards'
@@ -57,6 +57,19 @@ export async function startApp(): Promise<void> {
     const _prebootRes = await fetch('/api/at/state', { credentials: 'same-origin' })
     if (_prebootRes.ok) { const _prebootData = await _prebootRes.json(); if (_prebootData && typeof w.ZState !== 'undefined' && typeof w.ZState._applyPreboot === 'function') { w.ZState._applyPreboot(_prebootData); console.log('[startApp] Preboot AT state applied — _serverATEnabled:', !!w._serverATEnabled) } }
   } catch (_) { console.log('[startApp] Preboot AT fetch skipped') }
+
+  // [DSL-OFF] Preboot: sync client DSL.enabled from server per-user flag
+  try {
+    const _dslRes = await fetch('/api/dsl/toggle', { credentials: 'same-origin' })
+    if (_dslRes.ok) {
+      const _dslData = await _dslRes.json()
+      if (_dslData && typeof _dslData.dslEnabled === 'boolean' && w.DSL) {
+        w.DSL.enabled = _dslData.dslEnabled
+        try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {}
+        console.log('[startApp] DSL engine preboot:', w.DSL.enabled ? 'ON' : 'OFF')
+      }
+    }
+  } catch (_) { console.log('[startApp] Preboot DSL fetch skipped') }
 
   const _earlyRestored = w.ZState.restore()
   if (_earlyRestored) console.log('[startApp] State restored immediately at boot — positions in TP before Phase 1')
@@ -126,13 +139,13 @@ export async function startApp(): Promise<void> {
   })()
 
   w.ZLOG.install()
-  w.fetchKlines = safeAsync(w.fetchKlines, 'fetchKlines', { silent: true })
+  w.fetchKlines = safeAsync(fetchKlines, 'fetchKlines', { silent: true })
   w.fetchAllRSI = safeAsync(fetchAllRSI, 'fetchAllRSI', { silent: true })
-  w.fetchFG = safeAsync(w.fetchFG, 'fetchFG', { silent: true })
+  w.fetchFG = safeAsync(fetchFG, 'fetchFG', { silent: true })
   w.fetchATR = safeAsync(fetchATRRaw, 'fetchATR', { silent: true })
-  w.fetchOI = safeAsync(w.fetchOI, 'fetchOI', { silent: true })
-  w.fetchLS = safeAsync(w.fetchLS, 'fetchLS', { silent: true })
-  w.fetch24h = safeAsync(w.fetch24h, 'fetch24h', { silent: true })
+  w.fetchOI = safeAsync(fetchOI, 'fetchOI', { silent: true })
+  w.fetchLS = safeAsync(fetchLS, 'fetchLS', { silent: true })
+  w.fetch24h = safeAsync(fetch24h, 'fetch24h', { silent: true })
   w.fetchSymbolKlines = safeAsync(fetchSymbolKlines, 'fetchSymbolKlines', { silent: true })
   w.runMultiSymbolScan = safeAsync(runMultiSymbolScan, 'runMultiSymbolScan', { silent: false })
   w.runBacktest = safeAsync(runBacktest, 'runBacktest', { silent: false })
@@ -212,6 +225,7 @@ export async function startApp(): Promise<void> {
   })
 
   w.Intervals.set('userSettingsSave', w._usSave, 300000)
+  w.Intervals.set('ucPushDirty', function () { if (typeof w._userCtxPush === 'function') w._userCtxPush() }, 30000)
   if (typeof w.pushTCtoServer === 'function') { setTimeout(w.pushTCtoServer, 5000); w.Intervals.set('tcServerSync', w.pushTCtoServer, 60000) }
 
   // Multi-sym symbols loader
@@ -245,6 +259,19 @@ export async function startApp(): Promise<void> {
 
   // ═══ PHASE 5 — EXTRAS ═══
   _waitForFeedThenStartExtras()
+
+  // [DIAG] One-shot diagnostic after 10s — remove after debug
+  setTimeout(function () {
+    console.log('=== [ZEUS DIAGNOSTIC 10s] ===')
+    console.log('  S.price:', w.S?.price)
+    console.log('  S.bnbOk:', w.S?.bnbOk, 'S.bybOk:', w.S?.bybOk)
+    console.log('  typeof ingestPrice:', typeof w.ingestPrice)
+    console.log('  _hbArmed:', w._hbArmed, '_hbLastTick:', w._hbLastTick)
+    console.log('  WS.bnb readyState:', w.WS?.get?.('bnb')?.readyState)
+    console.log('  BrainStateBadge text:', document.getElementById('brainStateBadge')?.textContent)
+    console.log('  led-risk class:', document.getElementById('led-risk')?.className)
+    console.log('=== END DIAGNOSTIC ===')
+  }, 10000)
 
   if (w.S.vwapOn) { const vb = el('vwapBtn'); if (vb) vb.classList.add('on') }
   w._ztVisible = !document.hidden

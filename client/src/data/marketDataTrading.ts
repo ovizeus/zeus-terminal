@@ -2,7 +2,7 @@
 // Ported 1:1 from public/js/data/marketData.js lines 2036-2660 (Chunk E)
 // Trading panel UI: mode switch, add funds, demo/live orders, leverage, liq price
 
-import { getPrice, getSymbol } from '../services/stateAccessors'
+import { getPrice, getSymbol, getDSLEnabled } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { fmt, fP } from '../utils/format'
@@ -10,7 +10,7 @@ import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { _startLivePendingSync , renderDemoPositions } from './marketDataPositions'
-import { runDSLBrain } from '../trading/dsl'
+import { runDSLBrain, toggleDSL } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 import { calcDslTargetPrice } from '../engine/brain'
 import { updateModeBar } from '../ui/modebar'
@@ -107,6 +107,33 @@ export function _showConfirmDialog(title: string, message: string, cancelText: s
   ;(document.getElementById('zeusConfirmOk') as any).onclick = function () { overlay.remove(); if (typeof onConfirm === 'function') onConfirm() }
 }
 
+// 3-button variant for DSL-off flow: primary / secondary / cancel
+export function _showConfirmDialog3(
+  title: string, message: string,
+  primaryText: string, secondaryText: string, cancelText: string,
+  onPrimary: () => void, onSecondary: () => void,
+): void {
+  const old = document.getElementById('zeusConfirmOverlay'); if (old) old.remove()
+  const overlay = document.createElement('div'); overlay.id = 'zeusConfirmOverlay'
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px'
+  const safeTitle = escHtml(title)
+  const safeMsg = escHtml(message).replace(/\n/g, '<br>')
+  const safePri = escHtml(primaryText), safeSec = escHtml(secondaryText), safeCan = escHtml(cancelText)
+  overlay.innerHTML = '<div style="background:#0a0a1a;border:1px solid #00ffcc66;border-radius:8px;max-width:460px;width:100%;padding:24px;font-family:var(--ff,monospace)">'
+    + '<div style="font-size:14px;font-weight:700;color:#00ffcc;margin-bottom:16px;letter-spacing:1px">' + safeTitle + '</div>'
+    + '<div style="font-size:11px;color:#ccc;line-height:1.7;margin-bottom:24px">' + safeMsg + '</div>'
+    + '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">'
+    + '<button id="zeusConfirmCancel" style="padding:8px 16px;background:#1a1a2e;border:1px solid #333;color:#888;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;letter-spacing:1px">' + safeCan + '</button>'
+    + '<button id="zeusConfirmSec" style="padding:8px 16px;background:#1a2a1a;border:1px solid #f0c040;color:#f0c040;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:600;letter-spacing:1px">' + safeSec + '</button>'
+    + '<button id="zeusConfirmPri" style="padding:8px 16px;background:#001a33;border:1px solid #00aaff;color:#00ffcc;border-radius:4px;cursor:pointer;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:1px">' + safePri + '</button>'
+    + '</div></div>'
+  document.body.appendChild(overlay)
+  ;(document.getElementById('zeusConfirmCancel') as any).onclick = function () { overlay.remove() }
+  overlay.onclick = function (e: any) { if (e.target === overlay) overlay.remove() }
+  ;(document.getElementById('zeusConfirmPri') as any).onclick = function () { overlay.remove(); if (typeof onPrimary === 'function') onPrimary() }
+  ;(document.getElementById('zeusConfirmSec') as any).onclick = function () { overlay.remove(); if (typeof onSecondary === 'function') onSecondary() }
+}
+
 // ═══════════════════════════════════════════════════════
 // ADD FUNDS / RESET DEMO
 // ═══════════════════════════════════════════════════════
@@ -164,8 +191,33 @@ export function placeDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const _curEnv = w._resolvedEnv || (_curMode === 'demo' ? 'DEMO' : 'REAL')
   if (_curMode === 'live' && !w._apiConfigured) { toast('Cannot place order \u2014 exchange not configured', 3000, _ZI.lock); return }
-  if (_curMode === 'live' && w._apiConfigured) { const _isTestnet = _curEnv === 'TESTNET'; _showConfirmDialog(_isTestnet ? 'Place Testnet Order?' : 'Place Real Order?', _isTestnet ? 'You are about to place an order on Binance TESTNET with TEST funds.' : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.', 'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order', function () { _executePlaceDemoOrder() }); return }
-  _executePlaceDemoOrder()
+
+  // [DSL-OFF] Pre-open guard: if DSL engine is OFF, prompt user before placing any manual order
+  const _continueToLiveOrPlace = function () {
+    if (_curMode === 'live' && w._apiConfigured) {
+      const _isTestnet = _curEnv === 'TESTNET'
+      _showConfirmDialog(
+        _isTestnet ? 'Place Testnet Order?' : 'Place Real Order?',
+        _isTestnet ? 'You are about to place an order on Binance TESTNET with TEST funds.' : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.',
+        'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order',
+        function () { _executePlaceDemoOrder() }
+      )
+      return
+    }
+    _executePlaceDemoOrder()
+  }
+
+  if (!getDSLEnabled()) {
+    _showConfirmDialog3(
+      'DSL Engine is OFF',
+      'Dynamic Stop Loss is disabled.\n\nIf you continue, this position will NOT be attached to DSL. TP/SL from Risk Management (or the TP/SL fields above) will be placed natively on the exchange.\n\nActivate DSL now to attach the position to the DSL engine, or continue without DSL.',
+      'Activate DSL', 'Continue without DSL', 'Cancel',
+      function () { try { toggleDSL() } catch (_) {} ; _continueToLiveOrPlace() },
+      function () { _continueToLiveOrPlace() },
+    )
+    return
+  }
+  _continueToLiveOrPlace()
 }
 
 function _executePlaceDemoOrder(): void {
@@ -247,6 +299,9 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
     mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
     dslParams: (() => {
+      // [DSL-OFF] If DSL engine is OFF, do NOT attach DSL. Server will treat null as "skip DSL" and
+      // place native TP/SL from Risk Management instead.
+      if (!getDSLEnabled()) return null
       // [MANUAL DSL] Manual positions use user-set DSL inputs directly — no Brain.
       // Brain-driven AT positions get params via serverDSL.getPreset() on server.
       const _openDsl = parseFloat(el('dslActivatePct')?.value) || 0.50

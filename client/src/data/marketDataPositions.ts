@@ -65,6 +65,8 @@ function _fillDemoPendingOrder(ord: any): void {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
     dslParams: (() => {
+      // [DSL-OFF] If DSL engine is OFF at fill time, do NOT attach DSL. Server skips DSL + places native TP/SL.
+      if (!DSL.enabled) return null
       // [MANUAL DSL] Manual limit positions use user-set DSL inputs directly — no Brain.
       const _openDsl = _numOrDefault(el('dslActivatePct')?.value, 0.50)
       const _pl = _numOrDefault(el('dslTrailPct')?.value, 0.60)

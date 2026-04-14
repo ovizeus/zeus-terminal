@@ -19,7 +19,7 @@ import { runPostMortem } from '../engine/postMortem'
 import { onTradeExecuted } from '../trading/positions'
 import { _bmPostClose, _bmResetDailyIfNeeded } from '../trading/orders'
 import { _isExecAllowed , _safePnl } from '../utils/guards'
-import { _showConfirmDialog } from '../data/marketDataTrading'
+import { _showConfirmDialog, _showConfirmDialog3 } from '../data/marketDataTrading'
 import { computeProbScore } from '../engine/forecast'
 import { PREDATOR, computePredatorState } from '../engine/events'
 import { aubBBSnapshot } from '../engine/aub'
@@ -57,6 +57,22 @@ export function toggleAutoTrade(): void {
     if (typeof w.ZState !== 'undefined' && w.ZState.startATPolling) w.ZState.startATPolling()
     return
   }
+  // [DSL-OFF] When enabling AT while DSL engine is OFF, warn the user first.
+  // New AT positions will NOT attach DSL — they run with native TP/SL from RISK MANAGEMENT.
+  if (!getATEnabled() && !getDSLEnabled()) {
+    _showConfirmDialog3(
+      'DSL Engine is OFF',
+      'You are about to enable AutoTrade while DSL is disabled.\n\nDSL functions (including DSL Brain) will NOT manage new AT positions. The AT engine will place native TP and SL on the exchange using values from RISK MANAGEMENT.\n\nMake sure Stop Loss, Take Profit (R:R), and size settings are correctly configured.\n\nActivate DSL first, continue without DSL, or cancel.',
+      'Activate DSL', 'Continue without DSL', 'Cancel',
+      function () { try { (window as any).toggleDSL?.() } catch (_) {} ; toggleAutoTrade() },
+      function () { _continueAutoTradeEnable() },
+    )
+    return
+  }
+  _continueAutoTradeEnable()
+}
+
+function _continueAutoTradeEnable(): void {
   // ── Live mode confirmation gate ──
   const _atGlobalMode = (typeof AT !== 'undefined' && getATMode()) ? getATMode() : 'demo'
   if (!getATEnabled() && _atGlobalMode === 'live') {
