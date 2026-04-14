@@ -115,22 +115,22 @@ export function DSLZonePanel() {
       <div className="dsl-config" style={{ display: 'none' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <span className="dsl-lbl" style={{ minWidth: '62px', color: '#f0c040bb' }}>OPEN DSL:</span>
-          <input className="dsl-inp" type="number" defaultValue={40} id="dslActivatePct" min={0.1} max={100} step={0.1} style={{ width: '58px', borderColor: '#f0c04044' }} />
+          <input className="dsl-inp" type="number" defaultValue={0.50} id="dslActivatePct" min={0.1} max={100} step={0.05} style={{ width: '58px', borderColor: '#f0c04044' }} />
           <span className="dsl-lbl" style={{ color: '#f0c04077' }}>% TP</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <span className="dsl-lbl" style={{ minWidth: '68px', color: '#ff69b4' }}>PIVOT LEFT:</span>
-          <input className="dsl-inp" type="number" defaultValue={0.8} id="dslTrailPct" min={0.1} max={10} step={0.1} style={{ width: '58px', borderColor: '#ff69b444' }} />
+          <input className="dsl-inp" type="number" defaultValue={0.60} id="dslTrailPct" min={0.1} max={10} step={0.05} style={{ width: '58px', borderColor: '#ff69b444' }} />
           <span className="dsl-lbl" style={{ color: '#ff69b477' }}>% ↓</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <span className="dsl-lbl" style={{ minWidth: '62px', color: '#aa44ffbb' }}>IMPULSE V:</span>
-          <input className="dsl-inp" type="number" defaultValue={2} id="dslExtendPct" min={0.1} max={100} step={0.1} style={{ width: '58px', borderColor: '#aa44ff44' }} />
+          <input className="dsl-inp" type="number" defaultValue={0.25} id="dslExtendPct" min={0.05} max={100} step={0.05} style={{ width: '58px', borderColor: '#aa44ff44' }} />
           <span className="dsl-lbl" style={{ color: '#aa44ff77' }}>% TP</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <span className="dsl-lbl" style={{ minWidth: '68px', color: '#39ff14' }}>PIVOT RIGHT:</span>
-          <input className="dsl-inp" type="number" defaultValue={1.0} id="dslTrailSusPct" min={0.1} max={10} step={0.1} style={{ width: '58px', borderColor: '#39ff1444' }} />
+          <input className="dsl-inp" type="number" defaultValue={0.50} id="dslTrailSusPct" min={0.1} max={10} step={0.05} style={{ width: '58px', borderColor: '#39ff1444' }} />
           <span className="dsl-lbl" style={{ color: '#39ff1477' }}>% ↑</span>
         </div>
       </div>

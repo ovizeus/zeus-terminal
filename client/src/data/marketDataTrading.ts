@@ -246,7 +246,16 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
     id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
     mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: parseFloat(el('dslTrailPct')?.value) || 0.60, pivotRightPct: parseFloat(el('dslTrailSusPct')?.value) || 0.50, impulseVPct: parseFloat(el('dslExtendPct')?.value) || 0.25 }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(TP.demoSide, fillPrice, tp) : { openDslPct: 0.50, dslTargetPrice: TP.demoSide === 'LONG' ? fillPrice * 1.005 : fillPrice * 0.995 }),
+    dslParams: (() => {
+      // [MANUAL DSL] Manual positions use user-set DSL inputs directly — no Brain.
+      // Brain-driven AT positions get params via serverDSL.getPreset() on server.
+      const _openDsl = parseFloat(el('dslActivatePct')?.value) || 0.50
+      const _pl = parseFloat(el('dslTrailPct')?.value) || 0.60
+      const _pr = parseFloat(el('dslTrailSusPct')?.value) || 0.50
+      const _iv = parseFloat(el('dslExtendPct')?.value) || 0.25
+      const _tgt = TP.demoSide === 'LONG' ? fillPrice * (1 + _openDsl / 100) : fillPrice * (1 - _openDsl / 100)
+      return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv, dslTargetPrice: _tgt }
+    })(),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(),
   }
 }

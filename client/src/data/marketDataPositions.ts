@@ -64,7 +64,15 @@ function _fillDemoPendingOrder(ord: any): void {
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
-    dslParams: Object.assign({ pivotLeftPct: _numOrDefault(el('dslTrailPct')?.value, 0.60), pivotRightPct: _numOrDefault(el('dslTrailSusPct')?.value, 0.50), impulseVPct: _numOrDefault(el('dslExtendPct')?.value, 0.25) }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(ord.side, ord.limitPrice, ord.tp) : { openDslPct: 0.50, dslTargetPrice: ord.side === 'LONG' ? ord.limitPrice * 1.005 : ord.limitPrice * 0.995 }),
+    dslParams: (() => {
+      // [MANUAL DSL] Manual limit positions use user-set DSL inputs directly — no Brain.
+      const _openDsl = _numOrDefault(el('dslActivatePct')?.value, 0.50)
+      const _pl = _numOrDefault(el('dslTrailPct')?.value, 0.60)
+      const _pr = _numOrDefault(el('dslTrailSusPct')?.value, 0.50)
+      const _iv = _numOrDefault(el('dslExtendPct')?.value, 0.25)
+      const _tgt = ord.side === 'LONG' ? ord.limitPrice * (1 + _openDsl / 100) : ord.limitPrice * (1 - _openDsl / 100)
+      return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv, dslTargetPrice: _tgt }
+    })(),
     dslAdaptiveState: 'calm', dslHistory: [], openTs: Date.now(), filledAt: Date.now(), createdAt: ord.createdAt,
   }
   if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
