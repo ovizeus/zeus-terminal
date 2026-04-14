@@ -19,6 +19,32 @@ const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.I
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null
 
+// [M12] PIN unlock persists across tab close — localStorage + 4h TTL.
+// On expiry/missing → user is asked for PIN again. Cleared on logout/PIN remove.
+const PIN_UNLOCK_KEY = 'zeus_pin_unlocked_until'
+const PIN_UNLOCK_TTL_MS = 4 * 60 * 60 * 1000 // 4h
+
+function _pinIsUnlocked(): boolean {
+  try {
+    const exp = parseInt(localStorage.getItem(PIN_UNLOCK_KEY) || '0', 10)
+    if (exp && Date.now() < exp) return true
+    if (exp) localStorage.removeItem(PIN_UNLOCK_KEY) // expired — clean up
+  } catch (_) {}
+  // Legacy session-storage fallback (still honored within the same tab)
+  try { if (sessionStorage.getItem('zeus_pin_unlocked')) return true } catch (_) {}
+  return false
+}
+
+function _pinMarkUnlocked(): void {
+  try { localStorage.setItem(PIN_UNLOCK_KEY, String(Date.now() + PIN_UNLOCK_TTL_MS)) } catch (_) {}
+  try { sessionStorage.setItem('zeus_pin_unlocked', '1') } catch (_) {}
+}
+
+function _pinClearUnlocked(): void {
+  try { localStorage.removeItem(PIN_UNLOCK_KEY) } catch (_) {}
+  try { sessionStorage.removeItem('zeus_pin_unlocked') } catch (_) {}
+}
+
 export async function _pinIsSet(): Promise<boolean> {
   if (_pinSetCache !== null) return _pinSetCache
   try { const r = await fetch('/auth/pin/status', { credentials: 'same-origin' }); if (!r.ok) return false; const d = await r.json(); _pinSetCache = !!d.pinSet; return _pinSetCache } catch (_) { return false }
@@ -26,7 +52,7 @@ export async function _pinIsSet(): Promise<boolean> {
 
 export async function _pinCheckLock(): Promise<void> {
   const isSet = await _pinIsSet(); if (!isSet) return
-  if (sessionStorage.getItem('zeus_pin_unlocked')) return
+  if (_pinIsUnlocked()) return
   const ls = document.getElementById('pinLockScreen')
   if (ls) { ls.style.display = 'flex'; setTimeout(function () { const inp = document.getElementById('pinLockInput') as HTMLInputElement | null; if (inp) inp.focus() }, 100); const inp = document.getElementById('pinLockInput'); if (inp) { inp.addEventListener('keydown', function (e: any) { if (e.key === 'Enter') pinUnlock() }) } }
 }
@@ -37,8 +63,8 @@ export async function pinUnlock(): Promise<void> {
   try {
     const r = await fetch('/auth/pin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok === true) { sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof _showWelcomeModal === 'function') _showWelcomeModal() }, 300) } }
-    else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN nu este configurat'; sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
+    if (d.ok === true) { _pinMarkUnlocked(); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof _showWelcomeModal === 'function') _showWelcomeModal() }, 300) } }
+    else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN nu este configurat'; _pinMarkUnlocked(); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
     else if (d.error === 'session_invalid') { if (msg) msg.textContent = 'Sesiune expirat\u0103 \u2014 re-autentific\u0103-te' }
     else { if (msg) msg.textContent = 'PIN incorect!'; inp.value = ''; inp.focus(); inp.classList.add('pin-lock-shake'); setTimeout(function () { inp.classList.remove('pin-lock-shake') }, 500) }
   } catch (err) { if (msg) msg.textContent = 'Eroare de re\u021Bea' }
@@ -52,14 +78,14 @@ export async function pinActivate(): Promise<void> {
   try {
     const r = await fetch('/auth/pin/set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activat!' }; _pinUpdateUI(); sessionStorage.setItem('zeus_pin_unlocked', '1') }
+    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activat!' }; _pinUpdateUI(); _pinMarkUnlocked() }
     else if (d.error === 'session_invalid') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Sesiune expirat\u0103' } }
     else { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Eroare la setarea PIN-ului' } }
   } catch (err) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Eroare de re\u021Bea' } }
 }
 
 export async function pinRemove(): Promise<void> {
-  try { const r = await fetch('/auth/pin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin' }); const d = await r.json(); if (d.ok) { _pinSetCache = false; sessionStorage.removeItem('zeus_pin_unlocked'); try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }; const msg = document.getElementById('pin-msg'); if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN dezactivat.' }; _pinUpdateUI() } } catch (_) { }
+  try { const r = await fetch('/auth/pin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin' }); const d = await r.json(); if (d.ok) { _pinSetCache = false; _pinClearUnlocked(); try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }; const msg = document.getElementById('pin-msg'); if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN dezactivat.' }; _pinUpdateUI() } } catch (_) { }
 }
 
 export async function _pinUpdateUI(): Promise<void> {
@@ -78,7 +104,7 @@ export function _renderBuildInfo(): void {
 let _wlcShown = false
 export function _showWelcomeModal(): void {
   try {
-    if (_wlcShown) return; if (_pinIsSet() && !sessionStorage.getItem('zeus_pin_unlocked')) return; _wlcShown = true
+    if (_wlcShown) return; if (_pinIsSet() && !_pinIsUnlocked()) return; _wlcShown = true
     const m = document.getElementById('mwelcome'); if (!m) return; m.style.display = 'flex'
     const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO'); const modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO')
     const greetEl = document.getElementById('wlcGreeting'); if (greetEl) greetEl.textContent = 'Welcome back, Commander'

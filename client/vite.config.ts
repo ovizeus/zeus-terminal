@@ -8,6 +8,7 @@ export default defineConfig({
   build: {
     outDir: '../public/app',
     emptyOutDir: true,
+    sourcemap: false, // [M18] never emit sourcemaps in production — prevents source disclosure
   },
   server: {
     port: 5173,

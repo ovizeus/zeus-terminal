@@ -1554,7 +1554,8 @@ function _checkDailyReset(userId) {
     const us = _uState(userId);
     const utcDay = Math.floor(Date.now() / 86400000);
     if (utcDay !== us.lastResetDay) {
-        if (us.killActive) {
+        const wasKillActive = us.killActive;
+        if (wasKillActive) {
             logger.info('AT_ENGINE', `Kill switch reset uid=${userId} — new UTC day`);
             telegram.sendToUser(userId, '🟢 *Kill Switch Reset*\nNew UTC day — entries re-enabled');
         }
@@ -1565,6 +1566,8 @@ function _checkDailyReset(userId) {
         us.killActive = false;
         us.lastResetDay = utcDay;
         _persistState(userId);
+        // [M2] Push state change to clients via WS so UI unlocks immediately after midnight
+        if (wasKillActive) _notifyChange(userId);
     }
 }
 
@@ -1891,6 +1894,9 @@ function getDemoPositions(userId) {
 
 /** Full state snapshot for API/WebSocket consumers (per-user) */
 function getFullState(userId) {
+    // [M2] Lazy UTC day rollover — ensures kill switch reset propagates to clients
+    // even when no entry is attempted after midnight. Client polls every 30s.
+    _checkDailyReset(userId);
     const us = _uState(userId);
     const creds = getExchangeCreds(userId);
     const exchangeMode = creds ? (creds.mode || 'live') : null;
