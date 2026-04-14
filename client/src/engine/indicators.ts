@@ -364,7 +364,8 @@ export function updateIchimoku(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function updateFib(): void {
-  fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); fibSeries = []
+  if (!Array.isArray(w.fibSeries)) w.fibSeries = []
+  w.fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.fibSeries = []
   if (!w.mainChart || !w.S.klines.length) return
   const k = w.S.klines; let swH = -Infinity, swL = Infinity, hiIdx = 0, loIdx = 0
   const start = Math.max(0, k.length - 100)
@@ -377,7 +378,7 @@ export function updateFib(): void {
     const price = isUptrend ? swH - lv * (swH - swL) : swL + lv * (swH - swL)
     const s = w.mainChart.addLineSeries({ color: colors[idx] || '#888', lineWidth: 1, priceLineVisible: false, lastValueVisible: true, title: (lv * 100).toFixed(1) + '%', lineStyle: 2 })
     s.setData([{ time: k[start].time, value: price }, { time: k[k.length - 1].time, value: price }])
-    fibSeries.push(s)
+    w.fibSeries.push(s)
   })
 }
 
