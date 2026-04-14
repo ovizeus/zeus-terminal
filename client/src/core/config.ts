@@ -244,7 +244,6 @@ export function _srSave() {
     stats: SIGNAL_REGISTRY.stats,
   })
   w._ucMarkDirty('signalRegistry')
-  if (typeof w._userCtxPush === 'function') w._userCtxPush()
 }
 export function _srLoad() {
   try {
@@ -410,7 +409,6 @@ function _ncSave() {
     items: NOTIFICATION_CENTER.items.slice(0, 100),
   })
   w._ucMarkDirty('notifications')
-  if (typeof w._userCtxPush === 'function') w._userCtxPush()
 }
 export function _ncLoad() {
   try {
@@ -438,7 +436,6 @@ export function _ctxSave() {
         atLog: (typeof AT !== 'undefined' && Array.isArray(AT.log)) ? AT.log.slice(0, 50) : [],
       })
       w._ucMarkDirty('uiContext')
-      if (typeof w._userCtxPush === 'function') w._userCtxPush()
     } catch (_) { /* */ }
   }, 1000)
 }
@@ -470,6 +467,12 @@ let _ucPushTimer: any = null
 let _ucPulling = false
 const _ucVersion = 4
 let _ucPushPending = false
+// [ZT-AUD-#11] Throttle _ucPushBeacon: collapse rapid bursts into 1 trailing
+// push every UC_BEACON_MIN_MS, preventing 5-50 push/min spam loops triggered
+// by ws sync → pullAndMerge → _userCtxPull → re-push when local newer.
+const UC_BEACON_MIN_MS = 1500
+let _ucBeaconLastTs = 0
+let _ucBeaconTrailingTimer: any = null
 
 let _ucDirtyTs: any = {}
 try { _ucDirtyTs = JSON.parse(localStorage.getItem('zeus_uc_dirty_ts') || '{}') } catch (_) { _ucDirtyTs = {} }
@@ -516,7 +519,7 @@ function _buildAllSections(): any {
 
 export function _userCtxPushNow() {
   if (_ucPushTimer) { clearTimeout(_ucPushTimer); _ucPushTimer = null }
-  _ucPushBeacon()
+  _ucPushBeacon(true)
 }
 w._userCtxPushNow = _userCtxPushNow
 
@@ -524,6 +527,7 @@ export function _userCtxPush() {
   if (_ucPushTimer) clearTimeout(_ucPushTimer)
   _ucPushTimer = setTimeout(function _ucPushExec() {
     try {
+      if (typeof w._zsMarkPush === 'function') w._zsMarkPush()
       const payload = { _v: _ucVersion, ts: Date.now(), sections: _buildAllSections() }
       fetch('/api/sync/user-context', {
         method: 'POST',
@@ -585,8 +589,8 @@ export function _userCtxPull() {
       let localUS: any = JSON.parse(localStorage.getItem('zeus_user_settings') || 'null')
       let localTs = (localUS && localUS._syncTs) ? localUS._syncTs : 0
       const serverSettingsTs = (sec.settings && sec.settings.ts) ? sec.settings.ts : 0
-      if (localTs > serverSettingsTs && localTs > 0) {
-        console.log('[UC] local newer than server (' + localTs + ' > ' + serverSettingsTs + ') — re-pushing')
+      if (localTs > serverSettingsTs + 5000 && localTs > 0) {
+        console.log('[UC] local significantly newer than server (' + localTs + ' > ' + serverSettingsTs + ') — re-pushing')
         _ucPushBeacon()
       }
 
@@ -1445,12 +1449,13 @@ export function _usScheduleSave() {
 }
 export function _usFlush() {
   if (_usSettingsTimer) { clearTimeout(_usSettingsTimer); _usSettingsTimer = null; _usSave() }
-  if (_ucPushTimer) { clearTimeout(_ucPushTimer); _ucPushTimer = null; _ucPushBeacon() }
+  if (_ucPushTimer) { clearTimeout(_ucPushTimer); _ucPushTimer = null; _ucPushBeacon(true) }
 }
 
 const _UC_BEACON_PENDING_KEY = 'zeus_uc_beacon_pending'
-export function _ucPushBeacon() {
+function _ucPushBeaconNow() {
   try {
+    _ucBeaconLastTs = Date.now()
     const payload = JSON.stringify({
       _v: _ucVersion,
       ts: Date.now(),
@@ -1471,6 +1476,28 @@ export function _ucPushBeacon() {
         .catch(function () { /* LS pending will be retried on next boot */ })
     }
   } catch (_) { /* */ }
+}
+export function _ucPushBeacon(force?: boolean) {
+  // [ZT-AUD-#11] Throttle: if a beacon fired within UC_BEACON_MIN_MS, schedule
+  // a single trailing push when the window expires. force=true bypasses (used
+  // by visibility=hidden / unload paths where data must flush immediately).
+  if (force) {
+    if (_ucBeaconTrailingTimer) { clearTimeout(_ucBeaconTrailingTimer); _ucBeaconTrailingTimer = null }
+    _ucPushBeaconNow()
+    return
+  }
+  const now = Date.now()
+  const elapsed = now - _ucBeaconLastTs
+  if (elapsed >= UC_BEACON_MIN_MS) {
+    if (_ucBeaconTrailingTimer) { clearTimeout(_ucBeaconTrailingTimer); _ucBeaconTrailingTimer = null }
+    _ucPushBeaconNow()
+    return
+  }
+  if (_ucBeaconTrailingTimer) return
+  _ucBeaconTrailingTimer = setTimeout(function () {
+    _ucBeaconTrailingTimer = null
+    _ucPushBeaconNow()
+  }, UC_BEACON_MIN_MS - elapsed)
 }
 export function _ucRetryPendingBeacon() {
   try {
@@ -1549,7 +1576,6 @@ export function _usSave() {
     localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS))
     _ucMarkDirty('settings')
     console.log('[US] Settings saved')
-    if (typeof _userCtxPush === 'function') _userCtxPush()
   } catch (e: any) {
     console.warn('[US] Save failed:', e.message)
   }
@@ -1939,7 +1965,7 @@ export let _execActive = false
 
 // Window exports
 w.INDICATORS = INDICATORS
-w.WL_SYMS = w.WL_SYMS  // declared in state.js
+if (!w.WL_SYMS) w.WL_SYMS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'ZECUSDT']
 w.NOTIFICATION_CENTER = NOTIFICATION_CENTER
 w.USER_SETTINGS = USER_SETTINGS
 w.BT = BT
