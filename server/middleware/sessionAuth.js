@@ -66,7 +66,10 @@ function createSessionAuth(jwtSecret) {
             '/manifest.json',
             '/assets/',
             '/css/',
-            '/js/'
+            '/js/',
+            // [ZT-AUD-#15] Allow unauthenticated client error reports (so a
+            // crash on the login page itself can still be logged).
+            '/api/client-error'
         ];
 
         const isPublic = publicPaths.some(p => req.path.startsWith(p));

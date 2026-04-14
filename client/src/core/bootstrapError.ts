@@ -8,14 +8,57 @@ import { updateModeBar } from '../ui/modebar'
 const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
 
 // ===== GLOBAL ERROR BOUNDARY =====
+// [ZT-AUD-#15 / C13] Catch errors thrown anywhere in legacy code (intervals,
+// event handlers, async callbacks) that escape the React ErrorBoundary. Show
+// a Degraded banner so user knows something is broken instead of seeing a
+// frozen UI silently. Also handle unhandledrejection for promise paths.
+function _ensureEngineBanner(): HTMLElement | null {
+  let b = document.getElementById('engineErrorBanner') as HTMLElement | null
+  if (b) return b
+  if (!document.body) return null
+  b = document.createElement('div')
+  b.id = 'engineErrorBanner'
+  b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#ff3355,#aa1133);color:#fff;font-family:var(--ff,monospace);font-size:11px;font-weight:700;letter-spacing:0.5px;padding:6px 12px;text-align:center;display:none;border-bottom:1px solid #000;box-shadow:0 2px 8px rgba(0,0,0,0.4)'
+  b.textContent = '\u26A0 DEGRADED MODE \u2014 engine error caught. Refresh recommended.'
+  document.body.appendChild(b)
+  return b
+}
+
+function _reportClientError(payload: Record<string, any>) {
+  try {
+    fetch('/api/client-error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
+      body: JSON.stringify(payload),
+      credentials: 'same-origin',
+      keepalive: true,
+    }).catch(function () { /* best-effort */ })
+  } catch (_) { /* */ }
+}
+
+let _bannerShown = false
+function _showDegradedBanner(reason: string, meta?: Record<string, any>) {
+  if (_bannerShown) return
+  _bannerShown = true
+  const b = _ensureEngineBanner()
+  if (b) b.style.display = 'block'
+  _reportClientError({ kind: 'engine-error', reason, ts: Date.now(), ...(meta || {}) })
+}
+
 window.addEventListener('error', function (e: any) {
   console.error('[ZEUS][GlobalError]', e.message, e.filename, e.lineno)
   const fn = (e.filename || '').toLowerCase()
-  const isCoreEngine = fn.indexOf('/brain/') !== -1 || fn.indexOf('/core/') !== -1 || fn.indexOf('/trading/') !== -1 || fn.indexOf('/data/') !== -1
+  const isCoreEngine = fn.indexOf('/brain/') !== -1 || fn.indexOf('/core/') !== -1 || fn.indexOf('/trading/') !== -1 || fn.indexOf('/data/') !== -1 || fn.indexOf('/engine/') !== -1 || fn.indexOf('/bridge/') !== -1
   if (isCoreEngine && e.message && !/resizeobserver|script error/i.test(e.message)) {
-    const banner = document.getElementById('engineErrorBanner')
-    if (banner) banner.style.display = 'block'
+    _showDegradedBanner(e.message, { filename: e.filename, lineno: e.lineno })
   }
+})
+
+window.addEventListener('unhandledrejection', function (e: any) {
+  const reason = (e.reason && (e.reason.stack || e.reason.message)) || String(e.reason || 'unknown')
+  console.error('[ZEUS][UnhandledRejection]', reason)
+  if (/resizeobserver|abort/i.test(reason)) return
+  _showDegradedBanner('unhandledrejection: ' + String(reason).slice(0, 200))
 })
 
 // ===== APP UPDATE CHECKER =====

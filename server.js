@@ -151,6 +151,31 @@ app.get('/api/version', (_req, res) => {
   res.json(Object.assign({}, appVersion, { migration: MF.getAll() }));
 });
 
+// [ZT-AUD-#15 / C13] Client-side error report sink. Body: {kind, reason, ...}.
+// Logs via structured logger so degraded-mode incidents are observable in logs
+// even though there is no client Sentry. Throttled to avoid log flood from a
+// stuck loop (single user spamming).
+const _clientErrorLastTs = new Map();
+app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
+  try {
+    const uid = (req.user && req.user.id) || 'anon';
+    const now = Date.now();
+    const last = _clientErrorLastTs.get(uid) || 0;
+    if (now - last < 5000) return res.json({ ok: true, throttled: true });
+    _clientErrorLastTs.set(uid, now);
+    const body = req.body || {};
+    logger.log('WARN', 'CLIENT_ERR', String(body.reason || 'unknown').slice(0, 300), {
+      uid,
+      kind: body.kind || 'unknown',
+      filename: body.filename,
+      lineno: body.lineno,
+      ts: body.ts,
+      ua: req.get('user-agent'),
+    });
+  } catch (_) { /* swallow — client report must not 500 */ }
+  res.json({ ok: true });
+});
+
 // ─── Migration Flags (admin-only control for gradual migration) ───
 app.get('/api/migration/flags', (_req, res) => {
   res.json(MF.getAll());
