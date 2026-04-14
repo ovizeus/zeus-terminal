@@ -305,6 +305,11 @@ migrate('017_ares_state', () => {
     `);
 });
 
+migrate('018_pwd_temp_meta', () => {
+    db.exec("ALTER TABLE users ADD COLUMN pwd_temp_expires_at TEXT DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN pwd_must_change INTEGER NOT NULL DEFAULT 0");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -352,6 +357,10 @@ const _stmts = {
 
     // Token version (session invalidation)
     bumpTokenVersion: db.prepare("UPDATE users SET token_version = token_version + 1, updated_at = datetime('now') WHERE id = ?"),
+
+    // Temp-password metadata (set by admin reset, cleared on user change)
+    setPwdTempMeta: db.prepare("UPDATE users SET pwd_temp_expires_at = ?, pwd_must_change = 1, updated_at = datetime('now') WHERE id = ?"),
+    clearPwdTempMeta: db.prepare("UPDATE users SET pwd_temp_expires_at = NULL, pwd_must_change = 0, updated_at = datetime('now') WHERE id = ?"),
 
     // Password history
     insertPasswordHistory: db.prepare('INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)'),
@@ -448,6 +457,14 @@ function updatePassword(userId, newHash) {
 
 function bumpTokenVersion(userId) {
     return _stmts.bumpTokenVersion.run(userId);
+}
+
+function setTempPasswordMeta(userId, expiresAtIso) {
+    return _stmts.setPwdTempMeta.run(expiresAtIso, userId);
+}
+
+function clearTempPasswordMeta(userId) {
+    return _stmts.clearPwdTempMeta.run(userId);
 }
 
 function updateEmail(userId, newEmail) {
@@ -741,6 +758,8 @@ module.exports = {
     deleteUser,
     updatePassword,
     bumpTokenVersion,
+    setTempPasswordMeta,
+    clearTempPasswordMeta,
     updateEmail,
     atomicEmailUpdate,
     setUserStatus,

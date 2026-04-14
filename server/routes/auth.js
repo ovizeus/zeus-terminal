@@ -260,6 +260,12 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ error: 'Email sau parolă incorectă' });
         }
 
+        // Reject expired temporary password (set by admin reset)
+        if (user.pwd_temp_expires_at && new Date(user.pwd_temp_expires_at) < new Date()) {
+            db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'temp_password_expired' }, req.ip);
+            return res.status(401).json({ error: 'Parola temporară a expirat. Cere admin-ului una nouă.' });
+        }
+
         // Check approval
         if (!user.approved) {
             return res.status(403).json({ error: 'Contul tău nu a fost încă aprobat de administrator.' });
@@ -778,10 +784,12 @@ router.post('/admin/reset-password', async (req, res) => {
     }
     const tempPassword = crypto.randomBytes(9).toString('base64').replace(/[+/=]/g, '').slice(0, 12) + '!9';
     const hash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     db.updatePassword(target.id, hash);
+    db.setTempPasswordMeta(target.id, expiresAt);
     db.bumpTokenVersion(target.id);
-    db.auditLog(guard.caller.id, 'ADMIN_RESET_PASSWORD', { targetEmail: normalEmail, targetId: target.id }, req.ip);
-    res.json({ ok: true, tempPassword, note: 'Communicate this to the user via secure channel. It is shown once.' });
+    db.auditLog(guard.caller.id, 'ADMIN_RESET_PASSWORD', { targetEmail: normalEmail, targetId: target.id, expiresAt }, req.ip);
+    res.json({ ok: true, tempPassword, expiresAt, note: 'Temp password expires in 1 hour. Communicate via secure channel; user must change on first login.' });
 });
 
 // ─── ADMIN: POST /auth/admin/bulk — bulk ops (force-logout / approve / block) ───
@@ -954,6 +962,7 @@ router.post('/change-password/confirm', async (req, res) => {
         // Update password + record in history + invalidate old sessions
         db.updatePassword(user.id, newHash);
         db.addPasswordHistory(user.id, newHash);
+        db.clearTempPasswordMeta(user.id);
         db.bumpTokenVersion(user.id);
         pendingCodes.delete(key);
 
