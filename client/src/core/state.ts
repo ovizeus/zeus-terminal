@@ -167,10 +167,10 @@ w.TC = w.TC || {
   hourEnd: 23,
   sigMin: 3,
   confMin: 65,
-  dslActivatePct: 40,
-  dslTrailPct: 0.8,
-  dslTrailSusPct: 1.0,
-  dslExtendPct: 20,
+  dslActivatePct: 0.50,
+  dslTrailPct: 0.60,
+  dslTrailSusPct: 0.50,
+  dslExtendPct: 0.25,
 }
 
 export function syncDOMtoTC() {

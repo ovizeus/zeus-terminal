@@ -875,7 +875,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         pivotRightPct: getTCDslTrailSusPct(),
         impulseVPct: getTCDslExtendPct(),
       }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(side, entry, tp) : {
-        openDslPct: 1.5, dslTargetPrice: side === 'LONG' ? entry * 1.015 : entry * 0.985
+        openDslPct: 0.50, dslTargetPrice: side === 'LONG' ? entry * 1.005 : entry * 0.995
       }),
       dslAdaptiveState: 'calm',
       dslHistory: [],
@@ -985,7 +985,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
             pivotRightPct: getTCDslTrailSusPct(),
             impulseVPct: getTCDslExtendPct(),
           }, typeof calcDslTargetPrice === 'function' ? calcDslTargetPrice(side, fillPrice, _liveTP) : {
-            openDslPct: 1.5, dslTargetPrice: side === 'LONG' ? fillPrice * 1.015 : fillPrice * 0.985
+            openDslPct: 0.50, dslTargetPrice: side === 'LONG' ? fillPrice * 1.005 : fillPrice * 0.995
           }),
           dslAdaptiveState: 'calm',
           dslHistory: [],

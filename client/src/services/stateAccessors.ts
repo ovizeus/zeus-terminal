@@ -259,25 +259,25 @@ export function getDSLObject(): any {
   return (window as any).DSL
 }
 
-/** TC DSL activate pct — TEMP bridge */
+/** TC DSL activate pct — MANUAL DSL STANDARD (user-confirmed) */
 export function getTCDslActivatePct(): number {
   const w = window as any
   return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslActivatePct)) ? w.TC.dslActivatePct : 0.50
 }
-/** TC DSL trail pct (pivot left) — TEMP bridge */
+/** TC DSL trail pct (pivot left = PL) — MANUAL DSL STANDARD */
 export function getTCDslTrailPct(): number {
   const w = window as any
-  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : 0.70
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailPct)) ? w.TC.dslTrailPct : 0.60
 }
-/** TC DSL trail sus pct (pivot right) — TEMP bridge */
+/** TC DSL trail sus pct (pivot right = PR) — MANUAL DSL STANDARD */
 export function getTCDslTrailSusPct(): number {
   const w = window as any
-  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : 1.00
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslTrailSusPct)) ? w.TC.dslTrailSusPct : 0.50
 }
-/** TC DSL extend pct (impulse) — TEMP bridge */
+/** TC DSL extend pct (impulse = IV, delta from PR) — MANUAL DSL STANDARD */
 export function getTCDslExtendPct(): number {
   const w = window as any
-  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : 1.30
+  return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.dslExtendPct)) ? w.TC.dslExtendPct : 0.25
 }
 
 // ── Added in 8C-3B (dsl.ts market + positions reads) ──
