@@ -449,13 +449,15 @@ export function _runClientDSLOnPositions(positions: any[]): void {
         ? cur * (1 + pivotRightPct / 100)
         : cur * (1 - pivotRightPct / 100)
 
+      // [DSL-SEMANTIC-FIX] IV is measured FROM PR, not from current price.
+      // PR is already offset from cur by pivotRightPct, so IV = PR * (1 + ivPct/100).
       dsl.impulseVal = isLong
-        ? cur * (1 + impulseValPct / 100)
-        : cur * (1 - impulseValPct / 100)
+        ? dsl.pivotRight * (1 + impulseValPct / 100)
+        : dsl.pivotRight * (1 - impulseValPct / 100)
 
       dsl.pivotLeft = _dslSafePrice(dsl.pivotLeft, pos.sl, 'PL-init')
       dsl.pivotRight = _dslSafePrice(dsl.pivotRight, cur, 'PR-init')
-      dsl.impulseVal = _dslSafePrice(dsl.impulseVal, cur, 'IV-init')
+      dsl.impulseVal = _dslSafePrice(dsl.impulseVal, dsl.pivotRight, 'IV-init')
 
       // [DSL MAGNET] Hook A
       const _magnetOn_A = !!(pos.dslParams && pos.dslParams.magnetEnabled)
@@ -550,9 +552,15 @@ export function _runClientDSLOnPositions(positions: any[]): void {
             const oldPL = dsl.pivotLeft
             const oldIV = dsl.impulseVal
 
+            // [DSL-SEMANTIC-FIX] At impulse, PL anchors to current price (tightens).
+            // New PR = cur + pivotRightPct (will continue trailing on Faza 2).
+            // IV = new PR * (1 + ivPct/100) — always relative to PR.
+            const _newPR = isLong
+              ? cur * (1 + pivotRightPct / 100)
+              : cur * (1 - pivotRightPct / 100)
             dsl.impulseVal = isLong
-              ? cur * (1 + impulseValPct / 100)
-              : cur * (1 - impulseValPct / 100)
+              ? _newPR * (1 + impulseValPct / 100)
+              : _newPR * (1 - impulseValPct / 100)
 
             dsl.pivotLeft = isLong
               ? cur * (1 - pivotLeftPct / 100)

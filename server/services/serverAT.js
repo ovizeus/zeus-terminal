@@ -887,9 +887,13 @@ async function _executeLiveEntry(entry, stc) {
         return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
     }
 
-    // TP order with retry loop [B3]
+    // [DSL-SEMANTIC-FIX] No native TP on exchange for DSL-controlled AT positions.
+    // Rationale: DSL pivots (PR/IV) trail the price to capture the entire move.
+    // A native TP would close prematurely and cap the upside. PL (trailing stop
+    // via DSL) is the only exit path besides the native SL safety net.
     let tpOrder = null;
-    const TP_RETRY_DELAYS = [1000, 3000]; // [ZT-AUD-007] 1s, 3s backoff (consistent with SL)
+    const TP_RETRY_DELAYS = [1000, 3000];
+    /* TP placement intentionally skipped — DSL handles exit via PL trailing.
     for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
         try {
             tpOrder = await _placeConditionalOrder({
@@ -899,7 +903,7 @@ async function _executeLiveEntry(entry, stc) {
                 reduceOnly: true, newClientOrderId: `SAT_TP_${liveSeq}_${tpAttempt}`,
             }, creds);
             if (tpAttempt > 0) logger.info('AT_LIVE', `[${entry.seq}] TP order succeeded on retry #${tpAttempt}`);
-            break; // success
+            break;
         } catch (tpErr) {
             logger.error('AT_LIVE', `[${entry.seq}] TP order attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
             if (tpAttempt < TP_RETRY_DELAYS.length) {
@@ -908,9 +912,9 @@ async function _executeLiveEntry(entry, stc) {
             }
         }
     }
+    */
 
-    // [B3] If all TP retries failed — emergency close to prevent unprotected exposure
-    if (!tpOrder && slOrder) {
+    if (false && !tpOrder && slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL TP retries exhausted — executing EMERGENCY MARKET CLOSE`);
         Sentry.captureMessage(`EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_tp', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${TP_RETRY_DELAYS.length + 1} TP attempts failed.\nEmergency closing — position cannot stay open without TP protection.`);
@@ -1567,14 +1571,9 @@ function onPriceUpdate(symbol, price) {
             continue;
         }
 
-        // DSL TTP exit
-        if (dsl.ttpExit) {
-            const ttpPnl = pos.side === 'LONG'
-                ? (price - pos.price) / pos.price * pos.size * pos.lev
-                : (pos.price - price) / pos.price * pos.size * pos.lev;
-            _closePosition(i, pos, 'DSL_TTP', price, +ttpPnl.toFixed(2));
-            continue;
-        }
+        // [DSL-SEMANTIC-FIX] TTP removed — only PL closes DSL positions.
+        // Rationale: DSL pivots must capture the full move; an extra
+        // TTP retrace check would close prematurely against user intent.
 
         // DSL moved SL → update internal state + live order on Binance
         if (dsl.changed) {
@@ -2211,24 +2210,9 @@ async function addOnPosition(userId, seq, options = {}) {
                 }
             }
 
-            // ── Place new TP with total qty ──
+            // [DSL-SEMANTIC-FIX] No native TP on addons either — DSL handles exit.
             let newTpOrder = null;
-            for (let attempt = 0; attempt <= ADDON_TP_RETRIES.length; attempt++) {
-                try {
-                    newTpOrder = await _placeConditionalOrder({
-                        symbol: pos.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
-                        quantity: totalQtyStr,
-                        stopPrice: String(totalRoundedTp.stopPrice != null ? totalRoundedTp.stopPrice : pos.tp),
-                        reduceOnly: true, newClientOrderId: `SAT_ADONTP_${liveSeq}_${pos.addOnCount}_${attempt}`,
-                    }, creds);
-                    break;
-                } catch (tpErr) {
-                    logger.error('AT_ADDON', `[${seq}] Addon TP attempt ${attempt + 1} failed: ${tpErr.message}`);
-                    if (attempt < ADDON_TP_RETRIES.length) {
-                        await new Promise(r => setTimeout(r, ADDON_TP_RETRIES[attempt]));
-                    }
-                }
-            }
+            /* TP placement intentionally skipped for DSL-controlled positions. */
 
             // ── If SL/TP both failed: rollback position state, but MARKET order is filled ──
             // Position is live with increased size — warn user for manual SL/TP
@@ -2761,30 +2745,11 @@ async function _checkOrderHealth(pos, creds, label) {
         _persistPosition(pos);
     }
 
-    // Check TP order
+    // [DSL-SEMANTIC-FIX] TP reconciliation disabled — DSL-controlled positions
+    // have no native TP on exchange. If an old pos still has tpOrderId from
+    // before the fix, just clear it silently.
     if (pos.live.tpOrderId && !orderIds.has(pos.live.tpOrderId)) {
-        logger.warn(label, `[${pos.seq}] TP order ${pos.live.tpOrderId} MISSING from Binance — attempting re-placement`);
-        const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
-        const roundedTp = roundOrderParams(pos.symbol, pos.live.executedQty, pos.tp);
-        try {
-            const newTp = await _placeConditionalOrder({
-                symbol: pos.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
-                quantity: String(roundedTp.quantity || pos.live.executedQty),
-                stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : pos.tp),
-                reduceOnly: true, newClientOrderId: `SAT_RETPOT_${pos.live.liveSeq}_${Date.now()}`,
-            }, creds);
-            pos.live.tpOrderId = newTp.orderId;
-            logger.info(label, `[${pos.seq}] TP re-placed successfully → algoId=${newTp.orderId}`);
-        } catch (err) {
-            pos.live.tpOrderId = null;
-            logger.warn(label, `[${pos.seq}] TP re-placement failed: ${err.message}`);
-            // [AUDIT] Per-user dedupe — alert once per position, not every recon cycle
-            const _tpFailKey = `${userId}:${pos.seq}`;
-            if (!_reconAlerted.tpFails.has(_tpFailKey)) {
-                _reconAlerted.tpFails.add(_tpFailKey);
-                telegram.sendToUser(userId, `⚠️ TP re-placement failed for ${pos.side} ${pos.symbol}\nManual TP may be required.`);
-            }
-        }
+        pos.live.tpOrderId = null;
         _persistPosition(pos);
     }
 }

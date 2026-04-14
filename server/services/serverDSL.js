@@ -11,20 +11,22 @@ const DSL_MAX_LOG = 200; // [H2] cap per-position log to prevent unbounded growt
 // ══════════════════════════════════════════════════════════════════
 // DSL Configuration Defaults (mirrors client TC/global defaults)
 // ══════════════════════════════════════════════════════════════════
+// [DSL-SEMANTIC-FIX] impulseVPct is now DELTA from PR (not from cur).
+// New formula: IV = PR * (1 + impulseVPct/100). Presets recalibrated accordingly.
 const DSL_DEFAULTS = {
-    openDslPct: 0.50,       // DEF preset default
-    pivotLeftPct: 0.70,
-    pivotRightPct: 1.00,
-    impulseVPct: 1.30,
+    openDslPct: 0.60,
+    pivotLeftPct: 0.80,
+    pivotRightPct: 0.70,
+    impulseVPct: 0.30,
 };
 
-// Authoritative Brain DSL mode presets
+// Authoritative Brain DSL mode presets (IV = delta from PR)
 const DSL_PRESETS = {
-    fast: { openDslPct: 0.30, pivotLeftPct: 0.40, pivotRightPct: 0.60, impulseVPct: 0.80 },
-    tp: { openDslPct: 0.35, pivotLeftPct: 0.45, pivotRightPct: 0.75, impulseVPct: 1.00 },
-    def: { openDslPct: 0.50, pivotLeftPct: 0.70, pivotRightPct: 1.00, impulseVPct: 1.30 },
-    atr: { openDslPct: 0.65, pivotLeftPct: 0.90, pivotRightPct: 1.30, impulseVPct: 1.70 },
-    swing: { openDslPct: 1.00, pivotLeftPct: 1.30, pivotRightPct: 1.90, impulseVPct: 2.40 },
+    fast: { openDslPct: 0.35, pivotLeftPct: 0.50, pivotRightPct: 0.40, impulseVPct: 0.20 },
+    tp: { openDslPct: 0.40, pivotLeftPct: 0.55, pivotRightPct: 0.45, impulseVPct: 0.25 },
+    def: { openDslPct: 0.60, pivotLeftPct: 0.80, pivotRightPct: 0.70, impulseVPct: 0.30 },
+    atr: { openDslPct: 0.80, pivotLeftPct: 1.10, pivotRightPct: 0.90, impulseVPct: 0.35 },
+    swing: { openDslPct: 1.00, pivotLeftPct: 1.30, pivotRightPct: 1.10, impulseVPct: 0.40 },
 };
 
 function getPreset(mode) {
@@ -55,13 +57,8 @@ function _sanitizeParams(raw) {
         if (v > c.max) v = c.max;
         out[key] = v;
     }
-    // impulse must exceed pivotRight
-    if (out.impulseVPct <= out.pivotRightPct) {
-        out.impulseVPct = Math.round((out.pivotRightPct + 0.01) * 100) / 100;
-        if (out.impulseVPct > DSL_CLAMPS.impulseVPct.max) {
-            out.pivotRightPct = Math.round((out.impulseVPct - 0.01) * 100) / 100;
-        }
-    }
+    // [DSL-SEMANTIC-FIX] impulseVPct is now a DELTA from PR, so it can be
+    // smaller than pivotRightPct. No cross-field constraint needed.
     return out;
 }
 
@@ -182,20 +179,20 @@ function tick(posId, price) {
             ? price * (1 - p.pivotLeftPct / 100)
             : price * (1 + p.pivotLeftPct / 100);
 
-        // Pivot Right = ahead of DSL anchor
+        // Pivot Right = ahead of DSL anchor (trails price on Phase 2)
         s.pivotRight = isLong
             ? price * (1 + p.pivotRightPct / 100)
             : price * (1 - p.pivotRightPct / 100);
 
-        // Impulse Validation = further ahead from current price
+        // [DSL-SEMANTIC-FIX] Impulse Validation = delta from PR, NOT from price.
         s.impulseVal = isLong
-            ? price * (1 + p.impulseVPct / 100)
-            : price * (1 - p.impulseVPct / 100);
+            ? s.pivotRight * (1 + p.impulseVPct / 100)
+            : s.pivotRight * (1 - p.impulseVPct / 100);
 
         // Safety guards
         s.pivotLeft = _safePrice(s.pivotLeft, s.originalSL);
         s.pivotRight = _safePrice(s.pivotRight, price);
-        s.impulseVal = _safePrice(s.impulseVal, price);
+        s.impulseVal = _safePrice(s.impulseVal, s.pivotRight);
 
         // Pivot Left becomes the new effective SL
         s.currentSL = s.pivotLeft;
@@ -252,10 +249,14 @@ function tick(posId, price) {
                 const oldPL = s.pivotLeft;
                 const oldIV = s.impulseVal;
 
-                // Impulse Val recalculated from current price anchor
+                // [DSL-SEMANTIC-FIX] At impulse: PL tightens to cur, new PR = cur+PR%,
+                // new IV = new PR * (1 + iv%/100). IV is always delta from PR.
+                const newPR = isLong
+                    ? price * (1 + p.pivotRightPct / 100)
+                    : price * (1 - p.pivotRightPct / 100);
                 s.impulseVal = isLong
-                    ? price * (1 + p.impulseVPct / 100)
-                    : price * (1 - p.impulseVPct / 100);
+                    ? newPR * (1 + p.impulseVPct / 100)
+                    : newPR * (1 - p.impulseVPct / 100);
 
                 // Pivot Left moves toward current price (SL tightens)
                 s.pivotLeft = isLong
@@ -290,38 +291,8 @@ function tick(posId, price) {
             if (s.impulseTriggered) s.impulseTriggered = false;
         }
 
-        // ═══════════════════════════════════════════════════════
-        // TTP (Trailing Take Profit) — arms at +0.8%, trails 0.3%
-        // ═══════════════════════════════════════════════════════
-        const profitPct = isLong
-            ? (price - s.entry) / s.entry * 100
-            : (s.entry - price) / s.entry * 100;
-
-        if (!s.ttpArmed && profitPct >= 0.8) {
-            s.ttpArmed = true;
-            s.ttpPeak = price;
-            s.log.push({ ts: Date.now(), msg: `TTP armed @$${price.toFixed(2)} (profit ${profitPct.toFixed(2)}%)` });
-            logger.info('DSL', `[S${s.id}] 📈 TTP armed @ $${price.toFixed(2)}`);
-        }
-
-        if (s.ttpArmed) {
-            // Update peak
-            if (isLong && price > s.ttpPeak) s.ttpPeak = price;
-            if (!isLong && price < s.ttpPeak) s.ttpPeak = price;
-
-            // Check retrace from peak
-            const retracePct = isLong
-                ? (s.ttpPeak - price) / s.ttpPeak * 100
-                : (price - s.ttpPeak) / s.ttpPeak * 100;
-
-            if (retracePct >= 0.3) {
-                ttpExit = true;
-                const msg = `TTP Exit @$${price.toFixed(2)} (peak $${s.ttpPeak.toFixed(2)}, retrace ${retracePct.toFixed(2)}%)`;
-                s.log.push({ ts: Date.now(), msg });
-                logger.info('DSL', `[S${s.id}] 📈 ${msg}`);
-                return { currentSL: s.currentSL, plExit: false, ttpExit: true, phase: _getPhase(s), changed };
-            }
-        }
+        // [DSL-SEMANTIC-FIX] TTP removed — only PL exit closes DSL positions.
+        // Pivots must capture the full move; no secondary retrace-based exit.
     }
 
     return { currentSL: s.currentSL, plExit, ttpExit, phase: _getPhase(s), changed };
