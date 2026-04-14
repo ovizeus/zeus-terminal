@@ -96,7 +96,7 @@ export function AdminModal({ visible, onClose }: Props) {
   const loadUsers = useCallback(() => {
     setUsersLoading(true)
     setUsersError('')
-    fetch('/auth/admin/users', { credentials: 'same-origin' })
+    fetch('/auth/admin/users', { credentials: 'same-origin', headers: { 'X-Zeus-Request': '1' } })
       .then(r => r.json())
       .then(data => {
         if (!data.ok) { setUsersError('Eroare'); setUsersLoading(false); return }
@@ -109,7 +109,7 @@ export function AdminModal({ visible, onClose }: Props) {
   const loadAudit = useCallback(() => {
     setAuditLoading(true)
     setAuditError('')
-    fetch('/auth/admin/audit?limit=50', { credentials: 'same-origin' })
+    fetch('/auth/admin/audit?limit=50', { credentials: 'same-origin', headers: { 'X-Zeus-Request': '1' } })
       .then(r => r.json())
       .then(data => {
         if (!data.ok || !data.entries || data.entries.length === 0) {

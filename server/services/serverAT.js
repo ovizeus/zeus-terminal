@@ -2655,11 +2655,22 @@ async function _runReconciliation(isStartup) {
                     );
                     const idx = _positions.findIndex(p => p.seq === pos.seq && p.userId === userId);
                     if (idx >= 0) {
-                        const exitPrice = realExitPrice || (bpos ? bpos.markPrice : (pos._lastPrice || pos.price));
-                        const pnl = realPnl != null ? realPnl : (pos.side === 'LONG'
-                            ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                            : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2));
-                        _closePosition(idx, pos, 'RECON_PHANTOM', exitPrice, pnl);
+                        // [M5] Skip if user-initiated close already in flight — avoids double-close race.
+                        const _gk = `${userId}:${pos.seq}`;
+                        if (_closingGuard.has(_gk)) {
+                            logger.info(label, `[${pos.seq}] PHANTOM close skipped — user close in progress (closingGuard set)`);
+                            continue;
+                        }
+                        _closingGuard.set(_gk, Date.now());
+                        try {
+                            const exitPrice = realExitPrice || (bpos ? bpos.markPrice : (pos._lastPrice || pos.price));
+                            const pnl = realPnl != null ? realPnl : (pos.side === 'LONG'
+                                ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                                : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2));
+                            _closePosition(idx, pos, 'RECON_PHANTOM', exitPrice, pnl);
+                        } finally {
+                            setTimeout(() => _closingGuard.delete(_gk), 5000);
+                        }
                     }
                     audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl }, 'SERVER_AT');
                     continue;

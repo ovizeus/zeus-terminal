@@ -6,7 +6,9 @@
 const logger = require('./logger');
 const audit = require('./audit');
 
-const DSL_MAX_LOG = 200; // [H2] cap per-position log to prevent unbounded growth
+// [M15] Reduced from 200 → 80 per-position. With 100 active positions worst-case
+// we cap at 8K entries (was 20K). Each entry ~200B → ~1.6MB worst case.
+const DSL_MAX_LOG = 80;
 
 // ══════════════════════════════════════════════════════════════════
 // DSL Configuration Defaults (mirrors client TC/global defaults)

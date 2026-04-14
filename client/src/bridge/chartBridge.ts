@@ -103,26 +103,39 @@ export function registerChart(refs: ChartRefs): void {
   window.dispatchEvent(new CustomEvent('zeus:chartReady'))
 }
 
+// [M11] No-op stub returned for chart/series after unmount. Prevents legacy JS
+// crashes ("undefined is not a function") when it calls update/setData on a ref
+// that was nulled out at unmount. Methods silently no-op; getters return arrays/0.
+const _noopStub: any = new Proxy(function () {}, {
+  get(_t, prop) {
+    if (prop === 'priceScale' || prop === 'timeScale') return () => _noopStub
+    if (prop === 'options' || prop === 'data') return () => ({})
+    if (prop === 'subscribeClick' || prop === 'subscribeCrosshairMove' || prop === 'unsubscribeClick' || prop === 'unsubscribeCrosshairMove') return () => {}
+    return () => undefined
+  },
+  apply() { return undefined },
+})
+
 /**
  * Called by TradingChart on unmount.
- * Cleans up window globals to prevent stale ref access.
+ * Replaces window refs with no-op stubs so legacy JS calls don't throw.
  */
 export function unregisterChart(): void {
   if (!_registered) return
 
   const w = window as any
 
-  // Null out refs — old JS code checks for null before using
-  w.mainChart = null
-  w.cSeries = null
-  w._zMainChart = null
-  w._zCSeries = null
-  w.volS = null
-  w.ema50S = null
-  w.ema200S = null
-  w.wma20S = null
-  w.wma50S = null
-  w.stS = null
+  // [M11] Stub instead of null — legacy JS may still .update() / .setData() during teardown.
+  w.mainChart = _noopStub
+  w.cSeries = _noopStub
+  w._zMainChart = _noopStub
+  w._zCSeries = _noopStub
+  w.volS = _noopStub
+  w.ema50S = _noopStub
+  w.ema200S = _noopStub
+  w.wma20S = _noopStub
+  w.wma50S = _noopStub
+  w.stS = _noopStub
 
   // Don't remove LightweightCharts — it's a library, not a ref
   // Don't remove array series — old JS may still hold references
@@ -130,7 +143,7 @@ export function unregisterChart(): void {
   _refs = null
   _registered = false
 
-  console.log('[CHART-BRIDGE] Chart unregistered — window refs cleared')
+  console.log('[CHART-BRIDGE] Chart unregistered — window refs replaced with no-op stubs')
 }
 
 /** Check if chart bridge has registered refs */

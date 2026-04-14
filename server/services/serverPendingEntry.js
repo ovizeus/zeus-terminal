@@ -265,9 +265,27 @@ function _loadFromDisk() {
                 // Just clean them up
             } catch (_) {}
         }
+        // [M4] Audit each wiped pending so users can see why their pre-trigger entry vanished.
+        if (rows.length > 0) {
+            for (const row of rows) {
+                const m = /^pending:(.+)$/.exec(row.key);
+                if (!m) continue;
+                let data = null;
+                try { data = JSON.parse(row.value); } catch (_) {}
+                const uid = (data && data.userId) || null;
+                try {
+                    db.auditLog(uid, 'PENDING_WIPED_ON_RESTART', {
+                        symbol: data && data.symbol,
+                        side: data && data.side,
+                        triggerPrice: data && data.triggerPrice,
+                        createdAt: data && data.createdAt,
+                    }, null);
+                } catch (_) {}
+            }
+            logger.info('PENDING', `Wiping ${rows.length} stale pending entries on startup (audited per-user)`);
+        }
         // Clear all pending entries on startup — they're time-sensitive
         db.db.prepare("DELETE FROM at_state WHERE key LIKE 'pending:%'").run();
-        logger.info('PENDING', 'Cleared stale pending entries on startup');
     } catch (_) {}
 }
 
