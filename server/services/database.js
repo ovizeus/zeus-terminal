@@ -392,8 +392,10 @@ const _stmts = {
 
     // Audit
     insertAudit: db.prepare('INSERT INTO audit_log (user_id, action, details, ip) VALUES (?, ?, ?, ?)'),
-    listAudit: db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ?'),
-    listAuditByUser: db.prepare('SELECT * FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'),
+    listAudit: db.prepare('SELECT * FROM audit_log ORDER BY created_at DESC LIMIT ? OFFSET ?'), // [M10]
+    countAudit: db.prepare('SELECT COUNT(*) AS n FROM audit_log'), // [M10]
+    listAuditByUser: db.prepare('SELECT * FROM audit_log WHERE user_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?'), // [M10]
+    countAuditByUser: db.prepare('SELECT COUNT(*) AS n FROM audit_log WHERE user_id = ?'), // [M10]
 
     // AT Engine persistence — [MULTI-USER] all queries now include user_id
     atUpsertPos: db.prepare("INSERT INTO at_positions (seq, data, status, user_id) VALUES (?, ?, ?, ?) ON CONFLICT(seq) DO UPDATE SET data = excluded.data, status = excluded.status, user_id = excluded.user_id, updated_at = datetime('now')"),
@@ -599,12 +601,27 @@ function auditLog(userId, action, details, ip) {
     _stmts.insertAudit.run(userId || null, action, typeof details === 'string' ? details : JSON.stringify(details), ip || null);
 }
 
-function listAuditLog(limit) {
-    return _stmts.listAudit.all(limit || 100);
+// [M10] True pagination — returns rows + total for the UI.
+function listAuditLog(limit, offset) {
+    const lim = Math.max(1, Math.min(parseInt(limit, 10) || 100, 500));
+    const off = Math.max(0, parseInt(offset, 10) || 0);
+    return {
+        rows: _stmts.listAudit.all(lim, off),
+        total: _stmts.countAudit.get().n,
+        limit: lim,
+        offset: off,
+    };
 }
 
-function listAuditLogByUser(userId, limit) {
-    return _stmts.listAuditByUser.all(userId, limit || 100);
+function listAuditLogByUser(userId, limit, offset) {
+    const lim = Math.max(1, Math.min(parseInt(limit, 10) || 100, 500));
+    const off = Math.max(0, parseInt(offset, 10) || 0);
+    return {
+        rows: _stmts.listAuditByUser.all(userId, lim, off),
+        total: _stmts.countAuditByUser.get(userId).n,
+        limit: lim,
+        offset: off,
+    };
 }
 
 function listAuditLogByTarget(emailOrId, limit) {

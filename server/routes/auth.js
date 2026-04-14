@@ -40,9 +40,12 @@ const VERIFY_WINDOW = 15 * 60 * 1000;
 const VERIFY_MAX = 3; // Reduced from 10 — 6-digit code + 3 attempts is sufficient
 
 // ─── PIN Rate Limit (per-user) ───
-const pinAttempts = new Map(); // userId → { count, resetAt }
+// [M9] Exponential backoff: after each PIN_MAX failures, the next window doubles
+// (15min → 1h → 4h → 24h). Resets on successful PIN unlock or after 24h idle.
+const pinAttempts = new Map(); // userId → { count, resetAt, lockoutLevel }
 const PIN_WINDOW = 15 * 60 * 1000;
 const PIN_MAX = 5;
+const PIN_LOCKOUT_LEVELS = [15 * 60 * 1000, 60 * 60 * 1000, 4 * 60 * 60 * 1000, 24 * 60 * 60 * 1000]; // 15m,1h,4h,24h
 
 // ─── Login Rate Limit (per-email) ───
 const loginAttemptsEmail = new Map(); // email → { count, resetAt }
@@ -612,9 +615,11 @@ router.get('/admin/audit', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
         if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
 
-        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-        const rows = db.listAuditLog(limit);
-        res.json({ ok: true, entries: rows });
+        // [M10] True pagination — limit + offset, with total count
+        const limit = parseInt(req.query.limit, 10) || 50;
+        const offset = parseInt(req.query.offset, 10) || 0;
+        const page = db.listAuditLog(limit, offset);
+        res.json({ ok: true, entries: page.rows, total: page.total, limit: page.limit, offset: page.offset });
     } catch (err) { res.status(401).json({ error: 'Token invalid' }); }
 });
 
@@ -691,7 +696,7 @@ router.get('/admin/users/:id/audit', (req, res) => {
     const u = db.findUserById(id);
     if (!u) return res.status(404).json({ error: 'User not found' });
     // Include both actions performed by user AND targeting them (email match in details)
-    const byActor = db.listAuditLogByUser(id, limit);
+    const byActor = db.listAuditLogByUser(id, limit, 0).rows; // [M10] new shape
     const byTarget = db.listAuditLogByTarget(u.email, limit);
     const seen = new Set();
     const merged = [...byActor, ...byTarget]
@@ -754,7 +759,7 @@ router.get('/admin/sessions', (req, res) => {
 router.get('/admin/audit/export', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
     const limit = Math.min(parseInt(req.query.limit, 10) || 1000, 5000);
-    const rows = db.listAuditLog(limit);
+    const rows = db.listAuditLog(limit, 0).rows; // [M10] new shape
     const headers = ['id', 'created_at', 'user_id', 'action', 'ip', 'details'];
     const esc = (v) => {
         if (v == null) return '';
@@ -802,12 +807,28 @@ router.post('/admin/reset-password', async (req, res) => {
     res.json({ ok: true, tempPassword, expiresAt, note: 'Temp password expires in 1 hour. Communicate via secure channel; user must change on first login.' });
 });
 
+// [M7] Per-admin rate limit on bulk endpoint — limits damage from compromised admin
+const _bulkRate = new Map(); // adminId → { count, resetAt }
+const BULK_WINDOW = 60 * 1000; // 1 min
+const BULK_MAX_CALLS = 3;      // 3 calls/min/admin
+const BULK_MAX_IDS = 50;       // worst case: 150 actions/min/admin
+setInterval(() => { const now = Date.now(); for (const [k, v] of _bulkRate) if (now > v.resetAt) _bulkRate.delete(k); }, 5 * 60 * 1000);
+
 // ─── ADMIN: POST /auth/admin/bulk — bulk ops (force-logout / approve / block) ───
 router.post('/admin/bulk', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
+    // [M7] Per-admin throttle
+    const now = Date.now();
+    let br = _bulkRate.get(guard.caller.id);
+    if (!br || now > br.resetAt) { br = { count: 0, resetAt: now + BULK_WINDOW }; _bulkRate.set(guard.caller.id, br); }
+    br.count++;
+    if (br.count > BULK_MAX_CALLS) {
+        db.auditLog(guard.caller.id, 'ADMIN_BULK_RATE_LIMITED', { count: br.count }, req.ip);
+        return res.status(429).json({ error: 'Bulk rate limit: max ' + BULK_MAX_CALLS + ' calls/min' });
+    }
     const { action, ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids[] required' });
-    if (ids.length > 100) return res.status(400).json({ error: 'Max 100 ids per request' });
+    if (ids.length > BULK_MAX_IDS) return res.status(400).json({ error: 'Max ' + BULK_MAX_IDS + ' ids per request' });
     const allowed = ['force-logout', 'approve', 'block', 'unblock'];
     if (!allowed.includes(action)) return res.status(400).json({ error: 'Unknown action' });
     const results = { ok: 0, skipped: 0, errors: [] };
@@ -846,7 +867,7 @@ router.get('/admin/modules', (req, res) => {
         { key: 'audit',     name: 'Audit Log',   location: 'server', state: 'ok' },
     ];
     try {
-        const audit = db.listAuditLog(1);
+        const audit = db.listAuditLog(1, 0).rows; // [M10] new shape
         modules.find(m => m.key === 'audit').lastEvent = audit[0]?.created_at || null;
     } catch (_) {}
     res.json({ ok: true, modules, uptime: process.uptime(), checkedAt: new Date().toISOString() });
@@ -1327,11 +1348,12 @@ router.post('/pin/verify', async (req, res) => {
         const user = db.findUserById(decoded.id);
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
 
-        // PIN rate limit per user
+        // [M9] PIN rate limit per user — exponential backoff
         const now = Date.now();
         let pa = pinAttempts.get(user.id);
         if (pa && now < pa.resetAt && pa.count >= PIN_MAX) {
-            return res.status(429).json({ error: 'pin_rate_limited' });
+            const remainMs = pa.resetAt - now;
+            return res.status(429).json({ error: 'pin_rate_limited', retryAfterMs: remainMs });
         }
 
         const storedHash = db.getUserPin(user.id);
@@ -1343,9 +1365,15 @@ router.post('/pin/verify', async (req, res) => {
             pinAttempts.delete(user.id);
             res.json({ ok: true });
         } else {
-            if (!pa || now > pa.resetAt) { pa = { count: 0, resetAt: now + PIN_WINDOW }; pinAttempts.set(user.id, pa); }
+            // [M9] Exponential backoff — bump lockout level each time PIN_MAX is reached.
+            if (!pa || now > pa.resetAt) {
+                const prevLvl = (pa && pa.lockoutLevel != null) ? pa.lockoutLevel : -1;
+                const lvl = Math.min(prevLvl + 1, PIN_LOCKOUT_LEVELS.length - 1);
+                pa = { count: 0, resetAt: now + PIN_LOCKOUT_LEVELS[lvl], lockoutLevel: lvl };
+                pinAttempts.set(user.id, pa);
+            }
             pa.count++;
-            db.auditLog(user.id, 'PIN_VERIFY_FAILED', { attempts: pa.count }, req.ip);
+            db.auditLog(user.id, 'PIN_VERIFY_FAILED', { attempts: pa.count, lockoutLevel: pa.lockoutLevel }, req.ip);
             res.status(401).json({ ok: false, error: 'invalid_pin' }); // [SC-09]
         }
     } catch (err) { res.status(401).json({ error: 'session_invalid' }); }
