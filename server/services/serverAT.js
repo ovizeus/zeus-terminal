@@ -896,6 +896,27 @@ async function _executeLiveEntry(entry, stc) {
     metrics.recordOrder('filled');
     telegram.alertOrderFilled(entry.symbol, entry.side, executedQty, avgPrice, mainOrder.orderId, userId);
 
+    // [ZT-AUD-C6] Safety SL — place a far-OTM SL synchronously BEFORE the
+    // optimal-SL retry loop so the position is never naked, even during the
+    // 1-4s window of SL retries. Far-OTM = 15% from fill in adverse direction;
+    // exchange will accept it (no margin/price-already-past errors) and only
+    // hits on a flash crash. Cancelled once the real SL is placed.
+    let safetySlOrder = null;
+    try {
+        const safetyRaw = entry.side === 'LONG' ? avgPrice * 0.85 : avgPrice * 1.15;
+        const safetyRounded = roundOrderParams(entry.symbol, executedQty, safetyRaw);
+        const safetyStopPrice = String(safetyRounded.stopPrice != null ? safetyRounded.stopPrice : safetyRaw.toFixed(2));
+        safetySlOrder = await _placeConditionalOrder({
+            symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
+            quantity: fillQty, stopPrice: safetyStopPrice,
+            reduceOnly: true, newClientOrderId: `SAT_SLSAFE_${liveSeq}`,
+        }, creds);
+        logger.info('AT_LIVE', `[${entry.seq}] Safety SL placed @ $${safetyStopPrice} (15% OTM) — covers retry window`);
+    } catch (safeErr) {
+        logger.warn('AT_LIVE', `[${entry.seq}] Safety SL placement failed: ${safeErr.message} — proceeding with retry loop only`);
+        Sentry.captureException(safeErr, { level: 'warning', tags: { module: 'AT', action: 'safety_sl_failed', symbol: entry.symbol }, user: { id: String(userId) } });
+    }
+
     // SL order with auto-retry + emergency close
     let slOrder = null;
     const SL_RETRY_DELAYS = [1000, 3000]; // [ZT-AUD-007] 1s, 3s backoff (max 4s vs old 17s)
@@ -918,11 +939,20 @@ async function _executeLiveEntry(entry, stc) {
         }
     }
 
+    // Real SL placed → cancel the safety SL (it's no longer needed).
+    if (slOrder && safetySlOrder && safetySlOrder.orderId) {
+        await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
+        safetySlOrder = null;
+    }
+
     // [FIX1] EMERGENCY CLOSE: if all SL retries failed, market-close + properly remove from _positions
     if (!slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL SL retries exhausted — executing EMERGENCY MARKET CLOSE`);
         Sentry.captureMessage(`EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_sl', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing position to prevent unprotected exposure.`);
+        // [ZT-AUD-C6] Keep safety SL active during emergency close. It's reduceOnly so concurrent
+        // firing won't double-close; only cancel after the close confirms success. If close fails,
+        // the safety SL stays as last-line protection.
         try {
             const emgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
                 symbol: entry.symbol, side: closeSide, type: 'MARKET',
@@ -938,6 +968,11 @@ async function _executeLiveEntry(entry, stc) {
             logger.warn('AT_LIVE', `[${entry.seq}] Emergency close executed @ $${emgPrice.toFixed(2)} PnL=$${emgPnl.toFixed(2)}`);
             telegram.sendToUser(userId, `✅ Emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${emgPrice.toFixed(2)} — PnL: $${emgPnl.toFixed(2)}`);
             audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'SERVER_AT');
+            // [ZT-AUD-C6] Emergency close confirmed → safety SL no longer needed.
+            if (safetySlOrder && safetySlOrder.orderId) {
+                await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
+                safetySlOrder = null;
+            }
             // [FIX1] Properly close position — remove from _positions, update stats, persist
             const emgIdx = _positions.findIndex(p => p.seq === entry.seq);
             if (emgIdx >= 0) {
@@ -947,7 +982,8 @@ async function _executeLiveEntry(entry, stc) {
         } catch (emgErr) {
             logger.error('AT_LIVE', `[${entry.seq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
             Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_failed', symbol: entry.symbol }, user: { id: String(userId) } });
-            telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition is UNPROTECTED on Binance.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`);
+            const safetyMsg = safetySlOrder ? `\nSafety SL (15% OTM) still active as backstop.` : '';
+            telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL on Binance.${safetyMsg}\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`);
         }
         return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
     }
