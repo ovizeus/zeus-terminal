@@ -181,6 +181,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'ichimoku':
       if (show) initIchimokuSeries()
+      if (!Array.isArray(w.ichimokuSeries)) w.ichimokuSeries = []
       w.ichimokuSeries.forEach((s: any) => { try { s.applyOptions({ visible: show }) } catch (_) { } })
       if (show) updateIchimoku()
       break
@@ -190,11 +191,11 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'pivot':
       if (show) updatePivot()
-      else { w.pivotSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.pivotSeries = [] }
+      else { if (Array.isArray(w.pivotSeries)) w.pivotSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.pivotSeries = [] }
       break
     case 'vp':
       if (show) updateVP()
-      else { w.vpSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.vpSeries = [] }
+      else { if (Array.isArray(w.vpSeries)) w.vpSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.vpSeries = [] }
       break
     case 'vwap':
       w.S.vwapOn = show
@@ -385,6 +386,7 @@ export function updateFib(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function updatePivot(): void {
+  if (!Array.isArray(w.pivotSeries)) w.pivotSeries = []
   w.pivotSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.pivotSeries = []
   if (!w.mainChart || !w.S.klines.length) return
   const k = w.S.klines
@@ -416,6 +418,7 @@ export function updatePivot(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function updateVP(): void {
+  if (!Array.isArray(w.vpSeries)) w.vpSeries = []
   w.vpSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.vpSeries = []
   if (!w.mainChart || !w.S.klines.length) return
   const k = w.S.klines; const rows = w.IND_SETTINGS.vp.rows || 70
