@@ -60,7 +60,7 @@ export function AuditSection() {
       <div className="zac-panel" style={{ padding: 0 }}>
         <div className="zac-panel-header" style={{ padding: '14px 18px', margin: 0 }}>
           <div className="zac-panel-title">Audit Events ({filtered.length}{filtered.length !== audit.length ? ` of ${audit.length}` : ''})</div>
-          <button className="zac-btn zac-btn-ghost zac-btn-sm" disabled title="Export CSV — Faza B">⤓ Export</button>
+          <a className="zac-btn zac-btn-ghost zac-btn-sm" href={`/auth/admin/audit/export?limit=${Math.max(limit, 1000)}`} title="Export CSV">⤓ Export</a>
         </div>
         {auditLoading && <div style={{ padding: 18 }}><LoadingSkeleton rows={8} h={24} /></div>}
         {auditError && <div style={{ padding: 18, color: 'var(--ac-danger)' }}>{auditError}</div>}

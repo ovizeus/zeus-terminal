@@ -765,6 +765,109 @@ router.post('/admin/note', (req, res) => {
     res.json({ ok: true });
 });
 
+// ─── ADMIN: POST /auth/admin/reset-password — generate temp password, bump token_version ───
+router.post('/admin/reset-password', async (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    const normalEmail = email.toLowerCase().trim();
+    const target = db.findUserByEmail(normalEmail);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.role === 'admin' && target.id !== guard.caller.id) {
+        return res.status(400).json({ error: 'Cannot reset password for another admin' });
+    }
+    const tempPassword = crypto.randomBytes(9).toString('base64').replace(/[+/=]/g, '').slice(0, 12) + '!9';
+    const hash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
+    db.updatePassword(target.id, hash);
+    db.bumpTokenVersion(target.id);
+    db.auditLog(guard.caller.id, 'ADMIN_RESET_PASSWORD', { targetEmail: normalEmail, targetId: target.id }, req.ip);
+    res.json({ ok: true, tempPassword, note: 'Communicate this to the user via secure channel. It is shown once.' });
+});
+
+// ─── ADMIN: POST /auth/admin/bulk — bulk ops (force-logout / approve / block) ───
+router.post('/admin/bulk', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const { action, ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids[] required' });
+    if (ids.length > 100) return res.status(400).json({ error: 'Max 100 ids per request' });
+    const allowed = ['force-logout', 'approve', 'block', 'unblock'];
+    if (!allowed.includes(action)) return res.status(400).json({ error: 'Unknown action' });
+    const results = { ok: 0, skipped: 0, errors: [] };
+    for (const rawId of ids) {
+        const id = parseInt(rawId, 10);
+        if (!id) { results.skipped++; continue; }
+        try {
+            const u = db.findUserById(id);
+            if (!u) { results.skipped++; continue; }
+            if (u.role === 'admin' && u.id !== guard.caller.id) { results.skipped++; continue; }
+            if (action === 'force-logout') { db.bumpTokenVersion(id); }
+            else if (action === 'approve') { db.approveUser(u.email); }
+            else if (action === 'block') { db.setUserStatus(u.id, 'blocked'); }
+            else if (action === 'unblock') { db.setUserStatus(u.id, 'active'); }
+            results.ok++;
+        } catch (err) { results.errors.push({ id, error: err.message }); }
+    }
+    db.auditLog(guard.caller.id, 'ADMIN_BULK_' + action.toUpperCase().replace('-', '_'), { ids, results }, req.ip);
+    res.json({ ok: true, results });
+});
+
+// ─── ADMIN: GET /auth/admin/modules — module status snapshot ───
+router.get('/admin/modules', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    let MF = null;
+    try { MF = require('../migrationFlags'); } catch (_) {}
+    const modules = [
+        { key: 'at',        name: 'AutoTrade',   location: MF?.SERVER_AT ? 'server' : (MF?.CLIENT_AT ? 'client' : 'off'),
+          state: MF?.SERVER_AT || MF?.CLIENT_AT ? 'ok' : 'off' },
+        { key: 'brain',     name: 'Brain',       location: MF?.SERVER_BRAIN ? 'server' : (MF?.CLIENT_BRAIN ? 'client' : 'off'),
+          state: MF?.SERVER_BRAIN || MF?.CLIENT_BRAIN ? 'ok' : 'off' },
+        { key: 'marketData',name: 'Market Feed', location: MF?.SERVER_MARKET_DATA ? 'server' : 'client',
+          state: 'ok' },
+        { key: 'websocket', name: 'WebSocket',   location: 'server', state: 'ok' },
+        { key: 'database',  name: 'Database',    location: 'server', state: 'ok' },
+        { key: 'audit',     name: 'Audit Log',   location: 'server', state: 'ok' },
+    ];
+    try {
+        const audit = db.listAuditLog(1);
+        modules.find(m => m.key === 'audit').lastEvent = audit[0]?.created_at || null;
+    } catch (_) {}
+    res.json({ ok: true, modules, uptime: process.uptime(), checkedAt: new Date().toISOString() });
+});
+
+// ─── ADMIN: GET /auth/admin/flags — current migration flags ───
+router.get('/admin/flags', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    let MF = null;
+    try { MF = require('../migrationFlags'); } catch (_) { return res.status(500).json({ error: 'migrationFlags unavailable' }); }
+    const defaults = MF.DEFAULTS || {};
+    const current = MF.getAll();
+    const flags = Object.keys(defaults).map(key => ({
+        key,
+        value: current[key],
+        default: defaults[key],
+        changed: current[key] !== defaults[key],
+    }));
+    res.json({ ok: true, flags });
+});
+
+// ─── ADMIN: POST /auth/admin/flags — toggle a migration flag ───
+router.post('/admin/flags', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const { key, value } = req.body;
+    if (typeof key !== 'string' || typeof value !== 'boolean') return res.status(400).json({ error: 'key:string and value:boolean required' });
+    let MF = null;
+    try { MF = require('../migrationFlags'); } catch (_) { return res.status(500).json({ error: 'migrationFlags unavailable' }); }
+    try {
+        const before = MF.getAll()[key];
+        MF.set(key, value);
+        const after = MF.getAll()[key];
+        db.auditLog(guard.caller.id, 'ADMIN_FLAG_TOGGLE', { key, before, requested: value, after }, req.ip);
+        res.json({ ok: true, flags: MF.getAll() });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
 // ─── CHANGE PASSWORD: Step 1 — request code ───
 router.post('/change-password/request', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });

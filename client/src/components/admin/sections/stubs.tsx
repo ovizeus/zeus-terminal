@@ -353,10 +353,25 @@ export function SupportSection() {
 // MONITORING
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface ModuleEntry { key: string; name: string; location: string; state: string; lastEvent?: string | null }
+
 export function MonitoringSection() {
   const health = useAdminStore((s) => s.health)
   const loadHealth = useAdminStore((s) => s.loadHealth)
+  const [modules, setModules] = useState<ModuleEntry[] | null>(null)
+  const [mLoading, setMLoading] = useState(false)
+  const [mError, setMError] = useState('')
+
   useEffect(() => { if (!health) loadHealth() }, [])
+
+  const loadModules = () => {
+    setMLoading(true); setMError('')
+    fetch('/auth/admin/modules', { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setModules(d.modules || []); else setMError(d.error || 'Load error'); setMLoading(false) })
+      .catch((e) => { setMError(e.message || 'Network error'); setMLoading(false) })
+  }
+  useEffect(() => { loadModules() }, [])
 
   return (
     <>
@@ -388,9 +403,36 @@ export function MonitoringSection() {
           </>
         ) : <div style={{ fontSize: 11, color: 'var(--ac-fg-mute)' }}>No health data yet.</div>}
       </div>
-      <div className="zac-panel">
-        <div className="zac-panel-header"><div className="zac-panel-title">Module Status</div></div>
-        <Placeholder title="AT / DSL / ARES / Sync / Watchlist / Market Feed" note="Per-module health, queue depth, reconnect counts. Server exposes these in logs today; structured endpoint planned for Faza C." />
+
+      <div className="zac-panel" style={{ padding: 0 }}>
+        <div className="zac-panel-header" style={{ padding: '14px 18px', margin: 0 }}>
+          <div className="zac-panel-title">Module Status</div>
+          <button className="zac-btn zac-btn-sm zac-btn-ghost" onClick={loadModules}>↻</button>
+        </div>
+        {mLoading && <div style={{ padding: 14, fontSize: 11, color: 'var(--ac-fg-mute)' }}>Loading…</div>}
+        {mError && <div style={{ padding: 14, fontSize: 11, color: 'var(--ac-danger)' }}>{mError}</div>}
+        {!mLoading && !mError && modules && (
+          <table className="zac-table">
+            <thead>
+              <tr>
+                <th>Module</th>
+                <th style={{ width: 120 }}>Location</th>
+                <th style={{ width: 90 }}>State</th>
+                <th style={{ width: 160 }}>Last Event</th>
+              </tr>
+            </thead>
+            <tbody>
+              {modules.map((m) => (
+                <tr key={m.key}>
+                  <td><b>{m.name}</b> <span style={{ fontSize: 9, color: 'var(--ac-fg-mute)', marginLeft: 6 }}>{m.key}</span></td>
+                  <td><span className={m.location === 'server' ? 'zac-b zac-b-live' : m.location === 'client' ? 'zac-b zac-b-api' : 'zac-b zac-b-noapi'}>{m.location.toUpperCase()}</span></td>
+                  <td><span className={`zac-dot zac-dot-${m.state === 'ok' ? 'ok' : m.state === 'warn' ? 'warn' : m.state === 'down' ? 'down' : 'warn'}`} />{m.state.toUpperCase()}</td>
+                  <td style={{ fontSize: 10, color: 'var(--ac-fg-dim)' }}>{m.lastEvent ? fmtRelative(m.lastEvent) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </>
   )
@@ -416,17 +458,112 @@ function formatUptime(sec: number) {
 // SETTINGS — feature flags scaffolded
 // ═══════════════════════════════════════════════════════════════════════════
 
+interface FlagEntry { key: string; value: boolean; default: boolean; changed: boolean }
+
+const FLAG_DESC: Record<string, { title: string; note: string; danger?: boolean }> = {
+  SERVER_MARKET_DATA: { title: 'Server subscribes to Binance WS', note: 'When ON, server maintains market feed. Clients still connect for UI updates.' },
+  SERVER_BRAIN: { title: 'Server runs Brain engine', note: 'Confluence / regime computed on server. Mutually exclusive with CLIENT_BRAIN.', danger: true },
+  SERVER_AT: { title: 'Server runs AutoTrade', note: 'Server executes trade decisions. Mutually exclusive with CLIENT_AT.', danger: true },
+  CLIENT_BRAIN: { title: 'Client runs Brain engine', note: 'Default. Mutually exclusive with SERVER_BRAIN.' },
+  CLIENT_AT: { title: 'Client runs AutoTrade', note: 'Default. Mutually exclusive with SERVER_AT.' },
+}
+
 export function SettingsSection() {
+  const [flags, setFlags] = useState<FlagEntry[] | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [confirm, setConfirm] = useState<null | { key: string; next: boolean }>(null)
+  const [toast, setToast] = useState('')
+
+  const load = () => {
+    setLoading(true); setError('')
+    fetch('/auth/admin/flags', { credentials: 'same-origin' })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setFlags(d.flags || []); else setError(d.error || 'Load error'); setLoading(false) })
+      .catch((e) => { setError(e.message || 'Network error'); setLoading(false) })
+  }
+  useEffect(() => { load() }, [])
+
+  const apply = async (key: string, next: boolean) => {
+    try {
+      const r = await fetch('/auth/admin/flags', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value: next }),
+      })
+      const d = await r.json()
+      if (d.ok) { setToast(`✓ ${key} = ${next}`); load() }
+      else setToast('✕ ' + (d.error || 'Toggle failed'))
+    } catch (e: any) { setToast('✕ ' + (e.message || 'Network error')) }
+    setTimeout(() => setToast(''), 3000)
+  }
+
   return (
     <>
-      <div className="zac-panel">
-        <div className="zac-panel-header"><div className="zac-panel-title">Feature Flags</div></div>
-        <Placeholder title="Global toggles" note="Maintenance mode, registration on/off, invite-only, rollout gates. Toggle surface ready — storage and evaluation engine in Faza C." />
+      <div className="zac-panel" style={{ padding: 0 }}>
+        <div className="zac-panel-header" style={{ padding: '14px 18px', margin: 0 }}>
+          <div className="zac-panel-title">Migration Feature Flags</div>
+          <button className="zac-btn zac-btn-sm zac-btn-ghost" onClick={load}>↻</button>
+        </div>
+        {loading && <div style={{ padding: 14, fontSize: 11, color: 'var(--ac-fg-mute)' }}>Loading…</div>}
+        {error && <div style={{ padding: 14, fontSize: 11, color: 'var(--ac-danger)' }}>{error}</div>}
+        {!loading && !error && flags && flags.map((f) => {
+          const desc = FLAG_DESC[f.key] || { title: f.key, note: '' }
+          return (
+            <div key={f.key} style={{ padding: '12px 18px', borderTop: '1px solid var(--ac-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 11, color: 'var(--ac-fg)', fontWeight: 700, letterSpacing: 1 }}>
+                  {f.key}
+                  {f.changed && <span style={{ marginLeft: 8, fontSize: 9, color: 'var(--ac-gold)' }}>MODIFIED</span>}
+                </div>
+                <div style={{ fontSize: 10, color: 'var(--ac-fg-dim)', marginTop: 2 }}>{desc.title}</div>
+                <div style={{ fontSize: 9, color: 'var(--ac-fg-mute)', marginTop: 2 }}>{desc.note}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: 9, color: 'var(--ac-fg-mute)', marginBottom: 4 }}>default: <b>{String(f.default)}</b></div>
+                <button
+                  className={`zac-btn zac-btn-sm ${f.value ? 'zac-btn-primary' : 'zac-btn-ghost'}`}
+                  onClick={() => { if (desc.danger) setConfirm({ key: f.key, next: !f.value }); else apply(f.key, !f.value) }}
+                >
+                  {f.value ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
       </div>
+
       <div className="zac-panel">
         <div className="zac-panel-header"><div className="zac-panel-title">Safety Toggles</div></div>
-        <Placeholder title="Emergency switches" note="Global trading lock, emergency admin broadcast, global force-logout. Destructive toggles — scoped to Faza C with strict confirm flows." />
+        <Placeholder title="Emergency switches" note="Global trading lock, emergency admin broadcast, global force-logout. Destructive toggles — require superadmin role binding before enabling." />
       </div>
+
+      {confirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 9900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0d1520', border: '1px solid var(--ac-danger)', borderRadius: 8, padding: 22, maxWidth: 460 }}>
+            <div style={{ color: 'var(--ac-danger)', fontSize: 12, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10 }}>Confirm flag change</div>
+            <div style={{ fontSize: 11, color: 'var(--ac-fg-dim)', marginBottom: 14, whiteSpace: 'pre-wrap' }}>
+              Set <b style={{ color: 'var(--ac-fg)' }}>{confirm.key}</b> = <b style={{ color: confirm.next ? 'var(--ac-success)' : 'var(--ac-danger)' }}>{String(confirm.next)}</b>?
+              {'\n\n'}Mutual-exclusion invariants apply automatically (e.g. enabling SERVER_AT forces CLIENT_AT=false). This persists to disk and survives restarts.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="zac-btn zac-btn-ghost zac-btn-sm" onClick={() => setConfirm(null)}>Cancel</button>
+              <button className="zac-btn zac-btn-danger zac-btn-sm" onClick={() => { const c = confirm; setConfirm(null); apply(c.key, c.next) }}>Apply</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24,
+          background: toast.startsWith('✓') ? '#003a20' : '#3a0020',
+          border: '1px solid ' + (toast.startsWith('✓') ? '#00ff88' : '#ff4d4d'),
+          color: toast.startsWith('✓') ? '#00ff88' : '#ff8888',
+          padding: '10px 16px', borderRadius: 6, fontSize: 11,
+          letterSpacing: 1, zIndex: 9800, boxShadow: '0 4px 16px rgba(0,0,0,.5)'
+        }}>{toast}</div>
+      )}
     </>
   )
 }

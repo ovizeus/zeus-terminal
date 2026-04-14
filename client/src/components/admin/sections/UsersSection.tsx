@@ -17,6 +17,8 @@ export function UsersSection() {
   const [confirm, setConfirm] = useState<null | { title: string; message: string; confirmText: string; tone: 'default' | 'danger' | 'gold'; requireType?: string; onConfirm: () => Promise<void> }>(null)
   const [banMenuFor, setBanMenuFor] = useState<string | null>(null)
   const [toast, setToast] = useState<string>('')
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [tempPasswordShow, setTempPasswordShow] = useState<{ email: string; pw: string } | null>(null)
 
   useEffect(() => { if (users.length === 0 && !usersLoading) loadUsers() }, [])
 
@@ -52,6 +54,43 @@ export function UsersSection() {
     if (!res.ok) setToast('✕ ' + (res.error || 'Action failed'))
     else setToast('✓ ' + msg)
     setTimeout(() => setToast(''), 3000)
+  }
+
+  function toggleSel(id: number) {
+    setSelected((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  }
+  function toggleAllSel() {
+    const ids = filtered.filter((u) => u.role !== 'admin').map((u) => u.id)
+    setSelected((s) => s.size === ids.length ? new Set() : new Set(ids))
+  }
+
+  async function runBulk(action: 'force-logout' | 'approve' | 'block' | 'unblock', label: string) {
+    const ids = Array.from(selected)
+    if (ids.length === 0) return
+    try {
+      const r = await fetch('/auth/admin/bulk', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ids }),
+      })
+      const d = await r.json()
+      if (d.ok) { setToast(`✓ ${label}: ${d.results.ok} ok, ${d.results.skipped} skipped`); setSelected(new Set()); loadUsers() }
+      else setToast('✕ ' + (d.error || 'Bulk failed'))
+    } catch (e: any) { setToast('✕ ' + (e.message || 'Network error')) }
+    setTimeout(() => setToast(''), 3500)
+  }
+
+  async function resetPassword(email: string) {
+    try {
+      const r = await fetch('/auth/admin/reset-password', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const d = await r.json()
+      if (d.ok && d.tempPassword) { setTempPasswordShow({ email, pw: d.tempPassword }); loadUsers() }
+      else { setToast('✕ ' + (d.error || 'Reset failed')); setTimeout(() => setToast(''), 3000) }
+    } catch (e: any) { setToast('✕ ' + (e.message || 'Network error')); setTimeout(() => setToast(''), 3000) }
   }
 
   return (
@@ -100,7 +139,18 @@ export function UsersSection() {
       <div className="zac-panel" style={{ padding: 0 }}>
         <div className="zac-panel-header" style={{ padding: '14px 18px', margin: 0 }}>
           <div className="zac-panel-title">Users ({filtered.length}{filtered.length !== users.length ? ` of ${users.length}` : ''})</div>
-          <button className="zac-btn zac-btn-ghost zac-btn-sm" disabled title="Bulk actions — pending backend">◫ Bulk</button>
+          {selected.size > 0 ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <span style={{ fontSize: 10, color: 'var(--ac-gold)', letterSpacing: 1 }}>{selected.size} selected</span>
+              <button className="zac-btn zac-btn-sm" onClick={() => runBulk('approve', 'Approve')}>Approve</button>
+              <button className="zac-btn zac-btn-gold zac-btn-sm" onClick={() => runBulk('block', 'Block')}>Block</button>
+              <button className="zac-btn zac-btn-sm" onClick={() => runBulk('unblock', 'Unblock')}>Unblock</button>
+              <button className="zac-btn zac-btn-sm" onClick={() => runBulk('force-logout', 'Force logout')}>⏻ Logout</button>
+              <button className="zac-btn zac-btn-ghost zac-btn-sm" onClick={() => setSelected(new Set())}>Clear</button>
+            </div>
+          ) : (
+            <span style={{ fontSize: 9, color: 'var(--ac-fg-mute)' }}>select rows for bulk actions</span>
+          )}
         </div>
         {usersLoading && <div style={{ padding: 18 }}><LoadingSkeleton rows={6} /></div>}
         {usersError && <div style={{ padding: 18, color: 'var(--ac-danger)' }}>Error: {usersError}</div>}
@@ -110,13 +160,20 @@ export function UsersSection() {
             <table className="zac-table">
               <thead>
                 <tr>
+                  <th style={{ width: 32 }}>
+                    <input type="checkbox"
+                      checked={filtered.filter((u) => u.role !== 'admin').length > 0 && selected.size === filtered.filter((u) => u.role !== 'admin').length}
+                      onChange={toggleAllSel}
+                      title="Select all (non-admin)"
+                    />
+                  </th>
                   <th>Email</th>
                   <th>ID</th>
                   <th>Role</th>
                   <th>Status</th>
                   <th>API / Mode</th>
                   <th>Registered</th>
-                  <th style={{ width: 200, textAlign: 'right' }}>Actions</th>
+                  <th style={{ width: 220, textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -124,6 +181,8 @@ export function UsersSection() {
                   <UserRow
                     key={u.id}
                     u={u}
+                    selected={selected.has(u.id)}
+                    onToggleSelect={() => toggleSel(u.id)}
                     onOpen={() => setSelectedUser(u.id)}
                     onBlock={() => { setConfirm({ title: 'Block user', message: `Block ${u.email}?\n\nThey won't be able to login until unblocked.`, confirmText: 'Block', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('block', { email: u.email, block: true }, `Blocked ${u.email}`) } }) }}
                     onUnblock={() => runAction('block', { email: u.email, block: false }, `Unblocked ${u.email}`)}
@@ -136,6 +195,7 @@ export function UsersSection() {
                     onDelete={() => { setConfirm({ title: 'Delete user', message: `Delete ${u.email}?\n\nThis permanently removes the account and exchange keys. Irreversible.`, confirmText: 'Delete permanently', tone: 'danger', requireType: u.email, onConfirm: async () => { setConfirm(null); await runAction('delete', { email: u.email }, `Deleted ${u.email}`) } }) }}
                     onForceLogout={() => { setConfirm({ title: 'Force logout', message: `Force logout ${u.email}?\n\nAll their active sessions will be invalidated.`, confirmText: 'Force logout', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('force-logout', { email: u.email }, `Forced logout ${u.email}`) } }) }}
                     onSuspend={() => { setConfirm({ title: 'Suspend user', message: `Suspend ${u.email}?\n\nSimilar to block but flagged as temporary operational suspension.`, confirmText: 'Suspend', tone: 'gold', onConfirm: async () => { setConfirm(null); await runAction('suspend', { email: u.email, reason: 'admin_suspend' }, `Suspended ${u.email}`) } }) }}
+                    onResetPassword={() => { setConfirm({ title: 'Reset password', message: `Generate a temporary password for ${u.email}?\n\nA random password will be set and all sessions invalidated. The temp password is shown once — communicate it via a secure channel.`, confirmText: 'Reset password', tone: 'gold', onConfirm: async () => { setConfirm(null); await resetPassword(u.email) } }) }}
                   />
                 ))}
               </tbody>
@@ -157,6 +217,24 @@ export function UsersSection() {
         />
       )}
 
+      {/* Temp password display */}
+      {tempPasswordShow && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 9900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: '#0d1520', border: '1px solid var(--ac-gold)', borderRadius: 8, padding: 24, maxWidth: 460, boxShadow: '0 12px 40px rgba(0,0,0,.7)' }}>
+            <div style={{ color: 'var(--ac-gold)', fontSize: 13, fontWeight: 700, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12 }}>Temporary password generated</div>
+            <div style={{ fontSize: 11, color: 'var(--ac-fg-dim)', marginBottom: 6 }}>For <b style={{ color: 'var(--ac-fg)' }}>{tempPasswordShow.email}</b>:</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 18, background: '#000', color: 'var(--ac-gold)', padding: '12px 14px', borderRadius: 4, border: '1px dashed #d4af37', userSelect: 'all' }}>{tempPasswordShow.pw}</div>
+            <div style={{ fontSize: 10, color: 'var(--ac-fg-mute)', margin: '10px 0 16px' }}>
+              Shown <b style={{ color: 'var(--ac-danger)' }}>once</b>. All sessions for this user have been invalidated. Share via a secure channel.
+            </div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="zac-btn zac-btn-sm" onClick={() => { navigator.clipboard?.writeText(tempPasswordShow.pw); setToast('✓ Copied'); setTimeout(() => setToast(''), 2000) }}>Copy</button>
+              <button className="zac-btn zac-btn-primary zac-btn-sm" onClick={() => setTempPasswordShow(null)}>I have saved it</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div style={{
@@ -173,10 +251,12 @@ export function UsersSection() {
 }
 
 function UserRow({
-  u, onOpen, onBlock, onUnblock, onBanPicker, banPickerOpen, onPickBan, onUnban,
-  onApprove, onReject, onDelete, onForceLogout, onSuspend,
+  u, selected, onToggleSelect, onOpen, onBlock, onUnblock, onBanPicker, banPickerOpen, onPickBan, onUnban,
+  onApprove, onReject, onDelete, onForceLogout, onSuspend, onResetPassword,
 }: {
   u: AdminUser
+  selected: boolean
+  onToggleSelect: () => void
   onOpen: () => void
   onBlock: () => void
   onUnblock: () => void
@@ -189,6 +269,7 @@ function UserRow({
   onDelete: () => void
   onForceLogout: () => void
   onSuspend: () => void
+  onResetPassword: () => void
 }) {
   const isAdmin = u.role === 'admin'
   const isBlocked = u.status === 'blocked'
@@ -197,6 +278,11 @@ function UserRow({
 
   return (
     <tr onClick={onOpen}>
+      <td onClick={(e) => e.stopPropagation()}>
+        {!isAdmin && (
+          <input type="checkbox" checked={selected} onChange={onToggleSelect} />
+        )}
+      </td>
       <td>
         <span style={{ fontWeight: 600 }}>{u.email}</span>
       </td>
@@ -252,6 +338,7 @@ function UserRow({
               ) : null}
               {!isBanned && !isBlocked && <button className="zac-btn zac-btn-gold zac-btn-sm" onClick={onSuspend} title="Temporary operational suspend">Suspend</button>}
               <button className="zac-btn zac-btn-sm" onClick={onForceLogout} title="Invalidate all sessions">⏻</button>
+              <button className="zac-btn zac-btn-sm" onClick={onResetPassword} title="Reset password — generates temp password">⟲</button>
               <button className="zac-btn zac-btn-danger zac-btn-sm" onClick={onDelete} title="Delete account">✕</button>
             </>
           )}
