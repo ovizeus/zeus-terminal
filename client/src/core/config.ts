@@ -1694,10 +1694,10 @@ export function _usSave() {
     // Fire-and-forget; server will broadcast settings.changed on the
     // existing /ws/sync WSS to every other session of this user.
     _usPostRemote()
-    // [MIGRATION-F0] FS beacon path kept during phase 0 as a dual-write
-    // safety net; will be removed in phase-00 commit 7 once _usFetchRemote
-    // is the boot source of truth.
-    _ucMarkDirty('settings')
+    // [MIGRATION-F0 commit 7] FS dual-write removed for settings. The single
+    // persistence path is now: LS (zeus_user_settings) + POST /api/user/settings
+    // + /ws/sync settings.changed broadcast. Other sections (indSettings,
+    // panels, notifications, uiContext, …) still use _ucMarkDirty.
     console.log('[US] Settings saved')
   } catch (e: any) {
     console.warn('[US] Save failed:', e.message)

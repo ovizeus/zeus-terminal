@@ -11,8 +11,11 @@ import { create } from 'zustand'
 //
 // Both live in core/config.ts and are the canonical phase-0 code path.
 // settingsStore delegates to them so there are no parallel network paths.
-// The dual-write FS beacon (_ucMarkDirty) stays inside _usSave for now —
-// commit 7 removes it for settings.
+//
+// Persistence (post commit 7) is: LS `zeus_user_settings` (nested, canonical)
+// + POST /api/user/settings + /ws/sync `settings.changed` broadcast.
+// The FS dual-write (_ucMarkDirty section=settings) and the React-specific
+// LS mirror (zeus_user_settings_cache) were removed in commit 7.
 
 // ── DEFAULT SETTINGS — merge template for missing keys ──
 const DEFAULT_SETTINGS: Record<string, any> = {
@@ -65,23 +68,17 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
           const merged = { ...DEFAULT_SETTINGS, ...projected }
           set({ settings: merged, loaded: true })
           _syncToWindow(merged)
-          try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(merged)) } catch (_) { /* ignore */ }
           return
         }
         // ts === 0 → offline / transient; fall through to offline fallback
       } catch (_) { /* fall through to offline fallback */ }
     }
-    // Offline / boot-race fallback.
+    // Offline / boot-race fallback: project from the legacy USER_SETTINGS
+    // tree populated by bootstrapStartApp's loadUserSettings() (which reads
+    // LS `zeus_user_settings` — the single canonical cache). No second LS key.
     try {
       const projected = _projectFromLegacy()
-      if (Object.keys(projected).length > 0) {
-        const merged = { ...DEFAULT_SETTINGS, ...projected }
-        set({ settings: merged, loaded: true })
-        _syncToWindow(merged)
-        return
-      }
-      const cached = JSON.parse(localStorage.getItem('zeus_user_settings_cache') || '{}')
-      const merged = { ...DEFAULT_SETTINGS, ...cached }
+      const merged = { ...DEFAULT_SETTINGS, ...projected }
       set({ settings: merged, loaded: true })
       _syncToWindow(merged)
     } catch {
@@ -111,12 +108,10 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
           body: JSON.stringify({ settings }),
         }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status) })
       }
-      // 3. Write canonical LS cache (same key as legacy _usSave uses) — avoids duplicate LS sources.
+      // 3. Write canonical LS cache — same key legacy _usSave uses. Single source.
       try {
         if (w.USER_SETTINGS) localStorage.setItem('zeus_user_settings', JSON.stringify(w.USER_SETTINGS))
       } catch (_) { /* ignore */ }
-      // React-specific cache — kept in sync until we retire it in a later commit.
-      try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(settings)) } catch (_) { /* ignore */ }
     } finally {
       set({ saving: false })
     }
