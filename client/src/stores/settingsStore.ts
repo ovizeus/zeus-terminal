@@ -1,5 +1,19 @@
 import { create } from 'zustand'
 
+// [MIGRATION-F0 commit 6] Unified settings code path.
+//
+// The store is a React-facing projection of the legacy USER_SETTINGS cache
+// defined in core/config.ts. There is exactly ONE load primitive and ONE
+// save primitive for settings:
+//
+//   LOAD  → window._usFetchRemote()  (GET /api/user/settings)
+//   SAVE  → window._usPostRemote()   (POST /api/user/settings)
+//
+// Both live in core/config.ts and are the canonical phase-0 code path.
+// settingsStore delegates to them so there are no parallel network paths.
+// The dual-write FS beacon (_ucMarkDirty) stays inside _usSave for now —
+// commit 7 removes it for settings.
+
 // ── DEFAULT SETTINGS — merge template for missing keys ──
 const DEFAULT_SETTINGS: Record<string, any> = {
   // AT
@@ -25,13 +39,13 @@ interface SettingsStoreState {
   loaded: boolean
   saving: boolean
 
-  /** Load from server, merge with defaults, write to store */
+  /** Load from server via the unified _usFetchRemote primitive. */
   loadFromServer: () => Promise<void>
-  /** Save current settings to server (explicit, not auto) */
+  /** Save to server via the unified _usPostRemote primitive. */
   saveToServer: () => Promise<void>
-  /** Update one or more settings locally (does NOT auto-save) */
+  /** Update one or more settings locally (does NOT auto-save). */
   patch: (partial: Record<string, any>) => void
-  /** Get a setting value with default fallback */
+  /** Get a setting value with default fallback. */
   get: (key: string) => any
 }
 
@@ -41,28 +55,37 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   saving: false,
 
   loadFromServer: async () => {
-    try {
-      const res = await fetch('/api/user/settings', { credentials: 'same-origin' })
-      if (!res.ok) throw new Error('HTTP ' + res.status)
-      const data = await res.json()
-      const serverSettings = (data.ok && data.settings) ? data.settings : {}
-      // Merge: defaults ← server (server wins, defaults fill gaps)
-      const merged = { ...DEFAULT_SETTINGS, ...serverSettings }
-      set({ settings: merged, loaded: true })
-      // Write to localStorage as cache
-      try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(merged)) } catch (_) {}
-      // Bridge invers: populate window.TC + window.USER_SETTINGS for engines
-      _syncToWindow(merged)
-    } catch (_) {
-      // Fallback: load from localStorage cache if server unreachable
+    const w = window as any
+    // Single GET path — delegate to legacy primitive (mutates USER_SETTINGS in-place).
+    if (typeof w._usFetchRemote === 'function') {
       try {
-        const cached = JSON.parse(localStorage.getItem('zeus_user_settings_cache') || '{}')
-        const merged = { ...DEFAULT_SETTINGS, ...cached }
+        const ts = await (w._usFetchRemote() as Promise<number>)
+        if (ts > 0) {
+          const projected = _projectFromLegacy()
+          const merged = { ...DEFAULT_SETTINGS, ...projected }
+          set({ settings: merged, loaded: true })
+          _syncToWindow(merged)
+          try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(merged)) } catch (_) { /* ignore */ }
+          return
+        }
+        // ts === 0 → offline / transient; fall through to offline fallback
+      } catch (_) { /* fall through to offline fallback */ }
+    }
+    // Offline / boot-race fallback.
+    try {
+      const projected = _projectFromLegacy()
+      if (Object.keys(projected).length > 0) {
+        const merged = { ...DEFAULT_SETTINGS, ...projected }
         set({ settings: merged, loaded: true })
         _syncToWindow(merged)
-      } catch (__) {
-        set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
+        return
       }
+      const cached = JSON.parse(localStorage.getItem('zeus_user_settings_cache') || '{}')
+      const merged = { ...DEFAULT_SETTINGS, ...cached }
+      set({ settings: merged, loaded: true })
+      _syncToWindow(merged)
+    } catch {
+      set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
     }
   },
 
@@ -71,22 +94,29 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     if (saving) return
     set({ saving: true })
     try {
-      const res = await fetch('/api/user/settings', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings }),
-      })
-      if (!res.ok) throw new Error('HTTP ' + res.status)
-      const data = await res.json()
-      if (!data.ok) throw new Error(data.error || 'Save failed')
-      // Update localStorage cache
-      try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(settings)) } catch (_) {}
-      // Bridge invers
+      const w = window as any
+      // 1. Push store → legacy USER_SETTINGS + window.TC so engines + _usBuildFlatPayload see fresh values.
+      _projectToLegacy(settings)
       _syncToWindow(settings)
-    } catch (err) {
-      console.warn('[settings] save to server failed:', err)
-      throw err // propagate so UI can show error
+      // 2. Single POST path — delegate to _usPostRemote (flattens USER_SETTINGS via _usBuildFlatPayload,
+      //    POSTs /api/user/settings with keepalive, and triggers server-side settings.changed broadcast).
+      if (typeof w._usPostRemote === 'function') {
+        w._usPostRemote()
+      } else {
+        // Pre-bridge fallback (e.g. tests before config.ts module loaded).
+        await fetch('/api/user/settings', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ settings }),
+        }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status) })
+      }
+      // 3. Write canonical LS cache (same key as legacy _usSave uses) — avoids duplicate LS sources.
+      try {
+        if (w.USER_SETTINGS) localStorage.setItem('zeus_user_settings', JSON.stringify(w.USER_SETTINGS))
+      } catch (_) { /* ignore */ }
+      // React-specific cache — kept in sync until we retire it in a later commit.
+      try { localStorage.setItem('zeus_user_settings_cache', JSON.stringify(settings)) } catch (_) { /* ignore */ }
     } finally {
       set({ saving: false })
     }
@@ -94,7 +124,6 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
 
   patch: (partial) => set((s) => {
     const updated = { ...s.settings, ...partial }
-    // Bridge invers on each patch (engines need fresh values)
     _syncToWindow(updated)
     return { settings: updated }
   }),
@@ -104,7 +133,73 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   },
 }))
 
-/** Bridge invers: sync settings into window.TC and window.USER_SETTINGS for engines */
+/**
+ * Project the legacy USER_SETTINGS (nested) + window.TC mirror into the
+ * flat shape this store exposes to React consumers.
+ */
+function _projectFromLegacy(): Record<string, any> {
+  const w = window as any
+  const us = w.USER_SETTINGS || {}
+  const tc = w.TC || {}
+  const at = us.autoTrade || {}
+  const ch = us.chart || {}
+  const out: Record<string, any> = {
+    confMin: at.confMin ?? tc.confMin,
+    sigMin: at.sigMin ?? tc.sigMin,
+    size: at.size ?? tc.size,
+    riskPct: at.riskPct ?? tc.riskPct,
+    maxDay: at.maxDay,
+    maxPos: at.maxPos ?? tc.maxPos,
+    sl: at.sl ?? tc.slPct,
+    rr: at.rr ?? tc.rr,
+    killPct: at.killPct ?? tc.killPct,
+    lossStreak: at.lossStreak ?? tc.lossStreak,
+    maxAddon: at.maxAddon ?? tc.maxAddon,
+    lev: at.lev ?? tc.lev,
+    adaptEnabled: at.adaptEnabled,
+    adaptLive: at.adaptLive,
+    smartExitEnabled: at.smartExitEnabled,
+    mscanEnabled: at.multiSym,
+    chartTf: ch.tf,
+    candleColors: ch.colors,
+    heatmapSettings: ch.heatmap,
+    indSettings: us.indicators,
+    alertSettings: us.alerts,
+  }
+  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k]
+  try {
+    const raw = localStorage.getItem('zeus_mscan_syms')
+    if (raw) out.mscanSyms = JSON.parse(raw)
+  } catch (_) { /* ignore */ }
+  return out
+}
+
+/**
+ * Push the flat store shape back into the legacy USER_SETTINGS tree so
+ * _usBuildFlatPayload (inside _usPostRemote) reads up-to-date values.
+ */
+function _projectToLegacy(settings: Record<string, any>): void {
+  const w = window as any
+  const us = w.USER_SETTINGS = w.USER_SETTINGS || {}
+  us.autoTrade = us.autoTrade || {}
+  us.chart = us.chart || {}
+
+  const atKeys = [
+    'confMin', 'sigMin', 'size', 'riskPct', 'maxDay', 'maxPos',
+    'sl', 'rr', 'killPct', 'lossStreak', 'maxAddon', 'lev',
+    'adaptEnabled', 'adaptLive', 'smartExitEnabled',
+  ]
+  for (const k of atKeys) if (settings[k] !== undefined) us.autoTrade[k] = settings[k]
+  if (settings.mscanEnabled !== undefined) us.autoTrade.multiSym = settings.mscanEnabled
+
+  if (settings.chartTf !== undefined) us.chart.tf = settings.chartTf
+  if (settings.candleColors !== undefined) us.chart.colors = settings.candleColors
+  if (settings.heatmapSettings !== undefined) us.chart.heatmap = settings.heatmapSettings
+  if (settings.indSettings !== undefined) us.indicators = settings.indSettings
+  if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
+}
+
+/** Bridge invers: sync settings into window.TC for legacy engines. */
 function _syncToWindow(s: Record<string, any>) {
   const w = window as any
   if (typeof w.TC !== 'undefined') {

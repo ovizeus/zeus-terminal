@@ -2166,6 +2166,9 @@ w._usScheduleSave = _usScheduleSave
 w._usSave = _usSave
 w._usApply = _usApply
 w._usFetchRemote = _usFetchRemote
+// [MIGRATION-F0 commit 6] Expose the flat-POST primitive so settingsStore
+// (React) and _usSave (legacy) share a single network write path.
+w._usPostRemote = _usPostRemote
 w.loadUserSettings = loadUserSettings
 w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon
