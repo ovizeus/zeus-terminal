@@ -416,7 +416,9 @@ const _stmts = {
     annotationsByUser: db.prepare('SELECT seq, notes, tags, rating FROM trade_annotations WHERE user_id = ? ORDER BY seq DESC'),
     // User settings (per-user, UPSERT)
     settingsGet: db.prepare('SELECT data FROM user_settings WHERE user_id = ?'),
+    settingsGetWithTs: db.prepare('SELECT data, updated_at FROM user_settings WHERE user_id = ?'),
     settingsUpsert: db.prepare("INSERT INTO user_settings (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
+    settingsGetTs: db.prepare('SELECT updated_at FROM user_settings WHERE user_id = ?'),
     // ARES state (per-user, UPSERT)
     aresGet: db.prepare('SELECT data FROM ares_state WHERE user_id = ?'),
     aresUpsert: db.prepare("INSERT INTO ares_state (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
@@ -922,8 +924,22 @@ module.exports = {
         if (!row) return null;
         try { return JSON.parse(row.data); } catch (_) { return null; }
     },
+    // [MIGRATION-F0] Returns { data, updatedAt } where updatedAt is epoch ms.
+    // Used by GET /api/user/settings to expose updated_at so clients can
+    // detect server-newer state without re-parsing whole payload.
+    getUserSettingsWithTs: (userId) => {
+        const row = _stmts.settingsGetWithTs.get(userId);
+        if (!row) return { data: null, updatedAt: 0 };
+        let data = null;
+        try { data = JSON.parse(row.data); } catch (_) { data = null; }
+        const updatedAt = row.updated_at ? Date.parse(row.updated_at + 'Z') || 0 : 0;
+        return { data, updatedAt };
+    },
     saveUserSettings: (userId, data) => {
         _stmts.settingsUpsert.run(userId, JSON.stringify(data));
+        // Return the fresh updated_at so callers can broadcast it.
+        const row = _stmts.settingsGetTs.get(userId);
+        return row && row.updated_at ? (Date.parse(row.updated_at + 'Z') || 0) : 0;
     },
     // ARES state (per-user UPSERT)
     getAresState: (userId) => {

@@ -381,14 +381,19 @@ router.get('/user/telegram', (req, res) => {
 router.get('/user/settings', (req, res) => {
   try {
     const db = require('../services/database');
-    const data = db.getUserSettings(req.user.id);
-    res.json({ ok: true, settings: data || {} });
+    const { data, updatedAt } = db.getUserSettingsWithTs(req.user.id);
+    res.json({ ok: true, settings: data || {}, updated_at: updatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Failed to load settings' });
   }
 });
 
 // ─── POST /api/user/settings ─── Save per-user settings (whitelist + UPSERT) ───
+// [MIGRATION-F0] Whitelist extended to cover every settings key produced by
+// client `_usSave` so the legacy user_ctx FS path can be retired. Additions:
+// profile/bmMode/assistArmed (brain mode), manualLive (live trade defaults),
+// ptLevDemo/ptLevLive/ptMarginMode (leverage per account), chartTz,
+// dslSettings (DSL presets overrides).
 const SETTINGS_WHITELIST = new Set([
   // AT
   'confMin', 'sigMin', 'size', 'riskPct', 'maxDay', 'maxPos', 'sl', 'rr',
@@ -398,13 +403,19 @@ const SETTINGS_WHITELIST = new Set([
   // UI
   'theme', 'uiScale', 'soundEnabled',
   // Chart
-  'chartTf', 'chartType', 'candleColors', 'heatmapSettings', 'timezoneOffset',
+  'chartTf', 'chartTz', 'chartType', 'candleColors', 'heatmapSettings', 'timezoneOffset',
   // Indicators
   'indSettings',
   // Liq / LLV / Supremus / S-R
   'liqSettings', 'llvSettings', 'zsSettings', 'srSettings',
   // Alerts
   'alertSettings',
+  // Brain / profile
+  'profile', 'bmMode', 'assistArmed',
+  // Manual live defaults + per-account leverage
+  'manualLive', 'ptLevDemo', 'ptLevLive', 'ptMarginMode',
+  // DSL
+  'dslSettings',
 ]);
 
 router.post('/user/settings', (req, res) => {
@@ -423,8 +434,8 @@ router.post('/user/settings', (req, res) => {
     const existing = db.getUserSettings(req.user.id) || {};
     const merged = { ...existing, ...clean };
 
-    db.saveUserSettings(req.user.id, merged);
-    res.json({ ok: true });
+    const updatedAt = db.saveUserSettings(req.user.id, merged);
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Failed to save settings' });
   }
