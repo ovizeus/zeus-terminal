@@ -266,30 +266,35 @@ export function _srEnsureVisible() {
     srSec.style.removeProperty('display')
     srSec.style.removeProperty('max-height')
     srSec.style.removeProperty('overflow')
-    const alreadyIn = srSec.closest('#zeus-groups') !== null
-    if (!alreadyIn) {
-      const aub = mi.querySelector('#aub')
-      if (aub && aub.nextSibling) {
-        mi.insertBefore(srSec, aub.nextSibling)
-      } else if (aub) {
-        mi.appendChild(srSec)
+    // [FIX] React now owns sr-strip via data-panel-id="sigreg" wrapper inside #zeus-groups.
+    // If sr-strip's parent has data-panel-id, leave it alone — re-parenting would empty the wrapper.
+    const parentHasPanelId = srSec.parentElement && srSec.parentElement.hasAttribute('data-panel-id')
+    if (!parentHasPanelId) {
+      const alreadyIn = srSec.closest('#zeus-groups') !== null
+      if (!alreadyIn) {
+        const aub = mi.querySelector('#aub')
+        if (aub && aub.nextSibling) {
+          mi.insertBefore(srSec, aub.nextSibling)
+        } else if (aub) {
+          mi.appendChild(srSec)
+        } else {
+          mi.insertBefore(srSec, mi.firstChild)
+        }
+        console.log('[SR] Fallback: sr-sec fortat in zeus-groups')
       } else {
-        mi.insertBefore(srSec, mi.firstChild)
-      }
-      console.log('[SR] Fallback: sr-sec fortat in zeus-groups')
-    } else {
-      const aub = mi.querySelector('#aub')
-      if (aub) {
-        const nodes = Array.from(mi.children)
-        const aubIdx = nodes.indexOf(aub)
-        const srIdx = nodes.indexOf(srSec)
-        if (srIdx !== aubIdx + 1) {
-          if (aub.nextSibling) {
-            mi.insertBefore(srSec, aub.nextSibling)
-          } else {
-            mi.appendChild(srSec)
+        const aub = mi.querySelector('#aub')
+        if (aub) {
+          const nodes = Array.from(mi.children)
+          const aubIdx = nodes.indexOf(aub)
+          const srIdx = nodes.indexOf(srSec)
+          if (srIdx !== aubIdx + 1) {
+            if (aub.nextSibling) {
+              mi.insertBefore(srSec, aub.nextSibling)
+            } else {
+              mi.appendChild(srSec)
+            }
+            console.log('[SR] Fallback: sr-sec repositionat dupa AUB')
           }
-          console.log('[SR] Fallback: sr-sec repositionat dupa AUB')
         }
       }
     }

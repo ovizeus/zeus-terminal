@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.6.0',
-    build: 32,
+    version: '1.6.2',
+    build: 34,
     date: '2026-04-14',
-    changelog: 'Audit MEDIUM wave 4 (final): PIN unlock 4h cross-tab (M12), Vite sourcemap explicit false (M18), teacher dataset caps verified (M17), kill switch UTC lazy reset + WS push (M2)'
+    changelog: 'Fix follow-up: Signals panel still empty — _srEnsureVisible() was re-parenting sr-strip out of React wrapper 3s after boot. Skip re-parent when parent has data-panel-id.'
 };
