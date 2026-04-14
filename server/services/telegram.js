@@ -88,7 +88,16 @@ function sendToUser(userId, text, parseMode) {
         if (!row || !row.telegram_bot_token_enc || !row.telegram_chat_id) {
             return Promise.resolve(false); // user has no Telegram — skip silently
         }
-        const token = decrypt(row.telegram_bot_token_enc);
+        // [ZT-AUD-#16] Skip rows already flagged broken (re-encrypt needed).
+        if (row.telegram_broken_at) return Promise.resolve(false);
+        let token;
+        try {
+            token = decrypt(row.telegram_bot_token_enc);
+        } catch (e) {
+            console.warn('[TELEGRAM] decrypt failed for user ' + userId + ' — marking broken:', e.message);
+            try { db.markTelegramBroken(userId, e.message); } catch (_) { /* */ }
+            return Promise.resolve(false);
+        }
         return _sendWithRetry(token, row.telegram_chat_id, text, parseMode);
     } catch (e) {
         console.warn('[TELEGRAM] sendToUser failed:', e.message);

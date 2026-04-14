@@ -317,6 +317,14 @@ migrate('019_user_last_active', () => {
     db.exec("ALTER TABLE users ADD COLUMN last_active_at INTEGER DEFAULT NULL");
 });
 
+// [ZT-AUD-#16 / C14] Mark telegram tokens that fail to decrypt persistently
+// (e.g. encrypted under a rotated key) so we stop spamming logs every 60s and
+// the user can be told to re-add the token via UI.
+migrate('020_telegram_broken', () => {
+    db.exec("ALTER TABLE users ADD COLUMN telegram_broken_at INTEGER DEFAULT NULL");
+    db.exec("ALTER TABLE users ADD COLUMN telegram_broken_reason TEXT DEFAULT NULL");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -353,9 +361,13 @@ const _stmts = {
   `),
 
     // Telegram per-user
-    setUserTelegram: db.prepare("UPDATE users SET telegram_bot_token_enc = ?, telegram_chat_id = ?, updated_at = datetime('now') WHERE id = ?"),
-    getUserTelegram: db.prepare('SELECT telegram_bot_token_enc, telegram_chat_id FROM users WHERE id = ?'),
-    getAllTelegramUsers: db.prepare('SELECT id, telegram_bot_token_enc, telegram_chat_id FROM users WHERE telegram_bot_token_enc IS NOT NULL AND telegram_chat_id IS NOT NULL'),
+    setUserTelegram: db.prepare("UPDATE users SET telegram_bot_token_enc = ?, telegram_chat_id = ?, telegram_broken_at = NULL, telegram_broken_reason = NULL, updated_at = datetime('now') WHERE id = ?"),
+    getUserTelegram: db.prepare('SELECT telegram_bot_token_enc, telegram_chat_id, telegram_broken_at, telegram_broken_reason FROM users WHERE id = ?'),
+    // [ZT-AUD-#16] Skip rows already flagged broken so reload doesn't retry endlessly.
+    getAllTelegramUsers: db.prepare('SELECT id, telegram_bot_token_enc, telegram_chat_id FROM users WHERE telegram_bot_token_enc IS NOT NULL AND telegram_chat_id IS NOT NULL AND telegram_broken_at IS NULL'),
+    markTelegramBroken: db.prepare("UPDATE users SET telegram_broken_at = ?, telegram_broken_reason = ?, updated_at = datetime('now') WHERE id = ?"),
+    clearTelegramBroken: db.prepare("UPDATE users SET telegram_broken_at = NULL, telegram_broken_reason = NULL WHERE id = ?"),
+    getTelegramBrokenStatus: db.prepare('SELECT telegram_broken_at, telegram_broken_reason FROM users WHERE id = ?'),
 
     // PIN per-user
     setPin: db.prepare("UPDATE users SET pin_hash = ?, updated_at = datetime('now') WHERE id = ?"),
@@ -659,6 +671,20 @@ function getAllTelegramUsers() {
     return _stmts.getAllTelegramUsers.all();
 }
 
+function markTelegramBroken(userId, reason) {
+    _stmts.markTelegramBroken.run(Date.now(), String(reason || 'unknown').slice(0, 200), userId);
+}
+
+function clearTelegramBroken(userId) {
+    _stmts.clearTelegramBroken.run(userId);
+}
+
+function getTelegramBrokenStatus(userId) {
+    const row = _stmts.getTelegramBrokenStatus.get(userId);
+    if (!row || !row.telegram_broken_at) return null;
+    return { brokenAt: row.telegram_broken_at, reason: row.telegram_broken_reason };
+}
+
 // ─── PIN per-user ───
 
 function setUserPin(userId, pinHash) {
@@ -785,6 +811,9 @@ module.exports = {
     clearTempPasswordMeta,
     setLastActiveAt,
     getLastActiveAt,
+    markTelegramBroken,
+    clearTelegramBroken,
+    getTelegramBrokenStatus,
     updateEmail,
     atomicEmailUpdate,
     setUserStatus,

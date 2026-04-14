@@ -430,6 +430,12 @@ function _stopBot(userId) {
 
 // ── Load all user bots from DB ──
 
+// [ZT-AUD-#16 / C14] Track per-user decrypt failures so we mark the row broken
+// in the DB after a few attempts. Without this, _reloadBots ran every 60s and
+// printed the same warning forever, with no surfaced signal to the user.
+const _decryptFailCount = new Map();
+const _DECRYPT_FAIL_THRESHOLD = 3;
+
 function _reloadBots() {
     try {
         const db = require('./database');
@@ -442,9 +448,20 @@ function _reloadBots() {
             if (!_bots.has(u.id)) {
                 try {
                     const token = decrypt(u.telegram_bot_token_enc);
+                    _decryptFailCount.delete(u.id);
                     _startBot(u.id, token, u.telegram_chat_id);
                 } catch (e) {
-                    console.warn('[TG-BOT] Failed to decrypt token for user ' + u.id + ':', e.message);
+                    const n = (_decryptFailCount.get(u.id) || 0) + 1;
+                    _decryptFailCount.set(u.id, n);
+                    console.warn('[TG-BOT] Failed to decrypt token for user ' + u.id + ' (attempt ' + n + '):', e.message);
+                    if (n >= _DECRYPT_FAIL_THRESHOLD) {
+                        try {
+                            db.markTelegramBroken(u.id, e.message);
+                            db.auditLog(u.id, 'TELEGRAM_TOKEN_BROKEN', { reason: e.message }, null);
+                            console.warn('[TG-BOT] User ' + u.id + ' marked broken — UI must prompt re-add token');
+                        } catch (_) { /* */ }
+                        _decryptFailCount.delete(u.id);
+                    }
                 }
             }
         }
