@@ -786,6 +786,7 @@ router.post('/admin/reset-password', async (req, res) => {
     const hash = await bcrypt.hash(tempPassword, BCRYPT_ROUNDS);
     const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     db.updatePassword(target.id, hash);
+    db.addPasswordHistory(target.id, hash);
     db.setTempPasswordMeta(target.id, expiresAt);
     db.bumpTokenVersion(target.id);
     db.auditLog(guard.caller.id, 'ADMIN_RESET_PASSWORD', { targetEmail: normalEmail, targetId: target.id, expiresAt }, req.ip);
@@ -1172,6 +1173,7 @@ router.post('/forgot-password/confirm', async (req, res) => {
 
     db.updatePassword(pending.userId, newHash);
     db.addPasswordHistory(pending.userId, newHash);
+    db.clearTempPasswordMeta(pending.userId);
     db.bumpTokenVersion(pending.userId);
     pendingCodes.delete(key);
 
