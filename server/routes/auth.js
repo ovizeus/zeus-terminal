@@ -281,16 +281,23 @@ router.post('/login', async (req, res) => {
             expiresAt: Date.now() + CODE_TTL
         });
 
-        // If SMTP is not configured, skip 2FA entirely for local dev
+        // [ZT-AUD-C3] 2FA is mandatory. If SMTP isn't available we never
+        // bypass — in production we fail, in dev we surface the code via
+        // server console so the operator can still complete the flow without
+        // skipping the 2FA challenge entirely.
         const mailer = _getMailer();
         if (!mailer) {
-            console.warn(`[AUTH-2FA] SMTP not configured — auto-verifying login for ${_mask(normalEmail)}`);
-            pendingCodes.delete(normalEmail);
-            const token = jwt.sign({ id: user.id, email: normalEmail, role: user.role || 'user', tokenVersion: user.token_version || 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-            _setAuthCookie(res, token);
-            db.auditLog(user.id, 'LOGIN_SUCCESS', { method: 'auto-2fa-bypass' }, req.ip);
-            logger.info('AUTH', 'Login auto-verified (no SMTP)', { email: _mask(normalEmail) });
-            return res.json({ ok: true, email: normalEmail, role: user.role || 'user' });
+            const isProd = process.env.NODE_ENV === 'production';
+            if (isProd) {
+                pendingCodes.delete(normalEmail);
+                logger.error('AUTH', 'Login blocked — SMTP not configured in production', { email: _mask(normalEmail) });
+                db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'no_smtp_no_bypass' }, req.ip);
+                return res.status(503).json({ error: 'Email service unavailable. Cannot send 2FA code. Try again later.' });
+            }
+            // Dev/test: keep the code in pendingCodes and print it server-side.
+            console.warn(`[AUTH-2FA][DEV] SMTP not configured. 2FA code for ${_mask(normalEmail)}: ${code}`);
+            logger.warn('AUTH', '2FA code printed to console (dev, no SMTP)', { email: _mask(normalEmail) });
+            return res.json({ ok: true, needsCode: true, message: 'Cod 2FA tipărit în consola serverului (dev mode).' });
         }
 
         const sent = await _sendCode(normalEmail, code);
