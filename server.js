@@ -935,18 +935,21 @@ app.get('/legacy/{*rest}', (req, res) => {
 
 // ─── React app at /app/ (kept for backwards compat) ───
 app.get('/app', (req, res) => res.redirect('/app/'));
-app.get('/app/{*rest}', (req, res) => {
+// Asset-looking requests must 404, not fall back to index.html — otherwise the
+// browser sees text/html for a missing .js/.css and rejects it under strict
+// MIME checks (cached old bundle hashes after a redeploy).
+const _ASSET_RE = /\.(?:js|mjs|css|map|json|svg|png|jpe?g|gif|webp|ico|woff2?|ttf|otf|wasm)$/i;
+function _sendAppIndex(req, res) {
+  if (_ASSET_RE.test(req.path)) return res.status(404).type('text/plain').send('Not Found');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, 'public', 'app', 'index.html'), (err) => {
     if (err) res.status(500).send('Server error');
   });
-});
+}
+app.get('/app/{*rest}', _sendAppIndex);
 
 // ─── Fallback: React app is now the main app ───
-app.get('/{*splat}', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'app', 'index.html'), (err) => {
-    if (err) res.status(500).send('Server error');
-  });
-});
+app.get('/{*splat}', _sendAppIndex);
 
 // ─── [SENTRY] Error handler — must be before our custom error handler ───
 Sentry.setupExpressErrorHandler(app);

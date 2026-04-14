@@ -65,6 +65,10 @@ function createSessionAuth(jwtSecret) {
             '/sw.js',
             '/manifest.json',
             '/assets/',
+            '/app/assets/',
+            '/app/themes.css',
+            '/app/favicon.svg',
+            '/app/zeus-logo.png',
             '/css/',
             '/js/',
             // [ZT-AUD-#15] Allow unauthenticated client error reports (so a
