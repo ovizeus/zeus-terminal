@@ -1147,6 +1147,26 @@ app.locals.wsBroadcast = function (userId, senderWs) {
   });
 };
 
+// [MIGRATION-F0] Generic per-user push over the existing WSS. Used by
+// routes (settings / future stores) to broadcast a typed payload to every
+// live session of `userId`. Returns the count of sockets that received
+// the message. Safe to call when no sessions are connected.
+app.locals.wsBroadcastToUser = function (userId, payload) {
+  const set = _wsClients.get(userId);
+  if (!set || set.size === 0) return 0;
+  let msg;
+  try { msg = JSON.stringify(payload); } catch (_) { return 0; }
+  let sent = 0;
+  set.forEach(ws => {
+    try {
+      if (ws.readyState === WebSocket.OPEN) { ws.send(msg); sent++; }
+    } catch (_) { /* dead socket — cleaned on close */ }
+  });
+  return sent;
+};
+// Also expose on global for modules that don't have access to `app`.
+global.__zeusWsBroadcastToUser = app.locals.wsBroadcastToUser;
+
 // ─── Graceful Shutdown ───
 function _gracefulShutdown(signal) {
   logger.warn('SERVER', 'Shutdown signal received: ' + signal);

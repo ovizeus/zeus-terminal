@@ -435,6 +435,24 @@ router.post('/user/settings', (req, res) => {
     const merged = { ...existing, ...clean };
 
     const updatedAt = db.saveUserSettings(req.user.id, merged);
+
+    // [MIGRATION-F0] Fan-out to every live session of this user so other
+    // devices can refetch without polling. Uses the existing `/ws/sync`
+    // WSS (no parallel socket). Helper is wired on `app.locals` by
+    // server.js; also exposed on `global.__zeusWsBroadcastToUser` for
+    // modules without access to `req.app`. Best-effort — missing helper
+    // (e.g. during tests) must not break the save.
+    try {
+      const broadcast = (req.app && req.app.locals && req.app.locals.wsBroadcastToUser) || global.__zeusWsBroadcastToUser;
+      if (typeof broadcast === 'function') {
+        broadcast(req.user.id, {
+          type: 'settings.changed',
+          updated_at: updatedAt,
+          keys: Object.keys(clean),
+        });
+      }
+    } catch (_) { /* broadcast is best-effort */ }
+
     res.json({ ok: true, updated_at: updatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Failed to save settings' });
