@@ -5,17 +5,51 @@
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 
-// In-memory session activity tracker (userId → lastActiveMs)
+// [ZT-AUD-#12 / C10] In-memory cache backed by DB (last_active_at column).
+// Survives pm2 restarts so a stolen JWT cannot stay valid indefinitely just
+// because the server restarted between misuse attempts.
 const _activity = new Map();
 const INACTIVITY_TIMEOUT_MS = parseInt(process.env.SESSION_INACTIVITY_MIN, 10) * 60000 || 4 * 3600000; // default 4h
+// Throttle DB writes — only persist when delta > N ms (cache absorbs noise).
+const ACTIVITY_PERSIST_MIN_MS = 60000;
+const _lastPersistedTs = new Map();
 
-// [RT-05] Hourly cleanup of stale activity entries
+// [RT-05] Hourly cleanup of stale in-memory entries (DB column persists).
 setInterval(() => {
     const cutoff = Date.now() - INACTIVITY_TIMEOUT_MS;
     for (const [uid, ts] of _activity) {
-        if (ts < cutoff) _activity.delete(uid);
+        if (ts < cutoff) {
+            _activity.delete(uid);
+            _lastPersistedTs.delete(uid);
+        }
     }
 }, 3600000);
+
+function _readLastActive(uid) {
+    if (_activity.has(uid)) return _activity.get(uid);
+    try {
+        const db = require('../services/database');
+        const ts = db.getLastActiveAt(uid);
+        if (ts) {
+            _activity.set(uid, ts);
+            _lastPersistedTs.set(uid, ts);
+            return ts;
+        }
+    } catch (_) { /* DB not ready */ }
+    return null;
+}
+
+function _writeLastActive(uid, now) {
+    _activity.set(uid, now);
+    const lastDb = _lastPersistedTs.get(uid) || 0;
+    if ((now - lastDb) >= ACTIVITY_PERSIST_MIN_MS) {
+        try {
+            const db = require('../services/database');
+            db.setLastActiveAt(uid, now);
+            _lastPersistedTs.set(uid, now);
+        } catch (_) { /* swallow — cache still valid */ }
+    }
+}
 
 function createSessionAuth(jwtSecret) {
     return function sessionAuth(req, res, next) {
@@ -102,18 +136,20 @@ function createSessionAuth(jwtSecret) {
                 } catch (_) {}
             }
 
-            // Inactivity timeout check (in-memory, resets on server restart)
+            // [ZT-AUD-#12] Inactivity timeout — DB-backed (survives pm2 restart).
             if (req.user.id) {
-                const last = _activity.get(req.user.id);
-                if (last && (Date.now() - last) > INACTIVITY_TIMEOUT_MS) {
+                const last = _readLastActive(req.user.id);
+                const now = Date.now();
+                if (last && (now - last) > INACTIVITY_TIMEOUT_MS) {
                     _activity.delete(req.user.id);
+                    _lastPersistedTs.delete(req.user.id);
                     res.clearCookie('zeus_token', { path: '/' });
                     const db = require('../services/database');
-                    try { db.auditLog(req.user.id, 'INACTIVITY_TIMEOUT', { inactiveMs: Date.now() - last }, req.ip); } catch (_) {}
+                    try { db.auditLog(req.user.id, 'INACTIVITY_TIMEOUT', { inactiveMs: now - last }, req.ip); } catch (_) {}
                     if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired due to inactivity' });
                     return res.redirect('/login.html');
                 }
-                _activity.set(req.user.id, Date.now());
+                _writeLastActive(req.user.id, now);
             }
 
             next();

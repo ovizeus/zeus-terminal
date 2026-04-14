@@ -310,6 +310,13 @@ migrate('018_pwd_temp_meta', () => {
     db.exec("ALTER TABLE users ADD COLUMN pwd_must_change INTEGER NOT NULL DEFAULT 0");
 });
 
+// [ZT-AUD-#12 / C10] Persist last activity timestamp so inactivity timeout
+// survives pm2 restarts. Without this, a stolen JWT remains valid indefinitely
+// after server restart because the in-memory _activity Map is wiped.
+migrate('019_user_last_active', () => {
+    db.exec("ALTER TABLE users ADD COLUMN last_active_at INTEGER DEFAULT NULL");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -361,6 +368,10 @@ const _stmts = {
     // Temp-password metadata (set by admin reset, cleared on user change)
     setPwdTempMeta: db.prepare("UPDATE users SET pwd_temp_expires_at = ?, pwd_must_change = 1, updated_at = datetime('now') WHERE id = ?"),
     clearPwdTempMeta: db.prepare("UPDATE users SET pwd_temp_expires_at = NULL, pwd_must_change = 0, updated_at = datetime('now') WHERE id = ?"),
+
+    // [ZT-AUD-#12] Inactivity tracking (survives pm2 restart)
+    setLastActiveAt: db.prepare('UPDATE users SET last_active_at = ? WHERE id = ?'),
+    getLastActiveAt: db.prepare('SELECT last_active_at FROM users WHERE id = ?'),
 
     // Password history
     insertPasswordHistory: db.prepare('INSERT INTO password_history (user_id, password_hash) VALUES (?, ?)'),
@@ -465,6 +476,15 @@ function setTempPasswordMeta(userId, expiresAtIso) {
 
 function clearTempPasswordMeta(userId) {
     return _stmts.clearPwdTempMeta.run(userId);
+}
+
+function setLastActiveAt(userId, ts) {
+    return _stmts.setLastActiveAt.run(ts, userId);
+}
+
+function getLastActiveAt(userId) {
+    const row = _stmts.getLastActiveAt.get(userId);
+    return row ? row.last_active_at : null;
 }
 
 function updateEmail(userId, newEmail) {
@@ -763,6 +783,8 @@ module.exports = {
     bumpTokenVersion,
     setTempPasswordMeta,
     clearTempPasswordMeta,
+    setLastActiveAt,
+    getLastActiveAt,
     updateEmail,
     atomicEmailUpdate,
     setUserStatus,
