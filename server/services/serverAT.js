@@ -299,12 +299,20 @@ function setMode(userId, mode) {
     const us = _uState(userId);
     const oldMode = us.engineMode;
 
-    // [B1] Reject cross-switch if user has open positions
+    // [ZT-AUD-#13 / C11] Reject cross-switch only if user has positions in
+    // *either* mode. Old code counted all positions but never inspected the
+    // mode field, allowing a stale demo position to be monitored under live
+    // logic after a successful switch (and vice versa). Now we count both
+    // sides explicitly so a switch attempt with mixed positions is rejected
+    // with a precise reason.
     if (mode !== oldMode) {
-        const openCount = _positions.filter(p => p.userId === userId).length;
-        if (openCount > 0) {
-            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — ${openCount} open position(s)`);
-            return { ok: false, error: `Cannot switch mode with ${openCount} open position(s). Close them first.` };
+        const userPos = _positions.filter(p => p.userId === userId);
+        const oldModeCount = userPos.filter(p => (p.mode || 'demo') === oldMode).length;
+        const newModeCount = userPos.filter(p => (p.mode || 'demo') === mode).length;
+        if (oldModeCount > 0 || newModeCount > 0) {
+            const detail = `${oldModeCount} ${oldMode} + ${newModeCount} ${mode}`;
+            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — open positions (${detail})`);
+            return { ok: false, error: `Cannot switch mode — open positions (${detail}). Close them first.` };
         }
     }
 
