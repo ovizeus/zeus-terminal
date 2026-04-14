@@ -61,11 +61,11 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <button id="prof-defensive" className="znc-pbtn" onClick={() => (window as any).setProfile?.('defensive')}>DEF</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
-        <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
-        <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
         <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
+        <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
         <button id="dsl-defensive" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('defensive')}>DEF</button>
         <button id="dsl-tp" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('tp')}>TP</button>
+        <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
       </div>
 
       {/* PROTECT BANNER */}

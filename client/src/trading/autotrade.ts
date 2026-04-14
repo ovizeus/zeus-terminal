@@ -42,11 +42,11 @@ function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atS
 // AT UI helpers
 export function toggleAutoTrade(): void {
   if (getATKillTriggered()) {
-    toast('Kill switch activ — apasa butonul RESET din status sau asteapta', 0, _ZI.noent)
-    // Afiseaza butonul de reset daca nu e deja afisat
+    toast('Kill switch active — press RESET in status bar or wait', 0, _ZI.noent)
     const st = el('atStatus')
     if (st && !st.innerHTML.includes('data-action')) {
-      st.innerHTML = _ZI.siren + ` KILL ACTIV — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`
+      var _lossExtra = (AT.killLoss && AT.killLimit) ? ` (loss $${(+AT.killLoss).toFixed(2)} / limit $${(+AT.killLimit).toFixed(2)})` : ''
+      st.innerHTML = _ZI.siren + ` KILL ACTIVE${_lossExtra} — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET KILL SWITCH</button>`
       st.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch())
     }
     return
@@ -137,11 +137,17 @@ export function _applyATToggleUI(enabled: any): void {
       try { return new Date(j.time || 0).toLocaleDateString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest' }) === _todayRO } catch (_) { return false }
     })
     // FIX v118: numără DOAR trade-urile AutoTrade (nu Paper) pentru dailyTrades / closedTradesToday
-    const _jTodayAT = _jToday.filter((j: any) => j.autoTrade === true)
+    // [KILL-LOOP FIX] Skip entries closed BEFORE last kill reset — server zeros pnlAtReset, we mirror via killResetTs
+    const _resetAfter = +(AT.killResetTs || 0)
+    const _jTodayAT = _jToday.filter((j: any) => j.autoTrade === true && (!_resetAfter || (+(j.closedAt || 0) > _resetAfter)))
     AT.realizedDailyPnL = _jTodayAT.reduce((acc: any, j: any) => acc + (Number.isFinite(+j.pnl) ? +j.pnl : 0), 0)
     AT.closedTradesToday = _jTodayAT.length
     BM.dailyTrades = getATClosedToday()
     AT.dailyStart = new Date().toISOString().slice(0, 10)
+    // [KILL-LOOP FIX R5] Snapshot AT-enable timestamp. Positions opened before
+    // this point (e.g. old server-side AT positions from previous sessions)
+    // will NOT count toward the current session's kill unrealized PnL.
+    AT.enabledAt = Date.now()
     // [C3] Kill switch auto-clear REMOVED — require explicit user reset
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
     if (getATKillTriggered()) {
@@ -362,12 +368,37 @@ export function checkATConditions(): any {
 
   const allOk = (isBull || isBear) && sigOk && stOk && adxOk && hourOk && !hasOpposite && posOk && coolOk
 
+  // [AUDIT-L1] Diagnostic: build list of gates that blocked this tick (no behavior change)
+  const _blockReasons: string[] = []
+  if (!(isBull || isBear)) _blockReasons.push(`conf=${score}(need ${confMin}+ or ${100 - confMin}-)`)
+  if (!sigOk) _blockReasons.push(`sig=${Math.max(bullCount, bearCount)}/${sigMin}`)
+  if (!stOk) _blockReasons.push('st=no-flip')
+  if (!adxOk) _blockReasons.push(`adx=${adxVal}<18`)
+  if (!hourOk) _blockReasons.push(`hour=${String(curHour2).padStart(2, '0')}UTC WR${hourWR2}%`)
+  if (hasOpposite) _blockReasons.push('opp=open')
+  if (!posOk) _blockReasons.push(symAlreadyOpen ? 'pos=sym-already-open' : `pos=${openAuto}/${maxPos}`)
+  if (!coolOk) _blockReasons.push(`cool=${Math.max(0, Math.round((AT.cooldownMs - (nowTs - Math.max(getATLastTradeTs(), _symCd))) / 1000))}s`)
+  ;(AT as any)._lastBlockReason = _blockReasons.join(' | ')
+  ;(AT as any)._lastBlockTs = nowTs
+  // Throttled log: emit only if AT enabled, blocked, and reasons changed OR 60s since last log
+  if (!allOk && getATEnabled()) {
+    const _rk = _blockReasons.join('|')
+    const _lastLogged = (AT as any)._lastBlockLogKey
+    const _lastLoggedTs = (AT as any)._lastBlockLogTs || 0
+    if (_rk !== _lastLogged || (nowTs - _lastLoggedTs) > 60000) {
+      atLog('info', `[AT-BLOCK] ${_blockReasons.join(' | ')}`)
+      ;(AT as any)._lastBlockLogKey = _rk
+      ;(AT as any)._lastBlockLogTs = nowTs
+    }
+  }
+
   const _atResult = {
     allOk,
     isBull: isBull && sigDir === 'bull',
     isBear: isBear && sigDir === 'bear',
     score, bullCount, bearCount,
-    stDir, posOk, coolOk, adxOk, hourOk
+    stDir, posOk, coolOk, adxOk, hourOk,
+    blockReasons: _blockReasons
   }
   // [P0.4] Decision log — AT gate check
   if (typeof w.DLog !== 'undefined') w.DLog.record('at_gate', _atResult)
@@ -814,6 +845,32 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   if (_convDangerMult <= 0) {
     w.BlockReason.set('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
     atLog('warn', '[SHIELD] conviction=' + (BM.conviction || 0) + '% danger=' + (BM.danger || 0) + ' mult=0 → SKIP')
+    // [L1-SHIELD-DIAG] Throttled breakdown: show WHY conviction is low (60s dedup by signature)
+    try {
+      const _bd: any = (BM as any)._convictionBreakdown || null
+      const _fg: any[] = ((BM as any)._entryFailedGates) || []
+      if (_bd) {
+        const _sig = 'es=' + _bd.entryScore + '|atm=' + _bd.atmPart + '|mtf=' + _bd.mtfPart + '|ofi=' + _bd.ofiPart + '|sig=' + _bd.sigPart + '|fg=' + _fg.join(',')
+        const _lastSig = (w as any)._lastShieldDiagSig
+        const _lastTs = (w as any)._lastShieldDiagTs || 0
+        const _now = Date.now()
+        if (_sig !== _lastSig || (_now - _lastTs) > 60000) {
+          ;(w as any)._lastShieldDiagSig = _sig
+          ;(w as any)._lastShieldDiagTs = _now
+          const parts = [
+            '[SHIELD-DIAG] dir=' + _bd.dir,
+            'entryScore=' + _bd.entryScore + '(→' + _bd.entryPart + '/40)',
+            'atm=' + _bd.atmConf + '(→' + _bd.atmPart + '/15)',
+            'mtf1h=' + _bd.mtf1h + '/4h=' + _bd.mtf4h + '(→' + _bd.mtfPart + '/15)',
+            'ofi=' + _bd.ofi + '(→' + _bd.ofiPart + ')',
+            'sig=' + _bd.sigBull + 'b/' + _bd.sigBear + 's(→' + _bd.sigPart + '/5)',
+            'danger=' + _bd.danger,
+          ]
+          if (_fg.length) parts.push('failed_gates=[' + _fg.join(',') + ']')
+          atLog('info', parts.join(' | '))
+        }
+      }
+    } catch (_) { /* diag never throws */ }
     return
   }
   const _sizeMult = ((BM.adapt && BM.adapt.enabled) ? (BM.positionSizing && BM.positionSizing.finalMult ? BM.positionSizing.finalMult : 1) : 1) * _fusionMult * _convDangerMult
@@ -886,6 +943,11 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       sourceMode: (w.S.mode || 'assist').toLowerCase(), // [PATCH1] immutable — original source
       controlMode: (w.S.mode || 'assist').toLowerCase(), // mutable — AI or MANUAL
       brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
+      // [DSL MODE] Snapshot the selected Brain DSL mode at open time so the
+      // UI and journal can show WHICH preset (SWING/ATR/DEF/TP/FAST) owned the
+      // position — independent of later mode changes (those only apply to new
+      // positions, per setDslMode contract).
+      dslModeAtOpen: (typeof getDSLMode === 'function' ? getDSLMode() : 'atr'),
       dslParams: Object.assign({
         pivotLeftPct: getTCDslTrailPct(),
         pivotRightPct: getTCDslTrailSusPct(),
@@ -996,6 +1058,8 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           sourceMode: (w.S.mode || 'assist').toLowerCase(), // [PATCH1] immutable — original source
           controlMode: (w.S.mode || 'assist').toLowerCase(), // mutable — AI or MANUAL
           brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
+          // [DSL MODE] See demo branch above — snapshot selected DSL mode.
+          dslModeAtOpen: (typeof getDSLMode === 'function' ? getDSLMode() : 'atr'),
           dslParams: Object.assign({
             pivotLeftPct: getTCDslTrailPct(),
             pivotRightPct: getTCDslTrailSusPct(),
@@ -1374,16 +1438,35 @@ export function scheduleAutoClose(pos: any): void {
 // Kill switch
 export function checkKillThreshold(): void {
   if (getATKillTriggered()) return
+  // [KILL-LOOP FIX R4] Defer kill check until server confirms AT state.
+  // Prevents firing on boot while TP.demoPositions still has zombie AT positions
+  // from localStorage that haven't been reconciled with server's open-position list.
+  if (!AT._modeConfirmed) return
   const killPct = parseFloat(el('atKillPct')?.value) || 5
   const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
   if (bal <= 0) return // [FIX BUG4] Skip kill check if balance unknown — prevents $10k fallback distortion
   const _realPnL = +(getATDailyPnL()) || 0
   // [PATCH3 R2] Include unrealized PnL from open positions in daily loss check
+  // [KILL-LOOP FIX] Only AT positions count toward AT kill — manual/zombie positions
+  // from stale localStorage must not trigger AT kill switch
   let _unrealPnL = 0
   const _openList = getATMode() === 'demo' ? (TP.demoPositions || []) : (TP.livePositions || [])
   for (let i = 0; i < _openList.length; i++) {
     const _p = _openList[i]
     if (_p.closed || _p.status === 'closing') continue
+    if (!_p.autoTrade) continue
+    // [KILL-LOOP FIX R4] Only server-confirmed AT positions count toward kill.
+    // Unconfirmed positions may be localStorage zombies still pending prune.
+    if (!_p._serverSeq) continue
+    // [KILL-LOOP FIX R6] Daily kill = loss from positions opened TODAY only.
+    // Old open positions (from previous days/sessions) have their unrealized PnL
+    // tracked elsewhere (Total PnL banner) but they are NOT today's loss — they
+    // would retrigger kill infinitely right after user resets. Cutoff is the
+    // later of: start-of-day (UTC), last kill reset, and explicit AT.enabledAt.
+    const _openTs = +(_p.ts || _p.openTs || 0)
+    const _dayStart = new Date(); _dayStart.setUTCHours(0, 0, 0, 0)
+    const _cutoff = Math.max(_dayStart.getTime(), +(AT.killResetTs || 0), +((AT as any).enabledAt || 0))
+    if (_openTs > 0 && _openTs < _cutoff) continue
     const _cur = getSymPrice(_p)
     if (_cur > 0 && _p.entry > 0) {
       // [PATCH P1-6] Use _safePnl for consistency with closeDemoPos/triggerKillSwitch
@@ -1408,7 +1491,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   if (typeof w.DLog !== 'undefined') w.DLog.record('kill_switch', { reason: reason, pnl: realPnL, trades: closedCount2, killPct: killPct2, bal: bal2 })
   // Log exact values for kill switch
   if (reason === 'daily_loss') {
-    atLog('kill', `[KILL] KILL SWITCH: Pierdere zilnica ${(+(realPnL) || 0).toFixed(2)}$ >= ${(+(killPct2) || 5).toFixed(1)}% din $${(+(bal2) || 10000).toFixed(0)} | ${+(closedCount2) || 0} trades`)
+    atLog('kill', `[KILL] KILL SWITCH: Daily loss ${(+(realPnL) || 0).toFixed(2)}$ >= ${(+(killPct2) || 5).toFixed(1)}% of $${(+(bal2) || 10000).toFixed(0)} | ${+(closedCount2) || 0} trades`)
   }
 
   AT.enabled = false
@@ -1473,12 +1556,13 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   const killBtn = el('atKillBtn')
   if (killBtn) killBtn.classList.add('triggered')
 
-  const reasonMap: any = { manual: 'Stop manual', daily_loss: 'Pierdere zilnica atinsa!' }
+  const reasonMap: any = { manual: 'Manual stop', daily_loss: 'Daily loss limit reached' }
   const msg = reasonMap[reason] || reason
   const pnlStr = (totalEmergencyPnL >= 0 ? '+' : '') + '$' + totalEmergencyPnL.toFixed(2)
-  { const _oe6 = el('atStatus'); if (_oe6) { _oe6.innerHTML = _ZI.siren + ` KILL ACTIV — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`; _oe6.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch()) } }
-  atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} pozitii inchise | PnL: ${pnlStr}`)
-  toast(closedCount + ' pozitii inchise | PnL: ' + pnlStr, 0, _ZI.siren)
+  const _lossStr = (reason === 'daily_loss' && Number.isFinite(+realPnL)) ? ` (loss $${(+realPnL).toFixed(2)} / ${(+(killPct2) || 5).toFixed(1)}% of $${(+(bal2) || 0).toFixed(0)})` : ''
+  { const _oe6 = el('atStatus'); if (_oe6) { _oe6.innerHTML = _ZI.siren + ` KILL ACTIVE${_lossStr} — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET KILL SWITCH</button>`; _oe6.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch()) } }
+  atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} positions closed | PnL: ${pnlStr}`)
+  toast(closedCount + ' positions closed | PnL: ' + pnlStr, 0, _ZI.siren)
   if (w.S.alerts?.enabled) sendAlert('Zeus Kill Switch', msg, 'kill')
   // [FIX UI] Update banners immediately after kill trigger
   if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
@@ -1488,16 +1572,10 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
 }
 
-// Reset manual imediat - fara asteptare de 30s
+// Reset kill switch — server is authoritative (5min cooldown enforced there)
 export function resetKillSwitch(): void {
-  // [P3-5] Minimum 30s cooldown after kill was triggered
-  if (AT._killTriggeredTs && (Date.now() - AT._killTriggeredTs) < 30000) {
-    var _remaining = Math.ceil((30000 - (Date.now() - AT._killTriggeredTs)) / 1000)
-    toast('Kill switch reset blocat — asteapta ' + _remaining + 's', 0, _ZI.timer)
-    return
-  }
-  // Reset server-side (authoritative source of truth)
   var _bal = +(getATMode() === 'demo' ? TP.demoBalance : (TP.liveBalance || TP.demoBalance)) || 0
+  { const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.timer + ' Resetting kill switch...' }
   fetch('/api/at/kill/reset', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1505,30 +1583,36 @@ export function resetKillSwitch(): void {
     body: JSON.stringify({ balanceRef: _bal })
   }).then(function (r: any) { return r.json() })
     .then(function (j: any) {
-      if (j.ok) {
-        atLog('info', '[OK] Server kill switch reset confirmed — re-armed at ' + (j.killPct || 5) + '%')
+      if (j && j.ok) {
+        AT.killTriggered = false
+        AT._killTriggeredTs = 0
+        AT.killResetTs = Date.now()
+        AT.realizedDailyPnL = 0
+        AT.closedTradesToday = 0
+        AT.dailyPnL = 0
+        AT.enabled = false
+        // [KILL-LOOP FIX R5] Reset enabledAt — old positions won't count after next enable.
+        ;(AT as any).enabledAt = Date.now()
+        const kb = el('atKillBtn'); if (kb) kb.classList.remove('triggered')
+        var _killPct = j.killPct || parseFloat(el('atKillPct')?.value) || 5
+        { const _oe7 = el('atStatus'); if (_oe7) _oe7.innerHTML = _ZI.bolt + ' Kill switch reset — re-armed at ' + _killPct + '% loss threshold' }
+        atLog('info', '[OK] Kill switch reset — re-armed at ' + _killPct + '%')
+        toast('Kill switch reset — re-armed at ' + _killPct + '%', 0, _ZI.ok)
+        if (typeof w.ZState !== 'undefined') w.ZState.save()
+        w.atUpdateBanner(); w.ptUpdateBanner()
+        _emitATChanged()
       } else {
-        atLog('warn', '[WARN] Server kill reset failed: ' + (j.error || 'unknown'))
+        var _err = (j && j.error) || 'unknown error'
+        atLog('warn', '[WARN] Server rejected reset: ' + _err)
+        toast('Cannot reset: ' + _err, 0, _ZI.timer)
+        w.atUpdateBanner()
       }
     })
-    .catch(function () { atLog('warn', '[WARN] Server kill reset network error') })
-  // Optimistic local update (server poll will confirm within 10s)
-  AT.killTriggered = false
-  AT._killTriggeredTs = 0
-  AT.realizedDailyPnL = 0
-  AT.closedTradesToday = 0
-  AT.dailyPnL = 0
-  AT.enabled = false // [FIX H5] Ensure AT stays off after reset — user must explicitly re-enable
-  const kb = el('atKillBtn')
-  if (kb) kb.classList.remove('triggered')
-  var _killPct = parseFloat(el('atKillPct')?.value) || 5
-  { const _oe7 = el('atStatus'); if (_oe7) _oe7.innerHTML = _ZI.bolt + ' Resetat — re-armed la ' + _killPct + '% loss threshold' }
-  atLog('info', '[OK] Kill switch resetat manual — re-armed la ' + _killPct + '% threshold')
-  toast('Kill switch resetat — re-armed la ' + _killPct + '%', 0, _ZI.ok)
-  // Persist reset immediately so it survives reload and syncs to server
-  if (typeof w.ZState !== 'undefined') w.ZState.save()
-  w.atUpdateBanner(); w.ptUpdateBanner()
-  _emitATChanged() // [9A-4] Notify React after kill reset
+    .catch(function () {
+      atLog('warn', '[WARN] Server kill reset network error')
+      toast('Reset failed — network error', 0, _ZI.timer)
+      w.atUpdateBanner()
+    })
 }
 
 

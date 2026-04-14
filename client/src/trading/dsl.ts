@@ -247,16 +247,11 @@ export function _dslSanitizeParams(raw: any, posId: any): any {
     if (v > c.max) { fixes.push(`${key}: ${v}→${c.max} (above max)`); v = c.max; corrected = true }
     out[key] = v
   }
-  if (out.impulseVPct <= out.pivotRightPct) {
-    const safe = Math.round((out.pivotRightPct + 0.01) * 100) / 100
-    out.impulseVPct = Math.min(safe, CLAMPS.impulseVPct.max)
-    if (out.impulseVPct <= out.pivotRightPct) {
-      out.pivotRightPct = Math.round((out.impulseVPct - 0.01) * 100) / 100
-      fixes.push(`pivotRightPct: →${out.pivotRightPct} (reduced for IV>PR)`)
-    }
-    fixes.push(`impulseVPct: ${out.impulseVPct} (must exceed PR%)`)
-    corrected = true
-  }
+  // [DSL-SEMANTIC-FIX] impulseVPct is independent of pivotRightPct —
+  // all presets intentionally have IV < PR (e.g. FAST PR=0.40 / IV=0.20).
+  // The old IV>PR cross-field clamp was silently overwriting every user
+  // IV edit on the next DSL tick. Server-side sanitizer (serverDSL.js)
+  // already dropped this constraint; client is now aligned.
   if (corrected) {
     const msg = `DSL SANITIZE [${posId}]: ` + fixes.join(' | ')
     console.warn(msg)
@@ -497,8 +492,15 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
       pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` })
       if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'activate', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft, pivotRight: dsl.pivotRight, impulseVal: dsl.impulseVal })
-      atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
-      brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
+      if (_wasRestored) {
+        // [DSL-RESUME] Position was restored from snapshot with in-memory DSL state missing.
+        // Price is already past target, so activation fires immediately. Don't spam atLog —
+        // silently mark active; user already saw the original activation in prior session.
+        dsl.log.push({ ts: Date.now(), msg: `[RESUME] DSL state rehydrated @$${fP(cur)}` })
+      } else {
+        atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
+        brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
+      }
     }
 
     // ══════════════════════════════════════════════════════
@@ -676,6 +678,14 @@ export function dslTakeControl(posId: any): void {
   brainThink('info', _ZI.hand + ` User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`)
   toast(`Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
+  // [TAKE-CTRL] Immediate re-render so the 4 editable DSL inputs appear right
+  // away — without this, user has to wait for the next DSL tick (every few
+  // seconds) before the UI switches from the TAKE CONTROL button to the
+  // MANUAL CONTROL ACTIVE panel with DSL/PL/PR/IV inputs.
+  try {
+    const _allOpen = [...(getDemoPositions()), ...(getLivePositions())].filter(function (p: any) { return !p.closed })
+    renderDSLWidget(_allOpen)
+  } catch (_) { /* best-effort */ }
 }
 
 // ── Let AI Control handler ───────────
@@ -703,6 +713,12 @@ export function dslReleaseControl(posId: any): void {
   brainThink('ok', _ZI.robot + ` AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`)
   toast(`AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
+  // [LET-AI] Immediate re-render so the MANUAL panel collapses back to the
+  // TAKE CONTROL button without waiting for the next DSL tick.
+  try {
+    const _allOpen = [...(getDemoPositions()), ...(getLivePositions())].filter(function (p: any) { return !p.closed })
+    renderDSLWidget(_allOpen)
+  } catch (_) { /* best-effort */ }
 }
 
 // ── Manual DSL param update ───
@@ -716,13 +732,9 @@ export function dslManualParam(posId: any, param: any, value: any): void {
   if (!isFinite(v) || v <= 0) return
   if (!pos.dslParams) pos.dslParams = {}
   pos.dslParams[param] = v
-  if (param === 'impulseVPct' || param === 'pivotRightPct') {
-    const _pr = pos.dslParams.pivotRightPct ?? 1.0
-    const _iv = pos.dslParams.impulseVPct ?? 20
-    if (_iv <= _pr) {
-      pos.dslParams.impulseVPct = Math.round((_pr + 0.01) * 100) / 100
-    }
-  }
+  // [USER-EDIT] Mark position as user-edited so server-sync merge logic
+  // preserves these manual values across ticks/reloads (see state.ts merge).
+  pos._dslUserEdited = true
   if (param === 'openDslPct') {
     const _dslCheck = DSL.positions[posId]
     if (!_dslCheck?.active) {
@@ -969,10 +981,13 @@ export function _renderDslCard(pos: any): string {
   const cardCls = isLong ? 'long' : 'short'
 
   const _pp = pos.dslParams || {}
-  const openDSLpct = _pp.openDslPct ?? (getTCDslActivatePct())
-  const pivotLeftPct = _pp.pivotLeftPct ?? (getTCDslTrailPct())
-  const pivotRightPct = _pp.pivotRightPct ?? (getTCDslTrailSusPct())
-  const impulseValPct = _pp.impulseVPct ?? (getTCDslExtendPct())
+  // Round to 2 decimals to absorb any lingering float garbage (e.g. 0.8999999
+  // from older positions persisted before the round-at-source fix in brain.ts).
+  const _r2 = (n: number) => Math.round(n * 100) / 100
+  const openDSLpct = _r2(_pp.openDslPct ?? (getTCDslActivatePct()))
+  const pivotLeftPct = _r2(_pp.pivotLeftPct ?? (getTCDslTrailPct()))
+  const pivotRightPct = _r2(_pp.pivotRightPct ?? (getTCDslTrailSusPct()))
+  const impulseValPct = _r2(_pp.impulseVPct ?? (getTCDslExtendPct()))
 
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
   const _isManual = _cm === 'user'
@@ -1174,13 +1189,10 @@ export function _renderDslCard(pos: any): string {
       <button data-action="dslReleaseControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${isActive ? `<div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff22;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" disabled style="width:62px;background:#0a0e14;border:1px solid #ffffff11;color:#ffffff33;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit;cursor:not-allowed"></label>
-        <span class="dsl-price-sub" style="font-size:9px;color:#f0c04044;letter-spacing:0.3px">ACTIVATED</span>
-      </div>` : `<div style="display:flex;flex-direction:column;gap:1px">
+      <div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="openDslPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
-        <span class="dsl-price-sub" style="font-size:9px;color:#f0c04088;letter-spacing:0.3px">${_dslPriceSub}</span>
-      </div>`}
+        <span class="dsl-price-sub" style="font-size:9px;color:#f0c04088;letter-spacing:0.3px">${isActive ? 'ACTIVATED' : _dslPriceSub}</span>
+      </div>
       <div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PL%<input type="number" value="${pivotLeftPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="pivotLeftPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#39ff1488;letter-spacing:0.3px">${_plPriceSub}</span>

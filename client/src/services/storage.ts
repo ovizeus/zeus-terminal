@@ -49,7 +49,8 @@ function _reportTradeToServer(trade: Record<string, any>): void {
 export function renderTradeJournal(): void {
   const body = el('journalBody'); if (!body) return
   if (!TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return }
-  body.innerHTML = TP.journal.map((t: any) => {
+  const _sorted = TP.journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0)))
+  body.innerHTML = _sorted.map((t: any) => {
     const pnl = Number(t.pnl) || 0
     const win = pnl >= 0
     const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)

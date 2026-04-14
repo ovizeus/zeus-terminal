@@ -146,6 +146,12 @@ function _persistState(userId) {
             dailyPnLLive: us.dailyPnLLive,
             killActive: us.killActive,
             killPct: us.killPct,
+            killActiveAt: us.killActiveAt || 0,
+            killReason: us.killReason || null,
+            killLoss: us.killLoss || 0,
+            killLimit: us.killLimit || 0,
+            killBalRef: us.killBalRef || 0,
+            killModeAtTrigger: us.killModeAtTrigger || null,
             pnlAtReset: us.pnlAtReset,
             liveBalanceRef: us.liveBalanceRef,
             lastResetDay: us.lastResetDay,
@@ -185,6 +191,12 @@ function _applyStateBlob(userId, saved) {
     us.dailyPnLLive = saved.dailyPnLLive || 0;
     us.killActive = !!saved.killActive;
     us.killPct = (typeof saved.killPct === 'number' && saved.killPct > 0) ? saved.killPct : 5;
+    us.killActiveAt = saved.killActiveAt || 0;
+    us.killReason = saved.killReason || null;
+    us.killLoss = saved.killLoss || 0;
+    us.killLimit = saved.killLimit || 0;
+    us.killBalRef = saved.killBalRef || 0;
+    us.killModeAtTrigger = saved.killModeAtTrigger || null;
     us.pnlAtReset = saved.pnlAtReset || 0;
     us.liveBalanceRef = saved.liveBalanceRef || 0;
     us.lastResetDay = saved.lastResetDay || -1;
@@ -1586,6 +1598,12 @@ function _checkKillSwitch(userId) {
     const lossSinceReset = us.dailyPnL - (us.pnlAtReset || 0);
     if (lossSinceReset <= -lossLimit && lossLimit > 0) {
         us.killActive = true;
+        us.killActiveAt = Date.now();
+        us.killReason = 'daily_loss';
+        us.killLoss = +lossSinceReset.toFixed(2);
+        us.killLimit = +lossLimit.toFixed(2);
+        us.killBalRef = +balRef.toFixed(2);
+        us.killModeAtTrigger = us.engineMode;
         audit.record('KILL_SWITCH_TRIGGERED', { userId, loss: lossSinceReset, limit: lossLimit, pct, balRef, mode: us.engineMode }, 'SERVER_AT');
         logger.warn('AT_ENGINE', `KILL SWITCH uid=${userId} — loss $${lossSinceReset.toFixed(2)} <= -$${lossLimit.toFixed(2)} (${pct}% of $${balRef.toFixed(0)})`);
         telegram.sendToUser(userId,
@@ -1902,10 +1920,14 @@ function getFullState(userId) {
     const exchangeMode = creds ? (creds.mode || 'live') : null;
     const resolvedEnv = us.engineMode === 'demo' ? 'DEMO'
         : (exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
+    // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
+    // Client uses this to decide if it should lock out its own AT engine.
+    const serverDrivesAT = !!(MF && MF.SERVER_AT && MF.SERVER_BRAIN);
     return {
         mode: us.engineMode,
         enabled: us.atActive, // [F1] Reflect actual per-user AT state
         atActive: us.atActive, // [F1] Explicit field for frontend
+        serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
         apiConfigured: !!creds,
         exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
         resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'
@@ -1918,6 +1940,12 @@ function getFullState(userId) {
         demoBalance: getDemoBalance(userId),
         killActive: us.killActive,
         killPct: us.killPct || 5,
+        killActiveAt: us.killActiveAt || 0,
+        killReason: us.killReason || null,
+        killLoss: us.killLoss || 0,
+        killLimit: us.killLimit || 0,
+        killBalRef: us.killBalRef || 0,
+        killModeAtTrigger: us.killModeAtTrigger || null,
         dailyPnL: us.dailyPnL || 0,
         dailyPnLDemo: us.dailyPnLDemo || 0,
         dailyPnLLive: us.dailyPnLLive || 0,

@@ -6,6 +6,8 @@ const DEFAULT_SETTINGS: Record<string, any> = {
   confMin: 65, sigMin: 3, size: 200, riskPct: 1, maxDay: 5, maxPos: 3,
   sl: 1.5, rr: 2, killPct: 5, lossStreak: 3, maxAddon: 2, lev: 5,
   adaptEnabled: false, adaptLive: false, smartExitEnabled: false,
+  // Multi-Symbol scan (persisted per-user on server)
+  mscanEnabled: true, mscanSyms: null,
   // UI
   theme: 'native', uiScale: 100, soundEnabled: true,
   // Chart
@@ -118,4 +120,11 @@ function _syncToWindow(s: Record<string, any>) {
     if (s.maxAddon != null) w.TC.maxAddon = Number(s.maxAddon)
     if (s.lev != null) w.TC.lev = Number(s.lev)
   }
+  // Mirror mscan symbol selection to localStorage so legacy engines
+  // (data/klines.ts::_mscanGetActive) pick it up without a refactor.
+  try {
+    if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) {
+      localStorage.setItem('zeus_mscan_syms', JSON.stringify(s.mscanSyms))
+    }
+  } catch (_) { /* ignore */ }
 }

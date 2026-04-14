@@ -239,7 +239,8 @@ export function installPhase1Adapters(): void {
   // ── Phase 7F-E: marketData trading (coexist) ──
   // switchGlobalMode — removed (direct import) /* _applyGlobalModeUI — removed (direct import) */
   // promptAddFunds — removed (direct import) /* promptResetDemo — removed (direct import) */
-  // _showConfirmDialog — removed (direct import)
+  // Expose _showConfirmDialog on window for modules that can't import it directly (circular dep).
+  w._showConfirmDialog = _showConfirmDialog
   // setLiveSide — removed (direct import)
   /* onDemoOrdTypeChange — removed (direct import) */ w.getDemoLev = getDemoLev; /* getLiveLev — removed (direct import) */
   /* onDemoLevChange — removed (direct import) */ /* onLiveLevChange — removed (direct import) */

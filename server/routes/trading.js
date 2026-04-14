@@ -393,6 +393,8 @@ const SETTINGS_WHITELIST = new Set([
   // AT
   'confMin', 'sigMin', 'size', 'riskPct', 'maxDay', 'maxPos', 'sl', 'rr',
   'killPct', 'lossStreak', 'maxAddon', 'lev', 'adaptEnabled', 'adaptLive', 'smartExitEnabled',
+  // Multi-Symbol scan
+  'mscanEnabled', 'mscanSyms',
   // UI
   'theme', 'uiScale', 'soundEnabled',
   // Chart
@@ -692,6 +694,18 @@ router.get('/brain/dashboard', (req, res) => {
   } catch (err) {
     console.error('[API] brain/dashboard error:', err.message);
     res.status(500).json({ error: 'Brain dashboard unavailable' });
+  }
+});
+
+// ─── [L1-DIAG] Recent AT block reasons for client feed ───
+router.get('/brain/recent-blocks', (req, res) => {
+  try {
+    const serverBrain = require('../services/serverBrain');
+    const since = parseInt(req.query.since, 10) || 0;
+    const blocks = serverBrain.getRecentBlocks(req.user.id, since);
+    res.json({ ok: true, ts: Date.now(), blocks });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'recent-blocks unavailable' });
   }
 });
 

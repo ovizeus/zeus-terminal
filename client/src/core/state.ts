@@ -369,6 +369,7 @@ export const ZState = (() => {
           sourceMode: p.sourceMode || null,
           brainModeAtOpen: p.brainModeAtOpen || null,
           dslParams: p.dslParams || null,
+          _dslUserEdited: !!p._dslUserEdited,
           dslAdaptiveState: p.dslAdaptiveState || null,
           dslHistory: Array.isArray(p.dslHistory) ? p.dslHistory.slice(-20) : [],
           dsl: (typeof DSL !== 'undefined' && DSL.positions?.[String(p.id)])
@@ -408,6 +409,7 @@ export const ZState = (() => {
           _serverSeq: p._serverSeq || null,
           _serverMode: p._serverMode || null,
           dslParams: p.dslParams || null,
+          _dslUserEdited: !!p._dslUserEdited,
           dslAdaptiveState: p.dslAdaptiveState || null,
           dslHistory: Array.isArray(p.dslHistory) ? p.dslHistory.slice(-20) : [],
           dsl: (typeof DSL !== 'undefined' && DSL.positions?.[String(p.id)])
@@ -803,9 +805,11 @@ export const ZState = (() => {
       dslParams: (existingPos && existingPos.dslParams && (
         existingPos.controlMode === 'user' ||
         existingPos.controlMode === 'paper' ||
+        existingPos._dslUserEdited ||
         !existingPos.autoTrade ||
         (existingPos._dslParamsPushedAt && (Date.now() - existingPos._dslParamsPushedAt) < 10000)
       )) ? existingPos.dslParams : (sp.dslParams || {}),
+      _dslUserEdited: existingPos ? !!existingPos._dslUserEdited : !!sp._dslUserEdited,
       dslAdaptiveState: (sp.dsl && sp.dsl.phase) ? sp.dsl.phase : 'calm',
       dslHistory: existingPos ? (existingPos.dslHistory || []) : [],
       closed: sp.status ? sp.status !== 'OPEN' : !!sp.closed,
@@ -830,7 +834,17 @@ export const ZState = (() => {
     const TP = w.TP
     const AT = getATObject()
     const Intervals = w.Intervals
-    w._serverATEnabled = true
+    // [LOCKOUT-FIX] Only consider server AT authoritative when server actually
+    // drives brain+AT (MF.SERVER_AT && MF.SERVER_BRAIN). Legacy clients without
+    // the serverActive field default to the old behavior (locked).
+    // [POS-FLICKER FIX R2] Only update _serverATEnabled when the field is
+    // explicitly present in the response. AT-state-only payloads from
+    // /api/at/state often omit serverActive — defaulting them to true caused
+    // the serialize filter to flip-flop, producing the pos:3 → pos:0 → pos:3
+    // flicker every ~10s.
+    if ('serverActive' in state) {
+      w._serverATEnabled = state.serverActive !== false
+    }
     const _now = Date.now()
     Object.keys(_pendingServerCloses).forEach(function (k) {
       if (_now - _pendingServerCloses[k] > 120000) delete _pendingServerCloses[k]
@@ -856,6 +870,17 @@ export const ZState = (() => {
       return mapped.filter(function (p: any) { return !_rcSet.has(String(p.id)) && !_rcSet.has(String(p._serverSeq)) })
     }
     if (typeof TP !== 'undefined') {
+      // [POS-FLICKER FIX] Skip position rebuild entirely if the response carries
+      // no position keys at all (e.g. an AT-state-only payload from /api/at/state).
+      // Without this guard, the rebuild path runs with serverATDemo=[] and wipes
+      // TP.demoPositions every 10s — causing the panel to flicker until the next
+      // pullAndMerge restores them. We still rebuild when the server explicitly
+      // returns position arrays (even empty), which is the legitimate "all closed"
+      // signal.
+      const _hasPosKeys = ('demoPositions' in state) || ('livePositions' in state) || ('positions' in state)
+      if (!_hasPosKeys) {
+        // fall through to AT-state sync below; leave TP.demoPositions alone
+      } else {
       let serverATDemo: any[], serverATLive: any[]
       if (state.demoPositions && state.livePositions) {
         serverATDemo = _excludeRecentlyClosed(_filterOpen(state.demoPositions).map(_mapServerPos))
@@ -876,13 +901,22 @@ export const ZState = (() => {
         if (p.closed) return false
         if (_rcSet.has(String(p.id))) return false
         if (!p.autoTrade && !p._serverSeq) return true
-        if (p.autoTrade && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && p._localOnly) return true
+        // [POS-FLICKER FIX R4] Keep client-originated AT positions that are not
+        // (yet) server-backed. Client AT engine can open positions faster than
+        // the server register round-trip, so these live without _serverSeq for
+        // some time. Dropping them here when server returns empty caused the
+        // panel to flicker: _applyServerATState wiped them every 10s and the
+        // pullMerge-demo from /api/sync/state restored them. Keep if either
+        // explicitly _localOnly, OR has no _serverSeq (not yet registered).
+        if (p.autoTrade && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && (p._localOnly || !p._serverSeq)) return true
         return false
       })
       const clientOnlyLive = (TP.livePositions || []).filter(function (p: any) {
         if (p.closed) return false
         if (_rcSet.has(String(p.id))) return false
         if (!p.autoTrade && !p._serverSeq) return true
+        // Same rationale as demo — keep client-originated AT positions not yet server-backed.
+        if (p.autoTrade && !_serverLiveIds.has(String(p.id)) && !_serverLiveIds.has(String(p._serverSeq)) && (p._localOnly || !p._serverSeq)) return true
         return false
       })
       TP.demoPositions = serverATDemo.concat(clientOnlyDemo)
@@ -893,9 +927,22 @@ export const ZState = (() => {
         TP.demoPnL = state.demoBalance.pnl || 0
         TP._serverStartBalance = state.demoBalance.startBalance || 10000
       }
+      } // end _hasPosKeys block
     }
     if (typeof AT !== 'undefined') {
       AT.killTriggered = !!state.killActive
+      AT.killReason = state.killReason || null
+      AT.killLoss = state.killLoss || 0
+      AT.killLimit = state.killLimit || 0
+      AT.killBalRef = state.killBalRef || 0
+      AT.killModeAtTrigger = state.killModeAtTrigger || null
+      AT.killActiveAt = state.killActiveAt || 0
+      // Server is source of truth for dailyPnL — sync to window.AT to avoid stale localStorage drift
+      if (typeof state.dailyPnL === 'number') AT.dailyPnL = state.dailyPnL
+      if (!state.killActive && state.killActiveAt === 0) {
+        // Kill cleared on server — wipe local realized counter so journal recompute can't retrigger
+        AT.realizedDailyPnL = 0
+      }
       if (typeof state.killPct === 'number' && state.killPct > 0) {
         const _kpEl = document.getElementById('atKillPct') as any
         if (_kpEl) _kpEl.value = state.killPct
@@ -974,6 +1021,38 @@ export const ZState = (() => {
     fetch('/api/at/state', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (data: any) { if (data) _applyServerATState(data) })
+      .catch(function () { /* */ })
+    // [L1-DIAG] Poll server AT block reasons and surface in atLog feed
+    _pollServerBlocks()
+  }
+
+  // [L1-DIAG] Track last seen server block timestamp + dedup key
+  let _lastSrvBlockTs = 0
+  let _lastSrvBlockKey = ''
+  function _pollServerBlocks() {
+    const qs = _lastSrvBlockTs > 0 ? ('?since=' + _lastSrvBlockTs) : ''
+    fetch('/api/brain/recent-blocks' + qs, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data: any) {
+        if (!data || !data.ok || !Array.isArray(data.blocks)) return
+        for (const b of data.blocks) {
+          if (!b || !b.ts) continue
+          if (b.ts <= _lastSrvBlockTs) continue
+          _lastSrvBlockTs = b.ts
+          const sym = String(b.symbol || '?').replace('USDT', '')
+          const reasons = Array.isArray(b.reasons) ? b.reasons.join(',') : String(b.reasons || '?')
+          const key = sym + '|' + (b.stage || '') + '|' + reasons
+          if (key === _lastSrvBlockKey) continue
+          _lastSrvBlockKey = key
+          const parts = ['[SRV-BLOCK] ' + sym]
+          if (b.stage) parts.push('stage=' + b.stage)
+          if (b.score != null) parts.push('conf=' + b.score)
+          if (b.adx != null) parts.push('adx=' + (typeof b.adx === 'number' ? b.adx.toFixed(0) : b.adx))
+          if (b.confidence != null) parts.push('fconf=' + b.confidence)
+          parts.push('reasons=[' + reasons + ']')
+          atLog('info', parts.join(' '))
+        }
+      })
       .catch(function () { /* */ })
   }
 
@@ -1090,6 +1169,14 @@ export const ZState = (() => {
             const toRemove: string[] = []
             ;(arr || []).forEach(function (p: any) {
               const pid = String(p.id)
+              // [POS-FLICKER FIX R3] Server-managed AT positions (with _serverSeq)
+              // live in /api/at/state, NOT in /api/sync/state. The sync file omits
+              // them by design (serialize filter at line ~359). Without this guard
+              // _cleanArray would mistake them for "stale" and remove them every
+              // pullAndMerge tick — then _applyServerATState restores them at the
+              // next /api/at/state poll. That ping-pong is what users see as the
+              // panel positions disappearing for a few seconds and reappearing.
+              if (p && p._serverSeq && p.autoTrade) return
               if (serverClosedIds2.has(pid) || _closedSet.has(pid)) {
                 toRemove.push(pid)
               } else if (!p.closed && !serverIds.has(pid) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 120000) {

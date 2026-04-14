@@ -9,7 +9,7 @@ import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
+import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , DSL_PRESETS, _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
 import { calcConfluenceScore } from './confluence'
 import { getCurrentADX } from '../ui/render'
 import { GATE_DEFS } from '../constants/trading'
@@ -158,7 +158,7 @@ export function updateBrainState(): void {
     ticker = `ANALIZEZ... Score:${score}/68 | ${sigs}/3 semnale | Mai trebuie: ${confNeed > 0 ? '+' + confNeed + ' confluenta' : ''}${needing > 0 ? ' +' + needing + ' semnale' : ''} | OFI:${(BR.ofi.blendBuy || 50).toFixed(0)}%B`
   } else if (getATKillTriggered()) {
     state = 'blocked'
-    ticker = `KILL SWITCH ACTIV — BLOCAT. Asteapt reset 30s...`
+    ticker = `KILL SWITCH ACTIVE — BLOCKED. Waiting for reset...`
   } else {
     state = 'scanning'
     ticker = `SCANEZ... RSI:${(getRSI('5m') || 0).toFixed(0)} | FR:${getFR() !== null ? ((getFR() || 0) * 100).toFixed(3) + '%' : '—'} | REGIM:${BR.regime.toUpperCase()} | MAGNET:${(getMagnetBias() || 'neut').toUpperCase()} | ${fmtNow(true)}`
@@ -416,29 +416,37 @@ export function setMode(mode: any): void {
   if (mode !== 'assist' && mode !== 'auto') mode = 'assist'
   if (mode === w.S.mode) return // no change
 
-  // Check if there are open AT positions
   const openAT = [
     ...(getDemoPositions()).filter((p: any) => p.autoTrade && !p.closed),
     ...(getLivePositions()).filter((p: any) => !p.closed),
   ]
-  if (openAT.length > 0) {
-    // Show confirmation modal
-    // [PATCH MODE-SWITCH] Lock brain during async modal
-    w.__brainModeSwitching = true
-    // Safety: auto-unlock after 30s if user closes browser with modal open
-    if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
-    w.__brainModeSwitchTimer = setTimeout(() => { w.__brainModeSwitching = false }, 30000)
-    _pendingModeSwitch = mode
-    const modal = el('brainModeModal')
-    const msg = el('brainModeModalMsg')
-    if (msg) msg.innerHTML =
-      `Switching Brain mode from <b style="color:#00ffcc">${w.S.mode.toUpperCase()}</b> to <b style="color:#f0c040">${mode.toUpperCase()}</b>.<br><br>` +
-      `<span style="color:#ffffffaa">${openAT.length} open position${openAT.length > 1 ? 's' : ''} will <b>keep their current control mode</b>.</span><br>` +
-      `<span style="color:#ffffffaa">The new mode applies only to <b>future positions</b>.</span>`
-    if (modal) modal.style.display = 'flex'
-    return
+  const showDlg = (window as any)._showConfirmDialog
+  if (typeof showDlg !== 'function') { _applyModeSwitch(mode); return }
+
+  let msg: string
+  if (mode === 'auto') {
+    msg = 'Switch Brain mode to AUTO?\n\n' +
+      'In AUTO mode, the Brain executes trades automatically when its conviction score passes the threshold. You will not be asked to confirm each trade.\n\n' +
+      'This change applies only to FUTURE positions.'
+  } else {
+    msg = 'Switch Brain mode to ASSIST?\n\n' +
+      'In ASSIST mode, the Brain opens positions automatically — same as AUTO — but you can TAKE DSL CONTROL on any open position to override its parameters manually (activation, pivots, impulse).\n\n' +
+      'This change applies only to FUTURE positions.'
   }
-  _applyModeSwitch(mode)
+  if (openAT.length > 0) {
+    msg += '\n\n' + openAT.length + ' open position' + (openAT.length > 1 ? 's' : '') + ' will keep their current control mode.'
+  }
+  const confirmBtn = mode === 'auto' ? 'Activate AUTO' : 'Activate ASSIST'
+  const title = mode === 'auto' ? 'Switch Brain Mode to AUTO?' : 'Switch Brain Mode to ASSIST?'
+  // [PATCH MODE-SWITCH] Lock brain during async modal.
+  w.__brainModeSwitching = true
+  if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
+  w.__brainModeSwitchTimer = setTimeout(() => { w.__brainModeSwitching = false }, 30000)
+  showDlg(title, msg, 'Cancel', confirmBtn, function () {
+    _applyModeSwitch(mode)
+    if (w.__brainModeSwitchTimer) clearTimeout(w.__brainModeSwitchTimer)
+    w.__brainModeSwitching = false
+  })
 }
 
 export function _applyModeSwitch(mode: any): void {
@@ -453,6 +461,8 @@ export function _applyModeSwitch(mode: any): void {
   setTimeout(renderBrainCockpit, 30)
   w.dslUpdateBanner()
   w.atUpdateBanner(); w.ptUpdateBanner()
+  // [BRAIN-MODE-PERSIST] Push to server so ASSIST/AUTO survives refresh.
+  if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
 
 export function confirmBrainModeSwitch(): void {
@@ -480,7 +490,7 @@ export function cancelBrainModeSwitch(): void {
 // Keep legacy alias for onclick handlers
 export function setBrainMode(mode: any): void { setMode(mode) }
 
-export function setProfile(profile: any): void {
+function _applyProfileSwitch(profile: string): void {
   w.S.profile = profile.toLowerCase()
   brainThink('info', _ZI.chart + ` Profile → ${w.S.profile.toUpperCase()} | Trig:${PROFILE_TF[w.S.profile]?.trigger || '?'}`)
   syncBrainFromState()
@@ -488,13 +498,36 @@ export function setProfile(profile: any): void {
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // persist profile
 }
 
+export function setProfile(profile: any): void {
+  const p = (profile || '').toLowerCase()
+  if (p !== 'fast' && p !== 'swing' && p !== 'defensive') return
+  if (p === (w.S.profile || 'fast')) return
+  const tf = PROFILE_TF[p] || PROFILE_TF.fast
+  const cooldownMin = p === 'fast' ? 5 : p === 'swing' ? 30 : 60
+  const readyThresh = p === 'fast' ? 65 : p === 'defensive' ? 80 : 75
+  const blurbs: any = {
+    fast: 'Fast profile reacts quickly to short-term moves. More trades, more noise.',
+    swing: 'Swing profile waits for clearer setups. Fewer trades, larger moves.',
+    defensive: 'Defensive profile prioritizes capital preservation. Only high-conviction setups.',
+  }
+  const label = p.toUpperCase()
+  const msg =
+    'Switch Brain profile to ' + label + '?\n\n' +
+    'Trigger TF: ' + tf.trigger + '  \u00B7  Context: ' + tf.context + '  \u00B7  Bias: ' + tf.bias + '  \u00B7  HTF: ' + tf.htf + '\n' +
+    'Cooldown: ' + tf.cooldown + ' closes (~' + cooldownMin + ' min)  \u00B7  Ready threshold: ' + readyThresh + '\n\n' +
+    blurbs[p] + '\n\n' +
+    'Applies to all future Brain/AT decisions. Open positions are not affected.'
+  const showDlg = (window as any)._showConfirmDialog
+  if (typeof showDlg !== 'function') { _applyProfileSwitch(p); return }
+  showDlg('Switch Profile to ' + label + '?', msg, 'Cancel', 'Apply ' + label, function () {
+    _applyProfileSwitch(p)
+  })
+}
+
 // [B2] setRunMode / toggleRunMode REMOVED — AT.enabled is sole command
 
 // ── DSL MODE SETTER ──────────────────────────────────────────────
-export function setDslMode(mode: any): void {
-  const valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
-  mode = (mode || '').toLowerCase()
-  if (!valid.includes(mode)) return
+function _applyDslMode(mode: string): void {
   const _dsl = (window as any).DSL; if (_dsl) _dsl.mode = mode
   const _dslKey = (window as any)._zeusUserId ? 'zeus_dsl_mode:' + (window as any)._zeusUserId : 'zeus_dsl_mode'
   try { localStorage.setItem(_dslKey, mode) } catch (_) { }
@@ -503,34 +536,74 @@ export function setDslMode(mode: any): void {
   _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + mode, 'znc-dbtn', 'act-dsl-' + mode)
 }
 
-// ── DSL TARGET PRICE CALCULATOR ──────────────────────────────────
-// Returns { openDslPct, dslTargetPrice } based on DSL.mode
-export function calcDslTargetPrice(side: any, entry: any, tp: any): any {
-  const mode = getDSLMode() || 'atr'
-  let pct: number
-  switch (mode) {
-    case 'fast': pct = 0.5; break
-    case 'swing': pct = 1.5; break
-    case 'defensive': pct = 3.0; break
-    case 'tp':
-      if (tp && tp !== 0) {
-        pct = 0.3 * Math.abs(tp - entry) / entry * 100
-      } else {
-        // fallback to ATR if no TP
-        pct = _calcAtrPct(entry)
-      }
-      break
-    case 'atr':
-    default:
-      pct = _calcAtrPct(entry)
-      break
+export function setDslMode(mode: any): void {
+  const valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
+  mode = (mode || '').toLowerCase()
+  if (!valid.includes(mode)) return
+  const curMode = ((window as any).DSL && (window as any).DSL.mode) || getDSLMode() || 'atr'
+  if (mode === curMode) return
+  const preset = DSL_PRESETS[mode] || DSL_PRESETS.atr
+  const label = mode.toUpperCase()
+  const blurbs: any = {
+    atr:       'ATR mode: activation distance is computed dynamically from current volatility. Adaptive to market conditions.',
+    fast:      'FAST mode: tight trailing, SL locks into profit quickly. Best for scalping.',
+    swing:     'SWING mode: wider trailing, tolerates normal retraces. Best for larger moves.',
+    defensive: 'DEFENSIVE mode: wide trailing, trade needs a strong move before SL locks profit. Best for volatile markets.',
+    tp:        'TP mode: activation distance scales to 30% of entry\u2192TP distance (falls back to ATR if TP is not set).',
   }
-  // Safety clamp: 0.1% – 10%
-  pct = Math.max(0.1, Math.min(10, pct))
+  const activationLine = mode === 'atr'
+    ? 'Activation: dynamic (ATR-based)  \u00B7  typical \u2248 ' + preset.openDslPct.toFixed(2) + '%'
+    : mode === 'tp'
+      ? 'Activation: 30% of entry\u2192TP distance  \u00B7  fallback \u2248 ' + preset.openDslPct.toFixed(2) + '%'
+      : 'Activation: ' + preset.openDslPct.toFixed(2) + '%'
+  const msg =
+    'Switch DSL mode to ' + label + '?\n\n' +
+    activationLine + '\n' +
+    'Pivot Left (SL trail): ' + preset.pivotLeftPct.toFixed(2) + '%\n' +
+    'Pivot Right (impulse zone): ' + preset.pivotRightPct.toFixed(2) + '%\n' +
+    'Impulse V (extension): ' + preset.impulseVPct.toFixed(2) + '% (delta from PR)\n\n' +
+    blurbs[mode] + '\n\n' +
+    'Applies to NEW Brain/AT positions only. Open positions keep their current DSL parameters. Manual positions continue to use the DSL Zone panel defaults.'
+  const showDlg = (window as any)._showConfirmDialog
+  if (typeof showDlg !== 'function') { _applyDslMode(mode); return }
+  showDlg('Switch DSL Mode to ' + label + '?', msg, 'Cancel', 'Apply ' + label, function () {
+    _applyDslMode(mode)
+  })
+}
+
+// ── DSL TARGET PRICE CALCULATOR ──────────────────────────────────
+// Returns full DSL param set { openDslPct, pivotLeftPct, pivotRightPct, impulseVPct, dslTargetPrice }
+// based on active DSL.mode preset (DSL_PRESETS in config.ts, mirrors server serverDSL.js).
+// Applied ONLY to Brain/AT positions at open time. Manual positions use TC globals.
+export function calcDslTargetPrice(side: any, entry: any, tp: any): any {
+  const mode = (getDSLMode() || 'atr').toLowerCase()
+  const preset = DSL_PRESETS[mode] || DSL_PRESETS.atr
+  let openPct = preset.openDslPct
+  // Special handling for ATR: dynamic activation based on volatility.
+  if (mode === 'atr') {
+    openPct = _calcAtrPct(entry)
+  }
+  // Special handling for TP: activation scaled to 30% of entry→TP distance when TP set.
+  if (mode === 'tp' && tp && tp !== 0) {
+    openPct = 0.3 * Math.abs(tp - entry) / entry * 100
+  }
+  // Safety clamp activation: 0.1% – 10%.
+  openPct = Math.max(0.1, Math.min(10, openPct))
+  // Round to 2 decimals so stored/displayed values stay clean (float garbage
+  // like 0.8999999999 from ATR/TP derivations would otherwise leak into the
+  // UI and persist through serialize/pullMerge cycles).
+  const _r2 = (n: number) => Math.round(n * 100) / 100
+  const openPctR = _r2(openPct)
   const target = side === 'LONG'
-    ? entry * (1 + pct / 100)
-    : entry * (1 - pct / 100)
-  return { openDslPct: pct, dslTargetPrice: target }
+    ? entry * (1 + openPctR / 100)
+    : entry * (1 - openPctR / 100)
+  return {
+    openDslPct: openPctR,
+    pivotLeftPct: _r2(preset.pivotLeftPct),
+    pivotRightPct: _r2(preset.pivotRightPct),
+    impulseVPct: _r2(preset.impulseVPct),
+    dslTargetPrice: target,
+  }
 }
 
 export function _calcAtrPct(entry: any): number {
@@ -789,6 +862,10 @@ export function computeEntryScore(gates: any, dir: any): any {
 
   BM.entryScore = score
   BM.entryReady = score >= readyThreshold
+  // [L1-SHIELD-DIAG] Capture failed gate labels for SHIELD diagnostic surfacing
+  ;(BM as any)._entryFailedGates = GATE_DEFS
+    .filter((g: any) => gates[g.id] === 'fail')
+    .map((g: any) => g.id)
 
   // Update UI
   const numEl = el('entryScoreNum')
@@ -1556,6 +1633,23 @@ export function renderBrainCockpit(): void {
       let _cMult = BM.conviction >= 60 ? 1.0 : BM.conviction >= 40 ? 0.5 : 0.0
       let _dMult = BM.danger >= 80 ? 0.0 : BM.danger >= 60 ? 0.6 : BM.danger >= 40 ? 0.85 : 1.0
       BM.convictionMult = Math.round((_cMult * _dMult) * 100) / 100
+      // [L1-SHIELD-DIAG] Stash component breakdown for diagnostic logging at SHIELD block site
+      ;(BM as any)._convictionBreakdown = {
+        entryScore: _es,
+        entryPart: Math.round(Math.min(40, _es * 0.4)),
+        atmConf: _ac,
+        atmPart: Math.round(Math.min(15, _ac * 0.15)),
+        mtf1h: _1h,
+        mtf4h: _4h,
+        mtfPart: (_1h === _mtfDir ? 7 : 0) + (_4h === _mtfDir ? 8 : 0),
+        ofi: Math.round(_ofi),
+        ofiPart: ((dir === 'long' && _ofi > 57) || (dir === 'short' && _ofi < 43)) ? 10 : (((dir === 'long' && _ofi < 43) || (dir === 'short' && _ofi > 57)) ? -5 : 0),
+        sigBull: _bul,
+        sigBear: _ber,
+        sigPart: ((dir === 'long' && _bul > _ber) || (dir === 'short' && _ber > _bul)) ? 5 : 0,
+        dir,
+        danger: BM.danger || 0,
+      }
     } catch (_ce) { BM.conviction = 0; BM.convictionMult = 1.0 }
   })()
 

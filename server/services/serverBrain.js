@@ -77,6 +77,31 @@ setInterval(() => {
 const DECISION_LOG_MAX = 200;
 const _decisionLog = [];
 
+// [L1-DIAG] Per-user recent blocks ring buffer for client diagnostic surfacing
+const BLOCKS_MAX_PER_USER = 60;
+const _recentBlocks = new Map(); // userId -> [{ ts, symbol, reasons, score, adx, stage }]
+function _pushBlock(userId, symbol, reasons, stage, extra) {
+    if (!userId || !reasons || !reasons.length) return;
+    let buf = _recentBlocks.get(userId);
+    if (!buf) { buf = []; _recentBlocks.set(userId, buf); }
+    buf.push({
+        ts: Date.now(),
+        symbol: symbol || '?',
+        reasons: Array.isArray(reasons) ? reasons.slice() : [String(reasons)],
+        stage: stage || 'gates',
+        score: extra && extra.score != null ? extra.score : null,
+        adx: extra && extra.adx != null ? extra.adx : null,
+        confidence: extra && extra.confidence != null ? extra.confidence : null,
+    });
+    if (buf.length > BLOCKS_MAX_PER_USER) buf.splice(0, buf.length - BLOCKS_MAX_PER_USER);
+}
+function getRecentBlocks(userId, sinceTs) {
+    const buf = _recentBlocks.get(userId);
+    if (!buf) return [];
+    const since = Number(sinceTs) || 0;
+    return since > 0 ? buf.filter(e => e.ts > since) : buf.slice();
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Start / Stop
 // ══════════════════════════════════════════════════════════════════
@@ -379,6 +404,7 @@ function _runCycle() {
                 const sessionBlock = serverSessionProfile.checkSessionBlock(userId);
                 if (sessionBlock.blocked) {
                     _logDecision('BLOCKED', 'session', null, { reason: sessionBlock.reason });
+                    _pushBlock(userId, symbol, ['session_block:' + (sessionBlock.reason || 'na')], 'session', { score: confluence.score, adx: ind.adx });
                     try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
                         sourcePath: 'no_trade', finalAction: 'blocked_session', finalTier: 'NO_TRADE', finalDir: 'neutral', finalConfidence: 0,
                         sessionBlocked: true, sessionBlockReason: sessionBlock.reason,
@@ -393,6 +419,7 @@ function _runCycle() {
                 const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
                 if (ddAssess.locked) {
                     _logDecision('BLOCKED', 'drawdown_lockout', null, { drawdownPct: ddAssess.drawdownPct });
+                    _pushBlock(userId, symbol, ['drawdown_lockout:' + (ddAssess.drawdownPct != null ? ddAssess.drawdownPct.toFixed(1) + '%' : 'na')], 'drawdown', { score: confluence.score, adx: ind.adx });
                     try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
                         sourcePath: 'no_trade', finalAction: 'blocked_drawdown', finalTier: 'NO_TRADE', finalDir: 'neutral', finalConfidence: 0,
                         ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
@@ -442,6 +469,7 @@ function _runCycle() {
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: questioning.concerns.map(c => c.type),
                         });
+                        _pushBlock(userId, symbol, ['reflection:' + questioning.concerns.map(c => c.type).join(',')], 'reflection', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
                         try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                             sourcePath: 'no_trade', finalAction: 'blocked_reflection',
                             reflProceed: false, reflConcernCount: questioning.concerns.length,
@@ -459,6 +487,7 @@ function _runCycle() {
                         if (decision.fusion.confidence < 62) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('reflection_penalty');
+                            _pushBlock(userId, symbol, ['reflection_penalty:conf=' + decision.fusion.confidence], 'reflection_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
                             serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
                             try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                                 sourcePath: 'no_trade', finalAction: 'blocked_reflection_penalty',
@@ -489,6 +518,7 @@ function _runCycle() {
                     const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
                     if (!corrCheck.allowed) {
                         _logDecision('BLOCKED', 'correlation', decision, { reason: corrCheck.reason });
+                        _pushBlock(userId, symbol, ['correlation:' + (corrCheck.reason || 'na')], 'correlation', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
                         try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                             sourcePath: 'no_trade', finalAction: 'blocked_correlation',
                             corrAllowed: false, corrReason: corrCheck.reason,
@@ -504,6 +534,7 @@ function _runCycle() {
                         if (decision.fusion.confidence < 62) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('correlation_penalty');
+                            _pushBlock(userId, symbol, ['correlation_penalty:conf=' + decision.fusion.confidence], 'correlation_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
                             try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                                 sourcePath: 'no_trade', finalAction: 'blocked_correlation_penalty',
                                 finalConfidence: decision.fusion.confidence, finalTier: 'NO_TRADE',
@@ -564,6 +595,10 @@ function _runCycle() {
                         }
                     }
                 } else {
+                    // [L1-DIAG] Surface gate blocks to client diagnostic feed
+                    if (!gates.allOk && gates.reasons && gates.reasons.length) {
+                        _pushBlock(userId, symbol, gates.reasons, 'gates', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
+                    }
                     // Track NO_TRADE for regret analysis
                     if (fusion.confidence > 50) {
                         serverReflection.trackSkippedTrade(snap.symbol, confluence.isBull ? 'LONG' : 'SHORT', fusion.confidence, snap.price, userId);
@@ -1189,6 +1224,7 @@ module.exports = {
     stop,
     getStatus,
     getDecisionLog,
+    getRecentBlocks,
     updateConfig,
     getSTC,
     getBrainVision,

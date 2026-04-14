@@ -41,6 +41,12 @@ export interface ServerATState {
   demoBalance: number | ServerDemoBalance
   killActive: boolean
   killPct?: number
+  killActiveAt?: number
+  killReason?: string | null
+  killLoss?: number
+  killLimit?: number
+  killBalRef?: number
+  killModeAtTrigger?: string | null
   dailyPnL: number
   dailyPnLDemo: number
   dailyPnLLive: number

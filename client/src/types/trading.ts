@@ -36,6 +36,12 @@ export interface ATState {
   mode: PositionMode
   running: boolean
   killTriggered: boolean
+  killReason: string | null
+  killLoss: number
+  killLimit: number
+  killBalRef: number
+  killModeAtTrigger: string | null
+  killActiveAt: number
   interval: number | null
 
   // Stats
@@ -54,6 +60,7 @@ export interface ATState {
   cooldownMs: number
   _cooldownBySymbol: Record<string, number>
   _killTriggeredTs: number
+  enabledAt: number
   _modeConfirmed: boolean
   _enabledPerMode: Record<string, boolean>
   _serverMode: string

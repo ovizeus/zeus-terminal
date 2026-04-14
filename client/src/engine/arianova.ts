@@ -158,7 +158,10 @@ if (!w._ARIA_NOVA_LOADED) {
     // State badge
     el_state.className = ''
     if (killed) {
-      el_state.innerHTML = _ZI.skull + ' KILL SWITCH'
+      var _kLoss = (typeof w.AT !== 'undefined' && w.AT.killLoss) ? +w.AT.killLoss : 0
+      var _kLim = (typeof w.AT !== 'undefined' && w.AT.killLimit) ? +w.AT.killLimit : 0
+      var _kTag = (_kLoss && _kLim) ? ' (-$' + _kLoss.toFixed(2) + '/$' + _kLim.toFixed(2) + ')' : ''
+      el_state.innerHTML = _ZI.skull + ' KILL SWITCH' + _kTag
       el_state.className = 'atbs-kill'
     } else if (atOn) {
       if (nPos === 0) el_state.className = 'atbs-on-neutral'
@@ -175,7 +178,7 @@ if (!w._ARIA_NOVA_LOADED) {
     // Info
     const modeTag = brMode === 'auto' ? 'AUTO' : brMode === 'assist' ? 'ASSIST' : 'MANUAL'
     const execLocked = mode === 'live' && !w._apiConfigured
-    el_info.innerHTML = modeTag + (execLocked ? ' · ' + _ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții')
+    el_info.innerHTML = modeTag + (execLocked ? ' · ' + _ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' active pos' : ' · no positions')
 
     // PnL
     if (el_pnl) {

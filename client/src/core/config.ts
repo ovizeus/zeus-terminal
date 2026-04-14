@@ -1634,6 +1634,16 @@ export function _usApply() {
         _profBtn.classList.add('act-' + S.profile)
       }
     }
+    // [BRAIN-MODE-PERSIST] Restore Brain mode (assist/auto) across refresh.
+    if (USER_SETTINGS.bmMode && (USER_SETTINGS.bmMode === 'assist' || USER_SETTINGS.bmMode === 'auto')) {
+      S.mode = USER_SETTINGS.bmMode
+      if (typeof BM !== 'undefined') BM.mode = USER_SETTINGS.bmMode
+      const _modeBtn = document.getElementById('bmode-' + S.mode)
+      if (_modeBtn) {
+        document.querySelectorAll('.znc-mbtn').forEach((b: any) => b.className = 'znc-mbtn')
+        _modeBtn.classList.add('act-' + S.mode)
+      }
+    }
     if (USER_SETTINGS.alerts) Object.assign(S.alerts, USER_SETTINGS.alerts)
     if (USER_SETTINGS.assistArmed) {
       S.assistArmed = true
@@ -1936,6 +1946,17 @@ export const PROFILE_TF: any = {
   fast: { trigger: '5m', context: '15m', bias: '30m', htf: '1h', cooldown: 2 },
   swing: { trigger: '15m', context: '30m', bias: '1h', htf: '4h', cooldown: 4 },
   defensive: { trigger: '30m', context: '1h', bias: '4h', htf: '4h', cooldown: 6 }
+}
+
+// Canonical Brain DSL mode presets — authoritative source of truth (mirrors server/services/serverDSL.js).
+// Applied ONLY to Brain/AT positions at open time. Manual positions continue to use TC globals.
+// IV = delta from PR (not from entry).
+export const DSL_PRESETS: any = {
+  fast:      { openDslPct: 0.35, pivotLeftPct: 0.50, pivotRightPct: 0.40, impulseVPct: 0.20 },
+  tp:        { openDslPct: 0.40, pivotLeftPct: 0.55, pivotRightPct: 0.45, impulseVPct: 0.25 },
+  defensive: { openDslPct: 0.60, pivotLeftPct: 0.80, pivotRightPct: 0.70, impulseVPct: 0.30 },
+  atr:       { openDslPct: 0.80, pivotLeftPct: 1.10, pivotRightPct: 0.90, impulseVPct: 0.35 },
+  swing:     { openDslPct: 1.00, pivotLeftPct: 1.30, pivotRightPct: 1.10, impulseVPct: 0.40 },
 }
 BM.performance = BM.performance || {}
 BM.performance.byRegime = BM.performance.byRegime || {
