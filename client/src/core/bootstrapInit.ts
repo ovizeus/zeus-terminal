@@ -66,9 +66,10 @@ export function _waitForFeedThenStartExtras(): void {
       w.Intervals.clear('feedWait')
       if (!feedOk) atLog('warn', '[WARN] Extras started without confirmed feed (timeout)')
       else atLog('info', '[OK] Feed confirmed — starting DSL + scanner extras')
-      _startExtras()
+      // [MIGRATION-F0] Boot order: _userCtxPull → _startExtras (DoD #3)
       if (typeof w._ctxLoad === 'function') w._ctxLoad()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
+      _startExtras()
       if (typeof w._ucRetryPendingBeacon === 'function') w._ucRetryPendingBeacon()
       try { const _sd = sessionStorage.getItem('zeusDock'); if (_sd) openPageView(_sd) } catch (_) { }
       const _sp = document.getElementById('_dockSplash'); if (_sp) _sp.remove()

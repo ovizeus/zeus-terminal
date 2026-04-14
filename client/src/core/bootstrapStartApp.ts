@@ -5,7 +5,7 @@
 import { getATR, getKlines } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
-import { BM } from '../core/config'
+import { BM, USER_SETTINGS } from '../core/config'
 import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
@@ -85,7 +85,25 @@ export async function startApp(): Promise<void> {
   initCharts()
   try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
   initZeusGroups()
-  initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
+  initAdaptiveStrip(); w.initMTFStrip()
+  // [MIGRATION-F0] Boot order: _usFetchRemote → _usApply → loadUserSettings → _srLoad (DoD #3).
+  // Success: _usFetchRemote mutates USER_SETTINGS in-place; persist to LS so loadUserSettings
+  // reads authoritative values (its Object.assigns would otherwise overwrite fresh remote with stale LS).
+  // Failure/offline: fall back to LS cache (legacy path) — boot never blocks on network.
+  try {
+    const _fetchRemote: undefined | (() => Promise<number>) = w._usFetchRemote
+    if (typeof _fetchRemote === 'function') {
+      _fetchRemote().then((ts: number) => {
+        if (ts > 0) {
+          try { localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS)) } catch (_) { }
+        }
+        try { w.loadUserSettings() } catch (_) { }
+      }).catch(() => { try { w.loadUserSettings() } catch (_) { } })
+    } else {
+      w.loadUserSettings()
+    }
+  } catch (_) { try { w.loadUserSettings() } catch (_) { } }
+  w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
   setTimeout(runHealthChecks, 700)
   setTimeout(() => { _srUpdateStats(); w._srRenderList(); w.srStripUpdateBar() }, 800)
