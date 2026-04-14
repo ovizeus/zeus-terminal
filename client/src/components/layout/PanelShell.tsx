@@ -48,6 +48,7 @@ import { SettingsHubModal } from '../modals/SettingsHubModal'
 import { OVIPanel } from '../modals/OVIPanel'
 import { WelcomeModal } from '../modals/WelcomeModal'
 import { AdminModal } from '../modals/AdminModal'
+import { AdminPage } from '../admin/AdminPage'
 // ── Dialog Overlays ──
 import { CommandPalette } from '../modals/CommandPalette'
 import { ExposurePanel } from '../modals/ExposurePanel'
@@ -345,6 +346,7 @@ export function PanelShell() {
       <OVIPanel visible={activeModal === 'ovi'} onClose={closeModal} />
       <WelcomeModal visible={activeModal === 'welcome'} onClose={closeModal} />
       <AdminModal visible={activeModal === 'admin'} onClose={closeModal} />
+      <AdminPage visible={activeModal === 'adminPage'} onClose={closeModal} />
       <CommandPalette visible={activeModal === 'cmdpalette'} onClose={closeModal} />
       <ExposurePanel visible={activeModal === 'exposure'} onClose={closeModal} />
       <DecisionLogPanel visible={activeModal === 'decisionlog'} onClose={closeModal} />

@@ -602,6 +602,130 @@ router.get('/admin/audit', (req, res) => {
     } catch (err) { res.status(401).json({ error: 'Token invalid' }); }
 });
 
+// ─── Admin auth helper (reusable) ───
+function _adminGuard(req, res) {
+    const token = req.cookies && req.cookies.zeus_token;
+    if (!token) { res.status(401).json({ error: 'Not authenticated' }); return null; }
+    try {
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        const caller = db.findUserByEmail(decoded.email);
+        if (!caller || caller.role !== 'admin' || caller.status !== 'active') { res.status(403).json({ error: 'Admin only' }); return null; }
+        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) { res.status(401).json({ error: 'Session expired' }); return null; }
+        return { caller, decoded };
+    } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
+}
+
+// ─── ADMIN: GET /auth/admin/health — server health snapshot ───
+router.get('/admin/health', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    let dbStatus = 'ok';
+    try { db.db.prepare('SELECT 1').get(); } catch (_) { dbStatus = 'down'; }
+    const wss = global.__zeusWSClients;
+    const wsStatus = typeof wss === 'number' ? 'ok' : (wss === undefined ? 'warn' : 'ok');
+    const health = {
+        server: 'ok',
+        websocket: wsStatus,
+        database: dbStatus,
+        exchange: 'ok',
+        sync: 'ok',
+        audit: 'ok',
+        uptime: process.uptime(),
+        memory: { rss: process.memoryUsage().rss, heapUsed: process.memoryUsage().heapUsed, heapTotal: process.memoryUsage().heapTotal },
+        checkedAt: new Date().toISOString(),
+    };
+    res.json({ ok: true, health });
+});
+
+// ─── ADMIN: GET /auth/admin/users/:id — user detail ───
+router.get('/admin/users/:id', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const id = parseInt(req.params.id, 10);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    const u = db.findUserById(id);
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    let exchange = { connected: false };
+    try {
+        const all = db.listAllExchangeAccounts();
+        const ex = all.find(x => x.email === u.email);
+        if (ex) exchange = { connected: true, exchange: ex.exchange, mode: ex.mode, status: ex.status, lastVerified: ex.last_verified_at };
+    } catch (_) {}
+    res.json({
+        ok: true,
+        user: {
+            id: u.id,
+            email: u.email,
+            role: u.role || 'user',
+            approved: !!u.approved,
+            status: u.status || 'active',
+            bannedUntil: u.banned_until || null,
+            createdAt: u.created_at,
+            updatedAt: u.updated_at,
+            tokenVersion: u.token_version,
+            exchange,
+        },
+    });
+});
+
+// ─── ADMIN: GET /auth/admin/users/:id/audit — audit filtered by user ───
+router.get('/admin/users/:id/audit', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const id = parseInt(req.params.id, 10);
+    if (!id || Number.isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    const u = db.findUserById(id);
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    // Include both actions performed by user AND targeting them (email match in details)
+    const byActor = db.listAuditLogByUser(id, limit);
+    const byTarget = db.listAuditLogByTarget(u.email, limit);
+    const seen = new Set();
+    const merged = [...byActor, ...byTarget]
+      .filter(e => { if (seen.has(e.id)) return false; seen.add(e.id); return true; })
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))
+      .slice(0, limit);
+    res.json({ ok: true, entries: merged });
+});
+
+// ─── ADMIN: POST /auth/admin/force-logout — invalidate all sessions for a user ───
+router.post('/admin/force-logout', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    const normalEmail = email.toLowerCase().trim();
+    const target = db.findUserByEmail(normalEmail);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    db.bumpTokenVersion(target.id);
+    db.auditLog(guard.caller.id, 'ADMIN_FORCE_LOGOUT', { targetEmail: normalEmail, targetId: target.id }, req.ip);
+    logger.info('AUTH', 'Admin forced logout', { target: _mask(normalEmail) });
+    res.json({ ok: true });
+});
+
+// ─── ADMIN: POST /auth/admin/suspend — suspend with reason ───
+router.post('/admin/suspend', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const { email, reason } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email required' });
+    const normalEmail = email.toLowerCase().trim();
+    const target = db.findUserByEmail(normalEmail);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.role === 'admin') return res.status(400).json({ error: 'Cannot suspend admin' });
+    db.setUserStatus(target.id, 'blocked');
+    db.auditLog(guard.caller.id, 'ADMIN_SUSPEND_USER', { targetEmail: normalEmail, reason: reason || 'admin_suspend' }, req.ip);
+    logger.info('AUTH', 'Admin suspended user', { target: _mask(normalEmail), reason });
+    res.json({ ok: true });
+});
+
+// ─── ADMIN: POST /auth/admin/note — add internal note (stored in audit_log) ───
+router.post('/admin/note', (req, res) => {
+    const guard = _adminGuard(req, res); if (!guard) return;
+    const { email, note } = req.body;
+    if (!email || !note) return res.status(400).json({ error: 'Email and note required' });
+    const normalEmail = email.toLowerCase().trim();
+    const target = db.findUserByEmail(normalEmail);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    db.auditLog(guard.caller.id, 'ADMIN_NOTE', { targetEmail: normalEmail, targetId: target.id, note: String(note).slice(0, 1000) }, req.ip);
+    res.json({ ok: true });
+});
+
 // ─── CHANGE PASSWORD: Step 1 — request code ───
 router.post('/change-password/request', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });

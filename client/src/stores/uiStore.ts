@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { ThemeId } from '../types'
 
-type ModalId = 'notifications' | 'cloud' | 'alerts' | 'charts' | 'liq' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'cmdpalette' | 'exposure' | 'decisionlog' | 'missed' | 'session' | 'regime' | 'performance' | 'compare'
+type ModalId = 'notifications' | 'cloud' | 'alerts' | 'charts' | 'liq' | 'llv' | 'supremus' | 'sr' | 'settings' | 'ovi' | 'welcome' | 'admin' | 'adminPage' | 'cmdpalette' | 'exposure' | 'decisionlog' | 'missed' | 'session' | 'regime' | 'performance' | 'compare'
 
 interface UiStore {
   /** Current theme */

@@ -77,7 +77,7 @@ export function Header() {
                 d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
             </svg></button>
             <button className="sbtn" id="adminBtn" title="Admin Panel"
-              style={{ display: role === 'admin' ? undefined : 'none' }} onClick={() => openModal('admin')}><svg width="16" height="16"
+              style={{ display: role === 'admin' ? undefined : 'none' }} onClick={() => openModal('adminPage')}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
               strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />

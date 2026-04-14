@@ -544,6 +544,19 @@ function listAuditLog(limit) {
     return _stmts.listAudit.all(limit || 100);
 }
 
+function listAuditLogByUser(userId, limit) {
+    return _stmts.listAuditByUser.all(userId, limit || 100);
+}
+
+function listAuditLogByTarget(emailOrId, limit) {
+    // Matches actor (user_id) OR target referenced in details payload
+    const like = '%' + String(emailOrId).toLowerCase() + '%';
+    const rows = db.prepare(
+      "SELECT * FROM audit_log WHERE user_id = ? OR LOWER(details) LIKE ? ORDER BY created_at DESC LIMIT ?"
+    ).all(Number(emailOrId) || -1, like, limit || 100);
+    return rows;
+}
+
 // ─── Migration from users.json ───
 
 function migrateFromJson() {
@@ -746,6 +759,8 @@ module.exports = {
     getAllTelegramUsers,
     auditLog,
     listAuditLog,
+    listAuditLogByUser,
+    listAuditLogByTarget,
     addPasswordHistory,
     getPasswordHistory,
     migrateFromJson,
