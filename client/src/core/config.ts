@@ -1524,6 +1524,117 @@ w._usFlush = _usFlush
 
 let _usApplyDone = false
 
+// [MIGRATION-F0] Epoch-ms timestamp returned by the server on GET/POST
+// /api/user/settings. Used later (phase 0 commits 4–6) for conflict
+// resolution between boot hydrate and live WS pushes. Zero = never
+// seen a server value.
+let _usSettingsRemoteTs = 0
+
+// [MIGRATION-F0] Flatten the nested USER_SETTINGS shape into the flat
+// whitelist the server accepts. Keys must match SETTINGS_WHITELIST in
+// server/routes/trading.js. Only non-undefined values are included so
+// partial saves don't overwrite unrelated keys after merge on server.
+function _usBuildFlatPayload(): Record<string, any> {
+  const out: Record<string, any> = {}
+  const put = (k: string, v: any) => { if (v !== undefined) out[k] = v }
+  const at = USER_SETTINGS.autoTrade || {}
+  put('confMin', at.confMin); put('sigMin', at.sigMin); put('size', at.size)
+  put('riskPct', at.riskPct); put('maxDay', at.maxDay); put('maxPos', at.maxPos)
+  put('sl', at.sl); put('rr', at.rr); put('killPct', at.killPct)
+  put('lossStreak', at.lossStreak); put('maxAddon', at.maxAddon); put('lev', at.lev)
+  put('adaptEnabled', at.adaptEnabled); put('adaptLive', at.adaptLive)
+  put('smartExitEnabled', at.smartExitEnabled)
+  const ch = USER_SETTINGS.chart || {}
+  put('chartTf', ch.tf); put('chartTz', ch.tz)
+  put('heatmapSettings', ch.heatmap); put('candleColors', ch.colors)
+  put('indSettings', USER_SETTINGS.indicators)
+  put('alertSettings', USER_SETTINGS.alerts)
+  put('profile', USER_SETTINGS.profile)
+  put('bmMode', USER_SETTINGS.bmMode)
+  put('assistArmed', USER_SETTINGS.assistArmed)
+  put('manualLive', USER_SETTINGS.manualLive)
+  put('ptLevDemo', USER_SETTINGS.ptLevDemo)
+  put('ptLevLive', USER_SETTINGS.ptLevLive)
+  put('ptMarginMode', USER_SETTINGS.ptMarginMode)
+  return out
+}
+
+// [MIGRATION-F0] Un-flatten the server response back into the nested
+// USER_SETTINGS shape that `_usApply` reads. Only overwrites keys the
+// server sent; locally-set fields that weren't persisted remain intact.
+function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
+  if (!flat || typeof flat !== 'object') return
+  USER_SETTINGS.chart = USER_SETTINGS.chart || {}
+  if (flat.chartTf !== undefined) USER_SETTINGS.chart.tf = flat.chartTf
+  if (flat.chartTz !== undefined) USER_SETTINGS.chart.tz = flat.chartTz
+  if (flat.heatmapSettings !== undefined) USER_SETTINGS.chart.heatmap = flat.heatmapSettings
+  if (flat.candleColors !== undefined) USER_SETTINGS.chart.colors = flat.candleColors
+  if (flat.indSettings !== undefined) USER_SETTINGS.indicators = flat.indSettings
+  if (flat.alertSettings !== undefined) USER_SETTINGS.alerts = flat.alertSettings
+  if (flat.profile !== undefined) USER_SETTINGS.profile = flat.profile
+  if (flat.bmMode !== undefined) USER_SETTINGS.bmMode = flat.bmMode
+  if (flat.assistArmed !== undefined) USER_SETTINGS.assistArmed = flat.assistArmed
+  USER_SETTINGS.autoTrade = USER_SETTINGS.autoTrade || {}
+  const atKeys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin',
+    'riskPct', 'maxDay', 'lossStreak', 'maxAddon', 'adaptEnabled', 'adaptLive', 'smartExitEnabled']
+  for (const k of atKeys) if (flat[k] !== undefined) USER_SETTINGS.autoTrade[k] = flat[k]
+  if (flat.manualLive !== undefined) USER_SETTINGS.manualLive = flat.manualLive
+  if (flat.ptLevDemo !== undefined) USER_SETTINGS.ptLevDemo = flat.ptLevDemo
+  if (flat.ptLevLive !== undefined) USER_SETTINGS.ptLevLive = flat.ptLevLive
+  if (flat.ptMarginMode !== undefined) USER_SETTINGS.ptMarginMode = flat.ptMarginMode
+}
+
+// [MIGRATION-F0] Pull the authoritative settings from the SQLite backing
+// on boot (or after a WS `settings.changed` hint). Caller chooses when
+// to call `_usApply()` afterwards — we only mutate USER_SETTINGS in
+// memory here. Returns the new server `updated_at` on success, 0 on
+// failure/offline (LS cache remains usable).
+export async function _usFetchRemote(): Promise<number> {
+  try {
+    const res = await fetch('/api/user/settings', { credentials: 'same-origin' })
+    if (!res.ok) { console.warn('[US] fetchRemote HTTP ' + res.status); return 0 }
+    const data = await res.json()
+    if (!data || !data.ok) { console.warn('[US] fetchRemote invalid response'); return 0 }
+    _usApplyFlatToUserSettings(data.settings || {})
+    _usSettingsRemoteTs = Number(data.updated_at) || 0
+    console.log('[US] fetched remote settings (updated_at=' + _usSettingsRemoteTs + ', keys=' + Object.keys(data.settings || {}).length + ')')
+    return _usSettingsRemoteTs
+  } catch (e: any) {
+    console.warn('[US] fetchRemote failed:', e?.message || e)
+    return 0
+  }
+}
+
+// [MIGRATION-F0] POST flat payload to /api/user/settings. Best-effort,
+// fire-and-forget. Updates _usSettingsRemoteTs from the response so the
+// next server push (via WS `settings.changed`) can be compared. LS cache
+// remains authoritative while offline — any queued POST is retried on
+// next _usSave call. Uses `keepalive` so an in-flight save survives
+// page unload (complements _ucPushBeacon for the FS path that still
+// exists in this commit).
+function _usPostRemote(): void {
+  let payload: Record<string, any>
+  try { payload = _usBuildFlatPayload() } catch (_) { return }
+  try {
+    fetch('/api/user/settings', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: payload }),
+      keepalive: true,
+    }).then(function (r) {
+      if (!r.ok) { console.warn('[US] postRemote HTTP ' + r.status); return null }
+      return r.json()
+    }).then(function (j: any) {
+      if (j && j.ok && j.updated_at) _usSettingsRemoteTs = Number(j.updated_at) || _usSettingsRemoteTs
+    }).catch(function (e: any) {
+      console.warn('[US] postRemote failed:', e?.message || e)
+    })
+  } catch (e: any) {
+    console.warn('[US] postRemote threw:', e?.message || e)
+  }
+}
+
 export function _usSave() {
   if (!_usApplyDone) { console.log('[US] skip save — _usApply not yet run'); return }
   try {
@@ -1579,6 +1690,13 @@ export function _usSave() {
     if (_dmm) USER_SETTINGS.ptMarginMode = _dmm.value
     USER_SETTINGS._syncTs = Date.now()
     localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS))
+    // [MIGRATION-F0] Push directly to SQLite via POST /api/user/settings.
+    // Fire-and-forget; server will broadcast settings.changed on the
+    // existing /ws/sync WSS to every other session of this user.
+    _usPostRemote()
+    // [MIGRATION-F0] FS beacon path kept during phase 0 as a dual-write
+    // safety net; will be removed in phase-00 commit 7 once _usFetchRemote
+    // is the boot source of truth.
     _ucMarkDirty('settings')
     console.log('[US] Settings saved')
   } catch (e: any) {
@@ -2047,6 +2165,7 @@ w.initMTFStrip = initMTFStrip
 w._usScheduleSave = _usScheduleSave
 w._usSave = _usSave
 w._usApply = _usApply
+w._usFetchRemote = _usFetchRemote
 w.loadUserSettings = loadUserSettings
 w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon
