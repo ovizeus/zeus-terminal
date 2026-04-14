@@ -329,6 +329,29 @@ function setMode(userId, mode) {
     }
 
     us.engineMode = mode;
+
+    // [ZT-AUD-#14 / C12] On live→demo switch, refresh demoStartBalance to the
+    // current demoBalance so kill-switch drawdown calculations restart from
+    // the current state instead of the original $10k. If demoBalance is below
+    // 25% of DEFAULT, also auto-replenish to DEFAULT so the user isn't left
+    // with a near-zero balance after a long live session. Either way, prevents
+    // a stale 95% drawdown from persisting across mode flips.
+    if (mode === 'demo' && oldMode === 'live') {
+        const minHealthy = DEFAULT_DEMO_BALANCE * 0.25;
+        if (!Number.isFinite(us.demoBalance) || us.demoBalance < minHealthy) {
+            const prev = us.demoBalance;
+            us.demoBalance = DEFAULT_DEMO_BALANCE;
+            us.demoStartBalance = DEFAULT_DEMO_BALANCE;
+            logger.info('AT_ENGINE', `Demo balance auto-replenished uid=${userId} on live→demo: $${(prev || 0).toFixed(2)} → $${DEFAULT_DEMO_BALANCE}`);
+            audit.record('DEMO_BALANCE_AUTO_REPLENISH', { userId, prev, reset: DEFAULT_DEMO_BALANCE }, 'SERVER_AT');
+        } else {
+            us.demoStartBalance = us.demoBalance;
+            logger.info('AT_ENGINE', `Demo startBalance refreshed uid=${userId} on live→demo: startBalance=$${us.demoStartBalance.toFixed(2)}`);
+        }
+        us.dailyPnL = 0;
+        us.killActive = false;
+    }
+
     _persistState(userId);
 
     // [LIVE-PARITY] Auto-init liveBalanceRef from Binance on live mode switch (non-blocking)
