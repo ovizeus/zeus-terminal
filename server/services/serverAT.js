@@ -827,9 +827,50 @@ async function _executeLiveEntry(entry, stc) {
     const executedQty = parseFloat(verifiedOrder.executedQty || 0);
     const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
     if (!Number.isFinite(avgPrice) || avgPrice <= 0 || !Number.isFinite(executedQty) || executedQty <= 0) {
-        entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data', orderId: mainOrder.orderId };
-        logger.error('AT_LIVE', `[${entry.seq}] Entry aborted — no confirmed fill (avgPrice=${avgPrice}, qty=${executedQty})`);
-        telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — fill data missing. Order ${mainOrder.orderId} may be open on exchange.\nPosition kept tracked — reconciliation will verify.`);
+        // [ZT-AUD-C5] Reconcile against exchange BEFORE aborting. The order may
+        // have filled after our polling window — if so, leaving it untracked
+        // means a position with no SL/TP server-side. Force-close it.
+        let exchangeQty = 0;
+        let exchangeSide = null;
+        try {
+            const posRisk = await sendSignedRequest('GET', '/fapi/v2/positionRisk', { symbol: entry.symbol }, creds);
+            const bPos = (Array.isArray(posRisk) ? posRisk : []).find(p => parseFloat(p.positionAmt) !== 0);
+            if (bPos) {
+                exchangeQty = Math.abs(parseFloat(bPos.positionAmt));
+                exchangeSide = parseFloat(bPos.positionAmt) > 0 ? 'LONG' : 'SHORT';
+            }
+        } catch (recErr) {
+            logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED reconcile query failed: ${recErr.message}`);
+        }
+
+        if (exchangeQty > 0 && exchangeSide === entry.side) {
+            // Position exists on exchange — force market close to avoid unprotected exposure
+            logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED but exchange shows ${exchangeSide} qty=${exchangeQty} — FORCE CLOSING`);
+            Sentry.captureMessage(`FILL_UNVERIFIED force-close: ${entry.symbol} ${entry.side} qty=${exchangeQty}`, { level: 'fatal', tags: { module: 'AT', action: 'fill_unverified_force_close', symbol: entry.symbol }, user: { id: String(userId) } });
+            try {
+                const fcQty = String(roundOrderParams(entry.symbol, exchangeQty).quantity || exchangeQty);
+                await sendSignedRequest('POST', '/fapi/v1/order', {
+                    symbol: entry.symbol, side: closeSide, type: 'MARKET',
+                    quantity: fcQty, reduceOnly: true,
+                    newClientOrderId: `SAT_FCUNVER_${liveSeq}`,
+                }, creds);
+                entry.live = { status: 'FILL_UNVERIFIED_FORCE_CLOSED', error: 'No confirmed fill data; exchange position force-closed', orderId: mainOrder.orderId, exchangeQty };
+                audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, exchangeQty }, 'SERVER_AT');
+                telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED — FORCE CLOSED*\n${entry.symbol} ${entry.side} qty=${exchangeQty}\nFill data missing; closed exchange position to prevent unprotected exposure.`);
+            } catch (fcErr) {
+                logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED force-close FAILED: ${fcErr.message}`);
+                Sentry.captureException(fcErr, { level: 'fatal', tags: { module: 'AT', action: 'fill_unverified_force_close_failed' }, user: { id: String(userId) } });
+                entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill; force-close failed: ' + fcErr.message, orderId: mainOrder.orderId, exchangeQty };
+                audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSE_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, exchangeQty, error: fcErr.message }, 'SERVER_AT');
+                telegram.sendToUser(userId, `🚨🚨 *FILL UNVERIFIED — FORCE CLOSE FAILED*\n${entry.symbol} ${entry.side} qty=${exchangeQty}\n*MANUAL INTERVENTION REQUIRED*\nError: ${fcErr.message}`);
+            }
+        } else {
+            // No position on exchange — order was likely rejected/expired
+            entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data; no exchange position', orderId: mainOrder.orderId };
+            logger.error('AT_LIVE', `[${entry.seq}] Entry aborted — no confirmed fill, no exchange position (avgPrice=${avgPrice}, qty=${executedQty})`);
+            audit.record('SAT_FILL_UNVERIFIED_NO_POS', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side }, 'SERVER_AT');
+            telegram.sendToUser(userId, `⚠️ *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — no fill data and no position on exchange. Order may have been rejected.`);
+        }
         us.liveStats.errors++;
         return;
     }
