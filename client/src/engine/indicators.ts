@@ -187,7 +187,7 @@ export function applyIndVisibility(id: string, visible: boolean): void {
       break
     case 'fib':
       if (show) updateFib()
-      else { fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); fibSeries = [] }
+      else { if (Array.isArray(w.fibSeries)) w.fibSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.fibSeries = [] }
       break
     case 'pivot':
       if (show) updatePivot()
@@ -480,7 +480,7 @@ export function _syncSubChartsToMain(): void {
   try {
     const r = w.mainChart.timeScale().getVisibleLogicalRange()
     if (!r) return
-    ;[_rsiChart, w._stochChart, w._atrChart, _obvChart, w._mfiChart, w._cciChart, _macdChart].forEach((ch: any) => {
+    ;[w._rsiChart, w._stochChart, w._atrChart, w._obvChart, w._mfiChart, w._cciChart, _macdChart].forEach((ch: any) => {
       if (ch) try { ch.timeScale().setVisibleLogicalRange(r) } catch (_) { }
     })
   } catch (_) { }
