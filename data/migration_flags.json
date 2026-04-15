@@ -3,5 +3,6 @@
   "SERVER_BRAIN": false,
   "SERVER_AT": false,
   "CLIENT_BRAIN": true,
-  "CLIENT_AT": true
+  "CLIENT_AT": true,
+  "POSITIONS_WS": true
 }
