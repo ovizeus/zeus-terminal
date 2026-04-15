@@ -6,8 +6,14 @@ import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
 //
-// The store is a React-facing projection of the legacy USER_SETTINGS cache
-// defined in core/config.ts.
+// [MIGRATION-F4 commit 4] Projection inversion — settingsStore is now the
+// single source of truth. USER_SETTINGS + window.TC + atStore.config are
+// write-through projections of store.settings, refreshed atomically on
+// every store mutation via the _projectAll(s) helper (Legacy → Window → AT,
+// fixed order). The legacy tree retains keys the store does not own
+// (profile, bmMode, assistArmed, manualLive, ptLev*, chartTz, dslSettings)
+// because _projectToLegacy only overwrites keys it knows about — so legacy
+// engines reading those extras continue to work unchanged.
 //
 // [MIGRATION-F4 commits 2+3] GET + POST path canonicalization.
 // loadFromServer issues a direct GET via userSettingsApi.fetch() and
@@ -19,7 +25,7 @@ import type { SettingsPayload } from '../types/settings-contracts'
 // typed API, not on each other (no store→wrapper→store loop, no double
 // POST). Payload source is _usBuildFlatPayload(USER_SETTINGS) — the
 // same function the legacy wrapper uses, so both paths emit byte-identical
-// wire payloads. USER_SETTINGS is kept fresh via _projectToLegacy before
+// wire payloads. USER_SETTINGS is kept fresh via _projectAll before
 // the flat build.
 //
 // Persistence (post commit 7) is: LS `zeus_user_settings` (nested, canonical)
@@ -74,7 +80,6 @@ interface LegacyTC {
   lev?: number
 }
 interface ZeusWindowExt {
-  _usPostRemote?: () => void
   USER_SETTINGS?: LegacyUserSettings
   TC?: LegacyTC
 }
@@ -104,11 +109,12 @@ interface SettingsStoreState {
   loaded: boolean
   saving: boolean
 
-  /** Load from server via the unified _usFetchRemote primitive. */
+  /** Load from server (GET /api/user/settings) via userSettingsApi. */
   loadFromServer: () => Promise<void>
-  /** Save to server via the unified _usPostRemote primitive. */
+  /** Save to server (POST /api/user/settings) via userSettingsApi. */
   saveToServer: () => Promise<void>
-  /** Update one or more settings locally (does NOT auto-save). */
+  /** Update one or more settings locally (does NOT auto-save). Triggers
+   *  full projection to USER_SETTINGS + window.TC + atStore. */
   patch: (partial: Partial<SettingsPayload>) => void
   /** Get a setting value with default fallback. */
   get: <K extends keyof SettingsPayload>(key: K) => SettingsPayload[K]
@@ -134,8 +140,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
         const projected = _projectFromLegacy()
         const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
         set({ settings: merged, loaded: true })
-        _syncToWindow(merged)
-        _projectToAT(merged)
+        _projectAll(merged)
         return
       }
       // ok === false → offline / transient; fall through to offline fallback
@@ -156,8 +161,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       const projected = _projectFromLegacy()
       const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
       set({ settings: merged, loaded: true })
-      _syncToWindow(merged)
-      _projectToAT(merged)
+      _projectAll(merged)
     } catch {
       set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
     }
@@ -169,11 +173,10 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     set({ saving: true })
     try {
       const w = window as unknown as ZeusWindowExt
-      // 1. Push store → legacy USER_SETTINGS + window.TC so engines + _usBuildFlatPayload
-      //    see fresh values (projection MUST run before _usBuildFlatPayload below).
-      _projectToLegacy(settings)
-      _syncToWindow(settings)
-      _projectToAT(settings)
+      // 1. Push store → legacy USER_SETTINGS + window.TC + atStore via the
+      //    canonical _projectAll helper (MUST run before _usBuildFlatPayload
+      //    below, which reads from USER_SETTINGS).
+      _projectAll(settings)
       // 2. Build flat payload from USER_SETTINGS (covers keys whitelisted server-side
       //    that are not yet in SettingsPayload: profile, bmMode, assistArmed,
       //    manualLive, ptLev*, chartTz). Same builder the legacy wrapper uses →
@@ -208,8 +211,11 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
 
   patch: (partial) => set((s) => {
     const updated: SettingsPayload = { ...s.settings, ...partial }
-    _syncToWindow(updated)
-    _projectToAT(updated)
+    // [MIGRATION-F4 commit 4] Full projection on every patch — fixes the
+    // pre-inversion gap where patch() updated TC + atStore but left
+    // USER_SETTINGS stale, causing legacy engines reading USER_SETTINGS.*
+    // to drift from React state between save events.
+    _projectAll(updated)
     return { settings: updated }
   }),
 
@@ -263,8 +269,28 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
 }
 
 /**
+ * [MIGRATION-F4 commit 4] Canonical write-through projector. Any mutation
+ * to store.settings MUST flow through here so the three downstream
+ * projections (USER_SETTINGS → legacy engines, window.TC → AT Proxy chain,
+ * atStore.config → Phase-3 canonical AT state) stay in lockstep. Order
+ * is fixed: Legacy first (so _usBuildFlatPayload sees fresh values when
+ * called immediately after), Window second (TC Proxy delegates to atStore
+ * so keep atStore step close), AT last (atStore is the phase-3 source of
+ * truth for AT engine; hydrating it last guarantees its config reflects
+ * the final merged SettingsPayload).
+ */
+function _projectAll(s: SettingsPayload): void {
+  _projectToLegacy(s)
+  _syncToWindow(s)
+  _projectToAT(s)
+}
+
+/**
  * Push the flat store shape back into the legacy USER_SETTINGS tree so
- * _usBuildFlatPayload (inside _usPostRemote) reads up-to-date values.
+ * _usBuildFlatPayload (in core/config.ts) reads up-to-date values.
+ * Only overwrites keys this store owns — unrelated USER_SETTINGS keys
+ * (profile, bmMode, assistArmed, manualLive, ptLev*, chartTz, dslSettings)
+ * remain intact as hydrated by _usApplyFlatToUserSettings from the server.
  */
 function _projectToLegacy(settings: SettingsPayload): void {
   const w = window as unknown as ZeusWindowExt
@@ -296,9 +322,7 @@ function _projectToLegacy(settings: SettingsPayload): void {
  * Runs alongside _syncToWindow so atStore reflects the same source of truth
  * as window.TC. Wire mapping lives in atStore.hydrate (sl→slPct, others 1:1;
  * adxMin/cooldownMs not in flat wire, preserved from current config).
- *
- * No caller of atStore.config exists yet (Phase 3 C1 is contract-only);
- * this projector just keeps the store warm until C3+ flips the readers.
+ * Invoked by _projectAll on every store mutation.
  */
 function _projectToAT(s: SettingsPayload): void {
   try { useATStore.getState().hydrate(s) } catch (_) { /* defensive */ }
