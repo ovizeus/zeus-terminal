@@ -4,7 +4,7 @@ import type { Position } from './position'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged
 
 export interface WsAtUpdate {
   type: 'at_update'
@@ -24,6 +24,47 @@ export interface WsSettingsChanged {
   type: 'settings.changed'
   updated_at?: number
   keys?: string[]
+}
+
+/**
+ * [MIGRATION-F5 commit 1] Cross-device positions broadcast.
+ * Emitted by server over /ws/sync **after** a successful DB commit on any
+ * mutation of positions state (open / close / SL-TP hit / partial fill).
+ * Carries a full snapshot (MVP design — not true delta), so every message
+ * is auto-reconciliating: client applies via `replaceAll(snapshot)` and
+ * does not need prior state. Dedup is authoritative on `updated_at`
+ * (monotonic ms-since-epoch); client drops messages with
+ * `updated_at <= _lastKnownTs`.
+ *
+ * Gated server-side by feature flag `MF.POSITIONS_WS`. Subscriber:
+ * services/positionsRealtime.ts (added in Phase 5 C4). Not yet emitted
+ * at C1 — this interface is strict contract only, zero call-site flip.
+ */
+export interface WsPositionsChanged {
+  type: 'positions.changed'
+  updated_at: number
+  snapshot: PositionsSnapshot
+}
+
+/**
+ * [MIGRATION-F5 commit 1] Full positions snapshot carried by
+ * `WsPositionsChanged`. Shape is deliberately a superset of
+ * `ServerSnapshot` (from GET /api/sync/state) so the WS path and the
+ * polling fallback (`liveApiSyncState` → `ServerSnapshot`) can converge
+ * on the same reducer logic in `positionsStore.replaceAll`.
+ *
+ * Fields:
+ * - `updated_at`: authoritative monotonic timestamp for dedup.
+ * - `positions`: complete open-positions array at the emit moment.
+ * - `closedIds`: optional, mirrors `ServerSnapshot.closedIds` for
+ *   consumers that need the closed-position ledger (Journal, PnL
+ *   history). Omitted when the server has no cheap way to compute it;
+ *   client must treat absence as "no change to closed set".
+ */
+export interface PositionsSnapshot {
+  updated_at: number
+  positions: Position[]
+  closedIds?: (string | number)[]
 }
 
 /**

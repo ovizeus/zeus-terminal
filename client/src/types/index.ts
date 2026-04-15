@@ -66,6 +66,8 @@ export type {
   WsAtUpdate,
   WsSyncSignal,
   WsSettingsChanged,
+  WsPositionsChanged,
+  PositionsSnapshot,
   ServerATState,
   ServerDemoBalance,
   ServerATStats,
