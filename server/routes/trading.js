@@ -9,7 +9,7 @@ const config = require('../config');
 const { sendSignedRequest } = require('../services/binanceSigner');
 const { validateOrder, recordClosedPnL } = require('../services/riskGuard');
 const { roundOrderParams } = require('../services/exchangeInfo');
-const { validateOrderBody, validateCancelBody, validateLeverageBody } = require('../middleware/validate');
+const { validateOrderBody, validateCancelBody, validateLeverageBody, validateSettingsBody } = require('../middleware/validate');
 const resolveExchange = require('../middleware/resolveExchange');
 const telegram = require('../services/telegram');
 const logger = require('../services/logger');
@@ -418,7 +418,7 @@ const SETTINGS_WHITELIST = new Set([
   'dslSettings',
 ]);
 
-router.post('/user/settings', (req, res) => {
+router.post('/user/settings', validateSettingsBody, (req, res) => {
   try {
     const db = require('../services/database');
     const raw = req.body.settings;
