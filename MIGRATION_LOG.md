@@ -30,7 +30,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 2 API client centralized | ✓ done | `migration/phase-02-pre` | `migration/phase-02-post` | all safe internal `/api/*` call-sites migrated + exceptions documented | 21 migrations across 6 commits; 34 deferred exceptions categorized |
 | 3 atStore canonic | ✓ done | `migration/phase-03-pre` | `migration/phase-03-post` | #atLev DOM not source | 6 commits; CLIENT_AT_STORE feature flag deferred (hardening follow-up) |
 | 4 settingsStore canonic | ✓ done | `migration/phase-04-pre` | `migration/phase-04-post` | cross-device toggle | 6 commits; `_usBuildFlatPayload` retained as compat helper (deferred to Phase 5) |
-| 5 Positions WS live | pending | — | — | trade desktop→phone <1s | feature-flag |
+| 5 Positions WS live | ✓ done | `migration/phase-05-pre` | `migration/phase-05-post` | trade desktop→phone <1s | 7 commits + 1 preflip fix; `MF.POSITIONS_WS=true` live; polling retired from main path; 48h observation still open post-tag; **OPEN ISSUE**: transient UI duplicates (mandatory follow-up) |
 | 6 dslStore+brainStore canonic | pending | — | — | syncFromEngine=0 | — |
 | 7 Kill DOM-as-state | pending | — | — | getElementById source=0 | — |
 | 8 SQLite-only persist | pending | — | — | user_ctx = UI only | one-shot migration |
@@ -682,5 +682,140 @@ Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/04-20260415-015
 - **Boot order neatins** — `bootstrapStartApp` + `loadUserSettings()` rămân path-ul de boot. `settingsStore.loadFromServer()` e apelat post-boot din React App init, nu la `create`. Offline fallback via `_projectFromLegacy` citește `USER_SETTINGS` hidratat din LS la boot.
 
 **Status**: ✓ PHASE 4 COMPLETE (cu `_usBuildFlatPayload` retained as compat helper, eliminare scheduled Phase 5 după `SettingsPayload` widening).
+
+---
+
+### Phase 5 — Positions WS live
+
+**Scop**: server→client push de snapshot `positions.changed` peste WSS-ul
+existent `/ws/sync`, reconciliat client-side prin `positionsStore.applyDelta`
+cu dedup monotonic `lastSnapshotTs`. Sursa snapshot-ului este DB-read
+autoritativ (`db.atLoadOpenPositions(userId)`), NU `_positions` in-memory —
+fix critic pentru "zombie window" pe calea de close (`_persistClose` emite
+broadcast după `atArchiveClosed` dar înainte ca apelantul să facă
+`_positions.splice`). Polling-ul `livePosSync` retras de pe path principal
+(30s → 120s, gated pe `!wsService.isConnected()`). Flag gating toggle prin
+`MF.POSITIONS_WS` (default OFF, flipped ON la C5).
+
+**Pre-tag**: `migration/phase-05-pre` (HEAD=28b7151 = Phase 4 post)
+**Post-tag**: `migration/phase-05-post`
+**Branch**: `migration/phase-05-positions-ws`
+
+**Commit-urile 1–7 + post** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| 1 | `19a0856` | contract-only: `PositionsSnapshot`, `WsPositionsChanged` în `client/src/types/sync.ts`; `WsMessage` union extins; zero runtime consumer |
+| 2 | `05ee1a5` | `positionsStore.replaceAll` + `applyDelta` + `lastSnapshotTs: 0` default; dedup monotonic pe `updated_at`; 7 teste noi acoperire split/stale/dup/empty/balance/NaN/applyDelta-identity |
+| 3 | `aa36e7b` | server emit `positions.changed` GATED OFF: `MF.POSITIONS_WS` nou flag în `server/migrationFlags.js` (default false); `_broadcastPositions` + hooks la `_persistPosition:145` și `_persistClose:157` (doar pe success path post-DB-commit) |
+| 4 | `3c0f132` | client subscriber `positionsRealtime.ts` (62 linii) mirror `settingsRealtime.ts` dar folosește `positionsStore.lastSnapshotTs` pentru dedup; wired în `App.tsx` (`startPositionsRealtime` / `stopPositionsRealtime`) |
+| — | `5e67f35` | **C5-preflip fix**: `_broadcastPositions` sursă `db.atLoadOpenPositions(userId)` + re-enrichment DSL runtime; elimină structural zombie-window pe close path (analiză invariantă: DB post-`atArchiveClosed` = autoritativ, `_positions` încă ține row-ul până la caller-splice) |
+| 5 | `9af5e74` | **C5-flip**: `MF.POSITIONS_WS=true` în `data/migration_flags.json`; `pm2 reload zeus` PID 2057879→2060965; startup log confirmă flag activ în runtime |
+| 6 | `522052b` | polling `livePosSync` retras: 30s → 120s, gated pe `!wsService.isConnected()`; fallback pe WS disconnect doar; import nou `wsService` în `bootstrapInit.ts` |
+| 7 | `<post>` | docs: MIGRATION_LOG Phase 5 entry + tag `migration/phase-05-post` |
+
+**Totaluri**:
+
+- **Fișiere atinse total fază** (excluzând `MIGRATION_LOG.md`):
+  - Client: 6 (`types/sync.ts` — contract; `stores/positionsStore.ts` + test; `services/positionsRealtime.ts` — NEW; `App.tsx` — 3 linii wire; `core/bootstrapInit.ts` — 2 edit-uri)
+  - Server: 2 (`services/serverAT.js` — `_broadcastPositions` + 2 hook-uri; `migrationFlags.js` — flag + getter)
+  - Data: 1 (`data/migration_flags.json` — flag flip)
+- **Endpoint-uri noi**: 0 — reuz total `/ws/sync` existent + `global.__zeusWsBroadcastToUser`
+- **Socket-uri noi client**: 0 — reuz `wsService.subscribe`
+- **Componente test noi**: 7 unit tests în `positionsStore.test.ts`
+- **Flag-uri noi**: 1 (`MF.POSITIONS_WS`, default OFF, flipped ON la C5)
+
+**Ce s-a făcut concret**:
+
+- **Contract** (`client/src/types/sync.ts`): `PositionsSnapshot = { updated_at: number, positions: Position[] }`, `WsPositionsChanged = { type: 'positions.changed', updated_at: number, snapshot: PositionsSnapshot }`. Extindere aditivă a discriminated union `WsMessage` — safe pentru consumatorii existenți (narrowing prin `if (msg.type === 'x')`).
+- **Store reconciliere** (`client/src/stores/positionsStore.ts`): `applyDelta(snap) → replaceAll(snap)` cu dedup monotonic — dropped când `!Number.isFinite(updated_at)` sau `updated_at <= lastSnapshotTs`. Split atomic pe `mode` (`demo`/`live`). Nu atinge `demoBalance` / `liveBalance` (rămân sursă separată). Return `boolean` (applied vs dropped).
+- **Server emit** (`server/services/serverAT.js::_broadcastPositions`): gated pe `MF.POSITIONS_WS`; apelat SINGUR din `_persistPosition:145` și `_persistClose:157`, ambele strict pe success-path POST DB-commit (catch-uri return fără broadcast → zero phantom emit). Sursa snapshot-ului = `db.atLoadOpenPositions(userId)` + re-enrichment DSL per seq (paritate cu `getOpenPositions` minus zombie).
+- **Zombie-window fix structural** (C5-preflip): `_persistClose` ordine `atArchiveClosed` (DELETE txn) → broadcast → caller `_positions.splice`. La broadcast-time, `_positions` încă ține row-ul închis; dacă sursa ar fi `_positions`, snapshot-ul ar include zombie care ar fi reconciliat client-side ca "încă deschis" până la următorul delta. DB post-archive e autoritativ. Fix-ul preempt-ează orice mutații futură să reintrodusă riscul.
+- **Client subscriber** (`client/src/services/positionsRealtime.ts`): idempotent start/stop, defensive shape guard (`msg.snapshot`, `Array.isArray(positions)`, `Number.isFinite(updated_at)`), `try { applyDelta } catch {}` — malformed frame nu prăbușește subscriber-ul sau pagina. Reuz `wsService.subscribe`, zero socket paralel.
+- **Polling retirement** (`client/src/core/bootstrapInit.ts:87-94`): early-return dacă `wsService.isConnected()` e true. Când WS e OPEN, reconcilierea trece integral prin `positions.changed`; când WS e jos, fallback-ul rulează `liveApiSyncState()` la 120s. Detecție disconnect reutilizează `wsService.isConnected()` existent (readyState === OPEN).
+- **Flag flip runtime** (C5): `MF.set('POSITIONS_WS', true)` atomic rename persist → `pm2 reload zeus` → startup log confirmă `"POSITIONS_WS":true` în feature-flags line. Uptime contor resetat, PID nou.
+
+**DoD atins** (numerotat per pre-plan):
+
+- [x] **DoD 1** — Server emit `positions.changed` gated pe `MF.POSITIONS_WS`. Zero emit la flag OFF (verificat post-C3 cu `grep -c "positions.changed"` = 0). Emit activ post-C5-flip, confirmat cross-device de user.
+- [x] **DoD 2** — Client subscriber `positionsRealtime` aplică snapshot prin `positionsStore.applyDelta`. Shape-guard defensiv, dedup monotonic prin `lastSnapshotTs`.
+- [x] **DoD 3** — Polling `livePosSync` retras de pe path-ul principal. 30s → 120s, gated pe `!wsService.isConnected()`. Pe happy path (WS OPEN), zero call la `liveApiSyncState`.
+- [x] **DoD 4** — Cross-device propagation desktop→phone sub 1s — confirmat observațional de user la GO C6. Pipeline end-to-end funcțional.
+- [x] **DoD 5** — Zombie-window eliminat structural prin DB-read broadcast. Confirmat prin analiză invariant: `atArchiveClosed` (DELETE txn) se execută înainte de broadcast, deci DB state la emit nu mai conține row-ul închis; `_positions` îl elimină abia după return-ul din `_persistClose`.
+- [x] **DoD 6** — `npx tsc --noEmit` PASS după fiecare commit client-side; `npx vite build` PASS (~747ms la C6).
+- [x] **DoD 7** — Zero fișiere atinse în afara scope-ului Phase 5. Zero cod adăugat speculativ. Zero endpoint-uri noi server. `wsService` / `sessionAuth` / alte subsisteme neatinse.
+- [x] **DoD 8** — Mutual exclusion via `MF._enforceMutex` neafectată — `POSITIONS_WS` e independent de `SERVER_AT` / `CLIENT_AT` (nu face parte din invariantul de exclusivitate).
+- [x] **DoD 9** — Feature flag persistent pe restart — `data/migration_flags.json` survive reload (verificat prin repornire pm2).
+- [x] **DoD 10** — MIGRATION_LOG Phase 5 entry + tag `migration/phase-05-post` (C8).
+
+**OPEN ISSUE — mandatory follow-up post-Phase-5**:
+
+**Descriere**: Pozițiile apar uneori dublate / elemente tranzitorii apar pentru câteva secunde în UI, apoi dispar. Observat browser-side de user în fereastra post-C5-flip. Non-blocker pentru Phase 5 close (cosmetic UI flicker, self-correcting, nu afectează corectitudinea server-side sau execuția trading).
+
+**Root-cause suspect (inspecție cod C7)**: **două write-paths, un singur store, fără coordonare de cursor**.
+
+1. **WS path** — `client/src/services/positionsRealtime.ts` → `positionsStore.applyDelta(snap)` → respectă `lastSnapshotTs` dedup, advance cursor monotonic
+2. **Legacy bridge path** — `client/src/hooks/usePositionsBridge.ts:23` → `positionsStore.syncSnapshot({ demoPositions, livePositions, ... })` → **NU consultă `lastSnapshotTs`**, overwrite direct
+
+Bridge-ul ascultă `window.addEventListener('zeus:positionsChanged')` și re-citește `window.TP` la fiecare dispatch (6 dispatch-uri documentate: `autotrade.ts`, `marketDataTrading.ts`, `marketDataPositions.ts`, `marketDataClose.ts`, `liveApi.ts`, `state.ts`). Race window: WS delta ajunge cu `updated_at=TsX`, `applyDelta` advance la TsX, apoi un `zeus:positionsChanged` sincron din path-ul legacy (inițiat înainte) reads `window.TP` (version old) și `syncSnapshot` overwrite fără verificare cursor → flicker → următorul delta/event repară.
+
+**Candidate fix-uri** (în ordinea preferinței):
+
+1. **Bridge să folosească `applyDelta`** — pad `syncSnapshot` cu pseudo-`updated_at = Date.now()` ar introduce race invers; mai curat: introdu `applyBridgeDelta(snapshot, bridgeTs)` în store care folosește același `lastSnapshotTs` cursor → unificare semantică
+2. **Bridge gated pe `!wsService.isConnected()`** — simetric cu polling-ul C6; când WS e OPEN, bridge-ul devine no-op și reconcilierea trece integral prin WS. Mai conservator, dar poate rupe flow-uri de `autotrade.ts` care emit `zeus:positionsChanged` sincron pe mutații `window.TP` locale (înainte ca server-ul să confirme).
+3. **`syncSnapshot` merge-aware** — dacă `lastSnapshotTs > 0`, skip bridge-ul și log `[bridge] skipped: WS-authoritative`.
+
+**Status**: **NON-BLOCKER** pentru Phase 5 close, **MANDATORY follow-up** (nu "nice to have"). Tracking: această secțiune. Ownership: Phase 5.1 dedicată sau merge într-un Phase 6 addendum.
+
+**Ce a rămas intenționat pentru fazele următoare**:
+
+- **Transient UI duplicates fix** — vezi OPEN ISSUE above. Mandatory follow-up.
+- **48h demo observation window** — deschisă de la 2026-04-15 ~18:05 UTC (C5-flip). Continuă și după tag-ul `migration/phase-05-post`. Monitorizare: stabilitate server uptime, rate dubluri tranzitorii, frecvență WS disconnects (zero până la C7), un ciclu complet open→close cross-device.
+- **Validare end-to-end CLOSE path cross-device** — la C7, observate 5 OPEN events, 0 CLOSE events. Trebuie observat cel puțin un CLOSE complet pentru validare simetrică.
+- **Comportament pe WS disconnect real** — zero disconnects observate până la C7. Fallback 120s din C6 neexercitat în runtime. Monitorizare în fereastra 48h.
+- **`_usBuildFlatPayload` elimination** — legacy Phase 4 deferred. Necesită `SettingsPayload` widening (7 chei legacy-only de absorbit). Nu blochează Phase 6.
+- **`window.TP` → `positionsStore`-only refactor** — parte din Phase 7 (Kill DOM-as-state). Bridge-ul `usePositionsBridge` dispare când `window.TP` devine Proxy read-only derivat din store.
+
+**Rollback point**:
+
+```bash
+# Full rollback la pre-fază:
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 05 --dry-run
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 05
+
+# Sau git hard-reset la pre-tag:
+git checkout migration/phase-05-positions-ws
+git reset --hard migration/phase-05-pre
+# + flip MF.POSITIONS_WS=false și pm2 reload zeus pentru dezactivarea broadcast-ului server
+```
+
+Checkpoint-uri intermediare (tag-backed):
+
+- Tag: `migration/phase-05-c5-pre-20260415-1731` — pre-flip snapshot, înainte de decizia MISMATCH + fix `_broadcastPositions`
+- Branch backup: `backup/phase-05-c5-pre-20260415-1731`
+- C1 `19a0856` — contract-only additive
+- C2 `05ee1a5` — store (applyDelta/replaceAll/cursor)
+- C3 `aa36e7b` — server emit gated OFF
+- C4 `3c0f132` — client subscriber wired
+- C5-preflip `5e67f35` — DB-read source fix
+- C5-flip `9af5e74` — `MF.POSITIONS_WS=true`
+- C6 `522052b` — polling retirement
+- C7 — validation status (no commit, raport conversational)
+
+Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/05-*.report.txt` (per script `backup-pre-phase.sh 5`).
+
+**Observații de runtime / risc**:
+
+- **Flag live în runtime** — `MF.POSITIONS_WS=true` persistent în `data/migration_flags.json`, confirmat prin log startup `[MIGRATION] Feature flags: {..., "POSITIONS_WS":true}` (server repornit la C5-flip, PID 2060965, uptime 18+ min la C7 fără reporniri).
+- **Zero emit natural logat** — `_broadcastPositions` nu face log explicit per emit (design: helper-ul broadcast global e best-effort, log-ul ar spama pe AT activ). Validare indirectă prin cross-device propagation observat la C6 GO.
+- **Zero errori noi post-flip** — `pm2-error.log` curat din momentul reload-ului (doar warning-uri pre-existente de migrație DB + SIGINT-ul procesului vechi la grateful reload).
+- **28 WS connects observate, 0 disconnects** în fereastra de observație inițială C7 — socket stabil.
+- **Sursa broadcast-ului = DB-read autoritativ** — `db.atLoadOpenPositions(userId)` + re-enrichment DSL runtime. Structural exclude zombie-window pe close path. Orice regresiune care ar întoarce sursa pe `_positions` ar reintrodusă riscul.
+- **Polling 30s nu mai e path principal** — verificat în diff `bootstrapInit.ts`: interval 120000 + early-return pe `isConnected()`. Pe happy path, zero call la `liveApiSyncState`.
+- **Payload size** — 4291 bytes pentru uid=1 cu 5 poziții (măsurat la probe-ul C5). La 100+ poziții/user, snapshot-ul va depăși 50KB — acceptabil pentru WS, dar merită monitorizat dacă apare vreun user cu portofoliu mare.
+- **`wsService.subscribe` lifecycle** — subscriber-ul e pornit în `App.tsx` efect gated pe `authenticated`. Cleanup corespunzător la logout (`stopPositionsRealtime` înainte de `stopSettingsRealtime`).
+- **Fix(auth) `c9220fd`** — separat de seria Phase 5, inclus în branch dar NU în raport. Validare browser-side implicită (user a putut testa C5/C6 cross-device fără redirect-loop).
+
+**Status**: ✓ PHASE 5 COMPLETE (cu `_broadcastPositions` pe sursă DB-read autoritativă, `MF.POSITIONS_WS=true` live în runtime, polling retras de pe path principal, 48h observation window rămasă deschisă post-tag, OPEN ISSUE transient UI duplicates documentat ca mandatory follow-up).
 
 ---
