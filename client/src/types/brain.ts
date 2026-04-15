@@ -221,4 +221,42 @@ export interface BrainState {
     mtfOn: boolean
     ticks: number
   }
+
+  // [Phase 6 C1 additive] engine-surface fields that the canonical store
+  // will own in C6 (Brain engine inversion). Currently live on
+  // window.BRAIN / window.S / window.BlockReason and are tracked by
+  // brainStore extended. Optional so existing defaultBrain construction
+  // (brainStore.ts:11) does not need changes in this commit.
+  engineState?: BrainEngineState
+  thoughts?: BrainThought[]
+  adaptParams?: BrainAdaptParams | null
+  blockReason?: BrainBlockReason | null
+}
+
+/** Brain engine lifecycle state (SCANNING/ANALYZING/READY/TRADING/BLOCKED) */
+export type BrainEngineState =
+  | 'scanning'
+  | 'analyzing'
+  | 'ready'
+  | 'trading'
+  | 'blocked'
+  | string
+
+/** Single brain thought entry (log stream) */
+export interface BrainThought {
+  ts: number
+  kind?: string
+  msg?: string
+  [k: string]: unknown
+}
+
+/** Brain adapt params blob (shape owned by engine; opaque at type level) */
+export interface BrainAdaptParams {
+  [k: string]: unknown
+}
+
+/** Block reason surfaced by BlockReason facade */
+export interface BrainBlockReason {
+  code: string
+  text: string
 }

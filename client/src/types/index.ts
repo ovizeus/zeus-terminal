@@ -45,6 +45,10 @@ export type {
   PositionSizing,
   AdaptiveState,
   BrainState,
+  BrainEngineState,
+  BrainThought,
+  BrainAdaptParams,
+  BrainBlockReason,
 } from './brain'
 
 export type {

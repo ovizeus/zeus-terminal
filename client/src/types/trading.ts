@@ -120,6 +120,11 @@ export interface DslState {
   magnetMode: string
   positions: Record<string, DslPositionState>
   checkInterval: number | null
+
+  // [Phase 6 C1 additive] engine-internal bookkeeping — present on window.DSL
+  // at runtime (config.ts:1979) but not previously in the type. Optional so
+  // no existing construction site breaks.
+  _attachedIds?: Set<string>
 }
 
 /** Per-position DSL tracking */
@@ -138,6 +143,18 @@ export interface DslPositionState {
   attachedTs: number
   impulseTriggered: boolean
   log: unknown[]
+
+  // [Phase 6 C1 additive] runtime-only fields produced by the DSL engine and
+  // server DSL bridge (trading/dsl.ts:280-314). Made optional so the
+  // canonical store can hold engine output directly without casting.
+  progress?: number
+  _activationPrice?: number
+  ttpArmed?: boolean
+  ttpPeak?: number
+  _barGreenPct?: number
+  _barYellowPct?: number
+  _stale?: boolean
+  _staleLogged?: boolean
 }
 
 /** Predator engine state */
