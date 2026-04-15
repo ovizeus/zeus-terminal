@@ -51,6 +51,7 @@ export type {
   PredatorState,
   TradingConfig,
   ATState,
+  ATConfig,
   ATStats,
   ATLogEntry,
   DslState,

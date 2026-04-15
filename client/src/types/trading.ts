@@ -72,6 +72,24 @@ export interface ATState {
   log: ATLogEntry[]
 }
 
+/**
+ * AutoTrade config — canonical parameters consumed by the AT decision engine.
+ * Phase 3 contract: mirror of the subset of `window.TC` that AT actually
+ * reads (lev/size/slPct/rr/maxPos/sigMin/adxMin/cooldownMs). Wire mapping
+ * to `SettingsPayload`: sl→slPct, others 1:1; adxMin and cooldownMs are
+ * NOT in the flat wire and are hydrated from nested blobs / defaults.
+ */
+export interface ATConfig {
+  lev: number
+  size: number
+  slPct: number
+  rr: number
+  maxPos: number
+  sigMin: number
+  adxMin: number
+  cooldownMs: number
+}
+
 /** AT stats subset from server */
 export interface ATStats {
   totalTrades: number

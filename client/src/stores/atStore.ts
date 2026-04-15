@@ -1,9 +1,35 @@
 import { create } from 'zustand'
-import type { ATState, ATLogEntry } from '../types'
+import type { ATState, ATConfig, ATLogEntry, SettingsPayload } from '../types'
+
+/**
+ * Default AT config — matches legacy TC defaults observed in state.ts / config.ts
+ * boot path. Used as initial value before `hydrate()` or server fetch overlays.
+ */
+const DEFAULT_AT_CONFIG: ATConfig = {
+  lev: 5,
+  size: 150,
+  slPct: 1.3,
+  rr: 2,
+  maxPos: 3,
+  sigMin: 3,
+  adxMin: 18,
+  cooldownMs: 60000,
+}
 
 type ATStore = ATState & {
+  config: ATConfig
   /** Merge partial AT state from server */
   patch: (partial: Partial<ATState>) => void
+  /** Merge partial AT config (lev/size/slPct/rr/maxPos/sigMin/adxMin/cooldownMs) */
+  patchConfig: (partial: Partial<ATConfig>) => void
+  /**
+   * Hydrate AT config from a flat SettingsPayload.
+   * Wire mapping: sl → slPct, others 1:1.
+   * Fields NOT in flat wire (adxMin, cooldownMs) are left untouched
+   * (they live in nested indSettings blob / engine defaults).
+   * Undefined wire values leave the current config value intact.
+   */
+  hydrate: (settings: SettingsPayload) => void
   /** Append log entry */
   addLog: (entry: ATLogEntry) => void
 }
@@ -42,6 +68,30 @@ export const useATStore = create<ATStore>()((set) => ({
   _serverLiveStats: null,
   log: [],
 
+  config: { ...DEFAULT_AT_CONFIG },
+
   patch: (partial) => set((s) => ({ ...s, ...partial })),
+  patchConfig: (partial) => set((s) => {
+    const next: ATConfig = { ...s.config }
+    if (partial.lev !== undefined && Number.isFinite(partial.lev)) next.lev = partial.lev
+    if (partial.size !== undefined && Number.isFinite(partial.size)) next.size = partial.size
+    if (partial.slPct !== undefined && Number.isFinite(partial.slPct)) next.slPct = partial.slPct
+    if (partial.rr !== undefined && Number.isFinite(partial.rr)) next.rr = partial.rr
+    if (partial.maxPos !== undefined && Number.isFinite(partial.maxPos)) next.maxPos = partial.maxPos
+    if (partial.sigMin !== undefined && Number.isFinite(partial.sigMin)) next.sigMin = partial.sigMin
+    if (partial.adxMin !== undefined && Number.isFinite(partial.adxMin)) next.adxMin = partial.adxMin
+    if (partial.cooldownMs !== undefined && Number.isFinite(partial.cooldownMs)) next.cooldownMs = partial.cooldownMs
+    return { config: next }
+  }),
+  hydrate: (settings) => set((s) => {
+    const next: ATConfig = { ...s.config }
+    if (typeof settings.lev === 'number' && Number.isFinite(settings.lev)) next.lev = settings.lev
+    if (typeof settings.size === 'number' && Number.isFinite(settings.size)) next.size = settings.size
+    if (typeof settings.sl === 'number' && Number.isFinite(settings.sl)) next.slPct = settings.sl
+    if (typeof settings.rr === 'number' && Number.isFinite(settings.rr)) next.rr = settings.rr
+    if (typeof settings.maxPos === 'number' && Number.isFinite(settings.maxPos)) next.maxPos = settings.maxPos
+    if (typeof settings.sigMin === 'number' && Number.isFinite(settings.sigMin)) next.sigMin = settings.sigMin
+    return { config: next }
+  }),
   addLog: (entry) => set((s) => ({ log: [...s.log.slice(-99), entry] })),
 }))
