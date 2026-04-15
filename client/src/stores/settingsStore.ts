@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { api } from '../services/api'
 import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
@@ -155,12 +156,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
         w._usPostRemote()
       } else {
         // Pre-bridge fallback (e.g. tests before config.ts module loaded).
-        await fetch('/api/user/settings', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ settings }),
-        }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status) })
+        await api.raw('POST', '/api/user/settings', { settings })
       }
       // 3. Write canonical LS cache — same key legacy _usSave uses. Single source.
       try {

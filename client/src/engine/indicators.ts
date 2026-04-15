@@ -3,6 +3,7 @@
 // Live API stubs, PWA, Indicator panel, Overlay/Oscillator indicators,
 // Signal scanner, Deep Dive narrative generator
 
+import { api } from '../services/api'
 import { fmtTime, fmtDate, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
 import { sendAlert } from '../data/marketDataWS'
 import { liveApiSyncState } from '../trading/liveApi'
@@ -28,7 +29,7 @@ export function getMacdChart(): any { return _macdChart }
 export function connectLiveAPI(): void {
   const st = el('apiStatus')
   if (st) { st.innerHTML = _ZI.timer + ' Se verific\u0103 conexiunea exchange...'; st.style.color = 'var(--yel)' }
-  fetch('/api/exchange/status', { credentials: 'same-origin' }).then(function (r: Response) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/exchange/status').then(function (data: any) {
     if (!data.ok || !data.connected) {
       if (st) {
         st.innerHTML = _ZI.w + ' Nicio conexiune exchange configurat\u0103.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configureaz\u0103 \u00EEn Settings \u2192 Exchange API</span>'

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { api } from '../services/api'
 
 const DEFAULT_ARES = {
   balance: 0,
@@ -36,9 +37,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
 
   loadFromServer: async () => {
     try {
-      const res = await fetch('/api/user/ares', { credentials: 'same-origin' })
-      if (!res.ok) throw new Error('HTTP ' + res.status)
-      const data = await res.json()
+      const data = await api.raw<{ ok: boolean; ares?: Record<string, unknown> }>('GET', '/api/user/ares')
       const server = (data.ok && data.ares) ? data.ares : {}
       const merged = { ...DEFAULT_ARES, ...server }
       set({ ...merged, loaded: true })

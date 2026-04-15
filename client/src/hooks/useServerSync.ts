@@ -117,14 +117,8 @@ async function pullJournal() {
 async function pullATState() {
   try {
     // /api/at/state returns getFullState() directly (no {ok,data} wrapper)
-    const res = await fetch('/api/at/state', {
-      credentials: 'same-origin',
-      headers: { 'X-Zeus-Request': '1' },
-    })
-    if (res.ok) {
-      const data: ServerATState = await res.json()
-      if (data) applyATUpdate(data)
-    }
+    const data = await api.raw<ServerATState>('GET', '/api/at/state')
+    if (data) applyATUpdate(data)
   } catch {
     // AT poll failed — WS is primary, this is fallback
   }
