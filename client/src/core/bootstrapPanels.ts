@@ -8,6 +8,7 @@ import { _toggleDecisionPanel } from './bootstrapError'
 import { hubPopulate } from '../utils/dev'
 import { toggleFS } from '../data/marketDataFeeds'
 import { setSymbol } from '../data/marketDataWS'
+import { api } from '../services/api'
 
 const w = window as any
 
@@ -17,7 +18,7 @@ export function _toggleExposurePanel(): void { _exposureOpen = !_exposureOpen; c
 export function _fetchExposure(): void {
   const content = document.getElementById('exposureContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333">Loading...</div>'
-  fetch('/api/exposure', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/exposure').then(function (data: any) {
     if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">Error: ' + escHtml(data.error || 'unknown') + '</div>'; return }
     let html = ''
     html += '<div class="expo-row"><span class="expo-label">Mode</span><span class="expo-val" style="color:' + (data.mode === 'live' ? '#ff4444' : '#00d4ff') + '">' + data.mode.toUpperCase() + '</span></div>'
@@ -42,7 +43,7 @@ export function _toggleExpoInline(): void { _expoInlineOpen = !_expoInlineOpen; 
 function _fetchExpoInline(): void {
   const content = document.getElementById('expoInlineContent'); if (!content) return
   content.innerHTML = '<span style="color:#333">Loading...</span>'
-  fetch('/api/exposure', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/exposure').then(function (data: any) {
     if (!data.ok) { content.innerHTML = '<span style="color:#ff4444">' + escHtml(data.error || 'Error') + '</span>'; return }
     let html = '<div style="display:flex;flex-wrap:wrap;gap:8px 16px">'
     html += '<div class="expo-row" style="border:0;padding:0"><span class="expo-label">Mode</span> <span class="expo-val" style="color:' + (data.mode === 'live' ? '#ff4444' : '#00d4ff') + '">' + data.mode.toUpperCase() + '</span></div>'
@@ -108,7 +109,7 @@ document.addEventListener('click', function (e: any) { const panel = document.ge
 export function _showMissedTrades(): void {
   const content = document.getElementById('missedContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:16px">Loading...</div>'
-  fetch('/api/missed-trades?limit=100', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/missed-trades?limit=100').then(function (data: any) {
     if (!data.ok || !data.trades || data.trades.length === 0) { content.innerHTML = '<div style="text-align:center;color:#333;padding:20px;font-size:11px">No missed trades recorded yet.</div>'; return }
     const reasons: any = {}; data.trades.forEach(function (t: any) { reasons[t.reason] = (reasons[t.reason] || 0) + 1 })
     let statsHtml = '<div style="padding:8px 16px;font-size:9px;color:#555;border-bottom:1px solid #0f0f1a;display:flex;gap:10px;flex-wrap:wrap">'; statsHtml += '<span>Total: <b style="color:#888">' + data.trades.length + '</b></span>'
@@ -123,7 +124,7 @@ export function _showMissedTrades(): void {
 export function _showSessionReview(): void {
   const content = document.getElementById('sessionContent'); const dateEl = document.getElementById('sessionDate')
   if (!content) return; content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
-  fetch('/api/session-review', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/session-review').then(function (data: any) {
     if (!data.ok) { content.innerHTML = '<div style="color:#ff4444">' + escHtml(data.error || 'Error') + '</div>'; return }
     if (dateEl) dateEl.textContent = data.date; const s = data.summary; let html = ''
     const pnlClass = s.totalPnl > 0 ? 'positive' : (s.totalPnl < 0 ? 'negative' : 'zero')
@@ -146,7 +147,7 @@ export function _showSessionReview(): void {
 export function _showRegimeHistory(): void {
   const content = document.getElementById('regimeContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
-  fetch('/api/regime-history?limit=200', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/regime-history?limit=200').then(function (data: any) {
     if (!data.ok || !data.history || data.history.length === 0) { content.innerHTML = '<div style="text-align:center;color:#333;padding:20px;font-size:11px">No regime changes recorded yet.</div>'; return }
     const counts: any = {}; data.history.forEach(function (h: any) { counts[h.regime] = (counts[h.regime] || 0) + 1 })
     let statsHtml = '<div class="rh-stats">'; statsHtml += '<span>Total: <b style="color:#888">' + data.history.length + '</b></span>'
@@ -164,7 +165,7 @@ export function _showPerformance(mode?: string): void {
   if (tabs && !tabs.dataset.init) { tabs.dataset.init = '1'; ['all', 'demo', 'live'].forEach(function (m) { const btn = document.createElement('button'); btn.className = 'perf-tab' + (m === '' || m === 'all' ? ' active' : ''); btn.textContent = m === 'all' ? 'ALL' : m.toUpperCase(); btn.onclick = function () { tabs.querySelectorAll('.perf-tab').forEach(function (b: any) { b.classList.remove('active') }); btn.classList.add('active'); _showPerformance(m === 'all' ? '' : m) }; tabs.appendChild(btn) }) }
   const content = document.getElementById('perfContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
-  fetch('/api/performance' + (_perfMode ? '?mode=' + _perfMode : ''), { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/performance' + (_perfMode ? '?mode=' + _perfMode : '')).then(function (data: any) {
     if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(data.error || 'Error') + '</div>'; return }
     if (data.empty) { content.innerHTML = '<div style="text-align:center;color:#333;padding:30px;font-size:11px">No trades yet.</div>'; return }
     let html = ''; const pnlColor = data.totalPnl > 0 ? '#00ff88' : (data.totalPnl < 0 ? '#ff4444' : '#555')
@@ -179,7 +180,7 @@ export function _showPerformance(mode?: string): void {
 export function _showCompare(): void {
   const content = document.getElementById('compareContent'); if (!content) return
   content.innerHTML = '<div style="text-align:center;color:#333;padding:20px">Loading...</div>'
-  fetch('/api/compare', { credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('GET', '/api/compare').then(function (data: any) {
     if (!data.ok) { content.innerHTML = '<div style="color:#ff4444;padding:16px">' + escHtml(data.error || 'Error') + '</div>'; return }
     let html = ''
     html += _cmpSection('DEMO vs LIVE', ['Metric', 'DEMO', 'LIVE'], data.demoVsLive.demo, data.demoVsLive.live)
