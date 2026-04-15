@@ -27,7 +27,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 0.A Infrastructure | ✓ done | — | — | scripts + log + tag | backup/rollback scripts tested |
 | 0 Backend-first sync | ✓ done | `migration/phase-00-pre` | `migration/phase-00-post` | desktop→phone <2s via /ws/sync | Option A (WS), 8 commits |
 | 1 Typed contracts | ✓ done | `migration/phase-01-pre` | `migration/phase-01-post` | tsc clean + typed wire | 5 commits, log-only server validator |
-| 2 API client centralized | pending | — | — | fetch( ≤3 hits | — |
+| 2 API client centralized | ✓ done | `migration/phase-02-pre` | `migration/phase-02-post` | all safe internal `/api/*` call-sites migrated + exceptions documented | 21 migrations across 6 commits; 34 deferred exceptions categorized |
 | 3 atStore canonic | pending | — | — | #atLev DOM not source | feature-flag |
 | 4 settingsStore canonic | pending | — | — | cross-device toggle | — |
 | 5 Positions WS live | pending | — | — | trade desktop→phone <1s | feature-flag |
@@ -282,5 +282,197 @@ Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/01-20260414-235
   rapid pentru Faza 9.
 
 **Status**: ✓ PHASE 1 COMPLETE.
+
+---
+
+### Phase 2 — API client centralized
+
+**Scop**: centralizarea apelurilor client-side către `/api/*` pe helper-ul tipat
+`api.get/post/put/del/raw` din `client/src/services/api.ts`. Obiectiv migrare
+**mecanică** a tuturor call-site-urilor sigure (preservare URL/metodă/body/error
+handling/side-effects bit-identic); call-site-urile cu semnificație specială
+(fire-and-forget, keepalive/beacon, boot/init fragil, pattern de răspuns
+alternativ, lipsă `credentials` intenționată) rămân explicit **deferred**, nu
+accidentale. Fără schimbare de comportament la runtime.
+
+**Pre-tag**: `migration/phase-02-pre` (HEAD=4eaf6bb)
+**Post-tag**: `migration/phase-02-post`
+**Branch**: `migration/phase-02-api-client`
+
+**Descoperire critică pe parcurs**: `client/src/bridge/legacyLoader.ts:77-89`
+instalează un monkey-patch pe `window.fetch` care auto-injectează
+`X-Zeus-Request: 1` pe toate request-urile same-origin POST/PUT/DELETE/PATCH.
+Deci **lipsa header-ului CSRF în codul sursă NU înseamnă că request-ul eșuează
+post-bridge**. Strategia de migrare a fost recalibrată în urma descoperirii —
+migrăm ce e mecanic și sigur, defer cu motivație clară restul.
+
+**Commit-urile 1–6** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| 1 | `aa3fc28` | contract-only: extindere `api.ts` cu `del`, `raw<T>(method,url,body,opts)`, `ApiRequestOpts{keepalive,signal}` — zero call-site schimbat |
+| 2 | `0d6c175` | 4 migrări mecanice sigure (POST/GET fără comportament special) |
+| 3 | `ef2c984` | 9 migrări trading + data (`autotrade.ts` ×3, `marketDataPositions.ts` ×1, `marketDataClose.ts` ×1, `marketDataTrading.ts` ×4) |
+| 4 | `45b38b1` | 1 migrare: `SettingsHubModal.tsx:47` `/api/exchange/status` GET; helper-ul `apiFetch` local NU refactorizat (deferred explicit) |
+| 5A | `ca56f5a` | 7 migrări GET în `bootstrapPanels.ts` (`/api/exposure` ×2, `/api/missed-trades`, `/api/session-review`, `/api/regime-history`, `/api/performance`, `/api/compare`) |
+| 5B | — | NO-OP justificat: niciun call-site din `bootstrapStartApp.ts` sau `config.ts` nu e mecanic sigur; toate 11 cad în categoriile deferred (boot/init fragil, keepalive/beacon, alt pattern, helper complex) — raportat ca zero-migration |
+| 6 | `<post>` | docs: MIGRATION_LOG Phase 2 entry + tag `migration/phase-02-post` |
+
+**Totaluri**:
+
+- **Migrate**: **21** call-site-uri (C2:4 + C3:9 + C4:1 + C5A:7)
+- **Deferred explicit**: **34** call-site-uri rămase cu `fetch('/api/...')` direct, toate documentate mai jos
+- **Raw `fetch('/api/*')` rămas la final**: 34 (toate intenționate)
+
+**DoD — închidere calitativă (NU numerică brutală)**:
+
+Regula originală din ledger spunea `fetch( ≤3 hits`. Pe parcursul fazei,
+regula a fost redefinită explicit de user:
+
+> "Nu vreau să forțezi DoD-ul numeric brut. Toate excepțiile rămase sunt
+> explicit listate, motivate clar, documentate în MIGRATION_LOG. Nu schimbi
+> comportamentul doar ca să atingi un număr artificial."
+
+DoD calitativ atins:
+
+- [x] **DoD 1** — `api.ts` exportă `get/post/put/del/raw` + `ApiRequestOpts` (C1)
+- [x] **DoD 2** — toate call-site-urile sigure și mecanice din scope-ul permis migrate (21/21)
+- [x] **DoD 3** — toate call-site-urile neatinse sunt explicit listate cu motiv de defer
+- [x] **DoD 4** — zero schimbare de comportament runtime (URL/method/body/error-handling/side-effects preservate bit-identic pentru migrările făcute)
+- [x] **DoD 5** — `npx tsc --noEmit` PASS după fiecare commit (vezi raportul fiecărui commit)
+- [x] **DoD 6** — `npx vite build` PASS după fiecare commit
+- [x] **DoD 7** — monkey-patch `legacyLoader.ts:77-89` (X-Zeus-Request auto-inject) documentat — explică de ce call-site-urile migrate nu au nevoie de header explicit
+- [x] **DoD 8** — helper-ul local `apiFetch` din `SettingsHubModal.tsx:17` NU refactorizat (deferred controlat, out-of-scope Phase 2)
+- [x] **DoD 9** — MIGRATION_LOG Phase 2 entry complet + tag `migration/phase-02-post` creat
+
+**Deferred exceptions — categorizate**:
+
+**Categoria A: Fire-and-forget sensibil** (8) — apeluri fără `.then`/`.catch` pe
+rezultat, unde tranziția la `api.raw` schimbă semantica erorii (throw pe non-2xx
+vs. silent fail); risc de log spam / kill switch false-pozitiv:
+
+- `client/src/trading/dsl.ts:124` `/api/dsl/toggle` POST
+- `client/src/trading/dsl.ts:674` `/api/at/control` POST (controlMode user)
+- `client/src/trading/dsl.ts:708` `/api/at/control` POST (release)
+- `client/src/trading/dsl.ts:814` `/api/at/dslparams` POST
+- `client/src/engine/ares.ts:433` `/api/risk/pnl` POST (owner=ARES)
+- `client/src/data/marketDataPositions.ts:341` `/api/risk/pnl` POST (owner=AT, fără `credentials`)
+- `client/src/core/bootstrapStartApp.ts:237` `/api/at/kill` fire-and-forget
+- `client/src/core/bootstrapStartApp.ts:242` `/api/at/pct` fire-and-forget
+
+**Categoria B: Keepalive / beacon** (3) — folosesc `keepalive: true` pentru a
+sobreviețui unload; `api.raw` expune `opts.keepalive` dar migrarea ridică
+riscuri de ordonare și necesită revalidare pe runtime (unload flow e delicat):
+
+- `client/src/core/state.ts:1280` `/api/sync/state` POST keepalive
+- `client/src/core/config.ts:1479` `/api/sync/user-context` POST keepalive
+- `client/src/core/bootstrapError.ts:29` `/api/client-error` POST (endpoint beacon whitelisted server-side — validat prin Origin, nu CSRF)
+
+**Categoria C: Boot / init fragil** (8) — rulează PRE-bridge, deci monkey-patch-ul
+fetch nu e încă instalat; sau fac parte din boot sequence cu ordonare critică
+(`_usFetchRemote → _usApply → _userCtxPull → _startExtras`); migrarea fără
+repornire controlată de runtime riscă regresii de boot:
+
+- `client/src/core/bootstrapStartApp.ts:57` `/api/at/state` PREBOOT
+- `client/src/core/bootstrapStartApp.ts:63` `/api/dsl/toggle` PREBOOT
+- `client/src/core/state.ts:217` `/api/tc/sync` POST (sync init)
+- `client/src/core/state.ts:682` `/api/sync/state` POST
+- `client/src/core/state.ts:1021` `/api/at/state` GET (boot)
+- `client/src/core/state.ts:1034` `/api/brain/recent-blocks` GET (boot)
+- `client/src/core/state.ts:1076` `/api/sync/state` POST (sync)
+- `client/src/core/state.ts:1089` `/api/sync/journal` GET (sync)
+
+**Categoria D: Pattern de răspuns alternativ** (6) — `.then(r => r.ok ? r.json() : null)`
+sau chain custom unde mapping-ul direct pe `api.raw` (care throw pe non-2xx)
+ar schimba semantica (null vs. throw); necesită decizie explicită de comportament:
+
+- `client/src/core/bootstrapError.ts:68` `/api/version` GET (`r.ok ? r.json() : null`)
+- `client/src/core/bootstrapError.ts:76` `/api/version` GET (`r.ok ? r.json() : null`)
+- `client/src/core/bootstrapBrainDash.ts:197` `/api/brain/dashboard` GET (`r.ok ? r.json() : null`)
+- `client/src/core/bootstrapStartApp.ts:250` fetch alt pattern (sd/symbols)
+- `client/src/utils/dev.ts:759` `/api/user/telegram` GET (`r.json()` direct, fără `r.ok` check)
+- `client/src/core/config.ts:586` `/api/sync/user-context` GET (pull alt pattern complex)
+
+**Categoria E: Lipsă `credentials` intenționată / comportament special** (5) —
+call-site-urile care omit explicit `credentials: 'same-origin'`; migrarea ar
+adăuga cookies la request-uri unde un comportament diferit era așteptat, deci
+merită audit separat înainte de migrare:
+
+- `client/src/services/storage.ts:41` `/api/journal/report` POST
+- `client/src/stores/aresStore.ts:63` `/api/user/ares` POST/PUT
+- `client/src/utils/dev.ts:716` `/api/user/telegram` POST/PUT
+- `client/src/utils/dev.ts:739` `/api/user/telegram/test` POST
+- `client/src/components/layout/ModeBar.tsx:58` `/api/mode` POST
+
+**Categoria F: Helper shared complex — `_usFetchRemote`/`_usPostRemote`** (4) —
+funcții canonice apelate din multiple locuri, cu validation settings + merge
+logic + fallback LS; refactor-ul lor aparține unei faze dedicate (Phase 4
+`settingsStore canonic`):
+
+- `client/src/core/config.ts:537` `/api/sync/user-context` POST (user-context push complex)
+- `client/src/core/config.ts:1518` `/api/sync/user-context` POST (canonical `_usPostRemote`)
+- `client/src/core/config.ts:1594` `/api/user/settings` GET (canonical `_usFetchRemote`)
+- `client/src/core/config.ts:1619` `/api/user/settings` POST (canonical `_usPostRemote`)
+
+**Total deferred**: 8 + 3 + 8 + 6 + 5 + 4 = **34**
+
+**Nota privind reconcilierea numerelor**:
+Pe parcursul fazei raportul intermediar dădea "21 deferred"; recount final
+direct din sursa `grep "fetch('/api/"` dă **34**. Diferența provine din
+cumularea incompletă a rapoartelor per-commit (unele call-site-uri reapăreau
+în mai multe comenzi de audit). Numărul corect și autoritar este **34**,
+confirmat prin grep direct pe sursa post-C5A.
+
+**Ce a rămas intenționat neatins pentru fazele următoare**:
+
+- Helper `apiFetch` local din `SettingsHubModal.tsx:17` — 9 call-site-uri mixte
+  (`/api/exchange/*` + `/auth/*`); refactor dedicat în faza ulterioară după ce
+  separarea auth vs. api devine clară.
+- `_usFetchRemote` / `_usPostRemote` — convergența pe `settingsStore` ca sursă
+  unică: Phase 4.
+- Refactor beacon endpoints (`/api/client-error`, `/api/sync/state`,
+  `/api/sync/user-context`) — necesită audit runtime unload flow; out-of-scope.
+- Unificare fire-and-forget pattern — probabil se rezolvă natural la Phase 3
+  (`atStore canonic`) și Phase 6 (`dslStore+brainStore canonic`) când engine-urile
+  scriu direct prin store-uri tipate.
+
+**Rollback point**:
+
+```bash
+# Full rollback la pre-fază:
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 02 --dry-run
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 02
+
+# Sau git hard-reset la pre-tag:
+git checkout migration/phase-02-api-client
+git reset --hard migration/phase-02-pre
+```
+
+Checkpoint-uri intermediare (branch-backed prin commit-uri atomice):
+
+- C1 `aa3fc28` — contract-only (safe rollback point)
+- C2 `0d6c175` — 4 migrări
+- C3 `ef2c984` — 9 migrări
+- C4 `45b38b1` — 1 migrare
+- C5A `ca56f5a` — 7 migrări
+
+**Observații de runtime / risc**:
+
+- Monkey-patch-ul `legacyLoader.ts:77-89` este punctul central care face ca
+  migrările din C2/C3/C4/C5A să nu introducă regresii CSRF. Dacă monkey-patch-ul
+  ar fi scos, toate request-urile prin `api.raw` vor primi totuși `X-Zeus-Request`
+  via `HEADERS` din `api.ts`. Dublă protecție acceptabilă.
+- `api.raw` throw pe non-2xx (`HTTP ${status}`). Toate migrările făcute au fost
+  verificate să aibă `.then`/`.catch` care absorb erorile cum o făceau înainte.
+- Fetch-urile rămase **NU** sunt accidentale. 34 sunt listate mai sus categorizat.
+  Orice call-site nou `fetch('/api/...')` adăugat după Phase 2 trebuie să
+  urmeze helper-ul `api.*` sau să fie documentat explicit ca excepție.
+- `grep -rn "fetch('/api/" client/src` post-C5A returnează 34 hits în 13 fișiere
+  (incluzând `dsl.ts.bak-dsl-spam-20260414` care e backup local, nu cod viu —
+  efectiv 34 hits în cod viu).
+
+**Status**: ✓ PHASE 2 COMPLETE — all safe internal API call-sites migrated;
+remaining internal fetches are documented deferred exceptions, not accidental
+leftovers.
 
 ---
