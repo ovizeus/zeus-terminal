@@ -15,12 +15,24 @@ const HEADERS: Record<string, string> = {
   'X-Zeus-Request': '1',
 }
 
-async function request<T>(method: string, url: string, body?: unknown): Promise<ApiResponse<T>> {
+/**
+ * Per-request options shared by wrapped/raw helpers.
+ * `keepalive` — set by sendBeacon-style POSTs issued during page unload.
+ * `signal`   — AbortSignal for cancellable fetches (e.g. klines aborts).
+ */
+export interface ApiRequestOpts {
+  keepalive?: boolean
+  signal?: AbortSignal
+}
+
+async function request<T>(method: string, url: string, body?: unknown, opts?: ApiRequestOpts): Promise<ApiResponse<T>> {
   const res = await fetch(url, {
     method,
     headers: HEADERS,
     credentials: 'same-origin',
-    body: body ? JSON.stringify(body) : undefined,
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    keepalive: opts?.keepalive,
+    signal: opts?.signal,
   })
   if (!res.ok) {
     const text = await res.text().catch(() => '')
@@ -33,10 +45,36 @@ async function request<T>(method: string, url: string, body?: unknown): Promise<
   return res.json() as Promise<ApiResponse<T>>
 }
 
+/**
+ * Raw request — returns the parsed JSON body as `T` directly, without the
+ * `ApiResponse<T>` wrapper. Use for endpoints whose response shape does not
+ * follow `{ ok, data, error }` (e.g. `/api/at/state` returns an object
+ * directly, `/api/user/settings` returns `{ ok, settings, updated_at }`).
+ * Throws on non-2xx to preserve the pre-existing call-site pattern that
+ * checks `res.ok` before parsing.
+ */
+async function rawRequest<T>(method: string, url: string, body?: unknown, opts?: ApiRequestOpts): Promise<T> {
+  const res = await fetch(url, {
+    method,
+    headers: HEADERS,
+    credentials: 'same-origin',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+    keepalive: opts?.keepalive,
+    signal: opts?.signal,
+  })
+  if (!res.ok) {
+    throw new Error('HTTP ' + res.status)
+  }
+  return res.json() as Promise<T>
+}
+
 export const api = {
-  get: <T>(url: string) => request<T>('GET', url),
-  post: <T>(url: string, body?: unknown) => request<T>('POST', url, body),
-  put: <T>(url: string, body?: unknown) => request<T>('PUT', url, body),
+  get: <T>(url: string, opts?: ApiRequestOpts) => request<T>('GET', url, undefined, opts),
+  post: <T>(url: string, body?: unknown, opts?: ApiRequestOpts) => request<T>('POST', url, body, opts),
+  put: <T>(url: string, body?: unknown, opts?: ApiRequestOpts) => request<T>('PUT', url, body, opts),
+  del: <T>(url: string, opts?: ApiRequestOpts) => request<T>('DELETE', url, undefined, opts),
+  /** Low-level: returns raw JSON body (no ApiResponse wrapper). Throws on HTTP error. */
+  raw: <T>(method: string, url: string, body?: unknown, opts?: ApiRequestOpts) => rawRequest<T>(method, url, body, opts),
 }
 
 // ── Auth ──
