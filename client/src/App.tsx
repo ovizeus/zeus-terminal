@@ -16,6 +16,7 @@ import { useDSLBridge } from './hooks/useDSLBridge'
 import { useAresBridge } from './hooks/useAresBridge'
 import { wsService } from './services/ws'
 import { startSettingsRealtime, stopSettingsRealtime } from './services/settingsRealtime'
+import { startPositionsRealtime, stopPositionsRealtime } from './services/positionsRealtime'
 import './app.css'
 
 export function App() {
@@ -41,7 +42,11 @@ export function App() {
       wsService.connect()
       // [MIGRATION-F0] settings cross-device sync subscriber (reuses /ws/sync)
       startSettingsRealtime()
+      // [MIGRATION-F5 commit 4] positions cross-device sync subscriber
+      // (reuses /ws/sync). No-op until server flips MF.POSITIONS_WS at C5.
+      startPositionsRealtime()
       return () => {
+        stopPositionsRealtime()
         stopSettingsRealtime()
         wsService.disconnect()
         const w = window as any
