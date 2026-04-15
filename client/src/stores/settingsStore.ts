@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
 //
@@ -16,9 +17,62 @@ import { create } from 'zustand'
 // + POST /api/user/settings + /ws/sync `settings.changed` broadcast.
 // The FS dual-write (_ucMarkDirty section=settings) and the React-specific
 // LS mirror (zeus_user_settings_cache) were removed in commit 7.
+//
+// [MIGRATION-F1 commit 2] Typed with SettingsPayload. Legacy nested window
+// globals (USER_SETTINGS, TC) are narrowed via local Legacy* interfaces —
+// a controlled bridge scope, NOT `declare global`. No runtime change.
+
+interface LegacyAutoTrade {
+  confMin?: number
+  sigMin?: number
+  size?: number
+  riskPct?: number
+  maxDay?: number
+  maxPos?: number
+  sl?: number
+  rr?: number
+  killPct?: number
+  lossStreak?: number
+  maxAddon?: number
+  lev?: number
+  adaptEnabled?: boolean
+  adaptLive?: boolean
+  smartExitEnabled?: boolean
+  multiSym?: boolean
+}
+interface LegacyChart {
+  tf?: string
+  colors?: Record<string, unknown> | null
+  heatmap?: Record<string, unknown> | null
+}
+interface LegacyUserSettings {
+  autoTrade?: LegacyAutoTrade
+  chart?: LegacyChart
+  indicators?: Record<string, unknown> | null
+  alerts?: Record<string, unknown> | null
+}
+interface LegacyTC {
+  confMin?: number
+  sigMin?: number
+  size?: number
+  riskPct?: number
+  maxPos?: number
+  slPct?: number
+  rr?: number
+  killPct?: number
+  lossStreak?: number
+  maxAddon?: number
+  lev?: number
+}
+interface ZeusWindowExt {
+  _usFetchRemote?: () => Promise<number>
+  _usPostRemote?: () => void
+  USER_SETTINGS?: LegacyUserSettings
+  TC?: LegacyTC
+}
 
 // ── DEFAULT SETTINGS — merge template for missing keys ──
-const DEFAULT_SETTINGS: Record<string, any> = {
+const DEFAULT_SETTINGS: SettingsPayload = {
   // AT
   confMin: 65, sigMin: 3, size: 200, riskPct: 1, maxDay: 5, maxPos: 3,
   sl: 1.5, rr: 2, killPct: 5, lossStreak: 3, maxAddon: 2, lev: 5,
@@ -38,7 +92,7 @@ const DEFAULT_SETTINGS: Record<string, any> = {
 }
 
 interface SettingsStoreState {
-  settings: Record<string, any>
+  settings: SettingsPayload
   loaded: boolean
   saving: boolean
 
@@ -47,9 +101,9 @@ interface SettingsStoreState {
   /** Save to server via the unified _usPostRemote primitive. */
   saveToServer: () => Promise<void>
   /** Update one or more settings locally (does NOT auto-save). */
-  patch: (partial: Record<string, any>) => void
+  patch: (partial: Partial<SettingsPayload>) => void
   /** Get a setting value with default fallback. */
-  get: (key: string) => any
+  get: <K extends keyof SettingsPayload>(key: K) => SettingsPayload[K]
 }
 
 export const useSettingsStore = create<SettingsStoreState>()((set, getState) => ({
@@ -58,14 +112,14 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   saving: false,
 
   loadFromServer: async () => {
-    const w = window as any
+    const w = window as unknown as ZeusWindowExt
     // Single GET path — delegate to legacy primitive (mutates USER_SETTINGS in-place).
     if (typeof w._usFetchRemote === 'function') {
       try {
-        const ts = await (w._usFetchRemote() as Promise<number>)
+        const ts = await w._usFetchRemote()
         if (ts > 0) {
           const projected = _projectFromLegacy()
-          const merged = { ...DEFAULT_SETTINGS, ...projected }
+          const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
           set({ settings: merged, loaded: true })
           _syncToWindow(merged)
           return
@@ -78,7 +132,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     // LS `zeus_user_settings` — the single canonical cache). No second LS key.
     try {
       const projected = _projectFromLegacy()
-      const merged = { ...DEFAULT_SETTINGS, ...projected }
+      const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
       set({ settings: merged, loaded: true })
       _syncToWindow(merged)
     } catch {
@@ -91,7 +145,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     if (saving) return
     set({ saving: true })
     try {
-      const w = window as any
+      const w = window as unknown as ZeusWindowExt
       // 1. Push store → legacy USER_SETTINGS + window.TC so engines + _usBuildFlatPayload see fresh values.
       _projectToLegacy(settings)
       _syncToWindow(settings)
@@ -118,13 +172,14 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   },
 
   patch: (partial) => set((s) => {
-    const updated = { ...s.settings, ...partial }
+    const updated: SettingsPayload = { ...s.settings, ...partial }
     _syncToWindow(updated)
     return { settings: updated }
   }),
 
-  get: (key: string) => {
-    return getState().settings[key] ?? DEFAULT_SETTINGS[key]
+  get: <K extends keyof SettingsPayload>(key: K): SettingsPayload[K] => {
+    const s = getState().settings
+    return (s[key] ?? DEFAULT_SETTINGS[key]) as SettingsPayload[K]
   },
 }))
 
@@ -132,13 +187,13 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
  * Project the legacy USER_SETTINGS (nested) + window.TC mirror into the
  * flat shape this store exposes to React consumers.
  */
-function _projectFromLegacy(): Record<string, any> {
-  const w = window as any
-  const us = w.USER_SETTINGS || {}
-  const tc = w.TC || {}
-  const at = us.autoTrade || {}
-  const ch = us.chart || {}
-  const out: Record<string, any> = {
+function _projectFromLegacy(): Partial<SettingsPayload> {
+  const w = window as unknown as ZeusWindowExt
+  const us: LegacyUserSettings = w.USER_SETTINGS || {}
+  const tc: LegacyTC = w.TC || {}
+  const at: LegacyAutoTrade = us.autoTrade || {}
+  const ch: LegacyChart = us.chart || {}
+  const out: Partial<SettingsPayload> = {
     confMin: at.confMin ?? tc.confMin,
     sigMin: at.sigMin ?? tc.sigMin,
     size: at.size ?? tc.size,
@@ -161,10 +216,12 @@ function _projectFromLegacy(): Record<string, any> {
     indSettings: us.indicators,
     alertSettings: us.alerts,
   }
-  for (const k of Object.keys(out)) if (out[k] === undefined) delete out[k]
+  for (const k of Object.keys(out) as Array<keyof SettingsPayload>) {
+    if (out[k] === undefined) delete out[k]
+  }
   try {
     const raw = localStorage.getItem('zeus_mscan_syms')
-    if (raw) out.mscanSyms = JSON.parse(raw)
+    if (raw) out.mscanSyms = JSON.parse(raw) as string[]
   } catch (_) { /* ignore */ }
   return out
 }
@@ -173,31 +230,35 @@ function _projectFromLegacy(): Record<string, any> {
  * Push the flat store shape back into the legacy USER_SETTINGS tree so
  * _usBuildFlatPayload (inside _usPostRemote) reads up-to-date values.
  */
-function _projectToLegacy(settings: Record<string, any>): void {
-  const w = window as any
-  const us = w.USER_SETTINGS = w.USER_SETTINGS || {}
-  us.autoTrade = us.autoTrade || {}
-  us.chart = us.chart || {}
+function _projectToLegacy(settings: SettingsPayload): void {
+  const w = window as unknown as ZeusWindowExt
+  const us: LegacyUserSettings = w.USER_SETTINGS || (w.USER_SETTINGS = {})
+  const at: LegacyAutoTrade = us.autoTrade || (us.autoTrade = {})
+  const ch: LegacyChart = us.chart || (us.chart = {})
 
   const atKeys = [
     'confMin', 'sigMin', 'size', 'riskPct', 'maxDay', 'maxPos',
     'sl', 'rr', 'killPct', 'lossStreak', 'maxAddon', 'lev',
     'adaptEnabled', 'adaptLive', 'smartExitEnabled',
-  ]
-  for (const k of atKeys) if (settings[k] !== undefined) us.autoTrade[k] = settings[k]
-  if (settings.mscanEnabled !== undefined) us.autoTrade.multiSym = settings.mscanEnabled
+  ] as const
+  const atBag = at as unknown as Record<string, unknown>
+  for (const k of atKeys) {
+    const v = settings[k]
+    if (v !== undefined) atBag[k] = v
+  }
+  if (settings.mscanEnabled !== undefined) at.multiSym = settings.mscanEnabled
 
-  if (settings.chartTf !== undefined) us.chart.tf = settings.chartTf
-  if (settings.candleColors !== undefined) us.chart.colors = settings.candleColors
-  if (settings.heatmapSettings !== undefined) us.chart.heatmap = settings.heatmapSettings
+  if (settings.chartTf !== undefined) ch.tf = settings.chartTf
+  if (settings.candleColors !== undefined) ch.colors = settings.candleColors
+  if (settings.heatmapSettings !== undefined) ch.heatmap = settings.heatmapSettings
   if (settings.indSettings !== undefined) us.indicators = settings.indSettings
   if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
 }
 
 /** Bridge invers: sync settings into window.TC for legacy engines. */
-function _syncToWindow(s: Record<string, any>) {
-  const w = window as any
-  if (typeof w.TC !== 'undefined') {
+function _syncToWindow(s: SettingsPayload): void {
+  const w = window as unknown as ZeusWindowExt
+  if (w.TC) {
     if (s.confMin != null) w.TC.confMin = Number(s.confMin)
     if (s.sigMin != null) w.TC.sigMin = Number(s.sigMin)
     if (s.size != null) w.TC.size = Number(s.size)
