@@ -12,32 +12,30 @@
 //   - Dedup: skip when message updated_at is not newer than _lastKnownTs
 //   - Dedup: skip when a fetch is already in-flight (coalesces bursts)
 //   - Fail-soft: any error → swallow; next WS push retries naturally
+//
+// [MIGRATION-F1 commit 3] Typed against WsSettingsChanged from the unified
+// WsMessage union. Local `SettingsChangedMsg` alias removed; the `as unknown
+// as Partial<...>` cast is gone. window narrowed via local ZeusWindowExt.
 
 import { wsService } from './ws'
 import type { WsMessage } from '../types'
+
+interface ZeusWindowExt {
+  _usFetchRemote?: () => Promise<number>
+}
 
 let _started = false
 let _unsub: (() => void) | null = null
 let _lastKnownTs = 0
 let _fetchInFlight = false
 
-type SettingsChangedMsg = {
-  type: 'settings.changed'
-  updated_at?: number
-  keys?: string[]
-}
-
 export function startSettingsRealtime(): void {
   if (_started) return
   _started = true
 
   _unsub = wsService.subscribe((msg: WsMessage) => {
-    // WsMessage union does not declare settings.changed (server extension
-    // for phase 0). Treat the raw payload as unknown and narrow manually.
-    const raw = msg as unknown as Partial<SettingsChangedMsg>
-    if (!raw || raw.type !== 'settings.changed') return
-
-    const remoteTs = Number(raw.updated_at || 0)
+    if (msg.type !== 'settings.changed') return
+    const remoteTs = Number(msg.updated_at || 0)
 
     // Dedup: skip if message is not newer than last-known
     if (remoteTs > 0 && remoteTs <= _lastKnownTs) return
@@ -45,12 +43,13 @@ export function startSettingsRealtime(): void {
     // Dedup: coalesce bursts
     if (_fetchInFlight) return
 
-    const w = window as any
-    if (typeof w._usFetchRemote !== 'function') return
+    const w = window as unknown as ZeusWindowExt
+    const fetchRemote = w._usFetchRemote
+    if (typeof fetchRemote !== 'function') return
 
     _fetchInFlight = true
     Promise.resolve()
-      .then(() => w._usFetchRemote() as Promise<number>)
+      .then(() => fetchRemote())
       .then((ts: number) => {
         if (typeof ts === 'number' && ts > _lastKnownTs) _lastKnownTs = ts
       })
