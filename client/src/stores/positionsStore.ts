@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Position, Balance } from '../types'
+import type { Position, Balance, PositionsSnapshot } from '../types'
 
 interface PositionsStore {
   demoPositions: Position[]
@@ -11,6 +11,15 @@ interface PositionsStore {
   liveBalance: Balance
   liveConnected: boolean
   liveExchange: string
+
+  /**
+   * [MIGRATION-F5 commit 2] Last authoritative positions snapshot timestamp
+   * (ms since epoch). Used for monotonic dedup on WS broadcasts — a snapshot
+   * with `updated_at <= lastSnapshotTs` is dropped silently. 0 = no snapshot
+   * applied yet (boot state). Not read by any runtime call-site at C2; the
+   * C4 subscriber will be the first consumer.
+   */
+  lastSnapshotTs: number
 
   setDemoPositions: (positions: Position[]) => void
   setLivePositions: (positions: Position[]) => void
@@ -30,9 +39,43 @@ interface PositionsStore {
     liveBalance?: number
     source: 'server' | 'bridge'
   }) => void
+
+  /**
+   * [MIGRATION-F5 commit 2] Full-snapshot reconciliation — replaces
+   * `demoPositions` + `livePositions` with the contents of a `PositionsSnapshot`.
+   *
+   * Semantics:
+   * - Monotonic dedup on `snapshot.updated_at`: if
+   *   `snapshot.updated_at <= lastSnapshotTs` the call is a no-op and
+   *   returns `false`. Otherwise `lastSnapshotTs` is advanced to
+   *   `snapshot.updated_at` and `true` is returned.
+   * - Positions are split by `p.mode === 'live'` vs anything else; closed
+   *   positions are filtered out defensively (server contract says
+   *   "open-positions array at the emit moment" — we do not trust it blindly).
+   * - `demoBalance` / `liveBalance` are deliberately NOT touched —
+   *   `PositionsSnapshot` does not carry balance fields. Balance stays
+   *   owned by the existing `syncSnapshot` / `setDemoBalance` path.
+   * - No side effects beyond store state. No WS, no subscriber flip.
+   *
+   * Returns `true` if the snapshot was applied, `false` if dropped as stale.
+   */
+  replaceAll: (snapshot: PositionsSnapshot) => boolean
+
+  /**
+   * [MIGRATION-F5 commit 2] MVP alias for `replaceAll`.
+   *
+   * In the Phase 5 MVP design every WS `positions.changed` broadcast carries
+   * a **full** snapshot (not a true delta), so `applyDelta === replaceAll`.
+   * The name is kept separate so the C4 subscriber can call the semantic
+   * action and a future phase can upgrade this to a real delta pipeline
+   * without touching any call-site that already uses `applyDelta`.
+   *
+   * Returns the same `true`/`false` as `replaceAll`.
+   */
+  applyDelta: (snapshot: PositionsSnapshot) => boolean
 }
 
-export const usePositionsStore = create<PositionsStore>()((set) => ({
+export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   demoPositions: [],
   livePositions: [],
   demoBalance: 10000,
@@ -42,6 +85,7 @@ export const usePositionsStore = create<PositionsStore>()((set) => ({
   liveBalance: { totalBalance: 0, availableBalance: 0, unrealizedPnL: 0 },
   liveConnected: false,
   liveExchange: 'binance',
+  lastSnapshotTs: 0,
 
   setDemoPositions: (positions) => set({ demoPositions: positions }),
   setLivePositions: (positions) => set({ livePositions: positions }),
@@ -72,4 +116,28 @@ export const usePositionsStore = create<PositionsStore>()((set) => ({
       return { ...s, ...update }
     })
   },
+
+  replaceAll: (snapshot) => {
+    const prevTs = get().lastSnapshotTs
+    const nextTs = Number(snapshot?.updated_at)
+    if (!Number.isFinite(nextTs) || nextTs <= prevTs) return false
+
+    const all = Array.isArray(snapshot?.positions) ? snapshot.positions : []
+    const nextDemo: Position[] = []
+    const nextLive: Position[] = []
+    for (const p of all) {
+      if (!p || (p as Position & { closed?: boolean }).closed) continue
+      if ((p.mode || 'demo') === 'live') nextLive.push(p)
+      else nextDemo.push(p)
+    }
+
+    set({
+      demoPositions: nextDemo,
+      livePositions: nextLive,
+      lastSnapshotTs: nextTs,
+    })
+    return true
+  },
+
+  applyDelta: (snapshot) => get().replaceAll(snapshot),
 }))
