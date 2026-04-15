@@ -29,7 +29,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 1 Typed contracts | ✓ done | `migration/phase-01-pre` | `migration/phase-01-post` | tsc clean + typed wire | 5 commits, log-only server validator |
 | 2 API client centralized | ✓ done | `migration/phase-02-pre` | `migration/phase-02-post` | all safe internal `/api/*` call-sites migrated + exceptions documented | 21 migrations across 6 commits; 34 deferred exceptions categorized |
 | 3 atStore canonic | ✓ done | `migration/phase-03-pre` | `migration/phase-03-post` | #atLev DOM not source | 6 commits; CLIENT_AT_STORE feature flag deferred (hardening follow-up) |
-| 4 settingsStore canonic | pending | — | — | cross-device toggle | — |
+| 4 settingsStore canonic | ✓ done | `migration/phase-04-pre` | `migration/phase-04-post` | cross-device toggle | 6 commits; `_usBuildFlatPayload` retained as compat helper (deferred to Phase 5) |
 | 5 Positions WS live | pending | — | — | trade desktop→phone <1s | feature-flag |
 | 6 dslStore+brainStore canonic | pending | — | — | syncFromEngine=0 | — |
 | 7 Kill DOM-as-state | pending | — | — | getElementById source=0 | — |
@@ -574,5 +574,113 @@ Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/03-20260415-012
 - **Feature flag `CLIENT_AT_STORE` absent** — la orice defect major, rollback = `git reset --hard migration/phase-03-pre` + `pm2 reload zeus`. Este o rollback mecanică, nu runtime-instant, dar acceptabilă dată fiind validarea tsc/build/runtime curată pe fiecare commit.
 
 **Status**: ✓ PHASE 3 COMPLETE (cu `CLIENT_AT_STORE` feature flag deferred ca hardening follow-up).
+
+---
+
+### Phase 4 — settingsStore canonical
+
+**Scop**: mutarea GET/POST `/api/user/settings` din traseul legacy (wrappers
+globali `window._usFetchRemote` / `window._usPostRemote` din `core/config.ts`)
+într-un traseu canonic Zustand — `settingsStore.loadFromServer()` și
+`settingsStore.saveToServer()` apelează direct API-ul tipat `userSettingsApi`
+din `services/api.ts`. Inversare de proiecție: `settingsStore.settings` devine
+sursa unică, iar `USER_SETTINGS` (legacy nested) + `window.TC` + `atStore.config`
+sunt proiecții write-through refreshed atomic la fiecare mutație via helper-ul
+canonic `_projectAll(s)`. Wrapper-ele legacy rămân thin adapters peste același
+`userSettingsApi` (convergență pe API-ul tipat, nu unul pe altul → zero dublu
+POST, zero loop store↔wrapper).
+
+**Pre-tag**: `migration/phase-04-pre` (HEAD=1f92a35 = Phase 3 post)
+**Post-tag**: `migration/phase-04-post`
+**Branch**: `migration/phase-03-at-store` (continuare pe același branch; nu
+am deschis unul nou — convenție internă, backup acoperit prin tag-uri)
+
+**Commit-urile 1–6** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| 1 | `11ecdad` | additive: `userSettingsApi` tipat în `services/api.ts` (`fetch()` / `save()` peste `api.raw`); `UserSettingsResponse` / `UserSettingsSaveResponse` / `UserSettingsPayload`; zero call-site existent flip-at |
+| 2 | `f8d63f6` | `settingsStore.loadFromServer` face GET direct via `userSettingsApi.fetch()`; side-effects hidratate prin `_usApplyServerResponse(data)` (helper nou export din `core/config.ts`); `_usFetchRemote` rescris ca thin wrapper peste exact același API; log format `[US] fetchRemote ...` preservat bit-identic (dual catch branch HTTP vs generic) |
+| 3 | `9ff2e88` | `settingsStore.saveToServer` face POST direct via `userSettingsApi.save(payload, { keepalive: true })`; response-ul procesat prin `_usApplyPostResponse(j)` (helper nou export) → avansează `_usSettingsRemoteTs` pentru WS dedup în `settingsRealtime`; `_usPostRemote` rescris ca thin wrapper; log format `[US] postRemote ...` preservat; payload-ul construit prin `_usBuildFlatPayload()` (același builder ca legacy → wire byte-identic) |
+| 4 | `b7d9fb6` | inversare de proiecție: helper canonic `_projectAll(s)` = `_projectToLegacy` + `_syncToWindow` + `_projectToAT` în ordine fixă; wired la toate cele 4 puncte de mutație (`loadFromServer` success, offline fallback, `saveToServer` step 1, `patch`); fix critic în `patch()` — anterior actualiza TC + atStore dar lăsa `USER_SETTINGS` stale între save-uri, cauzând drift pentru engine-urile legacy care citesc `USER_SETTINGS.autoTrade.*`; cleanup: șters câmp mort `_usPostRemote?` din `ZeusWindowExt`, corectat docstring-uri |
+| 5 | `b92169d` | audit consumatori `_usBuildFlatPayload`: 2 consumatori activi (`_usPostRemote` în `config.ts` + `saveToServer` în store); helper-ul emite 7 chei legacy-only NEÎN `SettingsPayload` (`profile`, `bmMode`, `assistArmed`, `manualLive`, `ptLevDemo`, `ptLevLive`, `ptMarginMode`, `chartTz`) → eliminarea acum ar șterge silent aceste chei din save-urile parțiale; decizie: **RETAINED as compat helper**, eliminat într-o Phase 5 dedicată după ce `SettingsPayload` e lărgit să acopere full server whitelist; documentație 25 linii adăugată la helper + 9 linii în store |
+| 6 | `<post>` | docs: MIGRATION_LOG Phase 4 entry + tag `migration/phase-04-post` |
+
+**Totaluri**:
+
+- **Fișiere atinse total fază** (excluzând `MIGRATION_LOG.md`): 3
+  - `client/src/services/api.ts` (C1 — additive)
+  - `client/src/stores/settingsStore.ts` (C2, C3, C4, C5)
+  - `client/src/core/config.ts` (C2, C3, C5)
+- **Server atins**: 0 fișiere — traseul canonic reutilizează endpoint-ul existent `/api/user/settings` și broadcast-ul WS existent `settings.changed`.
+- **API surface nou tipat**: 1 (`userSettingsApi` cu `fetch` + `save`)
+- **Helper-e noi exportate din `core/config.ts`**: 2 (`_usApplyServerResponse`, `_usApplyPostResponse`)
+- **Helper-e retenție compat**: 1 (`_usBuildFlatPayload`, explicit deferred la Phase 5)
+
+**Ce s-a făcut concret**:
+
+- **Typed API surface** (`client/src/services/api.ts`): `userSettingsApi.fetch()` și `userSettingsApi.save(settings, opts)` peste `api.raw<T>` — throw pe non-2xx cu mesaj `HTTP NNN`, `keepalive` pass-through pentru save-uri din `beforeunload`. Tipuri: `UserSettingsResponse`, `UserSettingsSaveResponse`, `UserSettingsPayload` (= `Partial<SettingsPayload> & Record<string, unknown>` — `Record` arm e strict escape hatch pentru cele 7 chei legacy-only neîn `SettingsPayload`).
+- **GET path canonic** (`stores/settingsStore.ts::loadFromServer`): apel direct `userSettingsApi.fetch()` → `_usApplyServerResponse(data)` hidratează `USER_SETTINGS` + `_usSettingsRemoteTs` + log `[US] fetched remote settings` + salvează cache LS `zeus_user_settings` → apoi `_projectFromLegacy()` + `_projectAll(merged)` hidratează store-ul și toate proiecțiile. Offline fallback identic cu pre-Phase 4. Log format preservat bit-identic cu `_usFetchRemote` istoric (branch HTTP vs generic catch).
+- **POST path canonic** (`stores/settingsStore.ts::saveToServer`): `_projectAll(settings)` push store → `USER_SETTINGS` + TC + atStore **înainte** de build payload (pentru că `_usBuildFlatPayload` citește din `USER_SETTINGS`); apoi `userSettingsApi.save(payload, { keepalive: true })` → `_usApplyPostResponse(j)` avansează `_usSettingsRemoteTs`; în final LS cache `zeus_user_settings` rescris. Log format preservat.
+- **Projection inversion** (`stores/settingsStore.ts::_projectAll`): ordine fixă Legacy → Window → AT. Invocat din toate cele 4 puncte de mutație (`loadFromServer` success + offline, `saveToServer` step 1, `patch`). `_projectToLegacy` overwrites doar cheile pe care le deține store-ul — restul (`profile`, `bmMode`, `assistArmed`, `manualLive`, `ptLev*`, `chartTz`, `dslSettings`) rămân intacte, hidratate de `_usApplyFlatToUserSettings` la GET.
+- **Wrappers convergenți** (`core/config.ts::_usFetchRemote` / `_usPostRemote`): rescriși ca thin adapters peste `userSettingsApi` + helper-e share-uite. Store și wrappers converg pe același API tipat, **nu** unul pe altul → zero `store → wrapper → store` loop, zero dublu POST (grep verificat: `_usPostRemote` e chemat doar din `_usSave` legacy și din nicăieri în React post-Phase 4).
+- **`_usBuildFlatPayload` retained**: audit (grep client+server+public) → 2 consumatori activi, ambii necesari. Emite 7 chei legacy-only neîn `SettingsPayload`. Eliminarea = silent drop. Retenție explicită ca compat helper, eliminare scheduled Phase 5 după lărgirea `SettingsPayload`.
+
+**DoD atins** (numerotat per pre-plan):
+
+- [x] **DoD 1** — `settingsStore.loadFromServer()` este path-ul principal: apel direct `userSettingsApi.fetch()`, fără pre-bridge la `window._usFetchRemote`. Legacy wrapper rămas disponibil strict pentru call-site-uri externe care încă îl folosesc (de ex. `settingsRealtime`), dar **convergă** pe același API tipat.
+- [x] **DoD 2** — `settingsStore.saveToServer()` este path-ul principal: apel direct `userSettingsApi.save()`. Legacy `_usPostRemote` rescris ca thin wrapper peste același API. Grep `_usPostRemote` in React code post-C3 = 0 hits în afara `_usSave` legacy (sync path pe mutații imperative vechi).
+- [x] **DoD 3** — `settingsStore.settings` = sursa canonică. `USER_SETTINGS` + `window.TC` + `atStore.config` sunt proiecții write-through refreshed atomic prin `_projectAll` la fiecare mutație.
+- [x] **DoD 4** — `patch()` în store invocă `_projectAll(updated)` (fix critic C4). Anterior doar `_syncToWindow + _projectToAT`, deci `USER_SETTINGS.autoTrade.*` rămânea stale între save-uri → drift pentru engine-urile legacy citind `USER_SETTINGS`. Acum lockstep.
+- [x] **DoD 5** — wire payload byte-identic cu legacy. `_usBuildFlatPayload` retenționat ca single source pentru flat payload; ambii consumatori (`_usPostRemote` + `saveToServer`) îl folosesc → byte-identic pe sârmă.
+- [x] **DoD 6** — boot order neatins. Nu am mutat `bootstrapStartApp`, nu am introdus auto-load-from-server la `create`, nu am atins `loadUserSettings()` care hidratează `USER_SETTINGS` din LS la boot.
+- [x] **DoD 7** — `keepalive: true` păstrat pentru POST din `beforeunload` (paritatea `sendBeacon`-style a legacy `_usPostRemote`).
+- [x] **DoD 8** — WS dedup în `settingsRealtime` funcțional: `_usApplyPostResponse(j)` avansează `_usSettingsRemoteTs` la fiecare save → mesajele `settings.changed` cu `updated_at <= _lastKnownTs` sunt skip-ate corect.
+- [x] **DoD 9** — `npx tsc --noEmit` PASS după fiecare commit; `npx vite build` PASS (~720–800ms per commit).
+- [x] **DoD 10** — MIGRATION_LOG Phase 4 entry + tag `migration/phase-04-post` (C6).
+
+**Ce a rămas intenționat pentru fazele următoare**:
+
+- **`_usBuildFlatPayload` elimination** — **RETAINED as compat helper**. Audit C5: 2 consumatori activi, ambii necesari; emite 7 chei legacy-only (`profile`, `bmMode`, `assistArmed`, `manualLive`, `ptLevDemo`, `ptLevLive`, `ptMarginMode`, `chartTz`, plus `dslSettings`) care NU sunt în `SettingsPayload`. Eliminarea acum ar șterge silent aceste chei din save-urile parțiale. **Scheduled Phase 5**: lărgirea `SettingsPayload` să acopere full server whitelist → atunci helper-ul poate fi eliminat fără pierdere de date. Motivul reținerii e documentat explicit in-source (25 linii în `core/config.ts`, 9 linii în `stores/settingsStore.ts`).
+- **`_usFetchRemote` / `_usPostRemote` eliminare** — rescriși ca thin wrappers compat. Eliminare completă amânată pentru când toate call-site-urile externe (de ex. `settingsRealtime.ts` care apelează `window._usFetchRemote`) migrează la `userSettingsApi` direct. Nu e blocant pentru Phase 4 — ambele wrappers converg pe același API tipat, zero dublu POST.
+- **`SettingsPayload` widening** — cele 7 chei legacy-only trebuie absorbite în contract pentru a elimina `Record<string, unknown>` escape hatch din `UserSettingsPayload`. Lucrare de contract, fără logică nouă, potrivit pentru Phase 5 C1.
+- **`window.USER_SETTINGS` + `window.TC` kill** — rămân proiecții legacy până la Phase 7 (Kill DOM-as-state) / Phase 9 (Cleanup + TS strict global). Fiind write-through din store, riscul de drift e zero post-C4.
+- **`_usApplyServerResponse` / `_usApplyPostResponse` relocare** — helper-e partajate acum în `core/config.ts`, dar conceptual aparțin store-ului. Relocare la `stores/settingsStore.ts` amânată până la eliminarea wrapper-elor legacy — altfel ar crea dependență circulară config ↔ store.
+
+**Rollback point**:
+
+```bash
+# Full rollback la pre-fază:
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 04 --dry-run
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 04
+
+# Sau git hard-reset la pre-tag:
+git checkout migration/phase-03-at-store
+git reset --hard migration/phase-04-pre
+```
+
+Checkpoint-uri intermediare (tag-backed):
+
+- Tag: `migration/phase-04-c2-ok-20260415-0205` — după C2 (checkpoint înainte de C3, riscul mare POST path)
+- C1 `11ecdad` — additive API surface (safe rollback)
+- C2 `f8d63f6` — GET path canonic
+- C3 `9ff2e88` — POST path canonic
+- C4 `b7d9fb6` — projection inversion
+- C5 `b92169d` — `_usBuildFlatPayload` audit (retained)
+
+Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/04-20260415-0155.report.txt` (sau echivalent, per script `backup-pre-phase.sh 4`).
+
+**Observații de runtime / risc**:
+
+- **Zero dublu POST** — grep post-C3: `_usPostRemote` chemat doar din `_usSave` legacy (path sync pe mutații imperative vechi); React post-Phase 4 apelează exclusiv `saveToServer` → `userSettingsApi.save`. Store **nu** cheamă wrapper după flip; wrapper **nu** cheamă store. Convergență pe API-ul tipat, nu unul pe altul.
+- **Zero store↔wrapper loop** — `saveToServer` → `userSettingsApi.save` → server → WS `settings.changed` → `settingsRealtime` → `_usFetchRemote` (GET only) → `_usApplyServerResponse` hidratează **`USER_SETTINGS` module-local**, NU `store.settings`. Store nu e auto-updated din mutații `USER_SETTINGS`. Traseu acyclic verificat.
+- **Log format preservat bit-identic** — `api.raw` throw pe non-2xx cu mesaj `HTTP NNN`. Catch în store + wrapper face `msg.startsWith('HTTP ')` → emite `[US] fetchRemote HTTP 500` (branch HTTP) vs `[US] fetchRemote failed: <msg>` (generic), matching legacy.
+- **`keepalive: true` semantica `beforeunload`** — paritaet `sendBeacon`-style păstrată. Save-uri emise din `beforeunload` supraviețuiesc navigation/unload.
+- **WS dedup funcțional** — `_usApplyPostResponse(j)` avansează `_usSettingsRemoteTs` la fiecare save; `settingsRealtime` skip mesajele `settings.changed` cu `updated_at <= _lastKnownTs`. Zero round-trip redundant după propriul save.
+- **`_projectAll` ordine fixă** — Legacy → Window → AT. Legacy primul pentru că `_usBuildFlatPayload` citește din `USER_SETTINGS`; Window al doilea pentru că TC Proxy deleghează la `atStore`, deci atStore trebuie hidratat imediat după; AT ultimul ca faza-3 canonical AT source reflectă `SettingsPayload` final merged.
+- **CSRF / auth** — zero endpoint-uri server atinse în Phase 4; zero modificare a stratului de autentificare.
+- **Boot order neatins** — `bootstrapStartApp` + `loadUserSettings()` rămân path-ul de boot. `settingsStore.loadFromServer()` e apelat post-boot din React App init, nu la `create`. Offline fallback via `_projectFromLegacy` citește `USER_SETTINGS` hidratat din LS la boot.
+
+**Status**: ✓ PHASE 4 COMPLETE (cu `_usBuildFlatPayload` retained as compat helper, eliminare scheduled Phase 5 după `SettingsPayload` widening).
 
 ---
