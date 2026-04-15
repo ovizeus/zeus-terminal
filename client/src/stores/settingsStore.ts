@@ -1,7 +1,7 @@
 import { create } from 'zustand'
-import { api, userSettingsApi } from '../services/api'
+import { userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
-import { _usApplyServerResponse } from '../core/config'
+import { _usApplyServerResponse, _usApplyPostResponse, _usBuildFlatPayload } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
@@ -9,15 +9,18 @@ import type { SettingsPayload } from '../types/settings-contracts'
 // The store is a React-facing projection of the legacy USER_SETTINGS cache
 // defined in core/config.ts.
 //
-// [MIGRATION-F4 commit 2] GET path canonicalization.
-// loadFromServer no longer delegates to window._usFetchRemote — it issues
-// a direct GET via userSettingsApi.fetch() and applies the authoritative
-// hydration side effects (USER_SETTINGS mutation + _usSettingsRemoteTs)
-// through the shared _usApplyServerResponse helper. window._usFetchRemote
-// remains defined (settingsRealtime WS push + bootstrapStartApp) as a thin
-// wrapper over the same userSettingsApi.fetch() + _usApplyServerResponse
-// pipeline. Save path still delegates to window._usPostRemote — flipped
-// in C3.
+// [MIGRATION-F4 commits 2+3] GET + POST path canonicalization.
+// loadFromServer issues a direct GET via userSettingsApi.fetch() and
+// applies side effects through _usApplyServerResponse. saveToServer
+// issues a direct POST via userSettingsApi.save() and applies the ts
+// update through _usApplyPostResponse. window._usFetchRemote +
+// window._usPostRemote remain defined as thin wrappers over the same
+// userSettingsApi primitives — store and wrappers converge on the
+// typed API, not on each other (no store→wrapper→store loop, no double
+// POST). Payload source is _usBuildFlatPayload(USER_SETTINGS) — the
+// same function the legacy wrapper uses, so both paths emit byte-identical
+// wire payloads. USER_SETTINGS is kept fresh via _projectToLegacy before
+// the flat build.
 //
 // Persistence (post commit 7) is: LS `zeus_user_settings` (nested, canonical)
 // + POST /api/user/settings + /ws/sync `settings.changed` broadcast.
@@ -166,19 +169,35 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     set({ saving: true })
     try {
       const w = window as unknown as ZeusWindowExt
-      // 1. Push store → legacy USER_SETTINGS + window.TC so engines + _usBuildFlatPayload see fresh values.
+      // 1. Push store → legacy USER_SETTINGS + window.TC so engines + _usBuildFlatPayload
+      //    see fresh values (projection MUST run before _usBuildFlatPayload below).
       _projectToLegacy(settings)
       _syncToWindow(settings)
       _projectToAT(settings)
-      // 2. Single POST path — delegate to _usPostRemote (flattens USER_SETTINGS via _usBuildFlatPayload,
-      //    POSTs /api/user/settings with keepalive, and triggers server-side settings.changed broadcast).
-      if (typeof w._usPostRemote === 'function') {
-        w._usPostRemote()
-      } else {
-        // Pre-bridge fallback (e.g. tests before config.ts module loaded).
-        await api.raw('POST', '/api/user/settings', { settings })
+      // 2. Build flat payload from USER_SETTINGS (covers keys whitelisted server-side
+      //    that are not yet in SettingsPayload: profile, bmMode, assistArmed,
+      //    manualLive, ptLev*, chartTz). Same builder the legacy wrapper uses →
+      //    byte-identical wire payload.
+      let payload: Record<string, unknown> = {}
+      try { payload = _usBuildFlatPayload() } catch { payload = {} }
+      // 3. POST direct via userSettingsApi.save. keepalive:true preserves the
+      //    beforeunload-survival semantics of the legacy _usPostRemote path.
+      //    On success: feed _usApplyPostResponse so _usSettingsRemoteTs (inside
+      //    config.ts) advances, keeping WS-push dedup in settingsRealtime accurate.
+      //    On failure: warn with the exact log format _usPostRemote historically
+      //    emitted (HTTP-code vs generic failure branches).
+      try {
+        const j = await userSettingsApi.save(payload, { keepalive: true })
+        _usApplyPostResponse(j)
+      } catch (e: unknown) {
+        const msg = ((e as { message?: string })?.message ?? String(e))
+        if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
+          console.warn('[US] postRemote ' + msg)
+        } else {
+          console.warn('[US] postRemote failed:', msg)
+        }
       }
-      // 3. Write canonical LS cache — same key legacy _usSave uses. Single source.
+      // 4. Write canonical LS cache — same key legacy _usSave uses. Single source.
       try {
         if (w.USER_SETTINGS) localStorage.setItem('zeus_user_settings', JSON.stringify(w.USER_SETTINGS))
       } catch (_) { /* ignore */ }

@@ -1535,7 +1535,12 @@ let _usSettingsRemoteTs = 0
 // whitelist the server accepts. Keys must match SETTINGS_WHITELIST in
 // server/routes/trading.js. Only non-undefined values are included so
 // partial saves don't overwrite unrelated keys after merge on server.
-function _usBuildFlatPayload(): Record<string, any> {
+//
+// [MIGRATION-F4 commit 3] Exported so settingsStore.saveToServer can
+// reuse the same authoritative payload source. USER_SETTINGS remains the
+// projection surface (written by _projectToLegacy) — store + _usPostRemote
+// both read from the same USER_SETTINGS tree, so payloads never diverge.
+export function _usBuildFlatPayload(): Record<string, any> {
   const out: Record<string, any> = {}
   const put = (k: string, v: any) => { if (v !== undefined) out[k] = v }
   const at = USER_SETTINGS.autoTrade || {}
@@ -1628,6 +1633,18 @@ export async function _usFetchRemote(): Promise<number> {
   }
 }
 
+// [MIGRATION-F4 commit 3] Shared side-effects helper for POST /api/user/settings.
+// Updates _usSettingsRemoteTs from the server response so the next WS push
+// (settings.changed) can be deduped against our own save. Exported so that
+// settingsStore.saveToServer() can reuse the exact same post-save hook when
+// it issues its own direct POST via userSettingsApi.save() — both paths
+// converge on this helper, keeping one source of WS-dedup truth.
+export function _usApplyPostResponse(data: { ok?: boolean; updated_at?: number } | null | undefined): void {
+  if (data && data.ok && data.updated_at) {
+    _usSettingsRemoteTs = Number(data.updated_at) || _usSettingsRemoteTs
+  }
+}
+
 // [MIGRATION-F0] POST flat payload to /api/user/settings. Best-effort,
 // fire-and-forget. Updates _usSettingsRemoteTs from the response so the
 // next server push (via WS `settings.changed`) can be compared. LS cache
@@ -1635,24 +1652,30 @@ export async function _usFetchRemote(): Promise<number> {
 // next _usSave call. Uses `keepalive` so an in-flight save survives
 // page unload (complements _ucPushBeacon for the FS path that still
 // exists in this commit).
+//
+// [MIGRATION-F4 commit 3] Thin wrapper over userSettingsApi.save().
+// The raw fetch() moved to services/api.ts; post-response ts update moved
+// to _usApplyPostResponse. keepalive:true is preserved — critical for saves
+// issued during `beforeunload` (engine shutdown, tab close). Call contract
+// unchanged: void return, fire-and-forget.
+// Callers unchanged: _usSave (legacy save path). settingsStore.saveToServer
+// no longer calls this — it POSTs directly via userSettingsApi.save (no
+// double POST; store and wrapper converge on userSettingsApi, not on each
+// other).
 function _usPostRemote(): void {
   let payload: Record<string, any>
   try { payload = _usBuildFlatPayload() } catch (_) { return }
   try {
-    fetch('/api/user/settings', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: payload }),
-      keepalive: true,
-    }).then(function (r) {
-      if (!r.ok) { console.warn('[US] postRemote HTTP ' + r.status); return null }
-      return r.json()
-    }).then(function (j: any) {
-      if (j && j.ok && j.updated_at) _usSettingsRemoteTs = Number(j.updated_at) || _usSettingsRemoteTs
-    }).catch(function (e: any) {
-      console.warn('[US] postRemote failed:', e?.message || e)
-    })
+    userSettingsApi.save(payload, { keepalive: true })
+      .then(function (j: any) { _usApplyPostResponse(j) })
+      .catch(function (e: any) {
+        const msg = (e && e.message) || String(e)
+        if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
+          console.warn('[US] postRemote ' + msg)
+        } else {
+          console.warn('[US] postRemote failed:', msg)
+        }
+      })
   } catch (e: any) {
     console.warn('[US] postRemote threw:', e?.message || e)
   }
