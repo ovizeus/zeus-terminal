@@ -1540,6 +1540,31 @@ let _usSettingsRemoteTs = 0
 // reuse the same authoritative payload source. USER_SETTINGS remains the
 // projection surface (written by _projectToLegacy) — store + _usPostRemote
 // both read from the same USER_SETTINGS tree, so payloads never diverge.
+//
+// [MIGRATION-F4 commit 5] AUDIT + VERDICT. Active consumers (2, both
+// necessary):
+//   (a) _usPostRemote at config.ts:1667 — legacy save path triggered by
+//       _usSave / _usScheduleSave (dom2, indicators, marketData*, utils/dev).
+//   (b) settingsStore.saveToServer at settingsStore.ts:185 — React save.
+// Zero consumers in public/*, zero consumers in server/*, NOT exposed on
+// window (grep w._usBuildFlatPayload → no matches). Helper is strictly
+// module-to-module.
+//
+// Why retained (not eliminated in Phase 4):
+//   This function is the single bridge between the legacy nested
+//   USER_SETTINGS tree and the flat server whitelist. It emits seven
+//   keys that SettingsPayload does not yet own — profile, bmMode,
+//   assistArmed, manualLive, ptLevDemo, ptLevLive, ptMarginMode, chartTz
+//   — hydrated into USER_SETTINGS by _usApplyFlatToUserSettings on load
+//   but never mirrored into the React store. Eliminating the helper in
+//   favor of a store-built payload would silently drop these keys from
+//   the POST body → partial saves would wipe them on the server merge.
+//
+// Elimination is deferred to Phase 5, where SettingsPayload is widened
+// to own the full whitelist and _projectToLegacy becomes symmetric; at
+// that point _usBuildFlatPayload can be replaced by a flat read off
+// the store and the helper removed from both call-sites together.
+// Until then: shared compat helper, one source of truth for wire shape.
 export function _usBuildFlatPayload(): Record<string, any> {
   const out: Record<string, any> = {}
   const put = (k: string, v: any) => { if (v !== undefined) out[k] = v }

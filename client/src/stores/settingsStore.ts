@@ -15,6 +15,15 @@ import type { SettingsPayload } from '../types/settings-contracts'
 // because _projectToLegacy only overwrites keys it knows about — so legacy
 // engines reading those extras continue to work unchanged.
 //
+// [MIGRATION-F4 commit 5] _usBuildFlatPayload retained as compat helper.
+// Audit (grep across client/server/public) found exactly two consumers:
+// _usPostRemote in config.ts and this file's saveToServer. Helper is the
+// only bridge that emits the seven legacy-only whitelist keys (profile,
+// bmMode, assistArmed, manualLive, ptLev*, chartTz) which are not yet in
+// SettingsPayload — eliminating it now would silently drop them from
+// partial saves. Elimination scheduled for Phase 5 after SettingsPayload
+// is widened to own the full server whitelist. No behavioral change in C5.
+//
 // [MIGRATION-F4 commits 2+3] GET + POST path canonicalization.
 // loadFromServer issues a direct GET via userSettingsApi.fetch() and
 // applies side effects through _usApplyServerResponse. saveToServer
