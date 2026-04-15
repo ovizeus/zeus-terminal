@@ -64,6 +64,7 @@ export type {
   WsMessage,
   WsAtUpdate,
   WsSyncSignal,
+  WsSettingsChanged,
   ServerATState,
   ServerDemoBalance,
   ServerATStats,
@@ -72,6 +73,13 @@ export type {
   SyncStateResponse,
   SyncStatePush,
 } from './sync'
+
+export type {
+  SettingsPayload,
+  SettingsGetResponse,
+  SettingsPostRequest,
+  SettingsPostResponse,
+} from './settings-contracts'
 
 export type {
   ChartColors,

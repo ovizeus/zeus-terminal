@@ -4,7 +4,7 @@ import type { Position } from './position'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged
 
 export interface WsAtUpdate {
   type: 'at_update'
@@ -13,6 +13,17 @@ export interface WsAtUpdate {
 
 export interface WsSyncSignal {
   type: 'sync'
+}
+
+/**
+ * Cross-device settings broadcast.
+ * Emitted by server POST /api/user/settings → broadcastToUser over /ws/sync
+ * (see server/routes/trading.js). Subscriber: services/settingsRealtime.ts.
+ */
+export interface WsSettingsChanged {
+  type: 'settings.changed'
+  updated_at?: number
+  keys?: string[]
 }
 
 /**
