@@ -21,6 +21,13 @@ const DEFAULTS = {
     SERVER_AT: false,  // Phase 6: server runs AutoTrade decision engine
     CLIENT_BRAIN: true,   // Phase 4: client runs brain (flip when SERVER_BRAIN proven)
     CLIENT_AT: true,   // Phase 6: client runs AT (flip when SERVER_AT proven)
+    // [MIGRATION-F5] Server→client `positions.changed` broadcast over /ws/sync.
+    // When ON, serverAT._persistPosition / _persistClose emit a full
+    // PositionsSnapshot AFTER the SQLite commit succeeds. OFF by default —
+    // flipped ON only at Phase 5 C5, after the client subscriber (C4) lands
+    // and is paper-traded. Polling (bootstrapInit livePosSync 30s) remains
+    // parallel until C6.
+    POSITIONS_WS: false,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -86,6 +93,7 @@ module.exports = {
     get SERVER_AT() { return flags.SERVER_AT; },
     get CLIENT_BRAIN() { return flags.CLIENT_BRAIN; },
     get CLIENT_AT() { return flags.CLIENT_AT; },
+    get POSITIONS_WS() { return flags.POSITIONS_WS; },
     // Methods
     set,
     getAll,

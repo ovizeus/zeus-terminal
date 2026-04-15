@@ -89,6 +89,34 @@ let _onChangeCallback = null;
 // ══════════════════════════════════════════════════════════════════
 // Persistence — save/restore from SQLite
 // ══════════════════════════════════════════════════════════════════
+
+// [MIGRATION-F5 commit 3] Emit `positions.changed` over /ws/sync after a
+// successful DB commit on a position mutation. Gated by MF.POSITIONS_WS —
+// when OFF (default), this function returns immediately and no socket
+// traffic is produced. Broadcaster is attached on `global` by server.js;
+// missing broadcaster or zero connected clients must not throw.
+// Shape matches `WsPositionsChanged` from client/src/types/sync.ts:
+//   { type, updated_at, snapshot: { updated_at, positions } }
+// Top-level `updated_at` is IDENTICAL to `snapshot.updated_at` by design
+// (client dedup is authoritative on the top-level field).
+function _broadcastPositions(userId) {
+    if (!MF.POSITIONS_WS) return;
+    if (!userId) return;
+    const broadcast = (typeof global !== 'undefined' && global.__zeusWsBroadcastToUser) || null;
+    if (typeof broadcast !== 'function') return;
+    try {
+        const now = Date.now();
+        broadcast(userId, {
+            type: 'positions.changed',
+            updated_at: now,
+            snapshot: {
+                updated_at: now,
+                positions: getOpenPositions(userId),
+            },
+        });
+    } catch (_) { /* broadcast is best-effort */ }
+}
+
 function _persistPosition(pos) {
     // Snapshot DSL progress so it survives server restart
     const dslState = serverDSL.getState(pos.seq);
@@ -106,18 +134,28 @@ function _persistPosition(pos) {
             phaseChanges: dslState.phaseChanges,
         };
     }
-    try { db.atSavePosition(pos); } catch (e) {
+    try {
+        db.atSavePosition(pos);
+    } catch (e) {
         logger.error('AT_DB', 'Save position failed: ' + e.message);
         _alertPersistFailure(pos.userId, 'Save position [' + pos.seq + ']', e.message);
+        return; // Persist failed — do not broadcast a phantom state.
     }
+    // [MIGRATION-F5 commit 3] Post-commit broadcast. No-op when flag OFF.
+    _broadcastPositions(pos.userId);
 }
 
 function _persistClose(pos) {
-    try { db.atArchiveClosed(pos); return true; } catch (e) {
+    try {
+        db.atArchiveClosed(pos);
+    } catch (e) {
         logger.error('AT_DB', 'Archive closed failed: ' + e.message);
         _alertPersistFailure(pos.userId, 'Archive closed [' + pos.seq + ']', e.message);
         return false;
     }
+    // [MIGRATION-F5 commit 3] Post-commit broadcast. No-op when flag OFF.
+    _broadcastPositions(pos.userId);
+    return true;
 }
 
 const _persistAlertTs = new Map(); // per-user throttle
