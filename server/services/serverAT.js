@@ -105,13 +105,30 @@ function _broadcastPositions(userId) {
     const broadcast = (typeof global !== 'undefined' && global.__zeusWsBroadcastToUser) || null;
     if (typeof broadcast !== 'function') return;
     try {
+        // [MIGRATION-F5 C5-preflip] Snapshot source is DB, not in-memory `_positions`.
+        // Why: `_persistClose` emits this broadcast AFTER `db.atArchiveClosed` (DELETE
+        // in a transaction) but BEFORE the caller's `_positions.splice(idx, 1)`. If we
+        // read from `_positions`, the snapshot would include a transient "zombie" row
+        // for the position that was just closed — exactly the scenario the client
+        // would then reconcile as "still open". DB is authoritative at this point:
+        // the archive transaction has already removed the closed row, and every
+        // open-path mutation goes through `db.atSavePosition` before broadcast, so
+        // the DB is fully consistent with `_positions` at broadcast time minus the
+        // zombie window. DSL runtime state is re-attached here (mirrors the
+        // enrichment done by `getOpenPositions`, which is otherwise a pure
+        // `_positions` read + DSL overlay).
         const now = Date.now();
+        const positions = db.atLoadOpenPositions(userId).map(p => {
+            const copy = Object.assign({}, p);
+            copy.dsl = serverDSL.getState(p.seq) || null;
+            return copy;
+        });
         broadcast(userId, {
             type: 'positions.changed',
             updated_at: now,
             snapshot: {
                 updated_at: now,
-                positions: getOpenPositions(userId),
+                positions,
             },
         });
     } catch (_) { /* broadcast is best-effort */ }
