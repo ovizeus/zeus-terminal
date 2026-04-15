@@ -19,6 +19,7 @@ import { renderATLog } from '../trading/autotrade'
 import { _aresRender } from '../engine/aresUI'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { userSettingsApi } from '../services/api'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -1584,23 +1585,45 @@ function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
   if (flat.ptMarginMode !== undefined) USER_SETTINGS.ptMarginMode = flat.ptMarginMode
 }
 
+// [MIGRATION-F4 commit 2] Shared side-effects helper for GET /api/user/settings.
+// Hydrates USER_SETTINGS in-place, updates _usSettingsRemoteTs, and logs
+// the canonical "[US] fetched remote settings" line. Exported so that
+// settingsStore.loadFromServer() can reuse the exact same side effects
+// when it issues its own direct GET via userSettingsApi.fetch() — both
+// paths converge on this helper so there is one hydration surface.
+export function _usApplyServerResponse(data: { settings?: Record<string, any>; updated_at?: number } | null | undefined): number {
+  if (!data) return 0
+  const flat = data.settings || {}
+  _usApplyFlatToUserSettings(flat)
+  _usSettingsRemoteTs = Number(data.updated_at) || 0
+  console.log('[US] fetched remote settings (updated_at=' + _usSettingsRemoteTs + ', keys=' + Object.keys(flat).length + ')')
+  return _usSettingsRemoteTs
+}
+
 // [MIGRATION-F0] Pull the authoritative settings from the SQLite backing
 // on boot (or after a WS `settings.changed` hint). Caller chooses when
 // to call `_usApply()` afterwards — we only mutate USER_SETTINGS in
 // memory here. Returns the new server `updated_at` on success, 0 on
 // failure/offline (LS cache remains usable).
+//
+// [MIGRATION-F4 commit 2] Thin wrapper over userSettingsApi.fetch().
+// The raw fetch() + JSON parse moved to services/api.ts (typed surface);
+// side-effect hydration moved to _usApplyServerResponse. Boot order and
+// return contract (0 on failure, new ts on success) are preserved.
+// Callers unchanged: bootstrapStartApp, settingsRealtime (WS push),
+// settingsStore (via its own direct GET, post-C2).
 export async function _usFetchRemote(): Promise<number> {
   try {
-    const res = await fetch('/api/user/settings', { credentials: 'same-origin' })
-    if (!res.ok) { console.warn('[US] fetchRemote HTTP ' + res.status); return 0 }
-    const data = await res.json()
+    const data = await userSettingsApi.fetch()
     if (!data || !data.ok) { console.warn('[US] fetchRemote invalid response'); return 0 }
-    _usApplyFlatToUserSettings(data.settings || {})
-    _usSettingsRemoteTs = Number(data.updated_at) || 0
-    console.log('[US] fetched remote settings (updated_at=' + _usSettingsRemoteTs + ', keys=' + Object.keys(data.settings || {}).length + ')')
-    return _usSettingsRemoteTs
+    return _usApplyServerResponse(data)
   } catch (e: any) {
-    console.warn('[US] fetchRemote failed:', e?.message || e)
+    const msg = e?.message || e
+    if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
+      console.warn('[US] fetchRemote ' + msg)
+    } else {
+      console.warn('[US] fetchRemote failed:', msg)
+    }
     return 0
   }
 }

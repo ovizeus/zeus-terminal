@@ -1,19 +1,23 @@
 import { create } from 'zustand'
-import { api } from '../services/api'
+import { api, userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
+import { _usApplyServerResponse } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
 //
 // The store is a React-facing projection of the legacy USER_SETTINGS cache
-// defined in core/config.ts. There is exactly ONE load primitive and ONE
-// save primitive for settings:
+// defined in core/config.ts.
 //
-//   LOAD  → window._usFetchRemote()  (GET /api/user/settings)
-//   SAVE  → window._usPostRemote()   (POST /api/user/settings)
-//
-// Both live in core/config.ts and are the canonical phase-0 code path.
-// settingsStore delegates to them so there are no parallel network paths.
+// [MIGRATION-F4 commit 2] GET path canonicalization.
+// loadFromServer no longer delegates to window._usFetchRemote — it issues
+// a direct GET via userSettingsApi.fetch() and applies the authoritative
+// hydration side effects (USER_SETTINGS mutation + _usSettingsRemoteTs)
+// through the shared _usApplyServerResponse helper. window._usFetchRemote
+// remains defined (settingsRealtime WS push + bootstrapStartApp) as a thin
+// wrapper over the same userSettingsApi.fetch() + _usApplyServerResponse
+// pipeline. Save path still delegates to window._usPostRemote — flipped
+// in C3.
 //
 // Persistence (post commit 7) is: LS `zeus_user_settings` (nested, canonical)
 // + POST /api/user/settings + /ws/sync `settings.changed` broadcast.
@@ -67,7 +71,6 @@ interface LegacyTC {
   lev?: number
 }
 interface ZeusWindowExt {
-  _usFetchRemote?: () => Promise<number>
   _usPostRemote?: () => void
   USER_SETTINGS?: LegacyUserSettings
   TC?: LegacyTC
@@ -114,21 +117,34 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   saving: false,
 
   loadFromServer: async () => {
-    const w = window as unknown as ZeusWindowExt
-    // Single GET path — delegate to legacy primitive (mutates USER_SETTINGS in-place).
-    if (typeof w._usFetchRemote === 'function') {
-      try {
-        const ts = await w._usFetchRemote()
-        if (ts > 0) {
-          const projected = _projectFromLegacy()
-          const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
-          set({ settings: merged, loaded: true })
-          _syncToWindow(merged)
-          _projectToAT(merged)
-          return
-        }
-        // ts === 0 → offline / transient; fall through to offline fallback
-      } catch (_) { /* fall through to offline fallback */ }
+    // [MIGRATION-F4 commit 2] Direct GET via userSettingsApi.fetch().
+    // Side-effect hydration (USER_SETTINGS + _usSettingsRemoteTs + the
+    // canonical "[US] fetched remote settings" log) is delegated to
+    // _usApplyServerResponse — same helper _usFetchRemote now uses, so
+    // both paths produce identical legacy state. On failure we preserve
+    // the exact warn format _usFetchRemote historically emitted so logs
+    // do not silently disappear.
+    try {
+      const data = await userSettingsApi.fetch()
+      if (data && data.ok) {
+        _usApplyServerResponse(data)
+        const projected = _projectFromLegacy()
+        const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
+        set({ settings: merged, loaded: true })
+        _syncToWindow(merged)
+        _projectToAT(merged)
+        return
+      }
+      // ok === false → offline / transient; fall through to offline fallback
+      console.warn('[US] fetchRemote invalid response')
+    } catch (e: unknown) {
+      const msg = (e as { message?: string })?.message ?? String(e)
+      if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
+        console.warn('[US] fetchRemote ' + msg)
+      } else {
+        console.warn('[US] fetchRemote failed:', msg)
+      }
+      /* fall through to offline fallback */
     }
     // Offline / boot-race fallback: project from the legacy USER_SETTINGS
     // tree populated by bootstrapStartApp's loadUserSettings() (which reads
