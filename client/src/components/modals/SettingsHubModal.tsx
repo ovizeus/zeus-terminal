@@ -4,6 +4,7 @@ import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove } from '../../core/bootstrapMisc'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
+import { api } from '../../services/api'
 
 const w = window as any
 
@@ -44,8 +45,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
 
   useEffect(() => {
     if (tab !== 'exchange') return
-    fetch('/api/exchange/status', { credentials: 'same-origin' })
-      .then(r => r.json())
+    api.raw<any>('GET', '/api/exchange/status')
       .then(d => {
         if (!d.ok) return
         const map: Record<string, ExInfo> = {}
