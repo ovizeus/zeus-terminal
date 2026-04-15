@@ -28,7 +28,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 0 Backend-first sync | ✓ done | `migration/phase-00-pre` | `migration/phase-00-post` | desktop→phone <2s via /ws/sync | Option A (WS), 8 commits |
 | 1 Typed contracts | ✓ done | `migration/phase-01-pre` | `migration/phase-01-post` | tsc clean + typed wire | 5 commits, log-only server validator |
 | 2 API client centralized | ✓ done | `migration/phase-02-pre` | `migration/phase-02-post` | all safe internal `/api/*` call-sites migrated + exceptions documented | 21 migrations across 6 commits; 34 deferred exceptions categorized |
-| 3 atStore canonic | pending | — | — | #atLev DOM not source | feature-flag |
+| 3 atStore canonic | ✓ done | `migration/phase-03-pre` | `migration/phase-03-post` | #atLev DOM not source | 6 commits; CLIENT_AT_STORE feature flag deferred (hardening follow-up) |
 | 4 settingsStore canonic | pending | — | — | cross-device toggle | — |
 | 5 Positions WS live | pending | — | — | trade desktop→phone <1s | feature-flag |
 | 6 dslStore+brainStore canonic | pending | — | — | syncFromEngine=0 | — |
@@ -474,5 +474,105 @@ Checkpoint-uri intermediare (branch-backed prin commit-uri atomice):
 **Status**: ✓ PHASE 2 COMPLETE — all safe internal API call-sites migrated;
 remaining internal fetches are documented deferred exceptions, not accidental
 leftovers.
+
+---
+
+### Phase 3 — atStore canonical
+
+**Scop**: mutarea celor 8 parametri AutoTrade (`lev`, `size`, `slPct`, `rr`,
+`maxPos`, `sigMin`, `adxMin`, `cooldownMs`) dintr-un model hibrid (DOM inputs
+citite ca sursă + `window.TC` global + `USER_SETTINGS.autoTrade` nested) într-un
+loc canonic: `atStore.config` (Zustand). DOM-ul devine strict proiecție UI;
+`window.TC` devine Proxy care deleghează cele 8 chei la store; engine-urile
+citesc prin store/TC Proxy, niciodată prin `document.getElementById`.
+
+**Pre-tag**: `migration/phase-03-pre` (HEAD=8f69e4d = Phase 2 post)
+**Post-tag**: `migration/phase-03-post`
+**Branch**: `migration/phase-03-at-store`
+
+**Commit-urile 1–6** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| 1 | `f80ac83` | contract-only: `types/trading.ts` ATConfig (8 câmpuri); `atStore` extins cu `config: ATConfig`, `patchConfig(partial)`, `hydrate(settings)`; zero caller schimbat |
+| 2 | `fd21c91` | `settingsStore._projectToAT()` → `atStore.hydrate()`; wired în toate cele 4 puncte unde rulează `_syncToWindow` (loadFromServer success, offline fallback, saveToServer, patch) |
+| 3 | `13f93c4` | `core/state.ts` `w.TC` wrapped în Proxy: cele 8 chei AT delegă la `atStore.config` (get) și `patchConfig` (set); restul TC passthrough; seed atStore din defaults la install; idempotent prin marker `__atStoreProxy` |
+| 4 | `3fe1e05` | `AutoTradePanel.tsx` push direct în `atStore.patchConfig` via `useEffect` pe [atLev, atSize, atSL, atRR, atMaxPos, sigMin]; NaN guard preserve valorile vechi; zero cursor-jump risk (post-commit effect, no subscribers pe config) |
+| 5 | `90e271d` | eliminare DOM reads AT din decision path: `syncDOMtoTC` drop 6 AT lines; `core/state.ts:345-348` 4× fallback DOM → `useATStore.getState().config`; `risk.ts:236-237` 2× idem. 0 DOM-read AT rămase în decision path |
+| 6 | `<post>` | docs: MIGRATION_LOG Phase 3 entry + tag `migration/phase-03-post` |
+
+**Totaluri**:
+
+- **DOM reads eliminate în decision path**: **12** site-uri (6 în `syncDOMtoTC`, 4 în `_buildPositionCandidate`, 2 în `risk.ts` per-regime bucket calc)
+- **Fișiere noi tipate**: 1 (`ATConfig` în `types/trading.ts`)
+- **Fișiere atinse total fază**: 7 (excluzând `MIGRATION_LOG.md`):
+  `types/trading.ts`, `types/index.ts`, `stores/atStore.ts`, `stores/settingsStore.ts`,
+  `core/state.ts`, `components/dock/AutoTradePanel.tsx`, `trading/risk.ts`
+
+**Ce s-a făcut concret**:
+
+- **ATConfig contract** (`client/src/types/trading.ts`): `interface ATConfig` cu 8 câmpuri numerice (`lev`, `size`, `slPct`, `rr`, `maxPos`, `sigMin`, `adxMin`, `cooldownMs`); re-exportat în `types/index.ts`.
+- **atStore extins** (`client/src/stores/atStore.ts`): `config: ATConfig` cu `DEFAULT_AT_CONFIG` (valori legacy); `patchConfig(partial)` guard-at prin `Number.isFinite` (NaN/undefined ignorate silent); `hydrate(settings: SettingsPayload)` cu mapare wire-to-config (`sl → slPct`, altele 1:1; `adxMin`/`cooldownMs` neatinse, nu sunt în wire flat).
+- **Projector settings → AT** (`client/src/stores/settingsStore.ts`): `_projectToAT(s)` invocă `atStore.hydrate(s)`, wired la toate cele 4 puncte unde se sincronizează legacy state (`loadFromServer` success + offline fallback, `saveToServer` step 1, `patch` local).
+- **TC Proxy** (`client/src/core/state.ts:158-232`): `w.TC` ca Proxy cu get/set traps pentru cele 8 chei; `{ lev, size, slPct, rr, maxPos, sigMin, minADX → adxMin, cooldownMs }` rutează la `atStore.config` / `patchConfig`; restul (riskPct, hourStart, hourEnd, confMin, dslActivatePct, dslTrailPct, dslTrailSusPct, dslExtendPct) passthrough plain. Idempotent prin marker `__atStoreProxy`. Seed-uit din defaults la install pentru paritate bit-identică pre/post C3.
+- **AutoTradePanel write-path** (`client/src/components/dock/AutoTradePanel.tsx`): `useEffect` nou care watchează 6 state-uri de input și cheamă `patchConfig({lev, size, slPct, rr, maxPos, sigMin})` post-commit; NaN din input gol/invalid e guard-at. Zero subscriber pe `config.*`, deci zero rerender în cascadă.
+- **DOM reads eliminate** (`client/src/core/state.ts` + `client/src/trading/risk.ts`): 12 site-uri removed; path-ul de execuție al engine-ului citește exclusiv `useATStore.getState().config` pentru cele 8 chei AT.
+
+**DoD atins** (numerotat per pre-plan):
+
+- [x] **DoD 1** — `grep 'getElementById(.atLev\|atSize\|atSL\|atRR\|atMaxPos\|atSigMin\|atAdxMin\|atCooldown' client/src/core client/src/trading client/src/engine` → **0 hits** pentru read în decision path (2 hits rămase în `engine/aub.ts` sunt DOM **writes**, documentate ca deferred UI concern)
+- [x] **DoD 2** — `atStore` conține toate cele 8 câmpuri `ATConfig` + `patchConfig()` + `hydrate()` (C1)
+- [x] **DoD 3** — `window.TC` Proxy delegă citirile spre `atStore.getState().config` pentru cele 8 chei (C3)
+- [x] **DoD 4** — `AutoTradePanel.tsx` inputs scriu în `atStore.patchConfig` via `useEffect` (C4); niciodată direct `.value = x` pe DOM
+- [x] **DoD 5** — Save settings: `settingsStore.saveToServer()` → `_projectToLegacy` + `_syncToWindow` + `_projectToAT` → POST → broadcast WS → cross-device convergent (path-ul Phase 0 reutilizat; zero modificare infra)
+- [x] **DoD 6** — engine-urile (`core/state.ts`, `trading/autotrade.ts`, `trading/risk.ts`, `engine/brain.ts`, `engine/aub.ts`) citesc prin `useATStore.getState().config` sau `window.TC` Proxy — zero `document.getElementById` în decision path
+- [ ] **DoD 7** — **DEFERRED**: feature flag `MF.CLIENT_AT_STORE` NU a fost introdus. Motivul (explicit, decizia user-ului): *hardening / rollback runtime gate deferred to dedicated follow-up, not required to complete canonical AT config migration*. Phase 3 este funcțională pe traseul principal; flag-ul ar fi adăugat server touch + branch nou de comportament + risc nou doar pentru bifare. Rollback rămâne disponibil prin git tags (`migration/phase-03-pre`) și scriptul `rollback-to-phase.sh 03`, nu runtime-toggleable.
+- [x] **DoD 8** — `npx tsc --noEmit` PASS după fiecare commit; `npx vite build` PASS (~720–760ms per commit)
+- [x] **DoD 9** — runtime post-C5 observat curat: `pm2 reload` clean, `/health` 200, zero uncaught/throw/stack trace în pm2 error log pe toată durata fazei
+- [x] **DoD 10** — MIGRATION_LOG Phase 3 entry + tag `migration/phase-03-post` (C6)
+
+**Ce a rămas intenționat pentru fazele următoare**:
+
+- **Feature flag `MF.CLIENT_AT_STORE`** — deferred ca hardening follow-up dedicat. Nu e blocant pentru închiderea Phase 3. Argumentele user-ului: server-ul a rămas neatins pe toată durata Phase 3, flag-ul ar introduce un touch server + branch comportament + risc nou strict pentru bifare. Rollback e disponibil prin tag-uri git și scriptul `rollback-to-phase.sh 03` (non-runtime, dar suficient).
+- **`engine/aub.ts:511-514`** — 2 `document.getElementById('atSL'/'atRR').value = x` în `_aubApplyPendingSim` (UI action "Apply suggested settings"). Sunt DOM **writes**, nu reads, deci strict out-of-scope Phase 3 (decision-path READ elimination). De notat: post-React-migration, scrierea directă pe `input.value` e no-op (React revertează la render) — codul era deja non-funcțional independent de Phase 3. Fix corect = routing prin `settingsStore.patch` sau panel state; aparține unei faze UI dedicate.
+- **`syncDOMtoTC` pentru `riskPct` + `dslActivatePct/dslTrailPct/dslTrailSusPct/dslExtendPct`** — funcția continuă să citească DOM pentru aceste chei non-AT. Este în scope Phase 6 (`dslStore+brainStore canonic`) sau Phase 7 (Kill DOM-as-state).
+- **`adxMin` + `cooldownMs` UI surface** — nu există inputuri în `AutoTradePanel.tsx` pentru aceste 2 din 8 chei ATConfig; rămân pe valori hydrate din settings (prin `indSettings` blob) / defaults. Aduși în UI într-o fază dedicată când `indSettings` devine tipat (Phase 4 sau dedicat).
+- **Helper `useATBridge`** — neatins; este legacy compat bridge pentru componente care citesc AT state direct. Convergența totală pe `useATStore` aparține Phase 9 (Cleanup + TS strict global).
+- **`brain.ts:2651` `TC.slPct = newSL; TC.size = newSize`** — adaptive resize engine scrie pe TC; post-C3 aceste scrieri merg transparent prin Proxy → `patchConfig` → store. Comportament corect, zero refactor necesar.
+
+**Rollback point**:
+
+```bash
+# Full rollback la pre-fază:
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 03 --dry-run
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 03
+
+# Sau git hard-reset la pre-tag:
+git checkout migration/phase-03-at-store
+git reset --hard migration/phase-03-pre
+```
+
+Checkpoint-uri intermediare (branch/tag-backed):
+
+- Tag: `migration/phase-03-c2-ok-20260415-0130` — după C2
+- Branch: `backup/phase-03-c2-20260415-0130`
+- C1 `f80ac83` — contract-only (safe rollback)
+- C2 `fd21c91` — projector wiring
+- C3 `13f93c4` — TC Proxy install
+- C4 `3fe1e05` — panel write-path
+- C5 `90e271d` — DOM read elimination
+
+Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/03-20260415-012429.report.txt`.
+
+**Observații de runtime / risc**:
+
+- **TC Proxy seeding** — la install (C3) atStore primește valori din `_tcDefaults`, care sunt identice bit-identic cu obiectul TC raw anterior. Primul read după install returnează exact aceleași valori ca legacy, deci zero divergence window la boot.
+- **Write-path dublu (C4 + Proxy)** — când user tastează în panel: `onChange → setAtLev` (React state) → `useEffect → patchConfig` (store) → TC Proxy vede store-ul actualizat. Când `brain.ts:2651` scrie `TC.slPct = newSL` → Proxy.set → `patchConfig({slPct: ...})` → store. Ambele căi converg pe același store, niciun race observat la runtime.
+- **NaN guard** — `patchConfig` ignoră silent valori non-finite. Input gol sau invalid în panel nu corupe store-ul. Singurul risc era ca user-ul să vadă un câmp gol și store-ul să rămână pe valoarea veche — confirmat OK la runtime, bot-ul primește ultimele valori valide.
+- **Engine-urile care scriu TC** (grep verificat: `brain.ts:2651`, `settingsStore._syncToWindow`, pre-C5 `syncDOMtoTC`) — toate merg transparent prin Proxy. Scrierea legacy `TC.lev = N` ↔ patchConfig nu necesită refactor extern.
+- **CSRF / auth** — zero endpoint-uri server atinse în Phase 3; zero modificare a stratului de autentificare.
+- **Feature flag `CLIENT_AT_STORE` absent** — la orice defect major, rollback = `git reset --hard migration/phase-03-pre` + `pm2 reload zeus`. Este o rollback mecanică, nu runtime-instant, dar acceptabilă dată fiind validarea tsc/build/runtime curată pe fiecare commit.
+
+**Status**: ✓ PHASE 3 COMPLETE (cu `CLIENT_AT_STORE` feature flag deferred ca hardening follow-up).
 
 ---
