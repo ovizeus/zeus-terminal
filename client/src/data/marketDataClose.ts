@@ -13,6 +13,7 @@ import { renderTradeMarkers } from './marketDataOverlays'
 import { addTradeToJournal } from '../services/storage'
 import { renderDemoPositions , getSymPrice } from './marketDataPositions'
 import { _safePnl } from '../utils/guards'
+import { api } from '../services/api'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 
 export function closeDemoPos(id: any, reason?: string): void {
@@ -31,8 +32,7 @@ export function closeDemoPos(id: any, reason?: string): void {
   // [BUG1 FIX] Server-managed position close
   if (w._serverATEnabled && pos._serverSeq) {
     if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id)
-    fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq }) })
-      .then(function (r: any) { return r.json() })
+    api.raw<any>('POST', '/api/at/close', { seq: pos._serverSeq })
       .then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) })
       .catch(function () { })
   }

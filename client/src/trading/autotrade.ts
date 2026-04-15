@@ -13,6 +13,7 @@ import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
+import { api } from '../services/api'
 import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
 import { getTimeUTC, getCurrentADX, isCurrentTimeOK, renderDHF } from '../ui/render'
 import { runPostMortem } from '../engine/postMortem'
@@ -103,12 +104,7 @@ function _continueAutoTradeEnable(): void {
 export function _doEnableAT(): void {
   var _newState = !getATEnabled()
   // [AT-TOGGLE-FIX] Server-authoritative toggle — call dedicated endpoint
-  fetch('/api/at/toggle', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ active: _newState })
-  }).then(function(r: any) { return r.json() }).then(function(data: any) {
+  api.raw<any>('POST', '/api/at/toggle', { active: _newState }).then(function(data: any) {
     if (!data.ok) {
       toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, _ZI.x)
       return
@@ -1174,13 +1170,7 @@ export function openAddOn(posId: any): any {
   const seq = pos._serverSeq || pos.id
   const maxAddon = parseInt(el('atMaxAddon')?.value) || 3
   atLog('info', '[ADD-ON] Requesting server add-on for seq=' + seq + '...')
-  return fetch('/api/addon', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ seq: seq, maxAddon: maxAddon })
-  })
-    .then(function (r: any) { return r.json() })
+  return api.raw<any>('POST', '/api/addon', { seq: seq, maxAddon: maxAddon })
     .then(function (j: any) {
       if (j.ok) {
         atLog('buy', '[ADD-ON #' + j.addOnCount + '] ' + (pos.side || '') + ' ' + (pos.sym || '') +
@@ -1576,12 +1566,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
 export function resetKillSwitch(): void {
   var _bal = +(getATMode() === 'demo' ? TP.demoBalance : (TP.liveBalance || TP.demoBalance)) || 0
   { const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.timer + ' Resetting kill switch...' }
-  fetch('/api/at/kill/reset', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ balanceRef: _bal })
-  }).then(function (r: any) { return r.json() })
+  api.raw<any>('POST', '/api/at/kill/reset', { balanceRef: _bal })
     .then(function (j: any) {
       if (j && j.ok) {
         AT.killTriggered = false

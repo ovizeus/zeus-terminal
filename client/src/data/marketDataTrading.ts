@@ -13,6 +13,7 @@ import { _startLivePendingSync , renderDemoPositions } from './marketDataPositio
 import { runDSLBrain, toggleDSL } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
 import { calcDslTargetPrice } from '../engine/brain'
+import { api } from '../services/api'
 import { updateModeBar } from '../ui/modebar'
 import { renderTradeMarkers } from './marketDataOverlays'
 import { onPositionOpened } from '../trading/positions'
@@ -36,7 +37,7 @@ export function switchGlobalMode(mode: any): void {
 }
 
 function _executeGlobalModeSwitch(mode: string): void {
-  fetch('/api/at/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ mode }) }).then(function (r) { return r.json() }).then(function (data: any) {
+  api.raw<any>('POST', '/api/at/mode', { mode }).then(function (data: any) {
     if (data.ok) {
       if (typeof AT !== 'undefined') AT._serverMode = mode
       _applyGlobalModeUI(mode)
@@ -140,12 +141,12 @@ export function _showConfirmDialog3(
 export function promptAddFunds(): void {
   const amount = prompt('Enter amount to add to demo balance (USD):', '5000'); if (!amount) return
   const num = parseFloat(amount); if (!num || num <= 0 || num > 1000000) { toast('Invalid amount', 3000, _ZI.w); return }
-  fetch('/api/at/demo/add-funds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ amount: num }) }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
+  api.raw<any>('POST', '/api/at/demo/add-funds', { amount: num }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
 }
 
 export function promptResetDemo(): void {
   _showConfirmDialog('Reset Demo Balance?', 'This will reset your demo balance to $10,000 and clear all trading statistics.\n\nOpen positions will NOT be closed.\n\nThis action cannot be undone.', 'Cancel', 'Reset Demo', function () {
-    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0; if (typeof AT !== 'undefined') { AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0 }; w.updateDemoBalance(); toast('Demo balance reset to $10,000', 3000, _ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Reset failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
+    api.raw<any>('POST', '/api/at/demo/reset-balance').then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0; if (typeof AT !== 'undefined') { AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0 }; w.updateDemoBalance(); toast('Demo balance reset to $10,000', 3000, _ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Reset failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
   })
 }
 
@@ -240,7 +241,7 @@ function _executePlaceDemoOrder(): void {
 function _registerManualOnServer(pos: any): void {
   if (!pos || pos._serverSeq) return
   const payload = { symbol: pos.sym, side: pos.side, entryPrice: pos.entry, qty: pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0), leverage: pos.lev || 1, sl: pos.sl || null, tp: pos.tp || null, mode: pos.mode || 'demo', dslParams: pos.dslParams || null }
-  fetch('/api/at/register-manual', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, body: JSON.stringify(payload) }).then(function (r) { return r.json() }).then(function (d: any) { if (d.ok && d.seq) { pos._serverSeq = d.seq; if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save() } }).catch(function (err: any) { console.warn('[registerManualOnServer]', err.message || err) })
+  api.raw<any>('POST', '/api/at/register-manual', payload).then(function (d: any) { if (d.ok && d.seq) { pos._serverSeq = d.seq; if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save() } }).catch(function (err: any) { console.warn('[registerManualOnServer]', err.message || err) })
 }
 
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {

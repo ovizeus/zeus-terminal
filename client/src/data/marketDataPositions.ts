@@ -13,6 +13,7 @@ import { manualLiveModifyLimit, liveApiClosePosition, manualLiveGetOpenOrders, m
 import { calcLiqPrice } from './marketDataTrading'
 import { calcDslTargetPrice } from '../engine/brain'
 import { renderTradeMarkers } from './marketDataOverlays'
+import { api } from '../services/api'
 import { attachConfirmClose } from '../engine/events'
 import { onPositionOpened } from '../trading/positions'
 import { addTradeToJournal } from '../services/storage'
@@ -317,7 +318,7 @@ export function renderLivePositions(): void {
 export function closeLivePos(id: any, reason?: string): void {
   const strId = String(id); const idx = TP.livePositions.findIndex((p: any) => String(p.id) === strId); if (idx < 0) return
   const pos = TP.livePositions[idx]; if (pos.status === 'closing' || pos.closed) return
-  if (w._serverATEnabled && pos._serverSeq) { if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id); fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq }) }).then(function (r) { return r.json() }).then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) }).catch(function () { }) }
+  if (w._serverATEnabled && pos._serverSeq) { if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id); api.raw<any>('POST', '/api/at/close', { seq: pos._serverSeq }).then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) }).catch(function () { }) }
   if (typeof w.Intervals !== 'undefined' && w.Intervals.clear) w.Intervals.clear('posCheck_' + pos.id)
   const cur = getSymPrice(pos) || pos.entry; const pnl = (cur && Number.isFinite(cur) && cur > 0) ? calcPosPnL(pos, cur) : 0; pos.pnl = pnl; pos.status = 'closing'
   atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
