@@ -26,7 +26,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | baseline | ✓ done | — | `migration/baseline-v1.6.23-B55` | n/a | HEAD=8bdb16a branch=fix/audit-2026-04-14 |
 | 0.A Infrastructure | ✓ done | — | — | scripts + log + tag | backup/rollback scripts tested |
 | 0 Backend-first sync | ✓ done | `migration/phase-00-pre` | `migration/phase-00-post` | desktop→phone <2s via /ws/sync | Option A (WS), 8 commits |
-| 1 Typed contracts | pending | — | — | tsc clean on stores/ | — |
+| 1 Typed contracts | ✓ done | `migration/phase-01-pre` | `migration/phase-01-post` | tsc clean + typed wire | 5 commits, log-only server validator |
 | 2 API client centralized | pending | — | — | fetch( ≤3 hits | — |
 | 3 atStore canonic | pending | — | — | #atLev DOM not source | feature-flag |
 | 4 settingsStore canonic | pending | — | — | cross-device toggle | — |
@@ -177,5 +177,110 @@ git reset --hard migration/phase-00-c6-ok-20260414-233154
 - Zero cazuri de pierdere de date observate în testele manuale; toate checkpoint-urile C4/C5/C6 sunt branch-backed.
 
 **Status**: ✓ PHASE 0 COMPLETE.
+
+---
+
+### Phase 1 — Typed contracts
+
+**Scop**: fundația de tipuri pentru canalul settings — introducere `SettingsPayload`
+(flat wire contract, 40 chei, mirror exact `SETTINGS_WHITELIST`), extindere
+`WsMessage` union cu `WsSettingsChanged`, tiparea completă a store-ului și a
+subscriber-ului realtime pe aceste contracte, plus un validator shape server-side
+în **mod log-only** (soft). Zero schimbare de runtime; doar typed contracts +
+observabilitate.
+
+**Pre-tag**: `migration/phase-01-pre` (HEAD=f2ad761)
+**Post-tag**: `migration/phase-01-post`
+**Branch**: `migration/phase-01-typed-contracts`
+
+**Commit-urile 1–5** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| 1 | `f8fa810` | types: `WsSettingsChanged` în union + nou `types/settings-contracts.ts` (`SettingsPayload`, `SettingsGetResponse`, `SettingsPostRequest`, `SettingsPostResponse`) + re-export în `types/index.ts` |
+| 2 | `688d677` | client: `settingsStore.ts` tipat pe `SettingsPayload` — 13 `any`-uri eliminate; `Legacy*` interfaces locale pentru bridge-ul `USER_SETTINGS`/`TC` (fără `declare global`); `get<K>` tipare strict |
+| 3 | `1a0020d` | client: `settingsRealtime.ts` folosește direct narrow pe discriminant `msg.type === 'settings.changed'`; eliminat cast `as unknown as Partial<...>`; eliminat alias local duplicat; `window as any` → `window as unknown as ZeusWindowExt` |
+| 4 | `451ab47` | server: `validateSettingsBody` middleware **log-only (C4a)** în `middleware/validate.js` — `SETTINGS_SHAPE` cu tipuri pentru toate cele 40 chei; wire single-line în `routes/trading.js` POST `/api/user/settings`; **zero 400 nou** introdus |
+| 5 | `<post>` | docs: MIGRATION_LOG phase 1 entry + tag `migration/phase-01-post` |
+
+**Ce s-a tipat concret**:
+
+- **Contracts noi** (`client/src/types/settings-contracts.ts`):
+  - `SettingsPayload` — 40 chei opționale flat (number×16, boolean×6, string×7, array×1, object×10), mirror exact al server `SETTINGS_WHITELIST`
+  - `SettingsGetResponse` — `{ ok, settings, updated_at, error? }`
+  - `SettingsPostRequest` — `{ settings: SettingsPayload }`
+  - `SettingsPostResponse` — `{ ok, updated_at?, error? }`
+- **Union extins** (`client/src/types/sync.ts`): `WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged`
+- **Store typed** (`client/src/stores/settingsStore.ts`): `settings: SettingsPayload`, `patch(Partial<SettingsPayload>)`, `get<K extends keyof SettingsPayload>(K) => SettingsPayload[K]`, toate projector-ele pe shape-uri tipate; bridge locale `LegacyAutoTrade`/`LegacyChart`/`LegacyUserSettings`/`LegacyTC`/`ZeusWindowExt`; 13 `any` eliminate (0 rămase)
+- **Realtime typed** (`client/src/services/settingsRealtime.ts`): narrow prin discriminant pe union; alias local duplicat `SettingsChangedMsg` eliminat; 1 cast bridge controlat `window as unknown as ZeusWindowExt`
+- **Server shape validator** (`server/middleware/validate.js`): `SETTINGS_SHAPE` + `validateSettingsBody` log-only, wrap în try/catch, export adăugat; wire minim în `server/routes/trading.js`
+
+**DoD checklist**:
+
+- [x] **DoD 1** — `WsMessage` include `WsSettingsChanged`; `settingsRealtime.ts` narrow fără cast la `unknown`. `grep "as unknown as" client/src/services/settingsRealtime.ts` → 1 (doar `window as unknown as ZeusWindowExt`, documentat; zero cast pe mesaj)
+- [x] **DoD 2** — `settingsStore.ts`: 0 `any` (`grep -E "\bany\b" → 0`); singurul cast bridge controlat e `at as unknown as Record<string, unknown>` localizat într-o buclă de 3 linii, documentat (commit 2)
+- [x] **DoD 3** — `npx tsc --noEmit` PASS după fiecare commit; zero erori noi introduse în fișiere out-of-scope
+- [x] **DoD 4** — `SettingsPayload` conține EXACT 40 chei mirror `SETTINGS_WHITELIST` server. Cross-ref prin comentariu în ambele sensuri
+- [x] **DoD 5** — server `validateSettingsBody` log-only: zero 400 nou; request forwarded întotdeauna prin `next()`; logs prefix `[validate][settings]` pentru shape/unknown/type mismatches
+- [x] **DoD 6** — `npx vite build` PASS după fiecare commit (fără erori, doar warnings INEFFECTIVE_DYNAMIC_IMPORT pre-existente)
+- [x] **DoD 7** — zero regresii comportamentale: toate flow-urile runtime (load boot, save POST, realtime subscribe, server POST/GET, broadcast) au comportament bit-identic față de post-Faza 0
+- [x] **DoD 8** — MIGRATION_LOG Phase 1 entry complet; tag `migration/phase-01-post` creat
+- [x] **DoD 9** — `git diff migration/phase-01-pre..HEAD --stat` atinge doar zonele permise (`client/src/types/`, `client/src/stores/settingsStore.ts`, `client/src/services/settingsRealtime.ts`, `server/middleware/validate.js`, `server/routes/trading.js` wire-only, `MIGRATION_LOG.md`)
+
+**Ce a rămas intenționat neatins pentru fazele următoare**:
+
+- **Strict validator server** — C4 este C4a soft / log-only. Tightening la reject
+  hard (400 pe shape/type invalid) este planificat pentru o fază ulterioară după
+  ce log-urile soft confirmă că payload-urile reale respectă contractul. Fără
+  deviație neașteptată de traffic, upgrade-ul devine mecanic.
+- **Nested legacy types globale** — `LegacyAutoTrade`/`LegacyChart`/`LegacyUserSettings`/`LegacyTC`
+  sunt strict locale în `settingsStore.ts`. NU au fost promovate în `types/` pentru a
+  nu extinde suprafața publică. Faza 9 (Cleanup + TS strict global) poate decide
+  dacă merge `declare global` sau dacă bridge-ul dispare complet când Faza 7
+  (Kill DOM-as-state) elimină legacy-ul.
+- **`window.TC`, `USER_SETTINGS`, `_usFetchRemote`, `_usPostRemote`** rămân globale
+  necontrolate — convergența pe `settingsStore` ca sursă unică e treaba Fazei 4.
+- **`SettingsModal.tsx` `s.tc`/`s.setTC`** — bug pre-existent menționat în Phase 0
+  deferred, rămâne out-of-scope până la Faza 4.
+- **`useServerSync.ts`, `ws.ts`** — neatinse; nu aveau `any`-uri relevante și
+  extensia union-ului nu necesită modificări (listener-ele existente continuă să
+  primească mesajele non-`settings.changed`).
+- **`stateAccessors.ts`** — neatins; migrarea lui e în Faza 4/7.
+- **TS strict global** — restul erorilor pre-existente (panels.ts, render.ts,
+  SettingsModal.tsx) rămân out-of-scope până la Faza 9.
+
+**Rollback point**:
+
+```bash
+# Full rollback la pre-fază:
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 01 --dry-run
+bash /root/zeus-terminal/scripts/rollback-to-phase.sh 01
+
+# Sau git hard-reset la pre-tag:
+git checkout migration/phase-01-typed-contracts
+git reset --hard migration/phase-01-pre
+```
+
+Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/01-20260414-235740.report.txt`.
+
+**Observații de runtime / risc**:
+
+- Shape-ul `SETTINGS_SHAPE` din server (40 chei) DUBLEAZĂ `SETTINGS_WHITELIST` pe
+  tipuri. Orice adăugare de cheie nouă în whitelist trebuie propagată în 3 locuri:
+  `SETTINGS_WHITELIST` (server/routes/trading.js), `SETTINGS_SHAPE`
+  (server/middleware/validate.js), `SettingsPayload`
+  (client/src/types/settings-contracts.ts). Comentariu cross-ref în toate.
+- Log-urile `[validate][settings]` sunt grepable în output pm2. Dacă apar volume
+  mari de mismatch, asta semnalează că un client trimite payload care nu respectă
+  contractul — util pentru diagnostic înainte de tightening strict.
+- Runtime post-C4 NU a fost `pm2 reload`-at în cadrul fazei; prima validare live
+  va fi la următorul deploy. Până atunci, `node --check` pe ambele fișiere a
+  confirmat syntax valid; comportamentul middleware-ului (întotdeauna `next()`)
+  garantează absența de regresii la deploy.
+- Cast-urile bridge locale `window as unknown as ZeusWindowExt` sunt documentate
+  ca punct unic de intrare spre legacy globals — un grep le poate inventaria
+  rapid pentru Faza 9.
+
+**Status**: ✓ PHASE 1 COMPLETE.
 
 ---
