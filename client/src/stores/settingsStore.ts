@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { api } from '../services/api'
+import { useATStore } from './atStore'
 import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
@@ -123,6 +124,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
           const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
           set({ settings: merged, loaded: true })
           _syncToWindow(merged)
+          _projectToAT(merged)
           return
         }
         // ts === 0 → offline / transient; fall through to offline fallback
@@ -136,6 +138,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
       set({ settings: merged, loaded: true })
       _syncToWindow(merged)
+      _projectToAT(merged)
     } catch {
       set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
     }
@@ -150,6 +153,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       // 1. Push store → legacy USER_SETTINGS + window.TC so engines + _usBuildFlatPayload see fresh values.
       _projectToLegacy(settings)
       _syncToWindow(settings)
+      _projectToAT(settings)
       // 2. Single POST path — delegate to _usPostRemote (flattens USER_SETTINGS via _usBuildFlatPayload,
       //    POSTs /api/user/settings with keepalive, and triggers server-side settings.changed broadcast).
       if (typeof w._usPostRemote === 'function') {
@@ -170,6 +174,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   patch: (partial) => set((s) => {
     const updated: SettingsPayload = { ...s.settings, ...partial }
     _syncToWindow(updated)
+    _projectToAT(updated)
     return { settings: updated }
   }),
 
@@ -249,6 +254,19 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.heatmapSettings !== undefined) ch.heatmap = settings.heatmapSettings
   if (settings.indSettings !== undefined) us.indicators = settings.indSettings
   if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
+}
+
+/**
+ * Phase 3 projector: hydrate atStore.config from the flat settings payload.
+ * Runs alongside _syncToWindow so atStore reflects the same source of truth
+ * as window.TC. Wire mapping lives in atStore.hydrate (sl→slPct, others 1:1;
+ * adxMin/cooldownMs not in flat wire, preserved from current config).
+ *
+ * No caller of atStore.config exists yet (Phase 3 C1 is contract-only);
+ * this projector just keeps the store warm until C3+ flips the readers.
+ */
+function _projectToAT(s: SettingsPayload): void {
+  try { useATStore.getState().hydrate(s) } catch (_) { /* defensive */ }
 }
 
 /** Bridge invers: sync settings into window.TC for legacy engines. */
