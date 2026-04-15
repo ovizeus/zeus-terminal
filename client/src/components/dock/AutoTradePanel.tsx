@@ -92,6 +92,28 @@ export function AutoTradePanel() {
     try { localStorage.setItem('zeus_mscan_syms', JSON.stringify(mscanSyms)) } catch (_) {}
   }, [mscanSyms])
 
+  // Phase 3 C4: push the 6 AT config fields (lev/size/slPct/rr/maxPos/sigMin)
+  // into atStore.config on every edit, so atStore (and by extension the
+  // TC Proxy installed in core/state.ts) reflects the panel value without
+  // waiting for Save. NaN (from empty/invalid input) is guarded-out by
+  // patchConfig, leaving the previous store value intact. adxMin + cooldownMs
+  // are not panel inputs and stay on their hydrated/default values.
+  useEffect(() => {
+    const _n = (s: string) => {
+      if (s == null || s === '') return NaN
+      const v = Number(s)
+      return Number.isFinite(v) ? v : NaN
+    }
+    useATStore.getState().patchConfig({
+      lev: _n(atLev),
+      size: _n(atSize),
+      slPct: _n(atSL),
+      rr: _n(atRR),
+      maxPos: _n(atMaxPos),
+      sigMin: _n(sigMin),
+    })
+  }, [atLev, atSize, atSL, atRR, atMaxPos, sigMin])
+
   // Close the sym picker on outside click (React owns state now — legacy
   // document-level listener in klines.ts only mutates DOM style and would
   // desync with React state).
