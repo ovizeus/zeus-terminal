@@ -9,7 +9,7 @@ const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const db = require('../services/database');
 const logger = require('../services/logger');
-const { getActiveSessions } = require('../middleware/sessionAuth');
+const { getActiveSessions, resetActivity } = require('../middleware/sessionAuth');
 function _mask(email) { if (!email) return '?'; const [u, d] = email.split('@'); return u[0] + '***@' + (d || '?'); }
 
 const router = express.Router();
@@ -205,6 +205,7 @@ router.post('/register', async (req, res) => {
             // Admin auto-login (JWT includes id + tokenVersion for session invalidation)
             const token = jwt.sign({ id: userId, email: normalEmail, role: 'admin', tokenVersion: 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
             _setAuthCookie(res, token);
+            resetActivity(userId, Date.now());
             logger.info('AUTH', 'Admin registered', { email: _mask(normalEmail) });
             return res.json({ ok: true, email: normalEmail, role: 'admin' });
         }
@@ -369,6 +370,9 @@ router.post('/verify-code', (req, res) => {
         const freshUser = db.findUserById(pending.userId);
         const token = jwt.sign({ id: pending.userId, email: normalEmail, role: pending.role, tokenVersion: freshUser ? freshUser.token_version : 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
         _setAuthCookie(res, token);
+        // Reset inactivity tracking so this fresh session isn't immediately
+        // tripped by the previous session's stale last_active_at.
+        resetActivity(pending.userId, Date.now());
 
         db.auditLog(pending.userId, 'LOGIN_SUCCESS', {}, req.ip);
         logger.info('AUTH', 'Login verified', { email: _mask(normalEmail), role: pending.role });

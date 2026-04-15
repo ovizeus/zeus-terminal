@@ -177,4 +177,19 @@ function getActiveSessions() {
     return out;
 }
 
-module.exports = { createSessionAuth, cookieParser, getActiveSessions };
+// Reset inactivity tracking for a user (called from /auth/verify-code success).
+// Without this, a fresh login is judged against the previous session's stale
+// last_active_at — any >4h gap triggers an immediate INACTIVITY_TIMEOUT and
+// kicks the user straight back to /login.html.
+function resetActivity(userId, ts) {
+    if (!userId) return;
+    const now = ts || Date.now();
+    _activity.set(userId, now);
+    _lastPersistedTs.set(userId, now);
+    try {
+        const db = require('../services/database');
+        db.setLastActiveAt(userId, now);
+    } catch (_) { /* DB not ready */ }
+}
+
+module.exports = { createSessionAuth, cookieParser, getActiveSessions, resetActivity };

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'zt-v160-b24';
+const CACHE_VERSION = 'zt-v160-b25';
 const CACHE_NAME = `zt-cache-${CACHE_VERSION}`;
 const ASSETS = [
     '/login.html',
@@ -27,6 +27,8 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
+    // Cache API only supports GET — let the browser handle non-GET natively
+    if (event.request.method !== 'GET') return;
     const url = event.request.url;
     const isApi = url.includes('/api/') || url.includes('binance.com') || url.includes('bybit.com') || url.includes('alternative.me');
     const isExternal = url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com') || url.includes('cdn.jsdelivr.net') || url.includes('unpkg.com') || url.includes('cdnjs.cloudflare.com');
