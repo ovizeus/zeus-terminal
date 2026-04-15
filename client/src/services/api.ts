@@ -162,3 +162,55 @@ export interface VersionInfo {
 export const versionApi = {
   get: () => api.get<VersionInfo>('/api/version'),
 }
+
+// ── User Settings (Phase 4 canonical) ──
+//
+// Typed client for the authoritative per-user settings endpoint backed by
+// SQLite (server/routes/trading.js → /api/user/settings). Shape:
+//   GET  → { ok, settings: <flat whitelisted>, updated_at }
+//   POST { settings: <flat whitelisted> } → { ok, updated_at }
+//
+// The server whitelist (SETTINGS_WHITELIST in trading.js) accepts both keys
+// present in SettingsPayload AND a few extras not yet represented there
+// (profile, bmMode, assistArmed, manualLive, ptLevDemo, ptLevLive,
+// ptMarginMode, dslSettings, chartTz). The wire type therefore widens to
+// `Partial<SettingsPayload> & Record<string, unknown>` — the `Record` arm
+// is strictly a compat escape hatch for those extras and should shrink as
+// SettingsPayload grows.
+//
+// Phase 4 C1: strict additive. Zero call-sites yet — settingsStore + the
+// _usFetchRemote/_usPostRemote adapters in core/config.ts are wired in
+// C2/C3. This commit only introduces the typed surface.
+
+import type { SettingsPayload } from '../types/settings-contracts'
+
+/** Response shape of GET /api/user/settings. */
+export interface UserSettingsResponse {
+  ok: boolean
+  settings: Partial<SettingsPayload> & Record<string, unknown>
+  updated_at: number
+  error?: string
+}
+
+/** Response shape of POST /api/user/settings. */
+export interface UserSettingsSaveResponse {
+  ok: boolean
+  updated_at?: number
+  error?: string
+}
+
+/** Payload accepted by POST /api/user/settings (flat whitelisted keys). */
+export type UserSettingsPayload = Partial<SettingsPayload> & Record<string, unknown>
+
+export const userSettingsApi = {
+  /** GET /api/user/settings — authoritative per-user settings from SQLite. */
+  fetch: (opts?: ApiRequestOpts) =>
+    api.raw<UserSettingsResponse>('GET', '/api/user/settings', undefined, opts),
+  /**
+   * POST /api/user/settings — persist flat whitelisted settings.
+   * Pass `{ keepalive: true }` for saves issued during `beforeunload`
+   * (matches the legacy `_usPostRemote` fire-and-forget pattern).
+   */
+  save: (settings: UserSettingsPayload, opts?: ApiRequestOpts) =>
+    api.raw<UserSettingsSaveResponse>('POST', '/api/user/settings', { settings }, opts),
+}
