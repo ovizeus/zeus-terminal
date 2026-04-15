@@ -14,6 +14,7 @@ import { initZeusDock } from '../ui/dock'
 import { DEV } from '../utils/dev'
 import { runAutoTradeCheck , atLog } from '../trading/autotrade'
 import { liveApiSyncState } from '../trading/liveApi'
+import { wsService } from '../services/ws'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, atLog, fn calls
 
 // ===== INIT ZEUS GROUPS (DOM structure) =====
@@ -84,7 +85,14 @@ export function _startExtras(): void {
   w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
   w.Intervals.set('bbSave', () => { if (typeof w._aubSaveBB === 'function') w._aubSaveBB() }, 30000)
   atLog('info', '[INIT] Extras module online')
-  w.Intervals.set('livePosSync', function () { if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 30000)
+  // [MIGRATION-F5 C6] Polling retired from main path.
+  // Previously 30s always-on. Now 120s fallback, skipped while /ws/sync
+  // is OPEN — server's `positions.changed` broadcast + positionsRealtime
+  // subscriber + positionsStore.applyDelta handle reconciliation on the
+  // happy path. This interval only performs work when the socket is
+  // down (after intentional disconnect or while the reconnect backoff
+  // in wsService hasn't recovered yet).
+  w.Intervals.set('livePosSync', function () { if (wsService.isConnected()) return; if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 120000)
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     console.log('[startApp] AT was enabled before reload — resuming')
     const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
