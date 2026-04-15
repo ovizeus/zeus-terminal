@@ -19,6 +19,8 @@ import { renderLivePositions , renderDemoPositions } from '../data/marketDataPos
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
+import { useATStore } from '../stores/atStore'
+import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -154,23 +156,76 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
 })()
 
 // ── P1: TRADING CONFIG — DOM-free parameter source ───────────────
-w.TC = w.TC || {
-  lev: 5,
-  size: 200,
-  slPct: 1.5,
-  rr: 2,
-  riskPct: 1,
-  maxPos: 3,
-  cooldownMs: 60000,
-  minADX: 18,
-  hourStart: 0,
-  hourEnd: 23,
-  sigMin: 3,
-  confMin: 65,
-  dslActivatePct: 0.50,
-  dslTrailPct: 0.60,
-  dslTrailSusPct: 0.50,
-  dslExtendPct: 0.25,
+// Phase 3 C3: the 8 AT-relevant keys (lev, size, slPct, rr, maxPos, sigMin,
+// minADX, cooldownMs) are delegated to atStore.config via a Proxy.
+// Reads return atStore values; writes route through patchConfig and are
+// also mirrored on the backing object so Object.keys/enumeration still work.
+// Every other TC key (riskPct, hourStart, hourEnd, confMin, dslActivatePct,
+// dslTrailPct, dslTrailSusPct, dslExtendPct) stays as a plain property on
+// the backing object — untouched legacy behavior.
+{
+  const _tcDefaults: any = {
+    lev: 5,
+    size: 200,
+    slPct: 1.5,
+    rr: 2,
+    riskPct: 1,
+    maxPos: 3,
+    cooldownMs: 60000,
+    minADX: 18,
+    hourStart: 0,
+    hourEnd: 23,
+    sigMin: 3,
+    confMin: 65,
+    dslActivatePct: 0.50,
+    dslTrailPct: 0.60,
+    dslTrailSusPct: 0.50,
+    dslExtendPct: 0.25,
+  }
+  if (!w.TC || !w.TC.__atStoreProxy) {
+    const _tcBacking: any = w.TC ? { ..._tcDefaults, ...w.TC } : { ..._tcDefaults }
+    try {
+      // Seed atStore from backing defaults so first Proxy read matches legacy values.
+      useATStore.getState().patchConfig({
+        lev: _tcBacking.lev,
+        size: _tcBacking.size,
+        slPct: _tcBacking.slPct,
+        rr: _tcBacking.rr,
+        maxPos: _tcBacking.maxPos,
+        sigMin: _tcBacking.sigMin,
+        adxMin: _tcBacking.minADX,
+        cooldownMs: _tcBacking.cooldownMs,
+      })
+    } catch (_) { /* defensive */ }
+
+    const AT_DELEGATED = new Set(['lev', 'size', 'slPct', 'rr', 'maxPos', 'sigMin', 'minADX', 'cooldownMs'])
+    const TC_TO_CFG: Record<string, keyof ATConfig> = {
+      lev: 'lev', size: 'size', slPct: 'slPct', rr: 'rr',
+      maxPos: 'maxPos', sigMin: 'sigMin', minADX: 'adxMin', cooldownMs: 'cooldownMs',
+    }
+
+    w.TC = new Proxy(_tcBacking, {
+      get(target: any, prop: string | symbol) {
+        if (prop === '__atStoreProxy') return true
+        if (typeof prop === 'string' && AT_DELEGATED.has(prop)) {
+          try { return useATStore.getState().config[TC_TO_CFG[prop]] } catch (_) { return target[prop] }
+        }
+        return target[prop]
+      },
+      set(target: any, prop: string | symbol, value: any) {
+        if (typeof prop === 'string' && AT_DELEGATED.has(prop)) {
+          const n = Number(value)
+          if (Number.isFinite(n)) {
+            try { useATStore.getState().patchConfig({ [TC_TO_CFG[prop]]: n } as Partial<ATConfig>) } catch (_) { /* defensive */ }
+          }
+          target[prop] = value
+          return true
+        }
+        target[prop] = value
+        return true
+      },
+    })
+  }
 }
 
 export function syncDOMtoTC() {
