@@ -234,13 +234,13 @@ export function syncDOMtoTC() {
   const _pi = function (id: string, def: any) { const v = parseInt((_el(id) as any)?.value); return Number.isFinite(v) ? v : def }
   const _pf = function (id: string, def: any) { const v = parseFloat((_el(id) as any)?.value); return Number.isFinite(v) ? v : def }
   const TC = w.TC
-  TC.lev = Math.max(1, Math.min(125, _pi('atLev', TC.lev)))
-  TC.size = Math.max(1, _pf('atSize', TC.size))
-  TC.slPct = Math.max(0.1, Math.min(20, _pf('atSL', TC.slPct)))
-  TC.rr = Math.max(0.1, Math.min(20, _pf('atRR', TC.rr)))
-  TC.maxPos = Math.max(1, _pi('atMaxPos', TC.maxPos))
+  // Phase 3 C5: the 6 AT keys (lev/size/slPct/rr/maxPos/sigMin) are now
+  // sourced from atStore.config (populated by AutoTradePanel on edit and by
+  // settingsStore on load/WS). Reading DOM here would route DOM values back
+  // through the TC Proxy into the store, making DOM the implicit source
+  // again — exactly what Phase 3 eliminates. DROPPED for AT keys.
+  // riskPct + dsl* remain DOM-sourced (out-of-scope for Phase 3 atStore).
   TC.riskPct = Math.max(0.1, Math.min(5, _pf('atRiskPct', TC.riskPct)))
-  TC.sigMin = Math.max(1, _pi('atSigMin', TC.sigMin))
   TC.dslActivatePct = _pf('dslActivatePct', TC.dslActivatePct)
   TC.dslTrailPct = _pf('dslTrailPct', TC.dslTrailPct)
   TC.dslTrailSusPct = _pf('dslTrailSusPct', TC.dslTrailSusPct)
@@ -342,10 +342,14 @@ export function buildExecSnapshot(side: any, cond: any) {
   const BM = getBrainMetrics()
   const _tf = PROFILE_TF?.[S.profile || 'fast'] || { trigger: '5m', context: '15m' }
 
-  const _levRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.lev)) ? TC.lev : parseInt(document.getElementById('atLev')?.getAttribute('value') || '')
-  const _sizeRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.size)) ? TC.size : parseFloat(document.getElementById('atSize')?.getAttribute('value') || '')
-  const _slRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.slPct)) ? TC.slPct : parseFloat(document.getElementById('atSL')?.getAttribute('value') || '')
-  const _rrRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.rr)) ? TC.rr : parseFloat(document.getElementById('atRR')?.getAttribute('value') || '')
+  // Phase 3 C5: read AT config from atStore (canonical source). Previous
+  // DOM fallback via document.getElementById('atLev') etc. removed — the
+  // store always has valid finite defaults (seeded in C3 at Proxy install).
+  const _atCfg = useATStore.getState().config
+  const _levRaw = _atCfg.lev
+  const _sizeRaw = _atCfg.size
+  const _slRaw = _atCfg.slPct
+  const _rrRaw = _atCfg.rr
 
   const lev = (Number.isFinite(_levRaw) && _levRaw >= 1) ? Math.min(125, Math.max(1, _levRaw)) : 5
   const size = (Number.isFinite(_sizeRaw) && _sizeRaw > 0) ? Math.min(100000, _sizeRaw) : 200

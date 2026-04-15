@@ -10,6 +10,7 @@ import { MACRO_MULT } from '../constants/trading'
 import { DEV , devLog } from '../utils/dev'
 import { atLog } from './autotrade'
 import { getSymPrice } from '../data/marketDataPositions'
+import { useATStore } from '../stores/atStore'
 
 const w = window as any
 
@@ -233,8 +234,11 @@ export function recalcAdaptive(isStartup?: any): void {
 
     if (!closedTrades.length) return
 
-    var slPct = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.slPct)) ? w.TC.slPct : (parseFloat(document.getElementById('atSL')?.value || '') || 1.5)
-    var rrRatio = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.rr)) ? w.TC.rr : (parseFloat(document.getElementById('atRR')?.value || '') || 2)
+    // Phase 3 C5: read AT config from atStore (canonical source). DOM
+    // fallback via document.getElementById('atSL'/'atRR') removed.
+    var _atCfg = useATStore.getState().config
+    var slPct = _atCfg.slPct
+    var rrRatio = _atCfg.rr
 
     var newBuckets: any = {}
     closedTrades.forEach(function (t: any) {
