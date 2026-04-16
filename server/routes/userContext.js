@@ -83,7 +83,7 @@ router.get('/user-context', (req, res) => {
         const fp = _userFile(userId);
         if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
 
-        // 1. Read FS baseline (contains all sections including FS-only ones)
+        // 1. Read FS baseline (FS-only sections + envelope after C5)
         let fsData = null;
         if (fs.existsSync(fp)) {
             try { fsData = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { fsData = null; }
@@ -165,10 +165,7 @@ router.post('/user-context', async (req, res) => { // [S11] async to properly aw
         }
         if (rejected > 0) console.warn('[user-ctx] Rejected', rejected, 'section(s) from user', req.user.id);
 
-        const final = { userId: req.user.id, ts: body.ts, sections: merged };
-        _atomicWrite(fp, final);
-
-        // [Phase 8 C3] Dual-write: also persist SQLite-eligible sections
+        // [Phase 8 C5] SQLite is primary for 14 sections — write them there
         const sqliteBatch = {};
         for (const key of SQLITE_SECTIONS) {
             if (merged[key] !== undefined && merged[key] !== null) {
@@ -176,14 +173,20 @@ router.post('/user-context', async (req, res) => { // [S11] async to properly aw
             }
         }
         if (Object.keys(sqliteBatch).length > 0) {
-            try {
-                db.saveCtxBulk(req.user.id, sqliteBatch);
-            } catch (e) {
-                console.error('[user-ctx] SQLite dual-write failed for user', req.user.id, ':', e.message);
-            }
+            db.saveCtxBulk(req.user.id, sqliteBatch);
         }
 
-        console.log('[user-ctx] POST user', req.user.id, '— sections:', Object.keys(merged).join(','), '(sqlite:', Object.keys(sqliteBatch).length, ')');
+        // [Phase 8 C5] FS gets only non-SQLite sections (uiContext, panels, uiScale, settings, aresData)
+        const fsSections = {};
+        for (const [key, val] of Object.entries(merged)) {
+            if (!SQLITE_SECTIONS.has(key)) {
+                fsSections[key] = val;
+            }
+        }
+        const final = { userId: req.user.id, ts: body.ts, sections: fsSections };
+        _atomicWrite(fp, final);
+
+        console.log('[user-ctx] POST user', req.user.id, '— sqlite:', Object.keys(sqliteBatch).length, 'fs:', Object.keys(fsSections).length);
         // Broadcast to other devices via WebSocket for instant sync
         if (req.app.locals.wsBroadcast) req.app.locals.wsBroadcast(req.user.id, null);
         // [C3] Echo stored settings section for client-side validation
