@@ -2256,15 +2256,14 @@ w.BRAIN = BRAIN
 //   adapt, adaptive, performance, dailyTrades, dailyPnL, lossStreak,
 //   protectMode, protectReason, newsRisk, qexit, probScore, danger,
 //   _entryFailedGates, core, etc.) passes through to the backing BM.
-//   These fields still sync to the store via useBrainBridge +
-//   syncFromEngine (removed in C7).
+//   These fields remain backing-only (not inverted to store).
 // - SET on canonical keys is no-op + console.warn in dev. Engine writes
 //   must go through brainStore mutators (via brain.ts helpers); legacy
 //   external write attempts are intentionally not write-through.
 // - SET on runtime / non-inverted keys passes through to backing (so
 //   legacy paths keep updating BM.structure, BM.dailyTrades, etc.).
 //
-// useBrainBridge + syncFromEngine remain active in parallel until C7.
+// Engine writes go directly through brainStore mutators (Phase 6 C5–C7).
 {
   const CANONICAL_BM_KEYS = new Set([
     'mode', 'profile', 'entryReady', 'entryScore',

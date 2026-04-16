@@ -16,7 +16,7 @@ export function AdaptivePanel() {
         <div style={{ marginBottom: '8px' }}>
           <button id="adaptiveToggleBtn" onClick={() => {
             toggleAdaptive()
-            // brainStore syncs via useBrainBridge event — no manual setAdaptiveOn needed
+            // brainStore is canonical; engine writes directly via mutators
           }} style={{
             width: '100%', padding: '6px 10px', fontSize: '10px', fontFamily: 'var(--ff)', letterSpacing: '1px',
             background: adaptiveOn ? '#0a2a1a' : '#0a1220',

@@ -34,7 +34,7 @@ const w = window as any // kept for function calls, w.S writes + self-ref
 //   flow / mtf / sweep / gates / thoughts / adaptParams
 // BM fields outside this set (structure, volRegime, liqCycle, macro,
 // adaptive, performance, confMin, etc.) are NOT inverted here; they remain
-// backing-only for now and keep syncing to the store via syncFromEngine.
+// backing-only (runtime engine scratch, not exposed through the store).
 function _pushBrainMode(mode: BrainMode): void {
   BM.mode = mode
   useBrainStore.getState().setMode(mode)

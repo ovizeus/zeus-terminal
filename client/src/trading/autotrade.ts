@@ -40,10 +40,10 @@ import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 
-// [Phase 6 pre-C7] BlockReason mirror-write helpers — ensure brainStore
-// canonical blockReason stays in sync once useBrainBridge is removed in C7.
-// Backing w.BlockReason.set/.clear keeps legacy UI updates (DOM + atLog);
-// the store mirror publishes the typed canonical value to React consumers.
+// [Phase 6] BlockReason mirror-write helpers — brainStore canonical
+// blockReason kept in sync with backing w.BlockReason facade.
+// Backing .set/.clear keeps legacy UI updates (DOM + atLog);
+// store mirror publishes the typed canonical value to React consumers.
 function _setBR(code: string, text: string, source?: string): void {
   w.BlockReason.set(code, text, source)
   useBrainStore.getState().setBlockReason({ code, text })
