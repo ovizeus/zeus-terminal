@@ -7,6 +7,7 @@ import { updateLiveBalance, renderLivePositions , getSymPrice } from '../data/ma
 import { onPositionOpened } from './positions'
 import { addTradeToJournal } from '../services/storage'
 import { atLog } from './autotrade'
+import { usePositionsStore } from '../stores/positionsStore'
 
 const w = window as any
 
@@ -162,6 +163,11 @@ export async function liveApiSyncState(): Promise<any> {
     w.TP.liveBalance = bal.totalBalance || 0
     w.TP.liveAvailableBalance = bal.availableBalance || 0
     w.TP.liveUnrealizedPnL = bal.unrealizedPnL || 0
+    usePositionsStore.getState().setLiveBalance({
+      totalBalance: bal.totalBalance || 0,
+      availableBalance: bal.availableBalance || 0,
+      unrealizedPnL: bal.unrealizedPnL || 0,
+    })
     // [P0-B6] Merge exchange data into existing positions to preserve runtime DSL state
     var _existingById: any = {}
     if (Array.isArray(w.TP.livePositions)) {

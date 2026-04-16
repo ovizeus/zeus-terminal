@@ -19,6 +19,7 @@ import { renderTradeMarkers } from './marketDataOverlays'
 import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions } from './marketDataPositions'
 import { liveApiSyncState } from '../trading/liveApi'
+import { usePositionsStore } from '../stores/positionsStore'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 
 // ═══════════════════════════════════════════════════════
@@ -181,10 +182,11 @@ export function updateLiveLiqPrice(): void { const entry = parseFloat(el('liveEn
 export function setDemoPct(pct: number): void { const e = el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0) }
 export function setLivePct(pct: number): void { const e = el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0) }
 export function updateDemoBalance(): void {
-  const e = el('demoBalance'); if (!e) return
-  const _gm = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  if (_gm === 'live') { if (w._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) { const _balPrefix = (w._resolvedEnv === 'TESTNET') ? 'BAL (TESTNET): $' : 'BAL: $'; e.textContent = _balPrefix + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } else { e.textContent = 'BAL: Exchange not configured' } }
-  else { e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+  // React owns #demoBalance rendering (ManualTradePanel.tsx).
+  // Propagate TP.demoBalance → positionsStore so React re-renders reactively.
+  if (typeof TP !== 'undefined' && Number.isFinite(TP.demoBalance)) {
+    usePositionsStore.getState().setDemoBalance(TP.demoBalance)
+  }
 }
 
 // ===== PLACE ORDER =====

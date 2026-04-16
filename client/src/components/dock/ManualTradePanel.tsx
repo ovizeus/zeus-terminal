@@ -22,7 +22,8 @@ export function ManualTradePanel() {
   const [size, setSize] = useState('100')
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
-  const balance = usePositionsStore((s) => s.demoBalance)
+  const demoBalance = usePositionsStore((s) => s.demoBalance)
+  const liveBalanceTotal = usePositionsStore((s) => s.liveBalance.totalBalance)
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {
@@ -74,7 +75,7 @@ export function ManualTradePanel() {
   }
 
   function setPct(pct: number) {
-    const bal = balance // from positionsStore (reactive)
+    const bal = exchangeMode === 'live' ? liveBalanceTotal : demoBalance
     setSize((bal * pct / 100).toFixed(0))
   }
 
@@ -109,7 +110,14 @@ export function ManualTradePanel() {
           ? (resolvedEnv === 'TESTNET' ? '\u25CF MANUAL TRADE (TESTNET)' : '\u25CF MANUAL TRADE (LIVE)')
           : 'MANUAL TRADE'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span id="demoBalance" className="tp-bal">{`BAL: $${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+          <span id="demoBalance" className="tp-bal">{(() => {
+            if (exchangeMode === 'live') {
+              if (!apiConfigured) return 'BAL: Exchange not configured'
+              const prefix = resolvedEnv === 'TESTNET' ? 'BAL (TESTNET): $' : 'BAL: $'
+              return prefix + liveBalanceTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            }
+            return `BAL: $${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          })()}</span>
           <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => promptAddFunds()}>+ ADD</button>
           <button id="btnResetDemo" style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000" onClick={() => promptResetDemo()}>↻ RESET</button>
         </span>
