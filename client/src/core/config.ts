@@ -21,6 +21,8 @@ import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { userSettingsApi } from '../services/api'
 import { useDslStore } from '../stores/dslStore'
+import { useBrainStore } from '../stores/brainStore'
+import type { BrainMode } from '../types'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -1827,7 +1829,11 @@ export function _usApply() {
     // [BRAIN-MODE-PERSIST] Restore Brain mode (assist/auto) across refresh.
     if (USER_SETTINGS.bmMode && (USER_SETTINGS.bmMode === 'assist' || USER_SETTINGS.bmMode === 'auto')) {
       S.mode = USER_SETTINGS.bmMode
-      if (typeof BM !== 'undefined') BM.mode = USER_SETTINGS.bmMode
+      // [Phase 6 C6] mirror-write to backing BM + canonical brainStore
+      if (typeof BM !== 'undefined') {
+        BM.mode = USER_SETTINGS.bmMode
+        useBrainStore.getState().setMode(USER_SETTINGS.bmMode as BrainMode)
+      }
       const _modeBtn = document.getElementById('bmode-' + S.mode)
       if (_modeBtn) {
         document.querySelectorAll('.znc-mbtn').forEach((b: any) => b.className = 'znc-mbtn')
@@ -2241,7 +2247,58 @@ w.DAILY_STATS = DAILY_STATS
 w.BEXT = BEXT
 w.SESS_CFG = SESS_CFG
 w.BRAIN = BRAIN
-w.BM = BM
+// [Phase 6 C6] window.BM = read-side compat Proxy.
+// - GET on canonical keys (mode/profile/entryReady/entryScore/flow/mtf/
+//   sweep/gates) reads from useBrainStore (the canonical surface owned
+//   by the store as of C5 mutators + C6 engine write-inversion).
+// - GET on runtime / non-inverted keys (confluenceScore, confMin,
+//   structure, volRegime, liqCycle, regimeEngine, phaseFilter, macro,
+//   adapt, adaptive, performance, dailyTrades, dailyPnL, lossStreak,
+//   protectMode, protectReason, newsRisk, qexit, probScore, danger,
+//   _entryFailedGates, core, etc.) passes through to the backing BM.
+//   These fields still sync to the store via useBrainBridge +
+//   syncFromEngine (removed in C7).
+// - SET on canonical keys is no-op + console.warn in dev. Engine writes
+//   must go through brainStore mutators (via brain.ts helpers); legacy
+//   external write attempts are intentionally not write-through.
+// - SET on runtime / non-inverted keys passes through to backing (so
+//   legacy paths keep updating BM.structure, BM.dailyTrades, etc.).
+//
+// useBrainBridge + syncFromEngine remain active in parallel until C7.
+{
+  const CANONICAL_BM_KEYS = new Set([
+    'mode', 'profile', 'entryReady', 'entryScore',
+    'flow', 'mtf', 'sweep', 'gates',
+  ])
+  const isDev = !!(import.meta as any)?.env?.DEV
+  w.BM = new Proxy(BM, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && CANONICAL_BM_KEYS.has(prop)) {
+        const brain = useBrainStore.getState().brain
+        switch (prop) {
+          case 'mode': return brain.mode
+          case 'profile': return brain.profile
+          case 'entryReady': return brain.entryReady
+          case 'entryScore': return brain.entryScore
+          case 'flow': return brain.flow
+          case 'mtf': return brain.mtf
+          case 'sweep': return brain.sweep
+          case 'gates': return brain.gates
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+    set(target, prop, value, receiver) {
+      if (typeof prop === 'string' && CANONICAL_BM_KEYS.has(prop)) {
+        if (isDev) {
+          console.warn(`[BM Proxy] no-op write to canonical key "${String(prop)}" — call useBrainStore mutators instead`)
+        }
+        return true
+      }
+      return Reflect.set(target, prop, value, receiver)
+    },
+  })
+}
 w.ARM_ASSIST = ARM_ASSIST
 // NEWS — no window mapping needed (defined in this file)
 w.ZANIM = ZANIM

@@ -5,6 +5,7 @@
 
 import { getTPObject } from '../services/stateAccessors'
 import { BM, BRAIN as BR } from '../core/config'
+import { useBrainStore } from '../stores/brainStore'
 import { fmtTime, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
@@ -261,6 +262,18 @@ export function setSymbol(sym: string): void {
     if (typeof resetForecast === 'function') resetForecast()
     if (typeof BM !== 'undefined') { BM.regimeEngine = { regime: 'RANGE', confidence: 0, trendBias: 'neutral', volatilityState: 'normal', trapRisk: 0, notes: ['switching symbol'] }; BM.phaseFilter = { allow: false, phase: 'RANGE', reason: 'switching symbol', riskMode: 'reduced', sizeMultiplier: 0.5, allowedSetups: [], blockedSetups: [] }; BM.confluenceScore = 50; BM.probScore = 0; BM.probBreakdown = { regime: 0, liquidity: 0, signals: 0, flow: 0 }; BM.entryScore = 0; BM.entryReady = false; BM.gates = {}; BM.sweep = { type: 'none', reclaim: false, displacement: false }; BM.flow = { cvd: 'neut', delta: 0, ofi: 'neut' }; BM.mtf = { '15m': 'neut', '1h': 'neut', '4h': 'neut' }; BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['switching symbol'], sizeMultiplier: 1.0 }; BM.qexit = { risk: 0, signals: { divergence: { type: null, conf: 0 }, climax: { dir: null, mult: 0 }, regimeFlip: { from: null, to: null, conf: 0 }, liquidity: { nearestAboveDistPct: null, nearestBelowDistPct: null, bias: 'neutral' } }, action: 'HOLD', lastTs: 0, lastReason: '', shadowStop: null, confirm: { div: 0, climax: 0 } }; BM.danger = 0; BM.dangerBreakdown = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 }; BM.conviction = 0; BM.convictionMult = 1.0; BM.structure = { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '\u2014', structureLabel: '\u2014', mtfAlign: { '15m': 'neut', '1h': 'neut', '4h': 'neut' }, score: 0, lastUpdate: 0 } }
     if (typeof BR !== 'undefined') { BR.state = 'scanning'; BR.regime = 'unknown'; BR.regimeConfidence = 0; BR.score = 0; BR.thoughts = []; BR.neurons = {}; BR.ofi = { buy: 0, sell: 0, blendBuy: 50, tape: [] } }
+    // [Phase 6 C6] Mirror canonical reset to brainStore (mode/profile/adaptParams
+    // untouched here — this is a symbol switch, not a full brain reset).
+    {
+      const brainSt = useBrainStore.getState()
+      brainSt.setEntry({ ready: false, score: 0 })
+      brainSt.setGates({})
+      brainSt.setSweep({ type: 'none', reclaim: false, displacement: false })
+      brainSt.setFlow({ cvd: 'neut', delta: 0, ofi: 'neut' })
+      brainSt.setMtf({ '15m': 'neut', '1h': 'neut', '4h': 'neut' })
+      brainSt.setEngineState('scanning')
+      brainSt.setThoughts([])
+    }
     if (typeof w.CORE_STATE !== 'undefined') { w.CORE_STATE.score = 50; w.CORE_STATE.lastUpdate = Date.now() }
     // [9A-2] Notify React brainStore — BM/BR fully reset on symbol switch
     try { window.dispatchEvent(new CustomEvent('zeus:brainStateChanged')) } catch (_) {}

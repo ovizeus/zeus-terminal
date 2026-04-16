@@ -18,8 +18,61 @@ import { RegimeEngine } from './regime'
 import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 import { detectRegimeEnhanced } from './regimeEnhanced'
+import { useBrainStore } from '../stores/brainStore'
+import type { BrainMode, TradingProfile, BrainEngineState, BrainState, BrainAdaptParams } from '../types'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
+
+// ── Phase 6 C6: Brain engine → brainStore write-inversion helpers ──
+// Mirror-write pattern: each helper updates the backing object first
+// (preserves legacy direct importers like trading/risk.ts, trading/orders.ts,
+// data/klines.ts which `import { BM, BRAIN as BR } from '../core/config'`)
+// and then publishes the canonical value to useBrainStore.
+//
+// Scope — only the canonical Brain surface enumerated in C5 mutators:
+//   mode / profile / engineState / entry(ready+score) /
+//   flow / mtf / sweep / gates / thoughts / adaptParams
+// BM fields outside this set (structure, volRegime, liqCycle, macro,
+// adaptive, performance, confMin, etc.) are NOT inverted here; they remain
+// backing-only for now and keep syncing to the store via syncFromEngine.
+function _pushBrainMode(mode: BrainMode): void {
+  BM.mode = mode
+  useBrainStore.getState().setMode(mode)
+}
+function _pushBrainProfile(profile: TradingProfile): void {
+  BM.profile = profile
+  useBrainStore.getState().setProfile(profile)
+}
+function _pushBrainEngineState(state: BrainEngineState): void {
+  BR.state = state
+  useBrainStore.getState().setEngineState(state)
+}
+function _pushBrainEntry(score: number, ready: boolean): void {
+  BM.entryScore = score
+  BM.entryReady = ready
+  useBrainStore.getState().setEntry({ ready, score })
+}
+function _pushBrainFlow(flow: BrainState['flow']): void {
+  BM.flow = flow
+  useBrainStore.getState().setFlow(flow)
+}
+function _pushBrainSweep(sweep: BrainState['sweep']): void {
+  BM.sweep = sweep
+  useBrainStore.getState().setSweep(sweep)
+}
+function _pushBrainGates(gates: Record<string, unknown>): void {
+  BM.gates = gates
+  useBrainStore.getState().setGates(gates)
+}
+function _pushBrainThought(thought: { time: string; type: string; msg: string }): void {
+  BR.thoughts.unshift(thought)
+  if (BR.thoughts.length > 5) BR.thoughts.pop()
+  useBrainStore.getState().setThoughts(BR.thoughts.slice())
+}
+function _pushBrainAdaptParams(params: BrainAdaptParams | null): void {
+  BR.adaptParams = params
+  useBrainStore.getState().setAdaptParams(params)
+}
 
 // Neuron updater
 export function updateNeurons(): void {
@@ -170,7 +223,7 @@ export function updateBrainState(): void {
     ticker = `ANALIZEZ... Score:${score}/68 | ${sigs} semnale | AT OFF`
   }
 
-  BR.state = state
+  _pushBrainEngineState(state)
   updateBrainArc(score)
 
   // State badge
@@ -205,8 +258,7 @@ export function brainThink(type: any, msg: any): void {
   const log = el('brainThoughtLog')
   if (!log) return
   const now = fmtNow(true)
-  BR.thoughts.unshift({ time: now, type, msg })
-  if (BR.thoughts.length > 5) BR.thoughts.pop()
+  _pushBrainThought({ time: now, type, msg })
   log.innerHTML = BR.thoughts.map((t: any, i: number) =>
     `<div class="thought-line ${i === 0 ? t.type + ' fresh' : t.type}">
       <span style="color:#8a6ab0;flex-shrink:0">${t.time}</span>
@@ -326,7 +378,7 @@ export function syncDslFromProfile(): void {
   if (p === 'fast') { w.S.dsl.pivotL = 0.8; w.S.dsl.pivotR = 1.0; w.S.dsl.impulseV = 85; w.S.dsl.openDsl = 40 }
   else if (p === 'swing') { w.S.dsl.pivotL = 1.2; w.S.dsl.pivotR = 1.4; w.S.dsl.impulseV = 70; w.S.dsl.openDsl = 50 }
   else { w.S.dsl.pivotL = 1.6; w.S.dsl.pivotR = 1.8; w.S.dsl.impulseV = 55; w.S.dsl.openDsl = 60 }
-  BM.profile = p // keep mirror in sync
+  _pushBrainProfile(p as TradingProfile) // keep mirror in sync
   // Update DSL UI inputs + labels if they exist
   const dslInputs: any = {
     dslPivotL: w.S.dsl.pivotL, dslPivotR: w.S.dsl.pivotR,
@@ -365,8 +417,8 @@ export function syncBrainFromState(): void {
   const prof = (w.S.profile || 'fast').toLowerCase()
 
   // Mirror to BM (read-only; engine uses S.*)
-  BM.mode = mode
-  BM.profile = prof
+  _pushBrainMode(mode as BrainMode)
+  _pushBrainProfile(prof as TradingProfile)
   // [B2] BM.runMode removed — AT.enabled is sole command
 
   // Radio buttons — exact one active (no more manual)
@@ -682,7 +734,7 @@ export function detectSweepDisplacement(klines: any): any {
     sweep.liqDist = ((cur.close - cur.low) / cur.close * 100).toFixed(2)
   }
 
-  BM.sweep = sweep
+  _pushBrainSweep(sweep)
   return sweep
 }
 
@@ -707,7 +759,7 @@ export function updateFlowEngine(klines: any): void {
   const ofi = BR.ofi?.blendBuy || 50
   const ofiDir = ofi > 57 ? 'buy' : ofi < 43 ? 'sell' : 'neut'
 
-  BM.flow = { cvd: cvdDir, delta: parseFloat(delta), ofi: ofiDir }
+  _pushBrainFlow({ cvd: cvdDir, delta: parseFloat(delta), ofi: ofiDir })
 
   // Update UI
   const cvdEl = el('flowCVD'); if (cvdEl) { cvdEl.textContent = cvdDir.toUpperCase(); cvdEl.className = 'flow-cell-val ' + (cvdDir === 'rising' ? 'ok' : 'fail') }
@@ -790,7 +842,7 @@ export function computeGates(dir: any): any {
     news: BM.newsRisk === 'low' ? 'ok' : BM.newsRisk === 'med' ? 'wait' : 'fail'
   }
 
-  BM.gates = gates
+  _pushBrainGates(gates)
   return gates
 }
 
@@ -860,9 +912,9 @@ export function computeEntryScore(gates: any, dir: any): any {
   const label = score >= readyThreshold ? 'READY' : score >= 60 ? 'WAIT' : 'BLOCK'
   const col = score >= readyThreshold ? '#39ff14' : score >= 60 ? '#f0c040' : '#ff3355'
 
-  BM.entryScore = score
-  BM.entryReady = score >= readyThreshold
+  _pushBrainEntry(score, score >= readyThreshold)
   // [L1-SHIELD-DIAG] Capture failed gate labels for SHIELD diagnostic surfacing
+  // (underscore-prefixed runtime-only escape hatch — not canonical, stays on backing)
   ;(BM as any)._entryFailedGates = GATE_DEFS
     .filter((g: any) => gates[g.id] === 'fail')
     .map((g: any) => g.id)
@@ -1408,7 +1460,7 @@ export function renderBrainCockpit(): void {
     const gates = computeGates(dir)
     computeEntryScore(gates, dir)
   } else {
-    BM.entryScore = 0; BM.entryReady = false
+    _pushBrainEntry(0, false)
   }
 
   // 6b. Market Atmosphere (aggregator — reads all existing signals)
@@ -1687,7 +1739,7 @@ export function renderBrainCockpit(): void {
   })
 
   let state = BM.protectMode ? 'protect' : getATKillTriggered() ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'
-  BR.state = state === 'armed' ? 'ready' : state
+  _pushBrainEngineState((state === 'armed' ? 'ready' : state) as BrainEngineState)
 
   // ── SAFETY LED ROWS ──
   const safetyMap: any = {
@@ -2646,7 +2698,7 @@ export function adaptAutoTradeParams(): void {
   if (adapted) {
     const slEl = el('atSL'); if (slEl) slEl.value = newSL.toFixed(1)
     const sizeEl = el('atSize'); if (sizeEl) sizeEl.value = Math.round(newSize)
-    BR.adaptParams = { sl: newSL, size: newSize, adjustCount: (BR.adaptParams.adjustCount || 0) + 1 }
+    _pushBrainAdaptParams({ sl: newSL, size: newSize, adjustCount: (BR.adaptParams.adjustCount || 0) + 1 })
     // [P1] Sync adapted values back to TC
     if (typeof w.TC !== 'undefined') { w.TC.slPct = newSL; w.TC.size = newSize }
     brainThink('trade', _ZI.bolt + ` ADAPTAT: ${reason}`)
