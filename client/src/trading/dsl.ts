@@ -5,6 +5,7 @@
 
 import { getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
 import { DSL } from '../core/config'
+import { useDslStore } from '../stores/dslStore'
 import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
@@ -17,6 +18,28 @@ import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
+
+// [Phase 6 C3] Engine write inversion. Backing DSL stays as the engine's
+// per-tick scratch space; canonical state lives in useDslStore. Helpers
+// mirror engine writes to BOTH backing (for legacy direct importers and
+// in-tick reads) and store (canonical surface for React + window.DSL Proxy).
+// _attachedIds, visualInterval, history are intentionally backing-only.
+function _pushDslEnabled(next: boolean): void {
+  DSL.enabled = next
+  useDslStore.getState().setEnabled(next)
+}
+function _pushDslCheckInterval(handle: number | null): void {
+  DSL.checkInterval = handle
+  useDslStore.getState().setCheckIntervalActive(!!handle)
+}
+function _pushDslPosition(posId: string): void {
+  const snap = DSL.positions[posId]
+  if (snap) useDslStore.getState().upsertPosition(posId, { ...snap })
+}
+function _removeDslPosition(posId: string): void {
+  delete DSL.positions[posId]
+  useDslStore.getState().removePosition(posId)
+}
 
 // Sync DSL SL to exchange for live positions (client-side AT only)
 function _syncLiveSL(pos: any, newSL: number): void {
@@ -107,7 +130,7 @@ export function toggleDSL(): void {
       return
     }
     if (typeof DSL === 'undefined') return
-    DSL.enabled = !DSL.enabled
+    _pushDslEnabled(!DSL.enabled)
     if (!w.S.dsl) w.S.dsl = {}
     w.S.dsl.active = DSL.enabled
     if (!DSL.enabled && typeof stopDSLIntervals === 'function') { stopDSLIntervals() }
@@ -312,11 +335,12 @@ export function runDSLBrain(): void {
         dsl.log.push({ ts: Date.now(), msg: serverDsl.lastLog })
         if (dsl.log.length > 20) dsl.log = dsl.log.slice(-20)
       }
+      _pushDslPosition(_dslKey)
     })
 
     // Cleanup DSL states for closed positions
     Object.keys(DSL.positions).forEach((id: string) => {
-      if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) delete DSL.positions[id]
+      if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) _removeDslPosition(id)
     })
 
     if (!_manualPositions.length || !Number.isFinite(getPrice()) || getPrice() <= 0
@@ -344,7 +368,7 @@ export function runDSLBrain(): void {
 
   Object.keys(DSL.positions).forEach((id: string) => {
     if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) {
-      delete DSL.positions[id]
+      _removeDslPosition(id)
       if (DSL._attachedIds) DSL._attachedIds.delete(String(id))
     }
   })
@@ -656,6 +680,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
         }
       }
     }
+    _pushDslPosition(_dslKey)
   })
 }
 
@@ -780,6 +805,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
       if (!_ivReached) _dsl.impulseTriggered = false
       _dsl.log.push({ ts: Date.now(), msg: `[EDIT] LIVE recalc: PL=$${fP(_dsl.pivotLeft)} PR=$${fP(_dsl.pivotRight)} IV=$${fP(_dsl.impulseVal)}` })
     }
+    _pushDslPosition(_dslKey)
   }
 
   if (typeof w.ZState !== 'undefined') w.ZState.save()
@@ -1238,14 +1264,14 @@ export function _renderDslCard(pos: any): string {
 function _emitDSLChanged() { try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {} }
 
 export function stopDSLIntervals(): void {
-  if (DSL.checkInterval) { w.Intervals.clear('dsl'); DSL.checkInterval = null }
+  if (DSL.checkInterval) { w.Intervals.clear('dsl'); _pushDslCheckInterval(null) }
   if (DSL.visualInterval) { w.Intervals.clear('dslVis'); DSL.visualInterval = null }
   _emitDSLChanged()
 }
 export function startDSLIntervals(): void {
   if (DSL.checkInterval) return
   _emitDSLChanged()
-  DSL.checkInterval = w.Intervals.set('dsl', runDSLBrain, 3000)
+  _pushDslCheckInterval(w.Intervals.set('dsl', runDSLBrain, 3000))
   DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
@@ -1265,6 +1291,7 @@ export function _dslTrimLogs(posId: any): void {
   const pos = DSL.positions[posId]
   if (Array.isArray(pos.log) && pos.log.length > 20) {
     pos.log = pos.log.slice(-20)
+    _pushDslPosition(String(posId))
   }
 }
 
@@ -1282,7 +1309,7 @@ export function _dslTrimAll(): void {
   })
   const _openIds = new Set(_allPos.filter(function (p: any) { return !p.closed }).map(function (p: any) { return String(p.id) }))
   Object.keys(DSL.positions).forEach(function (id: string) {
-    if (!_openIds.has(id)) delete DSL.positions[id]
+    if (!_openIds.has(id)) _removeDslPosition(id)
   })
 }
 

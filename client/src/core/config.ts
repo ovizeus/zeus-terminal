@@ -20,6 +20,7 @@ import { _aresRender } from '../engine/aresUI'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { userSettingsApi } from '../services/api'
+import { useDslStore } from '../stores/dslStore'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -2185,7 +2186,46 @@ w.NOTIFICATION_CENTER = NOTIFICATION_CENTER
 w.USER_SETTINGS = USER_SETTINGS
 w.BT = BT
 w.BT_INDICATORS = BT_INDICATORS
-w.DSL = DSL
+// [Phase 6 C3] window.DSL = read-side compat Proxy.
+// - GET on canonical keys (enabled/mode/magnetEnabled/magnetMode/positions)
+//   reads from useDslStore (the canonical surface).
+// - GET on runtime keys (_attachedIds, checkInterval, visualInterval,
+//   history, anything else) passes through to the backing object.
+// - SET on canonical keys is no-op + console.warn in dev. Engine writes
+//   must go through useDslStore mutators (via dsl.ts helpers); legacy
+//   external write attempts are intentionally not write-through.
+// - SET on runtime keys passes through to backing (so legacy paths can
+//   still hold _attachedIds Set, interval handles, etc.).
+{
+  const CANONICAL_DSL_KEYS = new Set([
+    'enabled', 'mode', 'magnetEnabled', 'magnetMode', 'positions',
+  ])
+  const isDev = !!(import.meta as any)?.env?.DEV
+  w.DSL = new Proxy(DSL, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && CANONICAL_DSL_KEYS.has(prop)) {
+        const s = useDslStore.getState()
+        switch (prop) {
+          case 'enabled': return s.enabled
+          case 'mode': return s.mode
+          case 'magnetEnabled': return s.magnetEnabled
+          case 'magnetMode': return s.magnetMode
+          case 'positions': return s.positions
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+    set(target, prop, value, receiver) {
+      if (typeof prop === 'string' && CANONICAL_DSL_KEYS.has(prop)) {
+        if (isDev) {
+          console.warn(`[DSL Proxy] no-op write to canonical key "${String(prop)}" — call useDslStore mutators instead`)
+        }
+        return true
+      }
+      return Reflect.set(target, prop, value, receiver)
+    },
+  })
+}
 w.MSCAN_SYMS = MSCAN_SYMS
 w.MSCAN = MSCAN
 w.DHF = DHF
