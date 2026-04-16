@@ -34,7 +34,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 5.1 Positions bridge reconciliation | ✓ done | `migration/phase-5.1-pre` | `migration/phase-05.1-post` | bridge gated on WS | 1 commit; `usePositionsBridge` gated pe `wsService.isConnected()`; OPEN ISSUE **MITIGATED structurally, pending browser-side verification** |
 | 6 dslStore+brainStore canonic | ✓ done | — | `migration/phase-06-post` | syncFromEngine=0 | 8 commits (C1→C7) + 2 pre-C7 BlockReason inversions; `dslStore` + `brainStore` canonical; `window.DSL` + `window.BM` Proxy read-compat; `useDSLBridge` + `useBrainBridge` deleted; `syncFromEngine` removed from both stores; `blockReason` write-path canonical at all 20 known sites; `aresStore.syncFromEngine` deferred (out of scope) |
 | 7 Kill DOM-as-state | ✓ done | `migration/phase-7-pre` | `migration/phase-07-post` | USER_SETTINGS consumers canonical + stale comments cleaned | Scope redus intenționat: consumer migration (4 read-sites) + stale comments (5 files); `window.USER_SETTINGS` Proxy respins (nesting risk); `window.TC` auditat OK (Phase 3 satisfăcut); `engine/aub.ts` deferred; Phase 5 OPEN ISSUE out of scope |
-| 8 SQLite-only persist | pending | — | — | user_ctx = UI only | one-shot migration |
+| 8 SQLite-only persist | ✓ done | `migration/phase-08-pre` | `migration/phase-08-post` | 14 sections SQLite primary, FS stripped | 5 commits (C1→C5); migration 021_user_ctx_data; dual-read C2, dual-write C3, validated C4 (28/28 MATCH), FS write stopped C5; Phase 5.1 MITIGATED (not closed); Phase 8.1 FS prune deferred |
 | 9 Cleanup + TS strict global | pending | — | — | window.* only in bridge/ | v2.0.0 |
 
 ---
@@ -1274,5 +1274,70 @@ browser-side clară:
 
 **Status**: ✓ PHASE 5.1 COMPLETE — OPEN ISSUE mitigated structurally,
 pending browser-side verification pentru closed definitiv.
+
+---
+
+### Phase 8 — SQLite-only persistence for user_ctx (2026-04-16)
+
+**Branch**: `migration/phase-08-sqlite-persist`
+**Pre-tag**: `migration/phase-08-pre` (c3bc6b4)
+**Base branch**: `hotfix/manual-mode-label-mismatch`
+
+#### Summary
+
+Migrate 14 user_ctx sections from FS (data/user_ctx/{userId}.json) to
+SQLite (user_ctx_data table). Settings → user_settings (existing),
+aresData → ares_state (existing), 3 UI-only sections → FS-only.
+
+#### Section routing
+
+| Destination | Sections |
+|------------|----------|
+| SQLite `user_ctx_data` (14) | indSettings, llvSettings, signalRegistry, perfStats, dailyPnl, postmortem, adaptive, notifications, scannerSyms, midstackOrder, aubData, ofHud, teacherData, ariaNovaHud |
+| SQLite `user_settings` (existing) | settings |
+| SQLite `ares_state` (existing) | aresData |
+| FS-only (3) | uiContext, panels, uiScale |
+
+#### Commits
+
+| # | SHA | Description |
+|---|-----|-------------|
+| C1 | `01d0ec3` | Schema (migration 021_user_ctx_data) + query layer + FS→SQLite migration script |
+| C2 | `be7d634` | GET dual-read: SQLite primary, FS fallback for 14 sections |
+| C3 | `c003e99` | POST dual-write: FS + SQLite (saveCtxBulk transaction) |
+| C4 | `e6cef51` | Validation script: 28/28 MATCH, 0 DRIFT |
+| C5 | `ff9f93e` | Stop FS write for 14 SQLite sections; SQLite = primary |
+
+#### Validation (C4)
+
+```
+Results: 28 MATCH, 0 DRIFT, 0 MISSING_SQLITE, 0 MISSING_FS
+Verdict: PASS — zero drift
+```
+
+28 rows = 14 sections × 2 users. Migration script idempotent
+(re-run = 0 inserted, 28 skipped).
+
+#### What was NOT touched
+
+- `client/src/core/config.ts` — `_userCtxPull`, `_userCtxPush` unchanged;
+  client still pushes all sections, server routes them
+- `settings` and `aresData` — have their own endpoints, untouched
+- Phase 5.1 OPEN ISSUE — remains MITIGATED (not closed)
+- FS files — not deleted (Phase 8.1 prune deferred)
+- `migrationFlags.js` — no persistence flag needed; routing is server-side
+
+#### Deferred
+
+- **Phase 8.1**: FS prune — delete SQLite sections from FS files after
+  production validation period
+- **Phase 5.1 OPEN ISSUE**: duplicate/zombie positions — separate investigation
+- **Phase 9**: Cleanup + TS strict global
+
+**Deferred register**: `project_migration_deferred_register.md`
+**Known bugs**: `project_known_bugs.md`
+
+**Status**: ✓ PHASE 8 COMPLETE — 14 sections migrated to SQLite,
+FS write stopped, validation PASS. Phase 8.1 FS prune deferred.
 
 ---
