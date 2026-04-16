@@ -3,6 +3,7 @@ import { _ZI } from '../constants/icons'
 import { _AN_KEY_A, _AN_KEY_N, _dslStripOpen, setDslStripOpen } from '../core/config'
 import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
+import { useBrainStore } from '../stores/brainStore'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -1704,13 +1705,17 @@ if (!w._ARIA_NOVA_LOADED) {
         try { core = updateCoreState(); out = evaluateDecision(core) } catch (_) { return orig.apply(this, arguments) }
         if (out && out.decision === "BLOCK") {
           throttledLog({ blocked: true, reason: out.reason })
-          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_BLOCK', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2') } catch (_e) { }
+          const _wveBlockText = 'WVE: ' + ((out.reason || []).join(', '))
+          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_BLOCK', _wveBlockText, 'WVE_v2') } catch (_e) { }
+          try { useBrainStore.getState().setBlockReason({ code: 'WVE_BLOCK', text: _wveBlockText }) } catch (_e) { }
           try { atLog('warn', '[WVE] BLOCK: ' + ((out.reason || []).join(', '))) } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "BLOCK" }
         }
         if (out && out.decision === "NO_TRADE") {
           throttledLog({ blocked: true, reason: out.reason })
-          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_NO_TRADE', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2') } catch (_e) { }
+          const _wveNoTradeText = 'WVE: ' + ((out.reason || []).join(', '))
+          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_NO_TRADE', _wveNoTradeText, 'WVE_v2') } catch (_e) { }
+          try { useBrainStore.getState().setBlockReason({ code: 'WVE_NO_TRADE', text: _wveNoTradeText }) } catch (_e) { }
           try { atLog('warn', '[WVE] NO_TRADE: ' + ((out.reason || []).join(', '))) } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "NO_TRADE" }
         }

@@ -20,6 +20,7 @@ import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
 import { useATStore } from '../stores/atStore'
+import { useBrainStore } from '../stores/brainStore'
 import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
@@ -703,7 +704,15 @@ export const ZState = (() => {
       }
 
       // Restore block reason
-      if (snap.blockReason) BlockReason._current = snap.blockReason
+      if (snap.blockReason) {
+        BlockReason._current = snap.blockReason
+        try {
+          useBrainStore.getState().setBlockReason({
+            code: snap.blockReason.code,
+            text: snap.blockReason.text || '',
+          })
+        } catch (_e) { }
+      }
 
       console.log('[ZState] Restored:', snap.positions?.length || 0, 'positions, kill:', snap.at?.killTriggered)
       if (typeof _dslTrimAll === 'function') _dslTrimAll()

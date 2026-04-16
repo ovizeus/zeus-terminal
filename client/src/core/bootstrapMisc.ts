@@ -14,6 +14,7 @@ import { connectWatchlist } from '../services/symbols'
 import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
+import { useBrainStore } from '../stores/brainStore'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 
 // ===== PIN LOCK =====
@@ -146,7 +147,10 @@ export function masterReset(): void {
   if (typeof w.PERF !== 'undefined') { Object.keys(w.PERF).forEach((k: string) => { w.PERF[k].wins = 0; w.PERF[k].losses = 0; w.PERF[k].weight = 1.0 }) }
   if (typeof w.DHF !== 'undefined') { ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d: string) => { if (w.DHF.days[d]) { w.DHF.days[d].wins = w.DHF.days[d].losses = w.DHF.days[d].trades = 0; w.DHF.days[d].wr = 60 } }); Object.keys(w.DHF.hours || {}).forEach((h: string) => { w.DHF.hours[h].wins = w.DHF.hours[h].losses = w.DHF.hours[h].trades = 0; w.DHF.hours[h].wr = 60 }) }
   if (typeof BM !== 'undefined') { BM.protectMode = false; BM.protectReason = '' }
-  if (typeof w.BlockReason !== 'undefined') w.BlockReason.clear()
+  if (typeof w.BlockReason !== 'undefined') {
+    w.BlockReason.clear()
+    try { useBrainStore.getState().setBlockReason(null) } catch (_e) { }
+  }
   if (typeof w.Intervals !== 'undefined') w.Intervals.clearAll()
   if (typeof w.WS !== 'undefined') w.WS.closeAll()
   toast('Master Reset complet \u2014 re\u00EEnc\u0103rcare...')

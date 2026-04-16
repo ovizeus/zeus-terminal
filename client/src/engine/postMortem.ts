@@ -5,6 +5,7 @@
 import { _safeLocalStorageSet } from '../services/storage'
 import { escHtml } from '../utils/dom'
 import { atLog } from '../trading/autotrade'
+import { useBrainStore } from '../stores/brainStore'
 
 const w = window as any
 
@@ -342,14 +343,20 @@ export function _pmCheckRegimeTransition(): void {
     const score = Math.round(flatPts + atrPts + divPts)
 
     if (score >= 80) {
-      if (typeof w.BlockReason !== 'undefined' && !w.BlockReason.get())
-        w.BlockReason.set('REGIME_TRANSITION', `Tranzi\u021Bie regim iminenta (scor ${score}) \u2014 intr\u0103ri blocate`)
+      if (typeof w.BlockReason !== 'undefined' && !w.BlockReason.get()) {
+        const _rtText = `Tranzi\u021Bie regim iminenta (scor ${score}) \u2014 intr\u0103ri blocate`
+        w.BlockReason.set('REGIME_TRANSITION', _rtText)
+        try { useBrainStore.getState().setBlockReason({ code: 'REGIME_TRANSITION', text: _rtText }) } catch (_e) { }
+      }
     } else if (score >= 60) {
       atLog('warn', `[RegimeWatch] Alert\u0103 tranzi\u021Bie regim \u2014 scor ${score}`)
     } else {
       if (typeof w.BlockReason !== 'undefined') {
         const br = w.BlockReason.get()
-        if (br && br.code === 'REGIME_TRANSITION') w.BlockReason.clear()
+        if (br && br.code === 'REGIME_TRANSITION') {
+          w.BlockReason.clear()
+          try { useBrainStore.getState().setBlockReason(null) } catch (_e) { }
+        }
       }
     }
   } catch (e: any) { console.warn('[RegimeWatch]', e.message) }
