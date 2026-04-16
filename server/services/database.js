@@ -325,6 +325,19 @@ migrate('020_telegram_broken', () => {
     db.exec("ALTER TABLE users ADD COLUMN telegram_broken_reason TEXT DEFAULT NULL");
 });
 
+// [Phase 8] Per-user context data — 14 sections migrated from FS to SQLite
+migrate('021_user_ctx_data', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS user_ctx_data (
+            user_id     INTEGER NOT NULL,
+            section     TEXT NOT NULL,
+            data        TEXT NOT NULL DEFAULT '{}',
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (user_id, section)
+        );
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -422,6 +435,12 @@ const _stmts = {
     // ARES state (per-user, UPSERT)
     aresGet: db.prepare('SELECT data FROM ares_state WHERE user_id = ?'),
     aresUpsert: db.prepare("INSERT INTO ares_state (user_id, data, updated_at) VALUES (?, ?, datetime('now')) ON CONFLICT(user_id) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
+    // User context data (per-user per-section, Phase 8)
+    ctxGet: db.prepare('SELECT data FROM user_ctx_data WHERE user_id = ? AND section = ?'),
+    ctxGetAll: db.prepare('SELECT section, data, updated_at FROM user_ctx_data WHERE user_id = ?'),
+    ctxUpsert: db.prepare("INSERT INTO user_ctx_data (user_id, section, data, updated_at) VALUES (?, ?, ?, datetime('now')) ON CONFLICT(user_id, section) DO UPDATE SET data = excluded.data, updated_at = datetime('now')"),
+    ctxDelete: db.prepare('DELETE FROM user_ctx_data WHERE user_id = ? AND section = ?'),
+    ctxDeleteAll: db.prepare('DELETE FROM user_ctx_data WHERE user_id = ?'),
     // Brain decisions (ML data layer)
     bdInsert: db.prepare('INSERT INTO brain_decisions (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, linked_seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     bdLinkSeq: db.prepare('UPDATE brain_decisions SET linked_seq = ? WHERE snap_id = ?'),
@@ -949,6 +968,37 @@ module.exports = {
     },
     saveAresState: (userId, data) => {
         _stmts.aresUpsert.run(userId, JSON.stringify(data));
+    },
+    // User context data (per-user per-section, Phase 8)
+    getCtxSection: (userId, section) => {
+        const row = _stmts.ctxGet.get(userId, section);
+        if (!row) return null;
+        try { return JSON.parse(row.data); } catch (_) { return null; }
+    },
+    getCtxAll: (userId) => {
+        const rows = _stmts.ctxGetAll.all(userId);
+        const result = {};
+        for (const r of rows) {
+            try { result[r.section] = JSON.parse(r.data); } catch (_) { result[r.section] = null; }
+        }
+        return result;
+    },
+    saveCtxSection: (userId, section, data) => {
+        _stmts.ctxUpsert.run(userId, section, JSON.stringify(data));
+    },
+    saveCtxBulk: (userId, sections) => {
+        const tx = db.transaction(() => {
+            for (const [section, data] of Object.entries(sections)) {
+                _stmts.ctxUpsert.run(userId, section, JSON.stringify(data));
+            }
+        });
+        tx();
+    },
+    deleteCtxSection: (userId, section) => {
+        _stmts.ctxDelete.run(userId, section);
+    },
+    deleteCtxAll: (userId) => {
+        _stmts.ctxDeleteAll.run(userId);
     },
     // Missed trades
     saveMissedTrade: (userId, symbol, side, reason, price, confidence, tier, regime, data) => {
