@@ -14,6 +14,7 @@ import { triggerKillSwitch , atLog } from '../trading/autotrade'
 import { zeusGetTheme } from '../ui/theme'
 import { _enterRecoveryMode } from './guards'
 import { updateDeepDive } from '../engine/indicators'
+import { useSettingsStore } from '../stores/settingsStore'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -625,10 +626,9 @@ export function hubPopulate(): void {
     _setV('hubLiqMin', al.liqMinBtc !== undefined ? al.liqMinBtc : 1)
 
     // ── Auto Trade (populate AT panel toggles) ──────────────────
-    const at = (typeof w.USER_SETTINGS !== 'undefined' && w.USER_SETTINGS.autoTrade)
-      ? w.USER_SETTINGS.autoTrade : {}
+    const ss = useSettingsStore.getState()
     const atSeEl = document.getElementById('atSmartExit') as HTMLInputElement | null
-    if (atSeEl) atSeEl.checked = at.smartExitEnabled === true
+    if (atSeEl) atSeEl.checked = ss.smartExitEnabled === true
     const atAdaptEl = document.getElementById('atAdaptEnabled') as HTMLInputElement | null
     const BM = getBrainMetrics()
     if (atAdaptEl) atAdaptEl.checked = BM?.adapt && BM.adapt.enabled === true
