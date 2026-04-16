@@ -31,7 +31,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 3 atStore canonic | ✓ done | `migration/phase-03-pre` | `migration/phase-03-post` | #atLev DOM not source | 6 commits; CLIENT_AT_STORE feature flag deferred (hardening follow-up) |
 | 4 settingsStore canonic | ✓ done | `migration/phase-04-pre` | `migration/phase-04-post` | cross-device toggle | 6 commits; `_usBuildFlatPayload` retained as compat helper (deferred to Phase 5) |
 | 5 Positions WS live | ✓ done | `migration/phase-05-pre` | `migration/phase-05-post` | trade desktop→phone <1s | 7 commits + 1 preflip fix; `MF.POSITIONS_WS=true` live; polling retired from main path; 48h observation still open post-tag; **OPEN ISSUE**: transient UI duplicates (mandatory follow-up) |
-| 6 dslStore+brainStore canonic | pending | — | — | syncFromEngine=0 | — |
+| 6 dslStore+brainStore canonic | ✓ done | — | `migration/phase-06-post` | syncFromEngine=0 | 8 commits (C1→C7) + 2 pre-C7 BlockReason inversions; `dslStore` + `brainStore` canonical; `window.DSL` + `window.BM` Proxy read-compat; `useDSLBridge` + `useBrainBridge` deleted; `syncFromEngine` removed from both stores; `blockReason` write-path canonical at all 20 known sites; `aresStore.syncFromEngine` deferred (out of scope) |
 | 7 Kill DOM-as-state | pending | — | — | getElementById source=0 | — |
 | 8 SQLite-only persist | pending | — | — | user_ctx = UI only | one-shot migration |
 | 9 Cleanup + TS strict global | pending | — | — | window.* only in bridge/ | v2.0.0 |
@@ -817,5 +817,212 @@ Artefacte backup pre-fază: `/root/zeus-terminal-backups/reports/05-*.report.txt
 - **Fix(auth) `c9220fd`** — separat de seria Phase 5, inclus în branch dar NU în raport. Validare browser-side implicită (user a putut testa C5/C6 cross-device fără redirect-loop).
 
 **Status**: ✓ PHASE 5 COMPLETE (cu `_broadcastPositions` pe sursă DB-read autoritativă, `MF.POSITIONS_WS=true` live în runtime, polling retras de pe path principal, 48h observation window rămasă deschisă post-tag, OPEN ISSUE transient UI duplicates documentat ca mandatory follow-up).
+
+---
+
+### Phase 6 — dslStore + brainStore canonical
+
+**Scop**: inversiune a fluxului engine → store pentru `dslStore` și
+`brainStore`. Store-ul devine sursa unică de adevăr pentru suprafețele
+DSL și Brain. Engine-ul (`trading/dsl.ts`, `engine/brain.ts`,
+`core/config.ts`, `data/marketDataWS.ts`) scrie direct prin mutatori
+tipați; `window.DSL` și `window.BM` devin Proxy read-compat care rutează
+GET-urile pe chei canonice către store și SET-urile pe chei canonice ca
+warn+no-op (DEV) / no-op (prod), cu pass-through transparent pentru
+chei runtime-only. Hook-urile bridge `useDSLBridge` și `useBrainBridge`
+plus mutatorii `syncFromEngine` din ambele stores sunt eliminați. Toate
+write-path-urile pentru `BlockReason` sunt mirror-uite canonic la cele
+20 site-uri cunoscute (autotrade.ts × 11, klines.ts × 3, arianova.ts ×
+2, postMortem.ts × 2, bootstrapMisc.ts × 1, state.ts hydration × 1).
+
+**Pre-tag**: — (continuat pe branch-ul `migration/phase-05-positions-ws`
+fără pre-tag dedicat; HEAD pre-Phase-6 = `522052b` Phase 5 C6)
+**Post-tag**: `migration/phase-06-post`
+**Branch**: `migration/phase-05-positions-ws` (continuare directă)
+
+**Commit-urile C1–C7 + 2 pre-C7 + C8** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| C1 | `521c6b7` | contract widening additive: tipuri pentru suprafețele canonice DSL + Brain (BrainState, BrainEngineState, BrainBlockReason, BrainThought, BrainAdaptParams, MtfAlignment, TradingProfile, BrainMode); zero runtime consumer |
+| C2 | `9da5f3e` | `dslStore` typed mutators (additive only); `syncFromEngine` rămâne activ în paralel |
+| C3 | `906184f` | `trading/dsl.ts` engine inversion: write-uri direct prin mutatori; `window.DSL` instalat ca Proxy read-compat (GET canonic → store, GET runtime → backing, SET canonic warn+no-op DEV) |
+| C3-doc | `cb9917b` | doc-only: `checkIntervalActive` documentat ca store-internal (nu canonic) |
+| C4 | `d8b81f4` | DSL bridge removal: `client/src/hooks/useDSLBridge.ts` șters + `dslStore.syncFromEngine` eliminat din interface și implementare; teste aferente eliminate |
+| C5 | `5acf18c` | `brainStore` typed mutators (15 teste, 15/15 PASS); `setMode/setProfile/setEngineState/setEntry/setFlow/setMtf/setSweep/setGates/setBlockReason/setThoughts/setAdaptParams/patch` |
+| C6 | `128cfc0` | `engine/brain.ts` write inversion (BR backing-only via direct mirror; thoughts via push+atomic-replace); `window.BM` instalat ca Proxy read-compat (mirror exact al pattern-ului C3 DSL); `core/config.ts` și `data/marketDataWS.ts` write-uri redirectate prin mutatori |
+| pre-C7 | `d48ec81` | `BlockReason` write-path inversion: 14 site-uri în `trading/autotrade.ts` (11) + `data/klines.ts` (3) prin helperi `_setBR` / `_clearBR` care păstrează backing-ul `w.BlockReason.set/.clear` și mirror-ează canonic via `useBrainStore.getState().setBlockReason(...)` |
+| pre-C7 bis | `8abc444` | `BlockReason` write-path inversion (continuare): 6 site-uri rămase — `engine/arianova.ts` (2: WVE_BLOCK + WVE_NO_TRADE), `engine/postMortem.ts` (2: REGIME_TRANSITION set + conditional clear), `core/bootstrapMisc.ts` (1: masterReset clear), `core/state.ts` (1: ZState.restore hydration). Pattern inline mirror, hydration păstrează direct `_current` assign pentru a evita facade side-effects (debounce log, DOM mutate) la restore |
+| C7 | `15717e5` | `client/src/hooks/useBrainBridge.ts` șters + `App.tsx` import + call eliminate + `brainStore.syncFromEngine` eliminat din interface, implementare și JSDoc; cele 2 cazuri test `syncFromEngine` din `brainStore.test.ts` eliminate (13/13 PASS post-C7); JSDoc rescris pentru arhitectura finală C7 |
+| C8 | `<post>` | docs: MIGRATION_LOG Phase 6 entry + tag `migration/phase-06-post` |
+
+**Totaluri**:
+
+- **Fișiere atinse total fază** (excluzând `MIGRATION_LOG.md`):
+  - Stores: 2 (`dslStore.ts`, `brainStore.ts`) + 2 teste
+  - Engine: 4 (`trading/dsl.ts`, `engine/brain.ts`, `engine/arianova.ts`, `engine/postMortem.ts`)
+  - Core: 3 (`core/config.ts`, `core/bootstrapMisc.ts`, `core/state.ts`)
+  - Data: 2 (`data/marketDataWS.ts`, `data/klines.ts`)
+  - Trading: 1 (`trading/autotrade.ts`)
+  - Hooks: 2 deletes (`useDSLBridge.ts`, `useBrainBridge.ts`)
+  - App: 1 (`App.tsx` — 6 linii: 2 imports + 2 call sites pe parcursul C4/C7)
+  - Types: 1 (contract widening C1)
+- **Endpoint-uri noi**: 0 — Phase 6 e strict client-side
+- **Socket-uri noi**: 0
+- **Componente test noi**: 0 (C5 a adăugat 8 teste mutatori + 2 teste sync; C7 a eliminat cele 2 teste sync; net +6 brainStore + dslStore tests existente neatinse)
+- **Flag-uri noi**: 0
+
+**Ce s-a făcut concret**:
+
+- **Contract widening** (`client/src/types/`): tipuri tipate pentru
+  toate câmpurile canonice ale suprafeței Brain (`BrainState`,
+  `BrainEngineState`, `BrainBlockReason`, `BrainThought`,
+  `BrainAdaptParams`, `MtfAlignment`, `TradingProfile`, `BrainMode`).
+  Additiv pur — zero consumer runtime nou.
+- **`dslStore` canonical** (`client/src/stores/dslStore.ts`): mutatori
+  tipați adăugați C2; `syncFromEngine` eliminat C4. Store-ul deține
+  starea DSL — engine `trading/dsl.ts` scrie direct prin mutatori.
+- **`brainStore` canonical** (`client/src/stores/brainStore.ts`):
+  mutatori tipați adăugați C5 (12 mutatori); `syncFromEngine` eliminat
+  C7. Store-ul deține starea Brain — engine `engine/brain.ts` scrie
+  direct prin mutatori; `BR.thoughts` rămâne backing pentru semantica
+  `unshift`+bounded, dar e replicat atomic în store după fiecare push.
+- **`window.DSL` Proxy read-compat** (instalat în
+  `trading/dsl.ts`/`core/config.ts` C3): GET pe chei canonice rutează
+  către `useDslStore.getState()`; GET pe chei runtime-only fac
+  `Reflect.get` pe backing; SET pe chei canonice = warn în DEV +
+  no-op; SET pe chei runtime-only = `Reflect.set` pe backing. Compat
+  cu importatorii direcți legacy păstrat.
+- **`window.BM` Proxy read-compat** (instalat în C6): mirror exact al
+  pattern-ului C3 DSL aplicat pe Brain. `window.BRAIN` rămâne backing
+  obișnuit (nu Proxy) — write-urile pe BR sunt mirror-uite explicit
+  prin helperi `_setBrainState`, `_pushBrainThought`, `_setAdaptParams`.
+- **`useDSLBridge` eliminat** (C4): `client/src/hooks/useDSLBridge.ts`
+  șters; import + apel scoase din `App.tsx`; nu mai există hop
+  engine→store sync pentru DSL.
+- **`useBrainBridge` eliminat** (C7): `client/src/hooks/useBrainBridge.ts`
+  șters; import + apel scoase din `App.tsx`; nu mai există hop
+  engine→store sync pentru Brain. Event-ul `zeus:brainStateChanged` mai
+  este emis de engine după `runBrainUpdate` dar fără ascultător —
+  neutru, safe pentru telemetrie/debug.
+- **`syncFromEngine` eliminat din `dslStore` și `brainStore`**: ambii
+  mutatori sync șterși din interface, implementare și JSDoc; teste
+  aferente eliminate. `aresStore.syncFromEngine` rămâne — out of scope
+  Phase 6 (vezi deferred).
+- **`BlockReason` write-path fully canonical la 20 site-uri** (pre-C7
+  + pre-C7 bis): toate apelurile la `w.BlockReason.set/.clear` sau
+  scrierile directe pe `_current` păstrează backing-ul legacy
+  (DOM update `#zad-block-reason`, debounce log `atLog('warn',...)`,
+  `aubBBSnapshot`) și mirror-ează canonic via
+  `useBrainStore.getState().setBlockReason({code, text} | null)`.
+  Distribuție: `trading/autotrade.ts` (11), `data/klines.ts` (3),
+  `engine/arianova.ts` (2), `engine/postMortem.ts` (2),
+  `core/bootstrapMisc.ts` (1), `core/state.ts` hydration (1).
+
+**DoD atins**:
+
+- [x] **DoD 1** — `syncFromEngine = 0` în `dslStore` (C4) și `brainStore`
+  (C7); `aresStore.syncFromEngine` rămâne explicit out of scope Phase 6.
+- [x] **DoD 2** — `dslStore` și `brainStore` sunt sursa unică pentru
+  suprafețele lor canonice; engine-ul scrie direct prin mutatori.
+- [x] **DoD 3** — `window.DSL` și `window.BM` sunt Proxy read-compat,
+  păstrând compat cu importatorii legacy fără sync hop.
+- [x] **DoD 4** — `useDSLBridge` și `useBrainBridge` șterse; `App.tsx`
+  nu mai pornește bridge-uri Brain/DSL.
+- [x] **DoD 5** — `BlockReason` write-path canonical la toate cele 20
+  site-uri cunoscute; nu există drift între backing legacy și store
+  canonic după eliminarea bridge-urilor.
+- [x] **DoD 6** — `npx tsc --noEmit` PASS după fiecare commit.
+- [x] **DoD 7** — `npx vite build` PASS la fiecare commit; bundle final
+  index.js = 1770.56 kB (vs 1772.15 kB pre-C7, -1.59 kB).
+- [x] **DoD 8** — `vitest` PASS la fiecare commit relevant; brainStore
+  13/13 PASS post-C7 (era 15/15, cele 2 teste `syncFromEngine` scoase
+  intenționat); dslStore tests stabile post-C4.
+- [x] **DoD 9** — Zero atingere out of scope: `aresStore`,
+  `_usBuildFlatPayload`, `CLIENT_AT_STORE`, wrappers `_us*`, Phase 5
+  OPEN ISSUE — toate neatinse.
+- [x] **DoD 10** — MIGRATION_LOG Phase 6 entry + tag
+  `migration/phase-06-post` (C8).
+
+**Ce a rămas intenționat pentru fazele următoare** (deferred / out of scope):
+
+- **`aresStore.syncFromEngine`** — singurul store care mai poartă
+  pattern-ul `syncFromEngine` post-Phase-6. Master-plan-ul Phase 6 a
+  acoperit explicit doar DSL + Brain. Follow-up dedicat la GO explicit
+  (Phase 6.x sau parte din Phase 7).
+- **Phase 5 OPEN ISSUE — transient UI duplicates** — rămâne în afara
+  scope-ului Phase 6. Mandatory follow-up Phase 5.1 sau dedicat. Cele
+  două write-paths (`usePositionsBridge.syncSnapshot` fără cursor +
+  `positionsRealtime.applyDelta` cu cursor) rămân nerezolvate.
+- **48h observation Phase 5** — fereastra deschisă din 2026-04-15
+  ~18:05 UTC continuă în paralel cu Phase 6 și cu tag-ul
+  `migration/phase-06-post`. Monitorizare ad-hoc pentru stabilitate
+  server, frecvență disconnects, ciclu open→close cross-device.
+- **`_usBuildFlatPayload`** — retained compat helper Phase 4.
+  Necesită `SettingsPayload` widening (9 chei legacy-only). Neatins în
+  Phase 6.
+- **`CLIENT_AT_STORE` feature flag** — hardening follow-up Phase 3.
+  Neatins.
+- **`_usFetchRemote` / `_usPostRemote` wrappers** — thin compat
+  wrappers Phase 4. Neatinși.
+- **Stale comments referințe `useBrainBridge` / `syncFromEngine`** —
+  cleanup separat, non-blocking. Comentarii (nu cod) în
+  `core/config.ts`, `trading/autotrade.ts`, `data/klines.ts`,
+  `components/dock/AdaptivePanel.tsx`, `engine/brain.ts`. Cleanup la
+  GO explicit într-un commit doc-only ulterior.
+
+**Rollback point**:
+
+```bash
+# Sau git hard-reset la pre-Phase-6 (Phase 5 C6):
+git checkout migration/phase-05-positions-ws
+git reset --hard 522052b
+# (nu există pre-tag dedicat Phase 6; commit-ul pre-Phase-6 = Phase 5 C6)
+```
+
+Checkpoint-uri intermediare (commit-backed):
+
+- C1 `521c6b7` — contract widening
+- C2 `9da5f3e` — dslStore mutators
+- C3 `906184f` — DSL engine inversion + window.DSL Proxy
+- C3-doc `cb9917b` — doc-only checkIntervalActive
+- C4 `d8b81f4` — DSL bridge removal
+- C5 `5acf18c` — brainStore mutators
+- C6 `128cfc0` — Brain engine inversion + window.BM Proxy
+- pre-C7 `d48ec81` — BlockReason 14 site-uri (autotrade.ts/klines.ts)
+- pre-C7 bis `8abc444` — BlockReason 6 site-uri rămase
+- C7 `15717e5` — useBrainBridge + brainStore.syncFromEngine eliminate
+
+**Observații de runtime / risc**:
+
+- **Zero impact runtime backend** — Phase 6 e strict client-side.
+  Server-ul nu a fost atins. PM2 reload nu necesar.
+- **Bundle size scădere netă** — index.js gzip 504.85 kB la C7 vs
+  505.25 kB pre-C7 (-0.40 kB gzip, -1.59 kB raw); consistent cu codul
+  șters.
+- **Event `zeus:brainStateChanged` rămâne emis** — engine-ul mai
+  emite event-ul după `runBrainUpdate` dar nu mai are ascultător după
+  ștergerea `useBrainBridge`. Neutru runtime, safe pentru telemetrie
+  sau debug ad-hoc.
+- **`BlockReason` debounce log + DOM mutate păstrate** — toate
+  mirror-urile canonice se adaugă DUPĂ apelul backing legacy, deci
+  side-effects-urile facade-ului (debounce log, `#zad-block-reason`
+  DOM update, `aubBBSnapshot`) rămân intacte.
+- **State hydration `BlockReason._current` direct assign** — păstrat
+  intenționat în `core/state.ts` ZState restore pentru a NU declanșa
+  `set()` (care ar reseta debounce timestamps și ar muta DOM la
+  restore). Mirror canonic adăugat cu typed extract `{code, text}`.
+- **`useBrainStore.getState().setBlockReason(...)` în try/catch
+  defensiv** — toate site-urile mirror păstrează apelul în try/catch
+  pentru a NU putea prăbuși path-ul backing legacy în caz de bug viitor
+  în store.
+
+**Status**: ✓ PHASE 6 COMPLETE (`dslStore` + `brainStore` canonical,
+`window.DSL` + `window.BM` Proxy read-compat, `useDSLBridge` +
+`useBrainBridge` eliminate, `syncFromEngine` eliminat din ambele
+stores, `BlockReason` write-path fully canonical la 20 site-uri,
+`aresStore.syncFromEngine` deferred out of scope, Phase 5 OPEN ISSUE
+rămâne deschis în afara scope-ului, observația 48h Phase 5 continuă
+în paralel).
 
 ---
