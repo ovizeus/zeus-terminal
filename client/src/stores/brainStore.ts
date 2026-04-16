@@ -13,36 +13,24 @@ import type {
 /**
  * Brain canonical store.
  *
- * Phase 6 C5: typed mutators added (additive only). The legacy engine
- * (engine/brain.ts + window.BM / window.BRAIN / window.S / window.BlockReason)
- * still drives the store through `syncFromEngine`, invoked by the
- * `useBrainBridge` hook. C5 does NOT yet invert engine writes and does NOT
- * install the `window.BM` Proxy — those land in C6. `useBrainBridge` stays
- * wired in `App.tsx` until C7.
+ * Phase 6 C7: store is the single source of truth for the Brain surface.
+ * The legacy engine (engine/brain.ts) writes directly through the typed
+ * mutators below; `window.BM` is a Proxy that routes canonical reads to
+ * this store and runtime-only keys back to the backing object (installed
+ * in C6). `BlockReason` write-paths are mirrored canonically across all
+ * known sites (autotrade.ts, klines.ts, arianova.ts, postMortem.ts,
+ * bootstrapMisc.ts, state.ts hydration). `useBrainBridge` and
+ * `syncFromEngine` were removed in C7 — there is no engine→store sync hop.
  *
- * The mutators below cover the canonical Brain surface the user enumerated:
+ * Mutators cover the canonical Brain surface:
  *   - mode / profile
  *   - engineState (store-level `brainState`)
  *   - entryReady / entryScore
  *   - flow / mtf / sweep / gates
  *   - blockReason
- *   - thoughts
+ *   - thoughts (atomic replacement; engine uses `unshift` + bounded
+ *     capacity on the backing array, then replaces via `setThoughts`)
  *   - adaptParams
- *
- * Notes on blockReason / thoughts (C5 audit):
- *   - `blockReason` enters the canonical store cleanly as a typed replacement
- *     mutator (`BrainBlockReason | null`). The engine-side facade
- *     `window.BlockReason.get()` is a read surface; the store owns the
- *     committed value.
- *   - `thoughts` enters the canonical store cleanly as an atomic replacement
- *     mutator over `BrainThought[]`. The legacy engine uses `unshift` +
- *     bounded capacity on `window.BRAIN.thoughts` (engine/brain.ts:208-209);
- *     replacement semantics match the current `syncFromEngine` behavior
- *     (which already copies the whole array). If C6 inversion needs
- *     incremental push, that is the right place to add `pushThought` — not
- *     here.
- *
- * Neither field required a runtime-exception carry-forward for C5.
  */
 interface BrainStoreState {
   /** Brain state — mirrors window.BM */
@@ -83,9 +71,6 @@ interface BrainStoreState {
   setThoughts: (thoughts: BrainThought[]) => void
   /** Set adapt params (null clears) */
   setAdaptParams: (params: BrainAdaptParams | null) => void
-
-  /** Atomic snapshot sync from engine — one single set() call */
-  syncFromEngine: () => void
 }
 
 const defaultBrain: BrainState = {
@@ -233,54 +218,4 @@ export const useBrainStore = create<BrainStoreState>()((set) => ({
   setBlockReason: (reason) => set({ blockReason: reason }),
   setThoughts: (thoughts) => set({ thoughts }),
   setAdaptParams: (params) => set({ adaptParams: params }),
-
-  syncFromEngine: () => {
-    const w = window as any
-    const BM = w.BM; const BR = w.BRAIN; const S = w.S
-    if (!BM) return
-
-    // Single atomic set() — complete snapshot from window.BM + window.BRAIN
-    set({
-      brain: {
-        ...defaultBrain,
-        mode: S?.mode || 'assist',
-        profile: BM.profile || 'fast',
-        confluenceScore: BM.confluenceScore || 50,
-        confMin: BM.confMin || 65,
-        protectMode: !!BM.protectMode,
-        protectReason: BM.protectReason || '',
-        dailyTrades: BM.dailyTrades || 0,
-        dailyPnL: BM.dailyPnL || 0,
-        lossStreak: BM.lossStreak || 0,
-        newsRisk: BM.newsRisk || 'low',
-        gates: BM.gates || {},
-        entryScore: BM.entryScore || 0,
-        entryReady: !!BM.entryReady,
-        mtf: BM.mtf || { '15m': 'neut', '1h': 'neut', '4h': 'neut' },
-        sweep: BM.sweep || { type: 'none', reclaim: false, displacement: false },
-        flow: BM.flow || { cvd: 'neut', delta: 0, ofi: 'neut' },
-        regimeEngine: BM.regimeEngine || defaultBrain.regimeEngine,
-        phaseFilter: BM.phaseFilter || defaultBrain.phaseFilter,
-        atmosphere: BM.atmosphere || defaultBrain.atmosphere,
-        structure: BM.structure || defaultBrain.structure,
-        liqCycle: BM.liqCycle || defaultBrain.liqCycle,
-        volRegime: BM.volRegime || '—',
-        volPct: BM.volPct ?? null,
-        danger: BM.danger || 0,
-        dangerBreakdown: BM.dangerBreakdown || defaultBrain.dangerBreakdown,
-        conviction: BM.conviction || 0,
-        convictionMult: BM.convictionMult ?? 1.0,
-        positionSizing: BM.positionSizing || defaultBrain.positionSizing,
-        probScore: BM.probScore || 0,
-        probBreakdown: BM.probBreakdown || defaultBrain.probBreakdown,
-      },
-      brainState: BR?.state || 'scanning',
-      brainMode: S?.mode || 'assist',
-      thoughts: BR?.thoughts ? [...BR.thoughts] : [],
-      adaptParams: BR?.adaptParams || null,
-      blockReason: (typeof w.BlockReason !== 'undefined' && w.BlockReason.get()?.code)
-        ? { code: w.BlockReason.get().code, text: w.BlockReason.get().text || '' }
-        : null,
-    })
-  },
 }))
