@@ -30,7 +30,8 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 2 API client centralized | ✓ done | `migration/phase-02-pre` | `migration/phase-02-post` | all safe internal `/api/*` call-sites migrated + exceptions documented | 21 migrations across 6 commits; 34 deferred exceptions categorized |
 | 3 atStore canonic | ✓ done | `migration/phase-03-pre` | `migration/phase-03-post` | #atLev DOM not source | 6 commits; CLIENT_AT_STORE feature flag deferred (hardening follow-up) |
 | 4 settingsStore canonic | ✓ done | `migration/phase-04-pre` | `migration/phase-04-post` | cross-device toggle | 6 commits; `_usBuildFlatPayload` retained as compat helper (deferred to Phase 5) |
-| 5 Positions WS live | ✓ done | `migration/phase-05-pre` | `migration/phase-05-post` | trade desktop→phone <1s | 7 commits + 1 preflip fix; `MF.POSITIONS_WS=true` live; polling retired from main path; 48h observation still open post-tag; **OPEN ISSUE**: transient UI duplicates (mandatory follow-up) |
+| 5 Positions WS live | ✓ done | `migration/phase-05-pre` | `migration/phase-05-post` | trade desktop→phone <1s | 7 commits + 1 preflip fix; `MF.POSITIONS_WS=true` live; polling retired from main path; 48h observation still open post-tag; OPEN ISSUE transient duplicates → **MITIGATED by Phase 5.1** |
+| 5.1 Positions bridge reconciliation | ✓ done | `migration/phase-5.1-pre` | `migration/phase-05.1-post` | bridge gated on WS | 1 commit; `usePositionsBridge` gated pe `wsService.isConnected()`; OPEN ISSUE **MITIGATED structurally, pending browser-side verification** |
 | 6 dslStore+brainStore canonic | ✓ done | — | `migration/phase-06-post` | syncFromEngine=0 | 8 commits (C1→C7) + 2 pre-C7 BlockReason inversions; `dslStore` + `brainStore` canonical; `window.DSL` + `window.BM` Proxy read-compat; `useDSLBridge` + `useBrainBridge` deleted; `syncFromEngine` removed from both stores; `blockReason` write-path canonical at all 20 known sites; `aresStore.syncFromEngine` deferred (out of scope) |
 | 7 Kill DOM-as-state | ✓ done | `migration/phase-7-pre` | `migration/phase-07-post` | USER_SETTINGS consumers canonical + stale comments cleaned | Scope redus intenționat: consumer migration (4 read-sites) + stale comments (5 files); `window.USER_SETTINGS` Proxy respins (nesting risk); `window.TC` auditat OK (Phase 3 satisfăcut); `engine/aub.ts` deferred; Phase 5 OPEN ISSUE out of scope |
 | 8 SQLite-only persist | pending | — | — | user_ctx = UI only | one-shot migration |
@@ -1165,5 +1166,113 @@ migration `USER_SETTINGS` → settingsStore + stale comments cleanup;
 `window.USER_SETTINGS` Proxy respins; `window.TC` auditat OK;
 `engine/aub.ts` deferred; Phase 5 OPEN ISSUE rămâne separat;
 observația 48h Phase 5 continuă în paralel).
+
+---
+
+### Phase 5.1 — Positions bridge reconciliation (2026-04-16)
+
+**Obiectiv**: Elimină race condition-ul între bridge-ul legacy
+(`usePositionsBridge.syncSnapshot`) și path-ul WS
+(`positionsRealtime.applyDelta`) care putea cauza duplicate tranzitorii
+în UI. Bridge-ul suprascria store-ul cu date stale din `window.TP` când
+WS-ul era deja activ, deoarece `syncSnapshot` nu consulta cursorul
+monotonic `lastSnapshotTs`.
+
+**Abordare**: Option 2 din candidații registrului — gate bridge pe WS
+connectivity (`wsService.isConnected()`), simetric cu polling fallback
+din `bootstrapInit.ts:95`. Când WS e conectat, `applyDelta` (cu cursor
+dedup) deține exclusiv data path-ul. Când WS e down, bridge-ul
+funcționează ca fallback. Timer-ul de 2s la boot rămâne neatins (WS nu
+e OPEN încă la momentul execuției).
+
+**Pre-tag**: `migration/phase-5.1-pre` pe `e119179`.
+**Post-tag**: `migration/phase-05.1-post` pe commit C2.
+**Branch**: `migration/phase-07-kill-dom-as-state` (continuat).
+
+#### Commit chain
+
+| # | Hash | Scope | Files |
+|---|------|-------|-------|
+| C1 | `cb81bad` | Gate bridge pe WS connectivity | `client/src/hooks/usePositionsBridge.ts` |
+| C2 | (this) | MIGRATION_LOG + deferred register + tag | `MIGRATION_LOG.md` |
+
+#### C1 — Gate bridge pe WS connectivity
+
+**Fișier atins**: `client/src/hooks/usePositionsBridge.ts` (singur).
+
+**Modificare**:
+- Import adăugat: `import { wsService } from '../services/ws'` (L16)
+- Guard adăugat: `if (wsService.isConnected()) return` (L24), în
+  `readSnapshotFromWindow()`, înainte de `syncSnapshot()` call
+
+**Semantică**:
+- Când `wsService.isConnected() === true` → bridge skip, WS owns data
+- Când `wsService.isConnected() === false` → bridge funcționează ca
+  fallback (WS down, reconnect backoff, sau boot pre-WS)
+- Timer 2s la boot: neatins, funcționează normal (WS nu e OPEN la boot)
+- Simetric cu: `bootstrapInit.ts:95` polling 120s care face
+  `if (wsService.isConnected()) return`
+
+**Diff**: +2 linii (1 import, 1 guard), 0 linii șterse.
+
+**Validare C1**:
+- `npx tsc --noEmit`: PASS (zero erori)
+- `vite build`: PASS (774ms, warnings preexistente chunk size)
+- Zero cod funcțional atins în afara `usePositionsBridge.ts`
+
+#### DoD Phase 5.1
+
+1. ✅ Bridge nu mai apelează `syncSnapshot()` când WS activ
+2. ✅ Bridge funcționează ca fallback când WS down (guard pe
+   `isConnected()` returnează false → flow normal)
+3. ✅ Timer 2s la boot rămâne activ (WS nu e OPEN la boot)
+4. ✅ `positionsRealtime.applyDelta()` path neatins
+5. ⏳ Zero duplicate tranzitorii observabile în test manual țintit
+   (open + close position, fără flicker repetabil) — **PENDING
+   browser-side verification**
+6. ✅ MIGRATION_LOG entry + tag `migration/phase-05.1-post`
+7. ✅ Deferred register actualizat (MITIGATED, not CLOSED)
+
+#### OPEN ISSUE — Transient UI duplicates
+
+**Status: MITIGATED structurally by Phase 5.1, PENDING browser-side
+verification.**
+
+Phase 5.1 C1 elimină structural calea prin care bridge-ul putea
+suprascrie store-ul cu date stale din `window.TP` când WS era activ.
+Totuși, issue-ul NU este marcat CLOSED definitiv până la confirmare
+browser-side clară:
+
+- Zero duplicate tranzitorii observabile în sesiune cu WS activ
+- Bridge nu mai emite `syncSnapshot source=bridge` când WS e conectat
+  (verificabil prin console log DEV)
+- Ciclu complet: open position → verificare UI stabil → close position
+  → verificare UI stabil
+
+Închiderea definitivă se face la GO explicit după validare browser-side.
+
+#### Ce NU s-a atins în Phase 5.1
+
+- `positionsRealtime.ts` — funcționează corect, neatins
+- `positionsStore.ts` — neatins
+- `bootstrapInit.ts` — neatins (polling 120s fallback rămâne)
+- `window.TP` — neatins structural
+- Nicio altă fază (6, 7, 8, 9)
+- `_usBuildFlatPayload`, `CLIENT_AT_STORE`, `aresStore.syncFromEngine`,
+  `fix(auth) c9220fd`, `engine/aub.ts` — toate neatinse
+
+#### Observații
+
+- **Observația Phase 5 48h continuă în paralel** — fereastră deschisă
+  din ~2026-04-15 18:05 UTC, neatinsă de Phase 5.1.
+- **Tag naming**: pre-tag = `migration/phase-5.1-pre` (backup script
+  fără zero-padding); post-tag = `migration/phase-05.1-post` (canonic).
+  Discrepanță identică cu Phase 7 (`phase-7-pre` vs `phase-07-post`).
+
+**Deferred register**: `project_migration_deferred_register.md`
+**Known bugs**: `project_known_bugs.md`
+
+**Status**: ✓ PHASE 5.1 COMPLETE — OPEN ISSUE mitigated structurally,
+pending browser-side verification pentru closed definitiv.
 
 ---
