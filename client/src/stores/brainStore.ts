@@ -1,11 +1,91 @@
 import { create } from 'zustand'
-import type { BrainState } from '../types'
+import type {
+  BrainState,
+  BrainMode,
+  TradingProfile,
+  BrainEngineState,
+  BrainThought,
+  BrainAdaptParams,
+  BrainBlockReason,
+  MtfAlignment,
+} from '../types'
 
-interface BrainStore {
+/**
+ * Brain canonical store.
+ *
+ * Phase 6 C5: typed mutators added (additive only). The legacy engine
+ * (engine/brain.ts + window.BM / window.BRAIN / window.S / window.BlockReason)
+ * still drives the store through `syncFromEngine`, invoked by the
+ * `useBrainBridge` hook. C5 does NOT yet invert engine writes and does NOT
+ * install the `window.BM` Proxy — those land in C6. `useBrainBridge` stays
+ * wired in `App.tsx` until C7.
+ *
+ * The mutators below cover the canonical Brain surface the user enumerated:
+ *   - mode / profile
+ *   - engineState (store-level `brainState`)
+ *   - entryReady / entryScore
+ *   - flow / mtf / sweep / gates
+ *   - blockReason
+ *   - thoughts
+ *   - adaptParams
+ *
+ * Notes on blockReason / thoughts (C5 audit):
+ *   - `blockReason` enters the canonical store cleanly as a typed replacement
+ *     mutator (`BrainBlockReason | null`). The engine-side facade
+ *     `window.BlockReason.get()` is a read surface; the store owns the
+ *     committed value.
+ *   - `thoughts` enters the canonical store cleanly as an atomic replacement
+ *     mutator over `BrainThought[]`. The legacy engine uses `unshift` +
+ *     bounded capacity on `window.BRAIN.thoughts` (engine/brain.ts:208-209);
+ *     replacement semantics match the current `syncFromEngine` behavior
+ *     (which already copies the whole array). If C6 inversion needs
+ *     incremental push, that is the right place to add `pushThought` — not
+ *     here.
+ *
+ * Neither field required a runtime-exception carry-forward for C5.
+ */
+interface BrainStoreState {
   /** Brain state — mirrors window.BM */
   brain: BrainState
+  /** Brain engine lifecycle state (SCANNING/ANALYZING/READY/TRADING/BLOCKED) */
+  brainState: BrainEngineState
+  /** Brain mode (assist/auto) */
+  brainMode: BrainMode
+  /** Brain thoughts log */
+  thoughts: BrainThought[]
+  /** Brain adapt params */
+  adaptParams: BrainAdaptParams | null
+  /** Block reason */
+  blockReason: BrainBlockReason | null
+
   /** Merge partial brain state */
   patch: (partial: Partial<BrainState>) => void
+
+  /** Set operating mode (updates both `brain.mode` and top-level `brainMode`) */
+  setMode: (mode: BrainMode) => void
+  /** Set trading profile (fast/swing/defensive) */
+  setProfile: (profile: TradingProfile) => void
+  /** Set engine lifecycle state */
+  setEngineState: (state: BrainEngineState) => void
+  /** Set entry readiness + score together */
+  setEntry: (partial: { ready?: boolean; score?: number }) => void
+  /** Set flow snapshot (CVD / delta / OFI) */
+  setFlow: (flow: BrainState['flow']) => void
+  /** Set multi-timeframe alignment */
+  setMtf: (mtf: MtfAlignment) => void
+  /** Set sweep snapshot */
+  setSweep: (sweep: BrainState['sweep']) => void
+  /** Replace gates map */
+  setGates: (gates: Record<string, unknown>) => void
+  /** Set block reason (null clears) */
+  setBlockReason: (reason: BrainBlockReason | null) => void
+  /** Replace thoughts log atomically */
+  setThoughts: (thoughts: BrainThought[]) => void
+  /** Set adapt params (null clears) */
+  setAdaptParams: (params: BrainAdaptParams | null) => void
+
+  /** Atomic snapshot sync from engine — one single set() call */
+  syncFromEngine: () => void
 }
 
 const defaultBrain: BrainState = {
@@ -123,29 +203,36 @@ const defaultBrain: BrainState = {
   core: { lastLiqTs: 0, mtfOn: false, ticks: 0 },
 }
 
-interface BrainStoreExtended extends BrainStore {
-  /** Brain engine state (SCANNING/ANALYZING/READY/TRADING/BLOCKED) */
-  brainState: string
-  /** Brain mode (assist/auto) */
-  brainMode: string
-  /** Brain thoughts log */
-  thoughts: any[]
-  /** Brain adapt params */
-  adaptParams: any
-  /** Block reason */
-  blockReason: { code: string; text: string } | null
-  /** Atomic snapshot sync from engine — one single set() call */
-  syncFromEngine: () => void
-}
-
-export const useBrainStore = create<BrainStoreExtended>()((set) => ({
+export const useBrainStore = create<BrainStoreState>()((set) => ({
   brain: defaultBrain,
   brainState: 'scanning',
   brainMode: 'assist',
   thoughts: [],
   adaptParams: null,
   blockReason: null,
+
   patch: (partial) => set((s) => ({ brain: { ...s.brain, ...partial } })),
+
+  setMode: (mode) =>
+    set((s) => ({ brain: { ...s.brain, mode }, brainMode: mode })),
+  setProfile: (profile) =>
+    set((s) => ({ brain: { ...s.brain, profile } })),
+  setEngineState: (state) => set({ brainState: state }),
+  setEntry: ({ ready, score }) =>
+    set((s) => ({
+      brain: {
+        ...s.brain,
+        entryReady: ready !== undefined ? ready : s.brain.entryReady,
+        entryScore: score !== undefined ? score : s.brain.entryScore,
+      },
+    })),
+  setFlow: (flow) => set((s) => ({ brain: { ...s.brain, flow } })),
+  setMtf: (mtf) => set((s) => ({ brain: { ...s.brain, mtf } })),
+  setSweep: (sweep) => set((s) => ({ brain: { ...s.brain, sweep } })),
+  setGates: (gates) => set((s) => ({ brain: { ...s.brain, gates } })),
+  setBlockReason: (reason) => set({ blockReason: reason }),
+  setThoughts: (thoughts) => set({ thoughts }),
+  setAdaptParams: (params) => set({ adaptParams: params }),
 
   syncFromEngine: () => {
     const w = window as any
