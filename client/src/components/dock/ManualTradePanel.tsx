@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
-import { onDemoLevChange, placeDemoOrder, setLiveSide, onDemoOrdTypeChange, setLivePct, onLiveLevChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
+import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
 
 const w = window as any
@@ -263,80 +263,6 @@ export function ManualTradePanel() {
           </div>
           {/* TS renderTradeJournal() owns this div via innerHTML — no React children allowed */}
           <div className="journal-wrap" id="journalBody" dangerouslySetInnerHTML={{ __html: '<div style="padding:10px;text-align:center;font-size:8px;color:var(--dim)">No trades yet</div>' }} />
-        </div>
-      </div>
-    </div>
-    {/* LIVE TRADING PANEL — old JS populates via positions.js + liveApi.js */}
-    <div className="trade-panel" id="panelLive" style={{ display: 'none' }}>
-      <div className="tp-hdr live-hdr">
-        <span><span className="z-dot z-dot--red" /> LIVE TRADING — REAL FUNDS</span>
-        <span style={{ fontSize: '8px', color: '#ff8800' }}>
-          <svg className="z-i" viewBox="0 0 16 16"><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> USE WITH CAUTION
-        </span>
-      </div>
-      <div className="tp-body">
-        <div className="api-section" id="apiSection">
-          <div id="apiStatus" style={{ padding: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)', lineHeight: 1.8 }}>
-            Checking exchange connection...
-          </div>
-          <button className="tp-exec live-exec" id="btnConnectExchange">CHECK CONNECTION</button>
-        </div>
-        <div id="liveOrderForm" style={{ display: 'none' }}>
-          <div className="tp-sides">
-            <button className="tp-side-btn long-btn act" id="liveLongBtn" onClick={() => setLiveSide?.('LONG')}>LONG ▲</button>
-            <button className="tp-side-btn short-btn" id="liveShortBtn" onClick={() => setLiveSide?.('SHORT')}>SHORT ▼</button>
-          </div>
-          <div className="tp-row">
-            <div className="tp-field">
-              <div className="tp-lbl">TYPE</div>
-              <select id="liveOrdType" className="tp-sel" defaultValue="market">
-                <option value="market">MARKET</option>
-                <option value="limit">LIMIT</option>
-              </select>
-            </div>
-            <div className="tp-field">
-              <div className="tp-lbl">LEVERAGE</div>
-              <select id="liveLev" className="tp-sel" defaultValue="20" onChange={() => onLiveLevChange()}>
-                <option value="1">1x</option><option value="2">2x</option><option value="5">5x</option>
-                <option value="10">10x</option><option value="20">20x</option><option value="50">50x</option>
-                <option value="100">100x</option><option value="custom">✏ Custom</option>
-              </select>
-            </div>
-          </div>
-          <div className="tp-row" id="liveCustomLevRow" style={{ display: 'none' }}>
-            <div className="tp-field" style={{ width: '100%' }}>
-              <div className="tp-lbl">LEVIER CUSTOM (1 — 150x)</div>
-              <input type="number" id="liveCustomLev" className="tp-inp" defaultValue={20} min={1} max={150} step={1} style={{ width: '100%' }} />
-            </div>
-          </div>
-          <div className="tp-row">
-            <div className="tp-field">
-              <div className="tp-lbl">SIZE (USDT)</div>
-              <input type="number" id="liveSize" className="tp-inp" defaultValue={50} step={10} />
-            </div>
-            <div className="tp-field">
-              <div className="tp-lbl">ENTRY</div>
-              <input type="number" id="liveEntry" className="tp-inp" placeholder="Market" step={0.1} />
-            </div>
-          </div>
-          <div style={{ background: '#1a0a0a', border: '1px solid #ff335533', borderRadius: '4px', padding: '7px 10px', margin: '4px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '1px' }}>
-              <svg className="z-i" viewBox="0 0 16 16"><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> LIQ PRICE
-            </span>
-            <span id="liveLiqPrice" style={{ fontSize: '13px', fontWeight: 700, color: '#ff5577', fontFamily: "'Cinzel',serif" }}>—</span>
-          </div>
-          <div className="tp-row">
-            <div className="tp-field"><div className="tp-lbl">TP</div><input type="number" id="liveTP" className="tp-inp" placeholder="—" step={0.1} /></div>
-            <div className="tp-field"><div className="tp-lbl">SL</div><input type="number" id="liveSL" className="tp-inp" placeholder="—" step={0.1} /></div>
-          </div>
-          <div className="tp-pcts">
-            <button className="tp-pct" onClick={() => setLivePct(25)}>25%</button>
-            <button className="tp-pct" onClick={() => setLivePct(50)}>50%</button>
-            <button className="tp-pct" onClick={() => setLivePct(75)}>75%</button>
-            <button className="tp-pct" onClick={() => setLivePct(100)}>100%</button>
-          </div>
-          <button className="tp-exec live-exec" onClick={() => placeDemoOrder?.()}><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
-          <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
         </div>
       </div>
     </div>

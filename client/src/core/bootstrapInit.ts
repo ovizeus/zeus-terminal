@@ -47,7 +47,7 @@ export function initZeusGroups(): void {
   const _atPanel = document.getElementById('at-strip-panel')
   if (_atPanel) { mv('atPanel', _atPanel); mvSec('.at-sep', _atPanel) }
   const _ptPanel = document.getElementById('pt-strip-panel')
-  if (_ptPanel) { mvSec('.trade-sep', _ptPanel); mv('panelDemo', _ptPanel); mv('panelLive', _ptPanel) }
+  if (_ptPanel) { mvSec('.trade-sep', _ptPanel); mv('panelDemo', _ptPanel) }
   const _dslPanel = document.getElementById('dsl-strip-panel')
   if (_dslPanel) mv('dslZone', _dslPanel)
   mv('perfSec', mi); mv('btSec', mi)
@@ -114,7 +114,7 @@ export function runHealthChecks(): any {
   checks.mi = _check('zeus-groups', '.sec')
   checks.dsl = _check('dsl-strip-panel', '#dslZone')
   checks.at = _check('at-strip-panel', '#atPanel')
-  checks.pt = _check('pt-strip-panel', '#panelDemo') && _check('pt-strip-panel', '#panelLive')
+  checks.pt = _check('pt-strip-panel', '#panelDemo')
   console.log('[HEALTH] MI mounted:', checks.mi ? 'OK' : 'FAIL')
   console.log('[HEALTH] DSL mounted:', checks.dsl ? 'OK' : 'FAIL')
   console.log('[HEALTH] AT mounted:', checks.at ? 'OK' : 'FAIL')
