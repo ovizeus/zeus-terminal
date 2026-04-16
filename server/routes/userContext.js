@@ -168,7 +168,22 @@ router.post('/user-context', async (req, res) => { // [S11] async to properly aw
         const final = { userId: req.user.id, ts: body.ts, sections: merged };
         _atomicWrite(fp, final);
 
-        console.log('[user-ctx] POST user', req.user.id, '— sections:', Object.keys(merged).join(','));
+        // [Phase 8 C3] Dual-write: also persist SQLite-eligible sections
+        const sqliteBatch = {};
+        for (const key of SQLITE_SECTIONS) {
+            if (merged[key] !== undefined && merged[key] !== null) {
+                sqliteBatch[key] = merged[key];
+            }
+        }
+        if (Object.keys(sqliteBatch).length > 0) {
+            try {
+                db.saveCtxBulk(req.user.id, sqliteBatch);
+            } catch (e) {
+                console.error('[user-ctx] SQLite dual-write failed for user', req.user.id, ':', e.message);
+            }
+        }
+
+        console.log('[user-ctx] POST user', req.user.id, '— sections:', Object.keys(merged).join(','), '(sqlite:', Object.keys(sqliteBatch).length, ')');
         // Broadcast to other devices via WebSocket for instant sync
         if (req.app.locals.wsBroadcast) req.app.locals.wsBroadcast(req.user.id, null);
         // [C3] Echo stored settings section for client-side validation
