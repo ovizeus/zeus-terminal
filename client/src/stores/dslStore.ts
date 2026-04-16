@@ -11,6 +11,14 @@ import type { DslPositionState } from '../types'
  * It is a runtime-only Set used by the legacy engine and is non-serializable
  * / non-persistable. The canonical store must never become a hydration
  * source for it.
+ *
+ * Note (Phase 6 C3 audit): `checkIntervalActive` is a store-internal
+ * derived boolean (`!!DSL.checkInterval`). It is intentionally NOT exposed
+ * on the `window.DSL` Proxy canonical surface because there are zero
+ * external readers — all consumers (engine + DSLZonePanel) read the
+ * underlying interval handle as `DSL.checkInterval`, served by the
+ * Proxy via runtime pass-through to the backing object. Keeping this
+ * field store-only avoids a duplicate canonical surface.
  */
 interface DslStoreState {
   enabled: boolean

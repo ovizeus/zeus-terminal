@@ -2196,6 +2196,13 @@ w.BT_INDICATORS = BT_INDICATORS
 //   external write attempts are intentionally not write-through.
 // - SET on runtime keys passes through to backing (so legacy paths can
 //   still hold _attachedIds Set, interval handles, etc.).
+//
+// Note: `checkIntervalActive` (boolean derived from checkInterval) lives
+// in useDslStore but is intentionally NOT in the Proxy canonical surface.
+// Audit C3 confirmed zero external readers — consumers (engine,
+// DSLZonePanel) read `DSL.checkInterval` (the interval handle) via
+// runtime pass-through. Adding it would create a duplicate surface
+// without callers.
 {
   const CANONICAL_DSL_KEYS = new Set([
     'enabled', 'mode', 'magnetEnabled', 'magnetMode', 'positions',
