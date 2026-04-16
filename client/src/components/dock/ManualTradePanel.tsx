@@ -104,8 +104,10 @@ export function ManualTradePanel() {
       <div className="trade-line" />
     </div>
     <div className="trade-panel" id="panelDemo">
-      <div className="tp-hdr demo-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-        <span>MANUAL TRADE</span>
+      <div className={`tp-hdr ${exchangeMode === 'live' ? 'live-hdr' : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+        <span>{exchangeMode === 'live'
+          ? (resolvedEnv === 'TESTNET' ? '\u25CF MANUAL TRADE (TESTNET)' : '\u25CF MANUAL TRADE (LIVE)')
+          : 'MANUAL TRADE'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span id="demoBalance" className="tp-bal">{`BAL: $${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
           <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => promptAddFunds()}>+ ADD</button>
