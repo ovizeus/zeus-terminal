@@ -32,7 +32,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 4 settingsStore canonic | ✓ done | `migration/phase-04-pre` | `migration/phase-04-post` | cross-device toggle | 6 commits; `_usBuildFlatPayload` retained as compat helper (deferred to Phase 5) |
 | 5 Positions WS live | ✓ done | `migration/phase-05-pre` | `migration/phase-05-post` | trade desktop→phone <1s | 7 commits + 1 preflip fix; `MF.POSITIONS_WS=true` live; polling retired from main path; 48h observation still open post-tag; **OPEN ISSUE**: transient UI duplicates (mandatory follow-up) |
 | 6 dslStore+brainStore canonic | ✓ done | — | `migration/phase-06-post` | syncFromEngine=0 | 8 commits (C1→C7) + 2 pre-C7 BlockReason inversions; `dslStore` + `brainStore` canonical; `window.DSL` + `window.BM` Proxy read-compat; `useDSLBridge` + `useBrainBridge` deleted; `syncFromEngine` removed from both stores; `blockReason` write-path canonical at all 20 known sites; `aresStore.syncFromEngine` deferred (out of scope) |
-| 7 Kill DOM-as-state | pending | — | — | getElementById source=0 | — |
+| 7 Kill DOM-as-state | ✓ done | `migration/phase-7-pre` | `migration/phase-07-post` | USER_SETTINGS consumers canonical + stale comments cleaned | Scope redus intenționat: consumer migration (4 read-sites) + stale comments (5 files); `window.USER_SETTINGS` Proxy respins (nesting risk); `window.TC` auditat OK (Phase 3 satisfăcut); `engine/aub.ts` deferred; Phase 5 OPEN ISSUE out of scope |
 | 8 SQLite-only persist | pending | — | — | user_ctx = UI only | one-shot migration |
 | 9 Cleanup + TS strict global | pending | — | — | window.* only in bridge/ | v2.0.0 |
 
@@ -1024,5 +1024,146 @@ stores, `BlockReason` write-path fully canonical la 20 site-uri,
 `aresStore.syncFromEngine` deferred out of scope, Phase 5 OPEN ISSUE
 rămâne deschis în afara scope-ului, observația 48h Phase 5 continuă
 în paralel).
+
+---
+
+### Phase 7 — Kill DOM-as-state (scope redus)
+
+**Scop**: reducerea dependenței de oglinzile globale legacy pentru
+suprafețele unde store-urile canonice există deja. Phase 7 a fost
+planificat inițial cu obiectiv larg (Proxy install pe `window.TP`,
+`window.USER_SETTINGS`, `window.TC` + `engine/aub.ts` DOM-write
+elimination). După auditul pre-Phase-7, scope-ul a fost redus
+intenționat la consumer migration + stale comments cleanup pe baza
+următoarelor decizii:
+
+- **`window.USER_SETTINGS` Proxy RESPINS** — structură nested
+  (`autoTrade.*`, `chart.*`) face deep Proxy prea complex și riscant.
+  settingsStore e deja canonical (Phase 4); USER_SETTINGS e mirror
+  menținut de projection layer `_syncToWindow()`. Decizia: migrare
+  directă a consumatorilor rămași de pe `w.USER_SETTINGS` la
+  `useSettingsStore.getState()`. Cele 9 chei legacy-only (`profile`,
+  `bmMode`, `assistArmed`, `manualLive`, `ptLevDemo`, `ptLevLive`,
+  `ptMarginMode`, `chartTz`, `dslSettings`) rămân backing/pass-through.
+- **`window.TC` auditat, verdict: satisfăcut de Phase 3** — TC este
+  deja Proxy (instalat la `core/state.ts:208`, Phase 3 C3), cu 8 chei
+  AT-delegated routed prin atStore, 10 chei backing, zero enumeration
+  patterns. Zero code changes needed în Phase 7.
+- **`engine/aub.ts` DEFERRED** — conversie DOM-write fezabilă fără
+  aresStore dependency (confirmat prin audit), dar scope prea mare
+  (~250-300 linii + store nou `aubStore` + componentă React). Candidat
+  Phase 7.x sau Phase 8.
+- **`window.TP` DEFERRED** — entangled cu Phase 5 OPEN ISSUE
+  (transient UI duplicates). Nu se poate închide curat fără Phase 5.1.
+
+**Pre-tag**: `migration/phase-7-pre` (HEAD=`2bf7590` = Phase 6 post)
+**Notă tag naming**: backup script a creat `migration/phase-7-pre`
+(fără zero-padding), iar post-tag-ul canonic rămâne
+`migration/phase-07-post`. Ambele sunt valide; discrepanța este
+documentată și non-blocking.
+**Post-tag**: `migration/phase-07-post`
+**Branch**: `migration/phase-07-kill-dom-as-state`
+
+**Commit-urile C1–C3** (în ordine):
+
+| # | Hash | Rezumat |
+|---|------|---------|
+| C1 | `8346246` | consumer migration: 4 read-sites de la `w.USER_SETTINGS.autoTrade.smartExitEnabled` la `useSettingsStore.getState().smartExitEnabled` în `engine/forecast.ts` (3 site-uri) și `utils/dev.ts` (1 site); import `useSettingsStore` adăugat în ambele fișiere |
+| C2 | `a69fc04` | stale comments cleanup: 6 comentarii rescrise/curățate în 5 fișiere (`core/config.ts`, `trading/autotrade.ts`, `data/klines.ts`, `components/dock/AdaptivePanel.tsx`, `engine/brain.ts`); zero cod funcțional atins; referințe stale la `useBrainBridge`/`syncFromEngine` eliminate |
+| C3 | `<post>` | docs: MIGRATION_LOG Phase 7 entry + ledger update + tag `migration/phase-07-post` |
+
+**Totaluri**:
+
+- **Fișiere atinse total fază** (excluzând `MIGRATION_LOG.md`):
+  - C1: 2 (`engine/forecast.ts`, `utils/dev.ts`) — cod funcțional
+    (read-site replacement)
+  - C2: 5 (`core/config.ts`, `trading/autotrade.ts`, `data/klines.ts`,
+    `components/dock/AdaptivePanel.tsx`, `engine/brain.ts`) — comment-only
+- **Endpoint-uri noi**: 0
+- **Store-uri modificate**: 0
+- **Proxy-uri noi instalate**: 0 (USER_SETTINGS Proxy respins explicit)
+- **Flag-uri noi**: 0
+
+**Ce s-a făcut concret**:
+
+- **Consumer migration** (`engine/forecast.ts`, `utils/dev.ts`):
+  4 read-site-uri care accesau `w.USER_SETTINGS.autoTrade.smartExitEnabled`
+  au fost migrate la `useSettingsStore.getState().smartExitEnabled`.
+  Toți consumatorii citeau o singură cheie (`smartExitEnabled`) disponibilă
+  în settingsStore din Phase 4. `window.USER_SETTINGS` rămâne backing
+  mirror, neatins structural. Projection layer (`_syncToWindow()`) și
+  cele 9 chei legacy-only rămân neschimbate.
+
+- **Stale comments cleanup** (5 fișiere, 6 site-uri): comentarii care
+  încă refereau `useBrainBridge` / `syncFromEngine` (eliminate în
+  Phase 6 C4/C7) au fost rescrise să reflecte arhitectura curentă.
+  Referințele rămase la `syncFromEngine` sunt corecte: note istorice
+  în JSDoc (`dslStore.ts:7`, `brainStore.ts:22-23`) și cod activ ARES
+  (`aresStore.ts`, `useAresBridge.ts`) — ambele out of scope.
+
+**DoD atins**:
+
+- [x] **DoD 1** — Consumatorii direcți `w.USER_SETTINGS` din
+  `engine/forecast.ts` și `utils/dev.ts` citesc acum din settingsStore
+  canonical.
+- [x] **DoD 2** — Zero referințe stale la `useBrainBridge`/`syncFromEngine`
+  în afara notelor istorice corecte și codului activ ARES.
+- [x] **DoD 3** — `npx tsc --noEmit` PASS la fiecare commit.
+- [x] **DoD 4** — `npx vite build` PASS la fiecare commit.
+- [x] **DoD 5** — Zero cod funcțional atins în C2 (comment-only).
+- [x] **DoD 6** — MIGRATION_LOG Phase 7 entry + tag `migration/phase-07-post`.
+
+**Ce a fost respins intenționat în Phase 7**:
+
+- **`window.USER_SETTINGS` Proxy** — deep Proxy pe structură nested
+  prea complex; valoare marginală (store deja canonical); risk/reward
+  negativ.
+- **`window.TC` code changes** — TC deja Proxy din Phase 3; audit OK,
+  zero gap-uri. Nu se redeschide Phase 3 sub alt nume.
+
+**Ce rămâne deferred (nu a intrat în Phase 7)**:
+
+- **`engine/aub.ts` DOM-write elimination** — fezabil fără ARES
+  dependency (confirmat prin audit: zero import-uri store, zero DOM
+  reads ca sursă), dar scope prea mare (~250-300 linii + aubStore +
+  React rendering). Candidat Phase 7.x sau Phase 8.
+- **`window.TP` → Proxy** — entangled cu Phase 5 OPEN ISSUE root-cause.
+  Deferred la Phase 5.1 sau Phase 7.x.
+- **`window.AT` → Proxy** — candidat, neinvestigat în Phase 7.
+- **DOM `getElementById` source în alte engine-uri** (non-aub) —
+  neauditat; Phase 8 sau Phase 9.
+- **`aresStore.syncFromEngine`** — singurul store rămas cu pattern-ul.
+  Out of scope Phase 7, deferred ca follow-up dedicat.
+- **Phase 5 OPEN ISSUE** — transient UI duplicates. Mandatory follow-up,
+  separat de Phase 7.
+- **`_usBuildFlatPayload`**, **`CLIENT_AT_STORE`**, **wrappers
+  `_us*`** — neatinse, carried forward din fazele anterioare.
+- **`fix(auth) c9220fd`** — separat de seriile de migrare.
+- **Observația 48h Phase 5** — fereastră deschisă din ~2026-04-15
+  ~18:05 UTC, continuă în paralel cu și după tag-ul
+  `migration/phase-07-post`.
+
+**Rollback point**:
+
+```bash
+git checkout migration/phase-07-kill-dom-as-state
+git reset --hard migration/phase-7-pre
+```
+
+**Observații de runtime / risc**:
+
+- **Zero impact runtime backend** — Phase 7 e strict client-side.
+- **Bundle size delta neglijabil** — 1770.32 kB la C1 (vs 1770.56 kB
+  pre-Phase-7 = -0.24 kB); consistent cu înlocuirea referințelor string.
+- **settingsStore.ts acum importat static de `engine/forecast.ts`
+  și `utils/dev.ts`** — vite build raportează `INEFFECTIVE_DYNAMIC_IMPORT`
+  warning preexistent (settingsStore e și static-imported de `stores/index.ts`).
+  Warning e cosmetic, zero impact funcțional.
+
+**Status**: ✓ PHASE 7 COMPLETE (scope redus intenționat: consumer
+migration `USER_SETTINGS` → settingsStore + stale comments cleanup;
+`window.USER_SETTINGS` Proxy respins; `window.TC` auditat OK;
+`engine/aub.ts` deferred; Phase 5 OPEN ISSUE rămâne separat;
+observația 48h Phase 5 continuă în paralel).
 
 ---
