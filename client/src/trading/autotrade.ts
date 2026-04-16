@@ -7,6 +7,7 @@ import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClo
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { BM } from '../core/config'
+import { useBrainStore } from '../stores/brainStore'
 import { isValidMarketPrice, escHtml, el } from '../utils/dom'
 import { fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
@@ -38,6 +39,19 @@ import { liveApiSyncState } from '../trading/liveApi'
 import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
+
+// [Phase 6 pre-C7] BlockReason mirror-write helpers — ensure brainStore
+// canonical blockReason stays in sync once useBrainBridge is removed in C7.
+// Backing w.BlockReason.set/.clear keeps legacy UI updates (DOM + atLog);
+// the store mirror publishes the typed canonical value to React consumers.
+function _setBR(code: string, text: string, source?: string): void {
+  w.BlockReason.set(code, text, source)
+  useBrainStore.getState().setBlockReason({ code, text })
+}
+function _clearBR(): void {
+  w.BlockReason.clear()
+  useBrainStore.getState().setBlockReason(null)
+}
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
 // AT UI helpers
@@ -576,7 +590,7 @@ export function runAutoTradeCheck(): void {
   try {
     // B: Data stall grace period check BEFORE exec lock
     if (!isDataOkForAutoTrade()) {
-      w.BlockReason.set('DATA_STALL', 'Data stalled > 10s — AT paused', 'autoCheck')
+      _setBR('DATA_STALL', 'Data stalled > 10s — AT paused', 'autoCheck')
       return
     }
     // Safety engine check
@@ -679,7 +693,7 @@ export function runAutoTradeCheck(): void {
     }
 
     // All conditions met — clear any stale block reason
-    w.BlockReason.clear()
+    _clearBR()
     w.ZState.scheduleSave()
 
     // AT gates execution — if AT OFF, scan still shows signals but no trade
@@ -726,7 +740,7 @@ export function runAutoTradeCheck(): void {
         }
         if (_fd.decision === 'NO_TRADE') {
           w._FUSION_VETO = true
-          w.BlockReason.set('FUSION', 'Fusion Brain: NO_TRADE (' + _fd.confidence + '%) — ' + (_fd.reasons || []).slice(0, 2).join(', '), 'fusionBrain')
+          _setBR('FUSION', 'Fusion Brain: NO_TRADE (' + _fd.confidence + '%) — ' + (_fd.reasons || []).slice(0, 2).join(', '), 'fusionBrain')
           return
         }
         w._FUSION_VETO = false
@@ -746,7 +760,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   if (w._serverATEnabled) { atLog('info', '[LOCKED] Server AT active — client trade blocked'); return }
   // ── KILL SWITCH: check before exec (2. kill timing) ──────────
   if (getATKillTriggered()) {
-    w.BlockReason.set('KILL_SWITCH', 'Kill switch activ — AT blocat', 'placeAutoTrade')
+    _setBR('KILL_SWITCH', 'Kill switch activ — AT blocat', 'placeAutoTrade')
     return
   }
   // [FIX C5] Prevent re-entrant live execution
@@ -755,7 +769,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     return
   }
   if (BM?.protectMode) {
-    w.BlockReason.set('PROTECT_MODE', BM.protectReason || 'Protect mode activ', 'placeAutoTrade')
+    _setBR('PROTECT_MODE', BM.protectReason || 'Protect mode activ', 'placeAutoTrade')
     return
   }
 
@@ -771,7 +785,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Block trades when NOT in KILL (clear) state
   if (typeof PREDATOR !== 'undefined' && PREDATOR.state !== 'KILL') {
     var _pr = 'PREDATOR ' + PREDATOR.state + ' [' + PREDATOR.reason + ']'
-    w.BlockReason.set('PREDATOR', _pr, 'placeAutoTrade')
+    _setBR('PREDATOR', _pr, 'placeAutoTrade')
     atLog('warn', '[PREDATOR] VETO: ' + PREDATOR.state + ' / ' + PREDATOR.reason)
     return
   }
@@ -787,7 +801,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       const _utcHour = getTimeUTC().hour                    // lookup UTC — consistent cu DHF
       const _wrVal = w.DHF.hours?.[_utcHour]?.wr
       if (typeof _wrVal === 'number' && _wrVal < _wrCfg.minWR) {
-        w.BlockReason.set('WR_FILTER', 'WR ' + _wrVal + '% < ' + _wrCfg.minWR + '% @ UTC' + String(_utcHour).padStart(2, '0') + 'h', 'placeAutoTrade')
+        _setBR('WR_FILTER', 'WR ' + _wrVal + '% < ' + _wrCfg.minWR + '% @ UTC' + String(_utcHour).padStart(2, '0') + 'h', 'placeAutoTrade')
         if (!AT._wrLogTs || (Date.now() - AT._wrLogTs) > _wrCfg.warnEveryMs) {
           AT._wrLogTs = Date.now()
           const _roH = typeof w.getRoTime === 'function' ? w.getRoTime().hh : _utcHour
@@ -801,14 +815,14 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   const _snap = typeof w.buildExecSnapshot === 'function' ? w.buildExecSnapshot(side, cond) : null
   // [PATCH1 B1] buildExecSnapshot returns null if price invalid — reject early
   if (!_snap) {
-    w.BlockReason.set('INVALID_PRICE', 'Snapshot rejected — preț invalid', 'placeAutoTrade')
+    _setBR('INVALID_PRICE', 'Snapshot rejected — preț invalid', 'placeAutoTrade')
     atLog('warn', '[FAIL] buildExecSnapshot rejected (price invalid)'); return
   }
   // Use snapshot values exclusively — never re-read global state
   const sym = _sym || _snap.symbol
   const entry = _price || _snap.price
   if (!isValidMarketPrice(entry)) {
-    w.BlockReason.set('INVALID_PRICE', 'Preț invalid la exec', 'placeAutoTrade')
+    _setBR('INVALID_PRICE', 'Preț invalid la exec', 'placeAutoTrade')
     atLog('warn', '[FAIL] Nu am pret curent la exec'); return
   }
   // [FIX H2] Dedup: reject if same symbol already has open AT position
@@ -839,7 +853,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Conviction × Danger sizing multiplier (Adaptive Shield)
   const _convDangerMult = (typeof BM !== 'undefined' && Number.isFinite(BM.convictionMult)) ? BM.convictionMult : 1.0
   if (_convDangerMult <= 0) {
-    w.BlockReason.set('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
+    _setBR('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
     atLog('warn', '[SHIELD] conviction=' + (BM.conviction || 0) + '% danger=' + (BM.danger || 0) + ' mult=0 → SKIP')
     // [L1-SHIELD-DIAG] Throttled breakdown: show WHY conviction is low (60s dedup by signature)
     try {
@@ -957,7 +971,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     // [FIX P3] Margin check — reject if insufficient balance (check matches deduction)
     if (TP.demoBalance < adaptFinalSize) {
       AT.totalTrades--
-      w.BlockReason.set('MARGIN', 'Margin insuficient: need $' + adaptFinalSize.toFixed(2) + ' have $' + TP.demoBalance.toFixed(2), 'placeAutoTrade')
+      _setBR('MARGIN', 'Margin insuficient: need $' + adaptFinalSize.toFixed(2) + ' have $' + TP.demoBalance.toFixed(2), 'placeAutoTrade')
       atLog('warn', '[BLOCK] MARGIN REJECT: need $' + adaptFinalSize.toFixed(2) + ' but demoBalance=$' + TP.demoBalance.toFixed(2))
       return
     }

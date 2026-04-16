@@ -17,7 +17,21 @@ import { isCurrentTimeOK } from '../ui/render'
 import { placeAutoTrade , atLog } from '../trading/autotrade'
 import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
+import { useBrainStore } from '../stores/brainStore'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
+
+// [Phase 6 pre-C7] BlockReason mirror-write helpers — ensure brainStore
+// canonical blockReason stays in sync once useBrainBridge is removed in C7.
+// Backing w.BlockReason.set/.clear keeps legacy UI updates (DOM + atLog);
+// the store mirror publishes the typed canonical value to React consumers.
+function _setBR(code: string, text: string, source?: string): void {
+  w.BlockReason.set(code, text, source)
+  useBrainStore.getState().setBlockReason({ code, text })
+}
+function _clearBR(): void {
+  w.BlockReason.clear()
+  useBrainStore.getState().setBlockReason(null)
+}
 
 // ADX calculator
 export function calcADX(klines: any[], period = 14) {
@@ -426,13 +440,13 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   }
 
   if (_mode === 'auto') {
-    if (BM.protectMode) { w.BlockReason.set('PROTECT', BM.protectReason || 'Protect mode activ', 'autoCheck'); return }
-    if (AT.killTriggered) { w.BlockReason.set('KILL', 'Kill switch activ', 'autoCheck'); return }
+    if (BM.protectMode) { _setBR('PROTECT', BM.protectReason || 'Protect mode activ', 'autoCheck'); return }
+    if (AT.killTriggered) { _setBR('KILL', 'Kill switch activ', 'autoCheck'); return }
 
     const _chaos = Math.round((BR.regimeAtrPct || 0) * 15 + (BM.newsRisk === 'high' ? 40 : BM.newsRisk === 'med' ? 20 : 0))
     const _anyDSLActive = (TP.demoPositions || []).some((p: any) => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active)
     if (_anyDSLActive && _chaos > 60) {
-      w.BlockReason.set('CHAOS', `Chaos ${_chaos} > 60 \u2014 pia\u021B\u0103 prea volatil\u0103 cu DSL activ`, 'autoCheck')
+      _setBR('CHAOS', `Chaos ${_chaos} > 60 \u2014 pia\u021B\u0103 prea volatil\u0103 cu DSL activ`, 'autoCheck')
       atLog('warn', '[BLOCK] AUTO BLOCK \u2014 DSL active + chaos>60'); return
     }
 
