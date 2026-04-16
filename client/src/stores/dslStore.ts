@@ -4,8 +4,11 @@ import type { DslPositionState } from '../types'
 /**
  * DSL canonical store.
  *
- * Phase 6 C2: typed mutators added (additive only). `syncFromEngine` is
- * still active in parallel — engine inversion happens in C3.
+ * Phase 6 C4: `syncFromEngine` removed. The DSL engine (trading/dsl.ts)
+ * writes through the typed mutators directly via the C3 helpers
+ * (_pushDslEnabled / _pushDslCheckInterval / _pushDslPosition /
+ * _removeDslPosition). External readers go through the window.DSL Proxy
+ * (core/config.ts) which reads canonical keys from this store.
  *
  * Note: `_attachedIds` from `DslState` is intentionally NOT mirrored here.
  * It is a runtime-only Set used by the legacy engine and is non-serializable
@@ -27,9 +30,6 @@ interface DslStoreState {
   magnetMode: string
   positions: Record<string, DslPositionState>
   checkIntervalActive: boolean
-
-  /** Atomic snapshot sync from engine — reads complete window.DSL state */
-  syncFromEngine: () => void
 
   /** Set top-level enabled flag */
   setEnabled: (enabled: boolean) => void
@@ -60,26 +60,6 @@ export const useDslStore = create<DslStoreState>()((set) => ({
   magnetMode: 'soft',
   positions: {},
   checkIntervalActive: false,
-
-  syncFromEngine: () => {
-    const w = window as any
-    if (!w.DSL) return
-    const posSnapshot: Record<string, DslPositionState> = {}
-    if (w.DSL.positions) {
-      for (const posId of Object.keys(w.DSL.positions)) {
-        const p = w.DSL.positions[posId]
-        posSnapshot[posId] = { ...p }
-      }
-    }
-    set({
-      enabled: !!w.DSL.enabled,
-      mode: w.DSL.mode ?? null,
-      magnetEnabled: !!w.DSL.magnetEnabled,
-      magnetMode: w.DSL.magnetMode ?? 'soft',
-      positions: posSnapshot,
-      checkIntervalActive: !!w.DSL.checkInterval,
-    })
-  },
 
   setEnabled: (enabled) => set({ enabled }),
   setMode: (mode) => set({ mode }),

@@ -86,35 +86,6 @@ describe('dslStore', () => {
     expect(useDslStore.getState().positions).toEqual({})
   })
 
-  it('syncFromEngine remains active and reads window.DSL atomically', () => {
-    const w = window as any
-    w.DSL = {
-      enabled: false,
-      mode: 'aggressive',
-      magnetEnabled: true,
-      magnetMode: 'hard',
-      positions: { px: { active: true, currentSL: 50 } },
-      checkInterval: 123,
-    }
-    useDslStore.getState().syncFromEngine()
-    const s = useDslStore.getState()
-    expect(s.enabled).toBe(false)
-    expect(s.mode).toBe('aggressive')
-    expect(s.magnetEnabled).toBe(true)
-    expect(s.magnetMode).toBe('hard')
-    expect(s.checkIntervalActive).toBe(true)
-    expect(s.positions.px.active).toBe(true)
-    delete w.DSL
-  })
-
-  it('syncFromEngine no-ops when window.DSL absent', () => {
-    const w = window as any
-    delete w.DSL
-    useDslStore.getState().setEnabled(false)
-    useDslStore.getState().syncFromEngine()
-    expect(useDslStore.getState().enabled).toBe(false) // untouched
-  })
-
   it('patch merges shallow partial', () => {
     useDslStore.getState().patch({ enabled: false, mode: 'x' })
     const s = useDslStore.getState()
