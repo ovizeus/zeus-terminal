@@ -3387,6 +3387,7 @@ body {
 .zpv-active-panel .at-panel { display: block !important; }
 /* ── PT (manual-trade) — old pageview.js only moves #panelDemo, NOT .trade-sep ── */
 .zpv-active-panel .trade-panel { display: block !important; }
+#panelLive { display: none !important; }
 /* ── DSL ── */
 .zpv-active-panel .dsl-zone { display: block !important; }
 /* ── Default: hide ALL strip panels inside #zeus-groups unless active ── */
