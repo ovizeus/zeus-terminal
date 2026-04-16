@@ -66,16 +66,44 @@ function _atomicWrite(filePath, data) {
     fs.renameSync(tmp, filePath);
 }
 
+// [Phase 8] Sections served from SQLite (user_ctx_data table)
+const SQLITE_SECTIONS = new Set([
+    'indSettings', 'llvSettings', 'signalRegistry', 'perfStats',
+    'dailyPnl', 'postmortem', 'adaptive', 'notifications',
+    'scannerSyms', 'midstackOrder', 'aubData', 'ofHud',
+    'teacherData', 'ariaNovaHud',
+]);
+
 // ── GET /api/sync/user-context — pull user preferences ──────────
+// [Phase 8 C2] Dual-read: SQLite primary for 14 sections, FS fallback
 router.get('/user-context', (req, res) => {
     try {
         if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
-        const fp = _userFile(req.user.id);
+        const userId = req.user.id;
+        const fp = _userFile(userId);
         if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
-        if (!fs.existsSync(fp)) return res.json({ ok: true, data: null });
-        const raw = fs.readFileSync(fp, 'utf8');
-        const data = JSON.parse(raw);
-        return res.json({ ok: true, data });
+
+        // 1. Read FS baseline (contains all sections including FS-only ones)
+        let fsData = null;
+        if (fs.existsSync(fp)) {
+            try { fsData = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { fsData = null; }
+        }
+        if (!fsData) return res.json({ ok: true, data: null });
+
+        // 2. Read SQLite sections and overlay onto FS data
+        const sqliteSections = db.getCtxAll(userId);
+        const merged = fsData.sections || {};
+        let sqliteHits = 0;
+        for (const key of SQLITE_SECTIONS) {
+            if (sqliteSections[key] !== undefined && sqliteSections[key] !== null) {
+                merged[key] = sqliteSections[key];
+                sqliteHits++;
+            }
+            // If not in SQLite, FS value remains (fallback)
+        }
+
+        fsData.sections = merged;
+        return res.json({ ok: true, data: fsData, _src: { sqlite: sqliteHits, fs: Object.keys(merged).length - sqliteHits } });
     } catch (e) {
         console.error('[user-ctx] GET error:', e.message);
         return res.status(500).json({ ok: false, error: 'read failed' });
