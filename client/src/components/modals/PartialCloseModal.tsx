@@ -29,15 +29,15 @@ export default function PartialCloseModal({ posId, side, sym, size, pnl, onClose
     >
       <div style={{ background: '#06080e', border: '1px solid #aa44ff55', borderRadius: 6, padding: 20, width: 280, fontFamily: 'var(--ff)' }}>
         <div style={{ fontSize: 13, letterSpacing: 2, color: '#aa44ff', marginBottom: 12 }}>
-          ◑ INCHIDE PARTIAL — {side} {symBase}
+          ◑ PARTIAL CLOSE — {side} {symBase}
         </div>
         <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 4 }}>
-          Size total: <span style={{ color: 'var(--whi)' }}>${size.toFixed(0)} USDT</span>
+          Total size: <span style={{ color: 'var(--whi)' }}>${size.toFixed(0)} USDT</span>
         </div>
         <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 12 }}>
-          PnL curent: <span style={{ color: pnl >= 0 ? '#00ff88' : '#ff4466' }}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>
+          Current PnL: <span style={{ color: pnl >= 0 ? '#00ff88' : '#ff4466' }}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 6 }}>Procent de inchis:</div>
+        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 6 }}>Close percent:</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
           {[25, 50, 75].map(p => (
             <button key={p} onClick={() => handlePreset(p)} style={{ padding: 6, background: '#0d1520', border: '1px solid #aa44ff33', color: '#aa44ff', borderRadius: 3, fontSize: 13, cursor: 'pointer', fontFamily: 'var(--ff)' }}>
@@ -60,7 +60,7 @@ export default function PartialCloseModal({ posId, side, sym, size, pnl, onClose
           </button>
         </div>
         <button onClick={onCancel} style={{ width: '100%', padding: 5, background: '#1a0008', border: '1px solid #ff335533', color: '#ff4466', borderRadius: 3, fontSize: 12, cursor: 'pointer', fontFamily: 'var(--ff)' }}>
-          ANULEAZA
+          CANCEL
         </button>
       </div>
     </div>

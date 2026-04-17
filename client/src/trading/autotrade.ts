@@ -1726,7 +1726,7 @@ export function openPartialClose(posId: any): void {
 
 export function execPartialClose(posId: any, pct: any): void {
   document.getElementById('partialCloseModal')?.remove()
-  if (!pct || pct <= 0 || pct >= 100) { toast('Procent invalid'); return }
+  if (!pct || pct <= 0 || pct >= 100) { toast('Invalid percent'); return }
   // [FIX A3] Search both demo and live positions
   let idx = (TP.demoPositions || []).findIndex((p: any) => p.id === posId)
   let _isLivePartial = false
