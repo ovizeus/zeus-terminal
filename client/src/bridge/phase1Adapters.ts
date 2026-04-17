@@ -4,16 +4,29 @@
  *
  * Called from legacyLoader.ts installShims() BEFORE any old JS loads.
  *
- * ZT1.b triage (2026-04-17): bridge surface = 24 direct window slots + ~60
- * side-effect imports for module self-registration (IIFEs that run at
- * module-load time). In ZT2-B the file was reduced from ~200 named imports
- * to only those referenced in the function body; all other module imports
- * are bare to preserve side-effect registration.
+ * ZT8 resolution (2026-04-17): bridge surface = 22 direct window slots +
+ * ~60 side-effect imports for module self-registration (IIFEs that run
+ * at module-load time). The side-effect import list is intentional
+ * composition, NOT migration debt — each module self-registers on
+ * `window` through its own IIFE; those cannot be removed without
+ * rewriting every consumer. In ZT2-B the file was reduced from ~200
+ * named imports to only those used in the function body. ZT8 removed
+ * two verified-dead bindings (`w.procLiq`, `w.showTab`): neither had a
+ * reader in TS, React, or legacy HTML onclick.
  *
  * What remains in the function body:
  *   - ZT_safeInterval shim (arianova.ts IIFE looks it up on window)
- *   - 5 state refs + 10 chart-series refs (circular-dep escapes)
- *   - 8 onclick="" handlers from static HTML
+ *   - 5 config/state refs (MSCAN/DHF/PERF/ARM_ASSIST/_fakeout — circular-
+ *     dep escapes; PERF is HYBRID BY DESIGN, same pattern as BM/BRAIN)
+ *   - 10 chart-series refs (null/[] init; real values written by
+ *     marketDataChart.ts after chart creation — the null init keeps
+ *     typeof checks from throwing before initCharts runs)
+ *   - 5 onclick="" / cross-call handlers (_showConfirmDialog, calcPosPnL,
+ *     getDemoLev, updateDemoLiqPrice, updateDemoBalance)
+ *   - 1 legacy HTML onclick (testNotification — bound by
+ *     public/legacy/index.html:3123 + AlertsModal.tsx)
+ *   - 5 manager force-registration void refs (Intervals, WS, FetchLock,
+ *     ingestPrice, Timeouts) — trigger module-body side-effects
  *   - initIndicatorState() — must run before other engines read state
  */
 
@@ -30,7 +43,7 @@ import {
   updateDemoBalance,
 } from '../data/marketDataTrading'
 import '../data/marketDataChart'
-import { procLiq, showTab, testNotification } from '../data/marketDataWS'
+import { testNotification } from '../data/marketDataWS'
 import '../data/marketDataFeeds'
 import '../data/marketDataOverlays'
 import '../data/marketDataHelpers'
@@ -184,8 +197,6 @@ export function installPhase1Adapters(): void {
   w.getDemoLev = getDemoLev
   w.updateDemoLiqPrice = updateDemoLiqPrice
   w.updateDemoBalance = updateDemoBalance
-  w.procLiq = procLiq
-  w.showTab = showTab
   w.testNotification = testNotification
 
   // Force managers.ts to run its top-level side-effect registration.
