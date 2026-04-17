@@ -298,12 +298,10 @@ export const BlockReason: any = {
   set(code: any, text: any, source?: any) {
     const br = { code, text, source: source || 'engine', ts: Date.now() }
     this._current = br
-    const el_br = document.getElementById('zad-block-reason')
-    if (el_br) {
-      el_br.textContent = text
-      el_br.className = 'znc-block-reason block'
-      el_br.style.display = 'block'
-    }
+    // [R30] DOM write removed — <BlockReasonText/> subscribes to
+    // brainStore.blockReasonDisplay, which engine/brain.ts updates every
+    // cycle. Call sites already mirror {code,text} into brainStore.blockReason
+    // via the _setBR helpers (klines.ts, autotrade.ts, etc).
     const now = Date.now()
     const _logKey = String(code) + '|' + String(text || '')
     const sameKey = (_logKey === this._lastLogKey)
@@ -323,8 +321,7 @@ export const BlockReason: any = {
     this._lastLogCode = null
     this._lastLogTs = 0
     this._lastLogKey = null
-    const el_br = document.getElementById('zad-block-reason')
-    if (el_br) { el_br.textContent = ''; el_br.style.display = 'none' }
+    // [R30] DOM write removed — see BlockReason.set above.
     if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked(null, null)
   },
   get() { return this._current },

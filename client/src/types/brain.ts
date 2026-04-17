@@ -260,3 +260,30 @@ export interface BrainBlockReason {
   code: string
   text: string
 }
+
+/** Icon kind rendered inside the AutoTrade safety pill (subset of ATIconKind). */
+export type SafetyPillIconKind =
+  | 'w' | 'noent' | 'timer' | 'clock' | 'dRed' | 'bolt' | 'sh' | null
+
+/**
+ * Safety pill surface (#at-why-blocked). Rendered by <AtWhyBlockedPill/>.
+ * Produced by data/klines.ts `_updateWhyBlocked` based on BlockReason state
+ * and degraded-feeds snapshot.
+ */
+export interface BrainSafetyPill {
+  iconKind: SafetyPillIconKind
+  text: string
+  className: string
+  visible: boolean
+}
+
+/**
+ * Block-reason display surface (#zad-block-reason). Rendered by
+ * <BlockReasonText/> in BrainCockpit. Produced by engine/brain.ts top-reason
+ * logic; represents the single-line "why not entering" for the auto-trade
+ * detail card.
+ */
+export interface BrainBlockReasonDisplay {
+  text: string
+  className: string
+}

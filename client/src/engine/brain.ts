@@ -1922,8 +1922,8 @@ export function renderBrainCockpit(): void {
   else if (isArmed) { topReason = `AUTO ARMED: Entry score ${score} ✓ — waiting close`; reasonCls = 'ok' }
   else { topReason = `AUTO SCANNING: Score ${score} | ${BR.regime?.toUpperCase() || '—'}`; reasonCls = 'wait' }
 
-  const brEl = el('zad-block-reason')
-  if (brEl) { brEl.textContent = topReason; brEl.className = 'znc-block-reason ' + reasonCls }
+  // [R30] route to brainStore.blockReasonDisplay; <BlockReasonText/> renders the pill
+  useBrainStore.getState().setBlockReasonDisplay({ text: topReason, className: 'znc-block-reason ' + reasonCls })
 
   // ── PROTECT BANNER ──
   const pb = el('protectBanner')

@@ -6,7 +6,7 @@
 
 export type ATIconKind =
   | 'w' | 'x' | 'ok' | 'bolt' | 'siren' | 'lock' | 'pad'
-  | 'mag' | 'timer' | 'clock' | 'bellX' | 'noent'
+  | 'mag' | 'timer' | 'clock' | 'bellX' | 'noent' | 'sh'
   | 'dRed' | 'dGrn' | 'dYlw' | 'dPur'
 
 export function ATStatusIcon({ kind }: { kind: ATIconKind | null | undefined }) {
@@ -28,6 +28,7 @@ export function ATStatusIcon({ kind }: { kind: ATIconKind | null | undefined }) 
     case 'clock': return svg('M8 2a6 6 0 100 12A6 6 0 008 2zm0 3v3l2 2')
     case 'bellX': return svg('M8 2a4 4 0 00-4 4c0 4-2 5-2 6h12s-2-2-2-6a4 4 0 00-4-4zM4 4l8 8')
     case 'noent': return svg('M8 2a6 6 0 100 12A6 6 0 008 2zM4 8h8')
+    case 'sh':    return svg('M8 1L2 4v4c0 4 3 7 6 8 3-1 6-4 6-8V4L8 1z')
   }
 }
 

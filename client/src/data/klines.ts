@@ -221,10 +221,9 @@ export async function fetchSymbolKlines(sym: string, tf = '5m', limit = 100) {
 
 
 // Multi-symbol scan functions
+// [R30] Publishes {iconKind,text,className,visible} to brainStore.safetyPill;
+// <AtWhyBlockedPill/> renders it. No DOM writes.
 export function _updateWhyBlocked(code: any, text: any) {
-  const pill = document.getElementById('at-why-blocked')
-  if (!pill) return
-
   // Derive from current state if not passed
   if (code === undefined) {
     const br = w.BlockReason.get()
@@ -232,52 +231,51 @@ export function _updateWhyBlocked(code: any, text: any) {
     text = br?.text || null
   }
 
+  const setPill = useBrainStore.getState().setSafetyPill
+
   // Degraded feeds override
   if (_isDegradedOnly() && !code) {
     const feeds = [...w._SAFETY.degradedFeeds].join(',')
-    pill.innerHTML = _ZI.w + ' DEGRADED: ' + feeds
-    pill.className = 'degraded'
-    pill.style.display = 'block'
+    setPill({ iconKind: 'w', text: ' DEGRADED: ' + feeds, className: 'degraded', visible: true })
     return
   }
 
   if (!code) {
-    pill.style.display = 'none'
-    pill.className = 'ok'
+    setPill({ iconKind: null, text: '', className: 'ok', visible: false })
     return
   }
 
   // Map code → pill class + compact label
   let cls = 'blocked'
-  let label = _ZI.noent + ' ' + (text || code)
+  let iconKind: 'w' | 'noent' | 'timer' | 'clock' | 'dRed' | 'bolt' | 'sh' = 'noent'
+  let label = ' ' + (text || code)
 
   if (code === 'SAFETY_FAIL') {
-    if (text && text.includes('session')) { cls = 'session'; label = _ZI.timer + ' Session FAIL — outside hours' }
-    else if (text && text.includes('regime')) { cls = 'regime'; label = _ZI.w + ' Regime UNSTABLE' }
-    else if (text && text.includes('cooldown')) { cls = 'cooldown'; label = _ZI.clock + ' Cooldown — wait...' }
-    else { cls = 'blocked'; label = _ZI.noent + ' Safety: ' + (text || 'FAIL') }
+    if (text && text.includes('session')) { cls = 'session'; iconKind = 'timer'; label = ' Session FAIL — outside hours' }
+    else if (text && text.includes('regime')) { cls = 'regime'; iconKind = 'w'; label = ' Regime UNSTABLE' }
+    else if (text && text.includes('cooldown')) { cls = 'cooldown'; iconKind = 'clock'; label = ' Cooldown — wait...' }
+    else { cls = 'blocked'; iconKind = 'noent'; label = ' Safety: ' + (text || 'FAIL') }
   } else if (code === 'DATA_STALL') {
-    cls = 'degraded'; label = _ZI.w + ' Data stalled'
+    cls = 'degraded'; iconKind = 'w'; label = ' Data stalled'
   } else if (code === 'KILL' || code === 'KILL_SWITCH') {
-    cls = 'blocked'; label = _ZI.dRed + ' Kill switch activ'
+    cls = 'blocked'; iconKind = 'dRed'; label = ' Kill switch activ'
   } else if (code === 'PROTECT' || code === 'PROTECT_MODE') {
-    cls = 'blocked'; label = _ZI.sh + ' Protect mode'
+    cls = 'blocked'; iconKind = 'sh'; label = ' Protect mode'
   } else if (code === 'TRIGGER_FAIL') {
-    cls = 'regime'; label = _ZI.bolt + ' Trigger neatins'
+    cls = 'regime'; iconKind = 'bolt'; label = ' Trigger neatins'
   } else if (code === 'FAKEOUT') {
-    cls = 'regime'; label = _ZI.noent + ' Anti-fakeout'
+    cls = 'regime'; iconKind = 'noent'; label = ' Anti-fakeout'
   }
 
   // Cooldown: add live countdown if applicable
   if (cls === 'cooldown') {
     const cdMs = Math.max(0, _getCooldownMs() - (Date.now() - (AT.lastTradeTs || 0)))
     const cdMin = Math.ceil(cdMs / 60000)
-    label = _ZI.clock + ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
+    iconKind = 'clock'
+    label = ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
   }
 
-  pill.innerHTML = label
-  pill.className = cls
-  pill.style.display = 'block'
+  setPill({ iconKind, text: label, className: cls, visible: true })
 }
 // _updateWhyBlocked — now direct import (no window mapping needed)
 

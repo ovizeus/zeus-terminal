@@ -49,6 +49,9 @@ export type {
   BrainThought,
   BrainAdaptParams,
   BrainBlockReason,
+  BrainSafetyPill,
+  BrainBlockReasonDisplay,
+  SafetyPillIconKind,
 } from './brain'
 
 export type {

@@ -1,5 +1,6 @@
 import { useRef, useEffect, memo } from 'react'
 import { resetProtectMode } from '../../engine/brain'
+import { BlockReasonText } from './BlockReasonText'
 
 /**
  * 1:1 port of the ZEUS NEURAL CORE panel from public/index.html lines 1127-1570
@@ -269,7 +270,7 @@ export const BrainCockpit = memo(function BrainCockpit() {
             <div className="znc-ad-row">TF: <b id="zad-tf">—</b></div>
             <div className="znc-ad-row">Cooldown: <b id="zad-cd">READY</b></div>
             <div className="znc-gates-summary" id="zad-gates-summary">Gates: —/— OK</div>
-            <div className="znc-block-reason wait" id="zad-block-reason">AUTO WAIT: Initializing...</div>
+            <BlockReasonText />{/* [R30] store-driven subscriber — memo'd parent preserved */}
           </div>
 
           {/* EXECUTION RECEIPT */}

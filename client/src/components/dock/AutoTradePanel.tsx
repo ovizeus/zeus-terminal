@@ -4,6 +4,7 @@ import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
 import { resetKillSwitch } from '../../trading/autotrade'
 import { ATStatusIcon } from '../ATStatusIcon'
+import { AtWhyBlockedPill } from './AtWhyBlockedPill'
 
 /** Parse a string input to number for save; empty/invalid → fallback. */
 function toNum(s: string, fallback: number): number {
@@ -273,7 +274,7 @@ export function AutoTradePanel() {
             </button>
           )}
         </div>
-        <div id="at-why-blocked"></div>
+        <AtWhyBlockedPill />{/* [R30] store-driven subscriber; source: brainStore.safetyPill */}
         {ui.sentinel.visible && (
           <div style={{ fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center', background: ui.sentinel.bg, color: ui.sentinel.color, border: ui.sentinel.border }}>
             <ATStatusIcon kind={ui.sentinel.icon} />

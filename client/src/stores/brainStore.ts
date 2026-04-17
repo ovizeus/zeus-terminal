@@ -7,6 +7,8 @@ import type {
   BrainThought,
   BrainAdaptParams,
   BrainBlockReason,
+  BrainSafetyPill,
+  BrainBlockReasonDisplay,
   MtfAlignment,
 } from '../types'
 
@@ -45,6 +47,10 @@ interface BrainStoreState {
   adaptParams: BrainAdaptParams | null
   /** Block reason */
   blockReason: BrainBlockReason | null
+  /** Safety pill (#at-why-blocked) — produced by data/klines.ts `_updateWhyBlocked`. */
+  safetyPill: BrainSafetyPill | null
+  /** Block-reason display (#zad-block-reason) — produced by engine/brain.ts top-reason logic. */
+  blockReasonDisplay: BrainBlockReasonDisplay | null
 
   /** Merge partial brain state */
   patch: (partial: Partial<BrainState>) => void
@@ -67,6 +73,10 @@ interface BrainStoreState {
   setGates: (gates: Record<string, unknown>) => void
   /** Set block reason (null clears) */
   setBlockReason: (reason: BrainBlockReason | null) => void
+  /** Set safety pill (#at-why-blocked). Short-circuits when unchanged. */
+  setSafetyPill: (pill: BrainSafetyPill | null) => void
+  /** Set block-reason display (#zad-block-reason). Short-circuits when unchanged. */
+  setBlockReasonDisplay: (disp: BrainBlockReasonDisplay | null) => void
   /** Replace thoughts log atomically */
   setThoughts: (thoughts: BrainThought[]) => void
   /** Set adapt params (null clears) */
@@ -195,6 +205,8 @@ export const useBrainStore = create<BrainStoreState>()((set) => ({
   thoughts: [],
   adaptParams: null,
   blockReason: null,
+  safetyPill: null,
+  blockReasonDisplay: null,
 
   patch: (partial) => set((s) => ({ brain: { ...s.brain, ...partial } })),
 
@@ -216,6 +228,22 @@ export const useBrainStore = create<BrainStoreState>()((set) => ({
   setSweep: (sweep) => set((s) => ({ brain: { ...s.brain, sweep } })),
   setGates: (gates) => set((s) => ({ brain: { ...s.brain, gates } })),
   setBlockReason: (reason) => set({ blockReason: reason }),
+  setSafetyPill: (pill) => set((s) => {
+    const cur = s.safetyPill
+    if (cur === pill) return s
+    if (cur && pill &&
+      cur.iconKind === pill.iconKind &&
+      cur.text === pill.text &&
+      cur.className === pill.className &&
+      cur.visible === pill.visible) return s
+    return { safetyPill: pill }
+  }),
+  setBlockReasonDisplay: (disp) => set((s) => {
+    const cur = s.blockReasonDisplay
+    if (cur === disp) return s
+    if (cur && disp && cur.text === disp.text && cur.className === disp.className) return s
+    return { blockReasonDisplay: disp }
+  }),
   setThoughts: (thoughts) => set({ thoughts }),
   setAdaptParams: (params) => set({ adaptParams: params }),
 }))
