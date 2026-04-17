@@ -161,6 +161,38 @@ export interface AresStoreUI {
 
   /** Consciousness lobe dot colors (6 dots). */
   lobeColors: string[]
+
+  /** [R28.2-F] Lob status dots rendered inside the brain SVG overlay. */
+  lobDots: AresLobDot[]
+
+  /** [R28.2-F] Active consciousness dot index (0=SEED, 1=ASCENT, 2=SOVEREIGN). */
+  consciousnessActiveIdx: number
+
+  /** [R28.2-F] Mission-arc SVG values driven by progress + trajectory. */
+  missionArc: AresMissionArcUI
+}
+
+/** [R28.2-F] One brain-lob status dot. */
+export interface AresLobDot {
+  /** DOM id (ldot-frontal / -temporal / -occipital / -cerebel / -trunchi). */
+  id: string
+  /** ok | bad | warn */
+  level: 'ok' | 'bad' | 'warn'
+  /** Display text (e.g. POLICY: BALANCED). */
+  text: string
+  /** Resolved color hex for the level. */
+  color: string
+}
+
+/** [R28.2-F] Mission-arc SVG driver state. */
+export interface AresMissionArcUI {
+  visible: boolean
+  pct: number
+  tPct: number
+  col: string
+  startBalance: number
+  daysPassed: number
+  trajectoryDelta: number
 }
 
 /** Default empty UI slice — everything zeroed so components render a no-op state. */
@@ -187,4 +219,7 @@ export const DEFAULT_ARES_UI: AresStoreUI = {
   lesson: '',
   thoughts: [],
   lobeColors: [],
+  lobDots: [],
+  consciousnessActiveIdx: 0,
+  missionArc: { visible: false, pct: 0, tPct: 0, col: '#6ef', startBalance: 0, daysPassed: 0, trajectoryDelta: 0 },
 }

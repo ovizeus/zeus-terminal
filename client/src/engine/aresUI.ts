@@ -1,6 +1,6 @@
 // Zeus — engine/aresUI.ts
 // Ported 1:1 from public/js/brain/deepdive.js lines 2003-3732 (Phase 5B3)
-// ARES UI: CSS injections, _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick, ARES_BRAIN_COLOR_OVERRIDE
+// ARES UI: CSS injections, _aresRender, initAriaBrain, initARES, _demoTick, ARES_BRAIN_COLOR_OVERRIDE
 //
 // [R7 CONTRACT] This module is the SOLE writer of the `#ares-*` element
 // subtree at runtime. `components/dock/ARESPanel.tsx` renders the static
@@ -34,8 +34,6 @@ import { ARES_MIND } from './aresMind'
 import { syncAresUIToStore } from './aresStoreSync'
 
 const w = window as any
-
-const TARGET = 1_000_000
 
 // [R28] Set element content as: <trusted-icon-svg> + textNode(trailingText).
 // The icon SVG is author-controlled (_ZI.* constants). The trailingText is
@@ -249,83 +247,15 @@ export function _aresRender() {
 
     // [R28.2-D] Stage Progress, Objectives, Wallet block are React-owned
     // via <StageCol /> <ObjectivesCol /> <WalletCol /> subscribing to
-    // ui.stage, ui.objectives, ui.objectivesTitle, ui.wallet in the store.
-    // Consciousness dots (ldot-c0/c1/c2 inside the brain SVG) are still
-    // engine-owned via SVG setAttribute — that's an SVG-subtree, scheduled
-    // for R28.2-F.
-    try {
-      const bal = (typeof w.ARES !== 'undefined' && w.ARES.wallet) ? w.ARES.wallet.balance : 0
-      let activeIdx = 0
-      if (bal >= 10000) activeIdx = 2
-      else if (bal >= 1000) activeIdx = 1
-      const dotIds = ['ldot-c0', 'ldot-c1', 'ldot-c2']
-      const txtIds = ['ldot-parietal-seed', 'ldot-parietal-ascent', 'ldot-parietal-sovereign']
-      dotIds.forEach((did, ci) => {
-        const dotEl = document.getElementById(did)
-        const txtEl = document.getElementById(txtIds[ci])
-        const isActive = ci === activeIdx
-        if (dotEl) dotEl.setAttribute('fill', isActive ? '#00ff88' : ci < activeIdx ? '#00d9ff88' : '#444466')
-        if (dotEl) dotEl.setAttribute('opacity', isActive ? '0.95' : ci < activeIdx ? '0.55' : '0.35')
-        if (txtEl) txtEl.setAttribute('fill', isActive ? '#00ff88' : ci < activeIdx ? '#00d9ff' : '#556677')
-        if (txtEl) txtEl.setAttribute('opacity', isActive ? '0.90' : ci < activeIdx ? '0.55' : '0.38')
-      })
-    } catch (_) { }
-
+    // ui.stage, ui.objectives, ui.objectivesTitle, ui.wallet.
     // [R28.2-E] Positions list + close-all + close-btn are React-owned via
-    // <PositionsList /> in components/dock/ares/PositionsList.tsx. The store
-    // slice ui.positions is populated by aresStoreSync each tick. Live vs
-    // demo close path discrimination is preserved inside the component.
-
-    // 5) Lob dots — setare status per lob
-    try {
-      // Helper setLobDot(id, level, text)
-      // level: ok | bad | warn
-      const LOB_COLORS: any = {
-        ok: '#00E5FF',  // cyan electric (science/online)
-        bad: '#C1121F',  // crimson profund (risk/fail)
-        warn: '#FFB000'   // amber "nuclear" (action/exec)
-      }
-      function setLobDot(id: any, level: any, txt: any) {
-        const col = LOB_COLORS[level] || LOB_COLORS.warn
-        const dotEl = document.getElementById(id + '-c')
-        const txtEl = document.getElementById(id)
-        if (dotEl) { dotEl.setAttribute('fill', col); dotEl.setAttribute('style', 'filter:drop-shadow(0 0 3px ' + col + ')') }
-        if (txtEl) { txtEl.textContent = txt; txtEl.setAttribute('fill', col) }
-      }
-
-      const sid = st.current.id
-      const isBad = sid === 'DEFENSIVE' || sid === 'REVENGE_GUARD'
-      const isMortal = isBad && st.consecutiveLoss >= 3
-
-      // A) Lobul frontal — POLICY
-      const policyTxt = isMortal ? 'POLICY: CONSERVATIVE' : isBad ? 'POLICY: DEFENSIVE' : 'POLICY: BALANCED'
-      setLobDot('ldot-frontal', isMortal ? 'bad' : isBad ? 'warn' : 'ok', policyTxt)
-
-      // B) Lobul temporal — MEMORY
-      const consLoss = st.consecutiveLoss || 0
-      const memTxt = consLoss >= 3 ? 'MEMORY: REPEAT' : consLoss >= 1 ? 'MEMORY: PENALTY' : 'MEMORY: OK'
-      setLobDot('ldot-temporal', consLoss >= 3 ? 'bad' : consLoss >= 1 ? 'warn' : 'ok', memTxt)
-
-      // C) Lobul occipital — VISION (regim)
-      const reg = (typeof w.BM !== 'undefined' && w.BM.regime) ? w.BM.regime.toUpperCase() : '\u2014'
-      const visionOk = reg !== '\u2014' && reg !== 'UNKNOWN' && reg !== 'STALLED'
-      const visionClear = reg === 'STRONG_TREND' || reg === 'TREND' || reg === 'RANGE'
-      const visionTxt = !visionOk ? 'VISION: STALLED' : visionClear ? 'VISION: CLEAR' : 'VISION: UNCERTAIN'
-      setLobDot('ldot-occipital', !visionOk ? 'bad' : visionClear ? 'ok' : 'warn', visionTxt)
-
-      // D) Cerebel — EXEC / EQS
-      // EQS estimat din winRate10 (fallback)
-      const eqs = (st.winRate10 > 0) ? st.winRate10 : -1
-      const execTxt = eqs < 0 ? 'EXEC: \u2014' : eqs >= 70 ? 'EXEC: GOOD (' + eqs + '%)' : eqs >= 50 ? 'EXEC: OK (' + eqs + '%)' : 'EXEC: BAD (' + eqs + '%)'
-      setLobDot('ldot-cerebel', eqs < 0 ? 'warn' : eqs >= 70 ? 'ok' : eqs >= 50 ? 'warn' : 'bad', execTxt)
-
-      // E) Trunchi — SURVIVAL
-      const ksActive = (typeof w.AT !== 'undefined' && w.AT.killSwitch)
-      const dailyCapHit = isMortal
-      const survTxt = ksActive ? 'SURVIVAL: GUARD' : dailyCapHit ? 'SURVIVAL: DEFENSIVE' : 'SURVIVAL: STABLE'
-      setLobDot('ldot-trunchi', ksActive || dailyCapHit ? (ksActive ? 'bad' : 'warn') : 'ok', survTxt)
-
-    } catch (_) { }
+    // <PositionsList />. Live vs demo close path discrimination preserved
+    // inside the component.
+    // [R28.2-F] Lob dots (frontal / temporal / occipital / cerebel / trunchi)
+    // + consciousness dots (c0/c1/c2 + parietal seed/ascent/sovereign labels)
+    // + mission-arc SVG are React-owned via <BrainDots /> and <MissionArc />
+    // subscribing to ui.lobDots, ui.consciousnessActiveIdx, ui.missionArc.
+    // No imperative SVG setAttribute from _aresRender anymore.
 
     // [R28.2-C] Cognitive bar React-owned via <CognitiveBar /> subscribing to
     // useAresStore((s) => s.ui.cognitive.clarity). No imperative write.
@@ -543,8 +473,8 @@ export function _aresRender() {
     // useAresStore((s) => s.ui.stats). No imperative write.
     const st2 = w.ARES.getState(); void st2
 
-    // Update mission arc
-    _aresRenderArc()
+    // [R28.2-F] Mission arc is React-owned via <MissionArc /> subscribing to
+    // useAresStore((s) => s.ui.missionArc). No imperative SVG write.
 
     // Update lesson + cognitive insight
     const lessonEl = document.getElementById('ares-lesson-text')
@@ -558,44 +488,6 @@ export function _aresRender() {
       ).join('')
     }
   } catch (e: any) { console.warn('[_aresRender]', e && e.message ? e.message : e) } // [v119-p10 FIX]
-}
-
-export function _aresRenderArc() {
-  try { // [v119-p10 FIX]
-    if (typeof w.ARES === 'undefined' || !w.ARES.balance) return // [v122 BONUS] guard prevents ReferenceError
-    const svg = document.getElementById('ares-arc-svg')
-    if (!svg) return
-    const st = w.ARES.getState()
-    const pct = st.startBalance ? Math.min(1, (w.ARES.balance() - st.startBalance) / (TARGET - st.startBalance)) : 0
-    const tPct = st.startBalance ? Math.min(1, (st.targetBalance - st.startBalance) / (TARGET - st.startBalance)) : 0
-    const col = st.current.color
-
-    const W = 260, _H = 56, pad = 20; void _H
-    const arcW = W - pad * 2
-
-    // Progress values to x positions
-    const xActual = pad + pct * arcW
-    const xTarget = pad + tPct * arcW
-
-    svg.innerHTML = `
-        <line x1="${pad}" y1="32" x2="${pad + arcW}" y2="32" stroke="#0a1520" stroke-width="4" stroke-linecap="round"/>
-        <line x1="${pad}" y1="32" x2="${pad + arcW}" y2="32" stroke="${col}22" stroke-width="2" stroke-dasharray="3 5" stroke-linecap="round"/>
-        <line x1="${pad}" y1="32" x2="${xActual.toFixed(1)}" y2="32" stroke="${col}" stroke-width="3" stroke-linecap="round"
-      style="filter:drop-shadow(0 0 4px ${col})"/>
-        <line x1="${xTarget.toFixed(1)}" y1="26" x2="${xTarget.toFixed(1)}" y2="38" stroke="${col}88" stroke-width="1" stroke-dasharray="2 2"/>
-        <circle cx="${xActual.toFixed(1)}" cy="32" r="5" fill="${col}" stroke="#010408" stroke-width="2"
-      style="filter:drop-shadow(0 0 8px ${col});animation:aresCoreDot 1.5s ease-in-out infinite"/>
-        <text x="${pad}" y="52" font-family="monospace" font-size="7" fill="${col}44">$${st.startBalance ? Math.round(st.startBalance).toLocaleString() : '?'}</text>
-    <text x="${pad + arcW}" y="52" font-family="monospace" font-size="7" fill="${col}44" text-anchor="end">$1,000,000</text>
-    <text x="${pad + arcW / 2}" y="16" font-family="monospace" font-size="6" fill="${col}88" text-anchor="middle" letter-spacing="2">MISSION ARC \u2014 DAY ${Math.floor(st.daysPassed)}/${365}</text>
-        ${Math.abs(st.trajectoryDelta) > 0.1 ? `
-    <text x="${xActual.toFixed(1)}" y="${xActual > xTarget ? '22' : '46'}"
-      font-family="monospace" font-size="6" fill="${st.trajectoryDelta >= 0 ? '#00ff88' : '#ff4466'}"
-      text-anchor="middle" style="filter:drop-shadow(0 0 4px ${st.trajectoryDelta >= 0 ? '#00ff88' : '#ff4466'})">
-      ${st.trajectoryDelta >= 0 ? '+' : ''}${st.trajectoryDelta}%
-    </text>` : ''}
-  `
-  } catch (e: any) { console.warn("[_aresRenderArc]", e && e.message ? e.message : e) } // [v119-p10 FIX]
 }
 
 

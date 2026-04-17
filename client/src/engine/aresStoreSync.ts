@@ -20,6 +20,8 @@ import type {
   AresCoreState,
   AresDecisionLine,
   AresHistoryMark,
+  AresLobDot,
+  AresMissionArcUI,
   AresObjective,
   AresPositionCard,
   AresStageUI,
@@ -28,6 +30,14 @@ import type {
   AresWalletUI,
   AresWoundState,
 } from '../types/ares'
+
+const TARGET = 1_000_000
+
+const LOB_COLORS: Record<'ok' | 'bad' | 'warn', string> = {
+  ok: '#00E5FF',
+  bad: '#C1121F',
+  warn: '#FFB000',
+}
 
 const w = window as any
 
@@ -258,6 +268,68 @@ function _lobeColors(st: any): string[] {
   return [frontal, temporal, occipital, cerebel, trunchi]
 }
 
+/** [R28.2-F] Consciousness active dot index from balance. */
+function _consciousnessActiveIdx(balance: number): number {
+  if (balance >= 10000) return 2
+  if (balance >= 1000) return 1
+  return 0
+}
+
+/** [R28.2-F] Derive the 5 lob dot statuses from engine state. */
+function _lobDots(st: any): AresLobDot[] {
+  const sid = String(st?.current?.id || '')
+  const cl = Number(st?.consecutiveLoss || 0)
+  const isBad = sid === 'DEFENSIVE' || sid === 'REVENGE_GUARD'
+  const isMortal = isBad && cl >= 3
+  const reg = (typeof w.BM !== 'undefined' && w.BM.regime) ? String(w.BM.regime).toUpperCase() : '\u2014'
+  const visionOk = reg !== '\u2014' && reg !== 'UNKNOWN' && reg !== 'STALLED'
+  const visionClear = reg === 'STRONG_TREND' || reg === 'TREND' || reg === 'RANGE'
+  const eqs = Number(st?.winRate10 > 0 ? st.winRate10 : -1)
+  const ksActive = (typeof w.AT !== 'undefined' && w.AT.killSwitch)
+  const dailyCapHit = isMortal
+
+  const frontalLvl: 'ok' | 'bad' | 'warn' = isMortal ? 'bad' : isBad ? 'warn' : 'ok'
+  const frontalTxt = isMortal ? 'POLICY: CONSERVATIVE' : isBad ? 'POLICY: DEFENSIVE' : 'POLICY: BALANCED'
+
+  const temporalLvl: 'ok' | 'bad' | 'warn' = cl >= 3 ? 'bad' : cl >= 1 ? 'warn' : 'ok'
+  const temporalTxt = cl >= 3 ? 'MEMORY: REPEAT' : cl >= 1 ? 'MEMORY: PENALTY' : 'MEMORY: OK'
+
+  const occipitalLvl: 'ok' | 'bad' | 'warn' = !visionOk ? 'bad' : visionClear ? 'ok' : 'warn'
+  const occipitalTxt = !visionOk ? 'VISION: STALLED' : visionClear ? 'VISION: CLEAR' : 'VISION: UNCERTAIN'
+
+  const cerebelLvl: 'ok' | 'bad' | 'warn' = eqs < 0 ? 'warn' : eqs >= 70 ? 'ok' : eqs >= 50 ? 'warn' : 'bad'
+  const cerebelTxt = eqs < 0 ? 'EXEC: \u2014' : eqs >= 70 ? 'EXEC: GOOD (' + eqs + '%)' : eqs >= 50 ? 'EXEC: OK (' + eqs + '%)' : 'EXEC: BAD (' + eqs + '%)'
+
+  const trunchiLvl: 'ok' | 'bad' | 'warn' = ksActive || dailyCapHit ? (ksActive ? 'bad' : 'warn') : 'ok'
+  const trunchiTxt = ksActive ? 'SURVIVAL: GUARD' : dailyCapHit ? 'SURVIVAL: DEFENSIVE' : 'SURVIVAL: STABLE'
+
+  return [
+    { id: 'ldot-frontal',   level: frontalLvl,   text: frontalTxt,   color: LOB_COLORS[frontalLvl] },
+    { id: 'ldot-temporal',  level: temporalLvl,  text: temporalTxt,  color: LOB_COLORS[temporalLvl] },
+    { id: 'ldot-occipital', level: occipitalLvl, text: occipitalTxt, color: LOB_COLORS[occipitalLvl] },
+    { id: 'ldot-cerebel',   level: cerebelLvl,   text: cerebelTxt,   color: LOB_COLORS[cerebelLvl] },
+    { id: 'ldot-trunchi',   level: trunchiLvl,   text: trunchiTxt,   color: LOB_COLORS[trunchiLvl] },
+  ]
+}
+
+/** [R28.2-F] Mission-arc driver values. */
+function _missionArc(st: any, balance: number): AresMissionArcUI {
+  const start = Number(st?.startBalance || 0)
+  const target = Number(st?.targetBalance || 0)
+  if (!start) return { visible: false, pct: 0, tPct: 0, col: '#6ef', startBalance: 0, daysPassed: 0, trajectoryDelta: 0 }
+  const pct = Math.min(1, (balance - start) / (TARGET - start))
+  const tPct = Math.min(1, (target - start) / (TARGET - start))
+  return {
+    visible: true,
+    pct,
+    tPct,
+    col: String(st?.current?.color || '#6ef'),
+    startBalance: start,
+    daysPassed: Math.floor(Number(st?.daysPassed || 0)),
+    trajectoryDelta: Number(st?.trajectoryDelta || 0),
+  }
+}
+
 /** Publish the full UI slice to the store. Called at the start of _aresRender(). */
 export function syncAresUIToStore(): void {
   try {
@@ -291,6 +363,9 @@ export function syncAresUIToStore(): void {
       lesson: String(aresState.lastLesson || ''),
       thoughts,
       lobeColors: _lobeColors(aresState),
+      lobDots: _lobDots(aresState),
+      consciousnessActiveIdx: _consciousnessActiveIdx(balance),
+      missionArc: _missionArc(aresState, balance),
     }
     useAresStore.getState().patchUi(partial)
   } catch (e) {
