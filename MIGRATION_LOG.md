@@ -8,6 +8,58 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 
 ---
 
+## Honesty patch — starea reală la v2.0.0 (2026-04-17)
+
+La tag-ul `v2.0.0` (commit `050ba57`) am oprit firul de migrare principal.
+Ce s-a închis real:
+
+- **React SPA shell + Zustand stores**: layout, routing, auth, settings UI,
+  positions UI, manual trade UI, statusbar, DSL zone shell. Store-urile
+  canonical real sunt: `positionsStore`, `settingsStore`, `authStore`,
+  `uiStore`. `aresStore` e canonical la nivel de date dar nu de rendering.
+  `atStore`, `dslStore`, `brainStore`, `aubStore` conțin date corecte, dar
+  UI-ul se randează în mare parte din HTML-uri produse în engine, nu direct
+  din state-ul store-ului.
+- **Backend per-user isolation**: WS broadcast strict pe `userId`, toate
+  rutele prin `sessionAuth` + `req.user.id`, tabele SQLite cu `user_id`.
+- **R12 Phase 8.1 FS prune**: SQLite = SoT pentru 14 secțiuni `user_ctx_data`,
+  FS = SoT pentru 5 fs-only (`uiContext, panels, uiScale, settings, aresData`).
+  Zero fallback cross-store.
+
+Ce NU s-a închis la v2.0.0 (debt real, nu „by-design"):
+
+- **Bridge-ul rulează engine-uri legacy portate în TS** (brain, orderflow,
+  forecast, signals, ARES, AUB, indicators, teacher, postmortem, arianova).
+  Acestea scriu direct în DOM. Scara măsurată: 337 DOM writes în
+  `client/src/engine/`, 198 în `client/src/data/`, 59 în
+  `client/src/trading/`.
+- **Componente care redau HTML produs în engine** via
+  `dangerouslySetInnerHTML`: `AUBPanel` (3x), `AutoTradePanel` (2x),
+  `DSLZonePanel`, `AnalysisSections`, plus `ZeusDock` (SVG inline, acceptat).
+- **ARES interior**: `ARESPanel` e shell React, conținutul e scris de
+  `aresUI.ts` (90 DOM writes). Contractul single-writer R7 este respectat,
+  dar nu este „store → React render".
+- **`window.*` bindings**: ~785 patterns `(w as any)` / `w.x = …` în client.
+- **`localStorage` nu e user-scoped**: 20+ chei globale (ex. `zeus_dsl_mode`,
+  `zeus_adaptive_v1`, `zeus_llv_settings`, `zeus_ui_scale`, `_AN_KEY_A`,
+  `_AN_KEY_N`, plus chei `perfStore`, `dailyPnl`, `aresJournal`, `postMortem`,
+  `WK` ARES, orderflow `LS_KEY`/`POS_KEY`). Contaminare cross-user pe device
+  partajat.
+- **SQLite artifacts**: 1 rând `at_state.user_id IS NULL` (cheia
+  `brain:cooldowns`); `regime_history` fără coloană `user_id`.
+- **Postmortem section growth**: user 1 depășește 64 KB → respins la POST,
+  mesaj repetat în `pm2-error.log`, data nu se rotește client-side.
+- **Repo debris**: `_diff_*.txt` (15+), `audit-*.png` (10), `_check_schema.js`,
+  `public/js/index_original.html`, bundles legacy în `public/js/` și
+  `client/public/js/`.
+
+Mesajul tag-ului spune „React canonical migration + zero-tail recovery".
+Citit corect: canonical pentru shell/stores/auth/positions; engine rendering
+rămâne bridge. Urmărirea acestor debt-uri se face pe branch
+`post-v2/real-finish` cu lot-uri R17..R37, **nu prin re-tag de `v2.0.0`**.
+
+---
+
 ## Target architecture (north-star)
 
 - **Backend SQLite** = source of truth pentru date persistente per-user.
