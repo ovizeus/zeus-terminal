@@ -248,147 +248,20 @@ export function _aresRender() {
       }
     } catch (_) { }
 
-    // 4) Stage Progress + Objectives
+    // [R28.2-D] Stage Progress, Objectives, Wallet block are React-owned
+    // via <StageCol /> <ObjectivesCol /> <WalletCol /> subscribing to
+    // ui.stage, ui.objectives, ui.objectivesTitle, ui.wallet in the store.
+    // Consciousness dots (ldot-c0/c1/c2 inside the brain SVG) are still
+    // engine-owned via SVG setAttribute — that's an SVG-subtree, scheduled
+    // for R28.2-F.
     try {
-      // ARES_WALLET is the single source of truth — never TP.demoBalance
       const bal = (typeof w.ARES !== 'undefined' && w.ARES.wallet) ? w.ARES.wallet.balance : 0
-
-      // ── B) Stage Progress — correct range logic ─────────────────────────
-      const STAGES = [
-        { name: 'SEED', from: 0, to: 1000, next: '1,000' },
-        { name: 'ASCENT', from: 1000, to: 10000, next: '10,000' },
-        { name: 'SOVEREIGN', from: 10000, to: 1000000, next: '1,000,000' },
-      ]
-      let activeStage = STAGES[0]
-      for (const s of STAGES) { if (bal >= s.from) activeStage = s }
-      // pct within current stage range only
-      const stagePct = Math.min(100, Math.max(0, Math.round(
-        ((bal - activeStage.from) / (activeStage.to - activeStage.from)) * 100
-      )))
-      const filled = Math.floor(stagePct / 10)
-      const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(10 - filled) + ' ' + stagePct + '%'
-
-      const nameEl = document.getElementById('ares-stage-name')
-      const barEl = document.getElementById('ares-prog-bar')
-      const nextEl = document.getElementById('ares-prog-next')
-      if (nameEl) nameEl.textContent = activeStage.name
-      if (barEl) barEl.textContent = bar
-      if (nextEl && bal < activeStage.to) nextEl.textContent = 'Next: ' + activeStage.next
-      else if (nextEl) nextEl.textContent = '\u2713 COMPLETE'
-
-      // ── C) Objectives — strict wallet balance truth, no demoBalance ──────
-      // Each objective has its own from/to; progress is 0 until from reached.
-      // DONE only when balance >= to (upper bound).
-      const aresEquity = (bal > 0) ? bal : null
-
-      const OBJ_DEFS = [
-        { id: 0, from: 100, to: 1000, label: '100 \u2192 1,000', col: 'rgba(0,255,140,0.95)', colDim: 'rgba(0,255,140,0.55)' },
-        { id: 1, from: 1000, to: 10000, label: '1,000 \u2192 10,000', col: 'rgba(70,200,255,0.95)', colDim: 'rgba(70,200,255,0.55)' },
-        { id: 2, from: 10000, to: 1000000, label: '10,000 \u2192 1M', col: 'rgba(255,200,60,0.95)', colDim: 'rgba(255,200,60,0.55)' },
-      ]
-
-      // C) rangeProgress: bal must exceed from to show any %; DONE only at >= to
-      function rangeProgress(x: any, a: any, b: any) {
-        if (!Number.isFinite(x) || x <= a) return 0
-        if (x >= b) return 1
-        return (x - a) / (b - a)
-      }
-
-      // Title update — show status
-      const objTitleEl = document.getElementById('ares-obj-title')
-      if (objTitleEl) {
-        if (!aresEquity) {
-          objTitleEl.textContent = 'OBJECTIVES'
-          objTitleEl.style.color = '#ff335566'
-        } else if (aresEquity < 100) {
-          objTitleEl.textContent = 'OBJECTIVES \u2014 SEED NOT FUNDED'
-          objTitleEl.style.color = '#f0c04099'
-        } else {
-          objTitleEl.textContent = 'OBJECTIVES'
-          objTitleEl.style.color = '#0080ff66'
-        }
-      }
-
-      OBJ_DEFS.forEach((o: any) => {
-        const el = document.getElementById('aobj-' + o.id)
-        const elb = document.getElementById('aobj-' + o.id + 'b')
-        if (!el) return
-        const eq = aresEquity
-        let prog = 0
-        if (eq !== null) {
-          prog = rangeProgress(eq, o.from, o.to)
-        }
-        const pct2 = Math.round(prog * 100)
-        const notStarted = eq === null || eq <= o.from
-        const done = prog >= 1
-        const active = !notStarted && !done
-
-        el.className = 'ares-obj-item' + (done ? ' done' : active ? ' active' : '')
-        el.style.color = done ? o.colDim : active ? o.col : 'rgba(255,255,255,0.28)'
-        el.textContent = o.label
-        if (elb) {
-          if (!eq || (notStarted && !done)) {
-            elb.innerHTML = `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
-            <div style="width:60px;height:4px;background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden"><div style="width:0%;height:100%;background:${o.col}"></div></div>
-            <span style="color:rgba(255,255,255,0.28);font-size:11px">0%</span>
-          </div>`
-          } else if (done) {
-            elb.innerHTML = `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
-            <div style="width:60px;height:4px;background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden"><div style="width:100%;height:100%;background:${o.col};box-shadow:0 0 10px ${o.col}"></div></div>
-            <span style="color:${o.col};font-size:11px;font-weight:700">\u2713 DONE</span>
-          </div>`
-          } else {
-            const pw = Math.round(prog * 60)
-            elb.innerHTML = `<div style="display:flex;align-items:center;gap:4px;justify-content:flex-end">
-            <div style="width:60px;height:4px;background:rgba(255,255,255,0.12);border-radius:2px;overflow:hidden"><div style="width:${pw}px;height:100%;background:${o.col};box-shadow:0 0 8px ${o.col};transition:width 0.4s"></div></div>
-            <span style="color:${o.col};font-size:11px;font-weight:700">${pct2}%</span>
-          </div>`
-          }
-        }
-      })
-
-      // ── WALLET UI update (v118-2) ─────────────────────────────────────
-      try {
-        const wlt = (typeof w.ARES !== 'undefined' && w.ARES.wallet) ? w.ARES.wallet : null
-        const wBal = wlt ? wlt.balance : 0
-        const wAvl = wlt ? wlt.available : 0
-        const wLck = wlt ? wlt.locked : 0
-        const openCnt = (typeof w.ARES !== 'undefined' && w.ARES.positions) ? w.ARES.positions.getOpen().length : 0
-        const fmt = (v: any) => '$' + (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        const fmt0 = (v: any) => '$' + (v || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
-        const wBalEl = document.getElementById('ares-wallet-balance') as any
-        const wAvlEl = document.getElementById('ares-wallet-avail-val')
-        const wLckEl = document.getElementById('ares-wallet-lock-val')
-        const wFailEl = document.getElementById('ares-wallet-fail') as any
-        const wWdBtn = document.getElementById('ares-wallet-withdraw-btn') as any
-        const wWdTip = document.getElementById('ares-wallet-withdraw-tip') as any
-        if (wBalEl) { wBalEl.textContent = fmt(wBal); wBalEl.style.color = wBal > 0 ? '#00ff88' : 'rgba(255,255,255,0.25)' }
-        if (wAvlEl) wAvlEl.textContent = fmt0(wAvl)
-        if (wLckEl) wLckEl.textContent = fmt0(wLck)
-        // NO FUNDS badge — show only if balance > 0 but available = 0 (all locked)
-        if (wFailEl) {
-          const noFunds = (wAvl <= 0 && wBal > 0)
-          wFailEl.style.display = noFunds ? 'block' : 'none'
-        }
-        // F) WITHDRAW button — disabled when locked > 0 or open positions exist
-        const wdBlocked = (wLck > 0 || openCnt > 0)
-        if (wWdBtn) {
-          wWdBtn.disabled = wdBlocked
-          wWdBtn.style.opacity = wdBlocked ? '0.38' : '1'
-          wWdBtn.style.cursor = wdBlocked ? 'not-allowed' : 'pointer'
-          wWdBtn.style.borderColor = wdBlocked ? 'rgba(255,80,80,0.15)' : 'rgba(255,80,80,0.3)'
-        }
-        if (wWdTip) wWdTip.style.display = wdBlocked ? 'block' : 'none'
-      } catch (_) { }
-
-      // Consciousness dots (în SVG)
-      const _CONS_STAGES = ['SEED', 'ASCENT', 'SOVEREIGN']; void _CONS_STAGES
-      const activeIdx = STAGES.indexOf(activeStage)
-      const _dotCols = ['#00ff88', '#00ff88', '#00ff88']; void _dotCols
-      const _dotFades = ['#4a6655', '#4a6655', '#4a6655']; void _dotFades
+      let activeIdx = 0
+      if (bal >= 10000) activeIdx = 2
+      else if (bal >= 1000) activeIdx = 1
       const dotIds = ['ldot-c0', 'ldot-c1', 'ldot-c2']
       const txtIds = ['ldot-parietal-seed', 'ldot-parietal-ascent', 'ldot-parietal-sovereign']
-      dotIds.forEach((did: any, ci: any) => {
+      dotIds.forEach((did, ci) => {
         const dotEl = document.getElementById(did)
         const txtEl = document.getElementById(txtIds[ci])
         const isActive = ci === activeIdx

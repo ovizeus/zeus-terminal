@@ -2,7 +2,6 @@
  *  Entire panel is JS-generated in original. This is the visual shell
  *  including the strip bar, neural brain SVG, and all sections. */
 import { useCallback, useEffect, useRef } from 'react'
-import { useAresStore } from '../../stores'
 import { _aresRender } from '../../engine/aresUI'
 import { StripBadge } from './ares/StripBadge'
 import { StripConf } from './ares/StripConf'
@@ -10,6 +9,9 @@ import { ImmSpan } from './ares/ImmSpan'
 import { EmotionSpan } from './ares/EmotionSpan'
 import { CognitiveBar } from './ares/CognitiveBar'
 import { StatsRow } from './ares/StatsRow'
+import { StageCol } from './ares/StageCol'
+import { WalletCol } from './ares/WalletCol'
+import { ObjectivesCol } from './ares/ObjectivesCol'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -299,66 +301,11 @@ export function ARESPanel() {
       <div id="ares-strip-panel">
         <div id="ares-panel">
 
-      {/* ── META ROW: Stage + Wallet + Objectives ── */}
+      {/* ── META ROW: Stage + Wallet + Objectives (R28.2-D store-driven) ── */}
       <div id="ares-meta-row">
-        {/* Stage Progress */}
-        <div id="ares-stage-col">
-          <div className="ares-meta-title">STAGE PROGRESS</div>
-          <div className="ares-stage-name" id="ares-stage-name">SEED</div>
-          <div className="ares-prog-bar" id="ares-prog-bar">██░░░░░░░░ 0%</div>
-          <div className="ares-prog-next" id="ares-prog-next">Next: 1,000</div>
-        </div>
-
-        {/* Wallet */}
-        <div id="ares-wallet-col" style={{
-          flex: '0 0 auto', minWidth: '110px', textAlign: 'center',
-          borderLeft: '1px solid rgba(0,150,255,0.12)',
-          borderRight: '1px solid rgba(0,150,255,0.12)',
-          padding: '0 8px',
-        }}>
-          <div className="ares-meta-title" style={{ textAlign: 'center' }}>WALLET</div>
-          <div id="ares-wallet-balance" style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: '#00ff88', letterSpacing: '1px' }}>$0.00</div>
-          <div id="ares-wallet-avail" style={{ fontFamily: 'monospace', fontSize: '11px', color: '#6a9a7a', marginTop: '1px' }}>
-            Avail: <span id="ares-wallet-avail-val">$0</span> · Rest To Trade: <span id="ares-wallet-lock-val">$0</span>
-          </div>
-          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
-            <button id="ares-wallet-add-btn" onClick={() => {
-              const w = window as any; const amt = prompt('Add funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.fund(Number(amt)); setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200) }
-            }} style={{
-              background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.35)',
-              color: '#00ff88', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
-              cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-            }}>[+] ADD</button>
-            <button id="ares-wallet-withdraw-btn" onClick={() => {
-              const w = window as any; const amt = prompt('Withdraw funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200) }
-            }} style={{
-              background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)',
-              color: 'rgba(255,110,110,0.8)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
-              cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-            }}>[-] WITHDRAW</button>
-          </div>
-          <div id="ares-wallet-withdraw-tip" style={{
-            display: 'none', fontFamily: 'monospace', fontSize: '10px', color: '#ff555566', marginTop: '2px',
-          }}>withdraw disabled while positions active</div>
-          <span id="ares-wallet-fail" style={{
-            display: 'none', background: 'rgba(255,40,40,0.18)', border: '1px solid rgba(255,50,50,0.45)',
-            color: '#ff5555', fontFamily: 'monospace', fontSize: '11px', padding: '1px 5px',
-            borderRadius: '2px', letterSpacing: '1px', marginTop: '3px',
-          }}>NO FUNDS</span>
-        </div>
-
-        {/* Objectives */}
-        <div id="ares-obj-col">
-          <div className="ares-meta-title" id="ares-obj-title" style={{ textAlign: 'right' }}>OBJECTIVES</div>
-          <div className="ares-obj-item" id="aobj-0">100 → 1,000</div>
-          <div className="ares-obj-bar" id="aobj-0b" style={{ textAlign: 'right' }}></div>
-          <div className="ares-obj-item" id="aobj-1">1,000 → 10,000</div>
-          <div className="ares-obj-bar" id="aobj-1b" style={{ textAlign: 'right' }}></div>
-          <div className="ares-obj-item" id="aobj-2">10,000 → 1M</div>
-          <div className="ares-obj-bar" id="aobj-2b" style={{ textAlign: 'right' }}></div>
-        </div>
+        <StageCol />
+        <WalletCol />
+        <ObjectivesCol />
       </div>
 
       {/* ── POSITIONS ── */}
