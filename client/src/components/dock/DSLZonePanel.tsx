@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { useDslStore } from '../../stores'
 import { toggleDSL, stopDSLIntervals, startDSLIntervals, toggleAssistArm } from '../../trading/dsl'
+import { ATStatusIcon } from '../ATStatusIcon'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
 function seededRandom(seed: number) {
@@ -91,7 +92,10 @@ export function DSLZonePanel() {
       {/* ASSIST ARM BAR */}
       <div className={`dsl-assist-bar${ui.assistBarVisible ? ' show' : ''}`}>
         <span className="dsl-assist-status">{ui.assistStatusText}</span>
-        <button className={ui.assistArmClass} onClick={() => toggleAssistArm()} dangerouslySetInnerHTML={{ __html: ui.assistArmHtml }} />
+        <button className={ui.assistArmClass} onClick={() => toggleAssistArm()}>
+          <ATStatusIcon kind={ui.assistArmIcon} />
+          {ui.assistArmIcon ? ' ' : ''}{ui.assistArmText}
+        </button>
       </div>
 
       {/* Cascade drops (20 — neon rain from initDSLBubbles in dsl.js) */}

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { DslPositionState } from '../types'
+import type { ATIconKind } from '../components/ATStatusIcon'
 
 /**
  * DSL canonical store.
@@ -33,7 +34,8 @@ export interface DSLUI {
   toggleBtnTitle: string
   lockOverlayVisible: boolean
   assistBarVisible: boolean
-  assistArmHtml: string
+  assistArmIcon: ATIconKind | null
+  assistArmText: string
   assistArmClass: string
   assistStatusText: string
 }
@@ -48,7 +50,8 @@ const DEFAULT_DSL_UI: DSLUI = {
   toggleBtnTitle: '',
   lockOverlayVisible: false,
   assistBarVisible: false,
-  assistArmHtml: 'ARM ASSIST',
+  assistArmIcon: null,
+  assistArmText: 'ARM ASSIST',
   assistArmClass: 'dsl-assist-arm',
   assistStatusText: 'ASSIST \u2014 necesită armare pentru execuție',
 }

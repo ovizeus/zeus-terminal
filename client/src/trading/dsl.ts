@@ -189,7 +189,8 @@ export function _syncDslAssistUI(): void {
   } else if (_m === 'assist') {
     _dslUI({
       assistBarVisible: true, toggleBtnTitle: '',
-      assistArmHtml: w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT' : _ZI.lock + ' ARM ASSIST',
+      assistArmIcon: w.S.assistArmed ? 'dYlw' : 'lock',
+      assistArmText: w.S.assistArmed ? 'ASSIST ARMAT' : 'ARM ASSIST',
       assistArmClass: 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : ''),
       assistStatusText: w.S.assistArmed ? 'ASSIST ARMAT \u2014 DSL va executa la semnal' : 'Dezarmat \u2014 DSL \u00een preview only (f\u0103r\u0103 execu\u021Bie)',
     })
