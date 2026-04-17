@@ -270,6 +270,28 @@ export function PM_render(): void {
   container.innerHTML = statsHtml + listHtml
 }
 
+// [R20.1] Self-repair oversized localStorage on module import.
+// R20 put a 56KB cap inside _save()/_load(), but _load() only runs when the
+// user opens the Post-Mortem panel or closes a position. Users carrying
+// pre-R20 oversized records never trigger the trim path and the server keeps
+// rejecting every push. Running the trim once at module import covers that
+// cold-start window and schedules a push of the trimmed payload.
+;(function _pmSelfRepairOnBoot() {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return
+    const before = JSON.stringify(arr).length
+    if (before <= MAX_SIZE) return
+    const fixed = _trimToBudget(arr)
+    _safeLocalStorageSet(KEY, fixed)
+    console.warn('[PM] boot self-repair:', arr.length, 'records /', before, 'B →', fixed.length, '/', JSON.stringify(fixed).length, 'B')
+    if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('postmortem')
+    if (typeof w._userCtxPush === 'function') w._userCtxPush()
+  } catch (_) { /* never break boot */ }
+})()
+
 // ── CSS injection (runs on import) ─────────────────────────────
 ;(function _pmInjectCSS() {
   const s = document.createElement('style')

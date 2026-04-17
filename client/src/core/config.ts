@@ -500,6 +500,26 @@ export function _ucMarkDirty(section: string) {
 }
 w._ucMarkDirty = _ucMarkDirty
 
+// [R20.1] Section envelope ceiling. Server rejects at 64KB/section.
+// We trim at 58KB to leave headroom for the { ts, data } wrapper.
+const _SECTION_TRIM_TARGET = 58 * 1024
+function _trimRecordArrayToBudget(arr: any[], min: number): any[] {
+  if (!Array.isArray(arr)) return arr
+  let trimmed = arr
+  while (trimmed.length > min && JSON.stringify(trimmed).length > _SECTION_TRIM_TARGET) {
+    trimmed = trimmed.slice(0, Math.max(min, Math.floor(trimmed.length * 0.9)))
+  }
+  return trimmed
+}
+function _guardedArraySection(lsKey: string, parsed: any[] | null, min: number): any[] | null {
+  if (!Array.isArray(parsed)) return parsed
+  if (JSON.stringify(parsed).length <= _SECTION_TRIM_TARGET) return parsed
+  const trimmed = _trimRecordArrayToBudget(parsed, min)
+  try { localStorage.setItem(lsKey, JSON.stringify(trimmed)) } catch (_) { /* */ }
+  console.warn('[UC] guarded section', lsKey, '— trimmed', parsed.length, '→', trimmed.length)
+  return trimmed
+}
+
 function _buildAllSections(): any {
   const _t = function (s: string) { return _ucDirtyTs[s] || 0 }
   const _g = function (k: string) { try { return localStorage.getItem(k) } catch (_) { return null } }
@@ -514,7 +534,7 @@ function _buildAllSections(): any {
     signalRegistry: { ts: _t('signalRegistry'), data: _j('zeus_signal_registry') },
     perfStats: { ts: _t('perfStats'), data: _j('zeus_perf_v1') },
     dailyPnl: { ts: _t('dailyPnl'), data: _j('zeus_daily_pnl_v1') },
-    postmortem: { ts: _t('postmortem'), data: _j('zeus_postmortem_v1') },
+    postmortem: { ts: _t('postmortem'), data: _guardedArraySection('zeus_postmortem_v1', _j('zeus_postmortem_v1'), 10) },
     adaptive: { ts: _t('adaptive'), data: _j('zeus_adaptive_v1') },
     notifications: { ts: _t('notifications'), data: _j('zeus_notifications') },
     scannerSyms: { ts: _t('scannerSyms'), data: _j('zeus_mscan_syms') },
