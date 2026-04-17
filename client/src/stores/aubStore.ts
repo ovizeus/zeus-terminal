@@ -1,11 +1,15 @@
 import { create } from 'zustand'
 
+export interface AUBCompatItem { ok: boolean; label: string }
+export interface AUBMacroItem { label: string; when: string; riskPct: number; impact: string }
+export interface AUBSimResult { sl: number; rr: number; score: number; wins: number; total: number }
+
 interface AUBStoreState {
   expanded: boolean
   sfxEnabled: boolean
 
   compatOk: boolean
-  compatRows: string
+  compatItems: AUBCompatItem[]
 
   guardCount: number
   guardLast: string
@@ -28,11 +32,11 @@ interface AUBStoreState {
   corrPenalty: boolean
   corrPenaltyText: string
 
-  macroHtml: string
+  macroItems: AUBMacroItem[] | null
 
   simStatus: string
   simLast: string
-  simResultHtml: string | null
+  simResult: AUBSimResult | null
   simShowApply: boolean
 
   patch: (partial: Partial<Omit<AUBStoreState, 'patch'>>) => void
@@ -43,7 +47,7 @@ export const useAUBStore = create<AUBStoreState>()((set) => ({
   sfxEnabled: false,
 
   compatOk: true,
-  compatRows: '',
+  compatItems: [],
 
   guardCount: 0,
   guardLast: '—',
@@ -66,11 +70,11 @@ export const useAUBStore = create<AUBStoreState>()((set) => ({
   corrPenalty: false,
   corrPenaltyText: 'Penalty: inactive',
 
-  macroHtml: '<div class="aub-row">No events loaded</div>',
+  macroItems: null,
 
   simStatus: 'Status: Idle',
   simLast: 'Last run: never',
-  simResultHtml: null,
+  simResult: null,
   simShowApply: false,
 
   patch: (partial) => set((s) => ({ ...s, ...partial })),

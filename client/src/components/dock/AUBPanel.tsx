@@ -1,11 +1,12 @@
 import { useAUBStore } from '../../stores/aubStore'
 import { aubToggle, aubToggleSFX, aubBBExport, aubBBClear, aubMacroClear, aubSimRun, aubSimApply } from '../../engine/aub'
+import { ATStatusIcon } from '../ATStatusIcon'
 
 export function AUBPanel() {
   const expanded = useAUBStore((s) => s.expanded)
   const sfxEnabled = useAUBStore((s) => s.sfxEnabled)
   const compatOk = useAUBStore((s) => s.compatOk)
-  const compatRows = useAUBStore((s) => s.compatRows)
+  const compatItems = useAUBStore((s) => s.compatItems)
   const guardCount = useAUBStore((s) => s.guardCount)
   const guardLast = useAUBStore((s) => s.guardLast)
   const perfHeavy = useAUBStore((s) => s.perfHeavy)
@@ -21,10 +22,10 @@ export function AUBPanel() {
   const corrSol = useAUBStore((s) => s.corrSol)
   const corrPenalty = useAUBStore((s) => s.corrPenalty)
   const corrPenaltyText = useAUBStore((s) => s.corrPenaltyText)
-  const macroHtml = useAUBStore((s) => s.macroHtml)
+  const macroItems = useAUBStore((s) => s.macroItems)
   const simStatus = useAUBStore((s) => s.simStatus)
   const simLast = useAUBStore((s) => s.simLast)
-  const simResultHtml = useAUBStore((s) => s.simResultHtml)
+  const simResult = useAUBStore((s) => s.simResult)
   const simShowApply = useAUBStore((s) => s.simShowApply)
 
   const pct = (v: number) => Math.round(v * 100) + '%'
@@ -72,7 +73,15 @@ export function AUBPanel() {
         {/* 1: COMPAT SHIELD */}
         <div className="aub-card cyan">
           <div className="aub-card-title">COMPATIBILITY SHIELD</div>
-          <div dangerouslySetInnerHTML={{ __html: compatRows || '<div class="aub-row">Checking...</div>' }} />
+          {compatItems.length === 0 ? (
+            <div className="aub-row">Checking...</div>
+          ) : (
+            compatItems.map((item, idx) => (
+              <div key={idx} className={`aub-row ${item.ok ? 'ok' : 'warn'}`}>
+                <ATStatusIcon kind={item.ok ? 'ok' : 'w'} />{' '}{item.label}
+              </div>
+            ))
+          )}
         </div>
 
         {/* 2: INPUT GUARD */}
@@ -136,7 +145,17 @@ export function AUBPanel() {
         {/* 7: MACRO ANOMALY RADAR */}
         <div className="aub-card yellow">
           <div className="aub-card-title">MACRO ANOMALY RADAR</div>
-          <div dangerouslySetInnerHTML={{ __html: macroHtml }} />
+          <div>
+            {macroItems === null ? (
+              <div className="aub-row">No events loaded</div>
+            ) : (
+              macroItems.map((ev, idx) => (
+                <div key={idx} className={`aub-macro-item ${ev.impact === 'high' ? 'high' : ''}`}>
+                  {ev.label} — {ev.when} → Risk {ev.riskPct > 0 ? '-' : ''}{ev.riskPct}%
+                </div>
+              ))
+            )}
+          </div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
             <button className="aub-btn yellow" onClick={() => document.getElementById('aub-macro-file')?.click()}>
               <svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> Import JSON
@@ -153,8 +172,14 @@ export function AUBPanel() {
           <div className="aub-card-title">NIGHTLY SIM LAB</div>
           <div className="aub-row">{simStatus}</div>
           <div className="aub-row">{simLast}</div>
-          {simResultHtml && (
-            <div className="aub-sim-result" dangerouslySetInnerHTML={{ __html: simResultHtml }} />
+          {simResult && (
+            <div className="aub-sim-result">
+              Best: SL {simResult.sl}% / RR {simResult.rr}x<br />
+              WR: {simResult.score.toFixed(1)}% ({simResult.wins}/{simResult.total})<br />
+              <span style={{ color: '#ffd400' }}>
+                <ATStatusIcon kind="w" /> Suggest only — confirm before applying
+              </span>
+            </div>
           )}
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
             <button className="aub-btn violet" onClick={() => aubSimRun()}>▶ Run Now</button>

@@ -89,15 +89,13 @@ export function aubCheckCompat(): void {
   }
 
   const allOk = w.AUB_COMPAT.ws && w.AUB_COMPAT.audio && w.AUB_COMPAT.crypto
-  const row = (pass: any, label: any) =>
-    `<div class="aub-row ${pass ? 'ok' : 'warn'}">${pass ? _ZI.ok : _ZI.w} ${label}</div>`
-  const compatRows = [
-    row(w.AUB_COMPAT.ws, 'WebSocket: ' + (w.AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
-    row(w.AUB_COMPAT.audio, 'AudioContext: ' + (w.AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING')),
-    row(w.AUB_COMPAT.crypto, 'crypto.subtle: ' + (w.AUB_COMPAT.crypto ? 'OK' : 'MISSING')),
-    row(w.AUB_COMPAT.sw, 'ServiceWorker: ' + (w.AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : w.AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A')),
-  ].join('')
-  useAUBStore.getState().patch({ compatOk: allOk, compatRows })
+  const compatItems = [
+    { ok: !!w.AUB_COMPAT.ws, label: 'WebSocket: ' + (w.AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING') },
+    { ok: !!w.AUB_COMPAT.audio, label: 'AudioContext: ' + (w.AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING') },
+    { ok: !!w.AUB_COMPAT.crypto, label: 'crypto.subtle: ' + (w.AUB_COMPAT.crypto ? 'OK' : 'MISSING') },
+    { ok: !!w.AUB_COMPAT.sw, label: 'ServiceWorker: ' + (w.AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : w.AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A') },
+  ]
+  useAUBStore.getState().patch({ compatOk: allOk, compatItems })
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -382,18 +380,21 @@ export function aubGetActiveMacroRisk(): any {
 
 export function _aubRenderMacroEvents(): void {
   if (!AUB.macroEvents.length) {
-    useAUBStore.getState().patch({ macroHtml: '<div class="aub-row">No events loaded</div>' }); return
+    useAUBStore.getState().patch({ macroItems: null }); return
   }
   const now = Date.now()
-  const html = AUB.macroEvents.slice(0, 5).map((ev: any) => {
+  const macroItems = AUB.macroEvents.slice(0, 5).map((ev: any) => {
     const diff = ev.ts - now
     const hrs = Math.round(diff / 3600000)
     const when = Math.abs(hrs) < 1 ? 'NOW' : (hrs > 0 ? 'in ' + hrs + 'h' : Math.abs(hrs) + 'h ago')
-    const cls = ev.impact === 'high' ? 'high' : ''
-    const riskPct = Math.round((1 - ev.risk) * 100)
-    return `<div class="aub-macro-item ${cls}">${ev.label} — ${when} → Risk ${riskPct > 0 ? '-' : ''}${riskPct}%</div>`
-  }).join('')
-  useAUBStore.getState().patch({ macroHtml: html })
+    return {
+      label: String(ev.label),
+      when,
+      riskPct: Math.round((1 - ev.risk) * 100),
+      impact: String(ev.impact || ''),
+    }
+  })
+  useAUBStore.getState().patch({ macroItems })
 }
 
 export function _aubLoadMacro(): void {
@@ -459,11 +460,10 @@ export function _aubSimWorker(): void {
     const ts = new Date().toLocaleTimeString()
     _safeLocalStorageSet(w.AUB_SIM_KEY, { best, ts }) // FIX 22
 
-    const simResultHtml = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">` + _ZI.w + ` Suggest only — confirm before applying</span>`
     useAUBStore.getState().patch({
       simStatus: 'Status: Done (' + ts + ')',
       simLast: 'Last run: ' + ts,
-      simResultHtml,
+      simResult: { sl: best.sl, rr: best.rr, score: best.score, wins: best.wins, total: best.total },
       simShowApply: true,
     })
   } catch (e: any) {
