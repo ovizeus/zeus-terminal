@@ -1050,149 +1050,21 @@ export function updateLiqCycle() {
   }
 }
 
+// [ZT3-C] renderMTFPanel() trimmed to strip-bar only. MTFPanel rows + RE/PF
+// blocks are now fed by mtfStore (see engine/mtfSync.ts + MTFPanel.tsx).
+// This function writes only the condensed strip-bar elements that still live
+// in legacy DOM (injected by initMTFStrip via innerHTML): #mtf-strip-score,
+// #mtf-bar-re, #mtf-bar-regime, #mtf-bar-score, #mtf-bar-vol, #mtf-bar-squeeze.
+// Bar→React migration is out of scope for ZT3; tracked as ZT4.
 export function renderMTFPanel() {
   try {
     const BM = w.BM
-    const st = BM.structure
-    const _el = (id: string) => document.getElementById(id)
-    const _cls = (el: any, cls: string) => { if (el) { el.className = 'mtf-val'; if (cls) el.classList.add(cls) } }
-    const rEl = _el('mtf-regime')
-    if (rEl) {
-      const rMap: any = { trend: 'good', breakout: 'good', squeeze: 'warn', range: 'warn', panic: 'bad', volatile: 'bad', unknown: '', 'insufficient data': '' }
-      rEl.textContent = (st.regime || '\u2014').toUpperCase()
-      _cls(rEl, rMap[st.regime] || '')
-    }
-    const sEl = _el('mtf-structure')
-    if (sEl) {
-      sEl.textContent = st.structureLabel || '\u2014'
-      _cls(sEl, st.structureLabel === 'HH/HL' ? 'good' : st.structureLabel === 'LH/LL' ? 'bad' : 'warn')
-    }
-    const aEl = _el('mtf-atr')
-    if (aEl) {
-      aEl.textContent = st.atrPct ? st.atrPct.toFixed(2) + '%' : '\u2014'
-      _cls(aEl, st.atrPct > 2 ? 'bad' : st.atrPct > 1 ? 'warn' : 'good')
-    }
-    const vEl = _el('mtf-vol')
-    if (vEl) {
-      vEl.textContent = (st.volMode || '\u2014').toUpperCase()
-      _cls(vEl, st.volMode === 'expansion' ? 'good' : st.volMode === 'contraction' ? 'warn' : '')
-    }
-    const sqEl = _el('mtf-squeeze')
-    if (sqEl) {
-      sqEl.innerHTML = st.squeeze ? _ZI.bolt + ' ACTIV' : 'OFF'
-      _cls(sqEl, st.squeeze ? 'warn' : '')
-    }
-    const adxEl = _el('mtf-adx')
-    if (adxEl) {
-      adxEl.textContent = st.adx || '\u2014'
-      _cls(adxEl, st.adx > 30 ? 'good' : st.adx > 15 ? 'warn' : 'bad')
-    }
-    const vrEl = _el('mtf-vol-regime')
-    if (vrEl) {
-      vrEl.textContent = BM.volRegime || '\u2014'
-      const vrMap: any = { 'EXTREME': 'bad', 'HIGH': 'warn', 'MED': '', 'LOW': 'good' }
-      _cls(vrEl, vrMap[BM.volRegime] || '')
-    }
-    const vpEl = _el('mtf-vol-pct')
-    if (vpEl) {
-      vpEl.textContent = BM.volPct != null ? BM.volPct + 'th percentila' : '\u2014 (acumulez date)'
-      _cls(vpEl, BM.volPct != null ? (BM.volPct >= 85 ? 'bad' : BM.volPct >= 60 ? 'warn' : BM.volPct < 30 ? 'good' : '') : '')
-    }
-    const lc = BM.liqCycle
-    const swEl = _el('mtf-sweep')
-    if (swEl) {
-      const sw = lc.sweepSimple
-      if (sw && sw.dir !== '\u2014') {
-        swEl.textContent = sw.dir + (sw.strength > 0 ? ' ' + sw.strength + '%' : '')
-        _cls(swEl, sw.dir === 'BULL' ? 'good' : 'warn')
-      } else {
-        const swMap: any = { 'above': '\u2B06 ABOVE', 'below': '\u2B07 BELOW', 'none': '\u2014' }
-        swEl.textContent = swMap[lc.currentSweep] || '\u2014'
-        _cls(swEl, lc.currentSweep !== 'none' ? (lc.sweepDisplacement ? 'good' : 'warn') : '')
-      }
-    }
-    const trEl = _el('mtf-trap-rate')
-    if (trEl) {
-      if (lc.trapRate != null) {
-        const trPct = Math.round(lc.trapRate * 100)
-        trEl.textContent = trPct + '% (' + lc.trapsTotal + '/' + lc.sweepsTotal + ')'
-        _cls(trEl, trPct >= 70 ? 'bad' : trPct >= 40 ? 'warn' : 'good')
-      } else {
-        trEl.textContent = '\u2014 (date insuficiente)'
-        _cls(trEl, '')
-      }
-    }
-    const maEl = _el('mtf-mag-above')
-    if (maEl) {
-      maEl.textContent = lc.magnetAboveDist != null ? '+' + lc.magnetAboveDist + '%' : '\u2014'
-      _cls(maEl, lc.magnetAboveDist != null ? (lc.magnetAboveDist < 0.5 ? 'warn' : '') : '')
-    }
-    const mbEl = _el('mtf-mag-below')
-    if (mbEl) {
-      mbEl.textContent = lc.magnetBelowDist != null ? '-' + lc.magnetBelowDist + '%' : '\u2014'
-      _cls(mbEl, lc.magnetBelowDist != null ? (lc.magnetBelowDist < 0.5 ? 'warn' : '') : '')
-    }
-    const mbsEl = _el('mtf-mag-bias')
-    if (mbsEl) {
-      const biasMap: any = { 'above': '\u2B06 ABOVE', 'below': '\u2B07 BELOW', '\u2014': '\u2014' }
-      mbsEl.textContent = biasMap[lc.magnetBias] || '\u2014'
-      _cls(mbsEl, lc.magnetBias === 'above' ? 'good' : lc.magnetBias === 'below' ? 'warn' : '')
-    }
-    ;['15m', '1h', '4h'].forEach((tf: string) => {
-      const b = _el('mtf-' + tf)
-      if (b) {
-        const dir = st.mtfAlign[tf] || 'neut'
-        b.className = 'mtf-tf-badge ' + dir
-        b.textContent = tf + ' ' + (dir === 'bull' ? '\u25B2' : dir === 'bear' ? '\u25BC' : '\u2014')
-      }
-    })
-    const sc = st.score || 0
-    const scTxt = _el('mtf-score-txt')
-    const scFill = _el('mtf-score-fill')
-    const scBar = _el('mtf-strip-score')
-    if (scTxt) scTxt.textContent = sc + ' / 100'
-    if (scFill) (scFill as any).style.width = sc + '%'
-    if (scBar) scBar.textContent = sc + ' / 100'
-    const tsEl = _el('mtf-ts')
-    if (tsEl && st.lastUpdate) {
-      const d = new Date(st.lastUpdate)
-      tsEl.textContent = 'actualizat ' + d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    }
-    // Regime Engine rows
+    const st = BM.structure || {}
     const re = BM.regimeEngine || {}
-    const reEl = _el('re-regime')
-    if (reEl) {
-      const reMap: any = { 'TREND_UP': 'good', 'TREND_DOWN': 'bad', 'EXPANSION': 'good', 'SQUEEZE': 'warn', 'RANGE': '', 'CHAOS': 'bad', 'LIQUIDATION_EVENT': 'bad' }
-      reEl.textContent = (re.regime || '\u2014')
-      _cls(reEl, reMap[re.regime] || '')
-    }
-    const reTrap = _el('re-trap')
-    if (reTrap) {
-      reTrap.textContent = (re.trapRisk != null ? re.trapRisk + '%' : '\u2014')
-      _cls(reTrap, re.trapRisk >= 60 ? 'bad' : re.trapRisk >= 30 ? 'warn' : 'good')
-    }
-    const reConf = _el('re-conf')
-    if (reConf) {
-      reConf.textContent = (re.confidence != null ? re.confidence + '%' : '\u2014')
-      _cls(reConf, re.confidence >= 70 ? 'good' : re.confidence >= 40 ? 'warn' : 'bad')
-    }
-    const pf = BM.phaseFilter || {}
-    const pfPhase = _el('pf-phase')
-    if (pfPhase) {
-      pfPhase.textContent = (pf.phase || '\u2014') + (pf.allow ? '' : ' \u2718')
-      const pfMap: any = { 'TREND': 'good', 'EXPANSION': 'good', 'RANGE': '', 'SQUEEZE': 'warn', 'CHAOS': 'bad', 'LIQ_EVENT': 'bad' }
-      _cls(pfPhase, pfMap[pf.phase] || '')
-    }
-    const pfRisk = _el('pf-risk')
-    if (pfRisk) {
-      pfRisk.textContent = (pf.riskMode || '\u2014')
-      _cls(pfRisk, pf.riskMode === 'normal' ? 'good' : pf.riskMode === 'reduced' ? 'warn' : 'bad')
-    }
-    const pfSize = _el('pf-size')
-    if (pfSize) {
-      pfSize.textContent = (pf.sizeMultiplier != null ? '\u00D7' + pf.sizeMultiplier : '\u2014')
-      _cls(pfSize, pf.sizeMultiplier >= 1 ? 'good' : pf.sizeMultiplier >= 0.6 ? 'warn' : 'bad')
-    }
+    const _el = (id: string) => document.getElementById(id)
+    const sc = st.score || 0
+    const scBar = _el('mtf-strip-score')
+    if (scBar) scBar.textContent = sc + ' / 100'
     const reBarPill = _el('mtf-bar-re')
     if (reBarPill) {
       reBarPill.textContent = (re.regime || '\u2014')
