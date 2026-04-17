@@ -8,11 +8,11 @@
 
 import { getSymbol, getFRCountdown, getOI } from './stateAccessors'
 import { oiHistory, TP } from '../core/state'
-import { escHtml, el } from '../utils/dom'
-import { fP } from '../utils/format'
+import { el } from '../utils/dom'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { recordDailyClose } from '../engine/dailyPnl'
+import { usePositionsStore } from '../stores/positionsStore'
 const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, oiHistory, w.ZT_capArr
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -46,26 +46,13 @@ function _reportTradeToServer(trade: Record<string, any>): void {
   }).catch(() => { /* silent — localStorage is fallback */ })
 }
 
+// [R9] Journal render = store patch. React <JournalRow> owns rendering
+// from `positionsStore.journal`; this function simply republishes TP.journal
+// so the reactive list stays in sync after addTradeToJournal / loadJournalFromStorage.
 export function renderTradeJournal(): void {
-  const body = el('journalBody'); if (!body) return
-  if (!TP.journal.length) { body.innerHTML = '<div style="padding:10px;text-align:center;font-size:12px;color:var(--dim)">No trades yet</div>'; return }
-  const _sorted = TP.journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0)))
-  body.innerHTML = _sorted.map((t: any) => {
-    const pnl = Number(t.pnl) || 0
-    const win = pnl >= 0
-    const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
-    const ep = '$' + fP(t.entry || 0) + '→$' + fP(t.exit || 0)
-    const _time = escHtml(t.time || '')
-    const _side = escHtml(t.side || '')
-    const _reason = escHtml(t.reason || '—')
-    return `<div class="journal-row ${win ? 'win' : 'loss'}">
-      <span style="color:var(--dim)">${_time}</span>
-      <span style="color:${t.side === 'LONG' ? 'var(--grn)' : 'var(--red)'}">${_side}</span>
-      <span style="color:var(--dim);font-size:11px">${ep}</span>
-      <span style="color:${win ? 'var(--grn)' : 'var(--red)'};font-weight:700">${pnlStr}</span>
-      <span style="color:var(--dim);font-size:11px">${_reason}</span>
-    </div>`
-  }).join('')
+  try {
+    usePositionsStore.getState().setJournal((TP.journal || []).slice())
+  } catch (_) { /* ignore */ }
 }
 
 export function loadJournalFromStorage(): void {

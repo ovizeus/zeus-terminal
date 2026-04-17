@@ -19,6 +19,20 @@ interface PositionsStore {
   setManualStats: (pnl: number, pnlClass: string, wr: string, trades: number) => void
 
   /**
+   * [R9] Reactive pending + journal arrays that replace the imperative engine
+   * DOM writers (`renderPendingOrders`, `renderTradeJournal`). The engine
+   * still owns the source data via `w.TP.*`; mirror helpers in
+   * `marketDataPositions.ts` / `storage.ts` push a freshly-sliced copy into
+   * the store instead of `el.innerHTML = ...`.
+   */
+  pendingOrders: any[]
+  manualLivePending: any[]
+  journal: any[]
+  setPendingOrders: (orders: any[]) => void
+  setManualLivePending: (orders: any[]) => void
+  setJournal: (journal: any[]) => void
+
+  /**
    * [MIGRATION-F5 commit 2] Last authoritative positions snapshot timestamp
    * (ms since epoch). Used for monotonic dedup on WS broadcasts — a snapshot
    * with `updated_at <= lastSnapshotTs` is dropped silently. 0 = no snapshot
@@ -97,6 +111,14 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   manualWr: '0%',
   manualTrades: 0,
   setManualStats: (pnl, pnlClass, wr, trades) => set({ manualPnl: pnl, manualPnlClass: pnlClass, manualWr: wr, manualTrades: trades }),
+
+  // [R9] Reactive pending + journal arrays
+  pendingOrders: [],
+  manualLivePending: [],
+  journal: [],
+  setPendingOrders: (orders) => set({ pendingOrders: orders }),
+  setManualLivePending: (orders) => set({ manualLivePending: orders }),
+  setJournal: (journal) => set({ journal }),
 
   setDemoPositions: (positions) => set({ demoPositions: positions }),
   setLivePositions: (positions) => set({ livePositions: positions }),

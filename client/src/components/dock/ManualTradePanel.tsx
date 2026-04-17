@@ -4,6 +4,7 @@ import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
 import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
+import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow } from './PositionRows'
 
 const w = window as any
 
@@ -28,6 +29,20 @@ export function ManualTradePanel() {
   const manualPnlClass = usePositionsStore((s) => s.manualPnlClass)
   const manualWr = usePositionsStore((s) => s.manualWr)
   const manualTrades = usePositionsStore((s) => s.manualTrades)
+  // [R9] Reactive arrays that replace the old `dangerouslySetInnerHTML` divs
+  const demoPositions = usePositionsStore((s) => s.demoPositions)
+  const livePositions = usePositionsStore((s) => s.livePositions)
+  const pendingOrders = usePositionsStore((s) => s.pendingOrders)
+  const manualLivePending = usePositionsStore((s) => s.manualLivePending)
+  const journal = usePositionsStore((s) => s.journal)
+
+  // Filter lists by current mode — same rule as the old render functions
+  const gMode = exchangeMode || 'demo'
+  const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && !p.autoTrade && (p.mode || 'demo') === gMode)
+  const pendingRender = (gMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
+  const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && !p.autoTrade)
+  const isLiveMode = gMode === 'live'
+  const journalSorted = journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0)))
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {
@@ -232,16 +247,24 @@ export function ManualTradePanel() {
           <span><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h8v3L9 8l3 3v3H4v-3l3-3-3-3V2" /></svg> PENDING ORDERS</span>
           <span style={{ fontSize: '9px', color: 'var(--dim)' }}>0</span>
         </div>
-        {/* TS renderPendingOrders() owns this div via innerHTML — no React children allowed */}
-        <div id="pendingOrdersTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:4px">No pending orders</div>' }} />
+        {/* [R9] React-owned pending orders list — reads positionsStore.pendingOrders */}
+        <div id="pendingOrdersTable">
+          {pendingRender.length === 0
+            ? <div style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: 4 }}>No pending orders</div>
+            : pendingRender.map((ord: any) => <PendingOrderRow key={ord.id} ord={ord} />)}
+        </div>
 
         {/* OPEN POSITIONS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>OPEN POSITIONS</span>
           <button ref={closeAllRef} id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
         </div>
-        {/* TS renderDemoPositions() owns this div via innerHTML — no React children allowed */}
-        <div id="demoPosTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:8px">No open positions</div>' }} />
+        {/* [R9] React-owned demo/live-mode manual positions — reads positionsStore.demoPositions */}
+        <div id="demoPosTable">
+          {manualDemoPositions.length === 0
+            ? <div style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: 8 }}>No open positions</div>
+            : manualDemoPositions.map((pos: any) => <DemoPositionRow key={pos.id} pos={pos} />)}
+        </div>
 
         {/* P&L STATS — React-owned via positionsStore (D9) */}
         <div className="tp-pnl-row">
@@ -250,10 +273,14 @@ export function ManualTradePanel() {
           <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div className="tp-pnl-val">{manualTrades}</div></div>
         </div>
 
-        {/* LIVE/TESTNET OPEN POSITIONS (shown when mode=live, hidden in demo) */}
-        <div id="livePositionsInDemo" style={{ display: 'none', borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
+        {/* [R9] LIVE/TESTNET OPEN POSITIONS — reactive on exchangeMode */}
+        <div id="livePositionsInDemo" style={{ display: isLiveMode ? 'block' : 'none', borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
           <div style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '6px' }}>EXCHANGE POSITIONS</div>
-          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
+          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: isLiveMode && liveRender.length ? 'left' : 'center' }}>
+            {liveRender.length === 0
+              ? <span>No exchange positions</span>
+              : liveRender.map((pos: any) => <LivePositionRow key={pos.id} pos={pos} />)}
+          </div>
         </div>
 
         {/* TRADE JOURNAL */}
@@ -265,8 +292,12 @@ export function ManualTradePanel() {
           <div className="jl-hdr">
             <span>TIME</span><span>SIDE</span><span>ENTRY→EXIT</span><span>PnL</span><span>REASON</span>
           </div>
-          {/* TS renderTradeJournal() owns this div via innerHTML — no React children allowed */}
-          <div className="journal-wrap" id="journalBody" dangerouslySetInnerHTML={{ __html: '<div style="padding:10px;text-align:center;font-size:8px;color:var(--dim)">No trades yet</div>' }} />
+          {/* [R9] React-owned journal — reads positionsStore.journal */}
+          <div className="journal-wrap" id="journalBody">
+            {journalSorted.length === 0
+              ? <div style={{ padding: 10, textAlign: 'center', fontSize: 8, color: 'var(--dim)' }}>No trades yet</div>
+              : journalSorted.map((t: any) => <JournalRow key={(t.id || t.openTs || t.time) + ':' + (t.closedAt || '')} trade={t} />)}
+          </div>
         </div>
       </div>
     </div>
