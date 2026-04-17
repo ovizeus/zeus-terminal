@@ -21,7 +21,7 @@ import { _resumeLivePendingSyncIfNeeded , renderDemoPositions } from '../data/ma
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
 import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, brainThink } from '../engine/brain'
 import { runSignalScan } from '../engine/indicators'
-import { initARES, initAriaBrain } from '../engine/aresUI'
+import { initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
 import { initCloudSettings, connectBNB, connectBYB } from '../data/marketDataWS'
@@ -119,7 +119,10 @@ export async function startApp(): Promise<void> {
   setTimeout(_checkAppUpdate, 2000)
   initAUB()
   if (typeof w.initARIANOVA === 'function') w.initARIANOVA()
-  initPMPanel(); initARES()
+  // [R28.2-H] initARES() removed — ARES strip owned by ARESPanel.tsx.
+  // Preserve the original first-tick cadence that initARES() scheduled.
+  initPMPanel()
+  setTimeout(function () { if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 1000)
   // [FIX] _relocateFlow removed — React PanelShell controls flow-panel position
   setTimeout(initAriaBrain, 200)
   if (typeof w.initTeacher === 'function') w.initTeacher()

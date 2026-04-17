@@ -22,6 +22,7 @@ import { _ZI } from '../constants/icons'
 import { userSettingsApi } from '../services/api'
 import { useDslStore } from '../stores/dslStore'
 import { useBrainStore } from '../stores/brainStore'
+import { useAresStore } from '../stores/aresStore'
 import type { BrainMode } from '../types'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
@@ -1229,7 +1230,8 @@ export function _coreTickMI() {
     refreshLiqCycleLight()
     refreshSweepLight()
     renderMTFPanel()
-    if (typeof w.ARES !== 'undefined' && document.getElementById('ares-strip')?.classList.contains('open')) {
+    // [R28.2-H] stripOpen read from store (replaces document.getElementById+classList.contains)
+    if (typeof w.ARES !== 'undefined' && useAresStore.getState().ui.stripOpen) {
       _aresRender()
     }
   } catch (e: any) {

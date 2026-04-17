@@ -199,7 +199,7 @@ export interface AresMissionArcUI {
 
 /** Default empty UI slice — everything zeroed so components render a no-op state. */
 export const DEFAULT_ARES_UI: AresStoreUI = {
-  stripOpen: false,
+  stripOpen: true,
   core: { id: 'FOCUSED', label: 'FOCUSED', emoji: '', color: '#6ef', glow: '#6ef8', consecutiveLoss: 0 },
   confidence: 0,
   immPct: 0,

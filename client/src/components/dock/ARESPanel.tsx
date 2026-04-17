@@ -2,7 +2,7 @@
  *  Entire panel is JS-generated in original. This is the visual shell
  *  including the strip bar, neural brain SVG, and all sections. */
 import { useCallback, useEffect, useRef } from 'react'
-import { _aresRender } from '../../engine/aresUI'
+import { useAresStore } from '../../stores/aresStore'
 import { StripBadge } from './ares/StripBadge'
 import { StripConf } from './ares/StripConf'
 import { ImmSpan } from './ares/ImmSpan'
@@ -222,7 +222,8 @@ function generateBrainSVG(svgEl: SVGSVGElement) {
  */
 export function ARESPanel() {
   const coreSvgRef = useRef<SVGSVGElement>(null)
-  const stripRef = useRef<HTMLDivElement>(null)
+  const stripOpen = useAresStore((s) => s.ui.stripOpen)
+  const setStripOpen = useAresStore((s) => s.setStripOpen)
 
   // Generate brain SVG on mount — 1:1 from initAriaBrain() in deepdive.js
   useEffect(() => {
@@ -230,11 +231,11 @@ export function ARESPanel() {
   }, [])
 
   const toggleOpen = useCallback(() => {
-    stripRef.current?.classList.toggle('open')
-  }, [])
+    setStripOpen(!useAresStore.getState().ui.stripOpen)
+  }, [setStripOpen])
 
   return (
-    <div id="ares-strip" ref={stripRef} className="open">
+    <div id="ares-strip" className={stripOpen ? 'open' : ''}>
       {/* ── Strip Bar (collapsible header) — 1:1 from deepdive.js line 3579 ── */}
       <div id="ares-strip-bar" onClick={toggleOpen}>
         <div className="v6-accent">

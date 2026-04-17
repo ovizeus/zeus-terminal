@@ -56,7 +56,7 @@ import { ARES, ARES_openPosition } from '../engine/ares'
 // ARES_DECISION — now direct import in consumers
 import { ARES_EXECUTE } from '../engine/aresExecute'
 import { ARES_MONITOR } from '../engine/aresMonitor'
-import { _aresRender, initAriaBrain, initARES } from '../engine/aresUI'
+import { _aresRender, initAriaBrain } from '../engine/aresUI'
 // Phase 7C: teacher (15 files, self-register on window)
 import '../teacher/teacherConfig'
 import '../teacher/teacherStorage'
