@@ -3,6 +3,7 @@
 // Position management, open/close handlers
 
 import { escHtml, el } from '../utils/dom'
+import { useBrainStatsStore } from '../stores/brainStatsStore'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { perfRecordTrade } from './risk'
@@ -181,15 +182,14 @@ export function triggerExecCinematic(side: any, sym: any): void {
     setTimeout(() => { if (core2) core2.style.filter = '' }, 500)
   }
 
-  // Update receipt
+  // [ZT5-C] Receipt routed through brainStatsStore (single writer, store-driven JSX)
   const mode = w.S.mode?.toUpperCase() || 'AUTO'
   const score = w.BM.entryScore || 0
   const trig = w.BM.sweep?.type !== 'none' ? 'Sweep+Reclaim' : 'Displacement'
   const tfMap = PROFILE_TF?.[w.S.profile || 'fast']
   if (!tfMap) return
-  ;['rec-mode', 'rec-score', 'rec-trigger', 'rec-tf'].forEach((id: string, i: number) => {
-    const e = el(id)
-    if (e) e.textContent = [mode, score, trig, tfMap.trigger + '/' + tfMap.context][i]
+  useBrainStatsStore.getState().patchStats({
+    receipt: { mode, score: String(score), trigger: trig, tf: tfMap.trigger + '/' + tfMap.context },
   })
 }
 

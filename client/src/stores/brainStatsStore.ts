@@ -34,6 +34,37 @@ export interface BrainCenterOverlay {
   scoreColor: string
 }
 
+export interface BrainArmDetail {
+  mode: string
+  profile: string
+  score: string
+  trigger: string
+  tf: string
+  cooldown: string
+  gatesSummary: string
+  modeArmed: boolean
+  scoreArmed: boolean
+  triggerActive: boolean
+  cooldownReady: boolean
+}
+
+export interface BrainReceipt {
+  mode: string
+  score: string
+  trigger: string
+  tf: string
+}
+
+export interface BrainArmBadge {
+  text: string
+  cls: string
+}
+
+export interface BrainRegimeBadge {
+  innerHtml: string
+  cls: string
+}
+
 export interface BrainStatsSnapshot {
   gates: BrainStatsNode
   regime: BrainStatsNode
@@ -41,6 +72,11 @@ export interface BrainStatsSnapshot {
   auto: BrainStatsNode
   inner: BrainInnerValues
   center: BrainCenterOverlay
+  arm: BrainArmDetail
+  receipt: BrainReceipt
+  armBadge: BrainArmBadge
+  regimeBadge2: BrainRegimeBadge
+  regimeDetail: string
 }
 
 const emptyNode: BrainStatsNode = { text: '—', sub: '—', tone: 'neutral' }
@@ -53,6 +89,18 @@ const emptyCenter: BrainCenterOverlay = {
   mode: 'MANUAL', regime: '—', scoreText: '—', scoreTone: 'bad', scoreColor: '#ff3355',
 }
 
+const emptyArm: BrainArmDetail = {
+  mode: 'MANUAL', profile: 'FAST', score: '—', trigger: '—', tf: '—', cooldown: 'READY',
+  gatesSummary: 'Gates: —/— OK',
+  modeArmed: false, scoreArmed: false, triggerActive: false, cooldownReady: true,
+}
+
+const emptyReceipt: BrainReceipt = { mode: '—', score: '—', trigger: '—', tf: '—' }
+
+const emptyArmBadge: BrainArmBadge = { text: 'SCANNING', cls: 'znc-arm-badge scanning' }
+
+const emptyRegimeBadge: BrainRegimeBadge = { innerHtml: 'LOADING ▲', cls: 'znc-regime-val unknown' }
+
 export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   gates: emptyNode,
   regime: emptyNode,
@@ -60,6 +108,11 @@ export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   auto: emptyNode,
   inner: emptyInner,
   center: emptyCenter,
+  arm: emptyArm,
+  receipt: emptyReceipt,
+  armBadge: emptyArmBadge,
+  regimeBadge2: emptyRegimeBadge,
+  regimeDetail: 'ADX: — | VOL: — | STRUCT: —',
 }
 
 interface BrainStatsStoreState {

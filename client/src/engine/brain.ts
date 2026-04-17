@@ -1813,12 +1813,9 @@ export function renderBrainCockpit(): void {
   const badge = el('brainStateBadge')
   const stLabels: any = { scanning: 'SCANNING', analyzing: 'ANALYZING', armed: _ZI.bolt + ' ARMED', trading: _ZI.dRed + ' TRADING', protect: _ZI.sh + ' PROTECT', blocked: _ZI.noent + ' BLOCKED' }
   if (badge) { badge.innerHTML = stLabels[state] || state.toUpperCase(); badge.className = 'znc-state ' + state }
-  const armBadge = el('zncArmBadge')
-  if (armBadge) {
-    const armTxt = isArmed ? 'ARMED' : BM.protectMode ? 'PROTECT' : hasPos ? 'TRADING' : 'SCANNING'
-    armBadge.textContent = armTxt
-    armBadge.className = 'znc-arm-badge ' + (isArmed ? 'armed' : BM.protectMode ? 'protect' : hasPos ? 'trading' : 'scanning')
-  }
+  const armBadgeTxt = isArmed ? 'ARMED' : BM.protectMode ? 'PROTECT' : hasPos ? 'TRADING' : 'SCANNING'
+  const armBadgeCls = 'znc-arm-badge ' + (isArmed ? 'armed' : BM.protectMode ? 'protect' : hasPos ? 'trading' : 'scanning')
+  useBrainStatsStore.getState().patchStats({ armBadge: { text: armBadgeTxt, cls: armBadgeCls } })
 
   // ── CONTROL SOURCE ──
   const srcEl = el('znc-src')
@@ -1829,14 +1826,18 @@ export function renderBrainCockpit(): void {
   }
 
   // ── REGIME BADGES ──
-  const regLabels: any = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + _ZI.hex, panic: 'PANIC ' + _ZI.fire, unknown: '—' };
-  [el('brainRegimeBadge'), el('brainRegimeBadge2')].forEach((b: any) => {
-    if (!b) return
-    b.innerHTML = regLabels[BR.regime] || BR.regime
-    b.className = 'znc-regime-val ' + (BR.regime || 'unknown')
+  const regLabels: any = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + _ZI.hex, panic: 'PANIC ' + _ZI.fire, unknown: '—' }
+  const regInnerHtml = regLabels[BR.regime] || BR.regime || '—'
+  const regCls2 = 'znc-regime-val ' + (BR.regime || 'unknown')
+  // brainRegimeBadge (MTF mini row) kept imperative — outside ZT5-C scope
+  const mtfRb = el('brainRegimeBadge')
+  if (mtfRb) { mtfRb.innerHTML = regInnerHtml; mtfRb.className = regCls2 }
+  // [ZT5-C] brainRegimeBadge2 routed through store (right-column regime box)
+  const regDetailTxt = `ADX: ${regDat.adx || '—'} | VOL: ${regDat.volMode || '—'} | ${regDat.structure || '—'}${regDat.squeeze ? ' | SQZ' : ''}`
+  useBrainStatsStore.getState().patchStats({
+    regimeBadge2: { innerHtml: regInnerHtml, cls: regCls2 },
+    regimeDetail: regDetailTxt,
   })
-  const rd = el('zncRegimeDetail')
-  if (rd) rd.textContent = `ADX: ${regDat.adx || '—'} | VOL: ${regDat.volMode || '—'} | ${regDat.structure || '—'}${regDat.squeeze ? ' | SQZ' : ''}`
 
   // ── INSIGHT CARDS (use card IDs directly) ──
   const sw = BM.sweep
@@ -1885,20 +1886,27 @@ export function renderBrainCockpit(): void {
   // ── ARM DETAIL + TOP BLOCK REASON (uses S.* canonical) ──
   const trigType = sw.reclaim ? 'Sweep+Reclaim' : sw.displacement ? 'Displacement' : '—'
   const cdLeft = Math.max(0, Math.round((_getCooldownMs() - (Date.now() - (getATLastTradeTs() || 0))) / 60000))
-  const _ad = (id: any, v: any, arm?: any) => { const e = el(id); if (e) { e.textContent = v; if (arm !== undefined) e.style.color = arm ? '#39ff14' : '#2a4030' } }
-  _ad('zad-mode', mode.toUpperCase(), isArmed)
-  _ad('zad-profile', prof.toUpperCase() + '  ' + tfMap.trigger + '/' + tfMap.context + '/' + tfMap.bias)
-  _ad('zad-score', score + '/' + (isArmed ? '✓' : scoreThresh + '↑'), isArmed)
-  _ad('zad-trigger', trigType, ctx.trigger)
-  _ad('zad-tf', 'Trig:' + tfMap.trigger + ' Ctx:' + tfMap.context)
-  _ad('zad-cd', cdLeft > 0 ? cdLeft + 'm WAIT' : 'READY', cdLeft === 0)
 
-  // ── GATES SUMMARY + TOP BLOCK REASON ──
+  // ── GATES SUMMARY (computed here; routed with zad-* into store) ──
   const allGates = Object.assign({}, safety, { mtfCtx: ctx.mtf, flowCtx: ctx.flow, triggerCtx: ctx.trigger, antifakeCtx: !w._fakeout.invalid })
   const gatesOk = Object.values(allGates).filter(Boolean).length
   const gatesTotal = Object.keys(allGates).length
-  const gatesSumEl = el('zad-gates-summary')
-  if (gatesSumEl) gatesSumEl.textContent = `Gates: ${gatesOk}/${gatesTotal} pass`
+
+  useBrainStatsStore.getState().patchStats({
+    arm: {
+      mode: mode.toUpperCase(),
+      profile: prof.toUpperCase() + '  ' + tfMap.trigger + '/' + tfMap.context + '/' + tfMap.bias,
+      score: score + '/' + (isArmed ? '✓' : scoreThresh + '↑'),
+      trigger: trigType,
+      tf: 'Trig:' + tfMap.trigger + ' Ctx:' + tfMap.context,
+      cooldown: cdLeft > 0 ? cdLeft + 'm WAIT' : 'READY',
+      gatesSummary: `Gates: ${gatesOk}/${gatesTotal} pass`,
+      modeArmed: isArmed,
+      scoreArmed: isArmed,
+      triggerActive: !!ctx.trigger,
+      cooldownReady: cdLeft === 0,
+    },
+  })
 
   // Compute single TOP REASON why not entering
   let topReason = ''
@@ -1960,10 +1968,15 @@ export function renderBrainCockpit(): void {
     }
   }
 
-  // ── RECEIPT (ARM state) ──
+  // ── RECEIPT (ARM state) ── [ZT5-C] routed through store
   if (isArmed || hasPos) {
-    ['rec-mode', 'rec-score', 'rec-trigger', 'rec-tf'].forEach((id, i) => {
-      const e = el(id); if (e) e.textContent = [mode.toUpperCase(), score, trigType, tfMap.trigger + '/' + tfMap.context][i]
+    useBrainStatsStore.getState().patchStats({
+      receipt: {
+        mode: mode.toUpperCase(),
+        score: String(score),
+        trigger: trigType,
+        tf: tfMap.trigger + '/' + tfMap.context,
+      },
     })
   }
 

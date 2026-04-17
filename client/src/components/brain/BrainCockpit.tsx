@@ -1,6 +1,61 @@
 import { useRef, useEffect, memo } from 'react'
 import { resetProtectMode } from '../../engine/brain'
 import { BlockReasonText } from './BlockReasonText'
+import { useBrainStatsStore } from '../../stores/brainStatsStore'
+
+/** [ZT5-C] Store-driven consumers for right-column arm/regime/receipt */
+function ArmBadge() {
+  const s = useBrainStatsStore((st) => st.snapshot.armBadge)
+  return <div className={s.cls} id="zncArmBadge">{s.text}</div>
+}
+
+function RegimeBadge2() {
+  const s = useBrainStatsStore((st) => st.snapshot.regimeBadge2)
+  return <div className={s.cls} id="brainRegimeBadge2" dangerouslySetInnerHTML={{ __html: s.innerHtml }} />
+}
+
+function RegimeDetail() {
+  const s = useBrainStatsStore((st) => st.snapshot.regimeDetail)
+  return <div className="znc-regime-detail" id="zncRegimeDetail">{s}</div>
+}
+
+const ARM_FG_ON = '#39ff14'
+const ARM_FG_OFF = '#2a4030'
+
+function ArmDetail() {
+  const s = useBrainStatsStore((st) => st.snapshot.arm)
+  return (
+    <div className="znc-arm-detail">
+      <div className="znc-ad-title">AUTO-TRADE DETAIL</div>
+      <div className="znc-ad-row">Mode: <b id="zad-mode" style={{ color: s.modeArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.mode}</b></div>
+      <div className="znc-ad-row">Profile: <b id="zad-profile">{s.profile}</b></div>
+      <div className="znc-ad-row">Score: <b id="zad-score" style={{ color: s.scoreArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.score}</b></div>
+      <div className="znc-ad-row">Trigger: <b id="zad-trigger" style={{ color: s.triggerActive ? ARM_FG_ON : ARM_FG_OFF }}>{s.trigger}</b></div>
+      <div className="znc-ad-row">TF: <b id="zad-tf">{s.tf}</b></div>
+      <div className="znc-ad-row">Cooldown: <b id="zad-cd" style={{ color: s.cooldownReady ? ARM_FG_ON : ARM_FG_OFF }}>{s.cooldown}</b></div>
+      <div className="znc-gates-summary" id="zad-gates-summary">{s.gatesSummary}</div>
+      <BlockReasonText />{/* [R30] store-driven subscriber — memo'd parent preserved */}
+    </div>
+  )
+}
+
+function ReceiptBlock() {
+  const s = useBrainStatsStore((st) => st.snapshot.receipt)
+  return (
+    <div className="znc-receipt" id="zncReceipt">
+      <div className="znc-receipt-title">EXECUTION RECEIPT</div>
+      <div className="znc-receipt-row">Mode: <b id="rec-mode">{s.mode}</b></div>
+      <div className="znc-receipt-row">Score: <b id="rec-score">{s.score}</b></div>
+      <div className="znc-receipt-row">Trigger: <b id="rec-trigger">{s.trigger}</b></div>
+      <div className="znc-receipt-row">TF: <b id="rec-tf">{s.tf}</b></div>
+      <div className="znc-receipt-bolt">
+        <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}>
+          <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
+        </svg>
+      </div>
+    </div>
+  )
+}
 
 /**
  * 1:1 port of the ZEUS NEURAL CORE panel from public/index.html lines 1127-1570
@@ -219,17 +274,17 @@ export const BrainCockpit = memo(function BrainCockpit() {
             </div>
           </div>
 
-          {/* ARM STATUS */}
+          {/* ARM STATUS — store-driven */}
           <div className="znc-arm-box">
             <div className="znc-arm-lbl">AUTO-TRADE:</div>
-            <div className="znc-arm-badge scanning" id="zncArmBadge">SCANNING</div>
+            <ArmBadge />
           </div>
 
-          {/* REGIME */}
+          {/* REGIME — store-driven */}
           <div className="znc-regime-box">
             <div className="znc-regime-lbl">REGIME</div>
-            <div className="znc-regime-val unknown" id="brainRegimeBadge2">LOADING ▲</div>
-            <div className="znc-regime-detail" id="zncRegimeDetail">ADX: — | VOL: — | STRUCT: —</div>
+            <RegimeBadge2 />
+            <RegimeDetail />
           </div>
 
           {/* THREAT RADAR */}
@@ -260,32 +315,9 @@ export const BrainCockpit = memo(function BrainCockpit() {
             <div id="zncSessionBar"></div>
           </div>
 
-          {/* ARM DETAIL */}
-          <div className="znc-arm-detail">
-            <div className="znc-ad-title">AUTO-TRADE DETAIL</div>
-            <div className="znc-ad-row">Mode: <b id="zad-mode">MANUAL</b></div>
-            <div className="znc-ad-row">Profile: <b id="zad-profile">FAST</b></div>
-            <div className="znc-ad-row">Score: <b id="zad-score">—</b></div>
-            <div className="znc-ad-row">Trigger: <b id="zad-trigger">—</b></div>
-            <div className="znc-ad-row">TF: <b id="zad-tf">—</b></div>
-            <div className="znc-ad-row">Cooldown: <b id="zad-cd">READY</b></div>
-            <div className="znc-gates-summary" id="zad-gates-summary">Gates: —/— OK</div>
-            <BlockReasonText />{/* [R30] store-driven subscriber — memo'd parent preserved */}
-          </div>
-
-          {/* EXECUTION RECEIPT */}
-          <div className="znc-receipt" id="zncReceipt">
-            <div className="znc-receipt-title">EXECUTION RECEIPT</div>
-            <div className="znc-receipt-row">Mode: <b id="rec-mode">—</b></div>
-            <div className="znc-receipt-row">Score: <b id="rec-score">—</b></div>
-            <div className="znc-receipt-row">Trigger: <b id="rec-trigger">—</b></div>
-            <div className="znc-receipt-row">TF: <b id="rec-tf">—</b></div>
-            <div className="znc-receipt-bolt">
-              <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}>
-                <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
-              </svg>
-            </div>
-          </div>
+          {/* ARM DETAIL + EXECUTION RECEIPT — store-driven */}
+          <ArmDetail />
+          <ReceiptBlock />
 
           {/* OFI compact */}
           <div className="znc-ofi">
