@@ -75,3 +75,39 @@ The 16KB file size is dominated by the import list (~120 lines of imports), not 
 - **ZT8 estimate revised down**: 30 min instead of 3h. Scope: remove 6 dead imports + rewrite header comment + commit. No structural changes.
 - **Bridge residue item** (audit quantum §3.3): reclassified from DEBT → BY-DESIGN LEGITIM with dovadă scrisă.
 - **"100+ window exports" claim**: OVERSTATED in audit; real is 24, all with documented purpose.
+
+---
+
+## Status post-ZT execution (appended 2026-04-17)
+
+The table above captures the pre-lot state. Post-execution reality:
+
+- **Direct window slots: 21** (not 24). Three bindings were removed after
+  their readers were eliminated or never existed:
+  - `w.procLiq` — removed in ZT8. Zero readers anywhere; the three
+    internal callers inside `marketDataWS.ts` didn't need the binding.
+  - `w.showTab` — removed in ZT8. Zero readers across TS/React; the
+    `/legacy/` bundle has its own local `function showTab()` in
+    `public/legacy/js/data/marketData.js:1666`.
+  - `w.testNotification` — removed in ZT10. The only React reader
+    (`AlertsModal.tsx`) was switched to a direct named import, so the
+    binding became dead. The earlier "legacy HTML onclick" rationale
+    was wrong: the `/legacy/` bundle resolves its own
+    `function testNotification()` via module-local scope.
+- **Remaining 21 slots**: 1 ZT_safeInterval + 5 config/state refs
+  (MSCAN/DHF/PERF/ARM_ASSIST/_fakeout) + 10 chart-series refs
+  (cSeries/cvdS/cvdChart/volS/ema50S/ema200S/wma20S/wma50S/stS/srSeries)
+  + 5 cross-call handlers (_showConfirmDialog, calcPosPnL, getDemoLev,
+  updateDemoLiqPrice, updateDemoBalance). Each verified live.
+- **Export-surface follow-on (ZT11)**: the `showTab` export was
+  deleted entirely; `procLiq` was demoted from `export function` to
+  module-private. Internal callers unchanged.
+- **Dead named imports** flagged in §"Dead imports" above were cleaned
+  as part of the ZT2-B bulk TS6133/TS6192 sweep, not ZT8.
+- **Side-effect imports (~60 bare `import '…'` lines)**: unchanged.
+  Still intentional composition, not debt.
+
+Close trail: `docs/close-plan-v2/ZT8_FULL_CLOSE_REPORT.md`,
+`ZT10_FULL_CLOSE_REPORT.md`, `ZT11_FULL_CLOSE_REPORT.md`.
+The authoritative live count and classification lives in the header
+comment of `client/src/bridge/phase1Adapters.ts` itself.

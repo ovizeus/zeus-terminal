@@ -85,3 +85,41 @@ Audit quantum claimed 36 transitions (7 HYBRID + 21 STORE CANDIDATE + 8 BRIDGE).
 8. Mark FUTURE v3.0 BRIDGE explicitly similarly
 
 Target delta: 33 live transitions → 22 cutover + 11 justified KEEP.
+
+---
+
+## Status post-ZT7 execution (appended 2026-04-17)
+
+The cutover plan above assumed Zustand stores were populated in
+lockstep with legacy engine writers. ZT7 discovered this assumption
+was false for most STORE CANDIDATE accessors: `w.S`, `w.AT`, `w.DSL`,
+`w.TP`, `w.TC` are plain mutable objects written by legacy engines
+without any Zustand bridge. Only `useATBridge` (10 fields) and a
+handful of `setMarket`/`setBrain` calls in specific engines actually
+maintain lockstep sync.
+
+Actual ZT7 outcome:
+
+- **3 accessors flipped store-first with fallback** (the bridged
+  fields that ARE actually populated in lockstep): `getATMode`,
+  `getATClosedToday`, `getATDailyPnL`. Each now tries
+  `useATStore.getState()` first and falls back to `w.AT` on throw or
+  missing field.
+- **17 accessors reclassified as POPULATION DEBT** in the R14
+  docstring at the head of `stateAccessors.ts`. Category
+  `STORE CANDIDATE — POPULATION DEBT` means: the store type declares
+  the field, but no writer mirrors the legacy object into the store,
+  so flipping the read side would return stale/empty values. Unblocking
+  each one is a per-engine population lot, not a leaf-level cutover.
+- **HYBRID BY DESIGN / BRIDGE — NO CANONICAL STORE / MANUAL DSL
+  STANDARD / CLOSED (store-backed)** classifications preserved as
+  originally documented; they were never in ZT7's scope.
+- **Accessor total**: 44 exports (the triage above counted 43; the
+  ZT7 audit recounted the module and confirmed 44).
+
+ZT7 did NOT complete the planned "22 cutover" — that plan assumed
+populated stores that do not in fact exist. The honest refined state
+lives in the four-bucket classification header of
+`client/src/services/stateAccessors.ts`.
+
+Close trail: `docs/close-plan-v2/ZT7_FULL_CLOSE_REPORT.md`.

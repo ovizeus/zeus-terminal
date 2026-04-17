@@ -164,3 +164,44 @@ The ~20 keys R21 handled are already scoped at read/write sites with `_userKey(k
 Expected outcome: 25 user-scoped + 16 device-global + 0 unscoped.
 
 Cross-user pollution risk eliminated.
+
+---
+
+## Status post-ZT6 execution (appended 2026-04-17)
+
+The plan above assumed the sweep would need to introduce per-user
+scoping. ZT6 discovered the scoping infrastructure already existed:
+
+- `client/src/core/state.ts::_initUserScopedStorage()` (lines 29–152)
+  installs a whitelist-driven wrapper over
+  `localStorage.{get,set,remove}Item` at module load. Any key in
+  `_USER_KEYS` or prefixed by `_USER_PREFIXES` gets `:<uid>` appended
+  transparently; pre-existing global values are migrated once on first
+  login. Logout cleanup is exposed via `window._lsClearUser()`.
+
+So ZT6 became a **whitelist audit**, not a scoping rewrite. What it
+actually did:
+
+- **Used-but-not-whitelisted audit** flagged one real privacy bug:
+  `zeus_pin_unlocked_until` was global. Fixed in ZT6 — now
+  whitelisted and scoped per-user. `zeus_tab_leader` and
+  `zeus_app_version` were confirmed intentionally global and
+  documented as such.
+- **Whitelist rot cleanup**: removed three orphan entries from the
+  teacher-v2 migration (`zeus_teacher_enabled`, `zeus_teacher_mode`,
+  `zeus_teacher_sessionState`) that had no live writer.
+- **Key count reconciliation**: the 41-key table above was based on a
+  first-pass grep. ZT6's canonical audit found **64 unique keys**
+  across 218 call-sites in 33 files after resolving 14 variable-held
+  keys (`LS_KEY`/`KEY`/`POS_KEY`) to their const definitions. The
+  per-category counts in this triage (settings/trading/teacher/AUB/
+  aria-nova/ARES) are therefore undercounts, but the scoping
+  decision for each was already correct because the whitelist covered
+  most of them pre-ZT6.
+
+ZT6 did NOT execute the "25 unscoped → scope each" plan literally —
+the great majority were already scoped via the existing whitelist.
+The real outcome was a targeted bug fix (`zeus_pin_unlocked_until`) +
+rot removal + documented intentional globals.
+
+Close trail: `docs/close-plan-v2/ZT6_FULL_CLOSE_REPORT.md`.

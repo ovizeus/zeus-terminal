@@ -184,3 +184,21 @@ Next natural follow-ons (unchanged from R37 close sign-off):
 - R28.2 full ARES conversion
 - Code-split pass (chunk size)
 - Bridge contract redesign (drop `as any` escape hatch)
+
+---
+
+## Addendum (2026-04-17) — follow-on closures
+
+Two of the three deferrals above have since been closed:
+
+- **R28.2 full ARES conversion** — CLOSED REAL via sub-lots
+  R28.2-A…I. See `docs/POST-V2-R28.2-CLOSE-REPORT.md`.
+- **Bridge contract residue** — reduced (not rewritten) via the ZT
+  chain in `docs/close-plan-v2/`. The bridge surface went from 24
+  direct window slots at ZT1.b triage time to 21 post-ZT11. The three
+  removed bindings (`procLiq`, `showTab`, `testNotification`) were
+  each verified as zero-reader before deletion. The `as any`
+  escape-hatch contract itself was NOT rewritten — still tracked as
+  multi-day work.
+
+Chunk-size / code-split pass remains deferred.

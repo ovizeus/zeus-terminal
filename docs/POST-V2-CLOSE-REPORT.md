@@ -104,3 +104,32 @@ pm2 restart zeus && sleep 5 && pm2 logs zeus --err --lines 10 --nostream
 POST-v2 MEGA AUDIT closed. Branch `post-v2/real-finish` is merge-ready against the v2 baseline.
 
 Next natural follow-ons (not part of this close): **R28.2** full ARES conversion, chunk-splitting pass, and a proper bridge-contract redesign that lets us drop the `as any` escape hatch at file scope.
+
+---
+
+## Addendum (2026-04-17) — follow-on closures
+
+The R17–R37 pass above was extended after this report sealed:
+
+- **R28.2 full ARES store-driven conversion** — CLOSED REAL through
+  sub-lots R28.2-A…I. Tracked in `docs/POST-V2-R28.2-CLOSE-REPORT.md`.
+- **Master Zero-Tail Close Plan v2 (ZT1–ZT13)** — a separate,
+  post-R37 cleanup chain targeting the residues identified by the
+  adversarial audit. Per-lot close reports live in
+  `docs/close-plan-v2/ZT{N}_FULL_CLOSE_REPORT.md`. Notable outcomes:
+  - ZT2 family — tsc principal driven to 0 on `tsconfig.app.json`.
+  - ZT6 — localStorage per-user whitelist verified + one real privacy
+    bug fixed (`zeus_pin_unlocked_until`).
+  - ZT7 — accessor triage re-done with four-bucket classification
+    (STORE-BACKED / POPULATION DEBT / HYBRID BY DESIGN / BRIDGE).
+  - ZT8/ZT10/ZT11 — bridge surface reduced from 24 → 21 direct window
+    slots; `procLiq`/`showTab`/`testNotification` removed and their
+    export-surface follow-ons closed.
+  - ZT9 — final raw `fetch('/api/user/telegram…')` call sites migrated
+    to typed `telegramApi`; Telegram tab RO→EN.
+
+The bridge language in §3 ("by design for v2") still holds — the
+residual 21 slots are documented composition, not debt. The "416
+occurrences of `as any`" number in §2 is a point-in-time R34
+measurement and was not re-audited by the ZT chain; treat as
+ballpark, not current-truth.
