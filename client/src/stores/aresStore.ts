@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { api } from '../services/api'
+import type { AresStoreUI } from '../types/ares'
+import { DEFAULT_ARES_UI } from '../types/ares'
 
 const DEFAULT_ARES = {
   balance: 0,
@@ -24,15 +26,25 @@ interface AresStoreState {
   loaded: boolean
   saving: boolean
 
+  /** [R28.2] UI slice — mirrors aresUI.ts DOM render output. */
+  ui: AresStoreUI
+
   loadFromServer: () => Promise<void>
   saveToServer: () => Promise<void>
   patch: (partial: Partial<AresStoreState>) => void
+
+  /** [R28.2] Merge a partial UI update produced by the engine sync adapter. */
+  patchUi: (partial: Partial<AresStoreUI>) => void
+
+  /** [R28.2] Strip-bar open/closed toggle (replaces imperative #ares-strip style mutations). */
+  setStripOpen: (open: boolean) => void
 }
 
 export const useAresStore = create<AresStoreState>()((set, getState) => ({
   ...DEFAULT_ARES,
   loaded: false,
   saving: false,
+  ui: DEFAULT_ARES_UI,
 
   loadFromServer: async () => {
     try {
@@ -40,10 +52,8 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
       const server = (data.ok && data.ares) ? data.ares : {}
       const merged = { ...DEFAULT_ARES, ...server }
       set({ ...merged, loaded: true })
-      // Bridge invers: sync to engine localStorage
       _syncToEngine(merged)
     } catch (_) {
-      // Fallback: read from engine state
       _readFromEngine(set)
       set({ loaded: true })
     }
@@ -72,13 +82,16 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
   },
 
   patch: (partial) => set((s) => ({ ...s, ...partial })),
+
+  patchUi: (partial) => set((s) => ({ ui: { ...s.ui, ...partial } })),
+
+  setStripOpen: (open) => set((s) => ({ ui: { ...s.ui, stripOpen: open } })),
 }))
 
 /** Read ARES state from engine (localStorage/window.ARES) */
 function _readFromEngine(set: any) {
   const w = window as any
   try {
-    // Try engine objects first
     const wallet = w.ARES?.wallet || w.ARES_WALLET
     const positions = w.ARES?.positions || w.ARES_POSITIONS
     if (wallet) {
@@ -93,7 +106,6 @@ function _readFromEngine(set: any) {
     if (positions && typeof positions.getAll === 'function') {
       set({ positions: positions.getAll() || [] })
     }
-    // Stage from ARES state
     const state = w.ARES?.getState?.()
     if (state) {
       set({ stageName: state.stage || 'SEED', stageProgress: state.progress || 0 })
