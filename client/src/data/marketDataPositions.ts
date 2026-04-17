@@ -319,7 +319,27 @@ export function renderLivePositions(): void {
 export function closeLivePos(id: any, reason?: string): void {
   const strId = String(id); const idx = TP.livePositions.findIndex((p: any) => String(p.id) === strId); if (idx < 0) return
   const pos = TP.livePositions[idx]; if (pos.status === 'closing' || pos.closed) return
-  if (w._serverATEnabled && pos._serverSeq) { if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id); api.raw<any>('POST', '/api/at/close', { seq: pos._serverSeq }).then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) }).catch(function () { }) }
+  // [R1] Server-managed position close — unconditional when _serverSeq exists (symmetry with closeDemoPos)
+  if (pos._serverSeq) {
+    if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id)
+    const _closeSeq = pos._serverSeq
+    const _closeId = pos.id
+    const _doServerClose = function (attempt: number) {
+      api.raw<any>('POST', '/api/at/close', { seq: _closeSeq })
+        .then(function (d: any) {
+          if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(_closeSeq)
+        })
+        .catch(function (err: any) {
+          if (attempt < 2) {
+            setTimeout(function () { _doServerClose(attempt + 1) }, 2000 * attempt)
+          } else {
+            w._zeusCloseFailedSeqs = w._zeusCloseFailedSeqs || []
+            w._zeusCloseFailedSeqs.push({ seq: _closeSeq, id: _closeId, ts: Date.now() })
+          }
+        })
+    }
+    _doServerClose(1)
+  }
   if (typeof w.Intervals !== 'undefined' && w.Intervals.clear) w.Intervals.clear('posCheck_' + pos.id)
   const cur = getSymPrice(pos) || pos.entry; const pnl = (cur && Number.isFinite(cur) && cur > 0) ? calcPosPnL(pos, cur) : 0; pos.pnl = pnl; pos.status = 'closing'
   atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
