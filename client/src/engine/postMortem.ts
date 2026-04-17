@@ -321,7 +321,7 @@ export function initPMPanel(): void {
   const panel = document.createElement('div')
   panel.id = 'pm-strip'
   panel.innerHTML = `
-    <div id="pm-strip-bar" onclick="this.closest('#pm-strip').classList.toggle('open');PM_render()">
+    <div id="pm-strip-bar">
       <div class="v6-accent"><div class="v6-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="6"/><line x1="12" y1="16" x2="12" y2="22"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="10" y1="8" x2="10" y2="12"/><line x1="14" y1="8" x2="14" y2="12"/></svg></div><span class="v6-lbl">POST<br>MORT</span></div>
       <div class="v6-content">
         <div id="pm-strip-title"><span>POST-MORTEM</span></div>
@@ -338,6 +338,18 @@ export function initPMPanel(): void {
     </div>`
 
   srStrip.insertAdjacentElement('afterend', panel)
+
+  // ZT10: replaced inline `onclick="…PM_render()"` with a real listener.
+  // PM_render was never bound to window, so the inline call silently
+  // threw a ReferenceError after the classList.toggle ran.
+  const bar = panel.querySelector<HTMLDivElement>('#pm-strip-bar')
+  if (bar) {
+    bar.style.cursor = 'pointer'
+    bar.addEventListener('click', () => {
+      panel.classList.toggle('open')
+      PM_render()
+    })
+  }
 
   const stat = document.getElementById('pm-strip-stat')
   if (stat) {

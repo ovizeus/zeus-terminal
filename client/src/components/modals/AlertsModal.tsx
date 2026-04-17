@@ -2,7 +2,7 @@
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
 import { toggleAlerts } from '../../ui/dom2'
-import { injectFakeWhale, toggleSnd, saveAlerts } from '../../data/marketDataWS'
+import { injectFakeWhale, toggleSnd, saveAlerts, testNotification } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -126,7 +126,7 @@ export function AlertsModal({ visible, onClose }: Props) {
             <button style={{
               flex: 1, padding: 8, background: 'var(--gold)', color: '#000', border: 'none',
               borderRadius: 4, fontSize: 9, cursor: 'pointer', fontFamily: 'var(--ff)'
-            }} onClick={() => w.testNotification?.()}>Test Notification</button>
+            }} onClick={() => testNotification()}>Test Notification</button>
             <button style={{
               flex: 1, padding: 8, background: '#00b8d4', color: '#000', border: 'none',
               borderRadius: 4, fontSize: 9, cursor: 'pointer', fontFamily: 'var(--ff)'

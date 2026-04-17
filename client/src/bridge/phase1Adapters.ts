@@ -4,15 +4,18 @@
  *
  * Called from legacyLoader.ts installShims() BEFORE any old JS loads.
  *
- * ZT8 resolution (2026-04-17): bridge surface = 22 direct window slots +
- * ~60 side-effect imports for module self-registration (IIFEs that run
- * at module-load time). The side-effect import list is intentional
+ * ZT10 resolution (2026-04-17): bridge surface = 21 direct window slots
+ * + ~60 side-effect imports for module self-registration (IIFEs that
+ * run at module-load time). The side-effect import list is intentional
  * composition, NOT migration debt — each module self-registers on
  * `window` through its own IIFE; those cannot be removed without
  * rewriting every consumer. In ZT2-B the file was reduced from ~200
  * named imports to only those used in the function body. ZT8 removed
- * two verified-dead bindings (`w.procLiq`, `w.showTab`): neither had a
- * reader in TS, React, or legacy HTML onclick.
+ * `w.procLiq` and `w.showTab` (0 readers). ZT10 removed
+ * `w.testNotification`: the only React reader (AlertsModal.tsx) now
+ * imports the function directly; the /legacy/ bundle has its own local
+ * `testNotification()` defined in public/legacy/js/data/marketData.js,
+ * so the window binding had no surviving reader.
  *
  * What remains in the function body:
  *   - ZT_safeInterval shim (arianova.ts IIFE looks it up on window)
@@ -21,10 +24,9 @@
  *   - 10 chart-series refs (null/[] init; real values written by
  *     marketDataChart.ts after chart creation — the null init keeps
  *     typeof checks from throwing before initCharts runs)
- *   - 5 onclick="" / cross-call handlers (_showConfirmDialog, calcPosPnL,
- *     getDemoLev, updateDemoLiqPrice, updateDemoBalance)
- *   - 1 legacy HTML onclick (testNotification — bound by
- *     public/legacy/index.html:3123 + AlertsModal.tsx)
+ *   - 5 cross-call handlers (_showConfirmDialog, calcPosPnL, getDemoLev,
+ *     updateDemoLiqPrice, updateDemoBalance) — called via window from
+ *     circular-dep or legacy-adjacent call sites
  *   - 5 manager force-registration void refs (Intervals, WS, FetchLock,
  *     ingestPrice, Timeouts) — trigger module-body side-effects
  *   - initIndicatorState() — must run before other engines read state
@@ -43,7 +45,6 @@ import {
   updateDemoBalance,
 } from '../data/marketDataTrading'
 import '../data/marketDataChart'
-import { testNotification } from '../data/marketDataWS'
 import '../data/marketDataFeeds'
 import '../data/marketDataOverlays'
 import '../data/marketDataHelpers'
@@ -197,7 +198,6 @@ export function installPhase1Adapters(): void {
   w.getDemoLev = getDemoLev
   w.updateDemoLiqPrice = updateDemoLiqPrice
   w.updateDemoBalance = updateDemoBalance
-  w.testNotification = testNotification
 
   // Force managers.ts to run its top-level side-effect registration.
   void Intervals; void WS; void FetchLock; void ingestPrice; void Timeouts
