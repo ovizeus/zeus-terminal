@@ -122,12 +122,30 @@ import { _actfeedToggle } from '../core/bootstrapError'
 import { _pinIsSet, pinUnlock, pinActivate, pinRemove, _pinUpdateUI, _showWelcomeModal, registerServiceWorker as _bsRegisterSW, showPWAUpdateBanner, hidePWAUpdateBanner, setPWAVersion, masterReset } from '../core/bootstrapMisc'
 import { initZeusGroups, _startExtras, runHealthChecks, _updatePnlLabCondensed } from '../core/bootstrapInit'
 
+/**
+ * [R23] Function body is the *true* surface of the bridge after the 7-phase
+ * port to TS. Almost everything that used to live here is now a direct
+ * import — see the named imports above for the modules whose side-effect
+ * registration still needs to happen at bridge-install time.
+ *
+ * What remains here:
+ *   - ZT_safeInterval shim (config.js used to define this globally; some
+ *     IIFEs still look it up by name on window)
+ *   - A small set of window.* bindings for modules that can't import each
+ *     other due to circular deps, or are read by onclick="" attributes in
+ *     static HTML (showTab, testNotification)
+ *   - Chart-series globals that marketData.js (still bridge-active in a
+ *     couple of paths) dereferences
+ *   - initIndicatorState() — must run before other engines read state
+ */
 export function installPhase1Adapters(): void {
   const w = window as Record<string, unknown>
 
-  // ── Shim: ZT_safeInterval (defined in config.js, needed by arianova.ts at import time) ──
+  // ZT_safeInterval: config.js defined it globally; arianova.ts IIFE reads
+  // it from window at import time, so it must exist before any module body
+  // runs.
   if (typeof (w as any).ZT_safeInterval !== 'function') {
-    (w as any).ZT_safeInterval = function (name: string, fn: any, ms?: number) {
+    (w as any).ZT_safeInterval = function (name: string, fn: any, _ms?: number) {
       try {
         if (!(w as any).__ZT_INT_ERR__) (w as any).__ZT_INT_ERR__ = {}
         const wrap = function () {
@@ -142,63 +160,16 @@ export function installPhase1Adapters(): void {
     }
   }
 
-  // ── Phase 1: helpers.js ──
-  // w.el = el  // REMOVED — consumers now import { el } from utils/dom directly
+  // config.ts/state.ts exports read by onclick="" attributes in static HTML
+  // or by circular-dep consumers that can't import directly.
+  w.MSCAN = MSCAN
+  w.DHF = DHF
+  w.PERF = PERF
+  w.ARM_ASSIST = ARM_ASSIST
+  w._fakeout = _fakeout
 
-  // ── Phase 1: formatters.js ──
-
-
-  // ── Phase 1: icons.js ──  (moved to direct imports — earlyShims handles window init)
-
-  // ── Phase 2: constants.js ──
-  // MACRO_MULT — removed (direct import)
-  // GATE_DEFS — removed (direct import)
-  // NOTE: _SESS_DEF, _SESS_PRIORITY, _NEURO_SYMS are defined in config.js (still bridge-loaded)
-  // constants.js just re-exported them — config.js will set them on window itself
-
-  // ── Phase 2: events.js ──
-  // PREDATOR — removed (direct import)
-  // computePredatorState — removed (direct import)
-  // attachConfirmClose — removed (direct import)
-
-  // ── Phase 3: tabLeader.js ──
-
-  // ── Phase 3: storage.js ──
-  // addTradeToJournal — removed (direct import)
-  // renderTradeJournal — removed (direct import)
-  // loadJournalFromStorage — removed (direct import)
-
-  // trackOIDelta — removed (direct import)
-
-  // ── Phase 3: symbols.js ──
-  // connectWatchlist — removed (direct import)
-  // switchWLSymbol — removed (direct import)
-
-  // ── Phase 4: perfStore.js ──
-
-  // loadPerfFromStorage — removed (direct import)
-  // calcGlobalExpectancy — removed (direct import)
-  // calcExpectancyByProfile — removed (direct import)
-
-  // ── Phase 4: dailyPnl.js ──
-
-
-  // loadDailyPnl — removed (direct import)
-
-  // ── config.ts exports → window.* ──
-  // _AN_KEY_N — removed (direct import)
-  // _AN_KEY_A — removed (direct import)
-  // NOTIFICATION_CENTER — removed (direct import)
-  /* MSCAN_SYMS — removed (direct import) */ w.MSCAN = MSCAN; w.DHF = DHF; w.PERF = PERF
-  // SESS_CFG — removed (direct import)
-  /* PROFILE_TF — removed (direct import) */ w.ARM_ASSIST = ARM_ASSIST; /* NEWS — removed (self-ref in config.ts) */
-  /* _regimeHistory — removed (direct import) */ w._fakeout = _fakeout
-  // _NEURO_SYMS — removed (direct import)
-  // _SESS_DEF — removed (direct import)
-  /* _srUpdateStats — removed (direct import) */ /* _srRenderStats — removed (direct import) */
-  // state.ts exports
-  // Chart series refs — start as null/undefined, set by initCharts() in marketDataChart.ts
-  // Bridge marketData.js renderChart() references these as globals
+  // Chart-series refs: marketData.js (bridge-active) reads these as globals.
+  // Initialized to null/[] so it doesn't crash before initCharts() runs.
   if (w.cSeries === undefined) w.cSeries = null
   if (w.cvdS === undefined) w.cvdS = null
   if (w.cvdChart === undefined) w.cvdChart = null
@@ -210,276 +181,18 @@ export function installPhase1Adapters(): void {
   if (w.stS === undefined) w.stS = null
   if (w.srSeries === undefined) w.srSeries = []
 
-  // ── Phase 8E: bootstrap panels (coexist) ──
-
-  // ── Phase 8D: bootstrap error + dlog + actfeed (coexist) ──
-
-  // ── Phase 8C: bootstrap misc (coexist) ──
-  /* _pinCheckLock — removed (direct import) */
-  // _pinUpdateUI — removed (direct import)
-  // _showWelcomeModal — removed (direct import)
-  /* setupPWAReloadBtn — removed (direct import) */
-
-  // ── Phase 8B: startApp (coexist — bootstrap.js still defines startApp for bridge) ──
-
-  // ── Phase 8A: bootstrap init (coexist — bootstrap.js still in bridge for startApp) ──
-
-  // _updatePnlLabCondensed — removed (direct import)
-
-  // ── Phase 7F-G: closeDemoPos (coexist) ──
-  // closeDemoPos — removed (direct import)
-
-  // ── Phase 7F-F: marketData positions (coexist) ──
-
-  /* renderDemoPositions — removed (direct import) */ w.calcPosPnL = calcPosPnL
-  // renderLivePositions — removed (direct import)
-  // closeLivePos — removed (direct import)
-  // getSymPrice (from positions) — removed (direct import)
-
-  // ── Phase 7F-E: marketData trading (coexist) ──
-  // switchGlobalMode — removed (direct import) /* _applyGlobalModeUI — removed (direct import) */
-  // promptAddFunds — removed (direct import) /* promptResetDemo — removed (direct import) */
-  // Expose _showConfirmDialog on window for modules that can't import it directly (circular dep).
+  // Circular-dep escape hatches + HTML onclick="" bindings.
   w._showConfirmDialog = _showConfirmDialog
-  // setLiveSide — removed (direct import)
-  /* onDemoOrdTypeChange — removed (direct import) */ w.getDemoLev = getDemoLev; /* getLiveLev — removed (direct import) */
-  /* onDemoLevChange — removed (direct import) */ /* onLiveLevChange — removed (direct import) */
-  /* calcLiqPrice — removed (direct import) */ w.updateDemoLiqPrice = updateDemoLiqPrice; /* updateLiveLiqPrice — removed (direct import) */
-  /* setLivePct — removed (direct import) */ w.updateDemoBalance = updateDemoBalance
-  /* placeDemoOrder — removed (direct import) */ /* getSymPrice (from trading) — removed (direct import) */
+  w.calcPosPnL = calcPosPnL
+  w.getDemoLev = getDemoLev
+  w.updateDemoLiqPrice = updateDemoLiqPrice
+  w.updateDemoBalance = updateDemoBalance
+  w.procLiq = procLiq
+  w.showTab = showTab
+  w.testNotification = testNotification
 
-  // ── Phase 7F-B: marketData chart (coexist) ──
-  // getChartW — removed (direct import)
-  // getChartH — removed (direct import)
-
-  // ── Phase 7F-D2: marketData WS (coexist — old JS re-declares same functions) ──
-  // connectBNB — removed (direct import)
-  /* updConn — removed (direct import) */ w.procLiq = procLiq
-  /* setSymbol — removed (direct import) */ /* toggleSnd — removed (direct import) */
-  /* updateMainMetrics — removed (direct import) */ w.showTab = showTab
-  // setTZ — removed (direct import)
-  /* sendAlert — removed (direct import) */ /* registerServiceWorker — removed (direct import) */
-  /* checkLiqAlert — removed (direct import) */ w.testNotification = testNotification; /* saveAlerts — removed (direct import) */
-  // injectFakeWhale — removed (direct import)
-  // cloudClear — removed (direct import)
-  // cloudLoad — removed (direct import)
-  // cloudSave — removed (direct import)
-
-  // ── Phase 7F-D1: marketData feeds (coexist — old JS re-declares same functions) ──
-  // setTf — removed (direct import)
-  // toggleFS — removed (direct import)
-  /* updateMetrics — removed (direct import) */ /* calcSRTable — removed (self-ref in marketDataFeeds) */
-
-  // ── Phase 7F-C: marketData overlays (coexist — old JS re-declares same functions) ──
-  // updOvrs — removed (direct import)
-  // togOvr — removed (direct import)
-  // clearSR — removed (direct import)
-  // renderTradeMarkers — removed (direct import)
-  // llv*, renderHeatmapOverlay, renderSROverlay — removed (direct imports)
-
-  // ── Phase 7F-A: marketData helpers ──
-  // Dynamic timezone versions REPLACE the static ones from format.ts
-  // Old JS and ported TS modules consume these via window.*
-  // _calcATRSeries — removed (direct import)
-  // _escHtml: NOT set here — escHtml from dom.ts (Phase 1) is already on window
-
-  // ── Phase 7B: panels + render ──
-  // scanLiquidityMagnets — removed (direct import)
-
-  // renderVWAP — removed (direct import)
-  // toggleVWAP — removed (direct import)
-  // renderOviLiquid — removed (direct import)
-
-  // toggleSession — removed (direct import)
-  // renderPerfTracker — removed (direct import)
-  // getCurrentADX — removed (direct import)
-  // updateQuantumClock — removed (direct import)
-  // updateBrainExtension — removed (direct import)
-  // isCurrentTimeOK — removed (direct import)
-  // renderDHF — removed (direct import)
-
-  // ── Phase 7A: patch, hotkeys, pageview, marketCoreReactor, klines ──
-  // patch.ts, hotkeys.ts, marketCoreReactor.ts — side-effect imports, self-register
-  // openPageView — removed (direct import)
-  /* closePageView — removed (self-ref in pageview.ts) */
-  // calcADX — removed (direct import)
-  // fetchSymbolKlines — removed (direct import)
-  // _updateWhyBlocked — removed (direct import)
-
-  // runMultiSymbolAutoTrade, toggleMultiSymMode — removed (self-ref)
-  // _mscanUpdateLabel — removed (direct import)
-
-  // mscanPickAll — removed (self-ref)
-
-  // ── Phase 6E: ui leaf files ──
-  /* _initAudio — removed (direct import) */
-  // playAlertSound, toggleAlerts, initActBar — removed (direct imports)
-  // togInd — removed (direct import)
-
-  // updateModeBar — removed (direct import)
-  // initZeusDock — removed (direct import)
-  // dockClearActive — removed (direct import)
-  // modals.ts — _showExecOverlay already set by orders.ts adapter; modal version as alias
-  // notifications.ts — self-registers on import
-  // drawingTools.ts — self-registers on import
-
-  // ── Phase 6D: brain/aub.js ──
-  // aubBBSnapshot — removed (direct import)
-  // initAUB — removed (direct import)
-  // arianova.js — self-registers on window via IIFE import above
-
-  // ── Phase 6C: trading/autotrade.js ──
-
-  // atLog — removed (direct import)
-
-  // updateATStats — removed (direct import)
-  // computeFusionDecision — removed (direct import)
-  // runAutoTradeCheck — removed (direct import)
-  // placeAutoTrade — removed (direct import)
-  // openAddOn, scheduleAutoClose — removed (direct imports)
-  // triggerKillSwitch — removed (direct import)
-  // renderATPositions — removed (direct import)
-  // closeAllDemoPos — removed (direct import)
-
-  // ── Phase 6B: trading/dsl.js ──
-  // toggleDSL — removed (direct import)
-  // _syncDslAssistUI — removed (direct import)
-
-  // renderDSLWidget — removed (direct import)
-  // stopDSLIntervals — removed (direct import)
-  // _dslTrimAll — removed (direct import)
-
-  // ── Phase 6B: trading/risk.js ──
-  // computeMacroCortex — removed (direct import)
-  // estimateRoundTripFees — removed (direct import)
-  // _adaptLoad — removed (direct import)
-  // recalcAdaptive — removed (direct import)
-  // toggleAdaptive — removed (direct import)
-  // initAdaptiveStrip, macroAdjustEntryScore, macroAdjustExitRisk, perfRecordTrade — removed (direct imports)
-
-  // ── Phase 6B: trading/positions.js ──
-  // onPositionOpened — removed (direct import)
-  // onTradeExecuted — removed (direct import)
-
-  // ── Phase 6B: trading/orders.js ──
-  // _queueExecOverlay — removed (direct import)
-  // _bmResetDailyIfNeeded — removed (direct import)
-  // _bmPostClose — removed (direct import)
-
-  // ── Phase 6B: trading/liveApi.js ──
-  // liveApiGetPositions — removed (direct import)
-  // liveApiPlaceOrder, liveApiSetLeverage — removed (direct imports)
-  // liveApiClosePosition — removed (direct import)
-  // liveApiSyncState — removed (direct import)
-  // aresPlaceOrder — removed (direct import)
-  // aresSetStopLoss — removed (direct import)
-  // aresCancelOrder — removed (direct import)
-  // manualLivePlaceOrder — removed (direct import)
-  // manualLiveGetOpenOrders — removed (direct import)
-  // manualLiveCancelOrder — removed (direct import)
-
-  // manualLiveSetSL — removed (direct import)
-  // manualLiveSetTP — removed (direct import)
-
-  // ── Phase 6A: managers.js (self-installs on window via import) ──
-  // Intervals, WS, FetchLock, ingestPrice, Timeouts already on w.* from import
+  // Force managers.ts to run its top-level side-effect registration.
   void Intervals; void WS; void FetchLock; void ingestPrice; void Timeouts
 
-  // ── Phase 6A: guards.js ──
-  // _safePnl — removed (direct import)
-  // _isPriceSane — removed (direct import)
-  // _resetWatchdog — removed (direct import)
-  // _resetKlineWatchdog — removed (direct import)
-  // _enterDegradedMode — removed (direct import)
-  // _exitDegradedMode — removed (direct import)
-  // _isDegradedOnly — removed (direct import)
-  // _enterRecoveryMode — removed (direct import)
-  // _exitRecoveryMode — removed (direct import)
-  // _isExecAllowed — removed (direct import)
-  // initSafetyEngine — removed (direct import)
-
-  // ── Phase 6A: dev.js ──
-  // DEV — removed (direct import)
-  // devLog — removed (direct import)
-  /* devClearLog — removed (direct import) */
-  /* devExportLog — removed (direct import) */
-  // safeAsync — removed (direct import)
-  // hubToggleDev — removed (direct import)
-  // _devEnsureVisible — removed (direct import)
-  // setUiScale — removed (direct import)
-  // hubPopulate — removed (direct import)
-  // hubSaveAll — removed (direct import)
-  // hubLoadAll — removed (direct import)
-  // hubTgSave — removed (direct import)
-  // hubTgTest — removed (direct import)
-  // hubTgPopulate — removed (direct import)
-  // hubResetDefaults — removed (direct import)
-  // hubSetTf, hubSetTZ — removed (self-ref)
-  // hubCloudSave — removed (direct import)
-  // hubCloudLoad — removed (direct import)
-  // hubCloudClear — removed (direct import)
-
-  // ── Phase 6A: theme.js (self-applies on import) ──
-  // zeusApplyTheme — removed (direct import)
-  // zeusGetTheme — removed (direct import)
-
-  // ── Phase 6A: decisionLog.js ──
-
-  // ── Phase 5A: signals.js ──
-  // renderSignals — removed (direct import)
-
-  // ── Phase 5A: confluence.js ──
-  // calcConfluenceScore — removed (direct import)
-
-  // ── Phase 5A: regime.js ──
-  // RegimeEngine — removed (direct import, no w.* refs remain)
-
-  // ── Phase 5A: phaseFilter.js ──
-  // PhaseFilter — removed (direct import)
-
-  // ── Phase 5A: forecast.js ──
-
-  // runQuantumExitUpdate — removed (direct import)
-  // computeProbScore — removed (direct import)
-  // updateScenarioUI — removed (direct import)
-
-  // ── Phase 5B: deepdive.js — PM ──
-  // PM — removed (direct import)
-  // runPostMortem — removed (direct import)
-
-  // _pmCheckRegimeTransition — removed (direct import)
-
-  // ── Phase 5B: deepdive.js — ARES core ──
-  // ARES_DECISION — removed (direct import)
-  // ARES_EXECUTE — removed (direct import)
-  // ARES_MONITOR — removed (direct import)
-  // ARES_JOURNAL — removed (direct import)
-  // ARES_MIND — removed (direct import)
-
-  // ── Phase 5B: deepdive.js — ARES UI ──
-  // initAriaBrain, initARES — removed (direct imports)
-
-  // ── Phase 5B: deepdive.js — Indicators + Scanner + DeepDive ──
-
   initIndicatorState()
-  // applyIndVisibility — removed (direct import)
-  // renderActBar — removed (direct import)
-  // runSignalScan — removed (direct import)
-  // updateDeepDive — removed (direct import)
-
-  // ── Phase 5B4: brain.js ──
-  // updateBrainArc — removed (direct import)
-  // brainThink — removed (direct import)
-  // runBrainUpdate — removed (direct import)
-  // isArmAssistValid — removed (direct import)
-  // syncBrainFromState — removed (direct import)
-  /* setProfile — removed (direct import) */
-  // calcDslTargetPrice — removed (direct import)
-  // updateMTFAlignment — removed (direct import)
-  // detectSweepDisplacement — removed (direct import)
-  // computeMarketAtmosphere — removed (direct import)
-  // resetProtectMode — removed (direct import)
-  // onNeuronScanUpdate — removed (direct import)
-  // renderBrainCockpit — removed (direct import)
-  // startZAnim — removed (direct import)
 }
