@@ -110,7 +110,7 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
       if (liveBalance !== undefined && Number.isFinite(liveBalance)) {
         update.liveBalance = { ...s.liveBalance, totalBalance: liveBalance }
       }
-      if (process.env.NODE_ENV !== 'production') {
+      if (import.meta.env.DEV) {
         console.log(`[positionsStore] syncSnapshot source=${source} demo=${update.demoPositions?.length ?? '—'} live=${update.livePositions?.length ?? '—'} bal=${update.demoBalance ?? '—'}`)
       }
       return { ...s, ...update }

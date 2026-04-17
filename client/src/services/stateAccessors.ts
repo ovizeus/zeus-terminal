@@ -13,12 +13,13 @@
  * Created in Phase 8B-mini. Only getters consumed by migrated files exist here.
  */
 
+import { useATStore } from '../stores/atStore'
+
 // ── Store-backed getters (read from Zustand, fallback to window.*) ──
 
 /** AT enabled — store-backed */
 export function getATEnabled(): boolean {
   try {
-    const { useATStore } = require('../stores/atStore')
     return useATStore.getState().enabled
   } catch (_) {}
   return !!(window as any).AT?.enabled
@@ -162,7 +163,7 @@ export function getTeacher(): any | null {
 /** AT kill triggered — store-backed
  *  TODO: migrate fully to atStore in 8D */
 export function getATKillTriggered(): boolean {
-  try { const { useATStore } = require('../stores/atStore'); return useATStore.getState().killTriggered } catch (_) {}
+  try { return useATStore.getState().killTriggered } catch (_) {}
   return !!(window as any).AT?.killTriggered
 }
 
