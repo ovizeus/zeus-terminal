@@ -258,6 +258,7 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
     const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
     if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
     TP.demoPositions.push(pos); TP.demoBalance -= size
+    usePositionsStore.getState().syncSnapshot({ demoPositions: TP.demoPositions, demoBalance: TP.demoBalance, source: 'bridge' })
     w.updateDemoBalance(); renderDemoPositions()
     if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
     w.ZState.save(); _registerManualOnServer(pos)
