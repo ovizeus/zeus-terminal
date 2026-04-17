@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { ATState, ATConfig, ATLogEntry, SettingsPayload } from '../types'
+import type { ATIconKind } from '../components/ATStatusIcon'
 
 /**
  * Default AT config — matches legacy TC defaults observed in state.ts / config.ts
@@ -16,18 +17,43 @@ const DEFAULT_AT_CONFIG: ATConfig = {
   cooldownMs: 60000,
 }
 
+export interface ATStatus {
+  icon: ATIconKind | null
+  text: string
+  action: 'resetKill' | null
+}
+
+export interface ATModeLabel {
+  icon: ATIconKind | null
+  text: string
+  color: string
+}
+
+export interface ATModeDisplay {
+  icon: ATIconKind | null
+  text: string
+  lockSuffix: boolean
+  color: string
+  border: string
+}
+
+export interface ATSentinel {
+  visible: boolean
+  icon: ATIconKind | null
+  text: string
+  bg: string
+  color: string
+  border: string
+}
+
 export interface ATUI {
   btnClass: string
   dotBg: string
   dotShadow: string
   btnText: string
-  statusHtml: string
-  statusAction: string | null
-  modeLabelHtml: string
-  modeLabelColor: string
-  modeDisplayHtml: string
-  modeDisplayColor: string
-  modeDisplayBorder: string
+  status: ATStatus
+  modeLabel: ATModeLabel
+  modeDisplay: ATModeDisplay
   liveWarnVisible: boolean
   condConf: string
   condConfClass: string
@@ -43,14 +69,10 @@ export interface ATUI {
   dailyLossColor: string
   dailyLabel: string
   totalTradesText: string
-  logHtml: string
+  logEntries: ATLogEntry[]
   posCountText: string
   killBtnTriggered: boolean
-  sentinelVisible: boolean
-  sentinelHtml: string
-  sentinelBg: string
-  sentinelColor: string
-  sentinelBorder: string
+  sentinel: ATSentinel
 }
 
 const DEFAULT_AT_UI: ATUI = {
@@ -58,13 +80,9 @@ const DEFAULT_AT_UI: ATUI = {
   dotBg: '#aa44ff',
   dotShadow: '0 0 6px #aa44ff',
   btnText: 'AUTO TRADE OFF',
-  statusHtml: 'Configureaza mai jos',
-  statusAction: null,
-  modeLabelHtml: 'DEMO',
-  modeLabelColor: '#aa44ff',
-  modeDisplayHtml: 'DEMO MODE',
-  modeDisplayColor: '#aa44ff',
-  modeDisplayBorder: '#aa44ff44',
+  status: { icon: null, text: 'Configureaza mai jos', action: null },
+  modeLabel: { icon: null, text: 'DEMO', color: '#aa44ff' },
+  modeDisplay: { icon: null, text: 'DEMO MODE', lockSuffix: false, color: '#aa44ff', border: '#aa44ff44' },
   liveWarnVisible: false,
   condConf: '\u2014',
   condConfClass: 'at-cond-val wait',
@@ -80,14 +98,10 @@ const DEFAULT_AT_UI: ATUI = {
   dailyLossColor: 'var(--grn)',
   dailyLabel: 'DAILY P&L',
   totalTradesText: '0',
-  logHtml: '<div class="at-log-row"><span class="at-log-time">--:--</span><span class="at-log-msg info">Auto Trade Engine pornit. Astept semnal...</span></div>',
+  logEntries: [{ time: '--:--', type: 'info', msg: 'Auto Trade Engine pornit. Astept semnal...' }],
   posCountText: '0 positions',
   killBtnTriggered: false,
-  sentinelVisible: false,
-  sentinelHtml: '',
-  sentinelBg: '',
-  sentinelColor: '',
-  sentinelBorder: '',
+  sentinel: { visible: false, icon: null, text: '', bg: '', color: '', border: '' },
 }
 
 type ATStore = ATState & {

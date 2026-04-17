@@ -3,6 +3,7 @@ import { useATStore, useSettingsStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
 import { resetKillSwitch } from '../../trading/autotrade'
+import { ATStatusIcon } from '../ATStatusIcon'
 
 /** Parse a string input to number for save; empty/invalid → fallback. */
 function toNum(s: string, fallback: number): number {
@@ -261,8 +262,11 @@ export function AutoTradePanel() {
           <span>{ui.btnText}</span>
         </button>
         <div className="at-status">
-          <span dangerouslySetInnerHTML={{ __html: ui.statusHtml }} />
-          {ui.statusAction === 'resetKill' && (
+          <span>
+            <ATStatusIcon kind={ui.status.icon} />
+            {ui.status.icon ? ' ' : ''}{ui.status.text}
+          </span>
+          {ui.status.action === 'resetKill' && (
             <button data-action="resetKillSwitch" onClick={() => resetKillSwitch()}
               style={{ color: '#00ff88', background: 'none', border: '1px solid #00ff8866', borderRadius: '2px', padding: '1px 5px', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>
               RESET KILL SWITCH
@@ -270,9 +274,11 @@ export function AutoTradePanel() {
           )}
         </div>
         <div id="at-why-blocked"></div>
-        {ui.sentinelVisible && (
-          <div style={{ fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center', background: ui.sentinelBg, color: ui.sentinelColor, border: ui.sentinelBorder }}
-            dangerouslySetInnerHTML={{ __html: ui.sentinelHtml }} />
+        {ui.sentinel.visible && (
+          <div style={{ fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center', background: ui.sentinel.bg, color: ui.sentinel.color, border: ui.sentinel.border }}>
+            <ATStatusIcon kind={ui.sentinel.icon} />
+            {ui.sentinel.icon ? ' ' : ''}{ui.sentinel.text}
+          </div>
         )}
       </div>
       <div className="at-line"></div>
@@ -282,7 +288,10 @@ export function AutoTradePanel() {
     <div className="at-panel" id="atPanel">
       <div className="at-hdr">
         <span>ZEUS AI AUTO TRADE ENGINE</span>
-        <span style={{ fontSize: '8px', color: ui.modeLabelColor, letterSpacing: '1px' }} dangerouslySetInnerHTML={{ __html: ui.modeLabelHtml }} />
+        <span style={{ fontSize: '8px', color: ui.modeLabel.color, letterSpacing: '1px' }}>
+          <ATStatusIcon kind={ui.modeLabel.icon} />
+          {ui.modeLabel.icon ? ' ' : ''}{ui.modeLabel.text}
+        </span>
       </div>
       <div className="at-body">
         <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
@@ -293,8 +302,17 @@ export function AutoTradePanel() {
         <div className="at-row">
           <div className="at-field">
             <div className="at-lbl">GLOBAL MODE</div>
-            <div className="at-sel" style={{ background: '#0a0a1a', border: `1px solid ${ui.modeDisplayBorder}`, padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: ui.modeDisplayColor, letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}
-              dangerouslySetInnerHTML={{ __html: ui.modeDisplayHtml }} />
+            <div className="at-sel" style={{ background: '#0a0a1a', border: `1px solid ${ui.modeDisplay.border}`, padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: ui.modeDisplay.color, letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}>
+              <ATStatusIcon kind={ui.modeDisplay.icon} />
+              {ui.modeDisplay.icon ? ' ' : ''}{ui.modeDisplay.text}
+              {ui.modeDisplay.lockSuffix && (
+                <>
+                  {' \u00b7 '}
+                  <ATStatusIcon kind="w" />
+                  {' EXEC LOCKED'}
+                </>
+              )}
+            </div>
           </div>
           <div className="at-field">
             <div className="at-lbl">LEVERAGE AUTO</div>
@@ -437,7 +455,14 @@ export function AutoTradePanel() {
 
         {/* LOG */}
         <div style={{ fontSize: '7px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '3px' }}>ACTIVITY LOG</div>
-        <div className="at-log" dangerouslySetInnerHTML={{ __html: ui.logHtml }} />
+        <div className="at-log">
+          {ui.logEntries.map((entry, idx) => (
+            <div className="at-log-row" key={idx}>
+              <span className="at-log-time">{entry.time}</span>
+              <span className={`at-log-msg ${entry.type}`}>{entry.msg}</span>
+            </div>
+          ))}
+        </div>
 
         {/* BRAIN VISION */}
         <div id="brainVisionWrap" style={{ margin: '8px 0 6px', border: '1px solid rgba(120,80,220,0.25)', borderRadius: '6px', background: 'rgba(10,6,20,0.6)', overflow: 'hidden' }}>

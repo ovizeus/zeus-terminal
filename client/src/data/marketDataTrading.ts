@@ -61,19 +61,31 @@ export function _applyGlobalModeUI(mode: string): void {
   const _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
   const execLocked = mode === 'live' && !w._apiConfigured
   if (mode === 'live') {
-    const _atIsTestnet = _env === 'TESTNET'; const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE'; const _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE'; const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'; const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'; const _atEnvIcon = _atIsTestnet ? _ZI.dYlw : _ZI.dRed
+    const _atIsTestnet = _env === 'TESTNET'
+    const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE'
+    const _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE'
+    const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'
+    const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'
+    const _icoKind: 'dYlw' | 'dRed' = _atIsTestnet ? 'dYlw' : 'dRed'
     useATStore.getState().patchUI({
-      modeDisplayHtml: execLocked ? _atEnvIcon + ' ' + _atEnvLabel + ' &middot; ' + _ZI.w + ' EXEC LOCKED' : _atEnvIcon + ' ' + _atEnvLabel,
-      modeDisplayColor: execLocked ? 'var(--orange)' : _atEnvColor,
-      modeDisplayBorder: execLocked ? '#ff880044' : _atEnvColorDim,
-      modeLabelHtml: execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort,
-      modeLabelColor: execLocked ? 'var(--orange)' : _atEnvColor,
+      modeDisplay: {
+        icon: _icoKind,
+        text: _atEnvLabel,
+        lockSuffix: execLocked,
+        color: execLocked ? 'var(--orange)' : _atEnvColor,
+        border: execLocked ? '#ff880044' : _atEnvColorDim,
+      },
+      modeLabel: {
+        icon: _icoKind,
+        text: execLocked ? _atEnvShort + ' LOCKED' : _atEnvShort,
+        color: execLocked ? 'var(--orange)' : _atEnvColor,
+      },
       liveWarnVisible: true,
     })
   } else {
     useATStore.getState().patchUI({
-      modeDisplayHtml: _ZI.pad + ' DEMO MODE', modeDisplayColor: 'var(--pur)', modeDisplayBorder: '#aa44ff44',
-      modeLabelHtml: _ZI.pad + ' DEMO', modeLabelColor: 'var(--pur)',
+      modeDisplay: { icon: 'pad', text: 'DEMO MODE', lockSuffix: false, color: 'var(--pur)', border: '#aa44ff44' },
+      modeLabel: { icon: 'pad', text: 'DEMO', color: 'var(--pur)' },
       liveWarnVisible: false,
     })
   }

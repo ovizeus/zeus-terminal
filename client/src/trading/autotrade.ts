@@ -61,9 +61,9 @@ function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atS
 export function toggleAutoTrade(): void {
   if (getATKillTriggered()) {
     toast('Kill switch active — press RESET in status bar or wait', 0, _ZI.noent)
-    if (useATStore.getState().ui.statusAction !== 'resetKill') {
+    if (useATStore.getState().ui.status.action !== 'resetKill') {
       var _lossExtra = (AT.killLoss && AT.killLimit) ? ` (loss $${(+AT.killLoss).toFixed(2)} / limit $${(+AT.killLimit).toFixed(2)})` : ''
-      _atUI({ statusHtml: _ZI.siren + ` KILL ACTIVE${_lossExtra}`, statusAction: 'resetKill' })
+      _atUI({ status: { icon: 'siren', text: `KILL ACTIVE${_lossExtra}`, action: 'resetKill' } })
     }
     return
   }
@@ -95,7 +95,7 @@ function _continueAutoTradeEnable(): void {
     // Block without API keys
     if (!w._apiConfigured) {
       toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, _ZI.w)
-      _atUI({ statusHtml: _ZI.lock + ' EXEC LOCKED — Exchange not configured', statusAction: null })
+      _atUI({ status: { icon: 'lock', text: 'EXEC LOCKED — Exchange not configured', action: null } })
       return
     }
     // [MODE-P4] Require explicit confirmation — wording matches resolved environment
@@ -162,7 +162,7 @@ export function _applyATToggleUI(enabled: any): void {
       toast('Kill switch activ — apasă RESET sau așteaptă ziua următoare', 0, _ZI.noent)
       return
     }
-    _atUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', statusHtml: _ZI.dGrn + ' Activ — scan la 30s', statusAction: null })
+    _atUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Activ — scan la 30s', action: null } })
     atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
@@ -175,7 +175,7 @@ export function _applyATToggleUI(enabled: any): void {
         if (TP.liveBalance <= 0) {
           atLog('warn', '[WARN] LIVE balance = $0 after sync — AT blocked until balance confirmed')
           AT.enabled = false
-          _atUI({ statusHtml: _ZI.x + ' Live balance = 0 — verifică API', statusAction: null })
+          _atUI({ status: { icon: 'x', text: 'Live balance = 0 — verifică API', action: null } })
           w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
         } else {
           atLog('info', '[BAL] LIVE balance synced: $' + TP.liveBalance.toFixed(2))
@@ -183,7 +183,7 @@ export function _applyATToggleUI(enabled: any): void {
       }).catch(function () {
         atLog('warn', '[WARN] Live balance sync failed at AT start — AT blocked')
         AT.enabled = false
-        _atUI({ statusHtml: _ZI.x + ' Balance sync failed — AT blocked', statusAction: null })
+        _atUI({ status: { icon: 'x', text: 'Balance sync failed — AT blocked', action: null } })
         w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
       })
     }
@@ -192,7 +192,7 @@ export function _applyATToggleUI(enabled: any): void {
     if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
     _emitATChanged()
   } else {
-    _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', statusHtml: 'Configureaza mai jos', statusAction: null })
+    _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configureaza mai jos', action: null } })
     atLog('warn', '[AT] Auto Trade OPRIT.')
     w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
     w.atUpdateBanner(); w.ptUpdateBanner()
@@ -210,12 +210,20 @@ export function updateATMode(): void {
     var _isTest = _env === 'TESTNET'
     var _col = _isTest ? 'var(--gold)' : 'var(--red-bright)'
     var _colDim = _isTest ? '#f0c04044' : '#ff444444'
-    var _ico = _isTest ? _ZI.dYlw : _ZI.dRed
     var _short = _isTest ? 'TESTNET' : 'LIVE'
     var _long = _isTest ? 'TESTNET MODE' : 'LIVE MODE'
-    _atUI({ modeLabelHtml: _ico + ' ' + _short, modeLabelColor: _col, liveWarnVisible: true, modeDisplayHtml: _ico + ' ' + _long, modeDisplayColor: _col, modeDisplayBorder: _colDim })
+    var _icoKind: 'dYlw' | 'dRed' = _isTest ? 'dYlw' : 'dRed'
+    _atUI({
+      modeLabel: { icon: _icoKind, text: _short, color: _col },
+      modeDisplay: { icon: _icoKind, text: _long, lockSuffix: false, color: _col, border: _colDim },
+      liveWarnVisible: true,
+    })
   } else {
-    _atUI({ modeLabelHtml: _ZI.pad + ' DEMO', modeLabelColor: 'var(--pur)', liveWarnVisible: false, modeDisplayHtml: _ZI.pad + ' DEMO MODE', modeDisplayColor: 'var(--pur)', modeDisplayBorder: '#aa44ff44' })
+    _atUI({
+      modeLabel: { icon: 'pad', text: 'DEMO', color: 'var(--pur)' },
+      modeDisplay: { icon: 'pad', text: 'DEMO MODE', lockSuffix: false, color: 'var(--pur)', border: '#aa44ff44' },
+      liveWarnVisible: false,
+    })
   }
 }
 
@@ -234,12 +242,7 @@ export function atLog(type: any, msg: any): void {
 }
 
 export function renderATLog(): void {
-  _atUI({ logHtml: AT.log.map((l: any) => {
-    const _time = escHtml(l.time)
-    const _msg = escHtml(l.msg)
-    const _type = escHtml(l.type)
-    return `<div class="at-log-row"><span class="at-log-time">${_time}</span><span class="at-log-msg ${_type}">${_msg}</span></div>`
-  }).join('') })
+  _atUI({ logEntries: AT.log.map((l: any) => ({ time: String(l.time), type: String(l.type), msg: String(l.msg) })) })
 }
 
 export function updateATStats(): void {
@@ -546,7 +549,7 @@ export function runAutoTradeCheck(): void {
       _se('atCondADX', true)
       _se('atCondHour', true)
       _se('atCondOpp', true)
-      if (getATEnabled()) _atUI({ statusHtml: '<span style="color:#00d4ff">SERVER AT ACTIVE</span> \u2014 brain controls execution', statusAction: null })
+      if (getATEnabled()) _atUI({ status: { icon: null, text: 'SERVER AT ACTIVE — brain controls execution', action: null } })
     } catch (_) {}
     return
   }
@@ -660,7 +663,9 @@ export function runAutoTradeCheck(): void {
       const reasons: any[] = []
       if (!cond.posOk) reasons.push('max pozitii atins')
       if (!cond.coolOk) reasons.push('cooldown')
-      _atUI({ statusHtml: reasons.length ? _ZI.timer + ' Wait: ' + escHtml(reasons.join(', ')) : _ZI.mag + ' Scan... conditii neatinse', statusAction: null })
+      _atUI({ status: reasons.length
+        ? { icon: 'timer', text: 'Wait: ' + reasons.join(', '), action: null }
+        : { icon: 'mag', text: 'Scan... conditii neatinse', action: null } })
       return
     }
 
@@ -672,14 +677,14 @@ export function runAutoTradeCheck(): void {
     if (!getATEnabled()) {
       const _sigDir = cond.isBull ? 'LONG' : 'SHORT'
       atLog('info', `[SCAN] Signal ${_sigDir} (score:${cond.score}) but AT OFF — no execution`)
-      _atUI({ statusHtml: _ZI.mag + ' Signal found \u2014 AT OFF', statusAction: null })
+      _atUI({ status: { icon: 'mag', text: 'Signal found \u2014 AT OFF', action: null } })
       return
     }
 
     // [FIX BUG1] Guard: confluence/signal direction disagree → no clear direction, skip
     if (!cond.isBull && !cond.isBear) {
       atLog('info', 'AT_SKIP ' + (getSymbol() || '').replace('USDT', '') + ' confluence/signal disagree — no clear direction')
-      _atUI({ statusHtml: _ZI.mag + ' Confluence/semnale conflict \u2014 skip', statusAction: null })
+      _atUI({ status: { icon: 'mag', text: 'Confluence/semnale conflict \u2014 skip', action: null } })
       return
     }
 
@@ -973,7 +978,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
     })
-    _atUI({ statusHtml: _ZI.ok + ' ' + escHtml(side) + ' deschis @$' + fP(entry), statusAction: null })
+    _atUI({ status: { icon: 'ok', text: String(side) + ' deschis @$' + fP(entry), action: null } })
     toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
     if (typeof onTradeExecuted === 'function') onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
@@ -1530,7 +1535,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   const msg = reasonMap[reason] || reason
   const pnlStr = (totalEmergencyPnL >= 0 ? '+' : '') + '$' + totalEmergencyPnL.toFixed(2)
   const _lossStr = (reason === 'daily_loss' && Number.isFinite(+realPnL)) ? ` (loss $${(+realPnL).toFixed(2)} / ${(+(killPct2) || 5).toFixed(1)}% of $${(+(bal2) || 0).toFixed(0)})` : ''
-  _atUI({ btnClass: 'at-main-btn off', btnText: 'AUTO TRADE OFF', killBtnTriggered: true, statusHtml: _ZI.siren + ` KILL ACTIVE${_lossStr}`, statusAction: 'resetKill' })
+  _atUI({ btnClass: 'at-main-btn off', btnText: 'AUTO TRADE OFF', killBtnTriggered: true, status: { icon: 'siren', text: `KILL ACTIVE${_lossStr}`, action: 'resetKill' } })
   atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} positions closed | PnL: ${pnlStr}`)
   toast(closedCount + ' positions closed | PnL: ' + pnlStr, 0, _ZI.siren)
   if (w.S.alerts?.enabled) sendAlert('Zeus Kill Switch', msg, 'kill')
@@ -1545,7 +1550,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
 // Reset kill switch — server is authoritative (5min cooldown enforced there)
 export function resetKillSwitch(): void {
   var _bal = +(getATMode() === 'demo' ? TP.demoBalance : (TP.liveBalance || TP.demoBalance)) || 0
-  _atUI({ statusHtml: _ZI.timer + ' Resetting kill switch...', statusAction: null })
+  _atUI({ status: { icon: 'timer', text: 'Resetting kill switch...', action: null } })
   api.raw<any>('POST', '/api/at/kill/reset', { balanceRef: _bal })
     .then(function (j: any) {
       if (j && j.ok) {
@@ -1559,7 +1564,7 @@ export function resetKillSwitch(): void {
         // [KILL-LOOP FIX R5] Reset enabledAt — old positions won't count after next enable.
         ;(AT as any).enabledAt = Date.now()
         var _killPct = j.killPct || parseFloat((document.getElementById('atKillPct') as HTMLInputElement)?.value) || 5
-        _atUI({ killBtnTriggered: false, statusHtml: _ZI.bolt + ' Kill switch reset \u2014 re-armed at ' + _killPct + '% loss threshold', statusAction: null })
+        _atUI({ killBtnTriggered: false, status: { icon: 'bolt', text: 'Kill switch reset \u2014 re-armed at ' + _killPct + '% loss threshold', action: null } })
         atLog('info', '[OK] Kill switch reset — re-armed at ' + _killPct + '%')
         toast('Kill switch reset — re-armed at ' + _killPct + '%', 0, _ZI.ok)
         if (typeof w.ZState !== 'undefined') w.ZState.save()

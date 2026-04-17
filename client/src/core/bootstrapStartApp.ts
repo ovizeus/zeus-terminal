@@ -334,7 +334,25 @@ export async function startApp(): Promise<void> {
       if (w.__ZT_SENTINEL_V1__) return; w.__ZT_SENTINEL_V1__ = true
       function _onVisibilityChange() { try { const hidden = document.hidden; if (typeof w._SAFETY !== 'undefined') w._SAFETY.tabHidden = hidden; if (hidden) { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('TAB_HIDDEN', 'Tab in background \u2014 AT paused', 'sentinel'); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SENTINEL] Tab hidden \u2192 AT paused') } else { if (typeof w._SAFETY !== 'undefined') { w._SAFETY.tabHidden = false; w._SAFETY.tabRestoreTs = Date.now() }; if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SENTINEL] Tab visible \u2192 AT va relua') }; _updateSentinelBar() } catch (_) { } }
       document.addEventListener('visibilitychange', _onVisibilityChange)
-      function _updateSentinelBar() { try { const hidden = document.hidden; const sf = (typeof w._SAFETY !== 'undefined') ? w._SAFETY : {} as any; const lastTs = sf.lastPriceTs || 0; const dataAge = lastTs ? Math.round((Date.now() - lastTs) / 1000) : null; const stalled = !!sf.dataStalled; let txt: string, bg: string, col: string; if (hidden) { txt = _ZI.bellX + ' TAB HIDDEN \u2014 AT PAUSED'; bg = 'rgba(180,100,0,0.18)'; col = '#FFB000' } else if (stalled) { txt = _ZI.w + ' DATA STALLED \u2014 AT PAUSED'; bg = 'rgba(255,0,51,0.15)'; col = '#ff3355' } else if (dataAge !== null && dataAge > 8) { txt = _ZI.clock + ' DATA LAG ' + dataAge + 's'; bg = 'rgba(180,100,0,0.12)'; col = '#f0c040' } else if (dataAge !== null) { txt = _ZI.ok + ' FEED OK ' + dataAge + 's'; bg = 'rgba(0,200,100,0.10)'; col = '#00cc66' } else { txt = '\u2014 SENTINEL \u2014'; bg = 'rgba(60,80,100,0.10)'; col = '#445566' }; useATStore.getState().patchUI({ sentinelVisible: true, sentinelHtml: txt, sentinelBg: bg, sentinelColor: col, sentinelBorder: '1px solid ' + col + '44' }) } catch (_) { } }
+      function _updateSentinelBar() {
+        try {
+          const hidden = document.hidden
+          const sf = (typeof w._SAFETY !== 'undefined') ? w._SAFETY : {} as any
+          const lastTs = sf.lastPriceTs || 0
+          const dataAge = lastTs ? Math.round((Date.now() - lastTs) / 1000) : null
+          const stalled = !!sf.dataStalled
+          let icon: 'bellX' | 'w' | 'clock' | 'ok' | null
+          let text: string
+          let bg: string
+          let col: string
+          if (hidden) { icon = 'bellX'; text = 'TAB HIDDEN \u2014 AT PAUSED'; bg = 'rgba(180,100,0,0.18)'; col = '#FFB000' }
+          else if (stalled) { icon = 'w'; text = 'DATA STALLED \u2014 AT PAUSED'; bg = 'rgba(255,0,51,0.15)'; col = '#ff3355' }
+          else if (dataAge !== null && dataAge > 8) { icon = 'clock'; text = 'DATA LAG ' + dataAge + 's'; bg = 'rgba(180,100,0,0.12)'; col = '#f0c040' }
+          else if (dataAge !== null) { icon = 'ok'; text = 'FEED OK ' + dataAge + 's'; bg = 'rgba(0,200,100,0.10)'; col = '#00cc66' }
+          else { icon = null; text = '\u2014 SENTINEL \u2014'; bg = 'rgba(60,80,100,0.10)'; col = '#445566' }
+          useATStore.getState().patchUI({ sentinel: { visible: true, icon, text, bg, color: col, border: '1px solid ' + col + '44' } })
+        } catch (_) { }
+      }
       if (typeof w._SAFETY !== 'undefined') w._SAFETY.tabHidden = document.hidden
       if (!w.__ZT_SENTINEL_TMR__) { w.__ZT_SENTINEL_TMR__ = w.Intervals.set('sentinel', function () { try { _updateSentinelBar() } catch (_) { } }, 3000) }
       setTimeout(_updateSentinelBar, 500)

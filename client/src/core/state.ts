@@ -7,7 +7,6 @@
 import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
-import { _ZI } from '../constants/icons'
 import { _applyATToggleUI, updateATMode, updateATStats , atLog , renderATPositions } from '../trading/autotrade'
 import { useATStore } from '../stores/atStore'
 import { _dslTrimAll } from '../trading/dsl'
@@ -1060,7 +1059,7 @@ export const ZState = (() => {
             if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
           }, 600)
         } else {
-          useATStore.getState().patchUI({ statusHtml: '\u23F9 AT oprit \u2014 mod schimbat la ' + state.mode.toUpperCase(), statusAction: null })
+          useATStore.getState().patchUI({ status: { icon: null, text: '\u23F9 AT oprit \u2014 mod schimbat la ' + state.mode.toUpperCase(), action: null } })
           atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
         }
       }
@@ -1326,10 +1325,10 @@ export const ZState = (() => {
               if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
               if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
               if (AT.enabled) {
-                useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: '#00ff88', dotShadow: '0 0 10px #00ff88', btnText: 'AUTO TRADE ON', statusHtml: _ZI.dGrn + ' Activ \u2014 scan la 30s', statusAction: null })
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: '#00ff88', dotShadow: '0 0 10px #00ff88', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Activ \u2014 scan la 30s', action: null } })
                 if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
               } else {
-                useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF', statusHtml: 'Configureaza mai jos', statusAction: null })
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configureaza mai jos', action: null } })
                 if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
                 clearInterval(AT.interval); AT.interval = null
               }
