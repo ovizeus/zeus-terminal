@@ -53,6 +53,7 @@ function runBrain() {
   const at = useATStore.getState()
   const pos = usePositionsStore.getState()
   const brain = useBrainStore.getState()
+  const profile = brain.brain?.profile ?? 'fast'
 
   // Need klines to compute
   const klines = market.klines || []
@@ -71,7 +72,7 @@ function runBrain() {
     lastTradeTs: at.lastTradeTs,
     lossStreak: brain.lossStreak ?? 0,
     dailyTrades: brain.dailyTrades ?? 0,
-    profile: 'fast', // TODO: read from settings
+    profile,
   }
 
   const result = computeBrain(inputs)
