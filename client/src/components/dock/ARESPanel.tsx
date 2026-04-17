@@ -1,7 +1,7 @@
 /** ARES dock page view — 1:1 from initARES() + initAriaBrain() in deepdive.js
  *  Entire panel is JS-generated in original. This is the visual shell
  *  including the strip bar, neural brain SVG, and all sections. */
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useAresStore } from '../../stores'
 import { _aresRender } from '../../engine/aresUI'
 
@@ -227,19 +227,35 @@ function generateBrainSVG(svgEl: SVGSVGElement) {
   svgEl.innerHTML = svg
 }
 
+/**
+ * [R7 CONTRACT] ARESPanel renders the static scaffold ONLY.
+ * The `#ares-*` element subtree is owned at runtime by `engine/aresUI.ts`
+ * which imperatively writes text/innerHTML/style per tick. To avoid
+ * mixed-ownership (React wiping aresUI's writes on re-render), this
+ * component MUST NOT re-render after mount — no subscriptions to
+ * aresStore, no local state that flips on user interaction.
+ *
+ * The strip open/close toggle uses a ref + `classList.toggle` directly
+ * on the DOM, bypassing React entirely. This is the single-writer
+ * invariant that closes R7 without a full Option A store migration.
+ */
 export function ARESPanel() {
-  const [isOpen, setIsOpen] = useState(true)
   const coreSvgRef = useRef<SVGSVGElement>(null)
+  const stripRef = useRef<HTMLDivElement>(null)
 
   // Generate brain SVG on mount — 1:1 from initAriaBrain() in deepdive.js
   useEffect(() => {
     if (coreSvgRef.current) generateBrainSVG(coreSvgRef.current)
   }, [])
 
+  const toggleOpen = useCallback(() => {
+    stripRef.current?.classList.toggle('open')
+  }, [])
+
   return (
-    <div id="ares-strip" className={isOpen ? 'open' : ''}>
+    <div id="ares-strip" ref={stripRef} className="open">
       {/* ── Strip Bar (collapsible header) — 1:1 from deepdive.js line 3579 ── */}
-      <div id="ares-strip-bar" onClick={() => setIsOpen(o => !o)}>
+      <div id="ares-strip-bar" onClick={toggleOpen}>
         <div className="v6-accent">
           <div className="v6-ico">
             <svg viewBox="0 0 24 24">

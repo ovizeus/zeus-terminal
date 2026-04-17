@@ -1,6 +1,15 @@
 // Zeus — engine/aresUI.ts
 // Ported 1:1 from public/js/brain/deepdive.js lines 2003-3732 (Phase 5B3)
 // ARES UI: CSS injections, _aresRender, _aresRenderArc, initAriaBrain, initARES, _demoTick, ARES_BRAIN_COLOR_OVERRIDE
+//
+// [R7 CONTRACT] This module is the SOLE writer of the `#ares-*` element
+// subtree at runtime. `components/dock/ARESPanel.tsx` renders the static
+// scaffold once and MUST NOT re-render — that invariant is enforced by
+// moving the strip open/close toggle to a ref + classList.toggle in the
+// component, so aresUI.ts writes are never wiped by React reconciliation.
+// If a future change makes ARESPanel re-render, the R7 contract breaks
+// and every imperative write below silently regresses to its JSX
+// placeholder value ("CONF —%", "⚠ —", etc.).
 
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
