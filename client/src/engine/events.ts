@@ -32,6 +32,15 @@ export const AT = {
   _serverMode: '' as string,
   _serverStats: null as unknown,
   _enabledPerMode: {} as Record<string, boolean>,
+  // [R34] Diagnostics fields previously stashed via `(AT as any).x = …`.
+  // Typed here so trading/autotrade.ts decision path stays inside the
+  // structural type — no more ad-hoc widening on a trading surface.
+  enabledAt: 0,
+  killResetTs: 0,
+  _lastBlockReason: '' as string,
+  _lastBlockTs: 0,
+  _lastBlockLogKey: '' as string,
+  _lastBlockLogTs: 0,
 }
 
 // ── Predator state ──

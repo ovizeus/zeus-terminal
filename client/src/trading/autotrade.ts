@@ -364,17 +364,17 @@ export function checkATConditions(): any {
   if (hasOpposite) _blockReasons.push('opp=open')
   if (!posOk) _blockReasons.push(symAlreadyOpen ? 'pos=sym-already-open' : `pos=${openAuto}/${maxPos}`)
   if (!coolOk) _blockReasons.push(`cool=${Math.max(0, Math.round((AT.cooldownMs - (nowTs - Math.max(getATLastTradeTs(), _symCd))) / 1000))}s`)
-  ;(AT as any)._lastBlockReason = _blockReasons.join(' | ')
-  ;(AT as any)._lastBlockTs = nowTs
+  AT._lastBlockReason = _blockReasons.join(' | ')
+  AT._lastBlockTs = nowTs
   // Throttled log: emit only if AT enabled, blocked, and reasons changed OR 60s since last log
   if (!allOk && getATEnabled()) {
     const _rk = _blockReasons.join('|')
-    const _lastLogged = (AT as any)._lastBlockLogKey
-    const _lastLoggedTs = (AT as any)._lastBlockLogTs || 0
+    const _lastLogged = AT._lastBlockLogKey
+    const _lastLoggedTs = AT._lastBlockLogTs || 0
     if (_rk !== _lastLogged || (nowTs - _lastLoggedTs) > 60000) {
       atLog('info', `[AT-BLOCK] ${_blockReasons.join(' | ')}`)
-      ;(AT as any)._lastBlockLogKey = _rk
-      ;(AT as any)._lastBlockLogTs = nowTs
+      AT._lastBlockLogKey = _rk
+      AT._lastBlockLogTs = nowTs
     }
   }
 
@@ -833,17 +833,19 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     _setBR('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
     atLog('warn', '[SHIELD] conviction=' + (BM.conviction || 0) + '% danger=' + (BM.danger || 0) + ' mult=0 → SKIP')
     // [L1-SHIELD-DIAG] Throttled breakdown: show WHY conviction is low (60s dedup by signature)
+    // [R34] Dropped redundant `(w as any)` / `(BM as any)` casts — both are
+    // already typed `any` at import time (core/config.ts:BM, line 43 above:w).
     try {
-      const _bd: any = (BM as any)._convictionBreakdown || null
-      const _fg: any[] = ((BM as any)._entryFailedGates) || []
+      const _bd: any = BM._convictionBreakdown || null
+      const _fg: any[] = BM._entryFailedGates || []
       if (_bd) {
         const _sig = 'es=' + _bd.entryScore + '|atm=' + _bd.atmPart + '|mtf=' + _bd.mtfPart + '|ofi=' + _bd.ofiPart + '|sig=' + _bd.sigPart + '|fg=' + _fg.join(',')
-        const _lastSig = (w as any)._lastShieldDiagSig
-        const _lastTs = (w as any)._lastShieldDiagTs || 0
+        const _lastSig = w._lastShieldDiagSig
+        const _lastTs = w._lastShieldDiagTs || 0
         const _now = Date.now()
         if (_sig !== _lastSig || (_now - _lastTs) > 60000) {
-          ;(w as any)._lastShieldDiagSig = _sig
-          ;(w as any)._lastShieldDiagTs = _now
+          w._lastShieldDiagSig = _sig
+          w._lastShieldDiagTs = _now
           const parts = [
             '[SHIELD-DIAG] dir=' + _bd.dir,
             'entryScore=' + _bd.entryScore + '(→' + _bd.entryPart + '/40)',
@@ -1446,7 +1448,7 @@ export function checkKillThreshold(): void {
     // later of: start-of-day (UTC), last kill reset, and explicit AT.enabledAt.
     const _openTs = +(_p.ts || _p.openTs || 0)
     const _dayStart = new Date(); _dayStart.setUTCHours(0, 0, 0, 0)
-    const _cutoff = Math.max(_dayStart.getTime(), +(AT.killResetTs || 0), +((AT as any).enabledAt || 0))
+    const _cutoff = Math.max(_dayStart.getTime(), +(AT.killResetTs || 0), +(AT.enabledAt || 0))
     if (_openTs > 0 && _openTs < _cutoff) continue
     const _cur = getSymPrice(_p)
     if (_cur > 0 && _p.entry > 0) {
@@ -1562,7 +1564,7 @@ export function resetKillSwitch(): void {
         AT.dailyPnL = 0
         AT.enabled = false
         // [KILL-LOOP FIX R5] Reset enabledAt — old positions won't count after next enable.
-        ;(AT as any).enabledAt = Date.now()
+        AT.enabledAt = Date.now()
         var _killPct = j.killPct || parseFloat((document.getElementById('atKillPct') as HTMLInputElement)?.value) || 5
         _atUI({ killBtnTriggered: false, status: { icon: 'bolt', text: 'Kill switch reset \u2014 re-armed at ' + _killPct + '% loss threshold', action: null } })
         atLog('info', '[OK] Kill switch reset — re-armed at ' + _killPct + '%')

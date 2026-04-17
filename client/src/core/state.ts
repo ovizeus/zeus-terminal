@@ -226,9 +226,11 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
 
 export function syncDOMtoTC() {
   if (typeof document === 'undefined') return
-  const _el = function (id: string) { return document.getElementById(id) }
-  const _pi = function (id: string, def: any) { const v = parseInt((_el(id) as any)?.value); return Number.isFinite(v) ? v : def }
-  const _pf = function (id: string, def: any) { const v = parseFloat((_el(id) as any)?.value); return Number.isFinite(v) ? v : def }
+  // [R34] Typed `HTMLInputElement | null` instead of `as any` — `.value` is
+  // a structural property of input-like elements only.
+  const _el = function (id: string) { return document.getElementById(id) as HTMLInputElement | null }
+  const _pi = function (id: string, def: any) { const v = parseInt(_el(id)?.value ?? ''); return Number.isFinite(v) ? v : def }
+  const _pf = function (id: string, def: any) { const v = parseFloat(_el(id)?.value ?? ''); return Number.isFinite(v) ? v : def }
   const TC = w.TC
   // Phase 3 C5: the 6 AT keys (lev/size/slPct/rr/maxPos/sigMin) are now
   // sourced from atStore.config (populated by AutoTradePanel on edit and by
@@ -1037,8 +1039,9 @@ export const ZState = (() => {
         AT.realizedDailyPnL = 0
       }
       if (typeof state.killPct === 'number' && state.killPct > 0) {
-        const _kpEl = document.getElementById('atKillPct') as any
-        if (_kpEl) _kpEl.value = state.killPct
+        // [R34] Typed `HTMLInputElement | null` — targets a number input.
+        const _kpEl = document.getElementById('atKillPct') as HTMLInputElement | null
+        if (_kpEl) _kpEl.value = String(state.killPct)
       }
       if (!AT._enabledPerMode) AT._enabledPerMode = {}
       const _prevMode = AT._serverMode || AT.mode || 'demo'

@@ -88,10 +88,12 @@ export function updateMacroUI(): void {
     var m = w.BM.macro
     var ps = w.BM.positionSizing
     var ph = m.phase || 'NEUTRAL'
-    var col = ({
+    // [R34] Typed Record<string,string> replaces `{…} as any` lookup.
+    var _phaseCol: Record<string, string> = {
       ACCUMULATION: 'var(--grn)', EARLY_BULL: '#44eebb', LATE_BULL: 'var(--gold)',
       DISTRIBUTION: 'var(--orange)', TOP_RISK: 'var(--red)', NEUTRAL: 'var(--txt-dim)'
-    } as any)[ph] || 'var(--txt-dim)'
+    }
+    var col = _phaseCol[ph] || 'var(--txt-dim)'
 
     var badge = document.getElementById('macro-phase-badge')
     if (badge) {
@@ -107,9 +109,11 @@ export function updateMacroUI(): void {
       adaptSt.style.color = w.BM.adapt.enabled ? 'var(--grn)' : 'var(--dim)'
     }
 
-    var bar = document.getElementById('macro-composite-bar') as any
+    // [R34] `getElementById` returns `HTMLElement | null` which already has
+    // `.style` and `.textContent` — dropped redundant `as any` casts.
+    var bar = document.getElementById('macro-composite-bar')
     if (bar) { bar.style.width = m.composite + '%'; bar.style.background = col }
-    var compVal = document.getElementById('macro-composite-val') as any
+    var compVal = document.getElementById('macro-composite-val')
     if (compVal) { compVal.textContent = m.composite; compVal.style.color = col }
 
     var setTxt = function (id: string, val: any) { var e = document.getElementById(id); if (e) e.textContent = val }
@@ -118,7 +122,7 @@ export function updateMacroUI(): void {
     setTxt('macro-sent-val', m.sentimentScore)
     setTxt('macro-slope-val', m.slope > 0 ? '▲' + m.slope.toFixed(2) : m.slope < 0 ? '▼' + Math.abs(m.slope).toFixed(2) : '—')
 
-    var sizeMult = document.getElementById('macro-size-mult') as any
+    var sizeMult = document.getElementById('macro-size-mult')
     if (sizeMult) { sizeMult.textContent = '×' + (ps.finalMult || 1).toFixed(2); sizeMult.style.color = ps.finalMult > 1 ? 'var(--grn)' : ps.finalMult < 1 ? 'var(--orange)' : 'var(--gold)' }
     var perfMult = document.getElementById('macro-perf-mult')
     if (perfMult) perfMult.textContent = '×' + (ps.perfMult || 1).toFixed(2)
