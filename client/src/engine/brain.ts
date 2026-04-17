@@ -444,9 +444,9 @@ export function syncBrainFromState(): void {
   const src = el('znc-src')
   if (src) { const m: any = { assist: ['ASSIST', 'assist'], auto: ['AI', 'ai'] }; src.textContent = (m[mode] || m.assist)[0]; src.className = 'znc-src ' + (m[mode] || m.assist)[1] }
 
-  // DSL zone — always full opacity (no manual mode)
-  const dz = el('dslZone')
-  if (dz) dz.style.opacity = '1'
+  // [R10] DSL zone opacity reset removed — React owns #dslZone, and there is no
+  // codepath left that sets opacity < 1 (manual mode was removed), so the reset
+  // was a no-op write on a React-owned node.
 
   // Sync TF + DSL params
   syncTFProfile()

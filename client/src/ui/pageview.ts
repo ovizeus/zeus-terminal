@@ -220,12 +220,14 @@ export function openPageView(dockId: string) {
   }
 
   // ── DSL ──
+  // [R10] DSL zone is React-owned (DSLZonePanel.tsx). No imperative style.display
+  // write — `.zpv-content > *` CSS already forces display:block on moved children,
+  // so the old inline style was redundant and a mixed-ownership smell.
   if (dockId === 'dsl') {
     const dslZone = document.getElementById(mod.panelId)
     if (!dslZone) return
     if (title) title.textContent = mod.title
     _pvMoveIn(dslZone, content)
-    dslZone.style.display = 'block'
   }
 
   // ── Flow ──
@@ -330,7 +332,8 @@ export function closePageView() {
   if (did === 'flow') { _el = document.getElementById('flow-panel'); if (_el) { _el.classList.remove('expanded'); _el.classList.add('collapsed') } }
   if (did === 'aub') { _el = document.getElementById('aub'); if (_el) { _el.classList.remove('expanded'); _el.classList.add('collapsed') } }
   if (did === 'autotrade') { _el = document.getElementById('atPanel'); if (_el) _el.style.display = '' }
-  if (did === 'dsl') { _el = document.getElementById('dslZone'); if (_el) _el.style.display = '' }
+  // [R10] DSL: no close-time style.display reset — we never set one at open time.
+  // React/CSS own `#dslZone` visibility fully. Node move alone is enough.
   if (did === 'activity') { _el = document.getElementById('actfeed-panel'); if (_el) _el.style.display = 'none' }
 
   // Restore all extra elements to original positions (reverse order)

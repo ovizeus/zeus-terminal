@@ -177,8 +177,9 @@ export function _syncDslAssistUI(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
   const dslConf = document.querySelectorAll('.dsl-config input, .dsl-config select')
   dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-  const dz = el('dslZone')
-  if (dz) dz.style.pointerEvents = ''
+  // [R10] pointerEvents reset on #dslZone removed — React owns the node and no
+  // codepath sets `pointerEvents = 'none'` on it anymore, so the reset was a
+  // no-op write on a React-owned element.
 
   const _btnText = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'
   _dslUI({ lockOverlayVisible: false, toggleBtnDisabled: false, toggleBtnText: _btnText })
