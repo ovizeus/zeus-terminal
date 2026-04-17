@@ -12,6 +12,7 @@ import { liveApiGetPositions } from '../trading/liveApi'
 import { PM } from './postMortem'
 import { ARES_MONITOR } from './aresMonitor'
 import { _aresRender } from './aresUI'
+import { useAresStore } from '../stores/aresStore'
 
 const w = window as any
 
@@ -54,6 +55,11 @@ const ARES_WALLET = (function () {
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aresData')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
     try { window.dispatchEvent(new CustomEvent('zeus:aresStateChanged')) } catch (_) { }
+    useAresStore.getState().patch({
+      balance: _w.balance, locked: _w.locked,
+      available: Math.max(0, _w.balance - _w.locked),
+      realizedPnL: _w.realizedPnL, fundedTotal: _w.fundedTotal,
+    })
   }
   recalc()
   if (_w.locked > 0) { _w.locked = 0; _save() }
@@ -104,6 +110,7 @@ const ARES_POSITIONS = (function () {
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aresData')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
     try { window.dispatchEvent(new CustomEvent('zeus:aresStateChanged')) } catch (_) { }
+    useAresStore.getState().patch({ positions: [..._positions] })
   }
   function _makeClientId() { return 'ARES_' + Date.now() + '_' + Math.floor(Math.random() * 9999) }
   function calcUPnL(pos: any, markPrice: number) {

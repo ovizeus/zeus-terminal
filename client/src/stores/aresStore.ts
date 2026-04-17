@@ -26,7 +26,6 @@ interface AresStoreState {
 
   loadFromServer: () => Promise<void>
   saveToServer: () => Promise<void>
-  syncFromEngine: () => void
   patch: (partial: Partial<AresStoreState>) => void
 }
 
@@ -70,10 +69,6 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
     } finally {
       set({ saving: false })
     }
-  },
-
-  syncFromEngine: () => {
-    _readFromEngine(set)
   },
 
   patch: (partial) => set((s) => ({ ...s, ...partial })),

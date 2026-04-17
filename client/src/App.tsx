@@ -11,7 +11,6 @@ import { useForecastEngine } from './hooks/useForecastEngine'
 import { useLegacyBridge } from './bridge'
 import { usePositionsBridge } from './hooks/usePositionsBridge'
 import { useATBridge } from './hooks/useATBridge'
-import { useAresBridge } from './hooks/useAresBridge'
 import { wsService } from './services/ws'
 import { startSettingsRealtime, stopSettingsRealtime } from './services/settingsRealtime'
 import { startPositionsRealtime, stopPositionsRealtime } from './services/positionsRealtime'
@@ -75,9 +74,6 @@ export function App() {
 
   // ── AT BRIDGE — sync engine window.AT → atStore ──
   useATBridge()
-
-  // ── ARES BRIDGE — sync engine ARES state → aresStore ──
-  useAresBridge()
 
   if (loading) {
     return (
