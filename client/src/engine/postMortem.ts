@@ -12,16 +12,39 @@ const w = window as any
 // ── PM Module (IIFE → object) ───────────────────────────────────
 const KEY = 'zeus_postmortem_v1'
 const MAX_REC = 200
+// [R20] Server rejects user-ctx sections > 64KB. Cap at 56KB to leave
+// envelope headroom; drop oldest records until under budget.
+const MAX_SIZE = 56 * 1024
+const MIN_REC_KEPT = 10
 const DECAY_48 = 0.50
 const DECAY_96 = 0.25
 
+function _trimToBudget(records: any[]): any[] {
+  let trimmed = records.slice(0, MAX_REC)
+  while (trimmed.length > MIN_REC_KEPT && JSON.stringify(trimmed).length > MAX_SIZE) {
+    trimmed = trimmed.slice(0, Math.max(MIN_REC_KEPT, Math.floor(trimmed.length * 0.9)))
+  }
+  return trimmed
+}
+
 function _load(): any[] {
-  try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : [] }
+  try {
+    const r = localStorage.getItem(KEY)
+    const arr = r ? JSON.parse(r) : []
+    // [R20] Self-repair: if stored payload exceeds budget, trim on first load.
+    if (Array.isArray(arr) && JSON.stringify(arr).length > MAX_SIZE) {
+      const fixed = _trimToBudget(arr)
+      try { _safeLocalStorageSet(KEY, fixed) } catch (_) { }
+      return fixed
+    }
+    return arr
+  }
   catch (_) { return [] }
 }
 
 function _save(records: any[]): void {
-  try { _safeLocalStorageSet(KEY, records.slice(0, MAX_REC)) }
+  const trimmed = _trimToBudget(records)
+  try { _safeLocalStorageSet(KEY, trimmed) }
   catch (_) { }
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('postmortem')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
