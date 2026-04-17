@@ -19,6 +19,7 @@ import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 import { detectRegimeEnhanced } from './regimeEnhanced'
 import { useBrainStore } from '../stores/brainStore'
+import { useBrainStatsStore, type BrainStatsTone } from '../stores/brainStatsStore'
 import type { BrainMode, TradingProfile, BrainEngineState, BrainState, BrainAdaptParams } from '../types'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
@@ -2343,7 +2344,9 @@ export function renderCircuitBrain(): void {
       _sf ? ('News:' + (_sf.news ? 'OK' : 'BLK')) : '—',
       cdLeft > 0 ? ('CD:' + cdLeft + 'm') : 'CD:OK'
     ].join(' · ')
-    setNode('cbn-gates-box', 'cbn-gates-val', 'cbn-gates-sub', gCls, gOk + '/' + gTotal, gSub)
+    useBrainStatsStore.getState().patchStats({
+      gates: { text: gOk + '/' + gTotal, sub: gSub, tone: gCls as BrainStatsTone },
+    })
     svgNode('cb-node-gates', gCls)
   } catch (_) { }
 
@@ -2362,7 +2365,9 @@ export function renderCircuitBrain(): void {
     const volVal = (_st && _st.volMode) ? _st.volMode : '—'
     const strVal = (_st && _st.structureLabel) ? _st.structureLabel : '—'
     const subTxt = ('ADX:' + adxVal + ' VOL:' + volVal + ' ' + strVal).slice(0, 28)
-    setNode('cbn-regime-box', 'cbn-regime-val', 'cbn-regime-sub', regCls, regTxt.replace(' ▲', '').replace(' ↑', ''), subTxt)
+    useBrainStatsStore.getState().patchStats({
+      regime: { text: regTxt.replace(' ▲', '').replace(' ↑', ''), sub: subTxt, tone: regCls as BrainStatsTone },
+    })
     svgNode('cb-node-regime', regCls)
   } catch (_) { }
 
@@ -2394,7 +2399,9 @@ export function renderCircuitBrain(): void {
     const riskCls = kill || prot ? 'bad' : cdLeft > 0 ? 'warn' : 'vis'
     const riskVal = kill ? 'KILL' : prot ? 'PROTECT' : cdLeft > 0 ? cdLeft + 'm WAIT' : 'OK'
     const riskSub = 'Cooldown ' + (cdLeft > 0 ? cdLeft + 'm' : 'OFF') + ' · DD%'
-    setNode('cbn-risk-box', 'cbn-risk-val', 'cbn-risk-sub', riskCls, riskVal, riskSub)
+    useBrainStatsStore.getState().patchStats({
+      risk: { text: riskVal, sub: riskSub, tone: riskCls as BrainStatsTone },
+    })
     svgNode('cb-node-risk', riskCls)
   } catch (_) { }
 
@@ -2426,7 +2433,9 @@ export function renderCircuitBrain(): void {
         : (_brState === 'protect' || _brState === 'blocked') ? 'bad'
           : 'mem'
     const subLine = _mode + ' · ' + _prof
-    setNode('cbn-auto-box', 'cbn-auto-val', 'cbn-auto-sub', armCls, armTxt, subLine.slice(0, 22))
+    useBrainStatsStore.getState().patchStats({
+      auto: { text: armTxt, sub: subLine.slice(0, 22), tone: armCls as BrainStatsTone },
+    })
     svgNode('cb-node-auto', armCls)
   } catch (_) { }
 
