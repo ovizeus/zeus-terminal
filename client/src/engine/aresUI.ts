@@ -25,27 +25,11 @@
 // Full Option A (store+UI conversion, ~40 surfaces, multi-day scope) is
 // tracked separately as R28.2 and deferred from the post-v2 lot series.
 
-import { escHtml } from '../utils/dom'
-import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { checkPendingOrders , renderDemoPositions, checkDemoPositionsSLTP } from '../data/marketDataPositions'
-import { ARES_DECISION } from './aresDecision'
-import { ARES_MIND } from './aresMind'
 import { syncAresUIToStore } from './aresStoreSync'
 
 const w = window as any
-
-// [R28] Set element content as: <trusted-icon-svg> + textNode(trailingText).
-// The icon SVG is author-controlled (_ZI.* constants). The trailingText is
-// forced through textContent semantics — cannot inject HTML even if the
-// upstream engine state contains angle brackets.
-function _setIconText(el: HTMLElement, iconSvg: string, trailingText: string): void {
-  while (el.firstChild) el.removeChild(el.firstChild)
-  const tmpl = document.createElement('template')
-  tmpl.innerHTML = iconSvg
-  el.appendChild(tmpl.content)
-  el.appendChild(document.createTextNode(trailingText))
-}
 
 ;(function _aresCSS() {
   const s = document.createElement('style')
@@ -187,13 +171,6 @@ export function _aresRender() {
 
     const panel = document.getElementById('ares-core-svg')
     if (!panel) return
-    const st = w.ARES.getState()
-    const col = st.current.color
-
-    // Cognitive clarity from ARES_MIND
-    const clarity = ARES_MIND.getClarity()
-    const pulseSpeed = ARES_MIND.getPulseSpeed()
-    const predAcc = ARES_MIND.getPredictionAccuracy()
 
     // [R28.2-C] Strip badge + conf + IMM + emotion are now React-owned
     // (components/dock/ares/{StripBadge,StripConf,ImmSpan,EmotionSpan}.tsx)
@@ -201,49 +178,10 @@ export function _aresRender() {
     // .cognitive.clarity / .emotion). The sync adapter at the top of
     // _aresRender populates those slices. No imperative write needed here.
 
-    // 3) Mortal Wound (DEFENSIVE sau REVENGE_GUARD cu 3+ consecutive losses)
-    try {
-      const woundEl = document.getElementById('ares-wound-line')
-      if (woundEl) {
-        const isWounded = (st.current.id === 'DEFENSIVE' || st.current.id === 'REVENGE_GUARD') && st.consecutiveLoss >= 3
-        if (isWounded) {
-          woundEl.style.display = 'block'
-          _setIconText(woundEl, _ZI.w, ' MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced')
-        } else {
-          woundEl.style.display = 'none'
-        }
-      }
-    } catch (_) { }
-
-    // P0.7) Mission Failed — wallet depleted below minimum tradeable amount
-    try {
-      const bal = (typeof w.ARES !== 'undefined' && w.ARES.wallet) ? w.ARES.wallet.balance : 0
-      const woundEl = document.getElementById('ares-wound-line')
-      if (woundEl && bal < 5 && bal >= 0) {
-        woundEl.style.display = 'block'
-        woundEl.style.color = '#ff0044'
-        _setIconText(woundEl, _ZI.skull, ' MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.')
-      }
-    } catch (_) { }
-
-    // P0.7) Decision Engine status — show last decision summary
-    try {
-      if (typeof ARES_DECISION !== 'undefined') {
-        const lastDec = ARES_DECISION.getLastDecision()
-        const decEl = document.getElementById('ares-decision-line')
-        if (decEl && lastDec) {
-          if (lastDec.shouldTrade) {
-            decEl.style.display = 'block'
-            decEl.style.color = '#00ff88'
-            _setIconText(decEl, _ZI.ok, ' DECISION: ' + String(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map((r: any) => String(r)).join(' · '))
-          } else {
-            decEl.style.display = 'block'
-            decEl.style.color = '#ff8800'
-            _setIconText(decEl, _ZI.pause, ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map((r: any) => String(r)).join(' · '))
-          }
-        }
-      }
-    } catch (_) { }
+    // [R28.2-G] Mortal wound + Mission failed + Decision engine status are
+    // React-owned via <WoundLine /> and <DecisionLine /> subscribing to
+    // useAresStore((s) => s.ui.wound / .decision). The sync adapter derives
+    // both from engine state at the top of _aresRender.
 
     // [R28.2-D] Stage Progress, Objectives, Wallet block are React-owned
     // via <StageCol /> <ObjectivesCol /> <WalletCol /> subscribing to
@@ -260,233 +198,20 @@ export function _aresRender() {
     // [R28.2-C] Cognitive bar React-owned via <CognitiveBar /> subscribing to
     // useAresStore((s) => s.ui.cognitive.clarity). No imperative write.
 
-    // ── BRAIN SVG — Low-poly exact ca în imagine: creier lateral, fețe colorate, noduri albe ──
-    const cx = 168, cy = 135
-
-    // ══════════════════════════════════════════════════════════════════
-    // 28 VERTECȘI — silueta exactă a creierului din imagine
-    // Lateral stânga: frontal rotunjit stânga, parietal sus,
-    // occipital ascuțit dreapta-jos, cerebel jos-dreapta, trunchi jos
-    // ══════════════════════════════════════════════════════════════════
-    const V = [
-      // Contur exterior (0-15)
-      { x: cx - 12, y: cy + 58 },  // 0  trunchi jos
-      { x: cx - 35, y: cy + 45 },  // 1  temporal bas
-      { x: cx - 68, y: cy + 22 },  // 2  frontal lateral jos
-      { x: cx - 80, y: cy - 10 },  // 3  frontal lateral
-      { x: cx - 74, y: cy - 44 },  // 4  frontal sus
-      { x: cx - 50, y: cy - 70 },  // 5  frontal-parietal
-      { x: cx - 15, y: cy - 84 },  // 6  coroana stânga
-      { x: cx + 22, y: cy - 80 },  // 7  coroana dreapta
-      { x: cx + 55, y: cy - 65 },  // 8  parietal sus
-      { x: cx + 82, y: cy - 38 },  // 9  parietal lateral
-      { x: cx + 88, y: cy - 5 },   // 10 parietal-occipital
-      { x: cx + 78, y: cy + 28 },  // 11 occipital sus
-      { x: cx + 62, y: cy + 52 },  // 12 occipital (ascuțit)
-      { x: cx + 38, y: cy + 65 },  // 13 cerebel sus
-      { x: cx + 14, y: cy + 70 },  // 14 cerebel centru
-      { x: cx - 10, y: cy + 62 },  // 15 cerebel-trunchi
-      // Noduri interioare (16-27)
-      { x: cx - 52, y: cy - 28 },  // 16 frontal interior
-      { x: cx - 28, y: cy - 56 },  // 17 frontal-parietal int
-      { x: cx + 10, y: cy - 58 },  // 18 parietal interior sus
-      { x: cx + 46, y: cy - 40 },  // 19 parietal interior
-      { x: cx + 66, y: cy + 10 },  // 20 occipital interior
-      { x: cx + 46, y: cy + 42 },  // 21 cerebel interior
-      { x: cx + 14, y: cy + 48 },  // 22 cerebel-trunchi int
-      { x: cx - 14, y: cy + 32 },  // 23 temporal interior
-      { x: cx - 46, y: cy + 8 },   // 24 frontal-temporal int
-      { x: cx - 10, y: cy - 18 },  // 25 centru
-      { x: cx + 28, y: cy - 8 },   // 26 centru-dreapta
-      { x: cx + 10, y: cy + 22 },  // 27 centru-jos
-    ]
-
-    // ══════════════════════════════════════════════════════════════════
-    // TRIUNGHIURI — 36 fețe, organizate pe 6 zone cu culori diferite
-    // z=0 frontal(roz/mov), z=1 parietal(alb), z=2 occipital(albastru deschis)
-    // z=3 cerebel(albastru), z=4 trunchi(gri), z=5 interior(dark)
-    // ══════════════════════════════════════════════════════════════════
-    const TRIS = [
-      // Frontal roz/mov
-      { t: [0, 1, 24], z: 0 }, { t: [1, 2, 24], z: 0 }, { t: [2, 3, 16], z: 0 },
-      { t: [2, 16, 24], z: 0 }, { t: [3, 4, 16], z: 0 }, { t: [4, 5, 17], z: 0 },
-      { t: [4, 16, 17], z: 0 }, { t: [5, 6, 17], z: 0 },
-      // Parietal alb-albastru
-      { t: [6, 7, 17], z: 1 }, { t: [7, 8, 18], z: 1 }, { t: [6, 17, 18], z: 1 },
-      { t: [7, 18, 19], z: 1 }, { t: [8, 9, 19], z: 1 }, { t: [9, 10, 19], z: 1 },
-      // Occipital albastru deschis
-      { t: [10, 11, 20], z: 2 }, { t: [9, 19, 20], z: 2 }, { t: [10, 20, 19], z: 2 },
-      { t: [11, 12, 20], z: 2 },
-      // Cerebel albastru mediu
-      { t: [12, 13, 21], z: 3 }, { t: [13, 14, 22], z: 3 }, { t: [12, 21, 22], z: 3 },
-      { t: [14, 15, 22], z: 3 },
-      // Trunchi gri
-      { t: [0, 15, 23], z: 4 }, { t: [15, 22, 23], z: 4 }, { t: [0, 23, 24], z: 4 },
-      // Interior dark (centru creier)
-      { t: [16, 17, 25], z: 5 }, { t: [17, 18, 25], z: 5 }, { t: [18, 19, 26], z: 5 },
-      { t: [17, 25, 26], z: 5 }, { t: [19, 20, 26], z: 5 }, { t: [20, 21, 26], z: 5 },
-      { t: [21, 22, 27], z: 5 }, { t: [22, 23, 27], z: 5 }, { t: [23, 24, 25], z: 5 },
-      { t: [24, 16, 25], z: 5 }, { t: [25, 26, 27], z: 5 }, { t: [26, 20, 27], z: 5 },
-    ]
-
-    // Culori zone (A=luminos, B=întunecat) — puls alternant = efect 3D
-    const ZC: any = [
-      ['#e855a8', '#88226655'],  // 0 frontal roz/mov
-      ['#d8e8ff', '#5577bb44'],  // 1 parietal alb-bleu
-      ['#88ccff', '#1144aa33'],  // 2 occipital bleu deschis
-      ['#5599ee', '#0a2a6633'],  // 3 cerebel bleu
-      ['#3366aa', '#0a1a4422'],  // 4 trunchi gri-bleu
-      ['#0d1a30', '#060e1ecc'],  // 5 interior dark
-    ]
-
-    // Noduri hot — se aprind mai tare (vârfurile mari din imagine)
-    const HOT = new Set([0, 5, 6, 9, 12, 14, 17, 18, 20, 25, 26])
-
-    // Edges deduplicate
-    const _eSet = new Set(); const EDGES: any[] = []
-    TRIS.forEach(({ t: [a, b, c] }: any) => {
-      ;[[a, b], [b, c], [a, c]].forEach(([p, q]: any) => {
-        const k = Math.min(p, q) + '-' + Math.max(p, q)
-        if (!_eSet.has(k)) { _eSet.add(k); EDGES.push([p, q]) }
-      })
-    })
-
-    // Zone anatomice (etichete MICI pe creier, nu lateral)
-    const ZONES = [
-      { name: 'FRONTAL', f1: 'Decizie\u00b7Risc', col: '#2962FF', lx: cx - 52, ly: cy - 8 },
-      { name: 'PARIETAL', f1: 'Mi\u0219care\u00b7Sim\u021b', col: '#00E5FF', lx: cx + 18, ly: cy - 60 },
-      { name: 'OCCIPITAL', f1: 'Vizual\u00b7Chart', col: '#00E5FF', lx: cx + 72, ly: cy + 14 },
-      { name: 'CEREBEL', f1: 'Echilibru\u00b7SL', col: '#FFB000', lx: cx + 32, ly: cy + 58 },
-      { name: 'TRUNCHI', f1: 'AutoTrade\u00b7Kill', col: '#C1121F', lx: cx - 12, ly: cy + 52 },
-      { name: 'TEMPORAL', f1: 'Memorie\u00b7Timp', col: '#2962FF', lx: cx - 65, ly: cy + 18 },
-    ]
-
-    // ════════════════════════════ SVG BUILD ═══════════════════════════
-    let svg = `
-  <defs>
-    <radialGradient id="bgG" cx="50%" cy="50%" r="55%">
-      <stop offset="0%"   stop-color="#33006622"/>
-      <stop offset="100%" stop-color="transparent"/>
-    </radialGradient>
-    <radialGradient id="pinkG" cx="30%" cy="58%" r="42%">
-      <stop offset="0%"   stop-color="#cc224477"/>
-      <stop offset="100%" stop-color="transparent"/>
-    </radialGradient>
-    <filter id="fN" x="-120%" y="-120%" width="340%" height="340%">
-      <feGaussianBlur stdDeviation="3.5" result="b"/>
-      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-  <ellipse cx="${cx - 25}" cy="${cy + 12}" rx="72" ry="68"
-    fill="url(#pinkG)" style="animation:aresBrainPulse ${(pulseSpeed * 0.7).toFixed(1)}s ease-in-out infinite"/>
-  <ellipse cx="${cx}" cy="${cy}" rx="105" ry="95" fill="url(#bgG)"/>
-  `
-
-    // Fețe triunghiuri — puls per față
-    TRIS.forEach(({ t: [a, b, c], z }: any, i: any) => {
-      const [ca, cb] = ZC[z]
-      const pts = `${V[a].x},${V[a].y} ${V[b].x},${V[b].y} ${V[c].x},${V[c].y}`
-      const light = (a + b + c) % 2 === 0
-      const fill = light ? ca + '2a' : cb
-      const dur = (2.8 + (i % 9) * 0.4).toFixed(1)
-      const del = (i * 0.16 % 3.5).toFixed(2)
-      svg += `<polygon points="${pts}" fill="${fill}"
-      style="animation:aresNodePulse ${dur}s ease-in-out infinite ${del}s"/>`
-    })
-
-    // Muchii albe
-    EDGES.forEach(([a, b]: any, i: any) => {
-      const hot = HOT.has(a) || HOT.has(b)
-      const op = hot ? '0.88' : '0.32'
-      const lw = hot ? 1.3 : 0.65
-      const dur = (2.0 + (i % 7) * 0.45).toFixed(1)
-      svg += `<line x1="${V[a].x}" y1="${V[a].y}" x2="${V[b].x}" y2="${V[b].y}"
-      stroke="white" stroke-width="${lw}" stroke-opacity="${op}"
-      ${hot ? `style="animation:aresLineFlow ${dur}s linear infinite ${(i * 0.06).toFixed(2)}s"` : ''}/>`
-    })
-
-    // Noduri albe
-    V.forEach((n: any, i: any) => {
-      const hot = HOT.has(i)
-      const r = hot ? 4.8 : 2.6
-      const dur = (1.4 + (i % 8) * 0.28).toFixed(1)
-      const del = (i * 0.12).toFixed(2)
-      svg += `
-    <circle cx="${n.x}" cy="${n.y}" r="${r + 6}" fill="white" opacity="0.05" filter="url(#fN)"/>
-    <circle cx="${n.x}" cy="${n.y}" r="${r}" fill="white"
-      style="filter:drop-shadow(0 0 ${hot ? 8 : 4}px white) drop-shadow(0 0 ${hot ? 16 : 6}px #88aaff);
-             animation:aresNodePulse ${dur}s ease-in-out infinite ${del}s"/>`
-    })
-
-    // Particule curg pe muchii
-    EDGES.filter((_: any, i: any) => i % 2 === 0).forEach(([a, b]: any, i: any) => {
-      const dur = (1.5 + i * 0.2).toFixed(1)
-      svg += `<circle r="2" fill="white" opacity="0.85"
-      style="filter:drop-shadow(0 0 5px white)">
-      <animateMotion dur="${dur}s" repeatCount="indefinite" begin="${(i * 0.22).toFixed(1)}s"
-        path="M${V[a].x},${V[a].y} L${V[b].x},${V[b].y}"/>
-    </circle>`
-    })
-
-    // Etichete mici pe creier
-    ZONES.forEach((z: any, zi: any) => {
-      const active = st.confidence > 30 + zi * 8
-      const op = active ? '0.9' : '0.42'
-      svg += `
-    <circle cx="${z.lx}" cy="${z.ly}" r="3" fill="${z.col}" opacity="${op}"
-      style="filter:drop-shadow(0 0 5px ${z.col})"/>
-    <text x="${z.lx}" y="${z.ly - 7}" text-anchor="middle"
-      font-family="monospace" font-size="6" font-weight="900"
-      fill="${z.col}" opacity="${op}">${z.name}</text>
-    <text x="${z.lx}" y="${z.ly + 5}" text-anchor="middle"
-      font-family="monospace" font-size="4.5" fill="${z.col}" opacity="${Number(op) * 0.65}">${z.f1}</text>`
-    })
-
     // Brain SVG randat O SINGURĂ DATĂ la init prin initAriaBrain()
-    // _aresRender updatează doar badge/stats — nu mai rescrie SVG-ul
+    // _aresRender nu mai rescrie SVG-ul
     if (!(panel as any).dataset.abInit) { initAriaBrain(); (panel as any).dataset.abInit = '1' }
 
-    // ── THOUGHT STREAM cu date reale + cognitive insights ────────────────
-    const thoughtInner = document.getElementById('ares-thought-inner') as any
-    if (thoughtInner) {
-      const mindInsight = ARES_MIND.getPatternInsight()
-      const price = (typeof w.S !== 'undefined' && w.S.price > 0) ? fP(w.S.price) : '\u2014'
-      const regime = (typeof w.BM !== 'undefined' ? w.BM.regime : null) || '\u2014'
-      const cogLines = [
-        `COGNITIV: ${mindInsight}`,
-        `PREDIC\u021aIE: ${predAcc != null ? predAcc + '% acurate\u021be pe ultimele semnale' : '\u00een colectare date...'}`,
-        `CLARITATE MENTAL\u0102: ${clarity}% \u2014 ${clarity > 75 ? 'OPTIMAL' : clarity > 50 ? 'ACCEPTABIL' : 'RECALIBREZ'}`,
-        `PRE\u021a CURENT: ${price} \u2014 REGIM: ${regime}`,
-      ]
-      const combined = [...cogLines, ...st.thoughtLines, ...cogLines, ...st.thoughtLines]
-      thoughtInner.style.animation = `aresThoughtScroll ${Math.max(14, combined.length * 1.2)}s linear infinite`
-      thoughtInner.innerHTML = combined.map((l: any, i: any) => {
-        const isCog = i < cogLines.length || (i >= st.thoughtLines.length + cogLines.length && i < combined.length - st.thoughtLines.length)
-        const isAlert = l.toLowerCase().includes('alert\u0103') || l.toLowerCase().includes('recalib')
-        return `<div class="ares-thought-line${i === 0 ? ' new' : isAlert ? ' alert' : isCog ? ' new' : ''}">
-        <span style="color:${col}66">\u203a</span> ${escHtml(l)}
-      </div>`
-      }).join('')
-    }
+    // [R28.2-G] Thought stream + Lesson text + History bar are React-owned
+    // via <ThoughtStream /> <LessonText /> <HistoryBar /> subscribing to
+    // useAresStore((s) => s.ui.cognitive.cogLines / .thoughts / .lesson /
+    // .history). Sync adapter computes all four in one pass each tick.
 
     // [R28.2-C] Stats row React-owned via <StatsRow /> subscribing to
     // useAresStore((s) => s.ui.stats). No imperative write.
-    const st2 = w.ARES.getState(); void st2
 
     // [R28.2-F] Mission arc is React-owned via <MissionArc /> subscribing to
     // useAresStore((s) => s.ui.missionArc). No imperative SVG write.
-
-    // Update lesson + cognitive insight
-    const lessonEl = document.getElementById('ares-lesson-text')
-    if (lessonEl) lessonEl.textContent = st2.lastLesson + '  |  ' + ARES_MIND.getPatternInsight()
-
-    // Update history dots
-    const histBar = document.getElementById('ares-history-bar')
-    if (histBar && st2.tradeHistory.length) {
-      histBar.innerHTML = st2.tradeHistory.map((ww: any) =>
-        `<div class="ares-hist-dot" style="background:${ww ? '#0080ff66' : '#ff446666'};border:1px solid ${ww ? '#00d9ff' : '#ff4466'};box-shadow:0 0 4px ${ww ? '#00d9ff44' : '#ff446644'}"></div>`
-      ).join('')
-    }
   } catch (e: any) { console.warn('[_aresRender]', e && e.message ? e.message : e) } // [v119-p10 FIX]
 }
 

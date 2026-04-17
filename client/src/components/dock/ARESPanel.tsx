@@ -15,6 +15,11 @@ import { ObjectivesCol } from './ares/ObjectivesCol'
 import { PositionsList } from './ares/PositionsList'
 import { BrainDots } from './ares/BrainDots'
 import { MissionArc } from './ares/MissionArc'
+import { WoundLine } from './ares/WoundLine'
+import { DecisionLine } from './ares/DecisionLine'
+import { ThoughtStream } from './ares/ThoughtStream'
+import { LessonText } from './ares/LessonText'
+import { HistoryBar } from './ares/HistoryBar'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -260,9 +265,9 @@ export function ARESPanel() {
         </div>
       </div>
 
-      {/* Wound line + Decision line — from template lines 3593-3594 */}
-      <div id="ares-wound-line">⚠ —</div>
-      <div id="ares-decision-line" style={{ display: 'none', fontSize: 12, padding: '2px 8px', fontFamily: 'monospace' }}></div>
+      {/* Wound line + Decision line (R28.2-G store-driven) */}
+      <WoundLine />
+      <DecisionLine />
 
       <div id="ares-strip-panel">
         <div id="ares-panel">
@@ -297,20 +302,16 @@ export function ARESPanel() {
       {/* ── STATS ROW (R28.2-C store-driven) ── */}
       <StatsRow />
 
-      {/* ── THOUGHT LOG ── */}
+      {/* ── THOUGHT LOG (R28.2-G store-driven) ── */}
       <div id="ares-thought-wrap">
-        <div id="ares-thought-inner">
-          <div className="ares-thought-line new">› ARES 1.0 — Neural Command Center online</div>
-          <div className="ares-thought-line">› AUTONOMOUS mode — managing positions independently</div>
-          <div className="ares-thought-line">› Awaiting market data...</div>
-        </div>
+        <ThoughtStream />
       </div>
 
-      {/* ── LESSON FROM MEMORY ── */}
+      {/* ── LESSON FROM MEMORY (R28.2-G store-driven) ── */}
       <div id="ares-lesson-wrap">
         <div id="ares-lesson-label">◈ LAST LESSON FROM MEMORY</div>
-        <div id="ares-lesson-text">Awaiting first trade analysis...</div>
-        <div id="ares-history-bar"></div>
+        <LessonText />
+        <HistoryBar />
       </div>
 
         </div>

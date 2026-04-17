@@ -71,6 +71,8 @@ export interface AresCognitiveUI {
   clarity: number
   predictionAccuracy: number
   pulseSpeed: number
+  /** [R28.2-G] Cognitive text lines rendered in the thought stream. */
+  cogLines: string[]
 }
 
 /** Stats row (Day / Δ / Pred / WR). */
@@ -211,7 +213,7 @@ export const DEFAULT_ARES_UI: AresStoreUI = {
     balance: 0, locked: 0, available: 0, realizedPnL: 0, fundedTotal: 0,
     withdrawEnabled: false, withdrawTip: '', failBannerVisible: false, failMessage: '',
   },
-  cognitive: { clarity: 0, predictionAccuracy: 0, pulseSpeed: 1 },
+  cognitive: { clarity: 0, predictionAccuracy: 0, pulseSpeed: 1, cogLines: [] },
   stats: { day: '', delta: '', prediction: '', winRate: '' },
   positions: [],
   closeAllVisible: false,

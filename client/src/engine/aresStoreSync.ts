@@ -199,10 +199,23 @@ function _wallet(): AresWalletUI {
 }
 
 function _cognitive(): AresCognitiveUI {
+  const clarity = Number(ARES_MIND?.getClarity?.() || 0)
+  const predAcc = ARES_MIND?.getPredictionAccuracy?.()
+  const mindInsight = String(ARES_MIND?.getPatternInsight?.() || '')
+  const priceN = (typeof w.S !== 'undefined' && Number(w.S?.price) > 0) ? Number(w.S.price) : null
+  const price = priceN != null ? priceN.toFixed(2) : '\u2014'
+  const regime = (typeof w.BM !== 'undefined' ? w.BM.regime : null) || '\u2014'
+  const cogLines = [
+    'COGNITIV: ' + mindInsight,
+    'PREDIC\u021aIE: ' + (predAcc != null ? predAcc + '% acurate\u021be pe ultimele semnale' : '\u00een colectare date...'),
+    'CLARITATE MENTAL\u0102: ' + clarity + '% \u2014 ' + (clarity > 75 ? 'OPTIMAL' : clarity > 50 ? 'ACCEPTABIL' : 'RECALIBREZ'),
+    'PRE\u021a CURENT: ' + price + ' \u2014 REGIM: ' + regime,
+  ]
   return {
-    clarity: Number(ARES_MIND?.getClarity?.() || 0),
-    predictionAccuracy: Number(ARES_MIND?.getPredictionAccuracy?.() || 0),
+    clarity,
+    predictionAccuracy: Number(predAcc || 0),
     pulseSpeed: Number(ARES_MIND?.getPulseSpeed?.() || 1),
+    cogLines,
   }
 }
 
@@ -360,7 +373,7 @@ export function syncAresUIToStore(): void {
       positions: _positions(),
       closeAllVisible: (_positions().length >= 2),
       history: _history(aresState),
-      lesson: String(aresState.lastLesson || ''),
+      lesson: (String(aresState.lastLesson || '') + '  |  ' + String(ARES_MIND?.getPatternInsight?.() || '')).trim(),
       thoughts,
       lobeColors: _lobeColors(aresState),
       lobDots: _lobDots(aresState),
