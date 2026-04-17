@@ -2,6 +2,7 @@ import { useRef, useEffect, memo } from 'react'
 import { resetProtectMode } from '../../engine/brain'
 import { BlockReasonText } from './BlockReasonText'
 import { useBrainStatsStore } from '../../stores/brainStatsStore'
+import { _ZI } from '../../constants/icons'
 
 /** [ZT5-C] Store-driven consumers for right-column arm/regime/receipt */
 function ArmBadge() {
@@ -35,6 +36,45 @@ function ArmDetail() {
       <div className="znc-ad-row">Cooldown: <b id="zad-cd" style={{ color: s.cooldownReady ? ARM_FG_ON : ARM_FG_OFF }}>{s.cooldown}</b></div>
       <div className="znc-gates-summary" id="zad-gates-summary">{s.gatesSummary}</div>
       <BlockReasonText />{/* [R30] store-driven subscriber — memo'd parent preserved */}
+    </div>
+  )
+}
+
+function QForecastBlock() {
+  const s = useBrainStatsStore((st) => st.snapshot.forecast)
+  return (
+    <div id="brain-forecast">
+      <div className="bf-label">Q-FORECAST</div>
+      <div className={s.mainCls} id="bf-main">{s.mainText}</div>
+      <div className="bf-row">Range: <b id="bf-range">{s.rangeText}</b></div>
+      <div className="bf-row">State: <b id="bf-state">{s.stateText}</b></div>
+    </div>
+  )
+}
+
+function WhyEngineBlock() {
+  const s = useBrainStatsStore((st) => st.snapshot.why)
+  const empty = s.whyList.length === 0 && s.riskList.length === 0
+  return (
+    <div id="brain-why">
+      <div className="bw-label">WHY ENGINE</div>
+      <div className={s.stateCls} id="bw-state">{s.stateText}</div>
+      <div className="bw-reasons" id="bw-reasons">
+        {empty ? (
+          <span>Scanning market...</span>
+        ) : (
+          <>
+            {s.whyList.length > 0 && <div className="bw-section-label why-label">WHY:</div>}
+            {s.whyList.map((r, i) => (
+              <span key={'w' + i} className="bw-why" dangerouslySetInnerHTML={{ __html: _ZI.ok + ' ' + r.replace(/</g, '&lt;') }} />
+            ))}
+            {s.riskList.length > 0 && <div className="bw-section-label risk-label">RISK:</div>}
+            {s.riskList.map((r, i) => (
+              <span key={'r' + i} className="bw-risk" dangerouslySetInnerHTML={{ __html: _ZI.w + ' ' + r.replace(/</g, '&lt;') }} />
+            ))}
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -392,24 +432,10 @@ export const BrainCockpit = memo(function BrainCockpit() {
 
       </div>{/* end cockpit panel */}
 
-      {/* Q-FORECAST + WHY ENGINE row */}
+      {/* Q-FORECAST + WHY ENGINE row — store-driven */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', padding: '4px 6px 0' }}>
-
-        {/* Q-FORECAST */}
-        <div id="brain-forecast">
-          <div className="bf-label">Q-FORECAST</div>
-          <div className="bf-main neut" id="bf-main">Neutral (0)</div>
-          <div className="bf-row">Range: <b id="bf-range">—</b></div>
-          <div className="bf-row">State: <b id="bf-state">—</b></div>
-        </div>
-
-        {/* WHY ENGINE */}
-        <div id="brain-why">
-          <div className="bw-label">WHY ENGINE</div>
-          <div className="bw-state wait" id="bw-state">WAIT</div>
-          <div className="bw-reasons" id="bw-reasons"><span>—</span></div>
-        </div>
-
+        <QForecastBlock />
+        <WhyEngineBlock />
       </div>
 
       {/* COMPAT: hidden IDs needed by existing JS */}

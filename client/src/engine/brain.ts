@@ -1980,13 +1980,8 @@ export function renderBrainCockpit(): void {
     })
   }
 
-  // ── Q-FORECAST DISPLAY (pure display — S.quantumForecast set by Brain engine) ──
+  // [ZT5-E] Q-FORECAST + WHY ENGINE routed through brainStatsStore
   ;(function renderQForecast() {
-    const mainEl = el('bf-main')
-    const rangeEl = el('bf-range')
-    const stateEl = el('bf-state')
-    if (!mainEl) return
-
     const qf = w.S.quantumForecast
     const sent = qf?.sentiment || 'neutral'
     const strength = +(qf?.strength) || 0
@@ -1994,12 +1989,10 @@ export function renderBrainCockpit(): void {
     const rangeHigh = qf?.rangeHigh
     const qfState = qf?.state || '—'
 
-    // Sentiment → css class
     const sentLower = sent.toLowerCase()
     const sentCls = sentLower.includes('bull') ? 'bull'
       : sentLower.includes('bear') ? 'bear'
         : 'neut'
-    // strength modifiers
     const glowCls = strength > 70 ? ' glow' : ''
     const dimCls = strength < 40 ? ' dim' : ''
 
@@ -2007,50 +2000,35 @@ export function renderBrainCockpit(): void {
       ? sent.charAt(0).toUpperCase() + sent.slice(1).toLowerCase() + ' (' + strength + ')'
       : 'Neutral (0)'
 
-    mainEl.textContent = sentLabel
-    mainEl.className = 'bf-main ' + sentCls + glowCls + dimCls
-
-    if (rangeEl) {
-      rangeEl.textContent = (rangeLow && rangeHigh)
-        ? fP(rangeLow) + ' – ' + fP(rangeHigh)
-        : '—'
-    }
-    if (stateEl) stateEl.textContent = strength > 0 ? qfState : '—'
+    useBrainStatsStore.getState().patchStats({
+      forecast: {
+        mainText: sentLabel,
+        mainCls: 'bf-main ' + sentCls + glowCls + dimCls,
+        rangeText: (rangeLow && rangeHigh) ? fP(rangeLow) + ' – ' + fP(rangeHigh) : '—',
+        stateText: strength > 0 ? qfState : '—',
+      },
+    })
   })()
 
-  // ── WHY ENGINE DISPLAY (pure display — S.why set by brain narrator) ──
   ;(function renderWhyEngine() {
-    const stateEl = el('bw-state')
-    const reasonsEl = el('bw-reasons')
-    if (!stateEl) return
-
     const why = w.S.why
     const whyState = (why?.state || 'WAIT').toUpperCase()
-    const whyList = Array.isArray(why?.whyList) ? why.whyList : []
-    const riskList = Array.isArray(why?.riskList) ? why.riskList : []
+    const whyListRaw = Array.isArray(why?.whyList) ? why.whyList : []
+    const riskListRaw = Array.isArray(why?.riskList) ? why.riskList : []
 
-    // State → css class
     const stateCls = whyState === 'READY' ? 'executed'
       : whyState === 'BLOCKED' ? 'blocked'
         : whyState === 'ANALYZING' ? 'analyzing'
           : 'wait'
 
-    stateEl.textContent = whyState + (why?.dir ? ' (' + why.dir.toUpperCase() + ')' : '')
-    stateEl.className = 'bw-state ' + stateCls
-
-    if (reasonsEl) {
-      let html = ''
-      if (whyList.length > 0) {
-        html += '<div class="bw-section-label why-label">WHY:</div>'
-        html += whyList.slice(0, 4).map(function (r: any) { return '<span class="bw-why">' + _ZI.ok + ' ' + String(r).replace(/</g, '&lt;') + '</span>' }).join('')
-      }
-      if (riskList.length > 0) {
-        html += '<div class="bw-section-label risk-label">RISK:</div>'
-        html += riskList.slice(0, 3).map(function (r: any) { return '<span class="bw-risk">' + _ZI.w + ' ' + String(r).replace(/</g, '&lt;') + '</span>' }).join('')
-      }
-      if (!html) html = '<span>Scanning market...</span>'
-      reasonsEl.innerHTML = html
-    }
+    useBrainStatsStore.getState().patchStats({
+      why: {
+        stateText: whyState + (why?.dir ? ' (' + why.dir.toUpperCase() + ')' : ''),
+        stateCls: 'bw-state ' + stateCls,
+        whyList: whyListRaw.slice(0, 4).map((r: any) => String(r)),
+        riskList: riskListRaw.slice(0, 3).map((r: any) => String(r)),
+      },
+    })
   })()
 
   // ── AUB sync — update data badges from brain state ──

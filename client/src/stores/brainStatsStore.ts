@@ -70,6 +70,20 @@ export interface BrainOfi {
   sellPct: number
 }
 
+export interface BrainForecast {
+  mainText: string
+  mainCls: string
+  rangeText: string
+  stateText: string
+}
+
+export interface BrainWhy {
+  stateText: string
+  stateCls: string
+  whyList: string[]
+  riskList: string[]
+}
+
 export interface BrainStatsSnapshot {
   gates: BrainStatsNode
   regime: BrainStatsNode
@@ -83,6 +97,8 @@ export interface BrainStatsSnapshot {
   regimeBadge2: BrainRegimeBadge
   regimeDetail: string
   ofi: BrainOfi
+  forecast: BrainForecast
+  why: BrainWhy
 }
 
 const emptyNode: BrainStatsNode = { text: '—', sub: '—', tone: 'neutral' }
@@ -120,6 +136,8 @@ export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   regimeBadge2: emptyRegimeBadge,
   regimeDetail: 'ADX: — | VOL: — | STRUCT: —',
   ofi: { buyPct: 50, sellPct: 50 },
+  forecast: { mainText: 'Neutral (0)', mainCls: 'bf-main neut', rangeText: '—', stateText: '—' },
+  why: { stateText: 'WAIT', stateCls: 'bw-state wait', whyList: [], riskList: [] },
 }
 
 interface BrainStatsStoreState {
