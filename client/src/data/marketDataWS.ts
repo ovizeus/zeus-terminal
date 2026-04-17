@@ -110,7 +110,10 @@ export function updConn(): void {
 }
 
 // ===== PROCESS LIQUIDATION =====
-export function procLiq(o: any, src?: string): void {
+// Module-private: the two WebSocket handlers above (lines ~61/62/93)
+// are the only callers. The `w.procLiq` bridge binding was removed in
+// ZT8 after audit confirmed zero external readers.
+function procLiq(o: any, src?: string): void {
   if (!o || !o.q || !o.p) return
   src = src || 'bnb'
   const qty = +o.q, price = +o.p
@@ -335,7 +338,10 @@ export function updateMainMetrics(): void {
 }
 
 // ===== CHART SETTINGS =====
-export function showTab(tab: string, btn: any): void { document.querySelectorAll('.ctab-pane').forEach((p: any) => p.classList.remove('act')); document.querySelectorAll('.ctab-btn').forEach((b: any) => b.classList.remove('act')); const pane = el('ct-' + tab); if (pane) pane.classList.add('act'); if (btn) btn.classList.add('act') }
+// ZT11: `showTab` removed — zero readers across client/src (TS/React)
+// and the /legacy/ bundle has its own local showTab() in
+// public/legacy/js/data/marketData.js. The `w.showTab` bridge binding
+// was removed in ZT8.
 export function applyChartColors(): void { const uc = el('ccBull')?.value || '#00d97a'; const dc = el('ccBear')?.value || '#ff3355'; const uw = el('ccBullW')?.value || '#00d97a77'; const dw = el('ccBearW')?.value || '#ff335577'; if (w.cSeries) w.cSeries.applyOptions({ upColor: uc, downColor: dc, borderUpColor: uc, borderDownColor: dc, wickUpColor: uw, wickDownColor: dw }); toast('Colors applied'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function setCandleStyle(style: string, btn: any): void { document.querySelectorAll('#ct-candles .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Style: ' + style) }
 export function setTZ(tz: string, btn: any): void { w.S.tz = tz; document.querySelectorAll('#cst .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); const n: any = { 'Europe/Bucharest': 'RO', 'UTC': 'UTC', 'America/New_York': 'NY', 'Asia/Tokyo': 'TK', 'Europe/London': 'LN' }; const lbl = el('chartTZLbl'); if (lbl) lbl.textContent = n[tz] || tz; toast('Timezone: ' + tz); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
