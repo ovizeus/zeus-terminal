@@ -982,8 +982,8 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     if (typeof renderTradeMarkers === 'function') renderTradeMarkers()  // [CHART MARKERS]
   } else {
     if (!TP.liveConnected) {
-      atLog('warn', '[FAIL] LIVE: API neconectat! Conectati in panoul LIVE TRADING.')
-      toast('API neconectat — Auto trade anulat', 0, _ZI.x)
+      atLog('warn', '[FAIL] LIVE: API disconnected! Connect it in the LIVE TRADING panel.')
+      toast('API disconnected — auto-trade cancelled', 0, _ZI.x)
       AT.totalTrades--
       return
     }

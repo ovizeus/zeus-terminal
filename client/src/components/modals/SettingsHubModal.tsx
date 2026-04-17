@@ -63,7 +63,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
     setExLoadingFor(p => ({ ...p, [ex]: true }))
     const r = await apiFetch('/api/exchange/save', { apiKey: val(`${ex}ApiKey`), apiSecret: val(`${ex}ApiSecret`), mode: exModeFor[ex] || 'testnet', exchange: ex })
     setExLoadingFor(p => ({ ...p, [ex]: false }))
-    exSetMsg(ex, r.ok ? `✓ Conectat! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Eroare'), !!r.ok)
+    exSetMsg(ex, r.ok ? `✓ Connected! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Error'), !!r.ok)
     if (r.ok) setExAccounts(p => ({ ...p, [ex]: { connected: true, mode: r.mode, maskedKey: r.maskedKey, balance: r.balance, lastVerified: r.lastVerified } }))
   }
 
