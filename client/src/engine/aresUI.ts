@@ -32,6 +32,7 @@ import { checkPendingOrders , renderDemoPositions, checkDemoPositionsSLTP } from
 import { ARES_DECISION } from './aresDecision'
 import { ARES_MIND } from './aresMind'
 import { ARES_MONITOR } from './aresMonitor'
+import { syncAresUIToStore } from './aresStoreSync'
 
 const w = window as any
 
@@ -181,6 +182,12 @@ function _setIconText(el: HTMLElement, iconSvg: string, trailingText: string): v
 // ── ARES Render — Supreme Neural Brain v109 ──────────────────────────────
 export function _aresRender() {
   try { // [v119-p10 FIX] wrap complet — orice eroare internă NU mai aruncă uncaught → nu mai aprinde ENGINE ERROR banner
+    // [R28.2-B] Dual-writer: mirror the derived UI state into the Zustand store
+    // before imperative #ares-* writes. Store subscribers (components) can read
+    // the same data without engine coupling. This call is side-effect-free on
+    // the DOM — it only calls useAresStore.getState().patchUi(...).
+    syncAresUIToStore()
+
     const panel = document.getElementById('ares-core-svg')
     if (!panel) return
     const st = w.ARES.getState()
