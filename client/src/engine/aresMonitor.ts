@@ -123,7 +123,7 @@ export const ARES_MONITOR = { check, closeLivePosition: _closeLivePosition }
     if (g !== null) return g - (_sN(pos.fee) ?? _sN(pos.fees) ?? 0)
     return null
   }
-  w._demoCloseHooks.push(function (pos: any, pnl: number, reason: string) {
+  w._demoCloseHooks.push(function (pos: any, pnl: number, _reason: string) {
     if (typeof w.ARES === 'undefined' || typeof w.ARES.onTradeClosed !== 'function') return
     setTimeout(function () {
       try {

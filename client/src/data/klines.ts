@@ -28,11 +28,6 @@ function _setBR(code: string, text: string, source?: string): void {
   w.BlockReason.set(code, text, source)
   useBrainStore.getState().setBlockReason({ code, text })
 }
-function _clearBR(): void {
-  w.BlockReason.clear()
-  useBrainStore.getState().setBlockReason(null)
-}
-
 // ADX calculator
 export function calcADX(klines: any[], period = 14) {
   if (!klines || klines.length < period * 3 + 1) return null

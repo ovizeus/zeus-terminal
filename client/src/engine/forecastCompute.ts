@@ -367,7 +367,7 @@ function computeScenario(
   climSignal: ClimaxResult,
 ): ScenarioResult {
   const isBull = regimeSlope >= 0
-  const dir = isBull ? 'LONG' : 'SHORT'
+
 
   // Primary scenario
   const primary = (isBull ? '▲ Bullish' : '▼ Bearish')

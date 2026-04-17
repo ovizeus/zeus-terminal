@@ -229,7 +229,6 @@ export function syncDOMtoTC() {
   // [R34] Typed `HTMLInputElement | null` instead of `as any` — `.value` is
   // a structural property of input-like elements only.
   const _el = function (id: string) { return document.getElementById(id) as HTMLInputElement | null }
-  const _pi = function (id: string, def: any) { const v = parseInt(_el(id)?.value ?? ''); return Number.isFinite(v) ? v : def }
   const _pf = function (id: string, def: any) { const v = parseFloat(_el(id)?.value ?? ''); return Number.isFinite(v) ? v : def }
   const TC = w.TC
   // Phase 3 C5: the 6 AT keys (lev/size/slPct/rr/maxPos/sigMin) are now
@@ -932,7 +931,6 @@ export const ZState = (() => {
     }
     function _excludeRecentlyClosed(mapped: any[]) {
       if (_rcSet.size === 0) return mapped
-      const before = mapped.length
       const result = mapped.filter(function (p: any) {
         const excluded = _rcSet.has(String(p.id)) || _rcSet.has(String(p._serverSeq))
         return !excluded

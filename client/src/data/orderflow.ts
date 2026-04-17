@@ -660,14 +660,14 @@ export function _initOrderflowP3() {
   w.OF_PRICE_WINDOW_MS = 10000
   w.OF_PRICE_MAX = 50
 
-  function _prunePriceBuf() {
-    const cut = Date.now() - w.OF_PRICE_WINDOW_MS
-    const buf = w.OF_PRICE_BUF_ref()
-    let i = 0
-    while (i < buf.length && buf[i].ts < cut) i++
-    if (i > 0) buf.splice(0, i)
-    while (buf.length > w.OF_PRICE_MAX) buf.shift()
-  }
+
+
+
+
+
+
+
+
 
   w.OF_PRICE_BUF_ref = function () { return w.OF_PRICE_BUF }
 
@@ -898,14 +898,14 @@ export function _initOrderflowVacuum() {
 
   let _prevActive = false
 
-  function _getPriceNow() {
-    try {
-      const buf = w.OF_PRICE_BUF
-      if (buf && buf.length) return buf[buf.length - 1].price
-    } catch (_) { }
-    const sp = w.S && w.S.price
-    return (Number.isFinite(sp) && sp > 0) ? sp : null
-  }
+
+
+
+
+
+
+
+
 
   function _priceMovePct(ms: number) {
     try {
@@ -1487,7 +1487,7 @@ export function _initOrderflowHUD() {
   let _hudEl: any = null, _interval: any = null
 
   const _lastSeen = { trap: 0, vacuum: 0, ice: 0, flip: 0, abs: 0 }
-  function _secsAgo(ts: any) { if (!ts) return '\u2014'; const s = Math.floor((Date.now() - ts) / 1000); return s + 's ago' }
+
   function _isDbgOn() { return !!(_state.debug && Date.now() < _state.debugUntil) }
 
   function _getRegime() {
@@ -2086,13 +2086,13 @@ export function _initOrderflowHUD() {
 
   const POS_KEY = 'of_hud_pos_v1'
 
-  function _loadPos() {
-    try {
-      const p = JSON.parse(localStorage.getItem(POS_KEY) as any)
-      if (p && Number.isFinite(p.top) && Number.isFinite(p.left)) return p
-    } catch (_) { }
-    return null
-  }
+
+
+
+
+
+
+
 
   function _applyPos(el: any, p: any) {
     el.style.top = p.top + 'px'
@@ -2109,48 +2109,46 @@ export function _initOrderflowHUD() {
     console.log('[HUD] DBG mode', _state.debug ? 'ON (60s)' : 'OFF')
   }
 
-  const ANCH_POS_KEY = 'of_hud_anchor_x_v1'
-  let _anchDragTimer: any = null, _anchDragging = false, _anchStartX = 0, _anchOrigLeft = 0
 
-  function _initAnchorDrag(anchor: any) {
-    try {
-      const ax = parseInt(localStorage.getItem(ANCH_POS_KEY) as any)
-      if (Number.isFinite(ax)) { anchor.style.left = ax + 'px'; anchor.style.right = 'auto' }
-    } catch (_) { }
 
-    anchor.addEventListener('pointerdown', function (e: any) {
-      const rect = anchor.getBoundingClientRect()
-      _anchStartX = e.clientX
-      _anchOrigLeft = rect.left
-      _anchDragTimer = setTimeout(function () {
-        _anchDragTimer = null
-        _anchDragging = true
-        anchor.style.cursor = 'grabbing'
-        anchor.style.right = 'auto'
-        anchor.style.opacity = '0.75'
-      }, 300)
-    })
 
-    document.addEventListener('pointermove', function (e: any) {
-      if (!_anchDragging) return
-      const anc = document.getElementById('of-hud-anchor')
-      if (!anc) return
-      const newLeft = Math.max(4, Math.min(w.innerWidth - 40, _anchOrigLeft + (e.clientX - _anchStartX)))
-      ;(anc as any).style.left = newLeft + 'px'
-    })
 
-    document.addEventListener('pointerup', function (e: any) {
-      if (_anchDragTimer) { clearTimeout(_anchDragTimer); _anchDragTimer = null }
-      if (!_anchDragging) return
-      _anchDragging = false
-      const anc = document.getElementById('of-hud-anchor')
-      if (!anc) return
-      ;(anc as any).style.cursor = 'pointer'
-      ;(anc as any).style.opacity = '1'
-      try { localStorage.setItem(ANCH_POS_KEY, String(parseInt((anc as any).style.left))) } catch (_) { }
-      _ucMarkDirty('ofHud')
-    })
-  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   w.ofHudResetPos = function () {
     try { localStorage.removeItem(POS_KEY) } catch (_) { }
@@ -2172,9 +2170,9 @@ export function _initOrderflowHUD() {
   let _dragTimer: any = null
 
   const SNAP_CORNERS = [
-    { top: 10, getLeft: (w2: any) => 10 },
+    { top: 10, getLeft: (_w2: any) => 10 },
     { top: 10, getLeft: (w2: any) => w.innerWidth - w2 - 10 },
-    { top: (h: any) => w.innerHeight - h - 10, getLeft: (w2: any) => 10 },
+    { top: (h: any) => w.innerHeight - h - 10, getLeft: (_w2: any) => 10 },
     { top: (h: any) => w.innerHeight - h - 10, getLeft: (w2: any) => w.innerWidth - w2 - 10 },
   ]
 
@@ -2204,7 +2202,7 @@ export function _initOrderflowHUD() {
     _applyPos(_hudEl, snap || { top: newTop, left: newLeft })
   }
 
-  function _onDragEnd(e: any) {
+  function _onDragEnd(_e: any) {
     if (_dragTimer) { clearTimeout(_dragTimer); _dragTimer = null }
     if (!_drag.active) return
     _drag.active = false
@@ -2314,8 +2312,8 @@ export function _initOrderflowP6() {
   const RATE_OK = 10
   const UPDATE_MS = 2000
 
-  let _lastBufLen = 0
-  let _lastCheckTs = Date.now()
+
+  void (Date.now())
 
   function _wsAlive() {
     try {
@@ -2429,7 +2427,7 @@ export function _initOrderflowP7() {
     try { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('AT', msg, meta) } catch (_) { }
   }
 
-  function _reset(reason: any) {
+  function _reset(_reason: any) {
     _stateP7 = 'idle'
     _exhaustTs = null
     _exhaustSide = null
@@ -3505,7 +3503,7 @@ export function _initOrderflowP13() {
   w.__ZEUS_OF_MAGNET__ = true
 
   const MAG_DIST_MAX_PCT = 0.35; const MAG_STR_MIN = 1.6; const MAG_MIN_USD = 50000
-  const MAG_BUCKET_WINDOW = 50; const MAG_DISPLAY_MS = 4000; const MAG_COOLDOWN_MS = 8000
+
   const MAG_TW_MS = 7 * 24 * 3600 * 1000
 
   const _magDefault = () => ({ active: false, dir: 0, targetPrice: null, distancePct: null, strength: null, conf: null, ts: 0, cooldownUntil: 0 })

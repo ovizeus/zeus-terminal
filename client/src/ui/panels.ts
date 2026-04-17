@@ -220,7 +220,7 @@ export function renderMagnets() {
   const renderList = (list: any[], containerId: string, isAbove: boolean) => {
     const c = el(containerId); if (!c) return;
     if (!list.length) { c.innerHTML = `<div style="padding:8px;text-align:center;font-size:13px;color:var(--dim)">Niciun magnet detectat</div>`; return; }
-    c.innerHTML = list.map((m: any, i: number) => {
+    c.innerHTML = list.map((m: any, _i: number) => {
       const dist = isAbove ? ((m.price - p) / p * 100) : (p - m.price) / p * 100 * -1;
       const distStr = (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%';
       const cls = isAbove ? (m.strength > 70 ? 'strong-above' : 'above') : (m.strength > 70 ? 'strong-below' : 'below');
@@ -477,7 +477,7 @@ export async function runBacktest() {
   { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
 }
 
-export function renderBacktestResults(results: any, equityCurve: any, fwdBars: any, lookback: any, minMovePct: any) {
+export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: any, lookback: any, _minMovePct: any) {
   const BT_INDICATORS = w.BT_INDICATORS;
   const rows: any[] = [];
   let totalWins = 0, totalTrades = 0, bestWR = 0, bestName = '\u2014';
@@ -592,7 +592,7 @@ export function calcVWAPBands(klines: any) {
   let cumTPV = 0, cumV = 0;
   const vwapData: any[] = []; const upper1: any[] = []; const lower1: any[] = []; const upper2: any[] = []; const lower2: any[] = [];
   let cumVar = 0;
-  dayBars.forEach((k: any, i: number) => {
+  dayBars.forEach((k: any, _i: number) => {
     const tp = (k.high + k.low + k.close) / 3;
     cumTPV += tp * k.volume; cumV += k.volume;
     const vwap = cumV > 0 ? cumTPV / cumV : tp;
@@ -953,7 +953,7 @@ export function oviRenderScale(gMin: any, gMax: any) {
   try {
     const kl = S.klines; if (!kl.length) return;
     const last = kl[kl.length - 1];
-    const c = S.oviCfg;
+
     const scaleS = w.mainChart.addLineSeries({
       color: 'rgba(240,192,64,0.01)',
       priceLineVisible: true,

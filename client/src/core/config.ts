@@ -6,7 +6,7 @@
 
 import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
-import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced, setProfile } from '../engine/brain'
+import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced } from '../engine/brain'
 import { getLiveLev } from '../data/marketDataTrading'
 import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
@@ -19,7 +19,7 @@ import { renderATLog } from '../trading/autotrade'
 import { _aresRender } from '../engine/aresUI'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
-import { userSettingsApi } from '../services/api'
+
 import { useDslStore } from '../stores/dslStore'
 import { useBrainStore } from '../stores/brainStore'
 import { useAresStore } from '../stores/aresStore'

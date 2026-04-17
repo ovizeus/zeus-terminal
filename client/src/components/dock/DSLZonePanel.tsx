@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useDslStore } from '../../stores'
-import { toggleDSL, stopDSLIntervals, startDSLIntervals, toggleAssistArm } from '../../trading/dsl'
+import { toggleDSL, toggleAssistArm } from '../../trading/dsl'
 import { ATStatusIcon } from '../ATStatusIcon'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)

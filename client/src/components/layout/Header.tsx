@@ -2,7 +2,6 @@ import { useUiStore, useMarketStore, useAuthStore } from '../../stores'
 
 export function Header() {
   const connected = useUiStore((s) => s.connected)
-  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
   const openModal = useUiStore((s) => s.openModal)
   const price = useMarketStore((s) => s.market.price)
   const prevPrice = useMarketStore((s) => s.market.prevPrice)

@@ -3,7 +3,7 @@
 // Quantum Exit Brain, scenario engine, probability score
 
 import { fmtNow } from '../data/marketDataHelpers'
-import { fmt, fP } from '../utils/format'
+import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { macroAdjustExitRisk as _macroAdjustExitRisk } from '../trading/risk'
 import { DEV , devLog } from '../utils/dev'
@@ -54,7 +54,7 @@ function _calcRSIArr(prices: number[], p?: number): (number | null)[] {
   return out
 }
 
-function _qebDetectDivergence(bars: any[], rsiNow: number): { type: string, conf: number } | null {
+function _qebDetectDivergence(bars: any[], _rsiNow: number): { type: string, conf: number } | null {
   try {
     if (!bars || bars.length < 40) return null
     const pivots = _qebSwingPivots(bars, 80, 3)
@@ -220,7 +220,7 @@ export function computeExitRisk(posDir: string): number {
 
 // ── (A3) Decide Exit Action ──────────────────────────────────────
 // Does NOT execute anything. Returns action string only.
-export function decideExitAction(risk: number, posDir: string, dslActive: boolean): string {
+export function decideExitAction(risk: number, _posDir: string, dslActive: boolean): string {
   try {
     // 2-bar confirm gate: divergence OR climax must be confirmed ≥2 bars
     const confirmed = (w.BM.qexit.confirm.div >= 2) || (w.BM.qexit.confirm.climax >= 2)
@@ -433,7 +433,7 @@ function _qebUpdateRiskUI(): void {
     // Signal details
     if (sigsEl) {
       const sigs = w.BM.qexit.signals
-      const fmtPFn = fP
+
       const rows: string[] = []
       if (sigs.divergence.type) {
         rows.push('<span class="qexit-sig-name">DIVERGENCE</span> '
@@ -547,16 +547,16 @@ export function updateScenarioData(): void {
     const regime = (typeof w.BRAIN !== 'undefined') ? (w.BRAIN.regime || 'unknown') : 'unknown'
     const regConf = (typeof w.BRAIN !== 'undefined') ? (w.BRAIN.regimeConfidence || 0) : 0
     const regSlope = (typeof w.BRAIN !== 'undefined') ? (w.BRAIN.regimeSlope || 0) : 0
-    const price = w.S.price || 0
-    const liq = _qebLiquidityProximity()
+
+    void (_qebLiquidityProximity())
     const bullC = (w.S.signalData && w.S.signalData.bullCount) || 0
     const bearC = (w.S.signalData && w.S.signalData.bearCount) || 0
     const fPFn = fP
-    const fmtFn = fmt
+
 
     const prob = w.BM.probScore
     const isBull = (bullC >= bearC) && ((typeof w.BRAIN !== 'undefined') ? regSlope >= 0 : true)
-    const dir = isBull ? 'LONG' : 'SHORT'
+
 
     // ── Primary scenario ─────────────────────────────────────────
     const nearTarget = isBull

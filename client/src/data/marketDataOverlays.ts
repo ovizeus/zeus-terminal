@@ -314,10 +314,8 @@ export function llvLoadSettings(): void {
 }
 
 let _llvPressTimer: any = null
-let _llvLongFired = false
 export function _llvPressStart(_e: any): void {
-  _llvLongFired = false
-  _llvPressTimer = setTimeout(function () { _llvLongFired = true; _llvPressTimer = null; openM('mllv') }, 500)
+  _llvPressTimer = setTimeout(function () { _llvPressTimer = null; openM('mllv') }, 500)
 }
 export function _llvPressEnd(_e: any): void {
   if (_llvPressTimer) { clearTimeout(_llvPressTimer); _llvPressTimer = null }

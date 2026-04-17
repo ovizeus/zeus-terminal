@@ -129,7 +129,7 @@ export function _aubWrapPublicFunctions(): void {
   // setTf guard
   const _origSetTf = setTf
   if (typeof _origSetTf === 'function') {
-    w.setTf = function (tf: any, btn: any) {
+    w.setTf = function (tf: any, _btn: any) {
       const valid = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '5h', '6h', '12h', '1d', '3d', '1w', '1M']
       if (!_aubGuard('setTf', tf, (v: any) => valid.includes(v))) return
       return _origSetTf.apply(this, arguments)
@@ -246,9 +246,9 @@ export function aubBBClear(): void {
 export function aubCalcMTFStrength(): any {
   try {
     const rsi = (typeof w.S !== 'undefined' && w.S.rsi) ? w.S.rsi : {}
-    const klines = (typeof w.S !== 'undefined' && w.S.klines) ? w.S.klines : []
+
     // ADX from klines (already calculated in brain)
-    const adx = (typeof w.BRAIN !== 'undefined' && w.BRAIN.regime) ? 1 : 0
+
 
     // Normalize RSI → strength 0–1 (50=0.5, 70=1, 30=0)
     function rsiToStr(r: any) {
@@ -442,12 +442,11 @@ export function _aubSimWorker(): void {
           const slv = entry * (1 - sl / 100)
           total++
           // Check next 3 bars
-          let hit = false
           for (let j = i + 1; j <= i + 3 && j < bars.length; j++) {
             const h = bars[j].high
             const l = bars[j].low
-            if (h >= tp) { wins++; hit = true; break }
-            if (l <= slv) { hit = true; break }
+            if (h >= tp) { wins++; break }
+            if (l <= slv) { break }
           }
         }
         const score = total > 0 ? wins / total * 100 : 0

@@ -2,8 +2,6 @@ import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { masterReset } from '../../core/bootstrapMisc'
 import { cloudSave, cloudClear, cloudLoad } from '../../data/marketDataWS'
 
-const w = window as any
-
 interface Props { visible: boolean; onClose: () => void }
 
 export function CloudSyncModal({ visible, onClose }: Props) {

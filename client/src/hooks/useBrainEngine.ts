@@ -22,7 +22,7 @@ export function useBrainEngine(authenticated: boolean) {
     if (!authenticated) return
 
     // Subscribe to market store changes
-    const unsub = useMarketStore.subscribe((state) => {
+    const unsub = useMarketStore.subscribe((_state) => {
       const now = Date.now()
       if (now - lastRunRef.current < THROTTLE_MS) {
         // Schedule a delayed run if not already scheduled

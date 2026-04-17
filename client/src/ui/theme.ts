@@ -3,7 +3,7 @@
  * Themes: native (obsidian), dark (onyx), light (ivory)
  */
 
-const w = window as Record<string, any>
+
 
 const THEMES = ['native', 'dark', 'light']
 const LS_KEY = 'zeus_theme'

@@ -40,7 +40,7 @@ export function closeDemoPos(id: any, reason?: string): void {
         .then(function (d: any) {
           if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(_closeSeq)
         })
-        .catch(function (err: any) {
+        .catch(function (_err: any) {
           if (attempt < 2) {
             setTimeout(function () { _doServerClose(attempt + 1) }, 2000 * attempt)
           } else {

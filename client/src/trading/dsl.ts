@@ -70,7 +70,7 @@ export function dslToggleMagnet(posId: any): void {
 // ══════════════════════════════════════════════════════
 // [DSL MAGNET] Pure helper — computes snap candidate
 // ══════════════════════════════════════════════════════
-export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind: any, ctx: any): any {
+export function _computeDslMagnetSnap(basePrice: any, _pos: any, side: any, kind: any, ctx: any): any {
   const out = { applied: false, snappedPrice: basePrice, source: '', confidence: 0, reason: '' }
   try {
     const isLong = side === 'LONG'
@@ -205,7 +205,7 @@ export function initDSLBubbles(): void {
   const cascade = el('dslCascade')
   if (!bg || !cascade) return
 
-  bg.innerHTML = Array.from({ length: 12 }, (_: any, i: number) => {
+  bg.innerHTML = Array.from({ length: 12 }, (_: any, _i: number) => {
     const size = 4 + Math.random() * 8
     const left = 5 + Math.random() * 90
     const dur = 3 + Math.random() * 5
@@ -214,7 +214,7 @@ export function initDSLBubbles(): void {
     return `<div class="dsl-bubble" style="width:${size}px;height:${size}px;left:${left}%;background:${col};opacity:.15;animation-duration:${dur}s;animation-delay:${delay}s;box-shadow:0 0 ${size}px ${col}44"></div>`
   }).join('')
 
-  cascade.innerHTML = Array.from({ length: 20 }, (_: any, i: number) => {
+  cascade.innerHTML = Array.from({ length: 20 }, (_: any, _i: number) => {
     const h = 4 + Math.random() * 10
     const dur = 0.4 + Math.random() * 0.6
     const del = Math.random() * 1.5
@@ -1035,13 +1035,13 @@ export function _renderDslCard(pos: any): string {
   }
   const _as = _adaptMap[_adaptState] || _adaptMap.calm
 
-  const posLabel = ''
+
 
   const origSL = dsl?.originalSL || pos.sl
   const origTP = dsl?.originalTP || pos.tp
   const currentSL = dsl?.currentSL || pos.sl
 
-  const yellowLine = isActive ? cur : null
+
   const pivotLeft = isActive ? (dsl.pivotLeft || 0) : null
   const pivotRight = isActive ? cur * (isLong ? 1 + pivotRightPct / 100 : 1 - pivotRightPct / 100) : null
   const impulseVal = isActive ? (dsl.impulseVal || 0) : null
@@ -1073,7 +1073,7 @@ export function _renderDslCard(pos: any): string {
   const _posHist = pos.dslHistory || []
   const _dslLog = dsl?.log || []
   const _allHistory = [..._posHist, ..._dslLog].sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)).slice(0, 3)
-  const lastLog = _allHistory[0]?.msg || 'Awaiting activation...'
+
 
   const _showTakeControl = _isAT && (_cm === 'auto' || _cm === 'assist')
   const _showReleaseControl = _isAT && _cm === 'user'

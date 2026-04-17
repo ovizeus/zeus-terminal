@@ -6,7 +6,7 @@ import { useEffect, useRef } from 'react'
 import { useMarketStore } from '../stores'
 
 const BINANCE_REST = 'https://fapi.binance.com'
-const BINANCE_WS = 'wss://fstream.binance.com/ws'
+
 
 export interface Kline {
   time: number

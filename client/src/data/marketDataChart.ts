@@ -137,7 +137,7 @@ export function renderChart(): void {
     if (w.S.indicators.wma) {
       const _wp1 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.wma) ? Math.round(w.IND_SETTINGS.wma.p1) : 20
       const _wp2 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.wma) ? Math.round(w.IND_SETTINGS.wma.p2) : 50
-      function calcWMA(data: number[], p: number) { return data.map((v: number, i: number) => { if (i < p - 1) return { time: w.S.klines[i].time, value: 0 }; let s = 0, wt = 0; for (let j = 0; j < p; j++) { s += data[i - j] * (p - j); wt += p - j } return { time: w.S.klines[i].time, value: s / wt } }) }
+      function calcWMA(data: number[], p: number) { return data.map((_v: number, i: number) => { if (i < p - 1) return { time: w.S.klines[i].time, value: 0 }; let s = 0, wt = 0; for (let j = 0; j < p; j++) { s += data[i - j] * (p - j); wt += p - j } return { time: w.S.klines[i].time, value: s / wt } }) }
       if (w.wma20S) w.wma20S.setData(calcWMA(c, _wp1)); if (w.wma50S) w.wma50S.setData(calcWMA(c, _wp2))
     } else { if (w.wma20S) w.wma20S.setData([]); if (w.wma50S) w.wma50S.setData([]) }
     if (w.S.indicators.st && w.S.atr) {

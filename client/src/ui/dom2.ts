@@ -2,7 +2,7 @@ import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { applyIndVisibility, renderActBar, getMacdChart } from '../engine/indicators'
-import { sendAlert, closeM } from '../data/marketDataWS'
+import { closeM } from '../data/marketDataWS'
 import { _usSave, _userCtxPush, _userCtxPushNow, INDICATORS } from '../core/config'
 import { renderChart } from '../data/marketDataChart'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
@@ -67,7 +67,7 @@ export function playEntrySound(): void { _safePlayTone([440, 660, 880], 0.4); }
 export function playExitSound(win: any): void { _safePlayTone(win ? [880, 1100] : [440, 330], 0.4); }
 
 // ===== ALERT SOUND ON NOTIFICATIONS =====
-const _origSendAlert = typeof sendAlert !== 'undefined' ? sendAlert : null;
+
 
 // ===== FIX: Toggle alert button visual =====
 export function toggleAlerts(en: any): void {
@@ -98,7 +98,7 @@ export function toggleAlerts(en: any): void {
 // Added to chart settings modal via applyChartColors
 
 // Override applyChartColors to also handle price scale colors
-const _origApplyCC = typeof w.applyChartColors === 'undefined' ? null : w.applyChartColors;
+
 
 export function applyChartColors(): void {
   const bull = el('ccBull')?.value || '#00d97a';
@@ -131,7 +131,7 @@ export function initActBar(): void {
 }
 
 // Store chart bars for signal analysis
-const _origSetData = typeof w.cSeries !== 'undefined' ? null : null;
+
 
 
 // ===== PRICE AXIS WIDTH =====
@@ -147,7 +147,7 @@ export function applyPriceAxisWidth(px: any, btn: any): void {
 }
 
 // Store RSI data from fetch
-const _origFetchRSI = w.fetchAllRSI;
+
 
 // backwards compat aliases
 export function togInd(id: any, btn: any): void {

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useUiStore } from '../../stores'
 import { ChartControls } from '../chart/ChartControls'
 import { TradingChart } from '../chart/TradingChart'

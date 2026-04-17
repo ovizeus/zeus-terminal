@@ -1,6 +1,6 @@
 // Zeus v122 — ui/modals.ts (ported from ui/modals.js)
 // Modal dialogs & overlays
-const w = window as any;
+
 
 let _execActive = false;
 let _execQueue: any[] = [];

@@ -304,7 +304,7 @@ export function evaluateMarketPhase(input: { regime: string; confidence: number;
 export function computeAtmosphere(
   regime: RegimeResult,
   phase: PhaseResult,
-  sweep: SweepResult,
+  _sweep: SweepResult,
   brainRegime: string,
   atrPct: number,
 ): AtmosphereResult {
@@ -314,7 +314,7 @@ export function computeAtmosphere(
   let cautionLevel = 'low'
   let confidence = 50
   let sizeMult = phase.sizeMultiplier || 1.0
-  const trapRisk = regime.confidence < 30 ? 30 : 0 // simplified — no OF data
+
   const volState = regime.volMode === 'expansion' && atrPct > 2.0 ? 'extreme' : 'normal'
   const regimeUp = (regime.regime || 'range').toUpperCase()
   const phaseUp = (phase.phase || 'RANGE').toUpperCase()

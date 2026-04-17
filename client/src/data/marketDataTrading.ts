@@ -13,7 +13,7 @@ import { useATStore } from '../stores/atStore'
 import { _startLivePendingSync , renderDemoPositions } from './marketDataPositions'
 import { runDSLBrain, toggleDSL } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
-import { calcDslTargetPrice } from '../engine/brain'
+
 import { api } from '../services/api'
 import { updateModeBar } from '../ui/modebar'
 import { renderTradeMarkers } from './marketDataOverlays'

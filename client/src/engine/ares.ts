@@ -273,7 +273,7 @@ function _calcTrajectory(balance: number) {
   return { dailyRate: +(dailyRate * 100).toFixed(3), expectedNow: +expectedNow.toFixed(2), delta, daysLeft: +(Math.max(1, DAYS_MAX - daysPassed)).toFixed(0) }
 }
 
-function _computeState(traj: any, balance: number) {
+function _computeState(traj: any, _balance: number) {
   const { delta } = traj
   const cl = _state.consecutiveLoss, cw = _state.consecutiveWin, wr = _state.winRate10
   const timeSinceLoss = Date.now() - _state.lastLossTs
@@ -289,7 +289,8 @@ function _computeState(traj: any, balance: number) {
 
 function _computeConfidence(traj: any) {
   let score = 50
-  const regime = _regime(), es = _entryScore(), atrVal = _atr()
+  const regime = _regime(), es = _entryScore()
+  void _atr()
   if (regime === 'STRONG BULL' || regime === 'STRONG BEAR') score += 15
   else if (regime === 'BULL' || regime === 'BEAR') score += 8
   else if (regime === 'RANGE') score -= 10
@@ -301,7 +302,7 @@ function _computeConfidence(traj: any) {
   return Math.min(99, Math.max(1, score))
 }
 
-function _updateNodes(traj: any, balance: number) {
+function _updateNodes(traj: any, _balance: number) {
   const regime = _regime(), es = _entryScore(), session = _session()
   const pmStats = (typeof PM !== 'undefined') ? PM.getStats() : null
   const n_traj = _state.nodes.trajectory
@@ -426,7 +427,7 @@ function tick() {
   } catch (e: any) { console.warn('[ARES] tick error:', e.message) }
 }
 
-function onTradeClosed(pnl: number, pos?: any) {
+function onTradeClosed(pnl: number, _pos?: any) {
   try {
     const isWin = pnl > 0, isNeutral = pnl === 0
     _state.tradeHistory.unshift(isWin)

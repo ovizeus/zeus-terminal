@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { authApi } from '../../services/api'
+
 import type { AdminUser } from '../../services/api'
 import { useAuthStore } from '../../stores'
 import './login.css'
@@ -335,8 +335,8 @@ export function LoginPage() {
   const [registerBtnText, setRegisterBtnText] = useState('Request an Invite')
 
   // Admin panel
-  const [adminStatus, setAdminStatus] = useState('')
-  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [adminStatus, _setAdminStatus] = useState('')
+  const [showAdminPanel, _setShowAdminPanel] = useState(false)
   const [users, setUsers] = useState<AdminUser[]>([])
 
   // Tickers

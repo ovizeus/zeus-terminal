@@ -22,12 +22,6 @@ interface AuditEntry {
   created_at?: string
 }
 
-function escHtml(s: string) {
-  const d = document.createElement('div')
-  d.appendChild(document.createTextNode(s))
-  return d.innerHTML
-}
-
 function StatusBadge({ u }: { u: AdminUser }) {
   if (u.role === 'admin') return (
     <span className="adm-badge" style={{ background: '#00afff22', color: '#00afff', borderColor: '#00afff44' }}>

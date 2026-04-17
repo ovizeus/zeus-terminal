@@ -3,7 +3,7 @@
 // AutoTrade engine: conditions, execution, monitoring, kill switch
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { BM } from '../core/config'
@@ -135,7 +135,6 @@ export function _doEnableAT(): void {
 
 export function _applyATToggleUI(enabled: any): void {
   if (enabled) {
-    const _atGlobalMode = (typeof AT !== 'undefined' && getATMode()) ? getATMode() : 'demo'
     // FIX v118: reset zi dacă s-a schimbat data
     _bmResetDailyIfNeeded()
     // ── INIT: Recalculate daily counters from journal (no stale state) ──
@@ -336,8 +335,7 @@ export function checkATConditions(): any {
   setCondUI('atCondOpp', !hasOpposite, hasOpposite ? 'Pozitie opusa activa' : 'OK')
 
   // 7. Magnet alignment bonus
-  const magnetBias = getMagnetBias() || 'neut'
-  const magnetOk = (isBull && magnetBias === 'bull') || (isBear && magnetBias === 'bear') || magnetBias === 'neut'
+  void getMagnetBias()
   // Not a hard block, but logged
 
   // Max positions check — read from TC.maxPos (source: atMaxPos)
@@ -572,9 +570,7 @@ export function runAutoTradeCheck(): void {
     const [_execOk, _execReason] = _isExecAllowed()
     if (!_execOk) { atLog('wait', `[WAIT] AT wait: ${_execReason}`); return }
 
-    // Reset daily P&L if new day
-    const today = new Date().toISOString().slice(0, 10)
-    // Use server day if synced, else local
+    // Reset daily P&L if new day — use server day if synced, else local
     const _serverDay = w._SAFETY.storedDayId ? w._SAFETY.storedDayId : 0
     const _localDay = new Date().toISOString().slice(0, 10)
     if (AT.dailyStart !== _localDay || (_serverDay && _serverDay !== w._SAFETY._prevServerDay)) {
@@ -894,7 +890,6 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Check entry price sanity (slippage guard)
   // [v105 FIX Bug4] slipPct din _snap — consistent cu restul valorilor atomice
   // [v119-p15] eliminat DOM fallback (|| el('atSL')) — _snap.slPct e mereu >= 0.1 (clamped în buildExecSnapshot)
-  const slipPct = _snap.slPct
   // [FIX P14] totalTrades++ AFTER all early validation returns (including price check)
   if (!entry || entry <= 0) {
     atLog('warn', '[BLOCK] EXEC FAIL-SAFE: preț invalid → PROTECT activat')
@@ -1230,7 +1225,7 @@ export function scheduleAutoClose(pos: any): void {
   }, (w.WVE_CONFIG && w.WVE_CONFIG.ttp) || {})
 
   const _posKey = 'posCheck_' + pos.id
-  const checkId = w.Intervals.set(_posKey, () => {
+  w.Intervals.set(_posKey, () => {
     if (pos.closed) { w.Intervals.clear(_posKey); return }
     const cur = getPosPrice()
     if (!cur) { return }

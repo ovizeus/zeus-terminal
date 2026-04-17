@@ -111,7 +111,7 @@ function _checkRebound(klines: any[], exitIdx: number, side: string, entryPrice:
   return false
 }
 
-function _buildInsight(pnl: number, slAtrRatio: number | null, sim15: any, sim20: any, lateEntry: any[], rebound: boolean, atr: number | null): string {
+function _buildInsight(pnl: number, slAtrRatio: number | null, sim15: any, sim20: any, lateEntry: any[], rebound: boolean, _atr: number | null): string {
   const parts: string[] = []
   if (pnl < 0) {
     if (slAtrRatio && slAtrRatio < 1.0) parts.push('SL sub 1\u00D7ATR \u2014 posibil prea str\u00E2ns')

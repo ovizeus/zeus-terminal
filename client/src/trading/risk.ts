@@ -244,7 +244,7 @@ export function recalcAdaptive(isStartup?: any): void {
     // fallback via document.getElementById('atSL'/'atRR') removed.
     var _atCfg = useATStore.getState().config
     var slPct = _atCfg.slPct
-    var rrRatio = _atCfg.rr
+
 
     var newBuckets: any = {}
     closedTrades.forEach(function (t: any) {
@@ -258,8 +258,7 @@ export function recalcAdaptive(isStartup?: any): void {
       }
       var b = newBuckets[key]
       b.trades++
-      var entryPrice = t.entry || 1
-      var slAbs = entryPrice * slPct / 100
+
       var slValue = (t.size || 200) * (slPct / 100)
       var R = slValue > 0 ? t.pnl / slValue : 0
       if (t.pnl >= 0) b.wins++

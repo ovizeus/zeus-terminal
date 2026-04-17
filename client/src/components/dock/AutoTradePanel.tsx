@@ -15,8 +15,6 @@ function toNum(s: string, fallback: number): number {
 
 /** 1:1 port of .at-sep + #atPanel from public/index.html lines 1684-2033 */
 export function AutoTradePanel() {
-  const enabled = useATStore((s) => s.enabled)
-  const mode = useATStore((s) => s.mode)
   const killTriggered = useATStore((s) => s.killTriggered)
   const ui = useATStore((s) => s.ui)
   const [bextOpen, setBextOpen] = useState(false)

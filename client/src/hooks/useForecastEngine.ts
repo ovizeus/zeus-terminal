@@ -27,7 +27,7 @@ export function useForecastEngine(authenticated: boolean) {
     if (!authenticated) return
 
     // Subscribe to brain store changes (structure updates = new regime data)
-    const unsub = useBrainStore.subscribe((state) => {
+    const unsub = useBrainStore.subscribe((_state) => {
       const now = Date.now()
       if (now - lastRunRef.current < THROTTLE_MS) {
         if (!timerRef.current) {

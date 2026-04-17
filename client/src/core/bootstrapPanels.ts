@@ -3,7 +3,7 @@
 // 7 analytic panels: Exposure, ExpoInline, CmdPalette, MissedTrades, SessionReview, RegimeHistory, Performance, Compare
 
 import { escHtml } from '../utils/dom'
-import { openM } from '../data/marketDataWS'
+
 import { _toggleDecisionPanel } from './bootstrapError'
 import { hubPopulate } from '../utils/dev'
 import { toggleFS } from '../data/marketDataFeeds'

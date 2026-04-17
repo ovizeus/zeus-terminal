@@ -70,7 +70,7 @@ export function onTradeExecuted(pos: any): void {
   const tf1 = PROFILE_TF?.[w.S.profile || 'fast']?.trigger || w.S.triggerTF || '5m'
   const tf2 = PROFILE_TF?.[w.S.profile || 'fast']?.context || w.S.contextTF || '15m'
   const isLive = pos.isLive
-  const isSim = w.AT.mode === 'demo'
+
   var _posEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO')
   const simTag = isLive
     ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`

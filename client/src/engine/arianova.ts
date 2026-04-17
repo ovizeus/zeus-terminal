@@ -221,7 +221,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const bal = isLiveMode ? liveBal : demobal
     const startBal = isLiveMode ? liveBal : ((typeof w.TP !== 'undefined' && w.TP._serverStartBalance) ? w.TP._serverStartBalance : 10000)
     const balPnl = isLiveMode ? 0 : (demobal - startBal)
-    const balPct = (startBal > 0 ? (balPnl / startBal * 100) : 0).toFixed(2)
+    void ((startBal > 0 ? (balPnl / startBal * 100) : 0).toFixed(2))
 
     // Live unrealized PnL across all open positions
     let livePnl = 0
@@ -744,7 +744,7 @@ if (!w._ARIA_NOVA_LOADED) {
 
     // Liquidity Sweep
     if (pk.length >= 2 && vl.length >= 2) {
-      const lastC = r[r.length - 1], prevC = r[r.length - 2]
+      const lastC = r[r.length - 1]
       const recentHigh = Math.max(...pk.slice(-3).map((p: any) => p.v))
       const recentLow = Math.min(...vl.slice(-3).map((v: any) => v.v))
       if (lastC.high > recentHigh && lastC.close < recentHigh && lastC.close < lastC.open)

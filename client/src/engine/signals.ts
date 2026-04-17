@@ -8,7 +8,7 @@ import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { runBrainUpdate , brainThink } from './brain'
 
-const w = window as any // kept for brainThink calls
+
 
 export function renderSignals(signals: any[], bullCount: number, bearCount: number): void {
   const grid = document.getElementById('sigGrid')

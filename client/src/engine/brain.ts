@@ -77,10 +77,10 @@ function _pushBrainAdaptParams(params: BrainAdaptParams | null): void {
 // Neuron updater
 export function updateNeurons(): void {
   const rsiV = getRSI('5m')
-  const rsi1h = getRSI('1h')
+  void (getRSI('1h'))
   const sigs = getSignalData().signals
-  const bullC = getSignalData().bullCount
-  const bearC = getSignalData().bearCount
+  void (getSignalData().bullCount)
+  void (getSignalData().bearCount)
 
   // RSI neuron
   if (rsiV !== null && rsiV !== undefined) {
@@ -779,18 +779,18 @@ export function updateFlowEngine(klines: any): void {
 export function computeGates(dir: any): any {
   const regime = BR.regime || 'unknown'
   const ofi = BR.ofi?.blendBuy || 50
-  const rsi5m = getRSI('5m') || 50
-  const rsi1h = getRSI('1h') || 50
-  const rsi4h = getRSI('4h') || 50
-  const adx = BR.liveADX || 0
-  const fr = getFR() || 0
+  void (getRSI('5m') || 50)
+  void (getRSI('1h') || 50)
+  void (getRSI('4h') || 50)
+
+  void (getFR() || 0)
   const oi = w.S.oi || 0
   const oiPrev = w.S.oiPrev || oi
-  const vol = getVol24h() || 0
+  void (getVol24h() || 0)
   const isLong = dir === 'long'
   const sw = BM.sweep
   const profile = BM.profile
-  const regDat = detectRegimeEnhanced(getKlines())
+  void (detectRegimeEnhanced(getKlines()))
 
   // Current session
   const h = new Date().getUTCHours()
@@ -948,7 +948,7 @@ export function computeMarketAtmosphere(): void {
     const ofCascade = (typeof w.OF !== 'undefined' && w.OF.cascade) ? (w.OF.cascade.state === 'fired') : false
     const trapRisk = re.trapRisk || 0
     const volState = re.volatilityState || 'normal'
-    const wickChaos = re._wickChaos || 0 // may not be exposed; fallback 0
+
     const regime = (re.regime || 'RANGE').toUpperCase()
     const phase = (pf.phase || 'RANGE').toUpperCase()
     const reConf = re.confidence || 0
@@ -1477,7 +1477,7 @@ export function renderBrainCockpit(): void {
       const _regConf = BR.regimeConfidence || 0
       const _atrPct = BR.regimeAtrPct || 0
       const _rsi5m = getRSI('5m') || 50
-      const _rsi1h = getRSI('1h') || 50
+      void (getRSI('1h') || 50)
       const _ofi = BR.ofi?.blendBuy || 50
       const _sw = BM.sweep || {}
       const _fr = getFR() || 0
@@ -1719,7 +1719,7 @@ export function renderBrainCockpit(): void {
 
   // 9. Determine ARM state
   const score = BM.entryScore || 0
-  const profile = BM.profile
+
   const thresholds: any = { fast: [65, 55], swing: [72, 60], defensive: [80, 65] }
   const prof = w.S.profile || 'fast'
   const [scoreThresh, confThresh] = thresholds[prof] || [65, 55]
@@ -1731,12 +1731,6 @@ export function renderBrainCockpit(): void {
   const isArmed = !BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
   const hasPos = (getDemoPositions()).some((p: any) => p.autoTrade && !p.closed)
   const mode = w.S.mode || 'manual'
-
-  // DSL WAIT > 10min → raise threshold hint
-  const anyDSLWait = (getDemoPositions()).some((p: any) => {
-    const d = getDSLPositions()?.[p.id]
-    return d && !d.active && p.autoTrade && !p.closed
-  })
 
   let state = BM.protectMode ? 'protect' : getATKillTriggered() ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'
   _pushBrainEngineState((state === 'armed' ? 'ready' : state) as BrainEngineState)
@@ -2375,7 +2369,7 @@ export function renderCircuitBrain(): void {
   // ── 3. SCORE (zncScoreNum & zncScoreLbl already updated by renderBrainCockpit) ──
   try {
     const score = (typeof BM !== 'undefined' ? BM.entryScore : 0) || 0
-    const scoreLbl2 = document.getElementById('zncScoreLbl')
+    void (document.getElementById('zncScoreLbl'))
     const scoreCls = score >= 65 ? 'ok' : score >= 50 ? 'warn' : 'bad'
     const scoreBox = cbn('cbn-score-box')
     if (scoreBox) scoreBox.className = 'nc-sn-box ' + scoreCls
@@ -2556,9 +2550,9 @@ export function detectMarketRegime(klines: any): string {
   if (!klines || klines.length < 50) return 'unknown'
   const last = klines.slice(-50)
   const closes = last.map((k: any) => k.close)
-  const highs = last.map((k: any) => k.high)
-  const lows = last.map((k: any) => k.low)
-  const vols = last.map((k: any) => k.volume)
+  void (last.map((k: any) => k.high))
+  void (last.map((k: any) => k.low))
+  void (last.map((k: any) => k.volume))
 
   // ATR for volatility measure
   const atrs = last.slice(1).map((k: any, i: number) =>
@@ -2575,29 +2569,19 @@ export function detectMarketRegime(klines: any): string {
   // Range: price in tight band
   const priceRange = (Math.max(...closes) - Math.min(...closes)) / closes[closes.length - 1] * 100
 
-  // Volume trend
-  const avgVolRecent = vols.slice(-10).reduce((a: number, b: number) => a + b, 0) / 10
-  const avgVolOld = vols.slice(-30, -10).reduce((a: number, b: number) => a + b, 0) / 20
-  const volRatio = avgVolOld > 0 ? avgVolRecent / avgVolOld : 1
-
   let regime = 'unknown'
-  let confidence = 0
 
   if (atrPct > 1.8) {
     regime = 'volatile'
-    confidence = Math.min(100, Math.round(atrPct * 25))
   } else if (Math.abs(slope20) > 0.3 && (
     slope20 > 0 ? ema20[ema20.length - 1] > ema50[ema50.length - 1]
       : ema20[ema20.length - 1] < ema50[ema50.length - 1]
   )) {
     regime = 'trend'
-    confidence = Math.min(100, Math.round(Math.abs(slope20) * 80 + 40))
   } else if (priceRange < 2.5) {
     regime = 'range'
-    confidence = Math.min(100, Math.round((2.5 - priceRange) * 30 + 40))
   } else {
     regime = 'range'
-    confidence = 45
   }
 
   // [FIX QA-H5] detectMarketRegime no longer writes BRAIN.regime / BM.regime.

@@ -23,13 +23,13 @@ function extractBalance(raw: number | ServerDemoBalance | undefined): { balance:
 }
 
 /** Filter to only open positions */
-function filterOpen(positions: ServerATState['positions']): ServerATState['positions'] {
-  return (positions || []).filter((p) => {
-    if (p.status && p.status !== 'OPEN') return false
-    if ((p as Record<string, unknown>).closed) return false
-    return true
-  })
-}
+
+
+
+
+
+
+
 
 /** Apply a full AT state update to all relevant stores */
 function applyATUpdate(data: ServerATState) {
