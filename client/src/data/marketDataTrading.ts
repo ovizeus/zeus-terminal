@@ -195,8 +195,8 @@ export function calcLiqPrice(entry: any, lev: any, side: string): number | null 
   if (!e || !l || l <= 0) return null; const mm = 0.025 // Binance baseline maintenance margin 2.5%
   if (side === 'LONG') return e * (1 - 1 / l + mm); else return e * (1 + 1 / l - mm)
 }
-export function updateDemoLiqPrice(): void { const entry = parseFloat(el('demoEntry')?.value) || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
-export function updateLiveLiqPrice(): void { const entry = parseFloat(el('liveEntry')?.value) || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
+export function updateDemoLiqPrice(): void { const entry = parseFloat(el('demoEntry')?.value || '') || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
+export function updateLiveLiqPrice(): void { const entry = parseFloat(el('liveEntry')?.value || '') || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
 
 export function setDemoPct(pct: number): void { const e = el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0) }
 export function setLivePct(pct: number): void { const e = el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0) }
@@ -246,9 +246,9 @@ function _executePlaceDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const orderTypeSel = el('demoOrdType'); const orderType = (orderTypeSel && orderTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
   const size = parseFloat(el('demoSize')?.value || '100'); const lev = getDemoLev()
-  const tp = parseFloat(el('demoTP')?.value) || null; const sl = parseFloat(el('demoSL')?.value) || null
+  const tp = parseFloat(el('demoTP')?.value || '') || null; const sl = parseFloat(el('demoSL')?.value || '') || null
   let entry: number
-  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(el('demoEntry')?.value); if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return } }
+  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(el('demoEntry')?.value || ''); if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return } }
   if (!entry || !size) { toast('Entry price and size required', 3000, _ZI.w); return }
   if (size <= 0) { toast('Size must be positive', 3000, _ZI.w); return }
   if (entry <= 0) { toast('Entry price must be positive', 3000, _ZI.w); return }
@@ -331,10 +331,10 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
       if (!getDSLEnabled()) return null
       // [MANUAL DSL] Manual positions use user-set DSL inputs directly — no Brain.
       // Brain-driven AT positions get params via serverDSL.getPreset() on server.
-      const _openDsl = parseFloat(el('dslActivatePct')?.value) || 0.50
-      const _pl = parseFloat(el('dslTrailPct')?.value) || 0.60
-      const _pr = parseFloat(el('dslTrailSusPct')?.value) || 0.50
-      const _iv = parseFloat(el('dslExtendPct')?.value) || 0.25
+      const _openDsl = parseFloat(el('dslActivatePct')?.value || '') || 0.50
+      const _pl = parseFloat(el('dslTrailPct')?.value || '') || 0.60
+      const _pr = parseFloat(el('dslTrailSusPct')?.value || '') || 0.50
+      const _iv = parseFloat(el('dslExtendPct')?.value || '') || 0.25
       const _tgt = TP.demoSide === 'LONG' ? fillPrice * (1 + _openDsl / 100) : fillPrice * (1 - _openDsl / 100)
       return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv, dslTargetPrice: _tgt }
     })(),

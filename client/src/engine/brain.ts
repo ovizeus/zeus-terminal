@@ -815,9 +815,9 @@ export function computeGates(dir: any): any {
   const oiConfirm = oiChange > 0.05
 
   // Risk limits
-  const maxDay = parseInt(el('atMaxDay')?.value) || 5
+  const maxDay = parseInt(el('atMaxDay')?.value || '') || 5
   const maxConc = getTCMaxPos()
-  const lossLim = parseInt(el('atLossStreak')?.value) || 3
+  const lossLim = parseInt(el('atLossStreak')?.value || '') || 3
   // [RISK RAILS FIX] Count positions per AT.mode (not always demo)
   const _rrPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _rrPosList.filter((p: any) => p.autoTrade && !p.closed).length
@@ -1099,8 +1099,8 @@ export function updateNewsShield(): void {
 // PROTECT = only: execution risk, news HIGH, REAL risk limit breach
 // NOT: session off, regime unstable (those are BLOCK/WAIT only)
 export function checkProtectMode(): void {
-  const lossLim = parseInt(el('atLossStreak')?.value) || 3
-  const maxDay = parseInt(el('atMaxDay')?.value) || 5
+  const lossLim = parseInt(el('atLossStreak')?.value || '') || 3
+  const maxDay = parseInt(el('atMaxDay')?.value || '') || 5
   const _closedToday = +(getATClosedToday()) || 0
 
   let reason: any = null
@@ -1155,9 +1155,9 @@ export function updateDSLTelemetry(): void {
     return
   }
 
-  const pivotLeftPct = parseFloat(el('dslTrailPct')?.value) || 0.8
-  const pivotRightPct = parseFloat(el('dslTrailSusPct')?.value) || 1.0
-  const impulseValPct = parseFloat(el('dslExtendPct')?.value) || 20
+  const pivotLeftPct = parseFloat(el('dslTrailPct')?.value || '') || 0.8
+  const pivotRightPct = parseFloat(el('dslTrailSusPct')?.value || '') || 1.0
+  const impulseValPct = parseFloat(el('dslExtendPct')?.value || '') || 20
 
   let html = `<div class="dsl-tele-title">DSL TELEMETRY — BRAIN READ</div>`
   posns.forEach((pos: any) => {
@@ -1254,9 +1254,9 @@ export function checkAntiFakeout(klines: any, dir: any): boolean {
 
 // Safety gates
 export function computeSafetyGates(dir: any): any {
-  const maxDay = parseInt(el('atMaxDay')?.value) || 5
+  const maxDay = parseInt(el('atMaxDay')?.value || '') || 5
   const maxConc = getTCMaxPos()
-  const lossLim = parseInt(el('atLossStreak')?.value) || 3
+  const lossLim = parseInt(el('atLossStreak')?.value || '') || 3
   // [RISK RAILS FIX] Count positions per AT.mode
   const _sgPosList = getATMode() === 'live' ? (getLivePositions()) : (getDemoPositions())
   const concurrent = _sgPosList.filter((p: any) => p.autoTrade && !p.closed).length

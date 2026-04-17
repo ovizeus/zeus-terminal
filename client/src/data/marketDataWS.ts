@@ -294,7 +294,7 @@ export function toggleSnd(): void {
 
 // ===== MODAL =====
 export function openM(id: string): void { const e = el(id); if (e) e.style.display = 'flex' }
-export function closeM(id: string): void { const e = el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal'); if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
+export function closeM(id: string): void { const e = el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal') as HTMLElement | null; if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
 
 // ===== MODAL DRAG =====
 export function _initModalDrag(): void {

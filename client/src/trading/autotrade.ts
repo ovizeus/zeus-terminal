@@ -581,7 +581,7 @@ export function runAutoTradeCheck(): void {
     }
 
     // ── KILL SWITCH — realized + unrealized loss ──
-    const killPct = parseFloat(el('atKillPct')?.value) || 5
+    const killPct = parseFloat(el('atKillPct')?.value || '') || 5
     // [FIX BUG2] No phantom $10k fallback — skip kill check if balance unknown (consistent with checkKillThreshold)
     const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
     if (bal <= 0) { /* skip inline kill check — checkKillThreshold handles it when balance loads */ }
@@ -1131,7 +1131,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
 export function canAddOn(pos: any): any {
   if (!pos || pos.closed || !pos.autoTrade) return false
   // [Batch B] Removed demo-only gate — server decides mode eligibility
-  const maxAddon = parseInt(el('atMaxAddon')?.value) || 3
+  const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
   if ((pos.addOnCount || 0) >= maxAddon) return false
   // Must be in profit to add on (UI hint — server re-validates)
   const curPrice = (true) ? getSymPrice(pos) : getPrice()
@@ -1156,7 +1156,7 @@ export function openAddOn(posId: any): any {
     return Promise.resolve(false)
   }
   const seq = pos._serverSeq || pos.id
-  const maxAddon = parseInt(el('atMaxAddon')?.value) || 3
+  const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
   atLog('info', '[ADD-ON] Requesting server add-on for seq=' + seq + '...')
   return api.raw<any>('POST', '/api/addon', { seq: seq, maxAddon: maxAddon })
     .then(function (j: any) {
@@ -1420,7 +1420,7 @@ export function checkKillThreshold(): void {
   // Prevents firing on boot while TP.demoPositions still has zombie AT positions
   // from localStorage that haven't been reconciled with server's open-position list.
   if (!AT._modeConfirmed) return
-  const killPct = parseFloat(el('atKillPct')?.value) || 5
+  const killPct = parseFloat(el('atKillPct')?.value || '') || 5
   const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
   if (bal <= 0) return // [FIX BUG4] Skip kill check if balance unknown — prevents $10k fallback distortion
   const _realPnL = +(getATDailyPnL()) || 0

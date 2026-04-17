@@ -4,9 +4,11 @@
  */
 import { getKlines } from '../services/stateAccessors'
 
-/** getElementById shortcut — returns null in headless/SSR */
+/** getElementById shortcut — returns null in headless/SSR.
+ * Return type widened to HTMLInputElement so common input props (.value, .checked,
+ * .disabled, .placeholder, .readOnly, .type) are non-optional at call sites. */
 export const el = typeof document !== 'undefined'
-  ? (id: string): HTMLElement | null => document.getElementById(id)
+  ? (id: string): HTMLInputElement | null => document.getElementById(id) as HTMLInputElement | null
   : (_id: string): null => null
 
 /** Safe textContent setter */

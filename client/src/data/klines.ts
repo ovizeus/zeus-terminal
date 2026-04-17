@@ -462,7 +462,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   const [confMin, _confMinConfl] = profileThresh[w.S.profile || 'fast'] || [65, 55]
   const _adaptEntryMult = (BM.adaptive && BM.adaptive.enabled) ? (BM.adaptive.entryMult || 1.0) : 1.0
   const confMinAdj = Math.max(40, Math.min(95, confMin / _adaptEntryMult))
-  const _sigMin = parseInt(el('atSigMin')?.value) || 3
+  const _sigMin = parseInt(el('atSigMin')?.value || '') || 3
 
   // suppress unused
   void _confMinConfl; void _sigMin

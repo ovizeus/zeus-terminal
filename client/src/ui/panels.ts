@@ -290,9 +290,9 @@ export async function runBacktest() {
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'none'; }
   { const _oe = el('btEmpty'); if (_oe) _oe.style.display = 'none'; }
 
-  const lookback = parseInt(el('btLookback')?.value) || 500;
-  const fwdBars = parseInt(el('btFwdBars')?.value) || 5;
-  const minMovePct = parseFloat(el('btMinMove')?.value) || 0.5;
+  const lookback = parseInt(el('btLookback')?.value || '') || 500;
+  const fwdBars = parseInt(el('btFwdBars')?.value || '') || 5;
+  const minMovePct = parseFloat(el('btMinMove')?.value || '') || 0.5;
 
   const bars = S.klines.slice(-lookback);
   const results: any = {};
@@ -670,17 +670,17 @@ export function toggleVWAP(btn: any) {
 export function oviReadSettings() {
   const S = w.S;
   const c = S.oviCfg;
-  c.lookback = parseInt(el('oviLookback')?.value) || 400;
-  c.pivotW = parseInt(el('oviPivotW')?.value) || 1;
-  c.secW = parseInt(el('oviSecW')?.value) || 1;
-  c.atrLen = parseInt(el('oviAtrLen')?.value) || 121;
-  c.atrBandPct = parseFloat(el('oviAtrBand')?.value) || 1.0;
-  c.extend = parseInt(el('oviExtend')?.value) || 25;
-  c.minWeight = parseFloat(el('oviMinW')?.value) || 0;
-  c.heatContrast = parseFloat(el('oviContrast')?.value) || 0.7;
+  c.lookback = parseInt(el('oviLookback')?.value || '') || 400;
+  c.pivotW = parseInt(el('oviPivotW')?.value || '') || 1;
+  c.secW = parseInt(el('oviSecW')?.value || '') || 1;
+  c.atrLen = parseInt(el('oviAtrLen')?.value || '') || 121;
+  c.atrBandPct = parseFloat(el('oviAtrBand')?.value || '') || 1.0;
+  c.extend = parseInt(el('oviExtend')?.value || '') || 25;
+  c.minWeight = parseFloat(el('oviMinW')?.value || '') || 0;
+  c.heatContrast = parseFloat(el('oviContrast')?.value || '') || 0.7;
   c.longCol = el('oviLongCol')?.value || '#01c4fe';
   c.shortCol = el('oviShortCol')?.value || '#ffe400';
-  c.touchTransp = parseInt(el('oviTouchT')?.value) || 8;
+  c.touchTransp = parseInt(el('oviTouchT')?.value || '') || 8;
   c.showScale = el('oviShowScale')?.checked !== false;
   c.keepTouched = el('oviKeepTouched')?.checked !== false;
   const wm = document.querySelector('input[name="oviWeightMode"]:checked') as any;
