@@ -12,6 +12,7 @@ import { StatsRow } from './ares/StatsRow'
 import { StageCol } from './ares/StageCol'
 import { WalletCol } from './ares/WalletCol'
 import { ObjectivesCol } from './ares/ObjectivesCol'
+import { PositionsList } from './ares/PositionsList'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -308,23 +309,8 @@ export function ARESPanel() {
         <ObjectivesCol />
       </div>
 
-      {/* ── POSITIONS ── */}
-      <div id="ares-positions-wrap" style={{ margin: '4px 12px 0', padding: '4px 0 2px', borderTop: '1px solid rgba(0,150,255,0.12)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <div className="ares-meta-title" style={{ margin: 0 }}>POSITIONS</div>
-          <button id="ares-close-all-btn" onClick={() => {
-            const w = window as any
-            if (typeof w.ARES !== 'undefined' && w.ARES.positions) { w.ARES.positions.closeAll(); setTimeout(() => _aresRender(), 100) }
-          }} style={{
-            display: 'none', background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.4)',
-            color: 'rgba(255,100,100,0.85)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 7px',
-            cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-          }}>CLOSE ALL</button>
-        </div>
-        <div id="ares-positions-list" style={{ maxHeight: '220px', overflowY: 'auto' }}>
-          <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', fontFamily: 'monospace', padding: '2px 0' }}>— none —</div>
-        </div>
-      </div>
+      {/* ── POSITIONS (R28.2-E store-driven) ── */}
+      <PositionsList />
 
       {/* ── ARC SVG ── */}
       <div id="ares-arc-wrap">
