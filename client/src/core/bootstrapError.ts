@@ -102,17 +102,35 @@ function _showUpdateBanner(data: any): void {
 }
 
 // ===== STATUS BAR =====
+// [R8] StatusBar is React/store-owned. This loop polls AT/TP/_SAFETY every 2s
+// and writes the derived state into useUiStore via patch(). Zero direct DOM
+// writes to zsb* nodes — React renders everything from store fields.
+import { useUiStore } from '../stores/uiStore'
 ;(function _initStatusBar() {
   function _updateStatusBar() {
     try {
-      const modeEl = document.getElementById('zsbMode')
-      if (modeEl && typeof AT !== 'undefined') { const mode = AT._serverMode || AT.mode || 'demo'; const _sbEnv = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL'); modeEl.textContent = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase(); modeEl.className = 'zsb-item zsb-mode ' + (_sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo')) }
-      const atEl = document.getElementById('zsbAT'); if (atEl && typeof AT !== 'undefined') { const on = !!AT.enabled; atEl.innerHTML = '<span class="zsb-dot ' + (on ? 'zsb-on' : 'zsb-off') + '"></span>AT ' + (on ? 'ON' : 'OFF') }
-      const wsEl = document.getElementById('zsbWS'); if (wsEl) { const wsOk = !!(w._zeusWS && w._zeusWS.readyState === 1); wsEl.innerHTML = '<span class="zsb-dot ' + (wsOk ? 'zsb-on' : 'zsb-warn') + '"></span>' + (wsOk ? 'WS' : 'WS...') }
-      const dataEl = document.getElementById('zsbData'); if (dataEl && typeof w._SAFETY !== 'undefined') { const stale = !!w._SAFETY.dataStalled; const degraded = w._SAFETY.degradedFeeds && w._SAFETY.degradedFeeds.size > 0; const cls = stale ? 'zsb-warn' : (degraded ? 'zsb-stale' : 'zsb-on'); const txt = stale ? 'STALE' : (degraded ? 'DEGRADED' : 'DATA'); dataEl.innerHTML = '<span class="zsb-dot ' + cls + '"></span>' + txt }
-      const killEl = document.getElementById('zsbKill'); const killSep = document.getElementById('zsbKillSep'); if (killEl && typeof AT !== 'undefined') { const killActive = !!AT.killTriggered; killEl.style.display = killActive ? '' : 'none'; if (killSep) killSep.style.display = killActive ? '' : 'none'; if (killActive) killEl.innerHTML = '<span class="zsb-dot zsb-warn"></span>KILL ACTIVE' }
-      const posEl = document.getElementById('zsbPos'); if (posEl && typeof TP !== 'undefined') { const demoCount = (TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length; const liveCount = (TP.livePositions || []).filter(function (p: any) { return !p.closed }).length; const total = demoCount + liveCount; posEl.textContent = total + ' pos'; posEl.style.color = total > 0 ? 'var(--cyan)' : '#555' }
-      const pnlEl = document.getElementById('zsbPnl'); if (pnlEl && typeof AT !== 'undefined') { const pnl = AT.totalPnL || AT.realizedDailyPnL || 0; pnlEl.textContent = '$' + pnl.toFixed(2); pnlEl.style.color = pnl > 0 ? 'var(--grn-bright)' : (pnl < 0 ? 'var(--red-bright)' : '#555') }
+      const patch: Record<string, any> = {}
+      if (typeof AT !== 'undefined') {
+        const mode = AT._serverMode || AT.mode || 'demo'
+        const _sbEnv = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
+        patch.sbMode = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase()
+        patch.sbModeClass = _sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo')
+        patch.sbAtEnabled = !!AT.enabled
+        patch.sbKillActive = !!AT.killTriggered
+        patch.sbPnl = AT.totalPnL || AT.realizedDailyPnL || 0
+      }
+      patch.sbWsReady = !!(w._zeusWS && w._zeusWS.readyState === 1)
+      if (typeof w._SAFETY !== 'undefined') {
+        const stale = !!w._SAFETY.dataStalled
+        const degraded = w._SAFETY.degradedFeeds && w._SAFETY.degradedFeeds.size > 0
+        patch.sbDataState = stale ? 'stale' : degraded ? 'degraded' : 'ok'
+      }
+      if (typeof TP !== 'undefined') {
+        const demoCount = (TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length
+        const liveCount = (TP.livePositions || []).filter(function (p: any) { return !p.closed }).length
+        patch.sbPosCount = demoCount + liveCount
+      }
+      useUiStore.getState().patch(patch)
       if (typeof updateModeBar === 'function') updateModeBar()
     } catch (_) { }
   }

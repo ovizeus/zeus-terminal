@@ -31,6 +31,25 @@ interface UiStore {
   apiConfigured: boolean
   exchangeMode: string | null
   resolvedEnv: string
+
+  // [R8] StatusBar reactive fields (replaces imperative DOM writes from bootstrapError._updateStatusBar)
+  /** Display mode label (e.g. DEMO, LIVE, TESTNET) — derives from AT._serverMode / AT.mode / _resolvedEnv */
+  sbMode: string
+  /** CSS class for mode pill (zsb-demo | zsb-testnet | zsb-live) */
+  sbModeClass: string
+  /** AutoTrade enabled? drives zsbAT label + dot */
+  sbAtEnabled: boolean
+  /** WebSocket ready? drives zsbWS label + dot */
+  sbWsReady: boolean
+  /** Data feed state — 'ok' | 'stale' | 'degraded' */
+  sbDataState: 'ok' | 'stale' | 'degraded'
+  /** Kill-switch active? drives zsbKill visibility + label */
+  sbKillActive: boolean
+  /** Total open position count across demo+live */
+  sbPosCount: number
+  /** Daily PnL ($) */
+  sbPnl: number
+
   /** Merge partial state */
   patch: (partial: Partial<UiStore>) => void
 }
@@ -54,6 +73,16 @@ export const useUiStore = create<UiStore>()((set) => ({
   apiConfigured: false,
   exchangeMode: null,
   resolvedEnv: 'DEMO',
+
+  // [R8] StatusBar defaults
+  sbMode: 'DEMO',
+  sbModeClass: 'zsb-demo',
+  sbAtEnabled: false,
+  sbWsReady: false,
+  sbDataState: 'ok',
+  sbKillActive: false,
+  sbPosCount: 0,
+  sbPnl: 0,
 
   setTheme: (theme) => {
     try {
