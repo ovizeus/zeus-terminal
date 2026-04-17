@@ -99,9 +99,24 @@ function migrate(name, fn) {
     try {
         fn();
         _applyMigration.run(name);
+        _applied.add(name);
         console.log('[DB] Migration applied:', name);
     } catch (err) {
-        console.warn('[DB] Migration', name, 'skipped:', err.message);
+        // [R36] Pre-framework migrations (001–006) were never recorded in
+        // _migrations but their DDL already ran on the live DB. SQLite replies
+        // "duplicate column name" / "table X already exists" — treat those as
+        // "already applied", record it, and move on quietly. Anything else is
+        // a real failure and stays loud.
+        const msg = String(err && err.message || '');
+        const alreadyApplied =
+            /duplicate column name/i.test(msg) ||
+            /already exists/i.test(msg);
+        if (alreadyApplied) {
+            _applyMigration.run(name);
+            _applied.add(name);
+            return;
+        }
+        console.warn('[DB] Migration', name, 'failed:', msg);
     }
 }
 
