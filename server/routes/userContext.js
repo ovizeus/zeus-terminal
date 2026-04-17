@@ -47,14 +47,17 @@ function _userFile(userId) {
 }
 
 function _atomicWrite(filePath, data) {
-    // [Phase 8.1] Backup rotation removed — SQLite is primary for 14 sections,
-    // FS holds only 5 small FS-only sections (uiContext, panels, uiScale, settings, aresData).
+    // [R12 / Phase 8.1] FS prune complete: backup rotation removed, SQLite is
+    // the sole source of truth for the 14 SQLITE_SECTIONS below, FS holds ONLY
+    // the 5 fs-only sections (uiContext, panels, uiScale, settings, aresData).
     const tmp = filePath + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
     fs.renameSync(tmp, filePath);
 }
 
-// [Phase 8] Sections served from SQLite (user_ctx_data table)
+// [Phase 8] 14 sections served exclusively from SQLite (user_ctx_data table).
+// [R12] After Phase 8.1 prune, FS files MUST NOT contain any of these keys;
+//       the boot-time prune below enforces that invariant once per server start.
 const SQLITE_SECTIONS = new Set([
     'indSettings', 'llvSettings', 'signalRegistry', 'perfStats',
     'dailyPnl', 'postmortem', 'adaptive', 'notifications',
@@ -62,8 +65,53 @@ const SQLITE_SECTIONS = new Set([
     'teacherData', 'ariaNovaHud',
 ]);
 
+// [R12] Phase 8.1 FS prune — runs once at startup. Strips any stale
+// SQLITE_SECTIONS copies from FS files (pre-C5 data) and deletes leftover
+// `.bakN` rotation files from the abandoned backup scheme. Idempotent —
+// subsequent runs find nothing to prune and log 0/0.
+function _phase81FsPrune() {
+    try {
+        if (!fs.existsSync(CTX_DIR)) return;
+        const files = fs.readdirSync(CTX_DIR);
+        let fsStripped = 0;
+        let bakDeleted = 0;
+        for (const f of files) {
+            const fp = path.join(CTX_DIR, f);
+            // Delete stale rotation backups (.bak1..N)
+            if (/\.bak\d+$/.test(f)) {
+                try { fs.unlinkSync(fp); bakDeleted++; } catch (_) {}
+                continue;
+            }
+            // Only operate on .json user-context files (not .tmp, not other debris)
+            if (!/^\d+\.json$/.test(f)) continue;
+            let data;
+            try { data = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { continue; }
+            if (!data || typeof data !== 'object' || !data.sections) continue;
+            let pruned = 0;
+            for (const key of SQLITE_SECTIONS) {
+                if (Object.prototype.hasOwnProperty.call(data.sections, key)) {
+                    delete data.sections[key];
+                    pruned++;
+                }
+            }
+            if (pruned > 0) {
+                _atomicWrite(fp, data);
+                fsStripped += pruned;
+            }
+        }
+        if (fsStripped > 0 || bakDeleted > 0) {
+            logger.info('USER_CTX', `[R12] Phase 8.1 prune — stripped ${fsStripped} stale SQLite section(s), deleted ${bakDeleted} .bakN file(s)`);
+        }
+    } catch (e) {
+        logger.error('USER_CTX', '[R12] Phase 8.1 prune failed: ' + e.message);
+    }
+}
+_phase81FsPrune();
+
 // ── GET /api/sync/user-context — pull user preferences ──────────
-// [Phase 8 C2] Dual-read: SQLite primary for 14 sections, FS fallback
+// [R12] SQLite is sole truth for 14 sections; FS is sole truth for 5 fs-only
+//       sections. No fallback cross-store — a missing SQLite section is a
+//       missing section, not a cue to read from FS.
 router.get('/user-context', (req, res) => {
     try {
         if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
@@ -71,23 +119,27 @@ router.get('/user-context', (req, res) => {
         const fp = _userFile(userId);
         if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
 
-        // 1. Read FS baseline (FS-only sections + envelope after C5)
+        // 1. Read FS envelope (contains only fs-only sections after R12 prune)
         let fsData = null;
         if (fs.existsSync(fp)) {
             try { fsData = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { fsData = null; }
         }
         if (!fsData) return res.json({ ok: true, data: null });
 
-        // 2. Read SQLite sections — SQLite is sole source of truth for 14 sections
-        const sqliteSections = db.getCtxAll(userId);
+        // 2. Strip anything FS still has in SQLITE_SECTIONS keyspace — defensive
+        //    in case a client bug or external write sneaks one back in.
         const merged = fsData.sections || {};
+        for (const key of SQLITE_SECTIONS) {
+            if (Object.prototype.hasOwnProperty.call(merged, key)) delete merged[key];
+        }
+
+        // 3. Layer SQLite sections on top. These are authoritative.
+        const sqliteSections = db.getCtxAll(userId);
         let sqliteHits = 0;
         for (const key of SQLITE_SECTIONS) {
             if (sqliteSections[key] !== undefined && sqliteSections[key] !== null) {
                 merged[key] = sqliteSections[key];
                 sqliteHits++;
-            } else {
-                delete merged[key];
             }
         }
 
@@ -154,7 +206,7 @@ router.post('/user-context', async (req, res) => { // [S11] async to properly aw
         }
         if (rejected > 0) console.warn('[user-ctx] Rejected', rejected, 'section(s) from user', req.user.id);
 
-        // [Phase 8 C5] SQLite is primary for 14 sections — write them there
+        // [R12] SQLite is the sole writer for the 14 SQLITE_SECTIONS.
         const sqliteBatch = {};
         for (const key of SQLITE_SECTIONS) {
             if (merged[key] !== undefined && merged[key] !== null) {
@@ -165,7 +217,8 @@ router.post('/user-context', async (req, res) => { // [S11] async to properly aw
             db.saveCtxBulk(req.user.id, sqliteBatch);
         }
 
-        // [Phase 8 C5] FS gets only non-SQLite sections (uiContext, panels, uiScale, settings, aresData)
+        // [R12] FS holds only the 5 fs-only sections (uiContext, panels,
+        // uiScale, settings, aresData). Anything else is pruned on write.
         const fsSections = {};
         for (const [key, val] of Object.entries(merged)) {
             if (!SQLITE_SECTIONS.has(key)) {
