@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { api } from '../services/api'
 import type { AresStoreUI } from '../types/ares'
 import { DEFAULT_ARES_UI } from '../types/ares'
+import { _aresRender } from '../engine/aresUI'
+import { ARES_MONITOR } from '../engine/aresMonitor'
 
 const DEFAULT_ARES = {
   balance: 0,
@@ -38,6 +40,12 @@ interface AresStoreState {
 
   /** [R28.2] Strip-bar open/closed toggle (replaces imperative #ares-strip style mutations). */
   setStripOpen: (open: boolean) => void
+
+  /** [R28.2-I] Engine-action wrappers — components call these instead of window.ARES. */
+  fundWallet: (amount: number) => void
+  withdrawWallet: (amount: number) => void
+  closeArePosition: (posId: string, live: boolean, entry: number) => void
+  closeAllArePositions: () => void
 }
 
 export const useAresStore = create<AresStoreState>()((set, getState) => ({
@@ -86,6 +94,55 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
   patchUi: (partial) => set((s) => ({ ui: { ...s.ui, ...partial } })),
 
   setStripOpen: (open) => set((s) => ({ ui: { ...s.ui, stripOpen: open } })),
+
+  fundWallet: (amount) => {
+    const w = window as any
+    if (!Number.isFinite(amount) || amount <= 0) return
+    try {
+      if (w.ARES?.wallet?.fund) {
+        w.ARES.wallet.fund(amount)
+        setTimeout(() => { try { _aresRender(); getState().saveToServer() } catch (_) {} }, 200)
+      }
+    } catch (_) {}
+  },
+
+  withdrawWallet: (amount) => {
+    const w = window as any
+    if (!Number.isFinite(amount) || amount <= 0) return
+    try {
+      if (w.ARES?.wallet?.withdraw) {
+        w.ARES.wallet.withdraw(amount)
+        setTimeout(() => { try { _aresRender(); getState().saveToServer() } catch (_) {} }, 200)
+      }
+    } catch (_) {}
+  },
+
+  closeArePosition: (posId, live, entry) => {
+    const w = window as any
+    try {
+      if (live) {
+        const engine = w.ARES?.positions?.getOpen?.()?.find((p: any) => String(p.id) === posId)
+        if (engine) {
+          const mark = Number(engine.markPrice) || entry || 0
+          ARES_MONITOR.closeLivePosition(engine, mark, 'manual')
+          setTimeout(() => { try { _aresRender() } catch (_) {} }, 500)
+        }
+      } else if (w.ARES?.positions?.closePosition) {
+        w.ARES.positions.closePosition(posId)
+        try { _aresRender() } catch (_) {}
+      }
+    } catch (_) {}
+  },
+
+  closeAllArePositions: () => {
+    const w = window as any
+    try {
+      if (w.ARES?.positions?.closeAll) {
+        w.ARES.positions.closeAll()
+        setTimeout(() => { try { _aresRender() } catch (_) {} }, 100)
+      }
+    } catch (_) {}
+  },
 }))
 
 /** Read ARES state from engine (localStorage/window.ARES) */

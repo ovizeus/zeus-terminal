@@ -96,6 +96,14 @@ export interface AresPositionCard {
   durationMs: number
   tag?: string
   closable: boolean
+  /** [R28.2-I] Display-level fields mirrored from engine — cuts window.ARES reads in PositionsList. */
+  leverage: number
+  markPrice: number
+  liqPrice: number
+  slPrice: number
+  tpPrice: number
+  reason: string
+  beMoved: boolean
 }
 
 /** Trade-history bar entries (win/loss marks). */

@@ -1,28 +1,23 @@
 import { memo, useCallback } from 'react'
 import { useAresStore } from '../../../stores/aresStore'
-import { _aresRender } from '../../../engine/aresUI'
 
 /** Wallet column: balance, avail/locked, add/withdraw buttons. */
 export const WalletCol = memo(function WalletCol() {
   const wallet = useAresStore((s) => s.ui.wallet)
+  const fundWallet = useAresStore((s) => s.fundWallet)
+  const withdrawWallet = useAresStore((s) => s.withdrawWallet)
 
   const addFunds = useCallback(() => {
-    const w = window as any
     const amt = prompt('Add funds ($):')
-    if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) {
-      w.ARES.wallet.fund(Number(amt))
-      setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200)
-    }
-  }, [])
+    const n = Number(amt)
+    if (amt && Number.isFinite(n)) fundWallet(n)
+  }, [fundWallet])
 
   const withdrawFunds = useCallback(() => {
-    const w = window as any
     const amt = prompt('Withdraw funds ($):')
-    if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) {
-      w.ARES.wallet.withdraw(Number(amt))
-      setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200)
-    }
-  }, [])
+    const n = Number(amt)
+    if (amt && Number.isFinite(n)) withdrawWallet(n)
+  }, [withdrawWallet])
 
   const fmt = (v: number) =>
     '$' + (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

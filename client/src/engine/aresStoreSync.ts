@@ -247,6 +247,13 @@ function _positions(): AresPositionCard[] {
       durationMs: Number(p.openedAt ? Date.now() - p.openedAt : 0),
       tag: p._slMovedBE ? 'BE' : undefined,
       closable: true,
+      leverage: Number(p.leverage) || 1,
+      markPrice: Number(p.markPrice) || 0,
+      liqPrice: Number(p.liqPrice) || 0,
+      slPrice: Number(p.slPrice) || 0,
+      tpPrice: Number(p.tpPrice) || 0,
+      reason: p.reason ? String(p.reason) : '',
+      beMoved: !!p._slMovedBE,
     }))
   } catch (_) {
     return []
