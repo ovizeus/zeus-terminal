@@ -17,6 +17,7 @@ import { loadPerfFromStorage } from '../engine/perfStore'
 import { loadDailyPnl } from '../engine/dailyPnl'
 import { renderATLog } from '../trading/autotrade'
 import { _aresRender } from '../engine/aresUI'
+import { syncMTFStore } from '../engine/mtfSync'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 
@@ -1231,6 +1232,8 @@ export function _coreTickMI() {
     refreshLiqCycleLight()
     refreshSweepLight()
     renderMTFPanel()
+    // [ZT3-A] Mirror snapshot to mtfStore — React MTFPanel consumes store.
+    syncMTFStore()
     // [R28.2-H] stripOpen read from store (replaces document.getElementById+classList.contains)
     if (typeof w.ARES !== 'undefined' && useAresStore.getState().ui.stripOpen) {
       _aresRender()
