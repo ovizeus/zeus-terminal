@@ -127,7 +127,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const el_info = document.getElementById('at-bar-info')
     const el_pnl = document.getElementById('at-bar-pnl')
     const el_strip = document.getElementById('at-strip')
-    if (!el_state) return
+    if (!el_state || !el_info) return
 
     const atOn = typeof w.AT !== 'undefined' && (w.AT.enabled || w._serverATEnabled)
     const killed = typeof w.AT !== 'undefined' && w.AT.killTriggered
@@ -205,7 +205,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const el_info = document.getElementById('pt-bar-info')
     const el_pnl = document.getElementById('pt-bar-pnl')
     const el_strip = document.getElementById('pt-strip')
-    if (!el_state) return
+    if (!el_state || !el_info) return
 
     // All positions matching current globalMode
     var globalMode: any = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'

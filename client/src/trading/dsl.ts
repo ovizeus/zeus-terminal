@@ -1165,7 +1165,7 @@ export function _renderDslCard(pos: any): string {
     </div>
     ${isActive && prPos !== null ? `<div style="position:absolute;left:${prPos}%;top:-1px;width:2px;height:calc(100%+2px);background:#39ff14;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 8px #39ff14cc;transition:left 0.3s ease">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff14;white-space:nowrap">PR +${pivotRightPct}%</div>
-      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff1499;white-space:nowrap">$${fP(pivotRight)}</div>
+      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff1499;white-space:nowrap">$${fP(pivotRight ?? 0)}</div>
     </div>` : ''}
     ${isActive && ivPos !== null ? `<div style="position:absolute;left:${ivPos}%;top:-1px;width:2px;height:calc(100%+2px);background:#ff4466;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 6px #ff4466aa">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff4466;white-space:nowrap;font-weight:700">IV +${impulseValPct}%</div>
@@ -1178,7 +1178,7 @@ export function _renderDslCard(pos: any): string {
     ${isActive
       ? `<span style="color:#39ff14">PL: <b>$${fP(pivotLeft)}</b></span>
         <span style="color:#f0c040;font-weight:700">ODSL $${fP(cur)}</span>
-        <span style="color:#39ff14">PR: $${fP(pivotRight)}</span>
+        <span style="color:#39ff14">PR: $${fP(pivotRight ?? 0)}</span>
         <span style="color:#ff4466bb">IV: $${fP(impulseVal)}</span>
         <span style="color:#00ff8855">TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>`
       : `<span style="color:#ff4466aa">SL: <b style="color:#ff4466">$${fP(currentSL)}</b></span>

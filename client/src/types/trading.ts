@@ -64,9 +64,9 @@ export interface ATState {
   _modeConfirmed: boolean
   _enabledPerMode: Record<string, boolean>
   _serverMode: string
-  _serverStats: ATStats | null
-  _serverDemoStats: ATStats | null
-  _serverLiveStats: ATStats | null
+  _serverStats: ATStats | Record<string, unknown> | null
+  _serverDemoStats: ATStats | Record<string, unknown> | null
+  _serverLiveStats: ATStats | Record<string, unknown> | null
 
   // Log
   log: ATLogEntry[]

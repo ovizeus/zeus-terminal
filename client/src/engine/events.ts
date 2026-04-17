@@ -31,6 +31,8 @@ export const AT = {
   // Server mode fields (set by bridge/server sync)
   _serverMode: '' as string,
   _serverStats: null as unknown,
+  _serverDemoStats: null as unknown,
+  _serverLiveStats: null as unknown,
   _enabledPerMode: {} as Record<string, boolean>,
   // [R34] Diagnostics fields previously stashed via `(AT as any).x = …`.
   // Typed here so trading/autotrade.ts decision path stays inside the

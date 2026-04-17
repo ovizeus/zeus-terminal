@@ -308,7 +308,7 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.mscanEnabled !== undefined) at.multiSym = settings.mscanEnabled
 
   if (settings.chartTf !== undefined) ch.tf = settings.chartTf
-  if (settings.chartTz !== undefined) ch.tz = settings.chartTz
+  if (settings.chartTz !== undefined) ch.tz = (settings.chartTz == null ? null : Number(settings.chartTz))
   if (settings.candleColors !== undefined) ch.colors = settings.candleColors
   if (settings.heatmapSettings !== undefined) ch.heatmap = settings.heatmapSettings
   if (settings.indSettings !== undefined) us.indicators = settings.indSettings

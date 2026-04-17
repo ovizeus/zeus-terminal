@@ -184,8 +184,8 @@ export function onDemoOrdTypeChange(): void {
 }
 
 // ===== LEVERAGE =====
-export function getDemoLev(): number { const sel = el('demoLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('demoCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
-export function getLiveLev(): number { const sel = el('liveLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('liveCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
+export function getDemoLev(): number { const sel = el('demoLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('demoCustomLev')?.value ?? '') || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
+export function getLiveLev(): number { const sel = el('liveLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('liveCustomLev')?.value ?? '') || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
 export function onDemoLevChange(): void { const sel = el('demoLev'); const row = el('demoCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateDemoLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function onLiveLevChange(): void { const sel = el('liveLev'); const row = el('liveCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateLiveLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 

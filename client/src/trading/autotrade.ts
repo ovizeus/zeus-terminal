@@ -175,7 +175,7 @@ export function _applyATToggleUI(enabled: any): void {
           atLog('warn', '[WARN] LIVE balance = $0 after sync — AT blocked until balance confirmed')
           AT.enabled = false
           _atUI({ status: { icon: 'x', text: 'Live balance = 0 — verifică API', action: null } })
-          w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+          w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
         } else {
           atLog('info', '[BAL] LIVE balance synced: $' + TP.liveBalance.toFixed(2))
         }
@@ -183,7 +183,7 @@ export function _applyATToggleUI(enabled: any): void {
         atLog('warn', '[WARN] Live balance sync failed at AT start — AT blocked')
         AT.enabled = false
         _atUI({ status: { icon: 'x', text: 'Balance sync failed — AT blocked', action: null } })
-        w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+        w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
       })
     }
     w.atUpdateBanner(); w.ptUpdateBanner()
@@ -193,7 +193,7 @@ export function _applyATToggleUI(enabled: any): void {
   } else {
     _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configureaza mai jos', action: null } })
     atLog('warn', '[AT] Auto Trade OPRIT.')
-    w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+    w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = false + push to server for cross-device sync
     if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
@@ -203,7 +203,7 @@ export function _applyATToggleUI(enabled: any): void {
 
 export function updateATMode(): void {
   const mode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  AT.mode = mode
+  AT.mode = mode as 'demo' | 'live'
   var _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
   if (mode === 'live') {
     var _isTest = _env === 'TESTNET'
@@ -444,7 +444,7 @@ export function computeFusionDecision(): any {
   let prob: any = null
   try {
     if (typeof computeProbScore === 'function') {
-      const r: any = computeProbScore()
+      const r: any = (computeProbScore as any)()
       if (Number.isFinite(+r)) prob = +r
       else if (r && Number.isFinite(+r.score)) prob = +r.score
       else if (r && Number.isFinite(+r.confidence)) prob = +r.confidence
@@ -593,7 +593,7 @@ export function runAutoTradeCheck(): void {
       const _p = _openList2[i]
       if (_p.closed || _p.status === 'closing') continue
       const _cur = getSymPrice(_p)
-      if (_cur > 0 && _p.entry > 0) {
+      if (_cur != null && _cur > 0 && _p.entry > 0) {
         // [PATCH P1-6] Use _safePnl for consistency
         const _diff2 = _cur - _p.entry
         _unrealPnL2 += _safePnl(_p.side, _diff2, _p.entry, _p.size || 0, _p.lev || 1, true)
@@ -1446,7 +1446,7 @@ export function checkKillThreshold(): void {
     const _cutoff = Math.max(_dayStart.getTime(), +(AT.killResetTs || 0), +(AT.enabledAt || 0))
     if (_openTs > 0 && _openTs < _cutoff) continue
     const _cur = getSymPrice(_p)
-    if (_cur > 0 && _p.entry > 0) {
+    if (_cur != null && _cur > 0 && _p.entry > 0) {
       // [PATCH P1-6] Use _safePnl for consistency with closeDemoPos/triggerKillSwitch
       const _diff = _cur - _p.entry
       _unrealPnL += _safePnl(_p.side, _diff, _p.entry, _p.size || 0, _p.lev || 1, true)
@@ -1474,7 +1474,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
 
   AT.enabled = false
   AT.killTriggered = true
-  w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+  w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
 
   // Inchidem toate pozitiile auto cu PnL corect
   let closedCount = 0
@@ -1484,6 +1484,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     if (p.closed) return false
     p.closed = true
     const closePrice = getSymPrice(p)
+    if (closePrice == null) return false
     const diff = closePrice - p.entry
     const pnl = _safePnl(p.side, diff, p.entry, p.size, p.lev, true)
     totalEmergencyPnL += pnl
@@ -1781,6 +1782,7 @@ export function closeAutoPos(id: any): void {
   const livePos = TP.livePositions.find((p: any) => (p.id === numId || p.id === id) && !p.closed)
   if (livePos) {
     const cur = getSymPrice(livePos)
+    if (cur == null) { renderATPositions(); return }
     const diff = cur - livePos.entry
     const pnl = _safePnl(livePos.side, diff, livePos.entry, livePos.size, livePos.lev, true)
     closeLivePos(numId, 'Manual inchis')
@@ -1796,6 +1798,7 @@ export function closeAutoPos(id: any): void {
   if (!pos) { renderATPositions(); return }
 
   const cur = getSymPrice(pos)
+  if (cur == null) { renderATPositions(); return }
   const diff = cur - pos.entry
   const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
 

@@ -132,8 +132,8 @@ export function openIndPanel(): void {
       if (!target) return
       const action = target.dataset.action
       const id = target.dataset.id
-      if (action === 'openIndSettings') { e.stopPropagation(); openIndSettings(id) }
-      else if (action === 'toggleInd') toggleInd(id, target)
+      if (action === 'openIndSettings') { e.stopPropagation(); openIndSettings(id || '') }
+      else if (action === 'toggleInd') toggleInd(id || '', target)
     })
   }
 
@@ -266,7 +266,7 @@ export function openIndSettings(id: string): void {
     modal.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
       if (!btn) return
-      if (btn.dataset.action === 'applyIndSettings') applyIndSettings(btn.dataset.id)
+      if (btn.dataset.action === 'applyIndSettings') applyIndSettings(btn.dataset.id || '')
       else if (btn.dataset.action === 'closeIndSettings') closeIndSettings()
     })
   }
@@ -687,7 +687,7 @@ export function renderActBar(): void {
     bar.dataset.delegated = '1'
     bar.addEventListener('click', (e) => {
       const pill = (e.target as HTMLElement).closest('[data-action="deactivateInd"]') as HTMLElement
-      if (pill) deactivateInd(pill.dataset.id)
+      if (pill) deactivateInd(pill.dataset.id || '')
     })
   }
 }

@@ -75,9 +75,9 @@ function applyATUpdate(data: ServerATState) {
     dailyPnL: data.dailyPnL ?? stats.dailyPnL ?? 0,
     _modeConfirmed: true,
     _serverMode: data.mode || 'demo',
-    _serverStats: stats,
-    _serverDemoStats: demoStats,
-    _serverLiveStats: liveStats,
+    _serverStats: stats as unknown as Record<string, unknown>,
+    _serverDemoStats: demoStats as unknown as Record<string, unknown> | null,
+    _serverLiveStats: liveStats as unknown as Record<string, unknown> | null,
   })
 
   // --- UI env info ---
@@ -94,7 +94,9 @@ async function pullJournal() {
     const res = await api.get<unknown[]>('/api/sync/journal')
     if (res.ok && Array.isArray(res.data)) {
       useJournalStore.getState().setEntries(
-        res.data.map((row: Record<string, unknown>) => ({
+        res.data.map((raw: unknown) => {
+          const row = raw as Record<string, unknown>
+          return ({
           id: String(row.seq || row.id || ''),
           symbol: String(row.symbol || ''),
           side: String(row.side || 'LONG') as 'LONG' | 'SHORT',
@@ -105,7 +107,8 @@ async function pullJournal() {
           openTs: Number(row.ts || row.openTs || 0),
           closeTs: Number(row.closeTs || 0),
           mode: String(row.mode || 'demo') as 'demo' | 'live',
-        })),
+        })
+        }),
       )
     }
   } catch {

@@ -389,7 +389,7 @@ export function syncDslFromProfile(): void {
   const dslProfileHint = el('zncDslContract')
   if (dslProfileHint && !w.S.dsl.active) {
     const p2 = (w.S.profile || 'fast').toLowerCase()
-    const pLabel: any = { fast: 'FAST↑ trail agresiv', swing: 'SWING moderat', defensive: 'DEF↓ trail larg' }[p2] || p2
+    const pLabel: any = ({ fast: 'FAST↑ trail agresiv', swing: 'SWING moderat', defensive: 'DEF↓ trail larg' } as Record<string, string>)[p2] || p2
     dslProfileHint.innerHTML = `DSL: <b>OFF</b> · Profile: <b>${pLabel}</b> · PL:${w.S.dsl.pivotL}% PR:${w.S.dsl.pivotR}%`
   }
 }
@@ -924,7 +924,7 @@ export function computeEntryScore(gates: any, dir: any): any {
   const fillEl = el('entryScoreFill')
   const lblEl = el('entryScoreLabel')
   const reasonsEl = el('entryScoreReasons')
-  if (numEl) { numEl.textContent = score; numEl.style.color = col }
+  if (numEl) { numEl.textContent = String(score); numEl.style.color = col }
   if (fillEl) { fillEl.style.width = score + '%'; fillEl.style.background = col }
   if (lblEl) { lblEl.textContent = label; lblEl.style.color = col }
   if (reasonsEl) {
@@ -1872,8 +1872,8 @@ export function renderBrainCockpit(): void {
   // ── GAUGES ──
   const na = el('newsGaugeArc'); if (na) na.setAttribute('stroke-dasharray', `${newsScore / 100 * 75} 75`)
   const la = el('liqGaugeArc'); if (la) la.setAttribute('stroke-dasharray', `${liqScore / 100 * 75}  75`)
-  const nv = el('newsGaugeVal'); if (nv) { nv.textContent = newsScore; nv.style.color = newsScore < 33 ? '#39ff14' : newsScore < 66 ? '#f0c040' : '#ff3355' }
-  const lv = el('liqGaugeVal'); if (lv) { lv.textContent = liqScore; lv.style.color = liqScore < 33 ? '#39ff14' : liqScore < 66 ? '#f0c040' : '#ff3355' }
+  const nv = el('newsGaugeVal'); if (nv) { nv.textContent = String(newsScore); nv.style.color = newsScore < 33 ? '#39ff14' : newsScore < 66 ? '#f0c040' : '#ff3355' }
+  const lv = el('liqGaugeVal'); if (lv) { lv.textContent = String(liqScore); lv.style.color = liqScore < 33 ? '#39ff14' : liqScore < 66 ? '#f0c040' : '#ff3355' }
 
   // ── ARM DETAIL + TOP BLOCK REASON (uses S.* canonical) ──
   const trigType = sw.reclaim ? 'Sweep+Reclaim' : sw.displacement ? 'Displacement' : '—'
@@ -2180,7 +2180,7 @@ export function zAnimFrame(ts: any): void {
   w.ZANIM.orbScale += w.ZANIM.orbDir
   if (w.ZANIM.orbScale > 1.08 || w.ZANIM.orbScale < 0.95) w.ZANIM.orbDir *= -1
   const core = el('zncCore')
-  if (core) core.setAttribute('opacity', 0.6 + w.ZANIM.orbScale * 0.12)
+  if (core) core.setAttribute('opacity', String(0.6 + w.ZANIM.orbScale * 0.12))
 
   // SCORE ARC GLOW synapse intensity
   const score = BM.entryScore || 0
@@ -2681,7 +2681,7 @@ export function adaptAutoTradeParams(): void {
 
   if (adapted) {
     const slEl = el('atSL'); if (slEl) slEl.value = newSL.toFixed(1)
-    const sizeEl = el('atSize'); if (sizeEl) sizeEl.value = Math.round(newSize)
+    const sizeEl = el('atSize'); if (sizeEl) sizeEl.value = String(Math.round(newSize))
     _pushBrainAdaptParams({ sl: newSL, size: newSize, adjustCount: (BR.adaptParams.adjustCount || 0) + 1 })
     // [P1] Sync adapted values back to TC
     if (typeof w.TC !== 'undefined') { w.TC.slPct = newSL; w.TC.size = newSize }

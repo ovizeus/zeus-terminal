@@ -218,7 +218,7 @@ export function _startWatchdog(): void {
       }
     }
     // FIX3: refresh WHY BLOCKED pill every watchdog tick (cooldown countdown)
-    if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked()
+    if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked(null, null)
   }, 5000)
 }
 
@@ -235,7 +235,7 @@ export function _enterDegradedMode(source: string): void {
     w.ncAdd('warning', 'system', `Feed degradat: ${source} down`)
   }
   updConn()
-  _updateWhyBlocked()
+  _updateWhyBlocked(null, null)
 }
 // _enterDegradedMode — exported, consumers import directly
 
@@ -247,7 +247,7 @@ export function _exitDegradedMode(source: string): void {
       _degradedLogTs.exit = now
       atLog('info', `[OK] ${source} feed restored — full data mode`)
     }
-    _updateWhyBlocked()
+    _updateWhyBlocked(null, null)
   }
   updConn()
 }

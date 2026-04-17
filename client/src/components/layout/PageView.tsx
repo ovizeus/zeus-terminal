@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 /** Full-screen page view overlay — 1:1 from public/css zpv + public/js/ui/pageview.js */
-export function PageView({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function PageView({ title, onClose, children }: { title: string; onClose: () => void; children?: ReactNode }) {
   return (
     <div className="zpv" id="zeus-page-view">
       <div className="zpv-header">

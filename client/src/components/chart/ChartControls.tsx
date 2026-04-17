@@ -133,7 +133,8 @@ export function ChartControls() {
     if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
     // Also update React store for the 4 React-managed indicators
     if (key in indicators) {
-      patch({ indicators: { ...indicators, [key]: !indicators[key] } })
+      const ind = indicators as unknown as Record<string, boolean>
+      patch({ indicators: { ...indicators, [key]: !ind[key] } })
     }
   }
 
@@ -304,7 +305,7 @@ export function ChartControls() {
         </div>
         <div className="ind-panel-body" id="indPanelBody">
           {IND_LIST.map((ind) => {
-            const isOn = activeInds[ind.id] ?? (indicators as Record<string, boolean>)[ind.id] ?? false
+            const isOn = activeInds[ind.id] ?? (indicators as unknown as Record<string, boolean>)[ind.id] ?? false
             return (
               <div key={ind.id} className="ind-row">
                 <div className="ind-row-l">

@@ -286,7 +286,7 @@ export async function runBacktest() {
   BT.running = true;
   const runBtn = el('btRunBtn');
   if (runBtn) runBtn.className = 'bt-btn bt-btn-run running';
-  el('btProgress')?.style && (el('btProgress').style.display = 'block');
+  { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'block'; }
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'none'; }
   { const _oe = el('btEmpty'); if (_oe) _oe.style.display = 'none'; }
 
@@ -393,7 +393,7 @@ export async function runBacktest() {
     // Progress update every 50 bars
     if (i % 50 === 0) {
       const pct = Math.round((i - 30) / totalSteps * 100);
-      { const _oe = el('btProgressPct'); if (_oe) _oe.textContent = pct; }
+      { const _oe = el('btProgressPct'); if (_oe) _oe.textContent = String(pct); }
       { const _oe = el('btProgressFill'); if (_oe) _oe.style.width = pct + '%'; }
       await new Promise(r => setTimeout(r, 0)); // yield to UI
     }
@@ -472,7 +472,7 @@ export async function runBacktest() {
 
   renderBacktestResults(results, equityCurve, fwdBars, lookback, minMovePct);
   { const _oe = el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
-  el('btProgress')?.style && (el('btProgress').style.display = 'none');
+  { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'none'; }
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'block'; }
   { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
 }
@@ -506,7 +506,7 @@ export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: 
   { const _oe = el('btBestInd'); if (_oe) _oe.textContent = bestName + ' (' + bestWR + '%)'; }
   { const _oe = el('btAvgWR'); if (_oe) _oe.textContent = avgWR + '%'; }
   { const _oe = el('btAvgWR'); if (_oe) _oe.style.color = avgWR >= 55 ? 'var(--grn)' : avgWR >= 45 ? 'var(--ylw)' : 'var(--red)'; }
-  { const _oe = el('btTotalSig'); if (_oe) _oe.textContent = totalTrades; }
+  { const _oe = el('btTotalSig'); if (_oe) _oe.textContent = String(totalTrades); }
   { const _oe = el('btConfWR'); if (_oe) _oe.textContent = confWR ? confWR + '%' : '\u2014'; }
   { const _oe = el('btConfWR'); if (_oe) _oe.style.color = confWR >= 60 ? 'var(--grn)' : confWR >= 50 ? 'var(--ylw)' : 'var(--red)'; }
 
@@ -555,8 +555,9 @@ export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: 
 
   // Detail note update
   const bestRow = rows[0];
-  if (bestRow && el('btDetailNote')) {
-    el('btDetailNote').innerHTML = `
+  const _detailNote = el('btDetailNote');
+  if (bestRow && _detailNote) {
+    _detailNote.innerHTML = `
       ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
       ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combina toti indicatorii pentru precizie maxima.<br>
       ${_ZI.w} Backtestul e pe date istorice \u2014 performanta trecuta nu garanteaza rezultate viitoare.

@@ -373,7 +373,7 @@ export function devTriggerKillSwitch(): void {
   if (!_devModuleOk('killSwitch')) return
   try {
     if (typeof triggerKillSwitch === 'function') {
-      triggerKillSwitch('manual')
+      triggerKillSwitch('manual', 0, 0, 0, 0)
       devLog('Triggered kill switch (manual)', 'warning')
     } else {
       devLog('triggerKillSwitch not available', 'warning')

@@ -172,12 +172,12 @@ export async function fetchFG(): Promise<void> {
     // [R29] Expose on w.S so downstream engines (risk.ts macro cortex) can
     // read from canonical state instead of DOM textContent.
     w.S.fearGreed = val
-    const ev = el('fgval'); if (ev) { ev.textContent = val; ev.style.color = col }
+    const ev = el('fgval'); if (ev) { ev.textContent = String(val); ev.style.color = col }
     const el2 = el('fglbl'); if (el2) { el2.textContent = cls.toUpperCase(); el2.style.color = col }
     const efg = el('fgf'); if (efg) { efg.style.width = val + '%'; efg.style.background = col }
     const ech = el('fgch'); if (ech) ech.textContent = 'Yesterday: ' + (d.data[1] ? +d.data[1].value : '\u2014') + ' | Week: \u2014'
     const arc = el('fgarc')
-    if (arc) { const circ = 175.93; const offset = circ - (val / 100) * circ; arc.style.strokeDashoffset = offset; arc.style.stroke = col }
+    if (arc) { const circ = 175.93; const offset = circ - (val / 100) * circ; arc.style.strokeDashoffset = String(offset); arc.style.stroke = col }
   } catch (e: any) { console.warn('[fetchFG]', e.message) }
 }
 

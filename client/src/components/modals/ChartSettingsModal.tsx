@@ -26,7 +26,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
 
   function applyTimezone(zone: string) {
     setTz(zone)
-    setTZ(zone)
+    setTZ(zone, null)
   }
 
   function applyHeatmap() {

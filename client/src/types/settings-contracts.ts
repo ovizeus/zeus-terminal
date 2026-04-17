@@ -46,7 +46,7 @@ export interface SettingsPayload {
 
   // Chart
   chartTf?: string
-  chartTz?: string | null
+  chartTz?: string | number | null
   chartType?: string
   candleColors?: Record<string, unknown> | null
   heatmapSettings?: Record<string, unknown> | null

@@ -57,7 +57,7 @@ export function calcConfluenceScore(): void {
   // [v119] Sync CORE_STATE
   w.CORE_STATE.score = finalScore
   w.CORE_STATE.lastUpdate = Date.now()
-  if (scoreEl) { scoreEl.textContent = finalScore; scoreEl.style.color = col }
+  if (scoreEl) { scoreEl.textContent = String(finalScore); scoreEl.style.color = col }
   if (labelEl) {
     const txt = finalScore >= 75 ? 'STRONG BULL' : finalScore >= 60 ? 'BULLISH' : finalScore >= 45 ? 'NEUTRAL' : finalScore >= 30 ? 'BEARISH' : 'STRONG BEAR'
     labelEl.textContent = txt; labelEl.style.color = col

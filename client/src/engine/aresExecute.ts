@@ -19,7 +19,7 @@ export async function ARES_EXECUTE(decision: any): Promise<any> {
   const bal = wallet.balance, avail = wallet.available, confidence = decision.confidence
 
   let markPrice = 0
-  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = _lk.close } } catch (_) { }
+  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = Number(_lk.close) } } catch (_) { }
   if (!markPrice || markPrice <= 0) { console.warn('[ARES_EXECUTE] No mark price'); return null }
 
   const openCount = positions.getOpen().length

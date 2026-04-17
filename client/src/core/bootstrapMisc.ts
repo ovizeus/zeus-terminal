@@ -103,9 +103,9 @@ export function _renderBuildInfo(): void {
 
 // ===== WELCOME MODAL =====
 let _wlcShown = false
-export function _showWelcomeModal(): void {
+export async function _showWelcomeModal(): Promise<void> {
   try {
-    if (_wlcShown) return; if (_pinIsSet() && !_pinIsUnlocked()) return; _wlcShown = true
+    if (_wlcShown) return; if ((await _pinIsSet()) && !_pinIsUnlocked()) return; _wlcShown = true
     const m = document.getElementById('mwelcome'); if (!m) return; m.style.display = 'flex'
     const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO'); const modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO')
     const greetEl = document.getElementById('wlcGreeting'); if (greetEl) greetEl.textContent = 'Welcome back, Commander'

@@ -133,7 +133,7 @@ export function _aubWrapPublicFunctions(): void {
     w.setTf = function (tf: any, _btn: any) {
       const valid = ['1m', '3m', '5m', '15m', '30m', '1h', '2h', '4h', '5h', '6h', '12h', '1d', '3d', '1w', '1M']
       if (!_aubGuard('setTf', tf, (v: any) => valid.includes(v))) return
-      return _origSetTf.apply(this, arguments)
+      return _origSetTf.apply(this, arguments as unknown as [tf: any, btn: any])
     }
   }
   // toggleAutoTrade guard

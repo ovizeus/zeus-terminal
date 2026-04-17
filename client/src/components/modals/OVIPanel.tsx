@@ -93,7 +93,7 @@ export function OVIPanel({ visible, onClose }: Props) {
         </label>
       </div>
 
-      <button onClick={onClose} style={{
+      <button style={{
         width:'100%', padding:'6px', background:'#f0c04011', border:'1px solid #f0c04044',
         color:'#f0c040', fontSize:'8px', fontFamily:'var(--ff)', cursor:'pointer',
         borderRadius:'3px', letterSpacing:'1px'
