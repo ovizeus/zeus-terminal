@@ -1,33 +1,6 @@
-import { useEffect } from 'react'
 import { devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, devClearLog, devExportLog } from '../../utils/dev'
 
 export function AnalysisSections() {
-  // Attach delegation for dev tool buttons (dangerouslySetInnerHTML can't use onClick)
-  useEffect(() => {
-    const cont = document.getElementById('dev-content')
-    if (!cont || (cont as any).dataset.devDelegated) return
-    ;(cont as any).dataset.devDelegated = '1'
-    const actions: Record<string, Function> = {
-      devInjectSignalLONG: () => devInjectSignal('LONG'),
-      devInjectSignalSHORT: () => devInjectSignal('SHORT'),
-      devInjectLiquidationLONG: () => devInjectLiquidation('LONG'),
-      devInjectLiquidationSHORT: () => devInjectLiquidation('SHORT'),
-      devInjectWhale: () => devInjectWhale(),
-      devFeedDisconnect: () => devFeedDisconnect(),
-      devFeedRecover: () => devFeedRecover(),
-      devTriggerKillSwitch: () => devTriggerKillSwitch(),
-      devResetProtect: () => devResetProtect(),
-      devReplayStart: () => devReplayStart(),
-      devReplayStop: () => devReplayStop(),
-      devClearLog: () => devClearLog(),
-      devExportLog: () => devExportLog(),
-    }
-    cont.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
-      if (btn) { const fn = actions[btn.dataset.action || '']; if (fn) fn() }
-    })
-  }, [])
-
   return (
     <>
       {/* ===== RSI MULTI-TIMEFRAME ===== */}
@@ -845,33 +818,45 @@ export function AnalysisSections() {
           <span>DEVELOPER MODE — TEST HARNESS</span>
           <span id="dev-upd" style={{ fontSize: '7px', color: '#aa88ff' }}></span>
         </div>
-        <div className="dev-content" id="dev-content" dangerouslySetInnerHTML={{ __html:
-          '<div class="dev-section"><div class="dev-title">INJECT EVENTS</div><div class="dev-buttons">'
-          + '<button class="dev-btn" data-action="devInjectSignalLONG">LONG SIGNAL</button>'
-          + '<button class="dev-btn" data-action="devInjectSignalSHORT">SHORT SIGNAL</button>'
-          + '<button class="dev-btn" data-action="devInjectLiquidationLONG">LIQ LONG</button>'
-          + '<button class="dev-btn" data-action="devInjectLiquidationSHORT">LIQ SHORT</button>'
-          + '<button class="dev-btn" data-action="devInjectWhale">FAKE WHALE</button>'
-          + '<button class="dev-btn" data-action="devFeedDisconnect">FEED DISCONNECT</button>'
-          + '<button class="dev-btn" data-action="devFeedRecover">FEED RECOVER</button>'
-          + '<button class="dev-btn" data-action="devTriggerKillSwitch">KILL SWITCH</button>'
-          + '<button class="dev-btn" data-action="devResetProtect">RESET PROTECT</button>'
-          + '</div></div>'
-          + '<div class="dev-section"><div class="dev-title">EVENT LOG (last 50)</div>'
-          + '<div class="dev-log" id="dev-log"><div class="dev-log-empty">No events yet. Use buttons above to simulate.</div></div>'
-          + '<div style="display:flex;gap:4px;margin-top:4px">'
-          + '<button class="dev-btn small" data-action="devClearLog">CLEAR LOG</button>'
-          + '<button class="dev-btn small" data-action="devExportLog">EXPORT CSV</button>'
-          + '</div></div>'
-          + '<div class="dev-section"><div class="dev-title">REPLAY MODE (log-only viewer)</div>'
-          + '<div style="display:flex;gap:4px;align-items:center">'
-          + '<button class="dev-btn small" data-action="devReplayStart">▶ START</button>'
-          + '<button class="dev-btn small" data-action="devReplayStop">■ STOP</button>'
-          + '<span style="color:var(--dim);font-size:7px" id="dev-replay-status">Idle</span></div>'
-          + '<div style="margin-top:4px;font-size:7px;color:var(--dim)">'
-          + '<input type="number" id="dev-replay-speed" value="1" min="0.1" max="10" step="0.1" style="width:50px;background:#0a121a;border:1px solid #2a3a4a;color:#aaccff;padding:2px 4px;border-radius:2px;font-family:var(--ff)">× speed</div>'
-          + '</div>'
-        }} />
+        <div className="dev-content" id="dev-content">
+          <div className="dev-section">
+            <div className="dev-title">INJECT EVENTS</div>
+            <div className="dev-buttons">
+              <button className="dev-btn" onClick={() => devInjectSignal('LONG')}>LONG SIGNAL</button>
+              <button className="dev-btn" onClick={() => devInjectSignal('SHORT')}>SHORT SIGNAL</button>
+              <button className="dev-btn" onClick={() => devInjectLiquidation('LONG')}>LIQ LONG</button>
+              <button className="dev-btn" onClick={() => devInjectLiquidation('SHORT')}>LIQ SHORT</button>
+              <button className="dev-btn" onClick={() => devInjectWhale()}>FAKE WHALE</button>
+              <button className="dev-btn" onClick={() => devFeedDisconnect()}>FEED DISCONNECT</button>
+              <button className="dev-btn" onClick={() => devFeedRecover()}>FEED RECOVER</button>
+              <button className="dev-btn" onClick={() => devTriggerKillSwitch()}>KILL SWITCH</button>
+              <button className="dev-btn" onClick={() => devResetProtect()}>RESET PROTECT</button>
+            </div>
+          </div>
+          <div className="dev-section">
+            <div className="dev-title">EVENT LOG (last 50)</div>
+            <div className="dev-log" id="dev-log">
+              <div className="dev-log-empty">No events yet. Use buttons above to simulate.</div>
+            </div>
+            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+              <button className="dev-btn small" onClick={() => devClearLog()}>CLEAR LOG</button>
+              <button className="dev-btn small" onClick={() => devExportLog()}>EXPORT CSV</button>
+            </div>
+          </div>
+          <div className="dev-section">
+            <div className="dev-title">REPLAY MODE (log-only viewer)</div>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <button className="dev-btn small" onClick={() => devReplayStart()}>▶ START</button>
+              <button className="dev-btn small" onClick={() => devReplayStop()}>■ STOP</button>
+              <span style={{ color: 'var(--dim)', fontSize: '7px' }} id="dev-replay-status">Idle</span>
+            </div>
+            <div style={{ marginTop: '4px', fontSize: '7px', color: 'var(--dim)' }}>
+              <input type="number" id="dev-replay-speed" defaultValue={1} min={0.1} max={10} step={0.1}
+                style={{ width: '50px', background: '#0a121a', border: '1px solid #2a3a4a', color: '#aaccff', padding: '2px 4px', borderRadius: '2px', fontFamily: 'var(--ff)' }} />
+              × speed
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="tickw">
