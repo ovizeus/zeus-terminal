@@ -58,10 +58,7 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_mscan_syms': 1, 'zt_midstack_order': 1,
     'aub_bb': 1, 'aub_macro': 1, 'aub_sim_last': 1, 'aub_expanded': 1,
     'of_hud_v2': 1, 'of_hud_pos_v1': 1, 'of_hud_anchor_x_v1': 1,
-    'zeus_teacher_enabled': 1, 'zeus_teacher_mode': 1,
-    'zeus_teacher_sessionState': 1, 'zeus_teacher_cumulative': 1,
-    'zeus_teacher_checklistPrefs': 1, 'zeus_teacher_checklistState': 1,
-    'zeus_teacher_dismissed': 1,
+    // [ZT6] Teacher v2 (current codebase): 7 keys actively used
     'zeus_teacher_config': 1, 'zeus_teacher_sessions': 1,
     'zeus_teacher_lessons': 1, 'zeus_teacher_stats': 1,
     'zeus_teacher_memory': 1, 'zeus_teacher_v2state': 1,
@@ -70,8 +67,13 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_dev_enabled': 1,
     'zeus_drawings_v1': 1,
     'zeus_ts_open': 1,
-    'zeus_pin_hash': 1,
+    'zeus_pin_hash': 1, 'zeus_pin_unlocked_until': 1, // [ZT6] PIN unlock is per-user
     'zt_api_key': 1, 'zt_api_secret': 1, 'zt_api_token': 1, 'zt_api_exchange': 1
+    // [ZT6] Intentionally NOT scoped (per-browser, not per-user):
+    //   'zeus_tab_leader' — multi-tab leader election for AT executor (all
+    //     logged-in tabs across users must see the same leader).
+    //   'zeus_app_version' — PWA/update banner install-version marker tied
+    //     to the browser cache, not to the logged-in user.
   }
   const _USER_PREFIXES = ['zt_cloud_']
 
