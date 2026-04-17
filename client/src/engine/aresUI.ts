@@ -10,6 +10,20 @@
 // If a future change makes ARESPanel re-render, the R7 contract breaks
 // and every imperative write below silently regresses to its JSX
 // placeholder value ("CONF —%", "⚠ —", etc.).
+//
+// [R28 TRUST BOUNDARY] Remaining `.innerHTML =` writes below fall into
+// two categories:
+//   (a) SVG-shape/coord writes (neural brain, mission arc, progress bars,
+//       history dots) — author-authored templates interpolating numeric
+//       coords/colors from engine state. No user-influenced strings flow
+//       into these.
+//   (b) Thought-stream lines (line ~786) — each line is run through
+//       escHtml() before interpolation; textContent-equivalent safety.
+// All user-adjacent text (positions reason, decision reasons, badge
+// label, wound/failure text) is now written via textContent or the
+// _setIconText helper — cannot inject HTML.
+// Full Option A (store+UI conversion, ~40 surfaces, multi-day scope) is
+// tracked separately as R28.2 and deferred from the post-v2 lot series.
 
 import { escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
@@ -17,10 +31,23 @@ import { _ZI } from '../constants/icons'
 import { checkPendingOrders , renderDemoPositions, checkDemoPositionsSLTP } from '../data/marketDataPositions'
 import { ARES_DECISION } from './aresDecision'
 import { ARES_MIND } from './aresMind'
+import { ARES_MONITOR } from './aresMonitor'
 
 const w = window as any
 
 const TARGET = 1_000_000
+
+// [R28] Set element content as: <trusted-icon-svg> + textNode(trailingText).
+// The icon SVG is author-controlled (_ZI.* constants). The trailingText is
+// forced through textContent semantics — cannot inject HTML even if the
+// upstream engine state contains angle brackets.
+function _setIconText(el: HTMLElement, iconSvg: string, trailingText: string): void {
+  while (el.firstChild) el.removeChild(el.firstChild)
+  const tmpl = document.createElement('template')
+  tmpl.innerHTML = iconSvg
+  el.appendChild(tmpl.content)
+  el.appendChild(document.createTextNode(trailingText))
+}
 
 ;(function _aresCSS() {
   const s = document.createElement('style')
@@ -165,10 +192,10 @@ export function _aresRender() {
     const pulseSpeed = ARES_MIND.getPulseSpeed()
     const predAcc = ARES_MIND.getPredictionAccuracy()
 
-    // Update badge in header
+    // Update badge in header — emoji + label written as text, not HTML
     const badge = document.getElementById('ares-strip-badge')
     if (badge) {
-      badge.innerHTML = st.current.emoji + ' ' + st.current.label
+      badge.textContent = st.current.emoji + ' ' + st.current.label
       badge.style.color = col
       badge.style.borderColor = col + '88'
       badge.style.textShadow = `0 0 10px ${glow}`
@@ -213,7 +240,7 @@ export function _aresRender() {
         const isWounded = (st.current.id === 'DEFENSIVE' || st.current.id === 'REVENGE_GUARD') && st.consecutiveLoss >= 3
         if (isWounded) {
           woundEl.style.display = 'block'
-          woundEl.innerHTML = _ZI.w + ' MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced'
+          _setIconText(woundEl, _ZI.w, ' MORTAL WOUND — ' + st.consecutiveLoss + ' consecutive losses · Risk Reduced')
         } else {
           woundEl.style.display = 'none'
         }
@@ -227,7 +254,7 @@ export function _aresRender() {
       if (woundEl && bal < 5 && bal >= 0) {
         woundEl.style.display = 'block'
         woundEl.style.color = '#ff0044'
-        woundEl.innerHTML = _ZI.skull + ' MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.'
+        _setIconText(woundEl, _ZI.skull, ' MISSION FAILED — Wallet depleted ($' + bal.toFixed(2) + '). REFILL to resume trading.')
       }
     } catch (_) { }
 
@@ -240,11 +267,11 @@ export function _aresRender() {
           if (lastDec.shouldTrade) {
             decEl.style.display = 'block'
             decEl.style.color = '#00ff88'
-            decEl.innerHTML = _ZI.ok + ' DECISION: ' + escHtml(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map(escHtml).join(' · ')
+            _setIconText(decEl, _ZI.ok, ' DECISION: ' + String(lastDec.side) + ' — ' + lastDec.reasons.slice(0, 3).map((r: any) => String(r)).join(' · '))
           } else {
             decEl.style.display = 'block'
             decEl.style.color = '#ff8800'
-            decEl.innerHTML = _ZI.pause + ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map(escHtml).join(' · ')
+            _setIconText(decEl, _ZI.pause, ' BLOCKED: ' + lastDec.reasons.slice(0, 2).map((r: any) => String(r)).join(' · '))
           }
         }
       }
@@ -410,10 +437,17 @@ export function _aresRender() {
         const closeAllBtn = document.getElementById('ares-close-all-btn') as any
         if (closeAllBtn) closeAllBtn.style.display = openPositions.length >= 2 ? 'inline-block' : 'none'
         if (posListEl) {
+          // [R28] Replace innerHTML concatenation with DOM construction.
+          // Removes onclick-as-attribute-string (stringified JS expression) and
+          // forces user-adjacent text (pos.reason) through textContent.
+          while (posListEl.firstChild) posListEl.removeChild(posListEl.firstChild)
           if (openPositions.length === 0) {
-            posListEl.innerHTML = '<div style="color:rgba(255,255,255,0.25);font-size:12px;font-family:monospace;padding:2px 0">\u2014 none \u2014</div>'
+            const none = document.createElement('div')
+            none.style.cssText = 'color:rgba(255,255,255,0.25);font-size:12px;font-family:monospace;padding:2px 0'
+            none.textContent = '\u2014 none \u2014'
+            posListEl.appendChild(none)
           } else {
-            posListEl.innerHTML = openPositions.map((pos: any) => {
+            for (const pos of openPositions) {
               const pnlColor = pos.uPnL > 0 ? 'rgba(0,255,140,0.95)' : pos.uPnL < 0 ? 'rgba(255,60,60,0.95)' : 'rgba(70,200,255,0.95)'
               const pnlSign = pos.uPnL >= 0 ? '+' : ''
               const pnlPctStr = pnlSign + pos.uPnLPct.toFixed(2) + '%'
@@ -423,34 +457,80 @@ export function _aresRender() {
               const entry = Number.isFinite(pos.entryPrice) ? pos.entryPrice.toFixed(1) : '\u2014'
               const liq = Number.isFinite(pos.liqPrice) ? pos.liqPrice.toFixed(1) : '\u2014'
               const sz = pos.notional.toFixed(1)
-              // P0.8: Enhanced fields for live ARES positions
               const slStr = pos.slPrice ? '$' + pos.slPrice.toFixed(1) : '\u2014'
               const tpStr = pos.tpPrice ? '$' + pos.tpPrice.toFixed(1) : '\u2014'
-              const liveTag = pos.isLive ? '<span style="color:#00ff88;font-size:10px;letter-spacing:1px"> LIVE</span>' : ''
-              const beTag = pos._slMovedBE ? '<span style="color:#00d9ff;font-size:10px"> BE</span>' : ''
-              const reasonStr = pos.reason ? pos.reason.substring(0, 80) : ''
-              const closeAction = pos.isLive
-                ? `(function(){if(typeof ARES_MONITOR!=='undefined'){ARES_MONITOR.closeLivePosition(ARES.positions.getOpen().find(function(p){return p.id==='${pos.id}';}),${pos.markPrice || 0},'manual');setTimeout(_aresRender,500);}})()`
-                : `(function(){if(typeof ARES!=='undefined'&&ARES.positions){ARES.positions.closePosition('${pos.id}');_aresRender();}})()`
-              return `<div style="border-left:2px solid ${pnlColor};padding:4px 6px;margin-bottom:5px;background:rgba(0,0,0,0.25);border-radius:0 3px 3px 0">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1px">
-                <span style="font-family:monospace;font-size:13px;color:rgba(255,255,255,0.85);letter-spacing:0.5px">
-                  <span style="color:rgba(70,200,255,0.9)">[BTCUSDT]</span>
-                  <span style="color:${sideColor};font-weight:700">&nbsp;${pos.side}</span>
-                  <span style="color:rgba(255,200,60,0.85)">&nbsp;x${pos.leverage}</span>
-                  <span style="color:rgba(255,255,255,0.45)">&nbsp;ISO&nbsp;&nbsp;Size: ${sz} USDT</span>${liveTag}${beTag}
-                </span>
-                <button onclick="${closeAction}" style="background:rgba(255,50,50,0.18);border:1px solid rgba(255,50,50,0.5);color:rgba(255,100,100,0.9);font-family:monospace;font-size:11px;padding:2px 6px;cursor:pointer;border-radius:2px;letter-spacing:1px">CLOSE</button>
-              </div>
-              <div style="font-family:monospace;font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:1px">
-                Entry ${entry} &nbsp;Mark ${mark} &nbsp;Liq <span style="color:rgba(255,120,50,0.75)">${liq}</span> &nbsp;SL <span style="color:rgba(255,60,60,0.7)">${slStr}</span> &nbsp;TP <span style="color:rgba(0,255,140,0.7)">${tpStr}</span>
-              </div>
-              <div style="font-family:monospace;font-size:12px;color:${pnlColor};font-weight:700;text-shadow:0 0 8px ${pnlColor}55">
-                uPnL ${pnlPctStr} &nbsp; ${pnlAbsStr}
-              </div>
-              ${reasonStr ? '<div style="font-family:monospace;font-size:11px;color:rgba(255,255,255,0.3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + reasonStr + '</div>' : ''}
-            </div>`
-            }).join('')
+              const reasonStr = pos.reason ? String(pos.reason).substring(0, 80) : ''
+
+              const card = document.createElement('div')
+              card.style.cssText = `border-left:2px solid ${pnlColor};padding:4px 6px;margin-bottom:5px;background:rgba(0,0,0,0.25);border-radius:0 3px 3px 0`
+
+              // Row 1: symbol/side/leverage/size + CLOSE button
+              const row1 = document.createElement('div')
+              row1.style.cssText = 'display:flex;justify-content:space-between;align-items:center;margin-bottom:1px'
+              const row1Info = document.createElement('span')
+              row1Info.style.cssText = 'font-family:monospace;font-size:13px;color:rgba(255,255,255,0.85);letter-spacing:0.5px'
+              const sym = document.createElement('span'); sym.style.color = 'rgba(70,200,255,0.9)'; sym.textContent = '[BTCUSDT]'
+              const sid = document.createElement('span'); sid.style.cssText = `color:${sideColor};font-weight:700`; sid.textContent = ' ' + String(pos.side)
+              const lev = document.createElement('span'); lev.style.color = 'rgba(255,200,60,0.85)'; lev.textContent = ' x' + String(pos.leverage)
+              const iso = document.createElement('span'); iso.style.color = 'rgba(255,255,255,0.45)'; iso.textContent = ' ISO  Size: ' + sz + ' USDT'
+              row1Info.append(sym, sid, lev, iso)
+              if (pos.isLive) {
+                const live = document.createElement('span'); live.style.cssText = 'color:#00ff88;font-size:10px;letter-spacing:1px'; live.textContent = ' LIVE'
+                row1Info.appendChild(live)
+              }
+              if (pos._slMovedBE) {
+                const be = document.createElement('span'); be.style.cssText = 'color:#00d9ff;font-size:10px'; be.textContent = ' BE'
+                row1Info.appendChild(be)
+              }
+              const closeBtn = document.createElement('button')
+              closeBtn.style.cssText = 'background:rgba(255,50,50,0.18);border:1px solid rgba(255,50,50,0.5);color:rgba(255,100,100,0.9);font-family:monospace;font-size:11px;padding:2px 6px;cursor:pointer;border-radius:2px;letter-spacing:1px'
+              closeBtn.textContent = 'CLOSE'
+              // [R28] Proper function reference — no stringified JS in DOM attributes
+              const posId = String(pos.id)
+              const posIsLive = !!pos.isLive
+              const posMark = Number(pos.markPrice) || 0
+              closeBtn.addEventListener('click', () => {
+                try {
+                  if (posIsLive) {
+                    const live = w.ARES?.positions?.getOpen()?.find((p: any) => p.id === posId)
+                    if (live) {
+                      ARES_MONITOR.closeLivePosition(live, posMark, 'manual')
+                      setTimeout(() => _aresRender(), 500)
+                    }
+                  } else if (w.ARES?.positions) {
+                    w.ARES.positions.closePosition(posId)
+                    _aresRender()
+                  }
+                } catch (_) { /* swallow — UI-side close */ }
+              })
+              row1.append(row1Info, closeBtn)
+
+              // Row 2: Entry / Mark / Liq / SL / TP
+              const row2 = document.createElement('div')
+              row2.style.cssText = 'font-family:monospace;font-size:11px;color:rgba(255,255,255,0.45);margin-bottom:1px'
+              row2.appendChild(document.createTextNode('Entry ' + entry + '  Mark ' + mark + '  Liq '))
+              const liqS = document.createElement('span'); liqS.style.color = 'rgba(255,120,50,0.75)'; liqS.textContent = liq; row2.appendChild(liqS)
+              row2.appendChild(document.createTextNode('  SL '))
+              const slS = document.createElement('span'); slS.style.color = 'rgba(255,60,60,0.7)'; slS.textContent = slStr; row2.appendChild(slS)
+              row2.appendChild(document.createTextNode('  TP '))
+              const tpS = document.createElement('span'); tpS.style.color = 'rgba(0,255,140,0.7)'; tpS.textContent = tpStr; row2.appendChild(tpS)
+
+              // Row 3: uPnL
+              const row3 = document.createElement('div')
+              row3.style.cssText = `font-family:monospace;font-size:12px;color:${pnlColor};font-weight:700;text-shadow:0 0 8px ${pnlColor}55`
+              row3.textContent = 'uPnL ' + pnlPctStr + '   ' + pnlAbsStr
+
+              card.append(row1, row2, row3)
+
+              if (reasonStr) {
+                const reasonEl = document.createElement('div')
+                reasonEl.style.cssText = 'font-family:monospace;font-size:11px;color:rgba(255,255,255,0.3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'
+                // [R28] pos.reason via textContent — cannot inject HTML
+                reasonEl.textContent = reasonStr
+                card.appendChild(reasonEl)
+              }
+              posListEl.appendChild(card)
+            }
           }
         }
       }
