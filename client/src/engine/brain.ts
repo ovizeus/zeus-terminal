@@ -1785,12 +1785,18 @@ export function renderBrainCockpit(): void {
 
   // ── ORB SCORE ARC ──
   const arc = el('zncScoreArc')
-  const numEl = el('zncScoreNum')
   const scoreLbl = el('zncScoreLbl')
   const circum = 302 // 2π×48
   const col = score >= scoreThresh ? '#39ff14' : score >= 60 ? '#f0c040' : '#ff3355'
   if (arc) { arc.setAttribute('stroke-dasharray', `${score / 100 * circum} ${circum}`); arc.setAttribute('stroke', col) }
-  if (numEl) { numEl.textContent = score || '—'; numEl.style.color = col; numEl.style.textShadow = `0 0 16px ${col}` }
+  // [ZT5-B] zncScoreNum text/color routed through brainStatsStore (center.scoreText/Color)
+  useBrainStatsStore.getState().patchStats({
+    center: {
+      ...useBrainStatsStore.getState().snapshot.center,
+      scoreText: String(score || '—'),
+      scoreColor: col,
+    },
+  })
   if (scoreLbl) { scoreLbl.textContent = score >= scoreThresh ? 'READY' : score >= 60 ? 'WAIT' : 'BLOCK'; scoreLbl.className = 'znc-state ' + (score >= scoreThresh ? 'armed' : score >= 60 ? 'analyzing' : 'blocked') }
 
   // ── ORB LED NODES (gate state → LED ring dots) ──
@@ -2447,47 +2453,33 @@ export function renderCircuitBrain(): void {
 
   // ── 8. Inner orbit node values ──
   try {
-    const elFn = (id: string, v: any) => { const e = cbn(id); if (e) e.textContent = v }
-    // Flow
     const flowVal = (typeof BM !== 'undefined' && BM.flow != null) ? (typeof BM.flow === 'object' ? (BM.flow.cvd || '—').toUpperCase() : (typeof BM.flow === 'number' ? BM.flow.toFixed(1) : '—')) : '—'
-    elFn('nc-flow-val', flowVal)
-    // Volume mode
     const volMode = (typeof BM !== 'undefined' && BM.structure && BM.structure.volMode) ? BM.structure.volMode : '—'
-    elFn('nc-vol-val', volMode)
-    // Structure label
     const structLbl = (typeof BM !== 'undefined' && BM.structure && BM.structure.structureLabel) ? BM.structure.structureLabel : '—'
-    elFn('nc-struct-val', structLbl)
-    // Liquidity (from atmosphere if available)
     const liqVal = (typeof BM !== 'undefined' && BM.atmosphere && BM.atmosphere.liquidityScore != null) ? BM.atmosphere.liquidityScore.toFixed(0) : '—'
-    elFn('nc-liq-val', liqVal)
-    // Risk (from BRAIN neurons or safety)
     const riskN = (typeof BR !== 'undefined' && BR.neurons && BR.neurons.risk != null) ? BR.neurons.risk.toFixed(0) : '—'
-    elFn('nc-risk-val', riskN)
-    // ATR / Volatility
     const atrPct2 = (typeof BR !== 'undefined' && BR.regimeAtrPct != null) ? BR.regimeAtrPct.toFixed(2) + '%' : '—'
-    elFn('nc-volat-val', atrPct2)
+    useBrainStatsStore.getState().patchStats({
+      inner: { flow: flowVal, vol: volMode, struct: structLbl, liq: liqVal, risk: riskN, volat: atrPct2 },
+    })
   } catch (_) { }
 
   // ── 9. Center info overlay ──
   try {
-    const modeEl = cbn('nc-mode')
-    const regimeEl = cbn('nc-regime')
     const confEl = cbn('nc-confidence')
-    const scoreNumEl = cbn('zncScoreNum')
-    if (modeEl) modeEl.textContent = (typeof w.S !== 'undefined' && w.S.mode) ? w.S.mode.toUpperCase() : 'MANUAL'
-    if (regimeEl) {
-      const reg = (typeof BR !== 'undefined' && BR.regime) ? BR.regime.toUpperCase() : '—'
-      regimeEl.textContent = reg
-    }
+    const mode = (typeof w.S !== 'undefined' && w.S.mode) ? w.S.mode.toUpperCase() : 'MANUAL'
+    const regime = (typeof BR !== 'undefined' && BR.regime) ? BR.regime.toUpperCase() : '—'
+    const sc = (typeof BM !== 'undefined' ? BM.entryScore : 0) || 0
+    const scoreTone: 'ok' | 'warn' | 'bad' = sc >= 65 ? 'ok' : sc >= 50 ? 'warn' : 'bad'
+    const scoreColor = sc >= 65 ? '#39ff14' : sc >= 50 ? '#f0c040' : '#ff3355'
+    // nc-confidence is out of ZT5-B scope — kept imperative for now
     if (confEl) {
       const atm = (typeof BM !== 'undefined' && BM.atmosphere) ? BM.atmosphere : null
       confEl.textContent = atm && atm.confidence != null ? 'CONF ' + atm.confidence.toFixed(0) + '%' : ''
     }
-    // Score num colour class
-    if (scoreNumEl) {
-      const sc = (typeof BM !== 'undefined' ? BM.entryScore : 0) || 0
-      scoreNumEl.className = 'nc-score-num ' + (sc >= 65 ? 'ok' : sc >= 50 ? 'warn' : 'bad')
-    }
+    useBrainStatsStore.getState().patchStats({
+      center: { mode, regime, scoreText: String(sc || '—'), scoreTone, scoreColor },
+    })
   } catch (_) { }
 }
 

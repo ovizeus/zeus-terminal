@@ -17,20 +17,49 @@ export interface BrainStatsNode {
   tone: BrainStatsTone
 }
 
+export interface BrainInnerValues {
+  flow: string
+  vol: string
+  struct: string
+  liq: string
+  risk: string
+  volat: string
+}
+
+export interface BrainCenterOverlay {
+  mode: string
+  regime: string
+  scoreText: string
+  scoreTone: 'ok' | 'warn' | 'bad'
+  scoreColor: string
+}
+
 export interface BrainStatsSnapshot {
   gates: BrainStatsNode
   regime: BrainStatsNode
   risk: BrainStatsNode
   auto: BrainStatsNode
+  inner: BrainInnerValues
+  center: BrainCenterOverlay
 }
 
 const emptyNode: BrainStatsNode = { text: '—', sub: '—', tone: 'neutral' }
+
+const emptyInner: BrainInnerValues = {
+  flow: '—', vol: '—', struct: '—', liq: '—', risk: '—', volat: '—',
+}
+
+const emptyCenter: BrainCenterOverlay = {
+  mode: 'MANUAL', regime: '—', scoreText: '—', scoreTone: 'bad', scoreColor: '#ff3355',
+}
 
 export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   gates: emptyNode,
   regime: emptyNode,
   risk: emptyNode,
   auto: emptyNode,
+  inner: emptyInner,
+  center: emptyCenter,
 }
 
 interface BrainStatsStoreState {
