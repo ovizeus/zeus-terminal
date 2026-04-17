@@ -84,16 +84,6 @@ export interface BrainWhy {
   riskList: string[]
 }
 
-export type BrainNeuronState = 'ok' | 'fail' | 'wait' | 'inactive'
-export type BrainNeuronId = 'rsi' | 'macd' | 'st' | 'vol' | 'fr' | 'mag' | 'reg' | 'ofi'
-export interface BrainNeuronCell {
-  state: BrainNeuronState
-  val: string
-}
-export type BrainNeurons = Record<BrainNeuronId, BrainNeuronCell>
-
-export const BRAIN_NEURON_IDS: readonly BrainNeuronId[] = ['rsi', 'macd', 'st', 'vol', 'fr', 'mag', 'reg', 'ofi']
-
 export interface BrainStatsSnapshot {
   gates: BrainStatsNode
   regime: BrainStatsNode
@@ -109,7 +99,6 @@ export interface BrainStatsSnapshot {
   ofi: BrainOfi
   forecast: BrainForecast
   why: BrainWhy
-  neurons: BrainNeurons
 }
 
 const emptyNode: BrainStatsNode = { text: '—', sub: '—', tone: 'neutral' }
@@ -134,17 +123,6 @@ const emptyArmBadge: BrainArmBadge = { text: 'SCANNING', cls: 'znc-arm-badge sca
 
 const emptyRegimeBadge: BrainRegimeBadge = { innerHtml: 'LOADING ▲', cls: 'znc-regime-val unknown' }
 
-const emptyNeurons: BrainNeurons = {
-  rsi: { state: 'inactive', val: '—' },
-  macd: { state: 'inactive', val: '—' },
-  st: { state: 'inactive', val: '—' },
-  vol: { state: 'inactive', val: '—' },
-  fr: { state: 'inactive', val: '—' },
-  mag: { state: 'inactive', val: '—' },
-  reg: { state: 'inactive', val: '—' },
-  ofi: { state: 'inactive', val: '—' },
-}
-
 export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   gates: emptyNode,
   regime: emptyNode,
@@ -160,25 +138,16 @@ export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   ofi: { buyPct: 50, sellPct: 50 },
   forecast: { mainText: 'Neutral (0)', mainCls: 'bf-main neut', rangeText: '—', stateText: '—' },
   why: { stateText: 'WAIT', stateCls: 'bw-state wait', whyList: [], riskList: [] },
-  neurons: emptyNeurons,
 }
 
 interface BrainStatsStoreState {
   snapshot: BrainStatsSnapshot
   setSnapshot: (s: BrainStatsSnapshot) => void
   patchStats: (p: Partial<BrainStatsSnapshot>) => void
-  patchNeuron: (id: BrainNeuronId, cell: BrainNeuronCell) => void
 }
 
 export const useBrainStatsStore = create<BrainStatsStoreState>((set) => ({
   snapshot: emptyBrainStatsSnapshot,
   setSnapshot: (snapshot) => set({ snapshot }),
   patchStats: (p) => set((st) => ({ snapshot: { ...st.snapshot, ...p } })),
-  patchNeuron: (id, cell) =>
-    set((st) => ({
-      snapshot: {
-        ...st.snapshot,
-        neurons: { ...st.snapshot.neurons, [id]: cell },
-      },
-    })),
 }))

@@ -1,7 +1,7 @@
 import { useRef, useEffect, memo } from 'react'
 import { resetProtectMode } from '../../engine/brain'
 import { BlockReasonText } from './BlockReasonText'
-import { useBrainStatsStore, BRAIN_NEURON_IDS } from '../../stores/brainStatsStore'
+import { useBrainStatsStore } from '../../stores/brainStatsStore'
 import { _ZI } from '../../constants/icons'
 
 /** [ZT5-C] Store-driven consumers for right-column arm/regime/receipt */
@@ -95,22 +95,6 @@ function OfiBar() {
         <span id="ofiSellPct" style={{ color: '#ff335566' }}>SELL {se}%</span>
       </div>
     </div>
-  )
-}
-
-function NeuronsRow() {
-  const s = useBrainStatsStore((st) => st.snapshot.neurons)
-  return (
-    <>
-      {BRAIN_NEURON_IDS.map((n) => {
-        const cell = s[n]
-        return (
-          <div key={n} id={`bn-${n}`} className={`neuron ${cell.state}`}>
-            <div className="ndot"></div><span></span><span className="nval" id={`bnv-${n}`}>{cell.val}</span>
-          </div>
-        )
-      })}
-    </>
   )
 }
 
@@ -248,13 +232,43 @@ export const BrainCockpit = memo(function BrainCockpit() {
             {['gates','score','regime','risk','auto','data'].map(n => <circle key={n} cx="0" cy="0" r="0" id={`cb-node-${n}`} opacity="0" />)}
           </svg>
 
-          {/* Hidden compat elements — [ZT5-F] dead ids removed; only ids with live engine writers kept */}
+          {/* Hidden compat elements */}
+          <div style={{ display: 'none' }} id="nc-center"></div>
+          <div style={{ display: 'none' }} id="nc-regime"></div>
+          <div style={{ display: 'none' }} id="cbn-gates-val"></div>
+          <div style={{ display: 'none' }} id="cbn-gates-sub"></div>
+          <div style={{ display: 'none' }} id="nc-mode"></div>
+          <div style={{ display: 'none' }} id="zncScoreNum"></div>
           <div style={{ display: 'none' }} id="nc-confidence"></div>
+          <div style={{ display: 'none' }} id="nc-flow-val"></div>
+          <div style={{ display: 'none' }} id="nc-vol-val"></div>
+          <div style={{ display: 'none' }} id="cbn-risk-val"></div>
+          <div style={{ display: 'none' }} id="cbn-regime-val"></div>
+          <div style={{ display: 'none' }} id="zncValProfile"></div>
+          <div style={{ display: 'none' }} id="zncValTf"></div>
+          <div style={{ display: 'none' }} id="zncValCooldown"></div>
+          <div style={{ display: 'none' }} id="cbn-auto-val"></div>
+          <div style={{ display: 'none' }} id="zncValScan"></div>
+          <div style={{ display: 'none' }} id="zncScoreLbl"></div>
+          <div style={{ display: 'none' }} id="zncStatusSub"></div>
+          <div style={{ display: 'none' }} id="cbn-regime-box"></div>
+          <div style={{ display: 'none' }} id="cbn-regime-sub"></div>
+          <div style={{ display: 'none' }} id="nc-vol-box"></div>
+          <div style={{ display: 'none' }} id="nc-volat-val"></div>
           <div style={{ display: 'none' }} id="cbn-data-box"></div>
           <div style={{ display: 'none' }} id="cbn-data-val"></div>
           <div style={{ display: 'none' }} id="cbn-data-sub"></div>
+          <div style={{ display: 'none' }} id="cbn-auto-box"></div>
+          <div style={{ display: 'none' }} id="cbn-auto-sub"></div>
+          <div style={{ display: 'none' }} id="cbn-risk-box"></div>
+          <div style={{ display: 'none' }} id="cbn-risk-sub"></div>
+          <div style={{ display: 'none' }} id="nc-risk-val"></div>
+          <div style={{ display: 'none' }} id="nc-flow-box"></div>
+          <div style={{ display: 'none' }} id="nc-struct-box"></div>
+          <div style={{ display: 'none' }} id="nc-struct-val"></div>
+          <div style={{ display: 'none' }} id="nc-liq-val"></div>
           <div style={{ display: 'none' }} id="cbn-score-box"></div>
-          <div style={{ display: 'none' }} id="zncScoreLbl"></div>
+          <div style={{ display: 'none' }} id="nc-canvas"></div>
           <div style={{ display: 'none' }} id="predator-hud">
             <span id="pred-sleep"></span><span id="pred-hunt"></span><span id="pred-kill"></span>
           </div>
@@ -424,8 +438,9 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <WhyEngineBlock />
       </div>
 
-      {/* COMPAT: hidden IDs with live engine writers — [ZT5-F] brainRegimeBadge3/brainCoreBg/zncScoreNum2 dropped (0 external writers) */}
+      {/* COMPAT: hidden IDs needed by existing JS */}
       <div className="znc-compat">
+        <div id="brainRegimeBadge3"></div>
         <div id="entryScoreNum"></div>
         <div id="entryScoreFill"></div>
         <div id="entryScoreLabel"></div>
@@ -446,8 +461,14 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <div id="dslTelemetry"></div>
         <div id="brainScoreNum"></div>
         <div id="brainScoreArc"></div>
-        {/* [ZT5-F] neurons store-driven */}
-        <NeuronsRow />
+        <div id="brainCoreBg"></div>
+        <div id="zncScoreNum2"></div>
+        {/* neuron divs for setNeuron() */}
+        {['rsi','macd','st','vol','fr','mag','reg','ofi'].map(n => (
+          <div key={n} id={`bn-${n}`} className="neuron inactive">
+            <div className="ndot"></div><span></span><span className="nval" id={`bnv-${n}`}>—</span>
+          </div>
+        ))}
       </div>
 
     </div>

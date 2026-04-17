@@ -19,7 +19,7 @@ import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
 import { detectRegimeEnhanced } from './regimeEnhanced'
 import { useBrainStore } from '../stores/brainStore'
-import { useBrainStatsStore, BRAIN_NEURON_IDS, type BrainStatsTone, type BrainNeuronId, type BrainNeuronState } from '../stores/brainStatsStore'
+import { useBrainStatsStore, type BrainStatsTone } from '../stores/brainStatsStore'
 import type { BrainMode, TradingProfile, BrainEngineState, BrainState, BrainAdaptParams } from '../types'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
@@ -152,15 +152,12 @@ export function getNeuronColor(id: any): string {
   return n === 'ok' ? '#00ff88' : n === 'fail' ? '#ff4444' : n === 'wait' ? '#f0c040' : '#333'
 }
 
-const _KNOWN_NEURON_IDS = new Set<string>(BRAIN_NEURON_IDS)
 export function setNeuron(id: any, state: any, val: any): void {
   BR.neurons[id] = state
-  if (_KNOWN_NEURON_IDS.has(id)) {
-    useBrainStatsStore.getState().patchNeuron(id as BrainNeuronId, {
-      state: state as BrainNeuronState,
-      val: String(val),
-    })
-  }
+  const el2 = el('bn-' + id)
+  const valEl = el('bnv-' + id)
+  if (el2) el2.className = 'neuron ' + state
+  if (valEl) valEl.textContent = val
 }
 
 
