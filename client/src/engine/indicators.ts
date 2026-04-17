@@ -493,10 +493,10 @@ export function _syncSubChartsToMain(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function initRSIChart(): void {
-  if (w._rsiInited && _rsiChart) { updateRSI(); return }
-  _rsiChart = _createSubChart('rsiChart', 60)
-  if (!_rsiChart) return
-  w._rsiSeries = _rsiChart.addLineSeries({ color: '#f5c842', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'RSI' })
+  if (w._rsiInited && w._rsiChart) { updateRSI(); return }
+  w._rsiChart = _createSubChart('rsiChart', 60)
+  if (!w._rsiChart) return
+  w._rsiSeries = w._rsiChart.addLineSeries({ color: '#f5c842', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'RSI' })
   w._rsiInited = true
   updateRSI()
 }
@@ -586,10 +586,10 @@ export function updateATRInd(): void {
 }
 
 export function initOBVChart(): void {
-  if (w._obvInited && _obvChart) { updateOBV(); return }
-  _obvChart = _createSubChart('obvChart', 60)
-  if (!_obvChart) return
-  w._obvSeries = _obvChart.addLineSeries({ color: '#00b8d4', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'OBV' })
+  if (w._obvInited && w._obvChart) { updateOBV(); return }
+  w._obvChart = _createSubChart('obvChart', 60)
+  if (!w._obvChart) return
+  w._obvSeries = w._obvChart.addLineSeries({ color: '#00b8d4', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'OBV' })
   w._obvInited = true
   updateOBV()
 }

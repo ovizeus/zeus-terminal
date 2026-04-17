@@ -2372,7 +2372,6 @@ export function _initOrderflowP6() {
       el.title = 'Orderflow: WS=' + (alive ? 'connected' : 'disconnected') +
         ' | ' + tps.toFixed(1) + ' trades/s'
 
-      _lastCheckTs = Date.now()
     } catch (e) { }
   }
 
@@ -3503,6 +3502,7 @@ export function _initOrderflowP13() {
   w.__ZEUS_OF_MAGNET__ = true
 
   const MAG_DIST_MAX_PCT = 0.35; const MAG_STR_MIN = 1.6; const MAG_MIN_USD = 50000
+  const MAG_DISPLAY_MS = 4000; const MAG_COOLDOWN_MS = 8000
 
   const MAG_TW_MS = 7 * 24 * 3600 * 1000
 

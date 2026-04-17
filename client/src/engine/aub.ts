@@ -8,6 +8,7 @@ import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { setTf } from '../data/marketDataFeeds'
 import { useAUBStore } from '../stores/aubStore'
+import { AUB } from '../core/config'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 
 const w = window as any

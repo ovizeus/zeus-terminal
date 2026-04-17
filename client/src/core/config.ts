@@ -1024,7 +1024,8 @@ export function updateLiqCycle() {
     lc.sweepsTotal = sweepsCount
     lc.trapsTotal = trapsCount
     lc.trapRate = sweepsCount > 0 ? Math.round((trapsCount / sweepsCount) * 100) / 100 : null
-    const magnets = (typeof S !== 'undefined' && S.magnets) ? S.magnets : { above: [], below: [] }
+    const S = (window as any).S
+    const magnets = (typeof S !== 'undefined' && S?.magnets) ? S.magnets : { above: [], below: [] }
     const nearAbove = magnets.above?.[0]
     const nearBelow = magnets.below?.[0]
     lc.magnetAboveDist = (nearAbove && curPrice)
