@@ -7,13 +7,13 @@
 
 const logger = require('./logger');
 const marketFeed = require('./marketFeed');
-const { TEACHER_IND_DEFAULTS } = require('../../public/js/teacher/teacherConfig');
+const { TEACHER_IND_DEFAULTS } = require('../shared/teacher/teacherConfig');
 const {
     teacherComputeIndicators,
     teacherCalcRSI,
     teacherCalcADX,
     teacherCalcATR,
-} = require('../../public/js/teacher/teacherIndicators');
+} = require('../shared/teacher/teacherIndicators');
 
 // ══════════════════════════════════════════════════════════════════
 // [MULTI-SYM] Per-symbol state map
