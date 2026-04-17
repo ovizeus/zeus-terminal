@@ -9,6 +9,7 @@ import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
 import { _ZI } from '../constants/icons'
 import { _applyATToggleUI, updateATMode, updateATStats , atLog , renderATPositions } from '../trading/autotrade'
+import { useATStore } from '../stores/atStore'
 import { _dslTrimAll } from '../trading/dsl'
 import { aubBBSnapshot } from '../engine/aub'
 import { loadJournalFromStorage } from '../services/storage'
@@ -19,7 +20,6 @@ import { renderLivePositions , renderDemoPositions } from '../data/marketDataPos
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
-import { useATStore } from '../stores/atStore'
 import { useBrainStore } from '../stores/brainStore'
 import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
@@ -620,7 +620,6 @@ export const ZState = (() => {
         TP.demoPositions = TP.demoPositions || []
         snap.positions.forEach(function (p: any) {
           if (p.closed || closedPosIds.has(String(p.id))) {
-            console.log('[ZState] Skip closed/journal pos:', p.id)
             return
           }
           if (!existing.has(String(p.id))) {
@@ -864,7 +863,7 @@ export const ZState = (() => {
       addOnHistory: sp.addOnHistory || [],
       slPct: sp.slPct || 0,
       rr: sp.rr || 0,
-      autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : true,
+      autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : (sp.sourceMode === 'manual' ? false : true),
       openTs: sp.ts || sp.openTs || Date.now(),
       label: ((sp.mode === 'live') ? (w._resolvedEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : '\uD83D\uDD34 LIVE') : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
@@ -926,6 +925,9 @@ export const ZState = (() => {
       w._zeusRecentlyClosed.forEach(function (id: any) { _rcSet.add(String(id)) })
     }
     Object.keys(_pendingCloseIds).forEach(function (k) { _rcSet.add(String(k)) })
+    if (w._syncClosedIds && w._syncClosedIds.size > 0) {
+      w._syncClosedIds.forEach(function (id: string) { _rcSet.add(id) })
+    }
     function _filterOpen(arr: any[]) {
       return (arr || []).filter(function (p: any) {
         if (p.status && p.status !== 'OPEN') return false
@@ -936,7 +938,12 @@ export const ZState = (() => {
     }
     function _excludeRecentlyClosed(mapped: any[]) {
       if (_rcSet.size === 0) return mapped
-      return mapped.filter(function (p: any) { return !_rcSet.has(String(p.id)) && !_rcSet.has(String(p._serverSeq)) })
+      const before = mapped.length
+      const result = mapped.filter(function (p: any) {
+        const excluded = _rcSet.has(String(p.id)) || _rcSet.has(String(p._serverSeq))
+        return !excluded
+      })
+      return result
     }
     if (typeof TP !== 'undefined') {
       // [POS-FLICKER FIX] Skip position rebuild entirely if the response carries
@@ -952,7 +959,8 @@ export const ZState = (() => {
       } else {
       let serverATDemo: any[], serverATLive: any[]
       if (state.demoPositions && state.livePositions) {
-        serverATDemo = _excludeRecentlyClosed(_filterOpen(state.demoPositions).map(_mapServerPos))
+        const _rawFiltered = _filterOpen(state.demoPositions)
+        serverATDemo = _excludeRecentlyClosed(_rawFiltered.map(_mapServerPos))
         serverATLive = _excludeRecentlyClosed(_filterOpen(state.livePositions).map(_mapServerPos))
         w._lastServerPositions = (state.livePositions || []).concat(state.demoPositions || [])
       } else {
@@ -1048,12 +1056,7 @@ export const ZState = (() => {
           AT.enabled = false
           if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
           clearInterval(AT.interval); AT.interval = null
-          const _btn = document.getElementById('atMainBtn')
-          const _dot = document.getElementById('atBtnDot')
-          const _txt = document.getElementById('atBtnTxt')
-          if (_btn) _btn.className = 'at-main-btn off'
-          if (_dot) { (_dot as any).style.background = '#aa44ff'; (_dot as any).style.boxShadow = '0 0 6px #aa44ff' }
-          if (_txt) _txt.textContent = 'AUTO TRADE OFF'
+          useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF' })
         }
         if (AT._enabledPerMode[state.mode]) {
           atLog('info', '\u25B6 AT restoring — was ON in ' + state.mode.toUpperCase())
@@ -1061,8 +1064,7 @@ export const ZState = (() => {
             if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
           }, 600)
         } else {
-          const _st2 = document.getElementById('atStatus')
-          if (_st2) _st2.textContent = '\u23F9 AT oprit — mod schimbat la ' + state.mode.toUpperCase()
+          useATStore.getState().patchUI({ statusHtml: '\u23F9 AT oprit \u2014 mod schimbat la ' + state.mode.toUpperCase(), statusAction: null })
           atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
         }
       }
@@ -1110,7 +1112,22 @@ export const ZState = (() => {
     _atPollTimer = w.Intervals.set('atPoll', _atPollOnce, 10000)
   }
 
+  function _retryFailedCloses() {
+    if (!Array.isArray(w._zeusCloseFailedSeqs) || w._zeusCloseFailedSeqs.length === 0) return
+    const stale = w._zeusCloseFailedSeqs.splice(0, w._zeusCloseFailedSeqs.length)
+    const now = Date.now()
+    for (let i = 0; i < stale.length; i++) {
+      if (now - stale[i].ts > 300000) continue
+      const entry = stale[i]
+      fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: entry.seq }) })
+        .then(function (r) { return r.ok ? r.json() : null })
+        .then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(entry.seq) })
+        .catch(function () { w._zeusCloseFailedSeqs = w._zeusCloseFailedSeqs || []; w._zeusCloseFailedSeqs.push({ seq: entry.seq, id: entry.id, ts: entry.ts }) })
+    }
+  }
+
   function _atPollOnce() {
+    _retryFailedCloses()
     fetch('/api/at/state', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (data: any) { if (data) _applyServerATState(data) })
@@ -1246,6 +1263,11 @@ export const ZState = (() => {
       let changed = false
       const _closedSet = _buildClosedSet(serverSnap.closedIds)
 
+      if (Array.isArray(serverSnap.closedIds) && serverSnap.closedIds.length > 0) {
+        if (!w._syncClosedIds) w._syncClosedIds = new Set<string>()
+        serverSnap.closedIds.forEach(function (id: any) { w._syncClosedIds.add(String(id)) })
+      }
+
       if (w._serverATEnabled) {
         // Skip position merge — _applyServerATState handles positions
       } else {
@@ -1307,24 +1329,13 @@ export const ZState = (() => {
             setTimeout(function () {
               if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
               if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
-              const btn = document.getElementById('atMainBtn')
-              const dot = document.getElementById('atBtnDot')
-              const txt = document.getElementById('atBtnTxt')
-              if (btn && dot && txt) {
-                if (AT.enabled) {
-                  btn.className = 'at-main-btn on'
-                  ;(dot as any).style.background = '#00ff88'; (dot as any).style.boxShadow = '0 0 10px #00ff88'
-                  txt.textContent = 'AUTO TRADE ON'
-                  const st = document.getElementById('atStatus'); if (st) st.innerHTML = _ZI.dGrn + ' Activ — scan la 30s'
-                  if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
-                } else {
-                  btn.className = 'at-main-btn off'
-                  ;(dot as any).style.background = '#aa44ff'; (dot as any).style.boxShadow = '0 0 6px #aa44ff'
-                  txt.textContent = 'AUTO TRADE OFF'
-                  const st = document.getElementById('atStatus'); if (st) st.textContent = 'Configureaza mai jos'
-                  if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
-                  clearInterval(AT.interval); AT.interval = null
-                }
+              if (AT.enabled) {
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: '#00ff88', dotShadow: '0 0 10px #00ff88', btnText: 'AUTO TRADE ON', statusHtml: _ZI.dGrn + ' Activ \u2014 scan la 30s', statusAction: null })
+                if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
+              } else {
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF', statusHtml: 'Configureaza mai jos', statusAction: null })
+                if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
+                clearInterval(AT.interval); AT.interval = null
               }
             }, 50)
           }

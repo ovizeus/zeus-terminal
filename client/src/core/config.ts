@@ -476,10 +476,11 @@ let _ucPushTimer: any = null
 let _ucPulling = false
 const _ucVersion = 4
 let _ucPushPending = false
+let _ucLastPushTs = 0
 // [ZT-AUD-#11] Throttle _ucPushBeacon: collapse rapid bursts into 1 trailing
 // push every UC_BEACON_MIN_MS, preventing 5-50 push/min spam loops triggered
 // by ws sync → pullAndMerge → _userCtxPull → re-push when local newer.
-const UC_BEACON_MIN_MS = 1500
+const UC_BEACON_MIN_MS = 5000
 let _ucBeaconLastTs = 0
 let _ucBeaconTrailingTimer: any = null
 
@@ -548,7 +549,7 @@ export function _userCtxPush() {
         return r.json()
       }).then(function (json: any) {
         if (!json) return
-        console.log('[UC] \u2705 pushed'); _ucPushPending = false
+        console.log('[UC] \u2705 pushed'); _ucPushPending = false; _ucLastPushTs = Date.now()
         if (json.storedSettings && json.storedSettings.data) {
           try {
             const sent = payload.sections.settings ? payload.sections.settings.data : null
@@ -576,7 +577,7 @@ export function _userCtxPush() {
         }
       }).catch(function (e: any) { console.warn('[UC] push err:', e.message); _ucPushPending = true })
     } catch (_) { /* */ }
-  }, 1000)
+  }, 5000)
 }
 
 export function _userCtxPull() {
@@ -598,7 +599,7 @@ export function _userCtxPull() {
       let localUS: any = JSON.parse(localStorage.getItem('zeus_user_settings') || 'null')
       let localTs = (localUS && localUS._syncTs) ? localUS._syncTs : 0
       const serverSettingsTs = (sec.settings && sec.settings.ts) ? sec.settings.ts : 0
-      if (localTs > serverSettingsTs + 5000 && localTs > 0) {
+      if (localTs > serverSettingsTs + 5000 && localTs > 0 && (Date.now() - _ucLastPushTs > 10000)) {
         console.log('[UC] local significantly newer than server (' + localTs + ' > ' + serverSettingsTs + ') — re-pushing')
         _ucPushBeacon()
       }
@@ -1464,7 +1465,7 @@ export function _usFlush() {
 const _UC_BEACON_PENDING_KEY = 'zeus_uc_beacon_pending'
 function _ucPushBeaconNow() {
   try {
-    _ucBeaconLastTs = Date.now()
+    _ucBeaconLastTs = Date.now(); _ucLastPushTs = Date.now()
     const payload = JSON.stringify({
       _v: _ucVersion,
       ts: Date.now(),
@@ -1538,60 +1539,8 @@ let _usSettingsRemoteTs = 0
 // whitelist the server accepts. Keys must match SETTINGS_WHITELIST in
 // server/routes/trading.js. Only non-undefined values are included so
 // partial saves don't overwrite unrelated keys after merge on server.
-//
-// [MIGRATION-F4 commit 3] Exported so settingsStore.saveToServer can
-// reuse the same authoritative payload source. USER_SETTINGS remains the
-// projection surface (written by _projectToLegacy) — store + _usPostRemote
-// both read from the same USER_SETTINGS tree, so payloads never diverge.
-//
-// [MIGRATION-F4 commit 5] AUDIT + VERDICT. Active consumers (2, both
-// necessary):
-//   (a) _usPostRemote at config.ts:1667 — legacy save path triggered by
-//       _usSave / _usScheduleSave (dom2, indicators, marketData*, utils/dev).
-//   (b) settingsStore.saveToServer at settingsStore.ts:185 — React save.
-// Zero consumers in public/*, zero consumers in server/*, NOT exposed on
-// window (grep w._usBuildFlatPayload → no matches). Helper is strictly
-// module-to-module.
-//
-// Why retained (not eliminated in Phase 4):
-//   This function is the single bridge between the legacy nested
-//   USER_SETTINGS tree and the flat server whitelist. It emits seven
-//   keys that SettingsPayload does not yet own — profile, bmMode,
-//   assistArmed, manualLive, ptLevDemo, ptLevLive, ptMarginMode, chartTz
-//   — hydrated into USER_SETTINGS by _usApplyFlatToUserSettings on load
-//   but never mirrored into the React store. Eliminating the helper in
-//   favor of a store-built payload would silently drop these keys from
-//   the POST body → partial saves would wipe them on the server merge.
-//
-// Elimination is deferred to Phase 5, where SettingsPayload is widened
-// to own the full whitelist and _projectToLegacy becomes symmetric; at
-// that point _usBuildFlatPayload can be replaced by a flat read off
 // the store and the helper removed from both call-sites together.
 // Until then: shared compat helper, one source of truth for wire shape.
-export function _usBuildFlatPayload(): Record<string, any> {
-  const out: Record<string, any> = {}
-  const put = (k: string, v: any) => { if (v !== undefined) out[k] = v }
-  const at = USER_SETTINGS.autoTrade || {}
-  put('confMin', at.confMin); put('sigMin', at.sigMin); put('size', at.size)
-  put('riskPct', at.riskPct); put('maxDay', at.maxDay); put('maxPos', at.maxPos)
-  put('sl', at.sl); put('rr', at.rr); put('killPct', at.killPct)
-  put('lossStreak', at.lossStreak); put('maxAddon', at.maxAddon); put('lev', at.lev)
-  put('adaptEnabled', at.adaptEnabled); put('adaptLive', at.adaptLive)
-  put('smartExitEnabled', at.smartExitEnabled)
-  const ch = USER_SETTINGS.chart || {}
-  put('chartTf', ch.tf); put('chartTz', ch.tz)
-  put('heatmapSettings', ch.heatmap); put('candleColors', ch.colors)
-  put('indSettings', USER_SETTINGS.indicators)
-  put('alertSettings', USER_SETTINGS.alerts)
-  put('profile', USER_SETTINGS.profile)
-  put('bmMode', USER_SETTINGS.bmMode)
-  put('assistArmed', USER_SETTINGS.assistArmed)
-  put('manualLive', USER_SETTINGS.manualLive)
-  put('ptLevDemo', USER_SETTINGS.ptLevDemo)
-  put('ptLevLive', USER_SETTINGS.ptLevLive)
-  put('ptMarginMode', USER_SETTINGS.ptMarginMode)
-  return out
-}
 
 // [MIGRATION-F0] Un-flatten the server response back into the nested
 // USER_SETTINGS shape that `_usApply` reads. Only overwrites keys the
@@ -1633,33 +1582,6 @@ export function _usApplyServerResponse(data: { settings?: Record<string, any>; u
   return _usSettingsRemoteTs
 }
 
-// [MIGRATION-F0] Pull the authoritative settings from the SQLite backing
-// on boot (or after a WS `settings.changed` hint). Caller chooses when
-// to call `_usApply()` afterwards — we only mutate USER_SETTINGS in
-// memory here. Returns the new server `updated_at` on success, 0 on
-// failure/offline (LS cache remains usable).
-//
-// [MIGRATION-F4 commit 2] Thin wrapper over userSettingsApi.fetch().
-// The raw fetch() + JSON parse moved to services/api.ts (typed surface);
-// side-effect hydration moved to _usApplyServerResponse. Boot order and
-// return contract (0 on failure, new ts on success) are preserved.
-// Callers unchanged: bootstrapStartApp, settingsRealtime (WS push),
-// settingsStore (via its own direct GET, post-C2).
-export async function _usFetchRemote(): Promise<number> {
-  try {
-    const data = await userSettingsApi.fetch()
-    if (!data || !data.ok) { console.warn('[US] fetchRemote invalid response'); return 0 }
-    return _usApplyServerResponse(data)
-  } catch (e: any) {
-    const msg = e?.message || e
-    if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
-      console.warn('[US] fetchRemote ' + msg)
-    } else {
-      console.warn('[US] fetchRemote failed:', msg)
-    }
-    return 0
-  }
-}
 
 // [MIGRATION-F4 commit 3] Shared side-effects helper for POST /api/user/settings.
 // Updates _usSettingsRemoteTs from the server response so the next WS push
@@ -1673,41 +1595,6 @@ export function _usApplyPostResponse(data: { ok?: boolean; updated_at?: number }
   }
 }
 
-// [MIGRATION-F0] POST flat payload to /api/user/settings. Best-effort,
-// fire-and-forget. Updates _usSettingsRemoteTs from the response so the
-// next server push (via WS `settings.changed`) can be compared. LS cache
-// remains authoritative while offline — any queued POST is retried on
-// next _usSave call. Uses `keepalive` so an in-flight save survives
-// page unload (complements _ucPushBeacon for the FS path that still
-// exists in this commit).
-//
-// [MIGRATION-F4 commit 3] Thin wrapper over userSettingsApi.save().
-// The raw fetch() moved to services/api.ts; post-response ts update moved
-// to _usApplyPostResponse. keepalive:true is preserved — critical for saves
-// issued during `beforeunload` (engine shutdown, tab close). Call contract
-// unchanged: void return, fire-and-forget.
-// Callers unchanged: _usSave (legacy save path). settingsStore.saveToServer
-// no longer calls this — it POSTs directly via userSettingsApi.save (no
-// double POST; store and wrapper converge on userSettingsApi, not on each
-// other).
-function _usPostRemote(): void {
-  let payload: Record<string, any>
-  try { payload = _usBuildFlatPayload() } catch (_) { return }
-  try {
-    userSettingsApi.save(payload, { keepalive: true })
-      .then(function (j: any) { _usApplyPostResponse(j) })
-      .catch(function (e: any) {
-        const msg = (e && e.message) || String(e)
-        if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
-          console.warn('[US] postRemote ' + msg)
-        } else {
-          console.warn('[US] postRemote failed:', msg)
-        }
-      })
-  } catch (e: any) {
-    console.warn('[US] postRemote threw:', e?.message || e)
-  }
-}
 
 export function _usSave() {
   if (!_usApplyDone) { console.log('[US] skip save — _usApply not yet run'); return }
@@ -1767,11 +1654,11 @@ export function _usSave() {
     // [MIGRATION-F0] Push directly to SQLite via POST /api/user/settings.
     // Fire-and-forget; server will broadcast settings.changed on the
     // existing /ws/sync WSS to every other session of this user.
-    _usPostRemote()
-    // [MIGRATION-F0 commit 7] FS dual-write removed for settings. The single
-    // persistence path is now: LS (zeus_user_settings) + POST /api/user/settings
-    // + /ws/sync settings.changed broadcast. Other sections (indSettings,
-    // panels, notifications, uiContext, …) still use _ucMarkDirty.
+    const _ssStore = (w as any).__zeusSettingsStore
+    if (_ssStore && typeof _ssStore.getState === 'function') {
+      _ssStore.getState().loadFromLegacy()
+      _ssStore.getState().saveToServer()
+    }
     console.log('[US] Settings saved')
   } catch (e: any) {
     console.warn('[US] Save failed:', e.message)
@@ -2339,10 +2226,6 @@ w.initMTFStrip = initMTFStrip
 w._usScheduleSave = _usScheduleSave
 w._usSave = _usSave
 w._usApply = _usApply
-w._usFetchRemote = _usFetchRemote
-// [MIGRATION-F0 commit 6] Expose the flat-POST primitive so settingsStore
-// (React) and _usSave (legacy) share a single network write path.
-w._usPostRemote = _usPostRemote
 w.loadUserSettings = loadUserSettings
 w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon

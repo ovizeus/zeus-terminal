@@ -11,7 +11,7 @@ const logger = require('../services/logger');
 
 const CTX_DIR = path.join(__dirname, '..', '..', 'data', 'user_ctx');
 const MAX_SIZE = 256 * 1024; // 256KB ceiling per user — extended sections included
-const MAX_BACKUPS = 5; // rotative backups per user
+// [Phase 8.1] MAX_BACKUPS removed — backup rotation eliminated, SQLite is primary
 
 // Ensure directory exists
 if (!fs.existsSync(CTX_DIR)) fs.mkdirSync(CTX_DIR, { recursive: true });
@@ -47,20 +47,8 @@ function _userFile(userId) {
 }
 
 function _atomicWrite(filePath, data) {
-    // Backup rotation before overwrite
-    if (fs.existsSync(filePath)) {
-        try {
-            for (let i = MAX_BACKUPS - 1; i >= 1; i--) {
-                const src = filePath + '.bak' + i;
-                const dst = filePath + '.bak' + (i + 1);
-                if (fs.existsSync(src)) fs.renameSync(src, dst);
-            }
-            fs.copyFileSync(filePath, filePath + '.bak1');
-            // Remove oldest if over limit
-            const oldest = filePath + '.bak' + (MAX_BACKUPS + 1);
-            if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
-        } catch (_) { /* backup is best-effort */ }
-    }
+    // [Phase 8.1] Backup rotation removed — SQLite is primary for 14 sections,
+    // FS holds only 5 small FS-only sections (uiContext, panels, uiScale, settings, aresData).
     const tmp = filePath + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
     fs.renameSync(tmp, filePath);
@@ -90,7 +78,7 @@ router.get('/user-context', (req, res) => {
         }
         if (!fsData) return res.json({ ok: true, data: null });
 
-        // 2. Read SQLite sections and overlay onto FS data
+        // 2. Read SQLite sections — SQLite is sole source of truth for 14 sections
         const sqliteSections = db.getCtxAll(userId);
         const merged = fsData.sections || {};
         let sqliteHits = 0;
@@ -98,8 +86,9 @@ router.get('/user-context', (req, res) => {
             if (sqliteSections[key] !== undefined && sqliteSections[key] !== null) {
                 merged[key] = sqliteSections[key];
                 sqliteHits++;
+            } else {
+                delete merged[key];
             }
-            // If not in SQLite, FS value remains (fallback)
         }
 
         fsData.sections = merged;

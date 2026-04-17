@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
-import { _usApplyServerResponse, _usApplyPostResponse, _usBuildFlatPayload } from '../core/config'
+import { _usApplyServerResponse, _usApplyPostResponse } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
@@ -11,31 +11,10 @@ import type { SettingsPayload } from '../types/settings-contracts'
 // write-through projections of store.settings, refreshed atomically on
 // every store mutation via the _projectAll(s) helper (Legacy → Window → AT,
 // fixed order). The legacy tree retains keys the store does not own
-// (profile, bmMode, assistArmed, manualLive, ptLev*, chartTz, dslSettings)
-// because _projectToLegacy only overwrites keys it knows about — so legacy
-// engines reading those extras continue to work unchanged.
-//
-// [MIGRATION-F4 commit 5] _usBuildFlatPayload retained as compat helper.
-// Audit (grep across client/server/public) found exactly two consumers:
-// _usPostRemote in config.ts and this file's saveToServer. Helper is the
-// only bridge that emits the seven legacy-only whitelist keys (profile,
-// bmMode, assistArmed, manualLive, ptLev*, chartTz) which are not yet in
-// SettingsPayload — eliminating it now would silently drop them from
-// partial saves. Elimination scheduled for Phase 5 after SettingsPayload
-// is widened to own the full server whitelist. No behavioral change in C5.
-//
-// [MIGRATION-F4 commits 2+3] GET + POST path canonicalization.
-// loadFromServer issues a direct GET via userSettingsApi.fetch() and
-// applies side effects through _usApplyServerResponse. saveToServer
-// issues a direct POST via userSettingsApi.save() and applies the ts
-// update through _usApplyPostResponse. window._usFetchRemote +
-// window._usPostRemote remain defined as thin wrappers over the same
-// userSettingsApi primitives — store and wrappers converge on the
-// typed API, not on each other (no store→wrapper→store loop, no double
-// POST). Payload source is _usBuildFlatPayload(USER_SETTINGS) — the
-// same function the legacy wrapper uses, so both paths emit byte-identical
-// wire payloads. USER_SETTINGS is kept fresh via _projectAll before
-// the flat build.
+// All 9 legacy-only keys (profile, bmMode, assistArmed, manualLive,
+// ptLevDemo, ptLevLive, ptMarginMode, chartTz, dslSettings) are now
+// in SettingsPayload and projected bidirectionally by _projectFromLegacy
+// and _projectToLegacy. saveToServer sends store.settings directly.
 //
 // Persistence (post commit 7) is: LS `zeus_user_settings` (nested, canonical)
 // + POST /api/user/settings + /ws/sync `settings.changed` broadcast.
@@ -118,9 +97,8 @@ interface SettingsStoreState {
   loaded: boolean
   saving: boolean
 
-  /** Load from server (GET /api/user/settings) via userSettingsApi. */
   loadFromServer: () => Promise<void>
-  /** Save to server (POST /api/user/settings) via userSettingsApi. */
+  loadFromLegacy: () => void
   saveToServer: () => Promise<void>
   /** Update one or more settings locally (does NOT auto-save). Triggers
    *  full projection to USER_SETTINGS + window.TC + atStore. */
@@ -176,22 +154,20 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     }
   },
 
+  loadFromLegacy: () => {
+    const projected = _projectFromLegacy()
+    const merged: SettingsPayload = { ...getState().settings, ...projected }
+    set({ settings: merged })
+  },
+
   saveToServer: async () => {
     const { settings, saving } = getState()
     if (saving) return
     set({ saving: true })
     try {
       const w = window as unknown as ZeusWindowExt
-      // 1. Push store → legacy USER_SETTINGS + window.TC + atStore via the
-      //    canonical _projectAll helper (MUST run before _usBuildFlatPayload
-      //    below, which reads from USER_SETTINGS).
       _projectAll(settings)
-      // 2. Build flat payload from USER_SETTINGS (covers keys whitelisted server-side
-      //    that are not yet in SettingsPayload: profile, bmMode, assistArmed,
-      //    manualLive, ptLev*, chartTz). Same builder the legacy wrapper uses →
-      //    byte-identical wire payload.
-      let payload: Record<string, unknown> = {}
-      try { payload = _usBuildFlatPayload() } catch { payload = {} }
+      const payload: Record<string, unknown> = { ...settings }
       // 3. POST direct via userSettingsApi.save. keepalive:true preserves the
       //    beforeunload-survival semantics of the legacy _usPostRemote path.
       //    On success: feed _usApplyPostResponse so _usSettingsRemoteTs (inside
@@ -232,7 +208,8 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     const s = getState().settings
     return (s[key] ?? DEFAULT_SETTINGS[key]) as SettingsPayload[K]
   },
-}))
+}));
+(window as any).__zeusSettingsStore = useSettingsStore
 
 /**
  * Project the legacy USER_SETTINGS (nested) + window.TC mirror into the
@@ -266,6 +243,15 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
     heatmapSettings: ch.heatmap,
     indSettings: us.indicators,
     alertSettings: us.alerts,
+    profile: us.profile,
+    bmMode: us.bmMode,
+    assistArmed: us.assistArmed,
+    manualLive: us.manualLive as Record<string, unknown> | null | undefined,
+    ptLevDemo: us.ptLevDemo,
+    ptLevLive: us.ptLevLive,
+    ptMarginMode: us.ptMarginMode,
+    chartTz: ch.tz,
+    dslSettings: us.dslSettings as Record<string, unknown> | null | undefined,
   }
   for (const k of Object.keys(out) as Array<keyof SettingsPayload>) {
     if (out[k] === undefined) delete out[k]
@@ -282,7 +268,7 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
  * to store.settings MUST flow through here so the three downstream
  * projections (USER_SETTINGS → legacy engines, window.TC → AT Proxy chain,
  * atStore.config → Phase-3 canonical AT state) stay in lockstep. Order
- * is fixed: Legacy first (so _usBuildFlatPayload sees fresh values when
+ * is fixed: Legacy first (so USER_SETTINGS sees fresh values when
  * called immediately after), Window second (TC Proxy delegates to atStore
  * so keep atStore step close), AT last (atStore is the phase-3 source of
  * truth for AT engine; hydrating it last guarantees its config reflects
@@ -294,13 +280,6 @@ function _projectAll(s: SettingsPayload): void {
   _projectToAT(s)
 }
 
-/**
- * Push the flat store shape back into the legacy USER_SETTINGS tree so
- * _usBuildFlatPayload (in core/config.ts) reads up-to-date values.
- * Only overwrites keys this store owns — unrelated USER_SETTINGS keys
- * (profile, bmMode, assistArmed, manualLive, ptLev*, chartTz, dslSettings)
- * remain intact as hydrated by _usApplyFlatToUserSettings from the server.
- */
 function _projectToLegacy(settings: SettingsPayload): void {
   const w = window as unknown as ZeusWindowExt
   const us: LegacyUserSettings = w.USER_SETTINGS || (w.USER_SETTINGS = {})
@@ -320,10 +299,19 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.mscanEnabled !== undefined) at.multiSym = settings.mscanEnabled
 
   if (settings.chartTf !== undefined) ch.tf = settings.chartTf
+  if (settings.chartTz !== undefined) ch.tz = settings.chartTz
   if (settings.candleColors !== undefined) ch.colors = settings.candleColors
   if (settings.heatmapSettings !== undefined) ch.heatmap = settings.heatmapSettings
   if (settings.indSettings !== undefined) us.indicators = settings.indSettings
   if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
+  if (settings.profile !== undefined) us.profile = settings.profile
+  if (settings.bmMode !== undefined) us.bmMode = settings.bmMode
+  if (settings.assistArmed !== undefined) us.assistArmed = settings.assistArmed
+  if (settings.manualLive !== undefined) (us as any).manualLive = settings.manualLive
+  if (settings.ptLevDemo !== undefined) (us as any).ptLevDemo = settings.ptLevDemo
+  if (settings.ptLevLive !== undefined) (us as any).ptLevLive = settings.ptLevLive
+  if (settings.ptMarginMode !== undefined) (us as any).ptMarginMode = settings.ptMarginMode
+  if (settings.dslSettings !== undefined) (us as any).dslSettings = settings.dslSettings
 }
 
 /**

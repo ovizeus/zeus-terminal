@@ -6,6 +6,7 @@
 import { getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
 import { DSL } from '../core/config'
 import { useDslStore } from '../stores/dslStore'
+import type { DSLUI } from '../stores/dslStore'
 import { el } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
@@ -18,6 +19,7 @@ import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from '../data/marketDataClose'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
+function _dslUI(p: Partial<DSLUI>) { useDslStore.getState().patchUI(p) }
 
 // [Phase 6 C3] Engine write inversion. Backing DSL stays as the engine's
 // per-tick scratch space; canonical state lives in useDslStore. Helpers
@@ -135,10 +137,12 @@ export function toggleDSL(): void {
     w.S.dsl.active = DSL.enabled
     if (!DSL.enabled && typeof stopDSLIntervals === 'function') { stopDSLIntervals() }
     if (DSL.enabled && typeof startDSLIntervals === 'function' && !DSL.checkInterval) { startDSLIntervals() }
-    const btn = el('dslToggleBtn')
-    const dot = el('dslStatusDot')
-    if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off') }
-    if (dot) { dot.style.color = DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = DSL.enabled ? 'var(--grn-bright)' : '#333' }
+    _dslUI({
+      toggleBtnText: DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF',
+      toggleBtnClass: 'dsl-toggle' + (DSL.enabled ? '' : ' off'),
+      statusDotColor: DSL.enabled ? 'var(--grn-bright)' : '#333',
+      statusDotBg: DSL.enabled ? 'var(--grn-bright)' : '#333',
+    })
     atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
     brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
@@ -171,42 +175,25 @@ export function toggleAssistArm(): void {
 
 export function _syncDslAssistUI(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
-  const overlay = el('dslLockOverlay')
-  const assistBar = el('dslAssistBar')
-  const armBtn = el('dslAssistArmBtn')
-  const armStatus = el('dslAssistStatus')
   const dslConf = document.querySelectorAll('.dsl-config input, .dsl-config select')
+  dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
+  const dz = el('dslZone')
+  if (dz) dz.style.pointerEvents = ''
 
-  if (overlay) overlay.classList.remove('show')
+  const _btnText = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'
+  _dslUI({ lockOverlayVisible: false, toggleBtnDisabled: false, toggleBtnText: _btnText })
 
   if (_m === 'auto') {
-    if (assistBar) assistBar.classList.remove('show')
-    const dz = el('dslZone')
-    if (dz) dz.style.pointerEvents = ''
-    dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = 'Global DSL defaults for new positions' }
+    _dslUI({ assistBarVisible: false, toggleBtnTitle: 'Global DSL defaults for new positions' })
   } else if (_m === 'assist') {
-    if (assistBar) assistBar.classList.add('show')
-    const dz = el('dslZone')
-    if (dz) dz.style.pointerEvents = ''
-    dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
-    if (armBtn) {
-      armBtn.innerHTML = w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT' : _ZI.lock + ' ARM ASSIST'
-      armBtn.className = 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : '')
-    }
-    if (armStatus) {
-      armStatus.textContent = w.S.assistArmed ? 'ASSIST ARMAT — DSL va executa la semnal' : 'Dezarmat — DSL în preview only (fără execuție)'
-    }
+    _dslUI({
+      assistBarVisible: true, toggleBtnTitle: '',
+      assistArmHtml: w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT' : _ZI.lock + ' ARM ASSIST',
+      assistArmClass: 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : ''),
+      assistStatusText: w.S.assistArmed ? 'ASSIST ARMAT \u2014 DSL va executa la semnal' : 'Dezarmat \u2014 DSL \u00een preview only (f\u0103r\u0103 execu\u021Bie)',
+    })
   } else {
-    if (assistBar) assistBar.classList.remove('show')
-    const dz = el('dslZone')
-    if (dz) dz.style.pointerEvents = ''
-    dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
+    _dslUI({ assistBarVisible: false, toggleBtnTitle: '' })
   }
 }
 
@@ -899,7 +886,6 @@ export function _dslPushParamsDebounced(seq: any, dslParams: any): void {
 
 export function renderDSLWidget(positions: any[]): void {
   const container = el('dslPositionCards')
-  const countEl = el('dslActiveCount')
   if (!container) return
 
   const _activeMode = getATMode() || 'demo'
@@ -908,18 +894,16 @@ export function renderDSLWidget(positions: any[]): void {
     return posMode === _activeMode
   })
 
-  // [DSL-OFF] Panel shows only DSL-attached positions. Positions opened while DSL was OFF
-  // have no DSL state and must NOT appear here — they live only in the positions panel.
   const dslAttached = modeFiltered.filter((p: any) => DSL.positions[String(p.id)])
 
   if (container.contains(document.activeElement) && document.activeElement!.tagName === 'INPUT') {
-    if (countEl) countEl.textContent = dslAttached.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active'
+    _dslUI({ activeCountText: dslAttached.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active' })
     return
   }
 
   const allDisplayPosns = dslAttached
   const activeCount = allDisplayPosns.filter((p: any) => DSL.positions[String(p.id)]?.active).length
-  if (countEl) countEl.textContent = activeCount + ' active'
+  _dslUI({ activeCountText: activeCount + ' active' })
 
   if (!allDisplayPosns.length) {
     // [DSL-OFF] Distinct waiting text when engine is off vs. scanning for activation

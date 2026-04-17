@@ -266,9 +266,9 @@ export function renderDemoPositions(): void {
     _jManualLive.forEach(function (j: any) { const _jp = Number(j.pnl) || 0; _statsPnl += _jp; if (_jp >= 0) _statsWins++; else _statsLosses++ })
     _statsTrades = _openManualLive.length + _jManualLive.length
   } else { _statsWins = TP.demoWins || 0; _statsLosses = TP.demoLosses || 0; _statsPnl = totalPnL; _statsTrades = _statsWins + _statsLosses }
-  const pnlEl = el('demoPnL'); if (pnlEl) { pnlEl.textContent = '$' + _statsPnl.toFixed(2); pnlEl.className = 'tp-pnl-val ' + (_statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut') }
-  const wr = el('demoWR'); if (wr) wr.textContent = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%'
-  const tr = el('demoTrades'); if (tr) tr.textContent = _statsTrades
+  const _pnlClass = _statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut'
+  const _wrText = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%'
+  usePositionsStore.getState().setManualStats(_statsPnl, _pnlClass, _wrText, _statsTrades)
 }
 
 export function calcPosPnL(pos: any, cur: any): number { return _safePnl(pos.side, cur, pos.entry, pos.size, pos.lev, false) }

@@ -13,6 +13,7 @@ import { renderTradeMarkers } from './marketDataOverlays'
 import { addTradeToJournal } from '../services/storage'
 import { renderDemoPositions , getSymPrice } from './marketDataPositions'
 import { _safePnl } from '../utils/guards'
+import { useATStore } from '../stores/atStore'
 import { api } from '../services/api'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 
@@ -29,12 +30,26 @@ export function closeDemoPos(id: any, reason?: string): void {
   pos.closed = true
   pos.status = 'closing' // [FIX H3]
 
-  // [BUG1 FIX] Server-managed position close
-  if (w._serverATEnabled && pos._serverSeq) {
+  // [BUG1 FIX] Server-managed position close — unconditional when _serverSeq exists
+  if (pos._serverSeq) {
     if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id)
-    api.raw<any>('POST', '/api/at/close', { seq: pos._serverSeq })
-      .then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) })
-      .catch(function () { })
+    const _closeSeq = pos._serverSeq
+    const _closeId = pos.id
+    const _doServerClose = function (attempt: number) {
+      api.raw<any>('POST', '/api/at/close', { seq: _closeSeq })
+        .then(function (d: any) {
+          if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(_closeSeq)
+        })
+        .catch(function (err: any) {
+          if (attempt < 2) {
+            setTimeout(function () { _doServerClose(attempt + 1) }, 2000 * attempt)
+          } else {
+            w._zeusCloseFailedSeqs = w._zeusCloseFailedSeqs || []
+            w._zeusCloseFailedSeqs.push({ seq: _closeSeq, id: _closeId, ts: Date.now() })
+          }
+        })
+    }
+    _doServerClose(1)
   }
 
   // _bmPostClose
@@ -102,7 +117,7 @@ export function closeDemoPos(id: any, reason?: string): void {
     TP.demoPositions = (TP.demoPositions || []).filter((p: any) => !p.closed)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     const autoPosns = TP.demoPositions.filter((p: any) => p.autoTrade)
-    if (autoPosns.length === 0) { const el = document.getElementById('atPosCount'); if (el) el.textContent = '0 pozitii' }
+    if (autoPosns.length === 0) { useATStore.getState().patchUI({ posCountText: '0 pozitii' }) }
     if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   }, 0)
 

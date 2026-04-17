@@ -1,17 +1,39 @@
-/** AUB (Alien Upgrade Bay) dock page view — 1:1 from index.html lines 976-1124
- *  Header + sweep FX + 8 diagnostic cards. */
-import { useState } from 'react'
+import { useAUBStore } from '../../stores/aubStore'
+import { aubToggle, aubToggleSFX, aubBBExport, aubBBClear, aubMacroClear, aubSimRun, aubSimApply } from '../../engine/aub'
 
 export function AUBPanel() {
-  const [isOpen, setIsOpen] = useState(true)
+  const expanded = useAUBStore((s) => s.expanded)
+  const sfxEnabled = useAUBStore((s) => s.sfxEnabled)
+  const compatOk = useAUBStore((s) => s.compatOk)
+  const compatRows = useAUBStore((s) => s.compatRows)
+  const guardCount = useAUBStore((s) => s.guardCount)
+  const guardLast = useAUBStore((s) => s.guardLast)
+  const perfHeavy = useAUBStore((s) => s.perfHeavy)
+  const rafFps = useAUBStore((s) => s.rafFps)
+  const domSkips = useAUBStore((s) => s.domSkips)
+  const dataLabel = useAUBStore((s) => s.dataLabel)
+  const dataClass = useAUBStore((s) => s.dataClass)
+  const bbCount = useAUBStore((s) => s.bbCount)
+  const bbLast = useAUBStore((s) => s.bbLast)
+  const mtf = useAUBStore((s) => s.mtf)
+  const mtfPenalty = useAUBStore((s) => s.mtfPenalty)
+  const corrEth = useAUBStore((s) => s.corrEth)
+  const corrSol = useAUBStore((s) => s.corrSol)
+  const corrPenalty = useAUBStore((s) => s.corrPenalty)
+  const corrPenaltyText = useAUBStore((s) => s.corrPenaltyText)
+  const macroHtml = useAUBStore((s) => s.macroHtml)
+  const simStatus = useAUBStore((s) => s.simStatus)
+  const simLast = useAUBStore((s) => s.simLast)
+  const simResultHtml = useAUBStore((s) => s.simResultHtml)
+  const simShowApply = useAUBStore((s) => s.simShowApply)
+
+  const pct = (v: number) => Math.round(v * 100) + '%'
 
   return (
-    <div id="aub" className={isOpen ? 'expanded' : 'collapsed'}>
-      {/* Holo sweep FX layer */}
+    <div id="aub" className={expanded ? 'expanded' : 'collapsed'}>
       <div id="aub-sweep"></div>
 
-      {/* ── Header (always visible) — 1:1 from index.html line 983 ── */}
-      <div id="aub-hdr" onClick={() => setIsOpen(o => !o)}>
+      <div id="aub-hdr" onClick={() => aubToggle()}>
         <div className="v6-accent">
           <div className="v6-ico">
             <svg viewBox="0 0 24 24">
@@ -28,148 +50,117 @@ export function AUBPanel() {
         <div className="v6-content">
           <span id="aub-title">ALIEN UPGRADE BAY</span>
           <div id="aub-badges">
-            <span className="aub-badge ok" id="aub-badge-compat">COMPAT: OK</span>
-            <span className="aub-badge ok" id="aub-badge-perf">PERF: OK</span>
-            <span className="aub-badge info" id="aub-badge-data">DATA: WAIT</span>
+            <span className={`aub-badge ${compatOk ? 'ok' : 'warn'}`}>{compatOk ? 'COMPAT: OK' : 'COMPAT: LIMITED'}</span>
+            <span className={`aub-badge ${perfHeavy ? 'warn' : 'ok'}`}>{perfHeavy ? 'PERF: HEAVY' : 'PERF: OK'}</span>
+            <span className={`aub-badge ${dataClass}`}>{dataLabel}</span>
           </div>
-          <button id="aub-sfx-btn" onClick={(e) => e.stopPropagation()} title="Sound FX">
+          <button className={sfxEnabled ? 'on' : ''} onClick={(e) => { e.stopPropagation(); aubToggleSFX() }} title="Sound FX">
             <svg className="z-i" viewBox="0 0 16 16">
-              <path d="M2 6h2l3-3v10l-3-3H2zM11 6l4 4M11 10l4-4" />
+              {sfxEnabled
+                ? <path d="M2 6h2l3-3v10l-3-3H2zM11 5a4 4 0 010 6M13 3a7 7 0 010 10" />
+                : <path d="M2 6h2l3-3v10l-3-3H2zM11 6l4 4M11 10l4-4" />}
             </svg> SFX
           </button>
-          <button id="aub-toggle-btn" onClick={(e) => { e.stopPropagation(); setIsOpen(o => !o) }}>
+          <button onClick={(e) => { e.stopPropagation(); aubToggle() }}>
             <span className="aub-arrow">▼</span>
-            <span id="aub-toggle-txt">{isOpen ? 'COLLAPSE' : 'EXPAND'}</span>
+            <span>{expanded ? 'COLLAPSE' : 'EXPAND'}</span>
           </button>
         </div>
       </div>
 
-      {/* ── Body — 8 diagnostic cards ── */}
       <div id="aub-body">
-
         {/* 1: COMPAT SHIELD */}
-        <div className="aub-card cyan" id="aub-card-compat">
+        <div className="aub-card cyan">
           <div className="aub-card-title">COMPATIBILITY SHIELD</div>
-          <div id="aub-compat-list">
-            <div className="aub-row">
-              <svg className="z-i" viewBox="0 0 16 16">
-                <path d="M4 2h8v3L9 8l3 3v3H4v-3l3-3-3-3V2" />
-              </svg> Checking...
-            </div>
-          </div>
+          <div dangerouslySetInnerHTML={{ __html: compatRows || '<div class="aub-row">Checking...</div>' }} />
         </div>
 
         {/* 2: INPUT GUARD */}
-        <div className="aub-card violet" id="aub-card-guard">
+        <div className="aub-card violet">
           <div className="aub-card-title">INPUT GUARD</div>
           <div className="aub-row ok">● GUARD: ACTIVE</div>
-          <div className="aub-row" id="aub-guard-count">Validated: 0 calls</div>
-          <div className="aub-row" id="aub-guard-last">Last reject: —</div>
+          <div className="aub-row">Validated: {guardCount} calls</div>
+          <div className="aub-row">Last reject: {guardLast}</div>
         </div>
 
         {/* 3: RENDER ORCHESTRATOR */}
-        <div className="aub-card green" id="aub-card-perf">
+        <div className="aub-card green">
           <div className="aub-card-title">RENDER ORCHESTRATOR</div>
-          <div className="aub-row ok" id="aub-perf-mode">● DATA: 2s | VISUAL: rAF</div>
-          <div className="aub-row" id="aub-perf-fps">rAF FPS: —</div>
-          <div className="aub-row" id="aub-perf-skips">DOM skips (no-change): 0</div>
+          <div className="aub-row ok">● DATA: 2s | VISUAL: rAF</div>
+          <div className="aub-row">rAF FPS: {rafFps}{perfHeavy ? ' (!)' : ''}</div>
+          <div className="aub-row">DOM skips (no-change): {domSkips}</div>
         </div>
 
         {/* 4: DECISION BLACKBOX */}
-        <div className="aub-card violet" id="aub-card-bb">
+        <div className="aub-card violet">
           <div className="aub-card-title">DECISION BLACKBOX</div>
-          <div className="aub-row" id="aub-bb-count">Snapshots: 0</div>
-          <div className="aub-row" id="aub-bb-last">Last: —</div>
+          <div className="aub-row">Snapshots: {bbCount}</div>
+          <div className="aub-row">{bbLast}</div>
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-            <button className="aub-btn violet" onClick={() => (window as any).aubBBExport?.()}>
-              <svg className="z-i" viewBox="0 0 16 16">
-                <path d="M8 2v8m-3-3l3 3 3-3M3 14h10" />
-              </svg> JSON
+            <button className="aub-btn violet" onClick={() => aubBBExport()}>
+              <svg className="z-i" viewBox="0 0 16 16"><path d="M8 2v8m-3-3l3 3 3-3M3 14h10" /></svg> JSON
             </button>
-            <button className="aub-btn violet" onClick={() => (window as any).aubBBClear?.()}>
-              <svg className="z-i" viewBox="0 0 16 16">
-                <path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" />
-              </svg> Clear
+            <button className="aub-btn violet" onClick={() => aubBBClear()}>
+              <svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear
             </button>
           </div>
         </div>
 
         {/* 5: MTF HIERARCHY */}
-        <div className="aub-card cyan" id="aub-card-mtf">
+        <div className="aub-card cyan">
           <div className="aub-card-title">MTF HIERARCHY</div>
           <div className="aub-mtf-bar-wrap">
-            <div className="aub-mtf-row">
-              <span className="aub-mtf-lbl">4h</span>
-              <div className="aub-mtf-track">
-                <div className="aub-mtf-fill" id="aub-mtf-4h" style={{ width: '0%', background: '#00d9ff' }}></div>
+            {(['4h', '1h', '15m', '5m'] as const).map((tf) => (
+              <div className="aub-mtf-row" key={tf}>
+                <span className="aub-mtf-lbl">{tf}</span>
+                <div className="aub-mtf-track">
+                  <div className="aub-mtf-fill" style={{ width: pct(mtf[tf]), background: tf === '4h' ? '#00d9ff' : tf === '1h' ? '#00d9ffaa' : tf === '15m' ? '#00d9ff66' : '#00d9ff33' }}></div>
+                </div>
+                <span className="aub-mtf-val">{mtf[tf] > 0 ? Math.round(mtf[tf] * 100) : '—'}</span>
               </div>
-              <span className="aub-mtf-val" id="aub-mtf-4h-v">—</span>
-            </div>
-            <div className="aub-mtf-row">
-              <span className="aub-mtf-lbl">1h</span>
-              <div className="aub-mtf-track">
-                <div className="aub-mtf-fill" id="aub-mtf-1h" style={{ width: '0%', background: '#00d9ffaa' }}></div>
-              </div>
-              <span className="aub-mtf-val" id="aub-mtf-1h-v">—</span>
-            </div>
-            <div className="aub-mtf-row">
-              <span className="aub-mtf-lbl">15m</span>
-              <div className="aub-mtf-track">
-                <div className="aub-mtf-fill" id="aub-mtf-15m" style={{ width: '0%', background: '#00d9ff66' }}></div>
-              </div>
-              <span className="aub-mtf-val" id="aub-mtf-15m-v">—</span>
-            </div>
-            <div className="aub-mtf-row">
-              <span className="aub-mtf-lbl">5m</span>
-              <div className="aub-mtf-track">
-                <div className="aub-mtf-fill" id="aub-mtf-5m" style={{ width: '0%', background: '#00d9ff33' }}></div>
-              </div>
-              <span className="aub-mtf-val" id="aub-mtf-5m-v">—</span>
-            </div>
+            ))}
           </div>
-          <div className="aub-row" id="aub-mtf-penalty" style={{ marginTop: '4px' }}>Penalty: none</div>
+          <div className="aub-row" style={{ marginTop: '4px' }}>{mtfPenalty}</div>
         </div>
 
         {/* 6: CORRELATION FIELD */}
-        <div className="aub-card green" id="aub-card-corr">
+        <div className="aub-card green">
           <div className="aub-card-title">CORRELATION FIELD</div>
-          <div id="aub-corr-list">
-            <div className="aub-row">Corr: BTC→ETH = <b id="aub-corr-eth">—</b></div>
-            <div className="aub-row">Corr: BTC→SOL = <b id="aub-corr-sol">—</b></div>
-            <div className="aub-row" id="aub-corr-penalty">Penalty: inactive</div>
+          <div>
+            <div className="aub-row">Corr: BTC→ETH = <b>{corrEth}</b></div>
+            <div className="aub-row">Corr: BTC→SOL = <b>{corrSol}</b></div>
+            <div className={`aub-row ${corrPenalty ? 'warn' : ''}`}>{corrPenaltyText}</div>
           </div>
         </div>
 
         {/* 7: MACRO ANOMALY RADAR */}
-        <div className="aub-card yellow" id="aub-card-macro">
+        <div className="aub-card yellow">
           <div className="aub-card-title">MACRO ANOMALY RADAR</div>
-          <div id="aub-macro-events">
-            <div className="aub-row">No events loaded</div>
-          </div>
+          <div dangerouslySetInnerHTML={{ __html: macroHtml }} />
           <div style={{ display: 'flex', gap: '4px', marginTop: '5px' }}>
             <button className="aub-btn yellow" onClick={() => document.getElementById('aub-macro-file')?.click()}>
-              <svg className="z-i" viewBox="0 0 16 16">
-                <path d="M2 5h5l2 2h5v6H2V5z" />
-              </svg> Import JSON
+              <svg className="z-i" viewBox="0 0 16 16"><path d="M2 5h5l2 2h5v6H2V5z" /></svg> Import JSON
             </button>
-            <button className="aub-btn yellow" onClick={() => (window as any).aubMacroClear?.()}>
-              <svg className="z-i" viewBox="0 0 16 16">
-                <path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" />
-              </svg> Clear
+            <button className="aub-btn yellow" onClick={() => aubMacroClear()}>
+              <svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear
             </button>
           </div>
-          <input type="file" id="aub-macro-file" accept=".json" style={{ display: 'none' }} onChange={() => (window as any).aubMacroFileLoad?.()} />
+          <input type="file" id="aub-macro-file" accept=".json" style={{ display: 'none' }} onChange={(e) => (window as any).aubMacroFileLoad?.(e.target)} />
         </div>
 
         {/* 8: NIGHTLY SIM LAB */}
-        <div className="aub-card violet" id="aub-card-sim">
+        <div className="aub-card violet">
           <div className="aub-card-title">NIGHTLY SIM LAB</div>
-          <div className="aub-row" id="aub-sim-status">Status: Idle</div>
-          <div className="aub-row" id="aub-sim-last">Last run: never</div>
-          <div className="aub-sim-result" id="aub-sim-result" style={{ display: 'none' }}></div>
+          <div className="aub-row">{simStatus}</div>
+          <div className="aub-row">{simLast}</div>
+          {simResultHtml && (
+            <div className="aub-sim-result" dangerouslySetInnerHTML={{ __html: simResultHtml }} />
+          )}
           <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
-            <button className="aub-btn violet" onClick={() => (window as any).aubSimRun?.()}>▶ Run Now</button>
-            <button className="aub-btn violet" id="aub-sim-apply" style={{ display: 'none' }} onClick={() => (window as any).aubSimApply?.()}>✓ Apply</button>
+            <button className="aub-btn violet" onClick={() => aubSimRun()}>▶ Run Now</button>
+            {simShowApply && (
+              <button className="aub-btn violet" onClick={() => aubSimApply()}>✓ Apply</button>
+            )}
           </div>
         </div>
 

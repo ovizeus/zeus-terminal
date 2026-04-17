@@ -7,24 +7,20 @@ import { _safeLocalStorageSet } from '../services/storage'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { setTf } from '../data/marketDataFeeds'
+import { useAUBStore } from '../stores/aubStore'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 
 const w = window as any
 
 // ── TOGGLE ───────────────────────────────────────────────────────
 export function aubToggle(): void {
-  const el_aub = document.getElementById('aub')
-  const txt = document.getElementById('aub-toggle-txt')
-  if (!el_aub) return
   AUB.expanded = !AUB.expanded
-  el_aub.className = AUB.expanded ? 'expanded' : 'collapsed'
-  if (txt) txt.textContent = AUB.expanded ? 'COLLAPSE' : 'EXPAND'
+  useAUBStore.getState().patch({ expanded: AUB.expanded })
   if (AUB.expanded) {
     _aubHoloSweep()
     if (AUB.sfxEnabled) _aubPlayTone(440, 0.06)
     aubRefreshAll()
   }
-  // Mobile: save preference
   try { localStorage.setItem('aub_expanded', AUB.expanded ? '1' : '0') } catch (_) { }
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aubData')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
@@ -32,8 +28,7 @@ export function aubToggle(): void {
 
 export function aubToggleSFX(): void {
   AUB.sfxEnabled = !AUB.sfxEnabled
-  const btn = document.getElementById('aub-sfx-btn')
-  if (btn) { btn.innerHTML = AUB.sfxEnabled ? _ZI.bell + ' SFX' : _ZI.bellX + ' SFX'; btn.className = AUB.sfxEnabled ? 'on' : '' }
+  useAUBStore.getState().patch({ sfxEnabled: AUB.sfxEnabled })
   if (AUB.sfxEnabled) _aubInitAudio()
 }
 
@@ -94,23 +89,15 @@ export function aubCheckCompat(): void {
   }
 
   const allOk = w.AUB_COMPAT.ws && w.AUB_COMPAT.audio && w.AUB_COMPAT.crypto
-  const badge = document.getElementById('aub-badge-compat')
-  if (badge) {
-    badge.textContent = allOk ? 'COMPAT: OK' : 'COMPAT: LIMITED'
-    badge.className = 'aub-badge ' + (allOk ? 'ok' : 'warn')
-  }
-
-  const list = document.getElementById('aub-compat-list')
-  if (!list) return
   const row = (pass: any, label: any) =>
     `<div class="aub-row ${pass ? 'ok' : 'warn'}">${pass ? _ZI.ok : _ZI.w} ${label}</div>`
-
-  list.innerHTML = [
+  const compatRows = [
     row(w.AUB_COMPAT.ws, 'WebSocket: ' + (w.AUB_COMPAT.ws ? 'SUPPORTED' : 'MISSING')),
     row(w.AUB_COMPAT.audio, 'AudioContext: ' + (w.AUB_COMPAT.audio ? 'SUPPORTED' : 'MISSING')),
     row(w.AUB_COMPAT.crypto, 'crypto.subtle: ' + (w.AUB_COMPAT.crypto ? 'OK' : 'MISSING')),
     row(w.AUB_COMPAT.sw, 'ServiceWorker: ' + (w.AUB_COMPAT.swDisabled ? 'DISABLED (non-https)' : w.AUB_COMPAT.sw ? 'SUPPORTED' : 'N/A')),
   ].join('')
+  useAUBStore.getState().patch({ compatOk: allOk, compatRows })
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -128,10 +115,7 @@ export function _aubGuard(name: any, val: any, test: any): any {
 }
 
 export function _aubUpdateGuardUI(): void {
-  const cnt = document.getElementById('aub-guard-count')
-  const last = document.getElementById('aub-guard-last')
-  if (cnt) cnt.textContent = 'Validated: ' + AUB.guardCount + ' calls'
-  if (last) last.textContent = 'Last reject: ' + AUB.guardLast
+  useAUBStore.getState().patch({ guardCount: AUB.guardCount, guardLast: AUB.guardLast })
 }
 
 // Wrap public functions safely
@@ -186,15 +170,10 @@ export function _aubRafTick(ts: any): void {
 }
 
 export function _aubUpdatePerfBadge(): void {
-  const badge = document.getElementById('aub-badge-perf')
-  if (badge) {
-    badge.textContent = AUB._perfHeavy ? 'PERF: HEAVY' : 'PERF: OK'
-    badge.className = 'aub-badge ' + (AUB._perfHeavy ? 'warn' : 'ok')
-  }
+  useAUBStore.getState().patch({ perfHeavy: AUB._perfHeavy })
 }
 export function _aubUpdatePerfCard(): void {
-  w.AUB_PERF.setDOM('aub-perf-fps', 'rAF FPS: ' + AUB.rafFPS + (AUB._perfHeavy ? ' (!)' : ''))
-  w.AUB_PERF.setDOM('aub-perf-skips', 'DOM skips (no-change): ' + AUB.domSkips)
+  useAUBStore.getState().patch({ rafFps: AUB.rafFPS, domSkips: AUB.domSkips })
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -238,11 +217,11 @@ export function _aubLoadBB(): void {
 }
 
 export function _aubUpdateBBCard(): void {
-  w.AUB_PERF.setDOM('aub-bb-count', 'Snapshots: ' + AUB.bb.length)
   const last = AUB.bb[0]
-  w.AUB_PERF.setDOM('aub-bb-last', last
-    ? 'Last: ' + last.event + ' @' + new Date(last.ts).toTimeString().slice(0, 8)
-    : 'Last: —')
+  useAUBStore.getState().patch({
+    bbCount: AUB.bb.length,
+    bbLast: last ? 'Last: ' + last.event + ' @' + new Date(last.ts).toTimeString().slice(0, 8) : 'Last: —',
+  })
 }
 
 export function aubBBExport(): void {
@@ -298,14 +277,10 @@ export function aubCalcMTFStrength(): any {
 }
 
 export function _aubUpdateMTFCard(s5m: any, s15m: any, s1h: any, s4h: any, penalty: any): void {
-  const pct = (v: any) => Math.round(v * 100) + '%'
-  // [B24 FIX] Removed broken set() calls with wrong parameter order
-  const ids: any[] = [['aub-mtf-4h', s4h, 'aub-mtf-4h-v'], ['aub-mtf-1h', s1h, 'aub-mtf-1h-v'], ['aub-mtf-15m', s15m, 'aub-mtf-15m-v'], ['aub-mtf-5m', s5m, 'aub-mtf-5m-v']]
-  ids.forEach(([bid, val, vid]: any) => {
-    const b = document.getElementById(bid); if (b) b.style.width = pct(val)
-    const v = document.getElementById(vid); if (v) v.textContent = Math.round(val * 100)
+  useAUBStore.getState().patch({
+    mtf: { '5m': s5m, '15m': s15m, '1h': s1h, '4h': s4h },
+    mtfPenalty: penalty ? '(!) PENALTY: 4h bull vs 5m weak' : 'Penalty: none',
   })
-  w.AUB_PERF.setDOM('aub-mtf-penalty', penalty ? '(!) PENALTY: 4h bull vs 5m weak' : 'Penalty: none')
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -349,13 +324,12 @@ export function aubCalcCorrelation(): void {
 
 export function _aubUpdateCorrCard(): void {
   const fmt = (v: any) => v !== null ? (v > 0 ? '+' : '') + v.toFixed(2) : '—'
-  w.AUB_PERF.setDOM('aub-corr-eth', fmt(AUB.corr.eth))
-  w.AUB_PERF.setDOM('aub-corr-sol', fmt(AUB.corr.sol))
-  const pen = document.getElementById('aub-corr-penalty')
-  if (pen) {
-    pen.textContent = AUB.corrPenalty ? '(!) PENALTY: BTC drag active' : 'Penalty: inactive'
-    pen.className = 'aub-row ' + (AUB.corrPenalty ? 'warn' : '')
-  }
+  useAUBStore.getState().patch({
+    corrEth: fmt(AUB.corr.eth),
+    corrSol: fmt(AUB.corr.sol),
+    corrPenalty: AUB.corrPenalty,
+    corrPenaltyText: AUB.corrPenalty ? '(!) PENALTY: BTC drag active' : 'Penalty: inactive',
+  })
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -407,12 +381,11 @@ export function aubGetActiveMacroRisk(): any {
 }
 
 export function _aubRenderMacroEvents(): void {
-  const el_m = document.getElementById('aub-macro-events'); if (!el_m) return
   if (!AUB.macroEvents.length) {
-    el_m.innerHTML = '<div class="aub-row">No events loaded</div>'; return
+    useAUBStore.getState().patch({ macroHtml: '<div class="aub-row">No events loaded</div>' }); return
   }
   const now = Date.now()
-  el_m.innerHTML = AUB.macroEvents.slice(0, 5).map((ev: any) => {
+  const html = AUB.macroEvents.slice(0, 5).map((ev: any) => {
     const diff = ev.ts - now
     const hrs = Math.round(diff / 3600000)
     const when = Math.abs(hrs) < 1 ? 'NOW' : (hrs > 0 ? 'in ' + hrs + 'h' : Math.abs(hrs) + 'h ago')
@@ -420,6 +393,7 @@ export function _aubRenderMacroEvents(): void {
     const riskPct = Math.round((1 - ev.risk) * 100)
     return `<div class="aub-macro-item ${cls}">${ev.label} — ${when} → Risk ${riskPct > 0 ? '-' : ''}${riskPct}%</div>`
   }).join('')
+  useAUBStore.getState().patch({ macroHtml: html })
 }
 
 export function _aubLoadMacro(): void {
@@ -436,7 +410,7 @@ export function _aubLoadMacro(): void {
 export function aubSimRun(): void {
   if (AUB.simRunning) return
   AUB.simRunning = true
-  w.AUB_PERF.setDOM('aub-sim-status', 'Status: Running...')
+  useAUBStore.getState().patch({ simStatus: 'Status: Running...' })
   // Async so UI doesn't freeze
   setTimeout(_aubSimWorker, 100)
 }
@@ -445,7 +419,7 @@ export function _aubSimWorker(): void {
   try {
     const klines = (typeof w.S !== 'undefined' && w.S.klines) ? w.S.klines : []
     if (klines.length < 50) {
-      w.AUB_PERF.setDOM('aub-sim-status', 'Status: Need 50+ bars')
+      useAUBStore.getState().patch({ simStatus: 'Status: Need 50+ bars' })
       AUB.simRunning = false; return
     }
 
@@ -485,18 +459,15 @@ export function _aubSimWorker(): void {
     const ts = new Date().toLocaleTimeString()
     _safeLocalStorageSet(w.AUB_SIM_KEY, { best, ts }) // FIX 22
 
-    w.AUB_PERF.setDOM('aub-sim-status', 'Status: Done (' + ts + ')')
-    w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + ts)
-
-    const res = document.getElementById('aub-sim-result')
-    if (res) {
-      (res as any).style.display = 'block'
-      res.innerHTML = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">` + _ZI.w + ` Suggest only — confirm before applying</span>`
-    }
-    const applyBtn = document.getElementById('aub-sim-apply')
-    if (applyBtn) (applyBtn as any).style.display = 'inline-block'
+    const simResultHtml = `Best: SL ${best.sl}% / RR ${best.rr}x<br>WR: ${best.score.toFixed(1)}% (${best.wins}/${best.total})<br><span style="color:#ffd400">` + _ZI.w + ` Suggest only — confirm before applying</span>`
+    useAUBStore.getState().patch({
+      simStatus: 'Status: Done (' + ts + ')',
+      simLast: 'Last run: ' + ts,
+      simResultHtml,
+      simShowApply: true,
+    })
   } catch (e: any) {
-    w.AUB_PERF.setDOM('aub-sim-status', 'Status: Error — ' + (e.message || '?'))
+    useAUBStore.getState().patch({ simStatus: 'Status: Error — ' + (e.message || '?') })
   }
   AUB.simRunning = false
 }
@@ -513,7 +484,7 @@ export function aubSimApply(): void {
   if (slInput) slInput.value = AUB.simPendingApply.sl
   if (rrInput) rrInput.value = AUB.simPendingApply.rr
   toast('Suggestion applied to fields — review before enabling AT')
-  ;(document.getElementById('aub-sim-apply') as any).style.display = 'none'
+  useAUBStore.getState().patch({ simShowApply: false })
   AUB.simPendingApply = null
   aubBBSnapshot('SIM_APPLIED', { sl: AUB.simResult.sl, rr: AUB.simResult.rr })
 }
@@ -524,7 +495,7 @@ export function _aubLoadSim(): void {
     if (raw) {
       const data = JSON.parse(raw)
       AUB.simResult = data.best
-      w.AUB_PERF.setDOM('aub-sim-last', 'Last run: ' + (data.ts || '—'))
+      useAUBStore.getState().patch({ simLast: 'Last run: ' + (data.ts || '—') })
     }
   } catch (_) { }
 }
@@ -546,20 +517,18 @@ export function _aubCheckNightlySim(): void {
 // DATA BADGE — sync with _SAFETY.dataStalled
 // ════════════════════════════════════════════════════════════════
 export function _aubUpdateDataBadge(): void {
-  // FIX v118: aceeași sursă ca bannerul de feed și renderCircuitBrain
   const stalled = (typeof w._SAFETY !== 'undefined' && w._SAFETY.dataStalled) ||
     (typeof w.S !== 'undefined' && w.S.dataStalled)
   const recon = (typeof w._SAFETY !== 'undefined' && w._SAFETY.isReconnecting)
   const hasWS = (typeof w.S !== 'undefined') && (w.S.bnbOk || w.S.bybOk)
   const hasPrice = (typeof w.S !== 'undefined') && w.S.price > 0
-  const badge = document.getElementById('aub-badge-data')
-  if (badge) {
-    if (recon) { badge.textContent = 'DATA: RECON'; badge.className = 'aub-badge danger' }
-    else if (stalled) { badge.textContent = 'DATA: STALL'; badge.className = 'aub-badge danger' }
-    else if (hasWS && hasPrice) { badge.textContent = 'DATA: LIVE'; badge.className = 'aub-badge ok' }
-    else if (hasPrice) { badge.textContent = 'DATA: DELAY'; badge.className = 'aub-badge warn' }
-    else { badge.textContent = 'DATA: WAIT'; badge.className = 'aub-badge info' }
-  }
+  let dataLabel: string, dataClass: string
+  if (recon) { dataLabel = 'DATA: RECON'; dataClass = 'danger' }
+  else if (stalled) { dataLabel = 'DATA: STALL'; dataClass = 'danger' }
+  else if (hasWS && hasPrice) { dataLabel = 'DATA: LIVE'; dataClass = 'ok' }
+  else if (hasPrice) { dataLabel = 'DATA: DELAY'; dataClass = 'warn' }
+  else { dataLabel = 'DATA: WAIT'; dataClass = 'info' }
+  useAUBStore.getState().patch({ dataLabel, dataClass })
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -586,15 +555,9 @@ export function initAUB(): void {
   _aubLoadMacro()
   _aubLoadSim()
 
-  // Restore expand state (default collapsed)
-  const el_aub = document.getElementById('aub')
-  if (el_aub) {
-    const saved = localStorage.getItem('aub_expanded')
-    AUB.expanded = (saved === '1') && w.innerWidth >= 600
-    el_aub.className = AUB.expanded ? 'expanded' : 'collapsed'
-    const txt = document.getElementById('aub-toggle-txt')
-    if (txt) txt.textContent = AUB.expanded ? 'COLLAPSE' : 'EXPAND'
-  }
+  const saved = localStorage.getItem('aub_expanded')
+  AUB.expanded = (saved === '1') && w.innerWidth >= 600
+  useAUBStore.getState().patch({ expanded: AUB.expanded })
 
   // rAF FPS counter — purely visual, always safe (req 6)
   AUB._rafLast = performance.now()

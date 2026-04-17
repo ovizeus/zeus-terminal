@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useDslStore } from '../../stores'
-import { toggleDSL, stopDSLIntervals, startDSLIntervals } from '../../trading/dsl'
+import { toggleDSL, stopDSLIntervals, startDSLIntervals, toggleAssistArm } from '../../trading/dsl'
 
 // Seeded PRNG so bubbles/drops are deterministic but look random (same as JS Math.random output)
 function seededRandom(seed: number) {
@@ -12,6 +12,7 @@ function seededRandom(seed: number) {
  *  + initDSLBubbles() from dsl.js lines 181-204 */
 export function DSLZonePanel() {
   const dslOn = useDslStore((s) => s.enabled)
+  const ui = useDslStore((s) => s.ui)
 
   // Generate 12 floating bubbles (same logic as dsl.js initDSLBubbles)
   const bubbles = useMemo(() => {
@@ -68,44 +69,29 @@ export function DSLZonePanel() {
       {/* Header */}
       <div className="dsl-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span className="dsl-status-dot" id="dslStatusDot" style={{ color: '#00ffcc', background: '#00ffcc' }}></span>
+          <span className="dsl-status-dot" style={{ color: ui.statusDotColor, background: ui.statusDotBg }}></span>
           <span className="dsl-title">⬡ DYNAMIC SL ZONE ○ BRAIN TRAILING ENGINE — by OVI</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span id="dslActiveCount" style={{ fontSize: '7px', color: '#00ffcc44' }}>0 active</span>
-          <button className={`dsl-toggle${dslOn ? '' : ' off'}`} id="dslToggleBtn" onClick={() => {
-            // Flow: React → engine toggleDSL() → engine emits event → dslStore syncs
-            const w = window as any
-            try {
-              if (typeof toggleDSL === 'function') {
-                toggleDSL()
-              } else if (typeof w.DSL !== 'undefined') {
-                // Fallback if toggleDSL not mapped yet
-                w.DSL.enabled = !w.DSL.enabled
-                if (!w.S?.dsl) { if (w.S) w.S.dsl = {} }
-                if (w.S?.dsl) w.S.dsl.active = w.DSL.enabled
-                if (!w.DSL.enabled && typeof stopDSLIntervals === 'function') stopDSLIntervals()
-                if (w.DSL.enabled && typeof startDSLIntervals === 'function' && !w.DSL.checkInterval) startDSLIntervals()
-                if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
-                try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {}
-              }
-            } catch (e) { console.warn('[DSL btn]', e) }
+          <span style={{ fontSize: '7px', color: '#00ffcc44' }}>{ui.activeCountText}</span>
+          <button className={ui.toggleBtnClass} disabled={ui.toggleBtnDisabled} title={ui.toggleBtnTitle} onClick={() => {
+            try { toggleDSL() } catch (e) { console.warn('[DSL btn]', e) }
           }}>
-            {dslOn ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'}
+            {ui.toggleBtnText}
           </button>
         </div>
       </div>
 
       {/* AUTO LOCK OVERLAY */}
-      <div className="dsl-lock-overlay" id="dslLockOverlay">
+      <div className={`dsl-lock-overlay${ui.lockOverlayVisible ? ' show' : ''}`}>
         <div className="dsl-lock-badge">LOCKED BY AI</div>
         <div className="dsl-lock-sub">AUTO MODE — DSL ENGINE CONTROLAT DE BRAIN</div>
       </div>
 
       {/* ASSIST ARM BAR */}
-      <div className="dsl-assist-bar" id="dslAssistBar">
-        <span className="dsl-assist-status" id="dslAssistStatus">ASSIST — necesită armare pentru execuție</span>
-        <button className="dsl-assist-arm" id="dslAssistArmBtn">ARM ASSIST</button>
+      <div className={`dsl-assist-bar${ui.assistBarVisible ? ' show' : ''}`}>
+        <span className="dsl-assist-status">{ui.assistStatusText}</span>
+        <button className={ui.assistArmClass} onClick={() => toggleAssistArm()} dangerouslySetInnerHTML={{ __html: ui.assistArmHtml }} />
       </div>
 
       {/* Cascade drops (20 — neon rain from initDSLBubbles in dsl.js) */}

@@ -13,6 +13,7 @@ import { openPageView } from '../ui/pageview'
 import { initZeusDock } from '../ui/dock'
 import { DEV } from '../utils/dev'
 import { runAutoTradeCheck , atLog } from '../trading/autotrade'
+import { useATStore } from '../stores/atStore'
 import { liveApiSyncState } from '../trading/liveApi'
 import { wsService } from '../services/ws'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, atLog, fn calls
@@ -95,10 +96,7 @@ export function _startExtras(): void {
   w.Intervals.set('livePosSync', function () { if (wsService.isConnected()) return; if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 120000)
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     console.log('[startApp] AT was enabled before reload — resuming')
-    const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
-    const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)' }
-    const _txt = el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON'
-    const _st = el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s'
+    useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', statusHtml: _ZI.dGrn + ' Active \u2014 scanning every 30s', statusAction: null })
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     setTimeout(runAutoTradeCheck, 3000)
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()

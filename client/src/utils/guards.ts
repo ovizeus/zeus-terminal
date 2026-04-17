@@ -9,6 +9,7 @@ import { el } from './dom'
 import { _updateWhyBlocked } from '../data/klines'
 import { updConn } from '../data/marketDataWS'
 import { atLog } from '../trading/autotrade'
+import { useATStore } from '../stores/atStore'
 import { closeDemoPos } from '../data/marketDataClose'
 import { getSymPrice } from '../data/marketDataPositions'
 const w = window as Record<string, any> // kept for w.S writes (dataStalled, dataStalledSince), w.S.mode (self-ref), atLog, w.ncAdd, fn calls
@@ -130,7 +131,7 @@ export function _onNewUTCDay(_newDayId: number): void {
   // Kill switch: only keep if there was REAL loss today
   if (AT.killTriggered && _closed === 0 && Math.abs(_rPnL) < 0.01) {
     AT.killTriggered = false
-    const kb = el('atKillBtn'); if (kb) kb.classList.remove('triggered')
+    useATStore.getState().patchUI({ killBtnTriggered: false })
     atLog('info', '[INFO] Kill switch cleared — no realized loss on new day')
   }
   // [9A-4] Notify React after daily counter reset

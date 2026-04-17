@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useATStore, usePositionsStore, useSettingsStore } from '../../stores'
+import { useATStore, useSettingsStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
+import { resetKillSwitch } from '../../trading/autotrade'
 
 /** Parse a string input to number for save; empty/invalid → fallback. */
 function toNum(s: string, fallback: number): number {
@@ -15,14 +16,8 @@ export function AutoTradePanel() {
   const enabled = useATStore((s) => s.enabled)
   const mode = useATStore((s) => s.mode)
   const killTriggered = useATStore((s) => s.killTriggered)
-  const totalTrades = useATStore((s) => s.totalTrades)
-  const wins = useATStore((s) => s.wins)
-  const totalPnL = useATStore((s) => s.totalPnL)
-  const dailyPnL = useATStore((s) => s.dailyPnL)
-  const demoBalance = usePositionsStore((s) => s.demoBalance)
+  const ui = useATStore((s) => s.ui)
   const [bextOpen, setBextOpen] = useState(false)
-
-  const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : '—'
 
   // Numeric fields are held as STRINGS so the user can fully clear the input
   // (value === "") without React forcing a leading "0" back in. We parse to
@@ -261,16 +256,24 @@ export function AutoTradePanel() {
           {' '}ZEUS AUTO TRADE{' '}
           <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
         </div>
-        <button className={`at-main-btn ${enabled ? 'on' : 'off'}`} id="atMainBtn" onClick={handleToggle} disabled={toggling}>
-          <span id="atBtnDot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: enabled ? '#00ff88' : '#aa44ff', boxShadow: enabled ? '0 0 6px #00ff88' : '0 0 6px #aa44ff' }}></span>
-          <span id="atBtnTxt">{enabled ? 'AUTO TRADE ON' : 'AUTO TRADE OFF'}</span>
+        <button className={ui.btnClass} onClick={handleToggle} disabled={toggling}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ui.dotBg, boxShadow: ui.dotShadow }}></span>
+          <span>{ui.btnText}</span>
         </button>
-        <div className="at-status" id="atStatus">{enabled ? 'SERVER AT ACTIVE — brain controls execution' : 'Configureaza mai jos'}</div>
-        <div id="at-why-blocked"></div>
-        {/* Sentinel Health Indicator */}
-        <div id="zt-sentinel-bar"
-          style={{ display: 'none', fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center' }}>
+        <div className="at-status">
+          <span dangerouslySetInnerHTML={{ __html: ui.statusHtml }} />
+          {ui.statusAction === 'resetKill' && (
+            <button data-action="resetKillSwitch" onClick={() => resetKillSwitch()}
+              style={{ color: '#00ff88', background: 'none', border: '1px solid #00ff8866', borderRadius: '2px', padding: '1px 5px', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>
+              RESET KILL SWITCH
+            </button>
+          )}
         </div>
+        <div id="at-why-blocked"></div>
+        {ui.sentinelVisible && (
+          <div style={{ fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center', background: ui.sentinelBg, color: ui.sentinelColor, border: ui.sentinelBorder }}
+            dangerouslySetInnerHTML={{ __html: ui.sentinelHtml }} />
+        )}
       </div>
       <div className="at-line"></div>
     </div>
@@ -279,7 +282,7 @@ export function AutoTradePanel() {
     <div className="at-panel" id="atPanel">
       <div className="at-hdr">
         <span>ZEUS AI AUTO TRADE ENGINE</span>
-        <span id="atModeLabel" style={{ fontSize: '8px', color: '#aa44ff', letterSpacing: '1px' }}>{mode.toUpperCase()}</span>
+        <span style={{ fontSize: '8px', color: ui.modeLabelColor, letterSpacing: '1px' }} dangerouslySetInnerHTML={{ __html: ui.modeLabelHtml }} />
       </div>
       <div className="at-body">
         <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
@@ -290,9 +293,8 @@ export function AutoTradePanel() {
         <div className="at-row">
           <div className="at-field">
             <div className="at-lbl">GLOBAL MODE</div>
-            <div id="atModeDisplay" className="at-sel" style={{ background: '#0a0a1a', border: '1px solid #aa44ff44', padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: '#aa44ff', letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}>
-              {mode.toUpperCase()} MODE
-            </div>
+            <div className="at-sel" style={{ background: '#0a0a1a', border: `1px solid ${ui.modeDisplayBorder}`, padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: ui.modeDisplayColor, letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}
+              dangerouslySetInnerHTML={{ __html: ui.modeDisplayHtml }} />
           </div>
           <div className="at-field">
             <div className="at-lbl">LEVERAGE AUTO</div>
@@ -317,11 +319,11 @@ export function AutoTradePanel() {
           <div className="at-cond-title">CONDITII INTRARE (toate trebuie OK)</div>
           <div className="at-cond-row">
             <span className="at-cond-name">Confluence Score</span>
-            <span>≥ <input type="number" id="atConfMin" value={confMin} onChange={e => setConfMin(e.target.value)} min={50} max={95} className="at-inp" style={{ width: '52px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className="at-cond-val wait" id="atCondConf">—</span></span>
+            <span>≥ <input type="number" id="atConfMin" value={confMin} onChange={e => setConfMin(e.target.value)} min={50} max={95} className="at-inp" style={{ width: '52px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condConfClass}>{ui.condConf}</span></span>
           </div>
           <div className="at-cond-row">
             <span className="at-cond-name">Semnale aliniate</span>
-            <span>≥ <input type="number" id="atSigMin" value={sigMin} onChange={e => setSigMin(e.target.value)} min={2} max={6} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className="at-cond-val wait" id="atCondSig">—</span></span>
+            <span>≥ <input type="number" id="atSigMin" value={sigMin} onChange={e => setSigMin(e.target.value)} min={2} max={6} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condSigClass}>{ui.condSig}</span></span>
           </div>
         </div>
 
@@ -416,8 +418,8 @@ export function AutoTradePanel() {
         </div>
 
         {/* LIVE WARNING */}
-        {mode === 'live' && (
-          <div className="live-at-warn" id="atLiveWarn">
+        {ui.liveWarnVisible && (
+          <div className="live-at-warn">
             <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff8800' }}>
               <path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" />
             </svg> <strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on Binance.
@@ -426,18 +428,16 @@ export function AutoTradePanel() {
 
         {/* STATS */}
         <div className="at-stats">
-          <div className="at-stat"><div className="at-stat-l">BALANCE</div><div className="at-stat-v" id="atBalance" style={{ color: 'var(--whi)' }}>${demoBalance.toLocaleString()}</div></div>
-          <div className="at-stat"><div className="at-stat-l">AUTO TRADES</div><div className="at-stat-v" id="atTotalTrades" style={{ color: 'var(--whi)' }}>{totalTrades}</div></div>
-          <div className="at-stat"><div className="at-stat-l">WIN RATE</div><div className="at-stat-v" id="atWinRate" style={{ color: 'var(--dim)' }}>{winRate}%</div></div>
-          <div className="at-stat"><div className="at-stat-l">AUTO PnL</div><div className="at-stat-v" id="atTotalPnL" style={{ color: totalPnL >= 0 ? 'var(--grn)' : 'var(--red)' }}>${totalPnL.toFixed(2)}</div></div>
-          <div className="at-stat"><div className="at-stat-l" id="atDailyLabel">DAILY P&amp;L</div><div className="at-stat-v" id="atDailyLoss" style={{ color: dailyPnL >= 0 ? 'var(--grn)' : 'var(--red)' }}>${dailyPnL.toFixed(2)}</div></div>
+          <div className="at-stat"><div className="at-stat-l">BALANCE</div><div className="at-stat-v" style={{ color: ui.balanceColor }}>{ui.balanceText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">AUTO TRADES</div><div className="at-stat-v" style={{ color: 'var(--whi)' }}>{ui.totalTradesText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">WIN RATE</div><div className="at-stat-v" style={{ color: ui.winRateColor }}>{ui.winRateText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">AUTO PnL</div><div className="at-stat-v" style={{ color: ui.totalPnLColor }}>{ui.totalPnLText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">{ui.dailyLabel}</div><div className="at-stat-v" style={{ color: ui.dailyLossColor }}>{ui.dailyLossText}</div></div>
         </div>
 
         {/* LOG */}
         <div style={{ fontSize: '7px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '3px' }}>ACTIVITY LOG</div>
-        <div className="at-log" id="atLog">
-          <div className="at-log-row"><span className="at-log-time">--:--</span><span className="at-log-msg info">Auto Trade Engine pornit. Astept semnal...</span></div>
-        </div>
+        <div className="at-log" dangerouslySetInnerHTML={{ __html: ui.logHtml }} />
 
         {/* BRAIN VISION */}
         <div id="brainVisionWrap" style={{ margin: '8px 0 6px', border: '1px solid rgba(120,80,220,0.25)', borderRadius: '6px', background: 'rgba(10,6,20,0.6)', overflow: 'hidden' }}>
@@ -469,7 +469,7 @@ export function AutoTradePanel() {
         </button>
 
         {/* KILL SWITCH */}
-        <button className={`at-kill${killTriggered ? ' triggered' : ''}`} id="atKillBtn" onClick={handleKill}>
+        <button className={`at-kill${killTriggered || ui.killBtnTriggered ? ' triggered' : ''}`} onClick={handleKill}>
           <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff3355' }}>
             <path d="M8 1v2m5 2l-1.4 1.4M3 5l1.4 1.4M2 10h2m8 0h2M5 13h6M6 10a2 2 0 014 0" />
           </svg> EMERGENCY STOP — CLOSE ALL POSITIONS
@@ -479,7 +479,7 @@ export function AutoTradePanel() {
         <div style={{ borderTop: '1px solid #1a1030', paddingTop: '8px', marginTop: '2px' }}>
           <div style={{ fontSize: '7px', letterSpacing: '2px', color: '#aa44ff', marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span>ACTIVE AUTO TRADE POSITIONS</span>
-            <span id="atPosCount" style={{ color: 'var(--dim)' }}>0 positions</span>
+            <span style={{ color: 'var(--dim)' }}>{ui.posCountText}</span>
           </div>
           <div id="atActivePosPanel" style={{ minHeight: '32px' }}>
             <div style={{ textAlign: 'center', fontSize: '8px', color: 'var(--dim)', padding: '8px' }}>No active auto positions</div>

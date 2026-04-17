@@ -12,6 +12,12 @@ interface PositionsStore {
   liveConnected: boolean
   liveExchange: string
 
+  manualPnl: number
+  manualPnlClass: string
+  manualWr: string
+  manualTrades: number
+  setManualStats: (pnl: number, pnlClass: string, wr: string, trades: number) => void
+
   /**
    * [MIGRATION-F5 commit 2] Last authoritative positions snapshot timestamp
    * (ms since epoch). Used for monotonic dedup on WS broadcasts — a snapshot
@@ -86,6 +92,11 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   liveConnected: false,
   liveExchange: 'binance',
   lastSnapshotTs: 0,
+  manualPnl: 0,
+  manualPnlClass: 'neut',
+  manualWr: '0%',
+  manualTrades: 0,
+  setManualStats: (pnl, pnlClass, wr, trades) => set({ manualPnl: pnl, manualPnlClass: pnlClass, manualWr: wr, manualTrades: trades }),
 
   setDemoPositions: (positions) => set({ demoPositions: positions }),
   setLivePositions: (positions) => set({ livePositions: positions }),

@@ -16,12 +16,89 @@ const DEFAULT_AT_CONFIG: ATConfig = {
   cooldownMs: 60000,
 }
 
+export interface ATUI {
+  btnClass: string
+  dotBg: string
+  dotShadow: string
+  btnText: string
+  statusHtml: string
+  statusAction: string | null
+  modeLabelHtml: string
+  modeLabelColor: string
+  modeDisplayHtml: string
+  modeDisplayColor: string
+  modeDisplayBorder: string
+  liveWarnVisible: boolean
+  condConf: string
+  condConfClass: string
+  condSig: string
+  condSigClass: string
+  balanceText: string
+  balanceColor: string
+  winRateText: string
+  winRateColor: string
+  totalPnLText: string
+  totalPnLColor: string
+  dailyLossText: string
+  dailyLossColor: string
+  dailyLabel: string
+  totalTradesText: string
+  logHtml: string
+  posCountText: string
+  killBtnTriggered: boolean
+  sentinelVisible: boolean
+  sentinelHtml: string
+  sentinelBg: string
+  sentinelColor: string
+  sentinelBorder: string
+}
+
+const DEFAULT_AT_UI: ATUI = {
+  btnClass: 'at-main-btn off',
+  dotBg: '#aa44ff',
+  dotShadow: '0 0 6px #aa44ff',
+  btnText: 'AUTO TRADE OFF',
+  statusHtml: 'Configureaza mai jos',
+  statusAction: null,
+  modeLabelHtml: 'DEMO',
+  modeLabelColor: '#aa44ff',
+  modeDisplayHtml: 'DEMO MODE',
+  modeDisplayColor: '#aa44ff',
+  modeDisplayBorder: '#aa44ff44',
+  liveWarnVisible: false,
+  condConf: '\u2014',
+  condConfClass: 'at-cond-val wait',
+  condSig: '\u2014',
+  condSigClass: 'at-cond-val wait',
+  balanceText: '$10,000',
+  balanceColor: 'var(--whi)',
+  winRateText: '\u2014',
+  winRateColor: 'var(--dim)',
+  totalPnLText: '$0.00',
+  totalPnLColor: 'var(--grn)',
+  dailyLossText: '$0.00',
+  dailyLossColor: 'var(--grn)',
+  dailyLabel: 'DAILY P&L',
+  totalTradesText: '0',
+  logHtml: '<div class="at-log-row"><span class="at-log-time">--:--</span><span class="at-log-msg info">Auto Trade Engine pornit. Astept semnal...</span></div>',
+  posCountText: '0 positions',
+  killBtnTriggered: false,
+  sentinelVisible: false,
+  sentinelHtml: '',
+  sentinelBg: '',
+  sentinelColor: '',
+  sentinelBorder: '',
+}
+
 type ATStore = ATState & {
   config: ATConfig
+  ui: ATUI
   /** Merge partial AT state from server */
   patch: (partial: Partial<ATState>) => void
   /** Merge partial AT config (lev/size/slPct/rr/maxPos/sigMin/adxMin/cooldownMs) */
   patchConfig: (partial: Partial<ATConfig>) => void
+  /** Merge partial AT UI display state */
+  patchUI: (partial: Partial<ATUI>) => void
   /**
    * Hydrate AT config from a flat SettingsPayload.
    * Wire mapping: sl → slPct, others 1:1.
@@ -69,6 +146,7 @@ export const useATStore = create<ATStore>()((set) => ({
   log: [],
 
   config: { ...DEFAULT_AT_CONFIG },
+  ui: { ...DEFAULT_AT_UI },
 
   patch: (partial) => set((s) => ({ ...s, ...partial })),
   patchConfig: (partial) => set((s) => {
@@ -83,6 +161,7 @@ export const useATStore = create<ATStore>()((set) => ({
     if (partial.cooldownMs !== undefined && Number.isFinite(partial.cooldownMs)) next.cooldownMs = partial.cooldownMs
     return { config: next }
   }),
+  patchUI: (partial) => set((s) => ({ ui: { ...s.ui, ...partial } })),
   hydrate: (settings) => set((s) => {
     const next: ATConfig = { ...s.config }
     if (typeof settings.lev === 'number' && Number.isFinite(settings.lev)) next.lev = settings.lev

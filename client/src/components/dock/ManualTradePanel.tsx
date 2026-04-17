@@ -24,6 +24,10 @@ export function ManualTradePanel() {
   const [sl, setSl] = useState('')
   const demoBalance = usePositionsStore((s) => s.demoBalance)
   const liveBalanceTotal = usePositionsStore((s) => s.liveBalance.totalBalance)
+  const manualPnl = usePositionsStore((s) => s.manualPnl)
+  const manualPnlClass = usePositionsStore((s) => s.manualPnlClass)
+  const manualWr = usePositionsStore((s) => s.manualWr)
+  const manualTrades = usePositionsStore((s) => s.manualTrades)
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {
@@ -239,11 +243,11 @@ export function ManualTradePanel() {
         {/* TS renderDemoPositions() owns this div via innerHTML — no React children allowed */}
         <div id="demoPosTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:8px">No open positions</div>' }} />
 
-        {/* P&L STATS */}
+        {/* P&L STATS — React-owned via positionsStore (D9) */}
         <div className="tp-pnl-row">
-          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div id="demoPnL" className="tp-pnl-val neut">$0.00</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div id="demoWR" className="tp-pnl-val">0%</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div id="demoTrades" className="tp-pnl-val">0</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div className={`tp-pnl-val ${manualPnlClass}`}>${manualPnl.toFixed(2)}</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div className="tp-pnl-val">{manualWr}</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div className="tp-pnl-val">{manualTrades}</div></div>
         </div>
 
         {/* LIVE/TESTNET OPEN POSITIONS (shown when mode=live, hidden in demo) */}

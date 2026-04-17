@@ -9,6 +9,7 @@ import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { useATStore } from '../stores/atStore'
 import { _startLivePendingSync , renderDemoPositions } from './marketDataPositions'
 import { runDSLBrain, toggleDSL } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
@@ -58,17 +59,23 @@ export function _applyGlobalModeUI(mode: string): void {
   if (mode === 'live') { if (btnD) btnD.classList.remove('active'); if (btnL) btnL.classList.add('active') }
   else { if (btnD) btnD.classList.add('active'); if (btnL) btnL.classList.remove('active') }
   const _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
-  const atModeDisp = el('atModeDisplay'), atModeLbl = el('atModeLabel'), atWarn = el('atLiveWarn')
   const execLocked = mode === 'live' && !w._apiConfigured
   if (mode === 'live') {
     const _atIsTestnet = _env === 'TESTNET'; const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE'; const _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE'; const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'; const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'; const _atEnvIcon = _atIsTestnet ? _ZI.dYlw : _ZI.dRed
-    if (atModeDisp) { atModeDisp.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvLabel + ' &middot; ' + _ZI.w + ' EXEC LOCKED' : _atEnvIcon + ' ' + _atEnvLabel; atModeDisp.style.color = execLocked ? 'var(--orange)' : _atEnvColor; atModeDisp.style.borderColor = execLocked ? '#ff880044' : _atEnvColorDim }
-    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort; atModeLbl.style.color = execLocked ? 'var(--orange)' : _atEnvColor }
-    if (atWarn) { atWarn.style.display = 'block'; atWarn.textContent = execLocked ? 'EXECUTION LOCKED \u2014 Exchange not configured.' : (_atIsTestnet ? 'TESTNET MODE ACTIVE: Auto trades will execute on Binance TESTNET' : 'LIVE MODE ACTIVE: Auto trades will execute with REAL funds'); atWarn.style.color = execLocked ? 'var(--orange)' : '' }
+    useATStore.getState().patchUI({
+      modeDisplayHtml: execLocked ? _atEnvIcon + ' ' + _atEnvLabel + ' &middot; ' + _ZI.w + ' EXEC LOCKED' : _atEnvIcon + ' ' + _atEnvLabel,
+      modeDisplayColor: execLocked ? 'var(--orange)' : _atEnvColor,
+      modeDisplayBorder: execLocked ? '#ff880044' : _atEnvColorDim,
+      modeLabelHtml: execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort,
+      modeLabelColor: execLocked ? 'var(--orange)' : _atEnvColor,
+      liveWarnVisible: true,
+    })
   } else {
-    if (atModeDisp) { atModeDisp.innerHTML = _ZI.pad + ' DEMO MODE'; atModeDisp.style.color = 'var(--pur)'; atModeDisp.style.borderColor = '#aa44ff44' }
-    if (atModeLbl) { atModeLbl.innerHTML = _ZI.pad + ' DEMO'; atModeLbl.style.color = 'var(--pur)' }
-    if (atWarn) { atWarn.style.display = 'none'; atWarn.style.color = '' }
+    useATStore.getState().patchUI({
+      modeDisplayHtml: _ZI.pad + ' DEMO MODE', modeDisplayColor: 'var(--pur)', modeDisplayBorder: '#aa44ff44',
+      modeLabelHtml: _ZI.pad + ' DEMO', modeLabelColor: 'var(--pur)',
+      liveWarnVisible: false,
+    })
   }
   const af = el('btnAddFunds'), rd = el('btnResetDemo')
   if (af) af.style.display = mode === 'demo' ? '' : 'none'
