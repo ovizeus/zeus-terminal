@@ -1189,9 +1189,12 @@ export const ZState = (() => {
   function _mergePositionsInto(targetArray: any[], serverPositions: any[], closedSet: Set<string>, label: string) {
     if (!Array.isArray(targetArray) || !Array.isArray(serverPositions)) return 0
     const existingIds = new Set(targetArray.map(function (p: any) { return String(p.id) }))
+    const existingSeqs = new Set(targetArray.filter(function (p: any) { return p._serverSeq }).map(function (p: any) { return String(p._serverSeq) }))
     let added = 0
     serverPositions.forEach(function (p: any) {
       if (p.closed || closedSet.has(String(p.id)) || existingIds.has(String(p.id))) return
+      if (p.seq && existingSeqs.has(String(p.seq))) return
+      if (p._serverSeq && existingSeqs.has(String(p._serverSeq))) return
       targetArray.push(Object.assign({}, p, { _restored: true }))
       added++
     })

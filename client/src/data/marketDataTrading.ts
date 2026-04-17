@@ -246,7 +246,11 @@ function _registerManualOnServer(pos: any): void {
   api.raw<any>('POST', '/api/at/register-manual', payload).then(function (d: any) { if (d.ok && d.seq) { pos._serverSeq = d.seq; if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save() } }).catch(function (err: any) { console.warn('[registerManualOnServer]', err.message || err) })
 }
 
+let _lastDemoOrderTs = 0
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
+  const now = Date.now()
+  if (now - _lastDemoOrderTs < 1000) return
+  _lastDemoOrderTs = now
   if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, _ZI.x); return }
   if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { toast('Max 20 demo positions', 3000, _ZI?.x); return }
   if (orderType === 'MARKET') {
