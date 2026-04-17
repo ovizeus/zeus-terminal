@@ -10,27 +10,45 @@
  * - LEAF MODULE: imports only stores, nothing else
  * - Returns primitives or shallow copies (no mutable references)
  *
- * Created in Phase 8B-mini. Only getters consumed by migrated files exist here.
- *
  * ──────────────────────────────────────────────────────────────────────────
- * R14 TRIAGE (2026-04-17): classification of every accessor below.
- * Stale `TODO: migrate in 8D/Phase 9` labels were removed — those phases
- * closed without folding these into stores, so the notes were lying.
- * Current truthful classification:
+ * R14 TRIAGE (refreshed in ZT7, 2026-04-17) — honest post-v2 classification.
  *
- * [HYBRID BY DESIGN] — returns a mutable reference. The legacy engine file
- *   reads AND writes via the same object (e.g. `brain.ts` does
- *   `BM.confluenceScore = X`). Cannot be swapped to a store read until the
- *   engine itself is rewritten to call store setters. Scheduled per-engine
- *   in the post-v2 "engine-to-store" track (see register § Open roadmap).
+ * The earlier triage flagged many accessors as `[STORE CANDIDATE: X]` with
+ * a note that they were "safe to switch once a syncFromLegacy audit
+ * confirms the store is populated in lockstep with window.S". That audit
+ * was done in ZT7 and the answer is mostly "no": legacy engine writers
+ * (autotrade.ts, brain.ts, dsl.ts, marketDataTrading.ts) write to window.S
+ * / window.AT / window.DSL / window.TP directly; Zustand stores are
+ * populated only via dedicated React-side hooks or event bridges. Flipping
+ * getters wholesale would return stale values.
  *
- * [STORE CANDIDATE: <store>.<field>] — scalar read of a value that already
- *   lives in a canonical store. Safe to switch once a `syncFromLegacy`
- *   audit confirms the store is populated in lockstep with `window.S`.
- *   Deferred to a batched cut-over lot after R16 release.
+ * Classification labels now used below:
  *
- * [BRIDGE — NO CANONICAL STORE] — value has no canonical home. Creating
- *   a store for it is a dedicated lot, not an R14 action.
+ * [STORE-BACKED] — the getter already reads the store first and falls back
+ *   to window.* only when the store call fails. These are the flips that
+ *   are verified to be populated in lockstep with the legacy writer.
+ *   Today: enabled, mode, killTriggered, closedTradesToday, dailyPnL
+ *   (all covered by useATBridge on 'zeus:atStateChanged').
+ *
+ * [STORE CANDIDATE — POPULATION DEBT] — a canonical store field exists but
+ *   is NOT populated in lockstep with legacy writers, so the accessor
+ *   cannot flip without risk of stale reads. Unblocking requires adding a
+ *   write-side bridge or rewriting the legacy engine writer. Deferred to a
+ *   dedicated "engine-to-store writer" lot, per-domain.
+ *     · marketStore.* — only React components call `patch()`; engine
+ *       writes go straight to `window.S`. No S-→-store bridge exists.
+ *     · dslStore.mode — `useDslStore.getState().setMode()` is only called
+ *       from tests; engine writes are `window.DSL.mode = 'atr'`.
+ *     · atStore.lastTradeTs — field exists but useATBridge does not sync
+ *       it (only the 10 fields listed at useATBridge.ts:22-33).
+ *
+ * [HYBRID BY DESIGN] — returns a mutable reference on purpose. The legacy
+ *   engine reads AND writes via the same object (e.g. `BM.score = X`).
+ *   Cannot be swapped to a store read until the engine itself is rewritten
+ *   to call store setters. Tracked in the post-v2 "engine-to-store" track.
+ *
+ * [BRIDGE — NO CANONICAL STORE] — value has no store home at all. Creating
+ *   one is a dedicated lot (new store + wire-up), not an accessor flip.
  * ──────────────────────────────────────────────────────────────────────────
  */
 
@@ -38,7 +56,7 @@ import { useATStore } from '../stores/atStore'
 
 // ── Store-backed getters (read from Zustand, fallback to window.*) ──
 
-/** AT enabled — store-backed (canonical since Phase 3). */
+/** AT enabled — [STORE-BACKED] (canonical since Phase 3, bridged by useATBridge). */
 export function getATEnabled(): boolean {
   try {
     return useATStore.getState().enabled
@@ -56,33 +74,33 @@ export function getSignalData(): { bullCount: number; bearCount: number; signals
   return sd ? { bullCount: sd.bullCount || 0, bearCount: sd.bearCount || 0, signals: sd.signals ? [...sd.signals] : [] } : { bullCount: 0, bearCount: 0, signals: [] }
 }
 
-/** RSI by timeframe — [STORE CANDIDATE: marketStore.rsi] */
+/** RSI by timeframe — [STORE CANDIDATE — POPULATION DEBT] marketStore.rsi */
 export function getRSI(tf: string): number | null {
   const w = window as any
   return w.S?.rsi?.[tf] ?? null
 }
 
-/** Long/Short ratio — [STORE CANDIDATE: marketStore.ls] */
+/** Long/Short ratio — [STORE CANDIDATE — POPULATION DEBT] marketStore.ls */
 export function getLS(): { l: number; s: number } | null {
   const w = window as any
   return w.S?.ls || null
 }
 
-/** Funding rate — [STORE CANDIDATE: marketStore.fr] */
+/** Funding rate — [STORE CANDIDATE — POPULATION DEBT] marketStore.fr */
 export function getFR(): number | null {
   const w = window as any
   const fr = w.S?.fr
   return fr !== null && fr !== undefined ? fr : null
 }
 
-/** Open Interest + stale check — [STORE CANDIDATE: marketStore.oi/oiPrev]
+/** Open Interest + stale check — [STORE CANDIDATE — POPULATION DEBT] marketStore.oi/oiPrev
  *  (oiTs has no store field yet — would need widening first.) */
 export function getOI(): { oi: number | null; oiPrev: number | null; oiTs: number | null } {
   const w = window as any
   return { oi: w.S?.oi ?? null, oiPrev: w.S?.oiPrev ?? null, oiTs: w.S?.oiTs ?? null }
 }
 
-/** Funding rate countdown timestamp — [STORE CANDIDATE: marketStore.frCd] */
+/** Funding rate countdown timestamp — [STORE CANDIDATE — POPULATION DEBT] marketStore.frCd */
 export function getFRCountdown(): number {
   return (window as any).S?.frCd || 0
 }
@@ -93,16 +111,16 @@ export function getFG(): number {
   return (window as any).S?.fg || 50
 }
 
-/** ATR (Average True Range) — [STORE CANDIDATE: marketStore.atr] */
+/** ATR (Average True Range) — [STORE CANDIDATE — POPULATION DEBT] marketStore.atr */
 export function getATR(): number {
   return (window as any).S?.atr || 0
 }
 
 // ── Added in 8B-rest ──
 
-/** Timezone — [STORE CANDIDATE: marketStore.tz or settingsStore.tz]
- *  Both stores happen to carry it; marketStore has it today, settings owns
- *  user preference. Pick settingsStore when engine cutover happens. */
+/** Timezone — [STORE CANDIDATE — POPULATION DEBT] marketStore.tz / settingsStore.tz
+ *  Both stores carry it but legacy tz writes go to `window.S.tz`; settings
+ *  owns user preference. Pick settingsStore when engine cutover happens. */
 export function getTimezone(): string {
   return (window as any).S?.tz || 'Europe/Bucharest'
 }
@@ -121,7 +139,7 @@ export function getPerf(): Record<string, any> {
   return snap
 }
 
-/** Journal entries — [STORE CANDIDATE: journalStore or positionsStore.journal]
+/** Journal entries — [STORE CANDIDATE — POPULATION DEBT] journalStore / positionsStore.journal
  *  positionsStore got `journal` in R9 (Phase 7 tail); journalStore also
  *  exists. Consolidation required before switching the reader. */
 export function getJournal(): any[] {
@@ -132,12 +150,14 @@ export function getJournal(): any[] {
 
 // ── Added in 8E-1 (QM state redirect) ──
 
-/** Current price — [STORE CANDIDATE: marketStore.price] */
+/** Current price — [STORE CANDIDATE — POPULATION DEBT] marketStore.price
+ *  marketStore.setPrice is only called from TradingChart / useForecastEngine;
+ *  engine writes via `window.S.price = …` don't propagate. */
 export function getPrice(): number {
   return (window as any).S?.price || 0
 }
 
-/** Current symbol — [STORE CANDIDATE: marketStore.symbol] */
+/** Current symbol — [STORE CANDIDATE — POPULATION DEBT] marketStore.symbol */
 export function getSymbol(): string {
   return (window as any).S?.symbol || 'BTCUSDT'
 }
@@ -150,13 +170,13 @@ export function getKlines(): any[] {
   return Array.isArray(kl) ? [...kl] : []
 }
 
-/** Order book bids — [STORE CANDIDATE: marketStore.bids] */
+/** Order book bids — [STORE CANDIDATE — POPULATION DEBT] marketStore.bids */
 export function getBids(): any[] {
   const b = (window as any).S?.bids
   return Array.isArray(b) ? [...b] : []
 }
 
-/** Order book asks — [STORE CANDIDATE: marketStore.asks] */
+/** Order book asks — [STORE CANDIDATE — POPULATION DEBT] marketStore.asks */
 export function getAsks(): any[] {
   const a = (window as any).S?.asks
   return Array.isArray(a) ? [...a] : []
@@ -176,28 +196,38 @@ export function getTeacher(): any | null {
 
 // ── Added in 8C-2A1 (brain.ts safe lot) ──
 
-/** AT kill triggered — store-backed with legacy fallback. */
+/** AT kill triggered — [STORE-BACKED] (bridged by useATBridge). */
 export function getATKillTriggered(): boolean {
   try { return useATStore.getState().killTriggered } catch (_) {}
   return !!(window as any).AT?.killTriggered
 }
 
-/** AT last trade timestamp — [STORE CANDIDATE: atStore.lastTradeTs] */
+/** AT last trade timestamp — [STORE CANDIDATE — POPULATION DEBT]
+ *  atStore has a `lastTradeTs` field but useATBridge (hooks/useATBridge.ts:22-33)
+ *  does not sync it. Flipping now would read stale 0. Deferred until bridge
+ *  is widened or autotrade.ts writes it via store setter directly. */
 export function getATLastTradeTs(): number {
   return (window as any).AT?.lastTradeTs || 0
 }
 
-/** AT closed trades today — [STORE CANDIDATE: atStore.closedTradesToday] */
+/** AT closed trades today — [STORE-BACKED] (bridged by useATBridge). */
 export function getATClosedToday(): number {
+  try { return useATStore.getState().closedTradesToday } catch (_) {}
   return (window as any).AT?.closedTradesToday || 0
 }
 
-/** AT daily PnL — [STORE CANDIDATE: atStore.dailyPnL] */
+/** AT daily PnL — [STORE-BACKED] (bridged by useATBridge → dailyPnL + realizedDailyPnL). */
 export function getATDailyPnL(): number {
+  try {
+    const s = useATStore.getState()
+    return s.dailyPnL || s.realizedDailyPnL || 0
+  } catch (_) {}
   return (window as any).AT?.dailyPnL || (window as any).AT?.realizedDailyPnL || 0
 }
 
-/** TC max positions — [STORE CANDIDATE: settingsStore.maxPos] */
+/** TC max positions — [STORE CANDIDATE — POPULATION DEBT] settingsStore.maxPos
+ *  TC config is written directly to `window.TC` by settings flow; settingsStore
+ *  mirrors it only at hydrate time. Safer to keep legacy read until cutover. */
 export function getTCMaxPos(): number {
   const w = window as any
   return (typeof w.TC !== 'undefined' && w.TC.maxPos) || 3
@@ -215,20 +245,22 @@ export function getTCSize(): number {
   return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.size)) ? w.TC.size : 200
 }
 
-/** DSL mode — [STORE CANDIDATE: dslStore.mode] */
+/** DSL mode — [STORE CANDIDATE — POPULATION DEBT] dslStore.mode
+ *  dslStore has setMode but legacy autotrade.ts writes `window.DSL.mode = 'atr'`
+ *  directly. Flipping now would drift. */
 export function getDSLMode(): string {
   return (window as any).DSL?.mode || 'atr'
 }
 
 // ── Added in 8C-2A2 (brain.ts market reads) ──
 
-/** 24h volume — [STORE CANDIDATE: marketStore.vol24h — field missing]
- *  Store would need widening first. */
+/** 24h volume — [BRIDGE — NO CANONICAL STORE]
+ *  marketStore does not have a vol24h field. Would need store widening. */
 export function getVol24h(): number {
   return (window as any).S?.vol24h || 0
 }
 
-/** Magnet bias direction — [STORE CANDIDATE: marketStore.magnetBias] */
+/** Magnet bias direction — [STORE CANDIDATE — POPULATION DEBT] marketStore.magnetBias */
 export function getMagnetBias(): string {
   return (window as any).S?.magnetBias || 'neut'
 }
@@ -312,7 +344,8 @@ export function getATObject(): any {
   return (window as any).AT
 }
 
-/** TC signal minimum — [STORE CANDIDATE: settingsStore.sigMin] */
+/** TC signal minimum — [STORE CANDIDATE — POPULATION DEBT] settingsStore.sigMin
+ *  Same caveat as getTCMaxPos: TC config is written directly to `window.TC`. */
 export function getTCSignalMin(): number {
   return (window as any).TC?.sigMin || 3
 }
@@ -328,22 +361,37 @@ export function getTPObject(): any {
   return (window as any).TP
 }
 
+/** AT mode — [STORE-BACKED] (bridged by useATBridge → mode). */
 export function getATMode(): string {
+  try {
+    const m = useATStore.getState().mode
+    if (m) return m
+  } catch (_) {}
   return (window as any).AT?.mode || (window as any).AT?._serverMode || 'demo'
 }
 
+/** Demo positions — [STORE CANDIDATE — POPULATION DEBT] positionsStore.demoPositions
+ *  autotrade.ts mutates `window.TP.demoPositions` in place and pushes a slice()
+ *  to positionsStore after each change; reads from TP remain canonical until
+ *  autotrade.ts is rewritten. */
 export function getDemoPositions(): any[] {
   return (window as any).TP?.demoPositions || []
 }
 
+/** Live positions — [STORE CANDIDATE — POPULATION DEBT] positionsStore.livePositions
+ *  Same pattern as getDemoPositions. */
 export function getLivePositions(): any[] {
   return (window as any).TP?.livePositions || []
 }
 
+/** DSL enabled flag — [STORE CANDIDATE — POPULATION DEBT] dslStore.enabled
+ *  Engine writes `window.DSL.enabled` directly; no bridge to dslStore. */
 export function getDSLEnabled(): boolean {
   return !!(window as any).DSL?.enabled
 }
 
+/** DSL positions map — [BRIDGE — NO CANONICAL STORE]
+ *  dslStore does not hold a per-position map. */
 export function getDSLPositions(): Record<string, any> {
   return (window as any).DSL?.positions || {}
 }
