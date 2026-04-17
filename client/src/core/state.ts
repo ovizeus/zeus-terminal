@@ -424,6 +424,7 @@ export const ZState = (() => {
           size: p.size, lev: p.lev, tp: p.tp, sl: p.sl,
           liqPrice: p.liqPrice, autoTrade: !!p.autoTrade,
           openTs: p.openTs || p.id, isLive: !!p.isLive,
+          _serverSeq: p._serverSeq || null,
           mode: p.mode || 'demo',
           controlMode: p.controlMode || null,
           sourceMode: p.sourceMode || null,
