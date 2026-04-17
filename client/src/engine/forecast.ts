@@ -243,7 +243,7 @@ export function decideExitAction(risk: number, _posDir: string, dslActive: boole
     // risk >= emergencyTh
     if (!confirmed) return 'TIGHTEN_HARD' // need 2-bar confirm for EMERGENCY
     if (dslActive) {
-      const smartOn = useSettingsStore.getState().smartExitEnabled === true
+      const smartOn = useSettingsStore.getState().settings.smartExitEnabled === true
       const divConf = w.BM.qexit.signals.divergence.conf >= 70
       const climConf = w.BM.qexit.signals.climax.mult >= 3
       const doubleConfirmed = divConf && climConf
@@ -272,7 +272,7 @@ export function applyQuantumExit(pos: any): void {
       return
     }
 
-    const smartOn = useSettingsStore.getState().smartExitEnabled === true
+    const smartOn = useSettingsStore.getState().settings.smartExitEnabled === true
     const dslActive = (typeof w.DSL !== 'undefined') &&
       w.DSL.enabled &&
       w.DSL.positions &&
@@ -460,7 +460,7 @@ function _qebUpdateRiskUI(): void {
 
     // Advisory line
     if (advEl) {
-      const smartOn = useSettingsStore.getState().smartExitEnabled === true
+      const smartOn = useSettingsStore.getState().settings.smartExitEnabled === true
       advEl.innerHTML = smartOn
         ? _ZI.bolt + ' Smart Exit ENABLED \u2014 emergency actions may execute.'
         : _ZI.eye + ' Advisory mode \u2014 enable Smart Exit in Settings Hub to allow auto-exec.'

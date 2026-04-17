@@ -300,7 +300,7 @@ export function calcSRTable(): void {
 function checkRSIAlerts(rsi: number, tf: string): void {
   if (!w.S.alerts.rsiAlerts) return
   const key = 'rsi_' + tf
-  if (!checkRSIAlerts._last) checkRSIAlerts._last = {} as any
+  if (!(checkRSIAlerts as any)._last) (checkRSIAlerts as any)._last = {}
   if ((checkRSIAlerts as any)._last[key] && Date.now() - (checkRSIAlerts as any)._last[key] < 300000) return
   if (rsi > 70) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERBOUGHT', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
   if (rsi < 30) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERSOLD', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }

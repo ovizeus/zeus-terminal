@@ -47,12 +47,21 @@ interface LegacyChart {
   tf?: string
   colors?: Record<string, unknown> | null
   heatmap?: Record<string, unknown> | null
+  tz?: number | null
 }
 interface LegacyUserSettings {
   autoTrade?: LegacyAutoTrade
   chart?: LegacyChart
   indicators?: Record<string, unknown> | null
   alerts?: Record<string, unknown> | null
+  profile?: string
+  bmMode?: string
+  assistArmed?: boolean
+  manualLive?: boolean
+  ptLevDemo?: number
+  ptLevLive?: number
+  ptMarginMode?: string
+  dslSettings?: Record<string, unknown> | null
 }
 interface LegacyTC {
   confMin?: number

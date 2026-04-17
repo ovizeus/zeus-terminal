@@ -70,8 +70,8 @@ function runBrain() {
     openPositionCount: pos.demoPositions.length + pos.livePositions.length,
     lastTradeSide: at.lastTradeSide ?? null,
     lastTradeTs: at.lastTradeTs,
-    lossStreak: brain.lossStreak ?? 0,
-    dailyTrades: brain.dailyTrades ?? 0,
+    lossStreak: brain.brain.lossStreak ?? 0,
+    dailyTrades: brain.brain.dailyTrades ?? 0,
     profile,
   }
 
@@ -79,7 +79,7 @@ function runBrain() {
 
   // Map results to brainStore shape
   useBrainStore.getState().patch({
-    mode: brain.mode || 'assist',
+    mode: brain.brain.mode || 'assist',
     confluenceScore: result.entryScore, // confluence ~ entry score
     danger: result.danger,
     entryScore: result.entryScore,
@@ -145,7 +145,7 @@ function runBrain() {
 
     // Liq cycle from sweep data
     liqCycle: {
-      ...brain.liqCycle,
+      ...brain.brain.liqCycle,
       currentSweep: result.sweep.type,
       sweepDisplacement: result.sweep.displacement,
       magnetBias: result.dir === 'long' ? 'up' : 'down',

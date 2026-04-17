@@ -41,6 +41,15 @@ export const AT = {
   _lastBlockTs: 0,
   _lastBlockLogKey: '' as string,
   _lastBlockLogTs: 0,
+  killLoss: 0,
+  killLimit: 0,
+  killBalRef: 0,
+  killReason: null as string | null,
+  killModeAtTrigger: null as string | null,
+  killActiveAt: 0,
+  _modeConfirmed: false,
+  _liveExecInFlight: false,
+  _wrLogTs: 0,
 }
 
 // ── Predator state ──

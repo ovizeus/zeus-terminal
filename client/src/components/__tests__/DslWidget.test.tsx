@@ -12,13 +12,13 @@ const mockPos: Position = {
 
 describe('DslWidget', () => {
   it('returns null when DSL disabled', () => {
-    useDslStore.setState({ dsl: { ...useDslStore.getState().dsl, enabled: false } })
+    useDslStore.setState({ enabled: false })
     const { container } = render(<DslWidget position={mockPos} />)
     expect(container.innerHTML).toBe('')
   })
 
   it('renders WAITING when DSL enabled but not active', () => {
-    useDslStore.setState({ dsl: { ...useDslStore.getState().dsl, enabled: true } })
+    useDslStore.setState({ enabled: true })
     render(<DslWidget position={mockPos} />)
     expect(screen.getByText('WAITING')).toBeInTheDocument()
   })

@@ -63,7 +63,7 @@ export function useForecastEngine(authenticated: boolean) {
 
     // Determine position direction from open positions
     const allPositions = [...pos.demoPositions, ...pos.livePositions]
-    const openPos = allPositions.find(p => !p.closed)
+    const openPos = allPositions.find(p => p.status === 'OPEN')
     const posDir: 'LONG' | 'SHORT' = openPos?.side === 'SHORT' ? 'SHORT' : 'LONG'
     const hasOpenPosition = !!openPos
 

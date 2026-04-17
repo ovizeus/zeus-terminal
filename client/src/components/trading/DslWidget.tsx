@@ -2,8 +2,8 @@ import { useDslStore } from '../../stores'
 import type { Position } from '../../types'
 
 export function DslWidget({ position }: { position: Position }) {
-  const dslPositions = useDslStore((s) => s.dsl.positions)
-  const dslEnabled = useDslStore((s) => s.dsl.enabled)
+  const dslPositions = useDslStore((s) => s.positions)
+  const dslEnabled = useDslStore((s) => s.enabled)
 
   const dslState = dslPositions[String(position.seq)]
   const progress = position.dslProgress

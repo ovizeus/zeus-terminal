@@ -628,7 +628,7 @@ export function hubPopulate(): void {
     // ── Auto Trade (populate AT panel toggles) ──────────────────
     const ss = useSettingsStore.getState()
     const atSeEl = document.getElementById('atSmartExit') as HTMLInputElement | null
-    if (atSeEl) atSeEl.checked = ss.smartExitEnabled === true
+    if (atSeEl) atSeEl.checked = ss.settings.smartExitEnabled === true
     const atAdaptEl = document.getElementById('atAdaptEnabled') as HTMLInputElement | null
     const BM = getBrainMetrics()
     if (atAdaptEl) atAdaptEl.checked = BM?.adapt && BM.adapt.enabled === true

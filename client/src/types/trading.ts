@@ -101,13 +101,18 @@ export interface ATStats {
   closedTradesToday: number
 }
 
-/** AT log entry */
+/** AT log entry — engine action fields and legacy display fields coexist
+ * until the UI panel migrates off the display-shaped rows produced by
+ * atLog() / atStore.ui.logEntries. */
 export interface ATLogEntry {
-  ts: number
-  action: string
+  ts?: number
+  action?: string
   symbol?: string
   side?: string
   reason?: string
+  time?: string
+  type?: string
+  msg?: string
 }
 
 /**

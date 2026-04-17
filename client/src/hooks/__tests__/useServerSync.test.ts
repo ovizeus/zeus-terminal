@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { usePositionsStore } from '../../stores/positionsStore'
 import { useATStore } from '../../stores/atStore'
-import type { ServerATState, Position } from '../../types'
+import type { Position } from '../../types'
 
 function mockPosition(overrides: Partial<Position> = {}): Position {
   return {
@@ -25,9 +25,9 @@ describe('server sync store updates', () => {
     const demoPos = mockPosition({ seq: 1, mode: 'demo' })
     const livePos = mockPosition({ seq: 2, mode: 'live' })
 
-    // Simulate what useServerSync does
-    const data: ServerATState = {
-      mode: 'demo',
+    // Simulate what useServerSync does (test uses ATStats-shape stats — patch path accepts both)
+    const data = {
+      mode: 'demo' as const,
       positions: [demoPos, livePos],
       demoBalance: 9500,
       stats: { totalTrades: 5, wins: 3, losses: 2, totalPnL: 120, dailyPnL: 50, realizedDailyPnL: 30, closedTradesToday: 2, dailyStart: 'Thu Apr 03 2026' },

@@ -16,8 +16,8 @@ export function SettingsModal() {
   const toggleSettings = useUiStore((s) => s.toggleSettings)
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
-  const tc = useSettingsStore((s) => s.tc)
-  const setTC = useSettingsStore((s) => s.setTC)
+  const tc = useSettingsStore((s) => s.settings)
+  const setTC = useSettingsStore((s) => s.patch)
   const email = useAuthStore((s) => s.email)
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const [tab, setTab] = useState<Tab>('general')
@@ -97,8 +97,8 @@ export function SettingsModal() {
                   type="number"
                   min={0.1}
                   step={0.1}
-                  value={tc.slPct}
-                  onChange={(e) => setTC({ slPct: Number(e.target.value) || 0.5 })}
+                  value={tc.sl}
+                  onChange={(e) => setTC({ sl: Number(e.target.value) || 0.5 })}
                 />
               </label>
               <label className="zr-settings__label">

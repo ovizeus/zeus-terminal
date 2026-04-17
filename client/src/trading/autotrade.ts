@@ -444,7 +444,7 @@ export function computeFusionDecision(): any {
   let prob: any = null
   try {
     if (typeof computeProbScore === 'function') {
-      const r = computeProbScore()
+      const r: any = computeProbScore()
       if (Number.isFinite(+r)) prob = +r
       else if (r && Number.isFinite(+r.score)) prob = +r.score
       else if (r && Number.isFinite(+r.confidence)) prob = +r.confidence
