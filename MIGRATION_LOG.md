@@ -35,7 +35,7 @@ Fiecare fază are: pre-check, backup, execuție, teste, GO/NO-GO, lecții.
 | 6 dslStore+brainStore canonic | ✓ done | — | `migration/phase-06-post` | syncFromEngine=0 | 8 commits (C1→C7) + 2 pre-C7 BlockReason inversions; `dslStore` + `brainStore` canonical; `window.DSL` + `window.BM` Proxy read-compat; `useDSLBridge` + `useBrainBridge` deleted; `syncFromEngine` removed from both stores; `blockReason` write-path canonical at all 20 known sites; `aresStore.syncFromEngine` deferred (out of scope) |
 | 7 Kill DOM-as-state | ✓ done | `migration/phase-7-pre` | `migration/phase-07-post` | USER_SETTINGS consumers canonical + stale comments cleaned | Scope redus intenționat: consumer migration (4 read-sites) + stale comments (5 files); `window.USER_SETTINGS` Proxy respins (nesting risk); `window.TC` auditat OK (Phase 3 satisfăcut); `engine/aub.ts` deferred; Phase 5 OPEN ISSUE out of scope |
 | 8 SQLite-only persist | ✓ done | `migration/phase-08-pre` | `migration/phase-08-post` | 14 sections SQLite primary, FS stripped | 5 commits (C1→C5); migration 021_user_ctx_data; dual-read C2, dual-write C3, validated C4 (28/28 MATCH), FS write stopped C5; Phase 5.1 MITIGATED (not closed); Phase 8.1 FS prune deferred |
-| 9 Cleanup + TS strict global | pending | — | — | window.* only in bridge/ | v2.0.0 |
+| 9 Cleanup + TS strict | ✓ done | `migration/phase-09-pre` | `migration/phase-09-post` | syncFromEngine=0 in all stores, stores/services 0 TS errors | 3 commits; aresStore.syncFromEngine eliminated (engine push direct); partialPct audited→deferred; TS strict overlay 0 errors stores/services |
 
 ---
 
@@ -1339,5 +1339,78 @@ Verdict: PASS — zero drift
 
 **Status**: ✓ PHASE 8 COMPLETE — 14 sections migrated to SQLite,
 FS write stopped, validation PASS. Phase 8.1 FS prune deferred.
+
+---
+
+### Phase 9 — Cleanup + TS strict (2026-04-17)
+
+**Branch**: `migration/phase-09-cleanup`
+**Pre-tag**: `migration/phase-09-pre` (a59bd8f)
+**Base branch**: `migration/phase-08-sqlite-persist`
+
+#### Summary
+
+Final hygiene phase: eliminate last `syncFromEngine` pattern from stores,
+audit DOM-as-state candidates, resolve TS strict errors in stores/services.
+
+#### Commits
+
+| # | SHA | Description |
+|---|-----|-------------|
+| C1 | `44b85a6` | aresStore.syncFromEngine eliminated — engine push direct via patch() |
+| C2 | `cb65ad3` | partialPct DOM read audited → DEFERRED (no canonical source) |
+| C3+C4 | `5ac605c` | TS strict fixes stores/services + validation overlay |
+
+#### C1 Audit — aresStore.syncFromEngine
+
+- **What it synced:** wallet (balance, locked, available, realizedPnL, fundedTotal) + positions array
+- **Who called it:** single consumer — `useAresBridge` (App.tsx), listening to `zeus:aresStateChanged`
+- **Who emitted:** `engine/ares.ts` — `_save()` (wallet) and `_savePositions()` (positions)
+- **Verdict:** REMOVAL — pattern clear and small, zero tangling with ARES mission/wallet/UI
+- **What changed:** engine pushes directly to `aresStore.patch()` at mutation sites; `useAresBridge` deleted; `_readFromEngine` retained as private fallback for `loadFromServer`
+- Event `zeus:aresStateChanged` preserved (legacy compat by design)
+- `grep syncFromEngine stores/` → 0 functional hits (doc-only in dsl/brain)
+
+#### C2 Audit — partialPct DOM read
+
+- **Source:** `<input id="partialPct" value="50">` in innerHTML overlay (autotrade.ts:1762)
+- **Who sets it:** user types; default hardcoded 50
+- **Who reads it:** L1776 — `getElementById('partialPct').value` on OK button click
+- **Canonical source:** NONE — modal is imperative DOM, not React
+- **Verdict:** DEFER — requires new `PartialCloseModal.tsx` React component, beyond Phase 9 scope
+
+#### C3+C4 — TS strict stores/services
+
+- Created `tsconfig.phase9.strict.json` overlay (extends tsconfig.app.json, includes stores/** + services/**)
+- Fixed 3 errors:
+  - `positionsStore.ts:113`: `process.env.NODE_ENV` → `import.meta.env.DEV`
+  - `stateAccessors.ts:21,165`: `require('../stores/atStore')` → direct import
+- Result: **0 errors in stores/ + services/** (400 transitive errors in other dirs are pre-existing)
+- Overlay is validation-only — does not affect build or tsconfig.app.json
+
+#### What was NOT touched
+
+- `w.S`/`w.BM`/`w.AT`/`w.TC`/`w.TP`/`w.DSL` — 900+ usages, Phase 10+
+- `engine/aub.ts` DOM writes — deferred, scope too large
+- `_usBuildFlatPayload` + 9 legacy-only keys — SettingsPayload widening needed
+- `CLIENT_AT_STORE` feature flag — hardening follow-up
+- Phase 5.1 OPEN ISSUE — remains MITIGATED (not closed)
+- Phase 8.1 FS prune — soak period active
+- Hotfix manual panel — remains CLOSED
+- Legacy events — preserved by design
+- Stale comments (5 files) — already cleaned by Phase 7 C2, grep confirmed 0 hits
+- 400+ TS errors in core/engine/trading/data/components — out of scope
+
+#### SQLite sanity check
+
+Post-C5 (Phase 8) drift is expected: FS files have stale data for SQLite
+sections since FS write was stopped. SQLite is the authoritative source.
+6 sections show natural drift (FS older), 22 match, 0 missing.
+
+**Deferred register**: `project_migration_deferred_register.md`
+**Known bugs**: `project_known_bugs.md`
+
+**Status**: ✓ PHASE 9 COMPLETE — syncFromEngine=0 in all stores,
+stores/services TS strict clean, partialPct deferred.
 
 ---
