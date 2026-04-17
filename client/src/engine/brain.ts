@@ -2635,13 +2635,10 @@ export function updateOrderFlow(): any {
   const blendBuy = (BR.ofi.buy * 0.6 + buyPressure / tapeTot * 100 * 0.4)
   const blendSell = 100 - blendBuy
 
-  // Update UI
-  const buyEl = el('ofiBuy'), sellEl = el('ofiSell')
-  const buyPctEl = el('ofiBuyPct'), sellPctEl = el('ofiSellPct')
-  if (buyEl) buyEl.style.width = blendBuy.toFixed(0) + '%'
-  if (sellEl) sellEl.style.width = blendSell.toFixed(0) + '%'
-  if (buyPctEl) buyPctEl.textContent = 'BUY ' + blendBuy.toFixed(0) + '%'
-  if (sellPctEl) sellPctEl.textContent = 'SELL ' + blendSell.toFixed(0) + '%'
+  // [ZT5-D] Update UI through brainStatsStore (single writer, store-driven JSX)
+  useBrainStatsStore.getState().patchStats({
+    ofi: { buyPct: blendBuy, sellPct: blendSell },
+  })
 
   BR.ofi.blendBuy = blendBuy
   return blendBuy

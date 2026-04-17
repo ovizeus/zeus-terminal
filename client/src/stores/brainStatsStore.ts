@@ -65,6 +65,11 @@ export interface BrainRegimeBadge {
   cls: string
 }
 
+export interface BrainOfi {
+  buyPct: number
+  sellPct: number
+}
+
 export interface BrainStatsSnapshot {
   gates: BrainStatsNode
   regime: BrainStatsNode
@@ -77,6 +82,7 @@ export interface BrainStatsSnapshot {
   armBadge: BrainArmBadge
   regimeBadge2: BrainRegimeBadge
   regimeDetail: string
+  ofi: BrainOfi
 }
 
 const emptyNode: BrainStatsNode = { text: '—', sub: '—', tone: 'neutral' }
@@ -113,6 +119,7 @@ export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   armBadge: emptyArmBadge,
   regimeBadge2: emptyRegimeBadge,
   regimeDetail: 'ADX: — | VOL: — | STRUCT: —',
+  ofi: { buyPct: 50, sellPct: 50 },
 }
 
 interface BrainStatsStoreState {

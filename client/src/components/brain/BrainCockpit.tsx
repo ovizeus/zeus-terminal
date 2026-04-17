@@ -39,6 +39,25 @@ function ArmDetail() {
   )
 }
 
+function OfiBar() {
+  const s = useBrainStatsStore((st) => st.snapshot.ofi)
+  const b = s.buyPct.toFixed(0)
+  const se = s.sellPct.toFixed(0)
+  return (
+    <div className="znc-ofi">
+      <div style={{ fontSize: '6px', color: '#1a3020', letterSpacing: '1px', marginBottom: '2px' }}>ORDER FLOW</div>
+      <div className="ofi-bar">
+        <div className="ofi-buy" id="ofiBuy" style={{ width: b + '%' }}></div>
+        <div className="ofi-sell" id="ofiSell" style={{ width: se + '%' }}></div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '6px' }}>
+        <span id="ofiBuyPct" style={{ color: '#39ff1466' }}>BUY {b}%</span>
+        <span id="ofiSellPct" style={{ color: '#ff335566' }}>SELL {se}%</span>
+      </div>
+    </div>
+  )
+}
+
 function ReceiptBlock() {
   const s = useBrainStatsStore((st) => st.snapshot.receipt)
   return (
@@ -319,18 +338,8 @@ export const BrainCockpit = memo(function BrainCockpit() {
           <ArmDetail />
           <ReceiptBlock />
 
-          {/* OFI compact */}
-          <div className="znc-ofi">
-            <div style={{ fontSize: '6px', color: '#1a3020', letterSpacing: '1px', marginBottom: '2px' }}>ORDER FLOW</div>
-            <div className="ofi-bar">
-              <div className="ofi-buy" id="ofiBuy" style={{ width: '50%' }}></div>
-              <div className="ofi-sell" id="ofiSell" style={{ width: '50%' }}></div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '6px' }}>
-              <span id="ofiBuyPct" style={{ color: '#39ff1466' }}>BUY 50%</span>
-              <span id="ofiSellPct" style={{ color: '#ff335566' }}>SELL 50%</span>
-            </div>
-          </div>
+          {/* OFI compact — store-driven */}
+          <OfiBar />
         </div>{/* end right */}
       </div>{/* end body */}
 
