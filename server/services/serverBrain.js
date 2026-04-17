@@ -152,9 +152,17 @@ function _restoreStcFromDb() {
 
 function _persistCooldowns() {
     try {
-        const obj = {};
-        for (const [k, v] of _cooldowns) obj[k] = v;
-        db.atSetState('brain:cooldowns', obj, null);
+        const byUser = new Map();
+        for (const [k, v] of _cooldowns) {
+            const m = /^(\d+):/.exec(k);
+            if (!m) continue;
+            const uid = parseInt(m[1], 10);
+            if (!byUser.has(uid)) byUser.set(uid, {});
+            byUser.get(uid)[k] = v;
+        }
+        for (const [uid, obj] of byUser) {
+            db.atSetState('brain:cooldowns:' + uid, obj, uid);
+        }
     } catch (e) {
         logger.warn('BRAIN', '_persistCooldowns failed: ' + (e && e.message));
     }
@@ -162,10 +170,12 @@ function _persistCooldowns() {
 
 function _restoreCooldowns() {
     try {
-        const saved = db.atGetState('brain:cooldowns');
-        if (saved && typeof saved === 'object') {
-            const now = Date.now();
-            let restored = 0;
+        const users = db.listUsers ? db.listUsers() : [];
+        const now = Date.now();
+        let restored = 0;
+        for (const u of users) {
+            const saved = db.atGetState('brain:cooldowns:' + u.id);
+            if (!saved || typeof saved !== 'object') continue;
             for (const [k, v] of Object.entries(saved)) {
                 // Only restore cooldowns less than 10min old
                 if (typeof v === 'number' && (now - v) < 600000) {
@@ -173,8 +183,8 @@ function _restoreCooldowns() {
                     restored++;
                 }
             }
-            if (restored > 0) logger.info('BRAIN', `Restored ${restored} cooldown(s) from DB`);
         }
+        if (restored > 0) logger.info('BRAIN', `Restored ${restored} cooldown(s) from DB`);
     } catch (e) {
         logger.warn('BRAIN', '_restoreCooldowns failed: ' + (e && e.message));
     }

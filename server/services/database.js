@@ -338,6 +338,71 @@ migrate('021_user_ctx_data', () => {
     `);
 });
 
+// [R18] at_state cleanup: split brain:cooldowns NULL row per user, drop orphans (user_id not in users).
+migrate('022_at_state_cleanup', () => {
+    const oldRow = db.prepare("SELECT value FROM at_state WHERE key = 'brain:cooldowns' AND user_id IS NULL").get();
+    let splitReport = { users: 0, keys: 0 };
+    if (oldRow) {
+        let parsed = null;
+        try { parsed = JSON.parse(oldRow.value); } catch (_) { parsed = null; }
+        if (parsed && typeof parsed === 'object') {
+            const byUser = new Map();
+            for (const [k, v] of Object.entries(parsed)) {
+                const m = /^(\d+):/.exec(k);
+                if (!m) continue;
+                const uid = parseInt(m[1], 10);
+                if (!byUser.has(uid)) byUser.set(uid, {});
+                byUser.get(uid)[k] = v;
+            }
+            const userExists = db.prepare('SELECT 1 FROM users WHERE id = ?');
+            const insert = db.prepare('INSERT OR REPLACE INTO at_state (key, value, user_id) VALUES (?, ?, ?)');
+            const txn = db.transaction(() => {
+                for (const [uid, obj] of byUser) {
+                    if (!userExists.get(uid)) continue;
+                    insert.run('brain:cooldowns:' + uid, JSON.stringify(obj), uid);
+                    splitReport.users++;
+                    splitReport.keys += Object.keys(obj).length;
+                }
+            });
+            txn();
+        }
+        db.prepare("DELETE FROM at_state WHERE key = 'brain:cooldowns' AND user_id IS NULL").run();
+        console.log('[DB] at_state: split brain:cooldowns into', splitReport.users, 'per-user rows (', splitReport.keys, 'keys total)');
+    }
+
+    const orphanRes = db.prepare(`
+        DELETE FROM at_state
+        WHERE user_id IS NOT NULL
+          AND user_id NOT IN (SELECT id FROM users)
+    `).run();
+    if (orphanRes.changes > 0) console.log('[DB] at_state: deleted', orphanRes.changes, 'orphan rows (user_id not in users)');
+
+    const nullRes = db.prepare('DELETE FROM at_state WHERE user_id IS NULL').run();
+    if (nullRes.changes > 0) console.log('[DB] at_state: deleted', nullRes.changes, 'residual NULL user_id rows');
+});
+
+// [R18] at_state schema hardening: rebuild with user_id NOT NULL + FK CASCADE.
+migrate('023_at_state_harden', () => {
+    const nullCount = db.prepare('SELECT COUNT(*) AS c FROM at_state WHERE user_id IS NULL').get().c;
+    if (nullCount > 0) {
+        throw new Error('refusing to harden: ' + nullCount + ' NULL user_id rows still present');
+    }
+    db.exec(`
+        CREATE TABLE at_state__new (
+            key     TEXT    PRIMARY KEY,
+            value   TEXT    NOT NULL,
+            user_id INTEGER NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO at_state__new (key, value, user_id)
+            SELECT key, value, user_id FROM at_state;
+        DROP TABLE at_state;
+        ALTER TABLE at_state__new RENAME TO at_state;
+        CREATE INDEX IF NOT EXISTS idx_at_state_user ON at_state(user_id);
+    `);
+    console.log('[DB] at_state: rebuilt with user_id NOT NULL + FK CASCADE');
+});
+
 // ─── User methods ───
 
 const _stmts = {
