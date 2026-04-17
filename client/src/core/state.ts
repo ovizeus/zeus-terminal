@@ -988,8 +988,32 @@ export const ZState = (() => {
         if (p.autoTrade && !_serverLiveIds.has(String(p.id)) && !_serverLiveIds.has(String(p._serverSeq)) && (p._localOnly || !p._serverSeq)) return true
         return false
       })
-      TP.demoPositions = serverATDemo.concat(clientOnlyDemo)
-      TP.livePositions = serverATLive.concat(clientOnlyLive)
+      const _seenDemoIds = new Set<string>()
+      const _seenDemoSeqs = new Set<string>()
+      TP.demoPositions = serverATDemo.concat(clientOnlyDemo).filter(function (p: any) {
+        const pid = String(p.id)
+        if (_seenDemoIds.has(pid)) return false
+        _seenDemoIds.add(pid)
+        if (p._serverSeq) {
+          const sk = String(p._serverSeq)
+          if (_seenDemoSeqs.has(sk)) return false
+          _seenDemoSeqs.add(sk)
+        }
+        return true
+      })
+      const _seenLiveIds = new Set<string>()
+      const _seenLiveSeqs = new Set<string>()
+      TP.livePositions = serverATLive.concat(clientOnlyLive).filter(function (p: any) {
+        const pid = String(p.id)
+        if (_seenLiveIds.has(pid)) return false
+        _seenLiveIds.add(pid)
+        if (p._serverSeq) {
+          const sk = String(p._serverSeq)
+          if (_seenLiveSeqs.has(sk)) return false
+          _seenLiveSeqs.add(sk)
+        }
+        return true
+      })
       if (typeof renderLivePositions === 'function') renderLivePositions()
       if (state.demoBalance) {
         TP.demoBalance = state.demoBalance.balance || TP.demoBalance
