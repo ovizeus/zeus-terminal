@@ -33,15 +33,11 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
 ;(function _initUserScopedStorage() {
   let uid: any = null
   try {
-    const m = document.cookie.match(/zeus_token=([^;]+)/)
-    if (m) {
-      const parts = m[1].split('.')
-      if (parts.length >= 2) {
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-        uid = payload.id || null
-      }
-    }
-  } catch (_e) { /* not logged in or malformed token */ }
+    // zeus_token is httpOnly; read the non-httpOnly zeus_uid companion cookie
+    // set by server alongside zeus_token (see server/routes/auth.js _setAuthCookie).
+    const m = document.cookie.match(/zeus_uid=([^;]+)/)
+    if (m) uid = parseInt(m[1], 10) || null
+  } catch (_e) { /* not logged in */ }
   w._zeusUserId = uid
 
   const _USER_KEYS: any = {

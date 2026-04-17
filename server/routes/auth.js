@@ -148,7 +148,7 @@ function _checkLoginRateEmail(email) {
     return entry.count <= LOGIN_EMAIL_MAX;
 }
 
-function _setAuthCookie(res, token) {
+function _setAuthCookie(res, token, userId) {
     res.cookie('zeus_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // HTTPS only in prod (Cloudflare handles this)
@@ -156,6 +156,18 @@ function _setAuthCookie(res, token) {
         maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000, // [SC-02] matches JWT_EXPIRY
         path: '/'
     });
+    // [R21] Companion non-httpOnly cookie so client-side can read userId for
+    // per-user localStorage scoping. User id is not secret (session token
+    // stays httpOnly); this only exposes the id, not auth.
+    if (userId != null) {
+        res.cookie('zeus_uid', String(userId), {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+    }
 }
 
 // ─── POST /auth/register ───
@@ -204,7 +216,7 @@ router.post('/register', async (req, res) => {
         if (isFirst) {
             // Admin auto-login (JWT includes id + tokenVersion for session invalidation)
             const token = jwt.sign({ id: userId, email: normalEmail, role: 'admin', tokenVersion: 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-            _setAuthCookie(res, token);
+            _setAuthCookie(res, token, userId);
             resetActivity(userId, Date.now());
             logger.info('AUTH', 'Admin registered', { email: _mask(normalEmail) });
             return res.json({ ok: true, email: normalEmail, role: 'admin' });
@@ -369,7 +381,7 @@ router.post('/verify-code', (req, res) => {
         pendingCodes.delete(normalEmail);
         const freshUser = db.findUserById(pending.userId);
         const token = jwt.sign({ id: pending.userId, email: normalEmail, role: pending.role, tokenVersion: freshUser ? freshUser.token_version : 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-        _setAuthCookie(res, token);
+        _setAuthCookie(res, token, pending.userId);
         // Reset inactivity tracking so this fresh session isn't immediately
         // tripped by the previous session's stale last_active_at.
         resetActivity(pending.userId, Date.now());
@@ -386,6 +398,7 @@ router.post('/verify-code', (req, res) => {
 // ─── POST /auth/logout ───
 router.post('/logout', (req, res) => {
     res.clearCookie('zeus_token', { path: '/' });
+    res.clearCookie('zeus_uid', { path: '/' });
     res.json({ ok: true });
 });
 
@@ -404,9 +417,24 @@ router.get('/me', (req, res) => {
             userId = u ? u.id : null;
         }
 
+        // [R21] Refresh companion zeus_uid cookie on every /auth/me. This
+        // covers sessions that predate the R21 deploy (they have zeus_token
+        // but no zeus_uid) — /auth/me is the first server call on every
+        // boot, so uid is restored before any localStorage work.
+        if (userId != null) {
+            res.cookie('zeus_uid', String(userId), {
+                httpOnly: false,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+                path: '/'
+            });
+        }
+
         res.json({ ok: true, id: userId, email: decoded.email, role: decoded.role || 'user' });
     } catch (err) {
         res.clearCookie('zeus_token', { path: '/' });
+        res.clearCookie('zeus_uid', { path: '/' });
         res.status(401).json({ error: 'Token invalid' });
     }
 });
@@ -1007,7 +1035,7 @@ router.post('/change-password/confirm', async (req, res) => {
             { id: user.id, email: decoded.email, role: decoded.role, tokenVersion: freshUser.token_version },
             JWT_SECRET, { expiresIn: JWT_EXPIRY }
         );
-        _setAuthCookie(res, newToken);
+        _setAuthCookie(res, newToken, user.id);
 
         db.auditLog(user.id, 'CHANGE_PASSWORD_SUCCESS', {}, req.ip);
         logger.info('AUTH', 'Password changed', { email: _mask(decoded.email) });
@@ -1309,6 +1337,7 @@ router.post('/close-account/confirm', async (req, res) => {
 
         // Clear auth cookie
         res.clearCookie('zeus_token', { path: '/' });
+        res.clearCookie('zeus_uid', { path: '/' });
 
         db.auditLog(user.id, 'CLOSE_ACCOUNT_SUCCESS', { email: decoded.email }, req.ip);
         logger.info('AUTH', 'Account closed', { email: _mask(decoded.email) });
