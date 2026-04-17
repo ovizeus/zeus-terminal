@@ -59,9 +59,6 @@ router.get('/state', (req, res) => {
         }
         const raw = fs.readFileSync(sf, 'utf8');
         const data = JSON.parse(raw);
-        const _posCount = Array.isArray(data.positions) ? data.positions.length : 0;
-        const _closedCount = Array.isArray(data.closedIds) ? data.closedIds.length : 0;
-        console.log('[AUDIT][server][sync/read] uid=' + req.user.id + ' posCount=' + _posCount + ' closedIdsCount=' + _closedCount + ' ids=[' + (data.positions || []).map(p => p.id).join(',') + '] seqs=[' + (data.positions || []).map(p => p._serverSeq || 'none').join(',') + ']');
         res.json({ ok: true, data });
     } catch (e) {
         logger.warn('SYNC', 'Read state failed', { error: e.message });

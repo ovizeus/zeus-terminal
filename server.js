@@ -293,8 +293,6 @@ app.get('/api/tc/current', (_req, res) => {
 app.get('/api/at/state', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   const _st = serverAT.getFullState(_req.user.id);
-  const _demoPos = _st.demoPositions || [];
-  console.log('[AUDIT][server][at/state] uid=' + _req.user.id + ' openDemoCount=' + _demoPos.length + ' seqs=[' + _demoPos.map(p => p.seq).join(',') + '] autoTrade=[' + _demoPos.map(p => !!p.autoTrade).join(',') + ']');
   res.json(_st);
 });
 app.get('/api/at/positions', (_req, res) => {
@@ -378,9 +376,7 @@ app.post('/api/at/close', atCriticalLimit, (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Auth required' });
   const seq = parseInt(req.body.seq, 10);
   if (!Number.isFinite(seq)) return res.status(400).json({ error: 'Invalid seq' });
-  console.log('[AUDIT][server][at/close] uid=' + req.user.id + ' seq=' + seq + ' ts=' + Date.now());
   const result = serverAT.closeBySeq(req.user.id, seq);
-  console.log('[AUDIT][server][at/close] result=' + JSON.stringify(result));
   res.json(result);
 });
 // [BUG3 FIX] Client-initiated controlMode update (Take Control / Release)
