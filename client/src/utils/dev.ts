@@ -15,6 +15,7 @@ import { zeusGetTheme } from '../ui/theme'
 import { _enterRecoveryMode } from './guards'
 import { updateDeepDive } from '../engine/indicators'
 import { useSettingsStore } from '../stores/settingsStore'
+import { telegramApi } from '../services/api'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -712,12 +713,7 @@ export function hubTgSave(): void {
     return
   }
   // Token saved server-side only (encrypted) — never store in localStorage
-  // Push to server runtime config
-  fetch('/api/user/telegram', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ botToken: token, chatId: chatId })
-  }).then(function (r) { return r.json() }).then(function (d: any) {
+  telegramApi.save(token, chatId).then(function (d) {
     if (d.ok) {
       if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Saved + sent to server</span>'
       toast('Telegram saved', 0, _ZI?.ok)
@@ -736,10 +732,7 @@ export function hubTgTest(): void {
   hubTgSave()
   setTimeout(function () {
     if (statusEl) statusEl.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.mail + ' Sending test...</span>'
-    fetch('/api/user/telegram/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).then(function (r) { return r.json() }).then(function (d: any) {
+    telegramApi.test().then(function (d) {
       if (d.ok) {
         if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Test sent — check Telegram!</span>'
       } else {
@@ -756,7 +749,7 @@ export function hubTgPopulate(): void {
   const tokenEl = document.getElementById('hubTgBotToken') as HTMLInputElement | null
   const chatEl = document.getElementById('hubTgChatId') as HTMLInputElement | null
   // Fetch server-side config (token stored encrypted server-side, never in browser)
-  fetch('/api/user/telegram').then(function (r) { return r.json() }).then(function (d: any) {
+  telegramApi.fetchConfig().then(function (d) {
     if (d.configured) {
       if (chatEl) chatEl.value = d.chatId || ''
       if (tokenEl) tokenEl.placeholder = '(saved on server)'

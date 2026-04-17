@@ -270,8 +270,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       <div className="mbody" id="set-telegram" style={{display:tab==='telegram'?'block':'none'}}>
         <div className="msec">TELEGRAM BOT</div>
         <div style={{fontSize:'8px',color:'#6a9080',lineHeight:'1.6',marginBottom:'8px'}}>
-          Primești alerte pe Telegram: ordine, risk blocks, kill switch, reconciliation.<br/>
-          Creează un bot cu <span style={{color:'#4fc3f7'}}>@BotFather</span> → copiază token-ul → adaugă bot-ul în grup → ia Chat ID.
+          Receive alerts via Telegram: orders, risk blocks, kill switch, reconciliation.<br/>
+          Create a bot with <span style={{color:'#4fc3f7'}}>@BotFather</span> → copy the token → add the bot to a group → get the Chat ID.
         </div>
         <div className="mrow"><span className="mlbl">Bot Token</span><input type="password" id="hubTgBotToken" placeholder="123456:ABC-DEF..." style={inp} /></div>
         <div className="mrow"><span className="mlbl">Chat ID</span><input type="text" id="hubTgChatId" placeholder="-100123456789" style={inp} /></div>
@@ -280,13 +280,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <button id="hubTgTest" className="hub-sbtn" onClick={() => hubTgTest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> SEND TEST</button>
         </div>
         <div id="hubTgStatus" style={{marginTop:'6px',fontSize:'8px',color:'var(--dim)',minHeight:'14px'}}></div>
-        <div className="msec">CUM OBȚII</div>
+        <div className="msec">HOW TO GET IT</div>
         <div style={{fontSize:'7px',color:'#556677',lineHeight:'1.8'}}>
-          1. Deschide Telegram → caută <b>@BotFather</b> → <code>/newbot</code> → copiază token<br/>
-          2. Creează un grup sau folosește chat privat cu bot-ul<br/>
-          3. Trimite un mesaj în grup, apoi vizitează:<br/>
+          1. Open Telegram → search <b>@BotFather</b> → <code>/newbot</code> → copy the token<br/>
+          2. Create a group or use a private chat with the bot<br/>
+          3. Send a message in the group, then visit:<br/>
           <code style={{color:'#4fc3f7'}}>{'https://api.telegram.org/bot<TOKEN>/getUpdates'}</code><br/>
-          4. Caută <code>{'"chat":{"id":-100...}'}</code> — ăla e Chat ID-ul tău
+          4. Look for <code>{'"chat":{"id":-100...}'}</code> — that is your Chat ID
         </div>
       </div>
 

@@ -209,3 +209,29 @@ export const userSettingsApi = {
   save: (settings: UserSettingsPayload, opts?: ApiRequestOpts) =>
     api.raw<UserSettingsSaveResponse>('POST', '/api/user/settings', { settings }, opts),
 }
+
+// ── Telegram ──
+//
+// Typed wrapper for the per-user Telegram bot credentials endpoint.
+// Server routes live in server/routes/trading.js:
+//   GET  /api/user/telegram        → { configured, chatId }
+//   POST /api/user/telegram        → { ok } | 400/500 { error }
+//   POST /api/user/telegram/test   → { ok }
+// The raw variant is used for GET (direct shape, no wrapper) and the
+// wrapped `api.post` is used for the two POSTs so the 400/500 body (which
+// carries `{ error: '…' }`) is surfaced to the caller via ApiResponse.
+
+export interface TelegramConfig {
+  configured: boolean
+  chatId: string
+}
+
+export const telegramApi = {
+  /** GET /api/user/telegram — whether the user has Telegram credentials configured. */
+  fetchConfig: () => api.raw<TelegramConfig>('GET', '/api/user/telegram'),
+  /** POST /api/user/telegram — persist bot token (encrypted server-side) and chat id. */
+  save: (botToken: string, chatId: string) =>
+    api.post('/api/user/telegram', { botToken, chatId }),
+  /** POST /api/user/telegram/test — send a test message via the stored credentials. */
+  test: () => api.post('/api/user/telegram/test'),
+}
