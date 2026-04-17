@@ -60,3 +60,16 @@ public/app/
 
 # Deploy artifacts
 zeus-deploy.tar.gz
+
+# Backup debris (moved to /root/.backups-archive)
+.backups/
+**/.backups/
+*.bak
+*.bak[0-9]
+*.bak-*
+*.BAK-*
+public/app.BAK-*
+data/db_backups/
+data/zeus.db.*
+data/*_stale_*.json
+
