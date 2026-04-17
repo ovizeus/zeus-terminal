@@ -1,4 +1,30 @@
 import { devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, devClearLog, devExportLog } from '../../utils/dev'
+import { useQexitRiskStore } from '../../stores/qexitRiskStore'
+
+function QexitRiskStrip() {
+  const snap = useQexitRiskStore((s) => s.snapshot)
+  return (
+    <div className="qexit-bar-wrap" id="qexit-risk-strip" style={{ display: snap.visible ? 'block' : 'none' }}>
+      <div className="qexit-bar-row">
+        <span className="qexit-bar-label">EXIT RISK</span>
+        <div className="qexit-bar-track">
+          <div className="qexit-bar-fill" id="qexit-bar-fill" style={{ width: snap.risk + '%', background: snap.fillColor }}></div>
+        </div>
+        <span className="qexit-risk-val" id="qexit-risk-val" style={{ color: snap.valueColor }}>{snap.risk}</span>
+        <span className={'qexit-action ' + snap.action} id="qexit-action-badge">{snap.action}</span>
+      </div>
+      <div className="qexit-sigs" id="qexit-sigs-detail">
+        {snap.signals.map((sig, i) => (
+          <div key={i} className="qexit-sig-row">
+            <span className="qexit-sig-name">{sig.name}</span>{' '}
+            <span dangerouslySetInnerHTML={{ __html: sig.valueHtml }} />
+          </div>
+        ))}
+      </div>
+      <div className="qexit-advisory" id="qexit-advisory" style={{ color: snap.advisoryColor }} dangerouslySetInnerHTML={{ __html: snap.advisoryHtml }} />
+    </div>
+  )
+}
 
 export function AnalysisSections() {
   return (
@@ -724,18 +750,7 @@ export function AnalysisSections() {
           <span>SCENARIO ENGINE</span>
           <span id="scenario-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
         </div>
-        <div className="qexit-bar-wrap" id="qexit-risk-strip" style={{ display: 'none' }}>
-          <div className="qexit-bar-row">
-            <span className="qexit-bar-label">EXIT RISK</span>
-            <div className="qexit-bar-track">
-              <div className="qexit-bar-fill" id="qexit-bar-fill" style={{ width: '0%', background: '#556677' }}></div>
-            </div>
-            <span className="qexit-risk-val" id="qexit-risk-val" style={{ color: '#556677' }}>0</span>
-            <span className="qexit-action HOLD" id="qexit-action-badge">HOLD</span>
-          </div>
-          <div className="qexit-sigs" id="qexit-sigs-detail"></div>
-          <div className="qexit-advisory" id="qexit-advisory">Advisory mode &mdash; auto-exec disabled.</div>
-        </div>
+        <QexitRiskStrip />
         <div className="scenario-content" id="scenario-content">
           <div style={{ textAlign: 'center', padding: '14px', color: 'var(--dim)', fontSize: '10px', letterSpacing: '1px' }}>
             Waiting for market data...
