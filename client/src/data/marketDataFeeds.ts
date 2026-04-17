@@ -169,6 +169,9 @@ export async function fetchFG(): Promise<void> {
     const val = +d.data[0].value, cls = d.data[0].value_classification
     const colors: any = { 'Fear': '#ff8800', 'Extreme Fear': '#ff3355', 'Greed': '#00cc77', 'Extreme Greed': '#00ff99', 'Neutral': '#7a9ab8' }
     const col = colors[cls] || '#7a9ab8'
+    // [R29] Expose on w.S so downstream engines (risk.ts macro cortex) can
+    // read from canonical state instead of DOM textContent.
+    w.S.fearGreed = val
     const ev = el('fgval'); if (ev) { ev.textContent = val; ev.style.color = col }
     const el2 = el('fglbl'); if (el2) { el2.textContent = cls.toUpperCase(); el2.style.color = col }
     const efg = el('fgf'); if (efg) { efg.style.width = val + '%'; efg.style.background = col }

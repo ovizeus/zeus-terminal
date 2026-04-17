@@ -835,7 +835,9 @@ export function runSignalScan(): void {
   const bars = w.S.chartBars || []
   if (bars.length < 30) return
   const closes = bars.map((b: any) => b.close)
-  const rsiNow = w.S.rsiData?.['5m'] || parseFloat(document.getElementById('rn')?.textContent || '50') || 50
+  // [R29] Drop DOM fallback — w.S.rsiData is the canonical source (populated
+  // by fetchRSI in marketDataFeeds.ts). If absent, default to neutral 50.
+  const rsiNow = w.S.rsiData?.['5m'] || 50
   const rsi1h = w.S.rsiData?.['1h'] || 60
   const rsi4h = w.S.rsiData?.['4h'] || 60
   const price = w.S.price || 0

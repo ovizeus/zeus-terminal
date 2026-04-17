@@ -46,9 +46,11 @@ export function computeMacroCortex(): void {
     // Sentiment (0..15)
     var sentScore = 7
     try {
-      var fgEl = document.getElementById('fgval')
-      var fgRaw = fgEl ? parseInt(fgEl.textContent!) : NaN
-      if (!isNaN(fgRaw) && fgRaw >= 0 && fgRaw <= 100) {
+      // [R29] Read from w.S.fearGreed (canonical, set by fetchFG in
+      // marketDataFeeds.ts). Previous DOM read from #fgval.textContent was
+      // a DOM-as-state anti-pattern.
+      var fgRaw = typeof w.S !== 'undefined' ? Number(w.S.fearGreed) : NaN
+      if (Number.isFinite(fgRaw) && fgRaw >= 0 && fgRaw <= 100) {
         sentScore = _clamp(Math.round((fgRaw / 100) * 15), 0, 15)
       }
     } catch (_) { }
