@@ -9,6 +9,7 @@ import { macroAdjustExitRisk as _macroAdjustExitRisk } from '../trading/risk'
 import { DEV , devLog } from '../utils/dev'
 import { closeDemoPos } from '../data/marketDataClose'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useQexitRiskStore, type QexitAction, type QexitRiskSnapshot, type QexitSignalRow } from '../stores/qexitRiskStore'
 
 const w = window as any
 
@@ -407,65 +408,80 @@ export function runQuantumExitUpdate(): void {
   }
 }
 
-// ── Update risk bar UI ───────────────────────────────────────────
+// ── Update risk bar UI (store-driven — Option A) ─────────────────
+// [ZT4-A] Writes to qexitRiskStore; AnalysisSections renders from store.
 function _qebUpdateRiskUI(): void {
   try {
     const hasPos = typeof w.TP !== 'undefined' && w.TP.demoPositions &&
       w.TP.demoPositions.some(function (p: any) { return !p.closed })
-    const strip = document.getElementById('qexit-risk-strip')
-    if (strip) strip.style.display = hasPos ? '' : 'none'
-    if (!hasPos) return
+    if (!hasPos) {
+      useQexitRiskStore.getState().setSnapshot({
+        visible: false,
+        risk: 0,
+        action: 'HOLD',
+        fillColor: '#556677',
+        valueColor: '#556677',
+        signals: [],
+        advisoryHtml: 'Advisory mode &mdash; auto-exec disabled.',
+        advisoryColor: '#556677',
+      })
+      return
+    }
 
-    const risk = w.BM.qexit.risk
-    const action = w.BM.qexit.action
-
-    const fillEl = document.getElementById('qexit-bar-fill')
-    const valEl = document.getElementById('qexit-risk-val')
-    const badgeEl = document.getElementById('qexit-action-badge')
-    const sigsEl = document.getElementById('qexit-sigs-detail')
-    const advEl = document.getElementById('qexit-advisory')
-
+    const risk = w.BM.qexit.risk as number
+    const action = w.BM.qexit.action as QexitAction
     const col = risk < 40 ? '#556677' : risk < 60 ? '#f0c040' : risk < 80 ? '#ff8844' : '#ff2244'
-    if (fillEl) { (fillEl as HTMLElement).style.width = risk + '%'; (fillEl as HTMLElement).style.background = col }
-    if (valEl) { valEl.textContent = risk; (valEl as HTMLElement).style.color = col }
-    if (badgeEl) { badgeEl.textContent = action; badgeEl.className = 'qexit-action ' + action }
 
-    // Signal details
-    if (sigsEl) {
-      const sigs = w.BM.qexit.signals
-
-      const rows: string[] = []
-      if (sigs.divergence.type) {
-        rows.push('<span class="qexit-sig-name">DIVERGENCE</span> '
-          + (sigs.divergence.type === 'bear' ? '<span style="color:#ff4455">BEAR</span>' : '<span style="color:#00d97a">BULL</span>')
-          + ' <span style="color:#556677">conf ' + sigs.divergence.conf + '%</span>')
-      }
-      if (sigs.climax.dir) {
-        rows.push('<span class="qexit-sig-name">VOL CLIMAX</span> '
-          + (sigs.climax.dir === 'sell' ? '<span style="color:#ff4455">SELL</span>' : '<span style="color:#00d97a">BUY</span>')
-          + ' <span style="color:#556677">\u00D7' + sigs.climax.mult + ' avg</span>')
-      }
-      if (sigs.regimeFlip.from) {
-        rows.push('<span class="qexit-sig-name">REGIME FLIP</span> '
-          + '<span style="color:#f0c040">' + sigs.regimeFlip.from.toUpperCase() + ' \u2192 ' + sigs.regimeFlip.to.toUpperCase() + '</span>')
-      }
-      if (sigs.liquidity.nearestAboveDistPct !== null) {
-        rows.push('<span class="qexit-sig-name">LIQ ABOVE</span> '
-          + '<span style="color:#8fa0b0">+' + (sigs.liquidity.nearestAboveDistPct).toFixed(2) + '%</span>')
-      }
-      sigsEl.innerHTML = rows.map(function (r) {
-        return '<div class="qexit-sig-row">' + r + '</div>'
-      }).join('')
+    const sigs = w.BM.qexit.signals
+    const signals: QexitSignalRow[] = []
+    if (sigs.divergence.type) {
+      signals.push({
+        name: 'DIVERGENCE',
+        valueHtml: (sigs.divergence.type === 'bear'
+          ? '<span style="color:#ff4455">BEAR</span>'
+          : '<span style="color:#00d97a">BULL</span>')
+          + ' <span style="color:#556677">conf ' + sigs.divergence.conf + '%</span>',
+      })
+    }
+    if (sigs.climax.dir) {
+      signals.push({
+        name: 'VOL CLIMAX',
+        valueHtml: (sigs.climax.dir === 'sell'
+          ? '<span style="color:#ff4455">SELL</span>'
+          : '<span style="color:#00d97a">BUY</span>')
+          + ' <span style="color:#556677">\u00D7' + sigs.climax.mult + ' avg</span>',
+      })
+    }
+    if (sigs.regimeFlip.from) {
+      signals.push({
+        name: 'REGIME FLIP',
+        valueHtml: '<span style="color:#f0c040">' + sigs.regimeFlip.from.toUpperCase() + ' \u2192 ' + sigs.regimeFlip.to.toUpperCase() + '</span>',
+      })
+    }
+    if (sigs.liquidity.nearestAboveDistPct !== null) {
+      signals.push({
+        name: 'LIQ ABOVE',
+        valueHtml: '<span style="color:#8fa0b0">+' + (sigs.liquidity.nearestAboveDistPct).toFixed(2) + '%</span>',
+      })
     }
 
-    // Advisory line
-    if (advEl) {
-      const smartOn = useSettingsStore.getState().settings.smartExitEnabled === true
-      advEl.innerHTML = smartOn
-        ? _ZI.bolt + ' Smart Exit ENABLED \u2014 emergency actions may execute.'
-        : _ZI.eye + ' Advisory mode \u2014 enable Smart Exit in Settings Hub to allow auto-exec.'
-      ;(advEl as HTMLElement).style.color = smartOn ? 'var(--gold)' : '#556677'
+    const smartOn = useSettingsStore.getState().settings.smartExitEnabled === true
+    const advisoryHtml = smartOn
+      ? _ZI.bolt + ' Smart Exit ENABLED \u2014 emergency actions may execute.'
+      : _ZI.eye + ' Advisory mode \u2014 enable Smart Exit in Settings Hub to allow auto-exec.'
+    const advisoryColor = smartOn ? 'var(--gold)' : '#556677'
+
+    const next: QexitRiskSnapshot = {
+      visible: true,
+      risk,
+      action,
+      fillColor: col,
+      valueColor: col,
+      signals,
+      advisoryHtml,
+      advisoryColor,
     }
+    useQexitRiskStore.getState().setSnapshot(next)
   } catch (e) { /* silent */ }
 }
 
