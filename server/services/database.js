@@ -403,6 +403,14 @@ migrate('023_at_state_harden', () => {
     console.log('[DB] at_state: rebuilt with user_id NOT NULL + FK CASCADE');
 });
 
+// [R19] regime_history: add user_id column + index. Historical rows stay NULL
+// (legitimate — they predate per-user attribution). From this point, writes
+// fan out one row per active-brain user so per-user reads are isolated.
+migrate('024_regime_history_user_id', () => {
+    db.exec("ALTER TABLE regime_history ADD COLUMN user_id INTEGER DEFAULT NULL");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_regime_user ON regime_history(user_id)");
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -521,10 +529,10 @@ const _stmts = {
     missedByUser: db.prepare('SELECT id, symbol, side, reason, price, confidence, tier, regime, data, created_at FROM missed_trades WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'),
     missedPrune: db.prepare('DELETE FROM missed_trades WHERE user_id = ? AND id NOT IN (SELECT id FROM missed_trades WHERE user_id = ? ORDER BY created_at DESC LIMIT 200)'),
     // Regime history
-    regimeInsert: db.prepare('INSERT INTO regime_history (symbol, regime, prev_regime, confidence, price) VALUES (?, ?, ?, ?, ?)'),
-    regimeBySymbol: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, created_at FROM regime_history WHERE symbol = ? ORDER BY created_at DESC LIMIT ?'),
-    regimeRecent: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, created_at FROM regime_history ORDER BY created_at DESC LIMIT ?'),
-    regimePrune: db.prepare('DELETE FROM regime_history WHERE id NOT IN (SELECT id FROM regime_history ORDER BY created_at DESC LIMIT 500)'),
+    regimeInsert: db.prepare('INSERT INTO regime_history (symbol, regime, prev_regime, confidence, price, user_id) VALUES (?, ?, ?, ?, ?, ?)'),
+    regimeBySymbolUser: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, user_id, created_at FROM regime_history WHERE symbol = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?'),
+    regimeByUser: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, user_id, created_at FROM regime_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'),
+    regimePruneUser: db.prepare('DELETE FROM regime_history WHERE user_id = ? AND id NOT IN (SELECT id FROM regime_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 500)'),
 };
 
 // ─── Public API ───
@@ -1076,13 +1084,20 @@ module.exports = {
             return r;
         });
     },
-    // Regime history
-    saveRegimeChange: (symbol, regime, prevRegime, confidence, price) => {
-        _stmts.regimeInsert.run(symbol, regime, prevRegime || '', confidence || 0, price || 0);
-        _stmts.regimePrune.run(); // keep max 500
+    // Regime history (per-user; userId required)
+    saveRegimeChange: (symbol, regime, prevRegime, confidence, price, userId) => {
+        if (!userId) throw new Error('saveRegimeChange requires userId');
+        _stmts.regimeInsert.run(symbol, regime, prevRegime || '', confidence || 0, price || 0, userId);
+        _stmts.regimePruneUser.run(userId, userId); // keep max 500 per user
     },
-    getRegimeHistory: (symbol, limit) => _stmts.regimeBySymbol.all(symbol, limit || 100),
-    getRegimeHistoryAll: (limit) => _stmts.regimeRecent.all(limit || 100),
+    getRegimeHistory: (symbol, userId, limit) => {
+        if (!userId) throw new Error('getRegimeHistory requires userId');
+        return _stmts.regimeBySymbolUser.all(symbol, userId, limit || 100);
+    },
+    getRegimeHistoryByUser: (userId, limit) => {
+        if (!userId) throw new Error('getRegimeHistoryByUser requires userId');
+        return _stmts.regimeByUser.all(userId, limit || 100);
+    },
     // Brain decisions (ML data layer)
     bdInsert: (snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, data) => {
         _stmts.bdInsert.run(snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, JSON.stringify(data));

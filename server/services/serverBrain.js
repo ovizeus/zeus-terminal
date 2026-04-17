@@ -328,8 +328,12 @@ function _runCycle() {
             const prevRegimeForSym = _prevRegimes.get(symbol);
             if (prevRegimeForSym !== undefined && prevRegimeForSym !== regime.regime) {
                 logger.info('BRAIN', `[${symbol}] Regime change: ${prevRegimeForSym} → ${regime.regime} (conf=${regime.confidence}%)`);
-                // Persist regime change to SQLite
-                try { db.saveRegimeChange(symbol, regime.regime, prevRegimeForSym, regime.confidence, snap.price || 0); } catch (_) {}
+                // Persist per-user: each active-brain user gets their own row for isolation.
+                for (const _uid of _stcMap.keys()) {
+                    try {
+                        db.saveRegimeChange(symbol, regime.regime, prevRegimeForSym, regime.confidence, snap.price || 0, _uid);
+                    } catch (_) {}
+                }
                 const _regimeMsg = '🌐 *Regime Change* `' + symbol.replace('USDT', '') + '`\n' +
                     '`' + prevRegimeForSym + '` → *' + regime.regime + '*\n' +
                     'Confidence: `' + regime.confidence + '%`\n' +
