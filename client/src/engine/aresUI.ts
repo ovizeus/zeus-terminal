@@ -192,53 +192,17 @@ export function _aresRender() {
     if (!panel) return
     const st = w.ARES.getState()
     const col = st.current.color
-    const glow = st.current.glow
 
     // Cognitive clarity from ARES_MIND
     const clarity = ARES_MIND.getClarity()
     const pulseSpeed = ARES_MIND.getPulseSpeed()
     const predAcc = ARES_MIND.getPredictionAccuracy()
 
-    // Update badge in header — emoji + label written as text, not HTML
-    const badge = document.getElementById('ares-strip-badge')
-    if (badge) {
-      badge.textContent = st.current.emoji + ' ' + st.current.label
-      badge.style.color = col
-      badge.style.borderColor = col + '88'
-      badge.style.textShadow = `0 0 10px ${glow}`
-      badge.style.boxShadow = `0 0 8px ${glow}`
-    }
-    const confEl = document.getElementById('ares-strip-conf')
-    if (confEl) confEl.textContent = 'CONF ' + st.confidence + '%  ·  CLARITY ' + clarity + '%'
-
-    // ── v114: IMM + emotion + wound + stage + lob dots ────────────────────────
-
-    // 1) IMM — Immortality Score (progress spre 1M in %)
-    try {
-      const bal = (typeof w.ARES !== 'undefined' && w.ARES.wallet) ? w.ARES.wallet.balance : 0
-      const immPct = bal > 0 ? Math.min(100, +(bal / 10000).toFixed(2)) : 0
-      const immEl = document.getElementById('ares-imm-span')
-      if (immEl) immEl.textContent = ' · IMM ' + immPct.toFixed(1) + '%'
-    } catch (_) { }
-
-    // 2) Emotion suffix pe badge (derivat din stare + context)
-    try {
-      const EMOTION_MAP: any = {
-        DETERMINED: 'Focused',
-        RESILIENT: 'Recovering',
-        FOCUSED: 'Calm',
-        STRATEGIC: 'Ambition Rising',
-        MOMENTUM: 'High Energy',
-        FRUSTRATED: 'Pain Detected',
-        DEFENSIVE: 'Guard Mode',
-        REVENGE_GUARD: 'Revenge Guard',
-      }
-      const emotionEl = document.getElementById('ares-emotion-span')
-      if (emotionEl) {
-        const emo = EMOTION_MAP[st.current.id] || ''
-        emotionEl.textContent = emo ? ' — ' + emo : ''
-      }
-    } catch (_) { }
+    // [R28.2-C] Strip badge + conf + IMM + emotion are now React-owned
+    // (components/dock/ares/{StripBadge,StripConf,ImmSpan,EmotionSpan}.tsx)
+    // driven by useAresStore((s) => s.ui.core / .confidence / .immPct /
+    // .cognitive.clarity / .emotion). The sync adapter at the top of
+    // _aresRender populates those slices. No imperative write needed here.
 
     // 3) Mortal Wound (DEFENSIVE sau REVENGE_GUARD cu 3+ consecutive losses)
     try {
@@ -594,11 +558,8 @@ export function _aresRender() {
 
     } catch (_) { }
 
-    // ── COGNITIVE BAR update ─────────────────────────────────────────────
-    const cogFill = document.getElementById('ares-cog-fill') as any
-    const cogPct = document.getElementById('ares-cog-pct')
-    if (cogFill) cogFill.style.width = clarity + '%'
-    if (cogPct) cogPct.textContent = clarity + '%'
+    // [R28.2-C] Cognitive bar React-owned via <CognitiveBar /> subscribing to
+    // useAresStore((s) => s.ui.cognitive.clarity). No imperative write.
 
     // ── BRAIN SVG — Low-poly exact ca în imagine: creier lateral, fețe colorate, noduri albe ──
     const cx = 168, cy = 135
@@ -809,23 +770,9 @@ export function _aresRender() {
       }).join('')
     }
 
-    // ── STATS ROW — 4 celule (+ predicție) ──────────────────────────────
-    const statDelta = document.getElementById('ares-stat-delta') as any
-    const statDay = document.getElementById('ares-stat-day')
-    const statWR = document.getElementById('ares-stat-wr')
-    const statPred = document.getElementById('ares-stat-pred') as any
-    const st2 = w.ARES.getState()
-    if (statDelta) {
-      const d = st2.trajectoryDelta
-      statDelta.textContent = (d >= 0 ? '+' : '') + d + '%'
-      statDelta.style.color = d >= 0 ? '#00ff88' : '#ff4466'
-    }
-    if (statDay) statDay.textContent = Math.floor(st2.daysPassed) + ' / 365'
-    if (statWR) statWR.textContent = st2.winRate10 + '%'
-    if (statPred) {
-      statPred.textContent = predAcc != null ? predAcc + '%' : '\u2014'
-      statPred.style.color = predAcc != null ? (predAcc > 55 ? '#00d9ff' : '#ff9944') : '#445566'
-    }
+    // [R28.2-C] Stats row React-owned via <StatsRow /> subscribing to
+    // useAresStore((s) => s.ui.stats). No imperative write.
+    const st2 = w.ARES.getState(); void st2
 
     // Update mission arc
     _aresRenderArc()

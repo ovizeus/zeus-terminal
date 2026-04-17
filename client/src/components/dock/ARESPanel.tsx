@@ -4,6 +4,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useAresStore } from '../../stores'
 import { _aresRender } from '../../engine/aresUI'
+import { StripBadge } from './ares/StripBadge'
+import { StripConf } from './ares/StripConf'
+import { ImmSpan } from './ares/ImmSpan'
+import { EmotionSpan } from './ares/EmotionSpan'
+import { CognitiveBar } from './ares/CognitiveBar'
+import { StatsRow } from './ares/StatsRow'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -228,16 +234,18 @@ function generateBrainSVG(svgEl: SVGSVGElement) {
 }
 
 /**
- * [R7 CONTRACT] ARESPanel renders the static scaffold ONLY.
- * The `#ares-*` element subtree is owned at runtime by `engine/aresUI.ts`
- * which imperatively writes text/innerHTML/style per tick. To avoid
- * mixed-ownership (React wiping aresUI's writes on re-render), this
- * component MUST NOT re-render after mount — no subscriptions to
- * aresStore, no local state that flips on user interaction.
+ * ARESPanel scaffold.
  *
- * The strip open/close toggle uses a ref + `classList.toggle` directly
- * on the DOM, bypassing React entirely. This is the single-writer
- * invariant that closes R7 without a full Option A store migration.
+ * [R28.2] Migration in progress. Narrow subtrees are progressively
+ * moved to store-subscribing memo'd children (StripBadge, StripConf,
+ * ImmSpan, EmotionSpan, CognitiveBar, StatsRow, ...). The parent
+ * itself does NOT subscribe — only mounted children re-render on
+ * their own slices of `useAresStore((s) => s.ui.…)`. The sync
+ * adapter `engine/aresStoreSync.ts` populates those slices on every
+ * aresUI render tick.
+ *
+ * The strip open/close toggle still uses a ref + `classList.toggle`
+ * and will move to the store in R28.2-H.
  */
 export function ARESPanel() {
   const coreSvgRef = useRef<SVGSVGElement>(null)
@@ -275,10 +283,10 @@ export function ARESPanel() {
             <span style={{ fontSize: 11, color: '#00d9ff44', letterSpacing: 1 }}>NEURAL COMMAND</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span id="ares-strip-badge" style={{ color: '#00d9ff', borderColor: '#00d9ff88' }}>⚡ DETERMINED</span>
-            <span id="ares-strip-conf" style={{ fontSize: 11, color: '#00d9ff66' }}>CONF —%</span>
-            <span id="ares-imm-span"> · IMM —%</span>
-            <span id="ares-emotion-span"></span>
+            <StripBadge />
+            <StripConf />
+            <ImmSpan />
+            <EmotionSpan />
             <span id="ares-strip-chev">▼</span>
           </div>
         </div>
@@ -383,36 +391,11 @@ export function ARESPanel() {
         </svg>
       </div>
 
-      {/* ── COGNITIVE CLARITY BAR ── */}
-      <div id="ares-cog-bar">
-        <span id="ares-cog-label">CLARITATE COGNITIVĂ</span>
-        <div id="ares-cog-track"><div id="ares-cog-fill" style={{ width: '0%' }}></div></div>
-        <span id="ares-cog-pct">—</span>
-      </div>
+      {/* ── COGNITIVE CLARITY BAR (R28.2-C store-driven) ── */}
+      <CognitiveBar />
 
-      {/* ── STATS ROW ── */}
-      <div id="ares-stats-row">
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">TRAJECTORY Δ</div>
-          <div className="ares-stat-val" id="ares-stat-delta" style={{ color: '#00d9ff' }}>—</div>
-          <div className="ares-stat-sub">vs curve</div>
-        </div>
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">MISSION DAY</div>
-          <div className="ares-stat-val" id="ares-stat-day" style={{ color: '#00d9ff' }}>— / 365</div>
-          <div className="ares-stat-sub">elapsed</div>
-        </div>
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">WIN RATE</div>
-          <div className="ares-stat-val" id="ares-stat-wr" style={{ color: '#00d9ff' }}>—%</div>
-          <div className="ares-stat-sub">last 10</div>
-        </div>
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">PRED ACC</div>
-          <div className="ares-stat-val" id="ares-stat-pred" style={{ color: '#0080ff' }}>—</div>
-          <div className="ares-stat-sub">5min pred</div>
-        </div>
-      </div>
+      {/* ── STATS ROW (R28.2-C store-driven) ── */}
+      <StatsRow />
 
       {/* ── THOUGHT LOG ── */}
       <div id="ares-thought-wrap">
