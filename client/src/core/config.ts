@@ -534,49 +534,14 @@ export function _userCtxPushNow() {
 w._userCtxPushNow = _userCtxPushNow
 
 export function _userCtxPush() {
+  // [R2] Unify onto _ucPushBeacon — single throttled path, avoids duplicate POST spam
+  // (prev bug: parallel fetch here + beacon path produced 20+ POSTs/min per user).
+  // Callers get the same debounce shape: setTimeout 5s trailing, then beacon throttle.
   if (_ucPushTimer) clearTimeout(_ucPushTimer)
   _ucPushTimer = setTimeout(function _ucPushExec() {
-    try {
-      if (typeof w._zsMarkPush === 'function') w._zsMarkPush()
-      const payload = { _v: _ucVersion, ts: Date.now(), sections: _buildAllSections() }
-      fetch('/api/sync/user-context', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'same-origin'
-      }).then(function (r) {
-        if (!r.ok) { console.warn('[UC] push failed:', r.status); _ucPushPending = true; return null }
-        return r.json()
-      }).then(function (json: any) {
-        if (!json) return
-        console.log('[UC] \u2705 pushed'); _ucPushPending = false; _ucLastPushTs = Date.now()
-        if (json.storedSettings && json.storedSettings.data) {
-          try {
-            const sent = payload.sections.settings ? payload.sections.settings.data : null
-            const stored = json.storedSettings.data
-            if (sent && stored) {
-              const sentAT = typeof sent === 'string' ? JSON.parse(sent) : sent
-              const storedAT = typeof stored === 'string' ? JSON.parse(stored) : stored
-              if (sentAT.autoTrade && storedAT.autoTrade) {
-                const keys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin']
-                const mismatches: string[] = []
-                keys.forEach(function (k) {
-                  if (sentAT.autoTrade[k] !== storedAT.autoTrade[k]) {
-                    mismatches.push(k + ':sent=' + sentAT.autoTrade[k] + '/stored=' + storedAT.autoTrade[k])
-                  }
-                })
-                if (mismatches.length > 0) {
-                  console.error('[UC] \u26a0\ufe0f SETTINGS MISMATCH:', mismatches.join(', '))
-                  if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[UC] settings mismatch after push', { mismatches: mismatches })
-                } else {
-                  console.log('[UC] \u2705 settings validated \u2014 server matches client')
-                }
-              }
-            }
-          } catch (_) { /* */ }
-        }
-      }).catch(function (e: any) { console.warn('[UC] push err:', e.message); _ucPushPending = true })
-    } catch (_) { /* */ }
+    _ucPushTimer = null
+    if (typeof w._zsMarkPush === 'function') w._zsMarkPush()
+    _ucPushBeacon()
   }, 5000)
 }
 
