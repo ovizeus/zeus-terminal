@@ -2684,6 +2684,13 @@ async function _runReconciliation(isStartup) {
     _reconRunning = true;
     const label = isStartup ? 'STARTUP_RECON' : 'RECON';
     try {
+        // [batch2-L1] Evict stale _orphanPending entries: if first-detection is
+        // older than 3 recon cycles without a confirming re-detection, the orphan
+        // disappeared (user closed it manually on Binance), so drop the entry.
+        const _pendingStale = Date.now() - 3 * RECON_INTERVAL_MS;
+        for (const [k, v] of _orphanPending) {
+            if (v.firstSeen < _pendingStale) _orphanPending.delete(k);
+        }
         const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL'));
         if (livePositions.length === 0) return; // [B6] finally will reset _reconRunning
 
