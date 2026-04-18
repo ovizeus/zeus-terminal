@@ -450,7 +450,7 @@ router.get('/admin/users', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
             return res.status(403).json({ error: 'Admin only' });
         }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) {
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
             return res.status(401).json({ error: 'Session expired' });
         }
 
@@ -502,7 +502,7 @@ router.post('/admin/approve', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
             return res.status(403).json({ error: 'Admin only' });
         }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) {
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
             return res.status(401).json({ error: 'Session expired' });
         }
 
@@ -533,7 +533,7 @@ router.post('/admin/delete', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
             return res.status(403).json({ error: 'Admin only' });
         }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) {
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
             return res.status(401).json({ error: 'Session expired' });
         }
 
@@ -568,7 +568,7 @@ router.post('/admin/reject', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email required' });
         const normalEmail = email.toLowerCase().trim();
@@ -590,7 +590,7 @@ router.post('/admin/block', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
         const { email, block } = req.body; // block: true/false
         if (!email) return res.status(400).json({ error: 'Email required' });
         const normalEmail = email.toLowerCase().trim();
@@ -614,7 +614,7 @@ router.post('/admin/ban', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
         const { email, duration } = req.body; // duration: '1h','24h','7d','30d','permanent'
         if (!email || !duration) return res.status(400).json({ error: 'Email and duration required' });
         const normalEmail = email.toLowerCase().trim();
@@ -645,7 +645,7 @@ router.get('/admin/audit', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
 
         // [M10] True pagination — limit + offset, with total count
         const limit = parseInt(req.query.limit, 10) || 50;
@@ -663,7 +663,7 @@ function _adminGuard(req, res) {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') { res.status(403).json({ error: 'Admin only' }); return null; }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) { res.status(401).json({ error: 'Session expired' }); return null; }
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) { res.status(401).json({ error: 'Session expired' }); return null; }
         return { caller, decoded };
     } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
 }
