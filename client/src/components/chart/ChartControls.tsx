@@ -6,6 +6,7 @@ import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
 import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '../../ui/panels'
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 import { setSymbol } from '../../data/marketDataWS'
+import { openIndSettings } from '../../engine/indicators'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -60,29 +61,31 @@ const SYMBOLS: { label: string; items: { value: string; label: string }[] }[] = 
 
 /** Indicator definitions — 1:1 from INDICATORS in config.js lines 70-88 */
 // [batch3-A] IND_LIST extended with settingsModal/isOverlay/modalOnly flags.
-// settingsModal  : openModal(key) to show the gear panel for this indicator.
-// isOverlay      : toggle routes through togOvr (overlays.* store) instead of togInd.
-// modalOnly      : indicator has no on/off toggle, just a modal entry (e.g. OVI).
-type IndMeta = { id: string; ico: string; name: string; desc: string; settingsModal?: string; isOverlay?: boolean; modalOnly?: boolean }
+// [batch3-B] hasGenericSettings → gear opens openIndSettings(id) modal from engine/indicators.
+// settingsModal       : openModal(key) to show the gear panel for this indicator (custom UI).
+// hasGenericSettings  : gear opens the shared openIndSettings modal driven by IND_SETTINGS[id].
+// isOverlay           : toggle routes through togOvr (overlays.* store) instead of togInd.
+// modalOnly           : indicator has no on/off toggle, just a modal entry (e.g. OVI).
+type IndMeta = { id: string; ico: string; name: string; desc: string; settingsModal?: string; hasGenericSettings?: boolean; isOverlay?: boolean; modalOnly?: boolean }
 const IND_LIST: IndMeta[] = [
-  { id: 'ema', ico: '📈', name: 'EMA 50/200', desc: 'Exponential Moving Average' },
-  { id: 'wma', ico: '〰', name: 'WMA 20/50', desc: 'Weighted Moving Average' },
-  { id: 'st',  ico: '◆', name: 'Supertrend', desc: 'Trend + dynamic Stop Loss' },
-  { id: 'vp',  ico: '📊', name: 'Volume Profile', desc: 'Volume by price levels' },
-  { id: 'cvd', ico: '📊', name: 'CVD', desc: 'Cumulative Volume Delta' },
-  { id: 'macd', ico: '⚡', name: 'MACD', desc: 'Moving Avg Convergence Div' },
-  { id: 'bb',  ico: '◎', name: 'Bollinger Bands', desc: 'Volatility and trend' },
-  { id: 'stoch', ico: '〰', name: 'Stochastic RSI', desc: 'RSI smoothed with Stoch' },
-  { id: 'obv', ico: '📊', name: 'OBV', desc: 'On-Balance Volume' },
-  { id: 'atr', ico: '📏', name: 'ATR', desc: 'Average True Range - volat' },
-  { id: 'vwap', ico: '📊', name: 'VWAP', desc: 'Volume Weighted Avg Price' },
-  { id: 'ichimoku', ico: '☁', name: 'Ichimoku Cloud', desc: 'Full Japanese system' },
-  { id: 'fib', ico: '⬡', name: 'Fibonacci', desc: 'Auto retracement on swing' },
-  { id: 'pivot', ico: '◎', name: 'Pivot Points', desc: 'Daily Support/Resistance' },
-  { id: 'rsi14', ico: '⚡', name: 'RSI 14', desc: 'Relative Strength Index' },
-  { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'Volume-weighted RSI' },
-  { id: 'cci', ico: '📏', name: 'CCI', desc: 'Commodity Channel Index' },
-  // Moved from Row 2/Row 3 — overlays + OVI (modal-only).
+  { id: 'ema',      ico: '📈', name: 'EMA 50/200',      desc: 'Exponential Moving Average',   hasGenericSettings: true },
+  { id: 'wma',      ico: '〰', name: 'WMA 20/50',       desc: 'Weighted Moving Average',      hasGenericSettings: true },
+  { id: 'st',       ico: '◆', name: 'Supertrend',      desc: 'Trend + dynamic Stop Loss',    hasGenericSettings: true },
+  { id: 'vp',       ico: '📊', name: 'Volume Profile',  desc: 'Volume by price levels',       hasGenericSettings: true },
+  { id: 'cvd',      ico: '📊', name: 'CVD',             desc: 'Cumulative Volume Delta',      hasGenericSettings: true },
+  { id: 'macd',     ico: '⚡', name: 'MACD',            desc: 'Moving Avg Convergence Div',   hasGenericSettings: true },
+  { id: 'bb',       ico: '◎', name: 'Bollinger Bands', desc: 'Volatility and trend',         hasGenericSettings: true },
+  { id: 'stoch',    ico: '〰', name: 'Stochastic RSI',  desc: 'RSI smoothed with Stoch',      hasGenericSettings: true },
+  { id: 'obv',      ico: '📊', name: 'OBV',             desc: 'On-Balance Volume',            hasGenericSettings: true },
+  { id: 'atr',      ico: '📏', name: 'ATR',             desc: 'Average True Range - volat',   hasGenericSettings: true },
+  { id: 'vwap',     ico: '📊', name: 'VWAP',            desc: 'Volume Weighted Avg Price',    hasGenericSettings: true },
+  { id: 'ichimoku', ico: '☁', name: 'Ichimoku Cloud',  desc: 'Full Japanese system',         hasGenericSettings: true },
+  { id: 'fib',      ico: '⬡', name: 'Fibonacci',       desc: 'Auto retracement on swing',    hasGenericSettings: true },
+  { id: 'pivot',    ico: '◎', name: 'Pivot Points',    desc: 'Daily Support/Resistance',     hasGenericSettings: true },
+  { id: 'rsi14',    ico: '⚡', name: 'RSI 14',          desc: 'Relative Strength Index',      hasGenericSettings: true },
+  { id: 'mfi',      ico: '💰', name: 'Money Flow Index',desc: 'Volume-weighted RSI',          hasGenericSettings: true },
+  { id: 'cci',      ico: '📏', name: 'CCI',             desc: 'Commodity Channel Index',      hasGenericSettings: true },
+  // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
   { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
   { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
@@ -329,12 +332,16 @@ export function ChartControls() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {ind.settingsModal && (
+                  {(ind.settingsModal || ind.hasGenericSettings) && (
                     <span
                       className="gear"
                       style={{ cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '11px', color: '#f0c040' }}
                       title={`${ind.name} Settings`}
-                      onClick={(e) => { e.stopPropagation(); openModal(ind.settingsModal as Parameters<typeof openModal>[0]) }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (ind.settingsModal) openModal(ind.settingsModal as Parameters<typeof openModal>[0])
+                        else if (ind.hasGenericSettings) openIndSettings(ind.id)
+                      }}
                     >&#9881;&#65039;</span>
                   )}
                   {ind.modalOnly ? (

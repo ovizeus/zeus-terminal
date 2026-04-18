@@ -593,6 +593,9 @@ export function calcVWAPBands(klines: any) {
   let cumTPV = 0, cumV = 0;
   const vwapData: any[] = []; const upper1: any[] = []; const lower1: any[] = []; const upper2: any[] = []; const lower2: any[] = [];
   let cumVar = 0;
+  const vcfg = (w as any).IND_SETTINGS?.vwap || {};
+  const sd1 = vcfg.stdDev  > 0 ? vcfg.stdDev  : 1;
+  const sd2 = vcfg.stdDev2 > 0 ? vcfg.stdDev2 : 2;
   dayBars.forEach((k: any, _i: number) => {
     const tp = (k.high + k.low + k.close) / 3;
     cumTPV += tp * k.volume; cumV += k.volume;
@@ -600,10 +603,10 @@ export function calcVWAPBands(klines: any) {
     cumVar += k.volume * Math.pow(tp - vwap, 2);
     const std = cumV > 0 ? Math.sqrt(cumVar / cumV) : 0;
     vwapData.push({ time: k.time, value: vwap });
-    upper1.push({ time: k.time, value: vwap + std });
-    lower1.push({ time: k.time, value: vwap - std });
-    upper2.push({ time: k.time, value: vwap + 2 * std });
-    lower2.push({ time: k.time, value: vwap - 2 * std });
+    upper1.push({ time: k.time, value: vwap + sd1 * std });
+    lower1.push({ time: k.time, value: vwap - sd1 * std });
+    upper2.push({ time: k.time, value: vwap + sd2 * std });
+    lower2.push({ time: k.time, value: vwap - sd2 * std });
   });
   return { vwap: vwapData, upper1, lower1, upper2, lower2 };
 }

@@ -155,7 +155,13 @@ export function renderChart(): void {
       if (w.stS) w.stS.setData(stData.map((d: any) => ({ time: d.time, value: d.value })))
     } else { if (w.stS) w.stS.setData([]) }
     let cvd = 0
-    const cvdData = w.S.klines.map((k: any) => { cvd += k.close > k.open ? k.volume : -k.volume; return { time: k.time, value: cvd } })
+    const cvdRaw = w.S.klines.map((k: any) => { cvd += k.close > k.open ? k.volume : -k.volume; return { time: k.time, value: cvd } })
+    const _cvdSm = Math.round(w.IND_SETTINGS?.cvd?.smoothing || 0)
+    const cvdData = _cvdSm > 1 ? cvdRaw.map((d: any, i: number) => {
+      if (i < _cvdSm - 1) return d
+      let s = 0; for (let j = 0; j < _cvdSm; j++) s += cvdRaw[i - j].value
+      return { time: d.time, value: s / _cvdSm }
+    }) : cvdRaw
     if (w.cvdS) w.cvdS.setData(cvdData)
     const volData = w.S.klines.map((k: any) => ({ time: k.time, value: k.volume, color: k.close >= k.open ? '#00d97a44' : '#ff335544' }))
     if (w.volS) w.volS.setData(volData)

@@ -1443,14 +1443,15 @@ export const IND_SETTINGS: any = {
   stoch: { kPeriod: 14, dPeriod: 3, smooth: 3 },
   macd: { fast: 12, slow: 26, signal: 9 },
   atr: { period: 14 },
-  obv: {},
+  obv: { smoothing: 0 },
   mfi: { period: 14 },
   cci: { period: 20 },
   ichimoku: { tenkan: 9, kijun: 26, senkou: 52 },
   fib: { levels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] },
   pivot: { type: 'standard' },
-  vwap: {},
+  vwap: { stdDev: 1, stdDev2: 2 },
   vp: { rows: 70 },
+  cvd: { smoothing: 0 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []

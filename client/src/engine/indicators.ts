@@ -237,18 +237,35 @@ export function applyIndVisibility(id: string, visible: boolean): void {
 
 export function openIndSettings(id: string): void {
   const cfg = w.IND_SETTINGS[id]
-  if (!cfg || Object.keys(cfg).length === 0) { toast('No settings for ' + id.toUpperCase()); return }
+  if (!cfg) { toast('No settings for ' + id.toUpperCase()); return }
   const ind = w.INDICATORS.find((i: any) => i.id === id)
   const labels: Record<string, string> = {
     p1: 'Period 1', p2: 'Period 2', period: 'Period', mult: 'Multiplier',
-    stdDev: 'Std Deviation', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
+    stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
-    senkou: 'Senkou Span B', rows: 'Rows', type: 'Type'
+    senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
+    levels: 'Levels (CSV)'
+  }
+  // [batch3-B] pivot.type dropdown options
+  const typeOpts: Record<string, string[]> = {
+    pivot: ['standard', 'fibonacci', 'camarilla', 'woodie', 'demark']
   }
   let html = `<div class="ind-set-title">${ind ? ind.ico : _ZI.bolt} ${ind ? ind.name : id.toUpperCase()} Settings</div>`
-  for (const [key, val] of Object.entries(cfg)) {
-    if (key === 'levels' || key === 'type') continue
-    html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="1" max="500" step="any" class="ind-set-input"></div>`
+  const entries = Object.entries(cfg)
+  if (!entries.length) {
+    html += `<div class="ind-set-row" style="color:#888;font-size:11px">No configurable parameters.</div>`
+  }
+  for (const [key, val] of entries) {
+    if (key === 'type') {
+      const opts = typeOpts[id] || [String(val)]
+      const sel = opts.map((o: string) => `<option value="${o}"${o === val ? ' selected' : ''}>${o}</option>`).join('')
+      html += `<div class="ind-set-row"><label>${labels[key] || key}</label><select id="indset-${id}-${key}" class="ind-set-input">${sel}</select></div>`
+    } else if (key === 'levels' && Array.isArray(val)) {
+      const csv = (val as any[]).join(',')
+      html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="text" id="indset-${id}-${key}" value="${csv}" placeholder="0, 0.236, 0.382, 0.5, 0.618, 0.786, 1" class="ind-set-input"></div>`
+    } else {
+      html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="0" max="500" step="any" class="ind-set-input"></div>`
+    }
   }
   html += `<div style="display:flex;gap:8px;margin-top:10px"><button class="ind-set-btn" data-action="applyIndSettings" data-id="${id}">Apply</button><button class="ind-set-btn cancel" data-action="closeIndSettings">Cancel</button></div>`
   let modal = document.getElementById('indSettingsModal')
@@ -281,9 +298,19 @@ export function applyIndSettings(id: string): void {
   const cfg = w.IND_SETTINGS[id]
   if (!cfg) return
   for (const key of Object.keys(cfg)) {
-    if (key === 'levels' || key === 'type') continue
-    const inp = document.getElementById('indset-' + id + '-' + key) as HTMLInputElement | null
-    if (inp) { const v = parseFloat(inp.value); if (isFinite(v) && v > 0) cfg[key] = v }
+    const inp = document.getElementById('indset-' + id + '-' + key) as HTMLInputElement | HTMLSelectElement | null
+    if (!inp) continue
+    if (key === 'type') {
+      const val = (inp as HTMLSelectElement).value
+      if (val) cfg[key] = val
+    } else if (key === 'levels') {
+      const parsed = (inp as HTMLInputElement).value.split(',').map((s: string) => parseFloat(s.trim())).filter((n: number) => isFinite(n))
+      if (parsed.length) cfg[key] = parsed
+    } else {
+      const v = parseFloat((inp as HTMLInputElement).value)
+      // smoothing allows 0 (= disabled); other numeric keys require > 0
+      if (isFinite(v) && (v > 0 || key === 'smoothing')) cfg[key] = v
+    }
   }
   closeIndSettings()
   if (typeof w._indSettingsSave === 'function') w._indSettingsSave()
@@ -597,10 +624,16 @@ export function initOBVChart(): void {
 export function updateOBV(): void {
   if (!w._obvInited || !w._obvSeries || !w.S.klines.length) return
   const k = w.S.klines; let obv = 0
-  const data = k.map((b: any, i: number) => {
+  const raw = k.map((b: any, i: number) => {
     if (i > 0) { if (b.close > k[i - 1].close) obv += b.volume; else if (b.close < k[i - 1].close) obv -= b.volume }
     return { time: b.time, value: obv }
   })
+  const sm = Math.round(w.IND_SETTINGS?.obv?.smoothing || 0)
+  const data = sm > 1 ? raw.map((d: any, i: number) => {
+    if (i < sm - 1) return d
+    let s = 0; for (let j = 0; j < sm; j++) s += raw[i - j].value
+    return { time: d.time, value: s / sm }
+  }) : raw
   try { w._obvSeries.setData(data); _syncSubChartsToMain() } catch (_) { }
 }
 
@@ -762,9 +795,12 @@ export function initMACDChart(): void {
 function _updateMACDChart(): void {
   if (!w._macdInited || !_macdChart || !w._macdLineSeries) return
   const klines = w.S.klines
-  if (!klines || klines.length < 35) return
+  const cfg = w.IND_SETTINGS?.macd || {}
+  const fast = Math.max(1, Math.round(cfg.fast || 12))
+  const slow = Math.max(fast + 1, Math.round(cfg.slow || 26))
+  const signal = Math.max(1, Math.round(cfg.signal || 9))
+  if (!klines || klines.length < slow + signal) return
   const closes = klines.map((k: any) => k.close)
-  const fast = 12, slow = 26, signal = 9
   const emaFn = (arr: number[], p: number) => {
     const k = 2 / (p + 1); let v = arr[0]
     return arr.map((x: number, i: number) => i === 0 ? v : (v = x * k + v * (1 - k)))
