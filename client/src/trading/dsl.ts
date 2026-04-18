@@ -128,7 +128,7 @@ export function toggleDSL(): void {
   try {
     const _mode = (w.S?.mode || 'assist').toLowerCase()
     if (_mode === 'auto') {
-      toast('AUTO: DSL e controlat de AI', 0, _ZI?.robot)
+      toast('AUTO: DSL is controlled by AI', 0, _ZI?.robot)
       return
     }
     if (typeof DSL === 'undefined') return
@@ -143,8 +143,8 @@ export function toggleDSL(): void {
       statusDotColor: DSL.enabled ? 'var(--grn-bright)' : '#333',
       statusDotBg: DSL.enabled ? 'var(--grn-bright)' : '#333',
     })
-    atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
-    brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
+    atLog('info', DSL.enabled ? '[DSL] Dynamic SL ON' : '[WARN] Dynamic SL OFF')
+    brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL enabled' : 'DSL disabled')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
     // [DSL-OFF] Propagate DSL on/off to server so new AT + manual positions respect it.
     try {
@@ -162,14 +162,14 @@ export function toggleDSL(): void {
 // ── ASSIST ARM TOGGLE ────────────────────────────────────────
 export function toggleAssistArm(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
-  if (_m !== 'assist') { toast('ARM disponibil doar în ASSIST mode'); return }
+  if (_m !== 'assist') { toast('ARM available only in ASSIST mode'); return }
   w.S.assistArmed = !w.S.assistArmed
   if (typeof w.ARM_ASSIST !== 'undefined') {
     w.ARM_ASSIST.armed = w.S.assistArmed
     w.ARM_ASSIST.ts = w.S.assistArmed ? Date.now() : 0
   }
   _syncDslAssistUI()
-  brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT — DSL va executa la semnal' : _ZI.unlk + ' ASSIST dezarmat — DSL în preview only')
+  brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMED — DSL will execute on signal' : _ZI.unlk + ' ASSIST disarmed — DSL in preview only')
   w.dslUpdateBanner()
 }
 
@@ -190,9 +190,9 @@ export function _syncDslAssistUI(): void {
     _dslUI({
       assistBarVisible: true, toggleBtnTitle: '',
       assistArmIcon: w.S.assistArmed ? 'dYlw' : 'lock',
-      assistArmText: w.S.assistArmed ? 'ASSIST ARMAT' : 'ARM ASSIST',
+      assistArmText: w.S.assistArmed ? 'ASSIST ARMED' : 'ARM ASSIST',
       assistArmClass: 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : ''),
-      assistStatusText: w.S.assistArmed ? 'ASSIST ARMAT \u2014 DSL va executa la semnal' : 'Dezarmat \u2014 DSL \u00een preview only (f\u0103r\u0103 execu\u021Bie)',
+      assistStatusText: w.S.assistArmed ? 'ASSIST ARMED \u2014 DSL will execute on signal' : 'Disarmed \u2014 DSL in preview only (no execution)',
     })
   } else {
     _dslUI({ assistBarVisible: false, toggleBtnTitle: '' })
@@ -501,7 +501,7 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       dsl.currentSL = dsl.pivotLeft
       _syncLiveSL(pos, dsl.currentSL)
 
-      dsl.log.push({ ts: Date.now(), msg: `DSL activat @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` })
+      dsl.log.push({ ts: Date.now(), msg: `DSL activated @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` })
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
       pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` })
       if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'activate', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft, pivotRight: dsl.pivotRight, impulseVal: dsl.impulseVal })
@@ -511,8 +511,8 @@ export function _runClientDSLOnPositions(positions: any[]): void {
         // silently mark active; user already saw the original activation in prior session.
         dsl.log.push({ ts: Date.now(), msg: `[RESUME] DSL state rehydrated @$${fP(cur)}` })
       } else {
-        atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
-        brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
+        atLog('buy', `[DSL] ACTIVATED: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
+        brainThink('ok', _ZI.tgt + ` DSL activated on ${pos.sym.replace('USDT', '')} — Pivot Left takes over SL at $${fP(dsl.pivotLeft)}`)
       }
     }
 
@@ -681,7 +681,7 @@ export function dslTakeControl(posId: any): void {
   const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
-  if (_cm !== 'auto' && _cm !== 'assist') { toast('Take Control: doar pentru AUTO/ASSIST'); return }
+  if (_cm !== 'auto' && _cm !== 'assist') { toast('Take Control: AUTO/ASSIST only'); return }
   if (!pos.sourceMode) pos.sourceMode = _cm
   pos.controlMode = 'user'
   if (w._serverATEnabled && pos._serverSeq) {
@@ -707,7 +707,7 @@ export function dslReleaseControl(posId: any): void {
   posId = String(posId)
   const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
-  if ((pos.controlMode || 'paper') !== 'user') { toast('Această poziție nu e în MANUAL'); return }
+  if ((pos.controlMode || 'paper') !== 'user') { toast('This position is not in MANUAL'); return }
   const _origSource = (pos.sourceMode || pos.brainModeAtOpen || 'assist').toLowerCase()
   pos.controlMode = _origSource
   if (w._serverATEnabled && pos._serverSeq) {
@@ -943,7 +943,7 @@ export function renderDSLWidget(positions: any[]): void {
   // [DSL-OFF] Warning banner when engine is off but DSL-attached positions are still tracked
   if (!DSL.enabled) {
     html += `<div style="background:linear-gradient(90deg,#2a1400,#1a0a00);border:1px solid #f0c04066;border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:#f0c040;letter-spacing:1px;text-align:center">
-      DSL ENGINE OFF — următoarele poziții nu vor trece în DSL
+      DSL ENGINE OFF — new positions will not attach DSL
     </div>`
   }
 

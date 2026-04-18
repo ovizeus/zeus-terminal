@@ -53,7 +53,7 @@ const DEFAULT_DSL_UI: DSLUI = {
   assistArmIcon: null,
   assistArmText: 'ARM ASSIST',
   assistArmClass: 'dsl-assist-arm',
-  assistStatusText: 'ASSIST \u2014 necesită armare pentru execuție',
+  assistStatusText: 'ASSIST \u2014 requires arming for execution',
 }
 
 interface DslStoreState {

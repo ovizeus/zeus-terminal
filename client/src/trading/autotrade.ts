@@ -158,11 +158,11 @@ export function _applyATToggleUI(enabled: any): void {
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
     if (getATKillTriggered()) {
       AT.enabled = false
-      toast('Kill switch activ — apasă RESET sau așteaptă ziua următoare', 0, _ZI.noent)
+      toast('Kill switch active — press RESET or wait for next day', 0, _ZI.noent)
       return
     }
-    _atUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Activ — scan la 30s', action: null } })
-    atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
+    _atUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Active — scan every 30s', action: null } })
+    atLog('info', `[AT] Auto Trade STARTED. RealPnL today: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
     try { runSignalScan() } catch (_) {}
@@ -174,7 +174,7 @@ export function _applyATToggleUI(enabled: any): void {
         if (TP.liveBalance <= 0) {
           atLog('warn', '[WARN] LIVE balance = $0 after sync — AT blocked until balance confirmed')
           AT.enabled = false
-          _atUI({ status: { icon: 'x', text: 'Live balance = 0 — verifică API', action: null } })
+          _atUI({ status: { icon: 'x', text: 'Live balance = 0 — check API', action: null } })
           w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
         } else {
           atLog('info', '[BAL] LIVE balance synced: $' + TP.liveBalance.toFixed(2))
@@ -191,8 +191,8 @@ export function _applyATToggleUI(enabled: any): void {
     if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
     _emitATChanged()
   } else {
-    _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configureaza mai jos', action: null } })
-    atLog('warn', '[AT] Auto Trade OPRIT.')
+    _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configure below', action: null } })
+    atLog('warn', '[AT] Auto Trade STOPPED.')
     w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = false + push to server for cross-device sync
@@ -332,7 +332,7 @@ export function checkATConditions(): any {
     : (TP.livePositions || []).filter((p: any) => p.autoTrade)
   const dir = isBull ? 'LONG' : 'SHORT'
   const hasOpposite = autoPositions.some((p: any) => (dir === 'LONG' && p.side === 'SHORT') || (dir === 'SHORT' && p.side === 'LONG'))
-  setCondUI('atCondOpp', !hasOpposite, hasOpposite ? 'Pozitie opusa activa' : 'OK')
+  setCondUI('atCondOpp', !hasOpposite, hasOpposite ? 'Opposite position active' : 'OK')
 
   // 7. Magnet alignment bonus
   void getMagnetBias()
@@ -657,11 +657,11 @@ export function runAutoTradeCheck(): void {
       }
       // Update status
       const reasons: any[] = []
-      if (!cond.posOk) reasons.push('max pozitii atins')
+      if (!cond.posOk) reasons.push('max positions reached')
       if (!cond.coolOk) reasons.push('cooldown')
       _atUI({ status: reasons.length
         ? { icon: 'timer', text: 'Wait: ' + reasons.join(', '), action: null }
-        : { icon: 'mag', text: 'Scan... conditii neatinse', action: null } })
+        : { icon: 'mag', text: 'Scan... conditions not met', action: null } })
       return
     }
 
@@ -680,7 +680,7 @@ export function runAutoTradeCheck(): void {
     // [FIX BUG1] Guard: confluence/signal direction disagree → no clear direction, skip
     if (!cond.isBull && !cond.isBear) {
       atLog('info', 'AT_SKIP ' + (getSymbol() || '').replace('USDT', '') + ' confluence/signal disagree — no clear direction')
-      _atUI({ status: { icon: 'mag', text: 'Confluence/semnale conflict \u2014 skip', action: null } })
+      _atUI({ status: { icon: 'mag', text: 'Confluence/signals conflict \u2014 skip', action: null } })
       return
     }
 
@@ -694,7 +694,7 @@ export function runAutoTradeCheck(): void {
       if (typeof w.DLog !== 'undefined') w.DLog.record('at_signal', { sym: getSymbol(), side: side, conf: _sConf, score: cond.score, phase: _sPh })
     }
     atLog(side === 'LONG' ? 'buy' : 'sell',
-      `[SIGNAL] SEMNAL ${side} confirmat! Score:${cond.score} | ${Math.max(cond.bullCount, cond.bearCount)} semnale | ST:${cond.stDir} | Magnet:${getMagnetBias() || 'neut'}`)
+      `[SIGNAL] SIGNAL ${side} confirmed! Score:${cond.score} | ${Math.max(cond.bullCount, cond.bearCount)} signals | ST:${cond.stDir} | Magnet:${getMagnetBias() || 'neut'}`)
 
     // ── FUSION BRAIN v1 — final arbiter before exec ──────────────
     try {
@@ -788,15 +788,15 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   const _snap = typeof w.buildExecSnapshot === 'function' ? w.buildExecSnapshot(side, cond) : null
   // [PATCH1 B1] buildExecSnapshot returns null if price invalid — reject early
   if (!_snap) {
-    _setBR('INVALID_PRICE', 'Snapshot rejected — preț invalid', 'placeAutoTrade')
+    _setBR('INVALID_PRICE', 'Snapshot rejected — invalid price', 'placeAutoTrade')
     atLog('warn', '[FAIL] buildExecSnapshot rejected (price invalid)'); return
   }
   // Use snapshot values exclusively — never re-read global state
   const sym = _sym || _snap.symbol
   const entry = _price || _snap.price
   if (!isValidMarketPrice(entry)) {
-    _setBR('INVALID_PRICE', 'Preț invalid la exec', 'placeAutoTrade')
-    atLog('warn', '[FAIL] Nu am pret curent la exec'); return
+    _setBR('INVALID_PRICE', 'Invalid price at exec', 'placeAutoTrade')
+    atLog('warn', '[FAIL] No current price at exec'); return
   }
   // [FIX H2] Dedup: reject if same symbol already has open AT position
   const _existingPos = (getATMode() === 'demo' ? (TP.demoPositions || []) : (TP.livePositions || []))
@@ -892,7 +892,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // [v119-p15] eliminat DOM fallback (|| el('atSL')) — _snap.slPct e mereu >= 0.1 (clamped în buildExecSnapshot)
   // [FIX P14] totalTrades++ AFTER all early validation returns (including price check)
   if (!entry || entry <= 0) {
-    atLog('warn', '[BLOCK] EXEC FAIL-SAFE: preț invalid → PROTECT activat')
+    atLog('warn', '[BLOCK] EXEC FAIL-SAFE: invalid price → PROTECT activated')
     BM.protectMode = true; BM.protectReason = 'BLOCKED: ExecutionRisk (invalid price)'
     if (getATEnabled() && (w.S.mode || 'assist') === 'auto') AT.enabled = false
     const pb = el('protectBanner'); if (pb) pb.className = 'znc-protect show'
@@ -975,8 +975,8 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
     })
-    _atUI({ status: { icon: 'ok', text: String(side) + ' deschis @$' + fP(entry), action: null } })
-    toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
+    _atUI({ status: { icon: 'ok', text: String(side) + ' opened @$' + fP(entry), action: null } })
+    toast(`AUTO ${side} ${sym.replace('USDT', '')} opened! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
     if (typeof onTradeExecuted === 'function') onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
@@ -1598,9 +1598,9 @@ export function renderATPositions(): void {
     ...(TP.livePositions || []).filter((p: any) => p.autoTrade && !p.closed && p.status !== 'closing'),
   ].filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
    .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
-  _atUI({ posCountText: autoPosns.length + ' pozit' + (autoPosns.length === 1 ? 'ie' : 'ii') })
+  _atUI({ posCountText: autoPosns.length + ' position' + (autoPosns.length === 1 ? '' : 's') })
   if (!autoPosns.length) {
-    panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">Nicio pozitie auto deschisa</div>'
+    panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">No auto position open</div>'
     return
   }
   // Build HTML
@@ -1769,7 +1769,7 @@ export function execPartialClose(posId: any, pct: any): void {
   })
 
   atLog('info', `\u25D1 Partial close ${pct}% — ${pos.sym.replace('USDT', '')} PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
-  toast(`\u25D1 ${pct}% inchis — PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
+  toast(`\u25D1 ${pct}% closed — PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
   w.updateDemoBalance(); renderDemoPositions(); renderATPositions(); updateATStats()
   // [9A-5] Notify React — partial close updated balance + position size
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
@@ -1785,7 +1785,7 @@ export function closeAutoPos(id: any): void {
     if (cur == null) { renderATPositions(); return }
     const diff = cur - livePos.entry
     const pnl = _safePnl(livePos.side, diff, livePos.entry, livePos.size, livePos.lev, true)
-    closeLivePos(numId, 'Manual inchis')
+    closeLivePos(numId, 'Manual close')
     AT.totalPnL += pnl; AT.dailyPnL += pnl
     if (pnl >= 0) AT.wins++; else AT.losses++
     atLog(pnl >= 0 ? 'buy' : 'sell', '[LIVE] MANUAL CLOSE: ' + livePos.sym.replace('USDT', '') + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
@@ -1807,7 +1807,7 @@ export function closeAutoPos(id: any): void {
   pos._manualATClose = true
 
   // closeDemoPos sterge din array + updateaza AMBELE panouri
-  closeDemoPos(numId, 'Manual inchis')
+  closeDemoPos(numId, 'Manual close')
 
   // [FIX BUG4] Use closeDemoPos PnL if available (prevents price-race drift)
   const _finalPnl = Number.isFinite(pos._closePnl) ? pos._closePnl : pnl
@@ -1834,12 +1834,12 @@ export function closeAllDemoPos(): void {
     ? [...TP.demoPositions].filter((p: any) => !p.closed && !p.autoTrade)
     : []
   const totalClosed = livePosns.length + posns.length
-  if (!totalClosed) { toast('Nu exista pozitii manuale deschise', 0, _ZI.clip); return }
+  if (!totalClosed) { toast('No manual positions open', 0, _ZI.clip); return }
   posns.forEach((p: any) => {
     closeDemoPos(p.id, 'Close All Manual')
   })
   setTimeout(() => { renderATPositions(); updateATStats(); renderDemoPositions() }, 100)
-  toast('Inchis ' + totalClosed + ' pozitii manuale', 0, _ZI.ok)
+  toast('Closed ' + totalClosed + ' manual positions', 0, _ZI.ok)
 }
 
 // Inchide TOATE pozitiile AT (apelat din panoul AT / Emergency Stop)
@@ -1869,10 +1869,10 @@ export function closeAllATPos(): void {
     if (pnl >= 0) AT.wins++; else AT.losses++
   })
   const totalClosed = livePosns.length + posns.length
-  if (!totalClosed) { toast('Nu exista pozitii AT deschise', 0, _ZI.clip); return }
+  if (!totalClosed) { toast('No AT positions open', 0, _ZI.clip); return }
   if (livePosns.length > 0) checkKillThreshold()
   setTimeout(() => { renderATPositions(); updateATStats() }, 100)
-  toast('Inchis ' + totalClosed + ' pozitii AT', 0, _ZI.ok)
+  toast('Closed ' + totalClosed + ' AT positions', 0, _ZI.ok)
 }
 
 // ===================================================================

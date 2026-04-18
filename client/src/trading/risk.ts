@@ -338,7 +338,7 @@ export function _renderAdaptivePanel(): void {
     var tbl = document.getElementById('adaptive-bucket-table')
     if (!tbl) return
     if (!keys.length) {
-      tbl.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0">Niciun trade cu context — rulează după prime trades CLOSE.</div>'
+      tbl.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0">No trade with context — run after first trades CLOSE.</div>'
       return
     }
 

@@ -50,7 +50,7 @@ export function _bmResetDailyIfNeeded(): void {
     // reset protect automat la schimbare zi
     w.BM.protectMode = false
     w.BM.protectReason = ''
-    atLog('info', `[DAY] Zi nouă (${k}) — dailyTrades/lossStreak/protect resetate automat`)
+    atLog('info', `[DAY] New day (${k}) — dailyTrades/lossStreak/protect auto-reset`)
   }
 }
 
