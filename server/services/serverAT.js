@@ -643,6 +643,7 @@ function processBrainDecision(decision, stc, userId) {
         // [DSL-OFF] Per-user DSL engine flag: when OFF, skip DSL params so attach + native TP suppression
         // are bypassed and the position runs purely on exchange TP/SL.
         dslParams: us.dslEnabled === false ? null : serverDSL.getPreset(stc.dslMode),
+        dslModeAtOpen: us.dslEnabled === false ? null : (stc.dslMode || null),
         // ── Add-on tracking (Faza 2 Batch A) ──
         originalEntry: price,
         originalSize: finalSize,

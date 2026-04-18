@@ -53,6 +53,7 @@
  */
 
 import { useATStore } from '../stores/atStore'
+import { useDslStore } from '../stores/dslStore'
 
 // ── Store-backed getters (read from Zustand, fallback to window.*) ──
 
@@ -245,10 +246,13 @@ export function getTCSize(): number {
   return (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.size)) ? w.TC.size : 200
 }
 
-/** DSL mode — [STORE CANDIDATE — POPULATION DEBT] dslStore.mode
- *  dslStore has setMode but legacy autotrade.ts writes `window.DSL.mode = 'atr'`
- *  directly. Flipping now would drift. */
+/** DSL mode — reads canonical useDslStore directly.
+ *  [BATCH3-U] Previously read `window.DSL?.mode` via the Proxy; equivalent post-fix
+ *  (Proxy get is now store-backed) but the direct read skips Proxy indirection
+ *  on the hot path (AT uses this on every tick). */
 export function getDSLMode(): string {
+  const m = useDslStore.getState().mode
+  if (m) return m
   return (window as any).DSL?.mode || 'atr'
 }
 

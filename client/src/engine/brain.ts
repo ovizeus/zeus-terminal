@@ -20,6 +20,7 @@ import { _safePnl } from '../utils/guards'
 import { detectRegimeEnhanced } from './regimeEnhanced'
 import { useBrainStore } from '../stores/brainStore'
 import { useBrainStatsStore, BRAIN_NEURON_IDS, type BrainStatsTone, type BrainNeuronId, type BrainNeuronState } from '../stores/brainStatsStore'
+import { useDslStore } from '../stores/dslStore'
 import type { BrainMode, TradingProfile, BrainEngineState, BrainState, BrainAdaptParams } from '../types'
 
 const w = window as any // kept for function calls, w.S writes + self-ref
@@ -592,8 +593,16 @@ export function setProfile(profile: any): void {
 
 // ── DSL MODE SETTER ──────────────────────────────────────────────
 function _applyDslMode(mode: string): void {
+  // [BATCH3-U] Write to canonical store directly. Proxy at core/config.ts now
+  // mirrors this write too, but setMode() guarantees store-first — critical
+  // for the ATR-toggle-dead-click bug (Proxy used to silently drop writes).
+  try { useDslStore.getState().setMode(mode) } catch (_) { }
   const _dsl = (window as any).DSL; if (_dsl) _dsl.mode = mode
-  const _dslKey = (window as any)._zeusUserId ? 'zeus_dsl_mode:' + (window as any)._zeusUserId : 'zeus_dsl_mode'
+  // Per-user localStorage key is always used when the user id is known; the
+  // bare "zeus_dsl_mode" key is kept only as a transitional fallback for
+  // boot paths where the id hasn't landed yet.
+  const _uid = (window as any)._zeusUserId
+  const _dslKey = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
   try { localStorage.setItem(_dslKey, mode) } catch (_) { }
   const labels: any = { atr: _ZI.plug + ' ATR', fast: _ZI.bolt + ' FAST', swing: _ZI.wave + ' SWING', defensive: _ZI.sh + ' DEF', tp: _ZI.tgt + ' TP' }
   brainThink('info', _ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
@@ -604,7 +613,10 @@ export function setDslMode(mode: any): void {
   const valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
   mode = (mode || '').toLowerCase()
   if (!valid.includes(mode)) return
-  const curMode = ((window as any).DSL && (window as any).DSL.mode) || getDSLMode() || 'atr'
+  // [BATCH3-U] Compare against canonical store first. Previously the compare
+  // reached into window.DSL directly which, pre-fix, could be null forever —
+  // then every click other than the first one was a no-op.
+  const curMode = useDslStore.getState().mode || getDSLMode() || 'atr'
   if (mode === curMode) return
   const preset = DSL_PRESETS[mode] || DSL_PRESETS.atr
   const label = mode.toUpperCase()
@@ -2508,11 +2520,17 @@ export function _initBrainCockpit(): void {
   }
   w._brainInitDone = true
 
-  // Restore DSL mode from localStorage (user-scoped key)
+  // [BATCH3-U] Restore DSL mode from localStorage (user-scoped key) into the
+  // canonical store. Pre-fix this wrote to window.DSL.mode which the Proxy
+  // silently dropped, so the stored choice never survived a refresh.
   try {
-    const _dslKey = w._zeusUserId ? 'zeus_dsl_mode:' + w._zeusUserId : 'zeus_dsl_mode'
-    const savedDsl = localStorage.getItem(_dslKey) || localStorage.getItem('zeus_dsl_mode')
-    if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) { const _dsl2 = (window as any).DSL; if (_dsl2) _dsl2.mode = savedDsl }
+    const _uid = w._zeusUserId
+    const _dslKey = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+    const savedDsl = localStorage.getItem(_dslKey) || (_uid ? localStorage.getItem('zeus_dsl_mode') : null)
+    if (savedDsl && ['atr', 'fast', 'swing', 'defensive', 'tp'].includes(savedDsl)) {
+      useDslStore.getState().setMode(savedDsl)
+      const _dsl2 = (window as any).DSL; if (_dsl2) _dsl2.mode = savedDsl
+    }
   } catch (_) { }
 
   // Single sync from S.* canonical state

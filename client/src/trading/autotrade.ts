@@ -774,7 +774,13 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     w.DSL.mode = 'atr'
     atLog('warn', '[DSL] Mode was unset — auto-fell back to ATR (default). Set DSL mode explicitly in panel to avoid surprise.')
     try { console.warn('[AT/DSL] Mode auto-fallback to ATR — user had no mode set') } catch (_) { }
-    try { localStorage.setItem('zeus_dsl_mode', 'atr') } catch (_) { }
+    // [BATCH3-U] Scoped to the active user — previously wrote the global key,
+    // which cross-contaminated sessions on shared browsers.
+    try {
+      const _uid = (w as any)._zeusUserId
+      const _key = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+      localStorage.setItem(_key, 'atr')
+    } catch (_) { }
   }
 
   // [p19 PREDATOR VETO]

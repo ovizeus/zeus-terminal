@@ -526,10 +526,14 @@ function _buildAllSections(): any {
   const _t = function (s: string) { return _ucDirtyTs[s] || 0 }
   const _g = function (k: string) { try { return localStorage.getItem(k) } catch (_) { return null } }
   const _j = function (k: string) { try { return JSON.parse(_g(k) || 'null') } catch (_) { return null } }
+  // [BATCH3-U] DSL mode is per-user — prefer the scoped key, fall back to the
+  // global one only when no user id is present (pre-login push paths).
+  const _uid = (w as any)._zeusUserId
+  const _dslMode = _uid ? (_g('zeus_dsl_mode:' + _uid) || _g('zeus_dsl_mode')) : _g('zeus_dsl_mode')
   return {
     settings: { ts: _t('settings'), data: _j('zeus_user_settings') },
     uiContext: { ts: _t('uiContext'), data: _j('zeus_ui_context') },
-    panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _g('zeus_dsl_mode'), adaptStrip: _g('zeus_adaptive_strip_open') } },
+    panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _dslMode, adaptStrip: _g('zeus_adaptive_strip_open') } },
     indSettings: { ts: _t('indSettings'), data: _j('zeus_ind_settings') },
     llvSettings: { ts: _t('llvSettings'), data: _j('zeus_llv_settings') },
     uiScale: { ts: _t('uiScale'), data: _g('zeus_ui_scale') },
@@ -635,7 +639,20 @@ export function _userCtxPull() {
           if (pd.atStrip != null) localStorage.setItem('zeus_at_strip_open', pd.atStrip)
           if (pd.ptStrip != null) localStorage.setItem('zeus_pt_strip_open', pd.ptStrip)
           if (pd.mtfOpen != null) localStorage.setItem('zeus_mtf_open', pd.mtfOpen)
-          if (pd.dslMode != null) localStorage.setItem('zeus_dsl_mode', pd.dslMode)
+          // [BATCH3-U] Persist server-pulled DSL mode under the per-user key and
+          // hydrate the canonical store so UI reflects the value without a full
+          // reload. Pre-fix: wrote to the shared "zeus_dsl_mode" which leaked
+          // between accounts, and never touched useDslStore — so the UI kept
+          // showing whatever the store had (null → fallback "atr").
+          if (pd.dslMode != null) {
+            const _uid = (w as any)._zeusUserId
+            const _key = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+            try { localStorage.setItem(_key, pd.dslMode) } catch (_) { }
+            const _valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
+            if (_valid.includes(pd.dslMode)) {
+              try { useDslStore.getState().setMode(pd.dslMode) } catch (_) { }
+            }
+          }
           if (pd.adaptStrip != null) localStorage.setItem('zeus_adaptive_strip_open', pd.adaptStrip)
           _ucDirtyTs.panels = sec.panels.ts; _dirty = true
           console.log('[UC] \u2705 panels merged from server')
@@ -1980,8 +1997,18 @@ w.BT_INDICATORS = BT_INDICATORS
     },
     set(target, prop, value, receiver) {
       if (typeof prop === 'string' && CANONICAL_DSL_KEYS.has(prop)) {
-        if (isDev) {
-          console.warn(`[DSL Proxy] no-op write to canonical key "${String(prop)}" — call useDslStore mutators instead`)
+        // [BATCH3-U] Write-through to canonical store. Previously this was a
+        // silent no-op, which broke Brain's _applyDslMode (writes window.DSL.mode
+        // and expected the store to reflect it). Result: DSL toggles appeared
+        // dead, getDSLMode() returned stale values, AT opened positions with
+        // the wrong mode preset (user-reported: ATR mode → positions got 5% SL).
+        const store = useDslStore.getState()
+        switch (prop) {
+          case 'enabled': store.setEnabled(!!value); break
+          case 'mode': store.setMode(value == null ? null : String(value)); break
+          case 'magnetEnabled': store.setMagnet(!!value, store.magnetMode); break
+          case 'magnetMode': store.setMagnet(store.magnetEnabled, String(value || 'soft')); break
+          case 'positions': store.replacePositions(value || {}); break
         }
         return true
       }
