@@ -162,6 +162,7 @@ app.get('/api/version', (_req, res) => {
 // even though there is no client Sentry. Throttled to avoid log flood from a
 // stuck loop (single user spamming).
 const _clientErrorLastTs = new Map();
+const _CLIENT_ERR_TTL_MS = 60 * 60 * 1000; // 1h — any user idle this long won't be throttled
 app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
   try {
     const uid = (req.user && req.user.id) || 'anon';
@@ -169,6 +170,10 @@ app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
     const last = _clientErrorLastTs.get(uid) || 0;
     if (now - last < 5000) return res.json({ ok: true, throttled: true });
     _clientErrorLastTs.set(uid, now);
+    // [batch2-L2] Opportunistic eviction — drop entries older than TTL when map grows
+    if (_clientErrorLastTs.size > 200) {
+      for (const [k, ts] of _clientErrorLastTs) if (now - ts >= _CLIENT_ERR_TTL_MS) _clientErrorLastTs.delete(k);
+    }
     const body = req.body || {};
     logger.log('WARN', 'CLIENT_ERR', String(body.reason || 'unknown').slice(0, 300), {
       uid,
