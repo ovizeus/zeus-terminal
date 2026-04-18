@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.6.24',
-    build: 5,
+    build: 6,
     date: '2026-04-18',
-    changelog: 'Header cleanup (BUG6): Notifications bell removed from header — users saw the same NOTIFICATION_CENTER unread count in the bell and inside the Alerts modal. Bell is reachable now only via the "Open Notification Center" button in AlertsModal and the Alt+N hotkey. The Search (Ctrl+K) button slides into the bell\'s old slot (right of Decision Log, before Settings) so the button row stays balanced.'
+    changelog: 'Alerts sound (BUG7): the "Sound Notifications" button in AlertsModal flipped a dead w.S.soundOn flag — no audio path respected it, so tones played (or stayed muted) independent of the button. Now delegates to _soundBadgeClick, the same handler the Brain #soundBadge uses (init-on-first-click + toggle + chime + localStorage zt:sound_muted persist). New _syncSndIcon() paints the icon from isSoundMuted() and AlertsModal force-syncs on open via useEffect, so the button no longer lies when the master was flipped elsewhere.'
 };
