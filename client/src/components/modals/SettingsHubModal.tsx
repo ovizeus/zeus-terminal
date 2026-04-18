@@ -69,7 +69,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
 
   async function exVerify(ex: string) {
     const r = await apiFetch('/api/exchange/verify', { exchange: ex })
-    exSetMsg(ex, r.ok ? `✓ Verificat! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Eroare'), !!r.ok)
+    exSetMsg(ex, r.ok ? `✓ Verified! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Error'), !!r.ok)
     if (r.ok) setExAccounts(p => ({ ...p, [ex]: { ...p[ex], balance: r.balance, lastVerified: r.lastVerified } }))
   }
 
@@ -77,7 +77,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
     if (!confirm(`Disconnect ${ex}?`)) return
     const r = await apiFetch('/api/exchange/disconnect', { exchange: ex })
     if (r.ok) setExAccounts(p => { const n = { ...p }; delete n[ex]; return n })
-    else exSetMsg(ex, r.error || 'Eroare', false)
+    else exSetMsg(ex, r.error || 'Error', false)
   }
 
   async function chpwRequest() {
@@ -130,7 +130,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className={`mtab${tab==='telegram'?' act':''}`} onClick={()=>setTab('telegram')}>TELEGRAM</div>
         <div className={`mtab${tab==='exchange'?' act':''}`} onClick={()=>setTab('exchange')}>EXCHANGE API</div>
         <div className={`mtab${tab==='developer'?' act':''}`} onClick={()=>setTab('developer')}>DEVELOPER</div>
-        <div className={`mtab${tab==='security'?' act':''}`} onClick={()=>setTab('security')}><svg className="z-i" viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 016 0v2M4 7h8v7H4z" /></svg> CONT &amp; SECURITY</div>
+        <div className={`mtab${tab==='security'?' act':''}`} onClick={()=>setTab('security')}><svg className="z-i" viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 016 0v2M4 7h8v7H4z" /></svg> ACCOUNT &amp; SECURITY</div>
       </div>
 
       {/* ══ GENERAL ══ */}
@@ -173,76 +173,76 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       <div className="mbody" id="set-account" style={{display:tab==='security'?'block':'none'}}>
         <div className="msec">APP LOCK (PIN)</div>
         <div style={{fontSize:'10px',color:'#556',marginBottom:'8px',lineHeight:'1.6'}}>
-          Protejează terminalul cu un PIN local. La fiecare deschidere a aplicației, vei fi întrebat PIN-ul înainte să vezi datele.
+          Protect the terminal with a local PIN. You will be prompted for the PIN each time the app opens, before you can see your data.
         </div>
         <div className="mrow"><span className="mlbl">Status</span>
-          <span id="pinStatus" style={{fontSize:'11px',color:'#556',fontWeight:700}}>DEZACTIVAT</span>
+          <span id="pinStatus" style={{fontSize:'11px',color:'#556',fontWeight:700}}>DISABLED</span>
         </div>
         <div id="pinSetupForm">
           <div className="mrow" style={{marginBottom:'6px'}}>
             <span className="mlbl">PIN (4–8 cifre/litere)</span>
-            <input type="password" id="pinInput" placeholder="Introdu PIN" maxLength={8} style={pinInp} />
+            <input type="password" id="pinInput" placeholder="Enter PIN" maxLength={8} style={pinInp} />
           </div>
           <div className="mrow" style={{marginBottom:'6px'}}>
-            <span className="mlbl">Confirmă PIN</span>
-            <input type="password" id="pinConfirm" placeholder="Repetă PIN" maxLength={8} style={pinInp} />
+            <span className="mlbl">Confirm PIN</span>
+            <input type="password" id="pinConfirm" placeholder="Repeat PIN" maxLength={8} style={pinInp} />
           </div>
           <div style={{display:'flex',gap:'6px',marginTop:'6px'}}>
-            <button className="hub-sbtn pri" id="pinActivateBtn" onClick={() => pinActivate?.()}>ACTIVEAZĂ PIN</button>
-            <button className="hub-sbtn" id="pinRemoveBtn" style={{display:'none',borderColor:'#ff335533',color:'#ff6655'}} onClick={() => pinRemove?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> DEZACTIVEAZĂ</button>
+            <button className="hub-sbtn pri" id="pinActivateBtn" onClick={() => pinActivate?.()}>ACTIVATE PIN</button>
+            <button className="hub-sbtn" id="pinRemoveBtn" style={{display:'none',borderColor:'#ff335533',color:'#ff6655'}} onClick={() => pinRemove?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> DEACTIVATE</button>
           </div>
           <div id="pin-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
-        <div className="msec" style={{marginTop:'16px'}}>SCHIMBĂ PAROLA</div>
+        <div className="msec" style={{marginTop:'16px'}}>CHANGE PASSWORD</div>
         <div id="chpw-form">
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="chpwCurrent" placeholder="Parola actuală" style={inp} /></div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola nouă</span><input type="password" id="chpwNew" placeholder="Min 12 caractere (A-z, 0-9)" style={inp} /></div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Confirmă parola</span><input type="password" id="chpwConfirm" placeholder="Repetă parola nouă" style={inp} /></div>
-          <button className="hub-sbtn pri" id="chpwRequestBtn" style={{marginTop:'6px'}} onClick={chpwRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod de verificare</button>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Current password</span><input type="password" id="chpwCurrent" placeholder="Current password" style={inp} /></div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">New password</span><input type="password" id="chpwNew" placeholder="Min 12 characters (A-z, 0-9)" style={inp} /></div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Confirm password</span><input type="password" id="chpwConfirm" placeholder="Repeat new password" style={inp} /></div>
+          <button className="hub-sbtn pri" id="chpwRequestBtn" style={{marginTop:'6px'}} onClick={chpwRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Send verification code</button>
           <div id="chpw-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="chpw-code-form" style={{display:'none',marginTop:'10px'}}>
-          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE VERIFICARE</div>
-          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>Am trimis un cod pe emailul tău. Introdu-l mai jos:</div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="chpwCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
-          <button className="hub-sbtn pri" id="chpwConfirmBtn" onClick={chpwConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
+          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> VERIFICATION CODE</div>
+          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>We sent a code to your email. Enter it below:</div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="chpwCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
+          <button className="hub-sbtn pri" id="chpwConfirmBtn" onClick={chpwConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirm change</button>
           <div id="chpw-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
-        <div className="msec" style={{marginTop:'16px'}}>SCHIMBĂ EMAIL</div>
+        <div className="msec" style={{marginTop:'16px'}}>CHANGE EMAIL</div>
         <div id="chem-form">
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Email nou</span><input type="email" id="chemNewEmail" placeholder="email@exemplu.com" style={inp} /></div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="chemPassword" placeholder="Confirmă cu parola" style={inp} /></div>
-          <button className="hub-sbtn pri" id="chemRequestBtn" style={{marginTop:'6px'}} onClick={chemRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod pe noul email</button>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">New email</span><input type="email" id="chemNewEmail" placeholder="email@example.com" style={inp} /></div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Current password</span><input type="password" id="chemPassword" placeholder="Confirm with password" style={inp} /></div>
+          <button className="hub-sbtn pri" id="chemRequestBtn" style={{marginTop:'6px'}} onClick={chemRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Send code to new email</button>
           <div id="chem-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="chem-code-form" style={{display:'none',marginTop:'10px'}}>
-          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE VERIFICARE</div>
-          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>Am trimis un cod pe noul email. Introdu-l mai jos:</div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="chemCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
-          <button className="hub-sbtn pri" id="chemConfirmBtn" onClick={chemConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
+          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> VERIFICATION CODE</div>
+          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>We sent a code to the new email. Enter it below:</div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="chemCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
+          <button className="hub-sbtn pri" id="chemConfirmBtn" onClick={chemConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirm change</button>
           <div id="chem-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
-        <div className="msec" style={{marginTop:'16px'}}>INFORMAȚII CONT</div>
+        <div className="msec" style={{marginTop:'16px'}}>ACCOUNT INFO</div>
         <div style={{fontSize:'10px',color:'#556'}}>
           <div style={{marginBottom:'4px'}}>Email: <span style={{color:'#ccc'}} id="chpwUserEmail">—</span></div>
-          <div>Rol: <span style={{color:'#00afff'}} id="chpwUserRole">—</span></div>
+          <div>Role: <span style={{color:'#00afff'}} id="chpwUserRole">—</span></div>
         </div>
 
-        <div className="msec" style={{marginTop:'24px',color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff4444'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> ÎNCHIDE CONTUL</div>
-        <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Această acțiune este permanentă și nu poate fi anulată. Toate datele tale vor fi șterse.</div>
+        <div className="msec" style={{marginTop:'24px',color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff4444'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> CLOSE ACCOUNT</div>
+        <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>This action is permanent and cannot be undone. All your data will be deleted.</div>
         <div id="clac-form">
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="clacPassword" placeholder="Confirmă cu parola" style={{...inp, borderColor:'#ff444444'}} /></div>
-          <button className="hub-sbtn" id="clacRequestBtn" style={{marginTop:'6px',background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Trimite cod de confirmare</button>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Current password</span><input type="password" id="clacPassword" placeholder="Confirm with password" style={{...inp, borderColor:'#ff444444'}} /></div>
+          <button className="hub-sbtn" id="clacRequestBtn" style={{marginTop:'6px',background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Send confirmation code</button>
           <div id="clac-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="clac-code-form" style={{display:'none',marginTop:'10px'}}>
-          <div className="msec" style={{color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE CONFIRMARE ȘTERGERE</div>
-          <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Introdu codul primit pe email pentru a confirma ștergerea contului:</div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="clacCode" maxLength={6} placeholder="000000" style={dangerCodeInp} /></div>
-          <button className="hub-sbtn" id="clacConfirmBtn" style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> ȘTERGE CONTUL DEFINITIV</button>
+          <div className="msec" style={{color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> DELETION CONFIRMATION CODE</div>
+          <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Enter the code from your email to confirm account deletion:</div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="clacCode" maxLength={6} placeholder="000000" style={dangerCodeInp} /></div>
+          <button className="hub-sbtn" id="clacConfirmBtn" style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> DELETE ACCOUNT PERMANENTLY</button>
           <div id="clac-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
       </div>
@@ -313,8 +313,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}} onClick={() => w.ZLOG?.clear?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear ZLOG</button>
         </div>
         <div style={{marginTop:'4px',fontSize:'6px',color:'#3a4a5a',lineHeight:'1.6'}}>
-          Colectează: atLog + devLog + erori async (safeAsync).<br/>
-          Max 400 entries · dedup 2s · export fără server.
+          Collects: atLog + devLog + async errors (safeAsync).<br/>
+          Max 400 entries · dedup 2s · export without server.
         </div>
         <div className="msec">BUILD INFO</div>
         <div id="hub-build-info" style={{fontSize:'7px',color:'#556677',lineHeight:'1.8'}}>ZeuS v108 — FIX: chart negru la schimb simbol/TF + _adaptClamp + PostMortem + RegimeWatch</div>
@@ -323,7 +323,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       {/* ══ EXCHANGE API ══ */}
       <div id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px', overflowY:'auto', flex:'1 1 auto'}}>
         <div style={{fontSize:'8px',color:'#ff8800',marginBottom:'10px',lineHeight:'1.6'}}>
-          Cheile sunt criptate la server · Folosește READ + TRADE only (fără withdrawal) · Restricționează IP
+          Keys are encrypted server-side · Use READ + TRADE only (no withdrawal) · Restrict by IP
         </div>
         {(['binance', 'bybit'] as const).map(ex => {
           const info = exAccounts[ex]
@@ -337,7 +337,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
               <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
                 <span style={{fontSize:'10px',fontWeight:700,color:accentColor,letterSpacing:'1px'}}>{label}</span>
                 <span style={{fontSize:'9px',color: info ? '#00d97a' : '#556'}}>
-                  {info ? `● CONECTAT · ${info.mode.toUpperCase()} · ${info.maskedKey}` : '○ deconectat'}
+                  {info ? `● CONNECTED · ${info.mode.toUpperCase()} · ${info.maskedKey}` : '○ disconnected'}
                 </span>
               </div>
               {info ? (
@@ -369,7 +369,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
                   </>
                 ) : (
                   <button className="hub-sbtn pri" style={{flex:1,fontWeight:700}} onClick={() => exSave(ex)} disabled={!!loading}>
-                    {loading ? 'SE VERIFICĂ...' : 'VERIFY & SAVE'}
+                    {loading ? 'VERIFYING...' : 'VERIFY & SAVE'}
                   </button>
                 )}
               </div>

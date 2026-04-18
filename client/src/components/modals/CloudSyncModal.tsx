@@ -70,10 +70,10 @@ export function CloudSyncModal({ visible, onClose }: Props) {
             color: '#ff4466', borderRadius: 4, fontSize: 9, fontWeight: 700,
             cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: 1.5
           }} onClick={() => masterReset?.()}>
-            <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff4466' }}><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> MASTER RESET — ȘTERGE TOT
+            <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff4466' }}><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> MASTER RESET — ERASE ALL
           </button>
           <div style={{ fontSize: 7, color: '#ff335544', textAlign: 'center', marginTop: 4 }}>
-            Resetează poziții, AT, DSL, PERF, DHF + localStorage
+            Resets positions, AT, DSL, PERF, DHF + localStorage
           </div>
         </div>
       </div>

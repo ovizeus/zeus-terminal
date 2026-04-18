@@ -42,7 +42,7 @@ export function WelcomeModal({ visible, onClose }: Props) {
           {/* Row 3: Status cards */}
           <div className="wlc-row wlc-row-3">
             <div className="wlc-card wlc-mini">
-              <div className="wlc-label">POZIȚII</div>
+              <div className="wlc-label">POSITIONS</div>
               <div className="wlc-value" id="wlcPositions">0</div>
             </div>
             <div className="wlc-card wlc-mini">
@@ -56,7 +56,7 @@ export function WelcomeModal({ visible, onClose }: Props) {
           </div>
         </div>
         <button className="wlc-enter" id="wlcEnterBtn" onClick={onClose}>
-          INTRĂ ÎN TERMINAL{' '}
+          ENTER TERMINAL{' '}
           <svg className="z-i" viewBox="0 0 16 16"><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
         </button>
       </div>

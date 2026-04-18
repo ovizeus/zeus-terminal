@@ -29,7 +29,7 @@ function StatusBadge({ u }: { u: AdminUser }) {
     </span>
   )
   if (u.status === 'banned') {
-    let label = 'BANAT'
+    let label = 'BANNED'
     if (u.bannedUntil && u.bannedUntil !== '9999-12-31T23:59:59Z') {
       const d = new Date(u.bannedUntil)
       label += ' → ' + d.toLocaleDateString('ro-RO') + ' ' + d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })
@@ -44,7 +44,7 @@ function StatusBadge({ u }: { u: AdminUser }) {
   }
   if (u.status === 'blocked') return (
     <span className="adm-badge" style={{ background: '#ff880022', color: '#ff8844', borderColor: '#ff884444' }}>
-      <span className="z-dot z-dot--ylw"></span> BLOCAT
+      <span className="z-dot z-dot--ylw"></span> BLOCKED
     </span>
   )
   if (!u.approved) return (
@@ -54,7 +54,7 @@ function StatusBadge({ u }: { u: AdminUser }) {
   )
   return (
     <span className="adm-badge" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>
-      <span className="z-dot z-dot--grn"></span> ACTIV
+      <span className="z-dot z-dot--grn"></span> ACTIVE
     </span>
   )
 }
@@ -93,11 +93,11 @@ export function AdminModal({ visible, onClose }: Props) {
     fetch('/auth/admin/users', { credentials: 'same-origin', headers: { 'X-Zeus-Request': '1' } })
       .then(r => r.json())
       .then(data => {
-        if (!data.ok) { setUsersError('Eroare'); setUsersLoading(false); return }
+        if (!data.ok) { setUsersError('Error'); setUsersLoading(false); return }
         setUsers(data.users || [])
         setUsersLoading(false)
       })
-      .catch(() => { setUsersError('Eroare de conexiune'); setUsersLoading(false) })
+      .catch(() => { setUsersError('Connection error'); setUsersLoading(false) })
   }, [])
 
   const loadAudit = useCallback(() => {
@@ -114,7 +114,7 @@ export function AdminModal({ visible, onClose }: Props) {
         setAuditEntries(data.entries)
         setAuditLoading(false)
       })
-      .catch(() => { setAuditError('Eroare de conexiune'); setAuditLoading(false) })
+      .catch(() => { setAuditError('Connection error'); setAuditLoading(false) })
   }, [])
 
   const adminPost = useCallback((endpoint: string, body: object) => {
@@ -169,7 +169,7 @@ export function AdminModal({ visible, onClose }: Props) {
 
   return (
     <ModalOverlay id="madmin" visible={visible} onClose={onClose} maxWidth="620px">
-      <ModalHeader title="ADMIN — GESTIONARE USERI" onClose={onClose} />
+      <ModalHeader title="ADMIN — USER MANAGEMENT" onClose={onClose} />
 
       <div className="mbody" style={{ padding: 0, maxHeight: '70vh', overflowY: 'auto', display: 'block' }}>
         {/* Tab bar */}
@@ -179,7 +179,7 @@ export function AdminModal({ visible, onClose }: Props) {
             borderBottom: tab === 'users' ? '2px solid #00afff' : '2px solid transparent',
             color: tab === 'users' ? '#00afff' : '#556',
             fontSize: 11, fontWeight: 700, cursor: 'pointer', letterSpacing: 1
-          }}>USERI</button>
+          }}>USERS</button>
           <button id="adminTabAudit" onClick={() => setTab('audit')} style={{
             flex: 1, padding: '10px 0', background: 'none', border: 'none',
             borderBottom: tab === 'audit' ? '2px solid #00afff' : '2px solid transparent',
@@ -192,7 +192,7 @@ export function AdminModal({ visible, onClose }: Props) {
         <div id="adminPanelUsers" style={{ display: tab === 'users' ? undefined : 'none' }}>
           {/* Search bar */}
           <div style={{ padding: '12px 16px 8px', position: 'sticky', top: 36, background: '#080e14', zIndex: 2, borderBottom: '1px solid #1a2a3a' }}>
-            <input id="adminSearch" type="text" placeholder="Caută user..." value={search} onChange={e => setSearch(e.target.value)} style={{
+            <input id="adminSearch" type="text" placeholder="Search user..." value={search} onChange={e => setSearch(e.target.value)} style={{
               width: '100%', padding: '8px 12px', borderRadius: 6, border: '1px solid #1a2a3a',
               background: '#0a1018', color: '#ccc', fontSize: 12, outline: 'none', boxSizing: 'border-box'
             }} />
@@ -200,20 +200,20 @@ export function AdminModal({ visible, onClose }: Props) {
               {!usersLoading && !usersError && <>
                 <span style={{ color: '#00afff' }}>Total: {users.length}</span>
                 {pending.length > 0 && <span style={{ color: '#f0c040' }}><span className="z-dot z-dot--ylw"></span> Pending: {pending.length}</span>}
-                {blocked > 0 && <span style={{ color: '#ff8844' }}><span className="z-dot z-dot--ylw"></span> Blocați: {blocked}</span>}
-                {banned > 0 && <span style={{ color: '#ff4444' }}><span className="z-dot z-dot--red"></span> Banați: {banned}</span>}
+                {blocked > 0 && <span style={{ color: '#ff8844' }}><span className="z-dot z-dot--ylw"></span> Blocked: {blocked}</span>}
+                {banned > 0 && <span style={{ color: '#ff4444' }}><span className="z-dot z-dot--red"></span> Banned: {banned}</span>}
               </>}
             </div>
           </div>
 
-          {usersLoading && <div style={{ color: '#556', padding: '8px 16px' }}>Se încarcă...</div>}
+          {usersLoading && <div style={{ color: '#556', padding: '8px 16px' }}>Loading...</div>}
           {usersError && <div style={{ color: '#ff4444', padding: '8px 16px' }}>{usersError}</div>}
 
           {/* Pending approvals */}
           {filteredPending.length > 0 && (
             <div id="adminPendingSection" style={{ padding: '12px 16px 0' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#f0c040', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Cereri noi de aprobare
+                New approval requests
               </div>
               <div id="adminPendingList">
                 {filteredPending.map(u => (
@@ -221,10 +221,10 @@ export function AdminModal({ visible, onClose }: Props) {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ color: '#eee', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{u.email}</div>
-                        <div style={{ fontSize: 9, color: '#556', marginTop: 2 }}>Înregistrat: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ro-RO') : '?'}</div>
+                        <div style={{ fontSize: 9, color: '#556', marginTop: 2 }}>Registered: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ro-RO') : '?'}</div>
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button onClick={() => adminPost('approve', { email: u.email })} className="adm-btn" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>✓ APROBĂ</button>
+                        <button onClick={() => adminPost('approve', { email: u.email })} className="adm-btn" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>✓ APPROVE</button>
                         <button onClick={() => { if (confirm(`Reject user ${u.email}?`)) adminPost('reject', { email: u.email }) }} className="adm-btn" style={{ background: '#ff444422', color: '#ff4444', borderColor: '#ff444444' }}>✕ REJECT</button>
                       </div>
                     </div>
@@ -238,11 +238,11 @@ export function AdminModal({ visible, onClose }: Props) {
           {!usersLoading && !usersError && (
             <div style={{ padding: '12px 16px' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#00afff', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>
-                Useri existenți
+                Existing users
               </div>
               <div id="adminUsersList" style={{ fontSize: 12 }}>
                 {filteredActive.length === 0 ? (
-                  <div style={{ color: '#445', fontSize: 11, textAlign: 'center', padding: 12 }}>Niciun user activ</div>
+                  <div style={{ color: '#445', fontSize: 11, textAlign: 'center', padding: 12 }}>No active users</div>
                 ) : filteredActive.map(u => {
                   const isAdmin = u.role === 'admin'
                   const isBlocked = u.status === 'blocked'
@@ -257,15 +257,15 @@ export function AdminModal({ visible, onClose }: Props) {
                             <ExBadge u={u} />
                           </div>
                           <div style={{ fontSize: 9, color: '#445', marginTop: 3 }}>
-                            Înregistrat: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ro-RO') : '?'}
-                            {u.exchange && u.exchange.connected && u.exchange.lastVerified ? ' · API verificat: ' + new Date(u.exchange.lastVerified).toLocaleDateString('ro-RO') : ''}
+                            Registered: {u.createdAt ? new Date(u.createdAt).toLocaleDateString('ro-RO') : '?'}
+                            {u.exchange && u.exchange.connected && u.exchange.lastVerified ? ' · API verified: ' + new Date(u.exchange.lastVerified).toLocaleDateString('ro-RO') : ''}
                           </div>
                         </div>
                         {!isAdmin && (
                           <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
                             {/* Block toggle */}
                             {isBlocked ? (
-                              <button onClick={() => adminPost('block', { email: u.email, block: false })} className="adm-btn" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>DEBLOCHEAZĂ</button>
+                              <button onClick={() => adminPost('block', { email: u.email, block: false })} className="adm-btn" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>UNBLOCK</button>
                             ) : !isBanned ? (
                               <button onClick={() => { if (confirm(`Block user ${u.email}?`)) adminPost('block', { email: u.email, block: true }) }} className="adm-btn" style={{ background: '#ff880022', color: '#ff8844', borderColor: '#ff884444' }}>BLOCK</button>
                             ) : null}
@@ -278,10 +278,10 @@ export function AdminModal({ visible, onClose }: Props) {
                                 {banMenuOpen === u.email && (
                                   <div style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#0d1520', border: '1px solid #1a2a3a', borderRadius: 6, padding: 4, zIndex: 10, minWidth: 100, boxShadow: '0 4px 12px rgba(0,0,0,.5)' }}>
                                     {[
-                                      { dur: '1h', label: '1 oră', color: '#ff8844' },
-                                      { dur: '24h', label: '24 ore', color: '#ff6644' },
-                                      { dur: '7d', label: '7 zile', color: '#ff4444' },
-                                      { dur: '30d', label: '30 zile', color: '#ff2222' },
+                                      { dur: '1h', label: '1 hour', color: '#ff8844' },
+                                      { dur: '24h', label: '24 hours', color: '#ff6644' },
+                                      { dur: '7d', label: '7 days', color: '#ff4444' },
+                                      { dur: '30d', label: '30 days', color: '#ff2222' },
                                     ].map(opt => (
                                       <div key={opt.dur} onClick={() => { setBanMenuOpen(null); adminPost('ban', { email: u.email, duration: opt.dur }) }}
                                         style={{ padding: '5px 10px', cursor: 'pointer', color: opt.color, fontSize: 10, borderRadius: 4, whiteSpace: 'nowrap' }}
@@ -318,7 +318,7 @@ export function AdminModal({ visible, onClose }: Props) {
         <div id="adminPanelAudit" style={{ display: tab === 'audit' ? undefined : 'none', padding: '12px 16px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#f0c040', textTransform: 'uppercase', letterSpacing: 1 }}>
-              Ultimele acțiuni
+              Latest actions
             </div>
             <button onClick={loadAudit} style={{
               background: '#00afff22', color: '#00afff', border: '1px solid #00afff44',
@@ -326,10 +326,10 @@ export function AdminModal({ visible, onClose }: Props) {
             }}>REFRESH</button>
           </div>
           <div id="adminAuditList" style={{ fontSize: 11, color: '#556' }}>
-            {auditLoading && <div style={{ color: '#556', padding: 8 }}>Se încarcă...</div>}
+            {auditLoading && <div style={{ color: '#556', padding: 8 }}>Loading...</div>}
             {auditError && <div style={{ color: '#ff4444' }}>{auditError}</div>}
             {!auditLoading && !auditError && auditEntries.length === 0 && (
-              <div style={{ color: '#445', textAlign: 'center', padding: 12 }}>Niciun eveniment</div>
+              <div style={{ color: '#445', textAlign: 'center', padding: 12 }}>No events</div>
             )}
             {!auditLoading && !auditError && auditEntries.map((e, i) => {
               const dt = e.created_at ? new Date(e.created_at + 'Z') : null
