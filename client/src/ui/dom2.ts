@@ -38,21 +38,31 @@ export function _initAudio(): void {
 
 export function _updateAudioBadge(): void {
   const b = el('soundBadge');
-  if (!b) return;
-  if (!_audioReady) {
-    b.innerHTML = _ZI.mute + ' SOUND';
-    b.style.color = 'var(--orange)';
-    b.title = 'Click to enable sound';
-  } else if (_soundMuted) {
-    b.innerHTML = _ZI.mute + ' SOUND MUTED';
-    b.style.color = 'var(--dim)';
-    b.title = 'Click to unmute';
-  } else {
-    b.innerHTML = _ZI.vol + ' SOUND READY';
-    b.style.color = 'var(--lime)';
-    b.title = 'Click to mute';
+  if (b) {
+    if (!_audioReady) {
+      b.innerHTML = _ZI.mute + ' SOUND';
+      b.style.color = 'var(--orange)';
+      b.title = 'Click to enable sound';
+    } else if (_soundMuted) {
+      b.innerHTML = _ZI.mute + ' SOUND MUTED';
+      b.style.color = 'var(--dim)';
+      b.title = 'Click to unmute';
+    } else {
+      b.innerHTML = _ZI.vol + ' SOUND READY';
+      b.style.color = 'var(--lime)';
+      b.title = 'Click to mute';
+    }
+    b.style.cursor = 'pointer';
   }
-  b.style.cursor = 'pointer';
+  // [BUG7.1] Mirror state onto the AlertsModal #snd button so both UI
+  // surfaces stay in sync regardless of which one triggered the toggle.
+  const s = el('snd');
+  if (s) {
+    s.innerHTML = _soundMuted || !_audioReady ? _ZI.bellX : _ZI.bell;
+    s.title = !_audioReady
+      ? 'Sound not initialized — click to enable'
+      : (_soundMuted ? 'Sound muted — click to unmute' : 'Sound on — click to mute');
+  }
 }
 
 // FIX 17: Unlock on multiple gesture types for iOS compatibility
