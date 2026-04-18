@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.6.24',
-    build: 8,
+    build: 9,
     date: '2026-04-18',
-    changelog: 'Post-v2 security + correctness batch. [C1] serverAT.onPriceUpdate now guards pos.tp before HIT_TP — manual entries without TP no longer auto-close on the first tick (JS coerced null>=price to price>=0). [H1] WS + HTTP session auth: legacy JWTs without tokenVersion claim could bypass password-change force-logout and status check; rewrote to (?? 0) compare on both sides. [H1.1] Same pattern fixed across 8 admin routes in auth.js. [H2] RECON_PHANTOM no longer fabricates exit price from pos._lastPrice; explicit priority realExitPrice>0 -> bpos.markPrice>0 -> pos.price with estimatedClose audit flag + telegram alert for manual reconciliation.'
+    changelog: 'Post-v2 security + correctness batch (build 9 extends build 8). [L1] engine/brain.ts BR.regime fallback escaped via escHtml before reaching BrainCockpit dangerouslySetInnerHTML. [L2] bootstrapError.ts DLog fallback (unknown categories + catch branch) now escapes keys/values/JSON.stringify output. Scope note: bootstrapError.ts lines 180-186 (known categories) use the same raw-concat pattern and are pending L2.1. Previous build 8: [C1] serverAT pos.tp guard, [H1] WS+HTTP JWT tokenVersion bypass via (?? 0) compare, [H1.1] same pattern across 8 admin routes, [H2] RECON_PHANTOM no longer uses _lastPrice fallback.'
 };
