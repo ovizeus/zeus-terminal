@@ -11,7 +11,7 @@ export function LLVSettingsModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState<typeof tabs[number]>('DISPLAY')
 
   return (
-    <ModalOverlay id="mllv" visible={visible} onClose={onClose}>
+    <ModalOverlay id="mllv" visible={visible} onClose={onClose} zIndex={9500}>
       <ModalHeader title="LIQ LEVELS V2" titleStyle={{ color: '#f0c040' }} onClose={onClose} />
 
       <div style={{ padding: '12px 16px' }}>

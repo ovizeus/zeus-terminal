@@ -13,7 +13,7 @@ export function SRSettingsModal({ visible, onClose }: Props) {
   const [period, setPeriod] = useState('Session')
 
   return (
-    <ModalOverlay id="msr" visible={visible} onClose={onClose}>
+    <ModalOverlay id="msr" visible={visible} onClose={onClose} zIndex={9500}>
       <ModalHeader title="ZEUS S/R SETTINGS" onClose={onClose} />
 
       <div className="mtabs">

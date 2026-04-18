@@ -32,7 +32,7 @@ export function LiqSettingsModal({ visible, onClose }: Props) {
   }
 
   return (
-    <ModalOverlay id="mliq" visible={visible} onClose={onClose}>
+    <ModalOverlay id="mliq" visible={visible} onClose={onClose} zIndex={9500}>
       <ModalHeader title="LIQ CHART SETTINGS" onClose={onClose} />
 
       <div style={{ padding: '12px 16px' }}>
