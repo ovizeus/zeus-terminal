@@ -135,7 +135,11 @@ function liqChart(): string[] {
   const openInterest = S?._qmOpenInterest || 0
   const posRatio = posLongRatio > 0 ? `pos ${(posLongRatio * 100).toFixed(0)}%L/${(posShortRatio * 100).toFixed(0)}%S` : `acc ${(longRatio * 100).toFixed(0)}%L/${(shortRatio * 100).toFixed(0)}%S`
   const liqEventCount = (realLiqs.length || 0) + Object.keys(S?.llvBuckets || {}).length
-  lines.push(`  <span class="dg">\u25CF real event | ${posRatio} | OI:${openInterest.toFixed(0)}BTC | real liq feed 24h | src: BNB+BYB+OKX | ${liqEventCount} lvl</span>`)
+  const bucketCount = Object.keys(liqBuckets).length
+  const status = bucketCount === 0
+    ? `<span class="y">accumulating real liqs — ${liqEventCount} events so far (24h rolling)</span>`
+    : `real liq feed 24h | ${bucketCount} active levels | ${liqEventCount} events`
+  lines.push(`  <span class="dg">\u25CF ${status} | src: BNB+BYB+OKX | ${posRatio} | OI:${openInterest.toFixed(0)}BTC</span>`)
 
   return lines
 }

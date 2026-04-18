@@ -30,7 +30,24 @@ export function buildLiqEstimate(): void {
     c._qmLiqBuckets[bk].price = bPrice
   }
 
-  // 1) Binance + Bybit — already per-price aggregated by procLiq in marketDataWS
+  // 1) Per-event buffers from all 3 exchanges (populated by addLiq via
+  //    zeus:liq / zeus:okxLiq). These bypass the liqMinUsd threshold, so the
+  //    map stays populated even when big liqs are sparse.
+  const allEvents = ([] as any[])
+    .concat(QM.liqAgg.binance.btc || [])
+    .concat(QM.liqAgg.bybit.btc || [])
+    .concat(QM.liqAgg.okx.btc || [])
+  allEvents.forEach(liq => {
+    if (!liq || !liq.p || !liq.vol) return
+    if (liq.time && liq.time < cutoff) return
+    const isLong = liq.side === 'SELL' || !!liq.isLong
+    const pct = ((+liq.p - p) / p) * 100
+    addBucket(pct, +liq.p, isLong, +liq.vol)
+  })
+
+  // 2) Fallback: w.S.llvBuckets (classic Zeus llv feed, already per-price
+  //    aggregated but subject to liqMinUsd). Adds extra density from liqs
+  //    that may have missed the dispatch path.
   const llv = c.llvBuckets || {}
   for (const pkey in llv) {
     const b = llv[pkey]; if (!b || !b.price) continue
@@ -39,16 +56,6 @@ export function buildLiqEstimate(): void {
     if (b.longUSD > 0) addBucket(pct, b.price, true, b.longUSD)
     if (b.shortUSD > 0) addBucket(pct, b.price, false, b.shortUSD)
   }
-
-  // 2) OKX — per-event array (side: 'SELL' = long liquidated)
-  const okxEvents = (QM.liqAgg.okx.btc || []) as any[]
-  okxEvents.forEach(liq => {
-    if (!liq || !liq.p || !liq.vol) return
-    if (liq.time && liq.time < cutoff) return
-    const isLong = liq.side === 'SELL' || !!liq.isLong
-    const pct = ((+liq.p - p) / p) * 100
-    addBucket(pct, +liq.p, isLong, +liq.vol)
-  })
 }
 
 export async function fetchTopTraderPositionRatio(): Promise<void> {

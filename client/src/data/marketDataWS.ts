@@ -119,6 +119,17 @@ function procLiq(o: any, src?: string): void {
   const qty = +o.q, price = +o.p
   const sym = (o.s || '').replace('USDT', '').substring(0, 3)
   const usd = qty * price
+  // [BUG5.5.2] Feed QM liquidation map unfiltered so the map does not starve
+  // below liqMinUsd. Dispatch BEFORE the classic-feed threshold filter.
+  if (sym === 'BTC' && usd > 0 && Number.isFinite(usd)) {
+    const _isLongQ = o.S === 'SELL'
+    try {
+      window.dispatchEvent(new CustomEvent('zeus:liq', { detail: {
+        exchange: src === 'byb' ? 'bybit' : 'binance',
+        p: price, vol: usd, side: o.S, isLong: _isLongQ, time: Date.now()
+      }}))
+    } catch (_) { /* noop */ }
+  }
   if (usd < w.S.liqMinUsd) return
   const isLong = o.S === 'SELL'
   const m = w.S.liqMetrics[src] || w.S.liqMetrics.bnb
