@@ -203,23 +203,7 @@ function useDockLinkState(): { atHasPos: boolean; manualHasPos: boolean } {
     recompute()
     window.addEventListener('zeus:positionsChanged', recompute)
     window.addEventListener('zeus:atStateChanged', recompute)
-    // [BATCH3-P] Boot catch-up: positions arrive ~1.5-3s after mount via the
-    // Phase 3 server sync. Without this, the initial recompute() runs with an
-    // empty TP and the dots stay dark until the first zeus:positionsChanged
-    // event fires. Short poll for 12s covers the boot window; auto-stops once
-    // positions are detected (or on unmount / next re-run via event).
-    let ticks = 0
-    const bootPoll = setInterval(() => {
-      ticks++
-      recompute()
-      const w = window as any
-      const TP = w.TP || {}
-      const AT = w.AT || {}
-      const arr = (AT.mode === 'live') ? (TP.livePositions || []) : (TP.demoPositions || [])
-      if (ticks >= 48 || (Array.isArray(arr) && arr.length > 0)) clearInterval(bootPoll)
-    }, 250)
     return () => {
-      clearInterval(bootPoll)
       window.removeEventListener('zeus:positionsChanged', recompute)
       window.removeEventListener('zeus:atStateChanged', recompute)
     }

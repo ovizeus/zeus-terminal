@@ -20,35 +20,31 @@ const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.I
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null
 
-// [BATCH3-P] PIN unlock is now in-memory ONLY. Prior M12 behaviour kept unlock
-// in localStorage with a 4h TTL so users weren't re-prompted after a crash/tab
-// close. User feedback: this failed its security purpose — app close+relaunch
-// (incl. Capacitor WebView) kept PIN silent for up to 4h.
-// Now: any full page reload, any tab close, any Capacitor app kill-and-reopen
-// clears the in-memory flag → PIN is required again. Also proactively clears
-// the legacy localStorage/sessionStorage keys so no lingering unlock survives
-// the upgrade.
-let _pinUnlockedMemory = false
+// [M12] PIN unlock persists across tab close — localStorage + 4h TTL.
+// On expiry/missing → user is asked for PIN again. Cleared on logout/PIN remove.
+const PIN_UNLOCK_KEY = 'zeus_pin_unlocked_until'
+const PIN_UNLOCK_TTL_MS = 4 * 60 * 60 * 1000 // 4h
 
 function _pinIsUnlocked(): boolean {
-  return _pinUnlockedMemory
+  try {
+    const exp = parseInt(localStorage.getItem(PIN_UNLOCK_KEY) || '0', 10)
+    if (exp && Date.now() < exp) return true
+    if (exp) localStorage.removeItem(PIN_UNLOCK_KEY) // expired — clean up
+  } catch (_) {}
+  // Legacy session-storage fallback (still honored within the same tab)
+  try { if (sessionStorage.getItem('zeus_pin_unlocked')) return true } catch (_) {}
+  return false
 }
 
 function _pinMarkUnlocked(): void {
-  _pinUnlockedMemory = true
+  try { localStorage.setItem(PIN_UNLOCK_KEY, String(Date.now() + PIN_UNLOCK_TTL_MS)) } catch (_) {}
+  try { sessionStorage.setItem('zeus_pin_unlocked', '1') } catch (_) {}
 }
 
 function _pinClearUnlocked(): void {
-  _pinUnlockedMemory = false
-  // Legacy cleanup — remove any persisted unlock from older builds.
-  try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}
+  try { localStorage.removeItem(PIN_UNLOCK_KEY) } catch (_) {}
   try { sessionStorage.removeItem('zeus_pin_unlocked') } catch (_) {}
 }
-
-// Wipe any pre-existing persisted unlock from older clients on module load.
-// Without this, first launch after upgrade would still trust the legacy key.
-try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}
-try { sessionStorage.removeItem('zeus_pin_unlocked') } catch (_) {}
 
 export async function _pinIsSet(): Promise<boolean> {
   if (_pinSetCache !== null) return _pinSetCache
