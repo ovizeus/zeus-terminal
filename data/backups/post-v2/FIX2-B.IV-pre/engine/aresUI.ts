@@ -652,12 +652,12 @@ export function initAriaBrain() {
     // ── Cele 6 zone anatomice (coordonate centroid în spațiul SVG) ──────
     // Poziționate corect pe creierul lateral din imagine
     const ZONES = [
-      { name: 'Frontal lobe', sub: 'Decision \u00b7 Planning', cx: 85, cy: 110, r: 52, col: '#2962FF', pinX: 87, pinY: 80 },
-      { name: 'Parietal lobe', sub: 'Motion \u00b7 Senses', cx: 190, cy: 95, r: 55, col: '#00E5FF', pinX: 155, pinY: 30 },
-      { name: 'Temporal lobe', sub: 'Memory \u00b7 Hearing', cx: 100, cy: 175, r: 45, col: '#2962FF', pinX: 87, pinY: 178 },
-      { name: 'Occipital lobe', sub: 'Visual \u00b7 Chart', cx: 240, cy: 145, r: 48, col: '#00E5FF', pinX: 253, pinY: 125 },
-      { name: 'Cerebellum', sub: 'Balance \u00b7 SL/TP', cx: 195, cy: 215, r: 42, col: '#FFB000', pinX: 218, pinY: 248 },
-      { name: 'Brain stem', sub: 'AutoTrade \u00b7 Kill-switch', cx: 140, cy: 215, r: 35, col: '#C1121F', pinX: 127, pinY: 232 },
+      { name: 'Lobul frontal', sub: 'Decizie \u00b7 Planificare', cx: 85, cy: 110, r: 52, col: '#2962FF', pinX: 87, pinY: 80 },
+      { name: 'Lobul parietal', sub: 'Mi\u0219care \u00b7 Senza\u021bii', cx: 190, cy: 95, r: 55, col: '#00E5FF', pinX: 155, pinY: 30 },
+      { name: 'Lobul temporal', sub: 'Memorie \u00b7 Auz', cx: 100, cy: 175, r: 45, col: '#2962FF', pinX: 87, pinY: 178 },
+      { name: 'Lobul occipital', sub: 'Vizual \u00b7 Chart', cx: 240, cy: 145, r: 48, col: '#00E5FF', pinX: 253, pinY: 125 },
+      { name: 'Cerebelul', sub: 'Echilibru \u00b7 SL/TP', cx: 195, cy: 215, r: 42, col: '#FFB000', pinX: 218, pinY: 248 },
+      { name: 'Trunchi cerebral', sub: 'AutoTrade \u00b7 Kill-switch', cx: 140, cy: 215, r: 35, col: '#C1121F', pinX: 127, pinY: 232 },
     ]
 
     // ── BUILD SVG ────────────────────────────────────────────────────────

@@ -114,7 +114,7 @@ export async function fetchKlines(tf: any): Promise<void> {
     })
   } catch (e: any) {
     console.error('[fetchKlines]', e.message)
-    toast(`Chart: nu pot \u00EEnc\u0103rca datele (${e.message})`)
+    toast(`Chart: cannot load data (${e.message})`)
   } finally { w.FetchLock.release('klines') }
 }
 

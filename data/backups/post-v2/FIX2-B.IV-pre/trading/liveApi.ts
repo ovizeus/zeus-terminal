@@ -62,8 +62,8 @@ export async function _liveApiParse(res: Response, context: string): Promise<any
   if (!res.ok) {
     let reason = data.error || res.statusText || 'Unknown error'
     if (res.status === 403) reason = reason
-    if (res.status === 429) reason = 'Rate limit — wait 1 minute'
-    if (res.status === 400) reason = 'Validation: ' + reason
+    if (res.status === 429) reason = 'Rate limit — asteapta 1 minut'
+    if (res.status === 400) reason = 'Validare: ' + reason
     const err: any = new Error(reason)
     err.status = res.status
     _liveApiError(err, context)

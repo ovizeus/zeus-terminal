@@ -114,14 +114,14 @@ function _checkRebound(klines: any[], exitIdx: number, side: string, entryPrice:
 function _buildInsight(pnl: number, slAtrRatio: number | null, sim15: any, sim20: any, lateEntry: any[], rebound: boolean, _atr: number | null): string {
   const parts: string[] = []
   if (pnl < 0) {
-    if (slAtrRatio && slAtrRatio < 1.0) parts.push('SL below 1\u00D7ATR \u2014 likely too tight')
-    if (sim15 && !sim15.slHit && sim15.tpHit) parts.push('SL 1.5\u00D7ATR would have reached TP')
-    else if (sim20 && !sim20.slHit && sim20.tpHit) parts.push('SL 2\u00D7ATR would have reached TP')
-    if (rebound) parts.push('Price reverted in direction after SL \u2014 likely noise')
+    if (slAtrRatio && slAtrRatio < 1.0) parts.push('SL sub 1\u00D7ATR \u2014 posibil prea str\u00E2ns')
+    if (sim15 && !sim15.slHit && sim15.tpHit) parts.push('SL 1.5\u00D7ATR ar fi prins TP')
+    else if (sim20 && !sim20.slHit && sim20.tpHit) parts.push('SL 2\u00D7ATR ar fi prins TP')
+    if (rebound) parts.push('Pre\u021Bul a revenit \u00EEn direc\u021Bie dup\u0103 SL \u2014 probabil noise')
   }
   const betterLate = lateEntry.find((l: any) => l && l.tpHit && !l.slHit)
-  if (betterLate) parts.push(`Entry +${lateEntry.indexOf(betterLate) + 1} candles would have reached TP`)
-  return parts.length ? parts.join(' \u00B7 ') : (pnl >= 0 ? 'Compliant execution' : '\u2014')
+  if (betterLate) parts.push(`Intrare +${lateEntry.indexOf(betterLate) + 1} lum\u00E2n\u0103ri ar fi prins TP`)
+  return parts.length ? parts.join(' \u00B7 ') : (pnl >= 0 ? 'Execu\u021Bie conform\u0103' : '\u2014')
 }
 
 function pmRun(pos: any, pnl: number, exitPrice: number): void {
@@ -222,7 +222,7 @@ export function PM_render(): void {
   const records = PM.load()
 
   if (!stats || !records.length) {
-    container.innerHTML = '<div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">No trade analyzed yet.</div>'
+    container.innerHTML = '<div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">Nicio tranzac\u021Bie analizat\u0103 \u00EEnc\u0103.</div>'
     return
   }
 
@@ -236,19 +236,19 @@ export function PM_render(): void {
   const statsHtml = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:6px 10px;border-bottom:1px solid #0a1520">
       <div style="text-align:center">
-        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">SL TOO TIGHT</div>
+        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">SL PREA STR\u00C2NS</div>
         <div style="font-size:11px;font-weight:700;color:${stats.slTightPct > 50 ? '#ff4466' : '#00d97a'}">${stats.slTightPct}%</div>
-        <div style="font-size:10px;color:#334455">of losses</div>
+        <div style="font-size:10px;color:#334455">din pierderi</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">REBOUND AFTER SL</div>
+        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">REBOUND DUP\u0102 SL</div>
         <div style="font-size:11px;font-weight:700;color:${stats.reboundPct > 40 ? '#ff4466' : '#778899'}">${stats.reboundPct}%</div>
-        <div style="font-size:10px;color:#334455">avoidable losses</div>
+        <div style="font-size:10px;color:#334455">pierderi evitabile</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">OPTIMAL ATR</div>
+        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">ATR OPTIM</div>
         <div style="font-size:11px;font-weight:700;color:#00d9ff">${stats.avgSlAtrRatio ? stats.avgSlAtrRatio + '\u00D7' : '\u2014'}</div>
-        <div style="font-size:10px;color:#334455">average SL/ATR ratio</div>
+        <div style="font-size:10px;color:#334455">raport SL/ATR mediu</div>
       </div>
     </div>
     ${insightHtml}`
@@ -333,7 +333,7 @@ export function initPMPanel(): void {
     </div>
     <div id="pm-strip-panel">
       <div id="pm-panel-body">
-        <div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">No trade analyzed yet.</div>
+        <div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">Nicio tranzac\u021Bie analizat\u0103 \u00EEnc\u0103.</div>
       </div>
     </div>`
 
@@ -401,12 +401,12 @@ export function _pmCheckRegimeTransition(): void {
 
     if (score >= 80) {
       if (typeof w.BlockReason !== 'undefined' && !w.BlockReason.get()) {
-        const _rtText = `Imminent regime transition (score ${score}) \u2014 entries blocked`
+        const _rtText = `Tranzi\u021Bie regim iminenta (scor ${score}) \u2014 intr\u0103ri blocate`
         w.BlockReason.set('REGIME_TRANSITION', _rtText)
         try { useBrainStore.getState().setBlockReason({ code: 'REGIME_TRANSITION', text: _rtText }) } catch (_e) { }
       }
     } else if (score >= 60) {
-      atLog('warn', `[RegimeWatch] Regime transition alert \u2014 score ${score}`)
+      atLog('warn', `[RegimeWatch] Alert\u0103 tranzi\u021Bie regim \u2014 scor ${score}`)
     } else {
       if (typeof w.BlockReason !== 'undefined') {
         const br = w.BlockReason.get()

@@ -96,20 +96,20 @@ export let _ptStripOpen = false
 export const INDICATORS: any[] = [
   { id: 'ema', ico: _ZI.tup, name: 'EMA 50/200', desc: 'Exponential Moving Average', cat: 'trend', def: true },
   { id: 'wma', ico: _ZI.wave, name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },
-  { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + dynamic Stop Loss', cat: 'trend', def: true },
-  { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volume at price levels', cat: 'volume', def: true },
+  { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + Stop Loss dinamic', cat: 'trend', def: true },
+  { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volum pe niveluri de pret', cat: 'volume', def: true },
   { id: 'cvd', ico: _ZI.chart, name: 'CVD', desc: 'Cumulative Volume Delta', cat: 'volume', def: false },
   { id: 'macd', ico: _ZI.bolt, name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
-  { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatility and trend', cat: 'vol', def: false },
-  { id: 'stoch', ico: _ZI.wave, name: 'Stochastic RSI', desc: 'RSI enhanced with Stoch', cat: 'momentum', def: false },
+  { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatilitate si trend', cat: 'vol', def: false },
+  { id: 'stoch', ico: _ZI.wave, name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch', cat: 'momentum', def: false },
   { id: 'obv', ico: _ZI.chart, name: 'OBV', desc: 'On-Balance Volume', cat: 'volume', def: false },
-  { id: 'atr', ico: _ZI.ruler, name: 'ATR', desc: 'Average True Range - volatility', cat: 'vol', def: false },
+  { id: 'atr', ico: _ZI.ruler, name: 'ATR', desc: 'Average True Range - volat', cat: 'vol', def: false },
   { id: 'vwap', ico: _ZI.chart, name: 'VWAP', desc: 'Volume Weighted Avg Price', cat: 'trend', def: false },
-  { id: 'ichimoku', ico: _ZI.cloud, name: 'Ichimoku Cloud', desc: 'Full Japanese system', cat: 'trend', def: false },
-  { id: 'fib', ico: _ZI.hex, name: 'Fibonacci', desc: 'Auto swing retracement', cat: 'support', def: false },
-  { id: 'pivot', ico: _ZI.tgt, name: 'Pivot Points', desc: 'Daily Support/Resistance', cat: 'support', def: false },
+  { id: 'ichimoku', ico: _ZI.cloud, name: 'Ichimoku Cloud', desc: 'Sistem complet japonez', cat: 'trend', def: false },
+  { id: 'fib', ico: _ZI.hex, name: 'Fibonacci', desc: 'Retracement auto pe swing', cat: 'support', def: false },
+  { id: 'pivot', ico: _ZI.tgt, name: 'Pivot Points', desc: 'Suport/Rezistenta zilnice', cat: 'support', def: false },
   { id: 'rsi14', ico: _ZI.bolt, name: 'RSI 14', desc: 'Relative Strength Index', cat: 'momentum', def: false },
-  { id: 'mfi', ico: _ZI.money, name: 'Money Flow Index', desc: 'Volume-based RSI', cat: 'volume', def: false },
+  { id: 'mfi', ico: _ZI.money, name: 'Money Flow Index', desc: 'RSI bazat pe volum', cat: 'volume', def: false },
   { id: 'cci', ico: _ZI.ruler, name: 'CCI', desc: 'Commodity Channel Index', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
@@ -218,7 +218,7 @@ export function _srRenderList() {
   if (!el_l) return
   const items = SIGNAL_REGISTRY.signals.slice(0, 30)
   if (!items.length) {
-    el_l.innerHTML = '<div class="sr-empty">No signal registered yet</div>'
+    el_l.innerHTML = '<div class="sr-empty">Niciun semnal \u00EEnregistrat \u00EEnc\u0103</div>'
     return
   }
   el_l.innerHTML = items.map((s: any) => {
@@ -358,8 +358,8 @@ export function _ncRenderList() {
   )
 
   if (!items.length) {
-    list.innerHTML = '<div class="nc-empty">No notifications' +
-      (f !== 'all' ? ' for selected filter' : '') + '</div>'
+    list.innerHTML = '<div class="nc-empty">Nicio notificare' +
+      (f !== 'all' ? ' pentru filtrul selectat' : '') + '</div>'
     return
   }
 
@@ -1623,7 +1623,7 @@ export function _usApply() {
       if (typeof _mscanUpdateLabel === 'function') _mscanUpdateLabel()
       else {
         const lbl = document.getElementById('atMultiSymLbl')
-        if (lbl) lbl.textContent = at.multiSym ? 'ACTIVE' : 'DISABLED'
+        if (lbl) lbl.textContent = at.multiSym ? 'ACTIV' : 'DEZACTIVAT'
       }
     }
     if (typeof BM !== 'undefined' && BM.adapt) {

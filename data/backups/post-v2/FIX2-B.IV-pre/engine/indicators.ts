@@ -28,11 +28,11 @@ export function getMacdChart(): any { return _macdChart }
 
 export function connectLiveAPI(): void {
   const st = el('apiStatus')
-  if (st) { st.innerHTML = _ZI.timer + ' Checking exchange connection...'; st.style.color = 'var(--yel)' }
+  if (st) { st.innerHTML = _ZI.timer + ' Se verific\u0103 conexiunea exchange...'; st.style.color = 'var(--yel)' }
   api.raw<any>('GET', '/api/exchange/status').then(function (data: any) {
     if (!data.ok || !data.connected) {
       if (st) {
-        st.innerHTML = _ZI.w + ' No exchange connection configured.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configure in Settings \u2192 Exchange API</span>'
+        st.innerHTML = _ZI.w + ' Nicio conexiune exchange configurat\u0103.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configureaz\u0103 \u00EEn Settings \u2192 Exchange API</span>'
         st.style.color = '#f0c040'
       }
       return
@@ -58,7 +58,7 @@ export function placeLiveOrder(): void {
 }
 
 export function connectLiveExchange(): void {
-  toast('LIVE TRADING DISABLED \u2014 backend required.', 0, _ZI.dRed)
+  toast('LIVE TRADING DEZACTIVAT \u2014 backend necesar.', 0, _ZI.dRed)
 }
 
 export function loadSavedAPI(): void {
@@ -72,7 +72,7 @@ export function loadSavedAPI(): void {
 export function installPWA(): void {
   const prompt = w._dip || w._deferredPrompt
   if (prompt) { prompt.prompt(); prompt.userChoice.then(() => { const b = el('installBtn'); if (b) b.style.display = 'none'; w._dip = null; w._deferredPrompt = null }) }
-  else toast('Open in Chrome/Brave \u2192 menu \u2192 Install app')
+  else toast('Deschide in Chrome/Brave \u2192 meniu \u2192 Instaleaza aplicatia')
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -854,25 +854,25 @@ export function runSignalScan(): void {
     const dcross = macdRes.macd < macdRes.signal && macdRes.prevMacd >= macdRes.prevSignal
     if (cross) { signals.push({ name: 'MACD Crossover', det: `MACD: ${macdRes.macd.toFixed(2)} | Signal: ${macdRes.signal.toFixed(2)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
     if (dcross) { signals.push({ name: 'MACD Crossunder', det: `MACD: ${macdRes.macd.toFixed(2)} | Signal: ${macdRes.signal.toFixed(2)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
-    if (macdRes.hist > 0 && macdRes.prevHist < macdRes.hist) { signals.push({ name: 'MACD Histogram +', det: `Histogram: +${macdRes.hist.toFixed(2)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-    if (macdRes.hist < 0 && macdRes.prevHist > macdRes.hist) { signals.push({ name: 'MACD Histogram \u2212', det: `Histogram: ${macdRes.hist.toFixed(2)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+    if (macdRes.hist > 0 && macdRes.prevHist < macdRes.hist) { signals.push({ name: 'MACD Histogram +', det: `Histograma: +${macdRes.hist.toFixed(2)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+    if (macdRes.hist < 0 && macdRes.prevHist > macdRes.hist) { signals.push({ name: 'MACD Histogram \u2212', det: `Histograma: ${macdRes.hist.toFixed(2)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
   }
 
-  if (rsiNow < 30) { signals.push({ name: 'RSI Oversold (5m)', det: `RSI: ${rsiNow.toFixed(1)} < 30`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
-  if (rsiNow > 70) { signals.push({ name: 'RSI Overbought (5m)', det: `RSI: ${rsiNow.toFixed(1)} > 70`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
-  if (rsiDiv === 'bull_div') { signals.push({ name: 'RSI Bullish Divergence', det: `Price lower + RSI higher`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-  if (rsiDiv === 'bear_div') { signals.push({ name: 'RSI Bearish Divergence', det: `Price higher + RSI lower`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+  if (rsiNow < 30) { signals.push({ name: 'RSI Supravanzut (5m)', det: `RSI: ${rsiNow.toFixed(1)} < 30`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
+  if (rsiNow > 70) { signals.push({ name: 'RSI Supracumparat (5m)', det: `RSI: ${rsiNow.toFixed(1)} > 70`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
+  if (rsiDiv === 'bull_div') { signals.push({ name: 'RSI Divergenta Bullish', det: `Pret jos + RSI mai sus`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+  if (rsiDiv === 'bear_div') { signals.push({ name: 'RSI Divergenta Bearish', det: `Pret sus + RSI mai jos`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
-  if (stFlip === 'bull') { signals.push({ name: 'Supertrend Flip \u2191', det: `Trend change BULLISH`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
-  if (stFlip === 'bear') { signals.push({ name: 'Supertrend Flip \u2193', det: `Trend change BEARISH`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
+  if (stFlip === 'bull') { signals.push({ name: 'Supertrend Flip \u2191', det: `Schimbare de trend BULLISH`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
+  if (stFlip === 'bear') { signals.push({ name: 'Supertrend Flip \u2193', det: `Schimbare de trend BEARISH`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
 
-  if (rsiNow > 55 && rsi1h > 55 && rsi4h > 55) { signals.push({ name: 'RSI Aligned Bullish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-  if (rsiNow < 45 && rsi1h < 45 && rsi4h < 45) { signals.push({ name: 'RSI Aligned Bearish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+  if (rsiNow > 55 && rsi1h > 55 && rsi4h > 55) { signals.push({ name: 'RSI Aliniat Bullish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+  if (rsiNow < 45 && rsi1h < 45 && rsi4h < 45) { signals.push({ name: 'RSI Aliniat Bearish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
   const sma20 = closes.slice(-20).reduce((a: number, b: number) => a + b, 0) / 20
   const sma50 = closes.slice(-50).reduce((a: number, b: number) => a + b, 0) / 50
-  if (price > sma20 && sma20 > sma50) { signals.push({ name: 'Bullish Trend (SMA)', det: `Price>${sma20.toFixed(0)} > SMA50:${sma50.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-  if (price < sma20 && sma20 < sma50) { signals.push({ name: 'Bearish Trend (SMA)', det: `Price<${sma20.toFixed(0)} < SMA50:${sma50.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+  if (price > sma20 && sma20 > sma50) { signals.push({ name: 'Trend Bullish (SMA)', det: `Pret>${sma20.toFixed(0)} > SMA50:${sma50.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+  if (price < sma20 && sma20 < sma50) { signals.push({ name: 'Trend Bearish (SMA)', det: `Pret<${sma20.toFixed(0)} < SMA50:${sma50.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
   w.S.signalData = { signals, bullCount, bearCount }
   if (typeof renderSignals === 'function') renderSignals(signals, bullCount, bearCount)
@@ -880,8 +880,8 @@ export function runSignalScan(): void {
 
   if ((bullCount >= 3 || bearCount >= 3) && w.S.alerts?.enabled) {
     if (typeof playAlertSound === 'function') playAlertSound()
-    if (bullCount >= 3 && typeof sendAlert === 'function') sendAlert('STRONG BULL SIGNAL', '3+ indicators aligned bullish', 'scan')
-    if (bearCount >= 3 && typeof sendAlert === 'function') sendAlert('STRONG BEAR SIGNAL', '3+ indicators aligned bearish', 'scan')
+    if (bullCount >= 3 && typeof sendAlert === 'function') sendAlert('SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan')
+    if (bearCount >= 3 && typeof sendAlert === 'function') sendAlert('SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan')
   }
 
   signals.filter((s: any) => s.str.includes('STRONG')).forEach((s: any) => {

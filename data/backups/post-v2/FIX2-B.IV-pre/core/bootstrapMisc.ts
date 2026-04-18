@@ -60,39 +60,39 @@ export async function _pinCheckLock(): Promise<void> {
 
 export async function pinUnlock(): Promise<void> {
   const inp = document.getElementById('pinLockInput') as HTMLInputElement | null; const msg = document.getElementById('pinLockMsg')
-  if (!inp) return; const val = inp.value.trim(); if (!val) { if (msg) msg.textContent = 'Enter PIN'; return }
+  if (!inp) return; const val = inp.value.trim(); if (!val) { if (msg) msg.textContent = 'Introdu PIN-ul'; return }
   try {
     const r = await fetch('/auth/pin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
     if (d.ok === true) { _pinMarkUnlocked(); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof _showWelcomeModal === 'function') _showWelcomeModal() }, 300) } }
-    else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN not configured'; _pinMarkUnlocked(); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
-    else if (d.error === 'session_invalid') { if (msg) msg.textContent = 'Session expired \u2014 re-authenticate' }
-    else { if (msg) msg.textContent = 'Incorrect PIN!'; inp.value = ''; inp.focus(); inp.classList.add('pin-lock-shake'); setTimeout(function () { inp.classList.remove('pin-lock-shake') }, 500) }
-  } catch (err) { if (msg) msg.textContent = 'Network error' }
+    else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN nu este configurat'; _pinMarkUnlocked(); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
+    else if (d.error === 'session_invalid') { if (msg) msg.textContent = 'Sesiune expirat\u0103 \u2014 re-autentific\u0103-te' }
+    else { if (msg) msg.textContent = 'PIN incorect!'; inp.value = ''; inp.focus(); inp.classList.add('pin-lock-shake'); setTimeout(function () { inp.classList.remove('pin-lock-shake') }, 500) }
+  } catch (err) { if (msg) msg.textContent = 'Eroare de re\u021Bea' }
 }
 
 export async function pinActivate(): Promise<void> {
   const inp = document.getElementById('pinInput') as HTMLInputElement | null; const conf = document.getElementById('pinConfirm') as HTMLInputElement | null; const msg = document.getElementById('pin-msg')
   if (!inp || !conf) return; const val = inp.value.trim(); const val2 = conf.value.trim()
-  if (!val || val.length < 4) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN must be at least 4 characters' }; return }
-  if (val !== val2) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PINs do not match' }; return }
+  if (!val || val.length < 4) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN-ul trebuie s\u0103 aib\u0103 minim 4 caractere' }; return }
+  if (val !== val2) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN-urile nu coincid' }; return }
   try {
     const r = await fetch('/auth/pin/set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activated!' }; _pinUpdateUI(); _pinMarkUnlocked() }
-    else if (d.error === 'session_invalid') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Session expired' } }
-    else { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Error setting PIN' } }
-  } catch (err) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Network error' } }
+    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activat!' }; _pinUpdateUI(); _pinMarkUnlocked() }
+    else if (d.error === 'session_invalid') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Sesiune expirat\u0103' } }
+    else { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Eroare la setarea PIN-ului' } }
+  } catch (err) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Eroare de re\u021Bea' } }
 }
 
 export async function pinRemove(): Promise<void> {
-  try { const r = await fetch('/auth/pin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin' }); const d = await r.json(); if (d.ok) { _pinSetCache = false; _pinClearUnlocked(); try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }; const msg = document.getElementById('pin-msg'); if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN disabled.' }; _pinUpdateUI() } } catch (_) { }
+  try { const r = await fetch('/auth/pin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin' }); const d = await r.json(); if (d.ok) { _pinSetCache = false; _pinClearUnlocked(); try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }; const msg = document.getElementById('pin-msg'); if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN dezactivat.' }; _pinUpdateUI() } } catch (_) { }
 }
 
 export async function _pinUpdateUI(): Promise<void> {
   const isSet = await _pinIsSet(); const status = document.getElementById('pinStatus'); const actBtn = document.getElementById('pinActivateBtn'); const remBtn = document.getElementById('pinRemoveBtn')
-  if (status) { status.innerHTML = isSet ? 'ACTIVE ' + _ZI.ok : 'DISABLED'; status.style.color = isSet ? 'var(--grn-bright)' : '#556' }
-  if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' CHANGE PIN' : _ZI.lock + ' ACTIVATE PIN'
+  if (status) { status.innerHTML = isSet ? 'ACTIVAT ' + _ZI.ok : 'DEZACTIVAT'; status.style.color = isSet ? 'var(--grn-bright)' : '#556' }
+  if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' SCHIMB\u0102 PIN' : _ZI.lock + ' ACTIVEAZ\u0102 PIN'
   if (remBtn) (remBtn as HTMLElement).style.display = isSet ? '' : 'none'
 }
 
@@ -153,7 +153,7 @@ export function masterReset(): void {
   }
   if (typeof w.Intervals !== 'undefined') w.Intervals.clearAll()
   if (typeof w.WS !== 'undefined') w.WS.closeAll()
-  toast('Master Reset complete \u2014 reloading...')
+  toast('Master Reset complet \u2014 re\u00EEnc\u0103rcare...')
   setTimeout(() => location.reload(), 800)
 }
 

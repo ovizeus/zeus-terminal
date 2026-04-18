@@ -733,7 +733,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   if (w._serverATEnabled) { atLog('info', '[LOCKED] Server AT active — client trade blocked'); return }
   // ── KILL SWITCH: check before exec (2. kill timing) ──────────
   if (getATKillTriggered()) {
-    _setBR('KILL_SWITCH', 'Kill switch activ — AT blocat', 'placeAutoTrade')
+    _setBR('KILL_SWITCH', 'Kill switch active — AT blocked', 'placeAutoTrade')
     return
   }
   // [FIX C5] Prevent re-entrant live execution

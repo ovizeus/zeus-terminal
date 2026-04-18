@@ -270,7 +270,7 @@ export async function startApp(): Promise<void> {
   setTimeout(renderDHF, 1200); w.Intervals.set('dhf', renderDHF, 60000)
   setTimeout(renderPerfTracker, 2000)
   setTimeout(() => { updateQuantumClock(); updateBrainExtension() }, 3000)
-  setTimeout(() => { brainThink('info', _ZI.brain + ' Zeus Brain initialized. Waiting for live data...') }, 3200)
+  setTimeout(() => { brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
 
   setTimeout(runSignalScan, 4000); setTimeout(calcConfluenceScore, 5500)
   setTimeout(scanLiquidityMagnets, 9000); setTimeout(updateDeepDive, 11000)

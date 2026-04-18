@@ -34,7 +34,7 @@ export const ThoughtStream = memo(function ThoughtStream() {
         const isCog = i < cogLines.length
           || (i >= thoughts.length + cogLines.length && i < combined.length - thoughts.length)
         const ll = String(line).toLowerCase()
-        const isAlert = ll.includes('alert\u0103') || ll.includes('recalib')
+        const isAlert = ll.includes('alert') || ll.includes('recalib')
         const cls = 'ares-thought-line' + (i === 0 ? ' new' : isAlert ? ' alert' : isCog ? ' new' : '')
         return (
           <div key={i} className={cls}>

@@ -1325,10 +1325,10 @@ export const ZState = (() => {
               if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
               if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
               if (AT.enabled) {
-                useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: '#00ff88', dotShadow: '0 0 10px #00ff88', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Active \u2014 scan every 30s', action: null } })
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: '#00ff88', dotShadow: '0 0 10px #00ff88', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Activ \u2014 scan la 30s', action: null } })
                 if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
               } else {
-                useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configure below', action: null } })
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configureaza mai jos', action: null } })
                 if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
                 clearInterval(AT.interval); AT.interval = null
               }

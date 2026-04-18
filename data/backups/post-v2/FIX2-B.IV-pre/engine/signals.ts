@@ -37,7 +37,7 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
   }
 
   if (!signals.length) {
-    grid.innerHTML = '<div class="sig-row" style="justify-content:center;padding:12px;color:var(--dim);font-size:12px">No active signal currently</div>'
+    grid.innerHTML = '<div class="sig-row" style="justify-content:center;padding:12px;color:var(--dim);font-size:12px">Niciun semnal activ momentan</div>'
     return
   }
 

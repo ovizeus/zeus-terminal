@@ -145,7 +145,7 @@ export async function fetchRSI(tf: string): Promise<void> {
     const map: any = { '5m': '5m', '15m': '15m', '1h': '1h', '3h': '4h', '4h': '4h', '1d': '1d' }
     const itf = map[tf] || tf
     const d = await safeFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${itf}&limit=50`)
-    if (!Array.isArray(d)) throw new Error('R\u0103spuns invalid RSI')
+    if (!Array.isArray(d)) throw new Error('Invalid RSI response')
     const closes = d.map((k: any) => +k[4])
     const rsi = calcRSI(closes)
     w.S.rsi[tf] = rsi

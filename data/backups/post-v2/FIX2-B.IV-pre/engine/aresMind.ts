@@ -75,15 +75,15 @@ function getPredictionAccuracy(): number | null {
 }
 
 function getPatternInsight(): string {
-  if (_shortMemory.length < 3) return 'Collecting cognitive data...'
+  if (_shortMemory.length < 3) return 'Acumulez date cognitive...'
   const wins = _shortMemory.filter((m: any) => m.outcome === 'win').length
   const losses = _shortMemory.filter((m: any) => m.outcome === 'loss').length
   const longs = _shortMemory.filter((m: any) => m.dir === 'LONG').length
   const shorts = _shortMemory.filter((m: any) => m.dir === 'SHORT').length
-  const bias = longs > shorts ? 'LONG' : shorts > longs ? 'SHORT' : 'NEUTRAL'
-  if (wins > losses * 2) return `Pattern detected: ${bias} bias with high win-rate`
-  if (losses > wins * 2) return `Cognitive alert: recent poor results \u2014 recalibrating`
-  return `Balanced memory: ${wins}W / ${losses}L, bias ${bias}`
+  const bias = longs > shorts ? 'LONG' : shorts > longs ? 'SHORT' : 'NEUTRU'
+  if (wins > losses * 2) return `Pattern detectat: bias ${bias} cu win-rate ridicat`
+  if (losses > wins * 2) return `Alert\u0103 cognitiv\u0103: rezultate slabe recent \u2014 recalibrez`
+  return `Memorie echilibrat\u0103: ${wins}W / ${losses}L, bias ${bias}`
 }
 
 function getClarity(): number { return _cognitiveClarityPct }

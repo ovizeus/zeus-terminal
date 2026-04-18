@@ -117,11 +117,11 @@ export function closeDemoPos(id: any, reason?: string): void {
     TP.demoPositions = (TP.demoPositions || []).filter((p: any) => !p.closed)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     const autoPosns = TP.demoPositions.filter((p: any) => p.autoTrade)
-    if (autoPosns.length === 0) { useATStore.getState().patchUI({ posCountText: '0 positions' }) }
+    if (autoPosns.length === 0) { useATStore.getState().patchUI({ posCountText: '0 pozitii' }) }
     if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   }, 0)
 
-  toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Closed'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
   w.ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade', `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
 
   w.ZState.syncNow()

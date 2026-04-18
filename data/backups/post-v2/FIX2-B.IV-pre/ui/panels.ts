@@ -219,7 +219,7 @@ export function renderMagnets() {
   // Render lists
   const renderList = (list: any[], containerId: string, isAbove: boolean) => {
     const c = el(containerId); if (!c) return;
-    if (!list.length) { c.innerHTML = `<div style="padding:8px;text-align:center;font-size:13px;color:var(--dim)">No magnet detected</div>`; return; }
+    if (!list.length) { c.innerHTML = `<div style="padding:8px;text-align:center;font-size:13px;color:var(--dim)">Niciun magnet detectat</div>`; return; }
     c.innerHTML = list.map((m: any, _i: number) => {
       const dist = isAbove ? ((m.price - p) / p * 100) : (p - m.price) / p * 100 * -1;
       const distStr = (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%';
@@ -281,7 +281,7 @@ export async function runBacktest() {
   const BT = w.BT;
   const BT_INDICATORS = w.BT_INDICATORS;
   if (BT.running) return;
-  if (!S.klines || S.klines.length < 60) { toast('No historical data. Wait for the chart to load.'); return; }
+  if (!S.klines || S.klines.length < 60) { toast('Niciun date historice. Asteapta chart-ul sa se incarce.'); return; }
 
   BT.running = true;
   const runBtn = el('btRunBtn');
@@ -1033,7 +1033,7 @@ export function renderPnlLab() {
       html += '<div class="pnl-lab-section" style="text-align:center;padding:16px 10px">';
       html += '<div style="font-size:28px;margin-bottom:6px">\ud83d\udcca</div>';
       html += '<div style="color:#00d9ff;font-size:13px;font-weight:700;margin-bottom:4px">PnL Lab \u2014 No Data Yet</div>';
-      html += '<div style="color:#3a5068;font-size:11px;line-height:1.5">PnL Lab will populate automatically after you close the first trade.<br>Drawdown, Expectancy, Daily stats \u2014 everything appears here.</div>';
+      html += '<div style="color:#3a5068;font-size:11px;line-height:1.5">PnL Lab se va popula automat dup\u0103 ce \u00eenchizi primul trade.<br>Drawdown, Expectancy, Daily stats \u2014 totul apare aici.</div>';
       html += '</div>';
       body.innerHTML = html;
       return;

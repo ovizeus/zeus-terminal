@@ -98,7 +98,7 @@ const DEFAULT_AT_UI: ATUI = {
   dailyLossColor: 'var(--grn)',
   dailyLabel: 'DAILY P&L',
   totalTradesText: '0',
-  logEntries: [{ time: '--:--', type: 'info', msg: 'Auto Trade Engine started. Waiting for signal...' }],
+  logEntries: [{ time: '--:--', type: 'info', msg: 'Auto Trade Engine pornit. Astept semnal...' }],
   posCountText: '0 positions',
   killBtnTriggered: false,
   sentinel: { visible: false, icon: null, text: '', bg: '', color: '', border: '' },

@@ -12,7 +12,7 @@ export function WelcomeModal({ visible, onClose }: Props) {
               <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
             </svg>
           </div>
-          <div className="wlc-greeting" id="wlcGreeting">Bine ai revenit</div>
+          <div className="wlc-greeting" id="wlcGreeting">Welcome back</div>
           <div className="wlc-mode-badge" id="wlcModeBadge"></div>
           <div className="wlc-version" id="wlcVersion"></div>
         </div>
@@ -24,14 +24,14 @@ export function WelcomeModal({ visible, onClose }: Props) {
               <div className="wlc-value" id="wlcBalance">—</div>
             </div>
             <div className="wlc-card">
-              <div className="wlc-label">PnL AZI</div>
+              <div className="wlc-label">PnL TODAY</div>
               <div className="wlc-value" id="wlcDailyPnl">—</div>
             </div>
           </div>
           {/* Row 2: Trades + Win Rate */}
           <div className="wlc-row">
             <div className="wlc-card">
-              <div className="wlc-label">TRADES AZI</div>
+              <div className="wlc-label">TRADES TODAY</div>
               <div className="wlc-value" id="wlcTrades">—</div>
             </div>
             <div className="wlc-card">

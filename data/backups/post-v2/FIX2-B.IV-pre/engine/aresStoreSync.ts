@@ -206,10 +206,10 @@ function _cognitive(): AresCognitiveUI {
   const price = priceN != null ? priceN.toFixed(2) : '\u2014'
   const regime = (typeof w.BM !== 'undefined' ? w.BM.regime : null) || '\u2014'
   const cogLines = [
-    'COGNITIVE: ' + mindInsight,
-    'PREDICTION: ' + (predAcc != null ? predAcc + '% accuracy on recent signals' : 'collecting data...'),
-    'MENTAL CLARITY: ' + clarity + '% \u2014 ' + (clarity > 75 ? 'OPTIMAL' : clarity > 50 ? 'ACCEPTABLE' : 'RECALIBRATING'),
-    'CURRENT PRICE: ' + price + ' \u2014 REGIME: ' + regime,
+    'COGNITIV: ' + mindInsight,
+    'PREDIC\u021aIE: ' + (predAcc != null ? predAcc + '% acurate\u021be pe ultimele semnale' : '\u00een colectare date...'),
+    'CLARITATE MENTAL\u0102: ' + clarity + '% \u2014 ' + (clarity > 75 ? 'OPTIMAL' : clarity > 50 ? 'ACCEPTABIL' : 'RECALIBREZ'),
+    'PRE\u021a CURENT: ' + price + ' \u2014 REGIM: ' + regime,
   ]
   return {
     clarity,

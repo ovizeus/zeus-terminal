@@ -177,7 +177,7 @@ export function savePosSLTP(posId: any, mode: string): void {
     const promises: Promise<any>[] = []
     if (newSL) { promises.push(manualLiveSetSL({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newSL, cancelOrderId: livePos._slOrderId || undefined }).then(function (res: any) { livePos._slOrderId = res.orderId; livePos.sl = newSL })) } else if (livePos._slOrderId) { promises.push(manualLiveCancelOrder(livePos.sym, livePos._slOrderId).then(function () { livePos._slOrderId = null; livePos.sl = null }).catch(function () { })) }
     if (newTP) { promises.push(manualLiveSetTP({ symbol: livePos.sym, side: livePos.side, quantity: String(_qty), stopPrice: newTP, cancelOrderId: livePos._tpOrderId || undefined }).then(function (res: any) { livePos._tpOrderId = res.orderId; livePos.tp = newTP })) } else if (livePos._tpOrderId) { promises.push(manualLiveCancelOrder(livePos.sym, livePos._tpOrderId).then(function () { livePos._tpOrderId = null; livePos.tp = null }).catch(function () { })) }
-    Promise.allSettled(promises).then(function (results: any[]) { const failed = results.filter(function (r: any) { return r.status === 'rejected' }); if (failed.length === 0) { toast('LIVE SL/TP updated') } else { toast('Partial update — ' + failed.length + ' failed, check exchange') }; renderLivePositions() })
+    Promise.allSettled(promises).then(function (results: any[]) { const failed = results.filter(function (r: any) { return r.status === 'rejected' }); if (failed.length === 0) { toast('LIVE SL/TP updated') } else { toast('Partial update — ' + failed.length + ' failed, verifică exchange') }; renderLivePositions() })
   }
 }
 

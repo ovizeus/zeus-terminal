@@ -95,22 +95,22 @@ if (!w._ARIA_NOVA_LOADED) {
       el_s.textContent = 'DSL OFFLINE'
       el_s.className = 'dsls-off'
     } else if (mode === 'auto' && atOn) {
-      el_s.innerHTML = _ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIVE'
+      el_s.innerHTML = _ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIV'
       el_s.className = 'dsls-auto'
     } else if (mode === 'auto') {
-      el_s.innerHTML = _ZI.robot + ' AUTO MODE · AT OFF'
+      el_s.innerHTML = _ZI.robot + ' AUTO MODE · AT OPRIT'
       el_s.className = 'dsls-auto'
     } else if (mode === 'assist' && armed) {
-      el_s.innerHTML = _ZI.dYlw + ' ASSIST ARMED · DSL EXECUTES'
+      el_s.innerHTML = _ZI.dYlw + ' ASSIST ARMAT · DSL EXECUTĂ'
       el_s.className = 'dsls-assist-armed'
     } else if (mode === 'assist') {
-      el_s.innerHTML = _ZI.lock + ' ASSIST MANUAL · DISARMED'
+      el_s.innerHTML = _ZI.lock + ' ASSIST MANUAL · DEZARMAT'
       el_s.className = 'dsls-assist'
     } else {
       el_s.innerHTML = _ZI.hand + ' MANUAL · DSL MONITOR'
       el_s.className = 'dsls-manual'
     }
-    if (el_c) el_c.textContent = nPos > 0 ? nPos + ' pos·' : ''
+    if (el_c) el_c.textContent = nPos > 0 ? nPos + ' poz·' : ''
   }
 
   // ── AT STRIP TOGGLE ──────────────────────────────────────────────
@@ -256,12 +256,12 @@ if (!w._ARIA_NOVA_LOADED) {
 
     // Info: balance + positions
     if (isLiveMode && bal <= 0 && !w._apiConfigured) {
-      el_info.textContent = 'Balance unavailable · Exchange not configured' + (nPos > 0 ? ' · ' + nPos + ' active pos' : '')
+      el_info.textContent = 'Balance unavailable · Exchange not configured' + (nPos > 0 ? ' · ' + nPos + ' poz active' : '')
     } else if (isLiveMode) {
-      el_info.textContent = 'BAL $' + bal.toFixed(0) + (nPos > 0 ? ' · ' + nPos + ' active pos' : ' · no positions')
+      el_info.textContent = 'BAL $' + bal.toFixed(0) + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții')
     } else {
       const balStr = balPnl >= 0 ? '+$' + balPnl.toFixed(2) : '-$' + Math.abs(balPnl).toFixed(2)
-      el_info.textContent = 'BAL $' + bal.toFixed(0) + ' (' + balStr + ') · ' + (nPos > 0 ? nPos + ' active pos' : 'no positions')
+      el_info.textContent = 'BAL $' + bal.toFixed(0) + ' (' + balStr + ') · ' + (nPos > 0 ? nPos + ' poz active' : 'fără poziții')
     }
 
     // Live PnL unrealized

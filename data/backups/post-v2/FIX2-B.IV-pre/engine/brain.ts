@@ -203,28 +203,28 @@ export function updateBrainState(): void {
     state = 'trading'
     const pos = (getDemoPositions()).find((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).find((p: any) => p.autoTrade && !p.closed)
     const pnl = pos ? ((pos.side === 'LONG' ? getPrice() - pos.entry : pos.entry - getPrice()) / pos.entry * pos.size * (pos.lev || 1)) : 0
-    ticker = `ACTIVE POSITION ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORING TP/SL...`
+    ticker = `POZITIE ACTIVA ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORIZEZ TP/SL...`
   } else if (score >= 68 && sigs >= 3) {
     state = 'ready'
     const dir = bulls >= bears ? 'LONG' : 'SHORT'
-    ticker = `SIGNAL ${dir} CONFIRMED! Score:${score} | ${Math.max(bulls, bears)} signals | REGIME:${BR.regime.toUpperCase()} | ${getATEnabled() ? 'SENDING ORDER...' : 'AUTO TRADE OFF'}`
+    ticker = `SEMNAL ${dir} CONFIRMAT! Score:${score} | ${Math.max(bulls, bears)} semnale | REGIM:${BR.regime.toUpperCase()} | ${getATEnabled() ? 'TRIMIT ORDIN...' : 'AUTO TRADE OPRIT'}`
   } else if (score > 0 && sigs >= 1) {
     state = 'analyzing'
     const needing = 3 - sigs
     const confNeed = Math.max(0, 68 - score)
-    ticker = `ANALYZING... Score:${score}/68 | ${sigs}/3 signals | Need: ${confNeed > 0 ? '+' + confNeed + ' confluence' : ''}${needing > 0 ? ' +' + needing + ' signals' : ''} | OFI:${(BR.ofi.blendBuy || 50).toFixed(0)}%B`
+    ticker = `ANALIZEZ... Score:${score}/68 | ${sigs}/3 semnale | Mai trebuie: ${confNeed > 0 ? '+' + confNeed + ' confluenta' : ''}${needing > 0 ? ' +' + needing + ' semnale' : ''} | OFI:${(BR.ofi.blendBuy || 50).toFixed(0)}%B`
   } else if (getATKillTriggered()) {
     state = 'blocked'
     ticker = `KILL SWITCH ACTIVE — BLOCKED. Waiting for reset...`
   } else {
     state = 'scanning'
-    ticker = `SCANNING... RSI:${(getRSI('5m') || 0).toFixed(0)} | FR:${getFR() !== null ? ((getFR() || 0) * 100).toFixed(3) + '%' : '—'} | REGIME:${BR.regime.toUpperCase()} | MAGNET:${(getMagnetBias() || 'neut').toUpperCase()} | ${fmtNow(true)}`
+    ticker = `SCANEZ... RSI:${(getRSI('5m') || 0).toFixed(0)} | FR:${getFR() !== null ? ((getFR() || 0) * 100).toFixed(3) + '%' : '—'} | REGIM:${BR.regime.toUpperCase()} | MAGNET:${(getMagnetBias() || 'neut').toUpperCase()} | ${fmtNow(true)}`
   }
 
   // [PATCH BRAIN-AT-IDLE] No READY/decision state when AT is OFF
   if (!getATEnabled() && state === 'ready') {
     state = 'analyzing'
-    ticker = `ANALYZING... Score:${score}/68 | ${sigs} signals | AT OFF`
+    ticker = `ANALIZEZ... Score:${score}/68 | ${sigs} semnale | AT OFF`
   }
 
   _pushBrainEngineState(state)
@@ -244,7 +244,7 @@ export function updateBrainState(): void {
   // Regime badge
   const regime = detectMarketRegime(getKlines())
   const regimeBadge = el('brainRegimeBadge')
-  const regimeLabels: any = { trend: _ZI.tup + ' TREND', range: _ZI.chart + ' RANGE', volatile: _ZI.bolt + ' VOLATILE', unknown: _ZI.clock + ' LOADING' }
+  const regimeLabels: any = { trend: _ZI.tup + ' TREND', range: _ZI.chart + ' RANGE', volatile: _ZI.bolt + ' VOLATIL', unknown: _ZI.clock + ' LOADING' }
   if (regimeBadge) {
     regimeBadge.innerHTML = regimeLabels[regime] || regime
     regimeBadge.className = 'brain-regime ' + regime
@@ -291,11 +291,11 @@ export function runBrainUpdate(): void {
     const prevState = BR._prevState
     if (BR.state !== prevState) {
       const msgs: any = {
-        scanning: _ZI.mag + ' Scanning market... waiting for signals',
-        analyzing: _ZI.ruler + ' Signal detected — checking confluence',
-        ready: _ZI.ok + ' All conditions OK — ready to enter',
-        blocked: _ZI.noent + ' Kill switch active — suspended',
-        trading: _ZI.dRed + ' Active position — monitoring TP/SL'
+        scanning: _ZI.mag + ' Scanez piata... astept semnale',
+        analyzing: _ZI.ruler + ' Semnal detectat — verific confluenta',
+        ready: _ZI.ok + ' Toate conditiile OK — gata de intrare',
+        blocked: _ZI.noent + ' Kill switch activ — suspendat',
+        trading: _ZI.dRed + ' Pozitie activa — monitorizez TP/SL'
       }
       brainThink(BR.state === 'ready' ? 'ok' : BR.state === 'blocked' ? 'bad' : 'info',
         msgs[BR.state] || BR.state)
@@ -348,7 +348,7 @@ if (typeof w.S !== 'undefined' && w.S) {
 export function armAssist(): void {
   w.ARM_ASSIST.armed = true; w.ARM_ASSIST.ts = Date.now()
   w.S.assistArmed = true
-  brainThink('ok', _ZI.lock + ' ARM ASSIST active')
+  brainThink('ok', _ZI.lock + ' ARM ASSIST activ')
   _syncDslAssistUI()
   if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
@@ -1117,7 +1117,7 @@ export function checkProtectMode(): void {
   // [RISK RAILS] Daily DD condition REMOVED — server kill switch is sole authority
   // News HIGH — block not protect (keep compatible but only in auto)
   if (BM.newsRisk === 'high' && (w.S.mode || 'assist') === 'auto')
-    reason = `PROTECT: NEWS HIGH — extreme volatility`
+    reason = `PROTECT: NEWS HIGH — volatilitate extremă`
   // Kill switch — only if already triggered legitimately
   if (getATKillTriggered()) reason = 'BLOCKED: KILL SWITCH'
 
@@ -1504,10 +1504,10 @@ export function renderBrainCockpit(): void {
       }
       // Sweep + Reclaim
       if (_sw.type !== 'none' && _sw.reclaim) {
-        const _swDir = _sw.type === 'below' ? 'below support' : 'above resistance'
+        const _swDir = _sw.type === 'below' ? 'sub suport' : 'peste rezistență'
         _whyReasons.push('Liquidity sweep ' + _swDir + ' → reclaimed' + (_sw.displacement ? ' + displacement' : ''))
       } else if (_sw.type !== 'none') {
-        _whyReasons.push('Liquidity sweep detected (' + _sw.type + ')' + (_sw.liqDist ? ' — wick ' + _sw.liqDist + '%' : ''))
+        _whyReasons.push('Liquidity sweep detectat (' + _sw.type + ')' + (_sw.liqDist ? ' — wick ' + _sw.liqDist + '%' : ''))
       }
       // Orderflow
       if ((_isLong && _ofi > 57) || (!_isLong && _ofi < 43)) {
@@ -1915,17 +1915,17 @@ export function renderBrainCockpit(): void {
   let topReason = ''
   let reasonCls = 'wait'
   if (BM.protectMode) { topReason = `AUTO BLOCKED: ${BM.protectReason}`; reasonCls = 'block' }
-  else if (getATKillTriggered()) { topReason = 'AUTO BLOCKED: Kill switch active'; reasonCls = 'block' }
+  else if (getATKillTriggered()) { topReason = 'AUTO BLOCKED: Kill switch activ'; reasonCls = 'block' }
   else if (!safety.news) { topReason = 'AUTO BLOCKED: NewsRisk HIGH → prea periculos'; reasonCls = 'block' }
   else if (!safety.regime) { topReason = 'AUTO WAIT: Regime unstable (not locked 3 closes)'; reasonCls = 'wait' }
-  else if (!safety.cooldown) { topReason = `AUTO WAIT: Cooldown ${cdLeft}m remaining (${prof})`; reasonCls = 'wait' }
-  else if (!safety.session) { topReason = 'AUTO WAIT: Session OFF — unfavorable hour'; reasonCls = 'wait' }
-  else if (!safety.noOpposite) { topReason = 'AUTO BLOCKED: Opposite position open'; reasonCls = 'block' }
-  else if (!safety.risk) { topReason = 'AUTO BLOCKED: Risk Limits reached (DD/Streak/MaxPos)'; reasonCls = 'block' }
-  else if (!ctx.trigger) { topReason = 'AUTO WAIT: Trigger unconfirmed (Sweep+Reclaim or Disp)'; reasonCls = 'wait' }
-  else if (!ctx.flow) { topReason = 'AUTO WAIT: FlowConfirm FAIL — CVD/Delta neutral'; reasonCls = 'wait' }
-  else if (w._fakeout.invalid) { topReason = 'AUTO WAIT: Anti-fakeout — 2 closes without follow-through'; reasonCls = 'wait' }
-  else if (!ctx.mtf) { topReason = `AUTO WAIT: MTF Align ${mtfAlignCount}/3 (min 2 required)`; reasonCls = 'wait' }
+  else if (!safety.cooldown) { topReason = `AUTO WAIT: Cooldown ${cdLeft}m rămas (${prof})`; reasonCls = 'wait' }
+  else if (!safety.session) { topReason = 'AUTO WAIT: Session OFF — oră nefavorabilă'; reasonCls = 'wait' }
+  else if (!safety.noOpposite) { topReason = 'AUTO BLOCKED: Poziție opusă deschisă'; reasonCls = 'block' }
+  else if (!safety.risk) { topReason = 'AUTO BLOCKED: Risk Limits atinse (DD/Streak/MaxPos)'; reasonCls = 'block' }
+  else if (!ctx.trigger) { topReason = 'AUTO WAIT: Trigger neconfirmat (Sweep+Reclaim sau Disp)'; reasonCls = 'wait' }
+  else if (!ctx.flow) { topReason = 'AUTO WAIT: FlowConfirm FAIL — CVD/Delta neutru'; reasonCls = 'wait' }
+  else if (w._fakeout.invalid) { topReason = 'AUTO WAIT: Anti-fakeout — 2 closes fără follow-through'; reasonCls = 'wait' }
+  else if (!ctx.mtf) { topReason = `AUTO WAIT: MTF Align ${mtfAlignCount}/3 (min 2 cerut)`; reasonCls = 'wait' }
   else if (score < scoreThresh) { topReason = `AUTO WAIT: EntryScore ${score} < ${scoreThresh} (${prof})`; reasonCls = 'wait' }
   else if (confluenceScore < confThresh) { topReason = `AUTO WAIT: Confluence ${confluenceScore} < ${confThresh}`; reasonCls = 'wait' }
   else if (!atmosAllow) { topReason = `AUTO BLOCK: Atmosphere ${(BM.atmosphere?.category || '?').toUpperCase()} — ${(BM.atmosphere?.reasons || []).slice(0, 2).join(', ')}`; reasonCls = 'block' }
@@ -1953,13 +1953,13 @@ export function renderBrainCockpit(): void {
     const waitDSLPosns = autoPosnsAll.filter((p: any) => getDSLPositions()?.[p.id] && !getDSLPositions()[p.id].active)
     if (!getDSLEnabled()) {
       // Engine completely off
-      dslEl.innerHTML = `DSL ENGINE: <b style="color:#aa2233">OFF</b> ${_modeTag} | Enable the engine.`
+      dslEl.innerHTML = `DSL ENGINE: <b style="color:#aa2233">OFF</b> ${_modeTag} | Activează engine-ul.`
     } else if (!autoPosnsAll.length) {
       // Engine ready but no auto positions yet
-      dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">READY</b> ${_modeTag} · No AUTO position open`
+      dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">READY</b> ${_modeTag} · Nicio poziție AUTO deschisă`
     } else if (!activeDSLPosns.length && waitDSLPosns.length) {
       // Positions exist, waiting for activation threshold
-      dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">WAIT</b> ${_modeTag} · ${waitDSLPosns.length} pos. awaiting activation`
+      dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">WAIT</b> ${_modeTag} · ${waitDSLPosns.length} poz. asteaptă activare`
     } else if (activeDSLPosns.length) {
       // At least one position actively trailed
       const p = activeDSLPosns[0], dsl = getDSLPositions()[p.id]
@@ -1967,7 +1967,7 @@ export function renderBrainCockpit(): void {
       const sym2 = (p.sym || '').replace('USDT', '')
       dslEl.innerHTML = `DSL: <b style="color:#00ffcc">TRAILING</b> ${_modeTag} · ${sym2} PL:<b>$${fP(dsl.pivotLeft)}</b> PR:<b>$${fP(dsl.pivotRight)}</b> · Steps:<b>${steps}</b>`
     } else {
-      dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">READY</b> ${_modeTag} · ${autoPosnsAll.length} pos. monitored`
+      dslEl.innerHTML = `DSL ENGINE: <b style="color:#f0c040">READY</b> ${_modeTag} · ${autoPosnsAll.length} poz. monitorizate`
     }
   }
 
@@ -2664,11 +2664,11 @@ export function adaptAutoTradeParams(): void {
   if (regime === 'volatile' && losses < 3) {
     newSL = Math.max(newSL, 2.5) // wider SL in volatile market
     adapted = true
-    reason = (reason ? reason + ' | ' : '') + 'Volatile market → SL widened to ' + newSL.toFixed(1) + '%'
+    reason = (reason ? reason + ' | ' : '') + 'Piata volatila → SL extins la ' + newSL.toFixed(1) + '%'
   } else if (regime === 'range') {
     newSL = Math.min(newSL, 1.0) // tighter SL in range
     adapted = true
-    reason = (reason ? reason + ' | ' : '') + 'Range → SL tightened to ' + newSL.toFixed(1) + '%'
+    reason = (reason ? reason + ' | ' : '') + 'Range → SL strans la ' + newSL.toFixed(1) + '%'
   }
 
   if (adapted) {

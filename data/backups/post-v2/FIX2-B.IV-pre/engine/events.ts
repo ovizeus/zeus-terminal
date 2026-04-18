@@ -130,7 +130,7 @@ export function computePredatorState(): void {
 export const _pendingClose: Record<string, { timer: ReturnType<typeof setTimeout>; btnRef: HTMLElement; callback: () => void }> = {}
 
 function _applyPendingStyle(btn: HTMLElement): void {
-  btn.innerHTML = '✓ CONFIRM?'
+  btn.innerHTML = '✓ CONFIRMĂ?'
   btn.style.background = '#1a1200'
   btn.style.borderColor = 'var(--gold)'
   btn.style.color = 'var(--gold)'
@@ -138,7 +138,7 @@ function _applyPendingStyle(btn: HTMLElement): void {
 
 function _resetCloseBtn(btn: HTMLElement): void {
   if (btn.getAttribute('data-close-id')) {
-    btn.innerHTML = '✕ CLOSE ALL'; btn.style.background = '#2a0010'; btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'
+    btn.innerHTML = '✕ INCHIDE TOT'; btn.style.background = '#2a0010'; btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'
   } else if (btn.getAttribute('data-id')) {
     btn.innerHTML = '✕ CLOSE'; btn.style.background = '#2a0010'; btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'
   } else if (btn.id === 'closeAllBtn') {
