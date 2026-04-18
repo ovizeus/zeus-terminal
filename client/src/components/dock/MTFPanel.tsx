@@ -37,7 +37,7 @@ export function MTFPanel() {
       <Row label="SQUEEZE" id="mtf-squeeze" cell={s.squeeze} />
       <Row label="ADX" id="mtf-adx" cell={s.adx} />
       <Row label="VOL REGIME" id="mtf-vol-regime" cell={s.volRegime} />
-      <Row label="VOL PERCENTILĂ" id="mtf-vol-pct" cell={s.volPct} />
+      <Row label="VOL PERCENTILE" id="mtf-vol-pct" cell={s.volPct} />
       <div style={{ height: '1px', background: '#00d9ff0a', margin: '4px 0' }}></div>
       <Row label="SWEEP" id="mtf-sweep" cell={s.sweep} />
       <Row label="TRAP RATE" id="mtf-trap-rate" cell={s.trapRate} />

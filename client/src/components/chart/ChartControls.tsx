@@ -62,20 +62,20 @@ const SYMBOLS: { label: string; items: { value: string; label: string }[] }[] = 
 const IND_LIST: { id: string; ico: string; name: string; desc: string }[] = [
   { id: 'ema', ico: '📈', name: 'EMA 50/200', desc: 'Exponential Moving Average' },
   { id: 'wma', ico: '〰', name: 'WMA 20/50', desc: 'Weighted Moving Average' },
-  { id: 'st',  ico: '◆', name: 'Supertrend', desc: 'Trend + Stop Loss dinamic' },
-  { id: 'vp',  ico: '📊', name: 'Volume Profile', desc: 'Volum pe niveluri de pret' },
+  { id: 'st',  ico: '◆', name: 'Supertrend', desc: 'Trend + dynamic Stop Loss' },
+  { id: 'vp',  ico: '📊', name: 'Volume Profile', desc: 'Volume by price levels' },
   { id: 'cvd', ico: '📊', name: 'CVD', desc: 'Cumulative Volume Delta' },
   { id: 'macd', ico: '⚡', name: 'MACD', desc: 'Moving Avg Convergence Div' },
-  { id: 'bb',  ico: '◎', name: 'Bollinger Bands', desc: 'Volatilitate si trend' },
-  { id: 'stoch', ico: '〰', name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch' },
+  { id: 'bb',  ico: '◎', name: 'Bollinger Bands', desc: 'Volatility and trend' },
+  { id: 'stoch', ico: '〰', name: 'Stochastic RSI', desc: 'RSI smoothed with Stoch' },
   { id: 'obv', ico: '📊', name: 'OBV', desc: 'On-Balance Volume' },
   { id: 'atr', ico: '📏', name: 'ATR', desc: 'Average True Range - volat' },
   { id: 'vwap', ico: '📊', name: 'VWAP', desc: 'Volume Weighted Avg Price' },
-  { id: 'ichimoku', ico: '☁', name: 'Ichimoku Cloud', desc: 'Sistem complet japonez' },
-  { id: 'fib', ico: '⬡', name: 'Fibonacci', desc: 'Retracement auto pe swing' },
-  { id: 'pivot', ico: '◎', name: 'Pivot Points', desc: 'Suport/Rezistenta zilnice' },
+  { id: 'ichimoku', ico: '☁', name: 'Ichimoku Cloud', desc: 'Full Japanese system' },
+  { id: 'fib', ico: '⬡', name: 'Fibonacci', desc: 'Auto retracement on swing' },
+  { id: 'pivot', ico: '◎', name: 'Pivot Points', desc: 'Daily Support/Resistance' },
   { id: 'rsi14', ico: '⚡', name: 'RSI 14', desc: 'Relative Strength Index' },
-  { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'RSI bazat pe volum' },
+  { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'Volume-weighted RSI' },
   { id: 'cci', ico: '📏', name: 'CCI', desc: 'Commodity Channel Index' },
 ]
 
@@ -300,7 +300,7 @@ export function ChartControls() {
       <div className={`ind-panel-overlay${indPanelOpen ? ' open' : ''}`} id="indOverlay" onClick={() => setIndPanelOpen(false)}></div>
       <div className={`ind-panel${indPanelOpen ? ' open' : ''}`} id="indPanel">
         <div className="ind-panel-hdr">
-          <span className="ind-panel-title">SELECTEAZA INDICATOR</span>
+          <span className="ind-panel-title">SELECT INDICATOR</span>
           <span style={{ cursor: 'pointer', color: 'var(--dim)', fontSize: '14px' }} onClick={() => setIndPanelOpen(false)}>✕</span>
         </div>
         <div className="ind-panel-body" id="indPanelBody">

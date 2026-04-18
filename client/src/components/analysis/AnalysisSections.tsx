@@ -251,7 +251,7 @@ export function AnalysisSections() {
             <tbody id="mscanBody">
               <tr>
                 <td colSpan={10} style={{ textAlign: 'center', padding: '16px', color: 'var(--dim)', fontSize: '8px' }}>
-                  Apasa SCAN sau asteapta Auto Trade sa porneasca...
+                  Press SCAN or wait for Auto Trade to start...
                 </td>
               </tr>
             </tbody>
@@ -262,12 +262,12 @@ export function AnalysisSections() {
       {/* ===== SIGNAL SCANNER SECTION ===== */}
       <div className="sec sig-scan" id="sigScanSec">
         <div className="sig-hdr">
-          <span>SCANNER DE SEMNALE</span>
+          <span>SIGNAL SCANNER</span>
           <span id="sigScanTime" style={{ fontSize: '7px', color: 'var(--dim)' }}></span>
         </div>
         <div id="megaSigBox"></div>
         <div className="sig-grid" id="sigGrid">
-          <div className="sig-row" style={{ justifyContent: 'center', padding: '14px', color: 'var(--dim)', fontSize: '8px' }}>Se calculeaza semnale...</div>
+          <div className="sig-row" style={{ justifyContent: 'center', padding: '14px', color: 'var(--dim)', fontSize: '8px' }}>Calculating signals...</div>
         </div>
       </div>
 
@@ -279,26 +279,26 @@ export function AnalysisSections() {
             <span id="dhfCurrentSlot" style={{ fontSize: '8px', color: '#00ff88' }}>&mdash;</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '7px', cursor: 'pointer' }}>
               <input type="checkbox" id="dhfEnabled" defaultChecked onChange={() => (window as any).renderDHF?.()} />
-              <span style={{ color: '#aa44ff' }}>Filtru activ</span>
+              <span style={{ color: '#aa44ff' }}>Filter active</span>
             </label>
           </div>
         </div>
         <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
-          ZILE SAPTAMANA &mdash; WR mediu pe simboluri
+          WEEKDAYS &mdash; avg WR across symbols
         </div>
         <div className="dhf-grid" id="dhfDayGrid">
           {/* filled by JS */}
         </div>
         <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
-          ORE ROMANIA (UTC+2/+3) &mdash; Evita orele rosii
+          HOURS ROMANIA (UTC+2/+3) &mdash; Avoid red hours
         </div>
         <div className="dhf-hours" id="dhfHourGrid">
           {/* filled by JS */}
         </div>
         <div style={{ padding: '4px 10px 8px', fontSize: '7px', color: 'var(--dim)' }}>
-          <span style={{ color: '#00d97a' }}>&#9632;</span> WR&ge;60% &mdash; Tranzactioneaza &nbsp;
+          <span style={{ color: '#00d97a' }}>&#9632;</span> WR&ge;60% &mdash; Trade &nbsp;
           <span style={{ color: '#f0c040' }}>&#9632;</span> WR 45-60% &mdash; Caution &nbsp;
-          <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Evita
+          <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Avoid
         </div>
       </div>
 
@@ -306,43 +306,43 @@ export function AnalysisSections() {
       <div className="sec" id="perfSec">
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
           <span>PERFORMANCE TRACKER &mdash; PER INDICATOR</span>
-          <span id="perfUpdTime" style={{ fontSize: '9px', color: 'var(--dim)' }}>Live din trades</span>
+          <span id="perfUpdTime" style={{ fontSize: '9px', color: 'var(--dim)' }}>Live from trades</span>
         </div>
         <div style={{ padding: '4px 10px 4px', fontSize: '9px', color: 'var(--dim)', display: 'flex', justifyContent: 'space-between' }}>
           <span>INDICATOR</span><span>WIN RATE | TRADES | WEIGHT AI</span>
         </div>
         <div id="perfTrackerBody">
           <div style={{ padding: '16px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)' }}>
-            Se colecteaza date din Auto Trade...
+            Collecting data from Auto Trade...
           </div>
         </div>
         <div style={{ padding: '6px 10px', fontSize: '9px', color: 'var(--dim)', borderTop: '1px solid #0d1520', lineHeight: 1.8 }}>
-          Zeus Brain pondereaza automat Confluence Score bazat pe performanta reala a fiecarui indicator.<br />
-          Indicatorii cu WR mare primesc greutate mai mare in decizia de intrare.
+          Zeus Brain auto-weights the Confluence Score based on each indicator's real performance.<br />
+          Indicators with higher WR get more weight in entry decisions.
         </div>
       </div>
 
       {/* ===== BACKTEST ENGINE ===== */}
       <div className="sec" id="btSec">
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>BACKTEST ENGINE &mdash; PRECIZIE INDICATORI</span>
-          <span id="btLastRun" style={{ fontSize: '9px', color: 'var(--dim)' }}>Nerulatat</span>
+          <span>BACKTEST ENGINE &mdash; INDICATOR PRECISION</span>
+          <span id="btLastRun" style={{ fontSize: '9px', color: 'var(--dim)' }}>Not run yet</span>
         </div>
         <div className="bt-wrap">
           {/* Controls */}
           <div className="bt-controls">
             <button className="bt-btn bt-btn-run" id="btRunBtn" onClick={() => (window as any).runBacktest?.()}>&#9654; RUN BACKTEST</button>
             <select className="bt-sel" id="btLookback" defaultValue="500" onChange={() => {}}>
-              <option value="100">100 bare</option>
-              <option value="200">200 bare</option>
-              <option value="500">500 bare</option>
-              <option value="1000">1000 bare (max)</option>
+              <option value="100">100 bars</option>
+              <option value="200">200 bars</option>
+              <option value="500">500 bars</option>
+              <option value="1000">1000 bars (max)</option>
             </select>
             <select className="bt-sel" id="btFwdBars" defaultValue="5" onChange={() => {}}>
-              <option value="3">+3 bare</option>
-              <option value="5">+5 bare</option>
-              <option value="10">+10 bare</option>
-              <option value="20">+20 bare</option>
+              <option value="3">+3 bars</option>
+              <option value="5">+5 bars</option>
+              <option value="10">+10 bars</option>
+              <option value="20">+20 bars</option>
             </select>
             <select className="bt-sel" id="btMinMove" defaultValue="0.5" onChange={() => {}}>
               <option value="0.2">&ge;0.2% move</option>
@@ -353,7 +353,7 @@ export function AnalysisSections() {
 
           {/* Progress */}
           <div className="bt-progress" id="btProgress" style={{ display: 'none' }}>
-            <div>Se calculeaza... <span id="btProgressPct">0</span>%</div>
+            <div>Calculating... <span id="btProgressPct">0</span>%</div>
             <div className="bt-progress-bar">
               <div className="bt-progress-fill" id="btProgressFill" style={{ width: '0%' }}></div>
             </div>
@@ -368,11 +368,11 @@ export function AnalysisSections() {
                 <div className="bt-sum-val" id="btBestInd" style={{ color: 'var(--gold)', fontSize: '11px' }}>&mdash;</div>
               </div>
               <div className="bt-sum-cell">
-                <div className="bt-sum-lbl">MEDIE WIN RATE</div>
+                <div className="bt-sum-lbl">AVG WIN RATE</div>
                 <div className="bt-sum-val" id="btAvgWR" style={{ color: 'var(--whi)' }}>&mdash;</div>
               </div>
               <div className="bt-sum-cell">
-                <div className="bt-sum-lbl">TOTAL SEMNALE</div>
+                <div className="bt-sum-lbl">TOTAL SIGNALS</div>
                 <div className="bt-sum-val" id="btTotalSig" style={{ color: 'var(--blu)' }}>&mdash;</div>
               </div>
               <div className="bt-sum-cell">
@@ -385,9 +385,9 @@ export function AnalysisSections() {
             <div className="bt-ind-row hdr">
               <span>INDICATOR</span>
               <span>WIN RATE</span>
-              <span style={{ textAlign: 'center' }}>SEMNALE</span>
+              <span style={{ textAlign: 'center' }}>SIGNALS</span>
               <span style={{ textAlign: 'right' }}>R:R</span>
-              <span style={{ textAlign: 'center' }}>GRAD</span>
+              <span style={{ textAlign: 'center' }}>GRADE</span>
             </div>
 
             {/* Results rows */}
@@ -395,7 +395,7 @@ export function AnalysisSections() {
 
             {/* Equity curve */}
             <div className="bt-equity">
-              <div className="bt-equity-lbl">CURBA ECHITATE &mdash; CONFLUENTA (simulat $1000)</div>
+              <div className="bt-equity-lbl">EQUITY CURVE &mdash; CONFLUENCE (simulated $1000)</div>
               <div className="bt-equity-chart">
                 <svg className="bt-eq-svg" id="btEquitySvg" viewBox="0 0 400 50" preserveAspectRatio="none"></svg>
               </div>
@@ -406,17 +406,17 @@ export function AnalysisSections() {
               <svg className="z-i" viewBox="0 0 16 16">
                 <circle cx="8" cy="4" r="1" fill="currentColor" stroke="none" />
                 <path d="M7 7h2v6H7z" fill="currentColor" stroke="none" />
-              </svg> Backtestul verifica daca, dupa fiecare semnal detectat in istoric, pretul a confirmat directia in
-              urmatoarele bare.
-              Win Rate &gt; 55% = semnal util. Win Rate &gt; 65% = semnal excelent. Rezultatele sunt pe datele istorice
-              disponibile.
+              </svg> Backtest verifies whether, after every signal detected in history, the price confirmed the direction in
+              the following bars.
+              Win Rate &gt; 55% = useful signal. Win Rate &gt; 65% = excellent signal. Results are on the historical data
+              available.
             </div>
           </div>
 
           {/* Empty state */}
           <div id="btEmpty" style={{ padding: '16px', textAlign: 'center', fontSize: '9px', color: 'var(--dim)' }}>
-            Apasa <strong style={{ color: 'var(--gold)' }}>&#9654; RUN BACKTEST</strong> pentru a analiza precizia indicatorilor pe
-            datele istorice curente.
+            Press <strong style={{ color: 'var(--gold)' }}>&#9654; RUN BACKTEST</strong> to analyze indicator precision on the
+            current historical data.
           </div>
         </div>
       </div>
@@ -809,8 +809,8 @@ export function AnalysisSections() {
               ADAPTIVE OFF
             </button>
             <div style={{ fontSize: '8px', color: 'var(--dim)', marginTop: '4px', lineHeight: 1.6 }}>
-              OFF = toți multiplieri &times;1.00, engine nu citește nimic.<br />
-              Min 30 trades/bucket pentru a activa multiplicatorii.
+              OFF = all multipliers &times;1.00, engine reads nothing.<br />
+              Min 30 trades/bucket to activate multipliers.
             </div>
           </div>
           <div id="adaptive-mults-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '3px', fontSize: '9px', background: '#0a1520', border: '1px solid #1a2a3a', borderRadius: '3px', padding: '6px 10px', marginBottom: '8px' }}>
@@ -823,7 +823,7 @@ export function AnalysisSections() {
             <span>BUCKET</span><span>TRADES</span><span>WR</span><span>MULT</span>
           </div>
           <div id="adaptive-bucket-table" style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '8px', color: '#6a8090' }}>
-            <div style={{ color: 'var(--dim)', padding: '4px 0' }}>Niciun trade cu context încă.</div>
+            <div style={{ color: 'var(--dim)', padding: '4px 0' }}>No trade with context yet.</div>
           </div>
         </div>
       </div>

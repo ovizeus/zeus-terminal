@@ -126,8 +126,8 @@ export function AutoTradePanel() {
   }, [symPickerOpen])
 
   const mscanLabel = useMemo(() => {
-    if (!mscanEnabled) return 'DEZACTIVAT'
-    return 'ACTIV — ' + mscanSyms.length + ' simboluri'
+    if (!mscanEnabled) return 'DISABLED'
+    return 'ACTIVE — ' + mscanSyms.length + ' symbols'
   }, [mscanEnabled, mscanSyms])
 
   function toggleSym(sym: string) {
@@ -333,13 +333,13 @@ export function AutoTradePanel() {
 
         {/* ENTRY CONDITIONS */}
         <div className="at-condition">
-          <div className="at-cond-title">CONDITII INTRARE (toate trebuie OK)</div>
+          <div className="at-cond-title">ENTRY CONDITIONS (all must be OK)</div>
           <div className="at-cond-row">
             <span className="at-cond-name">Confluence Score</span>
             <span>≥ <input type="number" id="atConfMin" value={confMin} onChange={e => setConfMin(e.target.value)} min={50} max={95} className="at-inp" style={{ width: '52px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condConfClass}>{ui.condConf}</span></span>
           </div>
           <div className="at-cond-row">
-            <span className="at-cond-name">Semnale aliniate</span>
+            <span className="at-cond-name">Aligned signals</span>
             <span>≥ <input type="number" id="atSigMin" value={sigMin} onChange={e => setSigMin(e.target.value)} min={2} max={6} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condSigClass}>{ui.condSig}</span></span>
           </div>
         </div>
@@ -396,7 +396,7 @@ export function AutoTradePanel() {
                 style={{ position: 'absolute', right: 0, top: '100%', zIndex: 999, background: '#0d0a1a', border: '1px solid #aa44ff44', borderRadius: '6px', padding: '8px', minWidth: '180px', boxShadow: '0 8px 24px rgba(0,0,0,.6)', marginTop: '4px' }}
                 onClick={(e) => e.stopPropagation()}>
                 <div style={{ fontSize: '7px', color: '#aa44ff', fontWeight: 700, marginBottom: '6px', letterSpacing: '1px' }}>
-                  SELECTEAZA SIMBOLURI ({mscanSyms.length}/{MSCAN_SYMS.length})
+                  SELECT SYMBOLS ({mscanSyms.length}/{MSCAN_SYMS.length})
                 </div>
                 <div id="atSymPickerList" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
                   {MSCAN_SYMS.map((sym) => {

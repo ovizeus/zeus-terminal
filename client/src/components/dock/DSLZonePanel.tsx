@@ -149,7 +149,7 @@ export function DSLZonePanel() {
           </div>
           <div>
             <div className="dsl-radar-txt">WAITING DYNAMIC SL...</div>
-            <div style={{ fontSize: '6px', color: '#00ffcc22', marginTop: '3px', letterSpacing: '1px' }}>SCANEZ POZITII PENTRU ACTIVARE</div>
+            <div style={{ fontSize: '6px', color: '#00ffcc22', marginTop: '3px', letterSpacing: '1px' }}>SCANNING POSITIONS FOR ACTIVATION</div>
           </div>
         </div>
       </div>

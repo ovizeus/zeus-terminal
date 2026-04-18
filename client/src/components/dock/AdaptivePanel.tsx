@@ -49,7 +49,7 @@ export function AdaptivePanel() {
           <span>BUCKET</span><span>TRADES</span><span>WR</span><span>MULT</span>
         </div>
         <div id="adaptive-bucket-table" style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '8px', color: '#6a8090' }}>
-          <div style={{ color: 'var(--dim)', padding: '4px 0' }}>Niciun trade cu context &#xEE;nc&#x103;.</div>
+          <div style={{ color: 'var(--dim)', padding: '4px 0' }}>No trade with context yet.</div>
         </div>
       </div>
     </div>
