@@ -34,7 +34,10 @@ export function QuantMonitorPanel() {
         fontSize: '11.5px', letterSpacing: '0.3px',
         fontFamily: "'JetBrains Mono','Courier New','Lucida Console',monospace",
         lineHeight: 1.25, color: '#ccc',
-        textShadow: '0 0 1px rgba(0,255,136,0.15)',
+        contain: 'layout paint style',
+        transform: 'translateZ(0)',
+        willChange: 'contents',
+        backfaceVisibility: 'hidden',
       }}>
         <span className="dg">Initializing ZeuS Quantitative Monitor...</span>
       </div>
@@ -51,7 +54,7 @@ export function QuantMonitorPanel() {
       {/* Vignette glow */}
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-        boxShadow: 'inset 0 0 120px rgba(0,255,136,0.03)',
+        boxShadow: 'inset 0 0 120px rgba(0,255,136,0.015)',
         pointerEvents: 'none', zIndex: 102,
       }} />
     </div>
