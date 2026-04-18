@@ -5,42 +5,65 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="BTC"
-            android:textColor="#f0c040"
-            android:textSize="10sp"
-            android:textStyle="bold" />
+            android:textColor="#22e27a"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/wLiveDemo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_pill_live"
+            android:text="LIVE"
+            android:textColor="#22e27a"
+            android:textSize="8sp"
+            android:textStyle="bold"
+            android:paddingStart="5dp"
+            android:paddingEnd="5dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp"
+            android:maxLines="1" />
 
         <ImageView
             android:id="@+id/wRefresh"
-            android:layout_width="14dp"
-            android:layout_height="14dp"
+            android:layout_width="12dp"
+            android:layout_height="12dp"
+            android:layout_marginStart="5dp"
             android:src="@android:drawable/ic_popup_sync"
-            android:alpha="0.35"
+            android:alpha="0.4"
             android:contentDescription="refresh" />
     </LinearLayout>
 
     <TextView
         android:id="@+id/wBtc"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="2dp"
         android:text="—"
         android:textColor="#ffffff"
         android:textSize="22sp"
         android:textStyle="bold"
         android:maxLines="1"
-        android:ellipsize="end" />
+        android:ellipsize="end"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="12sp"
+        android:autoSizeMaxTextSize="26sp"
+        android:gravity="bottom|start" />
 
     <TextView
         android:id="@+id/wBtcChg"
@@ -48,7 +71,12 @@
         android:layout_height="wrap_content"
         android:text="—"
         android:textColor="#aab8c8"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:autoSizeTextType="uniform"
+        android:autoSizeMinTextSize="8sp"
+        android:autoSizeMaxTextSize="14sp" />
 
 </LinearLayout>

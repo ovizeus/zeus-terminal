@@ -80,26 +80,44 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
         int brainScore = prefs.getInt("brainScore", 0);
         long ts = prefs.getLong("snapshotTs", 0L);
 
-        int pnlColor;
-        if (pnlVal > 0) pnlColor = Color.parseColor("#22cc66");
-        else if (pnlVal < 0) pnlColor = Color.parseColor("#ff4455");
-        else pnlColor = Color.parseColor("#aab8c8");
+        int cGreen = Color.parseColor("#22e27a");
+        int cRed = Color.parseColor("#ff4d6d");
+        int cDim = Color.parseColor("#6b7a88");
+        int cNeutral = Color.parseColor("#aab8c8");
+
+        int pnlColor = pnlVal > 0 ? cGreen : (pnlVal < 0 ? cRed : cNeutral);
+
+        boolean isLive = mode != null && mode.toUpperCase().startsWith("LIVE");
+        String pillText = isLive ? "LIVE" : "DEMO";
+        int pillColor = isLive ? cGreen : Color.parseColor("#6cb0ff");
+        int pillBg = isLive ? R.drawable.widget_pill_live : R.drawable.widget_pill_demo;
+        views.setTextViewText(R.id.wLiveDemo, pillText);
+        views.setTextColor(R.id.wLiveDemo, pillColor);
+        views.setInt(R.id.wLiveDemo, "setBackgroundResource", pillBg);
 
         if (layoutId == R.layout.widget_medium || layoutId == R.layout.widget_large) {
             views.setTextViewText(R.id.wBalance, balance);
             views.setTextViewText(R.id.wPnl, pnl);
             views.setTextColor(R.id.wPnl, pnlColor);
-            views.setTextViewText(R.id.wPositions, pos + " open");
-            views.setTextViewText(R.id.wAt, "AT " + (atOn ? "ON" : "OFF") + " · " + mode);
-            views.setTextColor(R.id.wAt, atOn ? Color.parseColor("#22cc66") : Color.parseColor("#556677"));
+
+            String atLabel = "AT " + (atOn ? "ON" : "OFF");
+            views.setTextViewText(R.id.wAt, atLabel);
+            views.setTextColor(R.id.wAt, atOn ? cGreen : cDim);
+
+            if (layoutId == R.layout.widget_medium) {
+                views.setTextViewText(R.id.wPositions, pos + " pos");
+            } else {
+                views.setTextViewText(R.id.wPositions, String.valueOf(pos));
+            }
         }
         if (layoutId == R.layout.widget_large) {
-            views.setTextViewText(R.id.wBrain, "Brain " + brainMode + " (" + brainScore + ")");
+            views.setTextViewText(R.id.wBrain, "Brain " + brainMode + " · " + brainScore);
         }
 
-        String staleLabel = (ts > 0 && System.currentTimeMillis() - ts > 15 * 60 * 1000L) ? " · stale" : "";
+        boolean stale = ts > 0 && (System.currentTimeMillis() - ts) > 15 * 60 * 1000L;
         if (layoutId != R.layout.widget_small) {
-            views.setTextViewText(R.id.wStatus, "Zeus" + staleLabel);
+            views.setTextViewText(R.id.wStatus, stale ? "· stale" : "");
+            views.setTextColor(R.id.wStatus, stale ? cRed : cDim);
         }
     }
 
@@ -139,11 +157,11 @@ public class ZeusWidgetProvider extends AppWidgetProvider {
                         applySnapshot(context, v, layoutId);
                         v.setTextViewText(R.id.wBtc, fBtc);
                         v.setTextViewText(R.id.wBtcChg, fBtcCh);
-                        v.setTextColor(R.id.wBtcChg, fBtcN >= 0 ? Color.parseColor("#22cc66") : Color.parseColor("#ff4455"));
+                        v.setTextColor(R.id.wBtcChg, fBtcN >= 0 ? Color.parseColor("#22e27a") : Color.parseColor("#ff4d6d"));
                         if (layoutId == R.layout.widget_large) {
                             v.setTextViewText(R.id.wEth, fEth);
                             v.setTextViewText(R.id.wEthChg, fEthCh);
-                            v.setTextColor(R.id.wEthChg, fEthN >= 0 ? Color.parseColor("#22cc66") : Color.parseColor("#ff4455"));
+                            v.setTextColor(R.id.wEthChg, fEthN >= 0 ? Color.parseColor("#22e27a") : Color.parseColor("#ff4d6d"));
                         }
                         wireClicks(context, v);
                         mgr.updateAppWidget(id, v);

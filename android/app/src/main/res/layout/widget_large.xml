@@ -5,7 +5,7 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="14dp">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -18,25 +18,44 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="ZEUS TERMINAL"
-            android:textColor="#f0c040"
+            android:textColor="#22e27a"
             android:textSize="10sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/wLiveDemo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/widget_pill_live"
+            android:text="LIVE"
+            android:textColor="#22e27a"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:paddingStart="7dp"
+            android:paddingEnd="7dp"
+            android:paddingTop="1dp"
+            android:paddingBottom="1dp"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/wStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Zeus"
-            android:textColor="#556677"
-            android:textSize="9sp" />
+            android:layout_marginStart="6dp"
+            android:text=""
+            android:textColor="#667788"
+            android:textSize="9sp"
+            android:maxLines="1" />
 
         <ImageView
             android:id="@+id/wRefresh"
             android:layout_width="16dp"
             android:layout_height="16dp"
-            android:layout_marginStart="8dp"
+            android:layout_marginStart="6dp"
             android:src="@android:drawable/ic_popup_sync"
-            android:alpha="0.35"
+            android:alpha="0.4"
             android:contentDescription="refresh" />
     </LinearLayout>
 
@@ -48,75 +67,95 @@
         android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="28dp"
             android:layout_height="wrap_content"
-            android:layout_weight="0.6"
             android:text="BTC"
-            android:textColor="#556677"
+            android:textColor="#667788"
             android:textSize="10sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/wBtc"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="—"
             android:textColor="#ffffff"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold"
-            android:layout_marginEnd="8dp" />
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="12sp"
+            android:autoSizeMaxTextSize="19sp" />
 
         <TextView
             android:id="@+id/wBtcChg"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
             android:text="—"
             android:textColor="#aab8c8"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="9sp"
+            android:autoSizeMaxTextSize="13sp" />
     </LinearLayout>
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="3dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="0dp"
+            android:layout_width="28dp"
             android:layout_height="wrap_content"
-            android:layout_weight="0.6"
             android:text="ETH"
-            android:textColor="#556677"
+            android:textColor="#667788"
             android:textSize="10sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/wEth"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="—"
             android:textColor="#ffffff"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold"
-            android:layout_marginEnd="8dp" />
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="12sp"
+            android:autoSizeMaxTextSize="19sp" />
 
         <TextView
             android:id="@+id/wEthChg"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
             android:text="—"
             android:textColor="#aab8c8"
             android:textSize="12sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:autoSizeTextType="uniform"
+            android:autoSizeMinTextSize="9sp"
+            android:autoSizeMaxTextSize="13sp" />
     </LinearLayout>
 
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"
-        android:layout_marginTop="12dp"
-        android:layout_marginBottom="10dp"
+        android:layout_marginTop="10dp"
+        android:layout_marginBottom="8dp"
         android:background="@drawable/widget_divider" />
 
     <LinearLayout
@@ -136,16 +175,22 @@
                 android:text="BALANCE"
                 android:textColor="#556677"
                 android:textSize="8sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/wBalance"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="—"
                 android:textColor="#d0d8e0"
                 android:textSize="15sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="11sp"
+                android:autoSizeMaxTextSize="16sp" />
         </LinearLayout>
 
         <LinearLayout
@@ -160,16 +205,52 @@
                 android:text="PnL TODAY"
                 android:textColor="#556677"
                 android:textSize="8sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:maxLines="1" />
 
             <TextView
                 android:id="@+id/wPnl"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="—"
                 android:textColor="#aab8c8"
                 android:textSize="15sp"
-                android:textStyle="bold" />
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="11sp"
+                android:autoSizeMaxTextSize="16sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="0.8"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OPEN"
+                android:textColor="#556677"
+                android:textSize="8sp"
+                android:textStyle="bold"
+                android:maxLines="1" />
+
+            <TextView
+                android:id="@+id/wPositions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="0"
+                android:textColor="#d0d8e0"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:autoSizeTextType="uniform"
+                android:autoSizeMinTextSize="11sp"
+                android:autoSizeMaxTextSize="16sp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -177,16 +258,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:orientation="horizontal">
-
-        <TextView
-            android:id="@+id/wPositions"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="10dp"
-            android:text="0 open"
-            android:textColor="#aab8c8"
-            android:textSize="11sp" />
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
         <TextView
             android:id="@+id/wAt"
@@ -196,16 +269,20 @@
             android:text="AT OFF"
             android:textColor="#556677"
             android:textSize="11sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1" />
 
         <TextView
             android:id="@+id/wBrain"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_weight="1"
             android:text="Brain —"
-            android:textColor="#f0c040"
+            android:textColor="#22e27a"
             android:textSize="11sp"
-            android:textStyle="bold" />
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
     </LinearLayout>
 
 </LinearLayout>
