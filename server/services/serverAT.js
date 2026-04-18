@@ -2743,6 +2743,7 @@ async function _runReconciliation(isStartup) {
                         `🔍 *RECON: Phantom Position Removed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nPosition not found on Binance — likely closed externally (SL/TP hit, liquidation, or manual close).\nRemoving from server tracker.`
                     );
                     const idx = _positions.findIndex(p => p.seq === pos.seq && p.userId === userId);
+                    let estimatedClose = false;
                     if (idx >= 0) {
                         // [M5] Skip if user-initiated close already in flight — avoids double-close race.
                         const _gk = `${userId}:${pos.seq}`;
@@ -2752,16 +2753,35 @@ async function _runReconciliation(isStartup) {
                         }
                         _closingGuard.set(_gk, Date.now());
                         try {
-                            const exitPrice = realExitPrice || (bpos ? bpos.markPrice : (pos._lastPrice || pos.price));
-                            const pnl = realPnl != null ? realPnl : (pos.side === 'LONG'
+                            // Pick exit price in priority order:
+                            //   1. realExitPrice from userTrades (authoritative)
+                            //   2. bpos.markPrice if Binance still shows the symbol (side-flip case)
+                            //   3. pos.price as last resort — PnL forced to 0, flag manual reconcile
+                            // Never use pos._lastPrice: it fabricates a PnL from a stale tick.
+                            let exitPrice;
+                            if (realExitPrice != null && realExitPrice > 0) {
+                                exitPrice = realExitPrice;
+                            } else if (bpos && bpos.markPrice > 0) {
+                                exitPrice = bpos.markPrice;
+                            } else {
+                                exitPrice = pos.price;
+                                estimatedClose = true;
+                            }
+                            const pnl = realPnl != null ? realPnl : (estimatedClose ? 0 : (pos.side === 'LONG'
                                 ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                                : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2));
+                                : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2)));
+                            if (estimatedClose) {
+                                logger.warn(label, `[${pos.seq}] PHANTOM closed at entry price (PnL=0) — userTrades unavailable; manual reconciliation required`);
+                                telegram.sendToUser(userId,
+                                    `⚠️ *RECON: Manual Reconciliation Needed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nReal exit fill could not be retrieved from Binance userTrades API.\nClosed locally with PnL=$0. Please verify actual fill on Binance and adjust balance manually if needed.`
+                                );
+                            }
                             _closePosition(idx, pos, 'RECON_PHANTOM', exitPrice, pnl);
                         } finally {
                             setTimeout(() => _closingGuard.delete(_gk), 5000);
                         }
                     }
-                    audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl }, 'SERVER_AT');
+                    audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl, estimatedClose }, 'SERVER_AT');
                     continue;
                 }
 
