@@ -33,42 +33,61 @@ export function initCharts(): void {
     handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: true },
     handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
   })
-  w.mainChart = w.LightweightCharts.createChart(el('mc'), base(getChartH()))
-  w.cSeries = w.mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' })
+  // [batch3-D] REUSE the chart created by React TradingChart.tsx. #mc has
+  // overflow:hidden;height:400px — creating a second chart here stacks its
+  // canvas as a SIBLING of zr-chart-container and gets clipped invisible.
+  // All overlays (LIQ/SR/ZS/LLV/OVI) render on w.mainChart, so when legacy
+  // owned a ghost chart, the overlays silently drew on the hidden canvas.
+  // Guard: only create when no chart is registered yet (fallback for tests).
+  const _reactChartReady = w.mainChart && typeof w.mainChart.addLineSeries === 'function'
+  if (!_reactChartReady) {
+    w.mainChart = w.LightweightCharts.createChart(el('mc'), base(getChartH()))
+    w.cSeries = w.mainChart.addCandlestickSeries({ upColor: '#00d97a', downColor: '#ff3355', borderUpColor: '#00d97a', borderDownColor: '#ff3355', wickUpColor: '#00d97a77', wickDownColor: '#ff335577' })
+  }
   // LLV: load persisted settings and ensure canvas is ready
   if (typeof llvLoadSettings === 'function') llvLoadSettings()
   if (typeof llvEnsureCanvas === 'function') llvEnsureCanvas()
   // Reaplică culorile salvate
   if (w.S._savedChartColors) {
     const c = w.S._savedChartColors
-    w.cSeries.applyOptions({ upColor: c.bull, downColor: c.bear, borderUpColor: c.bull, borderDownColor: c.bear, wickUpColor: (c.bullW || c.bull) + '77', wickDownColor: (c.bearW || c.bear) + '77' })
-    if (w.mainChart) w.mainChart.applyOptions({ layout: { background: { color: c.priceBg || '#0a0f16' }, textColor: c.priceText || '#7a9ab8' }, rightPriceScale: { textColor: c.priceText || '#7a9ab8' } })
+    try { w.cSeries.applyOptions({ upColor: c.bull, downColor: c.bear, borderUpColor: c.bull, borderDownColor: c.bear, wickUpColor: (c.bullW || c.bull) + '77', wickDownColor: (c.bearW || c.bear) + '77' }) } catch (_) { }
+    try { if (w.mainChart) w.mainChart.applyOptions({ layout: { background: { color: c.priceBg || '#0a0f16' }, textColor: c.priceText || '#7a9ab8' }, rightPriceScale: { textColor: c.priceText || '#7a9ab8' } }) } catch (_) { }
   }
-  w.ema50S = w.mainChart.addLineSeries({ color: '#f0c040', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-  w.ema200S = w.mainChart.addLineSeries({ color: '#00b8d4', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-  w.ema3S = w.mainChart.addLineSeries({ color: '#00ff88', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-  w.ema4S = w.mainChart.addLineSeries({ color: '#ff66cc', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-  w.wma20S = w.mainChart.addLineSeries({ color: '#aa44ff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
-  w.wma50S = w.mainChart.addLineSeries({ color: '#ff8822', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
-  w.stS = w.mainChart.addLineSeries({ color: '#ff8800', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
+  // Series — only create ones NOT already registered by React TradingChart.
+  // TradingChart.tsx creates + registers: ema50S, ema200S, wma20S, wma50S, stS, volS.
+  // ema3S / ema4S are Zeus-specific extensions added here.
+  if (!w.ema50S) w.ema50S = w.mainChart.addLineSeries({ color: '#f0c040', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  if (!w.ema200S) w.ema200S = w.mainChart.addLineSeries({ color: '#00b8d4', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  if (!w.ema3S) w.ema3S = w.mainChart.addLineSeries({ color: '#00ff88', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  if (!w.ema4S) w.ema4S = w.mainChart.addLineSeries({ color: '#ff66cc', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  if (!w.wma20S) w.wma20S = w.mainChart.addLineSeries({ color: '#aa44ff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  if (!w.wma50S) w.wma50S = w.mainChart.addLineSeries({ color: '#ff8822', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
+  if (!w.stS) w.stS = w.mainChart.addLineSeries({ color: '#ff8800', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
   // CVD
-  if (el('cc')) {
+  if (el('cc') && !w.cvdChart) {
     const co = Object.assign(base(60), { rightPriceScale: { borderColor: '#1e2530', scaleMargins: { top: .1, bottom: .1 } } })
     w.cvdChart = w.LightweightCharts.createChart(el('cc'), co)
     w.cvdS = w.cvdChart.addLineSeries({ color: '#f0c040', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'CVD' })
   }
-  // Volume overlay
-  w.volS = w.mainChart.addHistogramSeries({ color: '#00b8d422', priceFormat: { type: 'volume' }, priceScaleId: 'vol', lastValueVisible: false, priceLineVisible: false })
-  w.mainChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, drawTicks: false, borderVisible: false, visible: false })
-  if (w.mainChart) w.mainChart.applyOptions({ localization: locFmt })
+  // Volume overlay — only create if React didn't already
+  if (!w.volS) {
+    w.volS = w.mainChart.addHistogramSeries({ color: '#00b8d422', priceFormat: { type: 'volume' }, priceScaleId: 'vol', lastValueVisible: false, priceLineVisible: false })
+    try { w.mainChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 }, drawTicks: false, borderVisible: false, visible: false }) } catch (_) { }
+  }
+  try { if (w.mainChart) w.mainChart.applyOptions({ localization: locFmt }) } catch (_) { }
   if (w.cvdChart) w.cvdChart.applyOptions({ localization: locFmt, timeScale: { visible: false, timeVisible: false, secondsVisible: false, borderVisible: false, rightOffset: 12 }, rightPriceScale: { visible: true, borderColor: '#1e2530', width: 70 } })
-  let syncing = false
-  w.mainChart.timeScale().subscribeVisibleLogicalRangeChange((r: any) => {
-    if (syncing || !r) return; syncing = true
-    try { if (w.cvdChart) w.cvdChart.timeScale().setVisibleLogicalRange(r) } catch (_) { }
-    try { if (typeof _syncSubChartsToMain === 'function') _syncSubChartsToMain() } catch (_) { }
-    syncing = false
-  })
+  if (!w._chartSyncInstalled) {
+    w._chartSyncInstalled = true
+    let syncing = false
+    try {
+      w.mainChart.timeScale().subscribeVisibleLogicalRangeChange((r: any) => {
+        if (syncing || !r) return; syncing = true
+        try { if (w.cvdChart) w.cvdChart.timeScale().setVisibleLogicalRange(r) } catch (_) { }
+        try { if (typeof _syncSubChartsToMain === 'function') _syncSubChartsToMain() } catch (_) { }
+        syncing = false
+      })
+    } catch (_) { }
+  }
 }
 
 // ===== FETCH KLINES =====
