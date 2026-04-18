@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.6.24',
-    build: 2,
+    build: 3,
     date: '2026-04-18',
-    changelog: 'QM cluster (BUG5.3/5.4/5.5): (1) QuantMonitor shipped in the main bundle instead of a code-split chunk — eliminates the dynamic chunk 404 class caused by stale Service Workers. (2) Paint isolation on #qm-screen (contain:layout paint style + translateZ + willChange:contents + removed redundant parent textShadow + vignette alpha 0.03→0.015) kills the whole-screen green "flashlight flash" during the 500ms innerHTML swap. (3) Liquidation map switched from synthetic bracket-MMR model (OI × weight × price) to real 24h-rolling aggregation from Binance+Bybit (w.S.llvBuckets via forceOrder@arr) + OKX (QM.liqAgg.okx via liquidation-orders WS). Display extended from 60 to 102 levels across 3 resolution zones — 0.25% near price, 0.5% mid, 1% far — with variable-window bucket summing. Sub-1% distance column shows 2 decimals.'
+    changelog: 'QM liq map (BUG5.5.2): binance+bybit liq events now feed QM.liqAgg via a zeus:liq CustomEvent dispatched BEFORE the liqMinUsd threshold in procLiq. Previously only OKX populated the per-exchange QM buffers (the dispatcher side of zeus:liq was never wired), so on a fresh page the map showed mostly dashes until large liqs accumulated in w.S.llvBuckets. buildLiqEstimate now reads QM.liqAgg.{binance,bybit,okx}.btc as primary data with llvBuckets as fallback density. Footer reports "accumulating real liqs — N events so far" when empty, or "N active levels | M events" when populated, so the feed state is visible.'
 };
