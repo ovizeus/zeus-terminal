@@ -3,7 +3,7 @@
 // Overlays, Trade Markers, LLV Canvas, Heatmap, S/R
 
 import { clearZS, renderZS, openM } from './marketDataWS'
-import { renderOviLiquid } from '../ui/panels'
+import { renderOviLiquid, clearOviLiquid, oviReadSettings } from '../ui/panels'
 import { _calcATRSeries } from './marketDataHelpers'
 
 const w = window as any
@@ -22,6 +22,12 @@ export function togOvr(o: any, btn: any): void {
   if (o === 'sr') { clearSR(); if (w.S.overlays.sr) renderSROverlay() }
   if (o === 'zs') { clearZS(); if (w.S.overlays.zs) renderZS() }
   if (o === 'llv') { clearLiqLevels(); if (w.S.overlays.llv) renderLiqLevels() }
+  // [batch3-A.1] OVI mirrored into overlays — keep legacy S.oviOn in sync so
+  // every reader (marketDataChart refresh timer, applySettings listeners) still works.
+  if (o === 'ovi') {
+    w.S.oviOn = w.S.overlays.ovi
+    if (w.S.overlays.ovi) { oviReadSettings(); renderOviLiquid() } else { clearOviLiquid() }
+  }
 }
 
 export function clearHeatmap(): void { w.liqSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s) } catch (_) { } }); w.liqSeries = [] }

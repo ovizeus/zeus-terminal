@@ -83,7 +83,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'Volume-weighted RSI' },
   { id: 'cci', ico: '📏', name: 'CCI', desc: 'Commodity Channel Index' },
   // Moved from Row 2/Row 3 — overlays + OVI (modal-only).
-  { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      modalOnly: true },
+  { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
   { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
   { id: 'sr',  ico: '📐', name: 'S/R Levels',  desc: 'Auto support/resistance', settingsModal: 'sr',       isOverlay: true },

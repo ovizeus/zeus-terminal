@@ -1403,7 +1403,7 @@ export const S: any = {
   rsi: {}, events: [], dtTf: '1H',
   soundOn: false, chartTf: '5m',
   indicators: { ema: true, wma: true, st: true, vp: true },
-  overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false },
+  overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false, ovi: false },
   llvSettings: { bucketPct: 0.3, maxBarWidthPct: 30, opacity: 0.7, minUsd: 0, longCol: '#00d4aa', shortCol: '#ff4466', showLabels: true, labelMode: 'compact' },
   klines: [], liqMinUsd: 500, liqSym: 'BTC', wsK: null,
   symbol: 'BTCUSDT', tz: 'Europe/Bucharest',
