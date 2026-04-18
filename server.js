@@ -941,6 +941,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
+    if (filePath.endsWith('.apk')) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="zeus-terminal.apk"');
+    }
   }
 }));
 
