@@ -165,6 +165,8 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'ema':
       if (w.ema50S) w.ema50S.applyOptions({ visible: show })
       if (w.ema200S) w.ema200S.applyOptions({ visible: show })
+      if (w.ema3S) w.ema3S.applyOptions({ visible: show })
+      if (w.ema4S) w.ema4S.applyOptions({ visible: show })
       break
     case 'wma':
       if (w.wma20S) w.wma20S.applyOptions({ visible: show })
@@ -240,7 +242,7 @@ export function openIndSettings(id: string): void {
   if (!cfg) { toast('No settings for ' + id.toUpperCase()); return }
   const ind = w.INDICATORS.find((i: any) => i.id === id)
   const labels: Record<string, string> = {
-    p1: 'Period 1', p2: 'Period 2', period: 'Period', mult: 'Multiplier',
+    p1: 'Period 1', p2: 'Period 2', p3: 'Period 3', p4: 'Period 4', period: 'Period', mult: 'Multiplier',
     stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
     senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',

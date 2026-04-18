@@ -1435,7 +1435,7 @@ export let _cciChart: any = null, _cciSeries: any = null, _cciInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
-  ema: { p1: 50, p2: 200 },
+  ema: { p1: 50, p2: 200, p3: 20, p4: 100 },
   wma: { p1: 20, p2: 50 },
   st: { period: 10, mult: 3 },
   bb: { period: 20, stdDev: 2 },

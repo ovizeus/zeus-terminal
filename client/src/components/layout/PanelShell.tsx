@@ -379,8 +379,10 @@ export function PanelShell() {
             <ErrorBoundary><TradingChart /></ErrorBoundary>
           </div>
           <div className="cleg">
-            <span className="li"><span className="ld" style={{ background: '#f0c040' }}></span>EMA50</span>
-            <span className="li"><span className="ld" style={{ background: '#00b8d4' }}></span>EMA200</span>
+            <span className="li"><span className="ld" style={{ background: '#f0c040' }}></span>EMA P1</span>
+            <span className="li"><span className="ld" style={{ background: '#00b8d4' }}></span>EMA P2</span>
+            <span className="li"><span className="ld" style={{ background: '#00ff88' }}></span>EMA P3</span>
+            <span className="li"><span className="ld" style={{ background: '#ff66cc' }}></span>EMA P4</span>
             <span className="li"><span className="ld" style={{ background: '#aa44ff' }}></span>WMA20</span>
             <span className="li"><span className="ld" style={{ background: '#ff8800' }}></span>ST</span>
             <span className="li" id="liqleg" style={{ display: 'none' }}><span className="ld" style={{ background: '#ff335599' }}></span>LIQ</span>

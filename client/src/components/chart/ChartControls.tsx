@@ -112,16 +112,27 @@ export function ChartControls() {
   const [activeInds, setActiveInds] = useState<Record<string, boolean>>({})
   const tfRef = useRef<HTMLDivElement>(null)
 
-  // Sync activeInds from old JS S.activeInds on mount + after bridge loads
+  // Sync activeInds + overlays from legacy w.S on mount + after bridge loads.
+  // [batch3-C] overlays added so the React toggle ALWAYS mirrors the legacy store
+  // (the source of truth for render gating) — prevents ghost-ON toggles where
+  // React says true but S.overlays.* still false and nothing renders.
   useEffect(() => {
     function sync() {
       const w = window as any
       if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
+      if (w.S?.overlays) {
+        const cur = useMarketStore.getState().market.overlays as unknown as Record<string, boolean>
+        const legacy = w.S.overlays as Record<string, boolean>
+        const keys = new Set([...Object.keys(cur), ...Object.keys(legacy)])
+        let diverged = false
+        for (const k of keys) { if (!!cur[k] !== !!legacy[k]) { diverged = true; break } }
+        if (diverged) patch({ overlays: { ...cur, ...legacy } as typeof cur })
+      }
     }
     sync()
     const id = setInterval(sync, 2000)
     return () => clearInterval(id)
-  }, [])
+  }, [patch])
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -153,11 +164,22 @@ export function ChartControls() {
   }
 
   function togOvr(key: keyof typeof overlays) {
+    // [batch3-C] Trust the legacy store as source of truth — togOvrFn mutates
+    // w.S.overlays[key] and calls the overlay's render/clear. Read the NEW value
+    // back from w.S AFTER the call so React state stays in lock-step, even if
+    // togOvrFn internally coerces (e.g. ovi→oviOn mirror) or the legacy start
+    // value was already-true (persisted) and React was still false.
+    const wRef = window as any
+    let newVal: boolean | null = null
     if (typeof togOvrFn === 'function') {
       const btn = document.getElementById('b' + key)
-      try { togOvrFn(key, btn) } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
+      try {
+        togOvrFn(key, btn)
+        if (wRef.S?.overlays) newVal = !!wRef.S.overlays[key]
+      } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
     }
-    patch({ overlays: { ...overlays, [key]: !overlays[key] } })
+    if (newVal === null) newVal = !overlays[key]
+    patch({ overlays: { ...overlays, [key]: newVal } })
   }
 
   function handleSymbolChange(val: string) {

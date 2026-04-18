@@ -187,6 +187,8 @@ export function installPhase1Adapters(): void {
   if (w.volS === undefined) w.volS = null
   if (w.ema50S === undefined) w.ema50S = null
   if (w.ema200S === undefined) w.ema200S = null
+  if (w.ema3S === undefined) w.ema3S = null
+  if (w.ema4S === undefined) w.ema4S = null
   if (w.wma20S === undefined) w.wma20S = null
   if (w.wma50S === undefined) w.wma50S = null
   if (w.stS === undefined) w.stS = null

@@ -46,6 +46,8 @@ export function initCharts(): void {
   }
   w.ema50S = w.mainChart.addLineSeries({ color: '#f0c040', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
   w.ema200S = w.mainChart.addLineSeries({ color: '#00b8d4', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  w.ema3S = w.mainChart.addLineSeries({ color: '#00ff88', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
+  w.ema4S = w.mainChart.addLineSeries({ color: '#ff66cc', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
   w.wma20S = w.mainChart.addLineSeries({ color: '#aa44ff', lineWidth: 1, priceLineVisible: false, lastValueVisible: false })
   w.wma50S = w.mainChart.addLineSeries({ color: '#ff8822', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 2 })
   w.stS = w.mainChart.addLineSeries({ color: '#ff8800', lineWidth: 2, priceLineVisible: false, lastValueVisible: false })
@@ -128,12 +130,17 @@ export function renderChart(): void {
     const c = w.S.klines.map((k: any) => k.close)
     function calcEMA(data: number[], p: number) { const k = 2 / (p + 1); let e = data[0]; return data.map((v: number) => { e = v * k + e * (1 - k); return e }) }
     if (w.S.indicators.ema) {
-      const _ep1 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.ema) ? Math.round(w.IND_SETTINGS.ema.p1) : 50
-      const _ep2 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.ema) ? Math.round(w.IND_SETTINGS.ema.p2) : 200
-      const e50 = calcEMA(c, _ep1).map((v: number, i: number) => ({ time: w.S.klines[i].time, value: v }))
-      const e200 = calcEMA(c, _ep2).map((v: number, i: number) => ({ time: w.S.klines[i].time, value: v }))
-      if (w.ema50S) w.ema50S.setData(e50); if (w.ema200S) w.ema200S.setData(e200)
-    } else { if (w.ema50S) w.ema50S.setData([]); if (w.ema200S) w.ema200S.setData([]) }
+      const _cfg = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.ema) ? w.IND_SETTINGS.ema : { p1: 50, p2: 200, p3: 20, p4: 100 }
+      const _ep1 = Math.round(_cfg.p1 || 50)
+      const _ep2 = Math.round(_cfg.p2 || 200)
+      const _ep3 = Math.round(_cfg.p3 || 0)
+      const _ep4 = Math.round(_cfg.p4 || 0)
+      const mapT = (arr: number[]) => arr.map((v: number, i: number) => ({ time: w.S.klines[i].time, value: v }))
+      if (w.ema50S) w.ema50S.setData(mapT(calcEMA(c, _ep1)))
+      if (w.ema200S) w.ema200S.setData(mapT(calcEMA(c, _ep2)))
+      if (w.ema3S) w.ema3S.setData(_ep3 > 0 ? mapT(calcEMA(c, _ep3)) : [])
+      if (w.ema4S) w.ema4S.setData(_ep4 > 0 ? mapT(calcEMA(c, _ep4)) : [])
+    } else { if (w.ema50S) w.ema50S.setData([]); if (w.ema200S) w.ema200S.setData([]); if (w.ema3S) w.ema3S.setData([]); if (w.ema4S) w.ema4S.setData([]) }
     if (w.S.indicators.wma) {
       const _wp1 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.wma) ? Math.round(w.IND_SETTINGS.wma.p1) : 20
       const _wp2 = (typeof w.IND_SETTINGS !== 'undefined' && w.IND_SETTINGS.wma) ? Math.round(w.IND_SETTINGS.wma.p2) : 50
