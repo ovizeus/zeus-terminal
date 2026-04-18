@@ -2655,11 +2655,27 @@ const RECON_INTERVAL_MS = 60000; // 60s
 let _reconTimer = null;
 let _reconRunning = false;
 // [AUDIT] Per-user recon alert deduplication — prevents Telegram spam for recurring issues
+// [batch2-M1] Maps with 24h TTL, not Sets — previously alerts for the same key were
+// suppressed forever, so a repeating SL failure on an unprotected position went silent
+// after the first alert. TTL lets genuinely persistent failures re-page after 24h.
+const _RECON_ALERT_TTL_MS = 24 * 60 * 60 * 1000;
 const _reconAlerted = {
-    orphans: new Set(),    // "userId:symbol:side" — alerted once per orphan
-    slFails: new Set(),    // "userId:seq" — alerted once per SL re-fail
-    tpFails: new Set(),    // "userId:seq" — alerted once per TP re-fail
+    orphans: new Map(),    // "userId:symbol:side" → last alert ts
+    slFails: new Map(),    // "userId:seq" → last alert ts
+    tpFails: new Map(),    // "userId:seq" → last alert ts
 };
+function _reconAlertedShouldFire(cat, key) {
+    const map = _reconAlerted[cat];
+    if (!map) return true;
+    const now = Date.now();
+    const last = map.get(key) || 0;
+    if (now - last < _RECON_ALERT_TTL_MS) return false;
+    map.set(key, now);
+    if (map.size > 500) {
+        for (const [k, ts] of map) if (now - ts >= _RECON_ALERT_TTL_MS) map.delete(k);
+    }
+    return true;
+}
 // [V5.4] Orphan pending map — tracks first detection for 2-cycle confirmation
 const _orphanPending = new Map(); // "userId:symbol:side" → { firstSeen, bpos, userId, symbol }
 
@@ -2880,8 +2896,7 @@ async function _runReconciliation(isStartup) {
                             }
                         } else {
                             // Not Zeus-created — alert only
-                            if (!_reconAlerted.orphans.has(_orphanKey)) {
-                                _reconAlerted.orphans.add(_orphanKey);
+                            if (_reconAlertedShouldFire('orphans', _orphanKey)) {
                                 telegram.sendToUser(userId,
                                     `⚠️ *RECON: External Orphan*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nThis position was NOT created by Zeus (no SAT_ orders).\nManual review required.`
                                 );
@@ -2995,8 +3010,7 @@ async function _checkOrderHealth(pos, creds, label) {
             logger.error(label, `[${pos.seq}] SL re-placement FAILED: ${err.message}`);
             // [AUDIT] Per-user dedupe — alert once per position, not every recon cycle
             const _slFailKey = `${userId}:${pos.seq}`;
-            if (!_reconAlerted.slFails.has(_slFailKey)) {
-                _reconAlerted.slFails.add(_slFailKey);
+            if (_reconAlertedShouldFire('slFails', _slFailKey)) {
                 telegram.sendToUser(userId, `🚨 *SL Re-placement FAILED*\n${pos.side} ${pos.symbol}\nSL was missing and could not be re-placed.\nPosition is *UNPROTECTED*. Manual SL required!\nError: ${err.message}`);
             }
         }
