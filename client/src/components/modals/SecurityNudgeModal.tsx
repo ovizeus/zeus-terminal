@@ -20,6 +20,7 @@ export function SecurityNudgeModal() {
   useEffect(() => {
     if (!isNative()) return
     let cancelled = false
+    let pollTimer: any = null
     async function decide() {
       try {
         const snoozeRaw = localStorage.getItem(SNOOZE_KEY)
@@ -39,11 +40,33 @@ export function SecurityNudgeModal() {
         bioReady = !!r.available
       }
       setHasBio(bioReady)
-      const t = setTimeout(() => { if (!cancelled) setVisible(true) }, 4000)
-      return () => clearTimeout(t)
+      // [BATCH3-T] Wait for Welcome Commander modal to close before showing the
+      // security nudge — otherwise both sit stacked on top of each other on
+      // first-launch. Welcome opens at boot+2.5s; nudge must come *after*
+      // user dismisses it. Safety cap: 30s absolute max wait.
+      const deadline = Date.now() + 30000
+      function isWelcomeOpen(): boolean {
+        try {
+          const el = document.getElementById('mwelcome')
+          if (!el) return false
+          const d = (el as HTMLElement).style.display
+          if (d === 'none' || d === '') return false
+          return true
+        } catch (_) { return false }
+      }
+      function tryShow() {
+        if (cancelled) return
+        if (!isWelcomeOpen() || Date.now() > deadline) {
+          setVisible(true)
+          return
+        }
+        pollTimer = setTimeout(tryShow, 500)
+      }
+      // Initial delay so we don't race the Welcome modal's own 2.5s open.
+      pollTimer = setTimeout(tryShow, 4000)
     }
     decide()
-    return () => { cancelled = true }
+    return () => { cancelled = true; if (pollTimer) clearTimeout(pollTimer) }
   }, [])
 
   if (!visible) return null
