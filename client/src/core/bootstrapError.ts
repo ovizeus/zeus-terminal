@@ -5,6 +5,7 @@
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { updateModeBar } from '../ui/modebar'
+import { escHtml } from '../utils/dom'
 const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
 
 // ===== GLOBAL ERROR BOUNDARY =====
@@ -184,9 +185,9 @@ function _dlogFormatDetail(cat: string, d: any): string {
     if (cat === 'regime') return '<span class="dlog-detail"><b>' + (d.regime || '?') + '</b> conf=' + (d.confidence || '?') + '%' + (d.trendBias ? ' bias=' + d.trendBias : '') + '</span>'
     if (cat === 'fusion') return '<span class="dlog-detail"><b>' + (d.decision || '?') + '</b> ' + (d.dir || '') + ' conf=' + (d.confidence || '?') + '%' + '</span>'
     if (cat === 'kill_switch') return '<span class="dlog-detail"><b style="color:#ff0000">KILL SWITCH</b> ' + (d.action || d.reason || '') + '</span>'
-    const keys = Object.keys(d).slice(0, 6); const parts = keys.map(function (k) { return k + '=' + (typeof d[k] === 'object' ? JSON.stringify(d[k]) : d[k]) })
+    const keys = Object.keys(d).slice(0, 6); const parts = keys.map(function (k) { return escHtml(k) + '=' + (typeof d[k] === 'object' ? escHtml(JSON.stringify(d[k])) : escHtml(d[k])) })
     return '<span class="dlog-detail">' + parts.join(' | ') + '</span>'
-  } catch (_) { return '<span class="dlog-detail">' + JSON.stringify(d).substring(0, 120) + '</span>' }
+  } catch (_) { return '<span class="dlog-detail">' + escHtml(JSON.stringify(d).substring(0, 120)) + '</span>' }
 }
 
 // ===== ACTIVITY FEED =====

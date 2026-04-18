@@ -7,7 +7,7 @@
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getDSLEnabled, getDSLPositions, getDSLMode, getDemoPositions, getLivePositions, getJournal, getPrice, getKlines, getRSI, getSignalData, getFR, getVol24h, getMagnetBias } from '../services/stateAccessors'
 import { fmtTime, fmtDate, fmtNow, toast } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
-import { el } from '../utils/dom'
+import { el, escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { _neuroLastScan, _SESS_DEF, _SESS_PRIORITY, _regimeHistory, PROFILE_TF , DSL_PRESETS, _NEURO_SYMS, BM, BRAIN as BR } from '../core/config'
 import { calcConfluenceScore } from './confluence'
@@ -1830,7 +1830,8 @@ export function renderBrainCockpit(): void {
 
   // ── REGIME BADGES ──
   const regLabels: any = { trend: 'TREND ▲', range: 'RANGE —', breakout: 'BREAKOUT ↑', squeeze: 'SQUEEZE ' + _ZI.hex, panic: 'PANIC ' + _ZI.fire, unknown: '—' }
-  const regInnerHtml = regLabels[BR.regime] || BR.regime || '—'
+  // BR.regime fallback is written to dangerouslySetInnerHTML downstream; escape to block XSS.
+  const regInnerHtml = regLabels[BR.regime] || escHtml(BR.regime || '—')
   const regCls2 = 'znc-regime-val ' + (BR.regime || 'unknown')
   // brainRegimeBadge (MTF mini row) kept imperative — outside ZT5-C scope
   const mtfRb = el('brainRegimeBadge')
