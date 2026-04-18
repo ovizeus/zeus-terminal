@@ -366,20 +366,18 @@ function setMode(userId, mode) {
     const us = _uState(userId);
     const oldMode = us.engineMode;
 
-    // [ZT-AUD-#13 / C11] Reject cross-switch only if user has positions in
-    // *either* mode. Old code counted all positions but never inspected the
-    // mode field, allowing a stale demo position to be monitored under live
-    // logic after a successful switch (and vice versa). Now we count both
-    // sides explicitly so a switch attempt with mixed positions is rejected
-    // with a precise reason.
+    // [batch3-V] Each position carries its own `mode` field — demo positions
+    // are monitored under demo logic (demo balance, simulated fills) and live
+    // positions under live logic (exchange API). Switching engine mode does
+    // NOT retag existing positions; they continue independently (as promised
+    // by the confirm dialog). Only block the switch if there are already
+    // positions OPEN in the NEW mode, which would create ambiguity.
     if (mode !== oldMode) {
         const userPos = _positions.filter(p => p.userId === userId);
-        const oldModeCount = userPos.filter(p => (p.mode || 'demo') === oldMode).length;
         const newModeCount = userPos.filter(p => (p.mode || 'demo') === mode).length;
-        if (oldModeCount > 0 || newModeCount > 0) {
-            const detail = `${oldModeCount} ${oldMode} + ${newModeCount} ${mode}`;
-            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — open positions (${detail})`);
-            return { ok: false, error: `Cannot switch mode — open positions (${detail}). Close them first.` };
+        if (newModeCount > 0) {
+            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — ${newModeCount} ${mode} position(s) already open`);
+            return { ok: false, error: `Cannot switch to ${mode} — ${newModeCount} ${mode} position(s) already open. Close them first.` };
         }
     }
 
@@ -487,10 +485,11 @@ async function preLiveChecklist(userId) {
         }
     }
 
-    // 3. No open positions (already checked by setMode, but include for completeness)
-    const openCount = _positions.filter(p => p.userId === userId).length;
-    checks.push({ name: 'NO_OPEN_POSITIONS', ok: openCount === 0, detail: openCount === 0 ? 'No open positions' : `${openCount} position(s) still open` });
-    if (openCount > 0) allOk = false;
+    // [batch3-V] Only block switch if there are already positions in the NEW mode
+    // (live). Demo positions continue independently (per-position mode routing).
+    const liveOpen = _positions.filter(p => p.userId === userId && (p.mode || 'demo') === 'live').length;
+    checks.push({ name: 'NO_LIVE_POSITIONS', ok: liveOpen === 0, detail: liveOpen === 0 ? 'No live positions open' : `${liveOpen} live position(s) already open` });
+    if (liveOpen > 0) allOk = false;
 
     // 4. Kill switch not active
     const us = _uState(userId);
