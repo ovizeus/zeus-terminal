@@ -39,6 +39,7 @@ import { sendAlert } from '../data/marketDataWS'
 import { addTradeToJournal } from '../services/storage'
 import { liveApiSyncState } from '../trading/liveApi'
 import { closeDemoPos } from '../data/marketDataClose'
+import { playEntrySound } from '../ui/dom2'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
 function _atUI(p: Partial<ATUI>) { useATStore.getState().patchUI(p) }
@@ -978,6 +979,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     _atUI({ status: { icon: 'ok', text: String(side) + ' opened @$' + fP(entry), action: null } })
     toast(`AUTO ${side} ${sym.replace('USDT', '')} opened! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
+    playEntrySound()  // [BUG5.1] sound on AT/manual demo entry (gated by SOUND READY)
     if (typeof onTradeExecuted === 'function') onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
     w.ZState.scheduleSave()  // persist new position
@@ -1067,6 +1069,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         atLog('buy', '[LIVE] LIVE ORDER FILLED: ' + side + ' ' + sym + ' @$' + fP(fillPrice) + ' qty:' + pos.qty + ' orderId:' + pos.orderId)
         toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + fP(fillPrice), 0, _ZI.dRed)
         w.ncAdd('info', 'trade', 'LIVE ' + side + ' ' + sym.replace('USDT', '') + ' @$' + fP(fillPrice) + ' | SL:$' + fP(_liveSL) + ' TP:$' + fP(_liveTP))
+        playEntrySound()  // [BUG5.1] sound on AT/manual live entry (gated by SOUND READY)
         scheduleAutoClose(pos)
         // [FIX QA-H2 + R4] Place exchange-level SL/TP with retry logic
         // If both SL and TP fail after retries, mark position as UNPROTECTED

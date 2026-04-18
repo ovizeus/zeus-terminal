@@ -9,6 +9,7 @@ import { _ZI } from '../constants/icons'
 import { setTf } from '../data/marketDataFeeds'
 import { useAUBStore } from '../stores/aubStore'
 import { AUB } from '../core/config'
+import { isSoundMuted } from '../ui/dom2'
 // setSymbol accessed via w.setSymbol for monkey-patch chain (Rolldown forbids import reassignment)
 
 const w = window as any
@@ -56,6 +57,10 @@ export function _aubInitAudio(): void {
 }
 export function _aubPlayTone(freq: any, vol: any, dur?: any): void {
   try {
+    // [BUG5.1] Respect master SOUND READY mute — AUB beeps are gated
+    // by the same flag as playAlertSound/Entry/Exit, so user can silence
+    // everything with one click on the Brain sound badge.
+    if (isSoundMuted()) return
     if (!AUB.audioCtx) _aubInitAudio()
     if (!AUB.audioCtx) return
     if (AUB.audioCtx.state === 'suspended') { AUB.audioCtx.resume().catch(function () { }); return }

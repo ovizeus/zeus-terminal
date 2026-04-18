@@ -15,6 +15,7 @@ import { renderDemoPositions , getSymPrice } from './marketDataPositions'
 import { _safePnl } from '../utils/guards'
 import { useATStore } from '../stores/atStore'
 import { api } from '../services/api'
+import { playExitSound } from '../ui/dom2'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 
 export function closeDemoPos(id: any, reason?: string): void {
@@ -123,6 +124,7 @@ export function closeDemoPos(id: any, reason?: string): void {
 
   toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Closed'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
   w.ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade', `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Closed'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  playExitSound(pnl >= 0)  // [BUG5.1] sound on demo close (manual/auto/TP/SL) — gated by SOUND READY
 
   w.ZState.syncNow()
 

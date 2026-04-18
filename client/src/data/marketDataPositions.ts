@@ -17,6 +17,7 @@ import { onPositionOpened } from '../trading/positions'
 import { addTradeToJournal } from '../services/storage'
 import { liveApiSyncState } from '../trading/liveApi'
 import { atLog } from '../trading/autotrade'
+import { playExitSound } from '../ui/dom2'
 import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from './marketDataClose'
 const w = window as any // kept for w.S (klines/mode/feeRate SKIP), w.ZState, w.ARES, fn calls
@@ -304,6 +305,7 @@ export function closeLivePos(id: any, reason?: string): void {
       if (typeof DSL !== 'undefined') { delete DSL.positions[String(pos.id)]; if (DSL._attachedIds) DSL._attachedIds.delete(String(pos.id)) }
       atLog('info', '[LIVE] CLOSE CONFIRMED: ' + pos.sym + ' fillPrice=' + fillPrice)
       renderLivePositions()
+      playExitSound(fillPnl >= 0)  // [BUG5.1] sound on live close (manual/auto/TP/SL) — gated by SOUND READY
       // [9A-5] Notify React — live position closed
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       try { if (typeof w.ARES !== 'undefined' && typeof w.ARES.onTradeClosed === 'function') w.ARES.onTradeClosed(fillPnl) } catch (_) { }
