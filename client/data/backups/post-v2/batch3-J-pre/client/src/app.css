@@ -5149,10 +5149,7 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .wlc-snooze-link:hover { color: #889 }
 .wlc-snooze-opts { display: flex; gap: 6px; justify-content: center; align-items: center; animation: wlcSlideIn .2s ease-out }
 .wlc-snooze-pill { background: #0b1120; border: 1px solid #1a2a3a; color: #aab; font-size: 10px; letter-spacing: 1px; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: var(--ff); transition: all .15s }
-.wlc-snooze-pill:hover:not(:disabled) { border-color: var(--gold-a40); color: var(--gold); background: #0d1520 }
-.wlc-snooze-pill:disabled { opacity: .35; cursor: default }
-.wlc-snooze-pill.wlc-snooze-active, .wlc-snooze-pill.wlc-snooze-active:disabled { opacity: 1; background: linear-gradient(135deg, var(--gold), #e0a820); border-color: var(--gold); color: #0a0f18; font-weight: 700; box-shadow: 0 0 12px var(--gold-a40); animation: wlcPillPulse .65s ease-out }
-@keyframes wlcPillPulse { 0% { transform: scale(1); box-shadow: 0 0 0 var(--gold-a40) } 40% { transform: scale(1.08); box-shadow: 0 0 18px var(--gold-a40) } 100% { transform: scale(1); box-shadow: 0 0 12px var(--gold-a40) } }
+.wlc-snooze-pill:hover { border-color: var(--gold-a40); color: var(--gold); background: #0d1520 }
 .wlc-snooze-cancel { background: none; border: none; color: #445; font-size: 10px; cursor: pointer; padding: 5px 6px; font-family: var(--ff); margin-left: 4px }
 .wlc-snooze-cancel:hover { color: #778 }
 

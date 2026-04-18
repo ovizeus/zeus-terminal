@@ -5,11 +5,10 @@ interface Props { visible: boolean; onClose: () => void }
 
 export function WelcomeModal({ visible, onClose }: Props) {
   const [snoozeOpen, setSnoozeOpen] = useState(false)
-  const [snoozePicked, setSnoozePicked] = useState<number | null>(null)
   function snooze(hours: number) {
     try { localStorage.setItem('zeus_wlc_snoozeUntil', String(Date.now() + hours * 3600 * 1000)) } catch (_) {}
-    setSnoozePicked(hours)
-    setTimeout(() => { setSnoozeOpen(false); setSnoozePicked(null); onClose() }, 650)
+    setSnoozeOpen(false)
+    onClose()
   }
   return (
     <div className="mover" id="mwelcome" style={{ display: visible ? 'flex' : 'none' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -72,10 +71,10 @@ export function WelcomeModal({ visible, onClose }: Props) {
             <button type="button" className="wlc-snooze-link" onClick={() => setSnoozeOpen(true)}>Don't show for…</button>
           ) : (
             <div className="wlc-snooze-opts">
-              <button type="button" disabled={snoozePicked !== null} className={'wlc-snooze-pill' + (snoozePicked === 5 ? ' wlc-snooze-active' : '')} onClick={() => snooze(5)}>5h</button>
-              <button type="button" disabled={snoozePicked !== null} className={'wlc-snooze-pill' + (snoozePicked === 12 ? ' wlc-snooze-active' : '')} onClick={() => snooze(12)}>12h</button>
-              <button type="button" disabled={snoozePicked !== null} className={'wlc-snooze-pill' + (snoozePicked === 24 ? ' wlc-snooze-active' : '')} onClick={() => snooze(24)}>24h</button>
-              <button type="button" disabled={snoozePicked !== null} className="wlc-snooze-cancel" onClick={() => setSnoozeOpen(false)}>cancel</button>
+              <button type="button" className="wlc-snooze-pill" onClick={() => snooze(5)}>5h</button>
+              <button type="button" className="wlc-snooze-pill" onClick={() => snooze(12)}>12h</button>
+              <button type="button" className="wlc-snooze-pill" onClick={() => snooze(24)}>24h</button>
+              <button type="button" className="wlc-snooze-cancel" onClick={() => setSnoozeOpen(false)}>cancel</button>
             </div>
           )}
         </div>
