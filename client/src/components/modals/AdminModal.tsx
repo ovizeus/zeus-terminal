@@ -225,7 +225,7 @@ export function AdminModal({ visible, onClose }: Props) {
                       </div>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button onClick={() => adminPost('approve', { email: u.email })} className="adm-btn" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>✓ APROBĂ</button>
-                        <button onClick={() => { if (confirm(`Sigur respingi ${u.email}?`)) adminPost('reject', { email: u.email }) }} className="adm-btn" style={{ background: '#ff444422', color: '#ff4444', borderColor: '#ff444444' }}>✕ RESPINGE</button>
+                        <button onClick={() => { if (confirm(`Reject user ${u.email}?`)) adminPost('reject', { email: u.email }) }} className="adm-btn" style={{ background: '#ff444422', color: '#ff4444', borderColor: '#ff444444' }}>✕ REJECT</button>
                       </div>
                     </div>
                   </div>
@@ -267,7 +267,7 @@ export function AdminModal({ visible, onClose }: Props) {
                             {isBlocked ? (
                               <button onClick={() => adminPost('block', { email: u.email, block: false })} className="adm-btn" style={{ background: '#00ff8822', color: '#00ff88', borderColor: '#00ff8844' }}>DEBLOCHEAZĂ</button>
                             ) : !isBanned ? (
-                              <button onClick={() => { if (confirm(`Blochezi ${u.email}?`)) adminPost('block', { email: u.email, block: true }) }} className="adm-btn" style={{ background: '#ff880022', color: '#ff8844', borderColor: '#ff884444' }}>BLOCK</button>
+                              <button onClick={() => { if (confirm(`Block user ${u.email}?`)) adminPost('block', { email: u.email, block: true }) }} className="adm-btn" style={{ background: '#ff880022', color: '#ff8844', borderColor: '#ff884444' }}>BLOCK</button>
                             ) : null}
                             {/* Ban */}
                             {isBanned ? (
@@ -290,7 +290,7 @@ export function AdminModal({ visible, onClose }: Props) {
                                       >{opt.label}</div>
                                     ))}
                                     <div style={{ borderTop: '1px solid #1a2a3a', margin: '2px 0' }}></div>
-                                    <div onClick={() => { setBanMenuOpen(null); if (confirm(`Ban PERMANENT pentru ${u.email}?`)) adminPost('ban', { email: u.email, duration: 'permanent' }) }}
+                                    <div onClick={() => { setBanMenuOpen(null); if (confirm(`Ban ${u.email} PERMANENTLY?`)) adminPost('ban', { email: u.email, duration: 'permanent' }) }}
                                       style={{ padding: '5px 10px', cursor: 'pointer', color: '#ff0000', fontSize: 10, fontWeight: 700, borderRadius: 4, whiteSpace: 'nowrap' }}
                                       onMouseOver={e => (e.currentTarget.style.background = '#1a2a3a')}
                                       onMouseOut={e => (e.currentTarget.style.background = '')}
@@ -300,7 +300,7 @@ export function AdminModal({ visible, onClose }: Props) {
                               </div>
                             )}
                             {/* Delete */}
-                            <button onClick={() => { if (confirm(`Sigur ștergi ${u.email}?`)) adminPost('delete', { email: u.email }) }} className="adm-btn" style={{ background: '#44111122', color: '#883333', borderColor: '#44111144' }} title="Șterge contul">
+                            <button onClick={() => { if (confirm(`Delete user ${u.email}?`)) adminPost('delete', { email: u.email }) }} className="adm-btn" style={{ background: '#44111122', color: '#883333', borderColor: '#44111144' }} title="Delete account">
                               <svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg>
                             </button>
                           </div>

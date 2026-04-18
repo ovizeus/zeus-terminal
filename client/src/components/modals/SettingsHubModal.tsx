@@ -74,7 +74,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   }
 
   async function exDisconnect(ex: string) {
-    if (!confirm(`Deconectezi ${ex}?`)) return
+    if (!confirm(`Disconnect ${ex}?`)) return
     const r = await apiFetch('/api/exchange/disconnect', { exchange: ex })
     if (r.ok) setExAccounts(p => { const n = { ...p }; delete n[ex]; return n })
     else exSetMsg(ex, r.error || 'Eroare', false)

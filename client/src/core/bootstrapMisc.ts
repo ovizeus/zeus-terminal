@@ -139,7 +139,7 @@ export function setupPWAReloadBtn(): void { const btn = document.getElementById(
 
 // ===== MASTER RESET =====
 export function masterReset(): void {
-  if (!window.confirm('MASTER RESET\n\u0218terge TOATE datele \u0219i reporne\u0219te Zeus Terminal?')) return
+  if (!window.confirm('MASTER RESET\nDelete ALL data and restart Zeus Terminal?')) return
   try { localStorage.clear() } catch (e) { }
   if (typeof TP !== 'undefined') { TP.demoPositions = []; TP.livePositions = []; TP.demoBalance = 10000; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0 }
   if (typeof AT !== 'undefined') { AT.enabled = false; AT.killTriggered = false; AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0; AT.lastTradeTs = 0; AT.lastTradeSide = null }

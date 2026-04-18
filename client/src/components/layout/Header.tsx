@@ -10,7 +10,7 @@ export function Header() {
   const clearAuth = useAuthStore((s) => s.clearAuth)
 
   function handleLogout() {
-    if (!confirm('Sigur vrei să te deloghezi?')) return
+    if (!confirm('Are you sure you want to log out?')) return
     const wipeAndGo = () => {
       clearAuth()
       // [ZT-AUD-C4] Wipe per-user client state so the next user on this
