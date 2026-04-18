@@ -906,7 +906,13 @@ export const ZState = (() => {
     // the serialize filter to flip-flop, producing the pos:3 → pos:0 → pos:3
     // flicker every ~10s.
     if ('serverActive' in state) {
-      w._serverATEnabled = state.serverActive !== false
+      const _prev = !!w._serverATEnabled
+      const _next = state.serverActive !== false
+      if (_prev !== _next) {
+        // [FIX #3] Log MF.SERVER_AT flip so client lockout transitions are visible.
+        try { console.warn('[AT/SERVER-FLIP] _serverATEnabled ' + _prev + ' → ' + _next + ' — client AT engine ' + (_next ? 'LOCKED (server owns)' : 'UNLOCKED (client owns)')) } catch (_) {}
+      }
+      w._serverATEnabled = _next
     }
     const _now = Date.now()
     Object.keys(_pendingServerCloses).forEach(function (k) {

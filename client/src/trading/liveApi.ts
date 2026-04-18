@@ -341,10 +341,12 @@ function _aresClientOrderId(): string {
 }
 
 // [FIX BUG8] AT-specific clientOrderId with AT_ prefix (separate from ARES)
+// [FIX #11] 6-digit random suffix so simultaneous AT + ARES/manual calls within the same ms
+// cannot collide on Binance dedup (previous 2-digit random = 1-in-100 collision within one ms).
 var _atOrderSeq = 0
 function _atClientOrderId(): string {
   _atOrderSeq = (_atOrderSeq + 1) % 10000
-  return 'AT_' + Date.now() + '_' + _atOrderSeq + String(Math.floor(Math.random() * 99)).padStart(2, '0')
+  return 'AT_' + Date.now() + '_' + _atOrderSeq + '_' + String(Math.floor(Math.random() * 999999)).padStart(6, '0')
 }
 
 /**

@@ -298,7 +298,15 @@ export function checkATConditions(): any {
   const sigMin = getTCSignalMin() // TC.sigMin bridge — no dedicated getter yet
 
   // 1. Confluence Score — read from canonical BM state, not DOM
-  const score = (typeof BM !== 'undefined' && Number.isFinite(BM.confluenceScore)) ? BM.confluenceScore : 50
+  const _bmScoreReady = typeof BM !== 'undefined' && Number.isFinite(BM.confluenceScore)
+  const score = _bmScoreReady ? BM.confluenceScore : 50
+  if (!_bmScoreReady) {
+    const _bmWarnTs = (AT as any)._bmFallbackWarnTs || 0
+    if (Date.now() - _bmWarnTs > 60000) {
+      ;(AT as any)._bmFallbackWarnTs = Date.now()
+      try { console.warn('[AT/BM] confluenceScore not ready — using neutral fallback 50') } catch (_) {}
+    }
+  }
   const isBull = score >= confMin
   const isBear = score <= (100 - confMin)
   setCondUI('atCondConf', isBull || isBear, isBull ? 'BULL ' + score : isBear ? 'BEAR ' + score : score + ' (neutru)')
@@ -538,6 +546,20 @@ export function computeFusionDecision(): any {
 
 // Main AT check loop
 export function runAutoTradeCheck(): void {
+  // [FIX #7] Invariant check — detect legacy w.AT.enabled vs useATStore drift.
+  // Reconcile silently (store is canonical) and log when we see it.
+  try {
+    const _legacyEnabled = !!AT.enabled
+    const _storeEnabled = !!useATStore.getState().enabled
+    if (_legacyEnabled !== _storeEnabled) {
+      const _driftTs = (AT as any)._enabledDriftWarnTs || 0
+      if (Date.now() - _driftTs > 60000) {
+        ;(AT as any)._enabledDriftWarnTs = Date.now()
+        try { console.warn('[AT/STORE-DRIFT] legacy=' + _legacyEnabled + ' store=' + _storeEnabled + ' — forcing re-sync event') } catch (_) {}
+        try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
+      }
+    }
+  } catch (_) {}
   // [AT-UNIFY] Server is source of truth — skip client AT engine
   if (w._serverATEnabled) {
     // Update AT conditions UI from server state so panel doesn't appear frozen
@@ -638,7 +660,7 @@ export function runAutoTradeCheck(): void {
           score: _fcRaw.score || 0,
         }
       }
-    } catch (_) { /* silent — nu blochează AT */ }
+    } catch (_fcErr: any) { try { console.warn('[AT/FUSION_CACHE]', _fcErr?.message || _fcErr) } catch (_) {} /* non-blocking */ }
 
     if (!cond.allOk) {
       // [PATCH B3] AT_BLOCK log with context
@@ -719,7 +741,7 @@ export function runAutoTradeCheck(): void {
         }
         w._FUSION_VETO = false
       }
-    } catch (_fb_err) { /* fusion non-blocking */ }
+    } catch (_fb_err: any) { try { console.warn('[AT/FUSION_LAST]', _fb_err?.message || _fb_err) } catch (_) {} /* fusion non-blocking */ }
     // ─────────────────────────────────────────────────────────────
 
     placeAutoTrade(side, cond)
@@ -750,7 +772,8 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // [DSL MODE GUARD] Auto-fallback to 'atr' if not set (prevents silent permanent block)
   if (!getDSLMode()) {
     w.DSL.mode = 'atr'
-    atLog('info', '[INFO] DSL mode auto-set to ATR (default)')
+    atLog('warn', '[DSL] Mode was unset — auto-fell back to ATR (default). Set DSL mode explicitly in panel to avoid surprise.')
+    try { console.warn('[AT/DSL] Mode auto-fallback to ATR — user had no mode set') } catch (_) { }
     try { localStorage.setItem('zeus_dsl_mode', 'atr') } catch (_) { }
   }
 
@@ -784,7 +807,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         return
       }
     }
-  } catch (_wrE) { /* non-blocking — nu oprim execuția dacă filtrul crapă */ }
+  } catch (_wrE: any) { try { console.warn('[AT/WR_FILTER]', _wrE?.message || _wrE) } catch (_) {} /* non-blocking — nu oprim execuția dacă filtrul crapă */ }
   // === /WR FILTER ===
   const _snap = typeof w.buildExecSnapshot === 'function' ? w.buildExecSnapshot(side, cond) : null
   // [PATCH1 B1] buildExecSnapshot returns null if price invalid — reject early
@@ -1233,6 +1256,17 @@ export function scheduleAutoClose(pos: any): void {
     const cur = getPosPrice()
     if (!cur) { return }
 
+    // [FIX #9] 7-day stale-position warn (not auto-close — BUG-08 intentionally removed 24h auto-close).
+    // Surface long-lived positions so user can review. Logged once per position.
+    try {
+      const _openTs = +(pos.openTs || pos.id || 0)
+      if (_openTs > 0 && !(pos as any)._staleWarned && (Date.now() - _openTs) > 604800000) {
+        ;(pos as any)._staleWarned = true
+        atLog('warn', '[STALE] ' + pos.side + ' ' + pos.sym + ' open for 7+ days — review manually')
+        try { console.warn('[AT/STALE] pos.' + pos.id + ' ' + pos.side + ' ' + pos.sym + ' age=' + Math.round((Date.now() - _openTs) / 86400000) + 'd') } catch (_) {}
+      }
+    } catch (_) {}
+
     const effectiveSL = (getDSLEnabled() && getDSLPositions()[String(pos.id)]?.active)
       ? getDSLPositions()[String(pos.id)].currentSL : pos.sl
 
@@ -1384,7 +1418,13 @@ export function scheduleAutoClose(pos: any): void {
         closeDemoPos(pos.id, 'AUTO ' + reason)
 
         // [FIX BUG4] Use closeDemoPos PnL if available (prevents price-race drift)
+        // [FIX #8] Log when fallback is hit so stats-drift is detectable — the fallback
+        // pnl2 was computed before closeDemoPos ran, so it may differ from the authoritative
+        // price at close.
         const _finalPnl2 = Number.isFinite(pos._closePnl) ? pos._closePnl : pnl2
+        if (!Number.isFinite(pos._closePnl)) {
+          try { console.warn('[AT/POST-CLOSE] pos.' + pos.id + ' closeDemoPos did not set _closePnl — using pre-close estimate $' + pnl2.toFixed(2)) } catch (_) {}
+        }
         // [PATCH P0-2] Removed duplicate AT stat accounting — closeDemoPos is single source of truth
         // Only keep AT.totalPnL and AT.dailyPnL (NOT tracked by closeDemoPos)
         AT.totalPnL += _finalPnl2; AT.dailyPnL += _finalPnl2
@@ -1464,8 +1504,12 @@ export function checkKillThreshold(): void {
 }
 
 export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, killPct2: any, bal2: any): void {
-  // [FIX v85 BUG8] Guard complet: dacă deja triggered, nu mai facem nimic (previne race condition)
-  if (getATKillTriggered()) return
+  // [FIX v85 BUG8 + FIX #2] Guard complet: dacă deja triggered, nu mai facem nimic (previne race condition).
+  // Check the SYNCHRONOUS legacy AT.killTriggered — reading getATKillTriggered() goes
+  // through the Zustand store which is updated on the async 'zeus:atStateChanged' event,
+  // leaving a window where two concurrent ticks could both see "not triggered yet".
+  // AT.killTriggered is set below synchronously, so the next caller sees it immediately.
+  if (AT.killTriggered) return
   AT.killTriggered = true // setăm imediat, înainte de orice operațiune async
   AT._killTriggeredTs = Date.now() // [P3-5] timestamp for reset cooldown
   // [P0.4] Decision log — kill switch

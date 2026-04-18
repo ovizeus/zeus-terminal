@@ -24,6 +24,14 @@ import type { BrainMode, TradingProfile, BrainEngineState, BrainState, BrainAdap
 
 const w = window as any // kept for function calls, w.S writes + self-ref
 
+// [FIX #6] AT/Brain thresholds — centralized instead of scattered magic numbers.
+// READY_SCORE=68 is the score at which brain enters READY state (>=68 + 3+ signals).
+// MIN_SIGNALS=3 mirrors the default TC.sigMin. Kept local to brain for now — if
+// they ever become user-tunable, promote to settings store. NOT the same as
+// checkATConditions' BM.confMin (user-tunable entry gate, default 65).
+const BRAIN_READY_SCORE = 68
+const BRAIN_MIN_SIGNALS = 3
+
 // ── Phase 6 C6: Brain engine → brainStore write-inversion helpers ──
 // Mirror-write pattern: each helper updates the backing object first
 // (preserves legacy direct importers like trading/risk.ts, trading/orders.ts,
@@ -204,15 +212,15 @@ export function updateBrainState(): void {
     const pos = (getDemoPositions()).find((p: any) => p.autoTrade && !p.closed) || (getLivePositions()).find((p: any) => p.autoTrade && !p.closed)
     const pnl = pos ? ((pos.side === 'LONG' ? getPrice() - pos.entry : pos.entry - getPrice()) / pos.entry * pos.size * (pos.lev || 1)) : 0
     ticker = `ACTIVE POSITION ${pos?.side} @$${fP(pos?.entry || 0)} | PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} | MONITORING TP/SL...`
-  } else if (score >= 68 && sigs >= 3) {
+  } else if (score >= BRAIN_READY_SCORE && sigs >= BRAIN_MIN_SIGNALS) {
     state = 'ready'
     const dir = bulls >= bears ? 'LONG' : 'SHORT'
     ticker = `SIGNAL ${dir} CONFIRMED! Score:${score} | ${Math.max(bulls, bears)} signals | REGIME:${BR.regime.toUpperCase()} | ${getATEnabled() ? 'SENDING ORDER...' : 'AUTO TRADE OFF'}`
   } else if (score > 0 && sigs >= 1) {
     state = 'analyzing'
-    const needing = 3 - sigs
-    const confNeed = Math.max(0, 68 - score)
-    ticker = `ANALYZING... Score:${score}/68 | ${sigs}/3 signals | Need: ${confNeed > 0 ? '+' + confNeed + ' confluence' : ''}${needing > 0 ? ' +' + needing + ' signals' : ''} | OFI:${(BR.ofi.blendBuy || 50).toFixed(0)}%B`
+    const needing = BRAIN_MIN_SIGNALS - sigs
+    const confNeed = Math.max(0, BRAIN_READY_SCORE - score)
+    ticker = `ANALYZING... Score:${score}/${BRAIN_READY_SCORE} | ${sigs}/${BRAIN_MIN_SIGNALS} signals | Need: ${confNeed > 0 ? '+' + confNeed + ' confluence' : ''}${needing > 0 ? ' +' + needing + ' signals' : ''} | OFI:${(BR.ofi.blendBuy || 50).toFixed(0)}%B`
   } else if (getATKillTriggered()) {
     state = 'blocked'
     ticker = `KILL SWITCH ACTIVE — BLOCKED. Waiting for reset...`
@@ -224,7 +232,7 @@ export function updateBrainState(): void {
   // [PATCH BRAIN-AT-IDLE] No READY/decision state when AT is OFF
   if (!getATEnabled() && state === 'ready') {
     state = 'analyzing'
-    ticker = `ANALYZING... Score:${score}/68 | ${sigs} signals | AT OFF`
+    ticker = `ANALYZING... Score:${score}/${BRAIN_READY_SCORE} | ${sigs} signals | AT OFF`
   }
 
   _pushBrainEngineState(state)
