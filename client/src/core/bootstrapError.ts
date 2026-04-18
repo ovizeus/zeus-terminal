@@ -178,13 +178,13 @@ function _renderDlogEntries(): void {
 function _dlogFormatDetail(cat: string, d: any): string {
   if (!d) return ''
   try {
-    if (cat === 'at_block') return '<span class="dlog-detail"><b>' + (d.sym || '?') + '</b> \u2014 ' + (Array.isArray(d.reasons) ? d.reasons.join(', ') : (d.reason || '?')) + (d.score != null ? ' | score=' + d.score : '') + (d.regime ? ' | regime=' + d.regime : '') + '</span>'
-    if (cat === 'at_entry') return '<span class="dlog-detail"><b>' + (d.sym || d.symbol || '?') + ' ' + (d.side || '') + '</b>' + (d.tier ? ' tier=' + d.tier : '') + (d.conf != null ? ' conf=' + d.conf + '%' : '') + (d.size ? ' $' + d.size : '') + '</span>'
-    if (cat === 'at_gate') return '<span class="dlog-detail"><b>' + (d.sym || '?') + '</b> gates: ' + (d.allOk ? '<b style="color:#00ff88">PASS</b>' : '<b style="color:#ff4444">FAIL</b>') + (Array.isArray(d.reasons) && d.reasons.length ? ' [' + d.reasons.join(', ') + ']' : '') + '</span>'
-    if (cat === 'confluence') return '<span class="dlog-detail">score=<b>' + (d.score || '?') + '</b>' + (d.regime ? ' regime=' + d.regime : '') + '</span>'
-    if (cat === 'regime') return '<span class="dlog-detail"><b>' + (d.regime || '?') + '</b> conf=' + (d.confidence || '?') + '%' + (d.trendBias ? ' bias=' + d.trendBias : '') + '</span>'
-    if (cat === 'fusion') return '<span class="dlog-detail"><b>' + (d.decision || '?') + '</b> ' + (d.dir || '') + ' conf=' + (d.confidence || '?') + '%' + '</span>'
-    if (cat === 'kill_switch') return '<span class="dlog-detail"><b style="color:#ff0000">KILL SWITCH</b> ' + (d.action || d.reason || '') + '</span>'
+    if (cat === 'at_block') return '<span class="dlog-detail"><b>' + escHtml(d.sym || '?') + '</b> \u2014 ' + escHtml(Array.isArray(d.reasons) ? d.reasons.join(', ') : (d.reason || '?')) + (d.score != null ? ' | score=' + escHtml(d.score) : '') + (d.regime ? ' | regime=' + escHtml(d.regime) : '') + '</span>'
+    if (cat === 'at_entry') return '<span class="dlog-detail"><b>' + escHtml(d.sym || d.symbol || '?') + ' ' + escHtml(d.side || '') + '</b>' + (d.tier ? ' tier=' + escHtml(d.tier) : '') + (d.conf != null ? ' conf=' + escHtml(d.conf) + '%' : '') + (d.size ? ' $' + escHtml(d.size) : '') + '</span>'
+    if (cat === 'at_gate') return '<span class="dlog-detail"><b>' + escHtml(d.sym || '?') + '</b> gates: ' + (d.allOk ? '<b style="color:#00ff88">PASS</b>' : '<b style="color:#ff4444">FAIL</b>') + (Array.isArray(d.reasons) && d.reasons.length ? ' [' + escHtml(d.reasons.join(', ')) + ']' : '') + '</span>'
+    if (cat === 'confluence') return '<span class="dlog-detail">score=<b>' + escHtml(d.score || '?') + '</b>' + (d.regime ? ' regime=' + escHtml(d.regime) : '') + '</span>'
+    if (cat === 'regime') return '<span class="dlog-detail"><b>' + escHtml(d.regime || '?') + '</b> conf=' + escHtml(d.confidence || '?') + '%' + (d.trendBias ? ' bias=' + escHtml(d.trendBias) : '') + '</span>'
+    if (cat === 'fusion') return '<span class="dlog-detail"><b>' + escHtml(d.decision || '?') + '</b> ' + escHtml(d.dir || '') + ' conf=' + escHtml(d.confidence || '?') + '%' + '</span>'
+    if (cat === 'kill_switch') return '<span class="dlog-detail"><b style="color:#ff0000">KILL SWITCH</b> ' + escHtml(d.action || d.reason || '') + '</span>'
     const keys = Object.keys(d).slice(0, 6); const parts = keys.map(function (k) { return escHtml(k) + '=' + (typeof d[k] === 'object' ? escHtml(JSON.stringify(d[k])) : escHtml(d[k])) })
     return '<span class="dlog-detail">' + parts.join(' | ') + '</span>'
   } catch (_) { return '<span class="dlog-detail">' + escHtml(JSON.stringify(d).substring(0, 120)) + '</span>' }
