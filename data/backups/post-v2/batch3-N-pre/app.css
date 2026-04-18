@@ -2414,7 +2414,6 @@ body {
   background: rgba(0, 184, 212, 0.10);
 }
 #zeus-dock .zd-icon {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2425,47 +2424,6 @@ body {
   border: 1px solid #1e2a3a;
   box-shadow: 0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
   transition: border-color .2s, box-shadow .2s, background .2s;
-}
-
-/* [BATCH3-N] Link dots — pulsing indicator that AT/Manual are bonded to DSL
-   via currently open positions. Shared animation start across items gives the
-   eye a synchronized-heartbeat reading of "these two are linked". */
-.zd-link-dot {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  pointer-events: none;
-  animation: zdLinkPulse 1.6s ease-in-out infinite;
-  animation-delay: 0s;
-  z-index: 2;
-}
-.zd-link-dot--at {
-  background: #22e27a;
-  box-shadow: 0 0 6px #22e27a, 0 0 2px #22e27a inset;
-}
-.zd-link-dot--manual {
-  background: #f0c040;
-  box-shadow: 0 0 6px #f0c040, 0 0 2px #f0c040 inset;
-}
-.zd-link-dot--dsl-at {
-  top: 3px;
-  right: 3px;
-}
-.zd-link-dot--dsl-manual {
-  top: auto;
-  bottom: 3px;
-  right: 3px;
-}
-@keyframes zdLinkPulse {
-  0%   { transform: scale(0.85); opacity: 0.55; }
-  50%  { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(0.85); opacity: 0.55; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .zd-link-dot { animation: none; opacity: 0.9; }
 }
 #zeus-dock .zd-icon svg {
   width: 24px;

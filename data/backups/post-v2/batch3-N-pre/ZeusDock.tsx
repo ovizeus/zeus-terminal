@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { useEffect, useState } from 'react'
 
 // [R24.1] SVG contents converted from hardcoded HTML strings (which were fed
 // into dangerouslySetInnerHTML) to structured JSX fragments. No user data
@@ -16,19 +15,18 @@ const DOCK_ITEMS: DockItem[] = [
   { id: 'autotrade', label: 'AutoTrade', group: 'trading',
     icon: (
       <>
-        <circle cx="12" cy="12" r="10" fill="currentColor" opacity=".08" />
-        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <path d="M13 3L6 13h5l-1 8 7-10h-5l1-8z" fill="currentColor" opacity=".25" />
-        <path d="M13 3L6 13h5l-1 8 7-10h-5l1-8z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 2L2 7l10 5 10-5-10-5z" fill="currentColor" opacity=".12" />
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="12" cy="7" r="1.2" fill="currentColor" opacity=".5" />
       </>
     ) },
   { id: 'manual-trade', label: 'Manual Trade', group: 'trading',
     icon: (
       <>
-        <path d="M10 13V5.5a1.5 1.5 0 013 0V11" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M13 11v-1a1.3 1.3 0 012.6 0v3" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-        <path d="M15.6 11.5v-.5a1.3 1.3 0 012.6 0v4.5c0 3-2 5.5-5 5.5H11c-1.5 0-2.4-.6-3.1-1.7L5 15.5c-.4-.7-.1-1.6.7-1.9.6-.2 1.3 0 1.7.5L10 17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M11 10c0-2 0-4 0-6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" opacity=".35" />
+        <rect x="4" y="4" width="16" height="16" rx="3" fill="currentColor" opacity=".08" />
+        <path d="M8 16V11l4-5 4 5v5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        <line x1="8" y1="13" x2="16" y2="13" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        <circle cx="12" cy="8" r="1.5" fill="currentColor" opacity=".45" />
       </>
     ) },
   { id: 'dsl', label: 'DSL', group: 'trading',
@@ -174,56 +172,7 @@ interface ZeusDockProps {
   onDockClick: (id: string) => void
 }
 
-// [BATCH3-N] Visual link between AT/Manual and DSL icons when respective
-// positions are open. Reads TP positions on `zeus:positionsChanged`. No logic
-// changes — pure presentation. Pulsing dots start on the same CSS animation
-// so the viewer reads AT↔DSL (or Manual↔DSL) as a bonded pair.
-function useDockLinkState(): { atHasPos: boolean; manualHasPos: boolean } {
-  const [state, setState] = useState({ atHasPos: false, manualHasPos: false })
-  useEffect(() => {
-    function recompute() {
-      try {
-        const w = window as any
-        const AT = w.AT || {}
-        const TP = w.TP || {}
-        const isLive = AT.mode === 'live'
-        const positions = isLive ? (TP.livePositions || []) : (TP.demoPositions || [])
-        let at = false
-        let man = false
-        if (Array.isArray(positions)) {
-          for (const p of positions) {
-            if (!p || p.closed) continue
-            if (p.autoTrade) { at = true } else { man = true }
-            if (at && man) break
-          }
-        }
-        setState(prev => (prev.atHasPos === at && prev.manualHasPos === man ? prev : { atHasPos: at, manualHasPos: man }))
-      } catch (_) {}
-    }
-    recompute()
-    window.addEventListener('zeus:positionsChanged', recompute)
-    window.addEventListener('zeus:atStateChanged', recompute)
-    return () => {
-      window.removeEventListener('zeus:positionsChanged', recompute)
-      window.removeEventListener('zeus:atStateChanged', recompute)
-    }
-  }, [])
-  return state
-}
-
-function LinkDots({ forItem, atHasPos, manualHasPos }: { forItem: string; atHasPos: boolean; manualHasPos: boolean }) {
-  const dots: ReactNode[] = []
-  if (forItem === 'autotrade' && atHasPos) dots.push(<span key="at" className="zd-link-dot zd-link-dot--at" aria-hidden />)
-  if (forItem === 'manual-trade' && manualHasPos) dots.push(<span key="man" className="zd-link-dot zd-link-dot--manual" aria-hidden />)
-  if (forItem === 'dsl') {
-    if (atHasPos) dots.push(<span key="at" className="zd-link-dot zd-link-dot--at zd-link-dot--dsl-at" aria-hidden />)
-    if (manualHasPos) dots.push(<span key="man" className="zd-link-dot zd-link-dot--manual zd-link-dot--dsl-manual" aria-hidden />)
-  }
-  return <>{dots}</>
-}
-
 export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
-  const { atHasPos, manualHasPos } = useDockLinkState()
   let lastGroup = ''
 
   return (
@@ -241,7 +190,6 @@ export function ZeusDock({ active, onDockClick }: ZeusDockProps) {
             >
               <div className="zd-icon">
                 <svg viewBox="0 0 24 24" width="24" height="24">{item.icon}</svg>
-                <LinkDots forItem={item.id} atHasPos={atHasPos} manualHasPos={manualHasPos} />
               </div>
               <span className="zd-label">{item.label}</span>
             </div>
