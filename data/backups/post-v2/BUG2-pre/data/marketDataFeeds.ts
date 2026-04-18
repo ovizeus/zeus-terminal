@@ -73,7 +73,7 @@ export function toggleFS(): void {
   const sec = el('csec'); const btn = el('fsbtn') || el('fsBtn')
   if (!sec) return
   const isFull = sec.classList.toggle('fsm')
-  if (btn) btn.textContent = isFull ? '\u2291' : '\u26F6'
+  if (btn) btn.textContent = isFull ? '\u2291' : '\u229E'
   const cc = el('cc')
   if (isFull) {
     const h = window.innerHeight - 100

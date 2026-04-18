@@ -237,7 +237,7 @@ export function ChartControls() {
             </div>
           </div>
           <span style={{ width: '4px' }}></span>
-          <button className="tfb ztf-sibling" id="fsbtn" title="Fullscreen" onClick={toggleFS}>{fsMode ? '\u2291' : '\u26F6'}</button>
+          <button className="tfb ztf-sibling" id="fsbtn" title="Fullscreen" onClick={toggleFS}>{fsMode ? '\u2291' : '\u272D'}</button>
           <button className="tfb ztf-sibling" title="Chart Settings" onClick={() => openModal('charts')}>&#9881;</button>
           <button className="tfb ztf-sibling" title="Add Indicator" onClick={() => setIndPanelOpen(true)}>&#9776;</button>
           <span style={{ width: '8px' }}></span>
