@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { NOTIFICATION_CENTER } from '../../core/config'
 
@@ -8,53 +8,16 @@ interface Props { visible: boolean; onClose: () => void }
 
 export function NotificationsModal({ visible, onClose }: Props) {
   const [filter, setFilter] = useState('all')
-  const [tick, setTick] = useState(0)
-
-  const items: any[] = (NOTIFICATION_CENTER?.items as any[]) || []
-  const totalCount = items.length
-  const unreadCount = items.filter((i) => !i.read).length
-  void tick
-
-  useEffect(() => {
-    const panel = document.getElementById('mnotifications')
-    if (!panel) return
-    if (visible) {
-      panel.classList.add('open')
-      if (typeof w._ncRenderList === 'function') w._ncRenderList()
-      setTick((t) => t + 1)
-    } else {
-      panel.classList.remove('open')
-    }
-  }, [visible])
 
   const applyFilter = (f: string) => {
     setFilter(f)
+    // ncFilter(sev) sets NOTIFICATION_CENTER._filter + calls _ncRenderList()
+    // Pass 'all' as undefined so old JS shows all items
     if (typeof w.ncFilter === 'function') w.ncFilter(f === 'all' ? 'all' : f)
     else if (NOTIFICATION_CENTER) {
       NOTIFICATION_CENTER._filter = f === 'all' ? 'all' : f
       if (typeof w._ncRenderList === 'function') w._ncRenderList()
     }
-  }
-
-  const handleMarkAllRead = () => {
-    if (!unreadCount) return
-    if (typeof w.ncMarkAllRead === 'function') w.ncMarkAllRead()
-    setTick((t) => t + 1)
-  }
-
-  const handleClearAll = () => {
-    if (!totalCount) return
-    if (typeof w.ncClear === 'function') w.ncClear()
-    setTick((t) => t + 1)
-  }
-
-  const markAllStyle: React.CSSProperties = {
-    opacity: unreadCount ? 1 : 0.45,
-    cursor: unreadCount ? 'pointer' : 'not-allowed',
-  }
-  const clearAllStyle: React.CSSProperties = {
-    opacity: totalCount ? 1 : 0.45,
-    cursor: totalCount ? 'pointer' : 'not-allowed',
   }
 
   return (
@@ -78,20 +41,8 @@ export function NotificationsModal({ visible, onClose }: Props) {
 
         {/* Actions */}
         <div className="nc-actions" style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-          <button
-            className={`sbtn2${unreadCount ? ' act' : ''}`}
-            disabled={!unreadCount}
-            style={markAllStyle}
-            onClick={handleMarkAllRead}
-          >
-            Mark all read{unreadCount ? ` (${unreadCount})` : ''}
-          </button>
-          <button
-            className="sbtn2"
-            disabled={!totalCount}
-            style={clearAllStyle}
-            onClick={handleClearAll}
-          >
+          <button className="sbtn2 pri" onClick={() => w.ncMarkAllRead?.()}>Mark all read</button>
+          <button className="sbtn2 sec" onClick={() => w.ncClear?.()}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
               strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
               style={{ marginRight: 4, verticalAlign: 'middle' }}>
@@ -100,7 +51,7 @@ export function NotificationsModal({ visible, onClose }: Props) {
               <path d="M10 11v6" /><path d="M14 11v6" />
               <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
             </svg>
-            Clear all{totalCount ? ` (${totalCount})` : ''}
+            Clear all
           </button>
         </div>
 
