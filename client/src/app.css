@@ -4832,7 +4832,7 @@ body {
    MODAL SYSTEM — .mover + .modal + shared controls
    ══════════════════════════════════════════════════════════════════ */
 .mover { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000000cc; z-index: 1000; display: flex; align-items: center; justify-content: center }
-.modal { background: #111318; border: 1px solid var(--gold-a20); border-radius: 12px; width: 100%; max-width: 480px; max-height: 85vh; display: flex; flex-direction: column; padding-bottom: 0 }
+.modal { background: #111318; border: 1px solid var(--gold-a20); border-radius: 12px; width: 100%; max-width: 480px; max-height: 85vh; display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden }
 .modal > .mhdr { flex-shrink: 0 }
 .modal > .mhdr ~ * { flex: 1; overflow-y: auto; padding-bottom: 24px }
 .mhdr { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px 10px; border-bottom: 1px solid var(--brd); position: sticky; top: 0; background: #111318; z-index: 1 }
