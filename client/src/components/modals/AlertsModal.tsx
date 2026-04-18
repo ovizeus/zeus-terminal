@@ -1,8 +1,9 @@
 /** Price Alerts Modal — wired to window.* functions */
+import { useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
-import { toggleAlerts } from '../../ui/dom2'
-import { injectFakeWhale, toggleSnd, saveAlerts, testNotification } from '../../data/marketDataWS'
+import { toggleAlerts, isSoundMuted } from '../../ui/dom2'
+import { injectFakeWhale, toggleSnd, saveAlerts, testNotification, _syncSndIcon } from '../../data/marketDataWS'
 
 const w = window as any
 
@@ -11,6 +12,14 @@ interface Props { visible: boolean; onClose: () => void }
 export function AlertsModal({ visible, onClose }: Props) {
   const openModal = useUiStore((s) => s.openModal)
   const symbol = useMarketStore((s) => s.market.symbol)
+
+  // [BUG7] Sync the Sound Notifications button icon with the BUG5 master mute
+  // flag every time the modal opens, so the button never lies about state.
+  useEffect(() => {
+    if (!visible) return
+    const id = setTimeout(() => _syncSndIcon(), 0)
+    return () => clearTimeout(id)
+  }, [visible])
 
   const toggleMaster = (checked: boolean) => {
     if (typeof toggleAlerts === 'function') toggleAlerts(checked)

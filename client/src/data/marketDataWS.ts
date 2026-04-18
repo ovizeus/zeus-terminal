@@ -19,7 +19,7 @@ import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
 import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
 import { renderATPositions } from '../trading/autotrade'
-import { _initAudio } from '../ui/dom2'
+import { _soundBadgeClick, isSoundMuted } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 
 // ===== WS RECONNECT BACKOFF =====
@@ -300,10 +300,19 @@ export function setSymbol(sym: string): void {
 w.setSymbol = setSymbol
 
 // ===== SOUND =====
+// [BUG7] Aligned with BUG5 master mute system. The legacy w.S.soundOn flag
+// was dead — no audio code respected it, so flipping the AlertsModal "Sound
+// Notifications" button had zero effect on actual tones. Now delegates to
+// _soundBadgeClick (init + toggle + chime + persist) and mirrors the icon
+// from the canonical _soundMuted flag via isSoundMuted().
 export function toggleSnd(): void {
-  w.S.soundOn = !w.S.soundOn
-  _initAudio()
-  const e = el('snd'); if (e) e.innerHTML = w.S.soundOn ? _ZI.bell : _ZI.bellX
+  _soundBadgeClick()
+  _syncSndIcon()
+}
+export function _syncSndIcon(): void {
+  const e = el('snd'); if (!e) return
+  e.innerHTML = isSoundMuted() ? _ZI.bellX : _ZI.bell
+  e.title = isSoundMuted() ? 'Sound muted — click to unmute' : 'Sound on — click to mute'
 }
 
 // ===== MODAL =====
