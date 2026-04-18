@@ -1727,6 +1727,13 @@ export function openPartialClose(posId: any): void {
       onClose: (id: any, pct: number) => { root.unmount(); container.remove(); execPartialClose(id, pct) },
       onCancel: () => { root.unmount(); container.remove() },
     }))
+  }).catch((e: any) => {
+    // [BUG5.2] Defensive: if PartialCloseModal chunk fails to load
+    // (partial deploy), remove the placeholder and toast instead of
+    // surfacing an unhandled rejection.
+    container.remove()
+    try { (toast as any)('Partial close unavailable — asset missing') } catch (_) { }
+    console.warn('[PartialCloseModal] chunk load failed:', e)
   })
 }
 

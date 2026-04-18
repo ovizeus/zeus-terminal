@@ -12,11 +12,18 @@ export function QuantMonitorPanel() {
     let destroyed = false
     let cleanupFn: (() => void) | null = null
 
-    // Dynamic import to avoid loading QM code until panel is actually opened
+    // Dynamic import to avoid loading QM code until panel is actually opened.
+    // [BUG5.2] .catch() so a missing chunk (partial deploy / cached HTML vs
+    // purged assets) degrades to an on-screen notice instead of an uncaught
+    // rejection.
     import('../../quantmonitor/index').then(({ init, destroy }) => {
       if (destroyed) return
       init('qm-screen', 'qm-particles').catch((e: any) => console.warn('[QM] init error:', e))
       cleanupFn = destroy
+    }).catch((e: any) => {
+      console.warn('[QM] chunk load failed:', e)
+      const screen = document.getElementById('qm-screen')
+      if (screen) screen.innerHTML = '<span style="color:#f66">QuantMonitor unavailable — asset missing. Reload or redeploy.</span>'
     })
 
     return () => {
