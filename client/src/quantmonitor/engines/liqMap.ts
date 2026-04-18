@@ -1,47 +1,53 @@
-// QM Liquidation Map — Estimated liq levels from OI + leverage brackets — 1:1 from HTML
+// QM Liquidation Map — [BUG5.5] Real liquidation aggregation (rolling 24h)
+// Replaces the prior synthetic bracket-MMR model (OI × weight × price) which
+// produced multi-billion-dollar phantom clusters. Now reads from live feeds:
+//   1. w.S.llvBuckets   — Binance + Bybit real liqs (populated by procLiq)
+//   2. QM.liqAgg.okx    — OKX real liqs (populated by addLiq via WS)
+// Each event is bucketed by %-from-current-price at 0.25% granularity so the
+// render layer can offer fine resolution near price and aggregate farther out.
+import { QM } from '../state'
+
 const w = window as any
+
+const WINDOW_MS = 24 * 3600 * 1000   // rolling 24-hour window
+const MAX_PCT = 35                    // clip far-out noise (matches prior UI)
+const MIN_PCT = 0.05                  // ignore micro-jitter at price
 
 export function buildLiqEstimate(): void {
   const c = w.S; if (!c || !c.price) return
   const p = c.price
-  const oi = c.oi || 1000
-  const longR = c._qmPosLongRatio || c.ls || 0.5
-  const shortR = c._qmPosShortRatio || (1 - (c.ls || 0.5))
-  const totalLong = oi * longR
-  const totalShort = oi * shortR
-
-  // Real BTCUSDT leverage brackets (Binance)
-  const brackets = [
-    { lev: 125, w: 0.004, mmr: 0.004 }, { lev: 100, w: 0.008, mmr: 0.005 },
-    { lev: 75, w: 0.012, mmr: 0.005 }, { lev: 50, w: 0.025, mmr: 0.01 },
-    { lev: 20, w: 0.055, mmr: 0.025 }, { lev: 10, w: 0.12, mmr: 0.05 },
-    { lev: 5, w: 0.20, mmr: 0.05 }, { lev: 4, w: 0.18, mmr: 0.10 },
-    { lev: 3, w: 0.15, mmr: 0.125 }, { lev: 2, w: 0.12, mmr: 0.15 },
-    { lev: 1, w: 0.126, mmr: 0.25 },
-  ]
-  const wSum = brackets.reduce((s, b) => s + b.w, 0)
-  brackets.forEach(b => b.w /= wSum)
+  const cutoff = Date.now() - WINDOW_MS
 
   c._qmLiqBuckets = {} as Record<number, { price: number; longVol: number; shortVol: number; lev: string[] }>
 
-  brackets.forEach(({ lev, w: weight, mmr }) => {
-    const longLiqPrice = p * (1 - (1 / lev) + mmr)
-    const shortLiqPrice = p * (1 + (1 / lev) - mmr)
-    const longVol = totalLong * weight * p
-    const shortVol = totalShort * weight * p
+  const addBucket = (pct: number, bPrice: number, isLong: boolean, usd: number) => {
+    if (!Number.isFinite(usd) || usd <= 0) return
+    if (Math.abs(pct) < MIN_PCT || Math.abs(pct) > MAX_PCT) return
+    const bk = Math.round(pct * 4) / 4
+    if (!c._qmLiqBuckets[bk]) c._qmLiqBuckets[bk] = { price: bPrice, longVol: 0, shortVol: 0, lev: [] }
+    if (isLong) c._qmLiqBuckets[bk].longVol += usd
+    else c._qmLiqBuckets[bk].shortVol += usd
+    c._qmLiqBuckets[bk].price = bPrice
+  }
 
-    const bucket = (pct: number, price: number, isLong: boolean, vol: number) => {
-      const b = Math.round(pct * 2) / 2
-      if (!c._qmLiqBuckets[b]) c._qmLiqBuckets[b] = { price, longVol: 0, shortVol: 0, lev: [] }
-      if (isLong) c._qmLiqBuckets[b].longVol += vol; else c._qmLiqBuckets[b].shortVol += vol
-      if (!c._qmLiqBuckets[b].lev.includes(lev + 'x')) c._qmLiqBuckets[b].lev.push(lev + 'x')
-      c._qmLiqBuckets[b].price = price
-    }
+  // 1) Binance + Bybit — already per-price aggregated by procLiq in marketDataWS
+  const llv = c.llvBuckets || {}
+  for (const pkey in llv) {
+    const b = llv[pkey]; if (!b || !b.price) continue
+    if (b.ts && b.ts < cutoff) continue
+    const pct = ((b.price - p) / p) * 100
+    if (b.longUSD > 0) addBucket(pct, b.price, true, b.longUSD)
+    if (b.shortUSD > 0) addBucket(pct, b.price, false, b.shortUSD)
+  }
 
-    const longPct = ((longLiqPrice - p) / p * 100)
-    const shortPct = ((shortLiqPrice - p) / p * 100)
-    if (longPct > -35 && longPct < 0) bucket(longPct, longLiqPrice, true, longVol)
-    if (shortPct < 35 && shortPct > 0) bucket(shortPct, shortLiqPrice, false, shortVol)
+  // 2) OKX — per-event array (side: 'SELL' = long liquidated)
+  const okxEvents = (QM.liqAgg.okx.btc || []) as any[]
+  okxEvents.forEach(liq => {
+    if (!liq || !liq.p || !liq.vol) return
+    if (liq.time && liq.time < cutoff) return
+    const isLong = liq.side === 'SELL' || !!liq.isLong
+    const pct = ((+liq.p - p) / p) * 100
+    addBucket(pct, +liq.p, isLong, +liq.vol)
   })
 }
 

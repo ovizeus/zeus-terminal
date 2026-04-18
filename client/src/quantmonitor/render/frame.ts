@@ -51,16 +51,34 @@ function liqChart(): string[] {
   const realLiqs: any[] = S?._qmRealLiqs || []
 
   const allLevels: any[] = []
-  const addLevel = (pct: number) => {
-    if (Math.abs(pct) < 0.05) return
-    const bk = Math.round(pct * 2) / 2
-    const bucket = liqBuckets[bk] || { longVol: 0, shortVol: 0, lev: [] }
-    const vol = bk < 0 ? (bucket.longVol || 0) : (bucket.shortVol || 0)
-    const realCount = realLiqs.filter((l: any) => Math.abs(((l.p - price) / price * 100) - bk) < 0.28).length
-    allLevels.push({ pct: bk, price: price * (1 + bk / 100), vol, realCount, side: bk < 0 ? 'LONG' : 'SHORT', levs: bucket.lev || [] })
+  // [BUG5.5] Multi-resolution levels: 0.25% near price, 0.5% mid, 1% far.
+  // Each display level sums all 0.25%-granularity buckets within its window.
+  const addLevel = (pct: number, stepSize: number) => {
+    if (Math.abs(pct) < 0.1) return
+    const half = stepSize / 2
+    const lo = pct - half, hi = pct + half
+    let longSum = 0, shortSum = 0
+    for (const bkStr in liqBuckets) {
+      const bpct = +bkStr
+      if (bpct >= lo && bpct < hi) {
+        const bucket = liqBuckets[bkStr]
+        longSum += bucket.longVol || 0
+        shortSum += bucket.shortVol || 0
+      }
+    }
+    const vol = pct < 0 ? longSum : shortSum
+    const realCount = realLiqs.filter((l: any) => {
+      const lpct = ((l.p - price) / price * 100)
+      return lpct >= lo && lpct < hi
+    }).length
+    allLevels.push({ pct, price: price * (1 + pct / 100), vol, realCount, side: pct < 0 ? 'LONG' : 'SHORT', levs: [] })
   }
-  for (let pct = 0.5; pct <= 10; pct += 0.5) { addLevel(pct); addLevel(-pct) }
-  for (let pct = 11; pct <= 20; pct += 1) { addLevel(pct); addLevel(-pct) }
+  // Near zone: 0.25% step, 0.25 → 6%
+  for (let pct = 0.25; pct <= 6; pct += 0.25) { addLevel(+pct.toFixed(2), 0.25); addLevel(+(-pct).toFixed(2), 0.25) }
+  // Mid zone: 0.5% step, 6.5 → 14%
+  for (let pct = 6.5; pct <= 14; pct += 0.5) { addLevel(pct, 0.5); addLevel(-pct, 0.5) }
+  // Far zone: 1% step, 15 → 25%
+  for (let pct = 15; pct <= 25; pct += 1) { addLevel(pct, 1); addLevel(-pct, 1) }
 
   const maxVol = Math.max(...allLevels.map(l => l.vol), 1)
 
@@ -82,7 +100,8 @@ function liqChart(): string[] {
   lines.push(`  <span class="dg"> PRICE        DIST    VOLUME                    EST.USD  \u25CF</span>`)
   lines.push(`  <span class="dg"> \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2500\u2500\u2500\u2500\u2500\u2500  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2500</span>`)
   shorts.forEach(l => {
-    const dist = ('+' + l.pct.toFixed(1) + '%').padStart(6)
+    const dp = Math.abs(l.pct) < 1 ? 2 : 1
+    const dist = ('+' + l.pct.toFixed(dp) + '%').padStart(6)
     const isHot = l.pct <= 1
     const pclr = isHot ? 'yb' : 'sq4'
     const realTag = l.realCount > 0 ? `<span class="sq6">\u25CF</span>` : '<span class="d">\u00B7</span>'
@@ -98,7 +117,8 @@ function liqChart(): string[] {
   const longs = allLevels.filter(l => l.pct < 0).sort((a, b) => b.pct - a.pct)
   lines.push(`  <span class="dg"> \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2500\u2500\u2500\u2500\u2500\u2500  \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2500\u2500\u2500\u2500\u2500\u2500\u2500  \u2500</span>`)
   longs.forEach(l => {
-    const dist = (l.pct.toFixed(1) + '%').padStart(6)
+    const dp = Math.abs(l.pct) < 1 ? 2 : 1
+    const dist = (l.pct.toFixed(dp) + '%').padStart(6)
     const isHot = l.pct >= -1
     const pclr = isHot ? 'yb' : 'rq4'
     const realTag = l.realCount > 0 ? `<span class="rq6">\u25CF</span>` : '<span class="d">\u00B7</span>'
@@ -114,7 +134,8 @@ function liqChart(): string[] {
   const shortRatio = S?._qmShortRatio || 0
   const openInterest = S?._qmOpenInterest || 0
   const posRatio = posLongRatio > 0 ? `pos ${(posLongRatio * 100).toFixed(0)}%L/${(posShortRatio * 100).toFixed(0)}%S` : `acc ${(longRatio * 100).toFixed(0)}%L/${(shortRatio * 100).toFixed(0)}%S`
-  lines.push(`  <span class="dg">\u25CF real event | ${posRatio} | OI:${openInterest.toFixed(0)}BTC | bracket-MMR model | \u00B110% @0.5% \u00B120% @1%</span>`)
+  const liqEventCount = (realLiqs.length || 0) + Object.keys(S?.llvBuckets || {}).length
+  lines.push(`  <span class="dg">\u25CF real event | ${posRatio} | OI:${openInterest.toFixed(0)}BTC | real liq feed 24h | src: BNB+BYB+OKX | ${liqEventCount} lvl</span>`)
 
   return lines
 }
