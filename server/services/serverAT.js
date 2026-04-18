@@ -1809,7 +1809,7 @@ function onPriceUpdate(symbol, price) {
                     : pos.slPnl;
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
-            } else if (price >= pos.tp) {
+            } else if (pos.tp && price >= pos.tp) {
                 const tpPnlReal = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_TP', price, tpPnlReal);
                 closed = true;
@@ -1821,7 +1821,7 @@ function onPriceUpdate(symbol, price) {
                     : pos.slPnl;
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
-            } else if (price <= pos.tp) {
+            } else if (pos.tp && price <= pos.tp) {
                 const tpPnlRealS = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_TP', price, tpPnlRealS);
                 closed = true;
