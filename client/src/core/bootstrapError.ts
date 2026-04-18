@@ -89,13 +89,13 @@ function _showUpdateBanner(data: any): void {
   if (document.getElementById('zeus-update-banner')) return
   const overlay = document.createElement('div'); overlay.id = 'zeus-update-banner'
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease'
-  const box = document.createElement('div'); box.style.cssText = 'background:linear-gradient(135deg,#0a1628,#132040);border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;max-width:360px;width:90vw;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)'
-  const icon = document.createElement('div'); icon.style.cssText = 'font-size:48px;margin-bottom:12px'; icon.textContent = '\u26A1'
-  const title = document.createElement('div'); title.style.cssText = 'color:#fff;font-size:18px;font-weight:700;margin-bottom:8px'; title.textContent = 'Update ' + data.version
-  const desc = document.createElement('div'); desc.style.cssText = 'color:#8899bb;font-size:13px;margin-bottom:20px;line-height:1.4'; desc.textContent = data.changelog || 'New version available'
-  const btn = document.createElement('button'); btn.style.cssText = 'background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;border:none;border-radius:10px;padding:14px 40px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:.5px;text-transform:uppercase'
+  const box = document.createElement('div'); box.style.cssText = 'background:linear-gradient(135deg,#0a1628,#132040);border:1px solid #1e3a5f;border-radius:16px;padding:20px 24px;max-width:360px;width:90vw;max-height:85vh;display:flex;flex-direction:column;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)'
+  const icon = document.createElement('div'); icon.style.cssText = 'font-size:40px;margin-bottom:8px;flex-shrink:0'; icon.textContent = '\u26A1'
+  const title = document.createElement('div'); title.style.cssText = 'color:#fff;font-size:17px;font-weight:700;margin-bottom:10px;flex-shrink:0'; title.textContent = 'Update ' + data.version
+  const desc = document.createElement('div'); desc.style.cssText = 'color:#8899bb;font-size:12px;margin-bottom:16px;line-height:1.5;flex:1 1 auto;overflow-y:auto;min-height:0;text-align:left;padding:0 4px'; desc.textContent = data.changelog || 'New version available'
+  const btn = document.createElement('button'); btn.style.cssText = 'background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;border:none;border-radius:10px;padding:14px 40px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:.5px;text-transform:uppercase;flex-shrink:0'
   btn.textContent = '\uD83D\uDD04 INSTALL'; btn.onclick = function () { btn.textContent = 'Updating...'; btn.style.opacity = '0.6'; localStorage.setItem('zeus_app_version', data.version); setTimeout(function () { location.reload() }, 500) }
-  const skip = document.createElement('div'); skip.style.cssText = 'color:#556;font-size:11px;margin-top:12px;cursor:pointer'; skip.textContent = 'Later'
+  const skip = document.createElement('div'); skip.style.cssText = 'color:#556;font-size:11px;margin-top:10px;cursor:pointer;flex-shrink:0'; skip.textContent = 'Later'
   skip.onclick = function () { overlay.remove(); _updateCheckInterval = setInterval(_pollForUpdate, 300000) }
   box.appendChild(icon); box.appendChild(title); box.appendChild(desc); box.appendChild(btn); box.appendChild(skip)
   overlay.appendChild(box); document.body.appendChild(overlay)
