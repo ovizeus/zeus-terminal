@@ -37,6 +37,18 @@ function _pinMarkUnlocked(): void {
   try { sessionStorage.setItem(_PIN_SS_KEY, '1') } catch (_) {}
 }
 
+// [BATCH3-R] Public bridge so the biometric-unlock path on <PinLockScreen />
+// can mark the session unlocked and trigger the welcome modal without
+// duplicating sessionStorage + UI-hide logic here.
+export function pinMarkUnlockedFromBiometric(): void {
+  _pinMarkUnlocked()
+  usePinLockStore.getState().setMessage('')
+  usePinLockStore.getState().setVisible(false)
+  if (typeof _showWelcomeModal === 'function') setTimeout(_showWelcomeModal, 50)
+}
+
+export function pinIsUnlocked(): boolean { return _pinIsUnlocked() }
+
 function _pinClearUnlocked(): void {
   try { sessionStorage.removeItem(_PIN_SS_KEY) } catch (_) {}
   try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}

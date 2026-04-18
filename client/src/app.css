@@ -5215,6 +5215,20 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .pin-lock-msg { min-height: 20px; font-size: 11px; color: #ff4455; margin-bottom: 8px }
 .pin-lock-hint { font-size: 9px; color: #333; letter-spacing: 1px }
 .pin-lock-shake { animation: pinShake .4s ease-in-out }
+.pin-lock-bio-btn { display: block; width: 200px; margin: 0 auto 10px; padding: 10px; background: transparent; color: var(--gold); border: 1px solid var(--gold-a40); border-radius: 10px; font-family: 'Cinzel', serif; font-size: 11px; font-weight: 600; letter-spacing: 2px; cursor: pointer; transition: all .2s }
+.pin-lock-bio-btn:hover { background: var(--gold-a20); border-color: var(--gold) }
+.zsn-backdrop { position: fixed; inset: 0; background: rgba(4,8,14,0.78); backdrop-filter: blur(4px); z-index: 99998; display: flex; align-items: center; justify-content: center; animation: zsnFade .25s ease-out }
+.zsn-card { width: min(340px, 90vw); background: linear-gradient(165deg, #0a1018 0%, #0c1420 100%); border: 1px solid var(--gold-a40); border-radius: 14px; padding: 24px 22px; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 40px rgba(240,192,64,0.08); animation: zsnRise .3s ease-out }
+.zsn-icon { margin-bottom: 12px; filter: drop-shadow(0 0 14px rgba(240,192,64,0.25)) }
+.zsn-title { font-family: 'Cinzel', serif; font-size: 15px; color: var(--gold); letter-spacing: 3px; margin-bottom: 10px }
+.zsn-body { font-size: 12px; color: #aab8c8; line-height: 1.55; margin-bottom: 18px }
+.zsn-btn { display: block; width: 100%; padding: 11px; margin-bottom: 8px; border: none; border-radius: 9px; font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: all .2s }
+.zsn-btn-pri { background: linear-gradient(135deg, var(--gold), #e0a820); color: #0a0f18; box-shadow: 0 4px 16px var(--gold-a20) }
+.zsn-btn-pri:hover { transform: translateY(-1px); box-shadow: 0 6px 22px var(--gold-a33) }
+.zsn-btn-sec { background: transparent; color: #8899aa; border: 1px solid #2a3a4a }
+.zsn-btn-sec:hover { color: #aab8c8; border-color: #3a4a5a }
+@keyframes zsnFade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes zsnRise { from { opacity: 0; transform: translateY(14px) scale(.97) } to { opacity: 1; transform: translateY(0) scale(1) } }
 @keyframes pinShake { 0%, 100% { transform: translateX(0) } 20%, 60% { transform: translateX(-8px) } 40%, 80% { transform: translateX(8px) } }
 
 /* ═══════════════════════════════════════════════════════════════

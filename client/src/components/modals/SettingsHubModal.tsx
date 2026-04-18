@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove } from '../../core/bootstrapMisc'
+import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
 import { api } from '../../services/api'
@@ -193,6 +194,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           </div>
           <div id="pin-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
+
+        <BiometricToggle />
 
         <div className="msec" style={{marginTop:'16px'}}>CHANGE PASSWORD</div>
         <div id="chpw-form">

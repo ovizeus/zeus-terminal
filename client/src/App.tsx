@@ -4,6 +4,7 @@ import { Header } from './components/layout/Header'
 import { PanelShell } from './components/layout/PanelShell'
 import { SettingsModal } from './components/settings/SettingsModal'
 import { PinLockScreen } from './components/modals/PinLockScreen'
+import { SecurityNudgeModal } from './components/modals/SecurityNudgeModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
 import { useServerSync } from './hooks/useServerSync'
@@ -95,6 +96,7 @@ export function App() {
         <PanelShell />
         <SettingsModal />
         <PinLockScreen />
+        <SecurityNudgeModal />
       </div>
     </ErrorBoundary>
   )
