@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.6.24',
-    build: 3,
+    build: 4,
     date: '2026-04-18',
-    changelog: 'QM liq map (BUG5.5.2): binance+bybit liq events now feed QM.liqAgg via a zeus:liq CustomEvent dispatched BEFORE the liqMinUsd threshold in procLiq. Previously only OKX populated the per-exchange QM buffers (the dispatcher side of zeus:liq was never wired), so on a fresh page the map showed mostly dashes until large liqs accumulated in w.S.llvBuckets. buildLiqEstimate now reads QM.liqAgg.{binance,bybit,okx}.btc as primary data with llvBuckets as fallback density. Footer reports "accumulating real liqs — N events so far" when empty, or "N active levels | M events" when populated, so the feed state is visible.'
+    changelog: 'QM liq map (BUG5.5.3): 24h rolling buffer now persists in localStorage (zt:qmLiq:v1). QM.liqAgg.{binance,bybit,okx}.btc and w.S.llvBuckets are snapshotted at init, every 10s thereafter, and force-flushed on beforeunload/pagehide/destroy — so refreshing the tab or closing the panel no longer wipes accumulated liquidation history. On hydrate, events older than 24h are filtered; llvBuckets merges with any events WS pushed during script parse so nothing is lost on fast reconnect. User-initiated localStorage.clear() (Header / Settings reset) still wipes as expected.'
 };
