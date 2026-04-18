@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'zt-v160-b25';
+const CACHE_VERSION = 'zt-v160-b26';
 const CACHE_NAME = `zt-cache-${CACHE_VERSION}`;
 const ASSETS = [
     '/login.html',
