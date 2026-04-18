@@ -17,7 +17,6 @@ import { manualLiveSetSL } from './liveApi'
 import { brainThink } from '../engine/brain'
 import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from '../data/marketDataClose'
-import { attachConfirmClose } from '../engine/events'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
 function _dslUI(p: Partial<DSLUI>) { useDslStore.getState().patchUI(p) }
@@ -960,27 +959,10 @@ export function renderDSLWidget(positions: any[]): void {
 
   container.innerHTML = html
 
-  // [BATCH3-O] Close buttons use attachConfirmClose (two-click confirm pattern
-  // from PositionRows). innerHTML regenerates every DSL tick, so reattach
-  // per-button each render — _pendingClose state in events.ts survives
-  // re-render and re-applies pending style when the same posId re-attaches.
-  container.querySelectorAll('[data-action="dslClosePosition"]').forEach((btn) => {
-    const posId = (btn as HTMLElement).dataset.id
-    if (!posId) return
-    attachConfirmClose(btn as HTMLElement, () => {
-      const all = [...getLivePositions(), ...getDemoPositions()]
-      const target = all.find((p: any) => String(p.id) === String(posId))
-      if (!target) return
-      if (target.isLive || target.mode === 'live') closeLivePos(posId, 'MANUAL')
-      else closeDemoPos(posId, 'MANUAL')
-    })
-  })
-
   // Event delegation for DSL card buttons + inputs
   if (!container.dataset.dslDelegated) {
     container.dataset.dslDelegated = '1'
     // Click delegation: dslToggleMagnet, dslTakeControl, dslReleaseControl
-    // (dslClosePosition is handled by attachConfirmClose above — not here.)
     container.addEventListener('click', (e: Event) => {
       const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
       if (!btn) return
@@ -1142,7 +1124,6 @@ export function _renderDslCard(pos: any): string {
   <!-- ROW 2: Entry / SL / TP / DSL Pivot / Loss@SL / Profit@TP / LIQ -->
   <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffffff55;margin-bottom:4px;flex-wrap:wrap;gap:4px">
     <span>Entry: <b style="color:#ffffffaa">$${fP(pos.entry)}</b></span>
-    ${pos.margin ? `<span>Margin: <b style="color:#aab8c8">$${Number(pos.margin).toFixed(2)}${pos.lev ? ' · ' + pos.lev + 'x' : ''}</b></span>` : ''}
     ${pos.sl ? `<span>SL: <b style="color:#ff4466">$${fP(pos.sl)}</b></span>` : ''}
     ${pos.tp ? `<span>TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>` : ''}
     ${isActive && pivotLeft ? `<span>DSL PL: <b style="color:#39ff14">$${fP(pivotLeft)}</b></span>` : ''}
@@ -1212,18 +1193,12 @@ export function _renderDslCard(pos: any): string {
     ${_magnetPreviewTxt && !_canMoveSL_render ? `<div style="font-size:10px;color:#00ccff44;font-style:italic;line-height:1.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_magnetPreviewTxt}</div>` : ''}
   </div>
 
-  <!-- ROW 7: Take Control / Let AI Control + Close Position + manual DSL inputs -->
-  ${_showTakeControl ? `<div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px">
-    <button data-action="dslClosePosition" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#2a0010;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">\u2715 CLOSE</button>
-    <button data-action="dslTakeControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#f0c04012;border:1px solid #f0c04033;color:#f0c040;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">TAKE CONTROL</button>
-  </div>` : ''}
+  <!-- ROW 7: Take Control / Let AI Control + manual DSL inputs -->
+  ${_showTakeControl ? `<div style="margin-top:6px;text-align:right"><button data-action="dslTakeControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#f0c04012;border:1px solid #f0c04033;color:#f0c040;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">TAKE CONTROL</button></div>` : ''}
   ${_showReleaseControl ? `<div style="margin-top:6px;border-top:1px solid #f0c04022;padding-top:6px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <span style="font-size:12px;color:#f0c040;letter-spacing:0.5px">MANUAL CONTROL ACTIVE</span>
-      <div style="display:flex;gap:6px">
-        <button data-action="dslClosePosition" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#2a0010;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">\u2715 CLOSE</button>
-        <button data-action="dslReleaseControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
-      </div>
+      <button data-action="dslReleaseControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:1px">
@@ -1245,10 +1220,7 @@ export function _renderDslCard(pos: any): string {
     </div>
   </div>` : ''}
   ${_showPaperControls ? `<div style="margin-top:6px;border-top:1px solid #ffffff11;padding-top:6px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-      <div style="font-size:11px;color:#ffffff33;letter-spacing:0.5px">DSL PARAMS</div>
-      <button data-action="dslClosePosition" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#2a0010;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">\u2715 CLOSE</button>
-    </div>
+    <div style="font-size:11px;color:#ffffff33;letter-spacing:0.5px;margin-bottom:4px">DSL PARAMS</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${isActive ? `<div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff22;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" disabled style="width:62px;background:#0a0e14;border:1px solid #ffffff11;color:#ffffff33;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit;cursor:not-allowed"></label>
