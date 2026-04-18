@@ -42,3 +42,5 @@
 {"ts":"2026-04-14T21:04:45.417Z","action":"AT_TOGGLE","actor":"user","userId":2,"ip":null,"details":{"userId":2,"was":false,"now":true}}
 {"ts":"2026-04-17T04:20:39.834Z","action":"AT_TOGGLE","actor":"user","userId":1,"ip":null,"details":{"userId":1,"was":true,"now":false}}
 {"ts":"2026-04-17T09:36:43.030Z","action":"AT_TOGGLE","actor":"user","userId":1,"ip":null,"details":{"userId":1,"was":false,"now":true}}
+{"ts":"2026-04-18T00:16:09.722Z","action":"AT_TOGGLE","actor":"user","userId":1,"ip":null,"details":{"userId":1,"was":true,"now":false}}
+{"ts":"2026-04-18T12:09:52.702Z","action":"AT_TOGGLE","actor":"user","userId":1,"ip":null,"details":{"userId":1,"was":false,"now":true}}

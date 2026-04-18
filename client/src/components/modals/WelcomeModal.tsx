@@ -1,8 +1,15 @@
 /** Welcome Modal — 1:1 from #mwelcome in index.html lines 4756-4810
  *  Uses .wlc-modal class (not standard .modal), no ModalOverlay */
+import { useState } from 'react'
 interface Props { visible: boolean; onClose: () => void }
 
 export function WelcomeModal({ visible, onClose }: Props) {
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
+  function snooze(hours: number) {
+    try { localStorage.setItem('zeus_wlc_snoozeUntil', String(Date.now() + hours * 3600 * 1000)) } catch (_) {}
+    setSnoozeOpen(false)
+    onClose()
+  }
   return (
     <div className="mover" id="mwelcome" style={{ display: visible ? 'flex' : 'none' }} onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal wlc-modal">
@@ -59,6 +66,18 @@ export function WelcomeModal({ visible, onClose }: Props) {
           ENTER TERMINAL{' '}
           <svg className="z-i" viewBox="0 0 16 16"><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
         </button>
+        <div className="wlc-snooze-wrap">
+          {!snoozeOpen ? (
+            <button type="button" className="wlc-snooze-link" onClick={() => setSnoozeOpen(true)}>Don't show for…</button>
+          ) : (
+            <div className="wlc-snooze-opts">
+              <button type="button" className="wlc-snooze-pill" onClick={() => snooze(5)}>5h</button>
+              <button type="button" className="wlc-snooze-pill" onClick={() => snooze(12)}>12h</button>
+              <button type="button" className="wlc-snooze-pill" onClick={() => snooze(24)}>24h</button>
+              <button type="button" className="wlc-snooze-cancel" onClick={() => setSnoozeOpen(false)}>cancel</button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

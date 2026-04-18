@@ -5144,6 +5144,14 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .wlc-value.wlc-gold { color: var(--gold) }
 .wlc-enter { display: block; width: calc(100% - 40px); margin: 8px 20px 20px; padding: 14px; background: linear-gradient(135deg, var(--gold), #e0a820); color: #0a0f18; border: none; border-radius: 10px; font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: all .2s; box-shadow: 0 4px 20px var(--gold-a20) }
 .wlc-enter:hover { transform: translateY(-1px); box-shadow: 0 6px 28px var(--gold-a33); background: linear-gradient(135deg, #f5cc55, var(--gold)) }
+.wlc-snooze-wrap { text-align: center; padding: 0 20px 14px; min-height: 24px }
+.wlc-snooze-link { background: none; border: none; color: #556; font-size: 10px; letter-spacing: 1px; cursor: pointer; padding: 4px 8px; font-family: var(--ff); text-transform: uppercase; transition: color .2s }
+.wlc-snooze-link:hover { color: #889 }
+.wlc-snooze-opts { display: flex; gap: 6px; justify-content: center; align-items: center; animation: wlcSlideIn .2s ease-out }
+.wlc-snooze-pill { background: #0b1120; border: 1px solid #1a2a3a; color: #aab; font-size: 10px; letter-spacing: 1px; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: var(--ff); transition: all .15s }
+.wlc-snooze-pill:hover { border-color: var(--gold-a40); color: var(--gold); background: #0d1520 }
+.wlc-snooze-cancel { background: none; border: none; color: #445; font-size: 10px; cursor: pointer; padding: 5px 6px; font-family: var(--ff); margin-left: 4px }
+.wlc-snooze-cancel:hover { color: #778 }
 
 /* ═══════════════════════════════════════════════════════════════
    PIN LOCK SCREEN — 1:1 from main.css lines 11271-11390
