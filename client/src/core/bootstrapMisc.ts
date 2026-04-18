@@ -15,40 +15,36 @@ import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
 import { useBrainStore } from '../stores/brainStore'
+import { usePinLockStore } from '../stores/pinLockStore'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null
 
-// [BATCH3-P] PIN unlock is now in-memory ONLY. Prior M12 behaviour kept unlock
-// in localStorage with a 4h TTL so users weren't re-prompted after a crash/tab
-// close. User feedback: this failed its security purpose — app close+relaunch
-// (incl. Capacitor WebView) kept PIN silent for up to 4h.
-// Now: any full page reload, any tab close, any Capacitor app kill-and-reopen
-// clears the in-memory flag → PIN is required again. Also proactively clears
-// the legacy localStorage/sessionStorage keys so no lingering unlock survives
-// the upgrade.
-let _pinUnlockedMemory = false
+// [BATCH3-Q] PIN unlock persists in sessionStorage — survives reload/refresh
+// within the same tab or Capacitor WebView session, but is wiped on full tab
+// close / Android app kill (OS tears down the WebView process → sessionStorage
+// dies with it). Matches user requirement: "only prompt on full exit, not on
+// refresh". Legacy TTL-in-localStorage (batch3-P-pre and earlier) is wiped on
+// module load so upgraded clients can't carry a stale multi-hour unlock.
+const _PIN_SS_KEY = 'zeus_pin_unlocked'
 
 function _pinIsUnlocked(): boolean {
-  return _pinUnlockedMemory
+  try { return sessionStorage.getItem(_PIN_SS_KEY) === '1' } catch (_) { return false }
 }
 
 function _pinMarkUnlocked(): void {
-  _pinUnlockedMemory = true
+  try { sessionStorage.setItem(_PIN_SS_KEY, '1') } catch (_) {}
 }
 
 function _pinClearUnlocked(): void {
-  _pinUnlockedMemory = false
-  // Legacy cleanup — remove any persisted unlock from older builds.
+  try { sessionStorage.removeItem(_PIN_SS_KEY) } catch (_) {}
   try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}
-  try { sessionStorage.removeItem('zeus_pin_unlocked') } catch (_) {}
 }
 
-// Wipe any pre-existing persisted unlock from older clients on module load.
-// Without this, first launch after upgrade would still trust the legacy key.
+// Wipe legacy TTL key from older clients so the upgrade can never inherit
+// a multi-hour persisted unlock.
 try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}
-try { sessionStorage.removeItem('zeus_pin_unlocked') } catch (_) {}
 
 export async function _pinIsSet(): Promise<boolean> {
   if (_pinSetCache !== null) return _pinSetCache
@@ -58,21 +54,37 @@ export async function _pinIsSet(): Promise<boolean> {
 export async function _pinCheckLock(): Promise<void> {
   const isSet = await _pinIsSet(); if (!isSet) return
   if (_pinIsUnlocked()) return
-  const ls = document.getElementById('pinLockScreen')
-  if (ls) { ls.style.display = 'flex'; setTimeout(function () { const inp = document.getElementById('pinLockInput') as HTMLInputElement | null; if (inp) inp.focus() }, 100); const inp = document.getElementById('pinLockInput'); if (inp) { inp.addEventListener('keydown', function (e: any) { if (e.key === 'Enter') pinUnlock() }) } }
+  // [BATCH3-Q] Show the React-rendered lock screen via Zustand store.
+  // The legacy #pinLockScreen div was never in the React tree, so the old
+  // document.getElementById(...) path was a no-op. Focus is handled by
+  // <PinLockScreen /> via its inputRef.
+  usePinLockStore.getState().setMessage('')
+  usePinLockStore.getState().setVisible(true)
 }
 
 export async function pinUnlock(): Promise<void> {
-  const inp = document.getElementById('pinLockInput') as HTMLInputElement | null; const msg = document.getElementById('pinLockMsg')
-  if (!inp) return; const val = inp.value.trim(); if (!val) { if (msg) msg.textContent = 'Enter PIN'; return }
+  const inp = document.getElementById('pinLockInput') as HTMLInputElement | null
+  const setMsg = usePinLockStore.getState().setMessage
+  const setVis = usePinLockStore.getState().setVisible
+  const setShake = usePinLockStore.getState().setShaking
+  if (!inp) return
+  const val = inp.value.trim()
+  if (!val) { setMsg('Enter PIN'); return }
   try {
     const r = await fetch('/auth/pin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok === true) { _pinMarkUnlocked(); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof _showWelcomeModal === 'function') _showWelcomeModal() }, 300) } }
-    else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN not configured'; _pinMarkUnlocked(); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
-    else if (d.error === 'session_invalid') { if (msg) msg.textContent = 'Session expired \u2014 re-authenticate' }
-    else { if (msg) msg.textContent = 'Incorrect PIN!'; inp.value = ''; inp.focus(); inp.classList.add('pin-lock-shake'); setTimeout(function () { inp.classList.remove('pin-lock-shake') }, 500) }
-  } catch (err) { if (msg) msg.textContent = 'Network error' }
+    if (d.ok === true) {
+      _pinMarkUnlocked(); setMsg(''); setVis(false)
+      if (typeof _showWelcomeModal === 'function') setTimeout(_showWelcomeModal, 50)
+    } else if (d.error === 'pin_not_set') {
+      setMsg('PIN not configured'); _pinMarkUnlocked(); setVis(false)
+    } else if (d.error === 'session_invalid') {
+      setMsg('Session expired \u2014 re-authenticate')
+    } else {
+      setMsg('Incorrect PIN!'); inp.value = ''; inp.focus()
+      setShake(true); setTimeout(() => setShake(false), 500)
+    }
+  } catch (err) { setMsg('Network error') }
 }
 
 export async function pinActivate(): Promise<void> {

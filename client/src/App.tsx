@@ -3,6 +3,7 @@ import { LoginPage } from './components/auth/LoginPage'
 import { Header } from './components/layout/Header'
 import { PanelShell } from './components/layout/PanelShell'
 import { SettingsModal } from './components/settings/SettingsModal'
+import { PinLockScreen } from './components/modals/PinLockScreen'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
 import { useServerSync } from './hooks/useServerSync'
@@ -93,6 +94,7 @@ export function App() {
         <Header />
         <PanelShell />
         <SettingsModal />
+        <PinLockScreen />
       </div>
     </ErrorBoundary>
   )
