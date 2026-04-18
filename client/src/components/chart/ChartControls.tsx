@@ -59,7 +59,12 @@ const SYMBOLS: { label: string; items: { value: string; label: string }[] }[] = 
 ]
 
 /** Indicator definitions — 1:1 from INDICATORS in config.js lines 70-88 */
-const IND_LIST: { id: string; ico: string; name: string; desc: string }[] = [
+// [batch3-A] IND_LIST extended with settingsModal/isOverlay/modalOnly flags.
+// settingsModal  : openModal(key) to show the gear panel for this indicator.
+// isOverlay      : toggle routes through togOvr (overlays.* store) instead of togInd.
+// modalOnly      : indicator has no on/off toggle, just a modal entry (e.g. OVI).
+type IndMeta = { id: string; ico: string; name: string; desc: string; settingsModal?: string; isOverlay?: boolean; modalOnly?: boolean }
+const IND_LIST: IndMeta[] = [
   { id: 'ema', ico: '📈', name: 'EMA 50/200', desc: 'Exponential Moving Average' },
   { id: 'wma', ico: '〰', name: 'WMA 20/50', desc: 'Weighted Moving Average' },
   { id: 'st',  ico: '◆', name: 'Supertrend', desc: 'Trend + dynamic Stop Loss' },
@@ -77,6 +82,12 @@ const IND_LIST: { id: string; ico: string; name: string; desc: string }[] = [
   { id: 'rsi14', ico: '⚡', name: 'RSI 14', desc: 'Relative Strength Index' },
   { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'Volume-weighted RSI' },
   { id: 'cci', ico: '📏', name: 'CCI', desc: 'Commodity Channel Index' },
+  // Moved from Row 2/Row 3 — overlays + OVI (modal-only).
+  { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      modalOnly: true },
+  { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
+  { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
+  { id: 'sr',  ico: '📐', name: 'S/R Levels',  desc: 'Auto support/resistance', settingsModal: 'sr',       isOverlay: true },
+  { id: 'llv', ico: '💥', name: 'LLV Heatmap', desc: 'Large Liquidation Vols',  settingsModal: 'llv',      isOverlay: true },
 ]
 
 export function ChartControls() {
@@ -264,27 +275,21 @@ export function ChartControls() {
           <div id="expoInlineContent" style={{ padding: '8px 10px', fontSize: '10px', color: '#888', lineHeight: 1.7 }}></div>
         </div>
 
-        {/* Row 2: Sessions + VWAP + OVI */}
+        {/* Row 2: Sessions + VWAP — [batch3-A] OVI moved to SELECT INDICATOR panel */}
         <div className="crow">
           <button className="sess-btn asia" id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
           <button className="sess-btn london" id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
           <button className="sess-btn ny" id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
           <button className="vwap-btn" id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
-          <button className="vwap-btn" id="oviBtn" title="OVI LIQUID &#8212; Liquidation Pockets" style={{ color: '#f0c040', borderColor: '#f0c04044' }} onClick={() => openModal('ovi')}>OVI</button>
         </div>
 
-        {/* Row 3: Indicators + Overlays + Drawing Tools */}
+        {/* Row 3: Indicators + Drawing Tools — [batch3-A] LIQ/SUPREMUS/S/R/LLV moved to SELECT INDICATOR panel */}
         <div className="crow">
           <button className={`indb${activeInds.ema ?? indicators.ema ? ' act' : ''}`} id="bema" onClick={() => togInd('ema')}>EMA</button>
           <button className={`indb${activeInds.wma ?? indicators.wma ? ' act' : ''}`} id="bwma" onClick={() => togInd('wma')}>WMA</button>
           <button className={`indb${activeInds.st ?? indicators.st ? ' act' : ''}`} id="bst" onClick={() => togInd('st')}>ST</button>
           <button className={`indb${activeInds.vp ?? indicators.vp ? ' act' : ''}`} id="bvp" onClick={() => togInd('vp')}>VOLP</button>
-          <span style={{ width: '5px' }}></span>
-          <button className={`ovrb${overlays.liq ? ' act' : ''}`} id="bliq" onClick={() => togOvr('liq')}>&#128165; LIQ</button><span className="gear" onClick={() => openModal('liq')}>&#9881;&#65039;</span>
-          <button className={`ovrb${overlays.zs ? ' act' : ''}`} id="bzs" onClick={() => togOvr('zs')}>&#128081; SUPREMUS</button><span className="gear" onClick={() => openModal('supremus')}>&#9881;&#65039;</span>
-          <button className={`ovrb${overlays.sr ? ' act' : ''}`} id="bsr" onClick={() => togOvr('sr')}>&#128208; S/R</button><span className="gear" style={{ cursor: 'pointer', padding: '2px 5px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '10px' }} title="S/R Settings" onClick={() => openModal('sr')}>&#9881;&#65039;</span>
-          <button className={`ovrb${overlays.llv ? ' act' : ''}`} id="bllv" onClick={() => togOvr('llv')}>&#128165; LLV</button><span className="gear" style={{ cursor: 'pointer', padding: '2px 5px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '10px' }} title="LLV Settings" onClick={() => openModal('llv')}>&#9881;&#65039;</span>
-          <span style={{ width: '5px' }}></span>
+          <span style={{ width: '8px' }}></span>
           <button className={`ovrb${tsOn ? ' act' : ''}`} id="ts-toggle-btn" title="Time &amp; Sales tape (T)" onClick={toggleTimeSales}>&#128200; T&amp;S</button>
           <span style={{ width: '8px' }}></span>
           <span className="dt-sep">|</span>
@@ -305,7 +310,15 @@ export function ChartControls() {
         </div>
         <div className="ind-panel-body" id="indPanelBody">
           {IND_LIST.map((ind) => {
-            const isOn = activeInds[ind.id] ?? (indicators as unknown as Record<string, boolean>)[ind.id] ?? false
+            // [batch3-A] Route on/off state + toggle through the correct store:
+            //   isOverlay → overlays[id]   (togOvr)
+            //   modalOnly → no toggle, just a gear/OPEN button (OVI pattern)
+            //   default   → indicators[id] or activeInds[id]   (togInd)
+            const isOn = ind.modalOnly
+              ? false
+              : ind.isOverlay
+                ? ((overlays as unknown as Record<string, boolean>)[ind.id] ?? false)
+                : (activeInds[ind.id] ?? (indicators as unknown as Record<string, boolean>)[ind.id] ?? false)
             return (
               <div key={ind.id} className="ind-row">
                 <div className="ind-row-l">
@@ -316,12 +329,27 @@ export function ChartControls() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div
-                    className={`ind-toggle${isOn ? ' on' : ''}`}
-                    onClick={() => togInd(ind.id)}
-                  >
-                    <div className="ind-toggle-dot"></div>
-                  </div>
+                  {ind.settingsModal && (
+                    <span
+                      className="gear"
+                      style={{ cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '11px', color: '#f0c040' }}
+                      title={`${ind.name} Settings`}
+                      onClick={(e) => { e.stopPropagation(); openModal(ind.settingsModal as Parameters<typeof openModal>[0]) }}
+                    >&#9881;&#65039;</span>
+                  )}
+                  {ind.modalOnly ? (
+                    <button
+                      style={{ fontSize: '9px', padding: '3px 10px', borderRadius: '3px', background: '#1a1a1a', color: '#f0c040', border: '1px solid #f0c04044', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.5px' }}
+                      onClick={() => openModal(ind.settingsModal as Parameters<typeof openModal>[0])}
+                    >OPEN</button>
+                  ) : (
+                    <div
+                      className={`ind-toggle${isOn ? ' on' : ''}`}
+                      onClick={() => ind.isOverlay ? togOvr(ind.id as keyof typeof overlays) : togInd(ind.id)}
+                    >
+                      <div className="ind-toggle-dot"></div>
+                    </div>
+                  )}
                 </div>
               </div>
             )
