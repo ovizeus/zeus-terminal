@@ -4,7 +4,7 @@
 
 module.exports = {
     version: '1.6.24',
-    build: 4,
+    build: 5,
     date: '2026-04-18',
-    changelog: 'QM liq map (BUG5.5.3): 24h rolling buffer now persists in localStorage (zt:qmLiq:v1). QM.liqAgg.{binance,bybit,okx}.btc and w.S.llvBuckets are snapshotted at init, every 10s thereafter, and force-flushed on beforeunload/pagehide/destroy — so refreshing the tab or closing the panel no longer wipes accumulated liquidation history. On hydrate, events older than 24h are filtered; llvBuckets merges with any events WS pushed during script parse so nothing is lost on fast reconnect. User-initiated localStorage.clear() (Header / Settings reset) still wipes as expected.'
+    changelog: 'Header cleanup (BUG6): Notifications bell removed from header — users saw the same NOTIFICATION_CENTER unread count in the bell and inside the Alerts modal. Bell is reachable now only via the "Open Notification Center" button in AlertsModal and the Alt+N hotkey. The Search (Ctrl+K) button slides into the bell\'s old slot (right of Decision Log, before Settings) so the button row stays balanced.'
 };
