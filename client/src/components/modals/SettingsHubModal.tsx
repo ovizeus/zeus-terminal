@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
-import { pinActivate, pinRemove } from '../../core/bootstrapMisc'
+import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
@@ -43,6 +43,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   const [exModeFor, setExModeFor] = useState<Record<string, 'live'|'testnet'>>({ binance: 'testnet', bybit: 'testnet' })
   const [exLoadingFor, setExLoadingFor] = useState<Record<string, boolean>>({})
   const [exMsgFor, setExMsgFor] = useState<Record<string, {text: string; ok: boolean}>>({})
+
+  // [BATCH3-S] When Security tab opens, sync PIN UI (show/hide Current PIN field).
+  useEffect(() => {
+    if (tab !== 'security') return
+    const t = setTimeout(() => { _pinUpdateUI?.() }, 50)
+    return () => clearTimeout(t)
+  }, [tab])
 
   useEffect(() => {
     if (tab !== 'exchange') return
@@ -180,13 +187,18 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <span id="pinStatus" style={{fontSize:'11px',color:'#556',fontWeight:700}}>DISABLED</span>
         </div>
         <div id="pinSetupForm">
+          {/* [BATCH3-S] Current PIN — only shown when PIN already active. Reused for both Change and Deactivate. */}
+          <div className="mrow" id="pinCurrentRow" style={{marginBottom:'6px',display:'none'}}>
+            <span className="mlbl">Current PIN</span>
+            <input type="password" id="pinCurrent" placeholder="Current PIN" maxLength={8} style={pinInp} autoComplete="off" />
+          </div>
           <div className="mrow" style={{marginBottom:'6px'}}>
-            <span className="mlbl">PIN (4–8 cifre/litere)</span>
-            <input type="password" id="pinInput" placeholder="Enter PIN" maxLength={8} style={pinInp} />
+            <span className="mlbl" id="pinInputLabel">PIN (4–8 cifre/litere)</span>
+            <input type="password" id="pinInput" placeholder="Enter PIN" maxLength={8} style={pinInp} autoComplete="off" />
           </div>
           <div className="mrow" style={{marginBottom:'6px'}}>
             <span className="mlbl">Confirm PIN</span>
-            <input type="password" id="pinConfirm" placeholder="Repeat PIN" maxLength={8} style={pinInp} />
+            <input type="password" id="pinConfirm" placeholder="Repeat PIN" maxLength={8} style={pinInp} autoComplete="off" />
           </div>
           <div style={{display:'flex',gap:'6px',marginTop:'6px'}}>
             <button className="hub-sbtn pri" id="pinActivateBtn" onClick={() => pinActivate?.()}>ACTIVATE PIN</button>

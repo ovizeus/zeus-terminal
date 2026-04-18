@@ -1360,14 +1360,26 @@ router.post('/pin/set', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const user = db.findUserById(decoded.id);
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
-        const { pin } = req.body;
+        const { pin, currentPin } = req.body;
         if (!pin || typeof pin !== 'string' || pin.length < 4 || pin.length > 8) {
             return res.status(400).json({ error: 'PIN trebuie să aibă 4–8 caractere' });
         }
+        // [BATCH3-S] If PIN already set, require currentPin re-entry before overwrite.
+        const existingHash = db.getUserPin(user.id);
+        if (existingHash) {
+            if (!currentPin || typeof currentPin !== 'string') {
+                return res.status(400).json({ error: 'current_pin_required' });
+            }
+            const validCurrent = await bcrypt.compare(currentPin, existingHash);
+            if (!validCurrent) {
+                db.auditLog(user.id, 'PIN_CHANGE_FAILED', { reason: 'wrong_current_pin' }, req.ip);
+                return res.status(401).json({ error: 'invalid_current_pin' });
+            }
+        }
         const hash = await bcrypt.hash(pin, BCRYPT_ROUNDS);
         db.setUserPin(user.id, hash);
-        db.auditLog(user.id, 'PIN_SET', {}, req.ip);
-        logger.info('AUTH', 'PIN set', { email: _mask(user.email) });
+        db.auditLog(user.id, existingHash ? 'PIN_CHANGED' : 'PIN_SET', {}, req.ip);
+        logger.info('AUTH', existingHash ? 'PIN changed' : 'PIN set', { email: _mask(user.email) });
         res.json({ ok: true });
     } catch (err) { res.status(401).json({ error: 'session_invalid' }); }
 });
@@ -1413,13 +1425,27 @@ router.post('/pin/verify', async (req, res) => {
 });
 
 // REMOVE PIN
-router.post('/pin/remove', (req, res) => {
+router.post('/pin/remove', async (req, res) => {
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'session_invalid' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const user = db.findUserById(decoded.id);
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
+        const storedHash = db.getUserPin(user.id);
+        // Idempotent: if no PIN is set, consider it already removed.
+        if (!storedHash) return res.json({ ok: true });
+        // [BATCH3-S] Require current PIN re-entry before removal —
+        // prevents shoulder-surfed sessions from disabling app lock silently.
+        const { pin } = req.body || {};
+        if (!pin || typeof pin !== 'string') {
+            return res.status(400).json({ error: 'pin_required' });
+        }
+        const valid = await bcrypt.compare(pin, storedHash);
+        if (!valid) {
+            db.auditLog(user.id, 'PIN_REMOVE_FAILED', { reason: 'wrong_pin' }, req.ip);
+            return res.status(401).json({ error: 'invalid_pin' });
+        }
         db.clearUserPin(user.id);
         db.auditLog(user.id, 'PIN_REMOVED', {}, req.ip);
         logger.info('AUTH', 'PIN removed', { email: _mask(user.email) });
