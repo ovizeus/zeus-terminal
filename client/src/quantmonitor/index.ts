@@ -13,6 +13,7 @@ import { fetchWeeklyKlines, fetchDailyKlines, calcS2F, calcLogRegression, calcMa
 import { connectOKXLiq, disconnectOKXLiq } from '../data/okxLiqWS'
 import { renderFrame } from './render/frame'
 import { initParticles, destroyParticles } from './particles/canvas'
+import { loadLiqSnapshot, startLiqPersist, stopLiqPersist, saveLiqSnapshot } from './persistence/liqPersist'
 
 const w = window as any
 const intervals: ReturnType<typeof setInterval>[] = []
@@ -75,6 +76,11 @@ export async function init(screenId: string, canvasId: string): Promise<void> {
     qmLog('SYS', 'Waiting for Zeus data feed...')
   }
 
+  // [BUG5.5.3] Restore 24h liq snapshot from localStorage before WS connects
+  // so the map is immediately populated with what was there last session.
+  const { restored } = loadLiqSnapshot()
+  if (restored > 0) qmLog('SYS', `Restored ${restored} liq events from last session`)
+
   // Connect OKX liquidation WS
   connectOKXLiq()
 
@@ -121,10 +127,17 @@ export async function init(screenId: string, canvasId: string): Promise<void> {
 
   // Start particles
   initParticles(canvasId)
+
+  // [BUG5.5.3] Throttled save every 10s + flush on beforeunload/pagehide
+  startLiqPersist()
 }
 
 export function destroy(): void {
   _destroyed = true
+  // [BUG5.5.3] Final flush of liq snapshot before teardown so closing the panel
+  // (or switching away) does not lose the 24h rolling buffer.
+  saveLiqSnapshot(true)
+  stopLiqPersist()
   intervals.forEach(iv => clearInterval(iv))
   intervals.length = 0
   if (renderIv) { clearInterval(renderIv); renderIv = null }
