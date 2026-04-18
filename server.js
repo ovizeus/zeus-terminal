@@ -1087,10 +1087,12 @@ wss.on('connection', (ws, req) => {
     const jwt = require('jsonwebtoken');
     user = jwt.verify(token, config.jwtSecret || authRoutes.JWT_SECRET, { algorithms: ['HS256'] });
     if (!user || !user.id) { ws.close(4001, 'unauthorized'); return; }
-    // Verify token_version (session invalidation on password change)
-    if (user.tokenVersion != null) {
+    // Verify user status + token_version (session invalidation on password change).
+    // Use ?? 0 on both sides so legacy tokens without tokenVersion claim fail against
+    // DB default (1), forcing re-login instead of silently bypassing the check.
+    {
       const fresh = db.findUserById(user.id);
-      if (!fresh || fresh.status !== 'active' || (fresh.token_version != null && user.tokenVersion !== fresh.token_version)) {
+      if (!fresh || fresh.status !== 'active' || (user.tokenVersion ?? 0) !== (fresh.token_version ?? 0)) {
         ws.close(4001, 'session expired'); return;
       }
     }

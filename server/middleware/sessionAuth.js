@@ -120,8 +120,10 @@ function createSessionAuth(jwtSecret) {
                         if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Account suspended' });
                         return res.redirect('/login.html');
                     }
-                    // Reject tokens issued before password change
-                    if (decoded.tokenVersion != null && fresh.token_version != null && decoded.tokenVersion !== fresh.token_version) {
+                    // Reject tokens issued before password change.
+                    // Use ?? 0 so legacy tokens without tokenVersion claim fail against
+                    // DB default (1), forcing re-login instead of silently bypassing.
+                    if ((decoded.tokenVersion ?? 0) !== (fresh.token_version ?? 0)) {
                         res.clearCookie('zeus_token', { path: '/' });
                         if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired. Please log in again.' });
                         return res.redirect('/login.html');
