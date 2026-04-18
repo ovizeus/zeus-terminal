@@ -100,11 +100,17 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
     // sendBeacon endpoints can't set custom headers — validate Origin instead [S3B1-T2]
+    // [batch2-M2] Reject absent Origin too. Modern browsers always set Origin on POST
+    // (fetch/sendBeacon/form); absent-Origin POSTs only come from non-browser or
+    // pre-2017 clients with no cookies, so they can't carry a valid session anyway.
     if (req.path === '/api/client-error' || req.path === '/api/sync/state' || req.path === '/api/sync/user-context') {
       var origin = req.headers['origin'] || '';
-      var allowed = config.allowedOrigins || ['https://' + (req.headers['host'] || '')];
-      // Accept same-origin (Origin matches host) or absent Origin (same-site navigation)
-      if (origin && !allowed.some(function (a) { return origin === a; }) && origin !== 'https://' + req.headers['host'] && origin !== 'http://' + req.headers['host']) {
+      var host = req.headers['host'] || '';
+      var allowed = config.allowedOrigins || ['https://' + host];
+      if (!origin) {
+        return res.status(403).json({ error: 'Forbidden — origin required' });
+      }
+      if (!allowed.some(function (a) { return origin === a; }) && origin !== 'https://' + host && origin !== 'http://' + host) {
         return res.status(403).json({ error: 'Forbidden — origin mismatch' });
       }
       return next();
