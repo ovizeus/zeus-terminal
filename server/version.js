@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.6.23',
-    build: 55,
-    date: '2026-04-14',
-    changelog: 'Brain mode persistence + DSL IV% final fix: (1) Brain mode (ASSIST/AUTO) now survives page refresh — _applyModeSwitch pushes to server via _usScheduleSave and _usApply restores S.mode from USER_SETTINGS.bmMode on boot (including radio-button state). Previously the save path existed but the apply path was missing so mode always reset to assist after F5. (2) Removed the residual IV>PR cross-field clamp inside _dslSanitizeParams on the client — it was re-running every DSL tick and silently rewriting pos.dslParams.impulseVPct back above pivotRightPct, undoing any user IV edit. Server-side serverDSL already dropped this clamp (DSL-SEMANTIC-FIX comment); client is now aligned so user-entered IV% survives ticks, Let AI Control, and page refresh.'
+    version: '1.6.24',
+    build: 1,
+    date: '2026-04-18',
+    changelog: 'QM cluster (BUG5.3/5.4/5.5): (1) QuantMonitor shipped in the main bundle instead of a code-split chunk — eliminates the dynamic chunk 404 class caused by stale Service Workers. (2) Paint isolation on #qm-screen (contain:layout paint style + translateZ + willChange:contents + removed redundant parent textShadow + vignette alpha 0.03→0.015) kills the whole-screen green "flashlight flash" during the 500ms innerHTML swap. (3) Liquidation map switched from synthetic bracket-MMR model (OI × weight × price) to real 24h-rolling aggregation from Binance+Bybit (w.S.llvBuckets via forceOrder@arr) + OKX (QM.liqAgg.okx via liquidation-orders WS). Display extended from 60 to 102 levels across 3 resolution zones — 0.25% near price, 0.5% mid, 1% far — with variable-window bucket summing. Sub-1% distance column shows 2 decimals.'
 };
