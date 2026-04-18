@@ -233,10 +233,10 @@ export function AutoTradePanel() {
           {/* Risk Gauges */}
           <div style={{ fontSize: '6px', letterSpacing: '2px', color: '#1a0830', padding: '4px 10px 0' }}>RISK MATRIX</div>
           {[
-            { label: 'VOLATILITY', id: 'vol' },
-            { label: 'POSITION RISK', id: 'pos' },
+            { label: 'VOLATILITATE', id: 'vol' },
+            { label: 'RISC POZITII', id: 'pos' },
             { label: 'SENTIMENT', id: 'sent' },
-            { label: 'CONFLUENCE', id: 'conf' },
+            { label: 'CONFLUENTA', id: 'conf' },
           ].map((g, i) => (
             <div className="risk-gauge" key={g.id} style={i === 3 ? { borderTop: 'none', paddingBottom: '6px' } : undefined}>
               <div className="risk-label">{g.label}</div>

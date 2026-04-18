@@ -1916,7 +1916,7 @@ export function renderBrainCockpit(): void {
   let reasonCls = 'wait'
   if (BM.protectMode) { topReason = `AUTO BLOCKED: ${BM.protectReason}`; reasonCls = 'block' }
   else if (getATKillTriggered()) { topReason = 'AUTO BLOCKED: Kill switch active'; reasonCls = 'block' }
-  else if (!safety.news) { topReason = 'AUTO BLOCKED: NewsRisk HIGH → prea periculos'; reasonCls = 'block' }
+  else if (!safety.news) { topReason = 'AUTO BLOCKED: NewsRisk HIGH → too dangerous'; reasonCls = 'block' }
   else if (!safety.regime) { topReason = 'AUTO WAIT: Regime unstable (not locked 3 closes)'; reasonCls = 'wait' }
   else if (!safety.cooldown) { topReason = `AUTO WAIT: Cooldown ${cdLeft}m remaining (${prof})`; reasonCls = 'wait' }
   else if (!safety.session) { topReason = 'AUTO WAIT: Session OFF — unfavorable hour'; reasonCls = 'wait' }

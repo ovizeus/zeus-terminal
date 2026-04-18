@@ -299,7 +299,7 @@ export function _srEnsureVisible() {
             } else {
               mi.appendChild(srSec)
             }
-            console.log('[SR] Fallback: sr-sec repositionat dupa AUB')
+            console.log('[SR] Fallback: sr-sec repositioned after AUB')
           }
         }
       }

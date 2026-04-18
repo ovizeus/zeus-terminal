@@ -529,7 +529,7 @@ export function _devEnsureVisible(): void {
           } else {
             mi.appendChild(devSec)
           }
-          console.log('[DEV] Fallback: dev-sec repositioned after deepdive-sec')
+          console.log('[DEV] Fallback: dev-sec repositionat dupa deepdive-sec')
         }
       }
     }

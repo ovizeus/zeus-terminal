@@ -1059,7 +1059,7 @@ export const ZState = (() => {
             if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
           }, 600)
         } else {
-          useATStore.getState().patchUI({ status: { icon: null, text: '\u23F9 AT oprit \u2014 mod schimbat la ' + state.mode.toUpperCase(), action: null } })
+          useATStore.getState().patchUI({ status: { icon: null, text: '\u23F9 AT paused \u2014 mode switched to ' + state.mode.toUpperCase(), action: null } })
           atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
         }
       }
