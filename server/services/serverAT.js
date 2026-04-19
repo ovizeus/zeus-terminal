@@ -2837,6 +2837,48 @@ async function _runReconciliation(isStartup) {
                 }
             }
 
+            // [Bug#3 STEP 3] Multi-seq collision reconciliation — if multiple OPEN
+            // server seqs claim the same (symbol, side), Binance (ONE-WAY mode) holds
+            // only ONE merged position. Without this pass, the per-seq check below
+            // sees bpos matching for all seqs, leaves them all OPEN; the extra seqs
+            // become phantoms that re-appear in Manual after the primary seq closes
+            // (exact symptom of Bug#3). Consolidate: keep earliest seq, close the
+            // rest with reason='RECON_PHANTOM_MERGED_DUP' at entry price, pnl=0.
+            const _bySymSide = new Map();
+            for (const _p of userLivePositions) {
+                const _k = _p.symbol + '_' + _p.side;
+                if (!_bySymSide.has(_k)) _bySymSide.set(_k, []);
+                _bySymSide.get(_k).push(_p);
+            }
+            const _keepSeqs = new Set();
+            for (const [, group] of _bySymSide) {
+                if (group.length === 1) { _keepSeqs.add(group[0].seq); continue; }
+                group.sort((a, b) => a.seq - b.seq);
+                _keepSeqs.add(group[0].seq);
+                for (let j = 1; j < group.length; j++) {
+                    const dup = group[j];
+                    const dupIdx = _positions.findIndex(pp => pp.seq === dup.seq && pp.userId === userId);
+                    if (dupIdx < 0) continue;
+                    const _gk = `${userId}:${dup.seq}`;
+                    if (_closingGuard.has(_gk)) continue;
+                    _closingGuard.set(_gk, Date.now());
+                    try {
+                        logger.warn(label, `[${dup.seq}] PHANTOM-MERGED-DUP uid=${userId}: ${dup.side} ${dup.symbol} (keeping seq=${group[0].seq})`);
+                        _closePosition(dupIdx, dup, 'RECON_PHANTOM_MERGED_DUP', dup.price, 0);
+                        telegram.sendToUser(userId, `🔧 *RECON: Phantom Duplicate Closed*\n${dup.side} ${dup.symbol} seq=${dup.seq}\nDuplicate server record for a single exchange position — kept seq=${group[0].seq}.`);
+                        audit.record('SAT_RECON_PHANTOM_MERGED_DUP', { seq: dup.seq, keepSeq: group[0].seq, symbol: dup.symbol, side: dup.side, userId }, 'SERVER_AT');
+                    } finally {
+                        setTimeout(() => _closingGuard.delete(_gk), 5000);
+                    }
+                }
+            }
+            // Drop consolidated duplicates from the per-seq list so the phantom check
+            // below does not revisit positions we already closed in this cycle.
+            for (let i = userLivePositions.length - 1; i >= 0; i--) {
+                if (!_keepSeqs.has(userLivePositions[i].seq)) userLivePositions.splice(i, 1);
+            }
+            if (_bySymSide.size !== userLivePositions.length) _notifyChange(userId);
+
             // 2. Check each server live position against Binance
             for (let i = userLivePositions.length - 1; i >= 0; i--) {
                 const pos = userLivePositions[i];
