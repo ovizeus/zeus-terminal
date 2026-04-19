@@ -112,6 +112,16 @@ export async function startApp(): Promise<void> {
       })
       .catch(() => { try { w.loadUserSettings() } catch (_) { } })
   } catch (_) { try { w.loadUserSettings() } catch (_) { } }
+  // [Phase 8A4] ARES server-first boot: mirror the settings load above so the
+  // ARES store hydrates from server at the same boot point instead of waiting
+  // for useServerSync's 8s-delayed pull. Without this, ARES renders stale LS
+  // values during the 0–8s window. Errors swallowed — useServerSync runs a
+  // second load at t=8s as safety net.
+  try {
+    import('../stores/aresStore').then(({ useAresStore }) => {
+      useAresStore.getState().loadFromServer()
+    }).catch(() => { })
+  } catch (_) { /* defensive */ }
   w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
   setTimeout(runHealthChecks, 700)
