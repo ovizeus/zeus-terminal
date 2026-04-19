@@ -35,6 +35,29 @@ export function Header() {
           w.AT.enabled = false
         }
         if (w.S) w.S.mode = 'assist'
+        // [Phase 8A3] Reset legacy window.TP fields in-place. Imported references
+        // (state.ts exports TP; many modules hold the same object) stay valid but
+        // contents no longer show the previous user's balance/positions during
+        // any render cycle that fires before the navigation to /login.html.
+        if (w.TP) {
+          w.TP.demoOpen = false
+          w.TP.liveOpen = false
+          w.TP.demoSide = 'LONG'
+          w.TP.liveSide = 'LONG'
+          w.TP.demoBalance = 10000
+          w.TP.demoPnL = 0
+          w.TP.demoWins = 0
+          w.TP.demoLosses = 0
+          w.TP.demoPositions = []
+          w.TP.livePositions = []
+          w.TP.pendingOrders = []
+          w.TP.manualLivePending = []
+          w.TP.liveConnected = false
+          w.TP.liveExchange = 'binance'
+          w.TP.liveBalance = 0
+          w.TP.liveAvailableBalance = 0
+          w.TP.liveUnrealizedPnL = 0
+        }
       } catch {}
       // [ZT-AUD-C4] Wipe per-user client storage so the next user on this
       // browser cannot see cached settings, ARES state, positions, or skip
