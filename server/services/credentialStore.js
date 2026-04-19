@@ -42,7 +42,13 @@ function getExchangeCreds(userId) {
         if (!apiKey || !apiSecret) return null;
 
         const exchange = account.exchange || 'binance';
-        const mode = account.mode === 'testnet' ? 'testnet' : 'live';
+        // [Hotfix] Strict mode whitelist — invalid mode is NEVER coerced to 'live'.
+        // Reason: Zeus must not assume REAL/LIVE when truth is uncertain.
+        const mode = account.mode;
+        if (mode !== 'testnet' && mode !== 'live') {
+            console.error('[CRED] Invalid mode for user', userId, 'exchange', exchange, ': received', JSON.stringify(mode));
+            return null;
+        }
         const baseUrl = _resolveBaseUrl(exchange, mode);
         if (!baseUrl) {
             console.error('[CRED] Unknown exchange in active row for user', userId, ':', exchange);
