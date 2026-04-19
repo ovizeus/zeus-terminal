@@ -987,12 +987,22 @@ export const ZState = (() => {
         serverATDemo = _excludeRecentlyClosed(_rawFiltered.map(_mapServerPos))
         serverATLive = _excludeRecentlyClosed(_filterOpen(state.livePositions).map(_mapServerPos))
         w._lastServerPositions = (state.livePositions || []).concat(state.demoPositions || [])
+        // [P5A CLIENT AT UPDATE] Cache write via split arrays path.
+        try {
+          const _liveKeys = (state.livePositions || []).map((p: any) => `${p.symbol || p.sym}/${p.side}/autoTrade=${p.autoTrade}/src=${p.sourceMode || '?'}/live=${p.live ? p.live.status : 'none'}`)
+          console.log(`[P5A CLIENT AT UPDATE] split-path cache written live=${(state.livePositions||[]).length} demo=${(state.demoPositions||[]).length} liveKeys=[${_liveKeys.join(' | ')}] execEnv=${(w as any)._executionEnv || 'n/a'} atMode=${(state as any).mode} ts=${Date.now()}`)
+        } catch (_) {}
       } else {
         const serverPosns = _filterOpen(state.positions)
         const mapped = serverPosns.map(_mapServerPos)
         serverATDemo = _excludeRecentlyClosed(mapped.filter(function (p: any) { return p.mode !== 'live' }))
         serverATLive = _excludeRecentlyClosed(mapped.filter(function (p: any) { return p.mode === 'live' }))
         w._lastServerPositions = state.positions || []
+        // [P5A CLIENT AT UPDATE] Cache write via fallback positions-only path (NO split arrays — weaker signal).
+        try {
+          const _allKeys = (state.positions || []).map((p: any) => `${p.symbol || p.sym}/${p.side}/mode=${p.mode}/autoTrade=${p.autoTrade}/src=${p.sourceMode || '?'}`)
+          console.log(`[P5A CLIENT AT UPDATE] fallback-path cache written total=${(state.positions||[]).length} keys=[${_allKeys.join(' | ')}] execEnv=${(w as any)._executionEnv || 'n/a'} atMode=${(state as any).mode} ts=${Date.now()}`)
+        } catch (_) {}
       }
       const _serverDemoIds = new Set<string>()
       serverATDemo.forEach(function (p: any) { _serverDemoIds.add(String(p.id)); if (p._serverSeq) _serverDemoIds.add(String(p._serverSeq)) })

@@ -1667,11 +1667,23 @@ export function renderATPositions(): void {
   // [Phase 3C] Render filter reads store truth (single source), not AT._serverMode mirror.
   // AT._serverMode is kept in sync via a useATStore subscriber (state.ts boot).
   const _globalMode = (useATStore.getState().mode || 'demo')
-  const autoPosns = [
-    ...(TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed),
-    ...(TP.livePositions || []).filter((p: any) => p.autoTrade && !p.closed && p.status !== 'closing'),
-  ].filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
-   .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
+  const _atStep1Demo = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
+  const _atStep1Live = (TP.livePositions || []).filter((p: any) => p.autoTrade && !p.closed && p.status !== 'closing')
+  const autoPosns = [..._atStep1Demo, ..._atStep1Live]
+    .filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
+    .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
+  // [P5A AT RENDER FILTER] Gate on window.P5A_RENDER — this runs at 2/s, default-off avoids spam.
+  // Flip via devtools: window.P5A_RENDER = true
+  if ((w as any).P5A_RENDER === true) {
+    try {
+      const _tpLive = (TP.livePositions || [])
+      const _liveAutoTrue = _tpLive.filter((p: any) => !!p.autoTrade).length
+      const _liveClosing = _tpLive.filter((p: any) => p.status === 'closing').length
+      const _liveModeMismatch = _tpLive.filter((p: any) => !!p.autoTrade && !p.closed && p.status !== 'closing' && (p.mode || p._serverMode || 'demo') !== _globalMode).length
+      const _liveKeys = _tpLive.map((p: any) => `${p.sym}/${p.side}/aT=${p.autoTrade}/src=${p.sourceMode || '?'}/mode=${p.mode || '?'}/st=${p.status || '?'}`)
+      console.log(`[P5A AT RENDER FILTER] globalMode=${_globalMode} tpLive=${_tpLive.length} liveAutoTrue=${_liveAutoTrue} liveClosing=${_liveClosing} modeMismatch=${_liveModeMismatch} rendered=${autoPosns.length} keys=[${_liveKeys.join(' | ')}] ts=${Date.now()}`)
+    } catch (_) {}
+  }
   _atUI({ posCountText: autoPosns.length + ' position' + (autoPosns.length === 1 ? '' : 's') })
   if (!autoPosns.length) {
     panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">No auto position open</div>'

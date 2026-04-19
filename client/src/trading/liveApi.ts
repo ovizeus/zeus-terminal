@@ -242,6 +242,10 @@ export async function liveApiSyncState(): Promise<any> {
         fresh.controlMode = _reclassified ? 'auto' : (existing.controlMode || 'auto')
         fresh.brainModeAtOpen = _reclassified ? 'auto' : (existing.brainModeAtOpen || 'auto')
         fresh.sourceMode = _reclassified ? 'auto' : (existing.sourceMode || (existing.autoTrade ? 'auto' : 'paper'))
+        // [P5A CLIENT LIVEAPI CLASSIFY] Existing-match tracepoint — log only on upward reclassify to reduce noise.
+        if (_reclassified) {
+          try { console.log(`[P5A CLIENT LIVEAPI CLASSIFY] RECLASSIFY-UP sym=${p.symbol} side=${p.side} wasAutoTrade=${existing.autoTrade} → autoTrade=true sourceMode=auto ts=${Date.now()}`) } catch (_) {}
+        }
         fresh.sl = existing.sl || null
         fresh.tp = existing.tp || null
         fresh.tpPnl = existing.tpPnl || 0
@@ -269,21 +273,29 @@ export async function liveApiSyncState(): Promise<any> {
       } else {
         // New position from exchange
         var _isServerAT = false
+        var _cacheLen = Array.isArray(w._lastServerPositions) ? w._lastServerPositions.length : -1
         if (Array.isArray(w._lastServerPositions)) {
           _isServerAT = w._lastServerPositions.some(function(sp: any) {
             return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false
           })
         }
+        var _tpMatchFound = false
         if (!_isServerAT && Array.isArray(w.TP.livePositions)) {
           var _tpMatch = w.TP.livePositions.find(function(tp: any) {
             return tp.sym === p.symbol && tp.side === p.side && !tp.closed
           })
-          if (_tpMatch && _tpMatch.autoTrade) _isServerAT = true
+          if (_tpMatch && _tpMatch.autoTrade) { _isServerAT = true; _tpMatchFound = true }
         }
         fresh.autoTrade = _isServerAT
         fresh.controlMode = _isServerAT ? 'auto' : 'user'
         fresh.brainModeAtOpen = _isServerAT ? 'auto' : 'user'
         fresh.sourceMode = _isServerAT ? 'auto' : 'paper'
+        // [P5A CLIENT LIVEAPI CLASSIFY] New-from-exchange tracepoint.
+        // Confirms hypothesis #1: if _cacheLen is 0 and _tpMatchFound is false when a real AT position
+        // appears here, it leaks to Manual because default is sourceMode='paper', autoTrade=false.
+        try {
+          console.log(`[P5A CLIENT LIVEAPI CLASSIFY] NEW sym=${p.symbol} side=${p.side} cacheLen=${_cacheLen} isServerAT=${_isServerAT} tpMatchFound=${_tpMatchFound} → autoTrade=${fresh.autoTrade} sourceMode=${fresh.sourceMode} ts=${Date.now()}`)
+        } catch (_) {}
         fresh.sl = null
         fresh.tp = null
         fresh.tpPnl = 0

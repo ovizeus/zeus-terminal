@@ -669,6 +669,13 @@ function processBrainDecision(decision, stc, userId) {
     us.stats.entries++;
     if (entry.mode !== 'live') us.demoStats.entries++;
 
+    // [P5A SERVER LIVE OWNERSHIP] Push tracepoint — captures ownership + live state at insert moment.
+    // Used to confirm race hypothesis #1/#2: position is in _positions but not yet in getLivePositions
+    // result until _livePending=true (set sync in _executeLiveEntry) or entry.live.status hits LIVE/LIVE_NO_SL.
+    if (entry.mode === 'live') {
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] PUSH seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} side=${entry.side} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} _livePending=${entry._livePending} live=${entry.live ? entry.live.status : 'undefined'} ts=${Date.now()}`);
+    }
+
     // ── Attach DSL (skipped when DSL engine is OFF for this user) ──
     if (entry.dslParams) {
         serverDSL.attach(entry, entry.dslParams);
@@ -757,6 +764,9 @@ async function _placeConditionalOrder(params, creds) {
 // ══════════════════════════════════════════════════════════════════
 async function _executeLiveEntry(entry, stc) {
     entry._livePending = true; // [TL-04] Lock position from onPriceUpdate exits
+    // [P5A SERVER LIVE OWNERSHIP] _livePending true transition — this is what getLivePositions() relies on
+    // to keep the position visible BEFORE entry.live.status is set at line ~1146.
+    logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] _livePending=true seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} live=${entry.live ? entry.live.status : 'undefined'} ts=${Date.now()}`);
     const _lockKey = entry.userId + ':' + entry.symbol;
     if (_liveEntryLocks.has(_lockKey)) {
         logger.warn('AT_LIVE', `[${entry.seq}] Live entry SKIPPED uid=${entry.userId} ${entry.symbol} — another entry in-flight`);
@@ -1149,6 +1159,8 @@ async function _executeLiveEntry(entry, stc) {
         tpOrderId: tpOrder ? tpOrder.orderId : null,
         slPlaced: !!slOrder, tpPlaced: !!tpOrder,
     };
+    // [P5A SERVER LIVE OWNERSHIP] live.status set — confirms fill path and ownership stays AT.
+    logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] live.status=${entry.live.status} seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} ts=${Date.now()}`);
 
     // CRITICAL: If SL still failed after retries AND emergency close also failed
     if (!slOrder) {
@@ -1166,6 +1178,8 @@ async function _executeLiveEntry(entry, stc) {
     _persistState(userId);
     } finally {
         entry._livePending = false; // [TL-04] Unlock — all paths covered
+        // [P5A SERVER LIVE OWNERSHIP] _livePending false transition — final state after exchange roundtrip.
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] _livePending=false seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} live=${entry.live ? entry.live.status : 'undefined'} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} ts=${Date.now()}`);
         _liveEntryLocks.delete(_lockKey); // Release per-symbol lock
 
         // [B18] FILL_UNVERIFIED: keep tracked — order may be filled on Binance
@@ -1934,12 +1948,21 @@ function getLiveStats(userId) {
 function getLivePositions(userId) {
     // [DSL-FIX2] Include LIVE_NO_SL positions (so user can see them) + attach DSL state
     // [AT-PANEL] Also include _livePending positions so client sees them before exchange fill
-    return _positions
-        .filter(p => p.userId === userId && p.mode === 'live' && (
+    const allLiveForUser = _positions.filter(p => p.userId === userId && p.mode === 'live');
+    const visible = allLiveForUser.filter(p => (
+        (p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL')) ||
+        p._livePending === true
+    ));
+    // [P5A SERVER LIVE OWNERSHIP] Filter tracepoint — only log when something is hidden (signal > noise).
+    // Confirms hypothesis #2: AT live positions may be filtered out between push and live.status set.
+    if (allLiveForUser.length !== visible.length) {
+        const hidden = allLiveForUser.filter(p => !(
             (p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL')) ||
             p._livePending === true
-        ))
-        .map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
+        )).map(p => `seq=${p.seq}/${p.symbol}/${p.side}/autoTrade=${p.autoTrade}/live=${p.live ? p.live.status : 'undef'}/pending=${p._livePending}`);
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] getLivePositions uid=${userId} visible=${visible.length}/${allLiveForUser.length} hidden=[${hidden.join(' | ')}] ts=${Date.now()}`);
+    }
+    return visible.map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
 }
 
 function getDemoBalance(userId) {
