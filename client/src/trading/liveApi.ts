@@ -286,15 +286,17 @@ export async function liveApiSyncState(): Promise<any> {
           })
           if (_tpMatch && _tpMatch.autoTrade) { _isServerAT = true; _tpMatchFound = true }
         }
-        fresh.autoTrade = _isServerAT
-        fresh.controlMode = _isServerAT ? 'auto' : 'user'
-        fresh.brainModeAtOpen = _isServerAT ? 'auto' : 'user'
-        fresh.sourceMode = _isServerAT ? 'auto' : 'paper'
-        // [P5A CLIENT LIVEAPI CLASSIFY] New-from-exchange tracepoint.
-        // Confirms hypothesis #1: if _cacheLen is 0 and _tpMatchFound is false when a real AT position
-        // appears here, it leaks to Manual because default is sourceMode='paper', autoTrade=false.
+        // [Phase 5C] Safe-unknown — when no server AT evidence AND no TP match, do NOT default to manual/paper.
+        // Prior behavior (autoTrade=false, sourceMode='paper') caused AT-owned positions to leak to Manual
+        // panel during the race window before _lastServerPositions arrived. Unknown is excluded from BOTH
+        // panels (Manual filter requires autoTrade===false || sourceMode==='manual'|'paper'; AT filter
+        // requires truthy autoTrade) — upward reclassification happens once server snapshot arrives.
+        fresh.autoTrade = _isServerAT ? true : null
+        fresh.controlMode = _isServerAT ? 'auto' : 'unknown'
+        fresh.brainModeAtOpen = _isServerAT ? 'auto' : 'unknown'
+        fresh.sourceMode = _isServerAT ? 'auto' : 'unknown'
         try {
-          console.log(`[P5A CLIENT LIVEAPI CLASSIFY] NEW sym=${p.symbol} side=${p.side} cacheLen=${_cacheLen} isServerAT=${_isServerAT} tpMatchFound=${_tpMatchFound} → autoTrade=${fresh.autoTrade} sourceMode=${fresh.sourceMode} ts=${Date.now()}`)
+          console.log(`[P5C CLIENT LIVEAPI CLASSIFY] NEW sym=${p.symbol} side=${p.side} cacheLen=${_cacheLen} isServerAT=${_isServerAT} tpMatchFound=${_tpMatchFound} → autoTrade=${fresh.autoTrade} sourceMode=${fresh.sourceMode} ts=${Date.now()}`)
         } catch (_) {}
         fresh.sl = null
         fresh.tp = null
