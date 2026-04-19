@@ -450,10 +450,14 @@ async function preLiveChecklist(userId) {
     const checks = [];
     let allOk = true;
 
+    // [Phase 2B] Canonical execution env gates non-demo. Stable `code` field
+    // surfaces the reason without changing existing name/ok/detail contract.
+    const execEnv = _resolveExecutionEnv(userId);
+
     // 1. Exchange credentials exist
     const creds = getExchangeCreds(userId);
     if (!creds) {
-        checks.push({ name: 'API_KEYS', ok: false, detail: 'No exchange credentials configured' });
+        checks.push({ name: 'API_KEYS', ok: false, detail: 'No exchange credentials configured', code: execEnv.blockedReason });
         allOk = false;
     } else {
         checks.push({ name: 'API_KEYS', ok: true, detail: 'Credentials found' });
@@ -1957,6 +1961,32 @@ function getDemoPositions(userId) {
         .map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
 }
 
+// [Phase 2B] Canonical server-side execution env resolver.
+// Single source of truth — never assumes REAL when truth is uncertain.
+//   demo               → { env: 'DEMO',    blockedReason: null }
+//   non-demo + valid creds (testnet)  → { env: 'TESTNET', blockedReason: null }
+//   non-demo + valid creds (live)     → { env: 'REAL',    blockedReason: null }
+//   non-demo + no row                 → { env: null, blockedReason: 'NO_ACTIVE_API_CREDENTIALS' }
+//   non-demo + row exists but invalid → { env: null, blockedReason: 'INVALID_ACTIVE_API_CONFIGURATION' }
+function _resolveExecutionEnv(userId) {
+    const us = _uState(userId);
+    if (us.engineMode === 'demo') {
+        return { env: 'DEMO', blockedReason: null };
+    }
+    const creds = getExchangeCreds(userId);
+    if (creds) {
+        // creds.mode is strictly 'testnet' or 'live' (enforced by credentialStore hotfix).
+        return { env: creds.mode === 'testnet' ? 'TESTNET' : 'REAL', blockedReason: null };
+    }
+    // No valid creds. Distinguish "no row" vs "row present but invalid".
+    let reason = 'NO_ACTIVE_API_CREDENTIALS';
+    try {
+        const account = db.getExchangeAccount(userId);
+        if (account) reason = 'INVALID_ACTIVE_API_CONFIGURATION';
+    } catch (_) { /* db read failure → keep NO_ACTIVE_API_CREDENTIALS (safe default) */ }
+    return { env: null, blockedReason: reason };
+}
+
 /** Full state snapshot for API/WebSocket consumers (per-user) */
 function getFullState(userId) {
     // [M2] Lazy UTC day rollover — ensures kill switch reset propagates to clients
@@ -1967,6 +1997,10 @@ function getFullState(userId) {
     const exchangeMode = creds ? (creds.mode || 'live') : null;
     // [Phase 2A] Canonical active exchange — additive field. null when no creds.
     const activeExchange = creds ? (creds.exchange || null) : null;
+    // [Phase 2B] Canonical execution env (server truth) + stable blocked reason.
+    const execEnv = _resolveExecutionEnv(userId);
+    // [Compat] resolvedEnv preserved as-is (legacy 'REAL' fallback). Aligning it
+    // to executionEnv would change client contract — deferred to a future client phase.
     const resolvedEnv = us.engineMode === 'demo' ? 'DEMO'
         : (exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
     // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
@@ -1979,8 +2013,10 @@ function getFullState(userId) {
         serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
         apiConfigured: !!creds,
         exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
-        resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'
+        resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'  (legacy; may falsely say REAL when no creds — use executionEnv for truth)
         activeExchange: activeExchange,    // [Phase 2A] 'binance' | 'bybit' | null
+        executionEnv: execEnv.env,         // [Phase 2B] 'DEMO' | 'TESTNET' | 'REAL' | null  (canonical server truth)
+        executionBlockedReason: execEnv.blockedReason, // [Phase 2B] 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
         positions: getOpenPositions(userId),
         demoPositions: getDemoPositions(userId),
         livePositions: getLivePositions(userId),
