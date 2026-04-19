@@ -232,11 +232,25 @@ export async function liveApiSyncState(): Promise<any> {
         }
         // Preserve runtime state from prior sync/open
         var _reclassified = false
+        // [Phase 8C1] Upward reclassify (manual → AT) must come from an
+        // UNAMBIGUOUS server signal. Previously "autoTrade !== false" matched
+        // positions whose autoTrade was undefined OR null, so a transient
+        // snapshot missing the field could bump a legitimate manual position
+        // onto the AT card for one tick and back. Require the strict form:
+        //   sp.autoTrade === true  AND  sourceMode in {auto, undefined}.
+        // Also require existing.openTs to be at least 3s old so a just-opened
+        // manual position isn't flipped before server classification settles.
         if (!existing.autoTrade && Array.isArray(w._lastServerPositions)) {
-          var _nowServerAT = w._lastServerPositions.some(function(sp: any) {
-            return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false
-          })
-          if (_nowServerAT) _reclassified = true
+          var _ageMs = existing.openTs ? (Date.now() - Number(existing.openTs)) : Infinity
+          if (_ageMs >= 3000) {
+            var _nowServerAT = w._lastServerPositions.some(function(sp: any) {
+              if (sp.symbol !== p.symbol || sp.side !== p.side) return false
+              if (sp.autoTrade !== true) return false
+              var _sm = sp.sourceMode
+              return _sm === 'auto' || _sm === undefined || _sm === null
+            })
+            if (_nowServerAT) _reclassified = true
+          }
         }
         fresh.autoTrade = _reclassified ? true : existing.autoTrade
         fresh.controlMode = _reclassified ? 'auto' : (existing.controlMode || 'auto')
