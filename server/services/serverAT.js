@@ -2166,12 +2166,22 @@ function registerManualPosition(userId, data) {
         return { ok: false, error: 'Missing required fields (symbol, side, entryPrice, qty)' };
     }
     const us = _uState(userId);
-    const seq = ++us.seq;
     const price = parseFloat(data.entryPrice);
     const qty = parseFloat(data.qty);
     const lev = parseInt(data.leverage, 10) || 1;
     const size = (lev > 0) ? (qty * price / lev) : (qty * price);
     const side = data.side === 'BUY' ? 'LONG' : (data.side === 'SELL' ? 'SHORT' : data.side);
+
+    // [Phase 9D1] Idempotency: if the client retries registration with the
+    // same clientReqId (e.g. transient network fail), fold onto the existing
+    // position instead of double-registering. Scoped per-user.
+    if (data.clientReqId) {
+        const prior = _positions.find(p => p.userId === userId && p._clientReqId === data.clientReqId);
+        if (prior) {
+            logger.info('AT_ENGINE', `[${prior.seq}] idempotent register hit clientReqId=${data.clientReqId} — returning existing seq`);
+            return { ok: true, seq: prior.seq, alreadyTracked: true };
+        }
+    }
 
     // Duplicate guard: only for LIVE (exchange merges same-side positions into one).
     // DEMO allows multiple independent manual positions on same (symbol, side) —
@@ -2181,10 +2191,12 @@ function registerManualPosition(userId, data) {
     if (mode === 'live') {
         const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side && p.mode === 'live');
         if (existing) {
-            logger.info('AT_ENGINE', `[${seq}] LIVE manual position already tracked as seq=${existing.seq} — skipping`);
+            logger.info('AT_ENGINE', `[${existing.seq}] LIVE manual position already tracked — skipping`);
             return { ok: true, seq: existing.seq, alreadyTracked: true };
         }
     }
+
+    const seq = ++us.seq;
 
     const sl = data.sl ? parseFloat(data.sl) : null;
     const tp = data.tp ? parseFloat(data.tp) : null;
@@ -2217,6 +2229,9 @@ function registerManualPosition(userId, data) {
         autoTrade: false,
         sourceMode: 'manual',
         controlMode: 'user',
+        // [Phase 9D1] Stamp idempotency token so a retry with the same token
+        // folds onto this entry instead of creating a duplicate.
+        _clientReqId: data.clientReqId || null,
         // DSL params: null = engine OFF (no DSL), object = user-provided, undefined = use defaults
         dslParams: _dslOff ? null : ((data.dslParams && typeof data.dslParams === 'object') ? data.dslParams : serverDSL.DSL_DEFAULTS),
         originalEntry: price,

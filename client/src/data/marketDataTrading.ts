@@ -277,34 +277,58 @@ function _executePlaceDemoOrder(): void {
 
 function _registerManualOnServer(pos: any): void {
   if (!pos || pos._serverSeq) return
-  const payload = { symbol: pos.sym, side: pos.side, entryPrice: pos.entry, qty: pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0), leverage: pos.lev || 1, sl: pos.sl || null, tp: pos.tp || null, mode: pos.mode || 'demo', dslParams: pos.dslParams || null }
+  // [Phase 9D1] clientReqId: idempotency token for the server dedup window.
+  // Two rapid clicks that somehow slip past the client-side lock would hit
+  // register-manual with distinct client ids but can share a reqId only if
+  // the caller reuses it — so we generate a fresh one per registration.
+  // The server stamps it onto the registered position so a second register
+  // attempt for the same logical order (retry after transient network fail)
+  // can be folded onto the existing seq.
+  if (!pos._clientReqId) pos._clientReqId = pos.id + '-' + Math.random().toString(36).slice(2, 8)
+  const payload = { symbol: pos.sym, side: pos.side, entryPrice: pos.entry, qty: pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0), leverage: pos.lev || 1, sl: pos.sl || null, tp: pos.tp || null, mode: pos.mode || 'demo', dslParams: pos.dslParams || null, clientReqId: pos._clientReqId }
   api.raw<any>('POST', '/api/at/register-manual', payload).then(function (d: any) { if (d.ok && d.seq) { pos._serverSeq = d.seq; if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save() } }).catch(function (err: any) { console.warn('[registerManualOnServer]', err.message || err) })
 }
 
+// [Phase 9D1] Demo manual-open click-lock — mirrors the live pattern.
+//   _demoOrderInFlight: synchronous re-entry guard, held for the full sync
+//     body of _executeDemoManualOrder. Prevents two handler invocations
+//     (back-to-back React event loop turns) from both pushing a pos into
+//     TP.demoPositions before the cooldown ts updates.
+//   _DEMO_ORDER_COOLDOWN_MS: post-complete cooldown. 1000ms is conservative
+//     for user intent; manual orders are not high-frequency.
 let _lastDemoOrderTs = 0
+let _demoOrderInFlight = false
+const _DEMO_ORDER_COOLDOWN_MS = 1000
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
+  // [Phase 9D1] Click-lock + cooldown gates — block before any work.
+  if (_demoOrderInFlight) { toast('Order already in progress', 2000, _ZI?.lock); return }
   const now = Date.now()
-  if (now - _lastDemoOrderTs < 1000) return
+  if (now - _lastDemoOrderTs < _DEMO_ORDER_COOLDOWN_MS) { toast('Order too fast — wait a moment', 2000, _ZI?.lock); return }
+  _demoOrderInFlight = true
   _lastDemoOrderTs = now
-  if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, _ZI.x); return }
-  if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { toast('Max 20 demo positions', 3000, _ZI?.x); return }
-  if (orderType === 'MARKET') {
-    const fillPrice = getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
-    const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
-    if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
-    TP.demoPositions.push(pos); TP.demoBalance -= size
-    usePositionsStore.getState().syncSnapshot({ demoPositions: TP.demoPositions, demoBalance: TP.demoBalance, source: 'bridge' })
-    w.updateDemoBalance(); renderDemoPositions()
-    if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
-    w.ZState.save(); _registerManualOnServer(pos)
-    try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
-    if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
-    toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
-  } else {
-    const pending = { id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
-    TP.pendingOrders.push(pending); TP.demoBalance -= size
-    w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
-    toast(' LIMIT ' + pending.side + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
+  try {
+    if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, _ZI.x); return }
+    if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { toast('Max 20 demo positions', 3000, _ZI?.x); return }
+    if (orderType === 'MARKET') {
+      const fillPrice = getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
+      const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
+      if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
+      TP.demoPositions.push(pos); TP.demoBalance -= size
+      usePositionsStore.getState().syncSnapshot({ demoPositions: TP.demoPositions, demoBalance: TP.demoBalance, source: 'bridge' })
+      w.updateDemoBalance(); renderDemoPositions()
+      if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
+      w.ZState.save(); _registerManualOnServer(pos)
+      try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
+      if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
+      toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
+    } else {
+      const pending = { id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
+      TP.pendingOrders.push(pending); TP.demoBalance -= size
+      w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
+      toast(' LIMIT ' + pending.side + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
+    }
+  } finally {
+    _demoOrderInFlight = false
   }
 }
 
