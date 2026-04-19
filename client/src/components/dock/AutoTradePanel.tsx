@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useATStore, useSettingsStore } from '../../stores'
+import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
 import { resetKillSwitch } from '../../trading/autotrade'
@@ -17,6 +17,11 @@ function toNum(s: string, fallback: number): number {
 export function AutoTradePanel() {
   const killTriggered = useATStore((s) => s.killTriggered)
   const ui = useATStore((s) => s.ui)
+  // [batch3-X b43] Env-aware warning text — server.resolvedEnv decides
+  // whether the live warning reads "REAL funds" or "TEST funds". Previously
+  // the JSX hardcoded "REAL funds on Binance" so TESTNET sessions saw a
+  // misleading warning.
+  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
   const [bextOpen, setBextOpen] = useState(false)
 
   // Numeric fields are held as STRINGS so the user can fully clear the input
@@ -439,7 +444,9 @@ export function AutoTradePanel() {
           <div className="live-at-warn">
             <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff8800' }}>
               <path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" />
-            </svg> <strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on Binance.
+            </svg> {resolvedEnv === 'TESTNET'
+              ? <><strong>TESTNET MODE ACTIVE:</strong> Auto trades will execute with TEST funds on Binance Testnet.</>
+              : <><strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on Binance.</>}
           </div>
         )}
 
