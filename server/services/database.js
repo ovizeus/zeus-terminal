@@ -426,6 +426,52 @@ migrate('024_regime_history_user_id', () => {
     db.exec("CREATE INDEX IF NOT EXISTS idx_regime_user ON regime_history(user_id)");
 });
 
+// [Phase 4B] Exchange single-active enforcement at the schema level.
+// Policy: at most ONE active exchange_accounts row per user (Binance XOR Bybit,
+// TESTNET XOR REAL). Route /api/exchange/save already rejects conflicts with
+// EXCHANGE_CONFLICT / ENV_CONFLICT, but we also enforce it at the DB level as
+// defense-in-depth so any future writer that bypasses the route cannot create
+// a split state.
+//
+// Reconciliation of legacy state: collapse any user with >1 active row by
+// keeping the most recently touched (updated_at DESC, id DESC) and marking
+// the rest inactive with status='disconnected_reconcile'.
+migrate('025_exchange_single_active', () => {
+    const _dupUsers = db.prepare(`
+        SELECT user_id, COUNT(*) AS n
+        FROM exchange_accounts
+        WHERE is_active = 1
+        GROUP BY user_id
+        HAVING n > 1
+    `).all();
+
+    let _collapsed = 0;
+    for (const _u of _dupUsers) {
+        const _rows = db.prepare(`
+            SELECT id FROM exchange_accounts
+            WHERE user_id = ? AND is_active = 1
+            ORDER BY datetime(updated_at) DESC, id DESC
+        `).all(_u.user_id);
+        const _keep = _rows[0].id;
+        const _loserIds = _rows.slice(1).map(r => r.id);
+        for (const _id of _loserIds) {
+            db.prepare(`
+                UPDATE exchange_accounts
+                SET is_active = 0,
+                    status = 'disconnected_reconcile',
+                    updated_at = datetime('now')
+                WHERE id = ?
+            `).run(_id);
+            _collapsed++;
+        }
+        console.log('[DB migration 025] user=' + _u.user_id + ' kept id=' + _keep + ' deactivated ids=[' + _loserIds.join(',') + ']');
+    }
+    if (_collapsed > 0) console.log('[DB migration 025] reconciled ' + _collapsed + ' legacy duplicate row(s)');
+
+    db.exec("DROP INDEX IF EXISTS idx_exchange_user_name");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_user_active_single ON exchange_accounts(user_id) WHERE is_active = 1");
+});
+
 // ─── User methods ───
 
 const _stmts = {
