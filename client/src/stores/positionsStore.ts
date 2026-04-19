@@ -94,6 +94,15 @@ interface PositionsStore {
    */
   applyDelta: (snapshot: PositionsSnapshot) => boolean
 
+  /**
+   * [Phase 8B5] Reset lastSnapshotTs to 0 so the next positions.changed
+   * snapshot is accepted regardless of its updated_at. Call on WS reconnect
+   * or when server state could have diverged (restart, clock rewind, etc.);
+   * the monotonic guard continues from the new baseline after the first
+   * accepted snapshot.
+   */
+  resetSnapshotTs: () => void
+
   /** [Phase 3B] Reset all state on logout. Wipes positions, balances, pending, journal. */
   reset: () => void
 }
@@ -198,6 +207,12 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   },
 
   applyDelta: (snapshot) => get().replaceAll(snapshot),
+
+  // [Phase 8B5] Reset snapshot watermark — used on WS reconnect so the first
+  // post-reconnect snapshot is always accepted, even if the server side's
+  // updated_at clock went backwards (rare: restart, time rewind). Subsequent
+  // snapshots continue monotonic dedup from that new baseline.
+  resetSnapshotTs: () => set({ lastSnapshotTs: 0 }),
 
   // [Phase 3B] Logout reset — clears per-user positions/balances/pending/journal to defaults.
   reset: () => set({

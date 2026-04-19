@@ -209,6 +209,12 @@ export function useServerSync(authenticated: boolean) {
             usePositionsStore.getState().setDemoBalance(bal.balance)
           }
         }).catch(() => {})
+        // [Phase 8B5] Reset lastSnapshotTs so the first post-reconnect
+        // positions.changed is accepted even if the server side's
+        // updated_at went backwards (rare but possible after a server
+        // restart or clock rewind). Monotonic dedup resumes from the new
+        // baseline as soon as that first snapshot applies.
+        usePositionsStore.getState().resetSnapshotTs()
       }
       useUiStore.getState().setConnected(true)
     })
