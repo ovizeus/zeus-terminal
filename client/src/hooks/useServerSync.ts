@@ -188,6 +188,16 @@ export function useServerSync(authenticated: boolean) {
         // position ownership fields (state.ts bridge merges positions with
         // autoTrade/sourceMode/controlMode/mode preserved via _mapServerPos).
         pullATState()
+        // [Phase 8A1] Also re-pull server settings and ARES on reconnect. Without this
+        // a stale client that missed settings.changed pushes during the disconnect
+        // window keeps rendering default values (e.g. LIVE appears to "revert to
+        // defaults" after a reconnect). Server is canonical — match boot behavior.
+        import('../stores/settingsStore').then(({ useSettingsStore }) => {
+          useSettingsStore.getState().loadFromServer()
+        }).catch(() => {})
+        import('../stores/aresStore').then(({ useAresStore }) => {
+          useAresStore.getState().loadFromServer()
+        }).catch(() => {})
       }
       useUiStore.getState().setConnected(true)
     })
