@@ -481,11 +481,14 @@ async function preLiveChecklist(userId) {
         }
     }
 
-    // [batch3-V] Only block switch if there are already positions in the NEW mode
-    // (live). Demo positions continue independently (per-position mode routing).
-    const liveOpen = _positions.filter(p => p.userId === userId && (p.mode || 'demo') === 'live').length;
-    checks.push({ name: 'NO_LIVE_POSITIONS', ok: liveOpen === 0, detail: liveOpen === 0 ? 'No live positions open' : `${liveOpen} live position(s) already open` });
-    if (liveOpen > 0) allOk = false;
+    // [Hotfix mode-switch] Removed legacy NO_LIVE_POSITIONS gate. Per the
+    // batch3-W per-position routing design (see setMode comments), engine-mode
+    // flips are a UI-routing concern, not a retag operation: existing live
+    // positions continue under live logic regardless of engine mode. Blocking
+    // re-entry to live when live positions exist is logically inverted — it
+    // locks the user out of managing their own open positions when they
+    // temporarily flip to demo and back. Env-compatibility gating, when
+    // needed, belongs at the credential-active layer, not here.
 
     // 4. Kill switch not active
     const us = _uState(userId);
