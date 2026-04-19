@@ -360,8 +360,46 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
       toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice) + ' ($' + fmt(_actualSize) + ')')
-      if (sl) { manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: _execQty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
-      if (tp) { manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: _execQty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
+      // [Phase 8C4] Parity with AT LIVE (autotrade.ts ~L1135–1162): 3x retry
+      // per SL and per TP with 1s backoff; on exhaustion mark pos._unprotected
+      // and raise a critical alert. Previously manual LIVE fired a single
+      // attempt and only toasted on failure — leaving a real position on the
+      // exchange without protection and no visible flag.
+      const _slTpSym = getSymbol()
+      const _slTpSide = TP.demoSide
+      const _slTpQty = _execQty.toFixed(8)
+      ;(async () => {
+        let _slOk = !sl, _tpOk = !tp
+        if (sl) {
+          for (let _r = 0; _r < 3 && !_slOk; _r++) {
+            try {
+              await manualLiveSetSL({ symbol: _slTpSym, side: _slTpSide, quantity: _slTpQty, stopPrice: sl })
+              _slOk = true
+            } catch (e: any) {
+              if (_r < 2) await new Promise(res => setTimeout(res, 1000))
+              else toast('SL failed after 3 retries: ' + (e.message || e))
+            }
+          }
+        }
+        if (tp) {
+          for (let _r = 0; _r < 3 && !_tpOk; _r++) {
+            try {
+              await manualLiveSetTP({ symbol: _slTpSym, side: _slTpSide, quantity: _slTpQty, stopPrice: tp })
+              _tpOk = true
+            } catch (e: any) {
+              if (_r < 2) await new Promise(res => setTimeout(res, 1000))
+              else toast('TP failed after 3 retries: ' + (e.message || e))
+            }
+          }
+        }
+        if (!_slOk || !_tpOk) {
+          pos._unprotected = true
+          pos._unprotectedReason = (!_slOk && !_tpOk) ? 'SL+TP failed' : !_slOk ? 'SL failed' : 'TP failed'
+          try { w.ncAdd && w.ncAdd('critical', 'alert', 'UNPROTECTED LIVE (manual): ' + _slTpSym + ' ' + _slTpSide + ' — ' + pos._unprotectedReason + '. Check exchange manually!') } catch (_) {}
+          toast(_slTpSym + ' MANUAL UNPROTECTED — ' + pos._unprotectedReason, 0, _ZI.siren)
+          try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
+        }
+      })()
       if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 1000)
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
