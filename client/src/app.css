@@ -3231,6 +3231,9 @@ body {
 .tp-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; font-size:15px; font-weight:700; letter-spacing:1.5px }
 .demo-hdr { background:linear-gradient(90deg,#001a2e,#002244); color:#00d4ff; border-bottom:1px solid #00aaff33 }
 .live-hdr { background:linear-gradient(90deg,#1a0000,#2a0000); color:#ff6666; border-bottom:1px solid #ff444433 }
+/* [Phase 3G] LOCKED header — orange palette signals non-demo blocked state. Distinct from
+ * live-hdr (red = active live) so user sees at a glance that the panel is not executing. */
+.locked-hdr { background:linear-gradient(90deg,#1a0f00,#2a1a00); color:#ffaa44; border-bottom:1px solid #ff880044 }
 .tp-body { padding:10px 12px; display:flex; flex-direction:column; gap:8px }
 .tp-sides { display:flex; gap:0; border-radius:4px; overflow:hidden }
 .tp-side-btn { flex:1; padding:10px; border:none; cursor:pointer; font-family:var(--ff); font-size:15px; font-weight:700; letter-spacing:1px; transition:.2s; opacity:.5 }
@@ -3249,6 +3252,10 @@ body {
 .tp-exec { width:100%; padding:11px; border:none; border-radius:4px; font-family:var(--ff); font-size:15px; font-weight:700; letter-spacing:2px; cursor:pointer; transition:.2s }
 .demo-exec { background:linear-gradient(90deg,#004488,#0066cc); color:#00ffff; box-shadow:0 0 10px #0066cc44 }
 .demo-exec:hover { background:linear-gradient(90deg,#0055aa,#0088ff); box-shadow:0 0 20px #0088ff66 }
+/* [Phase 3G] LOCKED PLACE button — orange, not-allowed cursor, dimmed. Same semantics as
+ * locked-hdr / zmb-btn-locked. Click still routed to placeDemoOrder which guards LOCKED. */
+.tp-exec-locked { background:linear-gradient(90deg,#2a1500,#4a2800); color:#ffaa44; box-shadow:0 0 8px #ff880044; cursor:not-allowed; opacity:0.75 }
+.tp-exec-locked:hover { background:linear-gradient(90deg,#2a1500,#4a2800); box-shadow:0 0 8px #ff880044 }
 .tp-pos-hdr { font-size:13px; letter-spacing:2px; color:var(--dim); border-top:1px solid var(--brd); padding-top:8px; margin-top:2px }
 .tp-pnl-row { display:flex; gap:0; border-top:1px solid var(--brd); padding-top:8px; margin-top:2px }
 .tp-pnl-cell { flex:1; text-align:center }
@@ -4862,9 +4869,14 @@ body {
 .zmb-btn-demo:active { background: rgba(170,68,255,0.18) }
 .zmb-btn-exit { background: rgba(90,110,130,0.08); border-color: rgba(90,110,130,0.3); color: var(--txt) }
 .zmb-btn-exit:active { background: rgba(90,110,130,0.18) }
+/* [Phase 3G] LOCKED state — orange tint matches .zmb-locked / .zmb-ind-locked chain. Signals
+ * "non-demo blocked" (executionEnv === null) clearly: distinct from demo-purple and real-red. */
+.zmb-btn-locked { background: rgba(255,136,0,0.08); border-color: rgba(255,136,0,0.4); color: var(--orange) }
+.zmb-btn-locked:active { background: rgba(255,136,0,0.18) }
 @media (hover: hover) {
   .zmb-btn-demo:hover { background: rgba(170,68,255,0.15); border-color: rgba(170,68,255,0.5) }
   .zmb-btn-exit:hover { background: rgba(90,110,130,0.15); border-color: rgba(90,110,130,0.5) }
+  .zmb-btn-locked:hover { background: rgba(255,136,0,0.18); border-color: rgba(255,136,0,0.6) }
 }
 @media (max-width: 360px) {
   .zeus-mode-bar { padding: 6px 10px }

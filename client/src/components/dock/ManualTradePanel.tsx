@@ -134,7 +134,7 @@ export function ManualTradePanel() {
       <div className="trade-line" />
     </div>
     <div className="trade-panel" id="panelDemo">
-      <div className={`tp-hdr ${isLiveMode ? 'live-hdr' : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+      <div className={`tp-hdr ${isLiveMode ? (envLabel === 'LOCKED' ? 'locked-hdr' : 'live-hdr') : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
         <span>{isLiveMode
           ? (envLabel === 'TESTNET' ? '\u25CF MANUAL TRADE (TESTNET)' : (envLabel === 'REAL' ? '\u25CF MANUAL TRADE (REAL)' : '\u26D4 MANUAL TRADE (LOCKED)'))
           : 'MANUAL TRADE'}</span>
@@ -242,7 +242,7 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className="tp-exec demo-exec" disabled={isPlacingLive} onClick={() => { if (isPlacingLive) return; if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
+        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive} onClick={() => { if (isPlacingLive) return; if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
           {(() => {
             if (isPlacingLive) return '\u23F3 PLACING\u2026'
             if (isLiveMode && envLabel === 'LOCKED') return '\uD83D\uDD12 PLACE ORDER (LIVE MODE LOCKED)'
