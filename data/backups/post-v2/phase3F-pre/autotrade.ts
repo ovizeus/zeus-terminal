@@ -1097,9 +1097,6 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
         _livePosPushed = true // [PATCH2 B2] mark: position now in array
         TP.liveBalance -= adaptFinalSize // [FIX BUG2] Optimistic balance deduction prevents duplicate trades
-        // [Phase 3F] Mirror optimistic deduction to React store so UI reflects change
-        // immediately. Server truth still reconciles via liveApiSyncState() at line ~1144.
-        { const _sPos = usePositionsStore.getState(); _sPos.setLiveBalance({ ..._sPos.liveBalance, totalBalance: TP.liveBalance }) }
         AT.lastTradeSide = side
         AT.lastTradeTs = Date.now()
         if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
@@ -1160,15 +1157,6 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           renderLivePositions()
         }
         atLog('warn', '[FAIL] LIVE ORDER FAILED: ' + (err.message || err))
-        // [Phase 3F] Reconcile balance + positions from server authority. Optimistic
-        // deduction at the entry path may or may not reflect exchange truth depending
-        // on where the error occurred. liveApiSyncState() pulls from server (single
-        // source of truth) and updates both TP.liveBalance and usePositionsStore —
-        // avoids up-to-120s stale window (normal livePosSync interval).
-        if (_livePosPushed && typeof liveApiSyncState === 'function') {
-          try { await liveApiSyncState() }
-          catch (_syncErr: any) { atLog('warn', '[WARN] Post-fail balance sync failed: ' + (_syncErr.message || _syncErr)) }
-        }
       } finally {
         AT._liveExecInFlight = false // [FIX C5] release guard
       }
