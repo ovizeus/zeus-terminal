@@ -158,11 +158,33 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
     const nextTs = Number(snapshot?.updated_at)
     if (!Number.isFinite(nextTs) || nextTs <= prevTs) return false
 
+    // [Phase 8B4] Resurrection guard — filter out positions whose id/seq was
+    // recently closed client-side. Without this, a positions.changed snapshot
+    // generated on the server before it processed the close (but delivered
+    // after with a newer updated_at) can re-introduce the closed position.
+    const w = window as unknown as {
+      _zeusRecentlyClosed?: Array<string | number>
+      _syncClosedIds?: Set<string>
+    }
+    const closedSet = new Set<string>()
+    if (Array.isArray(w._zeusRecentlyClosed)) {
+      for (const id of w._zeusRecentlyClosed) closedSet.add(String(id))
+    }
+    if (w._syncClosedIds && typeof w._syncClosedIds.forEach === 'function') {
+      w._syncClosedIds.forEach((id: string) => closedSet.add(String(id)))
+    }
+
     const all = Array.isArray(snapshot?.positions) ? snapshot.positions : []
     const nextDemo: Position[] = []
     const nextLive: Position[] = []
     for (const p of all) {
       if (!p || (p as Position & { closed?: boolean }).closed) continue
+      if (closedSet.size > 0) {
+        const _pAny = p as Position & { id?: unknown; _serverSeq?: unknown; seq?: unknown }
+        const _pid = _pAny.id !== undefined ? String(_pAny.id) : ''
+        const _pseq = _pAny._serverSeq !== undefined ? String(_pAny._serverSeq) : (_pAny.seq !== undefined ? String(_pAny.seq) : '')
+        if ((_pid && closedSet.has(_pid)) || (_pseq && closedSet.has(_pseq))) continue
+      }
       if ((p.mode || 'demo') === 'live') nextLive.push(p)
       else nextDemo.push(p)
     }
