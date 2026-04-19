@@ -166,7 +166,7 @@ export function useServerSync(authenticated: boolean) {
       }).catch(() => {})
     }, 8000)
 
-    // 4. WS subscription — handles at_update, sync, and reconnect messages
+    // 4. WS subscription — handles at_update and sync messages
     const unsub = wsService.subscribe((msg: WsMessage) => {
       if (msg.type === 'at_update' && msg.data) {
         applyATUpdate(msg.data)
@@ -180,14 +180,6 @@ export function useServerSync(authenticated: boolean) {
           }
         })
         pullJournal()
-      }
-      if (msg.type === 'reconnect') {
-        // [Phase 3E] WS reconnected after a close — pull canonical truth immediately
-        // (do not wait for server push or 30s polling tick). This refreshes AT state,
-        // env flags (resolvedEnv/executionEnv/exchangeMode/activeExchange), and
-        // position ownership fields (state.ts bridge merges positions with
-        // autoTrade/sourceMode/controlMode/mode preserved via _mapServerPos).
-        pullATState()
       }
       useUiStore.getState().setConnected(true)
     })

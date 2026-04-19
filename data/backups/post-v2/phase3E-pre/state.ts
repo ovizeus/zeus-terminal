@@ -777,9 +777,6 @@ export const ZState = (() => {
   let _ws: any = null
   let _wsRetry = 0
   let _wsVisListener = false
-  // [Phase 3E] Track if we've ever been connected — first open is initial bootstrap,
-  // subsequent opens are reconnects and must trigger canonical-truth re-pull.
-  let _wsEverConnected = false
   let _lastPushTs = 0 // cooldown: ignore sync signals shortly after our own push
   w._zsSyncPushTs = function () { return _lastPushTs }
   w._zsMarkPush = function () { _lastPushTs = Date.now() }
@@ -789,19 +786,7 @@ export const ZState = (() => {
     try {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
       _ws = new WebSocket(proto + '//' + location.host + '/ws/sync')
-      _ws.onopen = function () {
-        _wsRetry = 0
-        console.log('[ws] sync connected')
-        // [Phase 3E] On re-open (not first connect), pull canonical AT state immediately
-        // so positions (with full ownership fields: autoTrade, sourceMode, controlMode,
-        // mode) are re-hydrated via _applyServerATState. Closes stale-window regression
-        // where Manual/AT panels could misclassify after reconnect.
-        if (_wsEverConnected) {
-          console.log('[ws] reconnected — pulling canonical AT state')
-          try { _atPollOnce() } catch (_) { /* */ }
-        }
-        _wsEverConnected = true
-      }
+      _ws.onopen = function () { _wsRetry = 0; console.log('[ws] sync connected') }
       _ws.onmessage = function (ev: any) {
         try {
           const msg = JSON.parse(ev.data)
