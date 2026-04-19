@@ -1651,8 +1651,9 @@ export function renderATPositions(): void {
   _lastRenderAT = _now; _pendingRenderAT = 0
   const panel = el('atActivePosPanel')
   if (!panel) return
-  // [FIX A2] Include AT positions filtered by globalMode
-  const _globalMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
+  // [Phase 3C] Render filter reads store truth (single source), not AT._serverMode mirror.
+  // AT._serverMode is kept in sync via a useATStore subscriber (state.ts boot).
+  const _globalMode = (useATStore.getState().mode || 'demo')
   const autoPosns = [
     ...(TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed),
     ...(TP.livePositions || []).filter((p: any) => p.autoTrade && !p.closed && p.status !== 'closing'),

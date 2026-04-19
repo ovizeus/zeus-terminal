@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
+// [Phase 3C] Engine mode single source — useATStore.mode. AT.mode is a read mirror.
+import { useATStore } from '../../stores'
 
 // [R24.1] SVG contents converted from hardcoded HTML strings (which were fed
 // into dangerouslySetInnerHTML) to structured JSX fragments. No user data
@@ -184,9 +186,9 @@ function useDockLinkState(): { atHasPos: boolean; manualHasPos: boolean } {
     function recompute() {
       try {
         const w = window as any
-        const AT = w.AT || {}
         const TP = w.TP || {}
-        const isLive = AT.mode === 'live'
+        // [Phase 3C] Read engine mode from store (canonical), not AT.mode mirror.
+        const isLive = useATStore.getState().mode === 'live'
         const positions = isLive ? (TP.livePositions || []) : (TP.demoPositions || [])
         let at = false
         let man = false
@@ -214,8 +216,8 @@ function useDockLinkState(): { atHasPos: boolean; manualHasPos: boolean } {
       recompute()
       const w = window as any
       const TP = w.TP || {}
-      const AT = w.AT || {}
-      const arr = (AT.mode === 'live') ? (TP.livePositions || []) : (TP.demoPositions || [])
+      // [Phase 3C] Same store-truth rule as the primary path.
+      const arr = (useATStore.getState().mode === 'live') ? (TP.livePositions || []) : (TP.demoPositions || [])
       if (ticks >= 48 || (Array.isArray(arr) && arr.length > 0)) clearInterval(bootPoll)
     }, 250)
     return () => {

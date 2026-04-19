@@ -1520,3 +1520,19 @@ w.TP = TP
 w.oiHistory = oiHistory
 w.wlPrices = wlPrices
 w.IND_SETTINGS = IND_SETTINGS
+
+// [Phase 3C] Engine mode single truth — useATStore.mode is canonical.
+// Legacy AT.mode / AT._serverMode are read mirrors, kept in sync by this
+// subscriber. Any code that continues to write AT.mode directly creates
+// a transient divergence until the store writes back here; avoid that
+// pattern for new code. Read render-critical code from the store.
+try {
+  useATStore.subscribe((s, prev) => {
+    if (s.mode === prev.mode && s._serverMode === prev._serverMode) return
+    const _AT = w.AT
+    if (!_AT) return
+    if (s.mode && _AT.mode !== s.mode) _AT.mode = s.mode
+    const _nextServerMode = s._serverMode || s.mode || ''
+    if (_AT._serverMode !== _nextServerMode) _AT._serverMode = _nextServerMode
+  })
+} catch (_) { /* defensive: subscribe never throws in zustand v4 but keep the net */ }
