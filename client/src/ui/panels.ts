@@ -186,8 +186,8 @@ export function renderMagnets() {
 
   if (cpEl) cpEl.textContent = '$' + fP(p);
   if (updEl) updEl.textContent = 'UPD ' + new Date().toLocaleTimeString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  if (aboveCntEl) aboveCntEl.textContent = above.length + ' magneti';
-  if (belowCntEl) belowCntEl.textContent = below.length + ' magneti';
+  if (aboveCntEl) aboveCntEl.textContent = above.length + ' magnets';
+  if (belowCntEl) belowCntEl.textContent = below.length + ' magnets';
 
   // Nearest magnets summary
   const nearAbove = above[0];
@@ -208,9 +208,9 @@ export function renderMagnets() {
     const scoreA = nearAbove.strength / (distA + 0.1);
     const scoreB = nearBelow.strength / (distB + 0.1);
     let biasDir: any, biasClass: any, biasLabel: any;
-    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = _ZI.dGrn + ' BULL \u2014 Magnet jos atrage'; }
-    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = _ZI.dRed + ' BEAR \u2014 Magnet sus atrage'; }
-    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = _ZI.bolt + ' NEUTRU'; }
+    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = _ZI.dGrn + ' BULL \u2014 Lower magnet pulls'; }
+    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = _ZI.dRed + ' BEAR \u2014 Upper magnet pulls'; }
+    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = _ZI.bolt + ' NEUTRAL'; }
     biasEl.innerHTML = biasLabel;
     biasEl.className = 'mag-bias ' + biasClass;
     S.magnets.bias = biasDir;
