@@ -63,6 +63,8 @@ function _fillDemoPendingOrder(ord: any): void {
   const liqPrice = calcLiqPrice(ord.limitPrice, ord.lev, ord.side)
   const pos: any = {
     id: ord.id, side: ord.side, sym: ord.sym, entry: ord.limitPrice, size: ord.size, lev: ord.lev, tp: ord.tp, sl: ord.sl, liqPrice, pnl: 0,
+    // [Phase 3A] Explicit ownership — paper (demo manual limit) is owned by Manual panel, not AT.
+    autoTrade: false,
     mode: 'demo', orderType: 'LIMIT', sourceMode: 'paper', controlMode: 'paper', brainModeAtOpen: (w.S.mode || 'assist'),
     dslParams: (() => {
       // [DSL-OFF] If DSL engine is OFF at fill time, do NOT attach DSL. Server skips DSL + places native TP/SL.

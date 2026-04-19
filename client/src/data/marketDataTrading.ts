@@ -347,7 +347,10 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
 function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: any, sl: any, liqPrice: any, mode: string, orderType: string): any {
   return {
     id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
-    mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
+    mode, orderType,
+    // [Phase 3A] Explicit ownership — never leave autoTrade as undefined (Manual filter depends on it).
+    autoTrade: false,
+    sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
     dslParams: (() => {
       // [DSL-OFF] If DSL engine is OFF, do NOT attach DSL. Server will treat null as "skip DSL" and

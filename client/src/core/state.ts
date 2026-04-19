@@ -450,7 +450,11 @@ export const ZState = (() => {
       liveManualPositions: (typeof TP !== 'undefined' ? TP.livePositions || [] : [])
         .filter(function (p: any) {
           if (p.closed) return false
-          if (p.autoTrade) return false
+          // [Phase 3A] Whitelist: only whitelisted-manual positions are serialized as manual.
+          // Ambiguous positions (autoTrade undefined, sourceMode unknown) are dropped — they
+          // will rehydrate from server on reconnect if still live. Never coerce unknown → manual.
+          const _isManual = (p.autoTrade === false) || (p.sourceMode === 'manual') || (p.sourceMode === 'paper')
+          if (!_isManual) return false
           if (!p.isLive && !p.fromExchange) return false
           return true
         })
@@ -858,7 +862,12 @@ export const ZState = (() => {
       addOnHistory: sp.addOnHistory || [],
       slPct: sp.slPct || 0,
       rr: sp.rr || 0,
-      autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : (sp.sourceMode === 'manual' ? false : true),
+      // [Phase 3A] Fallback is explicit: manual/paper sourceMode → autoTrade=false.
+      // For AT-origin (sourceMode='auto' or anything not manual/paper), AT-safe default=true.
+      // If server sends sp.autoTrade explicitly, always trust that first.
+      autoTrade: (sp.autoTrade !== undefined)
+        ? !!sp.autoTrade
+        : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper' ? false : true),
       openTs: sp.ts || sp.openTs || Date.now(),
       label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',

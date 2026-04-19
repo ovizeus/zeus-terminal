@@ -958,9 +958,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       riskPct: riskPct, riskSizeRaw: _riskSizeRaw, riskSizeCapped: _riskSizeCapped,
       // [Etapa 5] adaptive sizing debug
       adaptSizeMult: _adaptSizeMult,
-      // Per-position control mode metadata
-      sourceMode: (w.S.mode || 'assist').toLowerCase(), // [PATCH1] immutable — original source
-      controlMode: (w.S.mode || 'assist').toLowerCase(), // mutable — AI or MANUAL
+      // [Phase 3A] Ownership fields — 'auto' is authoritative for AT origin.
+      // brainModeAtOpen preserves the brain/AI mode at trade time for post-trade analysis.
+      sourceMode: 'auto',
+      controlMode: 'auto',
       brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
       // [DSL MODE] Snapshot the selected Brain DSL mode at open time so the
       // UI and journal can show WHICH preset (SWING/ATR/DEF/TP/FAST) owned the
@@ -1074,9 +1075,10 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           mode: 'live',
           status: 'open', // [PATCH2 B3] explicit lifecycle status
           label: 'LIVE AUTO ' + side,
-          // Per-position control mode metadata
-          sourceMode: (w.S.mode || 'assist').toLowerCase(), // [PATCH1] immutable — original source
-          controlMode: (w.S.mode || 'assist').toLowerCase(), // mutable — AI or MANUAL
+          // [Phase 3A] Ownership fields — 'auto' is authoritative for AT origin.
+          // brainModeAtOpen preserves the brain/AI mode at trade time for post-trade analysis.
+          sourceMode: 'auto',
+          controlMode: 'auto',
           brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
           // [DSL MODE] See demo branch above — snapshot selected DSL mode.
           dslModeAtOpen: (typeof getDSLMode === 'function' ? getDSLMode() : 'atr'),

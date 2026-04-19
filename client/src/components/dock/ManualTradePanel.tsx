@@ -43,11 +43,12 @@ export function ManualTradePanel() {
   const manualLivePending = usePositionsStore((s) => s.manualLivePending)
   const journal = usePositionsStore((s) => s.journal)
 
-  // Filter lists by current engine mode — demo positions when in demo, live
-  // when in live. Exchange-mode ('testnet'/'live') is decoration only.
-  const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && !p.autoTrade && (p.mode || 'demo') === engineMode)
+  // [Phase 3A] Manual render uses WHITELIST (autoTrade===false OR sourceMode in {manual,paper}).
+  // NEVER match on `!p.autoTrade` alone — undefined would leak AT positions into Manual.
+  const _isManualOwned = (p: any) => p.autoTrade === false || p.sourceMode === 'manual' || p.sourceMode === 'paper'
+  const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && _isManualOwned(p) && (p.mode || 'demo') === engineMode)
   const pendingRender = (engineMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
-  const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && !p.autoTrade)
+  const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && _isManualOwned(p))
   const isLiveMode = engineMode === 'live'
   // null → LOCKED, REAL/TESTNET → as-is, DEMO label not rendered in live mode (engineMode guards)
   const envLabel: 'TESTNET' | 'REAL' | 'LOCKED' = executionEnv === 'TESTNET' ? 'TESTNET' : (executionEnv === 'REAL' ? 'REAL' : 'LOCKED')
