@@ -129,6 +129,52 @@ router.post('/save', async (req, res) => {
     const cleanKey = apiKey.trim();
     const cleanSecret = apiSecret.trim();
 
+    // ─── Phase 1A: single-exchange + single-env per user enforcement ───
+    // Reject conflicting save BEFORE external API verify or DB write.
+    // Re-verify/update on exact same (exchange, mode) falls through.
+    const _activeRows = db.getAllExchanges(req.user.id) || [];
+    for (const _row of _activeRows) {
+        if (_row.exchange !== exName) {
+            const _wantedLabel = exName === 'bybit' ? 'Bybit' : 'Binance';
+            const _activeLabel = _row.exchange === 'bybit' ? 'Bybit' : 'Binance';
+            const _msg = `${_wantedLabel} is blocked because ${_activeLabel} API credentials are currently active for this account. Zeus allows only one active exchange at a time. To use ${_wantedLabel}, first disconnect the active ${_activeLabel} API credentials, then return and add valid ${_wantedLabel} API credentials.`;
+            db.auditLog(req.user.id, 'EXCHANGE_SAVE_BLOCKED', {
+                code: 'EXCHANGE_CONFLICT',
+                attempted: { exchange: exName, mode: safeMode },
+                active: { exchange: _row.exchange, mode: _row.mode },
+            }, req.ip);
+            return res.status(409).json({
+                ok: false,
+                code: 'EXCHANGE_CONFLICT',
+                message: _msg,
+                details: {
+                    attempted: { exchange: exName, mode: safeMode },
+                    active: { exchange: _row.exchange, mode: _row.mode },
+                },
+            });
+        }
+        if (_row.mode !== safeMode) {
+            const _wantedEnv = safeMode === 'testnet' ? 'TESTNET' : 'REAL';
+            const _activeEnv = _row.mode === 'testnet' ? 'TESTNET' : 'REAL';
+            const _msg = `${_wantedEnv} mode is blocked because ${_activeEnv} API credentials are currently active for this exchange. Zeus allows only one active API environment per exchange at a time. To use ${_wantedEnv} mode, first disconnect the active ${_activeEnv} API credentials, then add valid ${_wantedEnv} API credentials.`;
+            db.auditLog(req.user.id, 'EXCHANGE_SAVE_BLOCKED', {
+                code: 'ENV_CONFLICT',
+                attempted: { exchange: exName, mode: safeMode },
+                active: { exchange: _row.exchange, mode: _row.mode },
+            }, req.ip);
+            return res.status(409).json({
+                ok: false,
+                code: 'ENV_CONFLICT',
+                message: _msg,
+                details: {
+                    attempted: { exchange: exName, mode: safeMode },
+                    active: { exchange: _row.exchange, mode: _row.mode },
+                },
+            });
+        }
+        // same exchange + same mode → allowed (re-verify/update path)
+    }
+
     let balanceInfo;
     try {
         balanceInfo = await _testKeys(exName, cleanKey, cleanSecret, safeMode);
