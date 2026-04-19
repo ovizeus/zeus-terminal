@@ -314,6 +314,12 @@ export async function liveApiSyncState(): Promise<any> {
     // Update UI
     if (typeof updateLiveBalance === 'function') updateLiveBalance()
     if (typeof renderLivePositions === 'function') renderLivePositions()
+    // [batch3-W] Sync full live-positions snapshot into React store so
+    // PositionTable/AT/ZeusDock reflect exchange truth (was only updating
+    // legacy TP.livePositions; React reads livePositions from positionsStore).
+    try {
+      usePositionsStore.getState().syncSnapshot({ livePositions: w.TP.livePositions.slice(), source: 'bridge' })
+    } catch (_) {}
     // [9A-5] Notify React after live positions full rebuild
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     // [PATCH P2-7] Only log on state change

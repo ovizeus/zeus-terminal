@@ -366,20 +366,12 @@ function setMode(userId, mode) {
     const us = _uState(userId);
     const oldMode = us.engineMode;
 
-    // [batch3-V] Each position carries its own `mode` field — demo positions
-    // are monitored under demo logic (demo balance, simulated fills) and live
-    // positions under live logic (exchange API). Switching engine mode does
-    // NOT retag existing positions; they continue independently (as promised
-    // by the confirm dialog). Only block the switch if there are already
-    // positions OPEN in the NEW mode, which would create ambiguity.
-    if (mode !== oldMode) {
-        const userPos = _positions.filter(p => p.userId === userId);
-        const newModeCount = userPos.filter(p => (p.mode || 'demo') === mode).length;
-        if (newModeCount > 0) {
-            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — ${newModeCount} ${mode} position(s) already open`);
-            return { ok: false, error: `Cannot switch to ${mode} — ${newModeCount} ${mode} position(s) already open. Close them first.` };
-        }
-    }
+    // [batch3-W] Per-position `mode` field is authoritative — demo positions
+    // run under demo logic, live positions under live logic, regardless of
+    // engine-mode flips. Switching engine mode is a UI-routing concern, not a
+    // retagging operation, so no cross-mode position gate is needed. Existing
+    // positions in the new mode (if any) continue independently; the confirm
+    // dialog already warns the user.
 
     // [V3.1] Guard: live mode requires valid exchange credentials
     if (mode === 'live') {
@@ -2170,6 +2162,46 @@ function registerManualPosition(userId, data) {
     return { ok: true, seq, position: entry };
 }
 
+// [batch3-W] Patch a registered position's entry price + qty after an async
+// Binance fill materializes (registerManualPosition is called on status=NEW
+// with a fallback reference price — this updates the real fill data).
+function patchPositionFill(userId, seq, patch) {
+    if (!userId || !seq || !patch) return { ok: false, error: 'Missing args' };
+    const pos = _positions.find(p => p.userId === userId && p.seq === seq && p.status === 'OPEN');
+    if (!pos) return { ok: false, error: 'Position not found' };
+    const newPrice = parseFloat(patch.entryPrice);
+    const newQty = parseFloat(patch.qty);
+    if (!(newPrice > 0) || !(newQty > 0)) return { ok: false, error: 'Invalid patch values' };
+    const newSize = (pos.lev > 0) ? (newQty * newPrice / pos.lev) : (newQty * newPrice);
+    pos.price = newPrice;
+    pos.qty = +newQty.toFixed(6);
+    pos.size = newSize;
+    pos.margin = newSize;
+    pos.originalEntry = newPrice;
+    pos.originalSize = newSize;
+    pos.originalQty = +newQty.toFixed(6);
+    if (pos.sl) {
+        const slDist = Math.abs(newPrice - pos.sl);
+        pos.slPct = newPrice > 0 && slDist > 0 ? +(slDist / newPrice * 100).toFixed(2) : 0;
+        pos.slPnl = +(-slDist / newPrice * newSize * pos.lev).toFixed(2);
+    }
+    if (pos.tp) {
+        const tpDist = Math.abs(newPrice - pos.tp);
+        pos.tpPnl = +(tpDist / newPrice * newSize * pos.lev).toFixed(2);
+        if (pos.sl) {
+            const slDist = Math.abs(newPrice - pos.sl);
+            pos.rr = slDist > 0 ? +(tpDist / slDist).toFixed(2) : 0;
+        }
+    }
+    if (pos.live) {
+        pos.live.avgPrice = newPrice;
+        pos.live.executedQty = newQty;
+    }
+    _persistPosition(pos);
+    _notifyChange(userId);
+    return { ok: true, seq, position: pos };
+}
+
 function closeBySeq(userId, seq) {
     const gk = `${userId}:${seq}`;
     if (_closingGuard.has(gk)) {
@@ -3148,6 +3180,7 @@ module.exports = {
     resetDemoBalance,
     // Client actions
     registerManualPosition,
+    patchPositionFill,
     closeBySeq,
     addOnPosition,
     updateControlMode,

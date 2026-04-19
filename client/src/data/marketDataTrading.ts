@@ -304,6 +304,10 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
       const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = parseFloat(result.executedQty) || qty
       TP.livePositions.push(pos); renderLivePositions()
+      // [batch3-W] Notify React store — legacy TP.livePositions mutation doesn't
+      // reach PositionsStore, so without this the live position never renders
+      // in the React UI (PositionTable / AT panel / ZeusDock).
+      usePositionsStore.getState().syncSnapshot({ livePositions: TP.livePositions.slice(), source: 'bridge' })
       if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_live')
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}

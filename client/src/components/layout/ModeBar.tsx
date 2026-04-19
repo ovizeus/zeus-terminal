@@ -1,17 +1,18 @@
-/** Zeus Mode Bar — 1:1 from initModeBar() + updateModeBar() in modebar.js
- *  Shows execution mode (DEMO / TESTNET / LIVE / LOCKED).
- *  Switch toggles demo ↔ live via POST /api/mode. */
-import { useUiStore } from '../../stores'
+/** Zeus Mode Bar — engine-mode-driven execution toggle.
+ *  Shows DEMO / LIVE—TESTNET / LIVE—REAL / LIVE—LOCKED based on server state.
+ *  Click delegates to switchGlobalMode() (legacy): confirm dialog +
+ *  POST /api/at/mode + preLiveChecklist handling + toast feedback.
+ *  When no API configured and user tries to exit demo, opens Settings modal. */
+import { useATStore, useUiStore } from '../../stores'
+import { switchGlobalMode } from '../../data/marketDataTrading'
+import { toast } from '../../data/marketDataHelpers'
+import { _ZI } from '../../constants/icons'
 
 export function ModeBar() {
-  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
+  const engineMode = useATStore((s) => s.mode) || 'demo'
   const apiConfigured = useUiStore((s) => s.apiConfigured)
   const exchangeMode = useUiStore((s) => s.exchangeMode)
-  const patch = useUiStore((s) => s.patch)
   const openModal = useUiStore((s) => s.openModal)
-
-  // Derive mode from store (same logic as modebar.js updateModeBar)
-  const mode = exchangeMode || 'demo'
 
   let barClass = 'zeus-mode-bar'
   let modeText = ''
@@ -19,48 +20,48 @@ export function ModeBar() {
   let btnClass = 'zmb-btn'
   let indClass = 'zmb-indicator'
 
-  if (mode === 'demo') {
+  if (engineMode === 'demo') {
     barClass += ' zmb-demo'
     modeText = 'DEMO MODE'
     btnText = 'EXIT DEMO'
     btnClass += ' zmb-btn-exit'
     indClass += ' zmb-ind-demo'
-  } else if (resolvedEnv === 'TESTNET') {
-    barClass += ' zmb-testnet'
-    modeText = 'LIVE — TESTNET'
-    btnText = 'ACTIVATE DEMO'
-    btnClass += ' zmb-btn-demo'
-    indClass += ' zmb-ind-testnet'
-  } else if (!apiConfigured && mode === 'live') {
+  } else if (!apiConfigured) {
     barClass += ' zmb-locked'
-    modeText = 'LIVE — LOCKED'
+    modeText = 'LIVE \u2014 LOCKED'
     btnText = 'CONFIGURE LIVE'
     btnClass += ' zmb-btn-locked'
     indClass += ' zmb-ind-locked'
+  } else if (exchangeMode === 'testnet') {
+    barClass += ' zmb-testnet'
+    modeText = 'LIVE \u2014 TESTNET'
+    btnText = 'ACTIVATE DEMO'
+    btnClass += ' zmb-btn-demo'
+    indClass += ' zmb-ind-testnet'
   } else {
     barClass += ' zmb-real'
-    modeText = 'LIVE — REAL'
+    modeText = 'LIVE \u2014 REAL'
     btnText = 'ACTIVATE DEMO'
     btnClass += ' zmb-btn-demo'
     indClass += ' zmb-ind-real'
   }
 
   function handleSwitch() {
-    // LOCKED: no API keys — guide user to settings
-    if (mode === 'live' && !apiConfigured) {
-      openModal('settings')
-      return
+    if (engineMode === 'demo') {
+      if (!apiConfigured) {
+        toast('Configure API keys in Settings \u2192 Exchange API first', 3500, _ZI.w)
+        openModal('settings')
+        return
+      }
+      switchGlobalMode('live')
+    } else {
+      if (!apiConfigured) {
+        toast('Configure API keys in Settings \u2192 Exchange API first', 3500, _ZI.w)
+        openModal('settings')
+        return
+      }
+      switchGlobalMode('demo')
     }
-    const newMode = mode === 'demo' ? 'live' : 'demo'
-    // Optimistic UI update
-    patch({ exchangeMode: newMode, resolvedEnv: newMode === 'demo' ? 'DEMO' : resolvedEnv })
-    // Notify server (fire-and-forget, server is source of truth on next sync)
-    fetch('/api/mode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: JSON.stringify({ mode: newMode }),
-    }).catch(() => { /* server sync will correct if needed */ })
   }
 
   return (

@@ -245,26 +245,51 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     logger.info('ORDER', `${side} ${quantity} ${symbol} @ ${type}`, { orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty });
     audit.record(fillStatus === 'FILLED' ? 'ORDER_FILLED' : 'ORDER_PLACED', { userId: req.user.id, symbol, side, type, quantity, orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty }, owner, req.ip);
     metrics.recordOrder(fillStatus === 'FILLED' ? 'filled' : 'placed');
+    // [batch3-W] Binance Futures testnet frequently returns status=NEW on MARKET
+    // orders (fill happens async microseconds later). Treat NEW and FILLED as
+    // "accepted by exchange" for position registration — skip only on rejected/
+    // CANCELED/EXPIRED statuses. Defer a single getOrder fetch to patch
+    // avgPrice/executedQty once the fill materializes.
+    const _acceptedForRegistration = (fillStatus === 'FILLED' || fillStatus === 'NEW' || fillStatus === 'PARTIALLY_FILLED');
     if (fillStatus === 'FILLED') {
       telegram.alertOrderFilled(symbol, side, data.executedQty || quantity, data.avgPrice || 0, data.orderId, req.user.id);
-      // [PHASE1] Register manual LIVE/TESTNET position as server-tracked Zeus object
-      // Only for non-close, non-reduceOnly MARKET fills (new exposure, not closing)
-      if (!closePosition && !req.body.reduceOnly && type === 'MARKET') {
-        try {
-          const regResult = _getServerAT().registerManualPosition(req.user.id, {
-            symbol,
-            side,
-            entryPrice: parseFloat(data.avgPrice) || parseFloat(data.price) || 0,
-            qty: parseFloat(data.executedQty) || parseFloat(quantity) || 0,
-            leverage: parseInt(leverage, 10) || 1,
-            orderId: data.orderId,
-            sl: req.body.sl ? parseFloat(req.body.sl) : null,
-            tp: req.body.tp ? parseFloat(req.body.tp) : null,
-          });
-          if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side}`);
-        } catch (regErr) {
-          logger.warn('ORDER', `Manual position registration failed: ${regErr.message}`);
+    }
+    if (_acceptedForRegistration && !closePosition && !req.body.reduceOnly && type === 'MARKET') {
+      try {
+        const _entryPriceFallback = parseFloat(data.avgPrice) || parseFloat(data.price) || parseFloat(req.body.referencePrice) || 0;
+        const _qtyFallback = parseFloat(data.executedQty) || parseFloat(quantity) || 0;
+        const regResult = _getServerAT().registerManualPosition(req.user.id, {
+          symbol,
+          side,
+          entryPrice: _entryPriceFallback,
+          qty: _qtyFallback,
+          leverage: parseInt(leverage, 10) || 1,
+          orderId: data.orderId,
+          sl: req.body.sl ? parseFloat(req.body.sl) : null,
+          tp: req.body.tp ? parseFloat(req.body.tp) : null,
+        });
+        if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side} status=${fillStatus}`);
+        // [batch3-W] If fill wasn't immediate (status=NEW), fetch the order a
+        // moment later to patch the real avgPrice/executedQty onto the
+        // already-registered position so the UI reflects actual fill price.
+        if (fillStatus !== 'FILLED' && regResult.ok && regResult.seq) {
+          setTimeout(() => {
+            sendSignedRequest('GET', '/fapi/v1/order', { symbol, orderId: data.orderId }, req.exchangeCreds).then(fresh => {
+              if (!fresh || fresh.status !== 'FILLED') return;
+              const _px = parseFloat(fresh.avgPrice) || parseFloat(fresh.price) || 0;
+              const _qty = parseFloat(fresh.executedQty) || 0;
+              if (_px > 0 && _qty > 0) {
+                const patched = _getServerAT().patchPositionFill(req.user.id, regResult.seq, { entryPrice: _px, qty: _qty });
+                if (patched && patched.ok) {
+                  telegram.alertOrderFilled(symbol, side, _qty, _px, data.orderId, req.user.id);
+                  logger.info('ORDER', `Manual position fill patched: seq=${regResult.seq} ${symbol} ${side} @ ${_px} qty=${_qty}`);
+                }
+              }
+            }).catch(e => logger.warn('ORDER', `Fill-patch fetch failed seq=${regResult.seq}: ${e.message}`));
+          }, 1500);
         }
+      } catch (regErr) {
+        logger.warn('ORDER', `Manual position registration failed: ${regErr.message}`);
       }
     }
     res.json({
