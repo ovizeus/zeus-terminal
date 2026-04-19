@@ -20,6 +20,11 @@ data/sync_user/
 data/metrics_snapshot.json
 data/riskState.json
 data/config_overrides.json
+data/audit.jsonl
+data/user_ctx/
+
+# Pre-edit backup snapshots (local-only; never deploy artifacts)
+data/backups/
 
 # Android build artifacts
 android/app/build/
