@@ -852,7 +852,12 @@ export const ZState = (() => {
         }
       }
     }
-    const srcMode = sp.mode === 'live' ? 'auto' : 'assist'
+    // [Phase 9A1] No more 'auto'/'assist' heuristic default. When the server omits
+    // ownership fields we must preserve the client's last-known tag — inventing
+    // 'auto' for live and 'assist' for demo is what caused manual positions to
+    // flicker onto the AT card after a reconnect or a minimal server snapshot.
+    // Final fallback is 'manual' (conservative) only for brand-new positions
+    // that have no existingPos and no server-side hint at all.
     return {
       // [FIX DUP] Preserve client id when matched — avoids id change in UI that confuses
       // render cycles and DSL attachment (DSL is keyed by pos.id)
@@ -861,7 +866,14 @@ export const ZState = (() => {
       sym: sp.symbol || sp.sym,
       entry: sp.price || sp.entry,
       size: sp.size || 0,
-      lev: sp.lev || 1,
+      // [Phase 9A2] When the server optimizes out `lev`, fall back to the client's
+      // last-known leverage before defaulting to 1. Without this the card briefly
+      // showed x1 for positions opened at x10/x20 whenever a snapshot omitted lev.
+      lev: (typeof sp.lev === 'number' && sp.lev > 0)
+        ? sp.lev
+        : (existingPos && typeof existingPos.lev === 'number' && existingPos.lev > 0)
+          ? existingPos.lev
+          : 1,
       tp: sp.tp || 0,
       sl: sp.sl || 0,
       liqPrice: 0,
@@ -886,21 +898,59 @@ export const ZState = (() => {
       // fields would be silently reclassified to AT-owned, moving it off the
       // Manual card mid-session. Order: server field → client existingPos →
       // sp.sourceMode heuristic → existingPos.sourceMode heuristic → default true.
+      // [Phase 9A1] autoTrade resolution, strict conservative default:
+      //   1. Server explicit wins.
+      //   2. Else preserve existingPos.autoTrade (never change owner mid-life).
+      //   3. Else derive from sp.sourceMode if present.
+      //   4. Else derive from existingPos.sourceMode.
+      //   5. Else default FALSE (conservative manual ownership).
+      //      Previously defaulted to TRUE which caused brand-new positions
+      //      without any server ownership info to land on the AT card.
       autoTrade: (sp.autoTrade !== undefined)
         ? !!sp.autoTrade
         : (existingPos && typeof existingPos.autoTrade === 'boolean')
           ? existingPos.autoTrade
-          : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper')
-            ? false
-            : (existingPos && (existingPos.sourceMode === 'manual' || existingPos.sourceMode === 'paper'))
+          : (sp.sourceMode === 'auto')
+            ? true
+            : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper' || sp.sourceMode === 'assist')
               ? false
-              : true,
+              : (existingPos && existingPos.sourceMode === 'auto')
+                ? true
+                : (existingPos && (existingPos.sourceMode === 'manual' || existingPos.sourceMode === 'paper' || existingPos.sourceMode === 'assist'))
+                  ? false
+                  : false,
       openTs: sp.ts || sp.openTs || Date.now(),
       label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
-      sourceMode: sp.sourceMode ? sp.sourceMode : (existingPos ? existingPos.sourceMode : srcMode),
-      controlMode: sp.controlMode ? sp.controlMode : (existingPos ? existingPos.controlMode : srcMode),
-      brainModeAtOpen: sp.brainModeAtOpen ? sp.brainModeAtOpen : (existingPos ? existingPos.brainModeAtOpen : srcMode),
+      // [Phase 9A1] Ownership resolution, strict order:
+      //   1. Explicit server value wins.
+      //   2. Else client's existingPos value (preserves whatever opened the pos).
+      //   3. Else derive from sp.autoTrade if present (true → auto, false → manual).
+      //   4. Else 'manual' — conservative default so an unidentified position
+      //      lands in the Manual panel instead of being falsely claimed by AT.
+      sourceMode: sp.sourceMode
+        ? sp.sourceMode
+        : (existingPos && existingPos.sourceMode)
+          ? existingPos.sourceMode
+          : (sp.autoTrade === true)
+            ? 'auto'
+            : (sp.autoTrade === false)
+              ? 'manual'
+              : 'manual',
+      controlMode: sp.controlMode
+        ? sp.controlMode
+        : (existingPos && existingPos.controlMode)
+          ? existingPos.controlMode
+          : (sp.autoTrade === true)
+            ? 'auto'
+            : 'manual',
+      brainModeAtOpen: sp.brainModeAtOpen
+        ? sp.brainModeAtOpen
+        : (existingPos && existingPos.brainModeAtOpen)
+          ? existingPos.brainModeAtOpen
+          : (sp.autoTrade === true)
+            ? 'auto'
+            : 'manual',
       dslParams: (existingPos && existingPos.dslParams && (
         existingPos.controlMode === 'user' ||
         existingPos.controlMode === 'paper' ||
