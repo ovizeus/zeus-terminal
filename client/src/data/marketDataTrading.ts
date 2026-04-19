@@ -360,10 +360,15 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
   // null = DSL engine OFF → server skips DSL attach (parity with demo at _registerManualOnServer call).
   const _liveDslParams: any = (function () {
     if (!getDSLEnabled()) return null
-    const _openDsl = parseFloat(el('dslActivatePct')?.value || '') || 0.50
-    const _pl = parseFloat(el('dslTrailPct')?.value || '') || 0.60
-    const _pr = parseFloat(el('dslTrailSusPct')?.value || '') || 0.50
-    const _iv = parseFloat(el('dslExtendPct')?.value || '') || 0.25
+    // [Phase 9F1] Prefer the persisted TC (Trading Config) store values over
+    // the hidden DOM inputs — settingsStore/config.ts already persists TC
+    // across sessions, so reloading the page no longer resets DSL params to
+    // the input `defaultValue`. Falls back to DOM for legacy paths.
+    const TC = (w as any).TC || {}
+    const _openDsl = (Number.isFinite(TC.dslActivatePct) && TC.dslActivatePct > 0) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value || '') || 0.50)
+    const _pl = (Number.isFinite(TC.dslTrailPct) && TC.dslTrailPct > 0) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value || '') || 0.60)
+    const _pr = (Number.isFinite(TC.dslTrailSusPct) && TC.dslTrailSusPct > 0) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value || '') || 0.50)
+    const _iv = (Number.isFinite(TC.dslExtendPct) && TC.dslExtendPct > 0) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value || '') || 0.25)
     return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv }
   })()
   manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice(), dslParams: _liveDslParams }).then(function (result: any) {
@@ -448,10 +453,14 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
       if (!getDSLEnabled()) return null
       // [MANUAL DSL] Manual positions use user-set DSL inputs directly — no Brain.
       // Brain-driven AT positions get params via serverDSL.getPreset() on server.
-      const _openDsl = parseFloat(el('dslActivatePct')?.value || '') || 0.50
-      const _pl = parseFloat(el('dslTrailPct')?.value || '') || 0.60
-      const _pr = parseFloat(el('dslTrailSusPct')?.value || '') || 0.50
-      const _iv = parseFloat(el('dslExtendPct')?.value || '') || 0.25
+      // [Phase 9F1] Prefer persisted TC store values over DOM inputs so params
+      // survive reload (DSLZonePanel config row is display:none, so DOM holds
+      // only the defaultValue after a fresh mount until TC hydrates).
+      const TC = (w as any).TC || {}
+      const _openDsl = (Number.isFinite(TC.dslActivatePct) && TC.dslActivatePct > 0) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value || '') || 0.50)
+      const _pl = (Number.isFinite(TC.dslTrailPct) && TC.dslTrailPct > 0) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value || '') || 0.60)
+      const _pr = (Number.isFinite(TC.dslTrailSusPct) && TC.dslTrailSusPct > 0) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value || '') || 0.50)
+      const _iv = (Number.isFinite(TC.dslExtendPct) && TC.dslExtendPct > 0) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value || '') || 0.25)
       const _tgt = TP.demoSide === 'LONG' ? fillPrice * (1 + _openDsl / 100) : fillPrice * (1 - _openDsl / 100)
       return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv, dslTargetPrice: _tgt }
     })(),
