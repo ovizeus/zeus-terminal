@@ -2851,9 +2851,30 @@ async function _runReconciliation(isStartup) {
                 _bySymSide.get(_k).push(_p);
             }
             const _keepSeqs = new Set();
+            // [Phase 8C3] Minimum age before a position can be closed as a
+            // PHANTOM-MERGED-DUP. Registration races can briefly produce two
+            // server seqs for the same (symbol, side) within ms; closing one
+            // before the other has settled risks killing the wrong record.
+            // Skip dup-close this cycle if ANY position in the group is
+            // younger than this threshold — wait for the next recon tick.
+            const _DUP_MIN_AGE_MS = 10000;
             for (const [, group] of _bySymSide) {
                 if (group.length === 1) { _keepSeqs.add(group[0].seq); continue; }
                 group.sort((a, b) => a.seq - b.seq);
+                const _now = Date.now();
+                const _tooFresh = group.some((pp) => {
+                    const _ts = Number(pp.openTs || pp.ts || 0);
+                    return _ts > 0 && (_now - _ts) < _DUP_MIN_AGE_MS;
+                });
+                if (_tooFresh) {
+                    // Defer: keep ALL seqs in the group this cycle. They re-enter the
+                    // per-seq phantom check below, which handles legitimate phantoms
+                    // on its own timeline. Without this guard a just-registered seq
+                    // could be clobbered before the exchange fill confirms.
+                    for (const pp of group) _keepSeqs.add(pp.seq);
+                    logger.info(label, `[RECON] PHANTOM-MERGED-DUP deferred uid=${userId} ${group[0].symbol}/${group[0].side} (${group.length} seqs, youngest < ${_DUP_MIN_AGE_MS}ms)`);
+                    continue;
+                }
                 _keepSeqs.add(group[0].seq);
                 for (let j = 1; j < group.length; j++) {
                     const dup = group[j];
