@@ -322,7 +322,10 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
     useUiStore.getState().setIsPlacingLive(false)
     if (orderType === 'MARKET') {
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
-      const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = parseFloat(result.executedQty) || qty
+      // [Bug#2] Reconcile size to actual fill — exchange stepSize rounds qty DOWN, so user-intent drifts (e.g. $100 → $90).
+      const _execQty = parseFloat(result.executedQty) || qty
+      const _actualSize = (lev > 0) ? (_execQty * fillPrice) / lev : (_execQty * fillPrice)
+      const pos = _buildManualPosition(fillPrice, _actualSize, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = _execQty
       TP.livePositions.push(pos); renderLivePositions()
       // [batch3-W] Notify React store — legacy TP.livePositions mutation doesn't
       // reach PositionsStore, so without this the live position never renders
@@ -332,9 +335,9 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
-      toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice))
-      if (sl) { manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
-      if (tp) { manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
+      toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice) + ' ($' + fmt(_actualSize) + ')')
+      if (sl) { manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: _execQty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
+      if (tp) { manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: _execQty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
       if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 1000)
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
