@@ -104,6 +104,21 @@ export function _applyGlobalModeUI(mode: string): void {
   }
   if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   if (typeof updateModeBar === 'function') updateModeBar()
+  // [batch3-W-hotfix2] When engine enters live mode with API configured, make
+  // sure the live balance + positions are fetched from Binance. Prior to this
+  // the only trigger was the user clicking CONNECT in Settings → Exchange API
+  // (connectLiveAPI). After the ModeBar/Manual React migration, users switch
+  // demo→live via ModeBar without going through Settings, so TP.liveBalance
+  // stayed 0 and the Manual panel showed BAL: $0 and rejected orders with
+  // "Insufficient live balance". Idempotent: only the first transition fires
+  // the sync; periodic 120s sync keeps it fresh from then on.
+  if (mode === 'live' && w._apiConfigured) {
+    const _wasConnected = !!w.TP.liveConnected
+    w.TP.liveConnected = true
+    if (!_wasConnected && typeof liveApiSyncState === 'function') {
+      liveApiSyncState()
+    }
+  }
 }
 
 function _toggleManualPanel(): void { TP.demoOpen = !TP.demoOpen; const p = el('panelDemo'); if (p) p.style.display = TP.demoOpen ? 'block' : 'none'; if (TP.demoOpen && getPrice()) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
