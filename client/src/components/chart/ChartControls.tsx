@@ -121,12 +121,13 @@ export function ChartControls() {
       const w = window as any
       if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
       if (w.S?.overlays) {
-        const cur = useMarketStore.getState().market.overlays as unknown as Record<string, boolean>
+        const cur = useMarketStore.getState().market.overlays
         const legacy = w.S.overlays as Record<string, boolean>
-        const keys = new Set([...Object.keys(cur), ...Object.keys(legacy)])
+        const curRec = cur as unknown as Record<string, boolean>
+        const keys = new Set([...Object.keys(curRec), ...Object.keys(legacy)])
         let diverged = false
-        for (const k of keys) { if (!!cur[k] !== !!legacy[k]) { diverged = true; break } }
-        if (diverged) patch({ overlays: { ...cur, ...legacy } as typeof cur })
+        for (const k of keys) { if (!!curRec[k] !== !!legacy[k]) { diverged = true; break } }
+        if (diverged) patch({ overlays: { ...curRec, ...legacy } as unknown as typeof cur })
       }
     }
     sync()

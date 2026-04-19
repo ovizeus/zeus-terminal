@@ -46,7 +46,7 @@ function _onOpen() {
   // use this to trigger canonical-truth refresh so ownership/env state doesn't stay
   // stale until the next server-initiated push or 30s polling tick.
   if (_everConnected) {
-    const ev = { type: 'reconnect' } as unknown as WsMessage
+    const ev: WsMessage = { type: 'reconnect' }
     _listeners.forEach((fn) => {
       try { fn(ev) } catch { /* ignore subscriber errors */ }
     })

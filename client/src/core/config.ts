@@ -1987,7 +1987,6 @@ w.BT_INDICATORS = BT_INDICATORS
   const CANONICAL_DSL_KEYS = new Set([
     'enabled', 'mode', 'magnetEnabled', 'magnetMode', 'positions',
   ])
-  const isDev = !!(import.meta as any)?.env?.DEV
   w.DSL = new Proxy(DSL, {
     get(target, prop, receiver) {
       if (typeof prop === 'string' && CANONICAL_DSL_KEYS.has(prop)) {

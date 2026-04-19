@@ -4,7 +4,7 @@ import type { Position } from './position'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect
 
 export interface WsAtUpdate {
   type: 'at_update'
@@ -13,6 +13,17 @@ export interface WsAtUpdate {
 
 export interface WsSyncSignal {
   type: 'sync'
+}
+
+/**
+ * [Phase 3E] Synthetic event emitted by services/ws.ts when the WebSocket
+ * re-opens after a previous close (i.e. NOT on first connect). Subscribers
+ * use this to trigger canonical-truth refresh (AT state, env flags, position
+ * ownership) without waiting for the next server-initiated push or the 30s
+ * polling tick. Carries no payload — receivers re-pull authoritative state.
+ */
+export interface WsReconnect {
+  type: 'reconnect'
 }
 
 /**

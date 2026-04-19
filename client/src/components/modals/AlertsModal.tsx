@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore, useMarketStore } from '../../stores'
-import { toggleAlerts, isSoundMuted } from '../../ui/dom2'
+import { toggleAlerts } from '../../ui/dom2'
 import { injectFakeWhale, toggleSnd, saveAlerts, testNotification, _syncSndIcon } from '../../data/marketDataWS'
 
 const w = window as any
