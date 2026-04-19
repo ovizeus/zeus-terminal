@@ -50,6 +50,11 @@ interface UiStore {
   /** Daily PnL ($) */
   sbPnl: number
 
+  /** [batch3-W+] Live manual order in-flight (sets Manual PLACE button to "Placing…" + disabled).
+   *  Set true when /api/order/place fires, false on then/catch. */
+  isPlacingLive: boolean
+  setIsPlacingLive: (placing: boolean) => void
+
   /** Merge partial state */
   patch: (partial: Partial<UiStore>) => void
 }
@@ -83,6 +88,9 @@ export const useUiStore = create<UiStore>()((set) => ({
   sbKillActive: false,
   sbPosCount: 0,
   sbPnl: 0,
+
+  isPlacingLive: false,
+  setIsPlacingLive: (placing) => set({ isPlacingLive: !!placing }),
 
   setTheme: (theme) => {
     try {

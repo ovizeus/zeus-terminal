@@ -10,6 +10,7 @@ import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { useATStore } from '../stores/atStore'
+import { useUiStore } from '../stores/uiStore'
 import { _startLivePendingSync , renderDemoPositions } from './marketDataPositions'
 import { runDSLBrain, toggleDSL } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
@@ -297,9 +298,13 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
   if (!TP.liveBalance || size > TP.liveBalance) { toast('Insufficient live balance', 3000, _ZI?.x); return }
   if (lev < 1 || lev > 125) { toast('Leverage must be 1-125x', 3000, _ZI?.x); return }
   const refPrice = (orderType === 'MARKET') ? getPrice() : entry; if (!refPrice || refPrice <= 0) { toast('Price unavailable — cannot place order', 3000, _ZI.x); return }; const qty = (size * lev) / refPrice; const binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
-  const execBtn = el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
+  // [batch3-W+] Button text/disabled is React-owned via uiStore.isPlacingLive.
+  // Legacy DOM mutation (textContent='Placing...') is removed — React would
+  // skip the DOM update on re-render since the VDOM text hadn't changed,
+  // leaving the button stuck on "Placing...".
+  useUiStore.getState().setIsPlacingLive(true)
   manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
-    if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }
+    useUiStore.getState().setIsPlacingLive(false)
     if (orderType === 'MARKET') {
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
       const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = parseFloat(result.executedQty) || qty
@@ -321,7 +326,7 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()
       toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); _startLivePendingSync()
     }
-  }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }; toast('LIVE order failed: ' + (err.message || err)) })
+  }).catch(function (err: any) { useUiStore.getState().setIsPlacingLive(false); toast('LIVE order failed: ' + (err.message || err)) })
 }
 
 function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: any, sl: any, liqPrice: any, mode: string, orderType: string): any {

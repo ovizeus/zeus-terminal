@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
+import { useUiStore, usePositionsStore, useMarketStore, useATStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
 import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
@@ -14,6 +14,14 @@ export function ManualTradePanel() {
   const resolvedEnv = useUiStore((s) => s.resolvedEnv)
   const apiConfigured = useUiStore((s) => s.apiConfigured)
   const exchangeMode = useUiStore((s) => s.exchangeMode)
+  const isPlacingLive = useUiStore((s) => s.isPlacingLive)
+  // [batch3-W+] Engine mode (demo/live) is the authoritative toggle for what
+  // the Manual panel shows. `exchangeMode` ('testnet'/'live'/null) only
+  // decorates labels (TESTNET vs REAL). Previously the panel used
+  // exchangeMode as engine mode, which broke everything when testnet API was
+  // configured while engine was in demo mode (gMode would be 'testnet' and
+  // match neither demo nor live positions).
+  const engineMode = useATStore((s) => s.mode) || 'demo'
   const [side, setSideLocal] = useState<'LONG' | 'SHORT'>(() => w.TP?.demoSide || 'LONG')
   const [ordType, setOrdType] = useState('market')
   const [marginMode, setMarginMode] = useState('cross')
@@ -36,12 +44,13 @@ export function ManualTradePanel() {
   const manualLivePending = usePositionsStore((s) => s.manualLivePending)
   const journal = usePositionsStore((s) => s.journal)
 
-  // Filter lists by current mode — same rule as the old render functions
-  const gMode = exchangeMode || 'demo'
-  const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && !p.autoTrade && (p.mode || 'demo') === gMode)
-  const pendingRender = (gMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
+  // Filter lists by current engine mode — demo positions when in demo, live
+  // when in live. Exchange-mode ('testnet'/'live') is decoration only.
+  const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && !p.autoTrade && (p.mode || 'demo') === engineMode)
+  const pendingRender = (engineMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
   const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && !p.autoTrade)
-  const isLiveMode = gMode === 'live'
+  const isLiveMode = engineMode === 'live'
+  const envLabel = resolvedEnv === 'TESTNET' ? 'TESTNET' : 'REAL'
   const journalSorted = journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0)))
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
@@ -94,7 +103,7 @@ export function ManualTradePanel() {
   }
 
   function setPct(pct: number) {
-    const bal = exchangeMode === 'live' ? liveBalanceTotal : demoBalance
+    const bal = isLiveMode ? liveBalanceTotal : demoBalance
     setSize((bal * pct / 100).toFixed(0))
   }
 
@@ -124,15 +133,15 @@ export function ManualTradePanel() {
       <div className="trade-line" />
     </div>
     <div className="trade-panel" id="panelDemo">
-      <div className={`tp-hdr ${exchangeMode === 'live' ? 'live-hdr' : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-        <span>{exchangeMode === 'live'
-          ? (resolvedEnv === 'TESTNET' ? '\u25CF MANUAL TRADE (TESTNET)' : '\u25CF MANUAL TRADE (LIVE)')
+      <div className={`tp-hdr ${isLiveMode ? 'live-hdr' : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+        <span>{isLiveMode
+          ? (envLabel === 'TESTNET' ? '\u25CF MANUAL TRADE (TESTNET)' : '\u25CF MANUAL TRADE (REAL)')
           : 'MANUAL TRADE'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span id="demoBalance" className="tp-bal">{(() => {
-            if (exchangeMode === 'live') {
+            if (isLiveMode) {
               if (!apiConfigured) return 'BAL: Exchange not configured'
-              const prefix = resolvedEnv === 'TESTNET' ? 'BAL (TESTNET): $' : 'BAL: $'
+              const prefix = envLabel === 'TESTNET' ? 'BAL (TESTNET): $' : 'BAL (REAL): $'
               return prefix + liveBalanceTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             }
             return `BAL: $${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -232,12 +241,11 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
+        <button id="demoExec" className="tp-exec demo-exec" disabled={isPlacingLive} onClick={() => { if (isPlacingLive) return; if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
           {(() => {
-            const mode = exchangeMode || 'demo'
-            const env = resolvedEnv || 'DEMO'
-            if (mode === 'live' && !apiConfigured) return '\uD83D\uDD12 PLACE ORDER (EXEC LOCKED)'
-            if (mode === 'live') { const tag = env === 'TESTNET' ? 'TESTNET' : 'LIVE'; return side === 'LONG' ? `\u25B2 OPEN LONG (${tag})` : `\u25BC OPEN SHORT (${tag})` }
+            if (isPlacingLive) return '\u23F3 PLACING\u2026'
+            if (isLiveMode && !apiConfigured) return '\uD83D\uDD12 PLACE ORDER (EXEC LOCKED)'
+            if (isLiveMode) { const tag = envLabel === 'TESTNET' ? 'TESTNET' : 'REAL'; return side === 'LONG' ? `\u25B2 OPEN LONG (${tag})` : `\u25BC OPEN SHORT (${tag})` }
             return side === 'LONG' ? '\u25B2 OPEN LONG' : '\u25BC OPEN SHORT'
           })()}
         </button>
