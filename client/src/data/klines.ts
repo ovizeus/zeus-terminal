@@ -3,7 +3,7 @@
  * Kline data processing helpers
  */
 
-import { getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
+import { getPrice, getSymbol, getTimezone, getTCMaxPos, getATMode } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { BM, BRAIN as BR, DSL } from '../core/config'
@@ -275,6 +275,14 @@ export function _updateWhyBlocked(code: any, text: any) {
 // _updateWhyBlocked — now direct import (no window mapping needed)
 
 // ─── MAIN MULTI SYMBOL SCAN ───────────────────────────────────
+// [Phase 6B] Canonical position list by current AT mode.
+// Demo reads demoPositions; live/testnet reads livePositions.
+// Fixes multi-symbol gates that previously read demoPositions in all modes
+// (already-open, maxPos, opposite-direction, DSL-active, DSL-waiting).
+function _activePosList(): any[] {
+  return (getATMode() === 'live' ? (TP.livePositions || []) : (TP.demoPositions || [])) as any[]
+}
+
 export async function runMultiSymbolScan() {
   if (el('atMultiSym')?.checked === false) return
   if (!w.FetchLock.try('multiScan')) return
@@ -310,7 +318,7 @@ export async function runMultiSymbolScan() {
         const isOpp = score >= confMin && (dir === 'bull' || dir === 'bear')
         if (isOpp) opps++
 
-        const alreadyOpen = (TP.demoPositions || []).some((p: any) => p.sym === sym && p.autoTrade && !p.closed)
+        const alreadyOpen = _activePosList().some((p: any) => p.sym === sym && p.autoTrade && !p.closed)
 
         results.push({ sym, price: wlPrice, chg: wlChg, rsi, macd, st, adx, score, dir, signals, isOpp, alreadyOpen })
         w.MSCAN.data[sym] = { price: wlPrice, chg: wlChg, rsi, macd, st, adx, score, dir, signals, isOpp, alreadyOpen }
@@ -402,7 +410,7 @@ export function renderMscanTable(results: any[], opps: number) {
 // ─── MANUAL ENTRY FROM SCANNER ─────────────────────────────────
 export function manualEnterFromScan(sym: string, side: string, score: number) {
   const maxPos = getTCMaxPos()
-  const openAuto = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed).length
+  const openAuto = _activePosList().filter((p: any) => p.autoTrade && !p.closed).length
   if (openAuto >= maxPos) { toast('Max positions reached (' + maxPos + ')'); return }
 
   const price = sym === getSymbol() ? getPrice() : (w.wlPrices[sym]?.price || 0)
@@ -437,14 +445,14 @@ export function runMultiSymbolAutoTrade(results: any[]) {
     if (AT.killTriggered) { _setBR('KILL', 'Kill switch active', 'autoCheck'); return }
 
     const _chaos = Math.round((BR.regimeAtrPct || 0) * 15 + (BM.newsRisk === 'high' ? 40 : BM.newsRisk === 'med' ? 20 : 0))
-    const _anyDSLActive = (TP.demoPositions || []).some((p: any) => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active)
+    const _anyDSLActive = _activePosList().some((p: any) => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active)
     if (_anyDSLActive && _chaos > 60) {
       _setBR('CHAOS', `Chaos ${_chaos} > 60 \u2014 market too volatile with DSL active`, 'autoCheck')
       atLog('warn', '[BLOCK] AUTO BLOCK \u2014 DSL active + chaos>60'); return
     }
 
     const _dslWaitMs = 10 * 60 * 1000
-    const _dslWaiting = (TP.demoPositions || []).some((p: any) => {
+    const _dslWaiting = _activePosList().some((p: any) => {
       const d = DSL.positions?.[p.id]
       return d && !d.active && p.autoTrade && !p.closed && (Date.now() - p.ts) > _dslWaitMs
     })
@@ -455,7 +463,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   void _prof
 
   const maxPos = getTCMaxPos()
-  const openAuto = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
+  const openAuto = _activePosList().filter((p: any) => p.autoTrade && !p.closed)
   if (openAuto.length >= maxPos) return
 
   const profileThresh: Record<string, number[]> = { fast: [65, 55], swing: [72, 60], defensive: [80, 65] }
@@ -479,7 +487,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
     r.scoreAdj = adjScore
     if (adjScore < confMinAdj) return false
     if (r.adx !== null && r.adx < 18) return false
-    const alreadyInDir = (TP.demoPositions || []).some((p: any) =>
+    const alreadyInDir = _activePosList().some((p: any) =>
       p.sym === r.sym && p.autoTrade && !p.closed &&
       ((r.dir === 'bull' && p.side === 'SHORT') || (r.dir === 'bear' && p.side === 'LONG')))
     if (alreadyInDir) return false
