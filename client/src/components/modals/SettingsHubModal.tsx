@@ -342,58 +342,81 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div style={{fontSize:'8px',color:'#ff8800',marginBottom:'10px',lineHeight:'1.6'}}>
           Keys are encrypted server-side · Use READ + TRADE only (no withdrawal) · Restrict by IP
         </div>
-        {(['binance', 'bybit'] as const).map(ex => {
-          const info = exAccounts[ex]
-          const mode = exModeFor[ex] || 'testnet'
-          const loading = exLoadingFor[ex]
-          const msg = exMsgFor[ex]
-          const accentColor = ex === 'binance' ? '#f0c040' : '#aa44ff'
-          const label = ex === 'binance' ? 'BINANCE FUTURES' : 'BYBIT DERIVATIVES'
-          return (
-            <div key={ex} style={{background:'#0a1018',border:`1px solid ${accentColor}33`,borderRadius:'6px',padding:'12px',marginBottom:'10px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
-                <span style={{fontSize:'10px',fontWeight:700,color:accentColor,letterSpacing:'1px'}}>{label}</span>
-                <span style={{fontSize:'9px',color: info ? '#00d97a' : '#556'}}>
-                  {info ? `● CONNECTED · ${info.mode.toUpperCase()} · ${info.maskedKey}` : '○ disconnected'}
-                </span>
-              </div>
-              {info ? (
-                <div style={{fontSize:'9px',color:'#8899aa',marginBottom:'8px'}}>
-                  Balance: <span style={{color:'#00d97a'}}>${(info.balance||0).toFixed(2)}</span>
-                  {info.lastVerified && <span style={{color:'#445',marginLeft:'8px'}}>· {new Date(info.lastVerified).toLocaleString('ro-RO')}</span>}
+        {(() => {
+          // [Phase 4C] Derive active exchange from server-sourced exAccounts ONLY
+          // (server truth — /api/exchange/status). Policy: at most one active
+          // exchange per user (Binance XOR Bybit). If an active exchange is
+          // connected, the other card is BLOCKED with an explicit disconnect
+          // instruction — no toggles or inputs rendered, SAVE disabled, so no
+          // 409 round-trip is needed for a conflict the UI already knows about.
+          const _activeKeys = Object.keys(exAccounts).filter(k => !!exAccounts[k])
+          const _activeExchange: 'binance'|'bybit'|null =
+            _activeKeys.length > 0 ? (_activeKeys[0] as 'binance'|'bybit') : null
+          return (['binance', 'bybit'] as const).map(ex => {
+            const info = exAccounts[ex]
+            const mode = exModeFor[ex] || 'testnet'
+            const loading = exLoadingFor[ex]
+            const msg = exMsgFor[ex]
+            const accentColor = ex === 'binance' ? '#f0c040' : '#aa44ff'
+            const label = ex === 'binance' ? 'BINANCE FUTURES' : 'BYBIT DERIVATIVES'
+            const _isBlocked = !info && _activeExchange !== null && _activeExchange !== ex
+            const _activeLabel = _activeExchange === 'binance' ? 'Binance' : _activeExchange === 'bybit' ? 'Bybit' : ''
+            const _targetLabel = ex === 'binance' ? 'Binance' : 'Bybit'
+            const _blockedMsg = `${_targetLabel} is blocked because ${_activeLabel} API credentials are currently active for this account. Zeus allows only one active exchange at a time. To use ${_targetLabel}, first disconnect the active ${_activeLabel} API credentials, then return and add valid ${_targetLabel} API credentials.`
+            return (
+              <div key={ex} data-ex-card={ex} data-ex-blocked={_isBlocked ? '1' : '0'} style={{background:'#0a1018',border:`1px solid ${_isBlocked ? '#ff884433' : `${accentColor}33`}`,borderRadius:'6px',padding:'12px',marginBottom:'10px',opacity:_isBlocked ? 0.75 : 1}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
+                  <span style={{fontSize:'10px',fontWeight:700,color:accentColor,letterSpacing:'1px'}}>{label}</span>
+                  <span style={{fontSize:'9px',color: info ? '#00d97a' : (_isBlocked ? '#ff8844' : '#556')}}>
+                    {info ? `● CONNECTED · ${info.mode.toUpperCase()} · ${info.maskedKey}` : (_isBlocked ? '🔒 BLOCKED' : '○ disconnected')}
+                  </span>
                 </div>
-              ) : (
-                <>
-                  <div style={{marginBottom:'6px'}}>
-                    <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>API KEY</div>
-                    <input type="password" id={`${ex}ApiKey`} placeholder="Paste API Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
-                  </div>
-                  <div style={{marginBottom:'8px'}}>
-                    <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>SECRET KEY</div>
-                    <input type="password" id={`${ex}ApiSecret`} placeholder="Paste Secret Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
-                  </div>
-                  <div style={{display:'flex',gap:'6px',marginBottom:'8px'}}>
-                    <button className="hub-sbtn" style={{flex:1,fontWeight:700,color:'#ff6655',background:mode==='live'?'#ff444433':'transparent',border:`1px solid ${mode==='live'?'#ff4444':'#ff444433'}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'live'}))}>● LIVE</button>
-                    <button className="hub-sbtn" style={{flex:1,fontWeight:700,background:mode==='testnet'?`${accentColor}22`:'transparent',border:`1px solid ${mode==='testnet'?accentColor:`${accentColor}33`}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'testnet'}))}>◎ TESTNET</button>
-                  </div>
-                </>
-              )}
-              <div style={{display:'flex',gap:'6px'}}>
                 {info ? (
-                  <>
-                    <button className="hub-sbtn" style={{flex:1}} onClick={() => exVerify(ex)}>RE-VERIFY</button>
-                    <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={() => exDisconnect(ex)}>DISCONNECT</button>
-                  </>
+                  <div style={{fontSize:'9px',color:'#8899aa',marginBottom:'8px'}}>
+                    Balance: <span style={{color:'#00d97a'}}>${(info.balance||0).toFixed(2)}</span>
+                    {info.lastVerified && <span style={{color:'#445',marginLeft:'8px'}}>· {new Date(info.lastVerified).toLocaleString('ro-RO')}</span>}
+                  </div>
+                ) : _isBlocked ? (
+                  <div data-ex-blocked-msg={ex} style={{fontSize:'9px',color:'#ff8844',lineHeight:'1.6',marginBottom:'8px',background:'#1a0d08',border:'1px solid #ff884422',borderRadius:'3px',padding:'8px'}}>
+                    {_blockedMsg}
+                  </div>
                 ) : (
-                  <button className="hub-sbtn pri" style={{flex:1,fontWeight:700}} onClick={() => exSave(ex)} disabled={!!loading}>
-                    {loading ? 'VERIFYING...' : 'VERIFY & SAVE'}
-                  </button>
+                  <>
+                    <div style={{marginBottom:'6px'}}>
+                      <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>API KEY</div>
+                      <input type="password" id={`${ex}ApiKey`} placeholder="Paste API Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
+                    </div>
+                    <div style={{marginBottom:'8px'}}>
+                      <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>SECRET KEY</div>
+                      <input type="password" id={`${ex}ApiSecret`} placeholder="Paste Secret Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
+                    </div>
+                    <div style={{display:'flex',gap:'6px',marginBottom:'8px'}}>
+                      <button className="hub-sbtn" style={{flex:1,fontWeight:700,color:'#ff6655',background:mode==='live'?'#ff444433':'transparent',border:`1px solid ${mode==='live'?'#ff4444':'#ff444433'}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'live'}))}>● LIVE</button>
+                      <button className="hub-sbtn" style={{flex:1,fontWeight:700,background:mode==='testnet'?`${accentColor}22`:'transparent',border:`1px solid ${mode==='testnet'?accentColor:`${accentColor}33`}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'testnet'}))}>◎ TESTNET</button>
+                    </div>
+                  </>
                 )}
+                <div style={{display:'flex',gap:'6px'}}>
+                  {info ? (
+                    <>
+                      <button className="hub-sbtn" style={{flex:1}} onClick={() => exVerify(ex)}>RE-VERIFY</button>
+                      <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={() => exDisconnect(ex)}>DISCONNECT</button>
+                    </>
+                  ) : _isBlocked ? (
+                    <button className="hub-sbtn" data-ex-save-blocked={ex} style={{flex:1,fontWeight:700,opacity:0.55,cursor:'not-allowed'}} disabled>
+                      VERIFY &amp; SAVE (BLOCKED)
+                    </button>
+                  ) : (
+                    <button className="hub-sbtn pri" style={{flex:1,fontWeight:700}} onClick={() => exSave(ex)} disabled={!!loading}>
+                      {loading ? 'VERIFYING...' : 'VERIFY & SAVE'}
+                    </button>
+                  )}
+                </div>
+                {msg && <div style={{marginTop:'6px',fontSize:'9px',color: msg.ok ? '#00d97a' : '#ff5566',textAlign:'center'}}>{msg.text}</div>}
               </div>
-              {msg && <div style={{marginTop:'6px',fontSize:'9px',color: msg.ok ? '#00d97a' : '#ff5566',textAlign:'center'}}>{msg.text}</div>}
-            </div>
-          )
-        })}
+            )
+          })
+        })()}
       </div>
 
       {/* ══ Footer ══ */}
