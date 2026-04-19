@@ -2,6 +2,11 @@ import { useState, useEffect, useMemo } from 'react'
 import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
+// [Phase 8D1] mscan state is server-owned — initial value comes from the
+// already-loaded settingsStore. The settingsStore._syncToWindow writes the
+// LS mirror that legacy engines (data/klines.ts::_mscanGetActive) read, so
+// the panel no longer writes LS directly. Remove the LS-as-source-of-truth
+// pathway to eliminate the double-write race against the server/WS push.
 import { resetKillSwitch } from '../../trading/autotrade'
 import { ATStatusIcon } from '../ATStatusIcon'
 import { AtWhyBlockedPill } from './AtWhyBlockedPill'
@@ -44,16 +49,18 @@ export function AutoTradePanel() {
   const [brainDashOpen, setBrainDashOpen] = useState(true)
   const [symPickerOpen, setSymPickerOpen] = useState(false)
 
-  // Multi-symbol scan state — reactive label + picker
-  const [mscanEnabled, setMscanEnabled] = useState(true)
+  // Multi-symbol scan state — reactive label + picker.
+  // [Phase 8D1] Initial value comes from settingsStore (server-backed single
+  // source of truth). Falls back to the full MSCAN_SYMS list only if the
+  // store has not loaded yet — storeSettings useEffect below rehydrates on
+  // loadFromServer completion. No direct LS read here anymore.
+  const [mscanEnabled, setMscanEnabled] = useState<boolean>(() => {
+    const s = useSettingsStore.getState().settings
+    return s.mscanEnabled != null ? !!s.mscanEnabled : true
+  })
   const [mscanSyms, setMscanSyms] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('zeus_mscan_syms')
-      if (saved) {
-        const arr = JSON.parse(saved)
-        if (Array.isArray(arr) && arr.length > 0) return arr
-      }
-    } catch (_) { /* */ }
+    const s = useSettingsStore.getState().settings
+    if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) return s.mscanSyms
     return MSCAN_SYMS.slice()
   })
 
@@ -84,11 +91,10 @@ export function AutoTradePanel() {
     if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) setMscanSyms(s.mscanSyms)
   }, [storeLoaded, storeSettings])
 
-  // Persist mscan selection to localStorage whenever it changes so legacy
-  // engines (data/klines.ts::_mscanGetActive) read the same source of truth.
-  useEffect(() => {
-    try { localStorage.setItem('zeus_mscan_syms', JSON.stringify(mscanSyms)) } catch (_) {}
-  }, [mscanSyms])
+  // [Phase 8D1] No direct LS write here. mscan selection is committed via
+  // handleSaveAT → settingsStore.patch → _syncToWindow (writes LS mirror) +
+  // saveToServer. Matches the behavior of every other AT field on this panel
+  // (size, SL, RR, etc.) — all persist only on explicit SAVE, not per keystroke.
 
   // Phase 3 C4: push the 6 AT config fields (lev/size/slPct/rr/maxPos/sigMin)
   // into atStore.config on every edit, so atStore (and by extension the
