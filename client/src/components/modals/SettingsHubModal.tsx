@@ -71,13 +71,15 @@ export function SettingsHubModal({ visible, onClose }: Props) {
     setExLoadingFor(p => ({ ...p, [ex]: true }))
     const r = await apiFetch('/api/exchange/save', { apiKey: val(`${ex}ApiKey`), apiSecret: val(`${ex}ApiSecret`), mode: exModeFor[ex] || 'testnet', exchange: ex })
     setExLoadingFor(p => ({ ...p, [ex]: false }))
-    exSetMsg(ex, r.ok ? `✓ Connected! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Error'), !!r.ok)
+    // [Phase 1B] Surface server `message` first (used by 409 EXCHANGE_CONFLICT/ENV_CONFLICT), fall back to legacy `error`.
+    exSetMsg(ex, r.ok ? `✓ Connected! Balance: $${(r.balance||0).toFixed(2)}` : (r.message || r.error || 'Error'), !!r.ok)
     if (r.ok) setExAccounts(p => ({ ...p, [ex]: { connected: true, mode: r.mode, maskedKey: r.maskedKey, balance: r.balance, lastVerified: r.lastVerified } }))
   }
 
   async function exVerify(ex: string) {
     const r = await apiFetch('/api/exchange/verify', { exchange: ex })
-    exSetMsg(ex, r.ok ? `✓ Verified! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Error'), !!r.ok)
+    // [Phase 1B] Surface server `message` first for forward-compat with future 409-shape responses.
+    exSetMsg(ex, r.ok ? `✓ Verified! Balance: $${(r.balance||0).toFixed(2)}` : (r.message || r.error || 'Error'), !!r.ok)
     if (r.ok) setExAccounts(p => ({ ...p, [ex]: { ...p[ex], balance: r.balance, lastVerified: r.lastVerified } }))
   }
 
