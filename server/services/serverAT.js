@@ -1965,6 +1965,8 @@ function getFullState(userId) {
     const us = _uState(userId);
     const creds = getExchangeCreds(userId);
     const exchangeMode = creds ? (creds.mode || 'live') : null;
+    // [Phase 2A] Canonical active exchange — additive field. null when no creds.
+    const activeExchange = creds ? (creds.exchange || null) : null;
     const resolvedEnv = us.engineMode === 'demo' ? 'DEMO'
         : (exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
     // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
@@ -1978,6 +1980,7 @@ function getFullState(userId) {
         apiConfigured: !!creds,
         exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
         resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'
+        activeExchange: activeExchange,    // [Phase 2A] 'binance' | 'bybit' | null
         positions: getOpenPositions(userId),
         demoPositions: getDemoPositions(userId),
         livePositions: getLivePositions(userId),
