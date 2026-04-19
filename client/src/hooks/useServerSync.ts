@@ -198,6 +198,17 @@ export function useServerSync(authenticated: boolean) {
         import('../stores/aresStore').then(({ useAresStore }) => {
           useAresStore.getState().loadFromServer()
         }).catch(() => {})
+        // [Phase 8B2] Re-pull /api/sync/state on reconnect so demoBalance
+        // and the positions snapshot (consumed by state.ts bridge path) are
+        // refreshed. Missed positions.changed pushes during the disconnect
+        // window could otherwise leave the client showing a closed position
+        // or missing a newly opened one until the next 30s poll.
+        syncApi.pullState().then((res) => {
+          if (res.ok && res.data && res.data.demoBalance) {
+            const bal = extractBalance(res.data.demoBalance)
+            usePositionsStore.getState().setDemoBalance(bal.balance)
+          }
+        }).catch(() => {})
       }
       useUiStore.getState().setConnected(true)
     })
