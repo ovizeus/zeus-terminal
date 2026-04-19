@@ -44,6 +44,32 @@ function _checkIdempotency(req) {
   return null;
 }
 
+// [Bug#3 STEP 2] In-memory per-user+exchange+symbol+side OPEN-order barrier.
+// Closes the TOCTOU hole between the sync duplicate-guard check and the async
+// Binance await: two parallel opens with different idempotency keys used to
+// both pass the guard (neither had committed a registration yet) and both hit
+// Binance, producing merged exchange qty + phantom seq. With this lock, the
+// second caller sees 409 before the guard even runs. Does not touch
+// close/reduceOnly orders — those legitimately reduce exposure and must pass.
+const _orderLocks = new Map();
+function _acquireOrderLock(userId, symbol, side, exchangeLabel) {
+  const key = `${userId}:${exchangeLabel || 'default'}:${symbol}:${side}`;
+  if (_orderLocks.has(key)) return null;
+  _orderLocks.set(key, Date.now());
+  return key;
+}
+function _releaseOrderLock(key) {
+  if (key) _orderLocks.delete(key);
+}
+// Safety sweep — release any lock older than 30s (guards against a path that
+// forgot finally on throw; no deadlock even in worst case).
+setInterval(() => {
+  const cutoff = Date.now() - 30000;
+  for (const [k, ts] of _orderLocks) {
+    if (ts < cutoff) _orderLocks.delete(k);
+  }
+}, 15000);
+
 // Sanitize error messages — pass Binance errors (have .status), hide internal errors
 function _safeError(err) {
   if (err.status && err.status >= 400 && err.status < 500) return err.message;
@@ -174,19 +200,32 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     return res.status(403).json({ error: risk.reason });
   }
 
-  // Duplicate position guard — prevent accidental double-open on same symbol+side
-  // Override with allowDuplicate:true in body for intentional hedging/scaling
-  if (!req.body.allowDuplicate && !closePosition) {
-    const _existingLive = require('../services/serverAT').getLivePositions(req.user.id);
-    const _dup = _existingLive.find(p => p.symbol === symbol && p.side === side);
-    if (_dup) {
-      logger.warn('ORDER', `Duplicate guard: ${side} ${symbol} already open (seq=${_dup.seq}) uid=${req.user.id}`);
-      if (_idemKey) _idempotencyCache.delete(_idemKey);
-      return res.status(409).json({ error: `Position already open: ${side} ${symbol} (seq=${_dup.seq}). Send allowDuplicate:true to override.` });
-    }
+  // [Bug#3 STEP 2] Acquire per-user+exchange+symbol+side lock BEFORE the duplicate
+  // guard. Parallel opens that arrive in the same tick used to both pass the guard
+  // (TOCTOU: sync check + async Binance await) — now the second caller short-circuits
+  // at 409 before ever reaching Binance. Close/reduceOnly orders skip the lock.
+  const _isOpening = !closePosition && !req.body.reduceOnly;
+  const _exLabel = req.exchangeMode || (req.exchangeCreds && req.exchangeCreds.baseUrl) || 'default';
+  const _orderLockKey = _isOpening ? _acquireOrderLock(req.user.id, symbol, side, _exLabel) : null;
+  if (_isOpening && !_orderLockKey) {
+    logger.warn('ORDER', `Order lock busy: ${side} ${symbol} uid=${req.user.id} ex=${_exLabel} — parallel submit rejected`);
+    if (_idemKey) _idempotencyCache.delete(_idemKey);
+    return res.status(409).json({ error: `Order in progress for ${side} ${symbol} — try again in a moment` });
   }
 
   try {
+    // Duplicate position guard — prevent accidental double-open on same symbol+side
+    // Override with allowDuplicate:true in body for intentional hedging/scaling
+    if (!req.body.allowDuplicate && !closePosition) {
+      const _existingLive = require('../services/serverAT').getLivePositions(req.user.id);
+      const _dup = _existingLive.find(p => p.symbol === symbol && p.side === side);
+      if (_dup) {
+        logger.warn('ORDER', `Duplicate guard: ${side} ${symbol} already open (seq=${_dup.seq}) uid=${req.user.id}`);
+        if (_idemKey) _idempotencyCache.delete(_idemKey);
+        return res.status(409).json({ error: `Position already open: ${side} ${symbol} (seq=${_dup.seq}). Send allowDuplicate:true to override.` });
+      }
+    }
+
     // Set leverage first if provided
     if (leverage) {
       try {
@@ -314,6 +353,9 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     metrics.recordError(err.message);
     telegram.alertOrderFailed(symbol, side, err.message, req.user.id);
     res.status(err.status || 500).json({ error: _safeError(err) });
+  } finally {
+    // [Bug#3 STEP 2] Release the per-user+exchange+symbol+side lock in all paths.
+    if (_orderLockKey) _releaseOrderLock(_orderLockKey);
   }
 });
 
