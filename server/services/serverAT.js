@@ -1878,6 +1878,21 @@ function getOpenPositions(userId) {
     return _positions.filter(p => p.userId === userId).map(p => {
         const copy = Object.assign({}, p);
         copy.dsl = serverDSL.getState(p.seq) || null;
+        // [Phase 9C2] Defensive normalization: guarantee every snapshot row ships
+        // sourceMode / autoTrade / controlMode / lev. Legacy rows restored from
+        // SQLite (pre-Phase 3A schema) may have undefined ownership fields, and
+        // the client's _mapServerPos would then need to invent values. Force a
+        // conservative baseline here so the wire contract is uniform.
+        if (typeof copy.lev !== 'number' || !(copy.lev > 0)) copy.lev = 1;
+        if (typeof copy.autoTrade !== 'boolean') {
+            copy.autoTrade = (copy.sourceMode === 'auto');
+        }
+        if (!copy.sourceMode) {
+            copy.sourceMode = copy.autoTrade === true ? 'auto' : 'manual';
+        }
+        if (!copy.controlMode) {
+            copy.controlMode = copy.autoTrade === true ? 'auto' : 'user';
+        }
         return copy;
     });
 }
