@@ -1030,9 +1030,15 @@ export const ZState = (() => {
         if (p.autoTrade && !_serverLiveIds.has(String(p.id)) && !_serverLiveIds.has(String(p._serverSeq)) && (p._localOnly || !p._serverSeq)) return true
         return false
       })
+      // [Phase 8B1] Atomic sync barrier — compute next demo + live arrays into
+      // locals, then assign TP.demoPositions / TP.livePositions / demo balance
+      // fields in one tight block with no intervening function calls. Previously
+      // TP.demoPositions was assigned on line 1 and TP.livePositions on line 14
+      // with function-filter bodies in between; any engine code that read both
+      // fields in that window saw mixed-era state (new demo + stale live).
       const _seenDemoIds = new Set<string>()
       const _seenDemoSeqs = new Set<string>()
-      TP.demoPositions = serverATDemo.concat(clientOnlyDemo).filter(function (p: any) {
+      const _nextDemoPositions = serverATDemo.concat(clientOnlyDemo).filter(function (p: any) {
         const pid = String(p.id)
         if (_seenDemoIds.has(pid)) return false
         _seenDemoIds.add(pid)
@@ -1045,7 +1051,7 @@ export const ZState = (() => {
       })
       const _seenLiveIds = new Set<string>()
       const _seenLiveSeqs = new Set<string>()
-      TP.livePositions = serverATLive.concat(clientOnlyLive).filter(function (p: any) {
+      const _nextLivePositions = serverATLive.concat(clientOnlyLive).filter(function (p: any) {
         const pid = String(p.id)
         if (_seenLiveIds.has(pid)) return false
         _seenLiveIds.add(pid)
@@ -1056,12 +1062,22 @@ export const ZState = (() => {
         }
         return true
       })
-      if (typeof renderLivePositions === 'function') renderLivePositions()
-      if (state.demoBalance) {
-        TP.demoBalance = state.demoBalance.balance || TP.demoBalance
-        TP.demoPnL = state.demoBalance.pnl || 0
-        TP._serverStartBalance = state.demoBalance.startBalance || 10000
+      // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
+      const _prevMerging = _merging
+      _merging = true
+      try {
+        TP.demoPositions = _nextDemoPositions
+        TP.livePositions = _nextLivePositions
+        if (state.demoBalance) {
+          TP.demoBalance = state.demoBalance.balance || TP.demoBalance
+          TP.demoPnL = state.demoBalance.pnl || 0
+          TP._serverStartBalance = state.demoBalance.startBalance || 10000
+        }
+      } finally {
+        _merging = _prevMerging
       }
+      // [Phase 8B1] Render AFTER the atomic mutation block.
+      if (typeof renderLivePositions === 'function') renderLivePositions()
       } // end _hasPosKeys block
     }
     if (typeof AT !== 'undefined') {
