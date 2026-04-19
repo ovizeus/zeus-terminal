@@ -93,6 +93,9 @@ interface PositionsStore {
    * Returns the same `true`/`false` as `replaceAll`.
    */
   applyDelta: (snapshot: PositionsSnapshot) => boolean
+
+  /** [Phase 3B] Reset all state on logout. Wipes positions, balances, pending, journal. */
+  reset: () => void
 }
 
 export const usePositionsStore = create<PositionsStore>()((set, get) => ({
@@ -173,4 +176,25 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   },
 
   applyDelta: (snapshot) => get().replaceAll(snapshot),
+
+  // [Phase 3B] Logout reset — clears per-user positions/balances/pending/journal to defaults.
+  reset: () => set({
+    demoPositions: [],
+    livePositions: [],
+    demoBalance: 10000,
+    demoPnL: 0,
+    demoWins: 0,
+    demoLosses: 0,
+    liveBalance: { totalBalance: 0, availableBalance: 0, unrealizedPnL: 0 },
+    liveConnected: false,
+    liveExchange: 'binance',
+    lastSnapshotTs: 0,
+    manualPnl: 0,
+    manualPnlClass: 'neut',
+    manualWr: '0%',
+    manualTrades: 0,
+    pendingOrders: [],
+    manualLivePending: [],
+    journal: [],
+  }),
 }))

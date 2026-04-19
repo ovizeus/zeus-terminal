@@ -1,4 +1,4 @@
-import { useUiStore, useMarketStore, useAuthStore } from '../../stores'
+import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 
 export function Header() {
   const connected = useUiStore((s) => s.connected)
@@ -13,7 +13,30 @@ export function Header() {
     if (!confirm('Are you sure you want to log out?')) return
     const wipeAndGo = () => {
       clearAuth()
-      // [ZT-AUD-C4] Wipe per-user client state so the next user on this
+      // [Phase 3B] Explicitly reset per-user client stores so any render cycle
+      // between clearAuth and navigation cannot show stale data from the
+      // previous user. Window mirrors cleared too — some legacy code reads
+      // w._executionEnv / w._resolvedEnv directly.
+      try { useUiStore.getState().reset() } catch {}
+      try { useATStore.getState().reset() } catch {}
+      try { usePositionsStore.getState().reset() } catch {}
+      try {
+        const w = window as any
+        w._executionEnv = null
+        w._executionBlockedReason = null
+        w._resolvedEnv = null
+        w._exchangeMode = null
+        w._apiConfigured = false
+        w._activeExchange = null
+        // AT engine flags — reset to safe defaults so stale state doesn't render briefly.
+        if (w.AT) {
+          w.AT.mode = 'demo'
+          w.AT._serverMode = ''
+          w.AT.enabled = false
+        }
+        if (w.S) w.S.mode = 'assist'
+      } catch {}
+      // [ZT-AUD-C4] Wipe per-user client storage so the next user on this
       // browser cannot see cached settings, ARES state, positions, or skip
       // the PIN gate (sessionStorage survives window.location.href).
       try { localStorage.clear() } catch {}

@@ -61,6 +61,8 @@ interface UiStore {
 
   /** Merge partial state */
   patch: (partial: Partial<UiStore>) => void
+  /** [Phase 3B] Reset all non-UI-preference state on logout. Preserves theme. */
+  reset: () => void
 }
 
 function readTheme(): ThemeId {
@@ -114,4 +116,26 @@ export const useUiStore = create<UiStore>()((set) => ({
   openModal: (id) => set({ activeModal: id }),
   closeModal: () => set({ activeModal: null }),
   patch: (partial) => set((s) => ({ ...s, ...partial })),
+  // [Phase 3B] Logout reset — clears ownership/env/mode/UI-connection fields to defaults.
+  // Theme is preserved intentionally (UX preference, not user-bound truth).
+  reset: () => set({
+    activePanel: 'chart',
+    settingsOpen: false,
+    connected: false,
+    activeModal: null,
+    apiConfigured: false,
+    exchangeMode: null,
+    resolvedEnv: 'DEMO',
+    executionEnv: null,
+    executionBlockedReason: null,
+    sbMode: 'DEMO',
+    sbModeClass: 'zsb-demo',
+    sbAtEnabled: false,
+    sbWsReady: false,
+    sbDataState: 'ok',
+    sbKillActive: false,
+    sbPosCount: 0,
+    sbPnl: 0,
+    isPlacingLive: false,
+  }),
 }))
