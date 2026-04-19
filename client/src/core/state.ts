@@ -880,9 +880,21 @@ export const ZState = (() => {
       // [Phase 3A] Fallback is explicit: manual/paper sourceMode → autoTrade=false.
       // For AT-origin (sourceMode='auto' or anything not manual/paper), AT-safe default=true.
       // If server sends sp.autoTrade explicitly, always trust that first.
+      // [Phase 8B3] When server response omits BOTH autoTrade and sourceMode,
+      // prefer the client's last-known ownership tag over the safe-AT default.
+      // Without this, a manual position whose server snapshot drops ownership
+      // fields would be silently reclassified to AT-owned, moving it off the
+      // Manual card mid-session. Order: server field → client existingPos →
+      // sp.sourceMode heuristic → existingPos.sourceMode heuristic → default true.
       autoTrade: (sp.autoTrade !== undefined)
         ? !!sp.autoTrade
-        : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper' ? false : true),
+        : (existingPos && typeof existingPos.autoTrade === 'boolean')
+          ? existingPos.autoTrade
+          : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper')
+            ? false
+            : (existingPos && (existingPos.sourceMode === 'manual' || existingPos.sourceMode === 'paper'))
+              ? false
+              : true,
       openTs: sp.ts || sp.openTs || Date.now(),
       label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
