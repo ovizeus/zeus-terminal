@@ -34,7 +34,7 @@ import { runSignalScan } from '../engine/indicators'
 import { calcConfluenceScore } from '../engine/confluence'
 import { renderTradeMarkers } from '../data/marketDataOverlays'
 import { attachConfirmClose } from '../engine/events'
-import { closeLivePos, renderLivePositions , renderDemoPositions , getSymPrice } from '../data/marketDataPositions'
+import { closeLivePos, renderLivePositions , renderDemoPositions , getSymPrice, savePosSLTP } from '../data/marketDataPositions'
 import { onPositionOpened } from '../trading/positions'
 import { sendAlert } from '../data/marketDataWS'
 import { addTradeToJournal } from '../services/storage'
@@ -1711,83 +1711,73 @@ export function renderATPositions(): void {
     panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">No auto position open</div>'
     return
   }
-  // Build HTML
+  // [Phase 9E1] AT card markup unified with DemoPositionRow / LivePositionRow.
+  // Body structure (pos-row class + header / entry-now-pnl / margin-notional /
+  // SL-TP inputs / LIQ) is identical to the Manual panel — the only delta is
+  // the extra action row below SAVE that carries AT-specific PARTIAL + ADD-ON
+  // buttons (Manual doesn't expose these because manual positions don't have
+  // add-on state). The user asked for "cards copy-paste identical with demo"
+  // — this keeps AT's richer actions while the visual body matches 1:1.
   panel.innerHTML = autoPosns.map((pos: any) => {
-    // [FIX A5] Use allPrices (consistent with getPosPrice/engine)
     const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
       : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
     const diff = symPrice - pos.entry
     const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
-    const pnlStr = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2)
     const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
-    const col = pos.side === 'LONG' ? '#00ff88' : '#ff4466'
-    const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))  // [v105 FIX Bug6] escHtml
-    const safeSide = escHtml(pos.side)                           // [v105 FIX Bug6] escHtml
+    const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
+    const safeSide = escHtml(pos.side)
     const posMode = (pos.mode || pos._serverMode || 'demo')
-    var _atPosEnv = w._executionEnv
-    const modeBadge = posMode === 'live'
-      ? (_atPosEnv === 'TESTNET'
-        ? '<span style="background:#f0c04022;color:#f0c040;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">TESTNET</span>'
-        : (_atPosEnv === 'REAL'
-          ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>'
-          : '<span style="background:#ff880022;color:#ff8800;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LOCKED</span>'))
-      : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>'
-
-    // TP/SL expected P&L
-    const tpPnl2 = pos.tpPnl || (pos.tp ? Math.abs(pos.tp - pos.entry) / pos.entry * pos.size * pos.lev : 0)
-    const slPnl2 = pos.slPnl || (pos.sl ? -Math.abs(pos.sl - pos.entry) / pos.entry * pos.size * pos.lev : 0)
-    const distToTP = pos.tp ? ((Math.abs(symPrice - pos.tp) / symPrice) * 100).toFixed(2) : null
-    const distToSL = pos.sl ? ((Math.abs(symPrice - pos.sl) / symPrice) * 100).toFixed(2) : null
-
-    // QTY and Margin
-    const qty2 = pos.qty || (pos.size / pos.entry)
-    const margin2 = pos.margin || (pos.size / pos.lev)
-
-    return `<div style="background:#0a0518;border:1px solid ${col}33;border-left:3px solid ${col};border-radius:4px;padding:8px 10px;margin-bottom:6px;font-size:12px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-        <span style="color:${col};font-weight:700;font-size:14px">${_ZI.robot} ${safeSide} ${symBase}${modeBadge}</span>
-        <span style="color:${pnl >= 0 ? '#00ff88' : '#ff4466'};font-size:16px;font-weight:700">${pnlStr} <span style="font-size:12px;opacity:.8">(${pnlPct}%)</span></span>
+    const _atPosEnv = w._executionEnv
+    const badgeLabel = posMode === 'live'
+      ? (_atPosEnv === 'TESTNET' ? 'TESTNET' : _atPosEnv === 'REAL' ? 'LIVE' : 'LOCKED')
+      : 'DEMO'
+    const badgeBg = posMode === 'live'
+      ? (_atPosEnv === 'TESTNET' ? '#f0c04022' : _atPosEnv === 'REAL' ? '#ff444422' : '#ff880022')
+      : '#aa44ff22'
+    const badgeFg = posMode === 'live'
+      ? (_atPosEnv === 'TESTNET' ? '#f0c040' : _atPosEnv === 'REAL' ? '#ff4444' : '#ff8800')
+      : '#aa44ff'
+    const margin = Number(pos.size) || 0
+    const lev = Number(pos.lev) || 1
+    const notional = margin * lev
+    const feeRate = (w.S?.feeRate ?? 0.0004) as number
+    const estFees = notional * feeRate * 2
+    const roe = margin > 0 ? (pnl / margin * 100).toFixed(2) : '0.00'
+    const dsl = (w.DSL && w.DSL.positions) ? w.DSL.positions[String(pos.id)] : null
+    const dslActive = dsl && dsl.active
+    const slVal = dslActive && dsl.currentSL > 0 ? dsl.currentSL : pos.sl
+    const slLabel = dslActive ? 'DSL' : 'SL'
+    const slColor = dslActive ? '#39ff14' : '#ff6644'
+    const posCls = pos.side === 'LONG' ? 'pos-long' : 'pos-short'
+    const pnlColor = pnl >= 0 ? 'var(--grn)' : 'var(--red)'
+    const liqColor = pos.side === 'LONG' ? '#ff3355' : '#00d97a'
+    const slInput = (pos.sl ? String(pos.sl) : '')
+    const tpInput = (pos.tp ? String(pos.tp) : '')
+    const canDoAddOn = canAddOn(pos)
+    return `<div class="pos-row ${posCls}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700">${_ZI.robot} ${safeSide} ${symBase} ${pos.lev}x<span style="background:${badgeBg};color:${badgeFg};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">${badgeLabel}</span></span>
+        <button data-close-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;min-height:52px;font-weight:700">\u2715 CLOSE</button>
       </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px">
-        <div style="color:var(--dim);font-size:11px">${(pos.addOnCount || 0) > 0 ? 'Avg Entry' : 'Entry'}<br><span style="color:var(--whi);font-size:13px;font-weight:700">$${fP(pos.entry)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Now (${symBase})<br><span style="color:${col};font-size:13px;font-weight:700">$${fP(symPrice)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Leverage<br><span style="color:#f0c040;font-size:13px;font-weight:700">${pos.lev}x</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px">
+        <span style="color:var(--dim)">Entry: $${fP(pos.entry)} | Now: $${fP(symPrice)}</span>
+        <span style="color:${pnlColor}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct}%)</span>
       </div>
-            ${(pos.addOnCount || 0) > 0 ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px;padding:4px 6px;background:#0d0a1a;border-radius:3px;border:1px solid #2a1a40">
-        <div style="color:var(--dim);font-size:11px">Orig Entry<br><span style="color:#f0c040;font-size:12px;font-weight:700">$${fP(pos.originalEntry || pos.entry)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Add-Ons<br><span style="color:#00b8d4;font-size:12px;font-weight:700">${pos.addOnCount}x</span></div>
-        <div style="color:var(--dim);font-size:11px">Orig Size<br><span style="color:#aa44ff;font-size:12px;font-weight:700">$${(pos.originalSize || pos.size).toFixed(0)}</span></div>
-      </div>` : ''}
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px;padding:4px 6px;background:#060212;border-radius:3px;border:1px solid #1a0a30">
-        <div style="color:var(--dim);font-size:11px">QTY (${symBase})<br><span style="color:#00b8d4;font-size:13px;font-weight:700">${qty2 > 1 ? qty2.toFixed(4) : qty2.toFixed(6)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Margin (USDT)<br><span style="color:#aa44ff;font-size:13px;font-weight:700">$${margin2.toFixed(2)}</span></div>
+      <div style="font-size:12px;color:var(--dim);margin-top:1px">
+        Margin: $${fmt(margin)} | Notional: $${fmt(notional)} | Fees\u2248$${fmt(estFees)} | ROE: ${roe}%
       </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px">
-        <div style="padding:3px 5px;background:#00d97a0a;border:1px solid #00d97a22;border-radius:3px">
-          <div style="font-size:10px;color:#00d97a55;letter-spacing:1px">TP PROFIT</div>
-          <div style="font-size:13px;color:#00d97a;font-weight:700">+$${tpPnl2.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--dim)">@$${fP(pos.tp)} ${distToTP ? '(' + distToTP + '%)' : ''}</div>
-        </div>
-        <div style="padding:3px 5px;background:#ff446608;border:1px solid #ff446622;border-radius:3px">
-          <div style="font-size:10px;color:#ff446655;letter-spacing:1px">SL RISC</div>
-          <div style="font-size:13px;color:#ff4466;font-weight:700">$${slPnl2.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--dim)">@$${fP(pos.sl)} ${distToSL ? '(' + distToSL + '%)' : ''}</div>
-        </div>
+      ${dslActive ? `<div style="font-size:12px;color:${slColor};margin-top:1px">${slLabel}: $${fP(slVal)}${pos.tp ? ` | TP: $${fP(pos.tp)}` : ''}</div>` : ''}
+      <div style="display:flex;gap:4px;margin-top:3px;align-items:center">
+        <span style="font-size:10px;color:#ff6644;width:22px">SL:</span>
+        <input id="slEdit_${pos.id}" type="number" step="0.1" value="${slInput}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"/>
+        <span style="font-size:10px;color:#00ff88;width:22px">TP:</span>
+        <input id="tpEdit_${pos.id}" type="number" step="0.1" value="${tpInput}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"/>
+        <button data-save-sltp-id="${pos.id}" data-save-mode="${posMode === 'live' ? 'live' : 'demo'}" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button>
       </div>
-            ${pos.liqPrice ? `<div style="font-size:11px;color:#ff8800;margin-bottom:5px">${_ZI.skull} LIQ: $${fP(pos.liqPrice)}</div>` : ''}
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
-        <button data-close-id="${pos.id}"
-          style="padding:10px 6px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;">
-          \u2715 CLOSE
-        </button>
-        <button data-partial-id="${pos.id}"
-          style="padding:10px 6px;background:#0d0020;border:2px solid #aa44ff;color:#aa44ff;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;">
-          \u25D1 PARTIAL
-        </button>
-        <button data-addon-id="${pos.id}" ${canAddOn(pos) ? '' : 'disabled'}
-          style="padding:10px 6px;background:${canAddOn(pos) ? '#001a10' : '#111'};border:2px solid ${canAddOn(pos) ? '#00ff88' : '#333'};color:${canAddOn(pos) ? '#00ff88' : '#555'};border-radius:4px;font-size:12px;font-weight:700;cursor:${canAddOn(pos) ? 'pointer' : 'not-allowed'};font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;opacity:${canAddOn(pos) ? '1' : '.5'}">
-          \u2795 ADD-ON
-        </button>
+      ${pos.liqPrice ? `<div style="font-size:12px;color:${liqColor};margin-top:1px">LIQ: $${fP(pos.liqPrice)}</div>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px">
+        <button data-partial-id="${pos.id}" style="padding:8px 6px;background:#0d0020;border:2px solid #aa44ff;color:#aa44ff;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;min-height:40px">\u25D1 PARTIAL</button>
+        <button data-addon-id="${pos.id}" ${canDoAddOn ? '' : 'disabled'} style="padding:8px 6px;background:${canDoAddOn ? '#001a10' : '#111'};border:2px solid ${canDoAddOn ? '#00ff88' : '#333'};color:${canDoAddOn ? '#00ff88' : '#555'};border-radius:4px;font-size:11px;font-weight:700;cursor:${canDoAddOn ? 'pointer' : 'not-allowed'};min-height:40px;opacity:${canDoAddOn ? '1' : '.5'}">\u2795 ADD-ON</button>
       </div>
     </div>`
   }).join('')
@@ -1805,6 +1795,15 @@ export function renderATPositions(): void {
     if (btn.disabled) return
     const id = parseInt(btn.getAttribute('data-addon-id'), 10)
     attachConfirmClose(btn, function () { openAddOn(id) })
+  })
+  // [Phase 9E1] SAVE SL/TP — same contract as Manual/Demo panel: reads input
+  // values by id slEdit_<id> / tpEdit_<id> via savePosSLTP().
+  panel.querySelectorAll('button[data-save-sltp-id]').forEach(function (btn: any) {
+    const id = parseInt(btn.getAttribute('data-save-sltp-id'), 10)
+    const mode = btn.getAttribute('data-save-mode') || 'demo'
+    btn.addEventListener('click', function () {
+      try { savePosSLTP(id, mode) } catch (e: any) { console.warn('[AT SAVE SL/TP]', e.message || e) }
+    })
   })
 }
 
