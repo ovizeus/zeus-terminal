@@ -219,15 +219,22 @@ export async function liveApiSyncState(): Promise<any> {
         openTs: p.updateTime || Date.now(),
       }
       if (existing) {
-        // [FIX R7] If ID changed, re-attach DSL state
+        // [FIX R7] If ID changed, re-attach DSL state.
+        // [Phase 8C2] Delegate to the shared _dslReassignId helper so all id-
+        // change sites stay consistent. Falls back to the inline implementation
+        // if the helper global isn't present yet (boot-order safety net).
         if (String(existing.id) !== String(fresh.id) && typeof w.DSL !== 'undefined') {
-          if (w.DSL.positions && w.DSL.positions[String(existing.id)]) {
-            w.DSL.positions[String(fresh.id)] = w.DSL.positions[String(existing.id)]
-            delete w.DSL.positions[String(existing.id)]
-          }
-          if (w.DSL._attachedIds) {
-            w.DSL._attachedIds.delete(String(existing.id))
-            w.DSL._attachedIds.add(String(fresh.id))
+          if (typeof w._dslReassignId === 'function') {
+            w._dslReassignId(existing.id, fresh.id)
+          } else {
+            if (w.DSL.positions && w.DSL.positions[String(existing.id)]) {
+              w.DSL.positions[String(fresh.id)] = w.DSL.positions[String(existing.id)]
+              delete w.DSL.positions[String(existing.id)]
+            }
+            if (w.DSL._attachedIds) {
+              w.DSL._attachedIds.delete(String(existing.id))
+              w.DSL._attachedIds.add(String(fresh.id))
+            }
           }
         }
         // Preserve runtime state from prior sync/open

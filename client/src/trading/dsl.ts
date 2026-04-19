@@ -44,6 +44,32 @@ function _removeDslPosition(posId: string): void {
   useDslStore.getState().removePosition(posId)
 }
 
+/**
+ * [Phase 8C2] DSL reattach helper — moves the DSL state and _attachedIds
+ * membership from oldId to newId. Idempotent: a no-op if oldId has no
+ * state, or if newId already owns equivalent state.
+ *
+ * Why: multiple sites (exchange sync in liveApi.ts, manual→server
+ * registration in marketDataTrading.ts, future reassignment paths) need
+ * to preserve the user's DSL preset + adaptive phase + history when the
+ * position's canonical id changes. Inlining the move in each place
+ * drifted over time; this helper keeps them consistent.
+ */
+export function _dslReassignId(oldId: string | number, newId: string | number): void {
+  const _old = String(oldId)
+  const _new = String(newId)
+  if (_old === _new) return
+  if (DSL.positions && DSL.positions[_old]) {
+    DSL.positions[_new] = DSL.positions[_old]
+    delete DSL.positions[_old]
+  }
+  if (DSL._attachedIds) {
+    if (DSL._attachedIds.has(_old)) DSL._attachedIds.delete(_old)
+    DSL._attachedIds.add(_new)
+  }
+}
+;(window as any)._dslReassignId = _dslReassignId
+
 // Sync DSL SL to exchange for live positions (client-side AT only)
 function _syncLiveSL(pos: any, newSL: number): void {
   if (!pos.isLive || w._serverATEnabled) return
