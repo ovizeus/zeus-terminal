@@ -1945,22 +1945,32 @@ function getLiveStats(userId) {
     };
 }
 
+// Terminal states — position is done, exchange side cleaned up. Safe to hide from client panels
+// (still persisted in _positions briefly until zombie-cleanup runs). Matches the implicit demo-parity
+// rule: demo closed positions are spliced from _positions immediately, so getDemoPositions never
+// sees them; for live we can't always splice immediately (reconciliation windows, FILL_UNVERIFIED),
+// so we filter by status instead.
+const _LIVE_TERMINAL_STATUSES = new Set([
+    'CLOSED', 'EMERGENCY_CLOSED', 'ERROR', 'LOCK_BLOCKED',
+]);
+
 function getLivePositions(userId) {
-    // [DSL-FIX2] Include LIVE_NO_SL positions (so user can see them) + attach DSL state
-    // [AT-PANEL] Also include _livePending positions so client sees them before exchange fill
+    // [Phase 5B] Demo-parity filter — include every live position for the user EXCEPT terminal-state
+    // zombies. Previous filter (LIVE/LIVE_NO_SL/_livePending) hid AT positions in the exchange-roundtrip
+    // window, so client _lastServerPositions cache didn't see them and liveApi classified them as
+    // MANUAL (default sourceMode='paper'). Demo had no such window because demo is synchronous.
+    //
+    // Including FILL_UNVERIFIED and undefined-status positions keeps the client cache hydrated with
+    // ownership truth even before exchange confirmation. Re-pulls eventually correct stale cases.
     const allLiveForUser = _positions.filter(p => p.userId === userId && p.mode === 'live');
-    const visible = allLiveForUser.filter(p => (
-        (p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL')) ||
-        p._livePending === true
-    ));
-    // [P5A SERVER LIVE OWNERSHIP] Filter tracepoint — only log when something is hidden (signal > noise).
-    // Confirms hypothesis #2: AT live positions may be filtered out between push and live.status set.
+    const visible = allLiveForUser.filter(p => !(p.live && _LIVE_TERMINAL_STATUSES.has(p.live.status)));
+    // [P5A SERVER LIVE OWNERSHIP] Post-fix tracepoint — logs only when the demo-parity filter still
+    // hides something (terminal zombies). If this fires with autoTrade=true for a non-terminal state,
+    // the fix missed a case and the filter needs widening.
     if (allLiveForUser.length !== visible.length) {
-        const hidden = allLiveForUser.filter(p => !(
-            (p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL')) ||
-            p._livePending === true
-        )).map(p => `seq=${p.seq}/${p.symbol}/${p.side}/autoTrade=${p.autoTrade}/live=${p.live ? p.live.status : 'undef'}/pending=${p._livePending}`);
-        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] getLivePositions uid=${userId} visible=${visible.length}/${allLiveForUser.length} hidden=[${hidden.join(' | ')}] ts=${Date.now()}`);
+        const hidden = allLiveForUser.filter(p => (p.live && _LIVE_TERMINAL_STATUSES.has(p.live.status)))
+            .map(p => `seq=${p.seq}/${p.symbol}/${p.side}/autoTrade=${p.autoTrade}/live=${p.live.status}`);
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] getLivePositions uid=${userId} visible=${visible.length}/${allLiveForUser.length} hidden-terminal=[${hidden.join(' | ')}] ts=${Date.now()}`);
     }
     return visible.map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
 }
