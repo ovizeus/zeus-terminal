@@ -1096,9 +1096,15 @@ export const ZState = (() => {
     }
     w._apiConfigured = !!state.apiConfigured
     w._exchangeMode = state.exchangeMode || null
-    // [Phase 3D] resolvedEnv mirror uses server canonical truth directly — no false derivation.
-    // When exec is blocked (null), mirror stays null. Legacy fallback removed.
-    w._resolvedEnv = (state.resolvedEnv !== undefined && state.resolvedEnv !== null) ? state.resolvedEnv : null
+    if (state.resolvedEnv) {
+      w._resolvedEnv = state.resolvedEnv
+    } else if (state.mode === 'demo') {
+      w._resolvedEnv = 'DEMO'
+    } else if (state.exchangeMode === 'testnet') {
+      w._resolvedEnv = 'TESTNET'
+    } else {
+      w._resolvedEnv = 'REAL'
+    }
     // Phase 2C: canonical mirrors. null is preserved (LOCKED state for non-demo).
     w._executionEnv = (state.executionEnv !== undefined) ? state.executionEnv : null
     w._executionBlockedReason = (state.executionBlockedReason !== undefined) ? state.executionBlockedReason : null
@@ -1514,19 +1520,3 @@ w.TP = TP
 w.oiHistory = oiHistory
 w.wlPrices = wlPrices
 w.IND_SETTINGS = IND_SETTINGS
-
-// [Phase 3C] Engine mode single truth — useATStore.mode is canonical.
-// Legacy AT.mode / AT._serverMode are read mirrors, kept in sync by this
-// subscriber. Any code that continues to write AT.mode directly creates
-// a transient divergence until the store writes back here; avoid that
-// pattern for new code. Read render-critical code from the store.
-try {
-  useATStore.subscribe((s, prev) => {
-    if (s.mode === prev.mode && s._serverMode === prev._serverMode) return
-    const _AT = w.AT
-    if (!_AT) return
-    if (s.mode && _AT.mode !== s.mode) _AT.mode = s.mode
-    const _nextServerMode = s._serverMode || s.mode || ''
-    if (_AT._serverMode !== _nextServerMode) _AT._serverMode = _nextServerMode
-  })
-} catch (_) { /* defensive: subscribe never throws in zustand v4 but keep the net */ }

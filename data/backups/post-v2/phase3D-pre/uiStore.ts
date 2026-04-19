@@ -30,8 +30,8 @@ interface UiStore {
   /** Server environment info */
   apiConfigured: boolean
   exchangeMode: string | null
-  /** [Phase 3D] Aligned to executionEnv — null when blocked. No more legacy REAL fallback. */
-  resolvedEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
+  /** Legacy: falsely 'REAL' when live+no creds. Phase 2C consumers MUST read executionEnv instead. */
+  resolvedEnv: string
   /** Phase 2C canonical execution env from server _resolveExecutionEnv(). null when non-demo blocked. */
   executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
   executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null

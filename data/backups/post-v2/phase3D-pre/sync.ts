@@ -77,7 +77,7 @@ export interface ServerATState {
   atActive: boolean
   apiConfigured: boolean
   exchangeMode: string | null // 'testnet' | 'live' | null
-  resolvedEnv: 'DEMO' | 'TESTNET' | 'REAL' | null // [Phase 3D] aligned with executionEnv (canonical truth); null when blocked
+  resolvedEnv: string // 'DEMO' | 'TESTNET' | 'REAL' — legacy, falsely 'REAL' when live+no creds; consumers MUST use executionEnv
   activeExchange?: 'binance' | 'bybit' | null
   // Phase 2C canonical execution env — truth from server _resolveExecutionEnv()
   executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null

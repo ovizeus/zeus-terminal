@@ -30,11 +30,7 @@ interface UiStore {
   /** Server environment info */
   apiConfigured: boolean
   exchangeMode: string | null
-  /** [Phase 3D] Aligned to executionEnv — null when blocked. No more legacy REAL fallback. */
-  resolvedEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
-  /** Phase 2C canonical execution env from server _resolveExecutionEnv(). null when non-demo blocked. */
-  executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
-  executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
+  resolvedEnv: string
 
   // [R8] StatusBar reactive fields (replaces imperative DOM writes from bootstrapError._updateStatusBar)
   /** Display mode label (e.g. DEMO, LIVE, TESTNET) — derives from AT._serverMode / AT.mode / _resolvedEnv */
@@ -54,15 +50,8 @@ interface UiStore {
   /** Daily PnL ($) */
   sbPnl: number
 
-  /** [batch3-W+] Live manual order in-flight (sets Manual PLACE button to "Placing…" + disabled).
-   *  Set true when /api/order/place fires, false on then/catch. */
-  isPlacingLive: boolean
-  setIsPlacingLive: (placing: boolean) => void
-
   /** Merge partial state */
   patch: (partial: Partial<UiStore>) => void
-  /** [Phase 3B] Reset all non-UI-preference state on logout. Preserves theme. */
-  reset: () => void
 }
 
 function readTheme(): ThemeId {
@@ -84,8 +73,6 @@ export const useUiStore = create<UiStore>()((set) => ({
   apiConfigured: false,
   exchangeMode: null,
   resolvedEnv: 'DEMO',
-  executionEnv: null,
-  executionBlockedReason: null,
 
   // [R8] StatusBar defaults
   sbMode: 'DEMO',
@@ -96,9 +83,6 @@ export const useUiStore = create<UiStore>()((set) => ({
   sbKillActive: false,
   sbPosCount: 0,
   sbPnl: 0,
-
-  isPlacingLive: false,
-  setIsPlacingLive: (placing) => set({ isPlacingLive: !!placing }),
 
   setTheme: (theme) => {
     try {
@@ -116,26 +100,4 @@ export const useUiStore = create<UiStore>()((set) => ({
   openModal: (id) => set({ activeModal: id }),
   closeModal: () => set({ activeModal: null }),
   patch: (partial) => set((s) => ({ ...s, ...partial })),
-  // [Phase 3B] Logout reset — clears ownership/env/mode/UI-connection fields to defaults.
-  // Theme is preserved intentionally (UX preference, not user-bound truth).
-  reset: () => set({
-    activePanel: 'chart',
-    settingsOpen: false,
-    connected: false,
-    activeModal: null,
-    apiConfigured: false,
-    exchangeMode: null,
-    resolvedEnv: 'DEMO',
-    executionEnv: null,
-    executionBlockedReason: null,
-    sbMode: 'DEMO',
-    sbModeClass: 'zsb-demo',
-    sbAtEnabled: false,
-    sbWsReady: false,
-    sbDataState: 'ok',
-    sbKillActive: false,
-    sbPosCount: 0,
-    sbPnl: 0,
-    isPlacingLive: false,
-  }),
 }))

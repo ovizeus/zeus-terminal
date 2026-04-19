@@ -450,11 +450,7 @@ export const ZState = (() => {
       liveManualPositions: (typeof TP !== 'undefined' ? TP.livePositions || [] : [])
         .filter(function (p: any) {
           if (p.closed) return false
-          // [Phase 3A] Whitelist: only whitelisted-manual positions are serialized as manual.
-          // Ambiguous positions (autoTrade undefined, sourceMode unknown) are dropped — they
-          // will rehydrate from server on reconnect if still live. Never coerce unknown → manual.
-          const _isManual = (p.autoTrade === false) || (p.sourceMode === 'manual') || (p.sourceMode === 'paper')
-          if (!_isManual) return false
+          if (p.autoTrade) return false
           if (!p.isLive && !p.fromExchange) return false
           return true
         })
@@ -862,12 +858,7 @@ export const ZState = (() => {
       addOnHistory: sp.addOnHistory || [],
       slPct: sp.slPct || 0,
       rr: sp.rr || 0,
-      // [Phase 3A] Fallback is explicit: manual/paper sourceMode → autoTrade=false.
-      // For AT-origin (sourceMode='auto' or anything not manual/paper), AT-safe default=true.
-      // If server sends sp.autoTrade explicitly, always trust that first.
-      autoTrade: (sp.autoTrade !== undefined)
-        ? !!sp.autoTrade
-        : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper' ? false : true),
+      autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : (sp.sourceMode === 'manual' ? false : true),
       openTs: sp.ts || sp.openTs || Date.now(),
       label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
@@ -1096,9 +1087,15 @@ export const ZState = (() => {
     }
     w._apiConfigured = !!state.apiConfigured
     w._exchangeMode = state.exchangeMode || null
-    // [Phase 3D] resolvedEnv mirror uses server canonical truth directly — no false derivation.
-    // When exec is blocked (null), mirror stays null. Legacy fallback removed.
-    w._resolvedEnv = (state.resolvedEnv !== undefined && state.resolvedEnv !== null) ? state.resolvedEnv : null
+    if (state.resolvedEnv) {
+      w._resolvedEnv = state.resolvedEnv
+    } else if (state.mode === 'demo') {
+      w._resolvedEnv = 'DEMO'
+    } else if (state.exchangeMode === 'testnet') {
+      w._resolvedEnv = 'TESTNET'
+    } else {
+      w._resolvedEnv = 'REAL'
+    }
     // Phase 2C: canonical mirrors. null is preserved (LOCKED state for non-demo).
     w._executionEnv = (state.executionEnv !== undefined) ? state.executionEnv : null
     w._executionBlockedReason = (state.executionBlockedReason !== undefined) ? state.executionBlockedReason : null
@@ -1514,19 +1511,3 @@ w.TP = TP
 w.oiHistory = oiHistory
 w.wlPrices = wlPrices
 w.IND_SETTINGS = IND_SETTINGS
-
-// [Phase 3C] Engine mode single truth — useATStore.mode is canonical.
-// Legacy AT.mode / AT._serverMode are read mirrors, kept in sync by this
-// subscriber. Any code that continues to write AT.mode directly creates
-// a transient divergence until the store writes back here; avoid that
-// pattern for new code. Read render-critical code from the store.
-try {
-  useATStore.subscribe((s, prev) => {
-    if (s.mode === prev.mode && s._serverMode === prev._serverMode) return
-    const _AT = w.AT
-    if (!_AT) return
-    if (s.mode && _AT.mode !== s.mode) _AT.mode = s.mode
-    const _nextServerMode = s._serverMode || s.mode || ''
-    if (_AT._serverMode !== _nextServerMode) _AT._serverMode = _nextServerMode
-  })
-} catch (_) { /* defensive: subscribe never throws in zustand v4 but keep the net */ }

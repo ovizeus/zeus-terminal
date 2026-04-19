@@ -30,8 +30,8 @@ interface UiStore {
   /** Server environment info */
   apiConfigured: boolean
   exchangeMode: string | null
-  /** [Phase 3D] Aligned to executionEnv — null when blocked. No more legacy REAL fallback. */
-  resolvedEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
+  /** Legacy: falsely 'REAL' when live+no creds. Phase 2C consumers MUST read executionEnv instead. */
+  resolvedEnv: string
   /** Phase 2C canonical execution env from server _resolveExecutionEnv(). null when non-demo blocked. */
   executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
   executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
@@ -61,8 +61,6 @@ interface UiStore {
 
   /** Merge partial state */
   patch: (partial: Partial<UiStore>) => void
-  /** [Phase 3B] Reset all non-UI-preference state on logout. Preserves theme. */
-  reset: () => void
 }
 
 function readTheme(): ThemeId {
@@ -116,26 +114,4 @@ export const useUiStore = create<UiStore>()((set) => ({
   openModal: (id) => set({ activeModal: id }),
   closeModal: () => set({ activeModal: null }),
   patch: (partial) => set((s) => ({ ...s, ...partial })),
-  // [Phase 3B] Logout reset — clears ownership/env/mode/UI-connection fields to defaults.
-  // Theme is preserved intentionally (UX preference, not user-bound truth).
-  reset: () => set({
-    activePanel: 'chart',
-    settingsOpen: false,
-    connected: false,
-    activeModal: null,
-    apiConfigured: false,
-    exchangeMode: null,
-    resolvedEnv: 'DEMO',
-    executionEnv: null,
-    executionBlockedReason: null,
-    sbMode: 'DEMO',
-    sbModeClass: 'zsb-demo',
-    sbAtEnabled: false,
-    sbWsReady: false,
-    sbDataState: 'ok',
-    sbKillActive: false,
-    sbPosCount: 0,
-    sbPnl: 0,
-    isPlacingLive: false,
-  }),
 }))

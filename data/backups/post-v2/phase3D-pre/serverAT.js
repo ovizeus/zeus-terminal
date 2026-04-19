@@ -1999,9 +1999,10 @@ function getFullState(userId) {
     const activeExchange = creds ? (creds.exchange || null) : null;
     // [Phase 2B] Canonical execution env (server truth) + stable blocked reason.
     const execEnv = _resolveExecutionEnv(userId);
-    // [Phase 3D] resolvedEnv now aligns to canonical execEnv.env (null when blocked).
-    // Legacy false-positive REAL derivation removed — no more fake truth on missing creds.
-    const resolvedEnv = execEnv.env;
+    // [Compat] resolvedEnv preserved as-is (legacy 'REAL' fallback). Aligning it
+    // to executionEnv would change client contract — deferred to a future client phase.
+    const resolvedEnv = us.engineMode === 'demo' ? 'DEMO'
+        : (exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
     // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
     // Client uses this to decide if it should lock out its own AT engine.
     const serverDrivesAT = !!(MF && MF.SERVER_AT && MF.SERVER_BRAIN);
@@ -2012,7 +2013,7 @@ function getFullState(userId) {
         serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
         apiConfigured: !!creds,
         exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
-        resolvedEnv: resolvedEnv,          // [Phase 3D] 'DEMO' | 'TESTNET' | 'REAL' | null — aligned with executionEnv (canonical truth)
+        resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'  (legacy; may falsely say REAL when no creds — use executionEnv for truth)
         activeExchange: activeExchange,    // [Phase 2A] 'binance' | 'bybit' | null
         executionEnv: execEnv.env,         // [Phase 2B] 'DEMO' | 'TESTNET' | 'REAL' | null  (canonical server truth)
         executionBlockedReason: execEnv.blockedReason, // [Phase 2B] 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
