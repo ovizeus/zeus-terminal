@@ -308,7 +308,18 @@ function _executeDemoManualOrder(orderType: string, size: number, entry: number,
   }
 }
 
+// [Bug#3 STEP 1] Module-level synchronous re-entry + cooldown guard for live manual order.
+// React's useUiStore.setIsPlacingLive is async; button's disabled= and handler's guard
+// both read stale state during a rapid double-click → 2 POSTs fire → 2 exchange orders.
+// These two flags run sync, in the same tick, so re-entry is blocked BEFORE any await.
+let _liveOrderInFlight = false
+let _lastLiveOrderCompleteTs = 0
+const _LIVE_ORDER_COOLDOWN_MS = 750
+
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
+  // [Bug#3 STEP 1] Re-entry + cooldown gates — block before any async work.
+  if (_liveOrderInFlight) { toast('Order already in progress', 2000, _ZI?.lock); return }
+  if (Date.now() - _lastLiveOrderCompleteTs < _LIVE_ORDER_COOLDOWN_MS) { toast('Order too fast — wait a moment', 2000, _ZI?.lock); return }
   if (typeof manualLivePlaceOrder !== 'function') { toast('Live API not available', 3000, _ZI.lock); return }
   if (!TP.liveBalance || size > TP.liveBalance) { toast('Insufficient live balance', 3000, _ZI?.x); return }
   if (lev < 1 || lev > 125) { toast('Leverage must be 1-125x', 3000, _ZI?.x); return }
@@ -317,6 +328,7 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
   // Legacy DOM mutation (textContent='Placing...') is removed — React would
   // skip the DOM update on re-render since the VDOM text hadn't changed,
   // leaving the button stuck on "Placing...".
+  _liveOrderInFlight = true  // [Bug#3 STEP 1] committed — released in finally
   useUiStore.getState().setIsPlacingLive(true)
   manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
     useUiStore.getState().setIsPlacingLive(false)
@@ -345,6 +357,7 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
       toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); _startLivePendingSync()
     }
   }).catch(function (err: any) { useUiStore.getState().setIsPlacingLive(false); toast('LIVE order failed: ' + (err.message || err)) })
+    .finally(function () { _liveOrderInFlight = false; _lastLiveOrderCompleteTs = Date.now() })
 }
 
 function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: any, sl: any, liqPrice: any, mode: string, orderType: string): any {
