@@ -187,15 +187,30 @@ export interface UserSettingsResponse {
   error?: string
 }
 
-/** Response shape of POST /api/user/settings. */
+/** Response shape of POST /api/user/settings.
+ *
+ * [Phase 8D2] On optimistic-concurrency conflict the server replies 409
+ * with `{ ok:false, error:'stale', current_updated_at, current_settings }`.
+ * userSettingsApi.save surfaces that body verbatim instead of throwing, so
+ * the store can refresh from server and abandon the stale write without a
+ * second fetch. Regular successes remain `{ ok:true, updated_at }`. */
 export interface UserSettingsSaveResponse {
   ok: boolean
   updated_at?: number
   error?: string
+  stale?: boolean
+  current_updated_at?: number
+  current_settings?: Partial<SettingsPayload>
 }
 
 /** Payload accepted by POST /api/user/settings (flat whitelisted keys). */
 export type UserSettingsPayload = Partial<SettingsPayload>
+
+/** Options for userSettingsApi.save. `ifUpdatedAt` enables optimistic
+ *  concurrency: server rejects with `stale:true` if DB is newer. */
+export interface UserSettingsSaveOpts extends ApiRequestOpts {
+  ifUpdatedAt?: number
+}
 
 export const userSettingsApi = {
   /** GET /api/user/settings — authoritative per-user settings from SQLite. */
@@ -205,9 +220,32 @@ export const userSettingsApi = {
    * POST /api/user/settings — persist flat whitelisted settings.
    * Pass `{ keepalive: true }` for saves issued during `beforeunload`
    * (matches the legacy `_usPostRemote` fire-and-forget pattern).
+   * [Phase 8D2] Pass `{ ifUpdatedAt: <last-known-remote-ts> }` to enable
+   * the server's optimistic-concurrency guard. A 409 response is returned
+   * as `{ ok:false, stale:true, current_updated_at, current_settings }`
+   * rather than thrown, so callers can refresh without a second request.
    */
-  save: (settings: UserSettingsPayload, opts?: ApiRequestOpts) =>
-    api.raw<UserSettingsSaveResponse>('POST', '/api/user/settings', { settings }, opts),
+  save: async (
+    settings: UserSettingsPayload,
+    opts?: UserSettingsSaveOpts,
+  ): Promise<UserSettingsSaveResponse> => {
+    const body: { settings: UserSettingsPayload; if_updated_at?: number } = { settings }
+    if (opts?.ifUpdatedAt && opts.ifUpdatedAt > 0) body.if_updated_at = opts.ifUpdatedAt
+    const res = await fetch('/api/user/settings', {
+      method: 'POST',
+      headers: HEADERS,
+      credentials: 'same-origin',
+      body: JSON.stringify(body),
+      keepalive: opts?.keepalive,
+      signal: opts?.signal,
+    })
+    if (res.status === 409) {
+      const parsed = await res.json().catch(() => ({} as UserSettingsSaveResponse))
+      return { ok: false, stale: true, error: 'stale', ...parsed }
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    return res.json() as Promise<UserSettingsSaveResponse>
+  },
 }
 
 // ── Telegram ──

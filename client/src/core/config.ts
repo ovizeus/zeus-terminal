@@ -1475,6 +1475,15 @@ export function _usApplyPostResponse(data: { ok?: boolean; updated_at?: number }
   }
 }
 
+// [Phase 8D2] Read-only getter for the currently tracked remote ts.
+// settingsStore.saveToServer passes this as `if_updated_at` so the server
+// can reject writes that would overwrite a newer version from another tab.
+// Exposed as a function (not a bare let export) so callers always see the
+// latest value after _usApplyServerResponse / _usApplyPostResponse mutate it.
+export function _usGetSettingsRemoteTs(): number {
+  return _usSettingsRemoteTs
+}
+
 
 export function _usSave() {
   if (!_usApplyDone) { console.log('[US] skip save — _usApply not yet run'); return }

@@ -495,6 +495,24 @@ router.post('/user/settings', validateSettingsBody, (req, res) => {
     const raw = req.body.settings;
     if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing settings object' });
 
+    // [Phase 8D2] Optimistic concurrency guard for multi-tab safety.
+    // Client may pass `if_updated_at` (epoch ms of the version the UI
+    // reflects). If the DB already holds a newer version, reject with 409
+    // and return the current snapshot so the stale tab can refresh instead
+    // of overwriting the fresher change from another tab / device.
+    const ifTs = Number(req.body.if_updated_at) || 0;
+    if (ifTs > 0) {
+      const current = db.getUserSettingsWithTs(req.user.id);
+      if (current && current.updatedAt > 0 && current.updatedAt > ifTs) {
+        return res.status(409).json({
+          ok: false,
+          error: 'stale',
+          current_updated_at: current.updatedAt,
+          current_settings: current.data || {},
+        });
+      }
+    }
+
     // Whitelist: only allowed keys pass through
     const clean = {};
     for (const key of Object.keys(raw)) {

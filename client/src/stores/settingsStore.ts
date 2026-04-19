@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
-import { _usApplyServerResponse, _usApplyPostResponse } from '../core/config'
+import { _usApplyServerResponse, _usApplyPostResponse, _usGetSettingsRemoteTs } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
@@ -183,9 +183,26 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       //    config.ts) advances, keeping WS-push dedup in settingsRealtime accurate.
       //    On failure: warn with the exact log format _usPostRemote historically
       //    emitted (HTTP-code vs generic failure branches).
+      // [Phase 8D2] Pass if_updated_at so the server rejects a save that
+      // would overwrite a newer version from another tab. On a stale
+      // rejection we abandon this save and refresh from server — the user
+      // can re-apply their change against the fresher baseline.
+      const ifUpdatedAt = _usGetSettingsRemoteTs()
       try {
-        const j = await userSettingsApi.save(payload, { keepalive: true })
-        _usApplyPostResponse(j)
+        const j = await userSettingsApi.save(payload, {
+          keepalive: true,
+          ifUpdatedAt: ifUpdatedAt > 0 ? ifUpdatedAt : undefined,
+        })
+        if (j && j.stale) {
+          const currentTs = Number(j.current_updated_at || 0)
+          console.warn('[US] postRemote stale — server version ' + currentTs + ' > local ' + ifUpdatedAt + '; refreshing')
+          // Refresh from server so legacy projections + store reflect the
+          // fresher baseline. Do not silently merge the in-flight payload —
+          // user must re-issue the save with eyes on the updated values.
+          await getState().loadFromServer()
+        } else {
+          _usApplyPostResponse(j)
+        }
       } catch (e: unknown) {
         const msg = ((e as { message?: string })?.message ?? String(e))
         if (typeof msg === 'string' && msg.startsWith('HTTP ')) {
