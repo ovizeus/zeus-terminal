@@ -330,7 +330,19 @@ function _executeLiveManualOrder(orderType: string, size: number, entry: number,
   // leaving the button stuck on "Placing...".
   _liveOrderInFlight = true  // [Bug#3 STEP 1] committed — released in finally
   useUiStore.getState().setIsPlacingLive(true)
-  manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
+  // [Phase 7 — Manual Parity GAP-1] Pre-compute DSL preset from the same DOM inputs used by
+  // _buildManualPosition (manual DEMO flow). Forward through manualLivePlaceOrder so the server's
+  // registerManualPosition gets the user's preset instead of falling back to DSL_DEFAULTS.
+  // null = DSL engine OFF → server skips DSL attach (parity with demo at _registerManualOnServer call).
+  const _liveDslParams: any = (function () {
+    if (!getDSLEnabled()) return null
+    const _openDsl = parseFloat(el('dslActivatePct')?.value || '') || 0.50
+    const _pl = parseFloat(el('dslTrailPct')?.value || '') || 0.60
+    const _pr = parseFloat(el('dslTrailSusPct')?.value || '') || 0.50
+    const _iv = parseFloat(el('dslExtendPct')?.value || '') || 0.25
+    return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv }
+  })()
+  manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice(), dslParams: _liveDslParams }).then(function (result: any) {
     useUiStore.getState().setIsPlacingLive(false)
     if (orderType === 'MARKET') {
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)

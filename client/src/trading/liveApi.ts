@@ -519,6 +519,9 @@ export async function manualLivePlaceOrder(params: any): Promise<any> {
     body.price = params.price
   }
   if (params.referencePrice) body.referencePrice = params.referencePrice
+  // [Phase 7] Forward user-computed DSL preset so server registers manual LIVE with same params as manual DEMO.
+  // null = DSL engine OFF; object = user preset; omitted = server falls back to DSL_DEFAULTS (legacy).
+  if (params.dslParams !== undefined) body.dslParams = params.dslParams
   var res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
     headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),

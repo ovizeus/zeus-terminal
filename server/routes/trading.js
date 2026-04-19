@@ -306,6 +306,10 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
           orderId: data.orderId,
           sl: req.body.sl ? parseFloat(req.body.sl) : null,
           tp: req.body.tp ? parseFloat(req.body.tp) : null,
+          // [Phase 7 — Manual Parity GAP-1] Forward client-computed DSL preset so manual LIVE
+          // registers with the user's params (same as manual DEMO via /api/at/register-manual).
+          // undefined → serverAT falls back to DSL_DEFAULTS (legacy clients); null → DSL OFF.
+          dslParams: req.body.dslParams,
         });
         if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side} status=${fillStatus}`);
         // [batch3-W] If fill wasn't immediate (status=NEW), fetch the order a
