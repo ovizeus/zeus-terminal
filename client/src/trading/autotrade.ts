@@ -590,6 +590,24 @@ export function runAutoTradeCheck(): void {
   if (!getATEnabled() || getATKillTriggered()) return
   AT.running = true
   try {
+    // [Phase 6C] Per-tick live execution-env gate.
+    // Toggle-time gate (L96–121) prevents enabling AT without valid creds, but
+    // if env becomes invalid mid-session (creds revoked, mode flipped to live
+    // after a lock, exchangeMode change), runAutoTradeCheck would keep firing
+    // live orders until Binance rejects them. Close that window here.
+    if (getATMode() === 'live' && (w._executionEnv === null || !w._apiConfigured)) {
+      const _reason = w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION'
+        ? 'Invalid active API configuration'
+        : (!w._apiConfigured ? 'API keys not configured' : 'Execution env locked')
+      _setBR('EXEC_LOCKED', 'AT paused — ' + _reason, 'autoCheck')
+      const _lastTs = (AT as any)._execLockLogTs || 0
+      if (Date.now() - _lastTs > 30000) {
+        ;(AT as any)._execLockLogTs = Date.now()
+        atLog('warn', '[EXEC_LOCKED] Live AT tick aborted — ' + _reason)
+      }
+      _atUI({ status: { icon: 'lock', text: 'AT paused — ' + _reason, action: null } })
+      return
+    }
     // B: Data stall grace period check BEFORE exec lock
     if (!isDataOkForAutoTrade()) {
       _setBR('DATA_STALL', 'Data stalled > 10s — AT paused', 'autoCheck')
