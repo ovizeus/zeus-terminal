@@ -797,8 +797,11 @@ app.get('/api/regime-history', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   try {
     const symbol = _req.query.symbol;
+    const userId = _req.user.id;
     const limit = Math.min(parseInt(_req.query.limit, 10) || 100, 500);
-    const history = symbol ? db.getRegimeHistory(symbol, limit) : db.getRegimeHistoryAll(limit);
+    const history = symbol
+      ? db.getRegimeHistory(symbol, userId, limit)
+      : db.getRegimeHistoryByUser(userId, limit);
     res.json({ ok: true, history });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -1053,6 +1056,20 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     }
   } else {
     logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false)');
+  }
+
+  // [b65] Reflection engine: start + backfill from history regardless of SERVER_BRAIN.
+  // Dashboard reads thoughts/rules/self-score directly from in-memory Maps —
+  // without this seed, every pm2 reload leaves the dashboard empty until a fresh
+  // AT close triggers reflectOnTrade. Restores rules from DB and replays the
+  // last 50 closed trades per user into the thoughts ring buffer.
+  try {
+    const serverReflection = require('./server/services/serverReflection');
+    serverReflection.start();
+    serverReflection.seedFromHistory(null, 50);
+    logger.info('SERVER', '[REFLECTION] engine started + history seeded (dashboard ready)');
+  } catch (err) {
+    logger.error('SERVER', `[REFLECTION] boot failed: ${err.message}`);
   }
 
   // [P6] Log live AT status
