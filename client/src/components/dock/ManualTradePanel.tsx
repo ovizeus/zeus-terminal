@@ -43,9 +43,14 @@ export function ManualTradePanel() {
   const manualLivePending = usePositionsStore((s) => s.manualLivePending)
   const journal = usePositionsStore((s) => s.journal)
 
-  // [Phase 3A] Manual render uses WHITELIST (autoTrade===false OR sourceMode in {manual,paper}).
-  // NEVER match on `!p.autoTrade` alone — undefined would leak AT positions into Manual.
-  const _isManualOwned = (p: any) => p.autoTrade === false || p.sourceMode === 'manual' || p.sourceMode === 'paper'
+  // [Phase 9B1] Manual panel = strict complement of AT panel.
+  //   A position belongs to Manual iff autoTrade !== true.
+  //   AT panel filters on autoTrade === true, so these two predicates are
+  //   mutually exclusive and jointly exhaustive — every live position is
+  //   rendered in exactly ONE panel. No more flicker between AT and Manual
+  //   when the server ships a minimal snapshot that drops ownership fields
+  //   (Phase 9A1 preserves existingPos; this guarantees the render follows).
+  const _isManualOwned = (p: any) => p.autoTrade !== true
   const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && _isManualOwned(p) && (p.mode || 'demo') === engineMode)
   const pendingRender = (engineMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
   const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && _isManualOwned(p))

@@ -1684,9 +1684,13 @@ export function renderATPositions(): void {
   if (!panel) return
   // [Phase 3C] Render filter reads store truth (single source), not AT._serverMode mirror.
   // AT._serverMode is kept in sync via a useATStore subscriber (state.ts boot).
+  // [Phase 9B1] Strict === true check — truthy fallback previously matched any
+  // non-boolean truthy value and failed to exclude undefined symmetrically.
+  // Pair this with ManualTradePanel _isManualOwned (autoTrade !== true) to
+  // guarantee every position shows in exactly one panel.
   const _globalMode = (useATStore.getState().mode || 'demo')
-  const _atStep1Demo = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
-  const _atStep1Live = (TP.livePositions || []).filter((p: any) => p.autoTrade && !p.closed && p.status !== 'closing')
+  const _atStep1Demo = (TP.demoPositions || []).filter((p: any) => p.autoTrade === true && !p.closed)
+  const _atStep1Live = (TP.livePositions || []).filter((p: any) => p.autoTrade === true && !p.closed && p.status !== 'closing')
   const autoPosns = [..._atStep1Demo, ..._atStep1Live]
     .filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
     .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
