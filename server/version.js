@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.15',
-    build: 41,
+    version: '1.7.16',
+    build: 42,
     date: '2026-04-19',
-    changelog: 'Post-v2 batch3-W-hotfix2 b41 v1.7.15 LIVE BALANCE AUTO-FETCH — after b40, Manual panel correctly showed "BAL (TESTNET): $0.00" because engine-mode switching via ModeBar never triggered a Binance balance fetch. Only connectLiveAPI() (user-click in Settings → Exchange API) set TP.liveConnected=true and ran liveApiSyncState; switchGlobalMode/_executeGlobalModeSwitch did not. With balance stuck at 0, orders were rejected client-side with "Insufficient live balance". Fix: _applyGlobalModeUI now flips TP.liveConnected=true and fires one liveApiSyncState() on the first demo→live transition when _apiConfigured is true. Idempotent — subsequent calls skip the sync; the periodic 120s livePosSync keeps balance fresh from then on. This path runs both on user-driven mode switch and on page-load state init, so refreshing the page while already in live mode also populates balance. Previous: batch3-W-hotfix b40 v1.7.14 (Manual panel engine/exchange mode separation).'
+    changelog: 'Post-v2 batch3-X b42 v1.7.16 AT SETTINGS PERSISTENCE FIX (BUG 2 of 2) — leverage and other AT integer fields silently reverted to defaults (lev→5, maxPos→4, maxDay→5, lossStreak→3, maxAddon→2, sigMin→3) after any UI action that scheduled _usSave. Root cause: _usSave (legacy DOM-read save in core/config.ts) read these 6 fields via document.getElementById(id)?.getAttribute("value"), which returns the initial HTML attribute. React-controlled <select>/<input> do not sync that attribute with state, so the read returned null → parseInt("") || N → default N. _usSave then called _ssStore.loadFromLegacy + saveToServer, POSTing the wrong value to the server, which broadcast settings.changed via WS and re-hydrated all tabs back to default. Fix: minimal surgical change in core/config.ts:_usSave — replaced the 6 getAttribute("value") reads with the existing _iv(id, def) helper that reads property .value (the React-controlled live value). Zero changes elsewhere. BUG 1 (TESTNET-mode showing "REAL funds" warning) deferred to next commit per audit plan.'
 };

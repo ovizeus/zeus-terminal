@@ -1502,19 +1502,26 @@ export function _usSave() {
       const el = document.getElementById(id) as any
       return el ? (parseFloat(el.value) || def) : def
     }
+    // [batch3-X b42] Read React-controlled inputs via property `.value` (same
+    // path as _iv helper). Previously these 6 fields used `getAttribute('value')`
+    // which returns the initial HTML attribute — React selects/inputs do not
+    // sync that attribute with state, so the read returned null and these
+    // fields silently reset to default on every _usSave (every UI action that
+    // schedules a save). Using _iv reads the live property — parseFloat is
+    // safe for integer values these inputs emit ("10" → 10).
     USER_SETTINGS.autoTrade = {
-      lev: parseInt(document.getElementById('atLev')?.getAttribute('value') || '') || 5,
+      lev: _iv('atLev', 5),
       sl: _iv('atSL', 1.5),
       rr: _iv('atRR', 2),
       size: _iv('atSize', 200),
-      maxPos: parseInt(document.getElementById('atMaxPos')?.getAttribute('value') || '') || 4,
+      maxPos: _iv('atMaxPos', 4),
       killPct: _iv('atKillPct', 5),
       riskPct: _iv('atRiskPct', 1),
-      maxDay: parseInt(document.getElementById('atMaxDay')?.getAttribute('value') || '') || 5,
-      lossStreak: parseInt(document.getElementById('atLossStreak')?.getAttribute('value') || '') || 3,
-      maxAddon: parseInt(document.getElementById('atMaxAddon')?.getAttribute('value') || '') || 2,
+      maxDay: _iv('atMaxDay', 5),
+      lossStreak: _iv('atLossStreak', 3),
+      maxAddon: _iv('atMaxAddon', 2),
       confMin: _iv('atConfMin', 65),
-      sigMin: parseInt(document.getElementById('atSigMin')?.getAttribute('value') || '') || 3,
+      sigMin: _iv('atSigMin', 3),
       multiSym: (document.getElementById('atMultiSym') as any)?.checked !== false,
       smartExitEnabled: (document.getElementById('atSmartExit') as any)?.checked === true,
       adaptEnabled: (typeof BM !== 'undefined' && BM.adapt) ? !!BM.adapt.enabled : false,
