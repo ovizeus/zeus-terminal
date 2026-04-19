@@ -15,8 +15,16 @@ const w = window as any
 // ===== CHART INIT =====
 export function getChartH(): number { return window.innerWidth >= 1000 ? 400 : 340 }
 export function getChartW(): number {
-  const page = document.querySelector('.page') as HTMLElement | null
-  if (window.innerWidth >= 1000 && page) return Math.max(400, page.offsetWidth - 390 - 2)
+  // [b72] Desktop: read live container width so the chart fills its slot.
+  // Legacy subtracted a hard-coded 392px sidebar that no longer exists in
+  // the React layout — at ~15s the zeusReady → _resizeCharts handler
+  // applied that stale narrow width, leaving the canvas ~70% shifted left.
+  if (window.innerWidth >= 1000) {
+    const mc = document.getElementById('mc') as HTMLElement | null
+    if (mc && mc.clientWidth > 0) return mc.clientWidth
+    const page = document.querySelector('.page') as HTMLElement | null
+    if (page) return Math.max(400, page.offsetWidth)
+  }
   return Math.min(window.innerWidth, 480)
 }
 
