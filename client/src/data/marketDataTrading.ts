@@ -45,7 +45,7 @@ function _executeGlobalModeSwitch(mode: string): void {
       if (typeof AT !== 'undefined') AT._serverMode = mode
       _applyGlobalModeUI(mode)
       if (mode === 'demo') { toast('Demo Mode Activated', 3000, _ZI.ok) }
-      else { const _toastEnv = w._resolvedEnv || (w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'); if (!w._apiConfigured) toast('Live Mode Locked \u2014 Execution unavailable until API keys are configured', 3000, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else toast('Real Trading Mode Activated', 3000, _ZI.ok) }
+      else { const _toastEnv = w._executionEnv; if (_toastEnv === null) toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else if (_toastEnv === 'REAL') toast('Real Trading Mode Activated', 3000, _ZI.ok); else toast('Demo Mode Activated', 3000, _ZI.ok) }
       _showManualPanel()
       if (typeof runDSLBrain === 'function') runDSLBrain()
       if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)
@@ -59,12 +59,12 @@ export function _applyGlobalModeUI(mode: string): void {
   const btnD = el('btnDemo'), btnL = el('btnLive')
   if (mode === 'live') { if (btnD) btnD.classList.remove('active'); if (btnL) btnL.classList.add('active') }
   else { if (btnD) btnD.classList.add('active'); if (btnL) btnL.classList.remove('active') }
-  const _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
-  const execLocked = mode === 'live' && !w._apiConfigured
+  const _env = w._executionEnv
+  const execLocked = mode === 'live' && (_env === null || !w._apiConfigured)
   if (mode === 'live') {
     const _atIsTestnet = _env === 'TESTNET'
-    const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE'
-    const _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE'
+    const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : (_env === 'REAL' ? 'LIVE MODE' : 'LIVE MODE LOCKED')
+    const _atEnvShort = _atIsTestnet ? 'TESTNET' : (_env === 'REAL' ? 'LIVE' : 'LOCKED')
     const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'
     const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'
     const _icoKind: 'dYlw' | 'dRed' = _atIsTestnet ? 'dYlw' : 'dRed'
@@ -227,8 +227,8 @@ export function updateDemoBalance(): void {
 // ===== PLACE ORDER =====
 export function placeDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  const _curEnv = w._resolvedEnv || (_curMode === 'demo' ? 'DEMO' : 'REAL')
-  if (_curMode === 'live' && !w._apiConfigured) { toast('Cannot place order \u2014 exchange not configured', 3000, _ZI.lock); return }
+  const _curEnv = w._executionEnv
+  if (_curMode === 'live' && (_curEnv === null || !w._apiConfigured)) { const _r = w._executionBlockedReason; toast('Cannot place order \u2014 ' + (_r === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.lock); return }
 
   // [DSL-OFF] Pre-open guard: if DSL engine is OFF, prompt user before placing any manual order
   const _continueToLiveOrPlace = function () {

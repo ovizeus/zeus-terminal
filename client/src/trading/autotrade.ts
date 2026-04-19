@@ -101,7 +101,11 @@ function _continueAutoTradeEnable(): void {
     }
     // [MODE-P4] Require explicit confirmation — wording matches resolved environment
     if (typeof _showConfirmDialog === 'function') {
-      var _atEnv = w._resolvedEnv || 'REAL'
+      var _atEnv = w._executionEnv
+      if (_atEnv === null) {
+        toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.lock)
+        return
+      }
       var _atTest = _atEnv === 'TESTNET'
       _showConfirmDialog(
         _atTest ? 'Enable AutoTrade in TESTNET Mode?' : 'Enable AutoTrade in LIVE Mode?',
@@ -205,13 +209,14 @@ export function _applyATToggleUI(enabled: any): void {
 export function updateATMode(): void {
   const mode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   AT.mode = mode as 'demo' | 'live'
-  var _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
+  var _env = w._executionEnv
   if (mode === 'live') {
     var _isTest = _env === 'TESTNET'
-    var _col = _isTest ? 'var(--gold)' : 'var(--red-bright)'
-    var _colDim = _isTest ? '#f0c04044' : '#ff444444'
-    var _short = _isTest ? 'TESTNET' : 'LIVE'
-    var _long = _isTest ? 'TESTNET MODE' : 'LIVE MODE'
+    var _isLocked = _env === null
+    var _col = _isTest ? 'var(--gold)' : (_isLocked ? 'var(--orange)' : 'var(--red-bright)')
+    var _colDim = _isTest ? '#f0c04044' : (_isLocked ? '#ff880044' : '#ff444444')
+    var _short = _isTest ? 'TESTNET' : (_isLocked ? 'LOCKED' : 'LIVE')
+    var _long = _isTest ? 'TESTNET MODE' : (_isLocked ? 'LIVE MODE LOCKED' : 'LIVE MODE')
     var _icoKind: 'dYlw' | 'dRed' = _isTest ? 'dYlw' : 'dRed'
     _atUI({
       modeLabel: { icon: _icoKind, text: _short, color: _col },
@@ -1669,11 +1674,13 @@ export function renderATPositions(): void {
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))  // [v105 FIX Bug6] escHtml
     const safeSide = escHtml(pos.side)                           // [v105 FIX Bug6] escHtml
     const posMode = (pos.mode || pos._serverMode || 'demo')
-    var _atPosEnv = w._resolvedEnv || (posMode === 'demo' ? 'DEMO' : 'REAL')
+    var _atPosEnv = w._executionEnv
     const modeBadge = posMode === 'live'
       ? (_atPosEnv === 'TESTNET'
         ? '<span style="background:#f0c04022;color:#f0c040;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">TESTNET</span>'
-        : '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>')
+        : (_atPosEnv === 'REAL'
+          ? '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>'
+          : '<span style="background:#ff880022;color:#ff8800;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LOCKED</span>'))
       : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>'
 
     // TP/SL expected P&L

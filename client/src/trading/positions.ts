@@ -72,9 +72,9 @@ export function onTradeExecuted(pos: any): void {
   const tf2 = PROFILE_TF?.[w.S.profile || 'fast']?.context || w.S.contextTF || '15m'
   const isLive = pos.isLive
 
-  var _posEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO')
+  var _posEnv = w._executionEnv
   const simTag = isLive
-    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`
+    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : (_posEnv === 'REAL' ? 'LIVE TRADE' : 'LOCKED')}</div>`
     : `<div class="zeus-exec-sim">SIMULATION</div>`
 
   const html = `
@@ -113,9 +113,9 @@ export function onTradeClosed(result: any): void {
   const isProfit = pnl >= 0
   const cssClass = isProfit ? 'exit-profit' : 'exit-loss'
   const isLive = result.isLive
-  var _posEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO')
+  var _posEnv = w._executionEnv
   const simTag = isLive
-    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`
+    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : (_posEnv === 'REAL' ? 'LIVE TRADE' : 'LOCKED')}</div>`
     : `<div class="zeus-exec-sim">SIMULATION</div>`
 
   const html = `

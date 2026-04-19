@@ -81,10 +81,14 @@ function applyATUpdate(data: ServerATState) {
   })
 
   // --- UI env info ---
+  // Phase 2C: executionEnv / executionBlockedReason are canonical truth from server.
+  // ?? (not ||) preserves null — null means "non-demo blocked" and consumers must show LOCKED.
   useUiStore.getState().patch({
     apiConfigured: !!data.apiConfigured,
     exchangeMode: data.exchangeMode || null,
     resolvedEnv: data.resolvedEnv || 'DEMO',
+    executionEnv: (data.executionEnv ?? null) as 'DEMO' | 'TESTNET' | 'REAL' | null,
+    executionBlockedReason: (data.executionBlockedReason ?? null) as 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null,
   })
 }
 

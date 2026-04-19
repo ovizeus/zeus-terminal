@@ -139,7 +139,7 @@ export function openPageView(dockId: string) {
 
   // ── Manual Trade ──
   if (dockId === 'manual-trade') {
-    const env = w._resolvedEnv || 'DEMO'
+    const env = w._executionEnv === null ? 'LOCKED' : (w._executionEnv || 'DEMO')
     if (title) title.textContent = 'Manual Trade (' + env + ')'
 
     const demoPanel = document.getElementById('panelDemo')

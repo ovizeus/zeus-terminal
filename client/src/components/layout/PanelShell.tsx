@@ -99,7 +99,8 @@ export function PanelShell() {
   })
   const activeModal = useUiStore((s) => s.activeModal)
   const closeModal = useUiStore((s) => s.closeModal)
-  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
+  // Phase 2C: canonical executionEnv. null → LOCKED label in dock title.
+  const executionEnv = useUiStore((s) => s.executionEnv)
 
   const openModal = useUiStore((s) => s.openModal)
 
@@ -320,7 +321,7 @@ export function PanelShell() {
   // 1:1 with old pageview.js — manual-trade title includes environment
   const activeTitle = dockActive
     ? (dockActive === 'manual-trade'
-      ? `Manual Trade (${resolvedEnv || 'DEMO'})`
+      ? `Manual Trade (${executionEnv === null ? 'LOCKED' : (executionEnv || 'DEMO')})`
       : DOCK_TITLES[dockActive])
     : null
 

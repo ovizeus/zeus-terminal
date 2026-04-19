@@ -3,7 +3,7 @@
 import { getATObject } from '../services/stateAccessors'
 import { toast } from '../data/marketDataHelpers'
 import { switchGlobalMode } from '../data/marketDataTrading'
-const w = window as any; // kept for w._resolvedEnv, w._apiConfigured
+const w = window as any; // kept for w._executionEnv, w._apiConfigured
 
 // ── RENDER ─────────────────────────────────────────────────────
 export function initModeBar(): void {
@@ -39,13 +39,13 @@ export function updateModeBar(): void {
 
   var AT = getATObject();
   var mode = (typeof AT !== 'undefined' && AT && AT._serverMode) ? AT._serverMode : 'demo';
-  var env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL');
-  var apiConfigured = !!w._apiConfigured;
+  // Phase 2C: canonical truth — null means non-demo blocked.
+  var env = w._executionEnv;
 
   // Remove all state classes
   bar.className = 'zeus-mode-bar';
 
-  if (mode === 'demo') {
+  if (mode === 'demo' || env === 'DEMO') {
     bar.classList.add('zmb-demo');
     modeEl.textContent = 'DEMO MODE';
     btnEl.textContent = 'EXIT DEMO';
@@ -57,18 +57,24 @@ export function updateModeBar(): void {
     btnEl.textContent = 'ACTIVATE DEMO';
     btnEl.className = 'zmb-btn zmb-btn-demo';
     if (indEl) indEl.className = 'zmb-indicator zmb-ind-testnet';
-  } else if (!apiConfigured && mode === 'live') {
+  } else if (env === null && mode === 'live') {
     bar.classList.add('zmb-locked');
     modeEl.textContent = 'LIVE \u2014 LOCKED';
     btnEl.textContent = 'CONFIGURE LIVE';
     btnEl.className = 'zmb-btn zmb-btn-locked';
     if (indEl) indEl.className = 'zmb-indicator zmb-ind-locked';
-  } else {
+  } else if (env === 'REAL') {
     bar.classList.add('zmb-real');
     modeEl.textContent = 'LIVE \u2014 REAL';
     btnEl.textContent = 'ACTIVATE DEMO';
     btnEl.className = 'zmb-btn zmb-btn-demo';
     if (indEl) indEl.className = 'zmb-indicator zmb-ind-real';
+  } else {
+    bar.classList.add('zmb-locked');
+    modeEl.textContent = 'LIVE \u2014 LOCKED';
+    btnEl.textContent = 'CONFIGURE LIVE';
+    btnEl.className = 'zmb-btn zmb-btn-locked';
+    if (indEl) indEl.className = 'zmb-indicator zmb-ind-locked';
   }
 }
 
@@ -76,11 +82,12 @@ export function updateModeBar(): void {
 export function _modeBarSwitch(): void {
   var AT = getATObject();
   var mode = (typeof AT !== 'undefined' && AT && AT._serverMode) ? AT._serverMode : 'demo';
-  var apiConfigured = !!w._apiConfigured;
+  var env = w._executionEnv;
+  var blockedReason = w._executionBlockedReason;
 
-  // LOCKED state: no API keys — guide user to settings
-  if (mode === 'live' && !apiConfigured) {
-    toast('Live trading unavailable \u2014 configure API keys in Settings first.', 3000);
+  // LOCKED state: non-demo with no canonical exec env — guide user to settings
+  if (mode === 'live' && env === null) {
+    toast('LIVE MODE LOCKED: ' + (blockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500);
     return;
   }
 

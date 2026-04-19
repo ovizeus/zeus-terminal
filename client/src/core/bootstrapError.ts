@@ -113,9 +113,13 @@ import { useUiStore } from '../stores/uiStore'
       const patch: Record<string, any> = {}
       if (typeof AT !== 'undefined') {
         const mode = AT._serverMode || AT.mode || 'demo'
-        const _sbEnv = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
-        patch.sbMode = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase()
-        patch.sbModeClass = _sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo')
+        // Phase 2C: read canonical executionEnv. null (non-demo blocked) → LOCKED.
+        const _sbEnv = w._executionEnv
+        if (_sbEnv === 'TESTNET') { patch.sbMode = 'TESTNET'; patch.sbModeClass = 'zsb-testnet' }
+        else if (_sbEnv === 'REAL') { patch.sbMode = 'LIVE'; patch.sbModeClass = 'zsb-live' }
+        else if (_sbEnv === 'DEMO') { patch.sbMode = 'DEMO'; patch.sbModeClass = 'zsb-demo' }
+        else if (mode !== 'demo') { patch.sbMode = 'LOCKED'; patch.sbModeClass = 'zsb-locked' }
+        else { patch.sbMode = 'DEMO'; patch.sbModeClass = 'zsb-demo' }
         patch.sbAtEnabled = !!AT.enabled
         patch.sbKillActive = !!AT.killTriggered
         patch.sbPnl = AT.totalPnL || AT.realizedDailyPnL || 0

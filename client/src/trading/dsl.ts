@@ -1023,9 +1023,9 @@ export function _renderDslCard(pos: any): string {
   const _isManual = _cm === 'user'
   const _isAT = !!pos.autoTrade
 
-  var _dslEnv = w._resolvedEnv || (pos.isLive ? 'REAL' : 'DEMO')
-  var _paperLiveLabel = _dslEnv === 'TESTNET' ? 'PAPER TESTNET' : 'PAPER LIVE'
-  var _atEnvLabel = _dslEnv === 'TESTNET' ? 'TESTNET' : (pos.isLive ? 'REAL' : 'DEMO')
+  var _dslEnv = w._executionEnv
+  var _paperLiveLabel = _dslEnv === 'TESTNET' ? 'PAPER TESTNET' : (_dslEnv === 'REAL' ? 'PAPER LIVE' : 'PAPER LOCKED')
+  var _atEnvLabel = _dslEnv === 'TESTNET' ? 'TESTNET' : (_dslEnv === 'REAL' ? 'REAL' : (pos.isLive ? 'LOCKED' : 'DEMO'))
   const _srcLabel = _isAT
     ? ('AT ' + _atEnvLabel)
     : (pos.isLive ? _paperLiveLabel : 'PAPER DEMO')
@@ -1033,9 +1033,11 @@ export function _renderDslCard(pos: any): string {
     'AT DEMO': { color: '#aa44ff', bg: '#aa44ff18', border: '#aa44ff44', icon: '' },
     'AT TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },
     'AT REAL': { color: '#ff4466', bg: '#ff446618', border: '#ff446644', icon: '' },
+    'AT LOCKED': { color: '#ff8800', bg: '#ff880018', border: '#ff880044', icon: '' },
     'PAPER DEMO': { color: '#ffffff66', bg: '#ffffff08', border: '#ffffff22', icon: '' },
     'PAPER LIVE': { color: '#ff4466', bg: '#ff446618', border: '#ff446644', icon: '' },
     'PAPER TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },
+    'PAPER LOCKED': { color: '#ff8800', bg: '#ff880018', border: '#ff880044', icon: '' },
   }
   const _sb = _srcMap[_srcLabel] || _srcMap['PAPER DEMO']
 

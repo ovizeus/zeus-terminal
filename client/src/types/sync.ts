@@ -77,7 +77,11 @@ export interface ServerATState {
   atActive: boolean
   apiConfigured: boolean
   exchangeMode: string | null // 'testnet' | 'live' | null
-  resolvedEnv: string // 'DEMO' | 'TESTNET' | 'REAL'
+  resolvedEnv: string // 'DEMO' | 'TESTNET' | 'REAL' — legacy, falsely 'REAL' when live+no creds; consumers MUST use executionEnv
+  activeExchange?: 'binance' | 'bybit' | null
+  // Phase 2C canonical execution env — truth from server _resolveExecutionEnv()
+  executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
+  executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
 
   // Positions — server sends both flat and split
   positions: Position[]

@@ -860,7 +860,7 @@ export const ZState = (() => {
       rr: sp.rr || 0,
       autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : (sp.sourceMode === 'manual' ? false : true),
       openTs: sp.ts || sp.openTs || Date.now(),
-      label: ((sp.mode === 'live') ? (w._resolvedEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : '\uD83D\uDD34 LIVE') : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
+      label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
       sourceMode: sp.sourceMode ? sp.sourceMode : (existingPos ? existingPos.sourceMode : srcMode),
       controlMode: sp.controlMode ? sp.controlMode : (existingPos ? existingPos.controlMode : srcMode),
@@ -1096,6 +1096,9 @@ export const ZState = (() => {
     } else {
       w._resolvedEnv = 'REAL'
     }
+    // Phase 2C: canonical mirrors. null is preserved (LOCKED state for non-demo).
+    w._executionEnv = (state.executionEnv !== undefined) ? state.executionEnv : null
+    w._executionBlockedReason = (state.executionBlockedReason !== undefined) ? state.executionBlockedReason : null
     w.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive)
     if (state.mode) _applyGlobalModeUI(state.mode)
     if (typeof updateATMode === 'function') updateATMode()

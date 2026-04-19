@@ -189,9 +189,16 @@ export async function _showWelcomeModal(): Promise<void> {
     } catch (_) {}
     _wlcShown = true
     const m = document.getElementById('mwelcome'); if (!m) return; m.style.display = 'flex'
-    const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO'); const modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO')
+    const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._executionEnv; const _wlcReason = w._executionBlockedReason
+    let modeLabel: string, badgeClass: string
+    if (_wlcEnv === 'TESTNET') { modeLabel = 'TESTNET'; badgeClass = 'wlc-testnet' }
+    else if (_wlcEnv === 'REAL') { modeLabel = 'LIVE'; badgeClass = 'wlc-live' }
+    else if (_wlcEnv === 'DEMO') { modeLabel = 'DEMO'; badgeClass = 'wlc-demo' }
+    else if (isLive) { modeLabel = 'LOCKED'; badgeClass = 'wlc-locked' }
+    else { modeLabel = 'DEMO'; badgeClass = 'wlc-demo' }
+    void _wlcReason
     const greetEl = document.getElementById('wlcGreeting'); if (greetEl) greetEl.textContent = 'Welcome back, Commander'
-    const badgeEl = document.getElementById('wlcModeBadge'); if (badgeEl) { badgeEl.textContent = modeLabel; badgeEl.className = 'wlc-mode-badge ' + (_wlcEnv === 'TESTNET' ? 'wlc-testnet' : (isLive ? 'wlc-live' : 'wlc-demo')) }
+    const badgeEl = document.getElementById('wlcModeBadge'); if (badgeEl) { badgeEl.textContent = modeLabel; badgeEl.className = 'wlc-mode-badge ' + badgeClass }
     const verEl = document.getElementById('wlcVersion'); const b = w.BUILD || {}; if (verEl) verEl.textContent = 'ZEUS TERMINAL ' + (b.version || '').toUpperCase()
     const balEl = document.getElementById('wlcBalance'); if (balEl) { let bal = 0; if (typeof TP !== 'undefined') bal = isLive ? (TP.liveBalance || 0) : (TP.demoBalance || 0); balEl.textContent = '$' + bal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
     let todayTrades = 0, todayWins = 0, todayPnl = 0

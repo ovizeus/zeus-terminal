@@ -168,11 +168,11 @@ if (!w._ARIA_NOVA_LOADED) {
       if (nPos === 0) el_state.className = 'atbs-on-neutral'
       else if (livePnl > 0) el_state.className = 'atbs-on-profit'
       else el_state.className = 'atbs-on-loss'
-      var _arEnv: any = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE')
-      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
+      var _arEnv: any = w._executionEnv
+      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (_arEnv === 'REAL' ? 'LIVE' : (mode === 'live' ? 'LOCKED' : 'DEMO')))
     } else {
-      var _arEnv2: any = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE')
-      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
+      var _arEnv2: any = w._executionEnv
+      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (_arEnv2 === 'REAL' ? 'LIVE' : (mode === 'live' ? 'LOCKED' : 'DEMO')))
       el_state.className = 'atbs-off'
     }
 
@@ -241,8 +241,10 @@ if (!w._ARIA_NOVA_LOADED) {
 
     // State badge — reflects global mode
     var globalMode: any = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
-    var _ptEnv: any = w._resolvedEnv || (globalMode === 'demo' ? 'DEMO' : 'REAL')
-    var modeLabel: any = globalMode === 'demo' ? 'DEMO MODE' : (_ptEnv === 'TESTNET' ? 'TESTNET MODE' : 'LIVE MODE')
+    var _ptEnv: any = w._executionEnv
+    var modeLabel: any = globalMode === 'demo'
+      ? 'DEMO MODE'
+      : (_ptEnv === 'TESTNET' ? 'TESTNET MODE' : (_ptEnv === 'REAL' ? 'LIVE MODE' : 'LIVE MODE LOCKED'))
     el_state.className = ''
     if (nPos === 0) {
       el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-empty'

@@ -30,7 +30,11 @@ interface UiStore {
   /** Server environment info */
   apiConfigured: boolean
   exchangeMode: string | null
+  /** Legacy: falsely 'REAL' when live+no creds. Phase 2C consumers MUST read executionEnv instead. */
   resolvedEnv: string
+  /** Phase 2C canonical execution env from server _resolveExecutionEnv(). null when non-demo blocked. */
+  executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
+  executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
 
   // [R8] StatusBar reactive fields (replaces imperative DOM writes from bootstrapError._updateStatusBar)
   /** Display mode label (e.g. DEMO, LIVE, TESTNET) — derives from AT._serverMode / AT.mode / _resolvedEnv */
@@ -78,6 +82,8 @@ export const useUiStore = create<UiStore>()((set) => ({
   apiConfigured: false,
   exchangeMode: null,
   resolvedEnv: 'DEMO',
+  executionEnv: null,
+  executionBlockedReason: null,
 
   // [R8] StatusBar defaults
   sbMode: 'DEMO',

@@ -1,8 +1,6 @@
 /** Zeus Mode Bar — engine-mode-driven execution toggle.
- *  Shows DEMO / LIVE—TESTNET / LIVE—REAL / LIVE—LOCKED based on server state.
- *  Click delegates to switchGlobalMode() (legacy): confirm dialog +
- *  POST /api/at/mode + preLiveChecklist handling + toast feedback.
- *  When no API configured and user tries to exit demo, opens Settings modal. */
+ *  Phase 2C: env semantics read from canonical executionEnv (server truth).
+ *  null + non-demo → LOCKED. Click delegates to switchGlobalMode() legacy. */
 import { useATStore, useUiStore } from '../../stores'
 import { switchGlobalMode } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
@@ -10,8 +8,8 @@ import { _ZI } from '../../constants/icons'
 
 export function ModeBar() {
   const engineMode = useATStore((s) => s.mode) || 'demo'
-  const apiConfigured = useUiStore((s) => s.apiConfigured)
-  const exchangeMode = useUiStore((s) => s.exchangeMode)
+  const executionEnv = useUiStore((s) => s.executionEnv)
+  const executionBlockedReason = useUiStore((s) => s.executionBlockedReason)
   const openModal = useUiStore((s) => s.openModal)
 
   let barClass = 'zeus-mode-bar'
@@ -20,19 +18,19 @@ export function ModeBar() {
   let btnClass = 'zmb-btn'
   let indClass = 'zmb-indicator'
 
-  if (engineMode === 'demo') {
+  if (engineMode === 'demo' || executionEnv === 'DEMO') {
     barClass += ' zmb-demo'
     modeText = 'DEMO MODE'
     btnText = 'EXIT DEMO'
     btnClass += ' zmb-btn-exit'
     indClass += ' zmb-ind-demo'
-  } else if (!apiConfigured) {
+  } else if (executionEnv === null) {
     barClass += ' zmb-locked'
     modeText = 'LIVE \u2014 LOCKED'
     btnText = 'CONFIGURE LIVE'
     btnClass += ' zmb-btn-locked'
     indClass += ' zmb-ind-locked'
-  } else if (exchangeMode === 'testnet') {
+  } else if (executionEnv === 'TESTNET') {
     barClass += ' zmb-testnet'
     modeText = 'LIVE \u2014 TESTNET'
     btnText = 'ACTIVATE DEMO'
@@ -48,15 +46,15 @@ export function ModeBar() {
 
   function handleSwitch() {
     if (engineMode === 'demo') {
-      if (!apiConfigured) {
-        toast('Configure API keys in Settings \u2192 Exchange API first', 3500, _ZI.w)
+      if (executionEnv === null) {
+        toast('LIVE MODE LOCKED: ' + (executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w)
         openModal('settings')
         return
       }
       switchGlobalMode('live')
     } else {
-      if (!apiConfigured) {
-        toast('Configure API keys in Settings \u2192 Exchange API first', 3500, _ZI.w)
+      if (executionEnv === null) {
+        toast('LIVE MODE LOCKED: ' + (executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w)
         openModal('settings')
         return
       }
