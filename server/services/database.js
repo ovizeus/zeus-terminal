@@ -472,6 +472,21 @@ migrate('025_exchange_single_active', () => {
     db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_exchange_user_active_single ON exchange_accounts(user_id) WHERE is_active = 1");
 });
 
+// [SEC-1] Persist login rate-limit counters across pm2 reloads — prevents an
+// attacker from resetting their window by forcing a restart.
+migrate('026_login_attempts', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            key      TEXT NOT NULL,
+            kind     TEXT NOT NULL,
+            count    INTEGER NOT NULL DEFAULT 0,
+            reset_at INTEGER NOT NULL,
+            PRIMARY KEY (kind, key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_login_attempts_reset ON login_attempts(reset_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -594,6 +609,12 @@ const _stmts = {
     regimeBySymbolUser: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, user_id, created_at FROM regime_history WHERE symbol = ? AND user_id = ? ORDER BY created_at DESC LIMIT ?'),
     regimeByUser: db.prepare('SELECT id, symbol, regime, prev_regime, confidence, price, user_id, created_at FROM regime_history WHERE user_id = ? ORDER BY created_at DESC LIMIT ?'),
     regimePruneUser: db.prepare('DELETE FROM regime_history WHERE user_id = ? AND id NOT IN (SELECT id FROM regime_history WHERE user_id = ? ORDER BY created_at DESC LIMIT 500)'),
+
+    // [SEC-1] Login attempts (per-IP, per-email) — persisted so pm2 reload can't reset the window
+    loginAttemptGet: db.prepare('SELECT count, reset_at FROM login_attempts WHERE kind = ? AND key = ?'),
+    loginAttemptUpsert: db.prepare('INSERT INTO login_attempts (kind, key, count, reset_at) VALUES (?, ?, ?, ?) ON CONFLICT(kind, key) DO UPDATE SET count = excluded.count, reset_at = excluded.reset_at'),
+    loginAttemptDelete: db.prepare('DELETE FROM login_attempts WHERE kind = ? AND key = ?'),
+    loginAttemptPruneExpired: db.prepare('DELETE FROM login_attempts WHERE reset_at < ?'),
 };
 
 // ─── Public API ───
@@ -1185,4 +1206,9 @@ module.exports = {
         _stmts.bdPruneBlocked.run(d90);
     },
     bdCount: () => _stmts.bdCount.all(),
+    // [SEC-1] Login attempts
+    loginAttemptGet: (kind, key) => _stmts.loginAttemptGet.get(kind, key) || null,
+    loginAttemptUpsert: (kind, key, count, resetAt) => _stmts.loginAttemptUpsert.run(kind, key, count, resetAt),
+    loginAttemptDelete: (kind, key) => _stmts.loginAttemptDelete.run(kind, key),
+    loginAttemptPruneExpired: (now) => _stmts.loginAttemptPruneExpired.run(now).changes,
 };

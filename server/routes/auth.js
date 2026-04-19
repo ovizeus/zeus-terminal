@@ -29,8 +29,7 @@ const pendingCodes = new Map(); // email → { code, role, userId, attempts, exp
 const CODE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_ATTEMPTS = 5;
 
-// ─── Login Rate Limit (per-IP) ───
-const loginAttempts = new Map(); // ip → { count, resetAt }
+// ─── Login Rate Limit (per-IP) — [SEC-1] SQLite-backed, survives pm2 reload ───
 const LOGIN_WINDOW = 15 * 60 * 1000; // 15 minutes
 const LOGIN_MAX = 10; // max attempts per window
 
@@ -47,18 +46,17 @@ const PIN_WINDOW = 15 * 60 * 1000;
 const PIN_MAX = 5;
 const PIN_LOCKOUT_LEVELS = [15 * 60 * 1000, 60 * 60 * 1000, 4 * 60 * 60 * 1000, 24 * 60 * 60 * 1000]; // 15m,1h,4h,24h
 
-// ─── Login Rate Limit (per-email) ───
-const loginAttemptsEmail = new Map(); // email → { count, resetAt }
+// ─── Login Rate Limit (per-email) — [SEC-1] SQLite-backed ───
 const LOGIN_EMAIL_MAX = 5;
 
 // Periodic cleanup of expired codes and stale rate-limit entries (every 5 min)
 setInterval(() => {
     const now = Date.now();
     for (const [k, v] of pendingCodes) { if (now > v.expiresAt) pendingCodes.delete(k); }
-    for (const [k, v] of loginAttempts) { if (now > v.resetAt) loginAttempts.delete(k); }
-    for (const [k, v] of loginAttemptsEmail) { if (now > v.resetAt) loginAttemptsEmail.delete(k); }
     for (const [k, v] of verifyAttempts) { if (now > v.resetAt) verifyAttempts.delete(k); }
     for (const [k, v] of pinAttempts) { if (now > v.resetAt) pinAttempts.delete(k); }
+    // [SEC-1] Prune expired login-attempt rows from SQLite
+    try { db.loginAttemptPruneExpired(now); } catch (_) { }
 }, 5 * 60 * 1000);
 
 // ─── Email Transporter ───
@@ -126,26 +124,26 @@ async function _sendCode(email, code) {
 
 // ─── Helpers ───
 
-function _checkLoginRate(ip) {
+// [SEC-1] Counters live in SQLite (table login_attempts) so a pm2 reload can't
+// reset an attacker's window. Kind is 'ip' or 'email'; max is LOGIN_MAX vs LOGIN_EMAIL_MAX.
+function _bumpLoginAttempt(kind, key, max) {
     const now = Date.now();
-    const entry = loginAttempts.get(ip);
-    if (!entry || now > entry.resetAt) {
-        loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW });
+    const row = db.loginAttemptGet(kind, key);
+    if (!row || now > row.reset_at) {
+        db.loginAttemptUpsert(kind, key, 1, now + LOGIN_WINDOW);
         return true;
     }
-    entry.count++;
-    return entry.count <= LOGIN_MAX;
+    const nextCount = row.count + 1;
+    db.loginAttemptUpsert(kind, key, nextCount, row.reset_at);
+    return nextCount <= max;
+}
+
+function _checkLoginRate(ip) {
+    return _bumpLoginAttempt('ip', ip, LOGIN_MAX);
 }
 
 function _checkLoginRateEmail(email) {
-    const now = Date.now();
-    const entry = loginAttemptsEmail.get(email);
-    if (!entry || now > entry.resetAt) {
-        loginAttemptsEmail.set(email, { count: 1, resetAt: now + LOGIN_WINDOW });
-        return true;
-    }
-    entry.count++;
-    return entry.count <= LOGIN_EMAIL_MAX;
+    return _bumpLoginAttempt('email', email, LOGIN_EMAIL_MAX);
 }
 
 function _setAuthCookie(res, token, userId) {
@@ -248,6 +246,8 @@ router.post('/login', async (req, res) => {
         const user = db.findUserByEmail(normalEmail);
 
         if (!user) {
+            // [SEC-2] IP-tagged log for fail2ban (unknown email = probing)
+            logger.warn('AUTH', 'LOGIN_FAILED unknown_email ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
             return res.status(401).json({ error: 'Email sau parolă incorectă' });
         }
 
@@ -275,12 +275,15 @@ router.post('/login', async (req, res) => {
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) {
             db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'wrong_password' }, req.ip);
+            // [SEC-2] IP-tagged log so fail2ban can ban brute-forcers
+            logger.warn('AUTH', 'LOGIN_FAILED wrong_password ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
             return res.status(401).json({ error: 'Email sau parolă incorectă' });
         }
 
         // Reject expired temporary password (set by admin reset)
         if (user.pwd_temp_expires_at && new Date(user.pwd_temp_expires_at) < new Date()) {
             db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'temp_password_expired' }, req.ip);
+            logger.warn('AUTH', 'LOGIN_FAILED temp_password_expired ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
             return res.status(401).json({ error: 'Parola temporară a expirat. Cere admin-ului una nouă.' });
         }
 
