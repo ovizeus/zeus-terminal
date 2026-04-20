@@ -1,7 +1,25 @@
 // Zeus Terminal — Server Market Radar (Phase 11.2)
-// Polls Binance Futures /ticker/24hr once per minute, detects market events
-// (price spikes, volume spikes, rank shifts, top-300 entry/exit) and
+// Polls Binance Futures /ticker/24hr, detects market events (price spikes,
+// volume spikes, rank shifts, top-N liquidity-universe entry/exit) and
 // broadcasts them over the WS sync channel to all connected clients.
+//
+// IMPORTANT — what "TOP 300" means here:
+//   The universe is the top 300 symbols returned by Binance Futures
+//   /fapi/v1/ticker/24hr, filtered to USDT-margined perpetuals, ranked
+//   DESCENDING by 24-hour quoteVolume (USD traded). This is a liquidity /
+//   trading-activity ranking. It is NOT a global market-cap ranking.
+//   newTop300 / exitTop300 mean: the symbol entered / left THIS liquidity
+//   universe between two consecutive polls. A UI surface MUST label the
+//   source clearly (e.g. "TOP 300 BINANCE USDT · 24h VOL") rather than a
+//   bare "TOP 300 LIVE" that would imply market cap.
+//
+// Feature flags (process.env):
+//   MARKET_RADAR_ENABLED  — "0" / "false" disables the scanner entirely
+//                           (default: enabled). When disabled: zero scan,
+//                           zero emit, zero crash. Client degrades quietly
+//                           because no market.radar frames are sent.
+//   MARKET_RADAR_POLL_MS  — poll interval in ms (default 60000; clamped to
+//                           [15000, 3600000]).
 //
 // Emits WS payloads of shape:
 //   { type: 'market.radar', data: { ts, symbol, category, color, price,
@@ -14,11 +32,25 @@
 
 const logger = require('./logger');
 
+// ── Env flags ──
+function _envEnabled() {
+    const raw = process.env.MARKET_RADAR_ENABLED;
+    if (raw === undefined || raw === null || raw === '') return true;
+    const v = String(raw).trim().toLowerCase();
+    return !(v === '0' || v === 'false' || v === 'off' || v === 'no');
+}
+function _envPollMs() {
+    const raw = parseInt(process.env.MARKET_RADAR_POLL_MS, 10);
+    if (!isFinite(raw) || raw <= 0) return 60000;
+    return Math.max(15000, Math.min(raw, 3600000));
+}
+
 // ── Config ──
 const BINANCE_REST = 'https://fapi.binance.com';
-const POLL_INTERVAL_MS = 60000;     // 1 tick = 1 minute
+const ENABLED = _envEnabled();
+const POLL_INTERVAL_MS = _envPollMs();
 const FIRST_POLL_DELAY_MS = 20000;  // warm up after boot
-const TOP_N = 300;                  // rank universe
+const TOP_N = 300;                  // rank universe (Binance USDT perps by 24h quoteVolume — NOT market cap)
 const HISTORY_MAX = 240;            // 240 ticks = 4h of 1-min snapshots
 const TICKS_1H = 60;                // offset to look back for 1h delta
 const TICKS_4H = 240;               // offset to look back for 4h delta
@@ -253,10 +285,14 @@ async function _pollOnce() {
 
 function start() {
     if (_running) return;
+    if (!ENABLED) {
+        logger.info('RADAR', 'scanner DISABLED via MARKET_RADAR_ENABLED — zero scan, zero emit');
+        return;
+    }
     _running = true;
     setTimeout(() => { _pollOnce().catch(() => { }); }, FIRST_POLL_DELAY_MS);
     _timer = setInterval(() => { _pollOnce().catch(() => { }); }, POLL_INTERVAL_MS);
-    logger.info('RADAR', `scanner started — top ${TOP_N}, poll ${POLL_INTERVAL_MS / 1000}s`);
+    logger.info('RADAR', `scanner started — top ${TOP_N} (Binance USDT perps, by 24h quoteVolume), poll ${POLL_INTERVAL_MS / 1000}s`);
 }
 
 function stop() {
@@ -266,11 +302,14 @@ function stop() {
 
 function getState() {
     return {
+        enabled: ENABLED,
         running: _running,
+        pollMs: POLL_INTERVAL_MS,
         tickCount: _tickCount,
         trackedSymbols: _history.size,
         topSetSize: _prevTopSet.size,
         dedupeEntries: _dedupe.size,
+        universe: 'binance-futures-usdt-perps/quoteVolume24h',
     };
 }
 
