@@ -1069,6 +1069,17 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.error('SERVER', `[RADAR] boot failed: ${err.message}`);
   }
 
+  // [LIQ] Binance public liquidation feed — one persistent WS to
+  // !forceOrder@arr, filtered to notional ≥ $100k. Read-only public data,
+  // no trading side effects. Gated by MARKET_RADAR_LIQ_ENABLED.
+  try {
+    const liquidationFeed = require('./server/services/liquidationFeed');
+    liquidationFeed.start();
+    logger.info('SERVER', '[LIQ] liquidation feed started');
+  } catch (err) {
+    logger.error('SERVER', `[LIQ] boot failed: ${err.message}`);
+  }
+
   // [b65] Reflection engine: start + backfill from history regardless of SERVER_BRAIN.
   // Dashboard reads thoughts/rules/self-score directly from in-memory Maps —
   // without this seed, every pm2 reload leaves the dashboard empty until a fresh

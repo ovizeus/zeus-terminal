@@ -14,20 +14,25 @@
 //   bare "TOP 300 LIVE" that would imply market cap.
 //
 // Feature flags (process.env):
-//   MARKET_RADAR_ENABLED  — "0" / "false" disables the scanner entirely
-//                           (default: enabled). When disabled: zero scan,
-//                           zero emit, zero crash. Client degrades quietly
-//                           because no market.radar frames are sent.
-//   MARKET_RADAR_POLL_MS  — poll interval in ms (default 60000; clamped to
-//                           [15000, 3600000]).
+//   MARKET_RADAR_ENABLED          — master switch. "0"/"false" disables the
+//                                   entire scanner (default: enabled).
+//   MARKET_RADAR_POLL_MS          — main poll interval in ms (default 60000;
+//                                   clamped to [15000, 3600000]).
+//   MARKET_RADAR_FUNDING_ENABLED  — toggle funding-rate sub-poll (default on).
+//   MARKET_RADAR_OI_ENABLED       — toggle open-interest sub-poll (default on).
 //
 // Emits WS payloads of shape:
 //   { type: 'market.radar', data: { ts, symbol, category, color, price,
 //                                   changePct, volRatio, rank, rankPrev,
-//                                   quoteVolume } }
+//                                   quoteVolume, btcDelta, streakCount,
+//                                   fundingRate, oiChangePct, notional } }
+//   btcDelta / streakCount are enrichment fields attached to every emit;
+//   fundingRate / oiChangePct / notional appear only on their own category.
 //
 // Event categories: spike1h, dump1h, spike4h, dump4h, spike24h, dump24h,
-//                   volSpike, rankUp, rankDown, newTop300, exitTop300
+//                   volSpike, rankUp, rankDown, newTop300, exitTop300,
+//                   fundingExtreme, oiSurge
+// (Liquidation categories liqLong/liqShort come from liquidationFeed.js.)
 'use strict';
 
 const logger = require('./logger');
@@ -44,10 +49,19 @@ function _envPollMs() {
     if (!isFinite(raw) || raw <= 0) return 60000;
     return Math.max(15000, Math.min(raw, 3600000));
 }
+function _envBool(name, defaultOn) {
+    const raw = process.env[name];
+    if (raw === undefined || raw === null || raw === '') return defaultOn;
+    const v = String(raw).trim().toLowerCase();
+    if (v === '0' || v === 'false' || v === 'off' || v === 'no') return false;
+    return true;
+}
 
 // ── Config ──
 const BINANCE_REST = 'https://fapi.binance.com';
 const ENABLED = _envEnabled();
+const FUNDING_ENABLED = _envBool('MARKET_RADAR_FUNDING_ENABLED', true);
+const OI_ENABLED = _envBool('MARKET_RADAR_OI_ENABLED', true);
 const POLL_INTERVAL_MS = _envPollMs();
 const FIRST_POLL_DELAY_MS = 20000;  // warm up after boot
 const TOP_N = 300;                  // rank universe (Binance USDT perps by 24h quoteVolume — NOT market cap)
@@ -56,12 +70,16 @@ const TICKS_1H = 60;                // offset to look back for 1h delta
 const TICKS_4H = 240;               // offset to look back for 4h delta
 const VOL_BASELINE_WINDOW = 20;     // volume avg over last 20 ticks
 const DEDUPE_WINDOW_MS = 300000;    // 1 event / symbol / category / 5 min
+const STREAK_WINDOW_MS = DEDUPE_WINDOW_MS * 3;  // streak continues if re-fires within 15 min
+const OI_TOP_N = 50;                // poll OI only for the deepest-liquidity 50 symbols
 const THRESH = {
     spike1h: 5,      // ±5 %
     spike4h: 10,     // ±10 %
     spike24h: 15,    // ±15 %
     volRatio: 2.0,   // ≥ 200 % of 20-tick avg quote volume
     rankShift: 20,   // |Δrank| ≥ 20 within top-N
+    fundingAbs: 0.0005,  // |funding rate| ≥ 0.05 % / 8 h (crowded trade)
+    oiChangePct: 10,     // |OI Δ| ≥ 10 % vs 60 ticks ago
 };
 
 // ── State ──
@@ -69,9 +87,12 @@ let _timer = null;
 let _running = false;
 let _tickCount = 0;
 const _history = new Map();    // symbol -> ring: [{ts, price, quoteVolume}]
+const _oiHistory = new Map();  // symbol -> ring: [{ts, oi}] (open interest in contracts)
 const _prevRank = new Map();   // symbol -> rank (1-based within top-N)
 let _prevTopSet = new Set();   // symbols in previous top-N snapshot
 const _dedupe = new Map();     // `${symbol}:${category}` -> ts
+const _streaks = new Map();    // `${symbol}:${category}` -> { count, lastTs }
+let _btcDelta = null;          // BTCUSDT priceChangePercent24h from the latest poll
 
 function _broadcast(payload) {
     const fn = global.__zeusWsBroadcastAll;
@@ -87,7 +108,28 @@ function _canEmit(symbol, category, now) {
     return true;
 }
 
+function _bumpStreak(symbol, category, now) {
+    const key = symbol + ':' + category;
+    const prev = _streaks.get(key);
+    if (prev && (now - prev.lastTs) <= STREAK_WINDOW_MS) {
+        prev.count++;
+        prev.lastTs = now;
+        return prev.count;
+    }
+    _streaks.set(key, { count: 1, lastTs: now });
+    return 1;
+}
+
 function _emit(event) {
+    // Attach enrichment fields to every event so the client can render:
+    //   - btcDelta: BTCUSDT's 24h % at emit time (context for altcoin moves)
+    //   - streakCount: consecutive fires of (symbol, category) within 15 min
+    if (event && typeof event === 'object') {
+        if (event.btcDelta === undefined) event.btcDelta = _btcDelta;
+        if (event.streakCount === undefined && event.symbol && event.category) {
+            event.streakCount = _bumpStreak(event.symbol, event.category, event.ts || Date.now());
+        }
+    }
     _broadcast({ type: 'market.radar', data: event });
 }
 
@@ -151,6 +193,11 @@ async function _pollOnce() {
         });
     }
     if (tickers.length === 0) return;
+
+    // Capture BTC 24h delta for event enrichment BEFORE sorting/emitting.
+    // Fall back to null if BTCUSDT isn't present (never expected, but safe).
+    const btc = tickers.find(t => t.symbol === 'BTCUSDT');
+    _btcDelta = btc ? btc.priceChangePercent24h : null;
 
     // Rank by 24h quote volume, take top N
     tickers.sort((a, b) => b.quoteVolume - a.quoteVolume);
@@ -278,9 +325,107 @@ async function _pollOnce() {
     for (const sym of _history.keys()) {
         if (!currentTopSet.has(sym)) _history.delete(sym);
     }
+    for (const sym of _oiHistory.keys()) {
+        if (!currentTopSet.has(sym)) _oiHistory.delete(sym);
+    }
     // GC dedupe entries older than 2× window
     const cutoff = now - DEDUPE_WINDOW_MS * 2;
     for (const [k, ts] of _dedupe) if (ts < cutoff) _dedupe.delete(k);
+    // GC streak entries older than 4× streak window
+    const streakCutoff = now - STREAK_WINDOW_MS * 4;
+    for (const [k, v] of _streaks) if (v.lastTs < streakCutoff) _streaks.delete(k);
+
+    // ── funding-rate sub-poll (piggyback on the same tick) ──
+    if (FUNDING_ENABLED) {
+        try { await _pollFunding(top, currentTopSet, now); }
+        catch (err) { logger.error('RADAR', `funding sub-poll failed: ${err.message}`); }
+    }
+
+    // ── open-interest sub-poll ──
+    if (OI_ENABLED) {
+        try { await _pollOpenInterest(top.slice(0, OI_TOP_N), now); }
+        catch (err) { logger.error('RADAR', `OI sub-poll failed: ${err.message}`); }
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Funding rate — /fapi/v1/premiumIndex returns ALL symbols in 1 call
+// ══════════════════════════════════════════════════════════════════
+async function _pollFunding(top, currentTopSet, now) {
+    const url = `${BINANCE_REST}/fapi/v1/premiumIndex`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    if (!Array.isArray(rows)) return;
+
+    // Index price/rank for O(1) enrichment lookup
+    const ix = new Map();
+    top.forEach((t, i) => ix.set(t.symbol, { rank: i + 1, price: t.price, qv: t.quoteVolume, pct24: t.priceChangePercent24h }));
+
+    for (const r of rows) {
+        const sym = r.symbol;
+        if (typeof sym !== 'string' || !currentTopSet.has(sym)) continue;
+        const fr = parseFloat(r.lastFundingRate);
+        if (!isFinite(fr)) continue;
+        if (Math.abs(fr) < THRESH.fundingAbs) continue;
+        if (!_canEmit(sym, 'fundingExtreme', now)) continue;
+        const meta = ix.get(sym);
+        // Positive funding = longs pay shorts → crowded longs → color RED
+        // Negative funding = shorts pay longs → crowded shorts → color GREEN
+        _emit({
+            ts: now, symbol: sym, category: 'fundingExtreme',
+            color: fr > 0 ? 'red' : 'green',
+            price: meta ? meta.price : null,
+            changePct: meta ? meta.pct24 : null,
+            fundingRate: fr,
+            rank: meta ? meta.rank : null,
+            quoteVolume: meta ? meta.qv : null,
+        });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Open interest — 1 call per symbol; limit to top OI_TOP_N for rate safety
+// Build our own 60-tick ring buffer; emit when |Δ1h| ≥ THRESH.oiChangePct
+// ══════════════════════════════════════════════════════════════════
+async function _fetchOI(symbol) {
+    const url = `${BINANCE_REST}/fapi/v1/openInterest?symbol=${encodeURIComponent(symbol)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const oi = parseFloat(data.openInterest);
+    return isFinite(oi) ? oi : null;
+}
+
+async function _pollOpenInterest(topSubset, now) {
+    // Spread requests to avoid a thundering herd on Binance: run 8 in parallel,
+    // then wait a handful of ms between batches. 50 symbols ÷ 8 ≈ 7 batches → ~1-2s.
+    const BATCH = 8;
+    for (let i = 0; i < topSubset.length; i += BATCH) {
+        const slice = topSubset.slice(i, i + BATCH);
+        await Promise.all(slice.map(async (t) => {
+            const oi = await _fetchOI(t.symbol);
+            if (oi === null) return;
+            let buf = _oiHistory.get(t.symbol);
+            if (!buf) { buf = []; _oiHistory.set(t.symbol, buf); }
+            buf.push({ ts: now, oi });
+            if (buf.length > HISTORY_MAX) buf.shift();
+            if (buf.length <= TICKS_1H) return;  // warmup
+            const past = buf[buf.length - 1 - TICKS_1H];
+            if (!past || !past.oi) return;
+            const pct = ((oi - past.oi) / past.oi) * 100;
+            if (!isFinite(pct) || Math.abs(pct) < THRESH.oiChangePct) return;
+            if (!_canEmit(t.symbol, 'oiSurge', now)) return;
+            _emit({
+                ts: now, symbol: t.symbol, category: 'oiSurge',
+                color: pct > 0 ? 'green' : 'red',
+                price: t.price, changePct: t.priceChangePercent24h,
+                oiChangePct: pct,
+                rank: topSubset.indexOf(t) + 1,
+                quoteVolume: t.quoteVolume,
+            });
+        }));
+    }
 }
 
 function start() {
@@ -292,7 +437,7 @@ function start() {
     _running = true;
     setTimeout(() => { _pollOnce().catch(() => { }); }, FIRST_POLL_DELAY_MS);
     _timer = setInterval(() => { _pollOnce().catch(() => { }); }, POLL_INTERVAL_MS);
-    logger.info('RADAR', `scanner started — top ${TOP_N} (Binance USDT perps, by 24h quoteVolume), poll ${POLL_INTERVAL_MS / 1000}s`);
+    logger.info('RADAR', `scanner started — top ${TOP_N} (Binance USDT perps, by 24h quoteVolume), poll ${POLL_INTERVAL_MS / 1000}s, funding=${FUNDING_ENABLED ? 'ON' : 'OFF'}, OI=${OI_ENABLED ? 'ON' : 'OFF'}`);
 }
 
 function stop() {
@@ -305,10 +450,15 @@ function getState() {
         enabled: ENABLED,
         running: _running,
         pollMs: POLL_INTERVAL_MS,
+        fundingEnabled: FUNDING_ENABLED,
+        oiEnabled: OI_ENABLED,
         tickCount: _tickCount,
         trackedSymbols: _history.size,
+        trackedOI: _oiHistory.size,
         topSetSize: _prevTopSet.size,
         dedupeEntries: _dedupe.size,
+        streakEntries: _streaks.size,
+        btcDelta: _btcDelta,
         universe: 'binance-futures-usdt-perps/quoteVolume24h',
     };
 }
