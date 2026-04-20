@@ -397,11 +397,10 @@ export function PanelShell() {
         {/* ── Status Bar — first element in content area (1:1 from old app .page) ── */}
         <StatusBar />
 
-        {/* ── Watchlist Bar (above ModeBar — 1:1 order from old app) ── */}
+        {/* ── Watchlist Bar ── */}
         <WatchlistBar />
 
-        {/* ── Mode Bar — 1:1 from original zeus-mode-bar ── */}
-        <ModeBar />
+        {/* ── Market Radar slot — populated in Phase 11.5 (mount). Empty now during Phase 11.1 layout move. ── */}
 
         {/* ── Chart section — 1:1 from original #csec .chart-section ── */}
         <section className="zr-panel zr-panel--chart chart-section" id="csec" data-panel="chart">
@@ -432,6 +431,9 @@ export function PanelShell() {
           {/* ── Time & Sales tape ── */}
           <div id="ts-wrap" style={{ display: 'none' }}></div>
         </section>
+
+        {/* ── Mode Bar — relocated below chart legend (Phase 11.1). Same component, same logic, same style. ── */}
+        <ModeBar />
 
         {/* ── Icon Dock — 1:1 from original zeus-dock ── */}
         <ZeusDock active={dockActive} onDockClick={handleDockClick} />
