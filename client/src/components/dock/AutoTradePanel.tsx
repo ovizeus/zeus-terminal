@@ -26,6 +26,9 @@ export function AutoTradePanel() {
   // Phase 2C: read canonical executionEnv. null = LOCKED.
   const executionEnv = useUiStore((s) => s.executionEnv)
   const executionBlockedReason = useUiStore((s) => s.executionBlockedReason)
+  // [Phase 12.A — Batch D1] Canonical exchange identity for dynamic labels.
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const _exchLabel = activeExchange === 'binance' ? 'Binance' : activeExchange === 'bybit' ? 'Bybit' : 'your active exchange'
   const [bextOpen, setBextOpen] = useState(false)
 
   // Numeric fields are held as STRINGS so the user can fully clear the input
@@ -504,9 +507,9 @@ export function AutoTradePanel() {
             <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff8800' }}>
               <path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" />
             </svg> {executionEnv === 'TESTNET'
-              ? <><strong>TESTNET MODE ACTIVE:</strong> Auto trades will execute with TEST funds on Binance Testnet.</>
+              ? <><strong>TESTNET MODE ACTIVE:</strong> Auto trades will execute with TEST funds on {_exchLabel} Testnet.</>
               : (executionEnv === 'REAL'
-                ? <><strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on Binance.</>
+                ? <><strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on {_exchLabel}.</>
                 : <><strong>LIVE MODE LOCKED:</strong> {executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'}</>)}
           </div>
         )}

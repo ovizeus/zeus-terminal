@@ -19,6 +19,15 @@ export function StatusBar() {
   const sbPosCount = useUiStore((s) => s.sbPosCount)
   const sbPnl = useUiStore((s) => s.sbPnl)
   const openModal = useUiStore((s) => s.openModal)
+  // [Phase 12.A — Batch D4] Compose mode label with exchange suffix on TESTNET/REAL.
+  //   Writer in bootstrapError emits sbMode='DEMO'|'TESTNET'|'LIVE'|'LOCKED';
+  //   here we map 'LIVE' → 'REAL' for display and append '· BINANCE' / '· BYBIT'
+  //   when there is a connected exchange. DEMO/LOCKED stay bare.
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const _exchSuffix = activeExchange === 'binance' ? ' \u00B7 BINANCE' : activeExchange === 'bybit' ? ' \u00B7 BYBIT' : ''
+  const sbModeDisplay = sbMode === 'TESTNET' ? ('TESTNET' + _exchSuffix)
+    : sbMode === 'LIVE' ? ('REAL' + _exchSuffix)
+    : sbMode // DEMO or LOCKED (or any other value) pass through unchanged
 
   const dataDot = sbDataState === 'stale' ? 'zsb-warn' : sbDataState === 'degraded' ? 'zsb-stale' : 'zsb-on'
   const dataTxt = sbDataState === 'stale' ? 'STALE' : sbDataState === 'degraded' ? 'DEGRADED' : 'DATA'
@@ -28,7 +37,7 @@ export function StatusBar() {
 
   return (
     <div className="zeus-status-bar" id="zeusStatusBar">
-      <div className={`zsb-item zsb-mode ${sbModeClass}`} id="zsbMode" title="Trading Mode">{sbMode}</div>
+      <div className={`zsb-item zsb-mode ${sbModeClass}`} id="zsbMode" title="Trading Mode">{sbModeDisplay}</div>
       <div className="zsb-sep"></div>
       <div className="zsb-item" id="zsbAT" title="AutoTrade State">
         <span className={`zsb-dot ${sbAtEnabled ? 'zsb-on' : 'zsb-off'}`}></span>AT {sbAtEnabled ? 'ON' : 'OFF'}

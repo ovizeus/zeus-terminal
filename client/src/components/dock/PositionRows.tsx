@@ -13,6 +13,19 @@ import { attachConfirmClose } from '../../engine/events'
 import { getSymPrice, savePosSLTP, cancelPendingOrder, modifyPendingPrice, closeLivePos, calcPosPnL } from '../../data/marketDataPositions'
 import { closeDemoPos } from '../../data/marketDataClose'
 import { _safePnl } from '../../utils/guards'
+import { useUiStore } from '../../stores'
+
+// [Phase 12.A — Batch D5] Resolve exchange chip label for a LIVE position.
+//   Prefer the position's own exchange field (if server ever attaches one),
+//   fallback to useUiStore.activeExchange. Returns null when neither is
+//   known — caller omits the chip rather than invent 'Binance'.
+function _resolveExchangeLabel(pos: { exchange?: unknown }, fallback: 'binance' | 'bybit' | null): string | null {
+  const own = typeof pos?.exchange === 'string' ? pos.exchange.toLowerCase() : null
+  const pick = own || fallback
+  if (pick === 'binance') return 'BINANCE'
+  if (pick === 'bybit') return 'BYBIT'
+  return null
+}
 
 const w = window as any
 
@@ -35,6 +48,8 @@ export function PendingOrderRow({ ord }: { ord: any }) {
   const age = Date.now() - (ord.createdAt || Date.now())
   const ageStr = age < 60000 ? Math.floor(age / 1000) + 's' : Math.floor(age / 60000) + 'm'
   const isLive = ord.mode === 'live'
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const exchLabel = isLive ? _resolveExchangeLabel(ord, activeExchange) : null
 
   return (
     <div className="pos-row pos-pending" style={{ borderColor: sideColor }}>
@@ -49,6 +64,13 @@ export function PendingOrderRow({ ord }: { ord: any }) {
             color: isLive ? '#ff4444' : '#aa44ff',
             padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, marginLeft: 4,
           }}>{isLive ? 'LIVE' : 'DEMO'}</span>
+          {exchLabel && (
+            <span style={{
+              background: '#00d4ff1a',
+              color: '#00d4ff',
+              padding: '1px 5px', borderRadius: 3, fontSize: 9, fontWeight: 700, marginLeft: 4, letterSpacing: 1,
+            }}>{exchLabel}</span>
+          )}
         </span>
         <div style={{ display: 'flex', gap: 4 }}>
           <button
@@ -81,6 +103,7 @@ export function DemoPositionRow({ pos }: { pos: any }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [sl, setSl] = useState<string>(pos.sl ? String(pos.sl) : '')
   const [tp, setTp] = useState<string>(pos.tp ? String(pos.tp) : '')
+  const activeExchange = useUiStore((s) => s.activeExchange)
 
   // Re-sync inputs when server-side updates the position (but not during active edit)
   useEffect(() => {
@@ -123,6 +146,7 @@ export function DemoPositionRow({ pos }: { pos: any }) {
   const roe = margin > 0 ? (pos.pnl / margin * 100).toFixed(2) : '0.00'
   const symBase = (pos.sym || 'BTC').replace('USDT', '')
   const isLive = (pos.mode || 'demo') === 'live'
+  const exchLabel = isLive ? _resolveExchangeLabel(pos, activeExchange) : null
   const dsl = (w.DSL && w.DSL.positions) ? w.DSL.positions[String(pos.id)] : null
   const dslActive = dsl && dsl.active
   const slVal = dslActive && dsl.currentSL > 0 ? dsl.currentSL : pos.sl
@@ -143,6 +167,11 @@ export function DemoPositionRow({ pos }: { pos: any }) {
           <span style={{ background: isLive ? '#ff444422' : '#aa44ff22', color: isLive ? '#ff4444' : '#aa44ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6 }}>
             {isLive ? 'LIVE' : 'DEMO'}
           </span>
+          {exchLabel && (
+            <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 4, letterSpacing: 1 }}>
+              {exchLabel}
+            </span>
+          )}
         </span>
         <button ref={btnRef} data-id={pos.id} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
       </div>
@@ -181,6 +210,8 @@ export function LivePositionRow({ pos }: { pos: any }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [sl, setSl] = useState<string>(pos.sl ? String(pos.sl) : '')
   const [tp, setTp] = useState<string>(pos.tp ? String(pos.tp) : '')
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const exchLabel = _resolveExchangeLabel(pos, activeExchange)
 
   useEffect(() => {
     const el = document.activeElement as any
@@ -205,7 +236,12 @@ export function LivePositionRow({ pos }: { pos: any }) {
     return (
       <div className={`pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 700 }}>{dotRed} {pos.side} {symBase} {pos.lev}x</span>
+          <span style={{ fontWeight: 700 }}>
+            {dotRed} {pos.side} {symBase} {pos.lev}x
+            {exchLabel && (
+              <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6, letterSpacing: 1 }}>{exchLabel}</span>
+            )}
+          </span>
           <button ref={btnRef} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
         </div>
         <div style={{ fontSize: 13, marginTop: 3, color: '#ff8800' }}>Price unavailable</div>
@@ -224,7 +260,12 @@ export function LivePositionRow({ pos }: { pos: any }) {
   return (
     <div className={`pos-row ${pos.side === 'LONG' ? 'pos-long' : 'pos-short'}`}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontWeight: 700 }}>{dotRed} {pos.side} {symBase} {pos.lev}x</span>
+        <span style={{ fontWeight: 700 }}>
+          {dotRed} {pos.side} {symBase} {pos.lev}x
+          {exchLabel && (
+            <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6, letterSpacing: 1 }}>{exchLabel}</span>
+          )}
+        </span>
         <button ref={btnRef} data-live-id={pos.id} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 3 }}>

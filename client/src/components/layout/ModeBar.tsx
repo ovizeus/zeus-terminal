@@ -10,7 +10,11 @@ export function ModeBar() {
   const engineMode = useATStore((s) => s.mode) || 'demo'
   const executionEnv = useUiStore((s) => s.executionEnv)
   const executionBlockedReason = useUiStore((s) => s.executionBlockedReason)
+  // [Phase 12.A — Batch D2] Append exchange identity to TESTNET/REAL labels.
+  const activeExchange = useUiStore((s) => s.activeExchange)
   const openModal = useUiStore((s) => s.openModal)
+
+  const _exchSuffix = activeExchange === 'binance' ? ' \u00B7 BINANCE' : activeExchange === 'bybit' ? ' \u00B7 BYBIT' : ''
 
   let barClass = 'zeus-mode-bar'
   let modeText = ''
@@ -32,13 +36,13 @@ export function ModeBar() {
     indClass += ' zmb-ind-locked'
   } else if (executionEnv === 'TESTNET') {
     barClass += ' zmb-testnet'
-    modeText = 'LIVE \u2014 TESTNET'
+    modeText = 'TESTNET' + _exchSuffix
     btnText = 'ACTIVATE DEMO'
     btnClass += ' zmb-btn-demo'
     indClass += ' zmb-ind-testnet'
   } else {
     barClass += ' zmb-real'
-    modeText = 'LIVE \u2014 REAL'
+    modeText = 'REAL' + _exchSuffix
     btnText = 'ACTIVATE DEMO'
     btnClass += ' zmb-btn-demo'
     indClass += ' zmb-ind-real'

@@ -1,6 +1,18 @@
 import { memo, useCallback } from 'react'
 import { useAresStore } from '../../../stores/aresStore'
+import { useUiStore } from '../../../stores'
 import type { AresPositionCard } from '../../../types/ares'
+
+// [Phase 12.A — Batch D5] Exchange chip for LIVE ARES cards. Prefers the
+// position's own exchange field (if ever attached); falls back to
+// useUiStore.activeExchange. Returns null when unknown — no 'Binance' lies.
+function _aresExchLabel(pos: AresPositionCard & { exchange?: unknown }, fallback: 'binance' | 'bybit' | null): string | null {
+  const own = typeof pos?.exchange === 'string' ? pos.exchange.toLowerCase() : null
+  const pick = own || fallback
+  if (pick === 'binance') return 'BINANCE'
+  if (pick === 'bybit') return 'BYBIT'
+  return null
+}
 
 function _pnlColor(pnl: number): string {
   if (pnl > 0) return 'rgba(0,255,140,0.95)'
@@ -14,6 +26,8 @@ function fmt1(n: number, fallback = '—'): string {
 
 function PositionCard({ pos }: { pos: AresPositionCard }) {
   const closeArePosition = useAresStore((s) => s.closeArePosition)
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const exchLabel = pos.live ? _aresExchLabel(pos, activeExchange) : null
   const pnlColor = _pnlColor(pos.pnl)
   const pnlSign = pos.pnl >= 0 ? '+' : ''
   const sideColor = pos.side === 'LONG' ? 'rgba(0,255,140,0.9)' : 'rgba(255,80,80,0.9)'
@@ -41,6 +55,7 @@ function PositionCard({ pos }: { pos: AresPositionCard }) {
           <span style={{ color: 'rgba(255,200,60,0.85)' }}> x{pos.leverage || 1}</span>
           <span style={{ color: 'rgba(255,255,255,0.45)' }}> ISO  Size: {pos.size.toFixed(1)} USDT</span>
           {pos.live ? <span style={{ color: '#00ff88', fontSize: 10, letterSpacing: 1 }}> LIVE</span> : null}
+          {exchLabel ? <span style={{ color: '#00d4ff', fontSize: 10, letterSpacing: 1 }}> {exchLabel}</span> : null}
           {bePill ? <span style={{ color: '#00d9ff', fontSize: 10 }}> BE</span> : null}
         </span>
         <button

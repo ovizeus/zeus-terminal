@@ -13,6 +13,8 @@ const w = window as any
 export function ManualTradePanel() {
   // Phase 2C: read canonical executionEnv. null = LOCKED (non-demo blocked).
   const executionEnv = useUiStore((s) => s.executionEnv)
+  // [Phase 12.A — Batch D3] Canonical exchange identity for header+balance labels.
+  const activeExchange = useUiStore((s) => s.activeExchange)
   const isPlacingLive = useUiStore((s) => s.isPlacingLive)
   // [batch3-W+] Engine mode (demo/live) is the authoritative toggle for what
   // the Manual panel shows. `exchangeMode` ('testnet'/'live'/null) only
@@ -57,6 +59,9 @@ export function ManualTradePanel() {
   const isLiveMode = engineMode === 'live'
   // null → LOCKED, REAL/TESTNET → as-is, DEMO label not rendered in live mode (engineMode guards)
   const envLabel: 'TESTNET' | 'REAL' | 'LOCKED' = executionEnv === 'TESTNET' ? 'TESTNET' : (executionEnv === 'REAL' ? 'REAL' : 'LOCKED')
+  // [Phase 12.A — Batch D3] Exchange suffix for live-mode header + balance prefix.
+  //   'binance' → '· BINANCE', 'bybit' → '· BYBIT', null → '· ACTIVE EXCHANGE' (honest fallback).
+  const _exchSuffix = activeExchange === 'binance' ? ' \u00B7 BINANCE' : activeExchange === 'bybit' ? ' \u00B7 BYBIT' : ' \u00B7 ACTIVE EXCHANGE'
   const journalSorted = journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0)))
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
@@ -141,13 +146,13 @@ export function ManualTradePanel() {
     <div className="trade-panel" id="panelDemo">
       <div className={`tp-hdr ${isLiveMode ? (envLabel === 'LOCKED' ? 'locked-hdr' : 'live-hdr') : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
         <span>{isLiveMode
-          ? (envLabel === 'TESTNET' ? '\u25CF MANUAL TRADE (TESTNET)' : (envLabel === 'REAL' ? '\u25CF MANUAL TRADE (REAL)' : '\u26D4 MANUAL TRADE (LOCKED)'))
+          ? (envLabel === 'TESTNET' ? `\u25CF MANUAL TRADE (TESTNET${_exchSuffix})` : (envLabel === 'REAL' ? `\u25CF MANUAL TRADE (REAL${_exchSuffix})` : '\u26D4 MANUAL TRADE (LOCKED)'))
           : 'MANUAL TRADE'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span id="demoBalance" className="tp-bal">{(() => {
             if (isLiveMode) {
               if (envLabel === 'LOCKED') return 'BAL: Exchange locked \u2014 not configured'
-              const prefix = envLabel === 'TESTNET' ? 'BAL (TESTNET): $' : 'BAL (REAL): $'
+              const prefix = envLabel === 'TESTNET' ? `BAL (TESTNET${_exchSuffix}): $` : `BAL (REAL${_exchSuffix}): $`
               return prefix + liveBalanceTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             }
             return `BAL: $${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
