@@ -29,6 +29,7 @@ const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // ═══════════════════════════════════════════════════════
 export function switchGlobalMode(mode: any): void {
   const currentMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
+  console.log('[BRAIN-SPLIT] switchGlobalMode(' + mode + ') currentMode=' + currentMode)
   if (currentMode === mode) { _toggleManualPanel(); return }
   if (mode === 'demo') {
     _showConfirmDialog('Activate Demo Mode?', 'You are about to switch the entire system to DEMO mode.\n\nAll new manual and auto trades will run in simulated mode.\nNo real Binance orders will be executed.\nLive mode will be turned off.\n\nExisting live positions will remain live and continue independently.', 'Cancel', 'Activate Demo', function () { _executeGlobalModeSwitch('demo') })
@@ -40,12 +41,17 @@ export function switchGlobalMode(mode: any): void {
 }
 
 function _executeGlobalModeSwitch(mode: string): void {
+  console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') POSTing...')
   api.raw<any>('POST', '/api/at/mode', { mode }).then(function (data: any) {
+    console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') response ok=' + data.ok)
     if (data.ok) {
       // [BRAIN-MODE-SPLIT b74] Flush pending _usSave BEFORE flipping the AT
       // mode, so the outgoing mode's current profile/bmMode lands in its own
       // namespace (USER_SETTINGS.brain[old]) — otherwise an 800ms-debounced
       // change just before the switch would leak into the new mode.
+      const _prevMode = (typeof AT !== 'undefined' && (AT as any).mode) ? (AT as any).mode : 'demo'
+      const _usBefore = (window as any).USER_SETTINGS || {}
+      console.log('[BRAIN-SPLIT] switch: ' + _prevMode + ' → ' + mode + ' | prev flat=' + _usBefore.profile + '/' + _usBefore.bmMode + ' | brain=' + JSON.stringify(_usBefore.brain || {}))
       try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
       // [BRAIN-MODE-SPLIT b74 hotfix] Flip BOTH AT.mode and atStore.mode synchronously,
       // not only AT._serverMode. getATMode() reads useATStore.mode, so without this the
@@ -54,6 +60,7 @@ function _executeGlobalModeSwitch(mode: string): void {
       // up (~500ms+). Any save during that window landed in the wrong brain namespace.
       if (typeof AT !== 'undefined') { AT._serverMode = mode; (AT as any).mode = mode }
       try { useATStore.getState().patch({ mode: mode as 'demo' | 'live' }) } catch (_) {}
+      console.log('[BRAIN-SPLIT] after flip: AT.mode=' + (AT as any).mode + ' store.mode=' + useATStore.getState().mode)
       // [BRAIN-MODE-SPLIT b74] Apply the new mode's brain namespace now, so S,
       // BM and the brainStore reflect the per-mode profile + bmMode the user
       // set for this mode previously (or the migration seed on first run).

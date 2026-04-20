@@ -557,6 +557,7 @@ export function setBrainMode(mode: any): void { setMode(mode) }
 
 function _applyProfileSwitch(profile: string): void {
   w.S.profile = profile.toLowerCase()
+  console.log('[BRAIN-SPLIT] _applyProfileSwitch: S.profile=' + w.S.profile + ' scheduleSave')
   brainThink('info', _ZI.chart + ` Profile → ${w.S.profile.toUpperCase()} | Trig:${PROFILE_TF[w.S.profile]?.trigger || '?'}`)
   syncBrainFromState()
   setTimeout(renderBrainCockpit, 30)

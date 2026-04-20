@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.49',
-    build: 75,
+    version: '1.7.50',
+    build: 76,
     date: '2026-04-20',
     changelog: [
+        'Post-v2 batch30 b76 v1.7.50 — Phase 10.18.2 BRAIN SPLIT SECOND SWITCH PATH FIX. Root cause found by deep audit: components/trading/ATPanel.tsx handleModeSwitch called api.post(/api/at/mode) DIRECTLY, bypassing switchGlobalMode/_executeGlobalModeSwitch entirely. That path never flushed the outgoing mode settings, never flipped AT.mode or useATStore.mode, never called applyBrainCfgForMode. Since the ATPanel toggle was the actual button the user was clicking, the entire b74+b75 brain namespace split machinery was never triggered by that route. FIX: ATPanel.handleModeSwitch now delegates to switchGlobalMode(newMode) so the single canonical switch pipeline runs (confirm dialog + _usFlush + AT/store flip + applyBrainCfgForMode + ui apply). Backup: ATPanel.tsx.bak.b76. Retained diagnostic [BRAIN-SPLIT] console logs from b75 patch for verification.',
         'Post-v2 batch29 b75 v1.7.49 — Phase 10.18.1 BRAIN MODE SYNC HOTFIX. _executeGlobalModeSwitch previously set only AT._serverMode on switch; AT.mode and useATStore.mode flipped only later via async atPollOnce → updateATMode → useATBridge chain. Because getATMode() reads useATStore.mode, the TRADING badge and _currentATModeKey (used by _usSave) stayed on the OLD mode for ~500ms+ after a switch, so saves during that window landed in the wrong brain namespace and profile/bmMode appeared to leak between demo and live. FIX: flip AT.mode and useATStore.getState().patch({mode}) synchronously alongside AT._serverMode, BEFORE calling applyBrainCfgForMode, so every getATMode() consumer sees the new mode immediately. Backup: marketDataTrading.ts.bak.b75.',
         'Post-v2 batch28 b74 v1.7.48 — Phase 10.18 BRAIN DEMO/LIVE NAMESPACE SPLIT.',
         'Complete separation of Brain configuration per AT trading mode so profile and bmMode persist independently for demo vs live.',

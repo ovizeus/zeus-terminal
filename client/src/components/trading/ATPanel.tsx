@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useATStore, usePositionsStore } from '../../stores'
 import { api } from '../../services/api'
+import { switchGlobalMode } from '../../data/marketDataTrading'
 
 export function ATPanel() {
   const enabled = useATStore((s) => s.enabled)
@@ -28,11 +29,9 @@ export function ATPanel() {
     setLoading('')
   }
 
-  async function handleModeSwitch() {
+  function handleModeSwitch() {
     const newMode = mode === 'demo' ? 'live' : 'demo'
-    setLoading('mode')
-    await api.post('/api/at/mode', { mode: newMode })
-    setLoading('')
+    switchGlobalMode(newMode)
   }
 
   async function handleKillReset() {

@@ -1386,6 +1386,7 @@ export function applyBrainCfgForMode(mode: 'live' | 'demo'): void {
   try {
     _seedBrainFromFlat()
     const cfg = USER_SETTINGS.brain[mode] || {}
+    console.log('[BRAIN-SPLIT] applyBrainCfgForMode(' + mode + ') cfg=' + JSON.stringify(cfg) + ' fullBrain=' + JSON.stringify(USER_SETTINGS.brain))
     const S = w.S || {}
     const BM = w.BM
     if (cfg.profile) {
@@ -1612,6 +1613,7 @@ export function _usSave() {
       USER_SETTINGS.brain[_curMode] = USER_SETTINGS.brain[_curMode] || {}
       USER_SETTINGS.brain[_curMode].profile = USER_SETTINGS.profile
       USER_SETTINGS.brain[_curMode].bmMode = USER_SETTINGS.bmMode
+      console.log('[BRAIN-SPLIT] _usSave writing to brain.' + _curMode + ' = ' + JSON.stringify(USER_SETTINGS.brain[_curMode]))
     } catch (_) { }
     USER_SETTINGS.assistArmed = !!S.assistArmed
     const _iv = (id: string, def: any) => {
