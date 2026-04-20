@@ -67,7 +67,7 @@ function _executeGlobalModeSwitch(mode: string): void {
       try { if (typeof w.applyBrainCfgForMode === 'function') w.applyBrainCfgForMode(mode) } catch (_) {}
       _applyGlobalModeUI(mode)
       if (mode === 'demo') { toast('Demo Mode Activated', 3000, _ZI.ok) }
-      else { const _toastEnv = w._executionEnv; if (_toastEnv === null) toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else if (_toastEnv === 'REAL') toast('Real Trading Mode Activated', 3000, _ZI.ok); else toast('Demo Mode Activated', 3000, _ZI.ok) }
+      else { const _toastEnv = w._executionEnv; if (_toastEnv === null) toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else if (_toastEnv === 'REAL') toast('Real Trading Mode Activated', 3000, _ZI.ok); else toast('Live Trading Mode Activated', 3000, _ZI.ok) }
       _showManualPanel()
       if (typeof runDSLBrain === 'function') runDSLBrain()
       if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)

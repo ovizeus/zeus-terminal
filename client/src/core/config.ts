@@ -1361,17 +1361,44 @@ function _ensureBrainNamespace(): void {
   if (!USER_SETTINGS.brain.demo || typeof USER_SETTINGS.brain.demo !== 'object') USER_SETTINGS.brain.demo = {}
 }
 
-// [BRAIN-MODE-SPLIT b74] First-run migration: if brain.live/demo profile/bmMode
-// are missing but the flat top-level profile/bmMode exist, seed both modes from
-// the flat values so the user doesn't lose pre-split settings.
+// [BRAIN-MODE-SPLIT b78] First-run migration: if brain.live/demo namespace keys
+// are missing but the flat top-level equivalents exist, seed both modes from
+// the flat values so the user doesn't lose pre-split settings. Covers profile,
+// bmMode, assistArmed, autoTrade (all AT risk params), dslSettings.
 function _seedBrainFromFlat(): void {
   _ensureBrainNamespace()
   const bL = USER_SETTINGS.brain.live
   const bD = USER_SETTINGS.brain.demo
+  // profile + bmMode (b74 heritage)
   if (bL.profile == null && USER_SETTINGS.profile) bL.profile = USER_SETTINGS.profile
   if (bD.profile == null && USER_SETTINGS.profile) bD.profile = USER_SETTINGS.profile
   if (bL.bmMode == null && USER_SETTINGS.bmMode) bL.bmMode = USER_SETTINGS.bmMode
   if (bD.bmMode == null && USER_SETTINGS.bmMode) bD.bmMode = USER_SETTINGS.bmMode
+  // assistArmed (b78)
+  if (bL.assistArmed == null && typeof USER_SETTINGS.assistArmed === 'boolean') bL.assistArmed = USER_SETTINGS.assistArmed
+  if (bD.assistArmed == null && typeof USER_SETTINGS.assistArmed === 'boolean') bD.assistArmed = USER_SETTINGS.assistArmed
+  // autoTrade full block (b78) — seed only if brain slot has no autoTrade yet
+  if (!bL.autoTrade && USER_SETTINGS.autoTrade && typeof USER_SETTINGS.autoTrade === 'object') {
+    bL.autoTrade = Object.assign({}, USER_SETTINGS.autoTrade)
+  }
+  if (!bD.autoTrade && USER_SETTINGS.autoTrade && typeof USER_SETTINGS.autoTrade === 'object') {
+    bD.autoTrade = Object.assign({}, USER_SETTINGS.autoTrade)
+  }
+  // dslSettings per-mode snapshot (b79) — DSL canonical state is useDslStore.
+  // On first boot after b79, if brain slot lacks dslSettings, seed from the
+  // current store snapshot so both modes start with the user's current DSL
+  // picks and diverge from there.
+  try {
+    const _dsl = useDslStore.getState()
+    const _snap = {
+      mode: _dsl.mode || null,
+      enabled: !!_dsl.enabled,
+      magnetEnabled: !!_dsl.magnetEnabled,
+      magnetMode: _dsl.magnetMode || 'soft',
+    }
+    if (bL.dslSettings == null) bL.dslSettings = Object.assign({}, _snap)
+    if (bD.dslSettings == null) bD.dslSettings = Object.assign({}, _snap)
+  } catch (_) { }
 }
 
 /**
@@ -1386,9 +1413,10 @@ export function applyBrainCfgForMode(mode: 'live' | 'demo'): void {
   try {
     _seedBrainFromFlat()
     const cfg = USER_SETTINGS.brain[mode] || {}
-    console.log('[BRAIN-SPLIT] applyBrainCfgForMode(' + mode + ') cfg=' + JSON.stringify(cfg) + ' fullBrain=' + JSON.stringify(USER_SETTINGS.brain))
+    console.log('[BRAIN-SPLIT] applyBrainCfgForMode(' + mode + ') cfg=' + JSON.stringify(cfg))
     const S = w.S || {}
     const BM = w.BM
+    const ARM_ASSIST = w.ARM_ASSIST
     if (cfg.profile) {
       S.profile = cfg.profile
       const _profBtn = document.getElementById('prof-' + S.profile) as HTMLElement | null
@@ -1408,10 +1436,107 @@ export function applyBrainCfgForMode(mode: 'live' | 'demo'): void {
         _modeBtn.classList.add('act-' + S.mode)
       }
     }
+    // [BRAIN-MODE-SPLIT b78] assistArmed per-mode
+    if (typeof cfg.assistArmed === 'boolean') {
+      S.assistArmed = cfg.assistArmed
+      if (typeof ARM_ASSIST !== 'undefined' && ARM_ASSIST) {
+        ARM_ASSIST.armed = cfg.assistArmed
+        if (cfg.assistArmed) ARM_ASSIST.ts = Date.now()
+      }
+    }
+    // [BRAIN-MODE-SPLIT b78] autoTrade per-mode: push to flat USER_SETTINGS.autoTrade,
+    // DOM inputs, BM.confMin, BM.adapt.*, then project through settingsStore so
+    // atStore + window.TC + legacy TC Proxy all pick up the new mode's values.
+    if (cfg.autoTrade && typeof cfg.autoTrade === 'object') {
+      USER_SETTINGS.autoTrade = USER_SETTINGS.autoTrade || {}
+      Object.assign(USER_SETTINGS.autoTrade, cfg.autoTrade)
+      const _setInp = (id: string, val: any) => {
+        if (val == null) return
+        const el = document.getElementById(id) as any
+        if (el) el.value = val
+      }
+      const _setChk = (id: string, val: any) => {
+        if (val == null) return
+        const el = document.getElementById(id) as any
+        if (el) el.checked = !!val
+      }
+      _setInp('atLev', cfg.autoTrade.lev)
+      _setInp('atSL', cfg.autoTrade.sl)
+      _setInp('atRR', cfg.autoTrade.rr)
+      _setInp('atSize', cfg.autoTrade.size)
+      _setInp('atMaxPos', cfg.autoTrade.maxPos)
+      _setInp('atKillPct', cfg.autoTrade.killPct)
+      _setInp('atRiskPct', cfg.autoTrade.riskPct)
+      _setInp('atMaxDay', cfg.autoTrade.maxDay)
+      _setInp('atLossStreak', cfg.autoTrade.lossStreak)
+      _setInp('atMaxAddon', cfg.autoTrade.maxAddon)
+      _setInp('atConfMin', cfg.autoTrade.confMin)
+      _setInp('atSigMin', cfg.autoTrade.sigMin)
+      _setChk('atMultiSym', cfg.autoTrade.multiSym)
+      _setChk('atSmartExit', cfg.autoTrade.smartExitEnabled)
+      _setChk('atAdaptEnabled', cfg.autoTrade.adaptEnabled)
+      _setChk('atAdaptLive', cfg.autoTrade.adaptLive)
+      if (typeof BM !== 'undefined' && BM) {
+        if (cfg.autoTrade.confMin != null) BM.confMin = Number(cfg.autoTrade.confMin) || BM.confMin
+        if (BM.adapt) {
+          if (typeof cfg.autoTrade.adaptEnabled === 'boolean') BM.adapt.enabled = cfg.autoTrade.adaptEnabled
+          if (typeof cfg.autoTrade.adaptLive === 'boolean') BM.adapt.allowLiveAdjust = cfg.autoTrade.adaptLive
+        }
+      }
+      // Re-project flat → store → atStore/TC so engine state tracks new mode.
+      try {
+        const _ssStore = (w as any).__zeusSettingsStore
+        if (_ssStore && typeof _ssStore.getState === 'function') {
+          _ssStore.getState().loadFromLegacy()
+        }
+      } catch (_) { }
+    }
+    // [BRAIN-MODE-SPLIT b79] dslSettings per-mode — canonical state lives in
+    // useDslStore (mode/magnetEnabled/magnetMode/enabled), NOT in the legacy
+    // USER_SETTINGS.dslSettings blob. Apply to the store + mirror to LS key
+    // (`zeus_dsl_mode:<uid>`) + window.DSL proxy + DOM radios, so the UI,
+    // engine and persistence layer all agree on the new mode's values.
+    if (cfg.dslSettings && typeof cfg.dslSettings === 'object') {
+      const dsl = cfg.dslSettings as any
+      try {
+        const dslState = useDslStore.getState()
+        if (typeof dsl.enabled === 'boolean') dslState.setEnabled(dsl.enabled)
+        if (typeof dsl.mode === 'string' && dsl.mode) dslState.setMode(dsl.mode)
+        if (typeof dsl.magnetEnabled === 'boolean' || typeof dsl.magnetMode === 'string') {
+          dslState.setMagnet(!!dsl.magnetEnabled, typeof dsl.magnetMode === 'string' ? dsl.magnetMode : undefined)
+        }
+      } catch (_) { }
+      try {
+        const _uid = (w as any)._zeusUserId
+        const _dslKey = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+        if (typeof dsl.mode === 'string' && dsl.mode) localStorage.setItem(_dslKey, dsl.mode)
+      } catch (_) { }
+      try {
+        const _winDsl: any = (w as any).DSL
+        if (_winDsl) {
+          if (typeof dsl.mode === 'string' && dsl.mode) _winDsl.mode = dsl.mode
+          if (typeof dsl.enabled === 'boolean') _winDsl.enabled = dsl.enabled
+        }
+      } catch (_) { }
+      try {
+        if (typeof dsl.mode === 'string' && dsl.mode) {
+          const _ids = ['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp']
+          _ids.forEach(function (id) {
+            const e = document.getElementById(id) as any
+            if (!e) return
+            e.className = 'znc-dbtn'
+          })
+          const _btn = document.getElementById('dsl-' + dsl.mode) as any
+          if (_btn) _btn.classList.add('act-dsl-' + dsl.mode)
+        }
+      } catch (_) { }
+      try { window.dispatchEvent(new CustomEvent('zeus:dslSettingsChanged', { detail: { source: 'modeSwitch', mode } })) } catch (_) { }
+    }
     // Keep the flat (active-mode snapshot) keys in sync so wire-format writes
     // reflect the mode the user is currently on.
     USER_SETTINGS.profile = cfg.profile || USER_SETTINGS.profile
     USER_SETTINGS.bmMode = cfg.bmMode || USER_SETTINGS.bmMode
+    if (typeof cfg.assistArmed === 'boolean') USER_SETTINGS.assistArmed = cfg.assistArmed
   } catch (e: any) {
     console.warn('[BRAIN-MODE-SPLIT] applyBrainCfgForMode failed:', e?.message || e)
   }
@@ -1605,16 +1730,6 @@ export function _usSave() {
     USER_SETTINGS.alerts = Object.assign({}, S.alerts)
     USER_SETTINGS.profile = S.profile || 'fast'
     USER_SETTINGS.bmMode = (typeof BM !== 'undefined' ? BM.mode : null) || null
-    // [BRAIN-MODE-SPLIT b74] Persist the current profile+bmMode under the
-    // active AT mode's namespace so live and demo are remembered independently.
-    try {
-      _ensureBrainNamespace()
-      const _curMode = _currentATModeKey()
-      USER_SETTINGS.brain[_curMode] = USER_SETTINGS.brain[_curMode] || {}
-      USER_SETTINGS.brain[_curMode].profile = USER_SETTINGS.profile
-      USER_SETTINGS.brain[_curMode].bmMode = USER_SETTINGS.bmMode
-      console.log('[BRAIN-SPLIT] _usSave writing to brain.' + _curMode + ' = ' + JSON.stringify(USER_SETTINGS.brain[_curMode]))
-    } catch (_) { }
     USER_SETTINGS.assistArmed = !!S.assistArmed
     const _iv = (id: string, def: any) => {
       const el = document.getElementById(id) as any
@@ -1654,6 +1769,35 @@ export function _usSave() {
     USER_SETTINGS.ptLevLive = getLiveLev()
     const _dmm = document.getElementById('demoMarginMode') as any
     if (_dmm) USER_SETTINGS.ptMarginMode = _dmm.value
+    // [BRAIN-MODE-SPLIT b78] Persist full per-mode namespace under brain[curMode]:
+    // profile, bmMode, assistArmed, autoTrade (full AT risk block), dslSettings.
+    // Runs AFTER USER_SETTINGS.autoTrade + .dslSettings + .assistArmed are
+    // populated so the brain slot is written with fresh values.
+    try {
+      _ensureBrainNamespace()
+      const _curMode = _currentATModeKey()
+      USER_SETTINGS.brain[_curMode] = USER_SETTINGS.brain[_curMode] || {}
+      const slot: any = USER_SETTINGS.brain[_curMode]
+      slot.profile = USER_SETTINGS.profile
+      slot.bmMode = USER_SETTINGS.bmMode
+      slot.assistArmed = !!USER_SETTINGS.assistArmed
+      slot.autoTrade = USER_SETTINGS.autoTrade ? Object.assign({}, USER_SETTINGS.autoTrade) : null
+      // [BRAIN-MODE-SPLIT b79] DSL canonical state is useDslStore — snapshot
+      // mode/magnet/enabled from the store (NOT from the legacy USER_SETTINGS.dslSettings
+      // blob, which nothing else writes to).
+      try {
+        const _dsl = useDslStore.getState()
+        slot.dslSettings = {
+          mode: _dsl.mode || null,
+          enabled: !!_dsl.enabled,
+          magnetEnabled: !!_dsl.magnetEnabled,
+          magnetMode: _dsl.magnetMode || 'soft',
+        }
+      } catch (_) {
+        slot.dslSettings = slot.dslSettings || null
+      }
+      console.log('[BRAIN-SPLIT] _usSave writing to brain.' + _curMode + ' keys=' + Object.keys(slot).join(',') + ' dsl=' + JSON.stringify(slot.dslSettings))
+    } catch (_) { }
     USER_SETTINGS._syncTs = Date.now()
     localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS))
     // [MIGRATION-F0] Push directly to SQLite via POST /api/user/settings.

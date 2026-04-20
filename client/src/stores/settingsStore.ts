@@ -52,6 +52,10 @@ interface LegacyChart {
 interface LegacyBrainNamespace {
   profile?: string
   bmMode?: string
+  // [BRAIN-MODE-SPLIT b78] full working-flow per-mode
+  assistArmed?: boolean
+  autoTrade?: Record<string, unknown>
+  dslSettings?: Record<string, unknown> | null
 }
 interface LegacyUserSettings {
   autoTrade?: LegacyAutoTrade
@@ -340,7 +344,11 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
   if (settings.profile !== undefined) us.profile = settings.profile
   if (settings.bmMode !== undefined) us.bmMode = settings.bmMode
-  // [BRAIN-MODE-SPLIT b74] project per-mode brain namespace back into legacy
+  // [BRAIN-MODE-SPLIT b78] project per-mode brain namespace back into legacy.
+  // Full working-flow shape: profile, bmMode, assistArmed, autoTrade, dslSettings.
+  // Merge is shallow at the namespace level (profile/bmMode/assistArmed replace,
+  // autoTrade/dslSettings replace as whole blobs — _usSave writes them complete),
+  // and preserves the non-active slot so a demo write never touches live.
   if (settings.brain !== undefined && settings.brain && typeof settings.brain === 'object') {
     us.brain = us.brain || { live: {}, demo: {} }
     if (settings.brain.live && typeof settings.brain.live === 'object') {

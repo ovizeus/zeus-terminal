@@ -13,6 +13,37 @@
  */
 
 /**
+ * [BRAIN-MODE-SPLIT b78] Per-trading-mode namespace shape. The same keys
+ * exist at the top-level SettingsPayload (flat "active-mode snapshot") and
+ * are mirrored into brain.live / brain.demo so each mode is remembered
+ * independently.
+ */
+export interface BrainModeNamespace {
+  profile?: string
+  bmMode?: string
+  assistArmed?: boolean
+  autoTrade?: {
+    lev?: number
+    sl?: number
+    rr?: number
+    size?: number
+    maxPos?: number
+    killPct?: number
+    riskPct?: number
+    maxDay?: number
+    lossStreak?: number
+    maxAddon?: number
+    confMin?: number
+    sigMin?: number
+    multiSym?: boolean
+    smartExitEnabled?: boolean
+    adaptEnabled?: boolean
+    adaptLive?: boolean
+  }
+  dslSettings?: Record<string, unknown> | null
+}
+
+/**
  * Flat settings payload — mirrors server SETTINGS_WHITELIST (40 keys).
  * All fields are optional: the server merges partial updates with the
  * existing row, and the client boots with DEFAULT_SETTINGS + overlay.
@@ -64,11 +95,12 @@ export interface SettingsPayload {
   profile?: string
   bmMode?: string
   assistArmed?: boolean
-  // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace. Separate profile +
-  // bmMode per trading mode so live and demo are remembered independently.
+  // [BRAIN-MODE-SPLIT b78] per-AT-mode brain+AT+DSL namespace. Full working-flow
+  // split: profile, bmMode, assistArmed, autoTrade (all AT risk params + BM
+  // adapt flags), dslSettings — all remembered independently per live/demo.
   brain?: {
-    live?: { profile?: string; bmMode?: string }
-    demo?: { profile?: string; bmMode?: string }
+    live?: BrainModeNamespace
+    demo?: BrainModeNamespace
   } | null
 
   // Manual live defaults + per-account leverage
