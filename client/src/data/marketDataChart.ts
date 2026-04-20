@@ -136,7 +136,7 @@ export async function fetchKlines(tf: any): Promise<void> {
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
         _resetKlineWatchdog()
-        try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
+        try { w.cSeries.update(bar) } catch (_) { }
         if (typeof updOvrs === 'function') updOvrs()
         if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
       }
@@ -153,7 +153,6 @@ export function renderChart(): void {
   try {
     w.S.chartBars = w.S.klines.map((k: any) => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close }))
     w.cSeries.setData(w.S.klines)
-    try { if (typeof w.rebuildCandleSeriesFromKlines === 'function') w.rebuildCandleSeriesFromKlines() } catch (_) { }
     try { w.mainChart.timeScale().scrollToRealTime() } catch (_) { }
     const c = w.S.klines.map((k: any) => k.close)
     function calcEMA(data: number[], p: number) { const k = 2 / (p + 1); let e = data[0]; return data.map((v: number) => { e = v * k + e * (1 - k); return e }) }
