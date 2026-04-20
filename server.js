@@ -1171,6 +1171,18 @@ wss.on('connection', (ws, req) => {
     if (set) { set.delete(ws); if (set.size === 0) _wsClients.delete(uid); }
   });
   ws.on('error', () => { try { ws.close(); } catch (_) { } });
+
+  // [Phase 11.7] Market Radar warm-start — replay cached events so a new or
+  // reconnecting session sees the same radar state as everyone else. Safe
+  // when cache is empty (we just skip the send). Sent synchronously here so
+  // it lands before any future market.radar broadcast.
+  try {
+    const radarCache = require('./server/services/radarCache');
+    const snap = radarCache.snapshot();
+    if (snap && (snap.green.length || snap.red.length)) {
+      ws.send(JSON.stringify({ type: 'market.radar.snapshot', data: snap }));
+    }
+  } catch (_) { /* cache optional; never block WS accept */ }
 });
 
 // Heartbeat — drop dead connections every 30s

@@ -36,6 +36,7 @@
 'use strict';
 
 const logger = require('./logger');
+const radarCache = require('./radarCache');
 
 // ── Env flags ──
 function _envEnabled() {
@@ -130,6 +131,9 @@ function _emit(event) {
             event.streakCount = _bumpStreak(event.symbol, event.category, event.ts || Date.now());
         }
     }
+    // [Phase 11.7] Push to shared cache BEFORE broadcasting so a client that
+    // connects mid-broadcast still receives this event via snapshot-on-connect.
+    radarCache.push(event);
     _broadcast({ type: 'market.radar', data: event });
 }
 

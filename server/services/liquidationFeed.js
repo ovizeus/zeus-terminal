@@ -22,6 +22,7 @@
 
 const WebSocket = require('ws');
 const logger = require('./logger');
+const radarCache = require('./radarCache');
 
 // ── Env flag ──
 function _envBool(name, defaultOn) {
@@ -86,15 +87,15 @@ function _handleForceOrder(msg) {
     const category = side === 'SELL' ? 'liqLong' : 'liqShort';
     const color = side === 'SELL' ? 'red' : 'green';
     _eventsEmitted++;
-    _broadcast({
-        type: 'market.radar',
-        data: {
-            ts, symbol, category, color,
-            price, changePct: null,
-            notional,
-            rank: null, quoteVolume: null,
-        },
-    });
+    const event = {
+        ts, symbol, category, color,
+        price, changePct: null,
+        notional,
+        rank: null, quoteVolume: null,
+    };
+    // [Phase 11.7] push to shared cache so reconnecting clients see recent liqs
+    radarCache.push(event);
+    _broadcast({ type: 'market.radar', data: event });
 }
 
 function _onMessage(raw) {

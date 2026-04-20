@@ -4,7 +4,7 @@ import type { Position } from './position'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot
 
 /**
  * [Phase 11.2] Market Radar event broadcast.
@@ -55,6 +55,23 @@ export interface RadarEvent {
 export interface WsMarketRadar {
   type: 'market.radar'
   data: RadarEvent
+}
+
+/**
+ * [Phase 11.7] Market Radar warm-start snapshot. Emitted by server to every
+ * new WebSocket session on connect (see server.js WS connection handler) so
+ * the client doesn't start with empty bands on refresh / reconnect / first
+ * tab open. Carries the same-shape events already in the server's rolling
+ * cache (last 10 min, capped per color) plus the monotonic lastEventTs so
+ * the client's stale-replay guard stays consistent.
+ */
+export interface WsMarketRadarSnapshot {
+  type: 'market.radar.snapshot'
+  data: {
+    green: RadarEvent[]
+    red: RadarEvent[]
+    lastEventTs: number
+  }
 }
 
 export interface WsAtUpdate {

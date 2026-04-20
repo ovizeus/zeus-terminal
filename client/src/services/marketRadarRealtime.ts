@@ -49,6 +49,22 @@ export function startMarketRadarRealtime(): void {
     _started = true
 
     _unsub = wsService.subscribe((msg: WsMessage) => {
+        // [Phase 11.7] Warm-start snapshot on (re)connect — server replays up
+        // to the last 10 min of cached events so the bands aren't empty after
+        // a refresh. Arrives before any live market.radar frame on this socket.
+        if (msg.type === 'market.radar.snapshot') {
+            const d = msg.data as { green?: unknown; red?: unknown; lastEventTs?: unknown } | undefined
+            if (!d) return
+            const green = Array.isArray(d.green) ? d.green.filter(_isValidEvent) : []
+            const red = Array.isArray(d.red) ? d.red.filter(_isValidEvent) : []
+            const ts = typeof d.lastEventTs === 'number' && isFinite(d.lastEventTs) ? d.lastEventTs : 0
+            try {
+                useMarketRadarStore.getState().hydrate(green, red, ts)
+            } catch {
+                /* defensive */
+            }
+            return
+        }
         if (msg.type !== 'market.radar') return
         const ev = msg.data
         if (!_isValidEvent(ev)) return

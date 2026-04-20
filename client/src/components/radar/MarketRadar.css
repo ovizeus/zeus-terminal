@@ -109,16 +109,28 @@
     animation-iteration-count: infinite;
     animation-play-state: running;
     will-change: transform;
+    /* [Phase 11.7] force GPU compositing layer on iOS so the mask-image band
+       doesn't throttle / stall the translate animation. */
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
 
-/* Pause on hover so users can actually click a pill. */
-.mr-band:hover .mr-track {
-    animation-play-state: paused;
+/* [Phase 11.7] Pause on hover ONLY on devices with a real pointer. On touch
+ * devices :hover fires on tap AND STICKS after release, which froze the
+ * marquee on mobile after the first pill tap. The media query keeps the
+ * desktop ergonomics and removes the mobile stall. */
+@media (hover: hover) and (pointer: fine) {
+    .mr-band:hover .mr-track {
+        animation-play-state: paused;
+    }
 }
 
+/* [Phase 11.7] Explicit 3D transform so iOS / Android Chrome promote the
+ * track to its own compositor layer (translateX alone can end up on the CPU
+ * path when combined with mask-image). */
 @keyframes mr-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
+    from { transform: translate3d(0, 0, 0); }
+    to   { transform: translate3d(-50%, 0, 0); }
 }
 
 /* Respect reduced-motion — no endless scroll, just static overflow. */

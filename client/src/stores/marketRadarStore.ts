@@ -26,7 +26,18 @@ export interface MarketRadarState {
   red: RadarEvent[]
   lastEventTs: number
   push: (ev: RadarEvent) => void
+  /** [Phase 11.7] replace both queues with a server-sent warm-start snapshot */
+  hydrate: (green: RadarEvent[], red: RadarEvent[], lastEventTs: number) => void
   clear: () => void
+}
+
+function _isRadarEvent(ev: unknown): ev is RadarEvent {
+  if (!ev || typeof ev !== 'object') return false
+  const e = ev as Record<string, unknown>
+  if (typeof e.ts !== 'number' || !isFinite(e.ts)) return false
+  if (typeof e.symbol !== 'string' || e.symbol.length === 0) return false
+  if (e.color !== 'green' && e.color !== 'red') return false
+  return true
 }
 
 function _enqueue(queue: RadarEvent[], ev: RadarEvent): RadarEvent[] {
@@ -60,6 +71,21 @@ export const useMarketRadarStore = create<MarketRadarState>((set, get) => ({
       }
       return { red: _enqueue(s.red, ev), lastEventTs: Math.max(s.lastEventTs, ev.ts) }
     })
+  },
+
+  hydrate: (green, red, lastEventTs) => {
+    // Server cache is authoritative on replay — we replace, not merge. Any
+    // live event that raced the snapshot will re-arrive via `push` after
+    // hydrate and be enqueued normally (stale guard prevents duplicates
+    // older than 10 min).
+    const g = (Array.isArray(green) ? green : []).filter(_isRadarEvent)
+    const r = (Array.isArray(red) ? red : []).filter(_isRadarEvent)
+    const gc = g.length > QUEUE_CAP ? g.slice(g.length - QUEUE_CAP) : g
+    const rc = r.length > QUEUE_CAP ? r.slice(r.length - QUEUE_CAP) : r
+    const ts = (typeof lastEventTs === 'number' && isFinite(lastEventTs) && lastEventTs > 0)
+      ? lastEventTs
+      : (gc.concat(rc).reduce((m, e) => Math.max(m, e.ts), 0))
+    set({ green: gc, red: rc, lastEventTs: ts })
   },
 
   clear: () => set({ green: [], red: [], lastEventTs: 0 }),
