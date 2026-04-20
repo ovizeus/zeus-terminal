@@ -4,7 +4,47 @@ import type { Position } from './position'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar
+
+/**
+ * [Phase 11.2] Market Radar event broadcast.
+ * Emitted by server/services/marketRadar.js every poll (default 60s) when a
+ * tracked symbol crosses a category threshold. Market-wide — sent via
+ * wsBroadcastAll to every connected session. Subscriber:
+ * services/marketRadarRealtime.ts.
+ *
+ * Dedup is authoritative on the server (5-min window per symbol/category),
+ * so the client store stays simple: append to the colored FIFO queue and
+ * drop from the front when cap is reached.
+ *
+ * The "TOP 300" universe is Binance Futures USDT perpetuals ranked by
+ * 24h quoteVolume — a liquidity ranking, NOT global market cap.
+ */
+export type RadarCategory =
+  | 'spike1h' | 'dump1h'
+  | 'spike4h' | 'dump4h'
+  | 'spike24h' | 'dump24h'
+  | 'volSpike'
+  | 'rankUp' | 'rankDown'
+  | 'newTop300' | 'exitTop300'
+
+export interface RadarEvent {
+  ts: number
+  symbol: string
+  category: RadarCategory
+  color: 'green' | 'red'
+  price: number | null
+  changePct: number | null
+  volRatio?: number | null
+  rank: number | null
+  rankPrev?: number | null
+  quoteVolume: number | null
+}
+
+export interface WsMarketRadar {
+  type: 'market.radar'
+  data: RadarEvent
+}
 
 export interface WsAtUpdate {
   type: 'at_update'

@@ -16,6 +16,7 @@ import { useATBridge } from './hooks/useATBridge'
 import { wsService } from './services/ws'
 import { startSettingsRealtime, stopSettingsRealtime } from './services/settingsRealtime'
 import { startPositionsRealtime, stopPositionsRealtime } from './services/positionsRealtime'
+import { startMarketRadarRealtime, stopMarketRadarRealtime } from './services/marketRadarRealtime'
 import './app.css'
 
 export function App() {
@@ -44,7 +45,12 @@ export function App() {
       // [MIGRATION-F5 commit 4] positions cross-device sync subscriber
       // (reuses /ws/sync). No-op until server flips MF.POSITIONS_WS at C5.
       startPositionsRealtime()
+      // [Phase 11.3] Market Radar event subscriber (reuses /ws/sync).
+      // Server emits market.radar frames via wsBroadcastAll. Silent no-op
+      // when MARKET_RADAR_ENABLED=0 on the server (no frames arrive).
+      startMarketRadarRealtime()
       return () => {
+        stopMarketRadarRealtime()
         stopPositionsRealtime()
         stopSettingsRealtime()
         wsService.disconnect()
