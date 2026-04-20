@@ -10,7 +10,10 @@ interface PositionsStore {
   demoLosses: number
   liveBalance: Balance
   liveConnected: boolean
-  liveExchange: string
+  /** [Phase 12.A — Batch C] null = no connected exchange (boot or post-logout).
+   *  Server truth flows via useUiStore.activeExchange; this mirror is written by
+   *  TP writer in engine/indicators.ts on verify-success. */
+  liveExchange: 'binance' | 'bybit' | null
 
   manualPnl: number
   manualPnlClass: string
@@ -116,7 +119,7 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   demoLosses: 0,
   liveBalance: { totalBalance: 0, availableBalance: 0, unrealizedPnL: 0 },
   liveConnected: false,
-  liveExchange: 'binance',
+  liveExchange: null,
   lastSnapshotTs: 0,
   manualPnl: 0,
   manualPnlClass: 'neut',
@@ -224,7 +227,7 @@ export const usePositionsStore = create<PositionsStore>()((set, get) => ({
     demoLosses: 0,
     liveBalance: { totalBalance: 0, availableBalance: 0, unrealizedPnL: 0 },
     liveConnected: false,
-    liveExchange: 'binance',
+    liveExchange: null,
     lastSnapshotTs: 0,
     manualPnl: 0,
     manualPnlClass: 'neut',

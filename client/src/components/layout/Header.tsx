@@ -53,7 +53,7 @@ export function Header() {
           w.TP.pendingOrders = []
           w.TP.manualLivePending = []
           w.TP.liveConnected = false
-          w.TP.liveExchange = 'binance'
+          w.TP.liveExchange = null
           w.TP.liveBalance = 0
           w.TP.liveAvailableBalance = 0
           w.TP.liveUnrealizedPnL = 0

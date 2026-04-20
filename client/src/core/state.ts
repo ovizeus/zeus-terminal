@@ -1600,7 +1600,12 @@ w._indSettingsSave = _indSettingsSave
 w._indSettingsLoad = _indSettingsLoad
 
 // Trading Positions state
-export const TP: any = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], pendingOrders: [], manualLivePending: [], liveConnected: false, liveExchange: 'binance', liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 }
+// [Phase 12.A — Batch C] liveExchange defaults to null (no connected exchange yet).
+// Server is the canonical source via useUiStore.activeExchange / TP writer in
+// indicators.ts (set on verify-success). A hardcoded 'binance' was a lie on boot
+// for Bybit users and after logout — null forces consumers to treat "no exchange"
+// as a distinct state instead of silently defaulting to Binance.
+export const TP: any = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], pendingOrders: [], manualLivePending: [], liveConnected: false, liveExchange: null, liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 }
 
 // OI + Watchlist + Prices
 export const oiHistory: any[] = []
