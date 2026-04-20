@@ -9,6 +9,7 @@ import WatchlistBar from './WatchlistBar'
 import { ZeusDock } from './ZeusDock'
 import { PageView } from './PageView'
 import { ModeBar } from './ModeBar'
+import { MarketRadar } from '../radar/MarketRadar'
 // ── Legacy panel init functions (1:1 from old openPageView in pageview.ts) ──
 import { _aresRender } from '../../engine/aresUI'
 import { PM_render } from '../../engine/postMortem'
@@ -400,7 +401,8 @@ export function PanelShell() {
         {/* ── Watchlist Bar ── */}
         <WatchlistBar />
 
-        {/* ── Market Radar slot — populated in Phase 11.5 (mount). Empty now during Phase 11.1 layout move. ── */}
+        {/* ── Market Radar (Phase 11.5) — dual marquee, fed by useMarketRadarStore. ── */}
+        <ErrorBoundary><MarketRadar /></ErrorBoundary>
 
         {/* ── Chart section — 1:1 from original #csec .chart-section ── */}
         <section className="zr-panel zr-panel--chart chart-section" id="csec" data-panel="chart">
