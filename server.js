@@ -1058,6 +1058,17 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false)');
   }
 
+  // [RADAR] Market Radar scanner — polls Binance top-300 USDT perps once/min
+  // and broadcasts spike / volume / rank / top-300 events via wsBroadcastAll.
+  // Always on — no migration flag. Read-only, no trading side effects.
+  try {
+    const marketRadar = require('./server/services/marketRadar');
+    marketRadar.start();
+    logger.info('SERVER', '[RADAR] market radar scanner started');
+  } catch (err) {
+    logger.error('SERVER', `[RADAR] boot failed: ${err.message}`);
+  }
+
   // [b65] Reflection engine: start + backfill from history regardless of SERVER_BRAIN.
   // Dashboard reads thoughts/rules/self-score directly from in-memory Maps —
   // without this seed, every pm2 reload leaves the dashboard empty until a fresh
@@ -1202,6 +1213,23 @@ app.locals.wsBroadcastToUser = function (userId, payload) {
 };
 // Also expose on global for modules that don't have access to `app`.
 global.__zeusWsBroadcastToUser = app.locals.wsBroadcastToUser;
+
+// [RADAR] Broadcast a payload to EVERY connected session across all users.
+// Used by market-wide feeds (e.g. market.radar) that are not user-scoped.
+app.locals.wsBroadcastAll = function (payload) {
+  let msg;
+  try { msg = JSON.stringify(payload); } catch (_) { return 0; }
+  let sent = 0;
+  _wsClients.forEach(set => {
+    set.forEach(ws => {
+      try {
+        if (ws.readyState === WebSocket.OPEN) { ws.send(msg); sent++; }
+      } catch (_) { /* dead socket — cleaned on close */ }
+    });
+  });
+  return sent;
+};
+global.__zeusWsBroadcastAll = app.locals.wsBroadcastAll;
 
 // ─── Graceful Shutdown ───
 function _gracefulShutdown(signal) {
