@@ -3,10 +3,11 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.48',
-    build: 74,
+    version: '1.7.49',
+    build: 75,
     date: '2026-04-20',
     changelog: [
+        'Post-v2 batch29 b75 v1.7.49 — Phase 10.18.1 BRAIN MODE SYNC HOTFIX. _executeGlobalModeSwitch previously set only AT._serverMode on switch; AT.mode and useATStore.mode flipped only later via async atPollOnce → updateATMode → useATBridge chain. Because getATMode() reads useATStore.mode, the TRADING badge and _currentATModeKey (used by _usSave) stayed on the OLD mode for ~500ms+ after a switch, so saves during that window landed in the wrong brain namespace and profile/bmMode appeared to leak between demo and live. FIX: flip AT.mode and useATStore.getState().patch({mode}) synchronously alongside AT._serverMode, BEFORE calling applyBrainCfgForMode, so every getATMode() consumer sees the new mode immediately. Backup: marketDataTrading.ts.bak.b75.',
         'Post-v2 batch28 b74 v1.7.48 — Phase 10.18 BRAIN DEMO/LIVE NAMESPACE SPLIT.',
         'Complete separation of Brain configuration per AT trading mode so profile and bmMode persist independently for demo vs live.',
         '(1) TRADING BADGE MODE BUG FIX: engine/brain.ts:1756 previously hardcoded getDemoPositions() when computing hasPos for the ARM badge — when the user was on LIVE (zero open positions) but DEMO held open AT positions, the badge stayed lit TRADING because it always read the demo array. FIX: resolves positions via getATMode() so the badge follows the active mode.',

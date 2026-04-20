@@ -47,7 +47,13 @@ function _executeGlobalModeSwitch(mode: string): void {
       // namespace (USER_SETTINGS.brain[old]) — otherwise an 800ms-debounced
       // change just before the switch would leak into the new mode.
       try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
-      if (typeof AT !== 'undefined') AT._serverMode = mode
+      // [BRAIN-MODE-SPLIT b74 hotfix] Flip BOTH AT.mode and atStore.mode synchronously,
+      // not only AT._serverMode. getATMode() reads useATStore.mode, so without this the
+      // badge, _currentATModeKey (for _usSave) and any getATMode consumer stayed on the
+      // OLD mode until the async atPollOnce → updateATMode → useATBridge chain caught
+      // up (~500ms+). Any save during that window landed in the wrong brain namespace.
+      if (typeof AT !== 'undefined') { AT._serverMode = mode; (AT as any).mode = mode }
+      try { useATStore.getState().patch({ mode: mode as 'demo' | 'live' }) } catch (_) {}
       // [BRAIN-MODE-SPLIT b74] Apply the new mode's brain namespace now, so S,
       // BM and the brainStore reflect the per-mode profile + bmMode the user
       // set for this mode previously (or the migration seed on first run).
