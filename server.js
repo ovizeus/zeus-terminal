@@ -1183,6 +1183,17 @@ wss.on('connection', (ws, req) => {
       ws.send(JSON.stringify({ type: 'market.radar.snapshot', data: snap }));
     }
   } catch (_) { /* cache optional; never block WS accept */ }
+
+  // [Phase 12.A — Batch A] Exchange/env warm-start — mirrors radar snapshot.
+  // Sends one typed exchange.changed frame so a new or reconnecting tab
+  // learns the active exchange + env immediately, without waiting for the
+  // next at_update emit or for a REST roundtrip on /api/exchange/status.
+  // Sent only to THIS socket (not broadcast) — other tabs already have the
+  // current state; this is purely a per-connection warm-start.
+  try {
+    const snap = _buildExchangeSnapshot(uid);
+    if (snap) ws.send(JSON.stringify({ type: 'exchange.changed', data: snap }));
+  } catch (_) { /* never block WS accept */ }
 });
 
 // Heartbeat — drop dead connections every 30s
@@ -1236,6 +1247,36 @@ app.locals.wsBroadcastToUser = function (userId, payload) {
 };
 // Also expose on global for modules that don't have access to `app`.
 global.__zeusWsBroadcastToUser = app.locals.wsBroadcastToUser;
+
+// [Phase 12.A — Batch A] Build a typed exchange/env snapshot for the user.
+// Reads the canonical serverAT.getFullState() and plucks only the 5 fields
+// the UI needs to render exchange + env labels — no engine state, no
+// positions. Returns null if the read throws (defensive; never blocks).
+function _buildExchangeSnapshot(userId) {
+  if (!userId) return null;
+  try {
+    const s = serverAT.getFullState(userId);
+    return {
+      exchange: s.activeExchange,                 // 'binance' | 'bybit' | null
+      mode: s.exchangeMode,                       // 'live' | 'testnet' | null
+      apiConfigured: !!s.apiConfigured,
+      executionEnv: s.executionEnv,               // 'DEMO' | 'TESTNET' | 'REAL' | null
+      executionBlockedReason: s.executionBlockedReason,
+      ts: Date.now(),
+    };
+  } catch (_) { return null; }
+}
+
+// [Phase 12.A — Batch A] Push exchange.changed to every live session of
+// `userId`. Used by /api/exchange/{save,disconnect,verify} so other tabs /
+// devices learn the new active exchange + env immediately, without waiting
+// for a polling REST cycle. Best-effort: silently no-ops if the user has no
+// connected sockets or the snapshot build fails.
+app.locals.broadcastExchangeChanged = function (userId) {
+  const data = _buildExchangeSnapshot(userId);
+  if (!data) return 0;
+  return app.locals.wsBroadcastToUser(userId, { type: 'exchange.changed', data });
+};
 
 // [RADAR] Broadcast a payload to EVERY connected session across all users.
 // Used by market-wide feeds (e.g. market.radar) that are not user-scoped.

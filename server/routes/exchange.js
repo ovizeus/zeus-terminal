@@ -190,6 +190,12 @@ router.post('/save', async (req, res) => {
     db.auditLog(req.user.id, 'EXCHANGE_CONNECTED', { exchange: exName, mode: safeMode, accountId, balance: balanceInfo.balance }, req.ip);
     logger.info('EXCHANGE', `User connected ${exName}`, { userId: req.user.id, mode: safeMode });
 
+    // [Phase 12.A — Batch A] Push typed exchange.changed to all live sessions
+    // of this user so other tabs / devices reflect the new active exchange +
+    // env immediately, without waiting for the next at_update or /status poll.
+    // Best-effort: never blocks the response.
+    try { req.app.locals.broadcastExchangeChanged(req.user.id); } catch (_) { /* WS push best-effort */ }
+
     res.json({
         ok: true,
         exchange: exName,
@@ -221,6 +227,11 @@ router.post('/disconnect', (req, res) => {
     db.disconnectExchangeByName(req.user.id, exName);
     db.auditLog(req.user.id, 'EXCHANGE_DISCONNECTED', { exchange: exName }, req.ip);
     logger.info('EXCHANGE', `User disconnected ${exName}`, { userId: req.user.id });
+
+    // [Phase 12.A — Batch A] Push typed exchange.changed so other sessions
+    // see the disconnect (executionEnv flips to null with blockedReason).
+    try { req.app.locals.broadcastExchangeChanged(req.user.id); } catch (_) { /* WS push best-effort */ }
+
     res.json({ ok: true });
 });
 
@@ -247,6 +258,10 @@ router.post('/verify', async (req, res) => {
         const balanceInfo = await _testKeys(exName, plainKey, plainSecret, account.mode);
         db.saveExchangeByName(req.user.id, exName, account.api_key_encrypted, account.api_secret_encrypted, account.mode);
         db.auditLog(req.user.id, 'EXCHANGE_REVERIFIED', { exchange: exName, balance: balanceInfo.balance }, req.ip);
+
+        // [Phase 12.A — Batch A] Re-verify can flip apiConfigured/executionEnv
+        // (e.g. previously invalid keys now pass). Push so UI reflects truth.
+        try { req.app.locals.broadcastExchangeChanged(req.user.id); } catch (_) { /* WS push best-effort */ }
 
         res.json({
             ok: true,
