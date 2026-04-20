@@ -27,6 +27,10 @@ export type RadarCategory =
   | 'volSpike'
   | 'rankUp' | 'rankDown'
   | 'newTop300' | 'exitTop300'
+  | 'fundingExtreme'     // crowded trade — |funding rate| ≥ 0.05% / 8h
+  | 'oiSurge'            // |open-interest Δ| ≥ 10% vs 1h ago
+  | 'liqLong'            // long position liquidated ≥ $100k notional
+  | 'liqShort'           // short position liquidated ≥ $100k notional
 
 export interface RadarEvent {
   ts: number
@@ -39,6 +43,13 @@ export interface RadarEvent {
   rank: number | null
   rankPrev?: number | null
   quoteVolume: number | null
+  // ── Phase 11.4 enrichment (server attaches on every emit) ──
+  btcDelta?: number | null        // BTCUSDT priceChangePercent24h at emit time
+  streakCount?: number | null     // consecutive fires of (symbol, category) within 15 min
+  // ── Phase 11.4 category-specific fields (present only for their category) ──
+  fundingRate?: number | null     // fundingExtreme — Binance lastFundingRate (per 8h)
+  oiChangePct?: number | null     // oiSurge — open-interest % change vs 1h ago
+  notional?: number | null        // liqLong / liqShort — price × qty in USD
 }
 
 export interface WsMarketRadar {

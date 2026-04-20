@@ -30,6 +30,8 @@ const _validCategories = new Set([
     'volSpike',
     'rankUp', 'rankDown',
     'newTop300', 'exitTop300',
+    'fundingExtreme', 'oiSurge',
+    'liqLong', 'liqShort',
 ])
 
 function _isValidEvent(d: unknown): d is RadarEvent {
