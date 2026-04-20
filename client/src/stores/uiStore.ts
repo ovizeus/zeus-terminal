@@ -35,6 +35,11 @@ interface UiStore {
   /** Phase 2C canonical execution env from server _resolveExecutionEnv(). null when non-demo blocked. */
   executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
   executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
+  /** [Phase 12.A — Batch B] Canonical active exchange identity from server.
+   *  Hydrated from at_update.data.activeExchange AND the new exchange.changed
+   *  frame (typed in types/sync.ts). null = no connected exchange OR pre-login.
+   *  Rendering of exchange labels in UI (Batch C+) reads strictly from this. */
+  activeExchange: 'binance' | 'bybit' | null
 
   // [R8] StatusBar reactive fields (replaces imperative DOM writes from bootstrapError._updateStatusBar)
   /** Display mode label (e.g. DEMO, LIVE, TESTNET) — derives from AT._serverMode / AT.mode / _resolvedEnv */
@@ -86,6 +91,7 @@ export const useUiStore = create<UiStore>()((set) => ({
   resolvedEnv: 'DEMO',
   executionEnv: null,
   executionBlockedReason: null,
+  activeExchange: null,
 
   // [R8] StatusBar defaults
   sbMode: 'DEMO',
@@ -128,6 +134,7 @@ export const useUiStore = create<UiStore>()((set) => ({
     resolvedEnv: 'DEMO',
     executionEnv: null,
     executionBlockedReason: null,
+    activeExchange: null,
     sbMode: 'DEMO',
     sbModeClass: 'zsb-demo',
     sbAtEnabled: false,

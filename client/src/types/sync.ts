@@ -4,7 +4,7 @@ import type { Position } from './position'
  * WebSocket message from server
  * From server.js lines 1068-1087
  */
-export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot
+export type WsMessage = WsAtUpdate | WsSyncSignal | WsSettingsChanged | WsPositionsChanged | WsReconnect | WsMarketRadar | WsMarketRadarSnapshot | WsExchangeChanged
 
 /**
  * [Phase 11.2] Market Radar event broadcast.
@@ -77,6 +77,32 @@ export interface WsMarketRadarSnapshot {
 export interface WsAtUpdate {
   type: 'at_update'
   data: ServerATState
+}
+
+/**
+ * [Phase 12.A — Batch A] Typed cross-tab / cross-device push fired by the
+ * server when /api/exchange/{save,disconnect,verify} mutates the active
+ * exchange row, AND as a one-shot warm-start on every WebSocket connect
+ * (mirrors Phase 11.7 market.radar.snapshot pattern).
+ *
+ * Frame carries ONLY the fields needed to render exchange + env labels —
+ * no engine state, no positions. Canonical truth is still serverAT; this
+ * frame just delivers it to clients instantly without REST polling.
+ *
+ * Field naming note: shortened (`exchange` / `mode`) at the wire level to
+ * keep the frame compact. The client subscriber maps them to the longer
+ * store fields (`activeExchange` / `exchangeMode`) — see useServerSync.ts.
+ */
+export interface WsExchangeChanged {
+  type: 'exchange.changed'
+  data: {
+    exchange: 'binance' | 'bybit' | null
+    mode: 'live' | 'testnet' | null
+    apiConfigured: boolean
+    executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
+    executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
+    ts: number
+  }
 }
 
 export interface WsSyncSignal {

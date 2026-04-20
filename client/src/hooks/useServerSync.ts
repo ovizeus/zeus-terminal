@@ -84,12 +84,19 @@ function applyATUpdate(data: ServerATState) {
   // Phase 2C: executionEnv / executionBlockedReason are canonical truth from server.
   // ?? (not ||) preserves null — null means "non-demo blocked" and consumers must show LOCKED.
   // [Phase 3D] resolvedEnv now uses ?? (not ||) so server null stays null — no false REAL fallback.
+  // [Phase 12.A — Batch B] activeExchange was already in the at_update payload
+  // since Phase 2A (serverAT.js getFullState()), but the client never mapped
+  // it into the store. Added here so every at_update keeps the store's
+  // activeExchange aligned with server truth; the typed exchange.changed
+  // handler (below, in the WS subscribe block) covers the save/disconnect/
+  // verify + connect warm-start paths that don't emit at_update.
   useUiStore.getState().patch({
     apiConfigured: !!data.apiConfigured,
     exchangeMode: data.exchangeMode || null,
     resolvedEnv: (data.resolvedEnv ?? null) as 'DEMO' | 'TESTNET' | 'REAL' | null,
     executionEnv: (data.executionEnv ?? null) as 'DEMO' | 'TESTNET' | 'REAL' | null,
     executionBlockedReason: (data.executionBlockedReason ?? null) as 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null,
+    activeExchange: (data.activeExchange ?? null) as 'binance' | 'bybit' | null,
   })
 }
 
@@ -166,10 +173,27 @@ export function useServerSync(authenticated: boolean) {
       }).catch(() => {})
     }, 8000)
 
-    // 4. WS subscription — handles at_update, sync, and reconnect messages
+    // 4. WS subscription — handles at_update, sync, reconnect, and exchange.changed
     const unsub = wsService.subscribe((msg: WsMessage) => {
       if (msg.type === 'at_update' && msg.data) {
         applyATUpdate(msg.data)
+      }
+      // [Phase 12.A — Batch B] Typed exchange.changed frame. Emitted by the
+      // server on /api/exchange/{save,disconnect,verify} success AND as a
+      // warm-start on every WS connect. Field names on the wire are
+      // shortened (exchange / mode); map to the longer store field names
+      // here. ?? null preserves canonical null (blocked / no creds).
+      // Patches only the 5 exchange/env fields this frame carries — does
+      // NOT touch positions, stats, kill-switch, or any engine state.
+      if (msg.type === 'exchange.changed' && msg.data) {
+        const d = msg.data
+        useUiStore.getState().patch({
+          activeExchange: (d.exchange ?? null) as 'binance' | 'bybit' | null,
+          exchangeMode: d.mode || null,
+          apiConfigured: !!d.apiConfigured,
+          executionEnv: (d.executionEnv ?? null) as 'DEMO' | 'TESTNET' | 'REAL' | null,
+          executionBlockedReason: (d.executionBlockedReason ?? null) as 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null,
+        })
       }
       if (msg.type === 'sync') {
         // Cross-device sync signal — re-pull balance only; positions via state.ts bridge
