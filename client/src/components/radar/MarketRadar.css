@@ -65,15 +65,10 @@
     overflow: hidden;
     margin: 4px 0;
     border-radius: 6px;
-    /* [Phase 11.8] Force this container onto its own compositor layer so the
-     * child .mr-track's translate3d animation keeps a GPU path on mobile.
-     * Previously we used -webkit-mask-image for soft edge fades, but Safari
-     * iOS had a known bug where a masked parent causes the animated child to
-     * fall off the compositor and appear frozen. Edge fades are now rendered
-     * via pseudo-element overlays (::before / ::after) below, which keep the
-     * look without touching the animated layer. */
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
+    /* [Phase 11.9 / b83] No transform/compositor hint on the band any more —
+     * the track is driven by JS rAF writing `style.transform` directly, so a
+     * nested compositor layer here only costs memory without helping. Edge
+     * fades are still rendered via ::before/::after overlays below. */
 }
 
 /* [Phase 11.8] Soft edge fades via pseudo-element overlays — replaces the
@@ -136,40 +131,12 @@
     height: 100%;
     width: max-content;
     padding: 0 8px;
-    /* [Phase 11.8] CSS-shorthand animation so mobile browsers always get a
-     * valid duration even if the React inline style (animationDuration) is
-     * skipped or stripped by a PWA shell. React then overrides just the
-     * duration via element style to keep density-based pacing. */
-    animation: mr-scroll 40s linear infinite;
-    animation-play-state: running;
+    /* [Phase 11.9 / b83] Transform is driven by JS `requestAnimationFrame`
+     * writing `element.style.transform` every frame (see MarketRadar.tsx
+     * Band). No CSS animation means: (a) no `prefers-reduced-motion` kill
+     * switch; (b) no compositor fragility on iOS PWA shells; (c) hover pause
+     * handled via JS pointer events, not the `:hover` sticky-on-touch bug. */
     will-change: transform;
-    backface-visibility: hidden;
-    -webkit-backface-visibility: hidden;
-}
-
-/* [Phase 11.7] Pause on hover ONLY on devices with a real pointer. On touch
- * devices :hover fires on tap AND STICKS after release, which froze the
- * marquee on mobile after the first pill tap. The media query keeps the
- * desktop ergonomics and removes the mobile stall. */
-@media (hover: hover) and (pointer: fine) {
-    .mr-band:hover .mr-track {
-        animation-play-state: paused;
-    }
-}
-
-/* [Phase 11.7] Explicit 3D transform so iOS / Android Chrome promote the
- * track to its own compositor layer (translateX alone can end up on the CPU
- * path when combined with mask-image). */
-@keyframes mr-scroll {
-    from { transform: translate3d(0, 0, 0); }
-    to   { transform: translate3d(-50%, 0, 0); }
-}
-
-/* Respect reduced-motion — no endless scroll, just static overflow. */
-@media (prefers-reduced-motion: reduce) {
-    .mr-track {
-        animation: none;
-    }
 }
 
 /* ── Pill ───────────────────────────────────────────────────────────── */

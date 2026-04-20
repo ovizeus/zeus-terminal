@@ -18,7 +18,7 @@
 //   NOT a global market-cap snapshot. We keep that wording honest at all
 //   times so users don't conflate radar hits with mcap moves.
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useMarketRadarStore } from '../../stores/marketRadarStore'
 import { useMarketStore } from '../../stores'
 import { switchWLSymbol } from '../../services/symbols'
@@ -152,9 +152,68 @@ interface BandProps {
 }
 
 function Band({ color, events, now, onPillClick }: BandProps) {
+    // [Phase 11.9 / b83] JS-driven rAF marquee.
+    //
+    // Why not CSS animations any more: on iOS PWA shells and on phones with
+    // `prefers-reduced-motion: reduce` enabled (accessibility setting, common
+    // on battery-saver / low-power modes) the CSS keyframe was being zeroed
+    // out or fell off the compositor, so the track stood still while desktop
+    // worked. Driving `style.transform` directly via `requestAnimationFrame`
+    // bypasses the reduced-motion media query and any CSS animation fragility
+    // — the frames keep firing as long as the tab is visible.
+    //
+    // The track still contains the doubled pill list, and we wrap offset at
+    // exactly -halfWidth so the loop is seamless. `ResizeObserver` keeps the
+    // half-width accurate when the pill list length changes.
+    const trackRef = useRef<HTMLDivElement>(null)
+    const pausedRef = useRef(false)
+    const offsetPxRef = useRef(0)
+    const durationMsRef = useRef(40000)
+    const hasEvents = events.length > 0
+    // Duration scales with pill count so density stays readable.
+    durationMsRef.current = Math.max(20, Math.min(90, events.length * 4)) * 1000
+
+    useEffect(() => {
+        if (!hasEvents) return
+        const track = trackRef.current
+        if (!track) return
+        let rafId = 0
+        let lastTs = performance.now()
+        let halfWidth = track.scrollWidth / 2
+        const step = (ts: number) => {
+            const dt = Math.min(100, ts - lastTs)
+            lastTs = ts
+            if (!pausedRef.current && halfWidth > 0 && durationMsRef.current > 0) {
+                const speedPxPerMs = halfWidth / durationMsRef.current
+                offsetPxRef.current -= speedPxPerMs * dt
+                if (offsetPxRef.current <= -halfWidth) offsetPxRef.current += halfWidth
+                track.style.transform = `translate3d(${offsetPxRef.current}px, 0, 0)`
+            }
+            rafId = requestAnimationFrame(step)
+        }
+        rafId = requestAnimationFrame(step)
+        const ro = new ResizeObserver(() => {
+            const nw = track.scrollWidth / 2
+            if (nw > 0 && offsetPxRef.current < -nw) offsetPxRef.current = offsetPxRef.current % nw
+            halfWidth = nw
+        })
+        ro.observe(track)
+        const band = track.parentElement
+        const onEnter = () => { pausedRef.current = true }
+        const onLeave = () => { pausedRef.current = false }
+        band?.addEventListener('mouseenter', onEnter)
+        band?.addEventListener('mouseleave', onLeave)
+        return () => {
+            cancelAnimationFrame(rafId)
+            ro.disconnect()
+            band?.removeEventListener('mouseenter', onEnter)
+            band?.removeEventListener('mouseleave', onLeave)
+        }
+    }, [hasEvents])
+
     // Idle state — show a quiet scanning message so the band never looks
     // broken when the server hasn't fired anything yet.
-    if (events.length === 0) {
+    if (!hasEvents) {
         return (
             <div className={`mr-band mr-band--${color} mr-band--idle`}>
                 <span className="mr-idle">
@@ -165,15 +224,12 @@ function Band({ color, events, now, onPillClick }: BandProps) {
         )
     }
 
-    // Duplicate the list inline so the keyframe translate(-50%) lands exactly
-    // at the start of the second copy, producing a seamless loop.
+    // Duplicate the list inline so wrapping at -halfWidth produces a seamless loop.
     const doubled = [...events, ...events]
-    // Animation duration scales with pill count so density stays readable.
-    const durationSec = Math.max(20, Math.min(90, events.length * 4))
 
     return (
         <div className={`mr-band mr-band--${color}`}>
-            <div className="mr-track" style={{ animationDuration: `${durationSec}s` }}>
+            <div className="mr-track" ref={trackRef}>
                 {doubled.map((ev, i) => (
                     <Pill key={`${ev.ts}-${ev.symbol}-${ev.category}-${i}`} ev={ev} now={now} onClick={onPillClick} />
                 ))}
