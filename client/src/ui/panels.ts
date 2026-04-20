@@ -1178,11 +1178,108 @@ export function toggleSession(sess: string, btn: any) {
   const S = w.S;
   S.sessions[sess] = !S.sessions[sess];
   if (btn) btn.classList.toggle('on', S.sessions[sess]);
-  renderSessionOverlay(sess, S.sessions[sess]);
+  _renderSessionOverlays();
   toast(`${SESSIONS[sess].label} session ${S.sessions[sess] ? 'ON' : 'OFF'}`);
 }
 
-// [FIX v85 BUG10] Functie de curatare completa a tuturor seriilor de sesiune (apelata la schimb simbol)
+function _ensureSessionOverlayHost(): HTMLElement | null {
+  const mc = document.getElementById('mc');
+  if (!mc) return null;
+  let host = document.getElementById('zsess-overlay') as HTMLElement | null;
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'zsess-overlay';
+    host.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3';
+    if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative';
+    mc.appendChild(host);
+  }
+  return host;
+}
+
+function _sessionBlocks(sess: string, klines: any[], cfg: any): { start: number; end: number }[] {
+  const blocks: { start: number; end: number }[] = [];
+  if (!klines || !klines.length) return blocks;
+  let inBlock = false;
+  let bStart = 0;
+  let lastT = 0;
+  for (let i = 0; i < klines.length; i++) {
+    const k = klines[i];
+    const h = new Date(k.time * 1000).getUTCHours();
+    const inSess = cfg.start < cfg.end ? (h >= cfg.start && h < cfg.end) : (h >= cfg.start || h < cfg.end);
+    if (inSess && !inBlock) { inBlock = true; bStart = k.time; }
+    if (!inSess && inBlock) { inBlock = false; blocks.push({ start: bStart, end: lastT }); }
+    lastT = k.time;
+  }
+  if (inBlock) blocks.push({ start: bStart, end: lastT });
+  return blocks;
+}
+
+function _renderSessionOverlays() {
+  const S = w.S;
+  const host = _ensureSessionOverlayHost();
+  if (!host || !w.mainChart || !S || !S.klines) {
+    if (host) host.innerHTML = '';
+    return;
+  }
+  host.innerHTML = '';
+  const activeSess: string[] = ['asia', 'london', 'ny'].filter(s => S.sessions && S.sessions[s]);
+  if (!activeSess.length) return;
+  const ts = w.mainChart.timeScale();
+  const rect = host.getBoundingClientRect();
+  const width = rect.width;
+  if (!width) return;
+
+  activeSess.forEach((sess, idx) => {
+    const cfg = SESSIONS[sess];
+    const blocks = _sessionBlocks(sess, S.klines, cfg);
+    blocks.forEach(bl => {
+      try {
+        const x1 = ts.timeToCoordinate(bl.start as any);
+        const x2 = ts.timeToCoordinate(bl.end as any);
+        if (x1 == null || x2 == null) return;
+        const left = Math.max(0, Math.min(x1, x2));
+        const right = Math.min(width, Math.max(x1, x2));
+        const w0 = Math.max(1, right - left);
+        if (right < 0 || left > width) return;
+        const col = cfg.borderColor.replace(/[0-9a-fA-F]{2}$/, '');
+        const div = document.createElement('div');
+        div.className = 'zsess-box zsess-' + sess;
+        div.style.cssText = `position:absolute;top:0;bottom:0;left:${left}px;width:${w0}px;background:linear-gradient(180deg, ${col}22, ${col}0c 60%, ${col}18);border-left:1px solid ${col}88;border-right:1px solid ${col}88;box-shadow:inset 0 2px 0 0 ${col}cc, inset 0 -2px 0 0 ${col}66;pointer-events:none;`;
+        const lbl = document.createElement('div');
+        const offsetY = 4 + idx * 14;
+        lbl.style.cssText = `position:absolute;top:${offsetY}px;left:4px;font-size:9px;font-weight:700;letter-spacing:1px;color:${col};text-shadow:0 0 6px ${col}88;font-family:inherit;pointer-events:none;opacity:0.85`;
+        lbl.textContent = cfg.label;
+        div.appendChild(lbl);
+        host.appendChild(div);
+      } catch (_) { }
+    });
+  });
+}
+
+function _ensureSessionOverlayListeners() {
+  if (w._sessOverlayListenersInstalled) return;
+  if (!w.mainChart) return;
+  w._sessOverlayListenersInstalled = true;
+  try {
+    w.mainChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+      if (w._sessRafPending) return;
+      w._sessRafPending = true;
+      requestAnimationFrame(() => { w._sessRafPending = false; _renderSessionOverlays(); });
+    });
+  } catch (_) { }
+  try {
+    const mc = document.getElementById('mc');
+    if (mc) {
+      const ro = new ResizeObserver(() => {
+        if (w._sessRafPending2) return;
+        w._sessRafPending2 = true;
+        requestAnimationFrame(() => { w._sessRafPending2 = false; _renderSessionOverlays(); });
+      });
+      ro.observe(mc);
+    }
+  } catch (_) { }
+}
+
 export function clearAllSessionOverlays() {
   Object.keys(sessionSeries).forEach((sess: string) => {
     if (sessionSeries[sess] && sessionSeries[sess].length) {
@@ -1192,49 +1289,15 @@ export function clearAllSessionOverlays() {
       sessionSeries[sess] = [];
     }
   });
+  const host = document.getElementById('zsess-overlay');
+  if (host) host.innerHTML = '';
 }
 
-export function renderSessionOverlay(sess: string, on: boolean) {
-  const S = w.S;
-  if (!w.mainChart) return; // [FIX v85 BUG10] Guard: chart poate sa nu existe
-  // Remove existing
-  if (sessionSeries[sess]) {
-    sessionSeries[sess].forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } });
-    sessionSeries[sess] = [];
-  }
-  if (!on || !S.klines.length) return;
-  const cfg = SESSIONS[sess];
-  const bars: any[] = [];
-  S.klines.forEach((k: any) => {
-    const d = new Date(k.time * 1000);
-    const h = d.getUTCHours();
-    const inSess = cfg.start < cfg.end ? (h >= cfg.start && h < cfg.end) : (h >= cfg.start || h < cfg.end);
-    if (inSess) bars.push(k);
-  });
-  if (!bars.length) return;
-  // Group into consecutive blocks
-  const blocks: any[] = []; let cur: any = null;
-  bars.forEach((b: any) => {
-    if (!cur) { cur = { start: b.time, end: b.time }; return; }
-    if (b.time - cur.end <= 600) cur.end = b.time;
-    else { blocks.push({ ...cur }); cur = { start: b.time, end: b.time }; }
-  });
-  if (cur) blocks.push(cur);
-  sessionSeries[sess] = [];
-  // Draw thin line for session start
-  blocks.forEach((bl: any) => {
-    try {
-      const startLine = w.mainChart.addLineSeries({ color: cfg.borderColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 1 });
-      // Draw vertical-ish indicator at session boundaries
-      const blBars = S.klines.filter((k: any) => k.time >= bl.start && k.time <= bl.end);
-      if (blBars.length < 1) return;
-      const maxP = Math.max(...blBars.map((k: any) => k.high));
-      const minP = Math.min(...blBars.map((k: any) => k.low));
-      startLine.setData(blBars.map((k: any) => ({ time: k.time, value: (maxP + minP) / 2 })));
-      startLine.applyOptions({ title: cfg.label });
-      sessionSeries[sess].push(startLine);
-    } catch (_) { }
-  });
+export function renderSessionOverlay(_sess: string, _on: boolean) {
+  _ensureSessionOverlayListeners();
+  _renderSessionOverlays();
 }
+
+w._renderSessionOverlays = _renderSessionOverlays;
 
 // ===== CONFLUENCE SCORE =====

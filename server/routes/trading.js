@@ -310,6 +310,10 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
           // registers with the user's params (same as manual DEMO via /api/at/register-manual).
           // undefined → serverAT falls back to DSL_DEFAULTS (legacy clients); null → DSL OFF.
           dslParams: req.body.dslParams,
+          // [Phase 10 classification] Client marks auto vs manual origin explicitly.
+          // Without this, every /order/place fill was registered as manual even
+          // when client AT fired it, so AT positions appeared in the Manual panel.
+          source: req.body.source,
         });
         if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side} status=${fillStatus}`);
         // [batch3-W] If fill wasn't immediate (status=NEW), fetch the order a
@@ -483,6 +487,8 @@ const SETTINGS_WHITELIST = new Set([
   'alertSettings',
   // Brain / profile
   'profile', 'bmMode', 'assistArmed',
+  // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace ({live:{profile,bmMode},demo:{...}})
+  'brain',
   // Manual live defaults + per-account leverage
   'manualLive', 'ptLevDemo', 'ptLevLive', 'ptMarginMode',
   // DSL
@@ -773,13 +779,21 @@ router.post('/manual/protection', validateOrderBody, async (req, res) => {
 router.post('/addon', async (req, res) => {
   try {
     const userId = req.user.id;
-    const { seq, maxAddon } = req.body;
+    const { seq, maxAddon, addOnSize, currentPrice } = req.body;
     if (!seq || !Number.isFinite(Number(seq))) {
       return res.status(400).json({ error: 'Missing or invalid seq' });
     }
     const serverAT = require('../services/serverAT');
     const opts = {};
     if (maxAddon && Number.isFinite(Number(maxAddon))) opts.maxAddon = Number(maxAddon);
+    // [Phase 10.7] Forward user-chosen add-on amount from AddOnModal
+    if (addOnSize && Number.isFinite(Number(addOnSize)) && Number(addOnSize) > 0) {
+      opts.addOnSize = Number(addOnSize);
+    }
+    // [Phase 10.7] Forward current price for server in-profit re-check
+    if (currentPrice && Number.isFinite(Number(currentPrice)) && Number(currentPrice) > 0) {
+      opts.currentPrice = Number(currentPrice);
+    }
     const result = await serverAT.addOnPosition(userId, Number(seq), opts);
     if (!result.ok) {
       return res.status(400).json({ error: result.error });

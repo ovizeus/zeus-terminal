@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
 import { MSCAN_SYMS } from '../../core/config'
+import { toast } from '../../data/marketDataHelpers'
 // [Phase 8D1] mscan state is server-owned — initial value comes from the
 // already-loaded settingsStore. The settingsStore._syncToWindow writes the
 // LS mirror that legacy engines (data/klines.ts::_mscanGetActive) read, so
@@ -45,8 +46,20 @@ export function AutoTradePanel() {
   const [adaptEnabled, setAdaptEnabled] = useState(false)
   const [adaptLive, setAdaptLive] = useState(false)
   const [smartExit, setSmartExit] = useState(false)
-  const [brainVisionOpen, setBrainVisionOpen] = useState(true)
-  const [brainDashOpen, setBrainDashOpen] = useState(true)
+  // [b66] Persist collapse state across refresh / app restart. User keeps both
+  // panels closed most of the time — re-opening them on every mount is noise.
+  const [brainVisionOpen, setBrainVisionOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('zeus:ui:brainVisionOpen') !== '0' } catch { return true }
+  })
+  const [brainDashOpen, setBrainDashOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('zeus:ui:brainDashOpen') !== '0' } catch { return true }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('zeus:ui:brainVisionOpen', brainVisionOpen ? '1' : '0') } catch {}
+  }, [brainVisionOpen])
+  useEffect(() => {
+    try { localStorage.setItem('zeus:ui:brainDashOpen', brainDashOpen ? '1' : '0') } catch {}
+  }, [brainDashOpen])
   const [symPickerOpen, setSymPickerOpen] = useState(false)
 
   // Multi-symbol scan state — reactive label + picker.
@@ -162,10 +175,13 @@ export function AutoTradePanel() {
       })
       await store.saveToServer()
       if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
-      if (typeof w.toast === 'function') w.toast('AT settings saved ✓')
+      // [Phase 10.8] Fixed: w.toast (window.toast) was never assigned anywhere,
+      // so SAVE SETTINGS visibly did nothing even though the save succeeded.
+      // Use the imported toast() from marketDataHelpers directly.
+      toast('AT settings saved \u2713')
     } catch (err: any) {
       console.error('[AT] Save failed:', err)
-      if (typeof w.toast === 'function') w.toast('Save failed: ' + (err?.message || 'unknown'))
+      toast('Save failed: ' + (err?.message || 'unknown'))
     }
   }
 
@@ -324,12 +340,51 @@ export function AutoTradePanel() {
           </div>
           <div className="at-field">
             <div className="at-lbl">LEVERAGE AUTO</div>
-            <select className="at-sel" id="atLev" value={atLev} onChange={e => setAtLev(e.target.value)}>
-              <option value="2">2x</option>
-              <option value="5">5x</option>
-              <option value="10">10x</option>
-              <option value="20">20x</option>
-            </select>
+            {/* [Phase 10.8] Preset pills + free-form input. User explicitly
+                requested no upper cap ("sa nu fiu limitat"); server / Binance
+                will reject invalid values at order placement time. */}
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              {['2', '5', '10', '20'].map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setAtLev(v)}
+                  style={{
+                    padding: '3px 7px',
+                    background: atLev === v ? '#f0c04022' : '#0a0a14',
+                    border: '1px solid ' + (atLev === v ? '#f0c040' : '#333'),
+                    color: atLev === v ? '#f0c040' : 'var(--dim)',
+                    borderRadius: 3,
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--ff)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {v}x
+                </button>
+              ))}
+              <input
+                id="atLev"
+                type="number"
+                min={1}
+                step={1}
+                value={atLev}
+                onChange={e => setAtLev(e.target.value)}
+                placeholder="custom"
+                style={{
+                  flex: 1,
+                  minWidth: 50,
+                  background: '#0a0a14',
+                  border: '1px solid #333',
+                  color: '#f0c040',
+                  padding: '3px 6px',
+                  fontSize: 11,
+                  borderRadius: 3,
+                  fontFamily: 'var(--ff)',
+                }}
+              />
+            </div>
           </div>
         </div>
 

@@ -7,6 +7,8 @@ import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '..
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 import { setSymbol } from '../../data/marketDataWS'
 import { openIndSettings } from '../../engine/indicators'
+import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
+import { USER_SETTINGS } from '../../core/config'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -90,7 +92,7 @@ const IND_LIST: IndMeta[] = [
   { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
   { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
   { id: 'sr',  ico: '📐', name: 'S/R Levels',  desc: 'Auto support/resistance', settingsModal: 'sr',       isOverlay: true },
-  { id: 'llv', ico: '💥', name: 'LLV Heatmap', desc: 'Large Liquidation Vols',  settingsModal: 'llv',      isOverlay: true },
+  { id: 'llv', ico: '💥', name: 'LLV Volume', desc: 'Large Liquidation Vols',  settingsModal: 'llv',      isOverlay: true },
 ]
 
 export function ChartControls() {
@@ -102,6 +104,11 @@ export function ChartControls() {
   const openModal = useUiStore((s) => s.openModal)
 
   const [tfOpen, setTfOpen] = useState(false)
+  const [ctOpen, setCtOpen] = useState(false)
+  const [candleType, setCandleType] = useState<CandleType>(
+    ((USER_SETTINGS?.chart?.candleType as CandleType) || 'candles'),
+  )
+  const ctRef = useRef<HTMLDivElement>(null)
   const [indPanelOpen, setIndPanelOpen] = useState(false)
   const [fsMode, setFsMode] = useState(false)
   const [_sessions, setSessions] = useState({ asia: false, london: false, ny: false })
@@ -139,10 +146,17 @@ export function ChartControls() {
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (tfRef.current && !tfRef.current.contains(e.target as Node)) setTfOpen(false)
+      if (ctRef.current && !ctRef.current.contains(e.target as Node)) setCtOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  function pickCandleType(t: CandleType) {
+    setCandleType(t)
+    setCtOpen(false)
+    try { applyCandleType(t) } catch (e) { console.warn('[candleType]', e) }
+  }
 
   function pickTf(tf: string) {
     if (typeof setTF === 'function') setTF(tf, null)
@@ -276,6 +290,25 @@ export function ChartControls() {
           <span style={{ width: '4px' }}></span>
           <button className="tfb ztf-sibling" id="fsbtn" title="Fullscreen" onClick={toggleFS}>{fsMode ? '\u2291' : '\u26F6'}</button>
           <button className="tfb ztf-sibling" title="Chart Settings" onClick={() => openModal('charts')}>&#9881;</button>
+          <div className={`ztf-wrap${ctOpen ? ' open' : ''}`} ref={ctRef} style={{ position: 'relative' }}>
+            <button className="tfb ztf-sibling" title="Chart Type" onClick={() => setCtOpen(o => !o)}>
+              {CANDLE_TYPES.find(c => c.id === candleType)?.icon || '▮'}
+            </button>
+            {ctOpen && (
+              <div className="ztf-dropdown" style={{ display: 'block', minWidth: 170, right: 'auto' }}>
+                {CANDLE_TYPES.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`ztf-item${candleType === c.id ? ' act' : ''}`}
+                    style={{ textAlign: 'left', padding: '6px 10px' }}
+                    onClick={() => pickCandleType(c.id)}
+                  >
+                    <span style={{ display: 'inline-block', width: 18, color: 'var(--gold)' }}>{c.icon}</span> {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="tfb ztf-sibling" title="Add Indicator" onClick={() => setIndPanelOpen(true)}>&#9776;</button>
           <span style={{ width: '8px' }}></span>
           <select

@@ -3,6 +3,7 @@ import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { toast } from '../../data/marketDataHelpers'
 import { renderOviLiquid } from '../../ui/panels'
 import { setTZ } from '../../data/marketDataWS'
+import { USER_SETTINGS, _usSave } from '../../core/config'
 
 const w = window as any
 interface Props { visible: boolean; onClose: () => void }
@@ -11,7 +12,8 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('csm')
   const [candleStyle, setCandleStyle] = useState('Candlestick')
   const [tz, setTz] = useState('RO')
-  const [axisWidth, setAxisWidth] = useState(60)
+  const initialWidth = (USER_SETTINGS?.chart?.axisWidth as number) || 60
+  const [axisWidth, setAxisWidth] = useState<number>(initialWidth)
 
   function applyCandles() {
     const bull = (document.getElementById('ccBull') as HTMLInputElement)?.value || '#00d97a'
@@ -21,6 +23,7 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
     if (w.cSeries) {
       w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bullW, wickDownColor: bearW })
     }
+    try { _usSave() } catch (_) { }
     toast('Candle colors applied')
   }
 
@@ -45,22 +48,29 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       }
     }
     if (w.S?.oviOn) renderOviLiquid()
+    try { _usSave() } catch (_) { }
     toast('Heatmap settings applied')
   }
 
   function applyPriceAxis() {
-    const textCol = (document.getElementById('ccPriceText2') as HTMLInputElement)?.value || '#7a9ab8'
-    const bgCol = (document.getElementById('ccPriceBg2') as HTMLInputElement)?.value || '#0a0f16'
+    const textCol = (document.getElementById('ccPriceText') as HTMLInputElement)?.value || '#7a9ab8'
+    const bgCol = (document.getElementById('ccPriceBg') as HTMLInputElement)?.value || '#0a0f16'
     const gridH = (document.getElementById('ccGridH') as HTMLInputElement)?.value || '#1a2530'
     const gridV = (document.getElementById('ccGridV') as HTMLInputElement)?.value || '#1a2530'
     if (w.mainChart) {
       w.mainChart.applyOptions({
         layout: { background: { color: bgCol }, textColor: textCol },
         grid: { horzLines: { color: gridH }, vertLines: { color: gridV } },
-        rightPriceScale: { width: axisWidth },
+        rightPriceScale: { minimumWidth: axisWidth, textColor: textCol },
       })
     }
-    if (w.cvdChart) w.cvdChart.applyOptions({ rightPriceScale: { width: axisWidth } })
+    if (w.cvdChart) w.cvdChart.applyOptions({ rightPriceScale: { minimumWidth: axisWidth } })
+    try {
+      USER_SETTINGS.chart.axisWidth = axisWidth
+      USER_SETTINGS.chart.gridH = gridH
+      USER_SETTINGS.chart.gridV = gridV
+      _usSave()
+    } catch (_) { }
     toast('Price axis applied')
   }
 
@@ -134,15 +144,27 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
 
       {/* PRICE AXIS TAB */}
       <div className="mbody" id="csc" style={{ display: tab === 'csc' ? 'block' : 'none' }}>
-        <div className="msec">CULORI PRICE AXIS</div>
-        <div className="mrow"><span className="mlbl">Culoare text preturi</span><input type="color" defaultValue="#7a9ab8" id="ccPriceText2" /></div>
-        <div className="mrow"><span className="mlbl">Background chart</span><input type="color" defaultValue="#0a0f16" id="ccPriceBg2" /></div>
-        <div className="mrow"><span className="mlbl">Grid orizontal</span><input type="color" defaultValue="#1a2530" id="ccGridH" /></div>
-        <div className="mrow"><span className="mlbl">Grid vertical</span><input type="color" defaultValue="#1a2530" id="ccGridV" /></div>
-        <div className="msec">LATIMEA LISTEI DE PRETURI</div>
+        <div className="msec">PRICE AXIS COLORS</div>
+        <div className="mrow"><span className="mlbl">Price text color</span><input type="color" defaultValue="#7a9ab8" id="ccPriceText" /></div>
+        <div className="mrow"><span className="mlbl">Chart background</span><input type="color" defaultValue="#0a0f16" id="ccPriceBg" /></div>
+        <div className="mrow"><span className="mlbl">Horizontal grid</span><input type="color" defaultValue="#1a2530" id="ccGridH" /></div>
+        <div className="mrow"><span className="mlbl">Vertical grid</span><input type="color" defaultValue="#1a2530" id="ccGridV" /></div>
+        <div className="msec">PRICE AXIS WIDTH</div>
+        <div className="mrow">
+          <span className="mlbl">Width: <b style={{ color: 'var(--gold)' }}>{axisWidth}px</b></span>
+          <input
+            type="range"
+            min={40}
+            max={140}
+            step={2}
+            value={axisWidth}
+            onChange={(e) => setAxisWidth(parseInt(e.currentTarget.value, 10) || 60)}
+            style={{ flex: 1, marginLeft: 10 }}
+          />
+        </div>
         <div className="qbs">
-          {[{ px: 40, l: 'Slim 40px' }, { px: 60, l: 'Normal 60px' }, { px: 80, l: 'Wide 80px' }, { px: 100, l: 'Extra 100px' }].map(o => (
-            <div key={o.px} className={`qb${axisWidth === o.px ? ' act' : ''}`} onClick={() => setAxisWidth(o.px)}>{o.l}</div>
+          {[{ px: 40, l: 'Slim' }, { px: 60, l: 'Normal' }, { px: 80, l: 'Wide' }, { px: 100, l: 'Extra' }, { px: 120, l: 'Max' }].map(o => (
+            <div key={o.px} className={`qb${axisWidth === o.px ? ' act' : ''}`} onClick={() => setAxisWidth(o.px)}>{o.l} {o.px}px</div>
           ))}
         </div>
         <div className="srow" style={{ marginTop: '10px' }}>

@@ -49,6 +49,10 @@ interface LegacyChart {
   heatmap?: Record<string, unknown> | null
   tz?: number | null
 }
+interface LegacyBrainNamespace {
+  profile?: string
+  bmMode?: string
+}
 interface LegacyUserSettings {
   autoTrade?: LegacyAutoTrade
   chart?: LegacyChart
@@ -56,6 +60,8 @@ interface LegacyUserSettings {
   alerts?: Record<string, unknown> | null
   profile?: string
   bmMode?: string
+  // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace
+  brain?: { live?: LegacyBrainNamespace; demo?: LegacyBrainNamespace } | null
   assistArmed?: boolean
   manualLive?: boolean
   ptLevDemo?: number
@@ -271,6 +277,8 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
     alertSettings: us.alerts,
     profile: us.profile,
     bmMode: us.bmMode,
+    // [BRAIN-MODE-SPLIT b74] pass per-mode brain namespace through the wire
+    brain: us.brain as SettingsPayload['brain'],
     assistArmed: us.assistArmed,
     manualLive: us.manualLive as Record<string, unknown> | null | undefined,
     ptLevDemo: us.ptLevDemo,
@@ -332,6 +340,16 @@ function _projectToLegacy(settings: SettingsPayload): void {
   if (settings.alertSettings !== undefined) us.alerts = settings.alertSettings
   if (settings.profile !== undefined) us.profile = settings.profile
   if (settings.bmMode !== undefined) us.bmMode = settings.bmMode
+  // [BRAIN-MODE-SPLIT b74] project per-mode brain namespace back into legacy
+  if (settings.brain !== undefined && settings.brain && typeof settings.brain === 'object') {
+    us.brain = us.brain || { live: {}, demo: {} }
+    if (settings.brain.live && typeof settings.brain.live === 'object') {
+      us.brain.live = { ...(us.brain.live || {}), ...settings.brain.live }
+    }
+    if (settings.brain.demo && typeof settings.brain.demo === 'object') {
+      us.brain.demo = { ...(us.brain.demo || {}), ...settings.brain.demo }
+    }
+  }
   if (settings.assistArmed !== undefined) us.assistArmed = settings.assistArmed
   if (settings.manualLive !== undefined) (us as any).manualLive = settings.manualLive
   if (settings.ptLevDemo !== undefined) (us as any).ptLevDemo = settings.ptLevDemo

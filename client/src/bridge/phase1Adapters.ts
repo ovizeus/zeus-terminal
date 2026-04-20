@@ -111,6 +111,7 @@ import '../ui/notifications'
 import '../ui/timeSales'
 import '../ui/modebar'
 import '../ui/drawingTools'
+import '../ui/candleTypeSwitcher'
 
 // Phase 6D: brain extensions
 import '../engine/aub'

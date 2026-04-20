@@ -42,7 +42,16 @@ export function switchGlobalMode(mode: any): void {
 function _executeGlobalModeSwitch(mode: string): void {
   api.raw<any>('POST', '/api/at/mode', { mode }).then(function (data: any) {
     if (data.ok) {
+      // [BRAIN-MODE-SPLIT b74] Flush pending _usSave BEFORE flipping the AT
+      // mode, so the outgoing mode's current profile/bmMode lands in its own
+      // namespace (USER_SETTINGS.brain[old]) — otherwise an 800ms-debounced
+      // change just before the switch would leak into the new mode.
+      try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
       if (typeof AT !== 'undefined') AT._serverMode = mode
+      // [BRAIN-MODE-SPLIT b74] Apply the new mode's brain namespace now, so S,
+      // BM and the brainStore reflect the per-mode profile + bmMode the user
+      // set for this mode previously (or the migration seed on first run).
+      try { if (typeof w.applyBrainCfgForMode === 'function') w.applyBrainCfgForMode(mode) } catch (_) {}
       _applyGlobalModeUI(mode)
       if (mode === 'demo') { toast('Demo Mode Activated', 3000, _ZI.ok) }
       else { const _toastEnv = w._executionEnv; if (_toastEnv === null) toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else if (_toastEnv === 'REAL') toast('Real Trading Mode Activated', 3000, _ZI.ok); else toast('Demo Mode Activated', 3000, _ZI.ok) }

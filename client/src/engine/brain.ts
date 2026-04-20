@@ -1753,7 +1753,12 @@ export function renderBrainCockpit(): void {
   // [ATMOSPHERE] Pre-filter: block ARM if atmosphere forbids entry
   const atmosAllow = BM.atmosphere ? BM.atmosphere.allowEntry !== false : true
   const isArmed = !BM.protectMode && safetyPass && ctx.mtf && ctx.flow && triggerOk && !w._fakeout.invalid && score >= scoreThresh && confluenceScore >= confThresh && atmosAllow
-  const hasPos = (getDemoPositions()).some((p: any) => p.autoTrade && !p.closed)
+  // [BRAIN-MODE-SPLIT b74] TRADING badge must follow the active AT mode. Previously
+  // hardcoded to getDemoPositions(), which kept the badge lit on LIVE when DEMO had
+  // open positions (and vice-versa).
+  const _atMode = getATMode()
+  const _positionsForMode = _atMode === 'live' ? getLivePositions() : getDemoPositions()
+  const hasPos = _positionsForMode.some((p: any) => p.autoTrade && !p.closed)
   const mode = w.S.mode || 'manual'
 
   let state = BM.protectMode ? 'protect' : getATKillTriggered() ? 'blocked' : hasPos ? 'trading' : isArmed ? 'armed' : score > 40 ? 'analyzing' : 'scanning'

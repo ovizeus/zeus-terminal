@@ -4,7 +4,7 @@
  * Phase 7E — HIGH RISK foundation file
  */
 
-import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
+import { getATObject, getTimezone, getKlines, getPrice, getATMode } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
 import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced } from '../engine/brain'
 import { getLiveLev } from '../data/marketDataTrading'
@@ -1318,6 +1318,11 @@ export function initMTFStrip() {
 }
 
 // User Settings
+// [BRAIN-MODE-SPLIT b74] USER_SETTINGS.brain is per-AT-mode (live / demo) so
+// profile+bmMode are remembered independently for each trading mode. The flat
+// `profile`/`bmMode` top-level keys are kept as the *active mode snapshot*
+// (wire-compat + seed for first-run migration); the authoritative per-mode
+// store is USER_SETTINGS.brain[mode].
 export const USER_SETTINGS: any = {
   _version: 1,
   chart: { tf: '5m', tz: 'Europe/Bucharest', heatmap: null, colors: null },
@@ -1325,11 +1330,90 @@ export const USER_SETTINGS: any = {
   alerts: null,
   profile: 'fast',
   bmMode: null,
+  brain: {
+    live: { profile: 'fast', bmMode: null },
+    demo: { profile: 'fast', bmMode: null },
+  },
   assistArmed: false,
   autoTrade: {
     lev: 5, sl: 1.5, rr: 2, size: 200, maxPos: 4, killPct: 5,
     confMin: 65, sigMin: 3, multiSym: true, smartExitEnabled: false,
   },
+}
+
+// [BRAIN-MODE-SPLIT b74] Resolve active trading mode ('live' | 'demo').
+// Uses getATMode() which reads useATStore then falls back to window.AT.
+function _currentATModeKey(): 'live' | 'demo' {
+  try {
+    const m = (getATMode() || 'demo').toLowerCase()
+    return m === 'live' ? 'live' : 'demo'
+  } catch (_) {
+    return 'demo'
+  }
+}
+
+// [BRAIN-MODE-SPLIT b74] Ensure USER_SETTINGS.brain exists with both namespaces.
+function _ensureBrainNamespace(): void {
+  if (!USER_SETTINGS.brain || typeof USER_SETTINGS.brain !== 'object') {
+    USER_SETTINGS.brain = { live: {}, demo: {} }
+  }
+  if (!USER_SETTINGS.brain.live || typeof USER_SETTINGS.brain.live !== 'object') USER_SETTINGS.brain.live = {}
+  if (!USER_SETTINGS.brain.demo || typeof USER_SETTINGS.brain.demo !== 'object') USER_SETTINGS.brain.demo = {}
+}
+
+// [BRAIN-MODE-SPLIT b74] First-run migration: if brain.live/demo profile/bmMode
+// are missing but the flat top-level profile/bmMode exist, seed both modes from
+// the flat values so the user doesn't lose pre-split settings.
+function _seedBrainFromFlat(): void {
+  _ensureBrainNamespace()
+  const bL = USER_SETTINGS.brain.live
+  const bD = USER_SETTINGS.brain.demo
+  if (bL.profile == null && USER_SETTINGS.profile) bL.profile = USER_SETTINGS.profile
+  if (bD.profile == null && USER_SETTINGS.profile) bD.profile = USER_SETTINGS.profile
+  if (bL.bmMode == null && USER_SETTINGS.bmMode) bL.bmMode = USER_SETTINGS.bmMode
+  if (bD.bmMode == null && USER_SETTINGS.bmMode) bD.bmMode = USER_SETTINGS.bmMode
+}
+
+/**
+ * [BRAIN-MODE-SPLIT b74] Apply the Brain configuration of a given mode
+ * (profile + bmMode) into window.S, window.BM and the canonical Zustand
+ * brain store. Called:
+ *   - on boot by `_usApply` (for the active mode)
+ *   - on mode switch by `_applyGlobalModeUI` (for the new mode)
+ * so the Brain always reflects the per-mode namespace.
+ */
+export function applyBrainCfgForMode(mode: 'live' | 'demo'): void {
+  try {
+    _seedBrainFromFlat()
+    const cfg = USER_SETTINGS.brain[mode] || {}
+    const S = w.S || {}
+    const BM = w.BM
+    if (cfg.profile) {
+      S.profile = cfg.profile
+      const _profBtn = document.getElementById('prof-' + S.profile) as HTMLElement | null
+      if (_profBtn) {
+        document.querySelectorAll('.znc-pbtn').forEach((b: any) => b.className = 'znc-pbtn')
+        _profBtn.classList.add('act-' + S.profile)
+      }
+      try { useBrainStore.getState().setProfile(S.profile) } catch (_) { }
+    }
+    if (cfg.bmMode && (cfg.bmMode === 'assist' || cfg.bmMode === 'auto')) {
+      S.mode = cfg.bmMode
+      if (typeof BM !== 'undefined' && BM) BM.mode = cfg.bmMode
+      try { useBrainStore.getState().setMode(cfg.bmMode as BrainMode) } catch (_) { }
+      const _modeBtn = document.getElementById('bmode-' + S.mode) as HTMLElement | null
+      if (_modeBtn) {
+        document.querySelectorAll('.znc-mbtn').forEach((b: any) => b.className = 'znc-mbtn')
+        _modeBtn.classList.add('act-' + S.mode)
+      }
+    }
+    // Keep the flat (active-mode snapshot) keys in sync so wire-format writes
+    // reflect the mode the user is currently on.
+    USER_SETTINGS.profile = cfg.profile || USER_SETTINGS.profile
+    USER_SETTINGS.bmMode = cfg.bmMode || USER_SETTINGS.bmMode
+  } catch (e: any) {
+    console.warn('[BRAIN-MODE-SPLIT] applyBrainCfgForMode failed:', e?.message || e)
+  }
 }
 
 let _usSettingsTimer: any = null
@@ -1436,6 +1520,12 @@ function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
   if (flat.alertSettings !== undefined) USER_SETTINGS.alerts = flat.alertSettings
   if (flat.profile !== undefined) USER_SETTINGS.profile = flat.profile
   if (flat.bmMode !== undefined) USER_SETTINGS.bmMode = flat.bmMode
+  // [BRAIN-MODE-SPLIT b74] per-mode brain namespace
+  if (flat.brain !== undefined && flat.brain && typeof flat.brain === 'object') {
+    _ensureBrainNamespace()
+    if (flat.brain.live && typeof flat.brain.live === 'object') Object.assign(USER_SETTINGS.brain.live, flat.brain.live)
+    if (flat.brain.demo && typeof flat.brain.demo === 'object') Object.assign(USER_SETTINGS.brain.demo, flat.brain.demo)
+  }
   if (flat.assistArmed !== undefined) USER_SETTINGS.assistArmed = flat.assistArmed
   USER_SETTINGS.autoTrade = USER_SETTINGS.autoTrade || {}
   const atKeys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin',
@@ -1501,11 +1591,28 @@ export function _usSave() {
       bearW: _cv('ccBearW', '#ff3355'),
       priceText: _cv('ccPriceText', '#7a9ab8'),
       priceBg: _cv('ccPriceBg', '#0a0f16'),
+      gridH: _cv('ccGridH', '#1a2530'),
+      gridV: _cv('ccGridV', '#1a2530'),
+    }
+    if (typeof USER_SETTINGS.chart.axisWidth !== 'number') {
+      USER_SETTINGS.chart.axisWidth = 60
+    }
+    if (typeof USER_SETTINGS.chart.candleType !== 'string') {
+      USER_SETTINGS.chart.candleType = 'candles'
     }
     USER_SETTINGS.indicators = Object.assign({}, S.activeInds)
     USER_SETTINGS.alerts = Object.assign({}, S.alerts)
     USER_SETTINGS.profile = S.profile || 'fast'
     USER_SETTINGS.bmMode = (typeof BM !== 'undefined' ? BM.mode : null) || null
+    // [BRAIN-MODE-SPLIT b74] Persist the current profile+bmMode under the
+    // active AT mode's namespace so live and demo are remembered independently.
+    try {
+      _ensureBrainNamespace()
+      const _curMode = _currentATModeKey()
+      USER_SETTINGS.brain[_curMode] = USER_SETTINGS.brain[_curMode] || {}
+      USER_SETTINGS.brain[_curMode].profile = USER_SETTINGS.profile
+      USER_SETTINGS.brain[_curMode].bmMode = USER_SETTINGS.bmMode
+    } catch (_) { }
     USER_SETTINGS.assistArmed = !!S.assistArmed
     const _iv = (id: string, def: any) => {
       const el = document.getElementById(id) as any
@@ -1589,40 +1696,36 @@ export function _usApply() {
       _si('ccBearW', c.bearW)
       _si('ccPriceText', c.priceText)
       _si('ccPriceBg', c.priceBg)
+      _si('ccGridH', c.gridH)
+      _si('ccGridV', c.gridV)
       S._savedChartColors = c
       if (typeof w.cSeries !== 'undefined' && w.cSeries) {
         w.cSeries.applyOptions({ upColor: c.bull, downColor: c.bear, borderUpColor: c.bull, borderDownColor: c.bear, wickUpColor: (c.bullW || c.bull) + '77', wickDownColor: (c.bearW || c.bear) + '77' })
       }
       if (typeof w.mainChart !== 'undefined' && w.mainChart) {
-        w.mainChart.applyOptions({ layout: { background: { color: c.priceBg || '#0a0f16' }, textColor: c.priceText || '#7a9ab8' }, rightPriceScale: { textColor: c.priceText || '#7a9ab8' } })
+        const _axW = (typeof USER_SETTINGS.chart.axisWidth === 'number' ? USER_SETTINGS.chart.axisWidth : 60)
+        w.mainChart.applyOptions({
+          layout: { background: { color: c.priceBg || '#0a0f16' }, textColor: c.priceText || '#7a9ab8' },
+          grid: { horzLines: { color: c.gridH || '#1a2530' }, vertLines: { color: c.gridV || '#1a2530' } },
+          rightPriceScale: { textColor: c.priceText || '#7a9ab8', minimumWidth: _axW },
+        })
+      }
+      if (typeof w.cvdChart !== 'undefined' && w.cvdChart) {
+        const _axW2 = (typeof USER_SETTINGS.chart.axisWidth === 'number' ? USER_SETTINGS.chart.axisWidth : 60)
+        try { w.cvdChart.applyOptions({ rightPriceScale: { minimumWidth: _axW2 } }) } catch (_) { }
       }
     }
     if (USER_SETTINGS.indicators) {
       Object.assign(S.activeInds, USER_SETTINGS.indicators)
       Object.assign(S.indicators, USER_SETTINGS.indicators)
     }
-    if (USER_SETTINGS.profile) {
-      S.profile = USER_SETTINGS.profile
-      const _profBtn = document.getElementById('prof-' + S.profile)
-      if (_profBtn) {
-        document.querySelectorAll('.znc-pbtn').forEach((b: any) => b.className = 'znc-pbtn')
-        _profBtn.classList.add('act-' + S.profile)
-      }
-    }
-    // [BRAIN-MODE-PERSIST] Restore Brain mode (assist/auto) across refresh.
-    if (USER_SETTINGS.bmMode && (USER_SETTINGS.bmMode === 'assist' || USER_SETTINGS.bmMode === 'auto')) {
-      S.mode = USER_SETTINGS.bmMode
-      // [Phase 6 C6] mirror-write to backing BM + canonical brainStore
-      if (typeof BM !== 'undefined') {
-        BM.mode = USER_SETTINGS.bmMode
-        useBrainStore.getState().setMode(USER_SETTINGS.bmMode as BrainMode)
-      }
-      const _modeBtn = document.getElementById('bmode-' + S.mode)
-      if (_modeBtn) {
-        document.querySelectorAll('.znc-mbtn').forEach((b: any) => b.className = 'znc-mbtn')
-        _modeBtn.classList.add('act-' + S.mode)
-      }
-    }
+    // [BRAIN-MODE-SPLIT b74] Seed per-mode namespace from the flat top-level
+    // profile/bmMode on first boot after the split ships, then apply the
+    // namespace for the currently-active AT mode. Both demo and live end up
+    // initialised to the user's pre-split settings — the user can then set
+    // them divergently and each mode will remember its own values.
+    _seedBrainFromFlat()
+    applyBrainCfgForMode(_currentATModeKey())
     if (USER_SETTINGS.alerts) Object.assign(S.alerts, USER_SETTINGS.alerts)
     if (USER_SETTINGS.assistArmed) {
       S.assistArmed = true
@@ -1675,6 +1778,12 @@ export function _usApply() {
       if (ml.sl != null) _setInp('liveSL', ml.sl)
       if (ml.tp != null) _setInp('liveTP', ml.tp)
     }
+    if (USER_SETTINGS.chart && USER_SETTINGS.chart.candleType && USER_SETTINGS.chart.candleType !== 'candles') {
+      const _cType = USER_SETTINGS.chart.candleType
+      setTimeout(() => {
+        try { if (typeof w.applyCandleType === 'function') w.applyCandleType(_cType, { persist: false }) } catch (_) { }
+      }, 1200)
+    }
     console.log('[US] Settings applied')
   } catch (e: any) {
     console.warn('[US] Apply failed:', e.message)
@@ -1712,6 +1821,12 @@ export function loadUserSettings() {
     if (parsed.autoTrade) Object.assign(USER_SETTINGS.autoTrade, parsed.autoTrade)
     if (parsed.profile) USER_SETTINGS.profile = parsed.profile
     if (parsed.bmMode) USER_SETTINGS.bmMode = parsed.bmMode
+    // [BRAIN-MODE-SPLIT b74] hydrate per-mode brain namespace from localStorage
+    if (parsed.brain && typeof parsed.brain === 'object') {
+      _ensureBrainNamespace()
+      if (parsed.brain.live && typeof parsed.brain.live === 'object') Object.assign(USER_SETTINGS.brain.live, parsed.brain.live)
+      if (parsed.brain.demo && typeof parsed.brain.demo === 'object') Object.assign(USER_SETTINGS.brain.demo, parsed.brain.demo)
+    }
     if (typeof parsed.assistArmed === 'boolean') USER_SETTINGS.assistArmed = parsed.assistArmed
     if (parsed.ptMarginMode) {
       const _mmSel = document.getElementById('demoMarginMode') as any
@@ -2131,6 +2246,9 @@ w.initMTFStrip = initMTFStrip
 w._usScheduleSave = _usScheduleSave
 w._usSave = _usSave
 w._usApply = _usApply
+// [BRAIN-MODE-SPLIT b74] expose so mode switcher (data/marketDataTrading.ts)
+// can re-apply the correct namespace after the AT mode flips.
+w.applyBrainCfgForMode = applyBrainCfgForMode
 w.loadUserSettings = loadUserSettings
 w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon

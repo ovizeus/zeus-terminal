@@ -543,6 +543,10 @@ export async function manualLivePlaceOrder(params: any): Promise<any> {
   // [Phase 7] Forward user-computed DSL preset so server registers manual LIVE with same params as manual DEMO.
   // null = DSL engine OFF; object = user preset; omitted = server falls back to DSL_DEFAULTS (legacy).
   if (params.dslParams !== undefined) body.dslParams = params.dslParams
+  // [Phase 10 classification] Explicit ownership marker so /order/place can
+  // stamp the registered position with autoTrade=false, sourceMode='manual'
+  // on the server side. Complements the 'auto' marker sent by autotrade.ts.
+  body.source = 'manual'
   var res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
     headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),

@@ -2210,6 +2210,10 @@ function registerManualPosition(userId, data) {
     // [DSL-OFF] Client sends dslParams === null when DSL engine is disabled.
     // In that case skip DSL attach entirely — position runs purely on exchange TP/SL (or demo tick-exits).
     const _dslOff = (data.dslParams === null);
+    // [Phase 10 classification] Honor explicit source marker from /order/place.
+    // Without this, ANY MARKET fill was stamped manual even when client AT
+    // fired it, so AT positions leaked into the Manual panel on the client.
+    const _srcAuto = (data.source === 'auto');
     const entry = {
         seq,
         userId,
@@ -2225,10 +2229,10 @@ function registerManualPosition(userId, data) {
         sl, tp, slPct, rr, tpPnl, slPnl,
         status: 'OPEN',
         closeTs: null, closePnl: null, closeReason: null,
-        // Manual-specific metadata
-        autoTrade: false,
-        sourceMode: 'manual',
-        controlMode: 'user',
+        // Ownership metadata — derived from explicit source marker.
+        autoTrade: _srcAuto,
+        sourceMode: _srcAuto ? 'auto' : 'manual',
+        controlMode: _srcAuto ? 'auto' : 'user',
         // [Phase 9D1] Stamp idempotency token so a retry with the same token
         // folds onto this entry instead of creating a duplicate.
         _clientReqId: data.clientReqId || null,
@@ -2255,13 +2259,13 @@ function registerManualPosition(userId, data) {
     if (!_dslOff) {
         serverDSL.attach(entry, entry.dslParams);
     } else {
-        logger.info('AT_ENGINE', `[${seq}] uid=${userId} MANUAL registered with DSL OFF — no DSL attach`);
+        logger.info('AT_ENGINE', `[${seq}] uid=${userId} ${_srcAuto ? 'AUTO' : 'MANUAL'} registered with DSL OFF — no DSL attach`);
     }
     _persistState(userId);
     _persistPosition(entry);
     _notifyChange(userId);
 
-    logger.info('AT_ENGINE', `[${seq}] uid=${userId} MANUAL ${side} ${data.symbol} @ $${price.toFixed(2)} | Size=$${size.toFixed(0)} Lev=${lev}x | Registered as server-tracked`);
+    logger.info('AT_ENGINE', `[${seq}] uid=${userId} ${_srcAuto ? 'AUTO' : 'MANUAL'} ${side} ${data.symbol} @ $${price.toFixed(2)} | Size=$${size.toFixed(0)} Lev=${lev}x | Registered as server-tracked`);
 
     return { ok: true, seq, position: entry };
 }
@@ -2398,9 +2402,17 @@ async function addOnPosition(userId, seq, options = {}) {
             return { ok: false, error: 'Position is not in profit — add-on denied' };
         }
 
-        // ── Addon size = 50% of original margin ──
+        // ── Addon size: prefer client-provided amount (modal input), else default to 50% of original ──
+        // [Phase 10.7] Client AddOnModal sends user-chosen amount via options.addOnSize.
+        // Fallback to legacy 50%-of-original when omitted (keeps backward compat with
+        // any non-modal callers).
         const origSize = pos.originalSize || pos.size;
-        const addOnSize = Math.round(origSize * 0.5);
+        let addOnSize;
+        if (Number.isFinite(Number(options.addOnSize)) && Number(options.addOnSize) > 0) {
+            addOnSize = Math.round(Number(options.addOnSize));
+        } else {
+            addOnSize = Math.round(origSize * 0.5);
+        }
         if (addOnSize <= 0) return { ok: false, error: 'Add-on size too small' };
 
         // ── Demo balance check ──

@@ -69,14 +69,10 @@ function stop() {
 // ══════════════════════════════════════════════════════════════════
 // CORE: Post-Trade Reflection (called after each trade closes)
 // ══════════════════════════════════════════════════════════════════
-function reflectOnTrade(trade, marketContext, userId) {
-    if (!trade || trade.closePnl == null || !userId) return;
-
-    const isWin = trade.closePnl > 0;
+function _buildReasons(trade, isWin) {
     const snap = trade.entrySnapshot || {};
     const reasons = [];
 
-    // ── Analyze WHY it won or lost ──
     if (snap.mtfAlignment != null && snap.mtfAlignment < 0.4 && !isWin) {
         reasons.push('MTF was misaligned at entry (' + Math.round(snap.mtfAlignment * 100) + '%)');
     }
@@ -128,6 +124,16 @@ function reflectOnTrade(trade, marketContext, userId) {
             reasons.push('Closed very quickly (' + Math.round(holdMin) + 'min) — possible noise entry');
         }
     }
+
+    return reasons;
+}
+
+function reflectOnTrade(trade, marketContext, userId) {
+    if (!trade || trade.closePnl == null || !userId) return;
+
+    const isWin = trade.closePnl > 0;
+    const snap = trade.entrySnapshot || {};
+    const reasons = _buildReasons(trade, isWin);
 
     // ── Generate thought ──
     const thought = {
@@ -766,6 +772,69 @@ function getDashboard(userId) {
     };
 }
 
+// ══════════════════════════════════════════════════════════════════
+// Backfill: seed thoughts + self-score from recent closed trades
+// Called once at boot so the dashboard is populated before new closes arrive.
+// Rules are NOT re-derived here — they come from _restoreAllUsers (DB).
+// ══════════════════════════════════════════════════════════════════
+function seedFromHistory(userIdArg, limit) {
+    try {
+        const cap = limit || 50;
+        const userRows = userIdArg
+            ? [{ user_id: userIdArg }]
+            : db.db.prepare('SELECT DISTINCT user_id FROM at_closed WHERE user_id IS NOT NULL').all();
+
+        for (const row of userRows) {
+            const uid = row.user_id;
+            const trades = _getRecentTrades(null, cap, uid);
+            if (!trades.length) continue;
+
+            _tht(uid).length = 0;
+            const ss = _score(uid);
+            ss.decisionsToday = 0;
+            ss.correctToday = 0;
+            ss.streak = 0;
+
+            const ordered = trades.slice().sort(
+                (a, b) => (a.closeTs || a._closedAt || 0) - (b.closeTs || b._closedAt || 0)
+            );
+            const cutoff = Date.now() - 86400000;
+
+            for (const t of ordered) {
+                if (t.closePnl == null) continue;
+                const isWin = t.closePnl > 0;
+                const snap = t.entrySnapshot || {};
+                const reasons = _buildReasons(t, isWin);
+                _addThought(uid, {
+                    ts: t.closeTs || t._closedAt || Date.now(),
+                    symbol: t.symbol,
+                    type: isWin ? 'win_reflection' : 'loss_reflection',
+                    severity: isWin ? 'info' : (reasons.length > 2 ? 'critical' : 'warning'),
+                    text: _buildReflectionText(t, isWin, reasons),
+                    reasons,
+                    pnl: t.closePnl,
+                    confidence: snap.confidence,
+                    regime: snap.regime,
+                });
+                const ts = t.closeTs || t._closedAt || 0;
+                if (ts > cutoff) {
+                    if (isWin) {
+                        ss.streak++;
+                        if (ss.streak > ss.bestStreak) ss.bestStreak = ss.streak;
+                        ss.correctToday++;
+                    } else {
+                        ss.streak = 0;
+                    }
+                    ss.decisionsToday++;
+                }
+            }
+            logger.info('REFLECTION', `uid=${uid} seeded ${ordered.length} thoughts from history (today: ${ss.decisionsToday} decisions, ${ss.correctToday} wins)`);
+        }
+    } catch (err) {
+        logger.error('REFLECTION', `seedFromHistory failed: ${err.message}`);
+    }
+}
+
 module.exports = {
     start,
     stop,
@@ -782,4 +851,5 @@ module.exports = {
     getDSLRecommendations,
     getSessionReviews,
     getDashboard,
+    seedFromHistory,
 };

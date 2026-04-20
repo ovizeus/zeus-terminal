@@ -64,6 +64,12 @@ export interface SettingsPayload {
   profile?: string
   bmMode?: string
   assistArmed?: boolean
+  // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace. Separate profile +
+  // bmMode per trading mode so live and demo are remembered independently.
+  brain?: {
+    live?: { profile?: string; bmMode?: string }
+    demo?: { profile?: string; bmMode?: string }
+  } | null
 
   // Manual live defaults + per-account leverage
   manualLive?: Record<string, unknown> | null

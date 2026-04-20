@@ -11,8 +11,30 @@ import { DEV , devLog } from '../utils/dev'
 import { atLog } from './autotrade'
 import { getSymPrice } from '../data/marketDataPositions'
 import { useATStore } from '../stores/atStore'
+import { useBrainStore } from '../stores/brainStore'
 
 const w = window as any
+
+// [b67] adaptive state lives on backing `w.BM.adaptive` (legacy), but the
+// React AdaptivePanel reads from brainStore. Propagate after every mutation
+// so the UI (button label/color, multipliers row, bucket table) stays in
+// sync with engine truth. Engine logic itself is untouched.
+function _syncAdaptiveToStore(): void {
+  try {
+    const a = w.BM && w.BM.adaptive
+    if (!a) return
+    useBrainStore.getState().patch({
+      adaptive: {
+        enabled: !!a.enabled,
+        lastRecalcTs: a.lastRecalcTs || 0,
+        entryMult: a.entryMult ?? 1.0,
+        sizeMult: a.sizeMult ?? 1.0,
+        exitMult: a.exitMult ?? 1.0,
+        buckets: a.buckets || {},
+      },
+    })
+  } catch (_) {}
+}
 
 // Macro cortex computation
 export function computeMacroCortex(): void {
@@ -213,6 +235,7 @@ export function _adaptLoad(): void {
     if (tog) tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
     if (tog) tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
     if (tog) tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
+    _syncAdaptiveToStore()
   } catch (e: any) {
     console.warn('[_adaptLoad] Restore failed:', e.message)
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('ERROR', '[_adaptLoad] ' + e.message)
@@ -304,6 +327,7 @@ export function recalcAdaptive(isStartup?: any): void {
 
     w.BM.adaptive.lastRecalcTs = now
     _adaptSave()
+    _syncAdaptiveToStore()
     _renderAdaptivePanel()
 
     {
@@ -371,6 +395,9 @@ export function toggleAdaptive(): void {
     tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
     tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
     tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
+    // [b68] legacy button in AnalysisSections.tsx has hardcoded OFF colors
+    // including background; without this it never visually lights up.
+    tog.style.background = w.BM.adaptive.enabled ? '#0a2a1a' : '#0a1220'
   }
   if (!w.BM.adaptive.enabled) {
     w.BM.adaptive.entryMult = 1.0
@@ -379,9 +406,15 @@ export function toggleAdaptive(): void {
     _renderAdaptivePanel()
   }
   _adaptSave()
+  _syncAdaptiveToStore()
   _updateAdaptiveBarTxt()
   atLog('info', '[ADAPT] Adaptive Control: ' + (w.BM.adaptive.enabled ? 'ON' : 'OFF'))
 }
+
+// [b68] Expose on window: legacy #adaptiveToggleBtn in AnalysisSections.tsx
+// calls `(window as any).toggleAdaptive?.()` and the optional-chain silently
+// no-ops when the binding is missing — which it was. Nothing else assigns it.
+;(window as any).toggleAdaptive = toggleAdaptive
 
 export function _updateAdaptiveBarTxt(): void {
   var el = document.getElementById('adaptive-bar-txt')

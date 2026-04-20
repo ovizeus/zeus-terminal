@@ -164,6 +164,19 @@ export function attachConfirmClose(btn: HTMLElement, callback: () => void): void
     btn.getAttribute('data-close-id') || btn.getAttribute('data-partial-id') || btn.id
   if (!posId) return
 
+  // [Phase 10 close-all] Prevent double-attach: closeAllBtn is targeted by two
+  // call sites (bootstrapMisc.ts timeout init + ManualTradePanel useEffect),
+  // and each call used to register its own click listener. The first click
+  // hit both listeners in sequence — listener A set _pendingClose, listener B
+  // then saw the pending entry and fired the callback. Net effect: one click
+  // closed all without confirmation. A data-flag marker short-circuits any
+  // subsequent attach for the same button, keeping the two-click confirm UX.
+  if (btn.getAttribute('data-confirm-close-attached') === '1') {
+    if (_pendingClose[posId]) _applyPendingStyle(btn)
+    return
+  }
+  btn.setAttribute('data-confirm-close-attached', '1')
+
   if (_pendingClose[posId]) {
     _applyPendingStyle(btn)
     _pendingClose[posId].btnRef = btn

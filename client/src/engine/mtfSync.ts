@@ -56,7 +56,7 @@ export function syncMTFStore(): void {
 
     const volPctValue = BM.volPct
     const volPctTone: MTFTone = volPctValue != null ? (volPctValue >= 85 ? 'bad' : volPctValue >= 60 ? 'warn' : volPctValue < 30 ? 'good' : '') : ''
-    const volPct = cell(volPctValue != null ? volPctValue + 'th percentila' : '\u2014 (acumulez date)', volPctTone)
+    const volPct = cell(volPctValue != null ? volPctValue + 'th percentile' : '\u2014 (collecting data)', volPctTone)
 
     let sweep: MTFCell
     const sw = lc.sweepSimple

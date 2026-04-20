@@ -13,7 +13,7 @@ import { usePositionsStore } from '../stores/positionsStore'
 import type { ATUI } from '../stores/atStore'
 import { isValidMarketPrice, escHtml, el } from '../utils/dom'
 import { fmtNow, toast } from '../data/marketDataHelpers'
-import { fP } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
@@ -789,7 +789,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     return
   }
   if (BM?.protectMode) {
-    _setBR('PROTECT_MODE', BM.protectReason || 'Protect mode activ', 'placeAutoTrade')
+    _setBR('PROTECT_MODE', BM.protectReason || 'Protect mode active', 'placeAutoTrade')
     return
   }
 
@@ -1063,7 +1063,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           side: side === 'LONG' ? 'BUY' : 'SELL',
           type: 'MARKET',
           quantity: String((adaptFinalSize * lev) / entry),
+          leverage: lev,
           referencePrice: entry,
+          source: 'auto',
         })
         // Build position from exchange response
         const fillPrice = parseFloat(result.avgPrice) || entry
@@ -1213,29 +1215,87 @@ export function canAddOn(pos: any): any {
   return true
 }
 
-// openAddOn(posId) — [Batch B] RPC to server POST /api/addon
-export function openAddOn(posId: any): any {
+// openAddOn(posId) — [Phase 10.7] Opens AddOnModal so user picks the add-on
+// amount; modal calls execAddOn() on confirm. The legacy "single-tap → server
+// auto-adds 50% of original" path was never reachable (button never received a
+// listener due to events.ts lookup mismatch on data-addon-id), so the new
+// modal-driven UX is now the canonical flow.
+export function openAddOn(posId: any): void {
+  const existing = document.getElementById('addOnModal')
+  if (existing) existing.remove()
+
+  const posList = ([] as any[]).concat(TP.demoPositions || [], TP.livePositions || [])
+  const pos = posList.find((p: any) => p.id === posId)
+  if (!pos) {
+    atLog('warn', '[ADD-ON] Position not found: ' + posId)
+    return
+  }
+  if (!canAddOn(pos)) {
+    atLog('warn', '[ADD-ON] Cannot add-on to position ' + posId)
+    toast('Add-on not available — position not in profit or limit reached', 0, '\u26A0\uFE0F')
+    return
+  }
+
+  const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
+    : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
+  const diff = symPrice - pos.entry
+  const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+  const origSize = Number(pos.originalSize || pos.size) || 0
+  const curSize = Number(pos.size) || 0
+  const addOnCount = Number(pos.addOnCount || 0)
+  const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
+
+  const container = document.createElement('div')
+  container.id = 'addOnModal'
+  document.body.appendChild(container)
+
+  Promise.all([
+    import('react'),
+    import('react-dom/client'),
+    import('../components/modals/AddOnModal'),
+  ]).then(([ReactMod, { createRoot }, { default: AddOnModal }]) => {
+    const root = createRoot(container)
+    root.render(ReactMod.createElement(AddOnModal, {
+      posId, side: pos.side, sym: pos.sym, origSize, curSize, addOnCount, maxAddon, curPrice: symPrice, pnl,
+      onConfirm: (id: any, addOnSize: number) => { root.unmount(); container.remove(); execAddOn(id, addOnSize, symPrice) },
+      onCancel: () => { root.unmount(); container.remove() },
+    }))
+  }).catch((e: any) => {
+    container.remove()
+    try { (toast as any)('Add-on modal unavailable — asset missing') } catch (_) { }
+    console.warn('[AddOnModal] chunk load failed:', e)
+  })
+}
+
+// execAddOn(posId, addOnSize, currentPrice) — POST /api/addon with user-chosen amount + price
+// [Phase 10.7 diag] Server needs currentPrice for its in-profit re-check; pos._lastPrice
+// is set only on the server tick loop and can be undefined immediately after open.
+export function execAddOn(posId: any, addOnSize: number, currentPrice?: number): Promise<boolean> {
   const posList = ([] as any[]).concat(TP.demoPositions || [], TP.livePositions || [])
   const pos = posList.find((p: any) => p.id === posId)
   if (!pos) {
     atLog('warn', '[ADD-ON] Position not found: ' + posId)
     return Promise.resolve(false)
   }
-  if (!canAddOn(pos)) {
-    atLog('warn', '[ADD-ON] Cannot add-on to position ' + posId)
+  if (!Number.isFinite(addOnSize) || addOnSize <= 0) {
+    atLog('warn', '[ADD-ON] Invalid amount: ' + addOnSize)
+    toast('Invalid add-on amount', 0, '\u26A0\uFE0F')
     return Promise.resolve(false)
   }
   const seq = pos._serverSeq || pos.id
   const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
-  atLog('info', '[ADD-ON] Requesting server add-on for seq=' + seq + '...')
-  return api.raw<any>('POST', '/api/addon', { seq: seq, maxAddon: maxAddon })
+  // Fallback: recompute currentPrice from available sources if modal didn't provide it
+  const priceFallback = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
+    : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
+  const curPrice = (currentPrice && Number.isFinite(currentPrice) && currentPrice > 0) ? currentPrice : priceFallback
+  atLog('info', '[ADD-ON] Requesting server add-on for seq=' + seq + ' size=$' + addOnSize + ' price=$' + curPrice + '...')
+  return api.raw<any>('POST', '/api/addon', { seq: seq, maxAddon: maxAddon, addOnSize: addOnSize, currentPrice: curPrice })
     .then(function (j: any) {
       if (j.ok) {
         atLog('buy', '[ADD-ON #' + j.addOnCount + '] ' + (pos.side || '') + ' ' + (pos.sym || '') +
           ' +$' + (j.addOnSize || 0) + ' @$' + (j.price || 0).toFixed(2) +
           ' | New entry:$' + (j.newEntry || 0).toFixed(2) + ' | Total:$' + (j.newSize || 0))
-        // Server broadcasts via WS → _applyServerATState updates client state
-        // Force re-render in case WS is slightly delayed
+        toast('+ Add-on $' + (j.addOnSize || 0) + ' done', 0, '\u2705')
         setTimeout(function () {
           renderATPositions()
           if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()
@@ -1243,17 +1303,16 @@ export function openAddOn(posId: any): any {
         return true
       } else {
         atLog('warn', '[ADD-ON] Server rejected: ' + (j.error || 'unknown'))
-        toast('Add-on rejected: ' + (j.error || 'unknown'), 0, '⚠️')
+        toast('Add-on rejected: ' + (j.error || 'unknown'), 0, '\u26A0\uFE0F')
         return false
       }
     })
     .catch(function (err: any) {
       atLog('warn', '[ADD-ON] Network error: ' + (err.message || err))
-      toast('Add-on failed: network error', 0, '⚠️')
+      toast('Add-on failed: network error', 0, '\u26A0\uFE0F')
       return false
     })
 }
-// openAddOn — self-ref removed (direct call)
 
 // ─── AUTO-CLOSE MONITOR ────────────────────────────────────────
 
@@ -1790,11 +1849,18 @@ export function renderATPositions(): void {
     const id = parseInt(btn.getAttribute('data-partial-id'), 10)
     attachConfirmClose(btn, function () { openPartialClose(id) })
   })
-  // [Batch B] Add-on button — single tap with server RPC
+  // [Phase 10.7] Add-on button — single tap opens AddOnModal (modal IS the
+  // confirmation, so no two-tap attachConfirmClose). The previous wiring went
+  // through attachConfirmClose, which silently dropped the listener because
+  // events.ts:163 lookup chain didn't include data-addon-id — that's why the
+  // button never reacted to taps. Now we bind click directly and ignore the
+  // confirm flow on the button itself.
   panel.querySelectorAll('button[data-addon-id]').forEach(function (btn: any) {
     if (btn.disabled) return
+    if (btn.getAttribute('data-addon-attached') === '1') return
+    btn.setAttribute('data-addon-attached', '1')
     const id = parseInt(btn.getAttribute('data-addon-id'), 10)
-    attachConfirmClose(btn, function () { openAddOn(id) })
+    btn.addEventListener('click', function (e: Event) { e.preventDefault(); openAddOn(id) })
   })
   // [Phase 9E1] SAVE SL/TP — same contract as Manual/Demo panel: reads input
   // values by id slEdit_<id> / tpEdit_<id> via savePosSLTP().

@@ -202,16 +202,38 @@ export function PanelShell() {
     let startY = 0, startX = 0, startTime = 0
     let lastScrollTime = 0
 
+    // [Phase 10.3 PTR-in-panel] When a dock panel is open, the PageView overlay
+    // (.zpv, z-index 900, position: fixed) covers <main>, and .zpv-content owns
+    // the scroll + the viewport. The legacy PTR flow (window scrollY + transform
+    // <main>) was silently blocked by G5 isInsideScrollable() seeing .zpv-content
+    // as "a scrollable child" and by the overlay hiding the animation target.
+    // Fix: detect the active scroller at each touch; treat .zpv-content exactly
+    // like window (scroll source + slide target) and stop isInsideScrollable
+    // walk at that boundary so only TRULY inner scrollables still block.
+    function getActiveScroller(): HTMLElement | null {
+      const zpv = document.querySelector('.zpv')
+      if (zpv) return zpv.querySelector('.zpv-content') as HTMLElement | null
+      return null
+    }
+
+    let currentScroller: HTMLElement | null = null
+
     function onScroll() { lastScrollTime = Date.now() }
     window.addEventListener('scroll', onScroll, { passive: true })
+    // [Phase 10.3] Also capture scrolls inside panel overlay so momentum guard works.
+    document.addEventListener('scroll', onScroll, { passive: true, capture: true })
 
-    function getScrollTop(): number {
+    function getScrollTop(scroller: HTMLElement | null): number {
+      if (scroller) return scroller.scrollTop || 0
       return Math.max(window.scrollY || 0, document.documentElement.scrollTop || 0, document.body.scrollTop || 0)
     }
 
-    function isInsideScrollable(target: EventTarget | null): boolean {
+    function isInsideScrollable(target: EventTarget | null, stopAt: HTMLElement | null): boolean {
       let el = target as HTMLElement | null
       while (el && el !== document.body) {
+        // [Phase 10.3] The active scroller itself is the viewport for PTR —
+        // not a "scrollable child". Stop the walk here, don't treat as block.
+        if (stopAt && el === stopAt) return false
         if (el.matches?.(BLOCK_SEL)) return true
         if (el.scrollHeight > el.clientHeight + 2) {
           const ov = getComputedStyle(el).overflowY
@@ -222,30 +244,34 @@ export function PanelShell() {
       return false
     }
 
-    function slideContent(px: number, animate: boolean) {
-      const el = mainRef.current
+    function slideContent(px: number, animate: boolean, scroller: HTMLElement | null) {
+      // [Phase 10.3] When panel overlay is active, translate the overlay's scroll
+      // container (it IS the visible viewport). Otherwise translate <main>.
+      const el = scroller || mainRef.current
       if (!el) return
       el.style.transition = animate ? 'transform .3s cubic-bezier(.2,.8,.4,1)' : 'none'
       el.style.transform = px > 0 ? `translateY(${px}px)` : ''
     }
 
-    function updateInd(progress: number, dy: number) {
+    function updateInd(progress: number, _dy: number) {
       const ind = document.getElementById('ptr-indicator')
       if (!ind) return
       ind.classList.add('visible')
       ind.classList.toggle('armed', progress >= 1)
       ind.classList.remove('refreshing')
-      const lbl = ind.querySelector('.ptr-label') as HTMLElement
-      if (lbl) lbl.textContent = progress >= 1 ? 'Release to refresh' : 'Zeus Terminal'
-      const sp = ind.querySelector('.ptr-spinner') as HTMLElement
-      if (sp) sp.style.transform = `rotate(${dy * 2.5}deg)`
+      // [Phase 10.5] Label text is static stacked markup in JSX ("ZEUS" over
+      // "REFRESHING") — no textContent mutation here, which would flatten the
+      // two-line structure back into one line.
     }
 
-    function resetAll(animate: boolean) {
-      slideContent(0, animate)
+    function resetAll(animate: boolean, scroller: HTMLElement | null) {
+      slideContent(0, animate, scroller)
       const ind = document.getElementById('ptr-indicator')
       if (ind) ind.classList.remove('visible', 'armed', 'refreshing')
-      if (animate) setTimeout(() => { if (mainRef.current) mainRef.current.style.transition = '' }, 350)
+      if (animate) {
+        const el = scroller || mainRef.current
+        if (el) setTimeout(() => { el.style.transition = '' }, 350)
+      }
       state = 'idle'
     }
 
@@ -253,11 +279,13 @@ export function PanelShell() {
     function onTouchStart(e: TouchEvent) {
       if (state === 'refreshing') return
       state = 'idle'
+      // [Phase 10.3] Re-detect scroller per-gesture; panel open/close can change it.
+      currentScroller = getActiveScroller()
       if (e.touches.length !== 1) return                              // G1: single finger
       if (e.touches[0].clientY > START_ZONE) return                   // G2: top zone only
-      if (getScrollTop() > 0) return                                  // G3: page at top
+      if (getScrollTop(currentScroller) > 0) return                   // G3: scroller at top
       if (Date.now() - lastScrollTime < SCROLL_COOLDOWN) return       // G4: no momentum
-      if (isInsideScrollable(e.target)) return                        // G5: not in scrollable child
+      if (isInsideScrollable(e.target, currentScroller)) return       // G5: not in inner scrollable
       state = 'tracking'
       startY = e.touches[0].clientY
       startX = e.touches[0].clientX
@@ -270,14 +298,14 @@ export function PanelShell() {
       const dy = e.touches[0].clientY - startY
       const dx = e.touches[0].clientX - startX
       if (Math.abs(dy) < DEAD_ZONE && state === 'tracking') return    // dead zone
-      if (Math.abs(dx) > Math.abs(dy) * HOR_RATIO) { resetAll(false); state = 'idle'; return } // diagonal
-      if (dy < 0) { if (state !== 'tracking') resetAll(true); state = 'idle'; return }          // pulling up
-      if (getScrollTop() > 0) { resetAll(false); state = 'idle'; return }                       // scrolled away
+      if (Math.abs(dx) > Math.abs(dy) * HOR_RATIO) { resetAll(false, currentScroller); state = 'idle'; return } // diagonal
+      if (dy < 0) { if (state !== 'tracking') resetAll(true, currentScroller); state = 'idle'; return }          // pulling up
+      if (getScrollTop(currentScroller) > 0) { resetAll(false, currentScroller); state = 'idle'; return }        // scrolled away
       e.preventDefault()
       const pull = Math.min(dy * DAMPING, MAX_PULL)
       const progress = Math.min(dy / THRESHOLD, 1)
       state = progress >= 1 ? 'armed' : 'pulling'
-      slideContent(pull, false)
+      slideContent(pull, false, currentScroller)
       updateInd(progress, dy)
     }
 
@@ -286,24 +314,22 @@ export function PanelShell() {
       if (state === 'armed') {
         const elapsed = Date.now() - startTime
         const speed = THRESHOLD / Math.max(elapsed, 1)
-        if (elapsed < MIN_DURATION || speed > MAX_SPEED) { resetAll(true); return } // flick guard
+        if (elapsed < MIN_DURATION || speed > MAX_SPEED) { resetAll(true, currentScroller); return } // flick guard
         state = 'refreshing'
         const ind = document.getElementById('ptr-indicator')
         if (ind) {
           ind.classList.remove('armed'); ind.classList.add('refreshing')
-          const lbl = ind.querySelector('.ptr-label') as HTMLElement
-          if (lbl) lbl.textContent = 'Refreshing...'
-          const sp = ind.querySelector('.ptr-spinner') as HTMLElement
-          if (sp) sp.style.transform = ''
+          // [Phase 10.5] Label is static stacked markup; pulse comes from CSS
+          // keyframe on .refreshing. No textContent mutation here.
         }
-        slideContent(MAX_PULL * 0.6, true)
+        slideContent(MAX_PULL * 0.6, true, currentScroller)
         setTimeout(() => location.reload(), 400)
       } else if (state === 'pulling' || state === 'tracking') {
-        resetAll(true)
+        resetAll(true, currentScroller)
       }
     }
 
-    function onTouchCancel() { if (state !== 'idle' && state !== 'refreshing') resetAll(true) }
+    function onTouchCancel() { if (state !== 'idle' && state !== 'refreshing') resetAll(true, currentScroller) }
 
     document.addEventListener('touchstart', onTouchStart, { passive: true })
     document.addEventListener('touchmove', onTouchMove, { passive: false })
@@ -311,6 +337,7 @@ export function PanelShell() {
     document.addEventListener('touchcancel', onTouchCancel, { passive: true })
     return () => {
       window.removeEventListener('scroll', onScroll)
+      document.removeEventListener('scroll', onScroll, true)
       document.removeEventListener('touchstart', onTouchStart)
       document.removeEventListener('touchmove', onTouchMove)
       document.removeEventListener('touchend', onTouchEnd)
@@ -357,10 +384,13 @@ export function PanelShell() {
       <PerformancePanel visible={activeModal === 'performance'} onClose={closeModal} />
       <ComparePanel visible={activeModal === 'compare'} onClose={closeModal} />
 
-      {/* Pull-to-refresh indicator (Bybit-style branded) */}
+      {/* Pull-to-refresh indicator — two stacked lines, both centered.
+          "ZEUS" above, "REFRESHING" below, same X-axis center, green. */}
       <div id="ptr-indicator">
-        <div className="ptr-spinner" />
-        <span className="ptr-label">Pull to refresh</span>
+        <div className="ptr-label">
+          <span className="ptr-line ptr-line-top">ZEUS</span>
+          <span className="ptr-line ptr-line-bot">REFRESHING</span>
+        </div>
       </div>
 
       <main className="zr-panels" ref={mainRef}>
