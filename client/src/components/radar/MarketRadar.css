@@ -65,9 +65,43 @@
     overflow: hidden;
     margin: 4px 0;
     border-radius: 6px;
-    /* Mask edges so pills fade in / out instead of clipping sharply. */
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
-            mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+    /* [Phase 11.8] Force this container onto its own compositor layer so the
+     * child .mr-track's translate3d animation keeps a GPU path on mobile.
+     * Previously we used -webkit-mask-image for soft edge fades, but Safari
+     * iOS had a known bug where a masked parent causes the animated child to
+     * fall off the compositor and appear frozen. Edge fades are now rendered
+     * via pseudo-element overlays (::before / ::after) below, which keep the
+     * look without touching the animated layer. */
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+}
+
+/* [Phase 11.8] Soft edge fades via pseudo-element overlays — replaces the
+ * iOS-hostile mask-image approach. Layered on top of the track so pills
+ * scrolling into / out of view fade instead of hard-clipping. Pointer events
+ * disabled so pill clicks still reach the button underneath. */
+.mr-band::before,
+.mr-band::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 24px;
+    pointer-events: none;
+    z-index: 2;
+}
+.mr-band::before {
+    left: 0;
+    background: linear-gradient(to right, #0a0f16 0%, rgba(10, 15, 22, 0) 100%);
+}
+.mr-band::after {
+    right: 0;
+    background: linear-gradient(to left, #0a0f16 0%, rgba(10, 15, 22, 0) 100%);
+}
+/* Hide overlays when the band is in idle state (no track to fade). */
+.mr-band--idle::before,
+.mr-band--idle::after {
+    display: none;
 }
 
 .mr-band--green {
@@ -85,8 +119,6 @@
     align-items: center;
     justify-content: center;
     height: 28px;
-    -webkit-mask-image: none;
-            mask-image: none;
 }
 
 .mr-idle {
@@ -104,13 +136,13 @@
     height: 100%;
     width: max-content;
     padding: 0 8px;
-    animation-name: mr-scroll;
-    animation-timing-function: linear;
-    animation-iteration-count: infinite;
+    /* [Phase 11.8] CSS-shorthand animation so mobile browsers always get a
+     * valid duration even if the React inline style (animationDuration) is
+     * skipped or stripped by a PWA shell. React then overrides just the
+     * duration via element style to keep density-based pacing. */
+    animation: mr-scroll 40s linear infinite;
     animation-play-state: running;
     will-change: transform;
-    /* [Phase 11.7] force GPU compositing layer on iOS so the mask-image band
-       doesn't throttle / stall the translate animation. */
     backface-visibility: hidden;
     -webkit-backface-visibility: hidden;
 }
