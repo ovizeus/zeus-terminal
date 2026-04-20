@@ -1,0 +1,253 @@
+/* Zeus Terminal — Market Radar styles (Phase 11.4.2)
+ *
+ * Two marquee bands beneath the chart. The track uses a single CSS keyframe
+ * (translateX 0 → -50%) with the pill list duplicated inline, so looping is
+ * seamless without JS. Hovering a band pauses animation-play-state on its
+ * track — lets users actually read a pill before it scrolls off.
+ *
+ * Variables lean on the app's existing CSS tokens (--brd, etc.) where they
+ * exist; the rest are scoped locally so we don't leak MR-specific greens /
+ * reds into the rest of the UI.
+ */
+
+.mr-root {
+    width: 100%;
+    margin: 8px 0;
+    padding: 6px 8px;
+    background: #0a0f16;
+    border: 1px solid var(--brd, #1a2230);
+    border-radius: 8px;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #cfe2ff;
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.mr-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 2px 4px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    margin-bottom: 6px;
+}
+
+.mr-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: #e6edf7;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.mr-age {
+    font-size: 10px;
+    color: #7a8aa0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.mr-age--idle {
+    color: #5b6778;
+    font-style: italic;
+}
+
+/* ── Bands ──────────────────────────────────────────────────────────── */
+
+.mr-band {
+    position: relative;
+    width: 100%;
+    height: 30px;
+    overflow: hidden;
+    margin: 4px 0;
+    border-radius: 6px;
+    /* Mask edges so pills fade in / out instead of clipping sharply. */
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+            mask-image: linear-gradient(to right, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+}
+
+.mr-band--green {
+    background: linear-gradient(180deg, rgba(0, 200, 120, 0.06), rgba(0, 200, 120, 0.02));
+    border: 1px solid rgba(0, 200, 120, 0.18);
+}
+
+.mr-band--red {
+    background: linear-gradient(180deg, rgba(255, 70, 90, 0.06), rgba(255, 70, 90, 0.02));
+    border: 1px solid rgba(255, 70, 90, 0.18);
+}
+
+.mr-band--idle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    -webkit-mask-image: none;
+            mask-image: none;
+}
+
+.mr-idle {
+    font-size: 10px;
+    color: #6c7a90;
+    font-style: italic;
+}
+
+/* ── Track (the thing that scrolls) ─────────────────────────────────── */
+
+.mr-track {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 100%;
+    width: max-content;
+    padding: 0 8px;
+    animation-name: mr-scroll;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-play-state: running;
+    will-change: transform;
+}
+
+/* Pause on hover so users can actually click a pill. */
+.mr-band:hover .mr-track {
+    animation-play-state: paused;
+}
+
+@keyframes mr-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+/* Respect reduced-motion — no endless scroll, just static overflow. */
+@media (prefers-reduced-motion: reduce) {
+    .mr-track {
+        animation: none;
+    }
+}
+
+/* ── Pill ───────────────────────────────────────────────────────────── */
+
+.mr-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 0 auto;
+    padding: 3px 8px;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 11px;
+    color: #cfe2ff;
+    font-size: 11px;
+    font-family: inherit;
+    line-height: 1;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.1s ease, border-color 0.1s ease, transform 0.1s ease;
+    user-select: none;
+}
+
+.mr-pill:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
+}
+
+.mr-pill:active {
+    transform: translateY(0);
+}
+
+.mr-band--green .mr-pill {
+    color: #a8f0c2;
+    border-color: rgba(0, 200, 120, 0.25);
+    background: rgba(0, 200, 120, 0.08);
+}
+.mr-band--green .mr-pill:hover {
+    background: rgba(0, 200, 120, 0.16);
+    border-color: rgba(0, 200, 120, 0.45);
+}
+
+.mr-band--red .mr-pill {
+    color: #ffb8c2;
+    border-color: rgba(255, 70, 90, 0.25);
+    background: rgba(255, 70, 90, 0.08);
+}
+.mr-band--red .mr-pill:hover {
+    background: rgba(255, 70, 90, 0.16);
+    border-color: rgba(255, 70, 90, 0.45);
+}
+
+/* ── Pill inner spans ───────────────────────────────────────────────── */
+
+.mr-pill-icon {
+    font-size: 11px;
+    opacity: 0.9;
+}
+
+.mr-pill-sym {
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.mr-pill-cat {
+    opacity: 0.7;
+    font-size: 10px;
+}
+
+.mr-pill-chg,
+.mr-pill-vol,
+.mr-pill-rank,
+.mr-pill-funding,
+.mr-pill-oi,
+.mr-pill-liq,
+.mr-pill-btc,
+.mr-pill-streak {
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+    opacity: 0.85;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background: rgba(0, 0, 0, 0.25);
+}
+
+.mr-pill-chg {
+    font-weight: 600;
+    opacity: 1;
+}
+
+.mr-pill-btc {
+    color: #ffcc66;
+}
+
+.mr-pill-streak {
+    color: #ffd580;
+    background: rgba(255, 180, 60, 0.18);
+    border: 1px solid rgba(255, 180, 60, 0.35);
+}
+
+/* ── NEW TOP 300 halo — first 10s post-emit ─────────────────────────── */
+
+.mr-halo {
+    box-shadow: 0 0 0 2px rgba(120, 200, 255, 0.55), 0 0 12px rgba(120, 200, 255, 0.35);
+    animation: mr-halo-pulse 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes mr-halo-pulse {
+    from { box-shadow: 0 0 0 2px rgba(120, 200, 255, 0.45), 0 0 8px  rgba(120, 200, 255, 0.25); }
+    to   { box-shadow: 0 0 0 2px rgba(120, 200, 255, 0.75), 0 0 16px rgba(120, 200, 255, 0.50); }
+}
+
+/* ── Mobile tweaks ──────────────────────────────────────────────────── */
+
+@media (max-width: 520px) {
+    .mr-root { padding: 5px 6px; margin: 6px 0; }
+    .mr-title { font-size: 10px; }
+    .mr-age { font-size: 9px; }
+    .mr-pill { height: 20px; padding: 2px 6px; font-size: 10px; }
+    .mr-pill-cat { display: none; }
+    .mr-pill-btc { display: none; }
+    .mr-band { height: 26px; }
+}
