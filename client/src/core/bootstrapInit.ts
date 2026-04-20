@@ -31,8 +31,9 @@ export function initZeusGroups(): void {
   function mv(id: string, target: any) { const el = document.getElementById(id); if (!el) return; _markPending(el); if (!target) { _recoverElement(el); return }; if (el.parentElement === target) { el.classList.remove('zg-pending-move'); return }; if (target.contains && target !== el && target.contains(el)) { el.classList.remove('zg-pending-move'); return }; target.appendChild(el); el.classList.remove('zg-pending-move') }
   function mvSec(childSel: string, target: any) { try { const child = document.querySelector(childSel); if (!child) return; let node: any = child; while (node && node !== document.body) { if (node.classList && (node.classList.contains('sec') || node.classList.contains('znc') || node.classList.contains('bext') || node.classList.contains('dsl-zone') || node.classList.contains('at-panel') || node.classList.contains('trade-panel') || node.classList.contains('trade-sep') || node.classList.contains('at-sep'))) { _markPending(node); if (!target) { _recoverElement(node); return }; if (node.parentElement === target) { node.classList.remove('zg-pending-move'); return }; if (target.contains && target !== node && target.contains(node)) { node.classList.remove('zg-pending-move'); return }; target.appendChild(node); node.classList.remove('zg-pending-move'); return }; node = node.parentElement } } catch (_) { } }
 
-  mv('zeus-mode-bar', mi); if (typeof initModeBar === 'function') initModeBar()
-  mv('aub', mi); mv('sr-strip', mi); mv('csec', mi); mv('zeus-dock', mi)
+  // Phase 11.1.1: zeus-mode-bar / csec / zeus-dock are React-owned (PanelShell.tsx) — React positions them canonically; legacy mv() into #zeus-groups reordered them and forced ModeBar above chart.
+  if (typeof initModeBar === 'function') initModeBar()
+  mv('aub', mi); mv('sr-strip', mi)
   if (typeof w.initPageView === 'function') w.initPageView()
   initZeusDock()
   mv('aria-strip', mi); mv('teacher-strip', mi); mv('pnl-lab-strip', mi)
