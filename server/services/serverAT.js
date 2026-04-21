@@ -189,11 +189,13 @@ function _broadcastPositions(userId) {
         // enrichment done by `getOpenPositions`, which is otherwise a pure
         // `_positions` read + DSL overlay).
         const now = Date.now();
-        const positions = db.atLoadOpenPositions(userId).map(p => {
-            const copy = Object.assign({}, p);
-            copy.dsl = serverDSL.getState(p.seq) || null;
-            return copy;
-        });
+        // [R1] Use the same ownership normalization helper as getOpenPositions /
+        // getDemoPositions / getLivePositions — otherwise positions.changed
+        // shipped raw DB rows, and legacy rows with missing autoTrade/sourceMode
+        // landed in the client positionsStore without ownership hints, then
+        // ManualTradePanel's `_isManualOwned = p.autoTrade !== true` matched
+        // them as manual (AT positions reclassified as manual on broadcast).
+        const positions = db.atLoadOpenPositions(userId).map(_normalizePositionRow);
         broadcast(userId, {
             type: 'positions.changed',
             updated_at: now,
@@ -2017,27 +2019,33 @@ function _notifyChange(userId) {
 // ══════════════════════════════════════════════════════════════════
 // Getters — single source of truth (per-user)
 // ══════════════════════════════════════════════════════════════════
+
+// [Phase 2 S2.C-follow-up R1] Single normalization helper — guarantees every
+// snapshot row ships sourceMode / autoTrade / controlMode / lev consistently,
+// whether it comes from in-memory `_positions` (live state) or from
+// `db.atLoadOpenPositions` (broadcast snapshot after DB commit). Legacy rows
+// persisted before Phase 3A ownership stamping may have undefined ownership
+// fields; without this, client's _mapServerPos would default autoTrade=false
+// and AT-owned positions would misclassify as MANUAL in panels that read
+// from split-array getters or the positions.changed WS stream.
+function _normalizePositionRow(p) {
+    const copy = Object.assign({}, p);
+    copy.dsl = serverDSL.getState(p.seq) || null;
+    if (typeof copy.lev !== 'number' || !(copy.lev > 0)) copy.lev = 1;
+    if (typeof copy.autoTrade !== 'boolean') {
+        copy.autoTrade = (copy.sourceMode === 'auto');
+    }
+    if (!copy.sourceMode) {
+        copy.sourceMode = copy.autoTrade === true ? 'auto' : 'manual';
+    }
+    if (!copy.controlMode) {
+        copy.controlMode = copy.autoTrade === true ? 'auto' : 'user';
+    }
+    return copy;
+}
+
 function getOpenPositions(userId) {
-    return _positions.filter(p => p.userId === userId).map(p => {
-        const copy = Object.assign({}, p);
-        copy.dsl = serverDSL.getState(p.seq) || null;
-        // [Phase 9C2] Defensive normalization: guarantee every snapshot row ships
-        // sourceMode / autoTrade / controlMode / lev. Legacy rows restored from
-        // SQLite (pre-Phase 3A schema) may have undefined ownership fields, and
-        // the client's _mapServerPos would then need to invent values. Force a
-        // conservative baseline here so the wire contract is uniform.
-        if (typeof copy.lev !== 'number' || !(copy.lev > 0)) copy.lev = 1;
-        if (typeof copy.autoTrade !== 'boolean') {
-            copy.autoTrade = (copy.sourceMode === 'auto');
-        }
-        if (!copy.sourceMode) {
-            copy.sourceMode = copy.autoTrade === true ? 'auto' : 'manual';
-        }
-        if (!copy.controlMode) {
-            copy.controlMode = copy.autoTrade === true ? 'auto' : 'user';
-        }
-        return copy;
-    });
+    return _positions.filter(p => p.userId === userId).map(_normalizePositionRow);
 }
 
 function getOpenCount(userId) { return _positions.filter(p => p.userId === userId).length; }
@@ -2130,7 +2138,10 @@ function getLivePositions(userId) {
             .map(p => `seq=${p.seq}/${p.symbol}/${p.side}/autoTrade=${p.autoTrade}/live=${p.live.status}`);
         logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] getLivePositions uid=${userId} visible=${visible.length}/${allLiveForUser.length} hidden-terminal=[${hidden.join(' | ')}] ts=${Date.now()}`);
     }
-    return visible.map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
+    // [R1] Same ownership normalization as getOpenPositions — split-array
+    // readers (client's state.ts _applyServerATState split path) otherwise
+    // saw raw rows with undefined autoTrade/sourceMode/controlMode.
+    return visible.map(_normalizePositionRow);
 }
 
 function getDemoBalance(userId) {
@@ -2150,9 +2161,12 @@ function getDemoStats(userId) {
 }
 
 function getDemoPositions(userId) {
+    // [R1] Same ownership normalization as getOpenPositions — split-array
+    // readers (client's state.ts _applyServerATState split path) otherwise
+    // saw raw rows with undefined autoTrade/sourceMode/controlMode.
     return _positions
         .filter(p => p.userId === userId && p.mode !== 'live')
-        .map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
+        .map(_normalizePositionRow);
 }
 
 // [Phase 2B] Canonical server-side execution env resolver.
