@@ -489,6 +489,15 @@ app.post('/api/at/register-manual', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Auth required' });
   const d = req.body;
   if (!d || !d.symbol || !d.side || !d.entryPrice) return res.status(400).json({ error: 'Missing fields' });
+  // [R2] Forward `source` and `clientReqId` — serverAT.registerManualPosition
+  // already consumes both (Phase 10 classification + Phase 9D1 idempotency),
+  // but this handler previously dropped them, so callers that passed
+  // source:'auto' had their position stamped as manual (autoTrade=false) and
+  // retries with the same clientReqId double-registered. Strict whitelist:
+  // `source` must be 'auto' or 'manual' (default 'manual' when absent),
+  // `clientReqId` coerced to string (or null).
+  const _src = (d.source === 'auto' || d.source === 'manual') ? d.source : 'manual';
+  const _cid = d.clientReqId ? String(d.clientReqId) : null;
   const result = serverAT.registerManualPosition(req.user.id, {
     symbol: d.symbol,
     side: d.side,
@@ -499,6 +508,8 @@ app.post('/api/at/register-manual', (req, res) => {
     tp: d.tp ? parseFloat(d.tp) : null,
     mode: d.mode || 'demo',
     dslParams: d.dslParams || null,
+    source: _src,
+    clientReqId: _cid,
   });
   res.json(result);
 });
