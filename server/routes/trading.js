@@ -184,6 +184,12 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  // [S2.C C1] Global PANIC halt — block any new live exposure via direct manual order
+  if (_getServerAT().isGlobalHaltActive()) {
+    logger.warn('ORDER', `Order blocked — GLOBAL_HALT active uid=${req.user && req.user.id}`);
+    try { audit.record('ORDER_BLOCKED_GLOBAL_HALT', { userId: req.user && req.user.id, symbol: req.body.symbol, side: req.body.side }, 'MANUAL', req.ip); } catch (_) { /* best-effort */ }
+    return res.status(423).json({ error: 'GLOBAL_HALT active — new live orders blocked' });
+  }
   // [BE-01] Compute idempotency key for cleanup on confirmed-failure paths
   const _idemKey = req.user && req.headers['x-idempotency-key'] ? `${req.user.id}:${req.headers['x-idempotency-key']}` : null;
   const { symbol, side, type, quantity, price, leverage, stopPrice, newClientOrderId, closePosition } = req.body;
@@ -661,6 +667,12 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  // [S2.C C3] Global PANIC halt — cancel+replace POSTs a new LIMIT, counts as new exposure
+  if (_getServerAT().isGlobalHaltActive()) {
+    logger.warn('ORDER', `Order modify blocked — GLOBAL_HALT active uid=${req.user && req.user.id}`);
+    try { audit.record('ORDER_MODIFY_BLOCKED_GLOBAL_HALT', { userId: req.user && req.user.id, symbol: req.body.symbol, orderId: req.body.orderId }, 'MANUAL', req.ip); } catch (_) { /* best-effort */ }
+    return res.status(423).json({ error: 'GLOBAL_HALT active — order modify blocked' });
+  }
   const { symbol, orderId, newPrice, newQuantity } = req.body;
   const np = parseFloat(newPrice);
   if (!newPrice || isNaN(np) || np <= 0) {
@@ -784,6 +796,12 @@ router.post('/addon', async (req, res) => {
       return res.status(400).json({ error: 'Missing or invalid seq' });
     }
     const serverAT = require('../services/serverAT');
+    // [S2.C C4] Global PANIC halt — add-on adds size/margin/risk, is new exposure
+    if (serverAT.isGlobalHaltActive()) {
+      logger.warn('ORDER', `Add-on blocked — GLOBAL_HALT active uid=${userId} seq=${seq}`);
+      try { audit.record('ADDON_BLOCKED_GLOBAL_HALT', { userId, seq }, 'MANUAL', req.ip); } catch (_) { /* best-effort */ }
+      return res.status(423).json({ error: 'GLOBAL_HALT active — add-on blocked' });
+    }
     const opts = {};
     if (maxAddon && Number.isFinite(Number(maxAddon))) opts.maxAddon = Number(maxAddon);
     // [Phase 10.7] Forward user-chosen add-on amount from AddOnModal

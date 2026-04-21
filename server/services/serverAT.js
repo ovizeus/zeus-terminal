@@ -2331,6 +2331,12 @@ function registerManualPosition(userId, data) {
     // each gets its own seq, DSL state, and lifecycle. Dedup would collapse them
     // on the client via _mapServerPos and cause positions to disappear.
     const mode = data.mode || us.engineMode;
+    // [S2.C C2] Global PANIC halt — block NEW live exposure via manual registration.
+    // DEMO path intentionally unaffected (no real risk).
+    if (mode === 'live' && isGlobalHaltActive()) {
+        logger.warn('AT_ENGINE', `registerManualPosition blocked uid=${userId} sym=${data.symbol} side=${side} — GLOBAL_HALT active`);
+        return { ok: false, error: 'GLOBAL_HALT active — new live exposure blocked' };
+    }
     if (mode === 'live') {
         const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side && p.mode === 'live');
         if (existing) {
