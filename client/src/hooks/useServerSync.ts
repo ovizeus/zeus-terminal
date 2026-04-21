@@ -108,6 +108,10 @@ async function pullJournal() {
       useJournalStore.getState().setEntries(
         res.data.map((raw: unknown) => {
           const row = raw as Record<string, unknown>
+          // [Phase 12.A — Batch G] Exchange + env snapshots — strict whitelist,
+          // null fallback honest (legacy rows pre-Batch-G have no stamp).
+          const _rowExch = row.exchange
+          const _rowEnv = row.env
           return ({
           id: String(row.seq || row.id || ''),
           symbol: String(row.symbol || ''),
@@ -119,6 +123,8 @@ async function pullJournal() {
           openTs: Number(row.ts || row.openTs || 0),
           closeTs: Number(row.closeTs || 0),
           mode: String(row.mode || 'demo') as 'demo' | 'live',
+          exchange: (_rowExch === 'binance' || _rowExch === 'bybit') ? _rowExch : null,
+          env: (_rowEnv === 'DEMO' || _rowEnv === 'TESTNET' || _rowEnv === 'REAL') ? _rowEnv : null,
         })
         }),
       )

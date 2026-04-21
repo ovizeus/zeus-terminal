@@ -13,6 +13,7 @@ import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
 import { recordDailyClose } from '../engine/dailyPnl'
 import { usePositionsStore } from '../stores/positionsStore'
+import { useUiStore } from '../stores/uiStore'
 const w = window as Record<string, any> // kept for w.Intervals, w.ZLOG, oiHistory, w.ZT_capArr
 
 export function _safeLocalStorageSet(key: string, data: unknown): boolean {
@@ -38,11 +39,21 @@ export function addTradeToJournal(trade: Record<string, any>): void {
 
 /** POST closed trade to server so Full Journal (at_closed table) has all trades */
 function _reportTradeToServer(trade: Record<string, any>): void {
+  // [Phase 12.A — Batch G] Stamp exchange + env snapshot from uiStore so the
+  // server persists truth-at-close for client-reported trades. Null fallback
+  // when store has no truth yet — never fake "Binance".
+  const _u = (() => { try { return useUiStore.getState() } catch (_) { return null } })()
+  const _exch = _u ? _u.activeExchange : null
+  const _env = _u ? _u.executionEnv : null
+  const _payload = Object.assign({}, trade, {
+    exchange: (trade.exchange === 'binance' || trade.exchange === 'bybit') ? trade.exchange : (_exch || null),
+    env: (trade.env === 'DEMO' || trade.env === 'TESTNET' || trade.env === 'REAL') ? trade.env : (_env || null),
+  })
   fetch('/api/journal/report', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' },
-    body: JSON.stringify(trade),
+    body: JSON.stringify(_payload),
   }).catch(() => { /* silent — localStorage is fallback */ })
 }
 

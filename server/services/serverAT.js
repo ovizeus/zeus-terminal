@@ -610,6 +610,11 @@ function processBrainDecision(decision, stc, userId) {
     const slPnl = -(slDist / price) * finalSize * lev;
 
     // ── Build position entry ──
+    // [Phase 12.A — Batch G] Stamp exchange + env at open so history snapshots
+    // reflect truth-at-entry (immutable through close, survives creds changes).
+    // Demo: exchange=null, env='DEMO'. Live: exchange from creds, env=TESTNET|REAL.
+    const _entryExecEnv = _resolveExecutionEnv(userId);
+    const _entryCreds = _entryExecEnv.env === 'DEMO' ? null : getExchangeCreds(userId);
     const entry = {
         seq: ++us.seq,
         userId: userId,
@@ -619,6 +624,8 @@ function processBrainDecision(decision, stc, userId) {
         side: side,
         tier: tier,
         mode: us.engineMode,        // 'demo' or 'live' — set at entry time
+        exchange: _entryCreds ? (_entryCreds.exchange || null) : null,
+        env: _entryExecEnv.env,     // 'DEMO' | 'TESTNET' | 'REAL' | null
         price: price,
         size: finalSize,
         margin: finalSize,        // margin locked
@@ -2214,6 +2221,10 @@ function registerManualPosition(userId, data) {
     // Without this, ANY MARKET fill was stamped manual even when client AT
     // fired it, so AT positions leaked into the Manual panel on the client.
     const _srcAuto = (data.source === 'auto');
+    // [Phase 12.A — Batch G] Stamp exchange + env at open (same rationale as the
+    // AT-engine entry path). Honest null when demo or when creds missing.
+    const _manualExecEnv = _resolveExecutionEnv(userId);
+    const _manualCreds = _manualExecEnv.env === 'DEMO' ? null : getExchangeCreds(userId);
     const entry = {
         seq,
         userId,
@@ -2221,6 +2232,8 @@ function registerManualPosition(userId, data) {
         symbol: data.symbol,
         side,
         mode: data.mode || us.engineMode,
+        exchange: _manualCreds ? (_manualCreds.exchange || null) : null,
+        env: _manualExecEnv.env,     // 'DEMO' | 'TESTNET' | 'REAL' | null
         price,
         size,
         margin: size,
