@@ -29,6 +29,7 @@ const serverDrawdownGuard = require('./serverDrawdownGuard');
 const serverMultiEntry = require('./serverMultiEntry');
 const serverVolatilityEngine = require('./serverVolatilityEngine');
 const brainLogger = require('./brainLogger');
+const MF = require('../migrationFlags');
 
 // ══════════════════════════════════════════════════════════════════
 // Configuration
@@ -57,7 +58,9 @@ const _stcMap = new Map(); // userId → STC config
 
 // ── Brain state ──
 let _timer = null;
+let _shadowTimer = null;  // [Phase 2 S3] separate timer for parity harness shadow cycle
 let _running = false;
+let _shadowRunning = false;  // [Phase 2 S3] re-entry guard for shadow cycle
 let _cycleCount = 0;
 let _lastDecision = null;
 const _prevRegimes = new Map();  // [MULTI-SYM] symbol → last regime
@@ -106,21 +109,31 @@ function getRecentBlocks(userId, sinceTs) {
 // Start / Stop
 // ══════════════════════════════════════════════════════════════════
 function start() {
-    if (_timer) return;
+    if (_timer || _shadowTimer) return;
     // ── Restore persisted state from SQLite ──
     _restoreStcFromDb();
     _restoreCooldowns();
-    logger.info('BRAIN', 'Server brain starting (observation mode, 30s cycle)');
-    // [BRAIN-V2] Start liquidity depth polling + order flow tracking
+    // [BRAIN-V2] Start liquidity depth polling + order flow tracking —
+    // required inputs for both the main cycle and the parity shadow cycle.
     serverLiquidity.startDepthPolling(serverState.getConfiguredSymbols());
     serverOrderflow.init();
     serverJournal.start();
     serverSentiment.start(serverState.getConfiguredSymbols());
     serverKNN.start();
     serverReflection.start();
-    _timer = setInterval(_runCycle, CYCLE_INTERVAL_MS);
-    // Run first cycle after short delay to let data settle
-    setTimeout(_runCycle, 5000);
+    if (MF.SERVER_BRAIN) {
+        logger.info('BRAIN', 'Server brain starting (observation mode, 30s cycle)');
+        _timer = setInterval(_runCycle, CYCLE_INTERVAL_MS);
+        // Run first cycle after short delay to let data settle
+        setTimeout(_runCycle, 5000);
+    } else if (MF.PARITY_SHADOW_ENABLED) {
+        // [Phase 2 S3] Shadow-only mode: compute fusion per user/symbol and
+        // write parity rows; NEVER touch serverAT, Telegram, regime history,
+        // reflection, or any other live side-effect path.
+        logger.info('BRAIN', '[S3] Server brain starting in shadow-only mode (parity harness, 30s cycle)');
+        _shadowTimer = setInterval(_runShadowCycle, CYCLE_INTERVAL_MS);
+        setTimeout(_runShadowCycle, 5000);
+    }
     // [ML] Daily prune of old decision snapshots
     setInterval(() => { try { brainLogger.prune(); } catch (_) {} }, 86400000);
 }
@@ -195,7 +208,12 @@ function stop() {
         clearInterval(_timer);
         _timer = null;
     }
+    if (_shadowTimer) {
+        clearInterval(_shadowTimer);
+        _shadowTimer = null;
+    }
     _running = false;
+    _shadowRunning = false;
     logger.info('BRAIN', 'Server brain stopped');
 }
 
@@ -656,6 +674,69 @@ function _runCycle() {
     } finally {
         _running = false;
         brainLock.release('brainCycle');
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3] Parity Harness — Shadow Cycle
+// ══════════════════════════════════════════════════════════════════
+// Runs the minimum required to produce a server-side fusion decision per
+// configured user/symbol: confluence → regime → (pure) gates → fusion.
+// Writes a source='server' row to brain_parity_log and returns. Intentionally
+// DOES NOT: call serverAT.processBrainDecision, send Telegram, persist regime
+// changes, track reflection, call serverMultiEntry, correlation guard,
+// adaptive sizing, or any other live side-effect. Never rethrows — shadow
+// failures must not contaminate the runtime.
+function _runShadowCycle() {
+    if (_shadowRunning) return;
+    // Skip if flag flipped off mid-run or real SERVER_BRAIN took over.
+    if (!MF.PARITY_SHADOW_ENABLED || MF.SERVER_BRAIN) return;
+    _shadowRunning = true;
+    try {
+        const readySymbols = serverState.getReadySymbols();
+        if (!readySymbols || readySymbols.length === 0) return;
+        if (_stcMap.size === 0) return;
+
+        for (const symbol of readySymbols) {
+            const snap = serverState.getSnapshotForSymbol(symbol);
+            if (!snap || !snap.indicators) continue;
+            if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
+
+            const ind = snap.indicators;
+            let confluence, regime, bars;
+            try {
+                confluence = _calcConfluence(snap, ind);
+                regime = {
+                    regime: ind.regime || 'RANGE',
+                    confidence: ind.regimeConf || 0,
+                    trendBias: ind.trendBias || 'neutral',
+                    volatilityState: ind.volatilityState || 'normal',
+                    trapRisk: ind.trapRisk || 0,
+                };
+                bars = serverState.getBarsForSymbol(symbol);
+            } catch (_e) { continue; }
+
+            for (const [userId, stc] of _stcMap) {
+                if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
+                try {
+                    const gates = _checkGates(snap, ind, confluence, stc, userId);
+                    const fusion = _computeFusion(snap, ind, confluence, regime, gates, bars, userId);
+                    if (!fusion) continue;
+                    db.logParityRow(userId, symbol, 'server', {
+                        dir: fusion.dir,
+                        decision: fusion.decision,
+                        confidence: fusion.confidence,
+                        score: fusion.score,
+                        reasons: fusion.reasons,
+                    }, _cycleCount);
+                } catch (_userErr) { /* per-user shadow failure is non-fatal */ }
+            }
+        }
+    } catch (err) {
+        // Top-level guard: log once per N minutes if needed, but never throw.
+        logger.warn('BRAIN', '[S3] Shadow cycle error: ' + (err && err.message));
+    } finally {
+        _shadowRunning = false;
     }
 }
 

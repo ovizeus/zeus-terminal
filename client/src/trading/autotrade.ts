@@ -689,6 +689,29 @@ export function runAutoTradeCheck(): void {
           confidence: _fcRaw.confidence || 0,
           score: _fcRaw.score || 0,
         }
+        // [Phase 2 S3] Parity harness — shadow-only emit.
+        // Fire-and-forget POST to /api/brain/parity/client with the fusion
+        // output. Gated client-side by localStorage zeus_parity_shadow='true'
+        // (default OFF: zero network traffic) and server-side by
+        // MF.PARITY_SHADOW_ENABLED. No UI, no retries, no influence on the
+        // trading path. The server correlates these rows against its own
+        // serverBrain shadow-cycle rows to produce the ≥95% agreement gate.
+        try {
+          if (localStorage.getItem('zeus_parity_shadow') === 'true') {
+            const _sym = getSymbol()
+            if (_sym) {
+              api.raw<any>('POST', '/api/brain/parity/client', {
+                symbol: _sym,
+                dir: _fcRaw.dir || 'neutral',
+                decision: _fcRaw.decision || 'NO_TRADE',
+                confidence: _fcRaw.confidence != null ? _fcRaw.confidence : 0,
+                score: _fcRaw.score != null ? _fcRaw.score : 0,
+                reasons: Array.isArray(_fcRaw.reasons) ? _fcRaw.reasons.slice(0, 8) : [],
+                ts: Date.now(),
+              }).catch(() => { /* parity harness is best-effort */ })
+            }
+          }
+        } catch (_) { /* localStorage blocked or api missing — silent */ }
       }
     } catch (_fcErr: any) { try { console.warn('[AT/FUSION_CACHE]', _fcErr?.message || _fcErr) } catch (_) {} /* non-blocking */ }
 

@@ -989,6 +989,13 @@ app.use('/api/sync', userContextRoutes);
 const journalRoutes = require('./server/routes/journal');
 app.use('/api/journal', journalRoutes);
 
+// ─── [Phase 2 S3] Brain Parity Harness Route ───
+// Mounts POST /api/brain/parity/client + GET /api/brain/parity/report.
+// Shadow-only. Gated by MF.PARITY_SHADOW_ENABLED inside the handlers so the
+// mount itself is inert when the flag is off (current default).
+const brainParityRoutes = require('./server/routes/brainParity');
+app.use('/api/brain/parity', brainParityRoutes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
@@ -1139,18 +1146,25 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 
   // [P3] Start server brain cycle if flag enabled (requires market data)
-  if (MF.SERVER_BRAIN) {
+  // [Phase 2 S3] Also start if PARITY_SHADOW_ENABLED so serverBrain can run
+  // its _runShadowCycle writer for the parity harness. Shadow-only when
+  // SERVER_BRAIN is off — no AT execution, no Telegram, no DB decision log.
+  if (MF.SERVER_BRAIN || MF.PARITY_SHADOW_ENABLED) {
     if (!MF.SERVER_MARKET_DATA) {
-      logger.error('SERVER', '[P3] SERVER_BRAIN requires SERVER_MARKET_DATA — brain NOT started');
+      logger.error('SERVER', '[P3] SERVER_BRAIN/PARITY_SHADOW requires SERVER_MARKET_DATA — brain NOT started');
     } else {
       // Wait for data to populate before starting brain
       setTimeout(() => {
         serverBrain.start();
-        logger.info('SERVER', '[P3] Server brain active (observation mode)');
+        if (MF.SERVER_BRAIN) {
+          logger.info('SERVER', '[P3] Server brain active (observation mode)');
+        } else {
+          logger.info('SERVER', '[S3] Server brain started in shadow-only mode (parity harness)');
+        }
       }, 15000);  // 15s delay for initial candle load
     }
   } else {
-    logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false)');
+    logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false, PARITY_SHADOW_ENABLED=false)');
   }
 
   // [RADAR] Market Radar scanner — polls Binance top-300 USDT perps once/min

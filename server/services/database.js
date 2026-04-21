@@ -487,6 +487,30 @@ migrate('026_login_attempts', () => {
     `);
 });
 
+// [Phase 2 S3] Parity harness storage — shadow-only comparison of client vs
+// server fusion decisions. Rows are written by POST /api/brain/parity/client
+// (source='client') and by serverBrain._runShadowCycle (source='server').
+// Report endpoint correlates rows per (user_id, symbol, created_at ±15s).
+migrate('027_brain_parity_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS brain_parity_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL,
+            symbol       TEXT NOT NULL,
+            source       TEXT NOT NULL CHECK(source IN ('client','server')),
+            cycle        INTEGER,
+            dir          TEXT,
+            decision     TEXT,
+            confidence   REAL,
+            score        REAL,
+            reasons      TEXT,
+            created_at   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_parity_user_symbol_ts ON brain_parity_log(user_id, symbol, created_at);
+        CREATE INDEX IF NOT EXISTS idx_parity_source_ts      ON brain_parity_log(source, created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -998,6 +1022,134 @@ setInterval(_runDailyBackup, 3600000);
 
 process.on('exit', closeDb);
 
+// ─── [Phase 2 S3] Brain Parity Harness Helpers ───
+const _parityInsert = db.prepare(
+    'INSERT INTO brain_parity_log (user_id, symbol, source, cycle, dir, decision, confidence, score, reasons, created_at) '
+    + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+);
+
+function _parityNormalizeDir(d) {
+    if (!d) return 'neutral';
+    const s = String(d).toLowerCase();
+    if (s === 'long' || s === 'bull' || s === 'buy') return 'long';
+    if (s === 'short' || s === 'bear' || s === 'sell') return 'short';
+    return 'neutral';
+}
+
+function logParityRow(userId, symbol, source, fusion, cycle) {
+    // Shadow logging — never throws. Silently skips bad input so parity
+    // infrastructure can never affect the live runtime.
+    try {
+        if (!userId || !symbol) return;
+        if (source !== 'client' && source !== 'server') return;
+        if (!fusion || typeof fusion !== 'object') return;
+        _parityInsert.run(
+            Number(userId),
+            String(symbol).slice(0, 32),
+            source,
+            cycle != null && !isNaN(Number(cycle)) ? Number(cycle) : null,
+            fusion.dir != null ? String(fusion.dir).slice(0, 16) : null,
+            fusion.decision != null ? String(fusion.decision).slice(0, 16) : null,
+            fusion.confidence != null && !isNaN(Number(fusion.confidence)) ? Number(fusion.confidence) : null,
+            fusion.score != null && !isNaN(Number(fusion.score)) ? Number(fusion.score) : null,
+            fusion.reasons ? JSON.stringify(Array.isArray(fusion.reasons) ? fusion.reasons : [String(fusion.reasons)]).slice(0, 4096) : null,
+            Date.now()
+        );
+    } catch (_err) { /* shadow must never throw */ }
+}
+
+function queryParityReport(opts) {
+    opts = opts || {};
+    const since = opts.since != null && !isNaN(Number(opts.since)) ? Number(opts.since) : (Date.now() - 24 * 3600 * 1000);
+    const symbolFilter = opts.symbol ? String(opts.symbol) : null;
+    const userFilter = opts.userId != null && !isNaN(Number(opts.userId)) ? Number(opts.userId) : null;
+    const matchWindowMs = 15000; // ±15s correlation window per audit S3 spec
+
+    // Pull client rows; each is the anchor row we try to pair with a server row
+    const clientSql = 'SELECT id, user_id, symbol, cycle, dir, decision, confidence, score, created_at '
+        + 'FROM brain_parity_log WHERE source = \'client\' AND created_at >= ?'
+        + (userFilter != null ? ' AND user_id = ?' : '')
+        + (symbolFilter ? ' AND symbol = ?' : '')
+        + ' ORDER BY created_at ASC';
+    const clientArgs = [since];
+    if (userFilter != null) clientArgs.push(userFilter);
+    if (symbolFilter) clientArgs.push(symbolFilter);
+    const clientRows = db.prepare(clientSql).all(...clientArgs);
+
+    // Aggregate counts — server rows visible in window for context
+    const serverCountRow = db.prepare(
+        'SELECT COUNT(*) AS cnt FROM brain_parity_log WHERE source = \'server\' AND created_at >= ?'
+        + (userFilter != null ? ' AND user_id = ?' : '')
+        + (symbolFilter ? ' AND symbol = ?' : '')
+    ).get(...clientArgs);
+    const serverRowCount = (serverCountRow && serverCountRow.cnt) || 0;
+
+    const findPair = db.prepare(
+        'SELECT id, dir, decision, confidence, score, created_at FROM brain_parity_log '
+        + 'WHERE source = \'server\' AND user_id = ? AND symbol = ? '
+        + 'AND created_at BETWEEN ? AND ? '
+        + 'ORDER BY ABS(created_at - ?) ASC LIMIT 1'
+    );
+
+    let matched = 0, mismatched = 0, unpaired = 0;
+    const mismatchReasons = new Map();
+    const bySymbol = new Map();
+
+    for (const cr of clientRows) {
+        const sr = findPair.get(cr.user_id, cr.symbol, cr.created_at - matchWindowMs, cr.created_at + matchWindowMs, cr.created_at);
+        if (!sr) { unpaired++; continue; }
+        const dirMatch = _parityNormalizeDir(cr.dir) === _parityNormalizeDir(sr.dir);
+        const tierMatch = (cr.decision || '') === (sr.decision || '');
+        const isMatch = dirMatch && tierMatch;
+        if (isMatch) matched++;
+        else {
+            mismatched++;
+            const parts = [];
+            if (!dirMatch) parts.push('dir:' + (cr.dir || '?') + '->' + (sr.dir || '?'));
+            if (!tierMatch) parts.push('tier:' + (cr.decision || '?') + '->' + (sr.decision || '?'));
+            const key = parts.join(' ') || 'unknown';
+            mismatchReasons.set(key, (mismatchReasons.get(key) || 0) + 1);
+        }
+        if (!bySymbol.has(cr.symbol)) bySymbol.set(cr.symbol, { matched: 0, mismatched: 0 });
+        const b = bySymbol.get(cr.symbol);
+        if (isMatch) b.matched++; else b.mismatched++;
+    }
+
+    const paired = matched + mismatched;
+    const agreementPct = paired > 0 ? Number((100 * matched / paired).toFixed(2)) : null;
+
+    const topMismatches = Array.from(mismatchReasons.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([reason, count]) => ({ reason, count }));
+
+    const bySymbolList = Array.from(bySymbol.entries()).map(([sym, v]) => {
+        const tot = v.matched + v.mismatched;
+        return {
+            symbol: sym,
+            matched: v.matched,
+            mismatched: v.mismatched,
+            agreementPct: tot > 0 ? Number((100 * v.matched / tot).toFixed(2)) : null,
+        };
+    });
+
+    return {
+        since,
+        filters: { symbol: symbolFilter, userId: userFilter },
+        totals: {
+            clientRows: clientRows.length,
+            serverRows: serverRowCount,
+            paired,
+            unpaired,
+            matched,
+            mismatched,
+            agreementPct,
+        },
+        topMismatches,
+        bySymbol: bySymbolList,
+    };
+}
+
 module.exports = {
     db,
     USER_STATUS, // [M6]
@@ -1038,6 +1190,9 @@ module.exports = {
     listAuditLog,
     listAuditLogByUser,
     listAuditLogByTarget,
+    // [Phase 2 S3] Parity harness
+    logParityRow,
+    queryParityReport,
     addPasswordHistory,
     getPasswordHistory,
     migrateFromJson,

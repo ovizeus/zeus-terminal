@@ -28,6 +28,14 @@ const DEFAULTS = {
     // and is paper-traded. Polling (bootstrapInit livePosSync 30s) remains
     // parallel until C6.
     POSITIONS_WS: false,
+    // [Phase 2 S3] Parity harness — shadow-only logging of client fusion
+    // decisions against server `serverBrain` fusion on the same tick. Writes
+    // to `brain_parity_log`; zero runtime influence on live AT/Brain paths.
+    // Independent of the SERVER_/CLIENT_ mutex — turning this on does NOT
+    // flip ownership; it only enables the /api/brain/parity/client POST
+    // handler and the optional `_runShadowCycle` server-side writer. Default
+    // OFF so the harness ships dormant.
+    PARITY_SHADOW_ENABLED: false,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -124,6 +132,7 @@ module.exports = {
     get CLIENT_BRAIN() { return flags.CLIENT_BRAIN; },
     get CLIENT_AT() { return flags.CLIENT_AT; },
     get POSITIONS_WS() { return flags.POSITIONS_WS; },
+    get PARITY_SHADOW_ENABLED() { return flags.PARITY_SHADOW_ENABLED; },
     // Methods
     set,
     getAll,
