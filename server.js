@@ -306,6 +306,48 @@ app.get('/api/at/state', (_req, res) => {
   const _st = serverAT.getFullState(_req.user.id);
   res.json(_st);
 });
+// [Phase 2 S1.B] Canonical resume endpoint.
+// Purpose: a single REST call a client uses after reconnect / refresh / offline
+// / server-restart to rebuild per-user state from authoritative server truth.
+// Never guesses from localStorage.
+//
+// Shape (stable contract):
+//   {
+//     protocol: 1,                       // bump on breaking changes
+//     serverTime: <ms>,                  // wall-clock from server; client uses for drift
+//     version: { version, build, date }, // so client can detect stale builds
+//     userId: <int>,                     // echo — detects session mismatch
+//     at: ServerATState                  // identical to /api/at/state / at_update payload
+//   }
+//
+// Source: serverAT.getFullState() ONLY. Same path as /api/at/state and the
+// WS at_update broadcast — no new truth source, no schema change. Per-user
+// scoped strictly via req.user.id from JWT (sessionAuth middleware);
+// userId is never read from body or query, so it cannot be spoofed.
+//
+// Empty-state behavior: serverAT.getFullState() returns a fully-initialized
+// per-user state (empty positions[], default demo balance, no kill, etc.)
+// for a first-time-connecting user — no special-case branch needed here.
+//
+// Post-restart behavior: serverAT rehydrates from SQLite on module load
+// (at_positions, at_state), so a reconnect after `pm2 reload` returns the
+// same shape as a reconnect against a warm process.
+app.get('/api/at/resume', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  try {
+    const at = serverAT.getFullState(_req.user.id);
+    res.json({
+      protocol: 1,
+      serverTime: Date.now(),
+      version: { version: appVersion.version, build: appVersion.build, date: appVersion.date },
+      userId: _req.user.id,
+      at: at,
+    });
+  } catch (err) {
+    logger.error('AT_RESUME', 'Failed for uid=' + _req.user.id + ': ' + err.message);
+    res.status(500).json({ error: 'resume_failed' });
+  }
+});
 app.get('/api/at/positions', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   res.json({ positions: serverAT.getOpenPositions(_req.user.id) });
@@ -1193,6 +1235,19 @@ wss.on('connection', (ws, req) => {
   try {
     const snap = _buildExchangeSnapshot(uid);
     if (snap) ws.send(JSON.stringify({ type: 'exchange.changed', data: snap }));
+  } catch (_) { /* never block WS accept */ }
+
+  // [Phase 2 S1.A] AT warm-start — per-socket canonical AT state snapshot.
+  // Eliminates the previous gap where a fresh tab had to wait for either the
+  // next serverAT.onChange() broadcast OR the 30s REST polling fallback
+  // before the AT panel rendered anything real. Read path is the same
+  // getFullState(uid) used by /api/at/state and the onChange broadcast, so
+  // the payload shape is identical to what applyATUpdate() already handles
+  // — no client wiring change needed. Per-socket only (not broadcast); other
+  // tabs already hold their own state.
+  try {
+    const atSnap = serverAT.getFullState(uid);
+    if (atSnap) ws.send(JSON.stringify({ type: 'at_update', data: atSnap }));
   } catch (_) { /* never block WS accept */ }
 });
 

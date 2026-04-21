@@ -45,17 +45,38 @@ try {
 }
 
 // ── Safety invariant: mutual exclusion ──
-function _enforceMutex() {
-    if (flags.SERVER_AT && flags.CLIENT_AT) {
-        console.error('[MF] SAFETY VIOLATION: SERVER_AT and CLIENT_AT both true! Forcing CLIENT_AT=false');
-        flags.CLIENT_AT = false;
+// [Phase 2 S1.C] Two enforcement modes:
+//   1. _validateMutex(f)  — pure check, returns {ok,violations[]}. No mutation.
+//   2. _enforceMutexStrict() — called at module load. If invalid, THROWS so the
+//      server process dies at boot. No silent coercion — a corrupt / manually
+//      edited data/migration_flags.json must never boot into dual-execution.
+//   3. set() uses _validateMutex and REJECTS the write instead of coercing.
+//      An admin flipping a flag via /api/migration/flags that would create a
+//      conflict gets an error, not a silent half-applied state.
+function _validateMutex(f) {
+    const violations = [];
+    if (f.SERVER_AT && f.CLIENT_AT) {
+        violations.push('SERVER_AT && CLIENT_AT both true — only one side may own execution');
     }
-    if (flags.SERVER_BRAIN && flags.CLIENT_BRAIN) {
-        console.error('[MF] SAFETY VIOLATION: SERVER_BRAIN and CLIENT_BRAIN both true! Forcing CLIENT_BRAIN=false');
-        flags.CLIENT_BRAIN = false;
+    if (f.SERVER_BRAIN && f.CLIENT_BRAIN) {
+        violations.push('SERVER_BRAIN && CLIENT_BRAIN both true — only one side may own decisioning');
     }
+    return { ok: violations.length === 0, violations };
 }
-_enforceMutex();
+
+function _enforceMutexStrict() {
+    const v = _validateMutex(flags);
+    if (v.ok) return;
+    const header = '[MF] FATAL: migration flag mutex violated — refusing to start.';
+    const detail = v.violations.map((m) => '  • ' + m).join('\n');
+    const hint = '\nFix by editing data/migration_flags.json so at most ONE of '
+        + '{CLIENT_AT,SERVER_AT} and ONE of {CLIENT_BRAIN,SERVER_BRAIN} is true.';
+    console.error(header + '\n' + detail + hint);
+    const err = new Error('Migration flag mutex violation: ' + v.violations.join('; '));
+    err.code = 'MF_MUTEX_VIOLATION';
+    throw err;
+}
+_enforceMutexStrict();
 
 // ── Persist to disk ──
 function save() {
@@ -71,11 +92,20 @@ function save() {
 }
 
 // ── Update a flag safely ──
+// [Phase 2 S1.C] Reject the write if the resulting state would violate mutex
+// instead of silently coercing the opposite flag to false. Caller (admin)
+// must disable the conflicting flag first.
 function set(key, value) {
     if (!(key in DEFAULTS)) throw new Error(`Unknown migration flag: ${key}`);
     if (typeof value !== 'boolean') throw new Error(`Migration flag value must be boolean`);
+    const candidate = Object.assign({}, flags, { [key]: value });
+    const v = _validateMutex(candidate);
+    if (!v.ok) {
+        const err = new Error('Migration flag mutex violation: ' + v.violations.join('; '));
+        err.code = 'MF_MUTEX_VIOLATION';
+        throw err;
+    }
     flags[key] = value;
-    _enforceMutex();
     save();
     console.log(`[MF] ${key} = ${flags[key]}`);
     return Object.assign({}, flags);
