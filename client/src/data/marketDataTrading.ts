@@ -42,17 +42,21 @@ export function switchGlobalMode(mode: any): void {
 
 function _executeGlobalModeSwitch(mode: string): void {
   console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') POSTing...')
+  // [R5] Flush pending _usSave BEFORE the POST, not in the .then callback.
+  // The server broadcasts a WS at_update as soon as it flips the mode, which
+  // races the HTTP response: _applyServerATState (state.ts) and applyATUpdate
+  // (useServerSync.ts) both flip AT.mode + useATStore.mode on that frame. If
+  // the flush ran in .then, _currentATModeKey() read the already-flipped NEW
+  // mode and _usSave wrote the outgoing mode's pending flat values (profile,
+  // DSL mode) into the WRONG brain slot (the new mode). Flushing pre-POST
+  // locks in the correct OLD-mode slot before any WS frame can arrive.
+  try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
   api.raw<any>('POST', '/api/at/mode', { mode }).then(function (data: any) {
     console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') response ok=' + data.ok)
     if (data.ok) {
-      // [BRAIN-MODE-SPLIT b74] Flush pending _usSave BEFORE flipping the AT
-      // mode, so the outgoing mode's current profile/bmMode lands in its own
-      // namespace (USER_SETTINGS.brain[old]) — otherwise an 800ms-debounced
-      // change just before the switch would leak into the new mode.
       const _prevMode = (typeof AT !== 'undefined' && (AT as any).mode) ? (AT as any).mode : 'demo'
       const _usBefore = (window as any).USER_SETTINGS || {}
       console.log('[BRAIN-SPLIT] switch: ' + _prevMode + ' → ' + mode + ' | prev flat=' + _usBefore.profile + '/' + _usBefore.bmMode + ' | brain=' + JSON.stringify(_usBefore.brain || {}))
-      try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
       // [BRAIN-MODE-SPLIT b74 hotfix] Flip BOTH AT.mode and atStore.mode synchronously,
       // not only AT._serverMode. getATMode() reads useATStore.mode, so without this the
       // badge, _currentATModeKey (for _usSave) and any getATMode consumer stayed on the
