@@ -253,13 +253,36 @@ export function placeDemoOrder(): void {
   if (_curMode === 'live' && (_curEnv === null || !w._apiConfigured)) { const _r = w._executionBlockedReason; toast('Cannot place order \u2014 ' + (_r === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.lock); return }
 
   // [DSL-OFF] Pre-open guard: if DSL engine is OFF, prompt user before placing any manual order
+  // [Phase 12.A — Batch F] REAL manual order confirm. TESTNET skips confirm (flow remains
+  //   identical to DEMO). REAL branch reads live order parameters (side/symbol/size/leverage
+  //   /entry type / price / TP / SL) and exchange label from useUiStore.activeExchange —
+  //   no more hardcoded "Binance" lies. DEMO and LOCKED also skip this confirm.
   const _continueToLiveOrPlace = function () {
-    if (_curMode === 'live' && w._apiConfigured) {
-      const _isTestnet = _curEnv === 'TESTNET'
+    if (_curMode === 'live' && w._apiConfigured && _curEnv === 'REAL') {
+      const _side = TP.demoSide === 'LONG' ? 'LONG' : 'SHORT'
+      const _sym = getSymbol()
+      const _ordTypeSel = el('demoOrdType')
+      const _ordType = (_ordTypeSel && _ordTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
+      const _size = parseFloat(el('demoSize')?.value || '0')
+      const _lev = getDemoLev()
+      const _tp = parseFloat(el('demoTP')?.value || '') || null
+      const _sl = parseFloat(el('demoSL')?.value || '') || null
+      const _entryPrice = _ordType === 'MARKET' ? getPrice() : (parseFloat(el('demoEntry')?.value || '') || 0)
+      const _activeExch = useUiStore.getState().activeExchange
+      const _exchLabel = _activeExch === 'binance' ? 'BINANCE' : _activeExch === 'bybit' ? 'BYBIT' : 'ACTIVE EXCHANGE'
+      const _entryTxt = _entryPrice > 0 ? ('$' + _entryPrice.toFixed(2)) : '—'
+      const _lines: string[] = []
+      _lines.push(_side + ' ' + _sym + ' \u2014 ' + _ordType + ' @ ' + _entryTxt)
+      _lines.push('Size: $' + (Number.isFinite(_size) ? _size.toFixed(2) : '—') + '  \u00B7  Leverage: ' + _lev + 'x')
+      _lines.push('Exchange: ' + _exchLabel + '  \u00B7  Env: REAL')
+      if (_tp) _lines.push('TP: $' + _tp.toFixed(2))
+      if (_sl) _lines.push('SL: $' + _sl.toFixed(2))
+      _lines.push('')
+      _lines.push('This order will execute with REAL funds. This action cannot be undone.')
       _showConfirmDialog(
-        _isTestnet ? 'Place Testnet Order?' : 'Place Real Order?',
-        _isTestnet ? 'You are about to place an order on Binance TESTNET with TEST funds.' : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.',
-        'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order',
+        'Place REAL order on ' + _exchLabel + '?',
+        _lines.join('\n'),
+        'Cancel', 'Place REAL Order',
         function () { _executePlaceDemoOrder() }
       )
       return
