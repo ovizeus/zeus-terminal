@@ -535,6 +535,21 @@ router.post('/user/settings', validateSettingsBody, (req, res) => {
     const existing = db.getUserSettings(req.user.id) || {};
     const merged = { ...existing, ...clean };
 
+    // [R5] Deep-merge per-mode brain namespace. Top-level spread replaces the
+    // whole `brain` object, so a client POST carrying only `{brain:{demo:{...}}}`
+    // would silently wipe `brain.live` (and vice-versa). Preserve both slots by
+    // merging each namespace shallowly against the existing snapshot. An empty
+    // slot in the payload (`{live:{...},demo:{}}`) is still merged defensively
+    // so nothing is clobbered.
+    if (clean.brain && typeof clean.brain === 'object' && !Array.isArray(clean.brain)) {
+      const existingBrain = (existing.brain && typeof existing.brain === 'object' && !Array.isArray(existing.brain))
+        ? existing.brain : { live: {}, demo: {} };
+      merged.brain = {
+        live: { ...(existingBrain.live || {}), ...(clean.brain.live || {}) },
+        demo: { ...(existingBrain.demo || {}), ...(clean.brain.demo || {}) },
+      };
+    }
+
     const updatedAt = db.saveUserSettings(req.user.id, merged);
 
     // [MIGRATION-F0] Fan-out to every live session of this user so other
