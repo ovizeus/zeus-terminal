@@ -37,11 +37,16 @@ export function connectLiveAPI(): void {
       }
       return
     }
-    const exchange = data.exchange || 'binance'
+    // [Phase 12.A — Batch H cleanup] No more hardcoded "binance" default.
+    // Whitelist server truth; null when unknown, never faked. Display label
+    // falls back to neutral "ACTIVE EXCHANGE" instead of inventing a brand.
+    const _rawExch = data.exchange
+    const exchange: 'binance' | 'bybit' | null = (_rawExch === 'binance' || _rawExch === 'bybit') ? _rawExch : null
     const mode = data.mode || 'live'
     w.TP.liveConnected = true; w.TP.liveExchange = exchange
+    const _exchDisplay = exchange ? exchange.toUpperCase() : 'ACTIVE EXCHANGE'
     if (st) {
-      st.innerHTML = _ZI.ok + ' <b>' + exchange.toUpperCase() + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
+      st.innerHTML = _ZI.ok + ' <b>' + _exchDisplay + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
       st.style.color = 'var(--grn)'
     }
     const form = el('liveOrderForm'); if (form) form.style.display = 'block'

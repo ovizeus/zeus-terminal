@@ -10,6 +10,7 @@ import { BM } from '../core/config'
 import { useBrainStore } from '../stores/brainStore'
 import { useATStore } from '../stores/atStore'
 import { usePositionsStore } from '../stores/positionsStore'
+import { useUiStore } from '../stores/uiStore'
 import type { ATUI } from '../stores/atStore'
 import { isValidMarketPrice, escHtml, el } from '../utils/dom'
 import { fmtNow, toast } from '../data/marketDataHelpers'
@@ -108,11 +109,16 @@ function _continueAutoTradeEnable(): void {
         return
       }
       var _atTest = _atEnv === 'TESTNET'
+      // [Phase 12.A — Batch H cleanup] No more hardcoded "Binance" in AT
+      // enable confirm. Exchange label derived from useUiStore.activeExchange;
+      // null → neutral "your active exchange" fallback (honest, no lies).
+      var _atExch = useUiStore.getState().activeExchange
+      var _atExchLabel = _atExch === 'binance' ? 'BINANCE' : _atExch === 'bybit' ? 'BYBIT' : 'your active exchange'
       _showConfirmDialog(
         _atTest ? 'Enable AutoTrade in TESTNET Mode?' : 'Enable AutoTrade in LIVE Mode?',
         _atTest
-          ? 'You are about to enable AutoTrade on Binance TESTNET.\n\nThe system will automatically execute orders with TEST funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings are configured before proceeding.'
-          : 'You are about to enable AutoTrade while in LIVE mode.\n\nThe system will automatically execute REAL orders on Binance using REAL funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings, leverage, and position size are correctly configured before proceeding.',
+          ? 'You are about to enable AutoTrade on ' + _atExchLabel + ' TESTNET.\n\nThe system will automatically execute orders with TEST funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings are configured before proceeding.'
+          : 'You are about to enable AutoTrade while in LIVE mode.\n\nThe system will automatically execute REAL orders on ' + _atExchLabel + ' using REAL funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings, leverage, and position size are correctly configured before proceeding.',
         'Cancel', _atTest ? 'Enable Testnet AT' : 'Enable Live AT',
         function () { _doEnableAT() }
       )
