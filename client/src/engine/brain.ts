@@ -608,6 +608,14 @@ function _applyDslMode(mode: string): void {
   const labels: any = { atr: _ZI.plug + ' ATR', fast: _ZI.bolt + ' FAST', swing: _ZI.wave + ' SWING', defensive: _ZI.sh + ' DEF', tp: _ZI.tgt + ' TP' }
   brainThink('info', _ZI.bolt + ' DSL Mode → ' + (labels[mode] || mode.toUpperCase()))
   _setRadio(['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp'], 'dsl-' + mode, 'znc-dbtn', 'act-dsl-' + mode)
+  // [R3] Align with _applyModeSwitch / _applyProfileSwitch which both call
+  // _usScheduleSave() on mutation. Without this, a DSL-mode pick followed by
+  // a rapid AT mode-switch (<800ms) left USER_SETTINGS.brain[oldMode].dslSettings
+  // stale — the outgoing mode's new DSL pick was never persisted to its own
+  // namespace before applyBrainCfgForMode(newMode) overwrote useDslStore with
+  // the new mode's saved value. _usSave reads useDslStore directly, so the
+  // current DSL pick lands in USER_SETTINGS.brain[curMode] at save time.
+  if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
 
 export function setDslMode(mode: any): void {
