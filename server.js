@@ -348,6 +348,48 @@ app.get('/api/at/resume', (_req, res) => {
     res.status(500).json({ error: 'resume_failed' });
   }
 });
+// [Phase 2 S2.B] Global PANIC halt — admin-only entry kill switch.
+// Persisted in at_state(key='global:halt'); read on every brain-driven +
+// server-AT live entry path (serverAT.processBrainDecision, _executeLiveEntry).
+// Survives restarts because the DB row is durable and serverAT reads on
+// every attempt (no stale in-memory cache).
+//
+// Contract:
+//   GET  /api/panic           → { active, by, ts, reason }   (any authed user)
+//   POST /api/panic           → body { active:boolean, reason?:string }
+//                               admin-only; userId from JWT (never body).
+//                               Response: { ok, halted, by, ts, reason }
+//
+// Safety:
+//   • userId source = req.user.id (JWT); never body/query — no spoofing.
+//   • Role check = admin; other users get 403.
+//   • No scope creep — no per-user opt-in, no global flag flip, no UI toggle.
+app.get('/api/panic', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  try {
+    res.json(serverAT.getGlobalHaltState());
+  } catch (err) {
+    logger.error('PANIC_GET', 'Failed: ' + err.message);
+    res.status(500).json({ error: 'halt_read_failed' });
+  }
+});
+app.post('/api/panic', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  if (_req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const body = _req.body || {};
+  if (typeof body.active !== 'boolean') {
+    return res.status(400).json({ error: 'active must be boolean' });
+  }
+  const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 200) : null;
+  try {
+    const state = serverAT.setGlobalHalt(body.active, _req.user.id, reason);
+    res.json({ ok: true, halted: state.active, by: state.by, ts: state.ts, reason: state.reason });
+  } catch (err) {
+    logger.error('PANIC_SET', 'Failed uid=' + _req.user.id + ': ' + err.message);
+    res.status(500).json({ error: 'halt_write_failed', detail: err.message });
+  }
+});
+
 app.get('/api/at/positions', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   res.json({ positions: serverAT.getOpenPositions(_req.user.id) });

@@ -5,6 +5,7 @@
 // Per-user isolation: each userId has independent state, positions, balance.
 'use strict';
 
+const crypto = require('crypto');
 const Sentry = require('@sentry/node');
 const logger = require('./logger');
 const MF = require('../migrationFlags');
@@ -75,6 +76,76 @@ function _uState(userId) {
     if (!userId) throw new Error('[AT] _uState called without userId');
     if (!_userState.has(userId)) _userState.set(userId, _defaultUserState());
     return _userState.get(userId);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S2.A] Decision Idempotency
+// ══════════════════════════════════════════════════════════════════
+// Stable 8-char hex token generated once per brain decision event and
+// stamped on the position entry (entry.decisionId). Combined with
+// entry.seq it builds the `newClientOrderId` passed to Binance, which
+// gives exchange-level dedupe: a retried POST /fapi/v1/order with the
+// same clientOrderId returns the original order instead of creating a
+// duplicate. 32 bits of entropy × per-user seq = no realistic collision.
+// decisionId survives restarts because it's persisted inside the
+// at_positions.data JSON blob (no schema change).
+function _newDecisionId() {
+    return crypto.randomBytes(4).toString('hex');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S2.B] Global PANIC Halt — cross-user entry kill switch
+// ══════════════════════════════════════════════════════════════════
+// Persisted in at_state under key 'global:halt' (TEXT PRIMARY KEY ⇒
+// single canonical row). user_id records which admin toggled it
+// (schema requires NOT NULL). Read on every brain-driven + live entry
+// path; write only via admin-gated POST /api/panic. Survives restarts
+// because at_state is SQLite-persisted. No schema migration needed.
+function isGlobalHaltActive() {
+    try {
+        const val = db.atGetState('global:halt');
+        return !!(val && val.active);
+    } catch (e) {
+        // Read-failure must not silently pass entries — treat as halted so
+        // a broken DB doesn't let orders through. Matches Hard Rule #4
+        // (fail fast, no silent coerce).
+        logger.error('AT_ENGINE', 'isGlobalHaltActive read failed — defaulting to HALTED for safety: ' + e.message);
+        return true;
+    }
+}
+
+function getGlobalHaltState() {
+    try {
+        const val = db.atGetState('global:halt');
+        if (!val) return { active: false, by: null, ts: null, reason: null };
+        return {
+            active: !!val.active,
+            by: val.by != null ? val.by : null,
+            ts: val.ts != null ? val.ts : null,
+            reason: val.reason || null,
+        };
+    } catch (e) {
+        return { active: true, by: null, ts: null, reason: null, error: e.message };
+    }
+}
+
+function setGlobalHalt(active, byUserId, reason) {
+    if (!byUserId) throw new Error('setGlobalHalt requires byUserId (admin)');
+    const payload = {
+        active: !!active,
+        by: byUserId,
+        ts: Date.now(),
+        reason: reason || null,
+    };
+    db.atSetState('global:halt', payload, byUserId);
+    logger.warn('AT_ENGINE', `GLOBAL_HALT ${active ? 'ARMED' : 'DISARMED'} by uid=${byUserId}` + (reason ? ' — ' + reason : ''));
+    try { audit.record('GLOBAL_HALT_TOGGLE', { active: !!active, by: byUserId, reason: reason || null }, 'SERVER_AT'); } catch (_) { /* best-effort */ }
+    try {
+        telegram.sendToUser(byUserId, active
+            ? `🛑 *GLOBAL HALT ARMED*${reason ? '\nReason: ' + reason : ''}\nAll new entries blocked server-wide.`
+            : '✅ *GLOBAL HALT DISARMED*\nEntries re-enabled.');
+    } catch (_) { /* best-effort */ }
+    return payload;
 }
 
 // ── Kill Switch config (per-user, persisted in _uState) ──
@@ -537,6 +608,14 @@ function processBrainDecision(decision, stc, userId) {
     // [MULTI-USER] Hard guard — reject decisions without userId
     if (!userId) { logger.error('AT_ENGINE', 'processBrainDecision called without userId — skipping'); return null; }
 
+    // [Phase 2 S2.B] Global panic halt — hard block before any per-user gate.
+    // Must come before _uState() to stay cheap when halted.
+    if (isGlobalHaltActive()) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — GLOBAL_HALT active`);
+        _recordMissedTrade(userId, decision, 'GLOBAL_HALT');
+        return null;
+    }
+
     const us = _uState(userId);
 
     // [F1] Per-user AT on/off gate — if user disabled AT, block ALL entries
@@ -619,6 +698,9 @@ function processBrainDecision(decision, stc, userId) {
         seq: ++us.seq,
         userId: userId,
         ts: Date.now(),
+        // [Phase 2 S2.A] Stable decision id — feeds newClientOrderId on exchange
+        // so retries/restarts yield the same order identity (Binance dedups).
+        decisionId: _newDecisionId(),
         cycle: decision.cycle,
         symbol: decision.symbol,
         side: side,
@@ -813,6 +895,24 @@ async function _executeLiveEntry(entry, stc) {
         return;
     }
 
+    // [Phase 2 S2.B] Global panic halt — re-check before touching the exchange.
+    // Admin may have armed halt between processBrainDecision and the live task
+    // picking up from the event loop. No exchange call must go out while halted.
+    if (isGlobalHaltActive()) {
+        logger.warn('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} — GLOBAL_HALT active`);
+        entry.live = { status: 'GLOBAL_HALT' };
+        _pushLog(userId, 'LIVE_GLOBAL_HALT', { seq: entry.seq });
+        const abortIdx = _positions.indexOf(entry);
+        if (abortIdx >= 0) {
+            entry.closeReason = 'GLOBAL_HALT_INFLIGHT';
+            entry.closePnl = 0;
+            entry.closeTs = Date.now();
+            if (_persistClose(entry)) { _positions.splice(abortIdx, 1); _persistState(userId); }
+        }
+        us.liveStats.blocked++;
+        return;
+    }
+
     const creds = getExchangeCreds(userId);
     if (!creds) {
         entry.live = { status: 'NO_CREDS' };
@@ -862,7 +962,17 @@ async function _executeLiveEntry(entry, stc) {
     }
 
     const liveSeq = ++us.liveSeq;
-    const clientOrderId = `SAT_${liveSeq}_${Date.now()}`;
+    // [Phase 2 S2.A] Stable newClientOrderId derived from entry.seq + decisionId
+    // instead of Date.now(). Retries (in-process or cross-restart) produce the
+    // SAME token, so Binance dedups at the exchange (returns the original order
+    // on resend rather than creating a duplicate). Format: SAT_<seq>_<8hex>
+    // — always ≤ 36 chars (Binance limit). Falls back to Date.now() only if a
+    // legacy position somehow lacks decisionId (pre-S2 positions rehydrated
+    // after deploy; such positions never retry this path).
+    const _decTok = (entry.decisionId && /^[0-9a-f]{8}$/.test(entry.decisionId))
+        ? entry.decisionId
+        : crypto.randomBytes(4).toString('hex');
+    const clientOrderId = `SAT_${entry.seq}_${_decTok}`;
 
     // Set leverage — BLOCKING: wrong leverage = wrong risk
     for (let levAttempt = 0; levAttempt < 2; levAttempt++) {
@@ -891,6 +1001,18 @@ async function _executeLiveEntry(entry, stc) {
     const roundedTp = roundOrderParams(entry.symbol, entry.qty, entry.tp);
     const qty = String(rounded.quantity || entry.qty);
 
+    // [Phase 2 S2.A] Idempotency short-circuit — if this entry was persisted
+    // with mainOrderId already set (server died between MAIN success and SL
+    // and we rehydrated from DB, or _executeLiveEntry was somehow re-invoked
+    // for the same entry), skip the POST. The exchange already has the order
+    // under our stable clientOrderId; re-POSTing would either be deduped by
+    // Binance or, worst case, risk a duplicate. Persisted state wins.
+    if (entry.live && entry.live.mainOrderId) {
+        logger.warn('AT_LIVE', `[${entry.seq}] MAIN order already recorded (${entry.live.mainOrderId}) — idempotency skip`);
+        audit.record('SAT_ENTRY_DEDUP_SKIP', { userId, seq: entry.seq, symbol: entry.symbol, existingOrderId: entry.live.mainOrderId, clientOrderId }, 'SERVER_AT');
+        return;
+    }
+
     // MARKET entry
     let mainOrder;
     try {
@@ -900,6 +1022,17 @@ async function _executeLiveEntry(entry, stc) {
             type: 'MARKET', quantity: qty,
             newClientOrderId: clientOrderId,
         }, creds);
+        // [Phase 2 S2.A] Persist mainOrderId + clientOrderId immediately so a
+        // crash between here and the final entry.live assignment at line ~1162
+        // cannot lose our idempotency key. The later reassignment of entry.live
+        // is a superset (adds SL/TP orderIds), so overwriting is safe.
+        entry.live = Object.assign({}, entry.live, {
+            status: 'MAIN_PLACED',
+            mainOrderId: mainOrder.orderId,
+            clientOrderId,
+            decisionId: entry.decisionId || null,
+        });
+        _persistPosition(entry);
     } catch (err) {
         entry.live = { status: 'ENTRY_FAILED', error: err.message };
         _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: err.message });
@@ -1161,6 +1294,9 @@ async function _executeLiveEntry(entry, stc) {
 
     entry.live = {
         status: (!slOrder) ? 'LIVE_NO_SL' : 'LIVE', liveSeq, clientOrderId,
+        // [Phase 2 S2.A] Carry decisionId forward so it's visible in the
+        // persisted live state (audit trail + client diagnostics).
+        decisionId: entry.decisionId || null,
         mainOrderId: mainOrder.orderId, avgPrice, executedQty,
         slOrderId: slOrder ? slOrder.orderId : null,
         tpOrderId: tpOrder ? tpOrder.orderId : null,
@@ -3370,6 +3506,10 @@ module.exports = {
     reset,
     addDemoFunds,
     resetDemoBalance,
+    // [Phase 2 S2.B] Global panic halt
+    isGlobalHaltActive,
+    getGlobalHaltState,
+    setGlobalHalt,
     // Client actions
     registerManualPosition,
     patchPositionFill,
