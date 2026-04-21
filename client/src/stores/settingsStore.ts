@@ -147,6 +147,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
         const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
         set({ settings: merged, loaded: true })
         _projectAll(merged)
+        _reapplyBrainCfgForCurrentMode()
         return
       }
       // ok === false → offline / transient; fall through to offline fallback
@@ -168,6 +169,7 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
       const merged: SettingsPayload = { ...DEFAULT_SETTINGS, ...projected }
       set({ settings: merged, loaded: true })
       _projectAll(merged)
+      _reapplyBrainCfgForCurrentMode()
     } catch {
       set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
     }
@@ -246,6 +248,32 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
   },
 }));
 (window as any).__zeusSettingsStore = useSettingsStore
+
+/**
+ * [R4] After loadFromServer hydrates USER_SETTINGS (including the per-mode
+ * `brain.live` / `brain.demo` namespaces), re-apply the current AT-mode's
+ * brain/DSL config to the UI. Without this, a `settings.changed` WS push
+ * updated the nested tree but left window.S, useBrainStore, useDslStore and
+ * the DOM radios untouched — cross-tab updates were invisible until the
+ * user toggled AT mode manually. Idempotent: applyBrainCfgForMode simply
+ * re-writes the same values when nothing has changed.
+ *
+ * Gated on `w.applyBrainCfgForMode` because config.ts exposes it on window
+ * after module init; during early boot (settingsStore created before
+ * config.ts runs) the gate is a silent no-op and the _usApply path later
+ * applies the config when brain/UI are ready.
+ */
+function _reapplyBrainCfgForCurrentMode(): void {
+  try {
+    const w = window as any
+    if (typeof w.applyBrainCfgForMode !== 'function') return
+    const m = useATStore.getState().mode
+    const modeKey: 'live' | 'demo' = m === 'live' ? 'live' : 'demo'
+    w.applyBrainCfgForMode(modeKey)
+  } catch {
+    /* defensive — settings hydration must not throw into WS handler */
+  }
+}
 
 /**
  * Project the legacy USER_SETTINGS (nested) + window.TC mirror into the
