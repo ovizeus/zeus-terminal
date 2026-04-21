@@ -8,6 +8,30 @@ export function Header() {
   const email = useAuthStore((s) => s.email)
   const role = useAuthStore((s) => s.role)
   const clearAuth = useAuthStore((s) => s.clearAuth)
+  // [Phase 12.A — Batch E1] Global exchange+env badge derived from server truth.
+  //   DEMO                 → single pill "DEMO"
+  //   TESTNET + binance    → "TESTNET · BINANCE"
+  //   TESTNET + bybit      → "TESTNET · BYBIT"
+  //   TESTNET + null       → "TESTNET · ACTIVE EXCHANGE" (honest fallback)
+  //   REAL    + binance    → "REAL · BINANCE"
+  //   REAL    + bybit      → "REAL · BYBIT"
+  //   REAL    + null       → "REAL · ACTIVE EXCHANGE"
+  //   executionEnv === null → "LOCKED" (no creds / blocked)
+  //   Click opens Settings modal so the user can jump straight to Exchange API.
+  const executionEnv = useUiStore((s) => s.executionEnv)
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const engineMode = useATStore((s) => s.mode) || 'demo'
+  const _badge = (() => {
+    if (engineMode === 'demo' || executionEnv === 'DEMO') {
+      return { text: 'DEMO', cls: 'zhb-demo' }
+    }
+    if (executionEnv === null) {
+      return { text: 'LOCKED', cls: 'zhb-locked' }
+    }
+    const exch = activeExchange === 'binance' ? 'BINANCE' : activeExchange === 'bybit' ? 'BYBIT' : 'ACTIVE EXCHANGE'
+    if (executionEnv === 'TESTNET') return { text: `TESTNET \u00B7 ${exch}`, cls: 'zhb-testnet' }
+    return { text: `REAL \u00B7 ${exch}`, cls: 'zhb-real' }
+  })()
 
   function handleLogout() {
     if (!confirm('Are you sure you want to log out?')) return
@@ -139,6 +163,35 @@ export function Header() {
             </svg></button>
           </div>
           <div className="hdr-price">
+            {/* [Phase 12.A — Batch E1] Exchange+env identity badge. Inline styles
+                (no global CSS touch) keep this additive and isolated. */}
+            <button
+              type="button"
+              id="hdrExchBadge"
+              title="Exchange + execution env. Click to open Settings."
+              onClick={() => openModal('settings')}
+              style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                padding: '3px 7px',
+                marginBottom: '2px',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontFamily: 'var(--ff)',
+                border: '1px solid',
+                background: 'transparent',
+                color: _badge.cls === 'zhb-demo' ? '#aa44ff'
+                  : _badge.cls === 'zhb-testnet' ? '#f0c040'
+                  : _badge.cls === 'zhb-real' ? '#ff4466'
+                  : /* locked */ '#ff8844',
+                borderColor: _badge.cls === 'zhb-demo' ? '#aa44ff66'
+                  : _badge.cls === 'zhb-testnet' ? '#f0c04066'
+                  : _badge.cls === 'zhb-real' ? '#ff446666'
+                  : '#ff884466',
+                whiteSpace: 'nowrap',
+              }}
+            >{_badge.text}</button>
             <span id="userEmail" style={{ fontSize: '8px', color: '#556', letterSpacing: '0.5px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</span>
           </div>
         </div>

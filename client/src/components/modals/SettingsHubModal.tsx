@@ -84,7 +84,25 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   }
 
   async function exDisconnect(ex: string) {
-    if (!confirm(`Disconnect ${ex}?`)) return
+    // [Phase 12.A — Batch E3] Stricter confirm for REAL disconnect. Live
+    // positions opened on the exchange remain on the exchange after
+    // disconnect — Zeus just stops managing them. Testnet keeps a light
+    // confirm (zero-cost operation).
+    const info = exAccounts[ex]
+    const exLabel = ex === 'binance' ? 'Binance' : 'Bybit'
+    const isReal = info?.mode === 'live'
+    if (isReal) {
+      const _warn =
+        `Disconnect REAL ${exLabel}?\n\n` +
+        `• You are disconnecting a REAL exchange with live funds.\n` +
+        `• Any live positions already opened on the exchange will REMAIN on the exchange — they are not closed by Zeus.\n` +
+        `• Zeus will STOP managing those positions (no SL/TP enforcement, no autoTrade, no risk guards) once the integration is removed.\n` +
+        `• You must monitor and close them manually on ${exLabel}'s own interface until you re-add valid API credentials.\n\n` +
+        `Continue with disconnect?`
+      if (!confirm(_warn)) return
+    } else {
+      if (!confirm(`Disconnect ${exLabel} TESTNET?`)) return
+    }
     const r = await apiFetch('/api/exchange/disconnect', { exchange: ex })
     if (r.ok) setExAccounts(p => { const n = { ...p }; delete n[ex]; return n })
     else exSetMsg(ex, r.error || 'Error', false)
@@ -362,7 +380,18 @@ export function SettingsHubModal({ visible, onClose }: Props) {
             const _isBlocked = !info && _activeExchange !== null && _activeExchange !== ex
             const _activeLabel = _activeExchange === 'binance' ? 'Binance' : _activeExchange === 'bybit' ? 'Bybit' : ''
             const _targetLabel = ex === 'binance' ? 'Binance' : 'Bybit'
-            const _blockedMsg = `${_targetLabel} is blocked because ${_activeLabel} API credentials are currently active for this account. Zeus allows only one active exchange at a time. To use ${_targetLabel}, first disconnect the active ${_activeLabel} API credentials, then return and add valid ${_targetLabel} API credentials.`
+            // [Phase 12.A — Batch E2] Pre-submit EXCHANGE_CONFLICT preview.
+            // Same text shape the server returns in 409 EXCHANGE_CONFLICT — we
+            // anticipate it here so the user never wastes keys on a doomed save.
+            const _blockedMsg = `SAVE DISABLED \u2014 ${_targetLabel} is blocked because ${_activeLabel} API credentials are currently active for this account. Zeus allows only one active exchange at a time. To use ${_targetLabel}, first disconnect the active ${_activeLabel} API credentials, then return and add valid ${_targetLabel} API credentials.`
+            // [Phase 12.A — Batch E2] Pre-submit ENV_CONFLICT hint.
+            // When the same exchange is already connected (at testnet or live),
+            // the card renders in info-mode with no mode toggles visible — so
+            // there's no way to trigger ENV_CONFLICT via UI. Surface a clear
+            // explanation so the user knows WHY they can't directly switch.
+            const _modeHint = info
+              ? `Currently connected in ${info.mode.toUpperCase()} mode. To switch to ${info.mode === 'live' ? 'TESTNET' : 'LIVE'}, disconnect first, then re-add credentials with the desired mode.`
+              : ''
             return (
               <div key={ex} data-ex-card={ex} data-ex-blocked={_isBlocked ? '1' : '0'} style={{background:'#0a1018',border:`1px solid ${_isBlocked ? '#ff884433' : `${accentColor}33`}`,borderRadius:'6px',padding:'12px',marginBottom:'10px',opacity:_isBlocked ? 0.75 : 1}}>
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
@@ -372,10 +401,16 @@ export function SettingsHubModal({ visible, onClose }: Props) {
                   </span>
                 </div>
                 {info ? (
-                  <div style={{fontSize:'9px',color:'#8899aa',marginBottom:'8px'}}>
-                    Balance: <span style={{color:'#00d97a'}}>${(info.balance||0).toFixed(2)}</span>
-                    {info.lastVerified && <span style={{color:'#445',marginLeft:'8px'}}>· {new Date(info.lastVerified).toLocaleString('ro-RO')}</span>}
-                  </div>
+                  <>
+                    <div style={{fontSize:'9px',color:'#8899aa',marginBottom:'8px'}}>
+                      Balance: <span style={{color:'#00d97a'}}>${(info.balance||0).toFixed(2)}</span>
+                      {info.lastVerified && <span style={{color:'#445',marginLeft:'8px'}}>· {new Date(info.lastVerified).toLocaleString('ro-RO')}</span>}
+                    </div>
+                    {/* [Phase 12.A — Batch E2] Mode-switch hint on connected card. */}
+                    <div data-ex-mode-hint={ex} style={{fontSize:'8px',color:'#6688aa',lineHeight:'1.6',marginBottom:'8px',fontStyle:'italic'}}>
+                      {_modeHint}
+                    </div>
+                  </>
                 ) : _isBlocked ? (
                   <div data-ex-blocked-msg={ex} style={{fontSize:'9px',color:'#ff8844',lineHeight:'1.6',marginBottom:'8px',background:'#1a0d08',border:'1px solid #ff884422',borderRadius:'3px',padding:'8px'}}>
                     {_blockedMsg}
