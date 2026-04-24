@@ -705,7 +705,10 @@ function _runShadowCycle() {
             const ind = snap.indicators;
             let confluence, regime, bars;
             try {
-                confluence = _calcConfluence(snap, ind);
+                // [Phase 2 S3.1c] Use client-mirror confluence for shadow rows
+                // so parity agreement is computed on matching formula +
+                // matching indicator set (RSI/ST/LS/FR/OI, not MACD).
+                confluence = _calcConfluenceParity(snap, ind);
                 regime = {
                     regime: ind.regime || 'RANGE',
                     confidence: ind.regimeConf || 0,
@@ -738,6 +741,78 @@ function _runShadowCycle() {
     } finally {
         _shadowRunning = false;
     }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3.1c] Parity Confluence — mirrors client calcConfluenceScore
+// Used ONLY by _runShadowCycle for parity rows; the live _calcConfluence
+// below stays untouched so server's live brain (if ever flipped) keeps
+// its [SHORT-FIX] direction-agnostic scoring. S3.1c aligns the shadow
+// formula to the client's in client/src/engine/confluence.ts so the
+// ≥95% agreement gate is computed on the same indicator set + same
+// score shape. Residual gap: client uses LongShort ratio (getLS()),
+// server has no LS feed yet → lsDir defaults to 'neut' here, mirroring
+// client's neutral-LS behavior; a follow-up batch should add
+// /futures/data/topLongShortPositionRatio polling to serverState.
+// ══════════════════════════════════════════════════════════════════
+function _calcConfluenceParity(snap, ind) {
+    // rsi direction — identical to client (50 split, binary)
+    const rsiV = (snap.rsi && snap.rsi['5m']) || 50;
+    const rsiDir = rsiV > 50 ? 'bull' : 'bear';
+
+    // Supertrend — client forces binary bull|bear (defaults bear if no bull
+    // signal found). Server's ind.stDir can be 'neut'; fold neut → bear to
+    // match client's fallback semantics.
+    const stDir = ind.stDir === 'bull' ? 'bull' : 'bear';
+
+    // LongShort ratio — server has no LS feed; default to 'neut' (same as
+    // client when getLS() returns null).
+    const lsDir = 'neut';
+
+    // Funding rate — identical to client
+    const fr = snap.fr;
+    const frDir = (fr != null) ? (fr < 0 ? 'bull' : 'bear') : 'neut';
+
+    // Open interest — identical to client (stale/missing → neut)
+    const oi = snap.oi;
+    const oiPrev = snap.oiPrev;
+    const oiDir = (oi == null || oiPrev == null) ? 'neut' : (oi > oiPrev ? 'bull' : 'bear');
+
+    // Client's dirs set: [rsi, st, ls, fr, oi] — NO macd.
+    const dirs = [rsiDir, stDir, lsDir, frDir, oiDir];
+    const bullDirs = dirs.filter(d => d === 'bull').length;
+    const bearDirs = dirs.filter(d => d === 'bear').length;
+
+    // Client formula: linear bull-bias (bullDirs / 5), not absolute alignment.
+    const dirFactor = bullDirs / dirs.length;
+    const baseScore = dirFactor * 100;
+
+    // Signal boost: client uses sd.signals count (external). Server has no
+    // equivalent, proxy with total non-neut dirs. Closest honest mapping.
+    const total = bullDirs + bearDirs;
+    const signalBoost = total >= 4 ? 20 : total >= 2 ? 10 : 0;
+
+    // Client finalScore: direction-specific sign on the boost (add when bull
+    // majority, subtract when bear majority, base otherwise). NOT the server
+    // live path's [SHORT-FIX] direction-agnostic add-only.
+    const finalScore = Math.round(Math.max(0, Math.min(100,
+        bullDirs > bearDirs ? baseScore + signalBoost :
+        bullDirs < bearDirs ? baseScore - signalBoost :
+        baseScore
+    )));
+
+    return {
+        score: finalScore,
+        bullDirs,
+        bearDirs,
+        rsiDir,
+        stDir,
+        macdDir: ind.macdDir || 'neut',  // not used by client formula; kept for _computeFusion contract
+        frDir,
+        oiDir,
+        isBull: bullDirs > bearDirs,
+        isBear: bearDirs > bullDirs,
+    };
 }
 
 // ══════════════════════════════════════════════════════════════════
