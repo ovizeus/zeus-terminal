@@ -52,8 +52,11 @@ router.post('/client', (req, res) => {
 // GET /api/brain/parity/report
 // Query: ?since=<ms>&symbol=<SYMUSDT>&userId=<n>
 // Auth: admin-only (role check).
-// Returns aggregate client/server match counts, top mismatch reasons,
-// per-symbol breakdown. Used for the ≥95% agreement gate before S6/S8/S10/S11.
+// Returns aggregate client/server match counts split into PRIMARY and
+// COVERAGE tracks (see database.js::queryParityReport for the split logic).
+// S4 / S6 / S8 / S10 / S11 unlock gates MUST read totals.primaryAgreementPct
+// ONLY — coverage.* is forced NO_TRADE emits from multi-sym scan and would
+// artificially inflate tier-match if merged.
 router.get('/report', _requireAdmin, (req, res) => {
     const report = db.queryParityReport({
         since: req.query.since,

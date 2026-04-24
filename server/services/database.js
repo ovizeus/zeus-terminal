@@ -1058,6 +1058,21 @@ function logParityRow(userId, symbol, source, fusion, cycle) {
     } catch (_err) { /* shadow must never throw */ }
 }
 
+// [Phase 2 S3.1b-fix] Parity report — PRIMARY vs COVERAGE split.
+// Client emits two kinds of rows:
+//   1. PRIMARY: chart symbol via autotrade.ts::computeFusionDecision — runs
+//      the same weighted-fusion + modifier pipeline the server uses.
+//      reasons field does NOT contain 'MultiScan_coverage'. THIS is the
+//      metric that gates S4/S6/S8/S10/S11.
+//   2. COVERAGE: non-chart symbols from klines.ts::runMultiSymbolScan —
+//      uses a 5-indicator simple score without fusion modifiers. Emits
+//      always decision='NO_TRADE' + reasons starting with 'MultiScan_coverage'.
+//      Direction-only signal. Tracked separately so it does NOT inflate the
+//      primary agreement score with forced NO_TRADE↔NO_TRADE matches.
+// The report returns both metrics; callers (S4 gate, dashboards, scripts)
+// must use primaryAgreementPct for unlock decisions.
+const COVERAGE_TAG = 'MultiScan_coverage';
+
 function queryParityReport(opts) {
     opts = opts || {};
     const since = opts.since != null && !isNaN(Number(opts.since)) ? Number(opts.since) : (Date.now() - 24 * 3600 * 1000);
@@ -1065,8 +1080,9 @@ function queryParityReport(opts) {
     const userFilter = opts.userId != null && !isNaN(Number(opts.userId)) ? Number(opts.userId) : null;
     const matchWindowMs = 15000; // ±15s correlation window per audit S3 spec
 
-    // Pull client rows; each is the anchor row we try to pair with a server row
-    const clientSql = 'SELECT id, user_id, symbol, cycle, dir, decision, confidence, score, created_at '
+    // Pull client rows — reasons is JSON text, filter in JS so legacy rows
+    // without the tag fall into PRIMARY automatically (safe default).
+    const clientSql = 'SELECT id, user_id, symbol, cycle, dir, decision, confidence, score, reasons, created_at '
         + 'FROM brain_parity_log WHERE source = \'client\' AND created_at >= ?'
         + (userFilter != null ? ' AND user_id = ?' : '')
         + (symbolFilter ? ' AND symbol = ?' : '')
@@ -1091,62 +1107,88 @@ function queryParityReport(opts) {
         + 'ORDER BY ABS(created_at - ?) ASC LIMIT 1'
     );
 
-    let matched = 0, mismatched = 0, unpaired = 0;
-    const mismatchReasons = new Map();
-    const bySymbol = new Map();
+    // Separate accumulators for primary and coverage tracks.
+    const _mkBucket = () => ({ matched: 0, mismatched: 0, unpaired: 0, mismatchReasons: new Map(), bySymbol: new Map() });
+    const primary = _mkBucket();
+    const coverage = _mkBucket();
 
     for (const cr of clientRows) {
+        const isCoverage = typeof cr.reasons === 'string' && cr.reasons.indexOf(COVERAGE_TAG) >= 0;
+        const bucket = isCoverage ? coverage : primary;
+
         const sr = findPair.get(cr.user_id, cr.symbol, cr.created_at - matchWindowMs, cr.created_at + matchWindowMs, cr.created_at);
-        if (!sr) { unpaired++; continue; }
+        if (!sr) { bucket.unpaired++; continue; }
         const dirMatch = _parityNormalizeDir(cr.dir) === _parityNormalizeDir(sr.dir);
         const tierMatch = (cr.decision || '') === (sr.decision || '');
         const isMatch = dirMatch && tierMatch;
-        if (isMatch) matched++;
+        if (isMatch) bucket.matched++;
         else {
-            mismatched++;
+            bucket.mismatched++;
             const parts = [];
             if (!dirMatch) parts.push('dir:' + (cr.dir || '?') + '->' + (sr.dir || '?'));
             if (!tierMatch) parts.push('tier:' + (cr.decision || '?') + '->' + (sr.decision || '?'));
             const key = parts.join(' ') || 'unknown';
-            mismatchReasons.set(key, (mismatchReasons.get(key) || 0) + 1);
+            bucket.mismatchReasons.set(key, (bucket.mismatchReasons.get(key) || 0) + 1);
         }
-        if (!bySymbol.has(cr.symbol)) bySymbol.set(cr.symbol, { matched: 0, mismatched: 0 });
-        const b = bySymbol.get(cr.symbol);
+        if (!bucket.bySymbol.has(cr.symbol)) bucket.bySymbol.set(cr.symbol, { matched: 0, mismatched: 0 });
+        const b = bucket.bySymbol.get(cr.symbol);
         if (isMatch) b.matched++; else b.mismatched++;
     }
 
-    const paired = matched + mismatched;
-    const agreementPct = paired > 0 ? Number((100 * matched / paired).toFixed(2)) : null;
+    const _finalize = (bucket) => {
+        const paired = bucket.matched + bucket.mismatched;
+        const agreementPct = paired > 0 ? Number((100 * bucket.matched / paired).toFixed(2)) : null;
+        const topMismatches = Array.from(bucket.mismatchReasons.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([reason, count]) => ({ reason, count }));
+        const bySymbol = Array.from(bucket.bySymbol.entries()).map(([sym, v]) => {
+            const tot = v.matched + v.mismatched;
+            return {
+                symbol: sym,
+                matched: v.matched,
+                mismatched: v.mismatched,
+                agreementPct: tot > 0 ? Number((100 * v.matched / tot).toFixed(2)) : null,
+            };
+        });
+        return { paired, unpaired: bucket.unpaired, matched: bucket.matched, mismatched: bucket.mismatched, agreementPct, topMismatches, bySymbol };
+    };
 
-    const topMismatches = Array.from(mismatchReasons.entries())
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 10)
-        .map(([reason, count]) => ({ reason, count }));
-
-    const bySymbolList = Array.from(bySymbol.entries()).map(([sym, v]) => {
-        const tot = v.matched + v.mismatched;
-        return {
-            symbol: sym,
-            matched: v.matched,
-            mismatched: v.mismatched,
-            agreementPct: tot > 0 ? Number((100 * v.matched / tot).toFixed(2)) : null,
-        };
-    });
+    const primaryStats = _finalize(primary);
+    const coverageStats = _finalize(coverage);
 
     return {
         since,
         filters: { symbol: symbolFilter, userId: userFilter },
+        // [S4-GATE] — S4 unlock decision reads primary.* only. coverage.* is
+        // informational; forced NO_TRADE emits on multi-sym would inflate
+        // tier-matching if merged.
         totals: {
             clientRows: clientRows.length,
+            clientPrimaryRows: clientRows.length - clientRows.filter(r => typeof r.reasons === 'string' && r.reasons.indexOf(COVERAGE_TAG) >= 0).length,
+            clientCoverageRows: clientRows.filter(r => typeof r.reasons === 'string' && r.reasons.indexOf(COVERAGE_TAG) >= 0).length,
             serverRows: serverRowCount,
-            paired,
-            unpaired,
-            matched,
-            mismatched,
-            agreementPct,
+            // Primary — the metric that gates S4
+            primaryPairs: primaryStats.paired,
+            primaryUnpaired: primaryStats.unpaired,
+            primaryMatched: primaryStats.matched,
+            primaryMismatched: primaryStats.mismatched,
+            primaryAgreementPct: primaryStats.agreementPct,
+            // Coverage — informational, directional-only, DO NOT use for S4
+            coveragePairs: coverageStats.paired,
+            coverageUnpaired: coverageStats.unpaired,
+            coverageMatched: coverageStats.matched,
+            coverageMismatched: coverageStats.mismatched,
+            coverageAgreementPct: coverageStats.agreementPct,
         },
-        topMismatches,
-        bySymbol: bySymbolList,
+        primary: {
+            topMismatches: primaryStats.topMismatches,
+            bySymbol: primaryStats.bySymbol,
+        },
+        coverage: {
+            topMismatches: coverageStats.topMismatches,
+            bySymbol: coverageStats.bySymbol,
+        },
     };
 }
 

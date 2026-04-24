@@ -325,31 +325,30 @@ export async function runMultiSymbolScan() {
         // rows for all 4 configured symbols (previous run only covered the
         // chart symbol → 255/259 client rows were BTCUSDT). Zero influence on
         // trading path — server drops rows when PARITY_SHADOW_ENABLED is off.
-        // [Phase 2 S3.1b] Tier mapping mirrors server _computeFusion thresholds
-        // (LARGE ≥82/75, MEDIUM ≥72/68, SMALL ≥62/60) so the parity report's
-        // tier-matching reflects real brain output, not a coarse binary fallback.
-        // multi-sym path has no separate `confidence` field, so we proxy with
-        // `score` (same origin: calcSymbolScore 0..100). Direction = neutral
-        // below confMin so we don't claim a tier when the per-symbol gate itself
-        // would reject the entry.
+        //
+        // [Phase 2 S3.1b-fix] COVERAGE-ONLY emit. Multi-sym scan uses a simple
+        // 5-indicator score from calcSymbolScore; it does NOT run the full
+        // fusion pipeline (regime/MTF/structure/flow/sentiment + 10 modifiers)
+        // that server `_computeFusion` applies. Any tier claim here
+        // (SMALL/MEDIUM/LARGE) would systematically overshoot server's
+        // modifier-scaled output — as T+1h soak proved (client 98% trade-tier
+        // vs server 94% NO_TRADE → 2% agreement). Honest emit: always
+        // NO_TRADE + confidence=0 + reasons starting with 'MultiScan_coverage'
+        // so the report can cleanly separate PRIMARY agreement (chart symbol
+        // via computeFusionDecision, mirrors server pipeline) from COVERAGE
+        // agreement (per-symbol directional-only). S4 verdict uses PRIMARY.
         if (sym !== getSymbol()) {
           try {
             const _isDir = dir === 'bull' || dir === 'bear'
             const _pDir = !_isDir || score < confMin ? 'neutral'
               : dir === 'bull' ? 'long' : 'short'
-            let _pDecision: string
-            if (_pDir === 'neutral') _pDecision = 'NO_TRADE'
-            else if (score >= 82) _pDecision = 'LARGE'
-            else if (score >= 72) _pDecision = 'MEDIUM'
-            else if (score >= 62) _pDecision = 'SMALL'
-            else _pDecision = 'NO_TRADE'
             api.raw<any>('POST', '/api/brain/parity/client', {
               symbol: sym,
               dir: _pDir,
-              decision: _pDecision,
-              confidence: score,
+              decision: 'NO_TRADE',
+              confidence: 0,
               score: score,
-              reasons: ['MultiScan', signals ? String(signals).slice(0, 64) : ''],
+              reasons: ['MultiScan_coverage', signals ? String(signals).slice(0, 64) : ''],
               ts: Date.now(),
             }).catch(() => { /* parity harness is best-effort */ })
           } catch (_) { /* api missing — silent */ }
