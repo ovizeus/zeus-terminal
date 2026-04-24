@@ -325,10 +325,24 @@ export async function runMultiSymbolScan() {
         // rows for all 4 configured symbols (previous run only covered the
         // chart symbol → 255/259 client rows were BTCUSDT). Zero influence on
         // trading path — server drops rows when PARITY_SHADOW_ENABLED is off.
+        // [Phase 2 S3.1b] Tier mapping mirrors server _computeFusion thresholds
+        // (LARGE ≥82/75, MEDIUM ≥72/68, SMALL ≥62/60) so the parity report's
+        // tier-matching reflects real brain output, not a coarse binary fallback.
+        // multi-sym path has no separate `confidence` field, so we proxy with
+        // `score` (same origin: calcSymbolScore 0..100). Direction = neutral
+        // below confMin so we don't claim a tier when the per-symbol gate itself
+        // would reject the entry.
         if (sym !== getSymbol()) {
           try {
-            const _pDir = dir === 'bull' ? 'long' : dir === 'bear' ? 'short' : 'neutral'
-            const _pDecision = isOpp ? 'SMALL' : 'NO_TRADE'
+            const _isDir = dir === 'bull' || dir === 'bear'
+            const _pDir = !_isDir || score < confMin ? 'neutral'
+              : dir === 'bull' ? 'long' : 'short'
+            let _pDecision: string
+            if (_pDir === 'neutral') _pDecision = 'NO_TRADE'
+            else if (score >= 82) _pDecision = 'LARGE'
+            else if (score >= 72) _pDecision = 'MEDIUM'
+            else if (score >= 62) _pDecision = 'SMALL'
+            else _pDecision = 'NO_TRADE'
             api.raw<any>('POST', '/api/brain/parity/client', {
               symbol: sym,
               dir: _pDir,
