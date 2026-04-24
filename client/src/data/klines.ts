@@ -18,6 +18,7 @@ import { placeAutoTrade , atLog } from '../trading/autotrade'
 import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
 import { useBrainStore } from '../stores/brainStore'
+import { api } from '../services/api'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
 
 // [Phase 6] BlockReason mirror-write helpers — brainStore canonical
@@ -317,6 +318,28 @@ export async function runMultiSymbolScan() {
         const confMin = (typeof BM !== 'undefined' ? BM.confMin : 65) || 65
         const isOpp = score >= confMin && (dir === 'bull' || dir === 'bear')
         if (isOpp) opps++
+
+        // [Phase 2 S3.1a] Per-symbol parity POST — shadow-only. Chart symbol is
+        // already emitted by autotrade.ts runAutoTradeCheck; here we cover the
+        // other multi-sym entries so server↔client correlation has per-symbol
+        // rows for all 4 configured symbols (previous run only covered the
+        // chart symbol → 255/259 client rows were BTCUSDT). Zero influence on
+        // trading path — server drops rows when PARITY_SHADOW_ENABLED is off.
+        if (sym !== getSymbol()) {
+          try {
+            const _pDir = dir === 'bull' ? 'long' : dir === 'bear' ? 'short' : 'neutral'
+            const _pDecision = isOpp ? 'SMALL' : 'NO_TRADE'
+            api.raw<any>('POST', '/api/brain/parity/client', {
+              symbol: sym,
+              dir: _pDir,
+              decision: _pDecision,
+              confidence: score,
+              score: score,
+              reasons: ['MultiScan', signals ? String(signals).slice(0, 64) : ''],
+              ts: Date.now(),
+            }).catch(() => { /* parity harness is best-effort */ })
+          } catch (_) { /* api missing — silent */ }
+        }
 
         const alreadyOpen = _activePosList().some((p: any) => p.sym === sym && p.autoTrade && !p.closed)
 
