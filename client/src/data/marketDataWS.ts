@@ -35,9 +35,14 @@ function _resetBackoff(key: string): void { _wsBackoff[key] = 0 }
 // ===== CONNECT BINANCE WS =====
 export function connectBNB(): void {
   const sym = (w.S.symbol || 'BTCUSDT').toLowerCase()
-  const url = `wss://fstream.binance.com/stream?streams=${sym}@markPrice@1s/${sym}@depth20@500ms/!forceOrder@arr`
+  // [Phase 2 S3.1d] ALT_WS_FEEDS workaround — when markPrice@1s is silently
+  // throttled by Binance, route price updates through bookTicker (mid of
+  // best bid/ask). depth20 + forceOrder still work on the normal lane.
+  const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
+  const _priceStream = _altFeeds ? `${sym}@bookTicker` : `${sym}@markPrice@1s`
+  const url = `wss://fstream.binance.com/stream?streams=${_priceStream}/${sym}@depth20@500ms/!forceOrder@arr`
   const _bnbGen = w.__wsGen
-  console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen}`)
+  console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen} | altFeeds=${_altFeeds}`)
   w.WS.open('bnb', url, {
     onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); updConn() },
     onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
@@ -48,10 +53,23 @@ export function connectBNB(): void {
       if (j.stream) {
         const d = j.data; const st = j.stream
         if (st.includes('markPrice')) {
+          // Primary-lane path: markPrice delivers mark price + funding rate
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
             updatePriceDisplay(); updateMainMetrics()
             if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
+          }
+        } else if (st.includes('bookTicker')) {
+          // [ALT_WS_FEEDS] bookTicker path — mid of best bid/ask stands in
+          // for mark price. Funding rate is not live here; stays cached
+          // until REST or markPrice lane recovers.
+          const _bid = +d.b, _ask = +d.a
+          if (_bid > 0 && _ask > 0) {
+            const _mid = ((_bid + _ask) / 2).toString()
+            if (w.ingestPrice(_mid, 'BNB')) {
+              updatePriceDisplay(); updateMainMetrics()
+              if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
+            }
           }
         } else if (st.includes('depth20')) {
           w.S.bids = (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q }))

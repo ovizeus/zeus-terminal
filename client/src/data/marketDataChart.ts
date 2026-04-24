@@ -126,21 +126,56 @@ export async function fetchKlines(tf: any): Promise<void> {
     renderChart()
     const symLow = sym.toLowerCase()
     const _klineGen = w.__wsGen
-    w.S.wsK = w.WS.open('kline', `wss://fstream.binance.com/ws/${symLow}@kline_${tf}`, {
-      onmessage: (e: any) => {
-        if (w.__wsGen !== _klineGen) return
-        let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
-        const k = j.k; if (!k) return
-        const bar = { time: Math.floor(k.t / 1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v }
+    // [Phase 2 S3.1d] ALT_WS_FEEDS — when @kline_<tf> is throttled, poll via
+    // REST every 10s. Chart updates are ~10s slower but correct; on 5m/1h/4h
+    // timeframes this is imperceptible. Reverts automatically when flag is
+    // flipped OFF (next fetchKlines call opens a live WS again).
+    const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
+    // Clear any previous poll timer from a prior fetchKlines call
+    try { if (w.S._altKlinePollTimer) { clearInterval(w.S._altKlinePollTimer); w.S._altKlinePollTimer = null } } catch (_) {}
+    if (_altFeeds) {
+      const _applyBar = (bar: any) => {
         const last = w.S.klines?.[w.S.klines.length - 1]
         if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
         else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
         _resetKlineWatchdog()
-        try { w.cSeries.update(bar) } catch (_) { }
+        try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
         if (typeof updOvrs === 'function') updOvrs()
         if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
       }
-    })
+      const _pollKline = async () => {
+        if (w.__wsGen !== _klineGen) return
+        if (w.S.symbol !== sym) return
+        try {
+          const _pr = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=1`, { signal: AbortSignal.timeout(8000) })
+          if (!_pr || !_pr.ok) return
+          const _pd = await _pr.json()
+          if (!Array.isArray(_pd) || !_pd.length) return
+          const k = _pd[0]
+          const bar = { time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] }
+          _applyBar(bar)
+        } catch (_) { /* quiet — next tick retries */ }
+      }
+      w.S._altKlinePollTimer = setInterval(_pollKline, 10000)
+      setTimeout(_pollKline, 2000)
+      console.log(`[fetchKlines] ALT_WS_FEEDS=ON — REST polling klines ${sym} ${tf} every 10s`)
+    } else {
+      w.S.wsK = w.WS.open('kline', `wss://fstream.binance.com/ws/${symLow}@kline_${tf}`, {
+        onmessage: (e: any) => {
+          if (w.__wsGen !== _klineGen) return
+          let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
+          const k = j.k; if (!k) return
+          const bar = { time: Math.floor(k.t / 1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v }
+          const last = w.S.klines?.[w.S.klines.length - 1]
+          if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
+          else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
+          _resetKlineWatchdog()
+          try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
+          if (typeof updOvrs === 'function') updOvrs()
+          if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
+        }
+      })
+    }
   } catch (e: any) {
     console.error('[fetchKlines]', e.message)
     toast(`Chart: cannot load data (${e.message})`)
@@ -153,6 +188,7 @@ export function renderChart(): void {
   try {
     w.S.chartBars = w.S.klines.map((k: any) => ({ time: k.time, open: k.open, high: k.high, low: k.low, close: k.close }))
     w.cSeries.setData(w.S.klines)
+    try { if (typeof w.rebuildCandleSeriesFromKlines === 'function') w.rebuildCandleSeriesFromKlines() } catch (_) { }
     try { w.mainChart.timeScale().scrollToRealTime() } catch (_) { }
     const c = w.S.klines.map((k: any) => k.close)
     function calcEMA(data: number[], p: number) { const k = 2 / (p + 1); let e = data[0]; return data.map((v: number) => { e = v * k + e * (1 - k); return e }) }

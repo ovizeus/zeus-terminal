@@ -55,6 +55,20 @@ export async function startApp(): Promise<void> {
   if (w.ZEUS_STARTED) { console.warn('[ZEUS] startApp() called twice — ignoring'); return }
   w.ZEUS_STARTED = true; w.ZEUS_BOOTED = false
 
+  // [Phase 2 S3.1d] Preboot: hydrate window.__MF from server migration flags.
+  // Blocks before any WS connection so marketDataWS / marketDataChart /
+  // orderflow can branch on ALT_WS_FEEDS from the first tick. Falls back to
+  // empty object on failure (all flags default off → original behavior).
+  try {
+    const _mfRes = await fetch('/api/migration/flags', { credentials: 'same-origin' })
+    if (_mfRes && _mfRes.ok) {
+      w.__MF = await _mfRes.json()
+      console.log('[startApp] Migration flags hydrated:', w.__MF)
+    } else {
+      w.__MF = {}
+    }
+  } catch (_) { w.__MF = {}; console.log('[startApp] Migration flags fetch failed — using defaults') }
+
   // [B17b] PREBOOT: fetch sync closedIds AND AT state in parallel.
   // closedIds MUST be populated BEFORE _applyPreboot so _rcSet is never empty at boot.
   try {

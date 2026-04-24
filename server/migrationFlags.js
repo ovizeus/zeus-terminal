@@ -36,6 +36,15 @@ const DEFAULTS = {
     // handler and the optional `_runShadowCycle` server-side writer. Default
     // OFF so the harness ships dormant.
     PARITY_SHADOW_ENABLED: false,
+    // [Phase 2 S3.1d] Binance Futures WS lane workaround. When some
+    // production streams (markPrice@1s, kline_*, aggTrade) are silently
+    // throttled by Binance on our IP while others (bookTicker, trade, depth)
+    // still deliver, this flag routes marketFeed + client WS through the
+    // working streams + REST kline polling. Default OFF — behavior identical
+    // to pre-S3.1d. Flip ON via admin API or data/migration_flags.json when
+    // Binance is misbehaving; flip OFF when the primary lane recovers. No
+    // trading-path change, no DSL/Brain engine change; only the input layer.
+    ALT_WS_FEEDS: false,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -133,6 +142,7 @@ module.exports = {
     get CLIENT_AT() { return flags.CLIENT_AT; },
     get POSITIONS_WS() { return flags.POSITIONS_WS; },
     get PARITY_SHADOW_ENABLED() { return flags.PARITY_SHADOW_ENABLED; },
+    get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     // Methods
     set,
     getAll,

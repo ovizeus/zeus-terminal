@@ -448,7 +448,12 @@ export function _initOrderflowP1() {
     RF.buf = []
     RF.dropped = 0
 
-    const url = 'wss://fstream.binance.com/ws/' + sym.toLowerCase() + '@aggTrade'
+    // [Phase 2 S3.1d] ALT_WS_FEEDS — when @aggTrade is throttled by Binance,
+    // @trade (raw) still delivers; shape-compatible for our consumer (uses
+    // d.p, d.q, d.T, d.m) so the downstream flow engine sees no difference.
+    const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
+    const _streamName = _altFeeds ? '@trade' : '@aggTrade'
+    const url = 'wss://fstream.binance.com/ws/' + sym.toLowerCase() + _streamName
 
     if (w.WS) {
       _ofWS = w.WS.open('of_agg', url, {

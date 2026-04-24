@@ -7,6 +7,7 @@
 const Sentry = require('@sentry/node');
 const WebSocket = require('ws');
 const logger = require('./logger');
+const MF = require('../migrationFlags');
 
 // ── Config ──
 const BINANCE_WS = 'wss://fstream.binance.com/ws';
@@ -21,6 +22,13 @@ const STALE_DATA_MS = 120000;    // 2min data staleness threshold
 const _streams = {};    // { streamKey: { ws, reconnects, timer, alive } }
 const _activeSymbols = new Set();  // [MULTI-SYM] all subscribed symbols (uppercase)
 let _timeframes = [];   // active timeframes ['5m', '1h', '4h']
+
+// ── [Phase 2 S3.1d] ALT_WS_FEEDS poller state ──
+// When the primary lane (kline / markPrice / aggTrade) is dead, we poll klines
+// via REST at ALT_KLINE_POLL_MS and derive price + kline events locally.
+// bookTicker/trade streams take over price + aggTrade emission.
+const ALT_KLINE_POLL_MS = 10000;    // 10s — balances freshness vs weight limits
+const _altKlinePollers = {};        // { 'BTCUSDT|5m': { timer, lastOpenTs } }
 
 // ── Event listeners ──
 const _listeners = { kline: [], price: [], fundingRate: [], openInterest: [] };
@@ -152,6 +160,88 @@ function _connectStream(streamName, onMessage) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3.1d] REST kline poller — used when MF.ALT_WS_FEEDS is ON.
+// Polls `/fapi/v1/klines?limit=2` every ALT_KLINE_POLL_MS, tracks the last
+// open timestamp per (symbol, tf), and emits compat 'kline' events:
+//   - `closed:false` live update on the current forming candle
+//   - `closed:true` transition event when a new candle begins
+// Price is also emitted on every poll so downstream priceTs stays fresh.
+// ══════════════════════════════════════════════════════════════════
+async function _altFetchKlinesLatest(symbol, interval, limit) {
+    const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const raw = await res.json();
+    return raw.map(k => ({
+        time: k[0] / 1000,
+        openTime: k[0],
+        open: +k[1],
+        high: +k[2],
+        low: +k[3],
+        close: +k[4],
+        volume: +k[5],
+        closeTime: k[6],
+    }));
+}
+
+function _altStartKlinePoller(symUpper, tf) {
+    const key = `${symUpper}|${tf}`;
+    if (_altKlinePollers[key]) return;
+    const state = { timer: null, lastOpenTs: 0, lastBar: null };
+    _altKlinePollers[key] = state;
+
+    const tick = async () => {
+        try {
+            const bars = await _altFetchKlinesLatest(symUpper, tf, 2);
+            if (!bars || bars.length === 0) return;
+            const latest = bars[bars.length - 1];
+            const prev = bars.length > 1 ? bars[0] : null;
+
+            if (state.lastOpenTs === 0) {
+                // First poll — emit latest as live update, nothing to close yet.
+                state.lastOpenTs = latest.openTime;
+                state.lastBar = latest;
+                _emit('kline', { symbol: symUpper, timeframe: tf, bar: { ...latest, closed: false }, initial: false });
+                if (latest.close > 0) _emit('price', { symbol: symUpper, price: latest.close });
+                return;
+            }
+
+            if (latest.openTime > state.lastOpenTs) {
+                // New candle started — prev is the candle that just closed.
+                if (prev && prev.openTime === state.lastOpenTs) {
+                    _emit('kline', { symbol: symUpper, timeframe: tf, bar: { ...prev, closed: true }, initial: false });
+                }
+                state.lastOpenTs = latest.openTime;
+                state.lastBar = latest;
+                _emit('kline', { symbol: symUpper, timeframe: tf, bar: { ...latest, closed: false }, initial: false });
+            } else {
+                // Same candle — live update
+                state.lastBar = latest;
+                _emit('kline', { symbol: symUpper, timeframe: tf, bar: { ...latest, closed: false }, initial: false });
+            }
+            if (latest.close > 0) _emit('price', { symbol: symUpper, price: latest.close });
+        } catch (err) {
+            // Quiet failure — next tick retries
+            if (err && err.message && !/HTTP 4\d\d/.test(err.message)) {
+                logger.warn('FEED', `[ALT_WS_FEEDS] kline poll failed [${symUpper} ${tf}]: ${err.message}`);
+            }
+        }
+    };
+
+    state.timer = setInterval(tick, ALT_KLINE_POLL_MS);
+    // Kick off first fetch soon
+    setTimeout(tick, 500);
+}
+
+function _altStopKlinePoller(symUpper, tf) {
+    const key = `${symUpper}|${tf}`;
+    const state = _altKlinePollers[key];
+    if (!state) return;
+    if (state.timer) clearInterval(state.timer);
+    delete _altKlinePollers[key];
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Subscribe — start all streams for a symbol
 // ══════════════════════════════════════════════════════════════════
 async function subscribe(symbol, timeframes) {
@@ -185,42 +275,77 @@ async function subscribe(symbol, timeframes) {
     if (fr !== null) _emit('fundingRate', { symbol: symUpper, rate: fr });
     if (oi !== null) _emit('openInterest', { symbol: symUpper, value: oi });
 
-    // 3) Connect kline WebSocket streams
-    for (const tf of _timeframes) {
-        _connectStream(`${symLower}@kline_${tf}`, (data) => {
-            if (data.e !== 'kline' || !data.k) return;
-            const k = data.k;
-            const bar = {
-                time: k.t / 1000,
-                open: +k.o,
-                high: +k.h,
-                low: +k.l,
-                close: +k.c,
-                volume: +k.v,
-                closed: k.x,  // true if candle just closed
-            };
-            _emit('kline', { symbol: symUpper, timeframe: tf, bar, initial: false });
-            // Also emit price on every kline tick
-            if (+k.c > 0) _emit('price', { symbol: symUpper, price: +k.c });
+    // [Phase 2 S3.1d] Lane selection — when the primary Binance streams are
+    // throttled (markPrice@1s / kline_* / aggTrade), MF.ALT_WS_FEEDS routes
+    // kline updates through REST polling and swaps markPrice→bookTicker,
+    // aggTrade→trade. Both branches emit identical 'kline'/'price'/'aggTrade'
+    // event shapes so downstream (serverState, serverOrderflow, shadow cycle)
+    // is oblivious to the source.
+    if (MF.ALT_WS_FEEDS) {
+        logger.info('FEED', `[ALT_WS_FEEDS=ON] ${symUpper} — using REST klines + bookTicker + trade`);
+
+        // 3a) REST kline polling — one poller per timeframe
+        for (const tf of _timeframes) {
+            _altStartKlinePoller(symUpper, tf);
+        }
+
+        // 4a) bookTicker stream → mid price emit
+        _connectStream(`${symLower}@bookTicker`, (data) => {
+            const bid = +data.b, ask = +data.a;
+            if (bid > 0 && ask > 0) {
+                const mid = (bid + ask) / 2;
+                _emit('price', { symbol: symUpper, price: mid });
+            }
+        });
+
+        // 5a) raw trade stream → aggTrade-shape emit (p, q, m, T identical)
+        _connectStream(`${symLower}@trade`, (data) => {
+            _emit('aggTrade', {
+                symbol: symUpper,
+                price: +data.p,
+                qty: +data.q,
+                isBuyerMaker: data.m,
+                ts: data.T,
+            });
+        });
+    } else {
+        // 3) Connect kline WebSocket streams
+        for (const tf of _timeframes) {
+            _connectStream(`${symLower}@kline_${tf}`, (data) => {
+                if (data.e !== 'kline' || !data.k) return;
+                const k = data.k;
+                const bar = {
+                    time: k.t / 1000,
+                    open: +k.o,
+                    high: +k.h,
+                    low: +k.l,
+                    close: +k.c,
+                    volume: +k.v,
+                    closed: k.x,  // true if candle just closed
+                };
+                _emit('kline', { symbol: symUpper, timeframe: tf, bar, initial: false });
+                // Also emit price on every kline tick
+                if (+k.c > 0) _emit('price', { symbol: symUpper, price: +k.c });
+            });
+        }
+
+        // 4) Connect mark price stream (includes funding rate updates)
+        _connectStream(`${symLower}@markPrice@1s`, (data) => {
+            if (data.p) _emit('price', { symbol: symUpper, price: +data.p });
+            if (data.r) _emit('fundingRate', { symbol: symUpper, rate: +data.r });
+        });
+
+        // 5) [BRAIN-V2] Connect aggTrade stream for order flow analysis
+        _connectStream(`${symLower}@aggTrade`, (data) => {
+            _emit('aggTrade', {
+                symbol: symUpper,
+                price: +data.p,
+                qty: +data.q,
+                isBuyerMaker: data.m,  // true = seller aggressor (taker sell)
+                ts: data.T,
+            });
         });
     }
-
-    // 4) Connect mark price stream (includes funding rate updates)
-    _connectStream(`${symLower}@markPrice@1s`, (data) => {
-        if (data.p) _emit('price', { symbol: symUpper, price: +data.p });
-        if (data.r) _emit('fundingRate', { symbol: symUpper, rate: +data.r });
-    });
-
-    // 5) [BRAIN-V2] Connect aggTrade stream for order flow analysis
-    _connectStream(`${symLower}@aggTrade`, (data) => {
-        _emit('aggTrade', {
-            symbol: symUpper,
-            price: +data.p,
-            qty: +data.q,
-            isBuyerMaker: data.m,  // true = seller aggressor (taker sell)
-            ts: data.T,
-        });
-    });
 
     logger.info('FEED', `Subscription complete for ${symUpper}`);
 }
