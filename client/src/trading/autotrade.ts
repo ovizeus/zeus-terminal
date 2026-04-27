@@ -596,6 +596,43 @@ export function runAutoTradeCheck(): void {
   if (!getATEnabled() || getATKillTriggered()) return
   AT.running = true
   try {
+    // [Phase 2 S3.1g] FUSION_CACHE + PRIMARY parity POST — moved ABOVE all
+    // execution-safety gates (EXEC_LOCKED / DATA_STALL / _isExecAllowed /
+    // KILL switch). Parity harness is shadow-only diagnostic that never
+    // touches order paths; gating it on production execution-safety made
+    // PRIMARY emit collapse to ~0 whenever a tab lost focus (browser
+    // throttle → WS stall → DATA_STALL gate → runAutoTradeCheck early-return),
+    // even though server brain emits unconditionally — biasing the parity
+    // sample. Server-side accepts only when MF.PARITY_SHADOW_ENABLED so this
+    // remains zero-impact in production. Original location: after KILL
+    // switch (around former line 664).
+    try {
+      if (typeof computeFusionDecision === 'function') {
+        const _fcRaw = computeFusionDecision()
+        w.FUSION_CACHE = {
+          ts: Date.now(),
+          dir: _fcRaw.dir || 'neutral',
+          decision: _fcRaw.decision || 'NO_TRADE',
+          confidence: _fcRaw.confidence || 0,
+          score: _fcRaw.score || 0,
+        }
+        try {
+          const _sym = getSymbol()
+          if (_sym) {
+            api.raw<any>('POST', '/api/brain/parity/client', {
+              symbol: _sym,
+              dir: _fcRaw.dir || 'neutral',
+              decision: _fcRaw.decision || 'NO_TRADE',
+              confidence: _fcRaw.confidence != null ? _fcRaw.confidence : 0,
+              score: _fcRaw.score != null ? _fcRaw.score : 0,
+              reasons: Array.isArray(_fcRaw.reasons) ? _fcRaw.reasons.slice(0, 8) : [],
+              ts: Date.now(),
+            }).catch(() => { /* parity harness is best-effort */ })
+          }
+        } catch (_) { /* api missing — silent */ }
+      }
+    } catch (_fcErr: any) { try { console.warn('[AT/FUSION_CACHE]', _fcErr?.message || _fcErr) } catch (_) {} /* non-blocking */ }
+
     // [Phase 6C] Per-tick live execution-env gate.
     // Toggle-time gate (L96–121) prevents enabling AT without valid creds, but
     // if env becomes invalid mid-session (creds revoked, mode flipped to live
@@ -661,6 +698,10 @@ export function runAutoTradeCheck(): void {
       return
     }
 
+    // [v119-p7 / S3.1g] FUSION_CACHE + PRIMARY parity POST — moved earlier in
+    // runAutoTradeCheck (above EXEC_LOCKED / DATA_STALL / _isExecAllowed /
+    // KILL gates). See the [Phase 2 S3.1g] block right after `try {` above.
+
     // Multi-symbol mode: scan all symbols
     const multiOn = el('atMultiSym')?.checked !== false
     if (multiOn) {
@@ -676,44 +717,6 @@ export function runAutoTradeCheck(): void {
       const _dir2 = cond.isBull ? 'bull' : cond.isBear ? 'bear' : 'neut'
       atLog('info', 'AT_SCAN ' + (getSymbol() || '').replace('USDT', '') + ' score=' + cond.score + ' dir=' + _dir2)
     }
-
-    // [v119-p7] FUSION_CACHE — actualizat la FIECARE tick, citit de ML vizual (read-only)
-    // Separat de FUSION_LAST (care se scrie doar pe semnal). Nu afectează sizing/trade/DSL.
-    try {
-      if (typeof computeFusionDecision === 'function') {
-        const _fcRaw = computeFusionDecision()
-        w.FUSION_CACHE = {
-          ts: Date.now(),
-          dir: _fcRaw.dir || 'neutral',
-          decision: _fcRaw.decision || 'NO_TRADE',
-          confidence: _fcRaw.confidence || 0,
-          score: _fcRaw.score || 0,
-        }
-        // [Phase 2 S3] Parity harness — shadow-only emit.
-        // Fire-and-forget POST to /api/brain/parity/client with the fusion
-        // output. Gated client-side by localStorage zeus_parity_shadow='true'
-        // (default OFF: zero network traffic) and server-side by
-        // MF.PARITY_SHADOW_ENABLED. No UI, no retries, no influence on the
-        // trading path. The server correlates these rows against its own
-        // serverBrain shadow-cycle rows to produce the ≥95% agreement gate.
-        try {
-          if (localStorage.getItem('zeus_parity_shadow') === 'true') {
-            const _sym = getSymbol()
-            if (_sym) {
-              api.raw<any>('POST', '/api/brain/parity/client', {
-                symbol: _sym,
-                dir: _fcRaw.dir || 'neutral',
-                decision: _fcRaw.decision || 'NO_TRADE',
-                confidence: _fcRaw.confidence != null ? _fcRaw.confidence : 0,
-                score: _fcRaw.score != null ? _fcRaw.score : 0,
-                reasons: Array.isArray(_fcRaw.reasons) ? _fcRaw.reasons.slice(0, 8) : [],
-                ts: Date.now(),
-              }).catch(() => { /* parity harness is best-effort */ })
-            }
-          }
-        } catch (_) { /* localStorage blocked or api missing — silent */ }
-      }
-    } catch (_fcErr: any) { try { console.warn('[AT/FUSION_CACHE]', _fcErr?.message || _fcErr) } catch (_) {} /* non-blocking */ }
 
     if (!cond.allOk) {
       // [PATCH B3] AT_BLOCK log with context
