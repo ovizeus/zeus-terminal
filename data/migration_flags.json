@@ -6,5 +6,9 @@
   "CLIENT_AT": true,
   "POSITIONS_WS": true,
   "PARITY_SHADOW_ENABLED": true,
-  "ALT_WS_FEEDS": true
+  "ALT_WS_FEEDS": true,
+  "BYBIT_TESTNET_ENABLED": false,
+  "BYBIT_LIVE_ENABLED": false,
+  "BYBIT_PARITY_ENABLED": false,
+  "BYBIT_DRY_RUN_ONLY": true
 }

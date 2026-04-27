@@ -45,6 +45,35 @@ const DEFAULTS = {
     // Binance is misbehaving; flip OFF when the primary lane recovers. No
     // trading-path change, no DSL/Brain engine change; only the input layer.
     ALT_WS_FEEDS: false,
+    // [Phase 2 S4-B0] Bybit safety flags — INERT BY DESIGN.
+    // S4-B0 introduces ONLY the flag surface and mutex assertions; no signer,
+    // no route, no order builder, no exchange dispatch. Every Bybit code path
+    // landed in later batches (S4-B1..S4-B9) MUST gate on these flags AND on
+    // explicit operator approval. Defaults are chosen so a fresh boot or a
+    // mis-edited migration_flags.json cannot enable any Bybit execution.
+    //
+    // BYBIT_TESTNET_ENABLED — when true, future Bybit signer is allowed to send
+    // signed requests to api-testnet.bybit.com only. Default OFF until S4-B7
+    // testnet validation matrix passes.
+    BYBIT_TESTNET_ENABLED: false,
+    // BYBIT_LIVE_ENABLED — when true, future Bybit signer is allowed to send
+    // signed requests to api.bybit.com (REAL money). Default OFF; gated by
+    // S4-B9 final report + operator GO + per-user opt-in (S10 pattern).
+    // Boot mutex below ALSO requires BYBIT_DRY_RUN_ONLY=false before LIVE
+    // can ever flip true.
+    BYBIT_LIVE_ENABLED: false,
+    // BYBIT_PARITY_ENABLED — when true, S4-B4 shadow harness logs Binance
+    // intent vs Bybit equivalent intent on the same decision into a future
+    // bybit_intent_parity_log table. Pure shadow, no orders. Default OFF
+    // until S4-B4 ships.
+    BYBIT_PARITY_ENABLED: false,
+    // BYBIT_DRY_RUN_ONLY — master safety latch. While TRUE, NO Bybit signer
+    // is permitted to send any HTTP request to a Bybit endpoint, even on
+    // testnet, even with TESTNET_ENABLED=true. Boot mutex enforces that
+    // LIVE_ENABLED cannot be true while DRY_RUN_ONLY is true. Default ON
+    // (true); only flipped to false in S4-B5+ once integration tests prove
+    // the signer matches Bybit V5 contract on a vector basis.
+    BYBIT_DRY_RUN_ONLY: true,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -77,6 +106,20 @@ function _validateMutex(f) {
     }
     if (f.SERVER_BRAIN && f.CLIENT_BRAIN) {
         violations.push('SERVER_BRAIN && CLIENT_BRAIN both true — only one side may own decisioning');
+    }
+    // [Phase 2 S4-B0] Bybit safety mutex — see DEFAULTS for full semantics.
+    // (1) TESTNET and LIVE cannot both be true; an account/process can only
+    //     be pointing at one Bybit environment at a time. The single-exchange
+    //     + single-env rule remains DB-enforced (exchange_accounts UNIQUE
+    //     INDEX); these flags add a process-wide guard rail on top.
+    if (f.BYBIT_TESTNET_ENABLED && f.BYBIT_LIVE_ENABLED) {
+        violations.push('BYBIT_TESTNET_ENABLED && BYBIT_LIVE_ENABLED both true — only one Bybit env may be enabled per process');
+    }
+    // (2) DRY_RUN is the master safety latch. While true, NO Bybit HTTP must
+    //     ever leave the process — even testnet. LIVE explicitly cannot flip
+    //     true while DRY_RUN is still on; operator must lower DRY_RUN first.
+    if (f.BYBIT_LIVE_ENABLED && f.BYBIT_DRY_RUN_ONLY) {
+        violations.push('BYBIT_LIVE_ENABLED && BYBIT_DRY_RUN_ONLY both true — disable BYBIT_DRY_RUN_ONLY before enabling LIVE');
     }
     return { ok: violations.length === 0, violations };
 }
@@ -143,6 +186,11 @@ module.exports = {
     get POSITIONS_WS() { return flags.POSITIONS_WS; },
     get PARITY_SHADOW_ENABLED() { return flags.PARITY_SHADOW_ENABLED; },
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
+    // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.
+    get BYBIT_TESTNET_ENABLED() { return flags.BYBIT_TESTNET_ENABLED; },
+    get BYBIT_LIVE_ENABLED() { return flags.BYBIT_LIVE_ENABLED; },
+    get BYBIT_PARITY_ENABLED() { return flags.BYBIT_PARITY_ENABLED; },
+    get BYBIT_DRY_RUN_ONLY() { return flags.BYBIT_DRY_RUN_ONLY; },
     // Methods
     set,
     getAll,
