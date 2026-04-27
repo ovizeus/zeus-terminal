@@ -1108,7 +1108,15 @@ function queryParityReport(opts) {
     );
 
     // Separate accumulators for primary and coverage tracks.
-    const _mkBucket = () => ({ matched: 0, mismatched: 0, unpaired: 0, mismatchReasons: new Map(), bySymbol: new Map() });
+    // [S3.1e] Per-bucket: RAW (existing) + ADJUSTED (NO_TRADE/NO_TRADE = match
+    // dir-agnostic) + per-user breakdown alongside per-symbol.
+    const _mkBucket = () => ({
+        matched: 0, mismatched: 0, unpaired: 0,
+        adjMatched: 0, adjMismatched: 0, ntDirOnly: 0,
+        mismatchReasons: new Map(),
+        bySymbol: new Map(),
+        byUser: new Map(),
+    });
     const primary = _mkBucket();
     const coverage = _mkBucket();
 
@@ -1118,26 +1126,44 @@ function queryParityReport(opts) {
 
         const sr = findPair.get(cr.user_id, cr.symbol, cr.created_at - matchWindowMs, cr.created_at + matchWindowMs, cr.created_at);
         if (!sr) { bucket.unpaired++; continue; }
-        const dirMatch = _parityNormalizeDir(cr.dir) === _parityNormalizeDir(sr.dir);
+        const cdN = _parityNormalizeDir(cr.dir);
+        const sdN = _parityNormalizeDir(sr.dir);
+        const cdec = String(cr.decision || '').toUpperCase();
+        const sdec = String(sr.decision || '').toUpperCase();
+        const dirMatch = cdN === sdN;
         const tierMatch = (cr.decision || '') === (sr.decision || '');
         const isMatch = dirMatch && tierMatch;
-        if (isMatch) bucket.matched++;
-        else {
-            bucket.mismatched++;
+        // [S3.1e] Adjusted: NO_TRADE/NO_TRADE = match regardless of dir.
+        const isAdjMatch = isMatch || (cdec === 'NO_TRADE' && sdec === 'NO_TRADE');
+        const isNtDirOnly = !isMatch && (cdec === 'NO_TRADE' && sdec === 'NO_TRADE');
+
+        if (isMatch) bucket.matched++; else bucket.mismatched++;
+        if (isAdjMatch) bucket.adjMatched++; else bucket.adjMismatched++;
+        if (isNtDirOnly) bucket.ntDirOnly++;
+
+        if (!isMatch) {
             const parts = [];
             if (!dirMatch) parts.push('dir:' + (cr.dir || '?') + '->' + (sr.dir || '?'));
             if (!tierMatch) parts.push('tier:' + (cr.decision || '?') + '->' + (sr.decision || '?'));
             const key = parts.join(' ') || 'unknown';
             bucket.mismatchReasons.set(key, (bucket.mismatchReasons.get(key) || 0) + 1);
         }
-        if (!bucket.bySymbol.has(cr.symbol)) bucket.bySymbol.set(cr.symbol, { matched: 0, mismatched: 0 });
-        const b = bucket.bySymbol.get(cr.symbol);
-        if (isMatch) b.matched++; else b.mismatched++;
+        // Per-symbol
+        if (!bucket.bySymbol.has(cr.symbol)) bucket.bySymbol.set(cr.symbol, { matched: 0, mismatched: 0, adjMatched: 0, adjMismatched: 0 });
+        const bs = bucket.bySymbol.get(cr.symbol);
+        if (isMatch) bs.matched++; else bs.mismatched++;
+        if (isAdjMatch) bs.adjMatched++; else bs.adjMismatched++;
+        // Per-user
+        if (!bucket.byUser.has(cr.user_id)) bucket.byUser.set(cr.user_id, { matched: 0, mismatched: 0, adjMatched: 0, adjMismatched: 0, unpaired: 0 });
+        const bu = bucket.byUser.get(cr.user_id);
+        if (isMatch) bu.matched++; else bu.mismatched++;
+        if (isAdjMatch) bu.adjMatched++; else bu.adjMismatched++;
     }
 
     const _finalize = (bucket) => {
         const paired = bucket.matched + bucket.mismatched;
         const agreementPct = paired > 0 ? Number((100 * bucket.matched / paired).toFixed(2)) : null;
+        const adjAgreementPct = paired > 0 ? Number((100 * bucket.adjMatched / paired).toFixed(2)) : null;
         const topMismatches = Array.from(bucket.mismatchReasons.entries())
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
@@ -1149,9 +1175,38 @@ function queryParityReport(opts) {
                 matched: v.matched,
                 mismatched: v.mismatched,
                 agreementPct: tot > 0 ? Number((100 * v.matched / tot).toFixed(2)) : null,
+                adjMatched: v.adjMatched,
+                adjMismatched: v.adjMismatched,
+                adjAgreementPct: tot > 0 ? Number((100 * v.adjMatched / tot).toFixed(2)) : null,
             };
         });
-        return { paired, unpaired: bucket.unpaired, matched: bucket.matched, mismatched: bucket.mismatched, agreementPct, topMismatches, bySymbol };
+        const byUser = Array.from(bucket.byUser.entries()).map(([uid, v]) => {
+            const tot = v.matched + v.mismatched;
+            return {
+                userId: uid,
+                paired: tot,
+                matched: v.matched,
+                mismatched: v.mismatched,
+                agreementPct: tot > 0 ? Number((100 * v.matched / tot).toFixed(2)) : null,
+                adjMatched: v.adjMatched,
+                adjMismatched: v.adjMismatched,
+                adjAgreementPct: tot > 0 ? Number((100 * v.adjMatched / tot).toFixed(2)) : null,
+            };
+        }).sort((a, b) => b.paired - a.paired);
+        return {
+            paired,
+            unpaired: bucket.unpaired,
+            matched: bucket.matched,
+            mismatched: bucket.mismatched,
+            agreementPct,
+            adjMatched: bucket.adjMatched,
+            adjMismatched: bucket.adjMismatched,
+            adjAgreementPct,
+            ntDirOnly: bucket.ntDirOnly,
+            topMismatches,
+            bySymbol,
+            byUser,
+        };
     };
 
     const primaryStats = _finalize(primary);
@@ -1163,31 +1218,46 @@ function queryParityReport(opts) {
         // [S4-GATE] — S4 unlock decision reads primary.* only. coverage.* is
         // informational; forced NO_TRADE emits on multi-sym would inflate
         // tier-matching if merged.
+        // [S3.1e] Adjusted metrics treat NO_TRADE/NO_TRADE as a match
+        // regardless of direction. Per-user breakdown surfaces
+        // modifier-induced divergence that the global average can mask.
         totals: {
             clientRows: clientRows.length,
             clientPrimaryRows: clientRows.length - clientRows.filter(r => typeof r.reasons === 'string' && r.reasons.indexOf(COVERAGE_TAG) >= 0).length,
             clientCoverageRows: clientRows.filter(r => typeof r.reasons === 'string' && r.reasons.indexOf(COVERAGE_TAG) >= 0).length,
             serverRows: serverRowCount,
-            // Primary — the metric that gates S4
+            // Primary RAW — the original S4 metric
             primaryPairs: primaryStats.paired,
             primaryUnpaired: primaryStats.unpaired,
             primaryMatched: primaryStats.matched,
             primaryMismatched: primaryStats.mismatched,
             primaryAgreementPct: primaryStats.agreementPct,
-            // Coverage — informational, directional-only, DO NOT use for S4
+            // Primary ADJUSTED — NO_TRADE/NO_TRADE dir-only counted as match
+            primaryAdjMatched: primaryStats.adjMatched,
+            primaryAdjMismatched: primaryStats.adjMismatched,
+            primaryAdjAgreementPct: primaryStats.adjAgreementPct,
+            primaryNtDirOnly: primaryStats.ntDirOnly,
+            // Coverage RAW — informational
             coveragePairs: coverageStats.paired,
             coverageUnpaired: coverageStats.unpaired,
             coverageMatched: coverageStats.matched,
             coverageMismatched: coverageStats.mismatched,
             coverageAgreementPct: coverageStats.agreementPct,
+            // Coverage ADJUSTED — informational
+            coverageAdjMatched: coverageStats.adjMatched,
+            coverageAdjMismatched: coverageStats.adjMismatched,
+            coverageAdjAgreementPct: coverageStats.adjAgreementPct,
+            coverageNtDirOnly: coverageStats.ntDirOnly,
         },
         primary: {
             topMismatches: primaryStats.topMismatches,
             bySymbol: primaryStats.bySymbol,
+            byUser: primaryStats.byUser,
         },
         coverage: {
             topMismatches: coverageStats.topMismatches,
             bySymbol: coverageStats.bySymbol,
+            byUser: coverageStats.byUser,
         },
     };
 }

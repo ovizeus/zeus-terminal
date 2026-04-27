@@ -31,7 +31,7 @@ const ALT_KLINE_POLL_MS = 10000;    // 10s — balances freshness vs weight limi
 const _altKlinePollers = {};        // { 'BTCUSDT|5m': { timer, lastOpenTs } }
 
 // ── Event listeners ──
-const _listeners = { kline: [], price: [], fundingRate: [], openInterest: [] };
+const _listeners = { kline: [], price: [], fundingRate: [], openInterest: [], aggTrade: [] };
 
 function on(event, fn) {
     if (_listeners[event]) _listeners[event].push(fn);

@@ -722,8 +722,15 @@ function _runShadowCycle() {
             for (const [userId, stc] of _stcMap) {
                 if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
                 try {
-                    const gates = _checkGates(snap, ind, confluence, stc, userId);
-                    const fusion = _computeFusion(snap, ind, confluence, regime, gates, bars, userId);
+                    // [Phase 2 S3.1e] Shadow-pure fusion — mirrors client
+                    // computeFusionDecision exactly, with NO per-user
+                    // modifiers and NO gates. Live _computeFusion stays
+                    // untouched (still drives SERVER_BRAIN live path when
+                    // that flag is on). This removes the journal/KNN/
+                    // session/drawdown modifier-induced divergence that
+                    // was producing 25/27 BTCUSDT mismatches on the admin
+                    // user during S3.1 re-soak.
+                    const fusion = _computeFusionParity(snap, ind, confluence, regime, bars);
                     if (!fusion) continue;
                     db.logParityRow(userId, symbol, 'server', {
                         dir: fusion.dir,
@@ -812,6 +819,131 @@ function _calcConfluenceParity(snap, ind) {
         oiDir,
         isBull: bullDirs > bearDirs,
         isBear: bearDirs > bullDirs,
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3.1e] Fusion Parity — mirrors client computeFusionDecision
+// EXACTLY, with NO per-user modifiers and NO gates. Used ONLY by
+// _runShadowCycle for parity rows. Live _computeFusion below stays
+// untouched.
+//
+// Why this exists: the live _computeFusion applies per-user modifiers
+// (serverJournal, serverKNN, serverSessionProfile, serverDrawdownGuard,
+// serverStructure, serverLiquidity, serverVolatility) which are NOT
+// present in client's computeFusionDecision. For users with rich
+// history (e.g. uid=1 admin) those modifiers can shift confidence
+// across tier thresholds and produce SMALL/MEDIUM where client emits
+// NO_TRADE — a per-user-history-induced divergence the parity gate
+// must not see. S3.1e isolates parity rows from those modifiers.
+//
+// Inputs available on server side mirror the client's brain context:
+//   confluence.score   ↔ BM.confluenceScore
+//   serverOrderflow    ↔ BM.ofi (buy/sell volumes → OFI ratio)
+//   serverLiquidity.liquidityGrabRisk ↔ MAGNETS.nearPct/100 (analog,
+//                                       not exact)
+//   regime.regime      ↔ brain.regime (case folded)
+// Server has no equivalent of:
+//   - computeProbScore (Scenario)  → defaults to 0.5 (matches client
+//                                    null-prob default)
+//   - LAST_SCAN.sigDir (multi-sym scan direction bonus) → 0
+//   - LongShort feed → handled in _calcConfluenceParity already
+//
+// Risk: zero on live decisions. This function is called only when
+// PARITY_SHADOW_ENABLED && !SERVER_BRAIN. It does not write to
+// serverAT, telegram, db (other than via the caller's logParityRow),
+// reflection, multi-entry, or any modifier service.
+// ══════════════════════════════════════════════════════════════════
+function _computeFusionParity(snap, ind, confluence, regime, bars) {
+    // Confluence value (0-100) — mirrors client BM.confluenceScore
+    const conf = Number.isFinite(confluence && confluence.score) ? confluence.score : 50;
+    const confN = Math.max(0, Math.min(1, (conf - 50) / 50));
+
+    // 4) OFI from server orderflow — mirrors client BM.ofi.{buy,sell}
+    let ofi = 0;
+    let totalVol = 0;
+    try {
+        const flow = serverOrderflow.getFlow(snap.symbol);
+        const buy = (flow && Number.isFinite(flow.buyVol)) ? flow.buyVol : 0;
+        const sell = (flow && Number.isFinite(flow.sellVol)) ? flow.sellVol : 0;
+        totalVol = buy + sell;
+        if (totalVol > 0) ofi = (buy - sell) / totalVol;
+    } catch (_) { /* OFI=0 on failure, matches client neutral */ }
+    const ofiN = (ofi + 1) / 2;
+
+    // 2) Scenario / probScore — server has no computeProbScore equivalent.
+    // Client defaults probN=0.5 when prob is null; mirror that here.
+    const probN = 0.5;
+
+    // 3) Regime mapping — mirrors client substring match (case-insensitive
+    // because server uses 'TREND_UP'/'RANGE'/'CHAOS' uppercase).
+    const rRaw = String((regime && regime.regime) || 'unknown');
+    const r = rRaw.toLowerCase();
+    let regimeN = 0.5;
+    if (r.indexOf('trend') >= 0) regimeN = 0.75;
+    else if (r.indexOf('range') >= 0) regimeN = 0.55;
+    else if (r.indexOf('chop') >= 0 || r.indexOf('unstable') >= 0) regimeN = 0.35;
+
+    // 5) Liquidity danger — server analog of client MAGNETS.nearPct/100.
+    // Client default is 0.2 when nearPct is null; mirror that.
+    let liqDangerN = 0.2;
+    let liqDangerSet = false;
+    try {
+        const liq = serverLiquidity.getLiquidity(snap.symbol, bars || [], snap.price);
+        if (liq && Number.isFinite(liq.liquidityGrabRisk)) {
+            liqDangerN = Math.max(0, Math.min(1, liq.liquidityGrabRisk));
+            liqDangerSet = true;
+        }
+    } catch (_) { /* keep default 0.2, matches client */ }
+
+    // 7) Direction score — mirrors client formula exactly.
+    // Server has no LAST_SCAN.sigDir equivalent → bonus is 0.
+    let dirScore = 0;
+    dirScore += ofi * 0.55;
+    dirScore += ((conf - 50) / 50) * 0.30;
+    dirScore = Math.max(-1, Math.min(1, dirScore));
+
+    const dir = dirScore > 0.15 ? 'long' : dirScore < -0.15 ? 'short' : 'neutral';
+
+    // 8) Confidence fusion — mirrors client formula exactly (no modifiers).
+    const alignN = dir === 'neutral' ? 0 : (dir === 'long' ? ofiN : (1 - ofiN));
+    let confF = (confN * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20);
+    confF *= (1 - (liqDangerN * 0.55));
+    confF = Math.max(0, Math.min(1, confF));
+    const confidence = Math.round(confF * 100);
+
+    // 9) Entry tier — mirrors client thresholds exactly.
+    let decision;
+    if (dir === 'neutral') {
+        decision = 'NO_TRADE';
+    } else if (confidence >= 82 && conf >= 75 && regimeN >= 0.55) {
+        decision = 'LARGE';
+    } else if (confidence >= 72 && conf >= 68) {
+        decision = 'MEDIUM';
+    } else if (confidence >= 62 && conf >= 60) {
+        decision = 'SMALL';
+    } else {
+        decision = 'NO_TRADE';
+    }
+
+    // Reasons payload — informational, mirrors client format. Parity
+    // matching uses dir+decision only; reasons help debugging.
+    const reasons = [
+        'Confluence:' + Math.round(conf),
+        'Regime:' + r,
+    ];
+    if (totalVol > 0) reasons.push('OFI:' + Math.round(ofi * 100) + '%');
+    if (liqDangerSet) reasons.push('LiqDanger:' + Math.round(liqDangerN * 100) + '%');
+    reasons.push('DirScore:' + Math.round(dirScore * 100) + '%');
+    reasons.push('Decision:' + decision + '(' + confidence + '%)');
+
+    return {
+        ts: Date.now(),
+        dir,
+        decision,
+        confidence,
+        score: Math.round(dirScore * confidence),
+        reasons,
     };
 }
 
