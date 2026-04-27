@@ -11,6 +11,43 @@ const _CB_THRESHOLD = 5;        // consecutive failures to trip
 const _CB_RESET_MS = 30000;     // 30s cooldown before retrying
 const _cbMap = new Map();       // [BE-04] userId|apiKey → { failures, lastFailure, state }
 
+// ─── IP-level Circuit Breaker — Fix 2 (post 2026-04-23 16:19 ban incident) ───
+// Binance enforces 418 (IP banned) and 429 (rate-limited) per IP, NOT per API key.
+// Per-user CB above does not protect us: when user A trips a 418, every subsequent
+// request from any user on the same IP extends the ban. This breaker is a process-
+// global gate: parse `banned until <epoch_ms>` from Binance's error message, refuse
+// all signed requests until that deadline + small jitter. If the message lacks a
+// timestamp (defensive fallback), use _IP_CB_FALLBACK_MS.
+const _IP_CB_FALLBACK_MS = 60000;  // cap on fallback ban window (Binance min ban is usually ~2min, but be lenient)
+const _IP_CB_JITTER_MS = 500;      // small post-deadline buffer
+let _ipBannedUntil = 0;
+let _ipBanReason = '';
+function _isIpBanned() {
+  return _ipBannedUntil > Date.now();
+}
+function _setIpBan(untilMs, reason) {
+  // Never shrink an existing ban; only extend.
+  const target = Math.max(_ipBannedUntil, untilMs + _IP_CB_JITTER_MS);
+  if (target > _ipBannedUntil) {
+    _ipBannedUntil = target;
+    _ipBanReason = reason || _ipBanReason || 'IP rate-limit';
+    const remainingS = Math.ceil((target - Date.now()) / 1000);
+    console.warn(`[BINANCE IP-CB] Tripped — refusing all signed requests for ~${remainingS}s. Reason: ${_ipBanReason}`);
+  }
+}
+// Parse `banned until 1776961979385` style timestamp from Binance error msg.
+function _parseBanUntil(msg) {
+  if (!msg || typeof msg !== 'string') return null;
+  const m = msg.match(/banned until\s+(\d{10,16})/i);
+  if (!m) return null;
+  const ts = parseInt(m[1], 10);
+  if (!Number.isFinite(ts) || ts <= Date.now()) return null;
+  return ts;
+}
+function getIpCbStatus() {
+  return { banned: _isIpBanned(), bannedUntil: _ipBannedUntil, reason: _ipBanReason };
+}
+
 function _getCb(key) {
   if (!_cbMap.has(key)) _cbMap.set(key, { failures: 0, lastFailure: 0, state: 'CLOSED' });
   return _cbMap.get(key);
@@ -78,6 +115,15 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
 
   // [BE-04] Per-user circuit breaker key — userId preferred, fallback to apiKey
   const _cbKey = creds.userId ? String(creds.userId) : creds.apiKey;
+
+  // [Fix 2] IP-level gate — refuse instantly during active ban so we don't extend it.
+  if (_isIpBanned()) {
+    const remainingS = Math.ceil((_ipBannedUntil - Date.now()) / 1000);
+    const err = new Error(`Binance IP rate-limit — paused for ~${remainingS}s (${_ipBanReason})`);
+    err.status = 503;
+    err.code = 'IP_BANNED';
+    throw err;
+  }
 
   // Circuit breaker check
   if (!_cbCanProceed(_cbKey)) {
@@ -152,6 +198,14 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     }
 
     if (!res.ok) {
+      // [Fix 2] Detect IP-level rate-limit / ban (418/429) and trip global gate.
+      // Binance puts the unban deadline in the message: "...banned until <ts>...".
+      // If parsing fails, fall back to a fixed window so we still pause requests.
+      if (res.status === 418 || res.status === 429) {
+        const parsedTs = _parseBanUntil(data.msg);
+        const untilMs = parsedTs != null ? parsedTs : Date.now() + _IP_CB_FALLBACK_MS;
+        _setIpBan(untilMs, `HTTP ${res.status}: ${data.msg || res.statusText}`);
+      }
       _cbRecordFailure(_cbKey);
       const err = new Error(`Binance API error: ${data.msg || res.statusText}`);
       err.code = data.code;
@@ -164,4 +218,4 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   }
 }
 
-module.exports = { signParams, sendSignedRequest };
+module.exports = { signParams, sendSignedRequest, getIpCbStatus };
