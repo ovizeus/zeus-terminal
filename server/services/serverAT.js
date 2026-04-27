@@ -29,8 +29,14 @@ const _positions = [];          // flat array — each pos carries .userId
 const _userState = new Map();   // userId → per-user engine state
 const _liveEntryLocks = new Set(); // 'userId:symbol' — prevents concurrent live entries
 const _pendingLiveCloses = new Map(); // [LIVE-PARITY] seq → { pos, exitType, ts } — failed closes for reconciliation
-const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → closeTs — prevents immediate re-entry after close
+// [RE-ENTRY + S5] Close-cooldown map. Value semantics changed from closeTs
+// (legacy) to deadlineMs (S5+). Persisted per-user in at_state under key
+// 'serverAT:closeCooldowns:{uid}' as { 'uid:symbol': deadlineMs }. Restored
+// lazily on first isCloseCooldownActive() call per user (no module-load
+// boot hook in this file — the cost of restoring is paid at decision time).
+const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → deadlineMs
 const CLOSE_COOLDOWN_MS = 600000;   // [RE-ENTRY] 10 min cooldown after any close
+const _closeCooldownsRestoredFor = new Set();  // uids whose rows have been lazy-restored
 
 const DEFAULT_DEMO_BALANCE = 10000;
 function _defaultUserState() {
@@ -1657,8 +1663,9 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     else { us.dailyPnLDemo = +(us.dailyPnLDemo + pnl).toFixed(2); }
     _checkKillSwitch(userId);
 
-    // [RE-ENTRY] Set close cooldown so brain won't re-enter this symbol immediately
-    _closeCooldowns.set(userId + ':' + pos.symbol, Date.now());
+    // [RE-ENTRY + S5] Set close cooldown DEADLINE (now + CLOSE_COOLDOWN_MS) and
+    // persist it per-user so PM2 reload does not weaken the [RE-ENTRY] gate.
+    _setCloseCooldownDeadline(userId, pos.symbol);
 
     // ── Persist close + remove from active ──
     // [B4] Splice only if persist succeeds — prevents ghost positions on DB failure
@@ -2050,12 +2057,69 @@ function getOpenPositions(userId) {
 
 function getOpenCount(userId) { return _positions.filter(p => p.userId === userId).length; }
 
-// [RE-ENTRY] Check if symbol was recently closed (prevents immediate re-entry)
+// [S5] Persist this user's close-cooldown rows. Shape: { 'uid:symbol': deadlineMs }.
+// Called after every set so the live PM2 process and any restart are coherent.
+function _persistCloseCooldownsForUser(userId) {
+    try {
+        const obj = {};
+        const prefix = userId + ':';
+        for (const [k, v] of _closeCooldowns) {
+            if (k.indexOf(prefix) === 0) obj[k] = v;
+        }
+        db.atSetState('serverAT:closeCooldowns:' + userId, obj, userId);
+    } catch (e) {
+        try { logger.warn('AT_RE-ENTRY', '_persistCloseCooldownsForUser failed: ' + (e && e.message)); } catch (_) {}
+    }
+}
+
+// [S5] Lazy restore: pulled in on the first close-cooldown read per user. The
+// brain calls isCloseCooldownActive on every gate evaluation, so restoration
+// happens at decision time without needing a module-load boot hook (this file
+// has no dedicated start() function). Backward compatible with legacy bare
+// closeTs values: legacy → effective deadline = closeTs + CLOSE_COOLDOWN_MS.
+function _restoreCloseCooldownsForUser(userId) {
+    if (_closeCooldownsRestoredFor.has(userId)) return;
+    _closeCooldownsRestoredFor.add(userId);
+    try {
+        const saved = db.atGetState('serverAT:closeCooldowns:' + userId);
+        if (!saved || typeof saved !== 'object') return;
+        const now = Date.now();
+        const prefix = userId + ':';
+        let restored = 0;
+        for (const [k, v] of Object.entries(saved)) {
+            if (k.indexOf(prefix) !== 0) continue;
+            if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+            const deadline = v <= now ? v + CLOSE_COOLDOWN_MS : v;
+            if (deadline > now && !_closeCooldowns.has(k)) {
+                _closeCooldowns.set(k, deadline);
+                restored++;
+            }
+        }
+        if (restored > 0) {
+            try { logger.info('AT_RE-ENTRY', `[S5] uid=${userId} restored ${restored} close-cooldown(s)`); } catch (_) {}
+        }
+    } catch (e) {
+        try { logger.warn('AT_RE-ENTRY', '_restoreCloseCooldownsForUser failed: ' + (e && e.message)); } catch (_) {}
+    }
+}
+
+// [S5] Set + persist close-cooldown deadline for (userId, symbol).
+function _setCloseCooldownDeadline(userId, symbol) {
+    const deadline = Date.now() + CLOSE_COOLDOWN_MS;
+    _closeCooldowns.set(userId + ':' + symbol, deadline);
+    _persistCloseCooldownsForUser(userId);
+}
+
+// [RE-ENTRY + S5] Check if symbol was recently closed (prevents immediate
+// re-entry). Uses absolute-deadline semantics — gate is active when a deadline
+// exists AND the deadline is in the future. Lazily restores any persisted
+// rows for this user on first call.
 function isCloseCooldownActive(userId, symbol) {
+    _restoreCloseCooldownsForUser(userId);
     const key = userId + ':' + symbol;
-    const ts = _closeCooldowns.get(key);
-    if (!ts) return false;
-    if ((Date.now() - ts) > CLOSE_COOLDOWN_MS) {
+    const deadline = _closeCooldowns.get(key);
+    if (!deadline) return false;
+    if (Date.now() >= deadline) {
         _closeCooldowns.delete(key); // expired, clean up
         return false;
     }
@@ -3543,4 +3607,15 @@ module.exports = {
     _runReconciliation,
     // Watchdog (for manual trigger / testing)
     _watchdogLiveNoSL,
+    // [S5] Test-only hooks. Exposed via require but never called by any
+    // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
+    // persistence + lazy restore + deadline cleanup.
+    _s5TestHooks: Object.freeze({
+        closeCooldowns: _closeCooldowns,
+        closeCooldownsRestoredFor: _closeCooldownsRestoredFor,
+        setCloseCooldownDeadline: _setCloseCooldownDeadline,
+        persistCloseCooldownsForUser: _persistCloseCooldownsForUser,
+        restoreCloseCooldownsForUser: _restoreCloseCooldownsForUser,
+        CLOSE_COOLDOWN_MS,
+    }),
 };

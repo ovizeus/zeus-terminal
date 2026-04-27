@@ -64,16 +64,21 @@ let _shadowRunning = false;  // [Phase 2 S3] re-entry guard for shadow cycle
 let _cycleCount = 0;
 let _lastDecision = null;
 const _prevRegimes = new Map();  // [MULTI-SYM] symbol → last regime
-const _cooldowns = new Map();   // 'userId:symbol' → lastEntryTs
+// [S5] _cooldowns value semantics changed from lastEntryTs → deadlineMs.
+// Gate is `now < deadlineMs`; cleanup drops entries with deadline <= now.
+// Persisted per-user in at_state under key 'brain:cooldowns:{uid}'.
+const _cooldowns = new Map();   // 'userId:symbol' → deadlineMs
 // [AUDIT] Per-user regime change Telegram throttle (max 1 per 15min per user)
 const _regimeTgLastTs = new Map();  // userId → timestamp
 const REGIME_TG_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
 
-// [RT-03] Hourly cleanup of stale cooldowns and TG throttle entries
+// [RT-03 + S5] Hourly cleanup. Cooldowns are deadline-based now: drop only if
+// deadline already past. TG throttle is timestamp-based: drop entries older
+// than the throttle window so we never leak memory.
 setInterval(() => {
     const now = Date.now();
-    for (const [k, ts] of _cooldowns) { if (now - ts > 3600000) _cooldowns.delete(k); }
-    for (const [k, ts] of _regimeTgLastTs) { if (now - ts > 3600000) _regimeTgLastTs.delete(k); }
+    for (const [k, deadline] of _cooldowns) { if (deadline <= now) _cooldowns.delete(k); }
+    for (const [k, ts] of _regimeTgLastTs) { if (now - ts > REGIME_TG_COOLDOWN_MS) _regimeTgLastTs.delete(k); }
 }, 3600000);
 
 // ── Decision log (ring buffer) ──
@@ -113,6 +118,11 @@ function start() {
     // ── Restore persisted state from SQLite ──
     _restoreStcFromDb();
     _restoreCooldowns();
+    // [S5] Restore regime baseline + per-user TG throttle so a restart does
+    // not silently swallow the next regime change and does not bypass the
+    // 15-min Telegram dedup.
+    _restoreRegimeBaseline();
+    _restoreRegimeTgThrottle();
     // [BRAIN-V2] Start liquidity depth polling + order flow tracking —
     // required inputs for both the main cycle and the parity shadow cycle.
     serverLiquidity.startDepthPolling(serverState.getConfiguredSymbols());
@@ -163,6 +173,9 @@ function _restoreStcFromDb() {
     }
 }
 
+// [S5] Persist cooldowns as { 'uid:symbol': deadlineMs } per-user. The shape
+// of each persisted row stays { 'uid:symbol': number } — only the SEMANTICS
+// of that number changes from lastEntryTs (legacy) to deadlineMs (S5+).
 function _persistCooldowns() {
     try {
         const byUser = new Map();
@@ -181,25 +194,126 @@ function _persistCooldowns() {
     }
 }
 
+// [S5] Restore using absolute-deadline semantics. Backward compatible with
+// pre-S5 rows (bare lastEntryTs): treat any value below LEGACY_TS_THRESHOLD
+// as a pre-S5 lastEntryTs and apply the old 10-min restore window — i.e.
+// effective deadline = oldTs + 600000 ms. Drop any entry whose effective
+// deadline is already in the past.
 function _restoreCooldowns() {
     try {
         const users = db.listUsers ? db.listUsers() : [];
         const now = Date.now();
-        let restored = 0;
+        // Pre-S5 cooldowns were stored as Date.now() at the moment of the
+        // entry, so values fall in the 1.7e12 range. Post-S5 deadlines also
+        // fall in that range (now + cooldownMs). The DISTINGUISHING property
+        // is that legacy lastEntryTs cannot be larger than (now + ~5min)
+        // grace, while S5 deadlines are typically (now + cooldownMs).
+        // Conservative legacy heuristic: if value <= now, it is either an
+        // expired deadline OR a legacy lastEntryTs that has already been
+        // consumed. Either way we apply legacy +10min compatibility window
+        // to bare values <= now-old; new deadlines are always > now.
+        let restored = 0, legacyApplied = 0, dropped = 0;
         for (const u of users) {
             const saved = db.atGetState('brain:cooldowns:' + u.id);
             if (!saved || typeof saved !== 'object') continue;
             for (const [k, v] of Object.entries(saved)) {
-                // Only restore cooldowns less than 10min old
-                if (typeof v === 'number' && (now - v) < 600000) {
-                    _cooldowns.set(k, v);
+                if (typeof v !== 'number' || !Number.isFinite(v)) { dropped++; continue; }
+                let deadline = v;
+                if (v <= now) {
+                    // Treat as legacy lastEntryTs: effective deadline = v + 10min.
+                    deadline = v + 600000;
+                    legacyApplied++;
+                }
+                if (deadline > now) {
+                    _cooldowns.set(k, deadline);
+                    restored++;
+                } else {
+                    dropped++;
+                }
+            }
+        }
+        if (restored > 0 || legacyApplied > 0 || dropped > 0) {
+            logger.info('BRAIN', `[S5] Restored ${restored} cooldown(s) from DB (${legacyApplied} legacy-converted, ${dropped} dropped/expired)`);
+        }
+    } catch (e) {
+        logger.warn('BRAIN', '_restoreCooldowns failed: ' + (e && e.message));
+    }
+}
+
+// [S5] Set a deadline-based cooldown and persist immediately. Centralizes
+// the (set + persist) pattern so call sites cannot accidentally write a
+// timestamp that was never persisted.
+function _setCooldownDeadline(userId, symbol, cooldownMs) {
+    if (!Number.isFinite(cooldownMs) || cooldownMs <= 0) return;
+    const deadline = Date.now() + cooldownMs;
+    _cooldowns.set(userId + ':' + symbol, deadline);
+    _persistCooldowns();
+}
+
+// [S5] Persist the global per-symbol regime baseline. Regime is global market
+// state, but at_state requires a non-NULL user_id (FK CASCADE since migration
+// 023). Mirror the existing per-user pattern used by db.saveRegimeChange:
+// write one row per active brain user (= keys of _stcMap), each carrying the
+// SAME map. On restore, the union across all rows is the baseline (entries
+// agree by construction).
+function _persistRegimeBaseline() {
+    try {
+        const obj = {};
+        for (const [sym, regime] of _prevRegimes) obj[sym] = regime;
+        for (const _uid of _stcMap.keys()) {
+            try { db.atSetState('brain:prevRegimes:' + _uid, obj, _uid); } catch (_) {}
+        }
+    } catch (e) {
+        logger.warn('BRAIN', '_persistRegimeBaseline failed: ' + (e && e.message));
+    }
+}
+
+function _restoreRegimeBaseline() {
+    try {
+        const users = db.listUsers ? db.listUsers() : [];
+        let restored = 0;
+        for (const u of users) {
+            const saved = db.atGetState('brain:prevRegimes:' + u.id);
+            if (!saved || typeof saved !== 'object') continue;
+            for (const [sym, regime] of Object.entries(saved)) {
+                if (typeof regime === 'string' && regime.length > 0 && !_prevRegimes.has(sym)) {
+                    _prevRegimes.set(sym, regime);
                     restored++;
                 }
             }
         }
-        if (restored > 0) logger.info('BRAIN', `Restored ${restored} cooldown(s) from DB`);
+        if (restored > 0) logger.info('BRAIN', `[S5] Restored regime baseline for ${restored} symbol(s)`);
     } catch (e) {
-        logger.warn('BRAIN', '_restoreCooldowns failed: ' + (e && e.message));
+        logger.warn('BRAIN', '_restoreRegimeBaseline failed: ' + (e && e.message));
+    }
+}
+
+// [S5] Persist + restore per-user regime-change Telegram throttle so the
+// 15-min dedup survives a PM2 reload.
+function _persistRegimeTgThrottle() {
+    try {
+        for (const [uid, ts] of _regimeTgLastTs) {
+            if (Number.isFinite(ts)) db.atSetState('brain:regimeTg:' + uid, { ts }, uid);
+        }
+    } catch (e) {
+        logger.warn('BRAIN', '_persistRegimeTgThrottle failed: ' + (e && e.message));
+    }
+}
+
+function _restoreRegimeTgThrottle() {
+    try {
+        const users = db.listUsers ? db.listUsers() : [];
+        let restored = 0;
+        for (const u of users) {
+            const saved = db.atGetState('brain:regimeTg:' + u.id);
+            if (saved && typeof saved === 'object' && Number.isFinite(saved.ts)) {
+                _regimeTgLastTs.set(u.id, saved.ts);
+                restored++;
+            }
+        }
+        if (restored > 0) logger.info('BRAIN', `[S5] Restored regime TG throttle for ${restored} user(s)`);
+    } catch (e) {
+        logger.warn('BRAIN', '_restoreRegimeTgThrottle failed: ' + (e && e.message));
     }
 }
 
@@ -359,15 +473,22 @@ function _runCycle() {
                     'Price: `$' + (snap.price ? snap.price.toFixed(snap.price >= 100 ? 0 : 2) : '?') + '`';
                 const _now = Date.now();
                 // Only notify users who have active TC config (= brain/AT participants)
+                let _tgChanged = false;
                 for (const _uid of _stcMap.keys()) {
                     const _lastTs = _regimeTgLastTs.get(_uid) || 0;
                     if (_now - _lastTs >= REGIME_TG_COOLDOWN_MS) {
                         _regimeTgLastTs.set(_uid, _now);
+                        _tgChanged = true;
                         telegram.sendToUser(_uid, _regimeMsg);
                     }
                 }
+                // [S5] Persist TG throttle so the 15-min dedup survives reload.
+                if (_tgChanged) _persistRegimeTgThrottle();
             }
             _prevRegimes.set(symbol, regime.regime);
+            // [S5] Persist regime baseline whenever it changes so a restart
+            // does not silently swallow the next real regime change.
+            _persistRegimeBaseline();
 
             // ── Per-user gate check + fusion + AT execution ──
             for (const [userId, stc] of users) {
@@ -606,8 +727,10 @@ function _runCycle() {
                     // [2G] Pending Entry System — wait for pullback instead of instant entry
                     const pending = serverPendingEntry.createPending(decision, sizingStc, userId, marketCtx);
                     if (pending) {
-                        _cooldowns.set(userId + ':' + decision.symbol, Date.now());
-                        _persistCooldowns();
+                        // [S5] Use the SAME cooldownMs that the gate at line ~1050 will read
+                        // (volAdjustedStc.cooldownMs ⇒ stc.cooldownMs at gate time). Persist
+                        // immediately so a crash/reload can not drop the deadline.
+                        _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
                         const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
                             Object.assign({}, _mlExtra, { sourcePath: 'pending_created', finalAction: 'pending_created' })
                         ));
@@ -620,8 +743,8 @@ function _runCycle() {
                         ));
                         const entry = serverAT.processBrainDecision(decision, sizingStc, userId);
                         if (entry) {
-                            _cooldowns.set(userId + ':' + decision.symbol, Date.now());
-                            _persistCooldowns();
+                            // [S5] Same deadline-based cooldown set as the pending branch.
+                            _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
                             if (_snapId && entry.seq) brainLogger.linkSeq(_snapId, entry.seq);
                             logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);
                         }
@@ -1045,10 +1168,12 @@ function _checkGates(snap, ind, confluence, stc, userId) {
     gates.posOk = openCount < stc.maxPos;
     if (!gates.posOk) gates.reasons.push('max_pos');
 
-    // 7. Cooldown gate (per-user + per-symbol)
+    // 7. Cooldown gate (per-user + per-symbol). [S5] deadline semantics:
+    // value is the absolute deadlineMs at which the cooldown expires.
+    // OK when no deadline OR deadline already past.
     const cdKey = userId + ':' + snap.symbol;
-    const lastEntry = _cooldowns.get(cdKey);
-    gates.coolOk = !lastEntry || (Date.now() - lastEntry) > stc.cooldownMs;
+    const cdDeadline = _cooldowns.get(cdKey);
+    gates.coolOk = !cdDeadline || Date.now() >= cdDeadline;
     if (!gates.coolOk) gates.reasons.push('cooldown');
 
     // 8. [RE-ENTRY] Close cooldown — prevent re-entry after recent close (10 min)
@@ -1531,4 +1656,21 @@ module.exports = {
     getSTC,
     getBrainVision,
     get STC() { return Object.assign({}, DEFAULT_STC); },
+    // [S5] Test-only hooks. Exposed via require but never called by any
+    // runtime path (start/_runCycle/_runShadowCycle do not reference them).
+    // Used by tests/probe-s5.js to exercise persistence + restore + cleanup
+    // without booting the brain cycle.
+    _s5TestHooks: Object.freeze({
+        cooldowns: _cooldowns,
+        prevRegimes: _prevRegimes,
+        regimeTgLastTs: _regimeTgLastTs,
+        persistCooldowns: _persistCooldowns,
+        restoreCooldowns: _restoreCooldowns,
+        setCooldownDeadline: _setCooldownDeadline,
+        persistRegimeBaseline: _persistRegimeBaseline,
+        restoreRegimeBaseline: _restoreRegimeBaseline,
+        persistRegimeTgThrottle: _persistRegimeTgThrottle,
+        restoreRegimeTgThrottle: _restoreRegimeTgThrottle,
+        REGIME_TG_COOLDOWN_MS,
+    }),
 };
