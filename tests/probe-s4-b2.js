@@ -347,7 +347,8 @@ console.log('\n=== T10 — defensive rejects ===');
 // ────────────────────────────────────────────────────────────────────────────
 // T11 — BYBIT flags are at safe defaults
 // (NB: migrationFlags exposes per-flag property getters + getAll(); there is
-//  no MF.get(name) method — the probe reads the canonical surface.)
+//  no MF.get(name) method — the probe reads the canonical surface. The
+//  bybitSigner dry-run gate also reads via the per-flag getter — see T13.)
 // ────────────────────────────────────────────────────────────────────────────
 console.log('\n=== T11 — Bybit migration flags at safe defaults ===');
 {
@@ -384,6 +385,44 @@ console.log('\n=== T12 — apiSecret never leaks into any descriptor ===');
     const sigs = all.map(r => r.headers['X-BAPI-SIGN']);
     const uniq = new Set(sigs);
     check('T12: all 8 signatures unique (deterministic per payload)', uniq.size === 8);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// T13 — S4-B1.1 dry-run gate hotfix: source-level fail-closed verification
+// Reads bybitSigner.js source and asserts:
+//   (a) the new fail-closed gate is present (`MF.BYBIT_DRY_RUN_ONLY !== true`)
+//   (b) the canonical error code `BYBIT_DRY_RUN_ONLY_REQUIRED` is thrown
+//   (c) the legacy inert pattern `MF.get(...)` is no longer present
+// Static verification is sufficient because the gate is a straight `if-throw`
+// with no escape clause; no require.cache surgery / mock injection needed.
+// ────────────────────────────────────────────────────────────────────────────
+console.log('\n=== T13 — S4-B1.1 dry-run gate hotfix (source-level) ===');
+{
+    const fs = require('fs');
+    const path = require('path');
+    const sigPath = path.resolve(__dirname, '..', 'server', 'services', 'bybitSigner.js');
+    const srcRaw = fs.readFileSync(sigPath, 'utf8');
+    // Strip line comments and block comments before pattern matching so probe
+    // assertions catch real code only — never the documentation that legitimately
+    // describes the patterns being forbidden.
+    const srcCode = srcRaw
+        .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
+        .replace(/(^|[^:])\/\/[^\n]*/g, '$1'); // line comments (preserves http:// in strings)
+
+    check('T13: bybitSigner.js readable',
+        typeof srcRaw === 'string' && srcRaw.length > 0);
+    check('T13: dry-run gate uses direct MF.BYBIT_DRY_RUN_ONLY (fail-closed)',
+        /MF\.BYBIT_DRY_RUN_ONLY\s*!==\s*true/.test(srcCode));
+    check('T13: dry-run gate throws canonical BYBIT_DRY_RUN_ONLY_REQUIRED error',
+        /throw new Error\(['"]BYBIT_DRY_RUN_ONLY_REQUIRED['"]\)/.test(srcCode));
+    check('T13: legacy MF.get(...) pattern absent in code (comments excluded)',
+        !/MF\.get\(/.test(srcCode));
+    check('T13: still no HTTP send code in bybitSigner.js (comments excluded)',
+        !/\bfetch\s*\(/.test(srcCode) && !/\baxios\b/.test(srcCode) &&
+        !/\bhttps?\.request\b/.test(srcCode) &&
+        !/require\(['"](?:node:)?https?['"]\)/.test(srcCode) &&
+        !/require\(['"]node-fetch['"]\)/.test(srcCode));
+    check('T13: still no sendSignedRequest export', typeof sgn.sendSignedRequest === 'undefined');
 }
 
 // ────────────────────────────────────────────────────────────────────────────

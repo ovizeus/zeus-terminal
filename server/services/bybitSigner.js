@@ -127,8 +127,12 @@ function buildSignedRequestDryRun(method, path, params = {}, creds = {}, options
     if (!creds.baseUrl) {
         throw new Error('buildSignedRequestDryRun: creds.baseUrl required (refusing to default to production)');
     }
-    if (typeof MF.get === 'function' && MF.get('BYBIT_DRY_RUN_ONLY') !== true) {
-        throw new Error('buildSignedRequestDryRun: BYBIT_DRY_RUN_ONLY must be true in S4-B1');
+    // Fail-closed dry-run gate (S4-B1.1). migrationFlags exposes per-flag
+    // property getters + getAll(); there is no MF.get(name) method, so we read
+    // the flag directly. If BYBIT_DRY_RUN_ONLY is anything other than strictly
+    // true, refuse to build a signed envelope. No fallback-open behavior.
+    if (MF.BYBIT_DRY_RUN_ONLY !== true) {
+        throw new Error('BYBIT_DRY_RUN_ONLY_REQUIRED');
     }
 
     const M = String(method).toUpperCase();
