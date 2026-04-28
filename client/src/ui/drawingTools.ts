@@ -35,6 +35,13 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   // Escape key, or when the tool changes.
   var _previewSeries: any = null;
   var _previewMoveHandler: any = null;
+  // [Pack G.3 mobile] A visible DOM dot anchored to p1 while the
+  // trendline is being drawn. Without this, on mobile (no cursor)
+  // the operator can't see where the first tap landed — preview
+  // line is zero-length until they move their finger. The dot
+  // tracks p1 in chart space so it stays glued to the right place
+  // through pan / zoom too.
+  var _previewMarker: any = null;
   var _handleContainer: any = null;
 
   var COLORS = ['#f0c040','#00d97a','#ff3355','#00b8d4','#aa44ff','#ff8822','#ffffff'];
@@ -684,59 +691,87 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
 
   // Mobile tap
   var _tapStart: any = null;
-  // [Pack G.1 mobile] Tap-and-drag flow for trendline. On mobile there
-  // is no cursor-following preview between two taps — the operator
-  // can't see where the second point will land. So when the trendline
-  // tool is active, the FIRST touchstart on the chart sets p1 and
-  // starts the preview; the preview follows the finger via touchmove
-  // (handled by _previewMoveHandler with the touch fix); touchend
-  // commits p2 at the release point. Single gesture = one trendline,
-  // exactly like TradingView mobile.
+  // [Pack G.1 / G.3 mobile] Trendline placement supports three flows:
+  //
+  //  (a) Tap-and-drag in ONE gesture (TradingView mobile style):
+  //      touchdown = p1, finger drag = preview follows, touchup = p2.
+  //
+  //  (b) Tap-then-lift, then tap second point: first tap places p1
+  //      AND leaves a visible dot marker (Pack G.3) so the operator
+  //      can see where p1 landed. A subsequent tap places p2.
+  //
+  //  (c) Tap-then-lift, then a NEW touch + drag: after the first tap
+  //      the marker stays put; if the operator now starts a fresh
+  //      touch and drags, releasing places p2 at the release point.
+  //
+  // _tlineTouchActive marks any in-flight touch that touchend should
+  // resolve. _tlineJustInitedP1 distinguishes the first tap (don't
+  // immediately place p2 at p1's coords just because step is 1) from
+  // a follow-up touch.
   var _tlineTouchActive = false;
+  var _tlineJustInitedP1 = false;
   document.addEventListener('touchstart', function(e: any) {
     if (!e.touches || !e.touches.length) return;
     var t0 = e.touches[0];
     _tapStart = { x: t0.clientX, y: t0.clientY, t: Date.now() };
     if (t0.target && t0.target.closest && t0.target.closest('.dt-handle,.dt-del,.dt-cfg,.dt-cfg-panel')) return;
 
-    if (_activeTool === 'tline' && _tlineStep === 0 && _isOnChart({ clientX: t0.clientX, clientY: t0.clientY })) {
-      var price = _priceAtY(t0.clientY);
-      var time = _timeAtX(t0.clientX);
-      if (price && time) {
-        _tlinePendingP1 = { time: time, price: price };
-        _tlineStep = 1;
+    if (_activeTool === 'tline' && _isOnChart({ clientX: t0.clientX, clientY: t0.clientY })) {
+      if (_tlineStep === 0) {
+        var price = _priceAtY(t0.clientY);
+        var time = _timeAtX(t0.clientX);
+        if (price && time) {
+          _tlinePendingP1 = { time: time, price: price };
+          _tlineStep = 1;
+          _tlineTouchActive = true;
+          _tlineJustInitedP1 = true;
+          _startPreview(_tlinePendingP1);
+        }
+      } else if (_tlineStep === 1) {
+        // Second touch — could be a tap (place p2) or drag (place p2
+        // at release point). Mark active so touchend can resolve.
         _tlineTouchActive = true;
-        _startPreview(_tlinePendingP1);
+        _tlineJustInitedP1 = false;
       }
     }
   }, { passive: true });
   document.addEventListener('touchend', function(e: any) {
-    // [Pack G.1] Trendline drag-to-draw release: place p2 at the
-    // release point if the finger moved >8px. If the user merely
-    // tapped (no drag), keep p1 + preview and fall through to the
-    // tap-to-place-p2 flow on the next tap (legacy 2-tap mode).
-    if (_tlineTouchActive) {
+    if (_tlineTouchActive && _tlinePendingP1) {
       var touch = (e.changedTouches && e.changedTouches[0]);
       var moved = (touch && _tapStart) ? (Math.abs(touch.clientX - _tapStart.x) + Math.abs(touch.clientY - _tapStart.y)) : 0;
-      if (touch && moved > 8 && _tlinePendingP1) {
-        var price2 = _priceAtY(touch.clientY);
-        var time2 = _timeAtX(touch.clientX);
-        if (price2 && time2) {
+
+      if (touch && moved > 8) {
+        // Drag → place p2 at release point (works for one-gesture
+        // tap-and-drag AND for new-touch-after-first-tap).
+        var p2price = _priceAtY(touch.clientY);
+        var p2time = _timeAtX(touch.clientX);
+        if (p2price && p2time) {
           _clearPreview();
-          _addTLine(_tlinePendingP1, { time: time2, price: price2 });
-          _tlinePendingP1 = null; _tlineStep = 0; _tlineTouchActive = false;
+          _addTLine(_tlinePendingP1, { time: p2time, price: p2price });
+          _tlinePendingP1 = null; _tlineStep = 0; _tlineTouchActive = false; _tlineJustInitedP1 = false;
           _deactivate();
           _toast('Trendline placed');
           _tapStart = null;
           return;
         }
       }
-      // No drag (or coords invalid) — leave preview in place, switch
-      // to 2-tap mode for this gesture: next tap places p2.
+
+      if (_tlineJustInitedP1) {
+        // This touch was the very first tap that placed p1. Marker is
+        // visible; preview is armed. Wait for the next gesture (tap
+        // OR drag) to place p2 — do NOT fall through to the legacy
+        // tap handler (it would call _handleChartAction with step===1
+        // and immediately place p2 at p1's coords → zero-length line).
+        _tlineJustInitedP1 = false;
+        _tlineTouchActive = false;
+        _tapStart = null;
+        _toast('Tap or drag to place 2nd point (Esc to cancel)');
+        return;
+      }
+      // Tap with step already === 1 from a previous touch — fall
+      // through so legacy tap handler runs _handleChartAction which
+      // places p2 at the tap point.
       _tlineTouchActive = false;
-      _tapStart = null;
-      _toast('Tap second point (Esc to cancel)');
-      return;
     }
 
     if (!_tapStart) return;
@@ -774,6 +809,8 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   }
   function _deactivate() {
     _activeTool = null; _tlineStep = 0; _tlinePendingP1 = null;
+    // [Pack G.3] Reset mobile flow flags so a future activation starts clean.
+    _tlineTouchActive = false; _tlineJustInitedP1 = false;
     _clearPreview();
     _updateBtnStates();
     var mc = _mc(); if (mc) mc.style.cursor = '';
@@ -800,6 +837,17 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
         { time: p1.time, value: p1.price },
       ]);
     } catch (_) { _previewSeries = null; return; }
+    // [Pack G.3 mobile] Add a visible DOM dot at p1 — operator can
+    // SEE where their first tap landed instead of staring at a
+    // zero-length dashed line.
+    _ensureHandleContainer();
+    if (_handleContainer) {
+      _previewMarker = document.createElement('div');
+      _previewMarker.className = 'dt-preview-marker';
+      _previewMarker.style.cssText = 'position:absolute;width:14px;height:14px;border-radius:50%;border:2px solid #88ccff;background:#88ccff66;box-shadow:0 0 6px #88ccff88;transform:translate(-50%,-50%);z-index:28;pointer-events:none;';
+      _handleContainer.appendChild(_previewMarker);
+      _updatePreviewMarker();
+    }
     _previewMoveHandler = function (e: any) {
       if (!_previewSeries || !_tlinePendingP1) return;
       // [Pack G.1] Normalize coords — touchmove events use
@@ -839,12 +887,35 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       try { var c = _chart(); if (c) c.removeSeries(_previewSeries); } catch (_) { /* */ }
       _previewSeries = null;
     }
+    // [Pack G.3 mobile] Tear down the p1 dot marker too.
+    if (_previewMarker && _previewMarker.parentElement) {
+      try { _previewMarker.parentElement.removeChild(_previewMarker); } catch (_) { /* */ }
+    }
+    _previewMarker = null;
+  }
+
+  // [Pack G.3 mobile] Re-pin the p1 dot to its chart-space anchor
+  // every frame so it stays glued to the right place through chart
+  // pan / zoom (just like the regular line handles).
+  function _updatePreviewMarker() {
+    if (!_previewMarker || !_tlinePendingP1) return;
+    var mc = _mc(); if (!mc) return;
+    var x = _timeToX(_tlinePendingP1.time);
+    var y = _priceToY(_tlinePendingP1.price);
+    if (x == null || y == null) return;
+    var oxL = mc.offsetLeft || 0;
+    var oyT = mc.offsetTop || 0;
+    _previewMarker.style.left = (oxL + x) + 'px';
+    _previewMarker.style.top = (oyT + y) + 'px';
   }
 
   // [Pack F] Escape key cancels mid-trendline — TradingView parity.
   document.addEventListener('keydown', function (e: KeyboardEvent) {
     if (e.key === 'Escape' && _activeTool === 'tline' && _tlineStep === 1) {
       _tlineStep = 0; _tlinePendingP1 = null;
+      // [Pack G.3] Also clear the mobile flow flags on cancel so the
+      // operator can re-enter the tline tool from a clean state.
+      _tlineTouchActive = false; _tlineJustInitedP1 = false;
       _clearPreview();
       _deactivate();
       _toast('Trendline cancelled');
@@ -912,8 +983,10 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     } catch(_) {}
 
     // Handle position sync — RAF loop for selected line handles
+    // and the in-flight trendline preview marker (Pack G.3).
     function _syncLoop() {
       if (_selectedId) _updateHandles();
+      if (_previewMarker) _updatePreviewMarker();
       requestAnimationFrame(_syncLoop);
     }
     requestAnimationFrame(_syncLoop);
