@@ -418,9 +418,14 @@ export const BrainCockpit = memo(function BrainCockpit() {
 
       </div>{/* end cockpit panel */}
 
-      {/* Q-FORECAST + WHY ENGINE row — store-driven */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', padding: '4px 6px 0' }}>
-        <QForecastBlock />
+      {/* [Pack C / L5] Q-FORECAST removed from render — `w.S.quantumForecast`
+          was read by renderQForecast (brain.ts:2022) but never written
+          anywhere in the codebase, so the panel always showed
+          "Neutral (0) / Range: — / State: —". WHY ENGINE remains; the
+          grid collapses to a single column. QForecastBlock function +
+          brainStatsStore.forecast field kept as dormant dead code for a
+          future Phase 12 cleanup batch (no behavior impact). */}
+      <div style={{ padding: '4px 6px 0' }}>
         <WhyEngineBlock />
       </div>
 

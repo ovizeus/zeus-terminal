@@ -221,7 +221,15 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
         if (x1 != null && y1 != null) { l.handles[0].style.left = x1+'px'; l.handles[0].style.top = y1+'px'; }
         if (x2 != null && y2 != null) { l.handles[1].style.left = x2+'px'; l.handles[1].style.top = y2+'px'; }
         if (l.delBtn && x1 != null && y1 != null && x2 != null && y2 != null) {
-          l.delBtn.style.left = ((x1+x2)/2) + 'px'; l.delBtn.style.top = Math.min(y1,y2) - 15 + 'px';
+          // [Pack C / M12 phase 1] Clamp delete-X position to chart bounds
+          // so the button never floats outside the chart when one trendline
+          // endpoint is panned past the visible viewport. Without this, a
+          // long trendline with one foot off-screen left the X button
+          // unclickable in the top-left or above the chart.
+          var chartH = mc.getBoundingClientRect().height;
+          var midX = Math.max(15, Math.min(chartW - 15, (x1 + x2) / 2));
+          var topY = Math.max(15, Math.min(chartH - 15, Math.min(y1, y2) - 15));
+          l.delBtn.style.left = midX + 'px'; l.delBtn.style.top = topY + 'px';
         }
       }
     });

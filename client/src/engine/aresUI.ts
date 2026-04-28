@@ -730,6 +730,14 @@ export function initAriaBrain() {
 
     // Generare path neuron-star: nucleu + 4 spikes asimetrice
     function _starPath(cx: any, cy: any, rCore: any, nSpikes: any, spikeLen: any) {
+      // [Pack C / NC6 → closes L2] Defensive guard: if any input is not
+      // finite (BRAIN_NODES[i] malformed, upstream geometry produced NaN,
+      // accentCol unexpectedly typed), bail with empty string instead of
+      // emitting `M NaN,NaN L NaN,NaN ...` which Chrome reports as
+      // "<path> attribute d: Expected number…". Closes L2.
+      if (!Number.isFinite(cx) || !Number.isFinite(cy) ||
+          !Number.isFinite(rCore) || !Number.isFinite(spikeLen) ||
+          !Number.isFinite(nSpikes) || nSpikes < 1) return ''
       let d = ''
       for (let s = 0; s < nSpikes; s++) {
         const ang = (s / nSpikes) * Math.PI * 2

@@ -239,12 +239,18 @@ function _positions(): AresPositionCard[] {
       id: String(p.id),
       side: String(p.side || ''),
       symbol: 'BTCUSDT',
-      entry: Number(p.entryPrice || 0),
-      size: Number(p.notional || 0),
-      pnl: Number(p.uPnL || 0),
-      pnlPct: Number(p.uPnLPct || 0),
+      // [Pack C / NC2] Apply `|| 0` AFTER Number() so NaN is also caught.
+      // The previous form `Number(p.field || 0)` short-circuited via `||`
+      // BEFORE coercion: a non-numeric truthy value like "abc" would yield
+      // Number("abc") = NaN and surface in the React UI as "NaN".
+      // The corrected form `Number(p.field) || 0` covers null/undefined/0
+      // AND NaN. Same below for the remaining 6 fields.
+      entry: Number(p.entryPrice) || 0,
+      size: Number(p.notional) || 0,
+      pnl: Number(p.uPnL) || 0,
+      pnlPct: Number(p.uPnLPct) || 0,
       live: !!p.isLive,
-      durationMs: Number(p.openedAt ? Date.now() - p.openedAt : 0),
+      durationMs: p.openedAt ? Math.max(0, Date.now() - p.openedAt) : 0,
       tag: p._slMovedBE ? 'BE' : undefined,
       closable: true,
       leverage: Number(p.leverage) || 1,

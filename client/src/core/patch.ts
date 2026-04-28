@@ -40,7 +40,12 @@ w.ZEUS.cfg = w.ZEUS.cfg || {
 // ── STEP 3A — setSymbol wrapper ──
 w.ZEUS.applyPatch("wrap.setSymbol", function () {
   const orig = w.setSymbol
-  if (!orig) { console.warn("[PATCH] wrap.setSymbol: w.setSymbol not found"); return }
+  // [Pack C / L1] Phase 6 React migration moved away from the legacy
+  // global `w.setSymbol`; the patch wrapper correctly noops when the
+  // global is absent. The console.warn was historical clutter — silence
+  // it to keep DevTools console clean. The wrapper still installs
+  // automatically if a future build re-exposes the legacy global.
+  if (!orig) return
   if (orig.__patched) return
 
   let _ssTimer: any = null
@@ -60,7 +65,10 @@ w.ZEUS.applyPatch("wrap.setSymbol", function () {
 // ── STEP 3B — Tick wrapper ──────────────────────────────────────────
 w.ZEUS.applyPatch("hook.tick", function () {
   const orig = w.runQuantDetectors
-  if (!orig) { console.warn("[PATCH] hook.tick: window.runQuantDetectors not found"); return }
+  // [Pack C / L1] Same as wrap.setSymbol above — Phase 6 migration
+  // dropped the legacy global. The deferred re-run at line ~86 silently
+  // retries via _deferPatchLayer, so a single boot-time miss is fine.
+  if (!orig) return
   if (orig.__patched) return
 
   w.runQuantDetectors = function () {

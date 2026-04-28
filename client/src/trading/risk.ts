@@ -38,6 +38,16 @@ function _syncAdaptiveToStore(): void {
 
 // Macro cortex computation
 export function computeMacroCortex(): void {
+  // [Pack C / NC11] Defensive init — same risk class as M3 (chart sessions)
+  // and M4 (Adaptive Control). If `w.BM`, `w.BM.macro`, or `w.BM.adapt`
+  // is undefined at call time (boot race / theme reset / lazy import),
+  // the next line would throw `Cannot read properties of undefined`
+  // and the entire macro pipeline silently dies. Idempotent: re-init
+  // a missing `macro` map only if absent, never overwrites populated
+  // state.
+  if (!w.BM) w.BM = {}
+  if (!w.BM.macro) w.BM.macro = { cycleScore: 0, flowScore: 0, sentimentScore: 0, composite: 0, slope: 0, phase: 'NEUTRAL', confidence: 0, lastUpdate: 0 }
+  if (!w.BM.adapt) w.BM.adapt = { lastPhase: 'NEUTRAL' }
   try {
     var now = Date.now()
     var prev = w.BM.macro.composite || 0
