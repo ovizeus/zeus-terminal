@@ -210,7 +210,12 @@ function _broadcastPositions(userId) {
                 positions,
             },
         });
-    } catch (_) { /* broadcast is best-effort */ }
+    } catch (e) {
+        // [S6-A] Replace previous silent catch with observable warn so a
+        // broken broadcast does not vanish from the operator's view. Best-
+        // effort guard: never let warn-itself throw inside this hot path.
+        try { logger.warn('AT_WS', 'broadcastPositions failed uid=' + userId + ': ' + (e && e.message)); } catch (_) {}
+    }
 }
 
 function _persistPosition(pos) {
@@ -3617,5 +3622,15 @@ module.exports = {
         persistCloseCooldownsForUser: _persistCloseCooldownsForUser,
         restoreCloseCooldownsForUser: _restoreCloseCooldownsForUser,
         CLOSE_COOLDOWN_MS,
+    }),
+    // [S6-A] Test-only hooks for the positions.changed contract probe.
+    // Exposed via require but never called by any runtime path. Used by
+    // tests/probe-s6.js to drive _broadcastPositions against a stubbed
+    // global.__zeusWsBroadcastToUser, inspect the snapshot frame, and
+    // verify per-user isolation + DB-authoritative shape.
+    _s6TestHooks: Object.freeze({
+        broadcastPositions: _broadcastPositions,
+        normalizePositionRow: _normalizePositionRow,
+        positions: _positions,
     }),
 };
