@@ -631,6 +631,19 @@ function processBrainDecision(decision, stc, userId) {
 
     const us = _uState(userId);
 
+    // [Phase 2 S6-B2] LIVE-MODE AUTHORIZATION GATE — refuse to dispatch when
+    // the user is in any non-demo mode (today: 'live'; future: 'testnet'/'real')
+    // unless the FULL SERVER_AT flag is on. SERVER_AT_DEMO alone is a
+    // demo-only carve-out (per S6-B1) and is NOT sufficient. Unknown /
+    // missing engineMode is treated as live for fail-safety. The demo
+    // branch (engineMode === 'demo') passes through to the existing
+    // demo paper-fill path below, untouched.
+    if (us.engineMode !== 'demo' && MF.SERVER_AT !== true) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — SERVER_AT_REQUIRED_FOR_LIVE (mode=${us.engineMode || 'unknown'})`);
+        _recordMissedTrade(userId, decision, 'SERVER_AT_REQUIRED_FOR_LIVE');
+        return null;
+    }
+
     // [F1] Per-user AT on/off gate — if user disabled AT, block ALL entries
     if (!us.atActive) {
         logger.info('AT_ENGINE', `Entry blocked uid=${userId} — AT disabled by user`);
@@ -865,6 +878,21 @@ async function _placeConditionalOrder(params, creds) {
 // Live Execution — Binance API calls (only for live-mode positions)
 // ══════════════════════════════════════════════════════════════════
 async function _executeLiveEntry(entry, stc) {
+    // [Phase 2 S6-B2] PARANOID LIVE EXECUTION GATE — fires as the FIRST
+    // executable statement, before any state mutation (no _livePending
+    // flag set), before any in-flight lock acquisition, before any
+    // _persistPosition / _persistClose write, and before any signed
+    // exchange request. _executeLiveEntry must NEVER fire unless the
+    // FULL SERVER_AT flag is on; SERVER_AT_DEMO is a demo-only carve-out
+    // (per S6-B1) and must not reach Binance/Bybit/any real exchange.
+    // This guard is independent of engineMode (defense in depth) — even
+    // a misrouted demo entry that somehow lands here cannot escape.
+    if (MF.SERVER_AT !== true) {
+        try { logger.error('AT_LIVE', `[${entry && entry.seq}] LIVE_ENTRY_REQUIRES_FULL_SERVER_AT — refusing live entry uid=${entry && entry.userId} sym=${entry && entry.symbol}`); } catch (_) {}
+        const err = new Error('LIVE_ENTRY_REQUIRES_FULL_SERVER_AT');
+        err.code = 'LIVE_ENTRY_REQUIRES_FULL_SERVER_AT';
+        throw err;
+    }
     entry._livePending = true; // [TL-04] Lock position from onPriceUpdate exits
     // [P5A SERVER LIVE OWNERSHIP] _livePending true transition — this is what getLivePositions() relies on
     // to keep the position visible BEFORE entry.live.status is set at line ~1146.
@@ -3632,5 +3660,16 @@ module.exports = {
         broadcastPositions: _broadcastPositions,
         normalizePositionRow: _normalizePositionRow,
         positions: _positions,
+    }),
+    // [Phase 2 S6-B2] Test-only hooks for the paranoid live execution gate
+    // probe. Two pure flag readers + the actual _executeLiveEntry function
+    // exposed so tests/probe-s6b2.js can verify that calling it with
+    // MF.SERVER_AT=false throws LIVE_ENTRY_REQUIRES_FULL_SERVER_AT before
+    // any state mutation. Runtime never references these exports.
+    _s6b2TestHooks: Object.freeze({
+        executeLiveEntry: _executeLiveEntry,
+        canExecuteLiveEntryUnderCurrentFlags: () => MF.SERVER_AT === true,
+        isLiveModeAuthorizedUnderCurrentFlags: (engineMode) =>
+            engineMode === 'demo' ? true : (MF.SERVER_AT === true),
     }),
 };

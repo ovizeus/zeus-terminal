@@ -89,7 +89,20 @@ check('processBrainDecision still blocked under PANIC', brainEntry === null);
 console.log('\n=== T5 — Post-disarm, brain entry flows ===');
 serverAT.setGlobalHalt(false, ADMIN_ID, null);
 serverAT.reset(ADMIN_ID);
-const brainOk = serverAT.processBrainDecision(fakeDecision, fakeStc, ADMIN_ID);
+// [S6-B2 compatibility] Admin is in engineMode='live' on this DB. The S6-B2
+// paranoid gate refuses live brain dispatch unless MF.SERVER_AT === true.
+// Mock the flag for the duration of this single processBrainDecision call so
+// the original S2.B post-disarm assertion still proves what it intended:
+// "the global-halt brain gate releases on disarm". MF.SERVER_AT is restored
+// immediately after the call (no other test uses it).
+const _MF_S2C = require('../server/migrationFlags');
+const _origSAT = Object.getOwnPropertyDescriptor(_MF_S2C, 'SERVER_AT');
+Object.defineProperty(_MF_S2C, 'SERVER_AT', { configurable: true, enumerable: true, get: () => true });
+let brainOk;
+try { brainOk = serverAT.processBrainDecision(fakeDecision, fakeStc, ADMIN_ID); }
+finally {
+    if (_origSAT) Object.defineProperty(_MF_S2C, 'SERVER_AT', _origSAT);
+}
 check('brain entry created post-disarm', !!brainOk);
 check('entry still has decisionId (S2.A intact)', brainOk && /^[0-9a-f]{8}$/.test(brainOk.decisionId));
 
