@@ -60,6 +60,22 @@ function _clearBR(): void {
 }
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
 
+// [S6-B5] Demo server-authority gate.
+// Blocks the client AT engine ONLY when the server has demo authority active
+// AND the user is currently in demo mode. Live/testnet/real are never gated
+// here — those remain client-driven until later roadmap gates (S8/S10/S11).
+// Inert today because the server-side demo authority flag is false by
+// default (and on disk), so window._serverATDemoEnabled stays false.
+function _isServerDemoATActive(): boolean {
+  try {
+    if (w._serverATDemoEnabled !== true) return false
+    const _mode = String(getATMode() || '').toLowerCase()
+    return _mode === 'demo'
+  } catch (_) {
+    return false
+  }
+}
+
 // AT UI helpers
 export function toggleAutoTrade(): void {
   if (getATKillTriggered()) {
@@ -586,6 +602,13 @@ export function runAutoTradeCheck(): void {
     } catch (_) {}
     return
   }
+  // [S6-B5] Server has demo authority for this user — skip client AT engine in demo
+  if (_isServerDemoATActive()) {
+    try {
+      if (getATEnabled()) _atUI({ status: { icon: null, text: 'SERVER AT ACTIVE (demo) — brain controls execution', action: null } })
+    } catch (_) {}
+    return
+  }
   // [B1] Multi-tab protection — only leader tab runs AT
   if (typeof TabLeader !== 'undefined' && !TabLeader.checkLeader()) return
   // [p19] Predator state refresh — always runs
@@ -810,6 +833,8 @@ export function runAutoTradeCheck(): void {
 export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): void {
   // [AT-UNIFY] Server handles all trade placement
   if (w._serverATEnabled) { atLog('info', '[LOCKED] Server AT active — client trade blocked'); return }
+  // [S6-B5] Server has demo authority for this user — refuse client demo placement
+  if (_isServerDemoATActive()) { atLog('info', '[LOCKED] Server demo AT active — client demo trade blocked'); return }
   // ── KILL SWITCH: check before exec (2. kill timing) ──────────
   if (getATKillTriggered()) {
     _setBR('KILL_SWITCH', 'Kill switch active — AT blocked', 'placeAutoTrade')
@@ -1352,6 +1377,8 @@ export function execAddOn(posId: any, addOnSize: number, currentPrice?: number):
 export function scheduleAutoClose(pos: any): void {
   // [AT-UNIFY] Server monitors SL/TP/DSL exits
   if (w._serverATEnabled) return
+  // [S6-B5] Server has demo authority — server brain monitors SL/TP/DSL exits in demo
+  if (_isServerDemoATActive()) return
   function getPosPrice(): any {
     // BUG2 FIX: use allPrices (works for any symbol, live or demo)
     if (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) return w.allPrices[pos.sym]

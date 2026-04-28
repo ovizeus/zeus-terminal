@@ -292,19 +292,22 @@ console.log('\n=== T8 — useServerSync mirrors window flags (REST + WS path) ==
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// T9 — autotrade.ts MUST NOT yet read demo authority flags (S6-B5 scope)
+// T9 — autotrade.ts surface-area discipline (post-S6-B5 narrowed)
+//   S6-B5 wired _serverATDemoEnabled into the client AT engine via the
+//   _isServerDemoATActive() helper. Autotrade.ts may now reference the
+//   client mirror (_serverATDemoEnabled) but MUST NOT reach into the
+//   brain-demo mirror or server-flag identifiers — those stay outside
+//   client trading scope.
 // ════════════════════════════════════════════════════════════════════════
-console.log('\n=== T9 — client autotrade.ts has NO demo-authority gate yet ===');
+console.log('\n=== T9 — client autotrade.ts surface-area discipline ===');
 {
     const aPath = path.resolve(__dirname, '..', 'client', 'src', 'trading', 'autotrade.ts');
     const src = fs.readFileSync(aPath, 'utf8');
-    check('T9: autotrade.ts does NOT reference _serverATDemoEnabled (S6-B5 scope)',
-        !/_serverATDemoEnabled/.test(src));
-    check('T9: autotrade.ts does NOT reference _serverBrainDemoEnabled (S6-B5 scope)',
+    check('T9: autotrade.ts does NOT reference _serverBrainDemoEnabled',
         !/_serverBrainDemoEnabled/.test(src));
-    check('T9: autotrade.ts does NOT reference SERVER_AT_DEMO',
+    check('T9: autotrade.ts does NOT reference SERVER_AT_DEMO identifier',
         !/\bSERVER_AT_DEMO\b/.test(src));
-    check('T9: autotrade.ts does NOT reference SERVER_BRAIN_DEMO',
+    check('T9: autotrade.ts does NOT reference SERVER_BRAIN_DEMO identifier',
         !/\bSERVER_BRAIN_DEMO\b/.test(src));
     // Existing _serverATEnabled gate still present
     check('T9: existing _serverATEnabled gate preserved (no regression)',
