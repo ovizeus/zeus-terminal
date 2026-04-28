@@ -82,9 +82,12 @@
 }
 @media (max-width: 900px) {
   :root {
-    /* Mobile header is ~80px tall (logo 42 + padding 24 + brand text);
-       plus StatusBar ~26 → ~106 minimum. Use 110 for breathing room. */
-    --zt-content-top: 110px;
+    /* [UI-R1.1] Operator: 110 was ~1cm too low — StatusBar floated
+       below the header instead of being glued to it. Mobile header
+       (.hdr at @max-width:900) is ~76 px tall (logo 42 + padding
+       12×2 + brand text overflow ~28). 80 px places StatusBar right
+       at the header bottom edge with a 4 px breathing buffer. */
+    --zt-content-top: 80px;
   }
 }
 @media (max-width: 768px) {
@@ -5734,7 +5737,14 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
    position: fixed at header bottom. Invisible until content slides down.
    Content translateY reveals this slot in the gap. Header never moves. */
 #ptr-indicator {
-  position: fixed; top: 68px; left: 0; right: 0; height: 54px;
+  position: fixed;
+  /* [UI-R1.1] PTR sits at the header bottom edge so the slot
+     revealed by the content's translateY-on-pull lines up with the
+     gap right under the header. Add the safe-area inset so PWA-with-
+     notch keeps the same alignment after the header shifts down.
+     Desktop 94 px header → 94 px top. */
+  top: calc(94px + env(safe-area-inset-top, 0px));
+  left: 0; right: 0; height: 54px;
   display: none; align-items: center; justify-content: center;
   background: #060a10;
   /* [Phase 10.3] Bumped above .zpv (900) so the indicator is visible when a
@@ -5742,11 +5752,14 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
   z-index: 951;
   opacity: 0; pointer-events: none; transition: opacity .15s ease;
 }
-@media (max-width: 900px) { #ptr-indicator { top: 56px; } }
+@media (max-width: 900px) {
+  /* [UI-R1.1] Mobile header ~76 px → 80 px (matches --zt-content-top). */
+  #ptr-indicator { top: calc(80px + env(safe-area-inset-top, 0px)); }
+}
 /* [Phase 10.3] When a dock panel overlay (.zpv) is mounted, #ptr-indicator is
    rendered as its sibling in PanelShell. Anchor below the panel's own header
    (.zpv-header min-height 48px) instead of the dashboard header. */
-.zpv ~ #ptr-indicator { top: 48px; }
+.zpv ~ #ptr-indicator { top: calc(48px + env(safe-area-inset-top, 0px)); }
 #ptr-indicator.visible { display: flex; opacity: 1; }
 /* [Phase 10.5] Stacked two-line label — "ZEUS" centered above "REFRESHING".
    Flex column centers both lines on the same vertical axis regardless of
