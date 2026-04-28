@@ -1175,9 +1175,25 @@ export const _origRenderChart_ovi = w.renderChart;
 
 
 // ===== SESSION OVERLAYS =====
+// [Pack D] zeus_chart_sessions persists ASIA/LON/NY toggle state across
+// refresh. Read at module init (with localStorage fallback) AND
+// re-restored after the user-context pull arrives (in config.ts pull
+// handler). The IIFE used to leave S.sessions = {asia:false,...} on
+// every boot — operator had to re-toggle every session manually after
+// each refresh.
 (function () {
   if (!w.S) return;
-  w.S.sessions = w.S.sessions || { asia: false, london: false, ny: false };
+  let _restored: any = null;
+  try { _restored = JSON.parse(localStorage.getItem('zeus_chart_sessions') || 'null'); } catch (_) { _restored = null; }
+  if (_restored && typeof _restored === 'object') {
+    w.S.sessions = {
+      asia:   !!_restored.asia,
+      london: !!_restored.london,
+      ny:     !!_restored.ny,
+    };
+  } else {
+    w.S.sessions = w.S.sessions || { asia: false, london: false, ny: false };
+  }
 })();
 const sessionSeries: any = {};
 
@@ -1199,6 +1215,12 @@ export function toggleSession(sess: string, btn: any) {
   S.sessions = S.sessions || { asia: false, london: false, ny: false };
   S.sessions[sess] = !S.sessions[sess];
   if (btn) btn.classList.toggle('on', S.sessions[sess]);
+  // [Pack D] Persist the new state immediately to localStorage so a
+  // refresh restores it even before the user-context pull completes.
+  // Then mark the chartExtras section dirty for the next UC push so
+  // the state syncs cross-device per-user.
+  try { localStorage.setItem('zeus_chart_sessions', JSON.stringify(S.sessions)); } catch (_) { /* */ }
+  try { if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('chartExtras'); } catch (_) { /* */ }
   // [Pack B+1] Install the timeScale + ResizeObserver listeners so the
   // session overlay re-renders on every chart pan/zoom — without this
   // the boxes stayed locked to their initial pixel position when the

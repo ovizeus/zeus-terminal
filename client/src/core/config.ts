@@ -550,6 +550,19 @@ function _buildAllSections(): any {
     teacherData: { ts: _t('teacherData'), data: { config: _j('zeus_teacher_config'), sessions: _j('zeus_teacher_sessions'), lessons: _j('zeus_teacher_lessons'), stats: _j('zeus_teacher_stats'), memory: _j('zeus_teacher_memory'), v2state: _j('zeus_teacher_v2state'), panelOpen: _g('zeus_teacher_panel_open') } },
     ariaNovaHud: { ts: _t('ariaNovaHud'), data: { aria: _j('aria_v1'), nova: _j('nova_v1') } },
     aresData: { ts: _t('aresData'), data: { wallet: _j('ARES_MISSION_STATE_V1_vw2'), positions: _j('ARES_POSITIONS_V1'), state: _j('ARES_STATE_V1'), init: _j('ares_init_v1'), lastTradeTs: _g('ARES_LAST_TRADE_TS'), journal: _j('ARES_JOURNAL_V1') } },
+    // [Pack D] chart-level toggle state that previously did not persist
+    // across refresh (sessions, vwapOn, heatmap, zsSettings, overlays).
+    // Read both from localStorage (toggleSession + cloudSave write here)
+    // AND from `w.S` directly so the push contains the freshest in-memory
+    // value even if the operator hasn't triggered a save-to-cloud since
+    // toggling. The pull restore (config.ts ~755+) writes back to S + LS.
+    chartExtras: { ts: _t('chartExtras'), data: {
+      sessions:        _j('zeus_chart_sessions') || ((w as any).S && (w as any).S.sessions) || null,
+      vwapOn:          ((w as any).S && (w as any).S.vwapOn) ? '1' : '0',
+      heatmapSettings: ((w as any).S && (w as any).S.heatmapSettings) || null,
+      zsSettings:      ((w as any).S && (w as any).S.zsSettings) || null,
+      overlays:        ((w as any).S && (w as any).S.overlays) || null,
+    } },
   }
 }
 
@@ -766,6 +779,37 @@ export function _userCtxPull() {
           if (ad2.journal != null) localStorage.setItem('ARES_JOURNAL_V1', JSON.stringify(ad2.journal))
           _ucDirtyTs['aresData'] = sec.aresData.ts; _dirty = true
           console.log('[UC] \u2705 aresData merged from server')
+        }
+      }
+      // [Pack D] Restore chart-extras (sessions, vwapOn, heatmap, zsSettings,
+      // overlays). Writes both into S.* (so the next render picks them up
+      // immediately) and into localStorage (so a fast refresh before the
+      // next pull still has them). If the server section is older than
+      // local edits (`_ucDirtyTs['chartExtras']` higher), skip \u2014 local wins.
+      if (sec.chartExtras && sec.chartExtras.data) {
+        const ceLocalDirty = _ucDirtyTs['chartExtras'] || 0
+        if (sec.chartExtras.ts > ceLocalDirty) {
+          const ce = sec.chartExtras.data
+          if (ce.sessions != null) {
+            try { localStorage.setItem('zeus_chart_sessions', JSON.stringify(ce.sessions)) } catch (_) { /* */ }
+            if ((w as any).S) { (w as any).S.sessions = { asia: !!ce.sessions.asia, london: !!ce.sessions.london, ny: !!ce.sessions.ny } }
+            // Re-render overlays after merge so the boxes appear without a manual toggle.
+            try { if (typeof (w as any)._renderSessionOverlays === 'function') (w as any)._renderSessionOverlays() } catch (_) { /* */ }
+          }
+          if (ce.vwapOn != null && (w as any).S) {
+            (w as any).S.vwapOn = ce.vwapOn === '1' || ce.vwapOn === true
+          }
+          if (ce.heatmapSettings != null && (w as any).S) {
+            (w as any).S.heatmapSettings = ce.heatmapSettings
+          }
+          if (ce.zsSettings != null && (w as any).S) {
+            (w as any).S.zsSettings = ce.zsSettings
+          }
+          if (ce.overlays != null && (w as any).S) {
+            (w as any).S.overlays = ce.overlays
+          }
+          _ucDirtyTs['chartExtras'] = sec.chartExtras.ts; _dirty = true
+          console.log('[UC] \u2705 chartExtras merged from server')
         }
       }
       if (_dirty) { try { localStorage.setItem('zeus_uc_dirty_ts', JSON.stringify(_ucDirtyTs)) } catch (_) { /* */ } }
