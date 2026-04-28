@@ -5736,7 +5736,15 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* ── Pull-to-refresh slot — sits between fixed header and content ──
    position: fixed at header bottom. Invisible until content slides down.
    Content translateY reveals this slot in the gap. Header never moves. */
-#ptr-indicator {
+/* [UI-R1.2] All #ptr-indicator rules use the `body #ptr-indicator`
+   prefix to outscore the legacy /css/main.css rule (loaded after
+   the React bundle by legacyLoader.ts). The legacy rule styles the
+   indicator as a 36×36 px gold-bordered ball anchored at
+   top: env(safe-area-inset-top, 0px) with transform: translateY(-50px)
+   — half off-screen at the very top of the viewport, regardless of
+   our header. Specificity (0,1,1) beats the legacy (0,1,0), so our
+   layout below now actually wins without resorting to !important. */
+body #ptr-indicator {
   position: fixed;
   /* [UI-R1.1] PTR sits at the header bottom edge so the slot
      revealed by the content's translateY-on-pull lines up with the
@@ -5744,7 +5752,14 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
      notch keeps the same alignment after the header shifts down.
      Desktop 94 px header → 94 px top. */
   top: calc(94px + env(safe-area-inset-top, 0px));
-  left: 0; right: 0; height: 54px;
+  left: 0; right: 0;
+  /* [UI-R1.2] Reset the legacy ball geometry so the React label
+     ("ZEUS"/"REFRESHING") gets a full-width strip slot to render in. */
+  transform: none;
+  width: auto;
+  height: 54px;
+  border-radius: 0;
+  border: none;
   display: none; align-items: center; justify-content: center;
   background: #060a10;
   /* [Phase 10.3] Bumped above .zpv (900) so the indicator is visible when a
@@ -5754,12 +5769,12 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 }
 @media (max-width: 900px) {
   /* [UI-R1.1] Mobile header ~76 px → 80 px (matches --zt-content-top). */
-  #ptr-indicator { top: calc(80px + env(safe-area-inset-top, 0px)); }
+  body #ptr-indicator { top: calc(80px + env(safe-area-inset-top, 0px)); }
 }
 /* [Phase 10.3] When a dock panel overlay (.zpv) is mounted, #ptr-indicator is
    rendered as its sibling in PanelShell. Anchor below the panel's own header
    (.zpv-header min-height 48px) instead of the dashboard header. */
-.zpv ~ #ptr-indicator { top: calc(48px + env(safe-area-inset-top, 0px)); }
+body .zpv ~ #ptr-indicator { top: calc(48px + env(safe-area-inset-top, 0px)); }
 #ptr-indicator.visible { display: flex; opacity: 1; }
 /* [Phase 10.5] Stacked two-line label — "ZEUS" centered above "REFRESHING".
    Flex column centers both lines on the same vertical axis regardless of
