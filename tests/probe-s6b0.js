@@ -223,33 +223,30 @@ console.log('\n=== T7 — module-load + current-state safety ===');
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// T8 — No usage of new flags outside migrationFlags + tests/probe-s6b0
+// T8 — Downstream consumer files (serverAT + client autotrade) remain
+// flag-free. NOTE: serverBrain.js MAY reference the new flags after S6-B1
+// ships (the dispatch gate is the entire point of S6-B1) — that case is
+// covered by probe-s6b1 instead. S6-B2 will add references to serverAT,
+// S6-B5 will add references to the client. Until those batches ship, both
+// files must remain flag-free.
 // ════════════════════════════════════════════════════════════════════════
-console.log('\n=== T8 — new DEMO flags are NOT yet used by runtime code ===');
+console.log('\n=== T8 — downstream consumer files still flag-free ===');
 {
-    // Read serverBrain.js, serverAT.js, client autotrade.ts; assert no
-    // SERVER_AT_DEMO / SERVER_BRAIN_DEMO usage. S6-B0 must be FLAG-ONLY.
     const stripComments = (s) => s
         .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
         .replace(/\/\*[\s\S]*?\*\//g, '');
-    const brainSrc = stripComments(fs.readFileSync(
-        path.resolve(__dirname, '..', 'server', 'services', 'serverBrain.js'), 'utf8'));
     const atSrc = stripComments(fs.readFileSync(
         path.resolve(__dirname, '..', 'server', 'services', 'serverAT.js'), 'utf8'));
     const clientATSrc = stripComments(fs.readFileSync(
         path.resolve(__dirname, '..', 'client', 'src', 'trading', 'autotrade.ts'), 'utf8'));
 
-    check('T8: serverBrain.js does NOT reference SERVER_AT_DEMO',
-        !/\bSERVER_AT_DEMO\b/.test(brainSrc));
-    check('T8: serverBrain.js does NOT reference SERVER_BRAIN_DEMO',
-        !/\bSERVER_BRAIN_DEMO\b/.test(brainSrc));
-    check('T8: serverAT.js does NOT reference SERVER_AT_DEMO',
+    check('T8: serverAT.js does NOT reference SERVER_AT_DEMO (until S6-B2)',
         !/\bSERVER_AT_DEMO\b/.test(atSrc));
-    check('T8: serverAT.js does NOT reference SERVER_BRAIN_DEMO',
+    check('T8: serverAT.js does NOT reference SERVER_BRAIN_DEMO (until S6-B2)',
         !/\bSERVER_BRAIN_DEMO\b/.test(atSrc));
-    check('T8: client autotrade.ts does NOT reference SERVER_AT_DEMO',
+    check('T8: client autotrade.ts does NOT reference SERVER_AT_DEMO (until S6-B5)',
         !/\bSERVER_AT_DEMO\b/.test(clientATSrc));
-    check('T8: client autotrade.ts does NOT reference SERVER_BRAIN_DEMO',
+    check('T8: client autotrade.ts does NOT reference SERVER_BRAIN_DEMO (until S6-B5)',
         !/\bSERVER_BRAIN_DEMO\b/.test(clientATSrc));
 }
 

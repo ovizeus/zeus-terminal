@@ -81,6 +81,30 @@ setInterval(() => {
     for (const [k, ts] of _regimeTgLastTs) { if (now - ts > REGIME_TG_COOLDOWN_MS) _regimeTgLastTs.delete(k); }
 }, 3600000);
 
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S6-B1] DEMO server-authority dispatch helpers — INERT.
+// Both helpers are pure flag readers; current production state has
+// SERVER_BRAIN=false, SERVER_BRAIN_DEMO=false, SERVER_AT=false,
+// SERVER_AT_DEMO=false, so _shouldRunMainCycle() returns false today
+// (start() falls through to the existing PARITY_SHADOW_ENABLED branch)
+// and _isServerAuthoritativeForUser() returns false for every user
+// (per-user dispatch loop continues past every user). When S6-B6
+// flips SERVER_BRAIN_DEMO + SERVER_AT_DEMO to true, these helpers
+// become live: main cycle starts and demo-mode users get dispatched
+// to serverAT.processBrainDecision; live-mode users still skip
+// because their gate condition requires the FULL SERVER_AT flag.
+// ══════════════════════════════════════════════════════════════════
+
+function _shouldRunMainCycle() {
+    return MF.SERVER_BRAIN === true || MF.SERVER_BRAIN_DEMO === true;
+}
+
+function _isServerAuthoritativeForUser(stc) {
+    if (MF.SERVER_AT === true) return true;
+    if (MF.SERVER_AT_DEMO === true && stc && stc.engineMode === 'demo') return true;
+    return false;
+}
+
 // ── Decision log (ring buffer) ──
 const DECISION_LOG_MAX = 200;
 const _decisionLog = [];
@@ -131,8 +155,14 @@ function start() {
     serverSentiment.start(serverState.getConfiguredSymbols());
     serverKNN.start();
     serverReflection.start();
-    if (MF.SERVER_BRAIN) {
-        logger.info('BRAIN', 'Server brain starting (observation mode, 30s cycle)');
+    if (_shouldRunMainCycle()) {
+        // [Phase 2 S6-B1] Boot main cycle when EITHER full SERVER_BRAIN is on
+        // OR the demo carve-out SERVER_BRAIN_DEMO is on. Per-user dispatch
+        // inside _runCycle further filters via _isServerAuthoritativeForUser
+        // so a demo-only carve-out cannot route a live user's decision to
+        // server execution.
+        const _mode = MF.SERVER_BRAIN ? 'full' : 'demo-only';
+        logger.info('BRAIN', `Server brain starting (${_mode}, observation mode, 30s cycle)`);
         _timer = setInterval(_runCycle, CYCLE_INTERVAL_MS);
         // Run first cycle after short delay to let data settle
         setTimeout(_runCycle, 5000);
@@ -494,6 +524,17 @@ function _runCycle() {
             for (const [userId, stc] of users) {
                 // Skip users who have AT disabled — no point computing gates/fusion
                 if (!serverAT.isATActive(userId)) continue;
+                // [Phase 2 S6-B1] Server-authoritative dispatch gate. Skip dispatch
+                // unless either:
+                //   (A) MF.SERVER_AT === true (full server-AT enabled — covers both
+                //       demo and live), OR
+                //   (B) MF.SERVER_AT_DEMO === true AND stc.engineMode === 'demo'
+                //       (demo carve-out — live users still execute via client AT).
+                // With both flags false (current production), this skip fires for
+                // every user and the loop exits early — bit-identical with pre-S6-B1
+                // because today _shouldRunMainCycle() is also false, so this loop
+                // never runs anyway. The gate is INERT until S6-B6 flips the flags.
+                if (!_isServerAuthoritativeForUser(stc)) continue;
                 // [MULTI-SYM] Skip if user has symbol selection and this symbol is not in it
                 if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
 
@@ -812,8 +853,13 @@ function _runCycle() {
 // failures must not contaminate the runtime.
 function _runShadowCycle() {
     if (_shadowRunning) return;
-    // Skip if flag flipped off mid-run or real SERVER_BRAIN took over.
-    if (!MF.PARITY_SHADOW_ENABLED || MF.SERVER_BRAIN) return;
+    // Skip if flag flipped off mid-run or any main-cycle flag took over.
+    // [S6-B1] Use _shouldRunMainCycle() instead of bare MF.SERVER_BRAIN so the
+    // shadow cycle is also suppressed when SERVER_BRAIN_DEMO=true and the main
+    // cycle is the active path. Defense in depth: start() never starts both
+    // cycles, but if a future drift caused both timers to fire, this gate keeps
+    // parity log writes clean.
+    if (!MF.PARITY_SHADOW_ENABLED || _shouldRunMainCycle()) return;
     _shadowRunning = true;
     try {
         const readySymbols = serverState.getReadySymbols();
@@ -1672,5 +1718,14 @@ module.exports = {
         persistRegimeTgThrottle: _persistRegimeTgThrottle,
         restoreRegimeTgThrottle: _restoreRegimeTgThrottle,
         REGIME_TG_COOLDOWN_MS,
+    }),
+    // [Phase 2 S6-B1] Test-only hooks for the demo dispatch gate. Pure flag
+    // readers exposed via require but never called by any runtime path
+    // (start() and _runCycle reference the local function symbols, not these
+    // exports). Used by tests/probe-s6b1.js to exercise the helpers against
+    // synthetic flag combinations without mutating live state.
+    _s6b1TestHooks: Object.freeze({
+        shouldRunMainCycle: _shouldRunMainCycle,
+        isServerAuthoritativeForUser: _isServerAuthoritativeForUser,
     }),
 };
