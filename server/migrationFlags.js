@@ -74,6 +74,27 @@ const DEFAULTS = {
     // (true); only flipped to false in S4-B5+ once integration tests prove
     // the signer matches Bybit V5 contract on a vector basis.
     BYBIT_DRY_RUN_ONLY: true,
+    // [Phase 2 S6-B0] DEMO server-authority carve-out flags — INERT BY DESIGN.
+    // S6-B0 introduces ONLY the flag surface and mutex carve-out rules; no
+    // dispatch logic, no client gating, no execution path. Every code path
+    // landed in later batches (S6-B1..S6-B6) MUST gate on these flags AND on
+    // explicit operator approval + 7-day demo soak. Defaults are chosen so a
+    // fresh boot or a mis-edited migration_flags.json cannot enable any
+    // server-side decisioning or execution for ANY user.
+    //
+    // SERVER_BRAIN_DEMO — when true, serverBrain._runCycle is allowed to run
+    // and dispatch decisions for users in engineMode='demo' ONLY. Independent
+    // of SERVER_BRAIN. Default OFF; flipped ON only at S6-B6 after S6-B1..B5
+    // ship and probes are green. Mutex below ALSO requires SERVER_BRAIN=false
+    // before SERVER_BRAIN_DEMO can ever flip true (one-way ratchet).
+    SERVER_BRAIN_DEMO: false,
+    // SERVER_AT_DEMO — when true, serverAT.processBrainDecision is allowed to
+    // fire for users in engineMode='demo' ONLY. Independent of SERVER_AT.
+    // Default OFF; flipped ON only at S6-B6. Mutex below ALSO requires
+    // SERVER_AT=false (one-way ratchet) and BYBIT_TESTNET_ENABLED=false +
+    // BYBIT_LIVE_ENABLED=false (TESTNET/REAL safety — DEMO carve-out must
+    // never accidentally route to a real exchange).
+    SERVER_AT_DEMO: false,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -120,6 +141,24 @@ function _validateMutex(f) {
     //     true while DRY_RUN is still on; operator must lower DRY_RUN first.
     if (f.BYBIT_LIVE_ENABLED && f.BYBIT_DRY_RUN_ONLY) {
         violations.push('BYBIT_LIVE_ENABLED && BYBIT_DRY_RUN_ONLY both true — disable BYBIT_DRY_RUN_ONLY before enabling LIVE');
+    }
+    // [Phase 2 S6-B0] DEMO server-authority carve-out mutex. The carve-out
+    // flags must NEVER co-exist with their global counterparts (one-way
+    // ratchet — once full SERVER_AT/SERVER_BRAIN is on, the demo-only carve
+    // is redundant and confusing) and must NEVER co-exist with any Bybit
+    // execution flag (DEMO carve cannot accidentally route to a real
+    // exchange).
+    if (f.SERVER_AT_DEMO && f.SERVER_AT) {
+        violations.push('SERVER_AT_DEMO && SERVER_AT both true — DEMO carve-out is redundant once full SERVER_AT is enabled; disable one before enabling the other');
+    }
+    if (f.SERVER_BRAIN_DEMO && f.SERVER_BRAIN) {
+        violations.push('SERVER_BRAIN_DEMO && SERVER_BRAIN both true — DEMO carve-out is redundant once full SERVER_BRAIN is enabled; disable one before enabling the other');
+    }
+    if (f.SERVER_AT_DEMO && f.BYBIT_LIVE_ENABLED) {
+        violations.push('SERVER_AT_DEMO && BYBIT_LIVE_ENABLED both true — DEMO carve-out must not co-exist with Bybit live execution');
+    }
+    if (f.SERVER_AT_DEMO && f.BYBIT_TESTNET_ENABLED) {
+        violations.push('SERVER_AT_DEMO && BYBIT_TESTNET_ENABLED both true — DEMO carve-out must not co-exist with Bybit testnet execution');
     }
     return { ok: violations.length === 0, violations };
 }
@@ -191,9 +230,21 @@ module.exports = {
     get BYBIT_LIVE_ENABLED() { return flags.BYBIT_LIVE_ENABLED; },
     get BYBIT_PARITY_ENABLED() { return flags.BYBIT_PARITY_ENABLED; },
     get BYBIT_DRY_RUN_ONLY() { return flags.BYBIT_DRY_RUN_ONLY; },
+    // [Phase 2 S6-B0] DEMO server-authority carve-out flags — inert until
+    // S6-B1..B6 ship.
+    get SERVER_BRAIN_DEMO() { return flags.SERVER_BRAIN_DEMO; },
+    get SERVER_AT_DEMO() { return flags.SERVER_AT_DEMO; },
     // Methods
     set,
     getAll,
     save,
     DEFAULTS,
+    // [Phase 2 S6-B0] Test-only hook for the S6-B0 probe. Exposes
+    // _validateMutex so the probe can exercise mutex carve-outs against
+    // synthetic flag combinations without mutating live state. Frozen;
+    // never called by any runtime path (mirrors the _s5TestHooks /
+    // _s6TestHooks pattern in serverAT/serverBrain).
+    _s6b0TestHooks: Object.freeze({
+        validateMutex: _validateMutex,
+    }),
 };
