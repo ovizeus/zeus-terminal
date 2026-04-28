@@ -231,6 +231,47 @@ export function ChartControls() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // [Pack D.4] Restore chartTf on mount. Same pattern as sessions: read
+  // `zeus_chart_tf` localStorage as the fast-path (written on every
+  // setTF call); if found and != default '5m', poll until chart is ready
+  // then re-apply via setTF() so klines are fetched for the right TF AND
+  // marketStore + dropdown UI sync up. The existing USER_SETTINGS.chart.tf
+  // → S.chartTf restore at config.ts:1868 only updates legacy state; it
+  // doesn't trigger setTF, so the chart kept showing 5m klines even
+  // though S.chartTf had been set to e.g. '1h'.
+  useEffect(() => {
+    let restoredTf: string | null = null
+    try {
+      const raw = localStorage.getItem('zeus_chart_tf')
+      if (raw && typeof raw === 'string' && raw.trim() && raw !== '5m') {
+        restoredTf = raw.trim()
+      }
+    } catch (_) { /* */ }
+    if (!restoredTf) return
+    const wAny: any = window
+    let attempts = 0
+    const MAX_ATTEMPTS = 40 // 40 × 250ms = 10 s budget
+    const pollId = setInterval(() => {
+      attempts++
+      const chartReady = wAny.mainChart && wAny.cSeries
+        && typeof wAny.cSeries.priceToCoordinate === 'function'
+      if (chartReady && restoredTf) {
+        // setTF is imported at top of file; calling it directly is safer
+        // than reaching through window because the export name might be
+        // tree-shaken away from the global scope in production bundles.
+        try { setTF(restoredTf, null) } catch (_) { /* */ }
+        // Patch marketStore so the dropdown label + active class show
+        // the restored TF (Zustand store is React's source of truth).
+        try { patch({ chartTf: restoredTf }) } catch (_) { /* */ }
+        clearInterval(pollId)
+        return
+      }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
+    }, 250)
+    return () => clearInterval(pollId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function pickCandleType(t: CandleType) {
     setCandleType(t)
     setCtOpen(false)

@@ -17,6 +17,11 @@ const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
   w.S.chartTf = tf
+  // [Pack D.4] Persist TF directly to localStorage so a refresh-before-
+  // _usScheduleSave-fires (800ms debounce) still has the value. The
+  // existing USER_SETTINGS path stays as the cross-device source of
+  // truth, but localStorage is the fast-path for same-device refresh.
+  try { localStorage.setItem('zeus_chart_tf', String(tf)) } catch (_) { /* */ }
   document.querySelectorAll('.tfb').forEach((b: any) => b.classList.remove('act'))
   if (btn) btn.classList.add('act')
   const _ztfLbl = document.getElementById('ztfLabel')
