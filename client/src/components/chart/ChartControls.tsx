@@ -3,7 +3,7 @@ import { useMarketStore, useUiStore } from '../../stores'
 import { setTF } from '../../data/marketDataFeeds'
 import { togInd as togIndFn } from '../../ui/dom2'
 import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
-import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '../../ui/panels'
+import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn, applyVWAPRestore } from '../../ui/panels'
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 import { setSymbol } from '../../data/marketDataWS'
 import { openIndSettings } from '../../engine/indicators'
@@ -157,9 +157,20 @@ export function ChartControls() {
   })()
   const [_sessions, setSessions] = useState(_initSessions)
   const [_vwapOn, setVwapOn] = useState(_initVwapOn)
-  const [tsOn, setTsOn] = useState(false)
+  // [Pack E] Read tsOn + drawingsVisible from localStorage so the button
+  // visual states (act / on classes) match the underlying restored state
+  // after refresh. The actual T&S panel content is auto-restored by the
+  // _restoreCheck loop in timeSales.ts:187 (~10s budget); this useState
+  // init only addresses the React-side button class.
+  const _initTsOn = (() => {
+    try { return localStorage.getItem('zeus_ts_open') === '1' } catch (_) { return false }
+  })()
+  const _initDrawingsVisible = (() => {
+    try { return localStorage.getItem('zeus_drawings_vis') !== '0' } catch (_) { return true }
+  })()
+  const [tsOn, setTsOn] = useState(_initTsOn)
   const [drawTool, setDrawTool] = useState<string | null>(null)
-  const [drawingsVisible, setDrawingsVisible] = useState(true)
+  const [drawingsVisible, setDrawingsVisible] = useState(_initDrawingsVisible)
   const [activeInds, setActiveInds] = useState<Record<string, boolean>>({})
   const tfRef = useRef<HTMLDivElement>(null)
 
@@ -224,6 +235,31 @@ export function ChartControls() {
           clearInterval(pollId)
           return
         }
+      }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
+    }, 250)
+    return () => clearInterval(pollId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // [Pack E] If VWAP was restored as ON, draw the bands once chart is
+  // ready. We can't call toggleVWAP() (would flip state); instead use
+  // applyVWAPRestore() exported from panels.ts which idempotently
+  // re-renders if S.vwapOn is true (no flip).
+  useEffect(() => {
+    if (!_initVwapOn) return
+    const wAny: any = window
+    let attempts = 0
+    const MAX_ATTEMPTS = 40 // 10s budget
+    const pollId = setInterval(() => {
+      attempts++
+      const chartReady = wAny.mainChart && wAny.cSeries
+        && typeof wAny.cSeries.priceToCoordinate === 'function'
+        && wAny.S && Array.isArray(wAny.S.klines) && wAny.S.klines.length > 0
+      if (chartReady) {
+        try { applyVWAPRestore() } catch (_) { /* */ }
+        clearInterval(pollId)
+        return
       }
       if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
     }, 250)
@@ -373,6 +409,10 @@ export function ChartControls() {
   function handleDrawToggleVis() {
     const w = window as any
     if (typeof w.drawToolToggleVis === 'function') w.drawToolToggleVis()
+    // [Pack E] localStorage write is also done by drawingTools.ts inside
+    // _toggleVisibility; this is just to keep the React-side button class
+    // declarative via setDrawingsVisible (drawingTools owns the source of
+    // truth for actual line visibility).
     setDrawingsVisible(v => !v)
   }
   function handleDrawClearAll() {
@@ -465,7 +505,11 @@ export function ChartControls() {
           <button className={`sess-btn asia${_sessions.asia ? ' on' : ''}`} id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
           <button className={`sess-btn london${_sessions.london ? ' on' : ''}`} id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
           <button className={`sess-btn ny${_sessions.ny ? ' on' : ''}`} id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
-          <button className="vwap-btn" id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
+          {/* [Pack E] VWAP button now declarative `on` class via React
+              state so restored vwapOn surfaces visually on mount.
+              toggleVWAP (panels.ts) still imperatively classList.toggles,
+              setVwapOn keeps both layers in sync. */}
+          <button className={`vwap-btn${_vwapOn ? ' on' : ''}`} id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
         </div>
 
         {/* Row 3: Indicators + Drawing Tools — [batch3-A] LIQ/SUPREMUS/S/R/LLV moved to SELECT INDICATOR panel */}

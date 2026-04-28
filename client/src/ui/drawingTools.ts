@@ -15,10 +15,15 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   w.__ZEUS_DRAW__ = true;
 
   var LS_KEY = 'zeus_drawings_v1';
+  var VIS_KEY = 'zeus_drawings_vis'; // [Pack E] '0' = hidden, anything else = visible (default)
   var _lines: any[] = [];
   var _activeTool: any = null;
   var _nextId = 1;
-  var _visible = true;
+  // [Pack E] Restore visibility from localStorage so the eye toggle
+  // survives refresh. Default visible if missing or malformed.
+  var _visible = (function () {
+    try { return localStorage.getItem(VIS_KEY) !== '0'; } catch (_) { return true; }
+  })();
   var _dragging: any = null;
   var _tlineStep = 0, _tlinePendingP1: any = null;
   var _selectedId: any = null;
@@ -382,6 +387,8 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   function _clearAll() { _lines.slice().forEach(function(l: any) { _removeLine(l.id); }); _toast('All cleared'); }
   function _toggleVisibility() {
     _visible = !_visible;
+    // [Pack E] Persist new visibility state to localStorage.
+    try { localStorage.setItem(VIS_KEY, _visible ? '1' : '0'); } catch (_) { /* */ }
     _lines.forEach(function(l: any) {
       if (l.lwcRef) try { l.lwcRef.applyOptions({ lineVisible:_visible, axisLabelVisible:_visible }); } catch(_) {}
       if (l.lwcSeries) try { l.lwcSeries.applyOptions({ visible:_visible }); } catch(_) {}
@@ -412,6 +419,19 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
           if (l.type === 'tline' && l.p1 && l.p2) _addTLine(l.p1, l.p2, l.color, l.id);
         });
         _deselectAll();
+        // [Pack E] If _visible was restored as false from localStorage,
+        // apply the hide state to all just-loaded lines (they were
+        // created with visible=true defaults, so we must mirror the
+        // hide state without flipping _visible itself).
+        if (!_visible) {
+          _lines.forEach(function(l: any) {
+            if (l.lwcRef) try { l.lwcRef.applyOptions({ lineVisible:false, axisLabelVisible:false }); } catch(_) {}
+            if (l.lwcSeries) try { l.lwcSeries.applyOptions({ visible:false }); } catch(_) {}
+            l.handles.forEach(function(h: any) { h.style.display = 'none'; });
+            if (l.delBtn) l.delBtn.style.display = 'none';
+          });
+          var b = document.getElementById('dt-eye'); if (b) b.classList.add('on');
+        }
       }
     } catch(_) {}
 

@@ -594,7 +594,12 @@ export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: 
 // [MOVED TO TOP] vwapSeries
 (function () {
   if (!w.S) return;
-  w.S.vwapOn = false;
+  // [Pack E] Restore VWAP toggle state from localStorage (written by
+  // toggleVWAP). Falls through to false if missing or if `w.S` isn't
+  // ready at IIFE time (handled by the ChartControls fallback).
+  let _restored = false;
+  try { _restored = localStorage.getItem('zeus_chart_vwap_on') === '1'; } catch (_) { _restored = false; }
+  w.S.vwapOn = _restored;
 })();
 
 export function calcVWAPBands(klines: any) {
@@ -651,9 +656,22 @@ export function toggleVWAP(btn: any) {
   const S = w.S;
   S.vwapOn = !S.vwapOn;
   if (btn) btn.classList.toggle('on', S.vwapOn);
+  // [Pack E] Persist VWAP toggle to localStorage + mark chartExtras
+  // dirty for the next user-context push (cross-device sync).
+  try { localStorage.setItem('zeus_chart_vwap_on', S.vwapOn ? '1' : '0'); } catch (_) { /* */ }
+  try { if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('chartExtras'); } catch (_) { /* */ }
   if (S.vwapOn) renderVWAP();
   else { vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } }); vwapSeries = []; }
   toast(S.vwapOn ? 'VWAP + Bands ON' : 'VWAP OFF');
+}
+
+// [Pack E] Public re-render hook for VWAP — used by ChartControls after
+// restore so the bands draw on chart without flipping the toggle state.
+// Idempotent: if S.vwapOn is false, no-op. If already rendered, redraws.
+export function applyVWAPRestore() {
+  const S = w.S;
+  if (!S || !S.vwapOn) return;
+  try { renderVWAP(); } catch (_) { /* */ }
 }
 
 // =================================================================
