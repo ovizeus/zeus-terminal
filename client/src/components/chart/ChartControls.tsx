@@ -111,8 +111,25 @@ export function ChartControls() {
   const ctRef = useRef<HTMLDivElement>(null)
   const [indPanelOpen, setIndPanelOpen] = useState(false)
   const [fsMode, setFsMode] = useState(false)
-  const [_sessions, setSessions] = useState({ asia: false, london: false, ny: false })
-  const [_vwapOn, setVwapOn] = useState(false)
+  // [Pack D.1] Read initial state from window.S so that values restored
+  // by panels.ts IIFE (from `zeus_chart_sessions` localStorage) actually
+  // surface in React's render — otherwise the React state stayed
+  // {asia:false,...} forever and buttons looked OFF + no overlay drew,
+  // even though w.S.sessions was correctly populated in memory.
+  const _initSessions = (() => {
+    try {
+      const wAny: any = window
+      if (wAny.S && wAny.S.sessions) {
+        return { asia: !!wAny.S.sessions.asia, london: !!wAny.S.sessions.london, ny: !!wAny.S.sessions.ny }
+      }
+    } catch (_) { /* */ }
+    return { asia: false, london: false, ny: false }
+  })()
+  const _initVwapOn = (() => {
+    try { return !!(window as any).S && !!(window as any).S.vwapOn } catch (_) { return false }
+  })()
+  const [_sessions, setSessions] = useState(_initSessions)
+  const [_vwapOn, setVwapOn] = useState(_initVwapOn)
   const [tsOn, setTsOn] = useState(false)
   const [drawTool, setDrawTool] = useState<string | null>(null)
   const [drawingsVisible, setDrawingsVisible] = useState(true)
@@ -150,6 +167,23 @@ export function ChartControls() {
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  // [Pack D.1] On mount, if any session was restored as active, draw the
+  // overlay boxes. Without this, even with React state correctly init'd,
+  // _renderSessionOverlays() would never fire until the operator manually
+  // re-toggled. The 200ms delay gives the chart series + price scale time
+  // to mount so priceToCoordinate() resolves correctly.
+  useEffect(() => {
+    if (!_initSessions.asia && !_initSessions.london && !_initSessions.ny) return
+    const wAny: any = window
+    const t = setTimeout(() => {
+      try {
+        if (typeof wAny._renderSessionOverlays === 'function') wAny._renderSessionOverlays()
+      } catch (_) { /* */ }
+    }, 200)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function pickCandleType(t: CandleType) {
@@ -336,9 +370,15 @@ export function ChartControls() {
 
         {/* Row 2: Sessions + VWAP — [batch3-A] OVI moved to SELECT INDICATOR panel */}
         <div className="crow">
-          <button className="sess-btn asia" id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
-          <button className="sess-btn london" id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
-          <button className="sess-btn ny" id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
+          {/* [Pack D.1] className now declarative: React syncs the `on`
+              class from _sessions.X state so on-mount restored values
+              from w.S.sessions show as ON (gold underline) without
+              requiring a re-toggle. The imperative classList.toggle in
+              toggleSession (panels.ts) still runs, but React's next
+              render reconciles and keeps both in sync via setSessions. */}
+          <button className={`sess-btn asia${_sessions.asia ? ' on' : ''}`} id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
+          <button className={`sess-btn london${_sessions.london ? ' on' : ''}`} id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
+          <button className={`sess-btn ny${_sessions.ny ? ' on' : ''}`} id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
           <button className="vwap-btn" id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
         </div>
 
