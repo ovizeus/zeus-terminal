@@ -63,6 +63,36 @@
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+
+  /* [UI-R1] Mobile header offset variables.
+     --zt-safe-top   — safe-area inset (notch / Dynamic Island /
+                       camera cutout); 0 in browsers / on devices
+                       without insets. Activated by viewport-fit=cover
+                       in client/index.html.
+     --zt-content-top — base padding-top for the main app content
+                        wrapper (.zr-panels), tuned per breakpoint
+                        below.
+     --zt-page-top    — base padding-top for the legacy .page
+                        wrapper (used by some module/secondary pages).
+     All consumers add var(--zt-safe-top) so they push down under
+     the notch on PWA without affecting plain-browser users. */
+  --zt-safe-top: env(safe-area-inset-top, 0px);
+  --zt-content-top: 120px; /* desktop ≈ 94px header + 26px in-content StatusBar */
+  --zt-page-top:    60px;  /* desktop pages without StatusBar */
+}
+@media (max-width: 900px) {
+  :root {
+    /* Mobile header is ~80px tall (logo 42 + padding 24 + brand text);
+       plus StatusBar ~26 → ~106 minimum. Use 110 for breathing room. */
+    --zt-content-top: 110px;
+  }
+}
+@media (max-width: 768px) {
+  :root {
+    /* Module / secondary pages on small screens — no StatusBar,
+       just need to clear the ~80px mobile header. */
+    --zt-page-top: 90px;
+  }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -633,11 +663,11 @@ select.zac-select optgroup {
   flex-direction: column;
   gap: 0;
   padding: 0;
-  /* M5: ~94px fixed header (.hdr ≈ logo 62px + 16px×2 padding) + ~26px
-     buffer for in-content status bar to stay fully visible on desktop
-     browsers. Mobile media-query at app.css line ~5536 keeps 60px
-     because the header is more compact there. */
-  padding-top: 120px;
+  /* [UI-R1] Use the shared --zt-content-top variable (120 desktop,
+     110 @≤900px) plus --zt-safe-top so iPhone-PWA users with the
+     notch don't get the StatusBar pushed under the now-shifted
+     fixed header. */
+  padding-top: calc(var(--zt-content-top) + var(--zt-safe-top));
   /* M2: progressive fallback — see comment in body{} above. */
   min-height: 100vh;
   min-height: 100dvh;
@@ -1425,7 +1455,8 @@ select.zac-select optgroup {
     border-radius: 5px;
   }
   .sbtn svg { width: 13px; height: 13px; }
-  .zr-panels { padding-top: 78px; }
+  /* [UI-R1] Replaced fixed 78px (too small — header ~80px + StatusBar
+     ~26px overlapped) with the shared variable system at :root. */
 }
 @media (max-width: 600px) {
   .zr-panel__body { padding: 6px; font-size: 11px; }
@@ -3454,7 +3485,13 @@ select.zac-select optgroup {
   /* Shown as fullscreen overlay content below PageView header */
   display: block !important;
   position: fixed;
-  top: 72px; /* below .zpv-header */
+  /* [UI-R1] Was hardcoded 72px. .zpv-header has
+     padding-top: calc(env(safe-area-inset-top, 0px) + 12px) plus its
+     own min-height (48px), so its real bottom is
+     ~48px + safe-area. Add the safe-area inset here too so the
+     active panel stays below the dynamically-sized header on
+     iPhone-PWA / notched devices. */
+  top: calc(72px + env(safe-area-inset-top, 0px));
   left: 0;
   right: 0;
   bottom: 0;
@@ -5560,7 +5597,11 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* ── Prevent horizontal scroll (global safety) ── */
 @media (max-width: 768px) {
   html, body { overflow-x: hidden !important; max-width: 100vw !important; width: 100% !important }
-  .page { overflow-x: clip; max-width: 100vw !important; width: 100% !important; padding-top: 60px }
+  /* [UI-R1] padding-top was hardcoded 60px which is smaller than
+     the ~80px mobile Zeus header — module / secondary pages that
+     used .page slid under the header. Use the shared variable +
+     safe-area inset so PWA-with-notch also stays clear. */
+  .page { overflow-x: clip; max-width: 100vw !important; width: 100% !important; padding-top: calc(var(--zt-page-top) + var(--zt-safe-top)) }
   .page > * { max-width: 100vw; overflow-x: clip; box-sizing: border-box }
   .wl-bar { overflow-x: auto !important; -webkit-overflow-scrolling: touch }
 }

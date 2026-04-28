@@ -23,6 +23,10 @@
 
   position: fixed;
   inset: 0;
+  /* [UI-R1] Honor the safe-area inset so the brand + REFRESH /
+     BACK TO APP row don't get clipped by the notch on iPhone-PWA
+     after viewport-fit=cover started reporting non-zero insets. */
+  padding-top: env(safe-area-inset-top, 0px);
   background: radial-gradient(ellipse at 20% 0%, #0d1a2a 0%, var(--ac-bg) 70%);
   color: var(--ac-fg);
   font-family: var(--ff, -apple-system, BlinkMacSystemFont, sans-serif);
