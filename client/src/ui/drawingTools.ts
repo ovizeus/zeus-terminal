@@ -218,31 +218,45 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   function _updateHandles() {
     var mc = _mc(); if (!mc) return;
     var chartW = mc.getBoundingClientRect().width;
+    var chartH = mc.getBoundingClientRect().height;
+    // [Pack F.1] _handleContainer spans `mc.parentElement`, but
+    // priceToCoordinate / timeToCoordinate return chart-canvas coords
+    // (relative to mc, not parent). Without offsets, handles/X land
+    // shifted by (mc.offsetLeft, mc.offsetTop) — typically a few px down
+    // and right of the trendline endpoints (or much more on layouts
+    // with chart toolbars / axis padding above the canvas). Add the
+    // canvas's offset within its parent to align handles + X exactly
+    // on the trendline endpoints / next to the line midpoint.
+    var oxL = mc.offsetLeft || 0;
+    var oyT = mc.offsetTop || 0;
     _lines.forEach(function(l: any) {
       if (!l.selected) return;
       if (l.type === 'hline') {
         var y = _priceToY(l.price);
         if (y != null) {
-          l.handles[0].style.left = (chartW - 30) + 'px';
-          l.handles[0].style.top = y + 'px';
-          if (l.delBtn) { l.delBtn.style.left = (chartW - 55) + 'px'; l.delBtn.style.top = y + 'px'; }
+          // hline handle pinned to right edge of chart — apply same
+          // offset so it lands inside chart bounds, not on the parent's
+          // padding.
+          l.handles[0].style.left = (oxL + chartW - 30) + 'px';
+          l.handles[0].style.top = (oyT + y) + 'px';
+          if (l.delBtn) { l.delBtn.style.left = (oxL + chartW - 55) + 'px'; l.delBtn.style.top = (oyT + y) + 'px'; }
         }
       }
       if (l.type === 'tline') {
         var x1 = _timeToX(l.p1.time), y1 = _priceToY(l.p1.price);
         var x2 = _timeToX(l.p2.time), y2 = _priceToY(l.p2.price);
-        if (x1 != null && y1 != null) { l.handles[0].style.left = x1+'px'; l.handles[0].style.top = y1+'px'; }
-        if (x2 != null && y2 != null) { l.handles[1].style.left = x2+'px'; l.handles[1].style.top = y2+'px'; }
+        if (x1 != null && y1 != null) { l.handles[0].style.left = (oxL + x1) + 'px'; l.handles[0].style.top = (oyT + y1) + 'px'; }
+        if (x2 != null && y2 != null) { l.handles[1].style.left = (oxL + x2) + 'px'; l.handles[1].style.top = (oyT + y2) + 'px'; }
         if (l.delBtn && x1 != null && y1 != null && x2 != null && y2 != null) {
-          // [Pack C / M12 phase 1] Clamp delete-X position to chart bounds
-          // so the button never floats outside the chart when one trendline
-          // endpoint is panned past the visible viewport. Without this, a
-          // long trendline with one foot off-screen left the X button
-          // unclickable in the top-left or above the chart.
-          var chartH = mc.getBoundingClientRect().height;
+          // [Pack C M12 X-clamp + Pack F.1 offset fix] Clamp delete-X
+          // position to chart bounds AND apply parent offset. Position
+          // it slightly above the higher endpoint (12px) so it sits
+          // visually next to the line, not floating far above the
+          // parent. Fully visible regardless of trendline geometry.
           var midX = Math.max(15, Math.min(chartW - 15, (x1 + x2) / 2));
-          var topY = Math.max(15, Math.min(chartH - 15, Math.min(y1, y2) - 15));
-          l.delBtn.style.left = midX + 'px'; l.delBtn.style.top = topY + 'px';
+          var topY = Math.max(15, Math.min(chartH - 15, Math.min(y1, y2) - 12));
+          l.delBtn.style.left = (oxL + midX) + 'px';
+          l.delBtn.style.top = (oyT + topY) + 'px';
         }
       }
     });
