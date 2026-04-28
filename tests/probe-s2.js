@@ -70,8 +70,13 @@ check('derived clientOrderId format SAT_<seq>_<8hex>', /^SAT_\d+_[0-9a-f]{8}$/.t
 
 console.log('\n=== T2 — Collision safety ===');
 serverAT.reset(ADMIN_ID);
-const eA = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BTCUSDT' }, fakeStc, ADMIN_ID);
-const eB = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'ETHUSDT' }, fakeStc, ADMIN_ID);
+// [S6-B3 compatibility] Each test scenario uses a distinct cycle string so
+// the per-user decisionId dedup (S6-B3) does not collapse logically distinct
+// decisions across test blocks. Within T2, both calls share cycleT2 so the
+// (symbol, cycle) key still differentiates BTC from ETH (per S6-B3 design).
+const cycleT2 = 'probe-s2-T2-' + Date.now();
+const eA = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BTCUSDT', cycle: cycleT2 }, fakeStc, ADMIN_ID);
+const eB = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'ETHUSDT', cycle: cycleT2 }, fakeStc, ADMIN_ID);
 check('same user, different symbols → both entries created', !!eA && !!eB);
 check('different symbols → different decisionIds', !!eA && !!eB && eA.decisionId !== eB.decisionId);
 const cidA = `SAT_${eA.seq}_${eA.decisionId}`;
@@ -79,12 +84,15 @@ const cidB = `SAT_${eB.seq}_${eB.decisionId}`;
 check('different entries → different clientOrderIds', cidA !== cidB);
 
 // Same symbol, same user, while position open → null
-const eC = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BTCUSDT' }, fakeStc, ADMIN_ID);
+const eC = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BTCUSDT', cycle: cycleT2 }, fakeStc, ADMIN_ID);
 check('same symbol re-decision during open position → null', eC === null);
 
 // Opposite side on same symbol — should still be blocked? Existing logic checks
 // same side only. Let's document actual behavior rather than assert.
-const eD = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BTCUSDT', fusion: { ...fakeDecision.fusion, dir: 'SHORT' } }, fakeStc, ADMIN_ID);
+// [S6-B3] Use distinct cycle so the per-user dedup row from above does not
+// preempt the duplicate-position guard we are exercising here.
+const cycleT2b = 'probe-s2-T2b-' + Date.now();
+const eD = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BTCUSDT', cycle: cycleT2b, fusion: { ...fakeDecision.fusion, dir: 'SHORT' } }, fakeStc, ADMIN_ID);
 check('opposite side same symbol → allowed (different entry ok)', !!eD);
 check('opposite side gets own decisionId', !!eD && eD.decisionId !== eA.decisionId);
 
@@ -104,7 +112,10 @@ check('reason stored', s1.reason === 'probe-test');
 check('isGlobalHaltActive() now true', serverAT.isGlobalHaltActive() === true);
 
 // Decision blocked while halted
-const eHalted = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BNBUSDT' }, fakeStc, ADMIN_ID);
+// [S6-B3] Distinct cycle so the dedup row from T2 does not pre-empt the
+// halt-gate test (we want the halt to be the reason for null, not dedup).
+const cycleT3 = 'probe-s2-T3-' + Date.now();
+const eHalted = serverAT.processBrainDecision({ ...fakeDecision, symbol: 'BNBUSDT', cycle: cycleT3 }, fakeStc, ADMIN_ID);
 check('processBrainDecision returns null while halted', eHalted === null);
 
 // Persistence: reload serverAT module → halt state survives because DB is truth
@@ -133,7 +144,9 @@ check('getFullState has positions array', Array.isArray(fs2.positions));
 
 // Post-disarm: decisions flow normally
 serverATReload.reset(ADMIN_ID);
-const eNormal = serverATReload.processBrainDecision({ ...fakeDecision, symbol: 'SOLUSDT' }, fakeStc, ADMIN_ID);
+// [S6-B3] Distinct cycle for T4 so any prior dedup row does not block.
+const cycleT4 = 'probe-s2-T4-' + Date.now();
+const eNormal = serverATReload.processBrainDecision({ ...fakeDecision, symbol: 'SOLUSDT', cycle: cycleT4 }, fakeStc, ADMIN_ID);
 check('post-disarm entry created', !!eNormal);
 check('post-disarm entry.decisionId present', eNormal && /^[0-9a-f]{8}$/.test(eNormal.decisionId));
 

@@ -38,6 +38,13 @@ const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → deadlineMs
 const CLOSE_COOLDOWN_MS = 600000;   // [RE-ENTRY] 10 min cooldown after any close
 const _closeCooldownsRestoredFor = new Set();  // uids whose rows have been lazy-restored
 
+// [Phase 2 S6-B3] Per-user decisionId dedup TTL. Sized to one full brain
+// cycle (CYCLE_INTERVAL_MS in serverBrain = 30s) so a single decision
+// arriving at most once per cycle interval cannot be double-accepted
+// during the S6-B6+ transition window. Persisted in at_state under the
+// per-user key 'serverAT:lastDecisionId:<uid>'.
+const DECISION_DEDUP_TTL_MS = 30000;
+
 const DEFAULT_DEMO_BALANCE = 10000;
 function _defaultUserState() {
     return {
@@ -648,6 +655,44 @@ function processBrainDecision(decision, stc, userId) {
     if (!us.atActive) {
         logger.info('AT_ENGINE', `Entry blocked uid=${userId} — AT disabled by user`);
         _recordMissedTrade(userId, decision, 'AT_DISABLED');
+        return null;
+    }
+
+    // [Phase 2 S6-B3] Per-user decisionId dedup. Prevents client+server
+    // double-open during the S6-B6+ transition window. Uses existing
+    // at_state schema (no DB migration). The dedup key is per-user only;
+    // cross-user same dedup id is allowed by construction.
+    //
+    // Dedup id derivation (no caller-side change required):
+    //   - ALWAYS include symbol so two parallel decisions for different
+    //     symbols (same user, same brain cycle) do NOT collide
+    //   - When decision.cycle is provided (server brain stamps this),
+    //     use it as the per-cycle disambiguator; otherwise fall back to
+    //     dir:priceTs which is stable per identical intent within ms
+    //
+    // Two parallel calls describing the SAME intent (same user, same
+    // symbol, same cycle/dir/priceTs) collapse to the same id and the
+    // second is rejected. Different symbols → different ids → both
+    // allowed (probe-s2 T2 "Collision safety" non-regression).
+    //
+    // Source defaults to 'server' (the only documented dispatcher today is
+    // serverBrain._runCycle); a future REST-driven path can override via
+    // decision._source. With current production flags, processBrainDecision
+    // is unreachable (S6-B1 dispatch gate keeps the main cycle dormant)
+    // so this dedup is INERT until S6-B6 flips the demo flags.
+    const _dedupSymbol = decision.symbol || '?';
+    const _dedupTail = (typeof decision.cycle === 'string' && decision.cycle)
+        ? decision.cycle
+        : (((decision.fusion && decision.fusion.dir) || '?') + ':' +
+           (Number.isFinite(decision.priceTs) ? decision.priceTs : 0));
+    const _dedupId = _dedupSymbol + ':' + _dedupTail;
+    const _dedupSource = (typeof decision._source === 'string' && decision._source)
+        ? decision._source
+        : 'server';
+    const _dedupResult = _checkAndStoreDecisionId(userId, _dedupId, _dedupSource, Date.now());
+    if (_dedupResult.ok === false && _dedupResult.reason === 'DUPLICATE_DECISION_ID') {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — DUPLICATE_DECISION_ID id=${_dedupId} (prev source=${_dedupResult.previous && _dedupResult.previous.source || 'unknown'})`);
+        _recordMissedTrade(userId, decision, 'DUPLICATE_DECISION_ID');
         return null;
     }
 
@@ -2157,6 +2202,52 @@ function isCloseCooldownActive(userId, symbol) {
         return false;
     }
     return true;
+}
+
+// [Phase 2 S6-B3] ── Per-user decisionId dedup ──────────────────────────────
+// Stable per-user key in at_state. Cross-user same decisionId is ALWAYS
+// allowed because the key includes uid.
+function _decisionDedupKey(userId) {
+    return 'serverAT:lastDecisionId:' + userId;
+}
+
+// _checkAndStoreDecisionId(userId, decisionId, source, nowMs)
+//   Returns { ok: true } when accepted (stored).
+//   Returns { ok: false, reason: 'DUPLICATE_DECISION_ID', previous } when
+//     the same decisionId for the same user appeared within DECISION_DEDUP_TTL_MS.
+//   Returns { ok: false, reason: 'NO_USER_ID' } when userId is missing —
+//     fail-safe: the caller must always pass a real uid.
+//   Returns { ok: true, reason: 'NO_DECISION_ID' } when no decisionId is
+//     supplied — backward compatible with paths that have not yet adopted
+//     the dedup key. Documented in S6-B3 report.
+//
+// Persistence is best-effort: a malformed at_state row, a missing row, or
+// a write failure must NEVER throw or block the runtime path. The dedup
+// is an additive safety layer, not a critical gate.
+function _checkAndStoreDecisionId(userId, decisionId, source, nowMs) {
+    if (userId === undefined || userId === null || userId === '') {
+        return { ok: false, reason: 'NO_USER_ID' };
+    }
+    if (decisionId === undefined || decisionId === null || decisionId === '') {
+        return { ok: true, reason: 'NO_DECISION_ID' };
+    }
+    const _id = String(decisionId);
+    const _now = Number.isFinite(nowMs) ? nowMs : Date.now();
+    const _src = (typeof source === 'string' && source.length > 0) ? source : 'unknown';
+    let prev = null;
+    try { prev = db.atGetState(_decisionDedupKey(userId)); } catch (_) {}
+    // Defensive: malformed prev → treat as no record.
+    const _prevValid = prev && typeof prev === 'object' &&
+        typeof prev.id === 'string' && Number.isFinite(prev.ts);
+    if (_prevValid && prev.id === _id && (_now - prev.ts) < DECISION_DEDUP_TTL_MS) {
+        return { ok: false, reason: 'DUPLICATE_DECISION_ID', previous: prev };
+    }
+    // Store new record (best-effort; never throw).
+    try {
+        db.atSetState(_decisionDedupKey(userId),
+            { id: _id, ts: _now, source: _src }, userId);
+    } catch (_) {}
+    return { ok: true };
 }
 
 function getLog(userId, limit) {
@@ -3671,5 +3762,14 @@ module.exports = {
         canExecuteLiveEntryUnderCurrentFlags: () => MF.SERVER_AT === true,
         isLiveModeAuthorizedUnderCurrentFlags: (engineMode) =>
             engineMode === 'demo' ? true : (MF.SERVER_AT === true),
+    }),
+    // [Phase 2 S6-B3] Test-only hooks for the per-user decisionId dedup
+    // probe. Pure helper exposed via require but never called by any
+    // runtime path — processBrainDecision references the local symbol
+    // _checkAndStoreDecisionId, not this export.
+    _s6b3TestHooks: Object.freeze({
+        DECISION_DEDUP_TTL_MS,
+        decisionDedupKey: _decisionDedupKey,
+        checkAndStoreDecisionId: _checkAndStoreDecisionId,
     }),
 };
