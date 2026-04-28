@@ -174,6 +174,14 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   // via _closeSettingsPanel on deselect / line delete / outside click.
   var _settingsPanel: any = null;
   var _settingsOutsideHandler: any = null;
+  // [Pack G.1] When the outside-click handler closes the panel, the
+  // SAME mouse gesture also produces a `click` event on the chart that
+  // would re-run _handleChartAction → nearest-line check → re-select
+  // the line (because clicks near the line price within 0.5% match the
+  // threshold). User wants the X + ⚙ to disappear after they finish
+  // editing — so we suppress the next chart action briefly after a
+  // panel close to force the deselect to stick.
+  var _suppressNextChartAction = false;
 
   function _closeSettingsPanel() {
     if (_settingsPanel && _settingsPanel.parentElement) {
@@ -336,7 +344,20 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
         var t = e.target;
         if (_settingsPanel.contains(t)) return;
         if (anchor && anchor.contains && anchor.contains(t)) return;
-        _closeSettingsPanel();
+        // Skip if the click landed on the line's own controls — let
+        // their own handlers run (handle drag, X delete) without the
+        // panel closing under them.
+        if (t.closest && t.closest('.dt-handle,.dt-del')) {
+          _closeSettingsPanel();
+          return;
+        }
+        // [Pack G.1] Outside click closes panel AND deselects the
+        // line — X + ⚙ disappear, only the line stays. The
+        // _suppressNextChartAction flag prevents the upcoming chart
+        // click from re-selecting via the nearest-line check.
+        _suppressNextChartAction = true;
+        setTimeout(function () { _suppressNextChartAction = false; }, 250);
+        _deselectAll();
       };
       document.addEventListener('mousedown', _settingsOutsideHandler, true);
       document.addEventListener('touchstart', _settingsOutsideHandler, true);
@@ -598,23 +619,81 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
 
   // Desktop click
   document.addEventListener('click', function(e: any) {
-    if (e.target && (e.target.tagName === 'BUTTON' || (e.target.closest && e.target.closest('.dt-btn,.dt-del,.dt-handle,.ovrb,.indb,.ctrls,.ztf-wrap')))) return;
+    // [Pack G.1] Suppress the chart action that would otherwise fire
+    // immediately after the settings panel was closed via outside
+    // click — the user wants the deselect to stick (X + ⚙ go away,
+    // only the line remains).
+    if (_suppressNextChartAction) { _suppressNextChartAction = false; return; }
+    // [Pack G.1] Also bail on clicks inside the settings popover and
+    // on the ⚙ button itself so picking a swatch / width / style
+    // doesn't trigger nearest-line re-selection.
+    if (e.target && (e.target.tagName === 'BUTTON' || (e.target.closest && e.target.closest('.dt-btn,.dt-del,.dt-handle,.dt-cfg,.dt-cfg-panel,.ovrb,.indb,.ctrls,.ztf-wrap')))) return;
     if (!_isOnChart(e)) return;
     _handleChartAction(e.clientX, e.clientY);
   }, true);
 
   // Mobile tap
   var _tapStart: any = null;
+  // [Pack G.1 mobile] Tap-and-drag flow for trendline. On mobile there
+  // is no cursor-following preview between two taps — the operator
+  // can't see where the second point will land. So when the trendline
+  // tool is active, the FIRST touchstart on the chart sets p1 and
+  // starts the preview; the preview follows the finger via touchmove
+  // (handled by _previewMoveHandler with the touch fix); touchend
+  // commits p2 at the release point. Single gesture = one trendline,
+  // exactly like TradingView mobile.
+  var _tlineTouchActive = false;
   document.addEventListener('touchstart', function(e: any) {
     if (!e.touches || !e.touches.length) return;
-    _tapStart = { x:e.touches[0].clientX, y:e.touches[0].clientY, t:Date.now() };
+    var t0 = e.touches[0];
+    _tapStart = { x: t0.clientX, y: t0.clientY, t: Date.now() };
+    if (t0.target && t0.target.closest && t0.target.closest('.dt-handle,.dt-del,.dt-cfg,.dt-cfg-panel')) return;
+
+    if (_activeTool === 'tline' && _tlineStep === 0 && _isOnChart({ clientX: t0.clientX, clientY: t0.clientY })) {
+      var price = _priceAtY(t0.clientY);
+      var time = _timeAtX(t0.clientX);
+      if (price && time) {
+        _tlinePendingP1 = { time: time, price: price };
+        _tlineStep = 1;
+        _tlineTouchActive = true;
+        _startPreview(_tlinePendingP1);
+      }
+    }
   }, { passive: true });
   document.addEventListener('touchend', function(e: any) {
+    // [Pack G.1] Trendline drag-to-draw release: place p2 at the
+    // release point if the finger moved >8px. If the user merely
+    // tapped (no drag), keep p1 + preview and fall through to the
+    // tap-to-place-p2 flow on the next tap (legacy 2-tap mode).
+    if (_tlineTouchActive) {
+      var touch = (e.changedTouches && e.changedTouches[0]);
+      var moved = (touch && _tapStart) ? (Math.abs(touch.clientX - _tapStart.x) + Math.abs(touch.clientY - _tapStart.y)) : 0;
+      if (touch && moved > 8 && _tlinePendingP1) {
+        var price2 = _priceAtY(touch.clientY);
+        var time2 = _timeAtX(touch.clientX);
+        if (price2 && time2) {
+          _clearPreview();
+          _addTLine(_tlinePendingP1, { time: time2, price: price2 });
+          _tlinePendingP1 = null; _tlineStep = 0; _tlineTouchActive = false;
+          _deactivate();
+          _toast('Trendline placed');
+          _tapStart = null;
+          return;
+        }
+      }
+      // No drag (or coords invalid) — leave preview in place, switch
+      // to 2-tap mode for this gesture: next tap places p2.
+      _tlineTouchActive = false;
+      _tapStart = null;
+      _toast('Tap second point (Esc to cancel)');
+      return;
+    }
+
     if (!_tapStart) return;
     if (Date.now() - _tapStart.t > 300) { _tapStart = null; return; }
     var touch = (e.changedTouches && e.changedTouches[0]) || _tapStart;
     if (Math.abs(touch.clientX - _tapStart.x) > 10 || Math.abs(touch.clientY - _tapStart.y) > 10) { _tapStart = null; return; }
-    if (touch.target && touch.target.closest && touch.target.closest('.dt-handle,.dt-del')) { _tapStart = null; return; }
+    if (touch.target && touch.target.closest && touch.target.closest('.dt-handle,.dt-del,.dt-cfg,.dt-cfg-panel')) { _tapStart = null; return; }
     if (!_isOnChart({ clientX:touch.clientX, clientY:touch.clientY })) { _tapStart = null; return; }
     _handleChartAction(touch.clientX, touch.clientY);
     _tapStart = null;
@@ -673,11 +752,18 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     } catch (_) { _previewSeries = null; return; }
     _previewMoveHandler = function (e: any) {
       if (!_previewSeries || !_tlinePendingP1) return;
-      // Only update when mouse is over the chart area
+      // [Pack G.1] Normalize coords — touchmove events use
+      // e.touches[0].clientX/Y (e.clientX is undefined). Without this
+      // the preview never moved on mobile, so the operator couldn't
+      // see where the line would land.
+      var clientX = e.clientX, clientY = e.clientY;
+      if (e.touches && e.touches[0]) { clientX = e.touches[0].clientX; clientY = e.touches[0].clientY; }
+      if (clientX == null || clientY == null) return;
+      // Only update when finger / mouse is over the chart area
       var mc = _mc(); if (!mc) return;
       var r = mc.getBoundingClientRect();
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
-      var t = _timeAtX(e.clientX); var p = _priceAtY(e.clientY);
+      if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return;
+      var t = _timeAtX(clientX); var p = _priceAtY(clientY);
       if (t == null || p == null) return;
       try {
         var t1 = _tlinePendingP1.time, t2 = t;
