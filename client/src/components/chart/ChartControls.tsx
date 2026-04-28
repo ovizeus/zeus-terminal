@@ -196,20 +196,38 @@ export function ChartControls() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
 
-  // [Pack D.1] On mount, if any session was restored as active, draw the
-  // overlay boxes. Without this, even with React state correctly init'd,
-  // _renderSessionOverlays() would never fire until the operator manually
-  // re-toggled. The 200ms delay gives the chart series + price scale time
-  // to mount so priceToCoordinate() resolves correctly.
+  // [Pack D.1 + D.3] If any session was restored as active on mount,
+  // poll until the chart is fully ready (mainChart + cSeries + klines
+  // loaded), then call _renderSessionOverlays() to draw the boxes.
+  // Without polling, a single 200ms timeout fired BEFORE the chart had
+  // finished loading klines and `_renderSessionOverlays` early-exited at
+  // the `if (!w.mainChart || !S.klines)` guard, so boxes never appeared
+  // even though the toggle state was correctly restored. Polling ensures
+  // we hit the right moment regardless of network speed (klines REST
+  // typically returns 200-2000ms after page render). Caps at 10s of
+  // attempts to avoid infinite polling.
   useEffect(() => {
     if (!_initSessions.asia && !_initSessions.london && !_initSessions.ny) return
     const wAny: any = window
-    const t = setTimeout(() => {
-      try {
-        if (typeof wAny._renderSessionOverlays === 'function') wAny._renderSessionOverlays()
-      } catch (_) { /* */ }
-    }, 200)
-    return () => clearTimeout(t)
+    let attempts = 0
+    const MAX_ATTEMPTS = 40 // 40 × 250ms = 10 s budget
+    const pollId = setInterval(() => {
+      attempts++
+      const chartReady = wAny.mainChart && wAny.cSeries
+        && typeof wAny.cSeries.priceToCoordinate === 'function'
+        && wAny.S && Array.isArray(wAny.S.klines) && wAny.S.klines.length > 0
+      if (chartReady && typeof wAny._renderSessionOverlays === 'function') {
+        try { wAny._renderSessionOverlays() } catch (_) { /* */ }
+        // Verify a box was actually drawn — host innerHTML non-empty
+        const host = document.getElementById('zsess-overlay')
+        if (host && host.children.length > 0) {
+          clearInterval(pollId)
+          return
+        }
+      }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
+    }, 250)
+    return () => clearInterval(pollId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
