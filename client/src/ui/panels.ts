@@ -1199,6 +1199,11 @@ export function toggleSession(sess: string, btn: any) {
   S.sessions = S.sessions || { asia: false, london: false, ny: false };
   S.sessions[sess] = !S.sessions[sess];
   if (btn) btn.classList.toggle('on', S.sessions[sess]);
+  // [Pack B+1] Install the timeScale + ResizeObserver listeners so the
+  // session overlay re-renders on every chart pan/zoom — without this
+  // the boxes stayed locked to their initial pixel position when the
+  // chart moved. Idempotent (guarded by `_sessOverlayListenersInstalled`).
+  _ensureSessionOverlayListeners();
   _renderSessionOverlays();
   toast(`${SESSIONS[sess].label} session ${S.sessions[sess] ? 'ON' : 'OFF'}`);
 }
@@ -1217,21 +1222,37 @@ function _ensureSessionOverlayHost(): HTMLElement | null {
   return host;
 }
 
-function _sessionBlocks(sess: string, klines: any[], cfg: any): { start: number; end: number }[] {
-  const blocks: { start: number; end: number }[] = [];
+function _sessionBlocks(sess: string, klines: any[], cfg: any): { start: number; end: number; high: number; low: number }[] {
+  // [Pack B+1] Each block now also carries the price-range (high/low)
+  // observed across the candles inside that session window. The render
+  // step uses this to size the box vertically (priceToCoordinate(high)
+  // → top, priceToCoordinate(low) → bottom) instead of spanning the full
+  // chart height. For the active in-progress block, high/low naturally
+  // expand as new candles arrive (next render call recomputes).
+  const blocks: { start: number; end: number; high: number; low: number }[] = [];
   if (!klines || !klines.length) return blocks;
   let inBlock = false;
   let bStart = 0;
+  let bHigh = -Infinity;
+  let bLow = Infinity;
   let lastT = 0;
   for (let i = 0; i < klines.length; i++) {
     const k = klines[i];
     const h = new Date(k.time * 1000).getUTCHours();
     const inSess = cfg.start < cfg.end ? (h >= cfg.start && h < cfg.end) : (h >= cfg.start || h < cfg.end);
-    if (inSess && !inBlock) { inBlock = true; bStart = k.time; }
-    if (!inSess && inBlock) { inBlock = false; blocks.push({ start: bStart, end: lastT }); }
+    if (inSess) {
+      if (!inBlock) { inBlock = true; bStart = k.time; bHigh = -Infinity; bLow = Infinity; }
+      const kHi = +k.high; const kLo = +k.low;
+      if (Number.isFinite(kHi) && kHi > bHigh) bHigh = kHi;
+      if (Number.isFinite(kLo) && kLo < bLow) bLow = kLo;
+    }
+    if (!inSess && inBlock) {
+      inBlock = false;
+      blocks.push({ start: bStart, end: lastT, high: bHigh, low: bLow });
+    }
     lastT = k.time;
   }
-  if (inBlock) blocks.push({ start: bStart, end: lastT });
+  if (inBlock) blocks.push({ start: bStart, end: lastT, high: bHigh, low: bLow });
   return blocks;
 }
 
@@ -1250,6 +1271,14 @@ function _renderSessionOverlays() {
   const width = rect.width;
   if (!width) return;
 
+  // [Pack B+1] Use the candle series (w.cSeries) for price→pixel Y
+  // conversion so the overlay box height matches the actual high-low
+  // range of the session, not the full chart height. Falls back to
+  // full-height (top:0;bottom:0) only when the price scale isn't
+  // available (e.g., during chart re-init).
+  const cSeries = (w.cSeries && typeof w.cSeries.priceToCoordinate === 'function') ? w.cSeries : null;
+  const chartHeight = rect.height;
+
   activeSess.forEach((sess, idx) => {
     const cfg = SESSIONS[sess];
     const blocks = _sessionBlocks(sess, S.klines, cfg);
@@ -1262,12 +1291,31 @@ function _renderSessionOverlays() {
         const right = Math.min(width, Math.max(x1, x2));
         const w0 = Math.max(1, right - left);
         if (right < 0 || left > width) return;
+
+        // [Pack B+1] Compute Y bounds from session high/low. Add small
+        // breathing-room padding (4px) so the box border doesn't sit
+        // exactly on a wick tip. If priceToCoordinate fails for either
+        // bound, fall back to full chart height.
+        let topY = 0;
+        let heightPx = chartHeight;
+        if (cSeries && Number.isFinite(bl.high) && Number.isFinite(bl.low) && bl.high > 0 && bl.low > 0) {
+          const yHigh = cSeries.priceToCoordinate(bl.high);
+          const yLow = cSeries.priceToCoordinate(bl.low);
+          if (yHigh != null && yLow != null && Number.isFinite(yHigh) && Number.isFinite(yLow)) {
+            const PAD = 4;
+            const yTop = Math.min(yHigh, yLow) - PAD;
+            const yBot = Math.max(yHigh, yLow) + PAD;
+            topY = Math.max(0, yTop);
+            heightPx = Math.max(2, Math.min(chartHeight - topY, yBot - topY));
+          }
+        }
+
         const col = cfg.borderColor.replace(/[0-9a-fA-F]{2}$/, '');
         const div = document.createElement('div');
         div.className = 'zsess-box zsess-' + sess;
-        div.style.cssText = `position:absolute;top:0;bottom:0;left:${left}px;width:${w0}px;background:linear-gradient(180deg, ${col}22, ${col}0c 60%, ${col}18);border-left:1px solid ${col}88;border-right:1px solid ${col}88;box-shadow:inset 0 2px 0 0 ${col}cc, inset 0 -2px 0 0 ${col}66;pointer-events:none;`;
+        div.style.cssText = `position:absolute;top:${topY}px;height:${heightPx}px;left:${left}px;width:${w0}px;background:linear-gradient(180deg, ${col}22, ${col}0c 60%, ${col}18);border:1px solid ${col}88;border-radius:1px;box-shadow:inset 0 2px 0 0 ${col}aa, inset 0 -2px 0 0 ${col}66;pointer-events:none;`;
         const lbl = document.createElement('div');
-        const offsetY = 4 + idx * 14;
+        const offsetY = 2 + idx * 12;
         lbl.style.cssText = `position:absolute;top:${offsetY}px;left:4px;font-size:9px;font-weight:700;letter-spacing:1px;color:${col};text-shadow:0 0 6px ${col}88;font-family:inherit;pointer-events:none;opacity:0.85`;
         lbl.textContent = cfg.label;
         div.appendChild(lbl);
@@ -1299,6 +1347,23 @@ function _ensureSessionOverlayListeners() {
       ro.observe(mc);
     }
   } catch (_) { }
+  // [Pack B+1] Low-cadence refresh (2 s) so the active session box grows
+  // visibly when new candles arrive (extends `bl.end` to the latest kline,
+  // and may re-expand `bl.high` / `bl.low` when a new wick prints).
+  // RAF-debounced so no work happens off-screen. Cleared if listeners
+  // ever need re-install (current code does not unsubscribe — single
+  // chart instance per session by design).
+  if (!w._sessRefreshTimer) {
+    w._sessRefreshTimer = setInterval(() => {
+      if (w._sessRafPending3) return;
+      const S = w.S;
+      if (!S || !S.sessions) return;
+      const anyActive = ['asia', 'london', 'ny'].some(s => S.sessions[s]);
+      if (!anyActive) return;
+      w._sessRafPending3 = true;
+      requestAnimationFrame(() => { w._sessRafPending3 = false; _renderSessionOverlays(); });
+    }, 2000);
+  }
 }
 
 export function clearAllSessionOverlays() {
