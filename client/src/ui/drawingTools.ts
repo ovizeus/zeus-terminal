@@ -569,13 +569,44 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var price = _priceAtY(clientY);
 
     if (!_activeTool) {
-      if (!price) { _deselectAll(); return; }
+      // [Pack G.2] Proximity check in PIXELS (~8px) instead of the
+      // old 0.5%-of-price band. The price-relative threshold was way
+      // too generous on high-priced symbols (BTC 70k = ±350$ band) —
+      // clicking "elsewhere" on the chart still landed inside the
+      // band and the line stayed selected, X + ⚙ never disappeared.
+      // Pixel distance feels right ("click on the line to select,
+      // click off the line to deselect") and gives correct
+      // perpendicular distance for trendlines.
+      var mc = _mc();
+      if (!mc) { _deselectAll(); return; }
+      var rect = mc.getBoundingClientRect();
+      var clickX = clientX - rect.left;
+      var clickY = clientY - rect.top;
+      var SELECT_PX = 8;
       var nearest: any = null, nd = Infinity;
-      _lines.forEach(function(l: any) {
-        var d: any;
-        if (l.type === 'hline') d = Math.abs(l.price - price);
-        if (l.type === 'tline') d = Math.min(Math.abs(l.p1.price - price), Math.abs(l.p2.price - price));
-        if (d < price * 0.005 && d < nd) { nd = d; nearest = l; }
+      _lines.forEach(function (l: any) {
+        var d: any = Infinity;
+        if (l.type === 'hline') {
+          var ly = _priceToY(l.price);
+          if (ly == null) return;
+          d = Math.abs(clickY - ly);
+        } else if (l.type === 'tline') {
+          var x1 = _timeToX(l.p1.time), y1 = _priceToY(l.p1.price);
+          var x2 = _timeToX(l.p2.time), y2 = _priceToY(l.p2.price);
+          if (x1 == null || y1 == null || x2 == null || y2 == null) return;
+          // Perpendicular distance from click to the line segment.
+          // Within X-range: use line-y-at-clickX. Outside: distance
+          // to nearer endpoint.
+          var lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+          if (clickX >= lo - 4 && clickX <= hi + 4 && Math.abs(x2 - x1) > 0.5) {
+            var ratio = (clickX - x1) / (x2 - x1);
+            var lineY = y1 + ratio * (y2 - y1);
+            d = Math.abs(clickY - lineY);
+          } else {
+            d = Math.min(Math.hypot(clickX - x1, clickY - y1), Math.hypot(clickX - x2, clickY - y2));
+          }
+        }
+        if (d < SELECT_PX && d < nd) { nd = d; nearest = l; }
       });
       if (nearest) _selectLine(nearest.id); else _deselectAll();
       return;
@@ -604,13 +635,32 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       }
     }
     if (_activeTool === 'eraser') {
-      if (!price) return;
-      var cl: any = null, cd = Infinity, pp = price * 0.005;
-      _lines.forEach(function(l: any) {
-        var d: any;
-        if (l.type === 'hline') d = Math.abs(l.price - price);
-        if (l.type === 'tline') d = Math.min(Math.abs(l.p1.price - price), Math.abs(l.p2.price - price));
-        if (d < pp && d < cd) { cd = d; cl = l; }
+      // [Pack G.2] Same pixel-distance proximity as select.
+      var emc = _mc(); if (!emc) { _deactivate(); return; }
+      var erect = emc.getBoundingClientRect();
+      var ex = clientX - erect.left, ey = clientY - erect.top;
+      var EPX = 10;
+      var cl: any = null, cd = Infinity;
+      _lines.forEach(function (l: any) {
+        var d: any = Infinity;
+        if (l.type === 'hline') {
+          var ly = _priceToY(l.price);
+          if (ly == null) return;
+          d = Math.abs(ey - ly);
+        } else if (l.type === 'tline') {
+          var x1 = _timeToX(l.p1.time), y1 = _priceToY(l.p1.price);
+          var x2 = _timeToX(l.p2.time), y2 = _priceToY(l.p2.price);
+          if (x1 == null || y1 == null || x2 == null || y2 == null) return;
+          var lo = Math.min(x1, x2), hi = Math.max(x1, x2);
+          if (ex >= lo - 4 && ex <= hi + 4 && Math.abs(x2 - x1) > 0.5) {
+            var ratio = (ex - x1) / (x2 - x1);
+            var lineY = y1 + ratio * (y2 - y1);
+            d = Math.abs(ey - lineY);
+          } else {
+            d = Math.min(Math.hypot(ex - x1, ey - y1), Math.hypot(ex - x2, ey - y2));
+          }
+        }
+        if (d < EPX && d < cd) { cd = d; cl = l; }
       });
       if (cl) _removeLine(cl.id); else _toast('No line nearby');
       _deactivate();
