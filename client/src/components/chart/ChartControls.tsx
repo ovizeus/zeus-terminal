@@ -344,10 +344,18 @@ export function ChartControls() {
 
         {/* Row 3: Indicators + Drawing Tools — [batch3-A] LIQ/SUPREMUS/S/R/LLV moved to SELECT INDICATOR panel */}
         <div className="crow">
-          <button className={`indb${activeInds.ema ?? indicators.ema ? ' act' : ''}`} id="bema" onClick={() => togInd('ema')}>EMA</button>
-          <button className={`indb${activeInds.wma ?? indicators.wma ? ' act' : ''}`} id="bwma" onClick={() => togInd('wma')}>WMA</button>
-          <button className={`indb${activeInds.st ?? indicators.st ? ' act' : ''}`} id="bst" onClick={() => togInd('st')}>ST</button>
-          <button className={`indb${activeInds.vp ?? indicators.vp ? ' act' : ''}`} id="bvp" onClick={() => togInd('vp')}>VOLP</button>
+          {/* [M11] Operator-precedence fix — `?? : ?:` was parsed as
+              `activeInds.X ?? (indicators.X ? ' act' : '')`, so when
+              activeInds.X = true the template literal coerced to
+              "indbtrue" / "indbfalse" instead of "indb act". Adding
+              parens around `(activeInds.X ?? indicators.X)` forces
+              "is this truthy" → " act" / "" semantics on every button.
+              Also passes `e.currentTarget` to togInd so the imperative
+              class toggle in dom2.ts:235 fires (UI sync robustness). */}
+          <button className={`indb${(activeInds.ema ?? indicators.ema) ? ' act' : ''}`} id="bema" onClick={(e) => togInd('ema', e.currentTarget)}>EMA</button>
+          <button className={`indb${(activeInds.wma ?? indicators.wma) ? ' act' : ''}`} id="bwma" onClick={(e) => togInd('wma', e.currentTarget)}>WMA</button>
+          <button className={`indb${(activeInds.st ?? indicators.st) ? ' act' : ''}`} id="bst" onClick={(e) => togInd('st', e.currentTarget)}>ST</button>
+          <button className={`indb${(activeInds.vp ?? indicators.vp) ? ' act' : ''}`} id="bvp" onClick={(e) => togInd('vp', e.currentTarget)}>VOLP</button>
           <span style={{ width: '8px' }}></span>
           <button className={`ovrb${tsOn ? ' act' : ''}`} id="ts-toggle-btn" title="Time &amp; Sales tape (T)" onClick={toggleTimeSales}>&#128200; T&amp;S</button>
           <span style={{ width: '8px' }}></span>

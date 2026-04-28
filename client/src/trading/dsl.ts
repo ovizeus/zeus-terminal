@@ -1156,7 +1156,7 @@ export function _renderDslCard(pos: any): string {
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_sb.bg};border:1px solid ${_sb.border};color:${_sb.color};font-weight:700;letter-spacing:0.5px">${_sb.icon}${_sb.icon ? ' ' : ''}${_srcLabel}</span>
       ${_isAT ? `<span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_ctrlBg};border:1px solid ${_ctrlBorder};color:${_ctrlColor};font-weight:700;letter-spacing:0.5px">${_ctrlIcon}${_ctrlIcon ? ' ' : ''}${_ctrlLabel}</span>` : ''}
-      <span style="color:${isActive ? '#00ffcc' : isLong ? '#00ff88' : '#ff4466'};font-weight:700;font-size:16px">${pos.side} ${symBase}</span>
+      <span style="color:${isLong ? (isActive ? '#00ffcc' : '#00ff88') : (isActive ? '#ff66aa' : '#ff4466')};font-weight:700;font-size:16px">${pos.side} ${symBase}</span>
       <span class="dsl-badge ${isActive ? 'active' : 'waiting'}">${isActive ? 'DSL ON' : 'WAITING'}</span>
       <button data-action="dslToggleMagnet" data-id="${pos.id}" style="font-size:11px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:0.5px;border:1px solid ${_magnetOn ? '#00ccffaa' : '#ffffff22'};background:${_magnetOn ? '#00ccff18' : 'transparent'};color:${_magnetOn ? '#00ccff' : '#ffffff44'}">${_magnetOn ? 'MAG ON' : 'MAG'}</button>
       ${_isAT ? `<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:${_as.color}15;color:${_as.color};border:1px solid ${_as.color}33">${_as.icon}${_as.icon ? ' ' : ''}${_as.label}</span>` : ''}

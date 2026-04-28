@@ -284,6 +284,12 @@ export async function runBacktest() {
   if (!S.klines || S.klines.length < 60) { toast('No historical data. Wait for the chart to load.'); return; }
 
   BT.running = true;
+  // [M6] try/finally so BT.running ALWAYS resets, even on thrown errors
+  // or early returns inside the long body. Without this guard, a single
+  // mid-cycle exception left BT.running=true forever — every subsequent
+  // click silently bailed at the gate above (line 283), making the button
+  // appear "dead" until a full page refresh.
+  try {
   const runBtn = el('btRunBtn');
   if (runBtn) runBtn.className = 'bt-btn bt-btn-run running';
   { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'block'; }
@@ -466,15 +472,23 @@ export async function runBacktest() {
     });
   }
 
-  BT.running = false;
   BT.results = results;
   BT.equityCurve = equityCurve;
 
   renderBacktestResults(results, equityCurve, fwdBars, lookback, minMovePct);
-  { const _oe = el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
-  { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'none'; }
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'block'; }
   { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
+  } catch (e: any) {
+    // [M6] surface the failure to the user instead of swallowing into ZLOG
+    try { toast('Backtest failed: ' + (e && e.message ? e.message : 'unknown error')); } catch (_) {}
+    try { console.warn('[Backtest] error', e); } catch (_) {}
+  } finally {
+    // [M6] idempotent DOM + state reset \u2014 runs on success, error, AND
+    // any early return path inside the try block.
+    BT.running = false;
+    { const _oe = el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
+    { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'none'; }
+  }
 }
 
 export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: any, lookback: any, _minMovePct: any) {
@@ -1175,7 +1189,14 @@ const SESSIONS: any = {
 };
 
 export function toggleSession(sess: string, btn: any) {
+  // [M3] Defensive init — the IIFE at module load (line 1163-1167) returns
+  // early if `w.S` was undefined at that exact moment, which can happen
+  // when toggleSession is imported before w.S is created. Without this
+  // guard, the next line would throw `Cannot read properties of undefined
+  // (reading '<sess>')`. Same pattern as M4 (Adaptive Control toggle).
   const S = w.S;
+  if (!S) return;
+  S.sessions = S.sessions || { asia: false, london: false, ny: false };
   S.sessions[sess] = !S.sessions[sess];
   if (btn) btn.classList.toggle('on', S.sessions[sess]);
   _renderSessionOverlays();

@@ -389,6 +389,14 @@ export function _renderAdaptivePanel(): void {
 }
 
 export function toggleAdaptive(): void {
+  // [M4] Defensive init — `w.BM` and `w.BM.adaptive` are normally created
+  // by bootstrap, but if a render race / theme reset / lazy import ordering
+  // leaves either undefined, the next line would throw `Cannot set
+  // properties of undefined (setting 'enabled')` and the toggle would
+  // silently fail (button visually inert, console error). Same defensive
+  // pattern as M3 (chart session toggles).
+  if (!w.BM) w.BM = {}
+  if (!w.BM.adaptive) w.BM.adaptive = { enabled: false, entryMult: 1.0, sizeMult: 1.0, exitMult: 1.0 }
   w.BM.adaptive.enabled = !w.BM.adaptive.enabled
   var tog = document.getElementById('adaptiveToggleBtn')
   if (tog) {
