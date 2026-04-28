@@ -12,5 +12,5 @@
   "BYBIT_PARITY_ENABLED": false,
   "BYBIT_DRY_RUN_ONLY": true,
   "SERVER_BRAIN_DEMO": true,
-  "SERVER_AT_DEMO": false
+  "SERVER_AT_DEMO": true
 }
