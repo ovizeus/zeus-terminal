@@ -98,6 +98,19 @@ function applyATUpdate(data: ServerATState) {
     executionBlockedReason: (data.executionBlockedReason ?? null) as 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null,
     activeExchange: (data.activeExchange ?? null) as 'binance' | 'bybit' | null,
   })
+
+  // [Phase 2 S6-B4] Demo-authority window mirrors — read-model only. Mirror
+  // here too so the REST pullATState fallback path (used at reconnect /
+  // boot warm-start) keeps the window flags in sync with the WS handler in
+  // core/state.ts:_applyServerATState. Both writers are idempotent for the
+  // same payload. S6-B5 will read these flags to gate the client AT engine
+  // for demo users; S6-B4 is pure read-model.
+  if ('serverATDemoEnabled' in (data as Record<string, unknown>)) {
+    (window as any)._serverATDemoEnabled = !!data.serverATDemoEnabled
+  }
+  if ('serverBrainDemoEnabled' in (data as Record<string, unknown>)) {
+    (window as any)._serverBrainDemoEnabled = !!data.serverBrainDemoEnabled
+  }
 }
 
 /** Pull journal entries from server */

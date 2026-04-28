@@ -2401,11 +2401,24 @@ function getFullState(userId) {
     // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
     // Client uses this to decide if it should lock out its own AT engine.
     const serverDrivesAT = !!(MF && MF.SERVER_AT && MF.SERVER_BRAIN);
+    // [Phase 2 S6-B4] Demo-authority flags — true ONLY if the corresponding
+    // demo carve-out flag is on AND this user is in demo mode. Live/testnet/
+    // real users always receive false even when the demo flags are true.
+    // Unknown / missing engineMode → false (fail-safe). Client mirrors these
+    // as window read-model flags only; the actual AT-engine gate (S6-B5+)
+    // will live behind these signals. With current production flags both
+    // remain false for every user.
+    const _isDemoUser = us.engineMode === 'demo';
+    const serverATDemoEnabled = !!(MF && MF.SERVER_AT_DEMO) && _isDemoUser;
+    const serverBrainDemoEnabled = !!(MF && MF.SERVER_BRAIN_DEMO) && _isDemoUser;
     return {
         mode: us.engineMode,
         enabled: us.atActive, // [F1] Reflect actual per-user AT state
         atActive: us.atActive, // [F1] Explicit field for frontend
         serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
+        // [Phase 2 S6-B4] Demo-only authority signals — see derivation above.
+        serverATDemoEnabled,
+        serverBrainDemoEnabled,
         apiConfigured: !!creds,
         exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
         resolvedEnv: resolvedEnv,          // [Phase 3D] 'DEMO' | 'TESTNET' | 'REAL' | null — aligned with executionEnv (canonical truth)

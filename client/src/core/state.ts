@@ -829,6 +829,11 @@ export const ZState = (() => {
 
   // ── Server AT state consumer ──
   w._serverATEnabled = false
+  // [Phase 2 S6-B4] Demo-authority window mirrors. Default false at boot;
+  // overwritten on first at_update / pullState response if present.
+  // S6-B5 will wire the client AT engine gate against these flags.
+  w._serverATDemoEnabled = false
+  w._serverBrainDemoEnabled = false
   let _atPollTimer: any = null
 
   function _mapServerPos(sp: any) {
@@ -999,6 +1004,18 @@ export const ZState = (() => {
         try { console.warn('[AT/SERVER-FLIP] _serverATEnabled ' + _prev + ' → ' + _next + ' — client AT engine ' + (_next ? 'LOCKED (server owns)' : 'UNLOCKED (client owns)')) } catch (_) {}
       }
       w._serverATEnabled = _next
+    }
+    // [Phase 2 S6-B4] Demo-authority window mirrors. Read-model only —
+    // these flags are consumed by S6-B5+ to gate the client AT engine for
+    // demo users; today (S6-B4) they are pure read state with no behavior
+    // attached. Mirror only when the field is explicitly present so legacy
+    // pre-S6-B4 server payloads (or AT-state-only payloads that omit them)
+    // do not silently flip the window flags.
+    if ('serverATDemoEnabled' in state) {
+      w._serverATDemoEnabled = !!state.serverATDemoEnabled
+    }
+    if ('serverBrainDemoEnabled' in state) {
+      w._serverBrainDemoEnabled = !!state.serverBrainDemoEnabled
     }
     const _now = Date.now()
     Object.keys(_pendingServerCloses).forEach(function (k) {

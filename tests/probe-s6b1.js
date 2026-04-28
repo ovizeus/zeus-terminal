@@ -208,24 +208,21 @@ console.log('\n=== T5 — no forbidden refs introduced ===');
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// T6 — Forbidden files unchanged (read-only fs check)
+// T6 — client autotrade.ts remains flag-free (until S6-B5).
+// NOTE: serverAT.js references SERVER_AT_DEMO / SERVER_BRAIN_DEMO as of
+// S6-B2 (paranoid live gate) and S6-B4 (at_update payload contract);
+// those references are intentional and covered by probe-s6b2 / probe-s6b4.
 // ════════════════════════════════════════════════════════════════════════
-console.log('\n=== T6 — forbidden files unchanged source-level ===');
+console.log('\n=== T6 — client autotrade.ts still flag-free (until S6-B5) ===');
 {
     const stripComments = (s) => s
         .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
         .replace(/\/\*[\s\S]*?\*\//g, '');
-    const atSrc = stripComments(fs.readFileSync(
-        path.resolve(__dirname, '..', 'server', 'services', 'serverAT.js'), 'utf8'));
     const clientATSrc = stripComments(fs.readFileSync(
         path.resolve(__dirname, '..', 'client', 'src', 'trading', 'autotrade.ts'), 'utf8'));
-    check('T6: serverAT.js does NOT reference SERVER_AT_DEMO',
-        !/\bSERVER_AT_DEMO\b/.test(atSrc));
-    check('T6: serverAT.js does NOT reference SERVER_BRAIN_DEMO',
-        !/\bSERVER_BRAIN_DEMO\b/.test(atSrc));
-    check('T6: client autotrade.ts does NOT reference SERVER_AT_DEMO',
+    check('T6: client autotrade.ts does NOT reference SERVER_AT_DEMO (until S6-B5)',
         !/\bSERVER_AT_DEMO\b/.test(clientATSrc));
-    check('T6: client autotrade.ts does NOT reference SERVER_BRAIN_DEMO',
+    check('T6: client autotrade.ts does NOT reference SERVER_BRAIN_DEMO (until S6-B5)',
         !/\bSERVER_BRAIN_DEMO\b/.test(clientATSrc));
 }
 

@@ -187,6 +187,15 @@ export interface ServerATState {
   // Phase 2C canonical execution env — truth from server _resolveExecutionEnv()
   executionEnv: 'DEMO' | 'TESTNET' | 'REAL' | null
   executionBlockedReason: 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
+  // [Phase 2 S6-B4] Demo-authority signals from server. true ONLY when the
+  // corresponding demo carve-out flag (SERVER_AT_DEMO / SERVER_BRAIN_DEMO)
+  // is on AND this user is in demo mode. Live/testnet/real users always
+  // receive false. Optional for backward compatibility — legacy clients
+  // ignore the field, and pre-S6-B4 server payloads omit it (treated as
+  // false on the client). Client mirrors these as window read-model flags
+  // only; the actual AT-engine gate is wired in S6-B5.
+  serverATDemoEnabled?: boolean
+  serverBrainDemoEnabled?: boolean
 
   // Positions — server sends both flat and split
   positions: Position[]
