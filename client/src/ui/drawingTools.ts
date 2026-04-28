@@ -40,6 +40,29 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   var COLORS = ['#f0c040','#00d97a','#ff3355','#00b8d4','#aa44ff','#ff8822','#ffffff'];
   var _colorIdx = 0;
   function _nextColor() { var c = COLORS[_colorIdx % COLORS.length]; _colorIdx++; return c; }
+
+  // [Pack G] Per-tool defaults — color/width/style of the NEXT new line.
+  // Persisted to localStorage so the operator's last choice survives
+  // refresh. Updated whenever settings popover is used on a selected
+  // line — existing lines keep their own state (per-line in _save()).
+  var DEFAULTS_KEY = 'zeus_drawing_defaults';
+  var _defaultColor: string = COLORS[0];
+  var _defaultWidth: number = 2;     // px
+  var _defaultStyle: number = 0;     // lightweight-charts: 0=solid 1=dotted 2=dashed 3=large 4=sparse
+  function _loadDrawingDefaults() {
+    try {
+      var raw = localStorage.getItem(DEFAULTS_KEY);
+      if (!raw) return;
+      var d = JSON.parse(raw);
+      if (d && typeof d.color === 'string') _defaultColor = d.color;
+      if (d && Number.isFinite(d.width)) _defaultWidth = Math.max(1, Math.min(6, d.width));
+      if (d && Number.isFinite(d.style)) _defaultStyle = Math.max(0, Math.min(4, d.style));
+    } catch (_) { /* */ }
+  }
+  function _saveDrawingDefaults() {
+    try { localStorage.setItem(DEFAULTS_KEY, JSON.stringify({ color: _defaultColor, width: _defaultWidth, style: _defaultStyle })); } catch (_) { /* */ }
+  }
+  _loadDrawingDefaults();
   function _chart() { return w._zMainChart || null; }
   function _series() { return w._zCSeries || null; }
   function _mc() { return document.getElementById('mc'); }
@@ -82,7 +105,9 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   function _save() {
     try { localStorage.setItem(LS_KEY, JSON.stringify({
       lines: _lines.map(function(l: any) {
-        var o: any = { id:l.id, type:l.type, color:l.color };
+        // [Pack G] Persist per-line width + style alongside color so the
+        // operator's individual customizations survive refresh.
+        var o: any = { id:l.id, type:l.type, color:l.color, width:l.width||2, style:l.style||0 };
         if (l.type === 'hline') o.price = l.price;
         if (l.type === 'tline') { o.p1 = { time:l.p1.time, price:l.p1.price }; o.p2 = { time:l.p2.time, price:l.p2.price }; }
         return o;
@@ -126,31 +151,232 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     return el;
   }
 
+  // [Pack G] Per-line settings button (\u2699 gear) sits next to the X.
+  // Click opens a Zeus-themed popover with color / width / style.
+  // Changes apply to this line + become defaults for future lines.
+  function _createSettingsBtn(lineId: any) {
+    var el = document.createElement('div');
+    el.className = 'dt-cfg';
+    el.innerHTML = '\u2699'; // \u2699 gear
+    el.style.cssText = 'position:absolute;width:20px;height:20px;border-radius:50%;background:#1a2530;color:#f0c040;font-size:12px;font-weight:700;line-height:20px;text-align:center;cursor:pointer;pointer-events:auto;transform:translate(-50%,-50%);z-index:27;display:none;touch-action:none;border:1px solid #2a3a4a;';
+    function _open(e: any) {
+      e.stopPropagation(); e.preventDefault && e.preventDefault();
+      var line = _lines.find(function (l: any) { return l.id === lineId; });
+      if (line) _openSettingsPanel(line, el);
+    }
+    el.addEventListener('click', _open);
+    el.addEventListener('touchend', _open as any, { passive: false } as any);
+    return el;
+  }
+
+  // [Pack G] Settings popover — Zeus-themed, semi-rounded, opens next
+  // to the ⚙ button. Singleton: only one panel exists at a time, closed
+  // via _closeSettingsPanel on deselect / line delete / outside click.
+  var _settingsPanel: any = null;
+  var _settingsOutsideHandler: any = null;
+
+  function _closeSettingsPanel() {
+    if (_settingsPanel && _settingsPanel.parentElement) {
+      try { _settingsPanel.parentElement.removeChild(_settingsPanel); } catch (_) { /* */ }
+    }
+    _settingsPanel = null;
+    if (_settingsOutsideHandler) {
+      try { document.removeEventListener('mousedown', _settingsOutsideHandler, true); } catch (_) { /* */ }
+      try { document.removeEventListener('touchstart', _settingsOutsideHandler, true); } catch (_) { /* */ }
+      _settingsOutsideHandler = null;
+    }
+  }
+
+  // [Pack G] Apply color/width/style to a specific line (live update on
+  // its lwcRef or lwcSeries) AND set as defaults for future lines —
+  // exactly the behavior the operator asked for: change the selected
+  // line, future new lines inherit, existing other lines keep theirs.
+  function _applyLineSettings(line: any, color: any, width: any, style: any) {
+    if (!line) return;
+    line.color = color;
+    line.width = width;
+    line.style = style;
+    if (line.type === 'hline' && line.lwcRef) {
+      try { line.lwcRef.applyOptions({ color: color, lineWidth: width, lineStyle: style }); } catch (_) { /* */ }
+    }
+    if (line.type === 'tline' && line.lwcSeries) {
+      // Selected gets +1px emphasis (mirrors _selectLine logic).
+      var lw = line.selected ? Math.min(6, width + 1) : width;
+      try { line.lwcSeries.applyOptions({ color: color, lineWidth: lw, lineStyle: style }); } catch (_) { /* */ }
+    }
+    // Recolor handles to match new line color.
+    if (line.handles) {
+      line.handles.forEach(function (h: any) {
+        try {
+          h.style.borderColor = color;
+          h.style.background = color + '44';
+        } catch (_) { /* */ }
+      });
+    }
+    // Defaults for future lines.
+    _defaultColor = color;
+    _defaultWidth = width;
+    _defaultStyle = style;
+    _saveDrawingDefaults();
+    _save();
+  }
+
+  function _openSettingsPanel(line: any, anchor: any) {
+    _closeSettingsPanel();
+    var mc = _mc(); if (!mc) return;
+    var host = mc.parentElement || document.body;
+
+    var panel = document.createElement('div');
+    panel.className = 'dt-cfg-panel';
+    panel.style.cssText = [
+      'position:absolute',
+      'z-index:30',
+      'background:#0d1620',
+      'border:1px solid #2a3a4a',
+      'border-radius:10px',
+      'padding:10px 12px',
+      'box-shadow:0 6px 20px rgba(0,0,0,.55)',
+      'font-family:monospace',
+      'font-size:11px',
+      'color:#cfd8e3',
+      'pointer-events:auto',
+      'min-width:180px',
+      'user-select:none',
+    ].join(';') + ';';
+
+    // Position panel just below + slightly left of the anchor (cfg btn).
+    var anchorLeft = parseFloat(anchor.style.left) || 0;
+    var anchorTop  = parseFloat(anchor.style.top)  || 0;
+    var px = Math.max(8, anchorLeft - 90);
+    var py = anchorTop + 18;
+    var hostW = host.getBoundingClientRect().width;
+    if (px + 200 > hostW) px = Math.max(8, hostW - 210);
+    panel.style.left = px + 'px';
+    panel.style.top = py + 'px';
+
+    // Section helper.
+    function row(label: string) {
+      var r = document.createElement('div');
+      r.style.cssText = 'display:flex;align-items:center;gap:6px;margin:4px 0;';
+      var lbl = document.createElement('span');
+      lbl.textContent = label;
+      lbl.style.cssText = 'color:#7a8896;font-size:10px;letter-spacing:.5px;text-transform:uppercase;flex:0 0 50px;';
+      r.appendChild(lbl);
+      return r;
+    }
+
+    // ── Color row ──
+    var rColor = row('Color');
+    COLORS.forEach(function (c: any) {
+      var sw = document.createElement('div');
+      sw.style.cssText = 'width:18px;height:18px;border-radius:50%;background:' + c + ';cursor:pointer;border:2px solid ' + ((line.color === c) ? '#f0c040' : '#2a3a4a') + ';transition:border-color .1s;';
+      sw.addEventListener('click', function (e: any) {
+        e.stopPropagation();
+        _applyLineSettings(line, c, line.width || _defaultWidth, line.style != null ? line.style : _defaultStyle);
+        // Refresh swatch borders.
+        Array.prototype.forEach.call(rColor.querySelectorAll('div'), function (d: any) {
+          d.style.borderColor = (d.dataset.color === c) ? '#f0c040' : '#2a3a4a';
+        });
+      });
+      sw.dataset.color = c;
+      rColor.appendChild(sw);
+    });
+    panel.appendChild(rColor);
+
+    // ── Width row ──
+    var rWidth = row('Width');
+    [1, 2, 3, 4].forEach(function (n: any) {
+      var b = document.createElement('div');
+      b.textContent = String(n);
+      b.dataset.width = String(n);
+      b.style.cssText = 'width:22px;height:22px;line-height:22px;text-align:center;border-radius:6px;background:#162230;border:1px solid ' + ((line.width || _defaultWidth) === n ? '#f0c040' : '#2a3a4a') + ';color:#cfd8e3;cursor:pointer;font-size:10px;';
+      b.addEventListener('click', function (e: any) {
+        e.stopPropagation();
+        _applyLineSettings(line, line.color || _defaultColor, n, line.style != null ? line.style : _defaultStyle);
+        Array.prototype.forEach.call(rWidth.querySelectorAll('div'), function (d: any) {
+          if (d.dataset.width != null) d.style.borderColor = (Number(d.dataset.width) === n) ? '#f0c040' : '#2a3a4a';
+        });
+      });
+      rWidth.appendChild(b);
+    });
+    panel.appendChild(rWidth);
+
+    // ── Style row ── (lightweight-charts: 0=solid 1=dotted 2=dashed)
+    var rStyle = row('Style');
+    var styles: any[] = [
+      { v: 0, label: '———' },  // solid
+      { v: 2, label: '— —' },  // dashed
+      { v: 1, label: '· · ·' } // dotted
+    ];
+    styles.forEach(function (s: any) {
+      var b = document.createElement('div');
+      b.textContent = s.label;
+      b.dataset.style = String(s.v);
+      var current = (line.style != null ? line.style : _defaultStyle);
+      b.style.cssText = 'padding:0 8px;height:22px;line-height:22px;border-radius:6px;background:#162230;border:1px solid ' + (current === s.v ? '#f0c040' : '#2a3a4a') + ';color:#cfd8e3;cursor:pointer;font-size:11px;';
+      b.addEventListener('click', function (e: any) {
+        e.stopPropagation();
+        _applyLineSettings(line, line.color || _defaultColor, line.width || _defaultWidth, s.v);
+        Array.prototype.forEach.call(rStyle.querySelectorAll('div'), function (d: any) {
+          if (d.dataset.style != null) d.style.borderColor = (Number(d.dataset.style) === s.v) ? '#f0c040' : '#2a3a4a';
+        });
+      });
+      rStyle.appendChild(b);
+    });
+    panel.appendChild(rStyle);
+
+    host.appendChild(panel);
+    _settingsPanel = panel;
+
+    // Click-outside-to-close (next tick so the opening click doesn't
+    // immediately close it).
+    setTimeout(function () {
+      _settingsOutsideHandler = function (e: any) {
+        if (!_settingsPanel) return;
+        var t = e.target;
+        if (_settingsPanel.contains(t)) return;
+        if (anchor && anchor.contains && anchor.contains(t)) return;
+        _closeSettingsPanel();
+      };
+      document.addEventListener('mousedown', _settingsOutsideHandler, true);
+      document.addEventListener('touchstart', _settingsOutsideHandler, true);
+    }, 0);
+  }
+
   // ── Add H-Line (native LWC price line — follows chart automatically) ──
-  function _addHLine(price: any, color?: any, existingId?: any) {
+  function _addHLine(price: any, color?: any, existingId?: any, width?: any, style?: any) {
     var s = _series(); if (!s) return;
-    color = color || _nextColor();
+    // [Pack G] If color/width/style not specified by caller, use the
+    // operator's saved defaults (last used in the settings popover).
+    color = color || _defaultColor || _nextColor();
+    var w0 = Number.isFinite(width) ? width : _defaultWidth;
+    var st0 = Number.isFinite(style) ? style : _defaultStyle;
     var id = existingId || _nextId++;
-    var ref = s.createPriceLine({ price:price, color:color, lineWidth:1, lineStyle:0, axisLabelVisible:true, title:price.toFixed(2) });
+    var ref = s.createPriceLine({ price:price, color:color, lineWidth:w0, lineStyle:st0, axisLabelVisible:true, title:price.toFixed(2) });
     _ensureHandleContainer();
     var h = _createHandle(id, 0, color);
     var del = _createDeleteBtn(id);
-    if (_handleContainer) { _handleContainer.appendChild(h); _handleContainer.appendChild(del); }
-    _lines.push({ id:id, type:'hline', price:price, color:color, lwcRef:ref, handles:[h], delBtn:del, selected:false });
+    var cfg = _createSettingsBtn(id);
+    if (_handleContainer) { _handleContainer.appendChild(h); _handleContainer.appendChild(del); _handleContainer.appendChild(cfg); }
+    _lines.push({ id:id, type:'hline', price:price, color:color, width:w0, style:st0, lwcRef:ref, handles:[h], delBtn:del, cfgBtn:cfg, selected:false });
     _selectLine(id);
     if (!existingId) _save();
   }
 
   // ── Add Trendline (native LWC LineSeries — follows chart automatically) ──
-  function _addTLine(p1: any, p2: any, color?: any, existingId?: any) {
+  function _addTLine(p1: any, p2: any, color?: any, existingId?: any, width?: any, style?: any) {
     var c = _chart(); if (!c) return;
-    color = color || _nextColor();
+    // [Pack G] Use operator's saved defaults when caller omits.
+    color = color || _defaultColor || _nextColor();
+    var w0 = Number.isFinite(width) ? width : _defaultWidth;
+    var st0 = Number.isFinite(style) ? style : _defaultStyle;
     var id = existingId || _nextId++;
 
     // Create a LineSeries on the chart for this trendline
     var lineSeries = c.addLineSeries({
       color: color,
-      lineWidth: 2,
+      lineWidth: w0,
+      lineStyle: st0,
       priceLineVisible: false,
       lastValueVisible: false,
       crosshairMarkerVisible: false
@@ -166,9 +392,10 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var h1 = _createHandle(id, 0, color);
     var h2 = _createHandle(id, 1, color);
     var del = _createDeleteBtn(id);
-    if (_handleContainer) { _handleContainer.appendChild(h1); _handleContainer.appendChild(h2); _handleContainer.appendChild(del); }
+    var cfg = _createSettingsBtn(id);
+    if (_handleContainer) { _handleContainer.appendChild(h1); _handleContainer.appendChild(h2); _handleContainer.appendChild(del); _handleContainer.appendChild(cfg); }
 
-    _lines.push({ id:id, type:'tline', p1:{time:p1.time, price:p1.price}, p2:{time:p2.time, price:p2.price}, color:color, lwcSeries:lineSeries, handles:[h1,h2], delBtn:del, selected:false });
+    _lines.push({ id:id, type:'tline', p1:{time:p1.time, price:p1.price}, p2:{time:p2.time, price:p2.price}, color:color, width:w0, style:st0, lwcSeries:lineSeries, handles:[h1,h2], delBtn:del, cfgBtn:cfg, selected:false });
     _selectLine(id);
     if (!existingId) _save();
   }
@@ -193,6 +420,9 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
         if (l.lwcSeries) try { _chart().removeSeries(l.lwcSeries); } catch(_) {}
         l.handles.forEach(function(h: any) { if (h.parentElement) h.parentElement.removeChild(h); });
         if (l.delBtn && l.delBtn.parentElement) l.delBtn.parentElement.removeChild(l.delBtn);
+        // [Pack G] Tear down the settings ⚙ button along with the line.
+        if (l.cfgBtn && l.cfgBtn.parentElement) l.cfgBtn.parentElement.removeChild(l.cfgBtn);
+        if (_selectedId === id) _closeSettingsPanel();
         _lines.splice(i, 1);
         if (_selectedId === id) _selectedId = null;
         _save(); _toast('Deleted');
@@ -208,11 +438,14 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       l.selected = (l.id === id);
       l.handles.forEach(function(h: any) { h.style.display = l.selected ? 'block' : 'none'; });
       if (l.delBtn) l.delBtn.style.display = l.selected ? 'block' : 'none';
-      // Highlight selected trendline
-      if (l.lwcSeries) try { l.lwcSeries.applyOptions({ lineWidth: l.selected ? 3 : 2 }); } catch(_) {}
+      // [Pack G] Settings ⚙ button mirrors selected state.
+      if (l.cfgBtn) l.cfgBtn.style.display = l.selected ? 'block' : 'none';
+      // Highlight selected trendline — preserve user's chosen width
+      // when not selected; emphasize +1px on selection.
+      if (l.lwcSeries) try { l.lwcSeries.applyOptions({ lineWidth: l.selected ? Math.min(6, (l.width || 2) + 1) : (l.width || 2) }); } catch(_) {}
     });
   }
-  function _deselectAll() { _selectedId = null; _selectLine(-1); }
+  function _deselectAll() { _selectedId = null; _selectLine(-1); _closeSettingsPanel(); }
 
   // ── Update handle positions (runs every frame via RAF) ──
   function _updateHandles() {
@@ -240,6 +473,8 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
           l.handles[0].style.left = (oxL + chartW - 30) + 'px';
           l.handles[0].style.top = (oyT + y) + 'px';
           if (l.delBtn) { l.delBtn.style.left = (oxL + chartW - 55) + 'px'; l.delBtn.style.top = (oyT + y) + 'px'; }
+          // [Pack G] Settings ⚙ button to the LEFT of the X for hline.
+          if (l.cfgBtn) { l.cfgBtn.style.left = (oxL + chartW - 80) + 'px'; l.cfgBtn.style.top = (oyT + y) + 'px'; }
         }
       }
       if (l.type === 'tline') {
@@ -249,14 +484,19 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
         if (x2 != null && y2 != null) { l.handles[1].style.left = (oxL + x2) + 'px'; l.handles[1].style.top = (oyT + y2) + 'px'; }
         if (l.delBtn && x1 != null && y1 != null && x2 != null && y2 != null) {
           // [Pack C M12 X-clamp + Pack F.1 offset fix] Clamp delete-X
-          // position to chart bounds AND apply parent offset. Position
-          // it slightly above the higher endpoint (12px) so it sits
-          // visually next to the line, not floating far above the
-          // parent. Fully visible regardless of trendline geometry.
+          // position to chart bounds AND apply parent offset.
           var midX = Math.max(15, Math.min(chartW - 15, (x1 + x2) / 2));
           var topY = Math.max(15, Math.min(chartH - 15, Math.min(y1, y2) - 12));
           l.delBtn.style.left = (oxL + midX) + 'px';
           l.delBtn.style.top = (oyT + topY) + 'px';
+          // [Pack G] Settings ⚙ button to the RIGHT of the X (+24px).
+          // Clamped so it stays inside chart bounds when X is at the
+          // right edge.
+          if (l.cfgBtn) {
+            var cfgX = Math.max(15, Math.min(chartW - 15, midX + 24));
+            l.cfgBtn.style.left = (oxL + cfgX) + 'px';
+            l.cfgBtn.style.top = (oyT + topY) + 'px';
+          }
         }
       }
     });
@@ -489,7 +729,10 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       if (l.lwcSeries) try { l.lwcSeries.applyOptions({ visible:_visible }); } catch(_) {}
       l.handles.forEach(function(h: any) { h.style.display = (_visible && l.selected) ? 'block' : 'none'; });
       if (l.delBtn) l.delBtn.style.display = (_visible && l.selected) ? 'block' : 'none';
+      // [Pack G] Settings ⚙ also follows visibility state.
+      if (l.cfgBtn) l.cfgBtn.style.display = (_visible && l.selected) ? 'block' : 'none';
     });
+    if (!_visible) _closeSettingsPanel();
     var b = document.getElementById('dt-eye'); if (b) b.classList.toggle('on', _visible);
     _toast(_visible ? 'Visible' : 'Hidden');
   }
@@ -510,8 +753,9 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       if (d && d.lines) {
         _nextId = d.nextId || 1;
         d.lines.forEach(function(l: any) {
-          if (l.type === 'hline') _addHLine(l.price, l.color, l.id);
-          if (l.type === 'tline' && l.p1 && l.p2) _addTLine(l.p1, l.p2, l.color, l.id);
+          // [Pack G] Restore per-line width + style alongside color.
+          if (l.type === 'hline') _addHLine(l.price, l.color, l.id, l.width, l.style);
+          if (l.type === 'tline' && l.p1 && l.p2) _addTLine(l.p1, l.p2, l.color, l.id, l.width, l.style);
         });
         _deselectAll();
         // [Pack E] If _visible was restored as false from localStorage,
@@ -524,6 +768,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
             if (l.lwcSeries) try { l.lwcSeries.applyOptions({ visible:false }); } catch(_) {}
             l.handles.forEach(function(h: any) { h.style.display = 'none'; });
             if (l.delBtn) l.delBtn.style.display = 'none';
+            if (l.cfgBtn) l.cfgBtn.style.display = 'none';
           });
           var b = document.getElementById('dt-eye'); if (b) b.classList.add('on');
         }
