@@ -27,6 +27,14 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
   var _dragging: any = null;
   var _tlineStep = 0, _tlinePendingP1: any = null;
   var _selectedId: any = null;
+  // [Pack F / M12 phase 2 — preview line]
+  // After first click, a dashed preview LineSeries is drawn between
+  // _tlinePendingP1 and the current mouse position so the operator
+  // sees exactly where the trendline will land before the second click
+  // (TradingView-style). Cleared on second click, on _deactivate, on
+  // Escape key, or when the tool changes.
+  var _previewSeries: any = null;
+  var _previewMoveHandler: any = null;
   var _handleContainer: any = null;
 
   var COLORS = ['#f0c040','#00d97a','#ff3355','#00b8d4','#aa44ff','#ff8822','#ffffff'];
@@ -308,9 +316,14 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       if (!time) { _toast('Click on chart area'); return; }
       if (_tlineStep === 0) {
         _tlinePendingP1 = { time:time, price:price };
-        _tlineStep = 1; _toast('Click second point'); return;
+        _tlineStep = 1;
+        // [Pack F] Start the dashed preview line that follows the cursor
+        // until the second click confirms placement.
+        _startPreview(_tlinePendingP1);
+        _toast('Click second point (Esc to cancel)'); return;
       }
       if (_tlineStep === 1 && _tlinePendingP1) {
+        _clearPreview();
         _addTLine(_tlinePendingP1, { time:time, price:price });
         _tlinePendingP1 = null; _tlineStep = 0; _deactivate(); _toast('Trendline placed'); return;
       }
@@ -369,6 +382,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     if (_activeTool === tool) { _deactivate(); return; }
     if (!_series()) { _toast('Chart not ready'); return; }
     _activeTool = tool; _tlineStep = 0; _tlinePendingP1 = null;
+    _clearPreview();
     _deselectAll(); _updateBtnStates();
     var mc = _mc(); if (mc) mc.style.cursor = 'crosshair';
     if (tool === 'hline') _toast('Click to place line');
@@ -376,9 +390,76 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     else if (tool === 'eraser') _toast('Click near a line');
   }
   function _deactivate() {
-    _activeTool = null; _tlineStep = 0; _tlinePendingP1 = null; _updateBtnStates();
+    _activeTool = null; _tlineStep = 0; _tlinePendingP1 = null;
+    _clearPreview();
+    _updateBtnStates();
     var mc = _mc(); if (mc) mc.style.cursor = '';
   }
+
+  // [Pack F] Create + maintain preview LineSeries during the trendline
+  // drawing flow. On first click, _startPreview installs a mousemove
+  // handler that updates a dashed semi-transparent line between p1 and
+  // the current cursor position. _clearPreview tears it down on second
+  // click, on cancel (Escape), on tool change, or on chart unmount.
+  function _startPreview(p1: any) {
+    var c = _chart(); if (!c) return;
+    try {
+      _previewSeries = c.addLineSeries({
+        color: '#88ccffaa',     // semi-transparent cyan — visible but doesn't compete with real lines
+        lineWidth: 2,
+        lineStyle: 2,           // dashed (lightweight-charts: 0=solid 1=dotted 2=dashed 3=large 4=sparse)
+        priceLineVisible: false,
+        lastValueVisible: false,
+        crosshairMarkerVisible: false,
+      });
+      _previewSeries.setData([
+        { time: p1.time, value: p1.price },
+        { time: p1.time, value: p1.price },
+      ]);
+    } catch (_) { _previewSeries = null; return; }
+    _previewMoveHandler = function (e: any) {
+      if (!_previewSeries || !_tlinePendingP1) return;
+      // Only update when mouse is over the chart area
+      var mc = _mc(); if (!mc) return;
+      var r = mc.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+      var t = _timeAtX(e.clientX); var p = _priceAtY(e.clientY);
+      if (t == null || p == null) return;
+      try {
+        var t1 = _tlinePendingP1.time, t2 = t;
+        var v1 = _tlinePendingP1.price, v2 = p;
+        // lightweight-charts requires data sorted by time ascending
+        var data = (t1 <= t2)
+          ? [{ time: t1, value: v1 }, { time: t2, value: v2 }]
+          : [{ time: t2, value: v2 }, { time: t1, value: v1 }];
+        _previewSeries.setData(data);
+      } catch (_) { /* ignore transient series state */ }
+    };
+    document.addEventListener('mousemove', _previewMoveHandler, true);
+    document.addEventListener('touchmove', _previewMoveHandler as any, { passive: true } as any);
+  }
+
+  function _clearPreview() {
+    if (_previewMoveHandler) {
+      try { document.removeEventListener('mousemove', _previewMoveHandler, true); } catch (_) { /* */ }
+      try { document.removeEventListener('touchmove', _previewMoveHandler as any); } catch (_) { /* */ }
+      _previewMoveHandler = null;
+    }
+    if (_previewSeries) {
+      try { var c = _chart(); if (c) c.removeSeries(_previewSeries); } catch (_) { /* */ }
+      _previewSeries = null;
+    }
+  }
+
+  // [Pack F] Escape key cancels mid-trendline — TradingView parity.
+  document.addEventListener('keydown', function (e: KeyboardEvent) {
+    if (e.key === 'Escape' && _activeTool === 'tline' && _tlineStep === 1) {
+      _tlineStep = 0; _tlinePendingP1 = null;
+      _clearPreview();
+      _deactivate();
+      _toast('Trendline cancelled');
+    }
+  });
   function _updateBtnStates() {
     ['dt-hline','dt-tline','dt-eraser'].forEach(function(id: any) {
       var b = document.getElementById(id); if (b) b.classList.toggle('on', _activeTool === id.replace('dt-',''));
