@@ -170,8 +170,12 @@ function Band({ color, events, now, onPillClick }: BandProps) {
     const offsetPxRef = useRef(0)
     const durationMsRef = useRef(40000)
     const hasEvents = events.length > 0
-    // Duration scales with pill count so density stays readable.
-    durationMsRef.current = Math.max(20, Math.min(90, events.length * 4)) * 1000
+    // L4: duration scales with pill count so density stays readable.
+    // Old clamp (20–90 s × events × 4) capped at 90 s for ~25 events,
+    // giving a too-fast scroll where pills could not be read; bumped to
+    // (60–240 s × events × 10) for a 1–4 min full traverse so the
+    // operator can read top-volume movers without hovering to pause.
+    durationMsRef.current = Math.max(60, Math.min(240, events.length * 10)) * 1000
 
     useEffect(() => {
         if (!hasEvents) return
@@ -181,7 +185,9 @@ function Band({ color, events, now, onPillClick }: BandProps) {
         let lastTs = performance.now()
         let halfWidth = track.scrollWidth / 2
         const step = (ts: number) => {
-            const dt = Math.min(100, ts - lastTs)
+            // L4: tighten dt clamp from 100 ms → 33 ms so a tab returning
+            // from the background does not jump-scroll the strip.
+            const dt = Math.min(33, ts - lastTs)
             lastTs = ts
             if (!pausedRef.current && halfWidth > 0 && durationMsRef.current > 0) {
                 const speedPxPerMs = halfWidth / durationMsRef.current

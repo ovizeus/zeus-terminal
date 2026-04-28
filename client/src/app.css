@@ -72,7 +72,11 @@ body {
   font-family: var(--ff);
   background: var(--bg);
   color: var(--txt);
+  /* M2: progressive fallback — 100vh for older browsers, 100dvh for
+     dynamic-viewport-aware mobile browsers (iOS Safari address-bar
+     collapse no longer leaves background gap). */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 /* ── Fixed top wrapper (header + status bar) ── */
@@ -464,6 +468,29 @@ body {
   outline: 1px solid var(--gold);
 }
 
+/* L6: native <select> dropdown popup styling. Most desktop browsers
+   (Firefox all platforms, Chrome on Linux/Windows) honour these rules
+   on <option>/<optgroup>; macOS Safari + iOS Safari use the OS-native
+   widget and ignore this — those platforms keep the existing white
+   popup until a custom dropdown component is introduced in a later
+   batch. Best-effort coverage estimated ~70% of users. */
+#symSel option,
+select.tfb option,
+select.zr-symbol-select option,
+select.zac-select option {
+  background: var(--bg);
+  color: var(--whi);
+}
+#symSel optgroup,
+select.tfb optgroup,
+select.zr-symbol-select optgroup,
+select.zac-select optgroup {
+  background: var(--bg2);
+  color: var(--gold);
+  font-style: normal;
+  font-weight: 700;
+}
+
 /* Indicator & overlay active states */
 .indb.act {
   background: #00b8d422;
@@ -606,8 +633,14 @@ body {
   flex-direction: column;
   gap: 0;
   padding: 0;
-  padding-top: 100px; /* ~68px header + ~6px breathing room (status bar now in content) */
+  /* M5: ~94px fixed header (.hdr ≈ logo 62px + 16px×2 padding) + ~26px
+     buffer for in-content status bar to stay fully visible on desktop
+     browsers. Mobile media-query at app.css line ~5536 keeps 60px
+     because the header is more compact there. */
+  padding-top: 120px;
+  /* M2: progressive fallback — see comment in body{} above. */
   min-height: 100vh;
+  min-height: 100dvh;
 }
 .zr-panel {
   background: var(--bg);
@@ -711,7 +744,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* M2: progressive fallback — see comment in body{} above. */
   height: 100vh;
+  height: 100dvh;
   background: var(--bg);
 }
 .zr-loading__text {
@@ -731,7 +766,9 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* M2: progressive fallback — see comment in body{} above. */
   min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   padding: 16px;
 }
