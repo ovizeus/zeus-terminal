@@ -111,22 +111,49 @@ export function ChartControls() {
   const ctRef = useRef<HTMLDivElement>(null)
   const [indPanelOpen, setIndPanelOpen] = useState(false)
   const [fsMode, setFsMode] = useState(false)
-  // [Pack D.1] Read initial state from window.S so that values restored
-  // by panels.ts IIFE (from `zeus_chart_sessions` localStorage) actually
-  // surface in React's render — otherwise the React state stayed
-  // {asia:false,...} forever and buttons looked OFF + no overlay drew,
-  // even though w.S.sessions was correctly populated in memory.
+  // [Pack D.1 + D.2] Read initial state with FOUR fallback layers because
+  // module load order isn't guaranteed: panels.ts IIFE may run BEFORE
+  // state.ts assigns `w.S = S` (panels.ts has no import-side dep on
+  // state.ts; both rely on `window.S` directly), in which case IIFE bails
+  // at `if (!w.S) return` and `w.S.sessions` stays undefined. We MUST
+  // also fall back to reading localStorage directly here, then SYNC the
+  // value into `w.S.sessions` so toggleSession on click sees the right
+  // state. Without the sync, the first click would `!S.sessions[k]` =
+  // `!undefined` = true (toggle ON looks correct), but the second click
+  // would `!true` = false (toggle OFF) — desync between React and `w.S`.
   const _initSessions = (() => {
     try {
       const wAny: any = window
       if (wAny.S && wAny.S.sessions) {
         return { asia: !!wAny.S.sessions.asia, london: !!wAny.S.sessions.london, ny: !!wAny.S.sessions.ny }
       }
+      // Fallback: read localStorage directly (panels.ts IIFE may have bailed)
+      const raw = localStorage.getItem('zeus_chart_sessions')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          const restored = { asia: !!parsed.asia, london: !!parsed.london, ny: !!parsed.ny }
+          // Sync back into w.S.sessions so toggleSession reads the correct
+          // value on the next click. Init w.S if missing (state.ts hasn't
+          // run yet — extremely rare but possible).
+          try { if (!wAny.S) wAny.S = {}; wAny.S.sessions = { ...restored } } catch (_) { /* */ }
+          return restored
+        }
+      }
     } catch (_) { /* */ }
     return { asia: false, london: false, ny: false }
   })()
   const _initVwapOn = (() => {
-    try { return !!(window as any).S && !!(window as any).S.vwapOn } catch (_) { return false }
+    try {
+      const wAny: any = window
+      if (wAny.S && typeof wAny.S.vwapOn !== 'undefined') return !!wAny.S.vwapOn
+      const raw = localStorage.getItem('zeus_chart_vwap_on')
+      if (raw === '1' || raw === 'true') {
+        try { if (!wAny.S) wAny.S = {}; wAny.S.vwapOn = true } catch (_) { /* */ }
+        return true
+      }
+    } catch (_) { /* */ }
+    return false
   })()
   const [_sessions, setSessions] = useState(_initSessions)
   const [_vwapOn, setVwapOn] = useState(_initVwapOn)
