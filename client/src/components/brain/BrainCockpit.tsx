@@ -52,16 +52,41 @@ function RadarLensBar() {
       {lens === 'timeframe' && (
         <>
           <span style={{ color: '#1e2a3a', margin: '0 2px' }}>|</span>
-          {(['5m', '15m', '1h', '4h'] as RadarLensTf[]).map(t => (
-            <button key={t} onClick={() => setTfState(t)} style={_btnStyle(tf === t, '#f0c040')}>
-              {t}
-            </button>
-          ))}
+          <span style={{ color: '#7a9ab8', fontSize: '9px', letterSpacing: '1.5px' }}>TF:</span>
+          {/* [polish] Native <select> pill — works on desktop AND mobile.
+              Native dropdown opens on tap, no z-index issues, supports
+              disabled options visibly. 30m kept visible but disabled
+              because no real 30m data exists client-side (audit
+              confirmed: fetchAllRSI lists ['5m','15m','1h','3h','4h','1d']). */}
+          <select
+            value={tf}
+            onChange={(e) => setTfState(e.target.value as RadarLensTf)}
+            style={{
+              padding: '3px 6px',
+              fontSize: '10px',
+              letterSpacing: '0.5px',
+              fontFamily: 'var(--ff)',
+              fontWeight: 700,
+              border: '1px solid #f0c040',
+              background: 'rgba(240,192,64,0.12)',
+              color: '#f0c040',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'auto',
+            }}
+          >
+            <option value="5m" style={{ background: '#0d1620', color: '#cfd8e3' }}>5m</option>
+            <option value="15m" style={{ background: '#0d1620', color: '#cfd8e3' }}>15m</option>
+            <option disabled style={{ background: '#0d1620', color: '#556677' }}>30m — NO DATA</option>
+            <option value="1h" style={{ background: '#0d1620', color: '#cfd8e3' }}>1h</option>
+            <option value="4h" style={{ background: '#0d1620', color: '#cfd8e3' }}>4h</option>
+          </select>
           <span style={{
             color: '#7a6a3a', fontSize: '8px', marginLeft: '4px',
-            letterSpacing: '0.5px', fontWeight: 700,
+            letterSpacing: '0.5px', fontWeight: 700, whiteSpace: 'nowrap' as const,
           }}>
-            TF BETA — LIMITED DATA
+            TF BETA — RSI/MOM ONLY
           </span>
         </>
       )}
