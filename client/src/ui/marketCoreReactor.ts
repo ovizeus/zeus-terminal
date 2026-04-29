@@ -773,14 +773,21 @@ const w = window as any
 
     ctx.clearRect(0, 0, W, H)
 
+    // [Compass layout fix v2] Auto-fit cerc to canvas with explicit
+    // TOP / BOTTOM reserves so text never overlaps the cerc, the
+    // cardinal markers, or itself — works cleanly from 120 px (phone)
+    // to 200+ px (tablet/desktop). Cardinal labels become single
+    // letters L / S / F / E inside the outer rim so they fit on any
+    // size; the verdict + combo text lives in a fixed-height bottom
+    // strip.
     const cx = W / 2
     const cy = H / 2
-    const maxR = Math.min(W, H) * 0.38
-    const isMobile = W < 220
-    const labelTop  = isMobile ? 'LONG'  : 'LONG CONFIRM'
-    const labelBot  = isMobile ? 'SHORT' : 'SHORT CONFIRM'
-    const labelLeft = 'FLAT'
-    const labelRight= 'ENERGY'
+    const isCompact = W < 180
+    const TOP_RES    = 6
+    const BOTTOM_RES = isCompact ? 28 : 32
+    const halfMaxV = Math.min(cy - TOP_RES, (H - BOTTOM_RES) - cy)
+    const halfMaxH = (W / 2) - 4
+    const maxR = Math.max(20, Math.min(halfMaxV, halfMaxH))
 
     // ── Compass scores (lerped, 0..1) ──
     const sLong     = _compassDisplay.long
@@ -919,26 +926,32 @@ const w = window as any
     ctx.shadowBlur = 0
     ctx.globalAlpha = 1
 
-    // ── Compass cardinal labels ──
+    // ── Compass cardinal markers (single letters inside outer rim) ──
+    // Single letters L / S / F / E sit on the inner edge of the
+    // outer ring so they're visible on any canvas size (120-200+).
+    // Color tracks the dominant state for instant glance read.
+    const _rimR = maxR - 9
     ctx.font = '700 9px "Orbitron","Share Tech Mono",monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = COL_LABEL
-    ctx.fillText(labelTop,    cx,            cy - maxR - 10)
-    ctx.fillText(labelBot,    cx,            cy + maxR + 10)
-    ctx.textAlign = 'right'
-    ctx.fillText(labelLeft,   cx - maxR - 6, cy)
-    ctx.textAlign = 'left'
-    ctx.fillText(labelRight,  cx + maxR + 6, cy)
+    const _markerColor = (active: boolean) => active ? haloColor : COL_LABEL
+    ctx.fillStyle = _markerColor(domState === 'long')
+    ctx.fillText('L', cx,           cy - _rimR)
+    ctx.fillStyle = _markerColor(domState === 'short')
+    ctx.fillText('S', cx,           cy + _rimR)
+    ctx.fillStyle = _markerColor(false)            // FLAT side never "active"
+    ctx.fillText('F', cx - _rimR,   cy)
+    ctx.fillStyle = _markerColor(domState === 'energy')
+    ctx.fillText('E', cx + _rimR,   cy)
 
-    // ── Center text — dominant verdict ──
+    // ── Verdict label (dominant state) ──
     let mainLabel = 'WAIT'
     let mainColor = '#7a8896'
     if (domState === 'risk') {
       mainLabel = 'RISK ' + Math.round(sRisk * 100) + '%'
       mainColor = '#ff3355'
     } else if (domState === 'conflict') {
-      mainLabel = 'CONFLICT ' + Math.round(sConflict * 100) + '% — choppy'
+      mainLabel = 'CONFLICT ' + Math.round(sConflict * 100) + '%'
       mainColor = '#ffffff'
     } else if (domState === 'long') {
       mainLabel = 'LONG CONFIRM ' + Math.round(sLong * 100) + '%'
@@ -950,72 +963,48 @@ const w = window as any
       mainLabel = 'ENERGY ' + Math.round(sEnergy * 100) + '%'
       mainColor = '#00d4ff'
     } else {
-      // WAIT — show why: top score below threshold
-      const top = Math.max(sLong, sShort, sEnergy, sRisk)
-      mainLabel = top < WAIT_THR ? 'WAIT' : 'WAIT — building'
+      const _top = Math.max(sLong, sShort, sEnergy, sRisk)
+      mainLabel = _top < WAIT_THR ? 'WAIT' : 'WAIT — building'
     }
 
-    // Secondary line — second-highest score for context
-    const scoreList: Array<[string, number]> = [
-      ['long',  sLong],   ['short',  sShort],
-      ['energy', sEnergy], ['risk',   sRisk],
+    // ── Combo line (secondary score + freshness) ──
+    // Combines second-highest score (if non-negligible) with the
+    // age of the last brain update — single line, replaces the old
+    // separate "RADAR CONFIRM · upd Xs" footer.
+    const _scores: Array<[string, number]> = [
+      ['long', sLong], ['short', sShort], ['energy', sEnergy], ['risk', sRisk],
     ]
-    scoreList.sort((a, b) => b[1] - a[1])
-    const secKey = scoreList[1][0]
-    const secVal = scoreList[1][1]
-    const secLabelMap: any = { long: 'long', short: 'short', energy: 'energy', risk: 'risk' }
-    const secText = (secVal >= 0.20 && domState !== secKey)
-      ? `${secLabelMap[secKey]} ${Math.round(secVal * 100)}%`
-      : ''
+    _scores.sort((a, b) => b[1] - a[1])
+    const _secKey = _scores[1][0]
+    const _secVal = _scores[1][1]
+    const _ageSec = _compassLastUpdate > 0
+      ? Math.max(0, Math.round((Date.now() - _compassLastUpdate) / 1000))
+      : 0
+    let comboText = 'upd ' + _ageSec + 's'
+    if (_secVal >= 0.20 && _secKey !== domState) {
+      comboText = _secKey + ' ' + Math.round(_secVal * 100) + '% · ' + comboText
+    }
 
-    // Confluence bar (kept) — bottom anchor
-    const barW = maxR * 1.4
-    const barH = 5
-    const barX = cx - barW / 2
-    const barY = cy + maxR + (isMobile ? 22 : 28)
-    const confNorm = _displayConf / 100
-    const confColor = _direction === 'LONG' ? '#39ff14' : _direction === 'SHORT' ? '#ff3355' : '#f0c040'
+    // ── Bottom-anchored 2-line layout ──
+    // Anchored from canvas bottom up so it never overflows on any
+    // canvas size. Reserves match the BOTTOM_RES used to size the
+    // cerc, so cerc + labels never touch text.
+    const _verdictFontPx = isCompact ? 11 : 13
+    const _verdictY      = H - (isCompact ? 16 : 18)
+    const _comboY        = H - 4
 
-    // Center labels (above the bar)
-    ctx.font = isMobile
-      ? '700 11px "Orbitron","Share Tech Mono",monospace'
-      : '700 13px "Orbitron","Share Tech Mono",monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'alphabetic'
+    ctx.font = '700 ' + _verdictFontPx + 'px "Orbitron","Share Tech Mono",monospace'
     ctx.fillStyle = mainColor
     ctx.shadowColor = mainColor
     ctx.shadowBlur = 6
-    ctx.fillText(mainLabel, cx, barY - (isMobile ? 8 : 12))
+    ctx.fillText(mainLabel, cx, _verdictY)
     ctx.shadowBlur = 0
 
-    if (secText) {
-      ctx.font = '600 9px "Orbitron","Share Tech Mono",monospace'
-      ctx.fillStyle = 'rgba(180,200,220,0.65)'
-      ctx.fillText(secText, cx, barY - (isMobile ? -1 : 0))
-    }
-
-    // ── Confluence bar ──
-    ctx.fillStyle = 'rgba(60,100,140,0.55)'
-    _roundRect(ctx, barX, barY, barW, barH, 3)
-    ctx.fill()
-    const fillW = barW * confNorm
-    ctx.fillStyle = confColor
-    ctx.shadowColor = confColor
-    ctx.shadowBlur = 5
-    _roundRect(ctx, barX, barY, fillW, barH, 3)
-    ctx.fill()
-    ctx.shadowBlur = 0
-
-    ctx.font = '700 10px "Orbitron","Share Tech Mono",monospace'
-    ctx.fillStyle = 'rgba(200,230,250,0.85)'
-    ctx.fillText(Math.round(_displayConf) + '%  CONFLUENCE', cx, barY + barH + 12)
-
-    // ── Title + last-update timestamp ──
-    const ageSec = _compassLastUpdate > 0 ? Math.max(0, Math.round((Date.now() - _compassLastUpdate) / 1000)) : 0
-    ctx.font = '600 8px "Orbitron","Share Tech Mono",monospace'
-    ctx.fillStyle = 'rgba(140,190,220,0.50)'
-    ctx.textAlign = 'center'
-    ctx.fillText('RADAR CONFIRM' + (ageSec >= 0 ? '  ·  upd ' + ageSec + 's' : ''), cx, barY + barH + 24)
+    ctx.font = '600 ' + (isCompact ? 7 : 9) + 'px "Orbitron","Share Tech Mono",monospace'
+    ctx.fillStyle = 'rgba(160,190,210,0.60)'
+    ctx.fillText(comboText, cx, _comboY)
   }
 
   // Rounded rect helper
