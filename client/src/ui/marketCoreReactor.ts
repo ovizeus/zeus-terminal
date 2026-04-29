@@ -42,6 +42,30 @@ const w = window as any
     AXIS_ANGLES.push(-Math.PI / 2 + (Math.PI * 2 / 6) * i)
   }
 
+  // ── [BRAIN_RADAR_12X_UI_ONLY] PAS 1 — UI SKELETON (read-only) ─────
+  // Optional 12-axis layout, default OFF via window.BRAIN_RADAR_12X_UI_ONLY.
+  // Order required by operator:
+  //   TREND → DELTA → FLOW → OI → VOL → FUND → VOLAT → IMB → MOM → SENT → STRUCT → LIQ
+  // Existing 6 axes (TREND/FLOW/VOL/VOLAT/MOM/STRUCT) keep their slots
+  // at positions 0, 2, 4, 6, 8, 10 — values reused from the existing
+  // `_display` map. The 6 new axes (DELTA/OI/FUND/IMB/SENT/LIQ) sit
+  // at positions 1, 3, 5, 7, 9, 11 and render as DIMMED placeholders
+  // with no data binding. PAS 2 will wire real read-model sources.
+  const AXES_12 = ['trend', 'delta', 'flow', 'oi', 'volume', 'fund', 'volatility', 'imb', 'momentum', 'sent', 'structure', 'liq']
+  const AXIS_LABELS_12 = ['TREND', 'DELTA', 'FLOW', 'OI', 'VOL', 'FUND', 'VOLAT', 'IMB', 'MOM', 'SENT', 'STRUCT', 'LIQ']
+  const AXIS_ANGLES_12: number[] = []
+  for (let i = 0; i < 12; i++) {
+    AXIS_ANGLES_12.push(-Math.PI / 2 + (Math.PI * 2 / 12) * i)
+  }
+  const NEW_AXIS_KEYS = new Set(['delta', 'oi', 'fund', 'imb', 'sent', 'liq'])
+  function _isDimmedAxis(k: string) { return NEW_AXIS_KEYS.has(k) }
+
+  // Initialize feature flag — default OFF, NO localStorage persistence.
+  // Operator can toggle in DevTools console: `window.BRAIN_RADAR_12X_UI_ONLY = true`.
+  if (typeof w.BRAIN_RADAR_12X_UI_ONLY === 'undefined') {
+    w.BRAIN_RADAR_12X_UI_ONLY = false
+  }
+
   // Colors
   const COL_BG = '#060e1a'
   const COL_GRID = 'rgba(80,180,255,0.08)'
@@ -51,6 +75,13 @@ const w = window as any
   const COL_LONG = { fill: 'rgba(57,255,20,0.18)', stroke: '#39ff14', glow: 'rgba(57,255,20,0.5)', core: '#39ff14' }
   const COL_SHORT = { fill: 'rgba(255,51,85,0.18)', stroke: '#ff3355', glow: 'rgba(255,51,85,0.5)', core: '#ff3355' }
   const COL_NEUTRAL = { fill: 'rgba(240,192,64,0.14)', stroke: '#f0c040', glow: 'rgba(240,192,64,0.4)', core: '#f0c040' }
+
+  // [BRAIN_RADAR_12X_UI_ONLY] Dimmed palette for placeholder axes — clearly
+  // distinct from active axes so operator can see at a glance which axes
+  // have data and which are skeleton-only.
+  const COL_DIM_AXIS  = 'rgba(100,140,170,0.18)'
+  const COL_DIM_LABEL = 'rgba(120,150,180,0.45)'
+  const COL_DIM_DOT   = 'rgba(140,170,200,0.55)'
 
   // suppress unused warnings for colors used only in draw functions
   void COL_BG; void COL_GRID_LINE
@@ -148,7 +179,15 @@ const w = window as any
     const sweepSpeed = 0.04 + (_displayConf / 100) * 0.10
     _sweepAngle = (_sweepAngle + dt * sweepSpeed) % 360
 
-    _drawReactor(dt)
+    // [BRAIN_RADAR_12X_UI_ONLY] PAS 1 — when flag ON, render 12-axis
+    // skeleton. Otherwise render the existing 6-axis reactor exactly
+    // as before (bit-identical code path). The signal-radar (sweep)
+    // rendering does not depend on axis count and is shared.
+    if (w.BRAIN_RADAR_12X_UI_ONLY) {
+      _drawReactor12(dt)
+    } else {
+      _drawReactor(dt)
+    }
     _drawRadar(dt)
 
     _rafId = requestAnimationFrame(_tick)
@@ -307,6 +346,203 @@ const w = window as any
     ctx.shadowBlur = 0
 
     // Sub-label: confluence score
+    ctx.font = '600 9px "Orbitron","Share Tech Mono",monospace'
+    ctx.textAlign = 'right'
+    ctx.fillStyle = 'rgba(180,220,240,0.78)'
+    ctx.fillText('CONFLUENCE ' + Math.round(_displayConf), cx + maxR, cy + maxR + 30)
+  }
+
+  // ══════════════════════════════════════════════════════
+  // [BRAIN_RADAR_12X_UI_ONLY] PAS 1 — 12-AXIS REACTOR DRAW (SKELETON)
+  // ══════════════════════════════════════════════════════
+  // Mirrors _drawReactor structure (grid rings → axis lines → polygon
+  // → vertex dots → labels → core glow → GATES + MODE labels) with
+  // these differences:
+  //   • iterates 12 axis slots instead of 6;
+  //   • polygon, fill, glow, vertex dots are drawn ONLY over the 6
+  //     real axes (positions 0,2,4,6,8,10 — TREND/FLOW/VOL/VOLAT/
+  //     MOM/STRUCT) so the actual brain shape stays honest;
+  //   • the 6 new axes (DELTA/OI/FUND/IMB/SENT/LIQ at positions
+  //     1,3,5,7,9,11) render as dimmed lines + dimmed labels +
+  //     '—' placeholder percentage. NO fake values, NO data binding.
+  // Any change to the visual style of _drawReactor that should also
+  // apply here must be applied in BOTH functions.
+  function _drawReactor12(_dt: number) {
+    const ctx = _reactorCtx
+    if (!ctx) return
+    const W = _reactorCanvas.clientWidth
+    const H = _reactorCanvas.clientHeight
+    if (!W || !H) return
+
+    ctx.clearRect(0, 0, W, H)
+
+    const cx = W / 2
+    const cy = H / 2
+    const maxR = Math.min(W, H) * 0.38
+    const cols = getColors()
+
+    // ── Background grid rings ──
+    ctx.strokeStyle = COL_GRID
+    ctx.lineWidth = 0.5
+    for (let ring = 1; ring <= 5; ring++) {
+      const r = maxR * ring / 5
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+
+    // ── Axis lines (12 — dimmed for new 6) ──
+    ctx.lineWidth = 0.8
+    for (let i = 0; i < 12; i++) {
+      const angle = AXIS_ANGLES_12[i]
+      const k = AXES_12[i]
+      ctx.strokeStyle = _isDimmedAxis(k) ? COL_DIM_AXIS : COL_AXIS
+      ctx.beginPath()
+      ctx.moveTo(cx, cy)
+      ctx.lineTo(cx + Math.cos(angle) * maxR, cy + Math.sin(angle) * maxR)
+      ctx.stroke()
+    }
+
+    // ── Data polygon over REAL 6 axes only (positions 0,2,4,6,8,10) ──
+    // Reuses the same _display values produced by the existing brain
+    // pipeline. No new compute, no new data, no new payload.
+    ctx.beginPath()
+    for (let j = 0; j < 6; j++) {
+      const i = j * 2
+      const k = AXES_12[i]
+      const val = _display[k]
+      const angle = AXIS_ANGLES_12[i]
+      const rV = maxR * Math.max(val, 0.04)
+      const px = cx + Math.cos(angle) * rV
+      const py = cy + Math.sin(angle) * rV
+      if (j === 0) ctx.moveTo(px, py)
+      else ctx.lineTo(px, py)
+    }
+    ctx.closePath()
+
+    ctx.fillStyle = cols.fill
+    ctx.fill()
+    ctx.strokeStyle = cols.stroke
+    ctx.lineWidth = 1.5
+    ctx.shadowColor = cols.glow
+    ctx.shadowBlur = 12
+    ctx.stroke()
+    ctx.shadowBlur = 0
+
+    // ── Vertex dots on REAL 6 axes only ──
+    for (let j = 0; j < 6; j++) {
+      const i = j * 2
+      const k = AXES_12[i]
+      const val = _display[k]
+      const angle = AXIS_ANGLES_12[i]
+      const rV = maxR * Math.max(val, 0.04)
+      const px = cx + Math.cos(angle) * rV
+      const py = cy + Math.sin(angle) * rV
+      ctx.beginPath()
+      ctx.arc(px, py, 3, 0, Math.PI * 2)
+      ctx.fillStyle = cols.stroke
+      ctx.shadowColor = cols.glow
+      ctx.shadowBlur = 8
+      ctx.fill()
+      ctx.shadowBlur = 0
+    }
+
+    // ── Tiny placeholder dots near center for the NEW 6 axes ──
+    // Visual cue that the slot exists but has no data yet. Sits at
+    // ~8% radius so it's clearly inside the polygon area, never on
+    // the perimeter, never connected.
+    for (let i = 0; i < 12; i++) {
+      const k = AXES_12[i]
+      if (!_isDimmedAxis(k)) continue
+      const angle = AXIS_ANGLES_12[i]
+      const rV = maxR * 0.08
+      const px = cx + Math.cos(angle) * rV
+      const py = cy + Math.sin(angle) * rV
+      ctx.beginPath()
+      ctx.arc(px, py, 2.5, 0, Math.PI * 2)
+      ctx.fillStyle = COL_DIM_DOT
+      ctx.fill()
+    }
+
+    // ── Axis labels (12 — '—' for new ones, % for real ones) ──
+    ctx.font = '600 8px "Orbitron","Share Tech Mono",monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    for (let i = 0; i < 12; i++) {
+      const angle = AXIS_ANGLES_12[i]
+      const lR = maxR + 18
+      const lx = cx + Math.cos(angle) * lR
+      const ly = cy + Math.sin(angle) * lR
+      const k = AXES_12[i]
+
+      if (_isDimmedAxis(k)) {
+        ctx.fillStyle = COL_DIM_LABEL
+        ctx.font = '600 8px "Orbitron","Share Tech Mono",monospace'
+        ctx.fillText(AXIS_LABELS_12[i], lx, ly - 5)
+        ctx.font = '700 9px "Orbitron","Share Tech Mono",monospace'
+        ctx.fillText('—', lx, ly + 6)
+      } else {
+        const pct = Math.round(_display[k] * 100)
+        ctx.fillStyle = COL_LABEL
+        ctx.font = '600 8px "Orbitron","Share Tech Mono",monospace'
+        ctx.fillText(AXIS_LABELS_12[i], lx, ly - 5)
+        ctx.fillStyle = cols.stroke
+        ctx.font = '700 9px "Orbitron","Share Tech Mono",monospace'
+        ctx.fillText(pct + '%', lx, ly + 6)
+      }
+    }
+
+    // ── Core center glow (mirrors _drawReactor lines 256-287) ──
+    const coreIntensity = _displayConf / 100
+    const pulsePhase = (Math.sin(performance.now() / (800 - _displayEntry * 4)) + 1) / 2
+    const coreAlpha = 0.15 + coreIntensity * 0.55 + pulsePhase * 0.12
+    const coreR = 14 + coreIntensity * 18 + pulsePhase * 4
+
+    const haloGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 2.2)
+    haloGrad.addColorStop(0, cols.core.replace(')', ',' + (coreAlpha * 0.3) + ')').replace('rgb', 'rgba'))
+    haloGrad.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.beginPath()
+    ctx.arc(cx, cy, coreR * 2.2, 0, Math.PI * 2)
+    ctx.fillStyle = haloGrad
+    ctx.fill()
+
+    const innerGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR)
+    innerGrad.addColorStop(0, 'rgba(255,250,230,' + (coreAlpha * 0.9) + ')')
+    innerGrad.addColorStop(0.4, cols.glow.replace(/[\d.]+\)$/, (coreAlpha * 0.7) + ')'))
+    innerGrad.addColorStop(1, 'rgba(0,0,0,0)')
+    ctx.beginPath()
+    ctx.arc(cx, cy, coreR, 0, Math.PI * 2)
+    ctx.fillStyle = innerGrad
+    ctx.fill()
+
+    ctx.beginPath()
+    ctx.arc(cx, cy, coreR * 0.6, 0, Math.PI * 2)
+    ctx.strokeStyle = cols.stroke
+    ctx.globalAlpha = 0.3 + coreAlpha * 0.5
+    ctx.lineWidth = 1.2
+    ctx.stroke()
+    ctx.globalAlpha = 1
+
+    // ── GATES badge (top-left) — same as _drawReactor ──
+    ctx.font = '700 11px "Orbitron","Share Tech Mono",monospace'
+    ctx.textAlign = 'left'
+    ctx.fillStyle = _gatesOpen >= _gatesTotal ? '#39ff14' : _gatesOpen >= _gatesTotal - 2 ? '#f0c040' : '#ff3355'
+    ctx.shadowColor = ctx.fillStyle
+    ctx.shadowBlur = 6
+    ctx.fillText('GATES ' + _gatesOpen + '/' + _gatesTotal, cx - maxR, cy - maxR - 28)
+    ctx.shadowBlur = 0
+
+    // ── MODE badge (bottom-left) — same as _drawReactor ──
+    const modeLabel = _direction === 'LONG' ? 'LONG MODE' : _direction === 'SHORT' ? 'SHORT MODE' : 'SCANNING'
+    const modeColor = _direction === 'LONG' ? '#39ff14' : _direction === 'SHORT' ? '#ff3355' : '#f0c040'
+    ctx.font = '700 12px "Orbitron","Share Tech Mono",monospace'
+    ctx.textAlign = 'left'
+    ctx.fillStyle = modeColor
+    ctx.shadowColor = modeColor
+    ctx.shadowBlur = 8
+    ctx.fillText(modeLabel, cx - maxR, cy + maxR + 30)
+    ctx.shadowBlur = 0
+
     ctx.font = '600 9px "Orbitron","Share Tech Mono",monospace'
     ctx.textAlign = 'right'
     ctx.fillStyle = 'rgba(180,220,240,0.78)'
