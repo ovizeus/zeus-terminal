@@ -18,9 +18,18 @@ const w = window as any
   let _radarCanvas: any, _radarCtx: any
 
   // Target values (set by update()) — 0→1 normalized
-  const _target: Record<string, number> = { trend: 0, flow: 0, volume: 0, volatility: 0, momentum: 0, structure: 0 }
+  // [BRAIN_RADAR_12X_UI_ONLY PAS 2] Extended with 6 new keys for the
+  // optional 12-axis layout. Defaults 0; only used when the feature
+  // flag is ON. The 6 existing keys behave identically to before.
+  const _target: Record<string, number> = {
+    trend: 0, flow: 0, volume: 0, volatility: 0, momentum: 0, structure: 0,
+    delta: 0, oi: 0, fund: 0, imb: 0, sent: 0, liq: 0,
+  }
   // Display values (lerped each frame toward target)
-  const _display: Record<string, number> = { trend: 0, flow: 0, volume: 0, volatility: 0, momentum: 0, structure: 0 }
+  const _display: Record<string, number> = {
+    trend: 0, flow: 0, volume: 0, volatility: 0, momentum: 0, structure: 0,
+    delta: 0, oi: 0, fund: 0, imb: 0, sent: 0, liq: 0,
+  }
 
   // Auxiliary display state
   let _gatesOpen = 0
@@ -42,15 +51,22 @@ const w = window as any
     AXIS_ANGLES.push(-Math.PI / 2 + (Math.PI * 2 / 6) * i)
   }
 
-  // ── [BRAIN_RADAR_12X_UI_ONLY] PAS 1 — UI SKELETON (read-only) ─────
+  // ── [BRAIN_RADAR_12X_UI_ONLY] 12-axis layout (PAS 1 + PAS 2) ──────
   // Optional 12-axis layout, default OFF via window.BRAIN_RADAR_12X_UI_ONLY.
   // Order required by operator:
   //   TREND → DELTA → FLOW → OI → VOL → FUND → VOLAT → IMB → MOM → SENT → STRUCT → LIQ
-  // Existing 6 axes (TREND/FLOW/VOL/VOLAT/MOM/STRUCT) keep their slots
-  // at positions 0, 2, 4, 6, 8, 10 — values reused from the existing
-  // `_display` map. The 6 new axes (DELTA/OI/FUND/IMB/SENT/LIQ) sit
-  // at positions 1, 3, 5, 7, 9, 11 and render as DIMMED placeholders
-  // with no data binding. PAS 2 will wire real read-model sources.
+  // Existing 6 axes (TREND/FLOW/VOL/VOLAT/MOM/STRUCT) sit at positions
+  // 0, 2, 4, 6, 8, 10 — values reused from the existing `_display`
+  // map (no new compute). The 6 new axes (DELTA/OI/FUND/IMB/SENT/LIQ)
+  // sit at positions 1, 3, 5, 7, 9, 11.
+  //
+  // PAS 2 wires REAL read-only sources for the 6 new axes. Each new
+  // axis uses a `_hasReal[k]` flag — when the brain feed contains a
+  // finite normalized value the flag flips to true and the axis
+  // renders as a normal data point at its 0..1 radius. When the
+  // source is undefined / NaN / Infinity / not yet ready, the flag
+  // stays false and the axis renders dimmed with `—` (skeleton).
+  // No fake data, no invented values, no decision impact.
   const AXES_12 = ['trend', 'delta', 'flow', 'oi', 'volume', 'fund', 'volatility', 'imb', 'momentum', 'sent', 'structure', 'liq']
   const AXIS_LABELS_12 = ['TREND', 'DELTA', 'FLOW', 'OI', 'VOL', 'FUND', 'VOLAT', 'IMB', 'MOM', 'SENT', 'STRUCT', 'LIQ']
   const AXIS_ANGLES_12: number[] = []
@@ -58,7 +74,19 @@ const w = window as any
     AXIS_ANGLES_12.push(-Math.PI / 2 + (Math.PI * 2 / 12) * i)
   }
   const NEW_AXIS_KEYS = new Set(['delta', 'oi', 'fund', 'imb', 'sent', 'liq'])
-  function _isDimmedAxis(k: string) { return NEW_AXIS_KEYS.has(k) }
+
+  // Per-axis "real data is bound" flag. The 6 existing axes always
+  // have data, the 6 new axes start as skeleton (false) and flip to
+  // true only when the brain feed delivers a finite normalized value.
+  const _hasReal: Record<string, boolean> = {
+    trend: true, flow: true, volume: true, volatility: true, momentum: true, structure: true,
+    delta: false, oi: false, fund: false, imb: false, sent: false, liq: false,
+  }
+  function _isDimmedAxis(k: string) {
+    // Treat any of the new axes without a real-data flag as dimmed.
+    if (!NEW_AXIS_KEYS.has(k)) return false
+    return !_hasReal[k]
+  }
 
   // Initialize feature flag — default OFF, NO localStorage persistence.
   // Operator can toggle in DevTools console: `window.BRAIN_RADAR_12X_UI_ONLY = true`.
@@ -160,6 +188,37 @@ const w = window as any
     if (data.direction) _direction = data.direction
     if (data.confidence != null) _confidence = clamp(+data.confidence, 0, 100)
     if (data.entryScore != null) _entryScore = clamp(+data.entryScore, 0, 100)
+
+    // [BRAIN_RADAR_12X_UI_ONLY PAS 2] Optional new axes — read-only
+    // visualization. Each axis is accepted only when the brain feed
+    // provides a finite number; otherwise its `_hasReal` flag stays
+    // false and the renderer dims it. NEVER falls back to fake data.
+    // Map: payload key → internal _target key.
+    //   delta     → 'delta'    (buy/sell aggression)
+    //   oi        → 'oi'       (open-interest pressure)
+    //   funding   → 'fund'     (funding bias / crowd pressure)
+    //   imbalance → 'imb'      (top-N orderbook imbalance)
+    //   sentiment → 'sent'     (long/short ratio deviation)
+    //   liquidity → 'liq'      (magnet / liquidity proximity)
+    const _readOptional = (raw: any, internalKey: string) => {
+      if (raw == null) {
+        _hasReal[internalKey] = false
+        return
+      }
+      const v = +raw
+      if (!Number.isFinite(v)) {
+        _hasReal[internalKey] = false
+        return
+      }
+      _target[internalKey] = clamp(v, 0, 1)
+      _hasReal[internalKey] = true
+    }
+    if ('delta'     in data) _readOptional(data.delta,     'delta')
+    if ('oi'        in data) _readOptional(data.oi,        'oi')
+    if ('funding'   in data) _readOptional(data.funding,   'fund')
+    if ('imbalance' in data) _readOptional(data.imbalance, 'imb')
+    if ('sentiment' in data) _readOptional(data.sentiment, 'sent')
+    if ('liquidity' in data) _readOptional(data.liquidity, 'liq')
   }
 
   // ── RAF Tick ───────────────────────────────────────────
@@ -172,6 +231,17 @@ const w = window as any
     for (let i = 0; i < AXES.length; i++) {
       const k = AXES[i]
       _display[k] = lerp(_display[k], _target[k], alpha)
+    }
+    // [BRAIN_RADAR_12X_UI_ONLY PAS 2] Lerp the 6 new axes only when
+    // they have real data attached. Skeleton axes stay at 0 so they
+    // do not flicker when first toggled ON. Pure visual smoothing —
+    // no decision impact.
+    if (w.BRAIN_RADAR_12X_UI_ONLY) {
+      const NEW_KEYS = ['delta', 'oi', 'fund', 'imb', 'sent', 'liq']
+      for (let i = 0; i < NEW_KEYS.length; i++) {
+        const k = NEW_KEYS[i]
+        if (_hasReal[k]) _display[k] = lerp(_display[k], _target[k], alpha)
+      }
     }
     _displayConf = lerp(_displayConf, _confidence, alpha * 0.6)
     _displayEntry = lerp(_displayEntry, _entryScore, alpha * 0.6)
@@ -403,19 +473,23 @@ const w = window as any
       ctx.stroke()
     }
 
-    // ── Data polygon over REAL 6 axes only (positions 0,2,4,6,8,10) ──
-    // Reuses the same _display values produced by the existing brain
-    // pipeline. No new compute, no new data, no new payload.
+    // ── Data polygon — covers all 12 vertices, but DIMMED axes
+    // collapse to a tiny 4% radius so they pull the polygon inward
+    // without spiking it. This way the shape matches the available
+    // data: when only the 6 base axes have data, the polygon looks
+    // like a 6-pointed star indented at every other vertex; when
+    // all 12 are real (PAS 2 mapping live), it forms a smooth
+    // 12-vertex shape. No fake values — dim slots show ~zero. ──
     ctx.beginPath()
-    for (let j = 0; j < 6; j++) {
-      const i = j * 2
+    for (let i = 0; i < 12; i++) {
       const k = AXES_12[i]
-      const val = _display[k]
+      const dim = _isDimmedAxis(k)
+      const val = dim ? 0 : _display[k]
       const angle = AXIS_ANGLES_12[i]
       const rV = maxR * Math.max(val, 0.04)
       const px = cx + Math.cos(angle) * rV
       const py = cy + Math.sin(angle) * rV
-      if (j === 0) ctx.moveTo(px, py)
+      if (i === 0) ctx.moveTo(px, py)
       else ctx.lineTo(px, py)
     }
     ctx.closePath()
@@ -429,39 +503,29 @@ const w = window as any
     ctx.stroke()
     ctx.shadowBlur = 0
 
-    // ── Vertex dots on REAL 6 axes only ──
-    for (let j = 0; j < 6; j++) {
-      const i = j * 2
+    // ── Vertex dots — bright on real axes, small dim dot on
+    // skeleton axes (placed at the same low radius as the polygon
+    // collapse so it sits on the polygon perimeter, not floating). ──
+    for (let i = 0; i < 12; i++) {
       const k = AXES_12[i]
-      const val = _display[k]
+      const dim = _isDimmedAxis(k)
+      const val = dim ? 0 : _display[k]
       const angle = AXIS_ANGLES_12[i]
       const rV = maxR * Math.max(val, 0.04)
       const px = cx + Math.cos(angle) * rV
       const py = cy + Math.sin(angle) * rV
       ctx.beginPath()
-      ctx.arc(px, py, 3, 0, Math.PI * 2)
-      ctx.fillStyle = cols.stroke
-      ctx.shadowColor = cols.glow
-      ctx.shadowBlur = 8
-      ctx.fill()
-      ctx.shadowBlur = 0
-    }
-
-    // ── Tiny placeholder dots near center for the NEW 6 axes ──
-    // Visual cue that the slot exists but has no data yet. Sits at
-    // ~8% radius so it's clearly inside the polygon area, never on
-    // the perimeter, never connected.
-    for (let i = 0; i < 12; i++) {
-      const k = AXES_12[i]
-      if (!_isDimmedAxis(k)) continue
-      const angle = AXIS_ANGLES_12[i]
-      const rV = maxR * 0.08
-      const px = cx + Math.cos(angle) * rV
-      const py = cy + Math.sin(angle) * rV
-      ctx.beginPath()
-      ctx.arc(px, py, 2.5, 0, Math.PI * 2)
-      ctx.fillStyle = COL_DIM_DOT
-      ctx.fill()
+      ctx.arc(px, py, dim ? 2.5 : 3, 0, Math.PI * 2)
+      if (dim) {
+        ctx.fillStyle = COL_DIM_DOT
+        ctx.fill()
+      } else {
+        ctx.fillStyle = cols.stroke
+        ctx.shadowColor = cols.glow
+        ctx.shadowBlur = 8
+        ctx.fill()
+        ctx.shadowBlur = 0
+      }
     }
 
     // ── Axis labels (12 — '—' for new ones, % for real ones) ──

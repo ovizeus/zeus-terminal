@@ -2154,6 +2154,105 @@ export function renderBrainCockpit(): void {
       // --- CONFIDENCE (confluence score, 0-100) ---
       const _confScore = BM.confluenceScore || 0
 
+      // [BRAIN_RADAR_12X_UI_ONLY PAS 2] Read-only mapping for the 6
+      // optional new axes. Each value is normalized to 0..1 from a
+      // real client-side source already used elsewhere in the
+      // pipeline (no new API call, no new compute beyond a few
+      // local arithmetic ops). Each block returns `null` when the
+      // upstream field is undefined / NaN / Infinity / not-yet-ready
+      // so the UI dims the corresponding axis instead of inventing
+      // data. NONE of these values feed scoring, confluence, gates,
+      // dispatch, parity, or any decision path. They are emitted
+      // ONLY into the visualization payload below.
+      var _radarVal = function (raw: any) {
+        if (raw == null) return null
+        var n = +raw
+        if (!Number.isFinite(n)) return null
+        return clamp(n, 0, 1)
+      }
+
+      // DELTA — buy/sell aggression, from OF.deltaPct (-100..100).
+      // Magnitude / 50 → strong imbalance pegs at 1.0 (50%+ either way).
+      var _deltaR: number | null = null
+      try {
+        if (typeof w.OF !== 'undefined' && w.OF !== null && w.OF.deltaPct != null) {
+          var _dPct = +w.OF.deltaPct
+          if (Number.isFinite(_dPct)) _deltaR = _radarVal(Math.abs(_dPct) / 50)
+        }
+      } catch (_) { _deltaR = null }
+
+      // OI — open interest pressure. |Δ%| over previous fetch, scaled
+      // so a 2 % swing reaches the rim (typical large-event move).
+      var _oiR: number | null = null
+      try {
+        var _oiNow = w.S && w.S.oi
+        var _oiPrv = w.S && w.S.oiPrev
+        if (Number.isFinite(_oiNow) && Number.isFinite(_oiPrv) && _oiPrv > 0) {
+          var _oiPct = Math.abs((_oiNow - _oiPrv) / _oiPrv) * 100
+          _oiR = _radarVal(_oiPct / 2)
+        }
+      } catch (_) { _oiR = null }
+
+      // FUND — funding bias. |fundingRate| pegs at 0.05% (typical
+      // extreme positive/negative funding event).
+      var _fundR: number | null = null
+      try {
+        if (w.S && w.S.fr != null) {
+          var _frNow = +w.S.fr
+          if (Number.isFinite(_frNow)) _fundR = _radarVal(Math.abs(_frNow) / 0.0005)
+        }
+      } catch (_) { _fundR = null }
+
+      // IMB — top-N orderbook imbalance from updateOrderFlow.
+      // BR.ofi.buy is 0..100 (50 = balanced). |buy-50|/50 → 0..1.
+      var _imbR: number | null = null
+      try {
+        if (BR && BR.ofi && BR.ofi.buy != null) {
+          var _buyPct = +BR.ofi.buy
+          if (Number.isFinite(_buyPct)) _imbR = _radarVal(Math.abs(_buyPct - 50) / 50)
+        }
+      } catch (_) { _imbR = null }
+
+      // SENT — long/short account ratio. ls.l + ls.s ≈ 100 (Binance
+      // global ratio, %). Deviation from 50/50 → 0..1.
+      var _sentR: number | null = null
+      try {
+        if (w.S && w.S.ls && w.S.ls.l != null && w.S.ls.s != null) {
+          var _lsL = +w.S.ls.l
+          var _lsS = +w.S.ls.s
+          if (Number.isFinite(_lsL) && Number.isFinite(_lsS) && (_lsL + _lsS) > 0) {
+            var _lsTot = _lsL + _lsS
+            var _lsLong = _lsL / _lsTot
+            _sentR = _radarVal(Math.abs(_lsLong - 0.5) / 0.5)
+          }
+        }
+      } catch (_) { _sentR = null }
+
+      // LIQ — liquidity / magnet proximity. Re-derive directly from
+      // S.magnets so we can return null when there are NO magnets at
+      // all (the STRUCT block defaults to 0.5 in that case which is
+      // not honest for a standalone LIQ axis). Closer magnet = higher
+      // value (within 2 % of price = pegs to 1.0).
+      var _liqR: number | null = null
+      try {
+        if (w.S && w.S.magnets &&
+            Array.isArray(w.S.magnets.above) && w.S.magnets.above.length &&
+            Array.isArray(w.S.magnets.below) && w.S.magnets.below.length &&
+            getPrice() > 0) {
+          var _liqA = w.S.magnets.above
+            .map(function (m: any) { return Math.abs((typeof m === 'number' ? m : (m && m.price) || 0) - getPrice()) / getPrice() })
+            .filter(function (d: any) { return Number.isFinite(d) })
+          var _liqB = w.S.magnets.below
+            .map(function (m: any) { return Math.abs((typeof m === 'number' ? m : (m && m.price) || 0) - getPrice()) / getPrice() })
+            .filter(function (d: any) { return Number.isFinite(d) })
+          if (_liqA.length && _liqB.length) {
+            var _liqNearA = Math.min.apply(null, _liqA)
+            var _liqNearB = Math.min.apply(null, _liqB)
+            _liqR = _radarVal(1 - clamp(Math.min(_liqNearA, _liqNearB) / 0.02, 0, 1))
+          }
+        }
+      } catch (_) { _liqR = null }
+
       w.MarketCoreReactor.update({
         trend: _trendVal,
         flow: _flowVal,
@@ -2165,7 +2264,17 @@ export function renderBrainCockpit(): void {
         gatesTotal: 7,
         direction: _mcrDir,
         confidence: _confScore,
-        entryScore: BM.entryScore || 0
+        entryScore: BM.entryScore || 0,
+        // [BRAIN_RADAR_12X_UI_ONLY PAS 2] Optional read-only fields.
+        // Each is null when the source is not yet available; the
+        // renderer treats null as "skeleton / dimmed". NEVER feeds
+        // any decision path.
+        delta: _deltaR,
+        oi: _oiR,
+        funding: _fundR,
+        imbalance: _imbR,
+        sentiment: _sentR,
+        liquidity: _liqR,
       })
     } catch (_mcrErr) { /* silently continue */ }
   }
