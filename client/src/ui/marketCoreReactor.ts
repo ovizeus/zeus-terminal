@@ -74,6 +74,7 @@ const w = window as any
     AXIS_ANGLES_12.push(-Math.PI / 2 + (Math.PI * 2 / 12) * i)
   }
   const NEW_AXIS_KEYS = new Set(['delta', 'oi', 'fund', 'imb', 'sent', 'liq'])
+  const ALL_AXIS_KEYS = ['trend', 'delta', 'flow', 'oi', 'volume', 'fund', 'volatility', 'imb', 'momentum', 'sent', 'structure', 'liq']
 
   // Per-axis "real data is bound" flag. The 6 existing axes always
   // have data, the 6 new axes start as skeleton (false) and flip to
@@ -82,10 +83,54 @@ const w = window as any
     trend: true, flow: true, volume: true, volatility: true, momentum: true, structure: true,
     delta: false, oi: false, fund: false, imb: false, sent: false, liq: false,
   }
+
+  // ── [L2] RADAR LENS ─────────────────────────────────────────────
+  // Lens filter dims axes that are not primary in the current lens.
+  //   HYBRID    — all 12 active (default)
+  //   REAL-TIME — DELTA/FLOW/IMB/MOM/VOL/VOLAT primary
+  //   SLOW      — OI/FUND/SENT/LIQ/STRUCT/VOLAT primary
+  //   TIMEFRAME — MOM only (uses S.rsi[lensTf] honestly; no fake TF data)
+  // NONE of these change brain decisions / scoring / confluence /
+  // gates / dispatch / parity. Pure visualization read-model.
+  type LensKey = 'hybrid' | 'realtime' | 'timeframe' | 'slow'
+  type LensTf  = '5m' | '15m' | '1h' | '4h'
+  let _lens: LensKey = 'hybrid'
+  let _lensTf: LensTf = '5m'
+  const LENS_PRIMARY: Record<LensKey, Set<string>> = {
+    hybrid:    new Set(ALL_AXIS_KEYS),
+    realtime:  new Set(['delta', 'flow', 'imb', 'momentum', 'volume', 'volatility']),
+    slow:      new Set(['oi', 'fund', 'sent', 'liq', 'structure', 'volatility']),
+    timeframe: new Set(['momentum']), // honest mode — only MOM has per-TF data via S.rsi[tf]
+  }
+  const _lensActive: Record<string, boolean> = {}
+  function _recomputeLensActive() {
+    const primary = LENS_PRIMARY[_lens]
+    for (let i = 0; i < ALL_AXIS_KEYS.length; i++) {
+      _lensActive[ALL_AXIS_KEYS[i]] = primary.has(ALL_AXIS_KEYS[i])
+    }
+  }
+  _recomputeLensActive()
+
   function _isDimmedAxis(k: string) {
-    // Treat any of the new axes without a real-data flag as dimmed.
-    if (!NEW_AXIS_KEYS.has(k)) return false
-    return !_hasReal[k]
+    // 1. New axis without real data → dim (PAS 2 skeleton behavior)
+    if (NEW_AXIS_KEYS.has(k) && !_hasReal[k]) return true
+    // 2. [L2] Axis not in current lens primary set → dim
+    if (!_lensActive[k]) return true
+    return false
+  }
+
+  // [L2 TIMEFRAME] Read-only override: when lens is TIMEFRAME, MOM
+  // uses |S.rsi[lensTf] - 50| / 50 instead of _display.momentum
+  // (which is computed from RSI 5m). All other axes keep their
+  // existing _display value. Pure read; no write to any store.
+  function _displayValueFor(k: string) {
+    if (_lens === 'timeframe' && k === 'momentum') {
+      try {
+        const tfRsi = w.S && w.S.rsi && w.S.rsi[_lensTf]
+        if (Number.isFinite(tfRsi)) return clamp(Math.abs(+tfRsi - 50) / 50, 0, 1)
+      } catch (_) { /* fall through */ }
+    }
+    return _display[k]
   }
 
   // Initialize feature flag — default OFF, NO localStorage persistence.
@@ -475,16 +520,14 @@ const w = window as any
 
     // ── Data polygon — covers all 12 vertices, but DIMMED axes
     // collapse to a tiny 4% radius so they pull the polygon inward
-    // without spiking it. This way the shape matches the available
-    // data: when only the 6 base axes have data, the polygon looks
-    // like a 6-pointed star indented at every other vertex; when
-    // all 12 are real (PAS 2 mapping live), it forms a smooth
-    // 12-vertex shape. No fake values — dim slots show ~zero. ──
+    // without spiking it. The shape matches the available data:
+    // skeleton axes / lens-deselected axes show ~zero; primary
+    // axes show their real value. No fake values. ──
     ctx.beginPath()
     for (let i = 0; i < 12; i++) {
       const k = AXES_12[i]
       const dim = _isDimmedAxis(k)
-      const val = dim ? 0 : _display[k]
+      const val = dim ? 0 : _displayValueFor(k)
       const angle = AXIS_ANGLES_12[i]
       const rV = maxR * Math.max(val, 0.04)
       const px = cx + Math.cos(angle) * rV
@@ -503,13 +546,13 @@ const w = window as any
     ctx.stroke()
     ctx.shadowBlur = 0
 
-    // ── Vertex dots — bright on real axes, small dim dot on
-    // skeleton axes (placed at the same low radius as the polygon
+    // ── Vertex dots — bright on primary axes, small dim dot on
+    // dim ones (placed at the same low radius as the polygon
     // collapse so it sits on the polygon perimeter, not floating). ──
     for (let i = 0; i < 12; i++) {
       const k = AXES_12[i]
       const dim = _isDimmedAxis(k)
-      const val = dim ? 0 : _display[k]
+      const val = dim ? 0 : _displayValueFor(k)
       const angle = AXIS_ANGLES_12[i]
       const rV = maxR * Math.max(val, 0.04)
       const px = cx + Math.cos(angle) * rV
@@ -546,7 +589,8 @@ const w = window as any
         ctx.font = '700 9px "Orbitron","Share Tech Mono",monospace'
         ctx.fillText('—', lx, ly + 6)
       } else {
-        const pct = Math.round(_display[k] * 100)
+        // [L2] _displayValueFor honors lens overrides (TIMEFRAME→MOM uses S.rsi[lensTf]).
+        const pct = Math.round(_displayValueFor(k) * 100)
         ctx.fillStyle = COL_LABEL
         ctx.font = '600 8px "Orbitron","Share Tech Mono",monospace'
         ctx.fillText(AXIS_LABELS_12[i], lx, ly - 5)
@@ -768,11 +812,35 @@ const w = window as any
     w.removeEventListener('resize', _debounceResize)
   }
 
+  // ── [L2] Public lens API — called by BrainCockpit lens bar ────
+  // Sets the active lens + (optional) timeframe. Selecting any lens
+  // automatically activates the 12-axis renderer (sets the existing
+  // window.BRAIN_RADAR_12X_UI_ONLY flag to true). To go back to the
+  // legacy 6-axis renderer, set the flag explicitly to false in
+  // DevTools console — that rollback path is preserved.
+  function setLens(lens: any, tf?: any) {
+    if (lens === 'hybrid' || lens === 'realtime' || lens === 'timeframe' || lens === 'slow') {
+      _lens = lens
+      // Selecting any lens means the operator wants the 12-axis view.
+      w.BRAIN_RADAR_12X_UI_ONLY = true
+    }
+    if (tf === '5m' || tf === '15m' || tf === '1h' || tf === '4h') {
+      _lensTf = tf
+    }
+    _recomputeLensActive()
+  }
+  function getLens() {
+    return { lens: _lens, tf: _lensTf, active: { ..._lensActive } }
+  }
+
   // ── Public API ─────────────────────────────────────────
   w.MarketCoreReactor = {
     init: init,
     update: update,
-    destroy: destroy
+    destroy: destroy,
+    // [L2] Lens controls — read-only, NO impact on trading decisions.
+    setLens: setLens,
+    getLens: getLens,
   }
 
 })()

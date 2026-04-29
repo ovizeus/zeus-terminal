@@ -1,8 +1,73 @@
-import { useRef, useEffect, memo } from 'react'
+import { useRef, useEffect, memo, useState } from 'react'
 import { resetProtectMode } from '../../engine/brain'
 import { BlockReasonText } from './BlockReasonText'
 import { useBrainStatsStore, BRAIN_NEURON_IDS } from '../../stores/brainStatsStore'
 import { _ZI } from '../../constants/icons'
+
+// [L1+L2] Radar lens controls — strictly visualization. Selecting any
+// lens turns the 12-axis renderer ON via window.BRAIN_RADAR_12X_UI_ONLY.
+// Per Zeus rules: in-memory only (no localStorage as final truth, no
+// server writes); proper per-user persistence is deferred to L4 after
+// T+7d soak. To rollback to legacy 6-axis: DevTools console
+// `window.BRAIN_RADAR_12X_UI_ONLY = false`.
+type RadarLens = 'hybrid' | 'realtime' | 'timeframe' | 'slow'
+type RadarLensTf = '5m' | '15m' | '1h' | '4h'
+const _RADAR_LENS_LABELS: Record<RadarLens, string> = {
+  hybrid: 'HYBRID', realtime: 'REAL-TIME', timeframe: 'TIMEFRAME', slow: 'SLOW',
+}
+function RadarLensBar() {
+  const [lens, setLensState] = useState<RadarLens>('hybrid')
+  const [tf, setTfState] = useState<RadarLensTf>('5m')
+  // Apply lens on mount + every change. Defensive: if MCR not yet
+  // booted, skip silently — the canvas IIFE wires up shortly after.
+  useEffect(() => {
+    const mcr = (window as any).MarketCoreReactor
+    if (mcr && typeof mcr.setLens === 'function') {
+      try { mcr.setLens(lens, tf) } catch (_) { /* */ }
+    }
+  }, [lens, tf])
+  const _btnStyle = (active: boolean, accent: string) => ({
+    padding: '3px 8px', fontSize: '9px', letterSpacing: '1px',
+    border: '1px solid ' + (active ? accent : '#1e2a3a'),
+    background: active ? accent + '22' : 'transparent',
+    color: active ? accent : '#8aa8c4',
+    borderRadius: '3px', cursor: 'pointer',
+    fontFamily: 'var(--ff)', fontWeight: 700,
+    whiteSpace: 'nowrap' as const,
+  })
+  return (
+    <div className="rdr-lens-bar" style={{
+      display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+      gap: '4px', padding: '4px 8px', margin: '4px 0',
+      background: 'rgba(8,16,28,0.55)',
+      border: '1px solid #1a2a3a', borderRadius: '4px',
+      fontFamily: 'var(--ff)', fontSize: '9px', letterSpacing: '1px',
+    }}>
+      <span style={{ color: '#7a9ab8', fontSize: '9px', letterSpacing: '1.5px' }}>RADAR LENS:</span>
+      {(['hybrid', 'realtime', 'timeframe', 'slow'] as RadarLens[]).map(l => (
+        <button key={l} onClick={() => setLensState(l)} style={_btnStyle(lens === l, '#00d4ff')}>
+          {_RADAR_LENS_LABELS[l]}
+        </button>
+      ))}
+      {lens === 'timeframe' && (
+        <>
+          <span style={{ color: '#1e2a3a', margin: '0 2px' }}>|</span>
+          {(['5m', '15m', '1h', '4h'] as RadarLensTf[]).map(t => (
+            <button key={t} onClick={() => setTfState(t)} style={_btnStyle(tf === t, '#f0c040')}>
+              {t}
+            </button>
+          ))}
+          <span style={{
+            color: '#7a6a3a', fontSize: '8px', marginLeft: '4px',
+            letterSpacing: '0.5px', fontWeight: 700,
+          }}>
+            TF BETA — LIMITED DATA
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
 
 /** [ZT5-C] Store-driven consumers for right-column arm/regime/receipt */
 function ArmBadge() {
@@ -228,6 +293,12 @@ export const BrainCockpit = memo(function BrainCockpit() {
               <div className="znc-gate-row"><div className="znc-led wait" id="led-regime"></div><span className="znc-gate-lbl wait" id="lbl-regime">Regime Stable</span></div>
             </div>
           </div>
+
+          {/* [L1+L2] Radar Lens controls — between Safety Gates and the
+              radar canvas. In-memory state only (no localStorage as final
+              truth, no server writes). Selecting any lens auto-enables the
+              12-axis renderer via window.BRAIN_RADAR_12X_UI_ONLY. */}
+          <RadarLensBar />
 
           {/* MARKET CORE REACTOR + SIGNAL RADAR — Canvas System */}
           <div id="brainViz" className="mcr-wrap">
