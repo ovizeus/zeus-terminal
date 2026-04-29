@@ -40,6 +40,24 @@ const w = window as any
   let _entryScore = 0
   let _displayEntry = 0
 
+  // [CONFIRMATION COMPASS] State for the small-radar confirmation
+  // compass. All values 0..1, derived purely from data already
+  // computed by the brain pipeline and from the existing _display
+  // map. Lens-INDEPENDENT (always uses full data, regardless of
+  // which lens the operator selected on the big radar — compass is
+  // the second-opinion overview, big radar is the inspection lens).
+  // NEVER feeds scoring/confluence/gates/AT/DSL/parity. Per-user
+  // automatically because brain emits per-user payloads.
+  let _bullCount = 0
+  let _bearCount = 0
+  const _compassTarget = { long: 0, short: 0, energy: 0, risk: 0, conflict: 0 }
+  const _compassDisplay = { long: 0, short: 0, energy: 0, risk: 0, conflict: 0 }
+  // Last N (max 6) needle positions for the fading trail effect —
+  // visual continuity, no decision impact. (x, y) in compass-local
+  // unit space (-1..1).
+  const _compassTrail: Array<{ x: number; y: number; ts: number }> = []
+  let _compassLastUpdate = 0
+
   // Radar sweep state
   let _sweepAngle = 0
 
@@ -264,6 +282,61 @@ const w = window as any
     if ('imbalance' in data) _readOptional(data.imbalance, 'imb')
     if ('sentiment' in data) _readOptional(data.sentiment, 'sent')
     if ('liquidity' in data) _readOptional(data.liquidity, 'liq')
+
+    // [CONFIRMATION COMPASS] Update bull/bear counts (continuous
+    // ratio, not binary gate) and recompute the 5 compass scores.
+    if ('bullCount' in data && Number.isFinite(+data.bullCount)) _bullCount = +data.bullCount
+    if ('bearCount' in data && Number.isFinite(+data.bearCount)) _bearCount = +data.bearCount
+    _recomputeCompass()
+  }
+
+  // [CONFIRMATION COMPASS] Compute the 5 scores from existing state.
+  // 100% honest math — no random, no synthetic, no smoothing tricks.
+  // Each score 0..1; missing-source values contribute 0 (never fake).
+  function _recomputeCompass() {
+    // Continuous bull/bear ratio (audit refinement #2 — no binary
+    // direction gate). Falls back to 0.5 (balanced) when no signals.
+    const _bbTot = _bullCount + _bearCount
+    const _bullRatio = _bbTot > 0 ? _bullCount / _bbTot : 0.5
+    const _bearRatio = 1 - _bullRatio
+
+    // Soft confidence multiplier (audit refinement #3 — confluence is
+    // a tie-breaker, not a hard gate). Compass operates at low conf
+    // but is dimmed there.
+    const _confMul = clamp(_displayConf / 100, 0.2, 1.0)
+
+    // Push strength — magnitude of real-time push axes that confirm
+    // direction. Higher push × higher bias = stronger confirmation.
+    // All inputs are already 0..1 magnitudes from the existing
+    // _display map (no direction inference here).
+    const _pushFlow  = _display.flow   // FLOW magnitude (0..1, brain.ts:2096)
+    const _pushDelta = _hasReal.delta ? _display.delta : 0  // DELTA magnitude (real iff source bound)
+    const _pushMom   = _display.momentum
+    const _pushTrend = _display.trend
+    const _pushStrength = clamp(0.30 * _pushFlow + 0.25 * _pushDelta + 0.25 * _pushMom + 0.20 * _pushTrend, 0, 1)
+
+    // LONG / SHORT confirmation — bias × push × confidence
+    _compassTarget.long  = clamp(_bullRatio * _pushStrength * _confMul, 0, 1)
+    _compassTarget.short = clamp(_bearRatio * _pushStrength * _confMul, 0, 1)
+
+    // ENERGY — magnitude only, no direction. Volat + Vol + Mom + Delta.
+    _compassTarget.energy = clamp(0.30 * _display.volatility + 0.25 * _display.volume + 0.25 * _pushMom + 0.20 * _pushDelta, 0, 1)
+
+    // RISK (formerly TRAP — audit refinement #4: honest naming).
+    // Warning index from extreme conditions, NOT a real trap detector.
+    // Sources: extreme funding, magnet very close, weak gates, low confidence.
+    const _fundExt  = _hasReal.fund ? _display.fund : 0
+    const _liqPull  = _hasReal.liq  ? _display.liq  : 0
+    const _gateW    = 1 - clamp(_gatesOpen / Math.max(_gatesTotal, 1), 0, 1)
+    const _confInv  = 1 - _confMul
+    _compassTarget.risk = clamp(0.25 * _fundExt + 0.25 * _liqPull + 0.25 * _gateW + 0.25 * _confInv, 0, 1)
+
+    // CONFLICT (audit refinement #5) — both confirms simultaneously
+    // present = signals at war. Capped at 2× the smaller score so
+    // even a weak conflict (both ~0.3) reads as ~0.6 conflict.
+    _compassTarget.conflict = clamp(Math.min(_compassTarget.long, _compassTarget.short) * 2, 0, 1)
+
+    _compassLastUpdate = Date.now()
   }
 
   // ── RAF Tick ───────────────────────────────────────────
@@ -290,6 +363,15 @@ const w = window as any
     }
     _displayConf = lerp(_displayConf, _confidence, alpha * 0.6)
     _displayEntry = lerp(_displayEntry, _entryScore, alpha * 0.6)
+
+    // [CONFIRMATION COMPASS] Lerp compass scores toward targets each
+    // frame for smooth needle motion.
+    const _compAlpha = alpha * 0.5
+    _compassDisplay.long     = lerp(_compassDisplay.long,     _compassTarget.long,     _compAlpha)
+    _compassDisplay.short    = lerp(_compassDisplay.short,    _compassTarget.short,    _compAlpha)
+    _compassDisplay.energy   = lerp(_compassDisplay.energy,   _compassTarget.energy,   _compAlpha)
+    _compassDisplay.risk     = lerp(_compassDisplay.risk,     _compassTarget.risk,     _compAlpha)
+    _compassDisplay.conflict = lerp(_compassDisplay.conflict, _compassTarget.conflict, _compAlpha)
 
     const sweepSpeed = 0.04 + (_displayConf / 100) * 0.10
     _sweepAngle = (_sweepAngle + dt * sweepSpeed) % 360
@@ -658,8 +740,30 @@ const w = window as any
   }
 
   // ══════════════════════════════════════════════════════
-  // SIGNAL RADAR DRAW
+  // CONFIRMATION COMPASS DRAW (small radar — formerly SIGNAL RADAR)
   // ══════════════════════════════════════════════════════
+  // Replaces the decorative rotating-sweep visualization with a
+  // 4-direction confirmation compass that synthesizes the big-radar
+  // 12-axis state into a single quick-read verdict.
+  //
+  //                LONG CONFIRM ▲
+  //                     │
+  //         FLAT ◄ ─ ─ ─●─ ─ ─ ► ENERGY
+  //                     │
+  //                SHORT CONFIRM ▼
+  //
+  // Outer ring colour reflects dominant state at a glance:
+  //   risk ≥ 0.5     → red pulsating WARNING (overrides others)
+  //   conflict ≥ 0.4 → white pulsating CONFLICT
+  //   long ≥ 0.4     → steady green
+  //   short ≥ 0.4    → steady red
+  //   energy ≥ 0.6   → steady cyan
+  //   else           → dim grey (WAIT)
+  //
+  // Needle leaves a soft fading trail (last 6 positions) so the
+  // operator sees not only WHERE confirmation is now but HOW it
+  // moved. All math 100% honest from existing per-user brain
+  // pipeline — no fake values, no random, no synthesized direction.
   function _drawRadar(_dt: number) {
     const ctx = _radarCtx
     if (!ctx) return
@@ -671,122 +775,247 @@ const w = window as any
 
     const cx = W / 2
     const cy = H / 2
-    const maxR = Math.min(W, H) * 0.40
-    const cols = getColors()
+    const maxR = Math.min(W, H) * 0.38
+    const isMobile = W < 220
+    const labelTop  = isMobile ? 'LONG'  : 'LONG CONFIRM'
+    const labelBot  = isMobile ? 'SHORT' : 'SHORT CONFIRM'
+    const labelLeft = 'FLAT'
+    const labelRight= 'ENERGY'
 
-    // ── Grid rings ──
-    ctx.strokeStyle = COL_GRID
-    ctx.lineWidth = 0.5
+    // ── Compass scores (lerped, 0..1) ──
+    const sLong     = _compassDisplay.long
+    const sShort    = _compassDisplay.short
+    const sEnergy   = _compassDisplay.energy
+    const sRisk     = _compassDisplay.risk
+    const sConflict = _compassDisplay.conflict
+
+    // ── Determine dominant state + halo colour ──
+    const RISK_RING = 0.50
+    const CONFLICT_THR = 0.40
+    const WAIT_THR = 0.30
+    const ENERGY_THR = 0.60
+
+    let domState: 'risk' | 'conflict' | 'long' | 'short' | 'energy' | 'wait' = 'wait'
+    if (sRisk >= RISK_RING) domState = 'risk'
+    else if (sConflict >= CONFLICT_THR) domState = 'conflict'
+    else if (sLong >= 0.40 && sLong > sShort) domState = 'long'
+    else if (sShort >= 0.40 && sShort > sLong) domState = 'short'
+    else if (sEnergy >= ENERGY_THR) domState = 'energy'
+
+    const haloColor =
+      domState === 'risk'     ? '#ff3355' :
+      domState === 'conflict' ? '#ffffff' :
+      domState === 'long'     ? '#39ff14' :
+      domState === 'short'    ? '#ff3355' :
+      domState === 'energy'   ? '#00d4ff' : '#7a8896'
+    const haloPulse = (domState === 'risk' || domState === 'conflict')
+    const tNow = performance.now()
+    const haloAlphaBase = haloPulse
+      ? 0.35 + 0.45 * Math.abs(Math.sin(tNow / 350))
+      : 0.30 + 0.40 * (Math.max(sLong, sShort, sEnergy))
+
+    // ── Concentric rings (25/50/75/100 intensity markers) ──
+    ctx.lineWidth = 0.6
     for (let ring = 1; ring <= 4; ring++) {
+      const r = maxR * ring / 4
+      ctx.strokeStyle = ring === 4 ? COL_AXIS : COL_GRID
       ctx.beginPath()
-      ctx.arc(cx, cy, maxR * ring / 4, 0, Math.PI * 2)
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
       ctx.stroke()
     }
 
-    // ── Cross lines ──
-    ctx.strokeStyle = COL_GRID_LINE
-    ctx.lineWidth = 0.5
-    for (let a = 0; a < 4; a++) {
-      const angle = (Math.PI / 4) * a
-      ctx.beginPath()
-      ctx.moveTo(cx + Math.cos(angle) * maxR, cy + Math.sin(angle) * maxR)
-      ctx.lineTo(cx - Math.cos(angle) * maxR, cy - Math.sin(angle) * maxR)
-      ctx.stroke()
-    }
-
-    // ── Sweep beam ──
-    const sweepRad = _sweepAngle * Math.PI / 180
-    const confNorm = _displayConf / 100
-    const beamAlpha = 0.15 + confNorm * 0.50
-    const beamSpread = 0.35
-
-    const sweepGrad = ctx.createConicGradient(sweepRad - beamSpread, cx, cy)
-    sweepGrad.addColorStop(0, 'rgba(0,0,0,0)')
-    sweepGrad.addColorStop(0.7, cols.glow.replace(/[\d.]+\)$/, (beamAlpha * 0.4) + ')'))
-    sweepGrad.addColorStop(1, cols.glow.replace(/[\d.]+\)$/, beamAlpha + ')'))
-
+    // ── Cross axes (vertical + horizontal) ──
+    ctx.strokeStyle = COL_AXIS
+    ctx.lineWidth = 0.8
     ctx.beginPath()
-    ctx.moveTo(cx, cy)
-    ctx.arc(cx, cy, maxR, sweepRad - beamSpread, sweepRad)
-    ctx.closePath()
-    ctx.fillStyle = sweepGrad
-    ctx.fill()
-
-    // Sweep leading edge line
-    ctx.beginPath()
-    ctx.moveTo(cx, cy)
-    ctx.lineTo(cx + Math.cos(sweepRad) * maxR, cy + Math.sin(sweepRad) * maxR)
-    ctx.strokeStyle = cols.stroke
-    ctx.globalAlpha = beamAlpha
-    ctx.lineWidth = 1.5
+    ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR)
+    ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy)
     ctx.stroke()
+    // ── Subtle diagonals (45°) — helps eye lock onto direction ──
+    ctx.strokeStyle = COL_GRID_LINE
+    ctx.lineWidth = 0.4
+    const diag = maxR * 0.707
+    ctx.beginPath()
+    ctx.moveTo(cx - diag, cy - diag); ctx.lineTo(cx + diag, cy + diag)
+    ctx.moveTo(cx - diag, cy + diag); ctx.lineTo(cx + diag, cy - diag)
+    ctx.stroke()
+
+    // ── Needle trail (history) — fading dots from oldest to newest ──
+    const trailLen = _compassTrail.length
+    for (let i = 0; i < trailLen; i++) {
+      const p = _compassTrail[i]
+      const alpha = (i + 1) / (trailLen + 1) * 0.55  // 0..0.55 fade
+      const tx = cx + p.x * maxR
+      const ty = cy + p.y * maxR
+      ctx.beginPath()
+      ctx.arc(tx, ty, 1.8, 0, Math.PI * 2)
+      ctx.fillStyle = haloColor
+      ctx.globalAlpha = alpha
+      ctx.fill()
+    }
     ctx.globalAlpha = 1
 
-    // ── Center dot ──
-    const centerGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, 8 + confNorm * 6)
-    centerGrad.addColorStop(0, cols.stroke)
-    centerGrad.addColorStop(1, 'rgba(0,0,0,0)')
-    ctx.beginPath()
-    ctx.arc(cx, cy, 8 + confNorm * 6, 0, Math.PI * 2)
-    ctx.fillStyle = centerGrad
-    ctx.fill()
+    // ── Needle position (vector from 4 scores) ──
+    // X axis: ENERGY (right) ↔ FLAT (left)  → mapped from energy 0..1 to -1..1
+    const Xv = (sEnergy - 0.5) * 2
+    // Y axis: LONG (up, screen-negative) ↔ SHORT (down, screen-positive)
+    const Yv = -(sLong - sShort)
+    // Magnitude clamp to 1 (so high-energy + high-long doesn't escape ring)
+    const mag = Math.sqrt(Xv * Xv + Yv * Yv)
+    const magClamped = mag > 1 ? 1 : mag
+    const ang = Math.atan2(Yv, Xv)
+    const needleX = cx + Math.cos(ang) * magClamped * maxR
+    const needleY = cy + Math.sin(ang) * magClamped * maxR
 
-    // ── Edge ring glow ──
+    // Push to trail — only if needle moved (avoid duplicate stack on idle)
+    const lastTrail = trailLen > 0 ? _compassTrail[trailLen - 1] : null
+    const movedEnough = !lastTrail ||
+      Math.abs((Math.cos(ang) * magClamped) - lastTrail.x) > 0.02 ||
+      Math.abs((Math.sin(ang) * magClamped) - lastTrail.y) > 0.02
+    if (movedEnough) {
+      _compassTrail.push({ x: Math.cos(ang) * magClamped, y: Math.sin(ang) * magClamped, ts: tNow })
+      if (_compassTrail.length > 6) _compassTrail.shift()
+    }
+
+    // ── Needle (current position) — bright glowing dot ──
+    {
+      const grad = ctx.createRadialGradient(needleX, needleY, 0, needleX, needleY, 9)
+      grad.addColorStop(0, haloColor)
+      grad.addColorStop(1, 'rgba(0,0,0,0)')
+      ctx.beginPath()
+      ctx.arc(needleX, needleY, 9, 0, Math.PI * 2)
+      ctx.fillStyle = grad
+      ctx.fill()
+
+      ctx.beginPath()
+      ctx.arc(needleX, needleY, 3, 0, Math.PI * 2)
+      ctx.fillStyle = haloColor
+      ctx.shadowColor = haloColor
+      ctx.shadowBlur = 8
+      ctx.fill()
+      ctx.shadowBlur = 0
+    }
+
+    // Optional thin line from center to needle — direction lock
+    if (magClamped > 0.10) {
+      ctx.strokeStyle = haloColor
+      ctx.globalAlpha = 0.45
+      ctx.lineWidth = 1
+      ctx.beginPath()
+      ctx.moveTo(cx, cy); ctx.lineTo(needleX, needleY)
+      ctx.stroke()
+      ctx.globalAlpha = 1
+    }
+
+    // ── Outer halo ring (dominant state colour) ──
     ctx.beginPath()
     ctx.arc(cx, cy, maxR, 0, Math.PI * 2)
-    ctx.strokeStyle = cols.stroke
-    ctx.globalAlpha = 0.2 + confNorm * 0.3
-    ctx.lineWidth = 1
-    ctx.shadowColor = cols.glow
-    ctx.shadowBlur = 10
+    ctx.strokeStyle = haloColor
+    ctx.globalAlpha = haloAlphaBase
+    ctx.lineWidth = haloPulse ? 1.5 : 1.2
+    ctx.shadowColor = haloColor
+    ctx.shadowBlur = haloPulse ? 14 : 8
     ctx.stroke()
     ctx.shadowBlur = 0
     ctx.globalAlpha = 1
 
-    // ── Direction label (top) ──
-    const dirLabel = _direction === 'LONG' ? 'LONG' : _direction === 'SHORT' ? 'SHORT' : 'SCAN'
-    const dirColor = _direction === 'LONG' ? '#39ff14' : _direction === 'SHORT' ? '#ff3355' : '#f0c040'
-    ctx.font = '700 13px "Orbitron","Share Tech Mono",monospace'
+    // ── Compass cardinal labels ──
+    ctx.font = '700 9px "Orbitron","Share Tech Mono",monospace'
     ctx.textAlign = 'center'
-    ctx.fillStyle = dirColor
-    ctx.shadowColor = dirColor
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = COL_LABEL
+    ctx.fillText(labelTop,    cx,            cy - maxR - 10)
+    ctx.fillText(labelBot,    cx,            cy + maxR + 10)
+    ctx.textAlign = 'right'
+    ctx.fillText(labelLeft,   cx - maxR - 6, cy)
+    ctx.textAlign = 'left'
+    ctx.fillText(labelRight,  cx + maxR + 6, cy)
+
+    // ── Center text — dominant verdict ──
+    let mainLabel = 'WAIT'
+    let mainColor = '#7a8896'
+    if (domState === 'risk') {
+      mainLabel = 'RISK ' + Math.round(sRisk * 100) + '%'
+      mainColor = '#ff3355'
+    } else if (domState === 'conflict') {
+      mainLabel = 'CONFLICT ' + Math.round(sConflict * 100) + '% — choppy'
+      mainColor = '#ffffff'
+    } else if (domState === 'long') {
+      mainLabel = 'LONG CONFIRM ' + Math.round(sLong * 100) + '%'
+      mainColor = '#39ff14'
+    } else if (domState === 'short') {
+      mainLabel = 'SHORT CONFIRM ' + Math.round(sShort * 100) + '%'
+      mainColor = '#ff3355'
+    } else if (domState === 'energy') {
+      mainLabel = 'ENERGY ' + Math.round(sEnergy * 100) + '%'
+      mainColor = '#00d4ff'
+    } else {
+      // WAIT — show why: top score below threshold
+      const top = Math.max(sLong, sShort, sEnergy, sRisk)
+      mainLabel = top < WAIT_THR ? 'WAIT' : 'WAIT — building'
+    }
+
+    // Secondary line — second-highest score for context
+    const scoreList: Array<[string, number]> = [
+      ['long',  sLong],   ['short',  sShort],
+      ['energy', sEnergy], ['risk',   sRisk],
+    ]
+    scoreList.sort((a, b) => b[1] - a[1])
+    const secKey = scoreList[1][0]
+    const secVal = scoreList[1][1]
+    const secLabelMap: any = { long: 'long', short: 'short', energy: 'energy', risk: 'risk' }
+    const secText = (secVal >= 0.20 && domState !== secKey)
+      ? `${secLabelMap[secKey]} ${Math.round(secVal * 100)}%`
+      : ''
+
+    // Confluence bar (kept) — bottom anchor
+    const barW = maxR * 1.4
+    const barH = 5
+    const barX = cx - barW / 2
+    const barY = cy + maxR + (isMobile ? 22 : 28)
+    const confNorm = _displayConf / 100
+    const confColor = _direction === 'LONG' ? '#39ff14' : _direction === 'SHORT' ? '#ff3355' : '#f0c040'
+
+    // Center labels (above the bar)
+    ctx.font = isMobile
+      ? '700 11px "Orbitron","Share Tech Mono",monospace'
+      : '700 13px "Orbitron","Share Tech Mono",monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'alphabetic'
+    ctx.fillStyle = mainColor
+    ctx.shadowColor = mainColor
     ctx.shadowBlur = 6
-    ctx.fillText(dirLabel, cx, cy - maxR - 14)
+    ctx.fillText(mainLabel, cx, barY - (isMobile ? 8 : 12))
     ctx.shadowBlur = 0
 
-    // ── Confidence bar (bottom) ──
-    const barW = maxR * 1.4
-    const barH = 6
-    const barX = cx - barW / 2
-    const barY = cy + maxR + 4
+    if (secText) {
+      ctx.font = '600 9px "Orbitron","Share Tech Mono",monospace'
+      ctx.fillStyle = 'rgba(180,200,220,0.65)'
+      ctx.fillText(secText, cx, barY - (isMobile ? -1 : 0))
+    }
 
-    ctx.strokeStyle = 'rgba(80,160,255,0.30)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(barX, barY - 2)
-    ctx.lineTo(barX + barW, barY - 2)
-    ctx.stroke()
-
+    // ── Confluence bar ──
     ctx.fillStyle = 'rgba(60,100,140,0.55)'
     _roundRect(ctx, barX, barY, barW, barH, 3)
     ctx.fill()
-
-    const fillW = barW * (confNorm)
-    ctx.fillStyle = dirColor
-    ctx.shadowColor = dirColor
-    ctx.shadowBlur = 6
+    const fillW = barW * confNorm
+    ctx.fillStyle = confColor
+    ctx.shadowColor = confColor
+    ctx.shadowBlur = 5
     _roundRect(ctx, barX, barY, fillW, barH, 3)
     ctx.fill()
     ctx.shadowBlur = 0
 
-    ctx.font = '700 11px "Orbitron","Share Tech Mono",monospace'
+    ctx.font = '700 10px "Orbitron","Share Tech Mono",monospace'
     ctx.fillStyle = 'rgba(200,230,250,0.85)'
-    ctx.fillText(Math.round(_displayConf) + '%  CONFIDENCE', cx, barY + barH + 14)
+    ctx.fillText(Math.round(_displayConf) + '%  CONFLUENCE', cx, barY + barH + 12)
 
-    // ── "SIGNAL RADAR" title ──
+    // ── Title + last-update timestamp ──
+    const ageSec = _compassLastUpdate > 0 ? Math.max(0, Math.round((Date.now() - _compassLastUpdate) / 1000)) : 0
     ctx.font = '600 8px "Orbitron","Share Tech Mono",monospace'
     ctx.fillStyle = 'rgba(140,190,220,0.50)'
-    ctx.fillText('SIGNAL RADAR', cx, barY + barH + 28)
+    ctx.textAlign = 'center'
+    ctx.fillText('RADAR CONFIRM' + (ageSec >= 0 ? '  ·  upd ' + ageSec + 's' : ''), cx, barY + barH + 24)
   }
 
   // Rounded rect helper

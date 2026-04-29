@@ -2275,6 +2275,13 @@ export function renderBrainCockpit(): void {
         imbalance: _imbR,
         sentiment: _sentR,
         liquidity: _liqR,
+        // [CONFIRMATION COMPASS] Read-only counts for the small-radar
+        // confirmation compass — gives it a continuous bull/bear ratio
+        // (0..1) instead of a binary direction gate. NEVER influences
+        // scoring, confluence, gates, dispatch, parity, AT, DSL,
+        // execution, or any decision path. Pure visualization input.
+        bullCount: _bullC,
+        bearCount: _bearC,
       })
     } catch (_mcrErr) { /* silently continue */ }
   }
