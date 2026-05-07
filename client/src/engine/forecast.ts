@@ -4,6 +4,7 @@
 
 import { fmtNow } from '../data/marketDataHelpers'
 import { fP } from '../utils/format'
+import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { macroAdjustExitRisk as _macroAdjustExitRisk } from '../trading/risk'
 import { DEV , devLog } from '../utils/dev'
@@ -455,7 +456,9 @@ function _qebUpdateRiskUI(): void {
     if (sigs.regimeFlip.from) {
       signals.push({
         name: 'REGIME FLIP',
-        valueHtml: '<span style="color:#f0c040">' + sigs.regimeFlip.from.toUpperCase() + ' \u2192 ' + sigs.regimeFlip.to.toUpperCase() + '</span>',
+        // [BUG-SEC-3] Escape server-controlled regimeFlip strings before HTML interpolation.
+        // valueHtml flows into <span dangerouslySetInnerHTML> in AnalysisSections.tsx \u2014 must not allow raw HTML.
+        valueHtml: '<span style="color:#f0c040">' + escHtml(String(sigs.regimeFlip.from ?? '').toUpperCase()) + ' \u2192 ' + escHtml(String(sigs.regimeFlip.to ?? '').toUpperCase()) + '</span>',
       })
     }
     if (sigs.liquidity.nearestAboveDistPct !== null) {

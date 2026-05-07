@@ -7,7 +7,7 @@ import { getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExt
 import { DSL } from '../core/config'
 import { useDslStore } from '../stores/dslStore'
 import type { DSLUI } from '../stores/dslStore'
-import { el } from '../utils/dom'
+import { el, escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
@@ -232,13 +232,15 @@ export function initDSLBubbles(): void {
   const cascade = el('dslCascade')
   if (!bg || !cascade) return
 
+  // [BUG-SEC-4] Defensive escape on inline-style template values. Today: values are local Math.random + literal hex constants (safe). Future-proof: escHtml prevents pattern drift if values become server-derived.
   bg.innerHTML = Array.from({ length: 12 }, (_: any, _i: number) => {
     const size = 4 + Math.random() * 8
     const left = 5 + Math.random() * 90
     const dur = 3 + Math.random() * 5
     const delay = Math.random() * 4
     const col = Math.random() > .5 ? '#00ffcc' : '#0066ff'
-    return `<div class="dsl-bubble" style="width:${size}px;height:${size}px;left:${left}%;background:${col};opacity:.15;animation-duration:${dur}s;animation-delay:${delay}s;box-shadow:0 0 ${size}px ${col}44"></div>`
+    const _safeCol = escHtml(col)
+    return `<div class="dsl-bubble" style="width:${size}px;height:${size}px;left:${left}%;background:${_safeCol};opacity:.15;animation-duration:${dur}s;animation-delay:${delay}s;box-shadow:0 0 ${size}px ${_safeCol}44"></div>`
   }).join('')
 
   cascade.innerHTML = Array.from({ length: 20 }, (_: any, _i: number) => {
@@ -246,7 +248,8 @@ export function initDSLBubbles(): void {
     const dur = 0.4 + Math.random() * 0.6
     const del = Math.random() * 1.5
     const col = Math.random() > .4 ? '#00ffcc' : '#0088ff'
-    return `<div class="dsl-drop" style="height:${h}px;background:${col};animation-duration:${dur}s;animation-delay:${del}s;opacity:.7"></div>`
+    const _safeCol = escHtml(col)
+    return `<div class="dsl-drop" style="height:${h}px;background:${_safeCol};animation-duration:${dur}s;animation-delay:${del}s;opacity:.7"></div>`
   }).join('')
 }
 
@@ -1030,7 +1033,10 @@ export function renderDSLWidget(positions: any[]): void {
 export function _renderDslCard(pos: any): string {
   const dsl = DSL.positions[String(pos.id)]
   const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
-  const symBase = pos.sym.replace('USDT', '')
+  // [BUG-SEC-1+SEC-2] Escape server-controlled string fields before HTML interpolation (innerHTML at renderDSL line ~987).
+  // pos.side and pos.sym originate from server WS payload — must not enter innerHTML unescaped.
+  const _safeSide = escHtml(String(pos.side ?? ''))
+  const symBase = escHtml(String(pos.sym ?? '').replace('USDT', ''))
   const isActive = dsl?.active || false
   const isLong = pos.side === 'LONG'
   const progress = dsl?.progress || 0
@@ -1156,7 +1162,7 @@ export function _renderDslCard(pos: any): string {
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_sb.bg};border:1px solid ${_sb.border};color:${_sb.color};font-weight:700;letter-spacing:0.5px">${_sb.icon}${_sb.icon ? ' ' : ''}${_srcLabel}</span>
       ${_isAT ? `<span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_ctrlBg};border:1px solid ${_ctrlBorder};color:${_ctrlColor};font-weight:700;letter-spacing:0.5px">${_ctrlIcon}${_ctrlIcon ? ' ' : ''}${_ctrlLabel}</span>` : ''}
-      <span style="color:${isLong ? (isActive ? '#00ffcc' : '#00ff88') : (isActive ? '#ff66aa' : '#ff4466')};font-weight:700;font-size:16px">${pos.side} ${symBase}</span>
+      <span style="color:${isLong ? (isActive ? '#00ffcc' : '#00ff88') : (isActive ? '#ff66aa' : '#ff4466')};font-weight:700;font-size:16px">${_safeSide} ${symBase}</span>
       <span class="dsl-badge ${isActive ? 'active' : 'waiting'}">${isActive ? 'DSL ON' : 'WAITING'}</span>
       <button data-action="dslToggleMagnet" data-id="${pos.id}" style="font-size:11px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:0.5px;border:1px solid ${_magnetOn ? '#00ccffaa' : '#ffffff22'};background:${_magnetOn ? '#00ccff18' : 'transparent'};color:${_magnetOn ? '#00ccff' : '#ffffff44'}">${_magnetOn ? 'MAG ON' : 'MAG'}</button>
       ${_isAT ? `<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:${_as.color}15;color:${_as.color};border:1px solid ${_as.color}33">${_as.icon}${_as.icon ? ' ' : ''}${_as.label}</span>` : ''}

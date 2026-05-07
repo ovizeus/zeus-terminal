@@ -172,9 +172,14 @@ function _setAuthCookie(res, token, userId) {
 router.post('/register', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
     try {
-        const { email, password } = req.body;
+        const { email, password, termsAcceptedAt, termsVersion } = req.body;
         if (!email || !password) {
             return res.status(400).json({ error: 'Email și parola sunt obligatorii' });
+        }
+
+        // [LEGAL-1] Require explicit acceptance of Terms / Privacy / Cookie policies (GDPR Art. 7)
+        if (!termsAcceptedAt || typeof termsAcceptedAt !== 'string' || !termsVersion || typeof termsVersion !== 'string') {
+            return res.status(400).json({ error: 'You must accept the Terms, Privacy and Cookie policies to register.' });
         }
 
         const normalEmail = email.toLowerCase().trim();
@@ -209,7 +214,10 @@ router.post('/register', async (req, res) => {
         const userId = db.createUser(normalEmail, hash, role, isFirst);
         db.addPasswordHistory(userId, hash);
 
-        db.auditLog(userId, 'USER_REGISTERED', { role, autoApproved: isFirst }, req.ip);
+        // [LEGAL-1] Persist consent record (GDPR Art. 7 — demonstrability)
+        try { db.setUserTermsConsent(userId, termsAcceptedAt, termsVersion); } catch (_) { /* best-effort */ }
+
+        db.auditLog(userId, 'USER_REGISTERED', { role, autoApproved: isFirst, termsVersion, termsAcceptedAt }, req.ip);
 
         if (isFirst) {
             // Admin auto-login (JWT includes id + tokenVersion for session invalidation)

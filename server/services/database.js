@@ -518,6 +518,7 @@ const _stmts = {
     findById: db.prepare('SELECT * FROM users WHERE id = ?'),
     countUsers: db.prepare('SELECT COUNT(*) as cnt FROM users'),
     insertUser: db.prepare('INSERT INTO users (email, password_hash, role, approved) VALUES (?, ?, ?, ?)'),
+    setUserTermsConsent: db.prepare("UPDATE users SET terms_accepted_at = ?, terms_version = ?, updated_at = datetime('now') WHERE id = ?"),
     listUsers: db.prepare('SELECT id, email, role, approved, status, created_at FROM users ORDER BY created_at'),
     approveUser: db.prepare("UPDATE users SET approved = 1, updated_at = datetime('now') WHERE email = ?"),
     deleteUser: db.prepare('DELETE FROM users WHERE email = ? AND role != ?'),
@@ -658,6 +659,13 @@ function countUsers() {
 function createUser(email, passwordHash, role, approved) {
     const info = _stmts.insertUser.run(email.toLowerCase().trim(), passwordHash, role, approved ? 1 : 0);
     return info.lastInsertRowid;
+}
+
+function setUserTermsConsent(userId, acceptedAt, version) {
+    if (!userId) return;
+    const ts = (typeof acceptedAt === 'string' && acceptedAt) ? acceptedAt : new Date().toISOString();
+    const ver = (typeof version === 'string' && version) ? version : 'unknown';
+    return _stmts.setUserTermsConsent.run(ts, ver, userId);
 }
 
 function listUsers() {
@@ -1269,6 +1277,7 @@ module.exports = {
     findUserById,
     countUsers,
     createUser,
+    setUserTermsConsent,
     listUsers,
     approveUser,
     rejectUser,

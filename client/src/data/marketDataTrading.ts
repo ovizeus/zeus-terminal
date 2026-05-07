@@ -51,7 +51,11 @@ function _executeGlobalModeSwitch(mode: string): void {
   // DSL mode) into the WRONG brain slot (the new mode). Flushing pre-POST
   // locks in the correct OLD-mode slot before any WS frame can arrive.
   try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
-  api.raw<any>('POST', '/api/at/mode', { mode }).then(function (data: any) {
+  // [BUG-SAFE-1] Server-side consent: live mode requires explicit confirm:true + env declaration (TESTNET|REAL).
+  // Resolved env comes from w._executionEnv (already populated by exchange-creds resolver). Fallback to TESTNET on null/unknown for safety.
+  const _safe1Env = (w._executionEnv === 'REAL') ? 'REAL' : 'TESTNET'
+  const _safe1Body = mode === 'live' ? { mode, confirm: true, env: _safe1Env } : { mode }
+  api.raw<any>('POST', '/api/at/mode', _safe1Body).then(function (data: any) {
     console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') response ok=' + data.ok)
     if (data.ok) {
       const _prevMode = (typeof AT !== 'undefined' && (AT as any).mode) ? (AT as any).mode : 'demo'

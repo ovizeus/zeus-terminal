@@ -539,7 +539,8 @@ export function ChartControls() {
       </div>
 
       {/* ── Indicator Panel (bottom sheet) — 1:1 from indOverlay + indPanel in index.html ── */}
-      <div className={`ind-panel-overlay${indPanelOpen ? ' open' : ''}`} id="indOverlay" onClick={() => setIndPanelOpen(false)}></div>
+      {/* [BUG-UI-CMP-8] Guard: only close if click hits overlay itself, not bubbled from panel content */}
+      <div className={`ind-panel-overlay${indPanelOpen ? ' open' : ''}`} id="indOverlay" onClick={(e) => { if (e.target === e.currentTarget) setIndPanelOpen(false) }}></div>
       <div className={`ind-panel${indPanelOpen ? ' open' : ''}`} id="indPanel">
         <div className="ind-panel-hdr">
           <span className="ind-panel-title">SELECT INDICATOR</span>
@@ -584,12 +585,17 @@ export function ChartControls() {
                       onClick={() => openModal(ind.settingsModal as Parameters<typeof openModal>[0])}
                     >OPEN</button>
                   ) : (
-                    <div
+                    /* [BUG-UI-CMP-3] Semantic switch button (native keyboard a11y, no manual onKeyDown to avoid double-toggle) */
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isOn}
                       className={`ind-toggle${isOn ? ' on' : ''}`}
                       onClick={() => ind.isOverlay ? togOvr(ind.id as keyof typeof overlays) : togInd(ind.id)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                     >
-                      <div className="ind-toggle-dot"></div>
-                    </div>
+                      <span className="ind-toggle-dot" aria-hidden="true"></span>
+                    </button>
                   )}
                 </div>
               </div>

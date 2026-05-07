@@ -130,17 +130,7 @@ function ArmDetail() {
   )
 }
 
-function QForecastBlock() {
-  const s = useBrainStatsStore((st) => st.snapshot.forecast)
-  return (
-    <div id="brain-forecast">
-      <div className="bf-label">Q-FORECAST</div>
-      <div className={s.mainCls} id="bf-main">{s.mainText}</div>
-      <div className="bf-row">Range: <b id="bf-range">{s.rangeText}</b></div>
-      <div className="bf-row">State: <b id="bf-state">{s.stateText}</b></div>
-    </div>
-  )
-}
+// [BUG-D-1] QForecastBlock removed 2026-05-07 — was never invoked (Pack C / L5 dead-code from 2026-04-28). brainStatsStore.forecast field + brain.ts renderQForecast IIFE retained as YELLOW-deferred D-2 (touches engine/brain.ts, out of QW client-only lane).
 
 function WhyEngineBlock() {
   const s = useBrainStatsStore((st) => st.snapshot.why)
@@ -514,13 +504,7 @@ export const BrainCockpit = memo(function BrainCockpit() {
 
       </div>{/* end cockpit panel */}
 
-      {/* [Pack C / L5] Q-FORECAST removed from render — `w.S.quantumForecast`
-          was read by renderQForecast (brain.ts:2022) but never written
-          anywhere in the codebase, so the panel always showed
-          "Neutral (0) / Range: — / State: —". WHY ENGINE remains; the
-          grid collapses to a single column. QForecastBlock function +
-          brainStatsStore.forecast field kept as dormant dead code for a
-          future Phase 12 cleanup batch (no behavior impact). */}
+      {/* [Pack C / L5] Q-FORECAST removed from render — WHY ENGINE remains, grid is single column. QForecastBlock dead function + #brain-forecast CSS cleaned up via BUG-D-1 (2026-05-07). brainStatsStore.forecast field + brain.ts renderQForecast IIFE retained as D-2 deferred follow-up. */}
       <div style={{ padding: '4px 6px 0' }}>
         <WhyEngineBlock />
       </div>

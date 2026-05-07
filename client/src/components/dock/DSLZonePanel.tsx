@@ -71,7 +71,7 @@ export function DSLZonePanel() {
       <div className="dsl-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span className="dsl-status-dot" style={{ color: ui.statusDotColor, background: ui.statusDotBg }}></span>
-          <span className="dsl-title">⬡ DYNAMIC SL ZONE ○ BRAIN TRAILING ENGINE — by OVI</span>
+          <span className="dsl-title">⬡ DYNAMIC SL ZONE ○ BRAIN TRAILING ENGINE</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '7px', color: '#00ffcc44' }}>{ui.activeCountText}</span>

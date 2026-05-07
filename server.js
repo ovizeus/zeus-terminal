@@ -406,8 +406,19 @@ app.get('/api/at/balance', (_req, res) => {
 app.post('/api/at/mode', async (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   const mode = _req.body.mode;
-  // Pre-live checklist — validate before switching to live
+  // [BUG-SAFE-1] Server-side consent enforcement for live mode switch.
+  // Client confirm dialog is advisory only; server enforces explicit
+  // {confirm:true, env:'TESTNET'|'REAL'} in request body. Demo mode unchanged.
   if (mode === 'live') {
+    if (_req.body.confirm !== true) {
+      logger.warn('AT_MODE', `Live mode switch rejected uid=${_req.user.id}: missing confirm:true`);
+      return res.status(400).json({ ok: false, error: 'CONFIRM_REQUIRED', message: 'Live mode requires explicit server-side confirmation.' });
+    }
+    if (_req.body.env !== 'TESTNET' && _req.body.env !== 'REAL') {
+      logger.warn('AT_MODE', `Live mode switch rejected uid=${_req.user.id}: invalid env='${_req.body.env}'`);
+      return res.status(400).json({ ok: false, error: 'ENV_CONFIRM_REQUIRED', message: 'Live mode requires explicit env declaration: TESTNET or REAL.' });
+    }
+    // Pre-live checklist — validate before switching to live
     try {
       const checklist = await serverAT.preLiveChecklist(_req.user.id);
       if (!checklist.ok) {
@@ -418,7 +429,11 @@ app.post('/api/at/mode', async (_req, res) => {
     }
   }
   const result = serverAT.setMode(_req.user.id, mode);
-  if (result.ok && mode === 'live') result.preLiveChecklist = 'PASSED';
+  if (result.ok && mode === 'live') {
+    result.preLiveChecklist = 'PASSED';
+    // [BUG-SAFE-1] Audit explicit consent + declared env for forensic trail
+    try { db.auditLog(_req.user.id, 'AT_MODE_CHANGE', { newMode: 'live', consentMethod: 'EXPLICIT_CONFIRM', declaredEnv: _req.body.env, serverEnforced: true, safe1: true }, _req.ip); } catch (_) {}
+  }
   res.json(result);
 });
 // [AT-TOGGLE-FIX] Dedicated AT ON/OFF endpoint — server-authoritative

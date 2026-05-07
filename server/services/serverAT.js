@@ -11,7 +11,7 @@ const logger = require('./logger');
 const MF = require('../migrationFlags');
 const { getExchangeCreds } = require('./credentialStore');
 const { sendSignedRequest } = require('./binanceSigner');
-const { roundOrderParams } = require('./exchangeInfo');
+const { roundOrderParams, getFilters: _getExchangeFilters } = require('./exchangeInfo');
 const { validateOrder, recordClosedPnL } = require('./riskGuard');
 const telegram = require('./telegram');
 const audit = require('./audit');
@@ -46,6 +46,40 @@ const _closeCooldownsRestoredFor = new Set();  // uids whose rows have been lazy
 const DECISION_DEDUP_TTL_MS = 30000;
 
 const DEFAULT_DEMO_BALANCE = 10000;
+
+// [BUG-TM-8] LOT_SIZE-aware qty alignment helper — money-path safe.
+// Returns { qty, size, aligned: true } if exchangeInfo cache has stepSize for symbol AND
+// roundOrderParams produces a valid stepSize-aligned positive quantity AND derived size >= MIN_TRADE_USD.
+// Returns null if any condition fails — caller MUST block entry/registration (no silent fallback to toFixed(6),
+// which would recreate the TM-8 bug for money-path entries).
+//
+// @param {string} symbol — e.g. 'BTCUSDT'
+// @param {number} rawQty — pre-rounded float qty (e.g. (sizeUsd * lev) / price)
+// @param {number} price — entry price
+// @param {number} lev — leverage
+// @param {string} _context — 'MAIN_ENTRY' | 'MANUAL_REGISTER' | 'DEMO_ADDON' (for log clarity, optional)
+// @returns {{qty:number, size:number, aligned:true} | null}
+function _alignQtyToLotSize(symbol, rawQty, price, lev, _context) {
+    const MIN_TRADE_USD = 10;
+    if (!Number.isFinite(rawQty) || rawQty <= 0) return null;
+    if (!Number.isFinite(price) || price <= 0) return null;
+    if (!Number.isFinite(lev) || lev <= 0) return null;
+    // Hard rule: cache MUST have stepSize for this symbol — block otherwise (prove cache hit explicitly).
+    let filters;
+    try { filters = _getExchangeFilters(symbol); } catch (_) { filters = null; }
+    if (!filters || !filters.stepSize) return null;
+    let qty;
+    try {
+        const _r = roundOrderParams(symbol, rawQty);
+        if (!_r || !Number.isFinite(_r.quantity) || _r.quantity <= 0) return null;
+        qty = _r.quantity;
+    } catch (_) { return null; }
+    if (!Number.isFinite(qty) || qty <= 0) return null;
+    const size = +(qty * price / lev).toFixed(2);
+    if (!Number.isFinite(size) || size < MIN_TRADE_USD) return null;
+    return { qty, size, aligned: true };
+}
+
 function _defaultUserState() {
     return {
         log: [],
@@ -65,7 +99,7 @@ function _defaultUserState() {
         dailyPnLDemo: 0,
         dailyPnLLive: 0,
         lastResetDay: -1,
-        atActive: true, // [F1] Per-user AT on/off — default ON for backward compat
+        atActive: false, // [BUG-O5] Per-user AT on/off — default OFF for safety; user must explicitly arm AT
         dslEnabled: true, // [DSL-OFF] Per-user DSL engine on/off — default ON
     };
 }
@@ -623,7 +657,7 @@ function _recordMissedTrade(userId, decision, reason) {
 // ══════════════════════════════════════════════════════════════════
 // Process a brain decision (called by serverBrain)
 // ══════════════════════════════════════════════════════════════════
-function processBrainDecision(decision, stc, userId) {
+function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
     if (!userId) { logger.error('AT_ENGINE', 'processBrainDecision called without userId — skipping'); return null; }
@@ -738,8 +772,20 @@ function processBrainDecision(decision, stc, userId) {
     const slPct = stc.slPct;
     const rr = stc.rr;
 
+    // [BUG-O7 S2] TC.size is max margin cap per trade (per autotrade.ts:921,928,933 canonical semantic).
+    // Adaptive sizing (vol + Kelly + DD + tier) may reduce; final size must NEVER exceed userIntent.
+    // Below MIN_TRADE_USD blocks entry (does NOT force above cap).
+    const MIN_TRADE_USD = 10;
     const rawSize = Math.round(baseSize * mult);
-    const finalSize = Math.max(Math.round(baseSize * 0.5), Math.min(Math.round(baseSize * 1.6), rawSize));
+    const cap = Number(userIntent);
+    const safeCap = (Number.isFinite(cap) && cap > 0) ? Math.round(cap) : Math.round(baseSize);
+    const cappedSize = Math.min(safeCap, rawSize);
+    if (!Number.isFinite(cappedSize) || cappedSize < MIN_TRADE_USD) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} — size below floor raw=${rawSize} cap=${safeCap}`);
+        _recordMissedTrade(userId, decision, 'SIZE_TOO_SMALL');
+        return null;
+    }
+    const finalSize = Math.round(cappedSize);
 
     // ── Demo balance gate (per-user) ──
     if (us.engineMode === 'demo' && us.demoBalance < finalSize) {
@@ -756,8 +802,17 @@ function processBrainDecision(decision, stc, userId) {
     else { sl = price + slDist; tp = price - tpDist; }
 
     const qty = (finalSize * lev) / price;
-    const tpPnl = (tpDist / price) * finalSize * lev;
-    const slPnl = -(slDist / price) * finalSize * lev;
+    // [BUG-TM-8] Align qty + size to LOT_SIZE BEFORE entry creation — never store unsafe toFixed(6).
+    const _tm8 = _alignQtyToLotSize(decision.symbol, qty, price, lev, 'MAIN_ENTRY');
+    if (!_tm8) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} — LOT_SIZE align rejected (qty=${qty}, price=${price}, lev=${lev})`);
+        _recordMissedTrade(userId, decision, 'LOT_SIZE_ALIGN_REJECTED');
+        return null;
+    }
+    const _alignedQty = _tm8.qty;
+    const _alignedSize = _tm8.size;
+    const tpPnl = (tpDist / price) * _alignedSize * lev;
+    const slPnl = -(slDist / price) * _alignedSize * lev;
 
     // ── Build position entry ──
     // [Phase 12.A — Batch G] Stamp exchange + env at open so history snapshots
@@ -780,10 +835,10 @@ function processBrainDecision(decision, stc, userId) {
         exchange: _entryCreds ? (_entryCreds.exchange || null) : null,
         env: _entryExecEnv.env,     // 'DEMO' | 'TESTNET' | 'REAL' | null
         price: price,
-        size: finalSize,
-        margin: finalSize,        // margin locked
+        size: _alignedSize,        // [BUG-TM-8] margin = qty * price / lev (matches actual exchange exposure)
+        margin: _alignedSize,      // margin locked, LOT_SIZE-aligned
         lev: lev,
-        qty: +qty.toFixed(6),
+        qty: _alignedQty,          // [BUG-TM-8] LOT_SIZE-aligned (no toFixed(6))
         sl: +sl.toFixed(2),
         tp: +tp.toFixed(2),
         slPct: slPct,
@@ -804,8 +859,8 @@ function processBrainDecision(decision, stc, userId) {
         dslModeAtOpen: us.dslEnabled === false ? null : (stc.dslMode || null),
         // ── Add-on tracking (Faza 2 Batch A) ──
         originalEntry: price,
-        originalSize: finalSize,
-        originalQty: +qty.toFixed(6),
+        originalSize: _alignedSize,    // [BUG-TM-8] LOT_SIZE-adjusted
+        originalQty: _alignedQty,      // [BUG-TM-8] LOT_SIZE-aligned
         addOnCount: 0,
         addOnHistory: [],
         controlMode: 'auto', // [TL-03] Initialize controlMode so user-override check works
@@ -821,7 +876,7 @@ function processBrainDecision(decision, stc, userId) {
 
     // ── Demo: deduct margin ──
     if (us.engineMode === 'demo') {
-        us.demoBalance = +(us.demoBalance - finalSize).toFixed(2);
+        us.demoBalance = +(us.demoBalance - _alignedSize).toFixed(2); // [BUG-TM-8] match LOT_SIZE-adjusted exposure
     }
 
     // ── Add to THE positions array ──
@@ -2530,6 +2585,14 @@ function registerManualPosition(userId, data) {
     const size = (lev > 0) ? (qty * price / lev) : (qty * price);
     const side = data.side === 'BUY' ? 'LONG' : (data.side === 'SELL' ? 'SHORT' : data.side);
 
+    // [BUG-TM-8] Align qty + size to LOT_SIZE before storage. Defense-in-depth: caller (live) typically pre-rounds via trading.js, but enforce server-side.
+    const _tm8reg = _alignQtyToLotSize(data.symbol, qty, price, lev, 'MANUAL_REGISTER');
+    if (!_tm8reg) {
+        return { ok: false, error: 'LOT_SIZE_ALIGN_REJECTED', detail: `qty=${qty} price=${price} lev=${lev} symbol=${data.symbol}` };
+    }
+    const _regAlignedQty = _tm8reg.qty;
+    const _regAlignedSize = _tm8reg.size;
+
     // [Phase 9D1] Idempotency: if the client retries registration with the
     // same clientReqId (e.g. transient network fail), fold onto the existing
     // position instead of double-registering. Scoped per-user.
@@ -2592,10 +2655,10 @@ function registerManualPosition(userId, data) {
         exchange: _manualCreds ? (_manualCreds.exchange || null) : null,
         env: _manualExecEnv.env,     // 'DEMO' | 'TESTNET' | 'REAL' | null
         price,
-        size,
-        margin: size,
+        size: _regAlignedSize,        // [BUG-TM-8] LOT_SIZE-adjusted
+        margin: _regAlignedSize,      // [BUG-TM-8] LOT_SIZE-adjusted
         lev,
-        qty: +qty.toFixed(6),
+        qty: _regAlignedQty,          // [BUG-TM-8] LOT_SIZE-aligned
         sl, tp, slPct, rr, tpPnl, slPnl,
         status: 'OPEN',
         closeTs: null, closePnl: null, closeReason: null,
@@ -2609,8 +2672,8 @@ function registerManualPosition(userId, data) {
         // DSL params: null = engine OFF (no DSL), object = user-provided, undefined = use defaults
         dslParams: _dslOff ? null : ((data.dslParams && typeof data.dslParams === 'object') ? data.dslParams : serverDSL.DSL_DEFAULTS),
         originalEntry: price,
-        originalSize: size,
-        originalQty: +qty.toFixed(6),
+        originalSize: _regAlignedSize,   // [BUG-TM-8]
+        originalQty: _regAlignedQty,     // [BUG-TM-8]
         addOnCount: 0,
         addOnHistory: [],
         // Live exchange metadata
@@ -3050,7 +3113,14 @@ async function addOnPosition(userId, seq, options = {}) {
         pos.price = +newEntry.toFixed(6);
         pos.size = newTotalSize;
         pos.margin = newTotalSize;
-        pos.qty = +((newTotalSize * pos.lev) / pos.price).toFixed(6);
+        // [BUG-TM-8] DEMO addon: align computed qty to LOT_SIZE for parity with live + future SERVER_AT.
+        // If alignment fails (cache miss), block addon (consistent with main entry policy — no silent fallback).
+        const _tm8addon = _alignQtyToLotSize(pos.symbol, (newTotalSize * pos.lev) / pos.price, pos.price, pos.lev, 'DEMO_ADDON');
+        if (!_tm8addon) {
+            logger.warn('AT_ADDON', `[${seq}] DEMO addon LOT_SIZE align rejected — symbol=${pos.symbol} newTotalSize=${newTotalSize}`);
+            return { ok: false, error: 'LOT_SIZE_ALIGN_REJECTED', detail: 'DEMO addon qty cannot be aligned to LOT_SIZE' };
+        }
+        pos.qty = _tm8addon.qty;
         pos.addOnCount = (pos.addOnCount || 0) + 1;
         if (!pos.addOnHistory) pos.addOnHistory = [];
         pos.addOnHistory.push(historyEntry);

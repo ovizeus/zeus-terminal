@@ -26,13 +26,19 @@ if (!w._ARIA_NOVA_LOADED) {
       const a = JSON.parse(localStorage.getItem(_AN_KEY_A) || '{}')
       w.ARIA_STATE.expanded = !!a.expanded
       if (a.pattern) w.ARIA_STATE.pattern = a.pattern
-    } catch (_) { }
+    } catch (e: any) {
+      // [BUG-UI-FE-2] Surface corrupt localStorage parse — was silent swallow.
+      console.warn('[ARIA/NOVA] localStorage parse failed for key:', _AN_KEY_A, e && e.message)
+    }
     try {
       const n = JSON.parse(localStorage.getItem(_AN_KEY_N) || '{}')
       w.NOVA_STATE.expanded = !!n.expanded
       if (Array.isArray(n.log)) w.NOVA_STATE.log = n.log.slice(-8)
       w.NOVA_STATE.lastMsg = n.lastMsg || null
-    } catch (_) { }
+    } catch (e: any) {
+      // [BUG-UI-FE-2] Surface corrupt localStorage parse — was silent swallow.
+      console.warn('[ARIA/NOVA] localStorage parse failed for key:', _AN_KEY_N, e && e.message)
+    }
   }
 
   function _anSave() {

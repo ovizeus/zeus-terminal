@@ -544,7 +544,9 @@ function _runCycle() {
                     if (pendingResult.action === 'FILL' || pendingResult.action === 'MOMENTUM') {
                         // Execute the pending entry via AT (use stored stc from pending)
                         const pendStc = pendingResult.pending.stc || serverRegimeParams.getAdaptedParams(regime.regime, stc);
-                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId);
+                        // [BUG-O7 S2] Cap pending-entry execution by raw TC.size as max per-trade cap (parity with main + scale-in paths).
+                        const _userIntentPending = Number((_stcMap.get(userId) || DEFAULT_STC).size);
+                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId, _userIntentPending);
                         if (entry) {
                             // [ML] Link pending snapshot to the created position
                             const _pendSnapId = pendingResult.pending._snapId;
@@ -579,7 +581,9 @@ function _runCycle() {
                                 ts: Date.now(), cycle: _cycleCount, symbol, price: snap.price, priceTs: snap.priceTs,
                                 fusion: { dir: existingPos.side, decision: 'SMALL', confidence: confluence.score, score: confluence.score, reasons: ['scale_in'] },
                             };
-                            const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId);
+                            // [BUG-O7 S2] Cap scale-in entry size by raw TC.size (max per-trade cap). Total-position cap NOT addressed in this batch — separate ticket.
+                            const _userIntentSI = Number((_stcMap.get(userId) || DEFAULT_STC).size);
+                            const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId, _userIntentSI);
                             if (scaleEntry) {
                                 serverMultiEntry.recordScaleIn(userId, symbol, snap.price, scaleStc.size);
                                 try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
@@ -782,7 +786,9 @@ function _runCycle() {
                         const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
                             Object.assign({}, _mlExtra, { sourcePath: 'direct', finalAction: 'entry' })
                         ));
-                        const entry = serverAT.processBrainDecision(decision, sizingStc, userId);
+                        // [BUG-O7 S2] Pass raw TC.size as userIntent so serverAT enforces max-cap (TC.size = absolute margin ceiling per autotrade.ts canonical semantic). Use raw _stcMap value, NOT volAdjustedStc/sizingStc which are already pipeline-modified.
+                        const _userIntent = Number((_stcMap.get(userId) || DEFAULT_STC).size);
+                        const entry = serverAT.processBrainDecision(decision, sizingStc, userId, _userIntent);
                         if (entry) {
                             // [S5] Same deadline-based cooldown set as the pending branch.
                             _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);

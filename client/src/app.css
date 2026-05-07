@@ -3155,27 +3155,7 @@ select.zac-select optgroup {
 .znc-dsl-body { font-size:12px; color:#2a5040; line-height:1.6 }
 .znc-dsl-body b { color:#00ffcc77 }
 
-/* ─── Q-FORECAST ─── */
-#brain-forecast {
-  background: #060e08;
-  border: 1px solid #1a3020;
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-family: var(--ff);
-  font-size: 12px;
-  line-height: 1.8;
-  letter-spacing: .5px;
-  height: 253px;
-}
-#brain-forecast .bf-label { color:#39ff1466; font-size:11px; letter-spacing:2px; margin-bottom:2px; text-transform:uppercase }
-#brain-forecast .bf-main { font-size:13px; font-weight:700 }
-#brain-forecast .bf-main.bull { color:var(--lime) }
-#brain-forecast .bf-main.bear { color:var(--red) }
-#brain-forecast .bf-main.neut { color:#556655 }
-#brain-forecast .bf-main.glow { text-shadow:0 0 8px currentColor }
-#brain-forecast .bf-main.dim { opacity:.45 }
-#brain-forecast .bf-row { color:#2a5040; font-size:12px }
-#brain-forecast .bf-row b { color:#3a7050 }
+/* [BUG-D-1] Q-FORECAST CSS section removed 2026-05-07 — orphan after BrainCockpit QForecastBlock dead-code cleanup. Selectors #brain-forecast + .bf-* had zero active DOM consumers. */
 
 /* ─── WHY ENGINE ─── */
 #brain-why {
@@ -5516,6 +5496,18 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 @media (max-width: 768px) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important }
   .mover, .modal, #aub { transition-duration: 0.2s !important }
+
+  /* [DSL-MOBILE-FREEZE] Re-enable DSL decorative rain/bubble animations on mobile only.
+     Keep global mobile perf kill for everything else. */
+  .dsl-bubble {
+    animation-duration: 6s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  .dsl-drop {
+    animation-duration: 0.85s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important }
@@ -5839,3 +5831,14 @@ body .zpv ~ #ptr-indicator { top: calc(48px + env(safe-area-inset-top, 0px)); }
 #qm-screen .a3  { color: #8a1515 }
 #qm-screen .a4  { color: #cc2222 }
 #qm-screen .a5  { color: #ff3344; text-shadow: 0 0 3px #ff334455 }
+
+/* [BUG-F] Native <select> dark theme — fixes white dropdowns across app (25 instances în 12 files: ChartControls, SymbolSelector, UsersSection, AuditSection, AnalysisSections, SettingsModal, SettingsHubModal, SupremusModal, AlertsModal, LLVSettingsModal, ManualTradePanel, BrainCockpit). Pure visual fix, no JSX edits. */
+select {
+  background: var(--card, #0b1120);
+  color: var(--text, #d0d8e0);
+  border: 1px solid var(--border, #12253a);
+}
+select option {
+  background: var(--card, #0b1120);
+  color: var(--text, #d0d8e0);
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
 import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
@@ -115,7 +115,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   }
 
   async function chpwConfirm() {
-    const r = await apiFetch('/auth/change-password/confirm', { code: val('chpwCode'), newPassword: val('chpwNew') })
+    // [BUG-UI-CMP-9] Pre-POST length check — empty/short codes wasted server roundtrips.
+    const code = (val('chpwCode') || '').trim()
+    if (code.length < 6) {
+      setMsg('chpw-code-msg', 'Enter the 6-digit code from email', false)
+      return
+    }
+    const r = await apiFetch('/auth/change-password/confirm', { code, newPassword: val('chpwNew') })
     setMsg('chpw-code-msg', r.message || r.error || '', !!r.ok)
     if (r.ok) setTimeout(() => { showEl('chpw-code-form', false); showEl('chpw-form', true) }, 1500)
   }
@@ -127,7 +133,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   }
 
   async function chemConfirm() {
-    const r = await apiFetch('/auth/change-email/confirm', { code: val('chemCode') })
+    // [BUG-UI-CMP-9] Pre-POST length check — empty/short codes wasted server roundtrips.
+    const code = (val('chemCode') || '').trim()
+    if (code.length < 6) {
+      setMsg('chem-code-msg', 'Enter the 6-digit code from email', false)
+      return
+    }
+    const r = await apiFetch('/auth/change-email/confirm', { code })
     setMsg('chem-code-msg', r.message || r.error || '', !!r.ok)
     if (r.ok) setTimeout(() => { showEl('chem-code-form', false); showEl('chem-form', true) }, 1500)
   }
@@ -146,6 +158,25 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       try { sessionStorage.clear() } catch {}
       window.location.href = '/login.html'
     }, 1500)
+  }
+
+  // [BUG-UI-CMP-2] Hard double-click guard for irreversible DELETE ACCOUNT button.
+  // useRef provides synchronous block (React state updates may be batched/async).
+  // useState only drives UI disabled/loading visual.
+  // Reset on error so user can retry; do NOT reset on success (redirect unmounts).
+  const clacBusyRef = useRef(false)
+  const [clacBusy, setClacBusy] = useState(false)
+  const onClacConfirm = async () => {
+    if (clacBusyRef.current) return
+    clacBusyRef.current = true
+    setClacBusy(true)
+    try {
+      await clacConfirm()
+    } catch (err) {
+      clacBusyRef.current = false
+      setClacBusy(false)
+      throw err
+    }
   }
 
   return (
@@ -277,7 +308,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <div className="msec" style={{color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> DELETION CONFIRMATION CODE</div>
           <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Enter the code from your email to confirm account deletion:</div>
           <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="clacCode" maxLength={6} placeholder="000000" style={dangerCodeInp} /></div>
-          <button className="hub-sbtn" id="clacConfirmBtn" style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> DELETE ACCOUNT PERMANENTLY</button>
+          <button className="hub-sbtn" id="clacConfirmBtn" disabled={clacBusy} style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444',opacity:clacBusy?0.5:1,cursor:clacBusy?'not-allowed':'pointer'}} onClick={onClacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> {clacBusy ? 'DELETING...' : 'DELETE ACCOUNT PERMANENTLY'}</button>
           <div id="clac-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
       </div>

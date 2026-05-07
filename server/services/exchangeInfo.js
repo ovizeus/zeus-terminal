@@ -91,4 +91,5 @@ function roundOrderParams(symbol, quantity, stopPrice) {
     return result;
 }
 
-module.exports = { startAutoRefresh, roundOrderParams };
+// [BUG-TM-8] Export getFilters so callers can prove cache hit before relying on roundOrderParams output (cannot detect cache miss via output equality alone — already-aligned qty looks identical to passthrough).
+module.exports = { startAutoRefresh, roundOrderParams, getFilters };

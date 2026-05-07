@@ -31,6 +31,10 @@ export function closeDemoPos(id: any, reason?: string): void {
   pos.closed = true
   pos.status = 'closing' // [FIX H3]
 
+  // [BUG-B] Refresh per-symbol cooldown on close — prevents AT immediate reopen
+  if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
+  AT._cooldownBySymbol[pos.sym] = Date.now()
+
   // [BUG1 FIX] Server-managed position close — unconditional when _serverSeq exists
   if (pos._serverSeq) {
     if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id)

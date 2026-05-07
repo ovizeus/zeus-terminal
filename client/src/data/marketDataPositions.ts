@@ -292,6 +292,9 @@ export function closeLivePos(id: any, reason?: string): void {
   }
   if (typeof w.Intervals !== 'undefined' && w.Intervals.clear) w.Intervals.clear('posCheck_' + pos.id)
   const cur = getSymPrice(pos) || pos.entry; const pnl = (cur && Number.isFinite(cur) && cur > 0) ? calcPosPnL(pos, cur) : 0; pos.pnl = pnl; pos.status = 'closing'
+  // [BUG-B] Refresh per-symbol cooldown on close — prevents AT immediate reopen
+  if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
+  AT._cooldownBySymbol[pos.sym] = Date.now()
   atLog('info', '[LIVE] CLOSING: ' + pos.side + ' ' + pos.sym + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
   renderLivePositions()
   if (typeof liveApiClosePosition === 'function') {
