@@ -14,7 +14,12 @@ export function AdaptivePanel() {
       <div style={{ padding: '8px 12px' }}>
         {/* Toggle button */}
         <div style={{ marginBottom: '8px' }}>
-          <button id="adaptiveToggleBtn" onClick={() => {
+          {/* [O17] id removed — duplicate with AnalysisSections.tsx legacy
+              mirror caused getElementById to update the hidden node and
+              skip this visible one. AdaptivePanel uses Zustand subscription
+              + React onClick; no id needed. Legacy mirror keeps its id
+              for _adaptLoad's restore path (display:none, not user-facing). */}
+          <button onClick={() => {
             toggleAdaptive()
             // brainStore is canonical; engine writes directly via mutators
           }} style={{
@@ -27,8 +32,8 @@ export function AdaptivePanel() {
             {adaptiveOn ? 'ADAPTIVE ON' : 'ADAPTIVE OFF'}
           </button>
           <div style={{ fontSize: '8px', color: 'var(--dim)', marginTop: '4px', lineHeight: 1.6 }}>
-            OFF = to&#x21B;i multiplieri &#xD7;1.00, engine nu cite&#x219;te nimic.<br />
-            Min 30 trades/bucket pentru a activa multiplicatorii.
+            OFF = all multipliers &times;1.00, engine reads nothing.<br />
+            Min 30 trades/bucket to activate multipliers.
           </div>
         </div>
         {/* Active multipliers row */}

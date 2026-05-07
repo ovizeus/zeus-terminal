@@ -408,15 +408,22 @@ export function toggleAdaptive(): void {
   if (!w.BM) w.BM = {}
   if (!w.BM.adaptive) w.BM.adaptive = { enabled: false, entryMult: 1.0, sizeMult: 1.0, exitMult: 1.0 }
   w.BM.adaptive.enabled = !w.BM.adaptive.enabled
-  var tog = document.getElementById('adaptiveToggleBtn')
-  if (tog) {
-    tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
-    tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
-    tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
-    // [b68] legacy button in AnalysisSections.tsx has hardcoded OFF colors
-    // including background; without this it never visually lights up.
-    tog.style.background = w.BM.adaptive.enabled ? '#0a2a1a' : '#0a1220'
-  }
+  // [O17] Canonical UI source = brainStore (Zustand), updated below via
+  // _syncAdaptiveToStore(). AdaptivePanel.tsx subscribes and re-renders
+  // its button (text + colors + background) from `brain.adaptive.enabled`.
+  // Direct DOM mutation via getElementById/querySelectorAll on
+  // `#adaptiveToggleBtn` is REMOVED here because:
+  //   1) it raced with React reconciliation (Zustand subscription) and
+  //      could leave the visible button stale even after a successful
+  //      state flip — confirmed empirically (BM flips, store stale, UI
+  //      stuck on prior state);
+  //   2) the duplicate id=adaptiveToggleBtn (legacy AnalysisSections.tsx
+  //      mirror, kept display:none) made getElementById return the
+  //      wrong node anyway.
+  // The legacy hidden mirror in AnalysisSections.tsx remains driven by
+  // _adaptLoad's restore path (still uses getElementById there) — that
+  // is invisible (display:none) and not user-facing, so DOM-only update
+  // is acceptable.
   if (!w.BM.adaptive.enabled) {
     w.BM.adaptive.entryMult = 1.0
     w.BM.adaptive.sizeMult = 1.0

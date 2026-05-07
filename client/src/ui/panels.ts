@@ -572,9 +572,9 @@ export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: 
   const _detailNote = el('btDetailNote');
   if (bestRow && _detailNote) {
     _detailNote.innerHTML = `
-      ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
-      ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combina toti indicatorii pentru precizie maxima.<br>
-      ${_ZI.w} Backtestul e pe date istorice \u2014 performanta trecuta nu garanteaza rezultate viitoare.
+      ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 best indicator over the last ${lookback} bars with <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} signals, R:R ${bestRow.rr}:1).<br>
+      ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combine all indicators for maximum precision.<br>
+      ${_ZI.w} Backtest is on historical data \u2014 past performance does not guarantee future results.
     `;
   }
 }
