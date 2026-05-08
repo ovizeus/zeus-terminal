@@ -207,6 +207,17 @@ let _onChangeCallback = null;
 // `seq: ++_wsFrameSeq` field at the bottom of getFullState. Helps clients
 // disambiguate two same-ms at_update frames during warm-start + onChange races.
 let _wsFrameSeq = 0;
+// [TM-4] Round-trip fee rate for Binance Futures. 0.04% per side (taker default,
+// most market exits are taker because instant). Round-trip = 0.08% on notional.
+// Applied at terminal PnL sites (closePnl set) to correct gross-PnL overstatement
+// by ~0.08%. If maker fee promo, actual cost lower — this is conservative max.
+const _ROUND_TRIP_FEE_RATE = 0.0008;
+function _applyRoundTripFee(grossPnl, size, lev) {
+    const notional = (size || 0) * (lev || 0);
+    if (!Number.isFinite(notional) || notional <= 0) return grossPnl;
+    const fee = notional * _ROUND_TRIP_FEE_RATE;
+    return +(grossPnl - fee).toFixed(2);
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Persistence — save/restore from SQLite
@@ -815,6 +826,21 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     }
     const _alignedQty = _tm8.qty;
     const _alignedSize = _tm8.size;
+    // [TM-7] Align tp/sl la PRICE_FILTER tick size of the symbol (was raw
+    // toFixed(2) which silently floors precision below tick or above tick.
+    // BTC tick=0.10 USD; toFixed(2) "1.23" isn't valid tick. SOL/ETH have
+    // smaller tick. roundOrderParams handles tick alignment via
+    // PRICE_FILTER cached at boot — falls back gracefully if symbol filters
+    // unavailable (returns input). Cu fallback, defense `+sl.toFixed(2)`
+    // remains semantically equivalent at boundary.
+    const _slRounded = roundOrderParams(decision.symbol, _alignedQty, sl);
+    const _tpRounded = roundOrderParams(decision.symbol, _alignedQty, tp);
+    const _slAligned = (_slRounded && Number.isFinite(_slRounded.stopPrice) && _slRounded.stopPrice > 0)
+        ? _slRounded.stopPrice
+        : +sl.toFixed(2);
+    const _tpAligned = (_tpRounded && Number.isFinite(_tpRounded.stopPrice) && _tpRounded.stopPrice > 0)
+        ? _tpRounded.stopPrice
+        : +tp.toFixed(2);
     const tpPnl = (tpDist / price) * _alignedSize * lev;
     const slPnl = -(slDist / price) * _alignedSize * lev;
 
@@ -843,8 +869,8 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         margin: _alignedSize,      // margin locked, LOT_SIZE-aligned
         lev: lev,
         qty: _alignedQty,          // [BUG-TM-8] LOT_SIZE-aligned (no toFixed(6))
-        sl: +sl.toFixed(2),
-        tp: +tp.toFixed(2),
+        sl: _slAligned,           // [TM-7] tick-aligned via roundOrderParams
+        tp: _tpAligned,           // [TM-7] tick-aligned via roundOrderParams
         slPct: slPct,
         rr: rr,
         fusionMult: mult,
@@ -1577,7 +1603,11 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                 }
                 const realFill = parseFloat(slOrder.avgPrice || slOrder.executedPrice || 0);
                 const slStatus = slOrder.status || slOrder.algoStatus || '';
-                if (Number.isFinite(realFill) && realFill > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
+                // [TM-5] Defensive `pos.price > 0` guard added — prevents
+                // div-by-zero NaN propagation in PnL formula below if pos.price
+                // ever fell to 0/NaN through corrupt state. realFill guard
+                // already in place; pos.price guard is defensive belt-and-braces.
+                if (Number.isFinite(realFill) && realFill > 0 && pos.price > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
                     // Exit slippage tracking
                     const expectedExitPrice = pos.sl;
                     const exitSlippage = realFill - expectedExitPrice;
@@ -1587,9 +1617,12 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                     pos.live.exitFillPrice = realFill;
                     pos.live.exitExpectedPrice = expectedExitPrice;
 
-                    const realPnl = pos.side === 'LONG'
+                    // [TM-4] Apply round-trip fee deduction to terminal PnL.
+                    // Gross PnL overstated by ~0.08% (entry+exit fees on notional).
+                    const _grossPnl = pos.side === 'LONG'
                         ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
                         : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                    const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
                     if (realPnl !== pos.closePnl) {
                         const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
                         logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
@@ -1650,9 +1683,11 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                 const _clRaw = parseFloat(closeResult.avgPrice);
                 const realFill = (Number.isFinite(_clRaw) && _clRaw > 0) ? _clRaw : exitPrice;
                 if (realFill > 0 && pos.price > 0) {
-                    const realPnl = pos.side === 'LONG'
+                    // [TM-4] Apply round-trip fee deduction (market close path).
+                    const _grossPnl = pos.side === 'LONG'
                         ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
                         : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                    const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
                     pos.live.exitFillPrice = realFill;
                     pos.live.exitExpectedPrice = exitPrice;
                     pos.closePnl = realPnl;
@@ -2822,9 +2857,11 @@ function closeBySeq(userId, seq) {
         const pos = _positions[idx];
         // Use last known price for PnL calculation (best effort)
         const exitPrice = pos._lastPrice || pos.price;
-        const pnl = pos.side === 'LONG'
+        // [TM-4] Apply round-trip fee deduction (manual client close).
+        const _grossPnl = pos.side === 'LONG'
             ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
             : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2);
+        const pnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
         _closePosition(idx, pos, 'MANUAL_CLIENT', exitPrice, pnl);
         success = true;
         return { ok: true, seq, pnl };
@@ -3506,9 +3543,18 @@ async function _runReconciliation(isStartup) {
                                 exitPrice = pos.price;
                                 estimatedClose = true;
                             }
-                            const pnl = realPnl != null ? realPnl : (estimatedClose ? 0 : (pos.side === 'LONG'
-                                ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                                : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2)));
+                            // [TM-4] When realPnl from userTrades API is available, it's already
+                            // post-fees (exchange-authoritative). Fallback local calc needs fee
+                            // deduction. estimatedClose path is forced to 0 (intentional —
+                            // operator manually reconciles).
+                            const pnl = realPnl != null
+                                ? realPnl
+                                : (estimatedClose ? 0 : _applyRoundTripFee(
+                                    pos.side === 'LONG'
+                                        ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                                        : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2),
+                                    pos.size, pos.lev
+                                ));
                             if (estimatedClose) {
                                 logger.warn(label, `[${pos.seq}] PHANTOM closed at entry price (PnL=0) — userTrades unavailable; manual reconciliation required`);
                                 telegram.sendToUser(userId,
