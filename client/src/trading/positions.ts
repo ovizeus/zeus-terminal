@@ -153,7 +153,11 @@ export function triggerExecCinematic(side: any, sym: any): void {
   // Banner
   const banner = document.createElement('div')
   banner.className = 'exec-banner' + (side === 'SHORT' ? ' short' : '')
-  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`
+  // [SEC-5] Escape `side` și `sym` at injection point. _ZI.bolt is a static
+  // SVG icon constant (safe); template structure ("ZEUS EXECUTION:") is
+  // hardcoded; only `side` și `sym` are dynamic and could carry untrusted
+  // chars. Aligned cu post-SEC-1/2/3/4 codebase pattern (escHtml at boundary).
+  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${escHtml(String(side ?? ''))} ${escHtml(String(sym ?? ''))}`
   document.body.appendChild(banner)
   setTimeout(() => { try { document.body.removeChild(banner) } catch (_) { } }, 3200)
 
