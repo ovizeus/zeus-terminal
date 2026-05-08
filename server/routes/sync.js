@@ -91,7 +91,27 @@ router.post('/state', (req, res) => {
                 try { existing = JSON.parse(fs.readFileSync(sf, 'utf8')); } catch (_) { }
             }
             // Merge: combine positions from server + incoming (union by id)
-            const incomingPositions = Array.isArray(body.positions) ? body.positions : [];
+            // [WS-4] Per-entry validation: drop malformed positions before
+            // merge so corrupt entries (missing id, NaN fields, wrong types)
+            // don't poison persisted state and broadcast to clients.
+            // Conservative validator — only checks fields the merge logic
+            // relies on (id presence, symbol string). Specific business
+            // validation happens elsewhere; this is structural sanity gate.
+            function _isValidPositionEntry(p) {
+                return p && typeof p === 'object' &&
+                    p.id != null &&
+                    (typeof p.id === 'string' || typeof p.id === 'number') &&
+                    typeof p.symbol === 'string' && p.symbol.length > 0;
+            }
+            const _incomingPositionsRaw = Array.isArray(body.positions) ? body.positions : [];
+            const incomingPositions = _incomingPositionsRaw.filter(_isValidPositionEntry);
+            if (incomingPositions.length !== _incomingPositionsRaw.length) {
+                logger.warn('SYNC', `[WS-4] Dropped ${_incomingPositionsRaw.length - incomingPositions.length} malformed position(s) from sync payload uid=${uid}`);
+            }
+            // [WS-4] Mirror filter pe body.positions so downstream resurrection
+            // guard logic that reads body.positions directly sees only
+            // validated entries.
+            body.positions = incomingPositions;
             const serverPositions = (existing && Array.isArray(existing.positions)) ? existing.positions : [];
 
             // [FIX] Resurrection guard: ALWAYS merge closedIds and filter positions, even with 0 server positions

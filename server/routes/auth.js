@@ -256,6 +256,15 @@ router.post('/login', async (req, res) => {
         if (!user) {
             // [SEC-2] IP-tagged log for fail2ban (unknown email = probing)
             logger.warn('AUTH', 'LOGIN_FAILED unknown_email ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
+            // [AUTH-2] Constant-time defense: spend ~bcrypt.compare time even
+            // on unknown email so timing differential doesn't leak email
+            // validity to attackers. Without this, valid email + wrong password
+            // takes ~100ms (bcrypt.compare on 12-round hash) while unknown email
+            // returns instantly — timing distinguishes valid/invalid emails.
+            // Compare against a known-bad hash; result always false (never
+            // authenticates). Per-email rate bucket isn't hit on this path
+            // (intentional — see SEC-2/AUTH-2 reasoning în bug book).
+            try { await bcrypt.compare(password || '', '$2a$12$0000000000000000000000.0000000000000000000000000000000'); } catch (_) {}
             return res.status(401).json({ error: 'Email sau parolă incorectă' });
         }
 

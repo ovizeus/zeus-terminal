@@ -301,13 +301,17 @@ export function recalcAdaptive(isStartup?: any): void {
       // but R is left out of the avgR aggregation when slValue is invalid.
       if (slValue <= 0) {
         b.trades++
-        // Skip totalR contribution entirely; b.wins still counts if pnl >= 0
-        if (t.pnl >= 0) b.wins++
+        // [TM-2] Canonical 3-way semantic aligned cu serverAT.js stats +
+        // liveStats (post-TM-1 closure): pnl > 0 win, pnl < 0 loss, pnl === 0
+        // NEITHER. Was `pnl >= 0` (counted zero as win) — opposite of server
+        // semantic. Now wins counter strictly excludes break-even.
+        if (t.pnl > 0) b.wins++
         return
       }
       b.trades++
       var R = t.pnl / slValue
-      if (t.pnl >= 0) b.wins++
+      // [TM-2] Same canonical 3-way semantic — strict `> 0` (was `>= 0`).
+      if (t.pnl > 0) b.wins++
       b.totalR += R
     })
 

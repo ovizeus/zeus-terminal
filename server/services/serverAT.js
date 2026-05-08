@@ -203,6 +203,10 @@ const TIER_MULT = { LARGE: 1.75, MEDIUM: 1.35, SMALL: 1.0 };
 
 // ── Change listeners (WebSocket push) ──
 let _onChangeCallback = null;
+// [WS-1] Monotonic frame sequence counter for getFullState — see usage at the
+// `seq: ++_wsFrameSeq` field at the bottom of getFullState. Helps clients
+// disambiguate two same-ms at_update frames during warm-start + onChange races.
+let _wsFrameSeq = 0;
 
 // ══════════════════════════════════════════════════════════════════
 // Persistence — save/restore from SQLite
@@ -2544,6 +2548,15 @@ function getFullState(userId) {
         dailyPnLLive: us.dailyPnLLive || 0,
         pnlAtReset: us.pnlAtReset || 0,
         ts: Date.now(),
+        // [WS-1] Monotonic per-server-process frame sequence number. `ts` alone
+        // can collide when two getFullState calls happen în same ms (warm-start
+        // + onChange near-concurrent path) — clients have no way to order them.
+        // `seq` increments on every getFullState invocation regardless of ts;
+        // client-side ordering can use `seq` cu strict-greater-than fallback
+        // when ts ties. Resets on PM2 reload (single-process bigint counter
+        // would also work but plain Number is sufficient — at 1k frames/sec
+        // sustained it takes 285+ years to hit Number.MAX_SAFE_INTEGER).
+        seq: ++_wsFrameSeq,
     };
 }
 
