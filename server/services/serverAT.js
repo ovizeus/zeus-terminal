@@ -1115,6 +1115,45 @@ async function _executeLiveEntry(entry, stc) {
         : crypto.randomBytes(4).toString('hex');
     const clientOrderId = `SAT_${entry.seq}_${_decTok}`;
 
+    // [SAFE-2] Force CROSSED margin type — BLOCKING: wrong margin type = wrong risk math.
+    // Zeus AT risk-management math (max-positions=5 implied pooled buffer)
+    // assumes CROSS pooling. User may have manually switched ISOLATED via
+    // Binance UI (or carry residue from a prior trade), so we ensure CROSSED
+    // here before leverage/order. Idempotent: Binance returns numeric code
+    // `-4046` "No need to change margin type" if already CROSSED — treat as
+    // success (suppressed at INFO level, entry proceeds). Any other failure
+    // mirrors the leverage failure pattern below: 1-retry then BLOCK with
+    // telegram alert + entry.live status + _pushLog + us.liveStats.blocked.
+    // Detection of -4046 uses err.code numeric (propagated by binanceSigner.js
+    // line 211 from Binance data.code) — reliable, not message-substring based.
+    for (let mtAttempt = 0; mtAttempt < 2; mtAttempt++) {
+        try {
+            await sendSignedRequest('POST', '/fapi/v1/marginType', {
+                symbol: entry.symbol, marginType: 'CROSSED',
+            }, creds);
+            logger.info('AT_LIVE', `[${entry.seq}] Margin type CROSSED set (was different)`);
+            break; // success — change applied
+        } catch (mtErr) {
+            // Idempotent: already CROSSED — Binance numeric code -4046
+            if (mtErr && mtErr.code === -4046) {
+                logger.info('AT_LIVE', `[${entry.seq}] Margin type already CROSSED (idempotent)`);
+                break;
+            }
+            // Real failure — mirror leverage pattern (1 retry, then block)
+            if (mtAttempt === 0) {
+                logger.warn('AT_LIVE', `[${entry.seq}] Margin type set failed, retrying: ${mtErr.message}`);
+                await new Promise(r => setTimeout(r, 1000));
+            } else {
+                entry.live = { status: 'MARGIN_TYPE_FAILED', error: mtErr.message, intendedMarginType: 'CROSSED' };
+                _pushLog(userId, 'LIVE_MARGIN_TYPE_FAILED', { seq: entry.seq, marginType: 'CROSSED', error: mtErr.message });
+                logger.error('AT_LIVE', `[${entry.seq}] Margin type set failed — BLOCKING entry: ${mtErr.message}`);
+                telegram.sendToUser(userId, `⚠️ *Margin Type Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: CROSSED\nEntry skipped — deterministic margin required for risk math.\nError: ${mtErr.message}`);
+                us.liveStats.blocked++;
+                return;
+            }
+        }
+    }
+
     // Set leverage — BLOCKING: wrong leverage = wrong risk
     for (let levAttempt = 0; levAttempt < 2; levAttempt++) {
         try {
