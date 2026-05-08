@@ -841,8 +841,18 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     const _tpAligned = (_tpRounded && Number.isFinite(_tpRounded.stopPrice) && _tpRounded.stopPrice > 0)
         ? _tpRounded.stopPrice
         : +tp.toFixed(2);
-    const tpPnl = (tpDist / price) * _alignedSize * lev;
-    const slPnl = -(slDist / price) * _alignedSize * lev;
+    // [TM-9] Apply expected round-trip cost (fees 0.08% + slippage estimate
+    // 0.06%) la display tpPnl/slPnl. Pre-fix: user saw expected $1000 dar
+    // real fill ~$997 (eroded încredere). Post-fix: displayed values match
+    // post-cost reality. _applyRoundTripFee already covers 0.08% fees;
+    // slippage adds ~0.03% × 2 sides = 0.06% on notional. Combined cost
+    // = ~0.14% on (size × lev) = notional. tpPnl reduces, slPnl becomes
+    // larger negative (loss + slippage cost stack).
+    const _expectedSlippageCost = (_alignedSize * lev) * 0.0006;
+    const _grossTpPnl = (tpDist / price) * _alignedSize * lev;
+    const _grossSlPnl = -(slDist / price) * _alignedSize * lev;
+    const tpPnl = _applyRoundTripFee(_grossTpPnl, _alignedSize, lev) - _expectedSlippageCost;
+    const slPnl = _applyRoundTripFee(_grossSlPnl, _alignedSize, lev) - _expectedSlippageCost;
 
     // ── Build position entry ──
     // [Phase 12.A — Batch G] Stamp exchange + env at open so history snapshots
