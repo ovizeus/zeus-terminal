@@ -128,6 +128,14 @@ export function ManualTradePanel() {
   // Attach confirm-close pattern on CLOSE ALL button
   const closeAllRef = useRef<HTMLButtonElement>(null)
   const closeAllAttached = useRef(false)
+  // [UI-CMP-6] Synchronous double-click guard for PLACE ORDER button —
+  // useRef immune to React state batching. Pre-existing `disabled={isPlacingLive}`
+  // + `if (isPlacingLive) return` în onClick is a dual guard, but on browsers
+  // where click can fire on a button as it transitions to disabled (Android
+  // Chrome rapid-tap, mobile touch race), the FIRST click can pass before
+  // setIsPlacingLive(true) has propagated through React's render. Same pattern
+  // as UI-CMP-7 (welcome snooze).
+  const placeBusyRef = useRef(false)
   useEffect(() => {
     if (closeAllRef.current && !closeAllAttached.current && typeof attachConfirmClose === 'function') {
       attachConfirmClose(closeAllRef.current, closeAllDemoPos)
@@ -259,7 +267,21 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive} onClick={() => { if (isPlacingLive) return; if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
+        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive} onClick={() => {
+          // [UI-CMP-6] Sync useRef guard FIRST (immune to React state batch
+          // delay) — then keep the existing isPlacingLive belt-and-braces.
+          if (placeBusyRef.current) return
+          if (isPlacingLive) return
+          placeBusyRef.current = true
+          try {
+            if (typeof placeDemoOrder === 'function') placeDemoOrder()
+          } finally {
+            // Release on next frame so any synchronous onClick re-fire from
+            // the same touch event still sees busy=true. placeDemoOrder sets
+            // isPlacingLive itself for the longer async window.
+            setTimeout(() => { placeBusyRef.current = false }, 0)
+          }
+        }}>
           {(() => {
             if (isPlacingLive) return '\u23F3 PLACING\u2026'
             if (isLiveMode && envLabel === 'LOCKED') return '\uD83D\uDD12 PLACE ORDER (LIVE MODE LOCKED)'
