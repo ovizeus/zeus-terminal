@@ -337,10 +337,23 @@ export function openM(id: string): void { const e = el(id); if (e) e.style.displ
 export function closeM(id: string): void { const e = el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal') as HTMLElement | null; if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
 
 // ===== MODAL DRAG =====
+// [PERF-4] WeakSet of `.mhdr` elements we've already attached drag handlers to.
+// Without this, _initModalDrag() called more than once (e.g. DOMContentLoaded race
+// + module bootstrap, or React re-mount that re-renders modal nodes) attaches
+// duplicate `mousedown` to header AND duplicate `mousemove` + `mouseup` to
+// `document` per modal. With 5 modals × N init calls, document gets N×5 mousemove
+// listeners firing on every cursor move. WeakSet keys auto-GC when DOM nodes are
+// removed, zero memory bookkeeping.
+const _modalDragAttached: WeakSet<Element> = new WeakSet()
+
 export function _initModalDrag(): void {
   document.querySelectorAll('.mover').forEach(function (ov: any) {
     const modal = ov.querySelector('.modal'); const hdr = ov.querySelector('.mhdr')
-    if (!modal || !hdr) return; hdr.style.cursor = 'grab'
+    if (!modal || !hdr) return
+    // [PERF-4] Skip if drag handlers already attached to this header
+    if (_modalDragAttached.has(hdr)) return
+    _modalDragAttached.add(hdr)
+    hdr.style.cursor = 'grab'
     let ox = 0, oy = 0, mx = 0, my = 0, dragging = false
     function onDown(e: any) { if (e.target.closest('.mclose')) return; dragging = true; const r = modal.getBoundingClientRect(); ox = r.left; oy = r.top; mx = e.clientX; my = e.clientY; modal.style.position = 'fixed'; modal.style.left = ox + 'px'; modal.style.top = oy + 'px'; modal.style.margin = '0'; hdr.style.cursor = 'grabbing'; e.preventDefault() }
     function onMove(e: any) { if (!dragging) return; let nx = ox + (e.clientX - mx), ny = oy + (e.clientY - my); const mw = modal.offsetWidth, mh = modal.offsetHeight; const vw = window.innerWidth, vh = window.innerHeight; nx = Math.max(0, Math.min(nx, vw - mw)); ny = Math.max(0, Math.min(ny, vh - mh)); modal.style.left = nx + 'px'; modal.style.top = ny + 'px'; modal.style.transform = 'none' }
