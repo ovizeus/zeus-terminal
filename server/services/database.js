@@ -1211,6 +1211,38 @@ function _runRestartCountCheck() {
 setTimeout(_runRestartCountCheck, 120000);   // 2min post-boot
 setInterval(_runRestartCountCheck, 3600000); // hourly day-tracked
 
+// ─── [SEC-22] Trading anomaly detector ──────────────────────────────
+// Sudden volume spikes (100 trades/min) = compromised account or runaway
+// bug. audit_log already captures ORDER_PLACED + ORDER_FILLED via
+// audit.record() at routes/trading.js:315. Cron checks last 5min window
+// per user; if any user exceeds threshold, Telegram alert. Cooldown
+// _seen Set prevents flood (single alert per user per 30min window).
+const ANOMALY_THRESHOLD = 30;          // trades/5min/user
+const ANOMALY_COOLDOWN_MS = 30 * 60 * 1000; // 30min between repeat alerts per user
+const _anomalyAlertedAt = new Map();   // userId → ms timestamp last alert
+function _runAnomalyDetector() {
+    try {
+        const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        const rows = db.prepare(
+            "SELECT user_id, COUNT(*) AS n FROM audit_log WHERE created_at >= ? AND action IN ('ORDER_PLACED','ORDER_FILLED') GROUP BY user_id HAVING n >= ?"
+        ).all(cutoff, ANOMALY_THRESHOLD);
+        if (rows.length === 0) return;
+        const now = Date.now();
+        for (const r of rows) {
+            const last = _anomalyAlertedAt.get(r.user_id) || 0;
+            if (now - last < ANOMALY_COOLDOWN_MS) continue;
+            _anomalyAlertedAt.set(r.user_id, now);
+            const msg = `⚠️ Trading anomaly uid=${r.user_id}: ${r.n} ORDER events în 5min (threshold ${ANOMALY_THRESHOLD}). Possible runaway bug or account compromise.`;
+            console.warn('[DB] ' + msg);
+            try { require('./telegram').send(msg); } catch (_) { }
+        }
+    } catch (err) {
+        console.error('[DB] Anomaly detector failed:', err.message);
+    }
+}
+setTimeout(_runAnomalyDetector, 150000);    // 2.5min post-boot
+setInterval(_runAnomalyDetector, 5 * 60 * 1000); // every 5min
+
 process.on('exit', closeDb);
 
 // ─── [Phase 2 S3] Brain Parity Harness Helpers ───

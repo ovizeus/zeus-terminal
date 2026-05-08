@@ -26,6 +26,11 @@ const ALLOWED_SECTIONS = new Set([
     'teacherData', 'ariaNovaHud',
     // ARES
     'aresData',
+    // [SEC-29] chart toggle persistence (Pack D, sessions/vwap/heatmap/zsSettings/overlays).
+    // Was emitted by client core/config.ts:559-565 _buildAllSections but missing from
+    // whitelist → 7,175 silent rejections during S6-B7 soak. FS-only persistence
+    // (small <1KB toggle state); NOT added to SQLITE_SECTIONS below.
+    'chartExtras',
 ]);
 
 // [BE-02] Per-user write lock — prevents concurrent POST from overwriting each other
