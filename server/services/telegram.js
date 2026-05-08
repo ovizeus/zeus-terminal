@@ -60,14 +60,52 @@ function _sendDirect(token, chatId, text, parseMode) {
     });
 }
 
-// Send with 1 retry; if Markdown parse fails, retry as plain text
+// [CFG-8] Telegram global rate limit = 30 msg/sec per bot. Multiple users
+// firing alerts at the same tick (anomaly detector + restart count + risk
+// block + kill switch + daily loss + PnL phase change) could collide. No
+// queue/batch previously → silent rate-limit drops at API edge. Token-bucket
+// pattern: serialize sends through FIFO queue cu MIN_INTERVAL_MS spacing.
+// 35ms = ~28 msgs/sec, safely under 30/sec ceiling. Queue is in-memory
+// (acceptable: alert burst is bounded, restart resets bucket).
+const _sendQueue = [];
+let _queueWorking = false;
+const _MIN_SEND_INTERVAL_MS = 35;
+function _enqueueSend(token, chatId, text, parseMode) {
+    return new Promise(resolve => {
+        _sendQueue.push({ token, chatId, text, parseMode, resolve });
+        _processSendQueue();
+    });
+}
+async function _processSendQueue() {
+    if (_queueWorking) return;
+    _queueWorking = true;
+    try {
+        while (_sendQueue.length > 0) {
+            const item = _sendQueue.shift();
+            try {
+                const result = await _sendDirect(item.token, item.chatId, item.text, item.parseMode);
+                item.resolve(result);
+            } catch (e) {
+                item.resolve(false);
+            }
+            if (_sendQueue.length > 0) {
+                await new Promise(r => setTimeout(r, _MIN_SEND_INTERVAL_MS));
+            }
+        }
+    } finally {
+        _queueWorking = false;
+    }
+}
+
+// Send with 1 retry; if Markdown parse fails, retry as plain text.
+// [CFG-8] All sends go through _enqueueSend (rate-limit serialized).
 async function _sendWithRetry(token, chatId, text, parseMode) {
     const pm = parseMode || 'Markdown';
-    const ok = await _sendDirect(token, chatId, text, pm);
+    const ok = await _enqueueSend(token, chatId, text, pm);
     if (ok) return true;
     // Fallback: retry as plain text (handles Markdown parse errors)
     await new Promise(r => setTimeout(r, 2000));
-    return _sendDirect(token, chatId, text, null);
+    return _enqueueSend(token, chatId, text, null);
 }
 
 // ── Send to global config (backward compat / fallback) ──
