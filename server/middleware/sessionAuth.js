@@ -75,7 +75,10 @@ function createSessionAuth(jwtSecret) {
             '/download/',
             // [ZT-AUD-#15] Allow unauthenticated client error reports (so a
             // crash on the login page itself can still be logged).
-            '/api/client-error'
+            '/api/client-error',
+            // [OPS-6] Prometheus scrape endpoint — IP-allowlisted at handler
+            // level (PROMETHEUS_ALLOW_IPS env, default localhost only).
+            '/metrics'
         ];
 
         const isPublic = publicPaths.some(p => req.path.startsWith(p));

@@ -152,6 +152,68 @@ app.use('/auth', authRoutes);
 app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
 
 // ─── App Version endpoint ───
+// ─── [OPS-6] Prometheus /metrics endpoint ───────────────────────────
+// Text exposition format (Prometheus 0.0.4). No npm dep — formats the
+// existing metrics service output into Prom-compatible labels. Localhost-
+// only (req.ip === '127.0.0.1' OR loopback) — Prometheus scraper runs
+// on same VPS în current setup; remote scraping requires explicit IP
+// allowlist via PROMETHEUS_ALLOW_IPS env (comma-separated). Existing
+// JSON metrics at /api/health/full remain unchanged for human dashboards.
+const _PROM_ALLOW_IPS = (process.env.PROMETHEUS_ALLOW_IPS || '127.0.0.1,::1,::ffff:127.0.0.1')
+    .split(',').map(s => s.trim()).filter(Boolean);
+function _promEscape(s) {
+    return String(s).replace(/[\\\n"]/g, c => c === '\n' ? '\\n' : '\\' + c);
+}
+app.get('/metrics', (req, res) => {
+    const ip = (req.ip || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
+    if (!_PROM_ALLOW_IPS.includes(req.ip) && !_PROM_ALLOW_IPS.includes(ip)) {
+        return res.status(403).type('text/plain').send('# Forbidden — IP not în PROMETHEUS_ALLOW_IPS\n');
+    }
+    try {
+        const m = metrics.getMetrics();
+        const memMB = parseInt(String(m.memory.rss).replace(/[^\d]/g, ''), 10) || 0;
+        const heapMB = parseInt(String(m.memory.heapUsed).replace(/[^\d]/g, ''), 10) || 0;
+        const latencyLast = parseInt(String(m.latency.binanceLast).replace(/[^\d]/g, ''), 10) || 0;
+        const latencyAvg = parseInt(String(m.latency.binanceAvg).replace(/[^\d]/g, ''), 10) || 0;
+        const lines = [
+            '# HELP zeus_uptime_seconds Process uptime in seconds',
+            '# TYPE zeus_uptime_seconds gauge',
+            'zeus_uptime_seconds ' + (m.uptime || 0),
+            '# HELP zeus_memory_rss_mb Process RSS memory in MB',
+            '# TYPE zeus_memory_rss_mb gauge',
+            'zeus_memory_rss_mb ' + memMB,
+            '# HELP zeus_memory_heap_used_mb Process heap used in MB',
+            '# TYPE zeus_memory_heap_used_mb gauge',
+            'zeus_memory_heap_used_mb ' + heapMB,
+            '# HELP zeus_orders_total Total orders by status',
+            '# TYPE zeus_orders_total counter',
+            'zeus_orders_total{status="placed"} ' + (m.orders.placed || 0),
+            'zeus_orders_total{status="filled"} ' + (m.orders.filled || 0),
+            'zeus_orders_total{status="failed"} ' + (m.orders.failed || 0),
+            'zeus_orders_total{status="blocked"} ' + (m.orders.blocked || 0),
+            '# HELP zeus_binance_latency_ms Binance API latency în ms',
+            '# TYPE zeus_binance_latency_ms gauge',
+            'zeus_binance_latency_ms{kind="last"} ' + latencyLast,
+            'zeus_binance_latency_ms{kind="avg"} ' + latencyAvg,
+            '# HELP zeus_errors_total Total recorded server errors',
+            '# TYPE zeus_errors_total counter',
+            'zeus_errors_total ' + (m.errors.total || 0),
+            '# HELP zeus_reconciliation_runs_total Position reconciliation runs',
+            '# TYPE zeus_reconciliation_runs_total counter',
+            'zeus_reconciliation_runs_total ' + (m.reconciliation.runs || 0),
+            '# HELP zeus_reconciliation_mismatches_total Position reconciliation mismatches detected',
+            '# TYPE zeus_reconciliation_mismatches_total counter',
+            'zeus_reconciliation_mismatches_total ' + (m.reconciliation.mismatches || 0),
+            '# HELP zeus_ws_clients Connected WebSocket clients (current)',
+            '# TYPE zeus_ws_clients gauge',
+            'zeus_ws_clients ' + (typeof wss !== 'undefined' && wss && wss.clients ? wss.clients.size : 0),
+        ];
+        res.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n');
+    } catch (err) {
+        res.status(500).type('text/plain').send('# error: ' + _promEscape(err.message) + '\n');
+    }
+});
+
 const appVersion = require('./server/version');
 app.get('/api/version', (_req, res) => {
   // [SEC-13] Strip verbose `changelog` from response — recon hardening.
