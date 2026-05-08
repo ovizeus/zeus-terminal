@@ -17,6 +17,13 @@ const db = new Database(DB_PATH);
 // WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// [DB-3] Cache size bump from default ~8MB (negative = pages, default -2000)
+// to ~32MB. Zeus DB ~103MB cu hot tables at_closed/at_positions/regime_history
+// (40K+ rows each post-S6-B7). Default cache misses → repeated disk I/O cu
+// random-access latency. -32000 ≈ 32MB cache sized for current hot working
+// set + headroom. PRAGMA scoped per-connection; better-sqlite3 single-connection
+// model means this applies for all queries server-side.
+db.pragma('cache_size = -32000');
 
 // ─── Schema ───
 db.exec(`
@@ -522,6 +529,18 @@ migrate('027_brain_parity_log', () => {
 // by user. Safe to ship even if migrate('027') already ran.
 migrate('028_at_closed_user_closed_at_idx', () => {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_at_closed_user_closed_at ON at_closed(user_id, closed_at DESC);`);
+});
+
+// [DB-1] Additive composite index for atLoadOpenPosByUser query performance.
+// `atLoadOpenPosByUser` does:
+//   SELECT seq, data FROM at_positions WHERE status = 'OPEN' AND user_id = ?
+// Existing indexes idx_at_pos_user (user_id) + idx_at_pos_status (status) are
+// SEPARATE single-column indexes. SQLite can use one but must filter the other
+// at row level → SEARCH user_id then filter status='OPEN' = O(N) scan per load.
+// Composite (user_id, status) lets SQLite satisfy WHERE clause directly from
+// index without row-level filtering. Same purely-additive pattern as DB-5 (028).
+migrate('029_at_pos_user_status_idx', () => {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_at_pos_user_status ON at_positions(user_id, status);`);
 });
 
 // ─── User methods ───

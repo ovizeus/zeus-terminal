@@ -1774,13 +1774,18 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     }
     us.stats.exits++;
     us.stats.pnl = +(us.stats.pnl + pnl).toFixed(2);
+    // [TM-1] Zero-PnL break-even trade was previously counted as loss via
+    // catch-all `else`. Compare line 1684-1685 (liveStats) which already used
+    // `else if (pnl < 0)` correctly. Now `stats` and `demoStats` mirror that
+    // semantic — break-even (pnl===0) is NEITHER win NOR loss. Existing
+    // exits counter still increments so total trade count is preserved.
     if (pnl > 0) us.stats.wins++;
-    else us.stats.losses++;
+    else if (pnl < 0) us.stats.losses++;
     if (pos.mode !== 'live') {
         us.demoStats.exits++;
         us.demoStats.pnl = +(us.demoStats.pnl + pnl).toFixed(2);
         if (pnl > 0) us.demoStats.wins++;
-        else us.demoStats.losses++;
+        else if (pnl < 0) us.demoStats.losses++;
     }
 
     // ── Demo: refund margin + apply PnL ──

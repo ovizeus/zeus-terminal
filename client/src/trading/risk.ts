@@ -290,10 +290,23 @@ export function recalcAdaptive(isStartup?: any): void {
         newBuckets[key] = { trades: 0, wins: 0, totalR: 0, avgR: 0, winrate: 0, mult: 1.0 }
       }
       var b = newBuckets[key]
-      b.trades++
 
       var slValue = (t.size || 200) * (slPct / 100)
-      var R = slValue > 0 ? t.pnl / slValue : 0
+      // [TM-6] Skip trades cu slValue=0 entirely instead of silent fallback to
+      // R=0. Previous behavior penalized tighter-SL trades (those with slPct≈0
+      // OR size 0 edge) by counting them with R=0 — diluting bucket avgR și
+      // mult calc downward. Tighter-SL trades that exited break-even or near-be
+      // shouldn't drag the bucket score; they should be excluded from R series.
+      // Trade still increments b.trades (kept counted toward MIN_TRADES gate)
+      // but R is left out of the avgR aggregation when slValue is invalid.
+      if (slValue <= 0) {
+        b.trades++
+        // Skip totalR contribution entirely; b.wins still counts if pnl >= 0
+        if (t.pnl >= 0) b.wins++
+        return
+      }
+      b.trades++
+      var R = t.pnl / slValue
       if (t.pnl >= 0) b.wins++
       b.totalR += R
     })
