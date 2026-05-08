@@ -232,6 +232,30 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       }
     }
 
+    // [SAFE-2] Force CROSSED margin type before leverage/order — Zeus AT risk
+    // math assumes CROSS pooling. Same rationale as serverAT.js
+    // _executeLiveEntry SAFE-2 patch (now both CLIENT_AT path
+    // /api/order/place + future SERVER_AT path are covered). Skip on
+    // close/reduceOnly orders (no new exposure). Idempotent: Binance
+    // returns numeric err.code -4046 if already CROSSED — treat as success
+    // and proceed silently. Real failure blocks order before placement,
+    // mirrors existing leverage failure style: console.error + _idemKey
+    // cleanup + 500 response with _safeError. Detection of -4046 uses
+    // err.code numeric (propagated by binanceSigner.js:211 from
+    // Binance data.code), not message-substring.
+    if (_isOpening) {
+      try {
+        await sendSignedRequest('POST', '/fapi/v1/marginType', { symbol, marginType: 'CROSSED' }, req.exchangeCreds);
+      } catch (mtErr) {
+        if (!(mtErr && mtErr.code === -4046)) {
+          console.error('[API] marginType set failed:', mtErr.message);
+          if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
+          return res.status(500).json({ error: 'Failed to set margin type: ' + _safeError(mtErr) });
+        }
+        // -4046 idempotent — already CROSSED, proceed silently (no log noise)
+      }
+    }
+
     // Set leverage first if provided
     if (leverage) {
       try {
