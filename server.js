@@ -1256,6 +1256,32 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
+  // [SEC-20] Origin allowlist on WS upgrade — defense-in-depth vs cross-site
+  // WebSocket hijacking. SameSite=lax cookie already prevents browser cross-
+  // origin cookie attach (primary defense), but absent Origin or unknown
+  // Origin in upgrade request indicates non-browser or rogue context — reject.
+  // Mirrors HTTP Origin guard at line ~107 (sendBeacon paths). Tolerate
+  // missing Origin only for non-browser clients în dev sau test (no cookies
+  // anyway). Production: strict allowlist match.
+  try {
+    const origin = req.headers['origin'] || '';
+    const host = req.headers['host'] || '';
+    const allowed = config.allowedOrigins || ['https://' + host];
+    const okOrigin = origin && (
+      allowed.some(a => origin === a) ||
+      origin === 'https://' + host ||
+      origin === 'http://' + host
+    );
+    if (!okOrigin) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+  } catch (_) {
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
+    socket.destroy();
+    return;
+  }
   wss.handleUpgrade(req, socket, head, (ws) => {
     wss.emit('connection', ws, req);
   });
@@ -1300,6 +1326,13 @@ wss.on('connection', (ws, req) => {
   }
   userSet.add(ws);
   logger.info('WS', 'Client connected uid=' + uid + ' total=' + userSet.size);
+
+  // [SEC-19] Pin token_version + uid on socket for heartbeat re-verify.
+  // Force-logout (DB token_version bump pe password change/banned/disabled)
+  // doesn't kick active WS connections until next reconnect — heartbeat now
+  // re-checks every 30s. If DB version > pinned version, kick socket.
+  ws._uid = uid;
+  ws._tokenVersion = user.tokenVersion ?? 0;
 
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
@@ -1346,10 +1379,24 @@ wss.on('connection', (ws, req) => {
   } catch (_) { /* never block WS accept */ }
 });
 
-// Heartbeat — drop dead connections every 30s
+// Heartbeat — drop dead connections every 30s + [SEC-19] re-verify token_version
 const _wsPing = setInterval(() => {
   wss.clients.forEach(ws => {
     if (!ws.isAlive) return ws.terminate();
+    // [SEC-19] Re-verify token_version against DB. Kick on mismatch (force-
+    // logout via password change / banned / disabled) sau on user gone.
+    // Cheap: 1 indexed DB read per active WS per 30s. Failure-safe: if DB
+    // read throws, leave socket alone (don't kick on transient DB error).
+    try {
+      if (ws._uid != null) {
+        const fresh = db.findUserById(ws._uid);
+        if (!fresh || fresh.status !== 'active' ||
+            (ws._tokenVersion ?? 0) !== (fresh.token_version ?? 0)) {
+          try { ws.close(4001, 'session expired'); } catch (_) { }
+          return;
+        }
+      }
+    } catch (_) { /* never kick on DB hiccup */ }
     ws.isAlive = false;
     ws.ping();
   });

@@ -17,6 +17,16 @@ const db = new Database(DB_PATH);
 // WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+// [DB-10] WAL auto-checkpoint tuning. Default = 1000 pages (~4MB at 4KB
+// pages) → checkpoint fires frequently under high-write workload, causing
+// fsync stalls. Bump to 10000 pages (~40MB) so brain decisions / parity
+// log / regime_history (40K+ rows each post-S6-B7) batch into one
+// checkpoint instead of N. Tradeoff: WAL file slightly larger between
+// checkpoints; recovery on crash reads more WAL pages — acceptable cost
+// for write throughput. Pre-Plan v3 ML escalation: `_ML_BRAIN` observation
+// overhead would multiply write rate ~10x; this PRAGMA preempts the
+// degradation surface area.
+db.pragma('wal_autocheckpoint = 10000');
 // [DB-3] Cache size bump from default ~8MB (negative = pages, default -2000)
 // to ~32MB. Zeus DB ~103MB cu hot tables at_closed/at_positions/regime_history
 // (40K+ rows each post-S6-B7). Default cache misses → repeated disk I/O cu
