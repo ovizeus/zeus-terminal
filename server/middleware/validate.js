@@ -99,14 +99,18 @@ function validateLeverageBody(req, res, next) {
   next();
 }
 
-// [MIGRATION-F1 commit 4] Settings body validator — LOG-ONLY (soft mode).
+// [SEC-27 — flipped to STRICT 2026-05-08] Settings body validator. Was
+// LOG-ONLY soft mode pre-flip; soft-mode logs in PM2 over weeks of
+// production traffic showed ZERO `[validate][settings] log-only` entries
+// (grep confirmed clean). Contract stable → flip to strict reject. Now:
+// (1) unknown keys → 400 + JSON error listing offenders; (2) bad types →
+// 400 + JSON error listing mismatches; (3) all whitelisted shape mismatches
+// reject. Compatibility guard: `null` value for any whitelisted key still
+// accepted (downstream null-safety is already established).
+//
 // Mirrors the client-side SettingsPayload contract (see
 // client/src/types/settings-contracts.ts) and the whitelist in
-// routes/trading.js. Any shape/type mismatch is logged with a
-// "[validate][settings]" prefix; the request is ALWAYS forwarded to the
-// handler via next(). This commit intentionally does NOT introduce new
-// 400 responses — tightening to strict reject is planned for a later
-// phase after soft-mode logs confirm the contract matches real traffic.
+// routes/trading.js.
 const SETTINGS_SHAPE = {
   // numbers
   confMin: 'number', sigMin: 'number', size: 'number', riskPct: 'number',
@@ -135,12 +139,16 @@ function validateSettingsBody(req, res, next) {
   try {
     const raw = req.body && req.body.settings;
     if (raw === undefined || raw === null) {
-      console.warn('[validate][settings] log-only: missing settings object');
+      // Allow missing settings (some endpoints may legitimately POST without
+      // settings — handler decides). Don't reject empty body here.
       return next();
     }
     if (typeof raw !== 'object' || Array.isArray(raw)) {
-      console.warn('[validate][settings] log-only: settings is not a plain object, got', Array.isArray(raw) ? 'array' : typeof raw);
-      return next();
+      return res.status(400).json({
+        ok: false,
+        error: 'Invalid settings shape',
+        detail: 'expected plain object, got ' + (Array.isArray(raw) ? 'array' : typeof raw),
+      });
     }
     const unknownKeys = [];
     const badTypes = [];
@@ -152,14 +160,19 @@ function validateSettingsBody(req, res, next) {
       const actual = Array.isArray(value) ? 'array' : typeof value;
       if (actual !== expected) badTypes.push({ key, expected, actual });
     }
-    if (unknownKeys.length > 0) {
-      console.warn('[validate][settings] log-only: unknown keys (server will whitelist-strip):', unknownKeys.join(','));
-    }
-    if (badTypes.length > 0) {
-      console.warn('[validate][settings] log-only: type mismatches:', JSON.stringify(badTypes));
+    if (unknownKeys.length > 0 || badTypes.length > 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Invalid settings payload',
+        unknownKeys: unknownKeys.length > 0 ? unknownKeys : undefined,
+        badTypes: badTypes.length > 0 ? badTypes : undefined,
+      });
     }
   } catch (err) {
-    console.warn('[validate][settings] log-only: middleware error, passing through:', err && err.message);
+    // Middleware-level error: log + soft-pass to avoid breaking handler on
+    // unexpected internal failure (defense in depth — strict on data
+    // contract, lenient on validator-internal exceptions).
+    console.warn('[validate][settings] middleware error, soft-passing:', err && err.message);
   }
   return next();
 }

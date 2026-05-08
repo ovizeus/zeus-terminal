@@ -8,6 +8,18 @@ const path = require('path');
 
 const OVERRIDES_FILE = path.join(__dirname, '..', 'data', 'config_overrides.json');
 
+// [SEC-24] Fail-fast if NODE_ENV missing on production-like host. Defensive
+// fallback `'development'` previously masked silent prod-as-dev boots
+// (stack traces exposed, permissive validation, NODE_ENV-gated production
+// code paths skipped). Heuristic: __dirname starts with `/root/` (Zeus VPS
+// canonical path) → require explicit NODE_ENV. Local dev (other paths)
+// keeps soft default.
+if (!process.env.NODE_ENV && __dirname.startsWith('/root/')) {
+  console.error('[CONFIG] FATAL: NODE_ENV missing on production-like host (' + __dirname + '). Set NODE_ENV=production în .env or ecosystem.config.js.');
+  process.exit(1);
+}
+console.log('[CONFIG] Boot environment: NODE_ENV=' + (process.env.NODE_ENV || 'development') + ' (path=' + __dirname + ')');
+
 const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET,
