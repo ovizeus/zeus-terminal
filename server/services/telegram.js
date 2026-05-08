@@ -71,10 +71,24 @@ async function _sendWithRetry(token, chatId, text, parseMode) {
 }
 
 // ── Send to global config (backward compat / fallback) ──
-function send(text, parseMode) {
+// [OPS-9] On Telegram failure, fall back to email to admin users via shared
+// mailer service. Best-effort — fallback runs in background, never blocks
+// the original return. Bug spec: "Telegram-only single-channel alerts —
+// silent failures if Telegram broken". Email fallback closes that gap for
+// global-broadcast critical alerts.
+async function send(text, parseMode) {
     const token = config.telegram && config.telegram.botToken;
     const chatId = config.telegram && config.telegram.chatId;
-    return _sendWithRetry(token, chatId, text, parseMode);
+    const ok = await _sendWithRetry(token, chatId, text, parseMode);
+    if (!ok) {
+        // Background email fallback — non-blocking
+        try {
+            const mailer = require('./mailer');
+            const subj = (text || '').split('\n')[0].slice(0, 80) || 'critical alert';
+            mailer.sendCriticalEmail(subj, text).catch(() => { });
+        } catch (_) { /* mailer optional */ }
+    }
+    return ok;
 }
 
 // ── Send to a specific user (from DB, encrypted) ──
