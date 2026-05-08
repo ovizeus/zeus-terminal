@@ -610,15 +610,39 @@ router.get('/user/ares', (req, res) => {
   }
 });
 
+// [SEC-7] Strip prototype-pollution-prone keys from user-controlled payload
+// before merge. Express body parser keeps `__proto__`/`constructor`/`prototype`
+// as regular own properties post-JSON.parse — they don't auto-trigger
+// pollution via spread, BUT persist via JSON.stringify and can manifest
+// downstream when ARES state is read back și iterated. /api/user/settings
+// (line 560) already has SETTINGS_WHITELIST defense; ARES has dynamic-keys
+// schema cu no whitelist, so apply explicit strip helper la boundary.
+// Top-level shallow strip is sufficient because spread is shallow — pollution
+// at nested __proto__ doesn't auto-pollute Object.prototype unless code does
+// `obj[someKey] = value` cu `someKey === '__proto__'`, which spread doesn't.
+function _stripDangerousKeys(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out = {};
+  for (const k of Object.keys(obj)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    out[k] = obj[k];
+  }
+  return out;
+}
+
 // ─── POST /api/user/ares ─── Save per-user ARES state (UPSERT) ───
 router.post('/user/ares', (req, res) => {
   try {
     const db = require('../services/database');
     const raw = req.body.ares;
     if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing ares object' });
-    // Merge with existing
-    const existing = db.getAresState(req.user.id) || {};
-    const merged = { ...existing, ...raw };
+    // [SEC-7] Strip dangerous keys before merge so prototype-pollution
+    // attempts în request body don't persist into DB ARES state.
+    const cleanRaw = _stripDangerousKeys(raw);
+    // Merge with existing (also clean existing pe read în case prior writes
+    // pre-patch persisted polluted state — defense-in-depth cleanup over time).
+    const existing = _stripDangerousKeys(db.getAresState(req.user.id) || {});
+    const merged = { ...existing, ...cleanRaw };
     db.saveAresState(req.user.id, merged);
     res.json({ ok: true });
   } catch (e) {
