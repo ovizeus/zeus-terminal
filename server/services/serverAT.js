@@ -2068,10 +2068,18 @@ function setKillPct(userId, pct) {
 function setLiveBalanceRef(userId, balance) {
     const us = _uState(userId);
     const bal = parseFloat(balance);
-    if (Number.isFinite(bal) && bal > 0) {
-        us.liveBalanceRef = bal;
-        _persistState(userId);
+    // [SRV-1] Surface invalid balance instead of silent ok:true on no-op.
+    // Previously rejected balances (NaN, <=0) returned `{ ok: true,
+    // liveBalanceRef: <unchanged> }` — caller couldn't tell if the value
+    // was applied or rejected. Now: failure path logs warn + returns
+    // `{ ok: false, error, input, parsed }` cu the unchanged ref so caller
+    // has actionable diagnostic. Successful path unchanged.
+    if (!Number.isFinite(bal) || bal <= 0) {
+        logger.warn('AT_BALANCE', `setLiveBalanceRef rejected uid=${userId}: invalid balance "${balance}" (parsed=${bal})`);
+        return { ok: false, error: 'INVALID_BALANCE', input: balance, parsed: bal, liveBalanceRef: us.liveBalanceRef };
     }
+    us.liveBalanceRef = bal;
+    _persistState(userId);
     return { ok: true, liveBalanceRef: us.liveBalanceRef };
 }
 

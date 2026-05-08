@@ -1003,6 +1003,24 @@ function atGetState(key) {
 }
 
 function atSetState(key, value, userId) {
+    // [SRV-8] Defensive cross-user scoping check — keys often follow
+    // format 'category:userId' (e.g. 'serverAT:closeCooldowns:1') sau
+    // 'engine:<userId>'. If key contains a userId-shaped segment that
+    // doesn't match the userId arg, that's likely a caller bug (wrong
+    // scope = cross-user overwrite). Log warn so the discrepancy
+    // surfaces în development testing instead of silently corrupting
+    // another user's at_state row. Uses console.warn instead of logger
+    // to avoid circular import (database.js is core dep). Match regex:
+    // `:NUMBER` followed by either end-of-string or another `:` —
+    // covers 'a:b:1' (id=1), 'engine:5' (id=5), 'cooldown:1:BTCUSDT'
+    // (id=1 in middle). False positives possible if a non-id numeric
+    // segment matches; warn only, don't block.
+    try {
+        const _m = String(key || '').match(/:(\d+)(?:$|:)/);
+        if (_m && userId != null && String(userId) !== _m[1]) {
+            console.warn('[AT_DB] atSetState scoping mismatch — key=' + key + ' embeds uid=' + _m[1] + ' but called cu userId=' + userId + '. Possible cross-user overwrite.');
+        }
+    } catch (_) { /* never block write on diagnostic failure */ }
     _stmts.atSetState.run(key, JSON.stringify(value), userId != null ? userId : null);
 }
 

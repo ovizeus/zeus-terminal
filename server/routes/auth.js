@@ -49,6 +49,15 @@ const PIN_LOCKOUT_LEVELS = [15 * 60 * 1000, 60 * 60 * 1000, 4 * 60 * 60 * 1000, 
 // ─── Login Rate Limit (per-email) — [SEC-1] SQLite-backed ───
 const LOGIN_EMAIL_MAX = 5;
 
+// [AUTH-1] 2FA email-send rate limiter — prevents email bombing via repeated
+// /login submits cu correct password (each one would otherwise queue another
+// 2FA email). Tracks send count per email în a rolling window. SEPARATE from
+// the SEC-1 SQLite per-email login attempts (which counts FAILED logins);
+// this counts SUCCESSFUL pendingCodes.set + _sendCode dispatches.
+const _2faSendTracker = new Map(); // email → { count, windowStart }
+const _2FA_WINDOW_MS = 10 * 60 * 1000; // 10 minutes rolling window
+const _2FA_MAX_SENDS = 3; // max 3 codes per email per 10 minutes
+
 // Periodic cleanup of expired codes and stale rate-limit entries (every 5 min)
 setInterval(() => {
     const now = Date.now();
@@ -57,6 +66,8 @@ setInterval(() => {
     for (const [k, v] of pinAttempts) { if (now > v.resetAt) pinAttempts.delete(k); }
     // [SEC-1] Prune expired login-attempt rows from SQLite
     try { db.loginAttemptPruneExpired(now); } catch (_) { }
+    // [AUTH-1] Prune expired 2FA send-tracker entries
+    for (const [k, v] of _2faSendTracker) { if (now - v.windowStart > _2FA_WINDOW_MS) _2faSendTracker.delete(k); }
 }, 5 * 60 * 1000);
 
 // ─── Email Transporter ───
@@ -307,6 +318,29 @@ router.post('/login', async (req, res) => {
         // Check approval
         if (!user.approved) {
             return res.status(403).json({ error: 'Contul tău nu a fost încă aprobat de administrator.' });
+        }
+
+        // [AUTH-1] 2FA email-bombing rate limit — gate before pendingCodes.set
+        // + _sendCode dispatch. Without this, attacker (or buggy client cu
+        // automatic retry) flooding /login cu correct credentials triggers
+        // unlimited 2FA emails, abusing SMTP and degrading mailbox UX.
+        // Window: 10 min, max 3 sends per email. Returns 429 when exceeded.
+        // Uses in-memory Map (not SQLite) — restart resets bucket which is
+        // acceptable risk; rate-limit is a soft defense, not auth gate.
+        {
+            const _now = Date.now();
+            const _track = _2faSendTracker.get(normalEmail) || { count: 0, windowStart: _now };
+            if (_now - _track.windowStart > _2FA_WINDOW_MS) {
+                // Window expired — reset counter
+                _track.count = 0;
+                _track.windowStart = _now;
+            }
+            if (_track.count >= _2FA_MAX_SENDS) {
+                logger.warn('AUTH', `2FA send rate limit hit uid=${user.id} email=${_mask(normalEmail)} ip=${req.ip} count=${_track.count}/${_2FA_MAX_SENDS}`);
+                return res.status(429).json({ error: 'Prea multe coduri 2FA trimise — încearcă din nou în câteva minute.' });
+            }
+            _track.count++;
+            _2faSendTracker.set(normalEmail, _track);
         }
 
         // Generate and send 2FA code
