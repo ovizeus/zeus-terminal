@@ -343,14 +343,23 @@ router.post('/login', async (req, res) => {
             _2faSendTracker.set(normalEmail, _track);
         }
 
-        // Generate and send 2FA code
-        const code = _generateCode();
+        // Generate and send 2FA code.
+        // [AUTH-4] On /login retry within active window, REUSE existing
+        // pending code instead of overwriting. Previously: new code orphaned
+        // the first one — user mistypes-then-retries got mismatched codes.
+        // Now: same code re-emailed (identical to first send), attempts
+        // counter preserved, expiry preserved. Fresh code only when no
+        // pending entry exists or previous expired.
+        const _now = Date.now();
+        const _existing = pendingCodes.get(normalEmail);
+        const _hasValidPending = _existing && _existing.expiresAt > _now;
+        const code = _hasValidPending ? _existing.code : _generateCode();
         pendingCodes.set(normalEmail, {
             code,
             role: user.role || 'user',
             userId: user.id,
-            attempts: 0,
-            expiresAt: Date.now() + CODE_TTL
+            attempts: _hasValidPending ? _existing.attempts : 0,
+            expiresAt: _hasValidPending ? _existing.expiresAt : _now + CODE_TTL,
         });
 
         // [ZT-AUD-C3] 2FA is mandatory. If SMTP isn't available we never

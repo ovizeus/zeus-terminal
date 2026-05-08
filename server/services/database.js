@@ -1561,10 +1561,15 @@ module.exports = {
             INNER JOIN at_closed c ON p.seq = c.seq AND p.user_id = c.user_id
         `).all();
     },
-    // [S2] Max seq across positions + closed — prevents seq collision after reset
+    // [S2] Max seq across positions + closed — prevents seq collision after reset.
+    // [DB-9] Was UNION ALL on `seq` columns — SQLite materializes into temp result
+    // before MAX. Split into 2 separate queries that hit `idx_at_pos_user` and
+    // `idx_at_closed_user` indexes directly + Math.max în JS. Faster + scales
+    // linearly per-table instead of dual scan.
     getMaxSeq: (userId) => {
-        const r = db.prepare('SELECT MAX(seq) as m FROM (SELECT seq FROM at_positions WHERE user_id = ? UNION ALL SELECT seq FROM at_closed WHERE user_id = ?)').get(userId, userId);
-        return (r && r.m) || 0;
+        const r1 = db.prepare('SELECT MAX(seq) as m FROM at_positions WHERE user_id = ?').get(userId);
+        const r2 = db.prepare('SELECT MAX(seq) as m FROM at_closed WHERE user_id = ?').get(userId);
+        return Math.max((r1 && r1.m) || 0, (r2 && r2.m) || 0);
     },
     // Journal
     journalGetClosed: (userId, limit, offset) => _stmts.journalGetClosed.all(userId, limit, offset),
