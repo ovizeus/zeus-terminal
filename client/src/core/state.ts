@@ -983,8 +983,23 @@ export const ZState = (() => {
     delete _pendingServerCloses[seq]
   }
 
+  // [WS-2] Frame-level seq dedup. Server WS-1 helper attaches `seq` field
+  // (monotonic counter from _wsFrameSeq) on every getFullState payload. On
+  // reconnect: warm-start frame + first onChange frame may carry divergent
+  // snapshots if AT mutates în the millisecond gap between them. Tracking
+  // last-applied frame seq lets us skip stale frames last-write-wins style
+  // without trusting timestamps. Per-tab counter (resets on reload).
+  let _lastAppliedFrameSeq = 0
   function _applyServerATState(state: any) {
     if (!state) return
+    // [WS-2] dedup gate — skip if frame seq is not strictly newer than last
+    // applied (handles reconnect duplicate scenarios where warm-start +
+    // onChange race în the same RAF). Lenient: missing seq still applies
+    // (legacy server payloads pre-WS-1).
+    if (typeof state.seq === 'number' && state.seq > 0) {
+      if (state.seq <= _lastAppliedFrameSeq) return
+      _lastAppliedFrameSeq = state.seq
+    }
     const TP = w.TP
     const AT = getATObject()
     const Intervals = w.Intervals

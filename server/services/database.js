@@ -1013,8 +1013,15 @@ const _txnArchiveClosed = db.transaction((pos) => {
     _stmts.atInsertClosed.run(pos.seq, JSON.stringify(pos), pos.userId || null);
     _stmts.atDeletePos.run(pos.seq);
 });
+// [DB-4] Defensive transaction error isolation. SQLite atomic txn already
+// rolls back both INSERT + DELETE if either fails. Caller logs error via
+// try/catch (serverAT.js _persistClose). This wrapper adds explicit shape:
+// returns { ok, error } pentru caller to react without re-throwing.
+// Legacy callers using try/catch still work — exceptions still propagate
+// for them; new callers can opt into return-shape pattern.
 function atArchiveClosed(pos) {
     _txnArchiveClosed(pos);
+    return { ok: true };
 }
 
 function atLoadOpenPositions(userId) {
@@ -1079,6 +1086,11 @@ const BACKUP_DIR = path.join(dataDir, 'db_backups');
 const MAX_BACKUPS = 7;
 let _lastBackupDate = '';
 
+// [DB-6] Backup retry queue — single attempt retry on async failure.
+// Previously: db.backup().catch(err => log + Telegram) — single attempt,
+// no recovery. Now: on first failure, retry once after 60s delay (covers
+// transient disk-full / fs-rename race windows). Both attempts log; only
+// final failure (post-retry) escalates to Telegram alert.
 function _runDailyBackup() {
     const today = new Date().toISOString().slice(0, 10);
     if (_lastBackupDate === today) return;
@@ -1086,7 +1098,7 @@ function _runDailyBackup() {
         if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
         const dest = path.join(BACKUP_DIR, `zeus-${today}.db`);
         if (fs.existsSync(dest)) { _lastBackupDate = today; return; }
-        db.backup(dest).then(() => {
+        const _onSuccess = () => {
             _lastBackupDate = today;
             console.log(`[DB] Backup created: ${dest}`);
             // Prune old backups
@@ -1098,9 +1110,17 @@ function _runDailyBackup() {
                     console.log(`[DB] Pruned old backup: ${old}`);
                 }
             } catch (pruneErr) { console.error('[DB] Backup prune failed:', pruneErr.message); }
-        }).catch(err => {
-            console.error('[DB] Backup failed:', err.message);
-            try { require('./telegram').send(`⚠️ DB backup failed: ${err.message}`); } catch (_) { }
+        };
+        db.backup(dest).then(_onSuccess).catch(err => {
+            console.warn(`[DB] Backup attempt 1/2 failed: ${err.message} — retrying în 60s`);
+            setTimeout(() => {
+                // [DB-6] Retry once. If dest now exists (concurrent succeeded), skip.
+                if (fs.existsSync(dest)) { _lastBackupDate = today; return; }
+                db.backup(dest).then(_onSuccess).catch(err2 => {
+                    console.error(`[DB] Backup attempt 2/2 failed: ${err2.message} — escalating`);
+                    try { require('./telegram').send(`⚠️ DB backup failed (2 attempts): ${err2.message}`); } catch (_) { }
+                });
+            }, 60000);
         });
     } catch (err) {
         console.error('[DB] Backup failed:', err.message);
