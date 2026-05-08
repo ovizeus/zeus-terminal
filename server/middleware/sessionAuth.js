@@ -82,10 +82,16 @@ function createSessionAuth(jwtSecret) {
         if (isPublic) return next();
 
         // Allow internal server requests (reconciliation, etc.) from localhost — limited paths only
+        // [SEC-12-β] Restricted to GET method. Previous unrestricted bypass let any
+        // process with shell access on VPS POST to /api/migration/flags from
+        // localhost without JWT, flipping migration flags as a privilege-escalation
+        // path (paired with SEC-12-α tightening admin role check in server.js POST
+        // handler). GET-only bypass preserves operator deploy.ps1 health check
+        // (curl GET) and any internal monitoring poll, while closing the write path.
         const ip = req.ip || req.connection.remoteAddress || '';
         const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
         const localSafePaths = ['/api/status', '/api/metrics', '/api/health', '/api/migration/flags', '/api/dashboard', '/api/sd/health'];
-        if (isLocal && localSafePaths.some(p => req.path === p)) return next();
+        if (isLocal && req.method === 'GET' && localSafePaths.some(p => req.path === p)) return next();
 
         // Check JWT cookie
         const token = req.cookies && req.cookies.zeus_token;

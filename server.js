@@ -154,7 +154,14 @@ app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] 
 // ─── App Version endpoint ───
 const appVersion = require('./server/version');
 app.get('/api/version', (_req, res) => {
-  res.json(Object.assign({}, appVersion, { migration: MF.getAll() }));
+  // [SEC-13] Strip verbose `changelog` from response — recon hardening.
+  // Authenticated users get version + build + date + migration flag state
+  // only. Internal file paths / architecture / deferred-work labels in
+  // `version.changelog` stay in the file for git/operator reference,
+  // never leave the box (was 30+ KB JSON exposing implementation detail
+  // to any authed user).
+  const { changelog: _changelog, ...publicVersion } = appVersion;
+  res.json(Object.assign({}, publicVersion, { migration: MF.getAll() }));
 });
 
 // [ZT-AUD-#15 / C13] Client-side error report sink. Body: {kind, reason, ...}.
@@ -192,14 +199,20 @@ app.get('/api/migration/flags', (_req, res) => {
   res.json(MF.getAll());
 });
 app.post('/api/migration/flags', (_req, res) => {
-  const ip = _req.ip || _req.connection?.remoteAddress || '';
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-  const isAdmin = _req.user && _req.user.role === 'admin';
-  if (!isLocal && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+  // [SEC-12] Removed `isLocal` bypass — anyone with shell access on
+  // VPS could POST via localhost (sessionAuth localSafePaths bypass —
+  // see SEC-12-β patch in middleware/sessionAuth.js) without admin
+  // role, flipping arbitrary migration flags including SERVER_AT /
+  // SERVER_BRAIN. Privilege escalation latent pre-S10 LIVE flip.
+  // Now strict admin role check + audit_log entry on every change for
+  // forensic trail.
+  if (!_req.user || _req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const { key, value } = _req.body;
   try {
     const updated = MF.set(key, value);
-    logger.log('INFO', 'MIGRATION', `Flag ${key} = ${value}`, { flags: updated });
+    const userId = _req.user.id || null;
+    logger.log('INFO', 'MIGRATION', `Flag ${key} = ${value}`, { flags: updated, byUserId: userId });
+    try { db.auditLog(userId, 'MIGRATION_FLAG_CHANGE', { key, value, byUserId: userId, ip: _req.ip }, _req.ip); } catch (_) {}
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
