@@ -1150,6 +1150,20 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
   logger.info('SERVER', 'Zeus Terminal started on port ' + PORT);
   logger.info('MIGRATION', 'Feature flags: ' + JSON.stringify(MF.getAll()));
+  // [OPS-5] Persist boot event for restart-count monitoring. Daily cron
+  // în database.js counts SERVER_BOOT events în last 24h and alerts on
+  // anomaly. Best-effort — try/catch so DB write failure never blocks
+  // the boot completion logging.
+  try {
+    db.auditLog(null, 'SERVER_BOOT', {
+      pid: process.pid,
+      port: PORT,
+      nodeEnv: process.env.NODE_ENV,
+      flags: MF.getAll(),
+    }, '127.0.0.1');
+  } catch (err) {
+    console.error('[OPS-5] Failed to persist SERVER_BOOT audit:', err && err.message);
+  }
   telegram.alertServerStart();
   telegramBot.start();
   // Position reconciliation handled internally by serverAT._runReconciliation (60s + startup)

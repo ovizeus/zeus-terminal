@@ -1181,6 +1181,36 @@ function _runRestoreProbe() {
 setTimeout(_runRestoreProbe, 90000);    // 90s post-boot (after backup cron settled)
 setInterval(_runRestoreProbe, 3600000); // hourly check; day-tracked + DOW-gated
 
+// ─── [OPS-5] PM2 restart count alert cron ───────────────────────────
+// PM2 was at 167 restarts în 20 days at audit baseline = ~8/day. Pattern
+// of issues invisible without operator polling. Daily cron counts
+// SERVER_BOOT audit_log rows în last 24h; if exceeds threshold, alert
+// via Telegram. Boot event is persisted by server.js post-listen
+// (see [OPS-5] block at line ~1153).
+const RESTART_ALERT_THRESHOLD = 10; // restarts/day before alert
+let _lastRestartAlertDate = '';
+function _runRestartCountCheck() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (_lastRestartAlertDate === today) return;
+    try {
+        const cutoff = new Date(Date.now() - 86400000).toISOString();
+        const row = db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE action='SERVER_BOOT' AND created_at >= ?").get(cutoff);
+        const count = (row && row.n) || 0;
+        _lastRestartAlertDate = today;
+        if (count > RESTART_ALERT_THRESHOLD) {
+            const msg = `⚠️ Zeus restart count anomaly: ${count} SERVER_BOOT events în last 24h (threshold ${RESTART_ALERT_THRESHOLD})`;
+            console.warn('[DB] ' + msg);
+            try { require('./telegram').send(msg); } catch (_) { }
+        } else if (count > 0) {
+            console.log(`[DB] Restart count OK: ${count}/24h (threshold ${RESTART_ALERT_THRESHOLD})`);
+        }
+    } catch (err) {
+        console.error('[DB] Restart count check failed:', err.message);
+    }
+}
+setTimeout(_runRestartCountCheck, 120000);   // 2min post-boot
+setInterval(_runRestartCountCheck, 3600000); // hourly day-tracked
+
 process.on('exit', closeDb);
 
 // ─── [Phase 2 S3] Brain Parity Harness Helpers ───
