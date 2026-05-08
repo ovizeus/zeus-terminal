@@ -278,4 +278,57 @@ router.post('/verify', async (req, res) => {
     }
 });
 
+// ─── [OPS-1] Daily API key health check cron ────────────────────────
+// Stale/revoked keys were detected only on first trade failure → user
+// surprise pe entry attempt. Cron iterates `db.getAllExchanges(uid)` for
+// every user în `listUsers()`, calls _testKeys against the saved decrypted
+// secret, and logs/audits/alerts on failure. Daily cadence; day-tracked
+// via _lastApiHealthCheckDate so multiple boots/day don't re-run the
+// probe (cheap but still respects exchange API rate limits).
+let _lastApiHealthCheckDate = '';
+async function _runApiKeyHealthCheck() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (_lastApiHealthCheckDate === today) return;
+    _lastApiHealthCheckDate = today;
+    let okCount = 0, failCount = 0;
+    try {
+        const users = db.listUsers() || [];
+        for (const u of users) {
+            if (!u || !u.id) continue;
+            const accounts = db.getAllExchanges(u.id) || [];
+            for (const acc of accounts) {
+                try {
+                    const plainKey = decrypt(acc.api_key_encrypted);
+                    const plainSecret = decrypt(acc.api_secret_encrypted);
+                    if (!plainKey || !plainSecret) {
+                        failCount++;
+                        db.auditLog(u.id, 'EXCHANGE_KEY_HEALTH_FAIL',
+                            { exchange: acc.exchange, mode: acc.mode, reason: 'decrypt_failed' }, '127.0.0.1');
+                        continue;
+                    }
+                    await _testKeys(acc.exchange, plainKey, plainSecret, acc.mode);
+                    okCount++;
+                } catch (err) {
+                    failCount++;
+                    const errMsg = (err && err.message) || 'unknown';
+                    db.auditLog(u.id, 'EXCHANGE_KEY_HEALTH_FAIL',
+                        { exchange: acc.exchange, mode: acc.mode, error: errMsg }, '127.0.0.1');
+                    logger.warn('EXCHANGE', `Key health FAIL uid=${u.id} ${acc.exchange}/${acc.mode}: ${errMsg}`);
+                    try {
+                        require('../services/telegram').sendToUser(u.id,
+                            `⚠️ Zeus: cheile ${acc.exchange.toUpperCase()} (${acc.mode}) au eșuat verificarea zilnică. Verifică cheile pe exchange — pot fi revocate sau expirate.`);
+                    } catch (_) { /* Telegram optional */ }
+                }
+            }
+        }
+        logger.info('EXCHANGE', `API key health check: ${okCount} OK / ${failCount} FAIL`);
+    } catch (err) {
+        logger.error('EXCHANGE', 'API key health check cron crashed: ' + (err && err.message));
+    }
+}
+// Boot delay 5min (avoid contention cu other crons + ensure DB ready);
+// hourly check after that (day-tracked so the actual probe fires once/day).
+setTimeout(() => { _runApiKeyHealthCheck().catch(() => { }); }, 5 * 60 * 1000);
+setInterval(() => { _runApiKeyHealthCheck().catch(() => { }); }, 60 * 60 * 1000);
+
 module.exports = router;
