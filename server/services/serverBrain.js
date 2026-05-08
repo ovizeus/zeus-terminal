@@ -53,6 +53,17 @@ const DEFAULT_STC = {
     symbols: null,      // [MULTI-SYM] null = trade all configured symbols, or array of specific symbols
 };
 const _stcMap = new Map(); // userId → STC config
+// [SRV-2] Track last activity timestamp per user for unbounded-growth defense.
+// Updated on every _stcMap.set() and _stcMap.get() access via the helper
+// pair below. Hourly cleanup (line ~85) drops stale entries older than
+// _STC_INACTIVITY_MS to prevent unbounded growth across user churn (test
+// accounts, deleted users, multi-env reuse).
+const _stcLastSeen = new Map();          // userId → ms timestamp
+const _STC_INACTIVITY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+function _touchStc(userId) {
+    if (userId == null) return;
+    _stcLastSeen.set(userId, Date.now());
+}
 
 // _getSTC removed — unused (brain uses _stcMap directly)
 
@@ -79,6 +90,13 @@ setInterval(() => {
     const now = Date.now();
     for (const [k, deadline] of _cooldowns) { if (deadline <= now) _cooldowns.delete(k); }
     for (const [k, ts] of _regimeTgLastTs) { if (now - ts > REGIME_TG_COOLDOWN_MS) _regimeTgLastTs.delete(k); }
+    // [SRV-2] Cleanup stale _stcMap entries — drop users inactive >30 days.
+    for (const [uid, lastTs] of _stcLastSeen) {
+        if ((now - lastTs) > _STC_INACTIVITY_MS) {
+            _stcMap.delete(uid);
+            _stcLastSeen.delete(uid);
+        }
+    }
 }, 3600000);
 
 // ══════════════════════════════════════════════════════════════════
@@ -191,6 +209,7 @@ function _restoreStcFromDb() {
                 const cfg = JSON.parse(row.value);
                 if (cfg && typeof cfg === 'object') {
                     _stcMap.set(userId, Object.assign({}, DEFAULT_STC, cfg));
+                    _touchStc(userId);              // [SRV-2] mark active
                     restored++;
                 }
             } catch (_) { /* skip corrupt row */ }
@@ -1531,6 +1550,7 @@ function updateConfig(userId, cfg) {
         stc = Object.assign({}, DEFAULT_STC);
         _stcMap.set(userId, stc);
     }
+    _touchStc(userId);                              // [SRV-2] mark active on any config update
     for (const k of Object.keys(DEFAULT_STC)) {
         if (k === 'dslMode') continue; // handled separately below
         if (k in cfg && typeof cfg[k] === 'number' && isFinite(cfg[k])) {
@@ -1564,7 +1584,11 @@ function updateConfig(userId, cfg) {
 }
 
 function getSTC(userId) {
-    return _stcMap.has(userId) ? Object.assign({}, _stcMap.get(userId)) : Object.assign({}, DEFAULT_STC);
+    if (_stcMap.has(userId)) {
+        _touchStc(userId);                          // [SRV-2] read = activity
+        return Object.assign({}, _stcMap.get(userId));
+    }
+    return Object.assign({}, DEFAULT_STC);
 }
 
 // ══════════════════════════════════════════════════════════════════

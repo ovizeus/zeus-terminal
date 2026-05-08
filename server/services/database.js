@@ -543,6 +543,28 @@ migrate('029_at_pos_user_status_idx', () => {
     db.exec(`CREATE INDEX IF NOT EXISTS idx_at_pos_user_status ON at_positions(user_id, status);`);
 });
 
+// [DB-2] Composite UNIQUE partial index pe at_positions(user_id, symbol, side,
+// mode) WHERE status='OPEN'. SQLite supports expression indexes (json_extract)
+// + partial indexes natively. Pre-flight check: 0 duplicates în current DB
+// (validated 2026-05-08). Prevents "race entry" double-position bug where two
+// concurrent INSERT-OR-UPDATE flows could create duplicate OPEN row pairs for
+// same user+symbol+side+mode combo. Closed positions (status='closed') NU sunt
+// constrained — multiple closed rows per (user, sym, side, mode) sunt expected
+// (history). Idempotent via `migrate()` track-once. Additive — no data
+// rewrite, no lock contention.
+migrate('030_at_pos_dedup_open_unique', () => {
+    db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_at_pos_user_sym_side_mode_open
+        ON at_positions(
+            user_id,
+            json_extract(data, '$.symbol'),
+            json_extract(data, '$.side'),
+            json_extract(data, '$.mode')
+        )
+        WHERE status='OPEN';
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
