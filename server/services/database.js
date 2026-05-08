@@ -511,6 +511,19 @@ migrate('027_brain_parity_log', () => {
     `);
 });
 
+// [DB-5] Additive composite index for atPruneClosed subquery performance.
+// `atPruneClosed` (line 596 area) does:
+//   DELETE FROM at_closed WHERE user_id = ? AND seq NOT IN
+//     (SELECT seq FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT 500)
+// Without (user_id, closed_at DESC) composite, SQLite scans all user rows then sorts.
+// At 2000+ trades/user this becomes table-scan stall. Index is purely additive — no
+// schema change, no data migration, only build-time tree construction. Existing
+// idx_at_closed_user (single-col user_id) remains for other queries that filter only
+// by user. Safe to ship even if migrate('027') already ran.
+migrate('028_at_closed_user_closed_at_idx', () => {
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_at_closed_user_closed_at ON at_closed(user_id, closed_at DESC);`);
+});
+
 // ─── User methods ───
 
 const _stmts = {

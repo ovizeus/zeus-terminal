@@ -64,6 +64,28 @@ for (const v of _required) {
   }
 }
 
+// [CFG-4] Telegram bot token warn — if chatId is configured but botToken
+// is empty, every alert send will silently fail. Surface this at boot
+// rather than at first runtime alert (which might be hours later or
+// during a real incident). Soft warn — telegram is optional, server can
+// still run, but ops needs to know if alerts won't fire.
+if (config.telegram.chatId && !config.telegram.botToken) {
+  console.warn('[CONFIG] WARN: TELEGRAM_CHAT_ID is set but TELEGRAM_BOT_TOKEN is empty — Telegram alerts will silently fail. Set both or unset both.');
+}
+
+// [CFG-5] Optional-but-important config defaults soft-warn at boot. JWT_SECRET
+// and ENCRYPTION_KEY are hard-required above; remaining env vars have empty-
+// string fallbacks that surface only at runtime. Boot-time warn makes deploy
+// surface the gap immediately rather than discover it on first feature use.
+const _softOptional = [
+  { key: 'TRADING_TOKEN', desc: 'manual trading auth token (POST /api/order/place + admin trading endpoints)' },
+];
+for (const opt of _softOptional) {
+  if (!process.env[opt.key]) {
+    console.warn(`[CONFIG] WARN: Optional env var ${opt.key} is empty — ${opt.desc} will use empty-string default.`);
+  }
+}
+
 // Note: Binance API keys are per-user (stored encrypted in DB via credentialStore)
 
 module.exports = config;
