@@ -24,7 +24,14 @@ function fmt1(n: number, fallback = '—'): string {
   return Number.isFinite(n) && n !== 0 ? n.toFixed(1) : fallback
 }
 
-function PositionCard({ pos }: { pos: AresPositionCard }) {
+// [PERF-3] memo wrapper — PositionCard is rendered N times per ARES
+// positions list and re-renders on every parent state change (positions
+// array reference change OR closeAllVisible/closeAllArePositions selectors
+// in PositionsList). React.memo short-circuits if `pos` reference is
+// unchanged. Pos objects come from aresStore — store mutators replace
+// individual entries on update, so memo correctly invalidates only the
+// changed cards.
+const PositionCard = memo(function PositionCard({ pos }: { pos: AresPositionCard }) {
   const closeArePosition = useAresStore((s) => s.closeArePosition)
   const activeExchange = useUiStore((s) => s.activeExchange)
   const exchLabel = pos.live ? _aresExchLabel(pos, activeExchange) : null
@@ -87,7 +94,7 @@ function PositionCard({ pos }: { pos: AresPositionCard }) {
       ) : null}
     </div>
   )
-}
+})
 
 /** Positions list + close-all button. */
 export const PositionsList = memo(function PositionsList() {

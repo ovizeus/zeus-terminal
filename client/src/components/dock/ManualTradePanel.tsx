@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore, useATStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
@@ -62,7 +62,14 @@ export function ManualTradePanel() {
   // [Phase 12.A — Batch D3] Exchange suffix for live-mode header + balance prefix.
   //   'binance' → '· BINANCE', 'bybit' → '· BYBIT', null → '· ACTIVE EXCHANGE' (honest fallback).
   const _exchSuffix = activeExchange === 'binance' ? ' \u00B7 BINANCE' : activeExchange === 'bybit' ? ' \u00B7 BYBIT' : ' \u00B7 ACTIVE EXCHANGE'
-  const journalSorted = journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0)))
+  // [PERF-6] useMemo so the slice+sort runs only when `journal` reference
+  // changes, not on every ManualTradePanel re-render (which fires on each
+  // useUiStore / useATStore / useMarketStore selector tick — many times
+  // per second during live updates).
+  const journalSorted = useMemo(
+    () => journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0))),
+    [journal]
+  )
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {

@@ -31,12 +31,22 @@ function _onMessage(ev: MessageEvent) {
 }
 
 function _onClose() {
-  _ws = null
-  if (!_intentionalClose) {
-    _reconnectTimer = setTimeout(() => {
-      _reconnectDelay = Math.min(_reconnectDelay * 1.5, 15000)
-      connect()
-    }, _reconnectDelay)
+  // [WS-6] Defensive try/catch — _onClose runs as a WebSocket event
+  // handler, so any throw inside (setTimeout queue full, connect() chain
+  // failing, _reconnectDelay arithmetic on corrupt module state) becomes
+  // an unhandled rejection that bubbles up through the browser without
+  // a stack trace pointing to this file. Catch + console.warn keeps the
+  // reconnect path resilient — at worst we lose one reconnect cycle.
+  try {
+    _ws = null
+    if (!_intentionalClose) {
+      _reconnectTimer = setTimeout(() => {
+        _reconnectDelay = Math.min(_reconnectDelay * 1.5, 15000)
+        connect()
+      }, _reconnectDelay)
+    }
+  } catch (e: any) {
+    console.warn('[WS] _onClose handler threw:', e && e.message)
   }
 }
 
