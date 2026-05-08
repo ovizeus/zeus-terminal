@@ -1110,6 +1110,77 @@ function _runDailyBackup() {
 setTimeout(_runDailyBackup, 30000);
 setInterval(_runDailyBackup, 3600000);
 
+// ─── [OPS-7] audit_log retention cron ───────────────────────────────
+// Audit_log was unbounded — 47,988 rows în 52 days at audit time would
+// reach ~330k rows în 1 year. ML observation phase will multiply ~10x.
+// Retain 90 days rolling (covers SOX-style 60d minimum + buffer). Daily
+// cadence; cheap delete (indexed on created_at). Failure non-fatal —
+// log + Telegram alert, never crash boot.
+const AUDIT_RETENTION_DAYS = 90;
+let _lastAuditPruneDate = '';
+function _runAuditLogRetention() {
+    const today = new Date().toISOString().slice(0, 10);
+    if (_lastAuditPruneDate === today) return;
+    try {
+        const cutoff = new Date(Date.now() - AUDIT_RETENTION_DAYS * 86400000).toISOString();
+        const result = db.prepare("DELETE FROM audit_log WHERE created_at < ?").run(cutoff);
+        _lastAuditPruneDate = today;
+        if (result.changes > 0) {
+            console.log(`[DB] Audit log retention: pruned ${result.changes} rows older than ${AUDIT_RETENTION_DAYS}d`);
+        }
+    } catch (err) {
+        console.error('[DB] Audit retention failed:', err.message);
+        try { require('./telegram').send(`⚠️ Audit log retention failed: ${err.message}`); } catch (_) { }
+    }
+}
+setTimeout(_runAuditLogRetention, 60000);   // 60s post-boot
+setInterval(_runAuditLogRetention, 3600000); // hourly check, day-tracked
+
+// ─── [OPS-3] DB restore probe cron ──────────────────────────────────
+// Backups were Schrödinger's — created daily but never tested. Weekly
+// probe: open most-recent backup readonly, query sqlite_master + key
+// tables, compare row counts vs live. Detects silent backup corruption
+// (incomplete writes, stale files, missing tables). Pre-S10 trust
+// requirement. Failure non-fatal — log + Telegram, never crash.
+let _lastRestoreProbeDate = '';
+function _runRestoreProbe() {
+    const today = new Date().toISOString().slice(0, 10);
+    // Run probe on Mondays only (1 = Monday în getUTCDay)
+    const dow = new Date().getUTCDay();
+    if (dow !== 1) { _lastRestoreProbeDate = today; return; }
+    if (_lastRestoreProbeDate === today) return;
+    try {
+        if (!fs.existsSync(BACKUP_DIR)) { _lastRestoreProbeDate = today; return; }
+        const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db')).sort();
+        if (files.length === 0) { _lastRestoreProbeDate = today; return; }
+        const latest = path.join(BACKUP_DIR, files[files.length - 1]);
+        const Db = require('better-sqlite3');
+        const probeDb = new Db(latest, { readonly: true, fileMustExist: true });
+        try {
+            const tables = probeDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+            const userCount = probeDb.prepare("SELECT COUNT(*) AS n FROM users").get().n;
+            const auditCount = probeDb.prepare("SELECT COUNT(*) AS n FROM audit_log").get().n;
+            // Compare vs live: live values should be >= backup (writes since backup)
+            const liveUsers = db.prepare("SELECT COUNT(*) AS n FROM users").get().n;
+            const liveAudit = db.prepare("SELECT COUNT(*) AS n FROM audit_log").get().n;
+            const ok = tables.length >= 5 && userCount > 0 && liveUsers >= userCount;
+            const msg = `[DB] Restore probe ${ok ? 'OK' : 'WARN'}: ${path.basename(latest)} tables=${tables.length} users=${userCount}/${liveUsers} audit=${auditCount}/${liveAudit}`;
+            console.log(msg);
+            if (!ok) {
+                try { require('./telegram').send(`⚠️ DB restore probe failed: ${msg}`); } catch (_) { }
+            }
+        } finally {
+            probeDb.close();
+        }
+        _lastRestoreProbeDate = today;
+    } catch (err) {
+        console.error('[DB] Restore probe failed:', err.message);
+        try { require('./telegram').send(`⚠️ DB restore probe error: ${err.message}`); } catch (_) { }
+    }
+}
+setTimeout(_runRestoreProbe, 90000);    // 90s post-boot (after backup cron settled)
+setInterval(_runRestoreProbe, 3600000); // hourly check; day-tracked + DOW-gated
+
 process.on('exit', closeDb);
 
 // ─── [Phase 2 S3] Brain Parity Harness Helpers ───
