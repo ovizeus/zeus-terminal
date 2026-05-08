@@ -91,6 +91,10 @@ if (config.telegram.chatId && !config.telegram.botToken) {
 // surface the gap immediately rather than discover it on first feature use.
 const _softOptional = [
   { key: 'TRADING_TOKEN', desc: 'manual trading auth token (POST /api/order/place + admin trading endpoints)' },
+  // [CFG-9] SENTRY_DSN — error reporting transport. Empty-string fallback
+  // means runtime errors în production go to console.log only (no remote
+  // visibility). Boot warn makes the gap surface at deploy time.
+  { key: 'SENTRY_DSN', desc: 'remote error reporting (errors will only log locally without it)' },
 ];
 for (const opt of _softOptional) {
   if (!process.env[opt.key]) {
