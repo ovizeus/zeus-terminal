@@ -2618,7 +2618,7 @@ select.zac-select optgroup {
 /* ── Keyframes ── */
 @keyframes zBlink { 0%,100%{opacity:1} 49%{opacity:1} 50%{opacity:0} 99%{opacity:0} }
 @keyframes zFlicker { 0%{opacity:1} 92%{opacity:1} 93%{opacity:0} 94%{opacity:1} 96%{opacity:0} 97%{opacity:1} }
-@keyframes zScan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
+@keyframes zScan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100dvh)} }
 @keyframes zTicker { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
 @keyframes zGlow { 0%,100%{box-shadow:0 0 4px currentColor} 50%{box-shadow:0 0 14px currentColor, 0 0 28px currentColor} }
 @keyframes zArmPulse { 0%,100%{text-shadow:0 0 8px currentColor} 50%{text-shadow:0 0 22px currentColor, 0 0 44px currentColor} }
