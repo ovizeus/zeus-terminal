@@ -207,6 +207,13 @@ let _onChangeCallback = null;
 // `seq: ++_wsFrameSeq` field at the bottom of getFullState. Helps clients
 // disambiguate two same-ms at_update frames during warm-start + onChange races.
 let _wsFrameSeq = 0;
+// [BUG-S7] Map serverDSL state → phase string for parity comparison.
+// Mirrors client phase derivation (NONE/ACTIVE/IMPULSE) for like-vs-like.
+function _dslPhaseString(s) {
+    if (!s || !s.active) return 'NONE';
+    if (s.phase === 'IMPULSE') return 'IMPULSE';
+    return 'ACTIVE';
+}
 // [TM-4] Round-trip fee rate for Binance Futures. 0.04% per side (taker default,
 // most market exits are taker because instant). Round-trip = 0.08% on notional.
 // Applied at terminal PnL sites (closePnl set) to correct gross-PnL overstatement
@@ -2195,6 +2202,25 @@ function onPriceUpdate(symbol, price) {
             }
             _persistPosition(pos);
             if (pos.userId) dslChangedUsers.add(pos.userId);
+        }
+
+        // [BUG-S7] Shadow parity log — gated by DSL_PARITY_SHADOW_ENABLED.
+        // Fire after every tick (not just dsl.changed) so client/server
+        // correlation has consistent sample density. Silent failure handled
+        // în db.logDslParityRow.
+        if (MF.DSL_PARITY_SHADOW_ENABLED) {
+            const dslState = serverDSL.getState(pos.seq);
+            if (dslState) {
+                db.logDslParityRow(pos.userId, pos.seq, pos.symbol, 'server', {
+                    phase: _dslPhaseString(dslState),
+                    currentSL: dslState.currentSL,
+                    pivotLeft: dslState.pivotLeft,
+                    pivotRight: dslState.pivotRight,
+                    impulseVal: dslState.impulseVal,
+                    entry: pos.price,
+                    price: price,
+                });
+            }
         }
 
         // ── Classic SL/TP check ──

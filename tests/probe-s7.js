@@ -268,6 +268,50 @@ console.log('\nT6 — DSL parity routes registered in brainParity router');
         !!(brainReport && brainReport.methods.includes('get')));
 }
 
+console.log('\nT7 — Server tick instrumentation in serverAT.js');
+{
+    const fs = require('fs');
+    const serverATSource = fs.readFileSync(
+        path.join(__dirname, '..', 'server', 'services', 'serverAT.js'),
+        'utf-8'
+    );
+
+    check('T7: _dslPhaseString helper defined',
+        /function _dslPhaseString\(s\)/.test(serverATSource));
+
+    check('T7: helper maps inactive state to NONE',
+        /if \(!s \|\| !s\.active\) return 'NONE'/.test(serverATSource));
+
+    check('T7: helper maps IMPULSE phase explicitly',
+        /if \(s\.phase === 'IMPULSE'\) return 'IMPULSE'/.test(serverATSource));
+
+    check('T7: instrumentation uses property form MF.DSL_PARITY_SHADOW_ENABLED',
+        /if \(MF\.DSL_PARITY_SHADOW_ENABLED\)/.test(serverATSource));
+
+    check('T7: instrumentation does NOT use function form getDslParityShadowEnabled',
+        !/MF\.getDslParityShadowEnabled\(\)/.test(serverATSource));
+
+    check("T7: calls logDslParityRow with 'server' source",
+        /db\.logDslParityRow\([^,]+,[^,]+,[^,]+, 'server'/.test(serverATSource));
+
+    check('T7: null guard on dslState before logDslParityRow',
+        /if \(dslState\) \{[\s\S]{0,400}?logDslParityRow/.test(serverATSource));
+
+    check('T7: instrumentation block placed before classic SL/TP check',
+        (() => {
+            const idxBlock = serverATSource.indexOf('MF.DSL_PARITY_SHADOW_ENABLED');
+            const idxClassic = serverATSource.indexOf('Classic SL/TP check');
+            return idxBlock > 0 && idxClassic > 0 && idxBlock < idxClassic;
+        })());
+
+    check('T7: instrumentation block placed after dslChangedUsers.add',
+        (() => {
+            const idxAdd = serverATSource.indexOf('dslChangedUsers.add(pos.userId)');
+            const idxBlock = serverATSource.indexOf('MF.DSL_PARITY_SHADOW_ENABLED');
+            return idxAdd > 0 && idxBlock > 0 && idxAdd < idxBlock;
+        })());
+}
+
 console.log('\n=== Summary ===');
 console.log(`  PASS=${pass}  FAIL=${fail}`);
 process.exit(fail === 0 ? 0 : 1);
