@@ -312,6 +312,64 @@ console.log('\nT7 — Server tick instrumentation in serverAT.js');
         })());
 }
 
+console.log('\nT8 — Client tick instrumentation in client/src/trading/dsl.ts');
+{
+    const fs = require('fs');
+    const dslSource = fs.readFileSync(
+        path.join(__dirname, '..', 'client', 'src', 'trading', 'dsl.ts'),
+        'utf-8'
+    );
+
+    check('T8: localStorage gate present',
+        /localStorage\.getItem\('zeus_dsl_parity_shadow'\)/.test(dslSource));
+
+    check('T8: 5s throttle via _dslParityLastEmit',
+        /_dslParityLastEmit[\s\S]*?>= 5000/.test(dslSource));
+
+    check('T8: fetch to /api/brain/parity/dsl/client',
+        /fetch\('\/api\/brain\/parity\/dsl\/client'/.test(dslSource));
+
+    check('T8: phase mirror with impulseTriggered',
+        /!dsl\.active \? 'NONE'[\s\S]*?dsl\.impulseTriggered \? 'IMPULSE'/.test(dslSource));
+
+    check('T8: try/catch wraps emit',
+        /try \{[\s\S]*?fetch\([\s\S]*?\}\)\.catch[\s\S]*?\} catch \(_\) \{[\s\S]*?never disturb DSL/.test(dslSource));
+
+    check('T8: x-zeus-request header present',
+        /'x-zeus-request': '1'/.test(dslSource) || /"x-zeus-request": "1"/.test(dslSource));
+
+    check('T8: credentials include for cookie auth',
+        /credentials: 'include'/.test(dslSource));
+
+    check('T8: POST method declared',
+        (() => {
+            // Match POST inside the parity block (after fetch /api/brain/parity/dsl/client)
+            const idxFetch = dslSource.indexOf("/api/brain/parity/dsl/client");
+            if (idxFetch < 0) return false;
+            const tail = dslSource.slice(idxFetch, idxFetch + 600);
+            return /method:\s*'POST'/.test(tail);
+        })());
+
+    check('T8: posId, symbol, phase, prices in body',
+        (() => {
+            const idxFetch = dslSource.indexOf("/api/brain/parity/dsl/client");
+            if (idxFetch < 0) return false;
+            const tail = dslSource.slice(idxFetch, idxFetch + 1500);
+            return /posId/.test(tail) && /symbol/.test(tail) && /phase/.test(tail)
+                && /currentSL/.test(tail) && /pivotLeft/.test(tail) && /pivotRight/.test(tail)
+                && /impulseVal/.test(tail) && /entry/.test(tail) && /price/.test(tail);
+        })());
+
+    check('T8: instrumentation inside _runClientDSLOnPositions loop',
+        (() => {
+            const idxLoop = dslSource.indexOf('_runClientDSLOnPositions');
+            const idxBlock = dslSource.indexOf('zeus_dsl_parity_shadow');
+            const idxRender = dslSource.indexOf('// ─── RENDER DSL WIDGET');
+            return idxLoop > 0 && idxBlock > 0 && idxRender > 0
+                && idxLoop < idxBlock && idxBlock < idxRender;
+        })());
+}
+
 console.log('\n=== Summary ===');
 console.log(`  PASS=${pass}  FAIL=${fail}`);
 process.exit(fail === 0 ? 0 : 1);

@@ -699,6 +699,40 @@ export function _runClientDSLOnPositions(positions: any[]): void {
         }
       }
     }
+
+    // [BUG-S7] Shadow parity emit — gated by localStorage flag.
+    // Fire-and-forget; never blocks render or DSL math. Throttled per pos.
+    try {
+      const _shadowOn = (typeof localStorage !== 'undefined' && localStorage.getItem('zeus_dsl_parity_shadow') === 'true')
+      if (_shadowOn) {
+        const _now = Date.now()
+        const _lastEmit = (pos as any)._dslParityLastEmit || 0
+        if (_now - _lastEmit >= 5000) {  // 5s throttle per pos
+          (pos as any)._dslParityLastEmit = _now
+          const _phase = !dsl.active ? 'NONE'
+            : dsl.impulseTriggered ? 'IMPULSE'
+            : 'ACTIVE'
+          fetch('/api/brain/parity/dsl/client', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
+            body: JSON.stringify({
+              posId: String(pos.id),
+              symbol: pos.sym,
+              phase: _phase,
+              currentSL: dsl.currentSL,
+              pivotLeft: dsl.pivotLeft,
+              pivotRight: dsl.pivotRight,
+              impulseVal: dsl.impulseVal,
+              entry: pos.entry,
+              price: cur,
+              ts: _now,
+            }),
+          }).catch(() => { /* never disturb DSL */ })
+        }
+      }
+    } catch (_) { /* never disturb DSL */ }
+
     _pushDslPosition(_dslKey)
   })
 }
