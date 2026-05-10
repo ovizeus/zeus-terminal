@@ -1531,6 +1531,97 @@ function queryParityReport(opts) {
     };
 }
 
+// [BUG-S7] DSL parity logging — silent-on-failure to never disturb runtime.
+// Caller fire-and-forgets; failures only console.warn for forensic visibility.
+const _stmtLogDslParity = db.prepare(
+    'INSERT INTO dsl_parity_log (user_id, pos_id, symbol, source, phase, current_sl, pivot_left, pivot_right, impulse_val, entry_price, tick_price, created_at) '
+    + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+);
+function logDslParityRow(userId, posId, symbol, source, dslState) {
+    try {
+        _stmtLogDslParity.run(
+            userId, String(posId), symbol, source,
+            dslState.phase || null,
+            Number.isFinite(dslState.currentSL) ? dslState.currentSL : null,
+            Number.isFinite(dslState.pivotLeft) ? dslState.pivotLeft : null,
+            Number.isFinite(dslState.pivotRight) ? dslState.pivotRight : null,
+            Number.isFinite(dslState.impulseVal) ? dslState.impulseVal : null,
+            Number.isFinite(dslState.entry) ? dslState.entry : null,
+            Number.isFinite(dslState.price) ? dslState.price : null,
+            Date.now()
+        );
+    } catch (err) {
+        console.warn('[DSL-PARITY] logDslParityRow failed:', err.message);
+    }
+}
+
+// queryDslParityReport — correlate server↔client DSL rows on
+// (user_id, pos_id, created_at ±2s) and compute divergence + phase match metrics.
+function queryDslParityReport(opts) {
+    opts = opts || {};
+    const since = parseInt(opts.since, 10) || (Date.now() - 24 * 3600 * 1000);
+    const userIdFilter = opts.userId ? `AND user_id = ${parseInt(opts.userId, 10)}` : '';
+    const posIdFilter = opts.posId ? `AND pos_id = '${String(opts.posId).replace(/'/g, "''")}'` : '';
+
+    const serverRows = db.prepare(
+        `SELECT * FROM dsl_parity_log WHERE source='server' AND created_at >= ? ${userIdFilter} ${posIdFilter} ORDER BY created_at`
+    ).all(since);
+    const clientRows = db.prepare(
+        `SELECT * FROM dsl_parity_log WHERE source='client' AND created_at >= ? ${userIdFilter} ${posIdFilter} ORDER BY created_at`
+    ).all(since);
+
+    const PAIR_WINDOW_MS = 2000;
+    const paired = [];
+    const usedClientIdx = new Set();
+    for (const sRow of serverRows) {
+        let bestC = -1, bestDt = Infinity;
+        for (let ci = 0; ci < clientRows.length; ci++) {
+            if (usedClientIdx.has(ci)) continue;
+            const cRow = clientRows[ci];
+            if (cRow.user_id !== sRow.user_id || cRow.pos_id !== sRow.pos_id) continue;
+            const dt = Math.abs(cRow.created_at - sRow.created_at);
+            if (dt > PAIR_WINDOW_MS) continue;
+            if (dt < bestDt) { bestDt = dt; bestC = ci; }
+        }
+        if (bestC >= 0) {
+            usedClientIdx.add(bestC);
+            paired.push({ s: sRow, c: clientRows[bestC] });
+        }
+    }
+
+    const divs = [];
+    let phaseMatches = 0;
+    let phaseValidPairs = 0;
+    for (const p of paired) {
+        const entry = p.s.entry_price || p.c.entry_price;
+        if (!Number.isFinite(entry) || entry <= 0) continue;
+        if (Number.isFinite(p.s.current_sl) && Number.isFinite(p.c.current_sl)) {
+            const div = Math.abs(p.s.current_sl - p.c.current_sl) / entry * 100;
+            divs.push(div);
+        }
+        if (p.s.phase && p.c.phase) {
+            phaseValidPairs++;
+            if (p.s.phase === p.c.phase) phaseMatches++;
+        }
+    }
+    divs.sort((a, b) => a - b);
+    const mean = divs.length ? divs.reduce((a, b) => a + b, 0) / divs.length : 0;
+    const p95 = divs.length ? divs[Math.floor(divs.length * 0.95)] : 0;
+    const max = divs.length ? divs[divs.length - 1] : 0;
+
+    return {
+        since,
+        paired: paired.length,
+        divergencePct: { mean, p95, max, count: divs.length },
+        phaseMatchPct: phaseValidPairs ? (phaseMatches / phaseValidPairs * 100) : 0,
+        phaseValidPairs,
+        gate: {
+            primary_pass: mean < 2.0 && p95 < 5.0 && divs.length >= 500,
+            secondary_pass: phaseValidPairs >= 100 && (phaseMatches / phaseValidPairs * 100) >= 95.0,
+        },
+    };
+}
+
 module.exports = {
     db,
     USER_STATUS, // [M6]
@@ -1575,6 +1666,9 @@ module.exports = {
     // [Phase 2 S3] Parity harness
     logParityRow,
     queryParityReport,
+    // [S7] DSL Parity harness
+    logDslParityRow,
+    queryDslParityReport,
     addPasswordHistory,
     getPasswordHistory,
     migrateFromJson,

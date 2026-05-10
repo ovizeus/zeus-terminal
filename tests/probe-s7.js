@@ -76,6 +76,135 @@ try {
     verifyDb.close();
 }
 
+// ─── T3 — logDslParityRow + queryDslParityReport helpers ───────────────────
+
+const dbModule = require('../server/services/database');
+
+// Cleanup: remove test rows before and after
+const cleanupTestRows = () => {
+    try {
+        dbModule.db.prepare("DELETE FROM dsl_parity_log WHERE pos_id LIKE 'test-%'").run();
+    } catch (_) {}
+};
+cleanupTestRows();
+
+console.log('\nT3 — Helper functions exist in db module');
+check('logDslParityRow is a function', typeof dbModule.logDslParityRow === 'function');
+check('queryDslParityReport is a function', typeof dbModule.queryDslParityReport === 'function');
+
+console.log('\nT4 — logDslParityRow writes row to dsl_parity_log');
+{
+    const userId = 9999;
+    const posId = 'test-pos-001';
+    const symbol = 'BTCUSDT';
+    const ts = Date.now();
+
+    try {
+        dbModule.logDslParityRow(userId, posId, symbol, 'server', {
+            phase: 'ACTIVE',
+            currentSL: 60000,
+            pivotLeft: 59000,
+            pivotRight: 61000,
+            impulseVal: 0.5,
+            entry: 62000,
+            price: 63000,
+        });
+
+        const row = dbModule.db.prepare(
+            "SELECT * FROM dsl_parity_log WHERE pos_id = ? AND source = 'server'"
+        ).get(posId);
+
+        check('T4: row inserted successfully', !!row, row ? 'found' : 'not found');
+        check('T4: user_id matches', row && row.user_id === userId, row ? String(row.user_id) : 'no row');
+        check('T4: symbol matches', row && row.symbol === symbol);
+        check('T4: source is server', row && row.source === 'server');
+        check('T4: phase matches', row && row.phase === 'ACTIVE');
+        check('T4: current_sl matches', row && row.current_sl === 60000);
+        check('T4: entry_price matches', row && row.entry_price === 62000);
+        check('T4: created_at is recent', row && Math.abs(row.created_at - ts) < 5000);
+    } catch (err) {
+        check('T4: no exception thrown', false, err.message);
+    }
+
+    // T4 silent-on-failure: bad input should not throw
+    try {
+        dbModule.logDslParityRow(userId, posId, symbol, 'server', {
+            currentSL: NaN,
+            entry: 0,
+            price: null,
+        });
+        check('T4: silent on NaN/null values (no throw)', true);
+    } catch (err) {
+        check('T4: silent on NaN/null values (no throw)', false, err.message);
+    }
+}
+
+console.log('\nT5 — queryDslParityReport math correctness');
+{
+    cleanupTestRows();
+
+    const now = Date.now();
+    const userId = 9999;
+    const posId = 'test-pos-math';
+    const symbol = 'ETHUSDT';
+
+    // Insert paired rows: server SL=100, client SL=101, entry=100 → divergence=1.0%
+    dbModule.logDslParityRow(userId, posId, symbol, 'server', {
+        phase: 'ACTIVE',
+        currentSL: 100,
+        entry: 100,
+        price: 105,
+    });
+
+    // Client row within 2s window (same ms effectively)
+    dbModule.logDslParityRow(userId, posId, symbol, 'client', {
+        phase: 'ACTIVE',
+        currentSL: 101,
+        entry: 100,
+        price: 105,
+    });
+
+    const since = now - 10000; // 10s back to catch just-inserted rows
+    const report = dbModule.queryDslParityReport({ since, userId });
+
+    check('T5: paired >= 1', report.paired >= 1, 'paired=' + report.paired);
+    check('T5: divergencePct.mean ≈ 1.0 (within 0.001)',
+        Math.abs(report.divergencePct.mean - 1.0) < 0.001,
+        'mean=' + report.divergencePct.mean);
+    check('T5: phaseMatchPct === 100',
+        report.phaseMatchPct === 100,
+        'phaseMatchPct=' + report.phaseMatchPct);
+    check('T5: gate.primary_pass === false (paired < 500)',
+        report.gate.primary_pass === false,
+        'primary_pass=' + report.gate.primary_pass);
+    check('T5: gate.secondary_pass === false (phaseValidPairs < 100)',
+        report.gate.secondary_pass === false,
+        'secondary_pass=' + report.gate.secondary_pass);
+    check('T5: divergencePct.count >= 1', report.divergencePct.count >= 1);
+    check('T5: phaseValidPairs >= 1', report.phaseValidPairs >= 1);
+
+    // Math edge-case: server=100, client=100, entry=100 → div=0
+    const posId2 = 'test-pos-nodiv';
+    dbModule.logDslParityRow(userId, posId2, symbol, 'server', { phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100 });
+    dbModule.logDslParityRow(userId, posId2, symbol, 'client', { phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100 });
+
+    const report2 = dbModule.queryDslParityReport({ since, userId });
+    check('T5: zero-divergence pair included', report2.divergencePct.count >= 2);
+
+    // Math edge-case: entry=0 row should be skipped in divergence calc
+    const posId3 = 'test-pos-zeroentry';
+    dbModule.logDslParityRow(userId, posId3, symbol, 'server', { phase: 'ACTIVE', currentSL: 100, entry: 0, price: 100 });
+    dbModule.logDslParityRow(userId, posId3, symbol, 'client', { phase: 'ACTIVE', currentSL: 101, entry: 0, price: 100 });
+
+    const beforeCount = report2.divergencePct.count;
+    const report3 = dbModule.queryDslParityReport({ since, userId });
+    check('T5: entry=0 rows skipped in divergence calc (count unchanged)',
+        report3.divergencePct.count === beforeCount,
+        'count was ' + beforeCount + ', now ' + report3.divergencePct.count);
+}
+
+cleanupTestRows();
+
 console.log('\n=== Summary ===');
 console.log(`  PASS=${pass}  FAIL=${fail}`);
 process.exit(fail === 0 ? 0 : 1);
