@@ -338,8 +338,8 @@ console.log('\nT8 — Client tick instrumentation in client/src/trading/dsl.ts')
     check('T8: x-zeus-request header present',
         /'x-zeus-request': '1'/.test(dslSource) || /"x-zeus-request": "1"/.test(dslSource));
 
-    check('T8: credentials include for cookie auth',
-        /credentials: 'include'/.test(dslSource));
+    check('T8: credentials same-origin for cookie auth',
+        /credentials: 'same-origin'/.test(dslSource));
 
     check('T8: POST method declared',
         (() => {
