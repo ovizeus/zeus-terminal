@@ -68,11 +68,12 @@ router.get('/report', _requireAdmin, (req, res) => {
 
 // ──────────────────────────────────────────────────────────────────
 // [BUG-S7] DSL Parity Shadow routes — analog brain parity.
-// POST /api/dsl/parity/client — per-user authed, writes source='client' row
-// when MF.DSL_PARITY_SHADOW_ENABLED=true; otherwise returns logged:false
-// (lets client emit unconditionally without error handling).
-// GET /api/dsl/parity/report — admin-only, aggregates divergence + phase
-// match metrics for stop gate evaluation.
+// POST /api/brain/parity/dsl/client — per-user authed (req.user.id from JWT
+// via createSessionAuth middleware), writes source='client' row when
+// MF.DSL_PARITY_SHADOW_ENABLED=true; otherwise returns logged:false (lets
+// client emit unconditionally without error handling).
+// GET /api/brain/parity/dsl/report — admin-only, aggregates divergence +
+// phase match metrics for stop gate evaluation.
 // ──────────────────────────────────────────────────────────────────
 router.post('/dsl/client', (req, res) => {
     if (!req.user || !req.user.id) {
@@ -84,8 +85,12 @@ router.post('/dsl/client', (req, res) => {
     const body = req.body || {};
     const posId = body.posId;
     const symbol = body.symbol;
-    if (!posId || typeof posId !== 'string') return res.status(400).json({ ok: false, error: 'posId required' });
-    if (typeof symbol !== 'string' || !symbol) return res.status(400).json({ ok: false, error: 'symbol required' });
+    if (typeof posId !== 'string' || !posId) {
+        return res.status(400).json({ ok: false, error: 'posId required' });
+    }
+    if (typeof symbol !== 'string' || !symbol) {
+        return res.status(400).json({ ok: false, error: 'symbol required' });
+    }
 
     db.logDslParityRow(req.user.id, posId, symbol, 'client', {
         phase: body.phase,
