@@ -137,6 +137,21 @@ console.log('\nT4 — logDslParityRow writes row to dsl_parity_log');
     } catch (err) {
         check('T4: silent on NaN/null values (no throw)', false, err.message);
     }
+
+    // T4 input guards — M-6/M-7: null/undefined/invalid inputs must not insert rows
+    cleanupTestRows();
+    const countBefore = () => dbModule.db.prepare("SELECT COUNT(*) AS n FROM dsl_parity_log WHERE pos_id LIKE 'test-%'").get().n;
+    const n0 = countBefore();
+    dbModule.logDslParityRow(null, 'test-guard-p1', 'SYM', 'server', {});
+    check('T4 input guards: reject missing userId', countBefore() === n0, 'rows changed');
+    dbModule.logDslParityRow(1, null, 'SYM', 'server', {});
+    check('T4 input guards: reject missing posId', countBefore() === n0, 'rows changed');
+    dbModule.logDslParityRow(1, 'test-guard-p1', null, 'server', {});
+    check('T4 input guards: reject missing symbol', countBefore() === n0, 'rows changed');
+    dbModule.logDslParityRow(1, 'test-guard-p1', 'SYM', 'invalid', {});
+    check('T4 input guards: reject invalid source', countBefore() === n0, 'rows changed');
+    dbModule.logDslParityRow(1, 'test-guard-p1', 'SYM', 'server', null);
+    check('T4 input guards: reject non-object dslState', countBefore() === n0, 'rows changed');
 }
 
 console.log('\nT5 — queryDslParityReport math correctness');
@@ -201,6 +216,26 @@ console.log('\nT5 — queryDslParityReport math correctness');
     check('T5: entry=0 rows skipped in divergence calc (count unchanged)',
         report3.divergencePct.count === beforeCount,
         'count was ' + beforeCount + ', now ' + report3.divergencePct.count);
+
+    // T5 SQL injection safety — I-1: parameterized binding must survive injection strings
+    try {
+        const injReport1 = dbModule.queryDslParityReport({ userId: "1; DROP TABLE dsl_parity_log;--" });
+        check('T5 SQL injection safe userId: no crash', true);
+        // Number("1; DROP TABLE...") => NaN, won't match any user_id => 0 paired
+        check('T5 SQL injection safe userId: returns valid report shape', typeof injReport1.paired === 'number');
+    } catch (err) {
+        check('T5 SQL injection safe userId: no crash', false, err.message);
+        check('T5 SQL injection safe userId: returns valid report shape', false, 'threw');
+    }
+
+    try {
+        const injReport2 = dbModule.queryDslParityReport({ posId: "test'; DROP TABLE dsl_parity_log;--" });
+        check('T5 SQL injection safe posId: no crash', true);
+        check('T5 SQL injection safe posId: returns valid report shape', typeof injReport2.paired === 'number');
+    } catch (err) {
+        check('T5 SQL injection safe posId: no crash', false, err.message);
+        check('T5 SQL injection safe posId: returns valid report shape', false, 'threw');
+    }
 }
 
 cleanupTestRows();

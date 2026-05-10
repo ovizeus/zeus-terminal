@@ -1538,6 +1538,11 @@ const _stmtLogDslParity = db.prepare(
     + 'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
 );
 function logDslParityRow(userId, posId, symbol, source, dslState) {
+    // [BUG-S7] Input guards — match S3 logParityRow pattern. Prevent corrupt
+    // rows from polluting report (null/undefined coerced to literal string).
+    if (!userId || !posId || !symbol) return;
+    if (source !== 'client' && source !== 'server') return;
+    if (!dslState || typeof dslState !== 'object') return;
     try {
         _stmtLogDslParity.run(
             userId, String(posId), symbol, source,
@@ -1560,15 +1565,21 @@ function logDslParityRow(userId, posId, symbol, source, dslState) {
 function queryDslParityReport(opts) {
     opts = opts || {};
     const since = parseInt(opts.since, 10) || (Date.now() - 24 * 3600 * 1000);
-    const userIdFilter = opts.userId ? `AND user_id = ${parseInt(opts.userId, 10)}` : '';
-    const posIdFilter = opts.posId ? `AND pos_id = '${String(opts.posId).replace(/'/g, "''")}'` : '';
 
-    const serverRows = db.prepare(
-        `SELECT * FROM dsl_parity_log WHERE source='server' AND created_at >= ? ${userIdFilter} ${posIdFilter} ORDER BY created_at`
-    ).all(since);
-    const clientRows = db.prepare(
-        `SELECT * FROM dsl_parity_log WHERE source='client' AND created_at >= ? ${userIdFilter} ${posIdFilter} ORDER BY created_at`
-    ).all(since);
+    // Build WHERE clauses + args dynamic (parameterized binding — S3 norm)
+    const buildQuery = (source) => {
+        let sql = 'SELECT * FROM dsl_parity_log WHERE source = ? AND created_at >= ?';
+        const args = [source, since];
+        if (opts.userId != null) { sql += ' AND user_id = ?'; args.push(Number(opts.userId)); }
+        if (opts.posId)          { sql += ' AND pos_id = ?';  args.push(String(opts.posId)); }
+        sql += ' ORDER BY created_at';
+        return { sql, args };
+    };
+
+    const sq = buildQuery('server');
+    const cq = buildQuery('client');
+    const serverRows = db.prepare(sq.sql).all(...sq.args);
+    const clientRows = db.prepare(cq.sql).all(...cq.args);
 
     const PAIR_WINDOW_MS = 2000;
     const paired = [];
