@@ -2205,21 +2205,27 @@ function onPriceUpdate(symbol, price) {
         }
 
         // [BUG-S7] Shadow parity log — gated by DSL_PARITY_SHADOW_ENABLED.
-        // Fire after every tick (not just dsl.changed) so client/server
-        // correlation has consistent sample density. Silent failure handled
-        // în db.logDslParityRow.
+        // 1s per-pos throttle (mirrors client 5s, 5x denser pentru pair window
+        // 2s la match sparse client emits). Pre-throttle every-tick rate
+        // ~6376 rows/min observed la 5-50Hz price feed × multi-pos. Throttle
+        // brings sustainable rate ~480 rows/min total.
         if (MF.DSL_PARITY_SHADOW_ENABLED) {
-            const dslState = serverDSL.getState(pos.seq);
-            if (dslState) {
-                db.logDslParityRow(pos.userId, pos.seq, pos.symbol, 'server', {
-                    phase: _dslPhaseString(dslState),
-                    currentSL: dslState.currentSL,
-                    pivotLeft: dslState.pivotLeft,
-                    pivotRight: dslState.pivotRight,
-                    impulseVal: dslState.impulseVal,
-                    entry: pos.price,
-                    price: price,
-                });
+            const _nowParity = Date.now();
+            const _lastEmitServer = pos._dslParityLastEmitServer || 0;
+            if (_nowParity - _lastEmitServer >= 1000) {
+                pos._dslParityLastEmitServer = _nowParity;
+                const dslState = serverDSL.getState(pos.seq);
+                if (dslState) {
+                    db.logDslParityRow(pos.userId, pos.seq, pos.symbol, 'server', {
+                        phase: _dslPhaseString(dslState),
+                        currentSL: dslState.currentSL,
+                        pivotLeft: dslState.pivotLeft,
+                        pivotRight: dslState.pivotRight,
+                        impulseVal: dslState.impulseVal,
+                        entry: pos.price,
+                        price: price,
+                    });
+                }
             }
         }
 

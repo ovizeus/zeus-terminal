@@ -333,6 +333,12 @@ console.log('\nT7 — Server tick instrumentation in serverAT.js');
             const idxBlock = serverATSource.indexOf('MF.DSL_PARITY_SHADOW_ENABLED');
             return idxAdd > 0 && idxBlock > 0 && idxAdd < idxBlock;
         })());
+
+    check('Server tick: 1s throttle via _dslParityLastEmitServer',
+        /pos\._dslParityLastEmitServer[\s\S]*?>= 1000/.test(serverATSource));
+
+    check('Server tick: throttle gate before getState call',
+        /if \(_nowParity - _lastEmitServer >= 1000\)[\s\S]*?serverDSL\.getState/.test(serverATSource));
 }
 
 console.log('\nT8 — Client tick instrumentation in client/src/trading/dsl.ts');
