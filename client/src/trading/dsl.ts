@@ -706,15 +706,16 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       const _shadowOn = (typeof localStorage !== 'undefined' && localStorage.getItem('zeus_dsl_parity_shadow') === 'true')
       if (_shadowOn) {
         const _now = Date.now()
-        const _lastEmit = (pos as any)._dslParityLastEmit || 0
+        const _lastEmit = pos._dslParityLastEmit || 0
         if (_now - _lastEmit >= 5000) {  // 5s throttle per pos
-          (pos as any)._dslParityLastEmit = _now
+          pos._dslParityLastEmit = _now
+          // Mirrors server _dslPhaseString() (serverAT.js:212): NONE if !active, IMPULSE if impulseTriggered, else ACTIVE.
           const _phase = !dsl.active ? 'NONE'
             : dsl.impulseTriggered ? 'IMPULSE'
             : 'ACTIVE'
           fetch('/api/brain/parity/dsl/client', {
             method: 'POST',
-            credentials: 'include',
+            credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
             body: JSON.stringify({
               posId: String(pos.id),
