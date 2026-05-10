@@ -4,9 +4,56 @@ All notable changes to Zeus Terminal are documented in this file.
 
 ---
 
+## v1.7.69 — 2026-05-09 (S6-B8 close)
+
+Administrative version bump marking end of S6-B7 GREEN-FINAL milestone + bug burn-down completion. NO Zeus runtime logic change — pure metadata + changelog.
+
+### S6-B7 milestone closure
+
+- T+168h GREEN-FINAL soak verdict signed-off **2026-05-05 12:40 UTC** (Phone Claude + Ovi)
+- T+192h sign-off clean **2026-05-06** (MD5 `2e416255fb90ed6eff7db15c34d57c78`)
+- 24h observation tail expired without incidents
+- Archive: `/root/_review/audit/archive/S6B7_GREEN_20260505/`
+
+### Bug book burn-down (8-9 mai 2026)
+
+**161 OPEN → 0 raw + 17 DEFERRED + 120 RESOLVED**, 35+ batches BUG-1.1..BUG-1.34.
+
+Categories closed:
+- **TM-1..9** trading math correctness (fee deduction 0.08% × 4 sites, slippage 0.06%, tick alignment, defensive guards)
+- **DB hardening** — migrations 028+029+030 (composite + partial UNIQUE indexes), PRAGMA cache 32MB, wal_autocheckpoint 10000, query optim, defensive transactions, backup retry
+- **WS-1/2** — monotonic seq + frame dedup client
+- **SEC-5/6/7/19/20/21/22/24/27/29** — XSS + pollution + auth heartbeat + Origin allowlist + anomaly detector + chartExtras whitelist (Sprint 1 root cause)
+- **AUTH-1/2/4** — 2FA rate limit + constant-time bcrypt + code reuse on retry
+- **OPS-1/3/5/6/7/9** — 5 noi crons în database.js (API key health + restore probe + boot count + audit retention 90d) + Prometheus /metrics + email fallback
+- **TEST-3/4/5+OPS-4/8** — CI hardening (npm audit + coverage 50% + NODE_ENV + rollback + bundle hash) via PAT refresh push
+
+### S6-B8 closure
+
+- Version bump 1.7.68 → **1.7.69**, build 94 → **95**
+- Tag **v1.7.69** pe HEAD
+- S6-B7 archived în memory pointers
+- **S7 work (DSL server integration) acum unblocked**
+
+### 17 DEFERRED bugs cu resume criteria
+
+- Post-soak operator action (6): CFG-3+1+2 secrets rotate, CFG-12+13 cleanup, DB-7 schema migration
+- Pre-S11 mass user (4): SRV-9 Redis, SEC-15+16 CSP unsafe-inline, SEC-23 pm2 user
+- Plan v3 ML opening (2): ML-1 env col, ISO-1 cross-env state
+- Multi-day operator-led (3): OPS-2 offsite backup, MOB-5 Capacitor App, O12 chart rewrite
+- Other (2): PERF-8 profiler-driven, SEC-17 runbook MD, CFG-11 magic numbers refactor
+
+NEW infrastructure files: `server/services/mailer.js`. NEW endpoint: `/metrics`. PM2 stable throughout: pid 3649523 unchanged, 179 restarts, 18.5h+ uptime, no reload pe metadata bump.
+
+---
+
 ## Post-v2 patch history (1.7.x series)
 
 Imported from `server/version.js` changelog array on 2026-05-08 per Working Rule 1 (changelog discipline). `server/version.js` retains only the latest 3 entries (current + 2 anterioare). Older patch entries below, reverse chronological.
+
+### v1.7.66 — b92 (Phase 2 S3 PARITY HARNESS — shadow-only instrumentation)
+
+Infrastructure to compare client `computeFusionDecision()` vs server `serverBrain._computeFusion()` on the same tick, producing the ≥95% agreement gate required before any SERVER_BRAIN flip (S6/S8/S10/S11). Zero flag flip; zero runtime influence on live AT/Brain paths. New `MF.PARITY_SHADOW_ENABLED` flag (default false). Migration 027 `brain_parity_log` table + 2 indexes. Helpers `logParityRow` (silent-on-failure) + `queryParityReport` (correlates client↔server rows on `(user_id, symbol, created_at ±15s)`). New `server/routes/brainParity.js` cu POST /client + GET /report (admin-only). serverBrain `_runShadowCycle` iterates ready symbols × _stcMap users, computes confluence+regime+gates+fusion via existing pure helpers, writes source="server" row, SKIPS every side-effect path. Self-guarded când !PARITY_SHADOW_ENABLED sau când SERVER_BRAIN on. Client patch: autotrade.ts FUSION_CACHE tick fire-and-forget POST gated by `localStorage.zeus_parity_shadow==="true"` (default OFF). Tests: tsc, vite build, server boot clean.
 
 ### v1.7.65 — b91 (P0 REPAIR R6 — per-env brain namespace WS race fix)
 
