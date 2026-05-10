@@ -575,6 +575,32 @@ migrate('030_at_pos_dedup_open_unique', () => {
     `);
 });
 
+// [S7] Shadow validation parity log for DSL reconciliation. Analog brain_parity_log
+// (S3 precedent, migration 027). serverDSL.tick outputs paired with client runDSLBrain
+// to detect schema drift (phase/current_sl/pivot_*/impulse_val divergence). Gates
+// deployment until shadow DSL matches production during soak window.
+migrate('031_dsl_parity_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS dsl_parity_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id      INTEGER NOT NULL,
+            pos_id       TEXT NOT NULL,
+            symbol       TEXT NOT NULL,
+            source       TEXT NOT NULL CHECK(source IN ('client','server')),
+            phase        TEXT,
+            current_sl   REAL,
+            pivot_left   REAL,
+            pivot_right  REAL,
+            impulse_val  REAL,
+            entry_price  REAL,
+            tick_price   REAL,
+            created_at   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_dsl_parity_user_pos_ts ON dsl_parity_log(user_id, pos_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_dsl_parity_source_ts   ON dsl_parity_log(source, created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
