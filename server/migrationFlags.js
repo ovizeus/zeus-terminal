@@ -36,10 +36,6 @@ const DEFAULTS = {
     // handler and the optional `_runShadowCycle` server-side writer. Default
     // OFF so the harness ships dormant.
     PARITY_SHADOW_ENABLED: false,
-    // [BUG-S7] DSL parity shadow — independent of PARITY_SHADOW_ENABLED.
-    // When ON: serverDSL.tick logs source='server' rows + client runDSLBrain
-    // fire-and-forgets source='client' POST. Default OFF = zero runtime.
-    DSL_PARITY_SHADOW_ENABLED: false,
     // [Phase 2 S3.1d] Binance Futures WS lane workaround. When some
     // production streams (markPrice@1s, kline_*, aggTrade) are silently
     // throttled by Binance on our IP while others (bookTicker, trade, depth)
@@ -119,7 +115,6 @@ try {
 // [BUG-S7] Independent environment variable for DSL parity shadow logging.
 // When enabled, serverDSL.tick logs source='server' rows. Default OFF = zero runtime.
 const _DSL_PARITY_SHADOW_ENABLED = (process.env.DSL_PARITY_SHADOW_ENABLED || 'false') === 'true';
-function getDslParityShadowEnabled() { return _DSL_PARITY_SHADOW_ENABLED; }
 
 // ── Safety invariant: mutual exclusion ──
 // [Phase 2 S1.C] Two enforcement modes:
@@ -235,7 +230,6 @@ module.exports = {
     get POSITIONS_WS() { return flags.POSITIONS_WS; },
     get PARITY_SHADOW_ENABLED() { return flags.PARITY_SHADOW_ENABLED; },
     get DSL_PARITY_SHADOW_ENABLED() { return _DSL_PARITY_SHADOW_ENABLED; },
-    getDslParityShadowEnabled,
     get ALT_WS_FEEDS() { return flags.ALT_WS_FEEDS; },
     // [Phase 2 S4-B0] Bybit safety flags — inert until S4-B1+ ship.
     get BYBIT_TESTNET_ENABLED() { return flags.BYBIT_TESTNET_ENABLED; },
