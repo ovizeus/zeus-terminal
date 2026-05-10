@@ -240,6 +240,34 @@ console.log('\nT5 — queryDslParityReport math correctness');
 
 cleanupTestRows();
 
+console.log('\nT6 — DSL parity routes registered in brainParity router');
+{
+    // Reload router fresh to pick up any changes to the routes file.
+    delete require.cache[require.resolve('../server/routes/brainParity')];
+    const brainParityRouter = require('../server/routes/brainParity');
+    const paths = brainParityRouter.stack
+        .filter(layer => layer.route)
+        .map(layer => ({ path: layer.route.path, methods: Object.keys(layer.route.methods) }));
+
+    const dslClient = paths.find(p => p.path === '/dsl/client');
+    check('T6 POST /dsl/client registered',
+        !!(dslClient && dslClient.methods.includes('post')),
+        dslClient ? ('methods=' + dslClient.methods.join(',')) : 'route not found');
+
+    const dslReport = paths.find(p => p.path === '/dsl/report');
+    check('T6 GET /dsl/report registered',
+        !!(dslReport && dslReport.methods.includes('get')),
+        dslReport ? ('methods=' + dslReport.methods.join(',')) : 'route not found');
+
+    // Sanity: existing brain parity routes still present (no regression).
+    const brainClient = paths.find(p => p.path === '/client');
+    check('T6 existing POST /client still registered',
+        !!(brainClient && brainClient.methods.includes('post')));
+    const brainReport = paths.find(p => p.path === '/report');
+    check('T6 existing GET /report still registered',
+        !!(brainReport && brainReport.methods.includes('get')));
+}
+
 console.log('\n=== Summary ===');
 console.log(`  PASS=${pass}  FAIL=${fail}`);
 process.exit(fail === 0 ? 0 : 1);

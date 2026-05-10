@@ -66,4 +66,46 @@ router.get('/report', _requireAdmin, (req, res) => {
     return res.status(200).json(Object.assign({ ok: true }, report));
 });
 
+// ──────────────────────────────────────────────────────────────────
+// [BUG-S7] DSL Parity Shadow routes — analog brain parity.
+// POST /api/dsl/parity/client — per-user authed, writes source='client' row
+// when MF.DSL_PARITY_SHADOW_ENABLED=true; otherwise returns logged:false
+// (lets client emit unconditionally without error handling).
+// GET /api/dsl/parity/report — admin-only, aggregates divergence + phase
+// match metrics for stop gate evaluation.
+// ──────────────────────────────────────────────────────────────────
+router.post('/dsl/client', (req, res) => {
+    if (!req.user || !req.user.id) {
+        return res.status(401).json({ ok: false, error: 'unauthorized' });
+    }
+    if (!MF.DSL_PARITY_SHADOW_ENABLED) {
+        return res.status(200).json({ ok: true, logged: false, reason: 'shadow_disabled' });
+    }
+    const body = req.body || {};
+    const posId = body.posId;
+    const symbol = body.symbol;
+    if (!posId || typeof posId !== 'string') return res.status(400).json({ ok: false, error: 'posId required' });
+    if (typeof symbol !== 'string' || !symbol) return res.status(400).json({ ok: false, error: 'symbol required' });
+
+    db.logDslParityRow(req.user.id, posId, symbol, 'client', {
+        phase: body.phase,
+        currentSL: body.currentSL,
+        pivotLeft: body.pivotLeft,
+        pivotRight: body.pivotRight,
+        impulseVal: body.impulseVal,
+        entry: body.entry,
+        price: body.price,
+    });
+    return res.status(200).json({ ok: true, logged: true });
+});
+
+router.get('/dsl/report', _requireAdmin, (req, res) => {
+    const report = db.queryDslParityReport({
+        since: req.query.since,
+        userId: req.query.userId,
+        posId: req.query.posId,
+    });
+    return res.status(200).json(Object.assign({ ok: true }, report));
+});
+
 module.exports = router;
