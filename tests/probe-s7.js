@@ -1,7 +1,26 @@
-// [S7] Standalone probe — exercises DSL parity shadow flag + migration 031.
-// Tests that the DSL_PARITY_SHADOW_ENABLED flag defaults to false.
-// Tests that migration 031_dsl_parity_log creates table + 2 indexes.
-// Run: npm test -- --forceExit --silent --testPathPattern probe-s7
+/**
+ * S7 Shadow Parity probe-s7.js
+ *
+ * Task coverage:
+ * - T1 (flag): DSL_PARITY_SHADOW_ENABLED default OFF, property getter
+ * - T2 (migration 031): dsl_parity_log table + 2 indexes
+ * - T3 (helpers): logDslParityRow exists, queryDslParityReport exists
+ * - T4 (logDslParityRow): row insertion, silent-on-bad-input, input guards
+ * - T5 (queryDslParityReport): pair correlation, divergence math, gate eval,
+ *                              SQL injection safety, edge-case skips
+ * - T6 (routes): /api/brain/parity/dsl/{client,report} registered
+ * - T7 (server tick): static check pe serverAT.js instrumentation
+ * - T8 (client tick): static check pe dsl.ts instrumentation
+ * - T9 (E2E integration): paired flow scenarios — zero/low/high divergence,
+ *                         phase mismatch, entry=0 skip, >2s window, multi-pair
+ *                         aggregation
+ *
+ * Cleanup invariant: pos_id LIKE 'test-%' OR 'e2e-%' deleted before/after.
+ * All test fixtures use those prefixes — see cleanupTestRows() helper.
+ *
+ * Run: node tests/probe-s7.js
+ *      npm test -- --forceExit --silent --testPathPattern probe-s7
+ */
 'use strict';
 
 const MF = require('../server/migrationFlags');
@@ -80,10 +99,14 @@ try {
 
 const dbModule = require('../server/services/database');
 
-// Cleanup: remove test rows before and after
+// Cleanup invariant: remove test fixture rows before and after.
+// Both 'test-%' (T4/T5 fixtures) and 'e2e-%' (T9 fixtures) are deleted so
+// that probe-s7 leaves dsl_parity_log in the same state it found it.
 const cleanupTestRows = () => {
     try {
-        dbModule.db.prepare("DELETE FROM dsl_parity_log WHERE pos_id LIKE 'test-%'").run();
+        dbModule.db
+            .prepare("DELETE FROM dsl_parity_log WHERE pos_id LIKE 'test-%' OR pos_id LIKE 'e2e-%'")
+            .run();
     } catch (_) {}
 };
 cleanupTestRows();
@@ -368,6 +391,139 @@ console.log('\nT8 — Client tick instrumentation in client/src/trading/dsl.ts')
             return idxLoop > 0 && idxBlock > 0 && idxRender > 0
                 && idxLoop < idxBlock && idxBlock < idxRender;
         })());
+}
+
+// ─── T9 — E2E integration: paired flow + gate evaluation ──────────────────
+// Insert paired (server+client) DSL fixtures via the public helpers
+// (logDslParityRow stamps created_at = Date.now() so the 2s pair window
+// is satisfied for back-to-back inserts). queryDslParityReport then
+// exercises divergence math, phase match logic, and gate aggregation
+// across multiple scenarios. Edge cases that need explicit timestamps
+// (>2s pair window) bypass the helper and INSERT directly so we control
+// created_at.
+
+console.log('\nT9 — E2E integration scenarios (paired flow + gate eval)');
+{
+    cleanupTestRows();
+
+    const userId = 8888;
+    const symbol = 'BTCUSDT';
+    const since = Date.now() - 10000;
+
+    // Scenario 1 — Zero divergence (perfect parity)
+    const posS1 = 'e2e-s1-zero';
+    dbModule.logDslParityRow(userId, posS1, symbol, 'server', {
+        phase: 'ACTIVE', currentSL: 50000, entry: 50000, price: 51000,
+    });
+    dbModule.logDslParityRow(userId, posS1, symbol, 'client', {
+        phase: 'ACTIVE', currentSL: 50000, entry: 50000, price: 51000,
+    });
+    const r1 = dbModule.queryDslParityReport({ since, userId, posId: posS1 });
+    check('T9 S1 zero-div: paired === 1', r1.paired === 1, 'paired=' + r1.paired);
+    check('T9 S1 zero-div: divergencePct.mean === 0',
+        r1.divergencePct.mean === 0, 'mean=' + r1.divergencePct.mean);
+    check('T9 S1 zero-div: divergencePct.p95 === 0',
+        r1.divergencePct.p95 === 0, 'p95=' + r1.divergencePct.p95);
+    check('T9 S1 zero-div: phaseMatchPct === 100',
+        r1.phaseMatchPct === 100, 'phaseMatchPct=' + r1.phaseMatchPct);
+
+    // Scenario 2 — 1% divergence (under primary mean threshold but n<500)
+    const posS2 = 'e2e-s2-onepct';
+    dbModule.logDslParityRow(userId, posS2, symbol, 'server', {
+        phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100,
+    });
+    dbModule.logDslParityRow(userId, posS2, symbol, 'client', {
+        phase: 'ACTIVE', currentSL: 101, entry: 100, price: 100,
+    });
+    const r2 = dbModule.queryDslParityReport({ since, userId, posId: posS2 });
+    check('T9 S2 1pct-div: divergencePct.mean ≈ 1.0',
+        Math.abs(r2.divergencePct.mean - 1.0) < 0.001, 'mean=' + r2.divergencePct.mean);
+    check('T9 S2 1pct-div: gate.primary_pass === false (paired<500)',
+        r2.gate.primary_pass === false, 'primary_pass=' + r2.gate.primary_pass);
+
+    // Scenario 3 — 2.5% divergence (would fail primary mean threshold if n>=500)
+    const posS3 = 'e2e-s3-twoandhalfpct';
+    dbModule.logDslParityRow(userId, posS3, symbol, 'server', {
+        phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100,
+    });
+    dbModule.logDslParityRow(userId, posS3, symbol, 'client', {
+        phase: 'ACTIVE', currentSL: 102.5, entry: 100, price: 100,
+    });
+    const r3 = dbModule.queryDslParityReport({ since, userId, posId: posS3 });
+    check('T9 S3 2.5pct-div: divergencePct.mean ≈ 2.5',
+        Math.abs(r3.divergencePct.mean - 2.5) < 0.001, 'mean=' + r3.divergencePct.mean);
+    check('T9 S3 2.5pct-div: gate.primary_pass === false (mean>=2.0 OR n<500)',
+        r3.gate.primary_pass === false, 'primary_pass=' + r3.gate.primary_pass);
+
+    // Scenario 4 — Phase divergence (server=ACTIVE, client=IMPULSE), SL still valid
+    const posS4 = 'e2e-s4-phasediv';
+    dbModule.logDslParityRow(userId, posS4, symbol, 'server', {
+        phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100,
+    });
+    dbModule.logDslParityRow(userId, posS4, symbol, 'client', {
+        phase: 'IMPULSE', currentSL: 100, entry: 100, price: 100,
+    });
+    const r4 = dbModule.queryDslParityReport({ since, userId, posId: posS4 });
+    check('T9 S4 phase-mismatch: paired === 1',
+        r4.paired === 1, 'paired=' + r4.paired);
+    check('T9 S4 phase-mismatch: phaseMatchPct === 0',
+        r4.phaseMatchPct === 0, 'phaseMatchPct=' + r4.phaseMatchPct);
+    check('T9 S4 phase-mismatch: divergencePct.count === 1 (SL still computed)',
+        r4.divergencePct.count === 1, 'count=' + r4.divergencePct.count);
+
+    // Scenario 5 — Edge: entry=0 on both sides → divergence skipped, pair counted
+    const posS5 = 'e2e-s5-zeroentry';
+    dbModule.logDslParityRow(userId, posS5, symbol, 'server', {
+        phase: 'ACTIVE', currentSL: 100, entry: 0, price: 100,
+    });
+    dbModule.logDslParityRow(userId, posS5, symbol, 'client', {
+        phase: 'ACTIVE', currentSL: 105, entry: 0, price: 100,
+    });
+    const r5 = dbModule.queryDslParityReport({ since, userId, posId: posS5 });
+    check('T9 S5 entry=0: paired === 1 (correlation still works)',
+        r5.paired === 1, 'paired=' + r5.paired);
+    check('T9 S5 entry=0: divergencePct.count === 0 (skipped from math)',
+        r5.divergencePct.count === 0, 'count=' + r5.divergencePct.count);
+
+    // Scenario 6 — Pair window > 2s: no pair formed.
+    // logDslParityRow stamps created_at internally so we INSERT directly to
+    // control timestamps (server t0, client t0+3000ms → outside 2s window).
+    const posS6 = 'e2e-s6-window';
+    const t6 = Date.now();
+    const insertStmt = dbModule.db.prepare(
+        'INSERT INTO dsl_parity_log ' +
+        '(user_id, pos_id, symbol, source, phase, current_sl, pivot_left, pivot_right, ' +
+        ' impulse_val, entry_price, tick_price, created_at) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    insertStmt.run(userId, posS6, symbol, 'server', 'ACTIVE', 100, null, null, null, 100, 100, t6);
+    insertStmt.run(userId, posS6, symbol, 'client', 'ACTIVE', 101, null, null, null, 100, 100, t6 + 3000);
+    const r6 = dbModule.queryDslParityReport({ since, userId, posId: posS6 });
+    check('T9 S6 >2s-window: paired === 0 (pair window exceeded)',
+        r6.paired === 0, 'paired=' + r6.paired);
+
+    // Scenario 7 — Multi-pair gate aggregation: 3 pairs at 0%, 1%, 2% divergence.
+    // Mean ≈ 1.0, max = 2.0, p95 = element at floor(3*0.95)=floor(2.85)=2 → 2.0.
+    cleanupTestRows();
+    const posS7a = 'e2e-s7-pair-a';
+    const posS7b = 'e2e-s7-pair-b';
+    const posS7c = 'e2e-s7-pair-c';
+    dbModule.logDslParityRow(userId, posS7a, symbol, 'server', { phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100 });
+    dbModule.logDslParityRow(userId, posS7a, symbol, 'client', { phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100 });
+    dbModule.logDslParityRow(userId, posS7b, symbol, 'server', { phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100 });
+    dbModule.logDslParityRow(userId, posS7b, symbol, 'client', { phase: 'ACTIVE', currentSL: 101, entry: 100, price: 100 });
+    dbModule.logDslParityRow(userId, posS7c, symbol, 'server', { phase: 'ACTIVE', currentSL: 100, entry: 100, price: 100 });
+    dbModule.logDslParityRow(userId, posS7c, symbol, 'client', { phase: 'ACTIVE', currentSL: 102, entry: 100, price: 100 });
+    const r7 = dbModule.queryDslParityReport({ since, userId });
+    check('T9 S7 multi-pair: paired === 3', r7.paired === 3, 'paired=' + r7.paired);
+    check('T9 S7 multi-pair: divergencePct.mean ≈ 1.0',
+        Math.abs(r7.divergencePct.mean - 1.0) < 0.001, 'mean=' + r7.divergencePct.mean);
+    check('T9 S7 multi-pair: divergencePct.max === 2.0',
+        Math.abs(r7.divergencePct.max - 2.0) < 0.001, 'max=' + r7.divergencePct.max);
+    check('T9 S7 multi-pair: gate.secondary_pass === false (phaseValidPairs<100)',
+        r7.gate.secondary_pass === false, 'secondary_pass=' + r7.gate.secondary_pass);
+
+    cleanupTestRows();
 }
 
 console.log('\n=== Summary ===');
