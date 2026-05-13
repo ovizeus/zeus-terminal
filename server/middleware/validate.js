@@ -65,6 +65,31 @@ function validateOrderBody(req, res, next) {
   req.body.quantity = qty;
   if (leverage !== undefined) req.body.leverage = parseInt(leverage, 10);
 
+  // [BUG-T5 2026-05-13] Defense-in-depth: enforce SL pentru mode=live.
+  // Coordonat cu BUG-T2c (Path A/B no-SL în registerManualPosition) +
+  // BUG-T4 (orphan position în catch block). Middleware blochează cererea
+  // ÎNAINTE să ajungă la route handler, prevenind tracking-deficient
+  // live positions fără SL pe exchange.
+  //
+  // Edge cases acoperite: 0, "0", null, undefined, "", negative, NaN,
+  // Infinity, malformed decimals ("1.2.3"), booleans, objects/arrays.
+  // Number() folosit (NU parseFloat) — strict, refuză "1.2.3" → NaN.
+  //
+  // Demo mode exempt (per Mirela manual playground pattern documentat
+  // BUG-T10 audit §3.5; demo positions au sl=null prin design).
+  if (req.body.mode === 'live') {
+    const sl = req.body.sl;
+    if (sl === undefined || sl === null || sl === '' ||
+        typeof sl === 'object' || typeof sl === 'boolean') {
+      return res.status(400).json({ error: 'SL required for live mode (defense-in-depth)' });
+    }
+    const slNum = Number(String(sl).trim());
+    if (!Number.isFinite(slNum) || slNum <= 0) {
+      return res.status(400).json({ error: 'SL required for live mode (defense-in-depth)' });
+    }
+    req.body.sl = slNum;  // normalize la number
+  }
+
   next();
 }
 
