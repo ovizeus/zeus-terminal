@@ -601,6 +601,30 @@ migrate('031_dsl_parity_log', () => {
     `);
 });
 
+// [BUG-DB-7 2026-05-13] at_closed table FK pe user_id + NOT NULL constraint.
+// Pre-fix: user_id era nullable + zero FK declared → orphan rows posibile la
+// user delete. GDPR right-to-erasure incomplete. Verificat 2026-05-13 pre-flight:
+// 0 NULL user_id rows (backfilled via migration 005). 2,331 rows total.
+// SQLite-recreate pattern: CREATE NEW + COPY + DROP OLD + RENAME + reindex.
+// Atomic într-o tranzacție via migrate() framework (db.exec single-statement).
+// FK declaration includes ON DELETE CASCADE — user delete now cleans at_closed.
+migrate('032_at_closed_fk_user', () => {
+    db.exec(`
+        CREATE TABLE at_closed_new (
+            seq         INTEGER PRIMARY KEY,
+            data        TEXT NOT NULL,
+            closed_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        );
+        INSERT INTO at_closed_new (seq, data, closed_at, user_id)
+            SELECT seq, data, closed_at, user_id FROM at_closed;
+        DROP TABLE at_closed;
+        ALTER TABLE at_closed_new RENAME TO at_closed;
+        CREATE INDEX idx_at_closed_user ON at_closed(user_id);
+        CREATE INDEX idx_at_closed_user_closed_at ON at_closed(user_id, closed_at DESC);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
