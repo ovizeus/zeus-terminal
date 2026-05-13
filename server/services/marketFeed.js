@@ -12,11 +12,14 @@ const MF = require('../migrationFlags');
 // ── Config ──
 const BINANCE_WS = 'wss://fstream.binance.com/ws';
 const BINANCE_REST = 'https://fapi.binance.com';
-const RECONNECT_MS = 5000;      // reconnect delay
-const MAX_RECONNECT_MS = 60000;     // max backoff
-const PING_INTERVAL_MS = 180000;    // 3min ping (Binance times out at 5min)
-const KLINE_HISTORY = 200;       // initial candle fetch count
-const STALE_DATA_MS = 120000;    // 2min data staleness threshold
+// [CFG-11 2026-05-13] Env-overridable feed tuning. Defaults preserved pentru
+// zero behavior change. Override prin env pentru tuning operational fără
+// rebuild — ex. STALE_DATA_MS=180000 pentru toleranță mai mare la network jitter.
+const RECONNECT_MS = parseInt(process.env.FEED_RECONNECT_MS, 10) || 5000;            // reconnect delay
+const MAX_RECONNECT_MS = parseInt(process.env.FEED_MAX_RECONNECT_MS, 10) || 60000;   // max backoff
+const PING_INTERVAL_MS = parseInt(process.env.FEED_PING_INTERVAL_MS, 10) || 180000;  // 3min ping (Binance times out at 5min)
+const KLINE_HISTORY = parseInt(process.env.FEED_KLINE_HISTORY, 10) || 200;           // initial candle fetch count
+const STALE_DATA_MS = parseInt(process.env.FEED_STALE_DATA_MS, 10) || 120000;        // 2min data staleness threshold
 
 // ── Active streams ──
 const _streams = {};    // { streamKey: { ws, reconnects, timer, alive } }

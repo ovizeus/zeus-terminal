@@ -10,9 +10,14 @@ import react from '@vitejs/plugin-react'
 const ZEUS_SERVER_URL = process.env.ZEUS_SERVER_URL || 'http://localhost:3000'
 const ZEUS_SERVER_WS = ZEUS_SERVER_URL.replace(/^http/, 'ws')
 
+// [CFG-11 2026-05-13] Env-overridable base path. Default '/app/' preserved.
+// Override doar dacă server-side static serve route is also updated să match.
+// Coupling: server.js routes la `/app/*` — ambele trebuie aliniate.
+const ZEUS_BASE_PATH = process.env.ZEUS_BASE_PATH || '/app/'
+
 export default defineConfig({
   plugins: [react()],
-  base: '/app/',
+  base: ZEUS_BASE_PATH,
   build: {
     outDir: '../public/app',
     emptyOutDir: true,

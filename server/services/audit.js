@@ -35,7 +35,9 @@ function _rotate() {
         }
     } catch (_) { }
 }
-setInterval(_rotate, 60000);
+// [CFG-11 2026-05-13] Env-overridable rotation interval. Default 60s preserved.
+const _AUDIT_ROTATE_INTERVAL_MS = parseInt(process.env.AUDIT_ROTATE_INTERVAL_MS, 10) || 60000;
+setInterval(_rotate, _AUDIT_ROTATE_INTERVAL_MS);
 
 /**
  * Record an audit event.
