@@ -6,7 +6,7 @@
  * setJournal/setDemoPositions/setLivePositions` and performs SL/TP/close actions
  * via the same engine exports the old inline handlers called.
  */
-import { useRef, useEffect, useState } from 'react'
+import { useRef, useEffect, useState, memo } from 'react'
 import { escHtml } from '../../utils/dom'
 import { fP, fmt } from '../../utils/format'
 import { attachConfirmClose } from '../../engine/events'
@@ -40,7 +40,12 @@ function _getCurPrice(sym: string | undefined): number {
 }
 
 // ── Pending order row ────────────────────────────────────────────────────────
-export function PendingOrderRow({ ord }: { ord: any }) {
+// [PERF-8 2026-05-13] memo wrapper — row componente sunt rendered N times în
+// positions/pending/journal lists. Re-render trigger pe fiecare price tick
+// (frequency ~1-10Hz). React.memo short-circuit-ează re-renders când prop
+// reference unchanged. Store setters replace items, deci memo invalidează
+// CORECT doar pentru cards changed. Pattern mirror din PositionsList [PERF-3].
+export const PendingOrderRow = memo(function PendingOrderRow({ ord }: { ord: any }) {
   const symBase = (ord.sym || '').replace('USDT', '')
   const sideColor = ord.side === 'LONG' ? 'var(--cyan)' : 'var(--blu)'
   const curPrice = _getCurPrice(ord.sym)
@@ -95,10 +100,11 @@ export function PendingOrderRow({ ord }: { ord: any }) {
       </div>
     </div>
   )
-}
+})
 
 // ── Demo position row (editable SL/TP + Close) ──────────────────────────────
-export function DemoPositionRow({ pos }: { pos: any }) {
+// [PERF-8 2026-05-13] memo wrapper — see PendingOrderRow comment.
+export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any }) {
   const curPrice = _getCurPrice(pos.sym)
   const btnRef = useRef<HTMLButtonElement>(null)
   const [sl, setSl] = useState<string>(pos.sl ? String(pos.sl) : '')
@@ -203,10 +209,11 @@ export function DemoPositionRow({ pos }: { pos: any }) {
       ) : null}
     </div>
   )
-}
+})
 
 // ── Live position row (editable SL/TP + Close) ──────────────────────────────
-export function LivePositionRow({ pos }: { pos: any }) {
+// [PERF-8 2026-05-13] memo wrapper — see PendingOrderRow comment.
+export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any }) {
   const btnRef = useRef<HTMLButtonElement>(null)
   const [sl, setSl] = useState<string>(pos.sl ? String(pos.sl) : '')
   const [tp, setTp] = useState<string>(pos.tp ? String(pos.tp) : '')
@@ -286,10 +293,11 @@ export function LivePositionRow({ pos }: { pos: any }) {
       </div>
     </div>
   )
-}
+})
 
 // ── Journal row (read-only) ─────────────────────────────────────────────────
-export function JournalRow({ trade }: { trade: any }) {
+// [PERF-8 2026-05-13] memo wrapper — see PendingOrderRow comment.
+export const JournalRow = memo(function JournalRow({ trade }: { trade: any }) {
   const pnl = Number(trade.pnl) || 0
   const win = pnl >= 0
   const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
@@ -303,4 +311,4 @@ export function JournalRow({ trade }: { trade: any }) {
       <span style={{ color: 'var(--dim)', fontSize: 11 }}>{escHtml(trade.reason || '—')}</span>
     </div>
   )
-}
+})
