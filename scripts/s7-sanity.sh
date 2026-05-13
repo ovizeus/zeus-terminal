@@ -318,27 +318,63 @@ COND_PAIRED_GROW=0;    [ "$PAIRED_COUNT" -gt 0 ] && COND_PAIRED_GROW=1
 COND_NO_ERR=0;         [ "$ERR_COUNT" -le 5 ] && COND_NO_ERR=1
 COND_PM2_STABLE=0;     [ "$PM2_STATUS_NOW" = "online" ] && [ "${PM2_UNSTABLE_NOW:-1}" = "0" ] && COND_PM2_STABLE=1
 
+# [Refactor 2026-05-13] Verdict logic distinguishes Recovery Plan §1 sub-classes.
+# Lesson learned post-S7 T+72h: hard threshold `divs=0` triggers RED literal DAR
+# context-aware verdict per Recovery Plan = 🟡a YELLOW NO_SIGNAL_NO_BREAKAGE
+# (acceptable post-soak when system stable). Refactor distinge:
+#
+#   RED (hard fail) = BREAKAGE — any of:
+#     - mean divergence ≥5% (severe SL math drift)
+#     - PM2 unstable OR status != online
+#     - error count > 5 în logs
+#     - phase match < 80% când există ≥100 valid pairs
+#
+#   YELLOW 🟡a (NO_SIGNAL_NO_BREAKAGE) = NO ACTIVE-phase data DAR system clean:
+#     - divs=0 sau paired<500 (insufficient sample)
+#     - PM2 stable, zero errors
+#     - phase agreement N/A sau ≥80% când exists
+#
+#   YELLOW 🟡b (PARTIAL_DRIFT) = signal partial cu minor concerns:
+#     - mean 2-5% (warning band)
+#     - phase match 80-94% (sub gate dar acceptable)
+#     - one gate fails but NOT breakage criteria
+#
+#   GREEN = all gates pass (divs≥500, mean<2%, p95<5%, phase≥95%, stable)
+
 # Pre-T+24h => INFO (insufficient soak time)
 if [ "$ELAPSED_H" -lt 24 ]; then
   STATUS="INFO"
   COLOR="$CYAN"
   REASON="T+${ELAPSED_H}h <24h — soak insufficient time (current rates: server=${SERVER_ROWS}, client=${CLIENT_ROWS}, paired=${PAIRED_COUNT}, divs=${DIVS_LEN}). Continue waiting."
-elif [ "$DIVS_LEN" -eq 0 ] || [ "$PAIRED_COUNT" -lt 500 ] || \
-     { [ "$MEAN_DIV_INT" -ge 500 ] && [ "$MEAN_DIV_INT" -ge 0 ]; } || \
-     [ "$ERR_COUNT" -gt 5 ] || [ "$COND_PM2_STABLE" -eq 0 ]; then
+
+# RED = breakage (NOT just insufficient data) — hard fail criteria per Recovery Plan
+elif [ "$COND_PM2_STABLE" -eq 0 ] || \
+     [ "$ERR_COUNT" -gt 5 ] || \
+     { [ "$DIVS_LEN" -ge 1 ] && [ "$MEAN_DIV_INT" -ge 500 ]; } || \
+     { [ "$PHASE_VALID" -ge 100 ] && [ "$PHASE_PCT_INT" -lt 80 ]; }; then
   STATUS="RED"
   COLOR="$RED"
-  REASON="Hard fail: divs=${DIVS_LEN} paired=${PAIRED_COUNT} mean=${MEAN_DIV} errors=${ERR_COUNT} pm2_status=${PM2_STATUS_NOW}/unstable=${PM2_UNSTABLE_NOW}"
+  REASON="Hard fail (breakage): pm2_stable=${COND_PM2_STABLE}, errors=${ERR_COUNT} (>5), mean=${MEAN_DIV}% (≥5 if divs≥1), phaseMatchPct=${PHASE_PCT}% (<80 when ≥100 valid). pm2_status=${PM2_STATUS_NOW}/unstable=${PM2_UNSTABLE_NOW}"
+
+# GREEN = all gates satisfied
 elif [ "$COND_DIVS_500" -eq 1 ] && [ "$COND_MEAN_OK" -eq 1 ] && [ "$COND_P95_OK" -eq 1 ] && \
      [ "$COND_PHASE_PCT_OK" -eq 1 ] && [ "$COND_PAIRED_GROW" -eq 1 ] && \
      [ "$COND_NO_ERR" -eq 1 ] && [ "$COND_PM2_STABLE" -eq 1 ]; then
   STATUS="GREEN"
   COLOR="$GREEN"
   REASON="All gates satisfied: divs=${DIVS_LEN}≥500, mean=${MEAN_DIV}%<2.0, p95=${P95_DIV}%<5.0, phaseMatchPct=${PHASE_PCT}%≥95, paired=${PAIRED_COUNT}, errors=${ERR_COUNT}≤5, PM2 stable"
-else
-  STATUS="YELLOW"
+
+# YELLOW 🟡a — NO_SIGNAL_NO_BREAKAGE: divs=0 or paired<500 BUT system clean
+elif [ "$DIVS_LEN" -eq 0 ] || [ "$PAIRED_COUNT" -lt 500 ]; then
+  STATUS="YELLOW (🟡a NO_SIGNAL_NO_BREAKAGE)"
   COLOR="$YELLOW"
-  REASON="One or more gates not met (divs=${DIVS_LEN}, mean=${MEAN_DIV}, p95=${P95_DIV}, phaseValid=${PHASE_VALID}, phasePct=${PHASE_PCT}%, paired=${PAIRED_COUNT}, errors=${ERR_COUNT})"
+  REASON="Insufficient ACTIVE-phase samples BUT system clean: divs=${DIVS_LEN} (need ≥500), paired=${PAIRED_COUNT}, PM2 stable, errors=${ERR_COUNT}≤5, phaseMatchPct=${PHASE_PCT}% when valid. Recovery Plan §1 sub-class 🟡a → ACCEPTABLE post-soak (acceptable verdict; not a breakage signal — just lacks data for math validation)."
+
+# YELLOW 🟡b — PARTIAL_DRIFT: signal exists but minor concerns
+else
+  STATUS="YELLOW (🟡b PARTIAL_DRIFT)"
+  COLOR="$YELLOW"
+  REASON="Partial drift detected: mean=${MEAN_DIV}% (2-5% warning band), p95=${P95_DIV}%, phaseValid=${PHASE_VALID}, phasePct=${PHASE_PCT}% (80-94% sub-gate), divs=${DIVS_LEN}, paired=${PAIRED_COUNT}, errors=${ERR_COUNT}. Recovery Plan §1 sub-class 🟡b → INVESTIGATE before promote la S8."
 fi
 
 printf "Reason: %s\n\n" "$REASON"
