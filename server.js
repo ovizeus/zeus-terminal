@@ -512,13 +512,24 @@ app.post('/api/at/mode', async (_req, res) => {
   res.json(result);
 });
 // [AT-TOGGLE-FIX] Dedicated AT ON/OFF endpoint — server-authoritative
+// [BUG-T7 2026-05-13] Accept optional `mode` param ('demo'|'live'). If omitted,
+// server uses current us.engineMode (backward-compat pentru clients existenți
+// care trimit doar { active }).
 app.post('/api/at/toggle', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   const active = _req.body.active;
   if (typeof active !== 'boolean') return res.status(400).json({ ok: false, error: 'active must be boolean' });
-  const result = serverAT.toggleActive(_req.user.id, active);
+  const modeParam = (_req.body.mode === 'live' || _req.body.mode === 'demo') ? _req.body.mode : undefined;
+  const result = serverAT.toggleActive(_req.user.id, active, modeParam);
   if (!result.ok) return res.json(result);
-  res.json({ ok: true, atActive: result.atActive, state: serverAT.getFullState(_req.user.id) });
+  res.json({
+    ok: true,
+    atActive: result.atActive,
+    atActiveDemo: result.atActiveDemo,
+    atActiveLive: result.atActiveLive,
+    mode: result.mode,
+    state: serverAT.getFullState(_req.user.id)
+  });
 });
 app.post('/api/at/reset', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });

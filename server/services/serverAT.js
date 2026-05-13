@@ -99,7 +99,9 @@ function _defaultUserState() {
         dailyPnLDemo: 0,
         dailyPnLLive: 0,
         lastResetDay: -1,
-        atActive: false, // [BUG-O5] Per-user AT on/off — default OFF for safety; user must explicitly arm AT
+        atActive: false, // [BUG-O5] LEGACY field — kept synced cu current engineMode via toggleActive (BUG-T7 2026-05-13)
+        atActiveDemo: false, // [BUG-T7 2026-05-13] Per-mode AT toggle — DEMO independent
+        atActiveLive: false, // [BUG-T7 2026-05-13] Per-mode AT toggle — LIVE independent
         dslEnabled: true, // [DSL-OFF] Per-user DSL engine on/off — default ON
     };
 }
@@ -357,7 +359,9 @@ function _persistState(userId) {
             pnlAtReset: us.pnlAtReset,
             liveBalanceRef: us.liveBalanceRef,
             lastResetDay: us.lastResetDay,
-            atActive: us.atActive, // [F1]
+            atActive: us.atActive, // [F1] LEGACY synced cu current mode flag
+            atActiveDemo: us.atActiveDemo, // [BUG-T7 2026-05-13] per-mode persistent
+            atActiveLive: us.atActiveLive, // [BUG-T7 2026-05-13] per-mode persistent
         }, userId);
     } catch (e) {
         logger.error('AT_DB', 'Save state failed: ' + e.message);
@@ -402,8 +406,13 @@ function _applyStateBlob(userId, saved) {
     us.pnlAtReset = saved.pnlAtReset || 0;
     us.liveBalanceRef = saved.liveBalanceRef || 0;
     us.lastResetDay = saved.lastResetDay || -1;
-    us.atActive = saved.atActive !== false; // [F1] Default true for existing users
-    logger.info('AT_DB', `State restored uid=${userId}: mode=${us.engineMode} seq=${us.seq} balance=$${us.demoBalance.toFixed(2)} atActive=${us.atActive}`);
+    us.atActive = saved.atActive !== false; // [F1] LEGACY — default true for existing users
+    // [BUG-T7 2026-05-13] Backfill new per-mode fields from legacy atActive
+    // pentru users care au state-uri persisted pre-T7. Atribuie ambele cu
+    // valoarea atActive existentă pentru a păstra current behavior post-deploy.
+    us.atActiveDemo = saved.atActiveDemo !== undefined ? !!saved.atActiveDemo : us.atActive;
+    us.atActiveLive = saved.atActiveLive !== undefined ? !!saved.atActiveLive : us.atActive;
+    logger.info('AT_DB', `State restored uid=${userId}: mode=${us.engineMode} seq=${us.seq} balance=$${us.demoBalance.toFixed(2)} atActive=${us.atActive} atDemo=${us.atActiveDemo} atLive=${us.atActiveLive}`);
 }
 
 function _restoreFromDb() {
@@ -587,7 +596,23 @@ function setMode(userId, mode) {
 }
 
 function getMode(userId) { return _uState(userId).engineMode; }
-function isATActive(userId) { return _uState(userId).atActive; }
+// [BUG-T7 2026-05-13] Per-mode AT-active check helper. mode='live'|'demo'.
+// Defensive: returns false on missing us or invalid mode (default demo).
+function _isATActiveForMode(us, mode) {
+    if (!us) return false;
+    return mode === 'live' ? !!us.atActiveLive : !!us.atActiveDemo;
+}
+
+// [BUG-T7 2026-05-13] isATActive accept optional mode param. Without mode,
+// defaults la current us.engineMode pentru backward-compat callers (e.g.
+// serverBrain.js:545 main loop). Pass explicit mode pentru cross-mode checks.
+function isATActive(userId, mode) {
+    const us = _uState(userId);
+    if (mode === 'live' || mode === 'demo') {
+        return _isATActiveForMode(us, mode);
+    }
+    return _isATActiveForMode(us, us.engineMode || 'demo');
+}
 
 /**
  * Pre-live checklist — validates readiness before switching to live mode.
@@ -648,21 +673,41 @@ async function preLiveChecklist(userId) {
     return { ok: allOk, checks, failedChecks };
 }
 
-// [F1] Per-user AT on/off toggle — independent of mode (demo/live)
-function toggleActive(userId, active) {
+// [BUG-T7 2026-05-13] Per-user AT on/off toggle — PER-MODE split.
+// Optional mode param ('demo'|'live') — if omitted, defaults la current
+// us.engineMode. Operator-flagged grav 2026-05-10: toggle anterior era
+// GLOBAL per-user (atActive single field) — turning off în demo blocked
+// live too (silent mental model break + safety risc combinat cu BUG-T3).
+// Fix: atActive split → atActiveDemo + atActiveLive independente.
+// Legacy atActive kept synced cu current engineMode flag pentru backward
+// compat telemetry (getFullState response, WebSocket frames).
+function toggleActive(userId, active, mode) {
     if (typeof active !== 'boolean') return { ok: false, error: 'active must be boolean' };
     if (!userId) return { ok: false, error: 'Missing userId' };
     const us = _uState(userId);
-    const was = us.atActive;
-    us.atActive = active;
+    const targetMode = (mode === 'live' || mode === 'demo') ? mode : (us.engineMode || 'demo');
+    const fieldName = targetMode === 'live' ? 'atActiveLive' : 'atActiveDemo';
+    const was = !!us[fieldName];
+    us[fieldName] = active;
+    // Sync legacy atActive cu current engineMode flag (NOT cu targetMode —
+    // operator may toggle off-mode while viewing the other mode; legacy must
+    // reflect what's true for *current* engineMode pentru UI consistency).
+    us.atActive = !!us[us.engineMode === 'live' ? 'atActiveLive' : 'atActiveDemo'];
     _persistState(userId);
-    logger.info('AT_ENGINE', `AT toggled uid=${userId}: ${was} → ${active}`);
-    audit.record('AT_TOGGLE', { userId, was, now: active }, 'user');
+    logger.info('AT_ENGINE', `AT toggled uid=${userId} mode=${targetMode}: ${was} → ${active}`);
+    audit.record('AT_TOGGLE', { userId, mode: targetMode, was, now: active }, 'user');
     telegram.sendToUser(userId, active
-        ? '🟢 *AT Activated* — brain entries enabled'
-        : '🔴 *AT Deactivated* — brain entries blocked');
+        ? `🟢 *AT Activated (${targetMode.toUpperCase()})* — brain entries enabled`
+        : `🔴 *AT Deactivated (${targetMode.toUpperCase()})* — brain entries blocked`);
     _notifyChange(userId);
-    return { ok: true, atActive: active, was };
+    return {
+        ok: true,
+        atActive: us.atActive,
+        atActiveDemo: us.atActiveDemo,
+        atActiveLive: us.atActiveLive,
+        mode: targetMode,
+        was,
+    };
 }
 
 // ── Missed trade recorder ──
@@ -707,9 +752,11 @@ function processBrainDecision(decision, stc, userId, userIntent) {
         return null;
     }
 
-    // [F1] Per-user AT on/off gate — if user disabled AT, block ALL entries
-    if (!us.atActive) {
-        logger.info('AT_ENGINE', `Entry blocked uid=${userId} — AT disabled by user`);
+    // [BUG-T7 2026-05-13] Per-mode AT-active gate. Pre-T7 used global atActive
+    // which blocked BOTH modes when toggled off în either. Now checks mode-specific
+    // flag based pe us.engineMode (decision context).
+    if (!_isATActiveForMode(us, us.engineMode)) {
+        logger.info('AT_ENGINE', `Entry blocked uid=${userId} mode=${us.engineMode} — AT disabled for this mode`);
         _recordMissedTrade(userId, decision, 'AT_DISABLED');
         return null;
     }
@@ -1070,9 +1117,10 @@ async function _executeLiveEntry(entry, stc) {
     const userId = entry.userId;
     const us = _uState(userId);
 
-    // [RE-ENTRY] Re-check atActive — user may have disabled AT between decision and execution
-    if (!us.atActive) {
-        logger.info('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} — AT disabled after decision`);
+    // [BUG-T7 2026-05-13] RE-ENTRY: per-mode AT-active re-check (user may have
+    // disabled AT for current mode between decision and execution).
+    if (!_isATActiveForMode(us, us.engineMode)) {
+        logger.info('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} mode=${us.engineMode} — AT disabled for this mode after decision`);
         const abortIdx = _positions.indexOf(entry);
         if (abortIdx >= 0) {
             entry.closeReason = 'AT_DISABLED_INFLIGHT';
@@ -2601,8 +2649,10 @@ function getFullState(userId) {
     const serverBrainDemoEnabled = !!(MF && MF.SERVER_BRAIN_DEMO) && _isDemoUser;
     return {
         mode: us.engineMode,
-        enabled: us.atActive, // [F1] Reflect actual per-user AT state
-        atActive: us.atActive, // [F1] Explicit field for frontend
+        enabled: us.atActive, // [F1] LEGACY — synced cu current engineMode flag
+        atActive: us.atActive, // [F1] LEGACY — synced cu current engineMode flag
+        atActiveDemo: us.atActiveDemo, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
+        atActiveLive: us.atActiveLive, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
         serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
         // [Phase 2 S6-B4] Demo-only authority signals — see derivation above.
         serverATDemoEnabled,
@@ -2936,9 +2986,10 @@ const ADDON_TP_RETRIES = [1000, 3000];
 async function addOnPosition(userId, seq, options = {}) {
     if (!userId) return { ok: false, error: 'Missing userId' };
     if (!seq) return { ok: false, error: 'Missing seq' };
-    // [M1] Block add-ons when AT is OFF — no exposure growth while disabled
+    // [BUG-T7 2026-05-13] Block add-ons when AT is OFF for current mode —
+    // no exposure growth while disabled. Per-mode aware (M1 add-on path).
     const us = _uState(userId);
-    if (!us.atActive) return { ok: false, error: 'Cannot add on: AT is OFF' };
+    if (!_isATActiveForMode(us, us.engineMode)) return { ok: false, error: `Cannot add on: AT is OFF for mode=${us.engineMode}` };
 
     // ── Lock: prevent double trigger on same position ──
     const gk = `${userId}:${seq}`;
