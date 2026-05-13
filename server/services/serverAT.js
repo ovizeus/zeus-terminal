@@ -604,7 +604,18 @@ function setMode(userId, mode) {
         `🔄 *AT Mode Changed*\n${oldMode.toUpperCase()} → ${mode.toUpperCase()}`
     );
     _notifyChange(userId);
-    return { ok: true, mode: us.engineMode };
+    // [BUG-T7 FOLLOWUP-2 2026-05-13] Return enriched response cu per-mode flags +
+    // computed atActive pentru new engineMode. Client (_executeGlobalModeSwitch) va
+    // patcha atStore.enabled imediat din response, eliminând race window între
+    // optimistic mode patch (immediate) și WS frame arrival (~50-200ms).
+    return {
+        ok: true,
+        mode: us.engineMode,
+        oldMode,
+        atActive: !!us.atActive, // synced cu new engineMode în resync de mai sus
+        atActiveDemo: us.atActiveDemo,
+        atActiveLive: us.atActiveLive,
+    };
 }
 
 function getMode(userId) { return _uState(userId).engineMode; }

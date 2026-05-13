@@ -67,7 +67,17 @@ function _executeGlobalModeSwitch(mode: string): void {
       // OLD mode until the async atPollOnce → updateATMode → useATBridge chain caught
       // up (~500ms+). Any save during that window landed in the wrong brain namespace.
       if (typeof AT !== 'undefined') { AT._serverMode = mode; (AT as any).mode = mode }
-      try { useATStore.getState().patch({ mode: mode as 'demo' | 'live' }) } catch (_) {}
+      // [BUG-T7 FOLLOWUP-2 2026-05-13] Patch BOTH mode AND enabled din response server.
+      // Pre-fix: doar mode era patched optimistic → atStore.enabled rămânea STALE
+      // until WS frame arrival (~50-200ms). Race window: dacă user clicked toggle în
+      // acest interval, UI button reflected stale state → click sent unintended toggle
+      // (e.g. „turn OFF" când user wanted „turn ON"). Operator-reported 2026-05-13.
+      // Fix: server setMode now returns enriched response cu atActive computed pentru
+      // new engineMode; client patches enabled imediat → zero race window.
+      try {
+        const _atActive = typeof data.atActive === 'boolean' ? data.atActive : useATStore.getState().enabled;
+        useATStore.getState().patch({ mode: mode as 'demo' | 'live', enabled: _atActive });
+      } catch (_) {}
       console.log('[BRAIN-SPLIT] after flip: AT.mode=' + (AT as any).mode + ' store.mode=' + useATStore.getState().mode)
       // [BRAIN-MODE-SPLIT b74] Apply the new mode's brain namespace now, so S,
       // BM and the brainStore reflect the per-mode profile + bmMode the user

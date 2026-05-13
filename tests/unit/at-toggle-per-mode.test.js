@@ -55,7 +55,29 @@ jest.mock('../../server/services/telegram', () => ({
     alertRiskBlock: jest.fn(),
 }));
 jest.mock('../../server/services/credentialStore', () => ({
-    getExchangeCreds: jest.fn(() => null),
+    // [BUG-T7 FOLLOWUP 2026-05-13] Mock returns valid creds pentru a permite
+    // setMode('live') să treacă validarea credentials check și să poate testa
+    // full sequence demo↔live switch + toggle per-mode.
+    getExchangeCreds: jest.fn(() => ({ apiKey: 'test', apiSecret: 'test', env: 'testnet' })),
+}));
+jest.mock('../../server/services/binanceSigner', () => ({
+    sendSignedRequest: jest.fn(() => Promise.resolve([])),
+}));
+jest.mock('../../server/services/exchangeInfo', () => ({
+    roundOrderParams: jest.fn(x => x),
+    getFilters: jest.fn(() => ({})),
+    startAutoRefresh: jest.fn(),
+}));
+jest.mock('../../server/services/riskGuard', () => ({
+    validateOrder: jest.fn(() => ({ ok: true })),
+    recordClosedPnL: jest.fn(),
+}));
+jest.mock('../../server/services/reconHelpers', () => ({
+    buildBinanceHeldMap: jest.fn(() => new Map()),
+    findExitTrade: jest.fn(() => null),
+}));
+jest.mock('../../server/services/orphanAlert', () => ({
+    alertOrphanRisk: jest.fn(),
 }));
 
 const serverAT = require('../../server/services/serverAT');
@@ -212,6 +234,142 @@ describe('BUG-T7: AT toggle per-mode split', () => {
             const full3 = serverAT.getFullState(1);
             expect(full3.atActive).toBe(false);
             expect(full3.atActiveDemo).toBe(false);
+        });
+    });
+
+    describe('[OPERATOR-REPORTED E2E] sequence-ul exact reportat 2026-05-13', () => {
+        // Scenariu operator (real device):
+        //   1. State inițial: live=ON, demo=OFF
+        //   2. Switch live → demo
+        //   3. Toggle ON (activate în demo)
+        //   4. Switch demo → live
+        //   5. Expected: live=ON (preserved)
+        //   6. Operator observă: live=OFF (BUG)
+        //
+        // Acest test verifică EXACT că fix-ul rezolvă scenariu.
+
+        test('LIVE ON preserved după demo activate + switch back live', () => {
+            // Step 1: Setup state inițial — live=ON, demo=OFF
+            serverAT.toggleActive(1, true, 'live');   // live ON
+            // demo rămâne OFF din beforeEach reset
+            let state = serverAT.getFullState(1);
+            expect(state.atActiveLive).toBe(true);
+            expect(state.atActiveDemo).toBe(false);
+
+            // Step 2: Switch de la live la demo
+            const sw1 = serverAT.setMode(1, 'demo');
+            expect(sw1.ok).toBe(true);
+            state = serverAT.getFullState(1);
+            expect(state.mode).toBe('demo');
+            // getFullState atActive computed dynamic → reflects atActiveDemo=false
+            expect(state.atActive).toBe(false);
+            expect(state.atActiveDemo).toBe(false);  // unchanged
+            expect(state.atActiveLive).toBe(true);   // PRESERVED
+
+            // Step 3: Toggle ON (în demo — no mode arg, server uses engineMode=demo)
+            const tog = serverAT.toggleActive(1, true);
+            expect(tog.ok).toBe(true);
+            expect(tog.mode).toBe('demo');
+            state = serverAT.getFullState(1);
+            expect(state.atActiveDemo).toBe(true);
+            expect(state.atActiveLive).toBe(true);   // STILL PRESERVED
+            expect(state.atActive).toBe(true);       // dynamic from demo
+
+            // Step 4: Switch de la demo la live (CRITICAL — operator's bug step)
+            const sw2 = serverAT.setMode(1, 'live');
+            expect(sw2.ok).toBe(true);
+            state = serverAT.getFullState(1);
+            expect(state.mode).toBe('live');
+
+            // Step 5: VERIFY live=ON preserved (operator's bug observation)
+            expect(state.atActiveLive).toBe(true);   // PRESERVED ✅
+            expect(state.atActiveDemo).toBe(true);   // unchanged
+            expect(state.atActive).toBe(true);       // dynamic from live = atActiveLive
+            expect(state.enabled).toBe(true);        // dynamic from live = atActiveLive
+        });
+
+        test('reverse: DEMO ON preserved după live toggle OFF + switch back demo', () => {
+            // Same pattern mirror: demo ON, switch live, toggle OFF live, switch back demo
+            // Expected: demo=ON preserved
+            serverAT.toggleActive(1, true, 'demo');
+            serverAT.setMode(1, 'live');
+            serverAT.toggleActive(1, false);  // toggle OFF în live (no mode arg)
+            const state1 = serverAT.getFullState(1);
+            expect(state1.atActiveLive).toBe(false);
+            expect(state1.atActiveDemo).toBe(true);  // PRESERVED
+
+            // Switch back to demo
+            serverAT.setMode(1, 'demo');
+            const state2 = serverAT.getFullState(1);
+            expect(state2.atActiveDemo).toBe(true);  // PRESERVED ✅
+            expect(state2.atActive).toBe(true);      // dynamic from demo
+        });
+
+        test('multi-cycle: 5 switches păstrează independence', () => {
+            // Operator scenariu extins — multiple cycle-uri demo↔live
+            serverAT.toggleActive(1, true, 'demo');
+            serverAT.toggleActive(1, true, 'live');
+            // Both ON
+
+            // 5 switch cycles cu toggle în fiecare mode
+            for (let i = 0; i < 5; i++) {
+                serverAT.setMode(1, 'live');
+                let s = serverAT.getFullState(1);
+                expect(s.atActiveLive).toBe(true);  // never accidentally reset
+                expect(s.atActiveDemo).toBe(true);  // never accidentally reset
+
+                serverAT.setMode(1, 'demo');
+                s = serverAT.getFullState(1);
+                expect(s.atActiveLive).toBe(true);  // never accidentally reset
+                expect(s.atActiveDemo).toBe(true);  // never accidentally reset
+            }
+        });
+
+        test('[FOLLOWUP-2] setMode return shape — include atActive computed pentru new mode', () => {
+            // Setup: live ON, demo OFF
+            serverAT.toggleActive(1, true, 'live');
+
+            // Switch to demo
+            const resultDemo = serverAT.setMode(1, 'demo');
+            expect(resultDemo.ok).toBe(true);
+            expect(resultDemo.mode).toBe('demo');
+            expect(resultDemo.oldMode).toBe('demo'); // initial state defaults la demo before any setMode
+            expect(resultDemo.atActive).toBe(false); // atActiveDemo=false (fresh)
+            expect(resultDemo.atActiveDemo).toBe(false);
+            expect(resultDemo.atActiveLive).toBe(true); // preserved
+
+            // Switch back to live
+            const resultLive = serverAT.setMode(1, 'live');
+            expect(resultLive.ok).toBe(true);
+            expect(resultLive.mode).toBe('live');
+            expect(resultLive.atActive).toBe(true); // computed pentru new mode (atActiveLive=true)
+            expect(resultLive.atActiveLive).toBe(true);
+            expect(resultLive.atActiveDemo).toBe(false);
+        });
+
+        test('multi-user: independence între users + per-mode', () => {
+            // Setup: uid=1 cu live ON, uid=2 cu demo ON
+            // Cleanup beforeEach only handles uid=1; reset uid=2 explicit
+            serverAT.reset(2);
+            serverAT.toggleActive(2, false, 'demo');
+            serverAT.toggleActive(2, false, 'live');
+
+            serverAT.toggleActive(1, true, 'live');
+            serverAT.toggleActive(2, true, 'demo');
+
+            // Switch uid=1 modes
+            serverAT.setMode(1, 'demo');
+            serverAT.setMode(1, 'live');
+
+            // uid=2 state nu trebuie afectat by uid=1 operations
+            const s2 = serverAT.getFullState(2);
+            expect(s2.atActiveDemo).toBe(true);
+            expect(s2.atActiveLive).toBe(false);
+
+            // uid=1 state correct
+            const s1 = serverAT.getFullState(1);
+            expect(s1.atActiveLive).toBe(true);  // preserved through 2 switches
+            expect(s1.atActiveDemo).toBe(false);
         });
     });
 });
