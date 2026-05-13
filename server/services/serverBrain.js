@@ -117,9 +117,20 @@ function _shouldRunMainCycle() {
     return MF.SERVER_BRAIN === true || MF.SERVER_BRAIN_DEMO === true;
 }
 
-function _isServerAuthoritativeForUser(stc) {
+// [BUG-T1 2026-05-13 FIX path B] Per-user gate now reads engineMode din `us`
+// (serverAT.getMode) — single source of truth pentru mode. Pre-T1: gate read
+// `stc.engineMode` care era ghost field (absent din DEFAULT_STC schema +
+// at_state.stc:N JSON) → gate returned false pentru toți useri → server-side
+// AT demo dispatch + brainLogger.logDecision unreachable (9 call sites inert).
+// Now: gate accepts userId, reads engineMode via serverAT.getMode(userId).
+// Backward-compat NU breakable — DEFAULT_STC nu mai are engineMode (per design;
+// mode trăiește în engine state, NOT în trading config).
+function _isServerAuthoritativeForUser(userId) {
     if (MF.SERVER_AT === true) return true;
-    if (MF.SERVER_AT_DEMO === true && stc && stc.engineMode === 'demo') return true;
+    if (MF.SERVER_AT_DEMO === true) {
+        const userMode = serverAT.getMode(userId);
+        if (userMode === 'demo') return true;
+    }
     return false;
 }
 
@@ -553,7 +564,9 @@ function _runCycle() {
                 // every user and the loop exits early — bit-identical with pre-S6-B1
                 // because today _shouldRunMainCycle() is also false, so this loop
                 // never runs anyway. The gate is INERT until S6-B6 flips the flags.
-                if (!_isServerAuthoritativeForUser(stc)) continue;
+                // [BUG-T1 2026-05-13] Pass userId în loc de stc — gate reads mode
+                // din serverAT.getMode(userId), source of truth (engineMode în us).
+                if (!_isServerAuthoritativeForUser(userId)) continue;
                 // [MULTI-SYM] Skip if user has symbol selection and this symbol is not in it
                 if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
 
