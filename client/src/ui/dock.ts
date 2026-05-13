@@ -71,6 +71,31 @@ export var DOCK_GROUPS: any[] = ['trading', 'review', 'intel', 'expand'];
 // Add ids here as each module gets its dedicated page view
 export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'activity', 'aub'];
 
+// ── Z-glyph "Coming Soon" toast (UI-POLISH-1 2026-05-13) ──────
+// Operator-approved dedicated brand-aligned overlay (NU emoji).
+// Z rune SVG sharp angular, cyan brand, Orbitron 900, glow pulse.
+function _zComingSoon(): void {
+  let t = document.getElementById('z-coming-soon-toast') as any;
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'z-coming-soon-toast';
+    t.className = 'z-coming-soon';
+    t.innerHTML =
+      '<svg class="z-cs-glyph" viewBox="0 0 32 32" width="28" height="28">' +
+        '<path d="M6 6 L26 6 L8 26 L26 26" fill="none" stroke="#00d4ff" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"/>' +
+      '</svg>' +
+      '<span class="z-cs-text">COMING SOON</span>';
+    document.body.appendChild(t);
+  }
+  t.style.display = 'flex';
+  t.style.opacity = '1';
+  clearTimeout(t._zcsT);
+  t._zcsT = setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => { t.style.display = 'none'; }, 300);
+  }, 3000);
+}
+
 // ── RENDER ─────────────────────────────────────────────────────
 export function initZeusDock(): void {
   var dock = document.getElementById('zeus-dock');
@@ -106,9 +131,9 @@ export function initZeusDock(): void {
 
     var dockId = item.getAttribute('data-dock');
 
-    // Disabled icons -> toast
+    // Disabled icons -> dedicated Z-glyph Coming Soon toast (UI-POLISH-1)
     if (item.classList.contains('zd-disabled')) {
-      toast('Coming soon', 1500);
+      _zComingSoon();
       return;
     }
 

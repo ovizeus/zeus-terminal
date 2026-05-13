@@ -4729,7 +4729,7 @@ select.zac-select optgroup {
 .bt-result-grid { display: flex; flex-direction: column }
 .bt-ind-row { padding: 8px 12px; border-bottom: 1px solid #0d1a24; display: grid; grid-template-columns: 90px 1fr 58px 55px 55px; align-items: center; gap: 4px; font-size: 13px }
 .bt-ind-row:last-child { border-bottom: none }
-.bt-ind-row.hdr { font-size: 12px; letter-spacing: 1px; color: var(--dim); padding: 5px 12px; background: #080c12; border-bottom: 1px solid var(--brd) }
+.bt-ind-row.bt-hdr { font-size: 12px; letter-spacing: 1px; color: var(--dim); padding: 5px 12px; background: #080c12; border-bottom: 1px solid var(--brd) }
 .bt-ind-name { display: flex; align-items: center; gap: 5px; font-size: 14px; color: var(--whi); font-weight: 600 }
 .bt-wr-bar { height: 5px; background: #1a2530; border-radius: 3px; overflow: hidden; margin-top: 2px }
 .bt-wr-fill { height: 100%; border-radius: 3px; transition: width 1s }
@@ -5841,4 +5841,45 @@ select {
 select option {
   background: var(--card, #0b1120);
   color: var(--text, #d0d8e0);
+}
+
+/* ── Z-glyph Coming Soon toast (UI-POLISH-1 2026-05-13) ──────
+   Operator-approved brand-aligned overlay pentru More icon click.
+   Z rune sharp angular cyan + Orbitron 900 + glow pulse 1.5s loop. */
+.z-coming-soon {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 28px;
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid #00d4ff44;
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10000;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+  filter: drop-shadow(0 0 12px #00d4ff99);
+  animation: z-glow-pulse 1.5s ease-in-out infinite alternate;
+}
+.z-coming-soon .z-cs-glyph {
+  flex-shrink: 0;
+  display: block;
+}
+.z-coming-soon .z-cs-text {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 2.5px;
+  color: #00d4ff;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px #00d4ff99;
+}
+@keyframes z-glow-pulse {
+  0%   { filter: drop-shadow(0 0 8px  #00d4ff66); }
+  100% { filter: drop-shadow(0 0 18px #00d4ffcc); }
 }

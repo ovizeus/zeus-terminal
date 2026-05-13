@@ -382,7 +382,7 @@ export function AnalysisSections() {
             </div>
 
             {/* Table header */}
-            <div className="bt-ind-row hdr">
+            <div className="bt-ind-row bt-hdr">
               <span>INDICATOR</span>
               <span>WIN RATE</span>
               <span style={{ textAlign: 'center' }}>SIGNALS</span>
