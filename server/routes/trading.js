@@ -367,6 +367,16 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
         }
       } catch (regErr) {
         logger.warn('ORDER', `Manual position registration failed: ${regErr.message}`);
+        // [BUG-T4 2026-05-13] Orphan position risk defense-in-depth: main
+        // order succeeded pe Binance dar registerManualPosition threw →
+        // position există fizic, Zeus zero tracking. Fire 3 alerts
+        // best-effort: audit_log + Telegram + Sentry. Operator decides
+        // next action (manual close on exchange or accept risk).
+        try {
+          require('../services/orphanAlert').alertOrphanRisk(regErr, {
+            req, symbol, side, type, quantity, data, owner,
+          });
+        } catch (_) { /* best-effort isolation — outer wrapper safety */ }
       }
     }
     res.json({
