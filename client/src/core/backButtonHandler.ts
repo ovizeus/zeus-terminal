@@ -71,13 +71,27 @@ function _isModalOpen(): boolean {
 
 function _isPageViewOpen(): boolean {
     try {
-        // PageView system uses #zeusPageView DOM container — check if visible
-        const pv = document.getElementById('zeusPageView');
-        if (pv && pv.style.display !== 'none' && pv.offsetParent !== null) return true;
-        // Alternative class-based check
-        if (document.querySelector('.zpv.zpv-open, .zpv[data-open="true"]')) return true;
+        // [BUG-FIX 2026-05-13 evening] PageView.tsx renders <div className="zpv"
+        // id="zeus-page-view">. Element exists ONLY when active panel open
+        // (mounted/unmounted by React conditional render). Cele 3 selectors
+        // pentru defense-in-depth:
+        const pv1 = document.getElementById('zeus-page-view');
+        if (pv1) return true;
+        const pv2 = document.querySelector('.zpv');
+        if (pv2) return true;
+        const pv3 = document.querySelector('.zpv-content');
+        if (pv3) return true;
     } catch (_) { /* fall through */ }
     return false;
+}
+
+function _findPageViewBackBtn(): HTMLElement | null {
+    try {
+        const btn = document.querySelector('.zpv-back') as HTMLElement | null;
+        return btn;
+    } catch (_) {
+        return null;
+    }
 }
 
 function _closeModal(): void {
@@ -88,6 +102,17 @@ function _closeModal(): void {
 
 function _closePageView(): void {
     try {
+        // [BUG-FIX 2026-05-13 evening] React PageView component renders own
+        // <button className="zpv-back" onClick={onClose}>. Simplest reliable
+        // way to close = simulate click pe acel button (calls React onClose
+        // handler ce updates store properly). Window.closePageView (legacy
+        // fallback) NU funcționează cu noul React PageView.
+        const backBtn = _findPageViewBackBtn();
+        if (backBtn && typeof backBtn.click === 'function') {
+            backBtn.click();
+            return;
+        }
+        // Fallback la legacy pageview.ts API
         if (typeof w.closePageView === 'function') {
             w.closePageView();
         }
@@ -95,42 +120,53 @@ function _closePageView(): void {
 }
 
 async function _handleBack(): Promise<void> {
+    // [DIAG 2026-05-13] Console diagnostic — visible via Chrome remote
+    // debugging (chrome://inspect from desktop while phone connected).
+    try { console.log('[MOB-5] backButton fired — handler running'); } catch (_) {}
     // Priority 1: Modal open → close it
     if (_isModalOpen()) {
+        try { console.log('[MOB-5] modal detected → closing'); } catch (_) {}
         _closeModal();
         return;
     }
     // Priority 2: PageView open → close it
     if (_isPageViewOpen()) {
+        try { console.log('[MOB-5] pageView detected → closing'); } catch (_) {}
         _closePageView();
         return;
     }
     // Priority 3: Root dashboard — confirm-to-exit
     const now = Date.now();
     if (now - _lastBackPress < EXIT_CONFIRM_MS) {
+        try { console.log('[MOB-5] confirm-exit timeout → exitApp()'); } catch (_) {}
         try {
             await App.exitApp();
         } catch (_) { /* may not be available on some Android versions */ }
         return;
     }
     _lastBackPress = now;
+    try { console.log('[MOB-5] root dashboard — show confirm-exit toast'); } catch (_) {}
     _toast('Apasă Back din nou pentru a închide Zeus');
 }
 
 export function initBackButtonHandler(): void {
-    // Web context: plugin no-op, skip entirely
+    // [DIAG 2026-05-13] Always log init attempt — visible via Chrome
+    // remote debugging (chrome://inspect cu phone connected).
     try {
-        if (!Capacitor.isNativePlatform || !Capacitor.isNativePlatform()) {
+        const isNative = Capacitor.isNativePlatform && Capacitor.isNativePlatform();
+        console.log('[MOB-5] init called. isNativePlatform=' + isNative + ', Capacitor obj=' + typeof Capacitor);
+        if (!isNative) {
+            console.log('[MOB-5] Web context detected — handler SKIPPED');
             return;
         }
-    } catch (_) {
+    } catch (e: any) {
+        console.warn('[MOB-5] init platform check failed:', e?.message || e);
         return;
     }
     try {
         App.addListener('backButton', _handleBack);
-        // Best-effort log pentru debug
-        try { (w.ZLOG || console).info && (w.ZLOG ? w.ZLOG.push('MOB', '[MOB-5] backButton listener attached') : console.info('[MOB-5] backButton listener attached')); } catch (_) {}
-    } catch (e) {
-        try { console.warn('[MOB-5] Failed to attach backButton listener:', (e as Error).message); } catch (_) {}
+        console.log('[MOB-5] ✅ backButton listener attached on native platform');
+    } catch (e: any) {
+        console.warn('[MOB-5] Failed to attach backButton listener:', e?.message || e);
     }
 }
