@@ -15,6 +15,9 @@ const { roundOrderParams, getFilters: _getExchangeFilters } = require('./exchang
 const { validateOrder, recordClosedPnL } = require('./riskGuard');
 const telegram = require('./telegram');
 const audit = require('./audit');
+// [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
+// testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
+const { buildBinanceHeldMap, findExitTrade } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const db = require('./database');
@@ -3500,19 +3503,12 @@ async function _runReconciliation(isStartup) {
                 continue;
             }
 
-            // Build set of actively-held Binance symbols (non-zero positionAmt)
-            const binanceHeld = new Map();
-            for (const bp of binancePositions) {
-                const amt = parseFloat(bp.positionAmt || 0);
-                if (amt !== 0) {
-                    binanceHeld.set(bp.symbol, {
-                        amt, side: amt > 0 ? 'LONG' : 'SHORT',
-                        entryPrice: parseFloat(bp.entryPrice || 0),
-                        markPrice: parseFloat(bp.markPrice || 0),
-                        unrealizedProfit: parseFloat(bp.unRealizedProfit || 0),
-                    });
-                }
-            }
+            // [BUG-T2a 2026-05-13] Hedge-aware Binance held map — keyed by
+            // `symbol_side` tuple pentru a păstra LONG + SHORT same symbol
+            // independente în HEDGE mode. Pre-T2a: keyed by symbol only,
+            // collapsed both → recon detection lookup mismatch on side.
+            // Logic extracted la reconHelpers.buildBinanceHeldMap pentru testability.
+            const binanceHeld = buildBinanceHeldMap(binancePositions);
 
             // [Bug#3 STEP 3] Multi-seq collision reconciliation — if multiple OPEN
             // server seqs claim the same (symbol, side), Binance (ONE-WAY mode) holds
@@ -3580,9 +3576,16 @@ async function _runReconciliation(isStartup) {
             // 2. Check each server live position against Binance
             for (let i = userLivePositions.length - 1; i >= 0; i--) {
                 const pos = userLivePositions[i];
-                const bpos = binanceHeld.get(pos.symbol);
+                // [BUG-T2a 2026-05-13] Lookup hedge-aware: symbol_side tuple key.
+                // Pre-T2a: `binanceHeld.get(pos.symbol)` returned same entry pentru
+                // ambele LONG + SHORT positions în HEDGE mode (last-write-wins
+                // collapse). Acum cheia include side → fiecare position găsește
+                // corespondentul corect (sau lipsa).
+                const bpos = binanceHeld.get(pos.symbol + '_' + pos.side);
 
                 // PHANTOM: server says position exists, Binance says no
+                // Note: side check redundant post-T2a (key includes side) dar
+                // kept as belt-and-suspenders pentru defensive coding.
                 if (!bpos || bpos.side !== pos.side) {
                     logger.warn(label, `[${pos.seq}] PHANTOM DETECTED uid=${userId}: ${pos.side} ${pos.symbol} not found on Binance — closing locally`);
 
@@ -3593,16 +3596,16 @@ async function _runReconciliation(isStartup) {
                         const trades = await sendSignedRequest('GET', '/fapi/v1/userTrades', {
                             symbol: pos.symbol, limit: 10,
                         }, creds);
-                        if (Array.isArray(trades) && trades.length > 0) {
-                            // Find the most recent trade matching our side (reduce-only = exit)
-                            const exitTrade = trades.reverse().find(t =>
-                                t.symbol === pos.symbol && t.realizedPnl && parseFloat(t.realizedPnl) !== 0
-                            );
-                            if (exitTrade) {
-                                realExitPrice = parseFloat(exitTrade.price);
-                                realPnl = parseFloat(exitTrade.realizedPnl);
-                                logger.info(label, `[${pos.seq}] PHANTOM real fill: price=$${realExitPrice} pnl=$${realPnl} (from userTrades)`);
-                            }
+                        // [BUG-T2b 2026-05-13] Strict exit trade filter via reconHelpers.
+                        // Pre-T2b: `realizedPnl !== 0` matched ANY trade — could
+                        // fortuitously pick UNRELATED old trade pentru same symbol.
+                        // Post-T2b: must be AFTER pos.openTs, side opposite la pos.side
+                        // (LONG exits SELL, SHORT exits BUY), qty ≥95% pos qty.
+                        const exitTrade = findExitTrade(trades, pos);
+                        if (exitTrade) {
+                            realExitPrice = parseFloat(exitTrade.price);
+                            realPnl = parseFloat(exitTrade.realizedPnl);
+                            logger.info(label, `[${pos.seq}] PHANTOM real fill: price=$${realExitPrice} pnl=$${realPnl} (from userTrades, strict-filtered)`);
                         }
                     } catch (tradeErr) {
                         logger.warn(label, `[${pos.seq}] userTrades query failed: ${tradeErr.message} — using markPrice fallback`);
