@@ -3,8 +3,8 @@
 'use strict';
 
 module.exports = {
-    version: '1.7.71',
-    build: 97,
+    version: '1.7.72',
+    build: 98,
     date: '2026-05-13',
     changelog: [
         'b96 v1.7.70 — 16-buguri sesiunea 2026-05-13 + MOB-5 Android Back button. APK v1.7.9 release-signed (versionCode 35) replaces v1.7.8 (versionCode 34) pe production via public/download/zeus-terminal.apk. Categorii fix: MOB-5 (@capacitor/app + backButtonHandler.ts priority handler modal→pageview→confirm-exit), T1 server-authoritative gate engineMode din us (path B), T2a+T2b recon hardening (hedge-aware map + strict userTrades filter), T4 orphan position alerts (audit_log + Telegram + Sentry defense-in-depth), T5 validateOrderBody SL enforcement edge cases (38 jest tests), T6 verify-as-designed /api/panic, T7 AT toggle per-mode split + setMode resync + getFullState dynamic compute (3-commit followup), T8 mobile visualViewport API + chart rAF + --app-height CSS var, T9 mobile .hdr CSS collision rename hdr→bt-hdr, T10 session lifetime env Option B (JWT 14d + inactivity 30d), UI-POLISH-1 Z-glyph cyan Coming Soon overlay, DB-7 at_closed FK + NOT NULL migration 032 ON DELETE CASCADE, SEC-17 encryption-key-rotation runbook 774 linii doc-only, CFG-11 5 magic numbers → env-overridable (AUDIT_ROTATE_INTERVAL_MS + JOURNAL_FIRST_COMPUTE_MS + FEED_* 5 vars + ZEUS_BASE_PATH), PERF-8 PositionRows.tsx 4 row componente React.memo wrappers, sanity script sub-class detection Recovery Plan §1 aligned (YELLOW 🟡a NO_SIGNAL_NO_BREAKAGE distinguishable de RED). 15 commits push origin/post-v2/real-finish; jest 161 baseline → 250 tests (+89 new). PM2 reloads 9 (183→193) all clean unstable=0. DEFERRED 28→13 (operator-gated rotation/architectural M1 fold-in T2c+T3). APK signing identical SHA256 cu production (DA:FB:5F:F7...) — installs ca update peste app existent fără uninstall.',
