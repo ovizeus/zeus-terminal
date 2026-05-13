@@ -279,6 +279,23 @@ if (!w._closeAllBtnInited) {
     const width = getChartW(); const h = getChartH()
     try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { const _mc = getMacdChart(); if (_mc) _mc.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }
-  window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(_resizeCharts, 120) })
+  // [BUG-T8 2026-05-13] Mobile viewport desync fix.
+  // Android Chrome browser-bar collapse/expand changes visualViewport.height
+  // BEFORE CSS layout recalc → app reads stale window.innerHeight → chart
+  // resize(stale) → black gap. Operator-reported intermitent + refresh-fixes.
+  // Fix: track visualViewport + orientationchange + write --app-height CSS
+  // var that viewport-aware CSS uses as final fallback (after 100dvh).
+  function _updateAppHeight() {
+    const vv = (window as any).visualViewport
+    const h = (vv && typeof vv.height === 'number') ? vv.height : window.innerHeight
+    document.documentElement.style.setProperty('--app-height', h + 'px')
+  }
+  window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(function () { _updateAppHeight(); _resizeCharts() }, 120) })
+  window.addEventListener('orientationchange', function () { setTimeout(function () { _updateAppHeight(); _resizeCharts() }, 200) })
+  if ((window as any).visualViewport) {
+    (window as any).visualViewport.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(function () { _updateAppHeight(); _resizeCharts() }, 120) })
+  }
+  // Initial set on load (before any resize event fires)
+  _updateAppHeight()
   window.addEventListener('zeusReady', function () { setTimeout(_resizeCharts, 500) })
 })()

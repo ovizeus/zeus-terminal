@@ -107,9 +107,13 @@ body {
   color: var(--txt);
   /* M2: progressive fallback — 100vh for older browsers, 100dvh for
      dynamic-viewport-aware mobile browsers (iOS Safari address-bar
-     collapse no longer leaves background gap). */
+     collapse no longer leaves background gap).
+     [BUG-T8 2026-05-13] --app-height var written by bootstrapMisc.ts pe
+     visualViewport.resize + orientationchange — final fallback pentru
+     Android Chrome browser-bar dynamic collapse/expand. */
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
 }
 
 /* ── Fixed top wrapper (header + status bar) ── */
@@ -671,9 +675,11 @@ select.zac-select optgroup {
      notch don't get the StatusBar pushed under the now-shifted
      fixed header. */
   padding-top: calc(var(--zt-content-top) + var(--zt-safe-top));
-  /* M2: progressive fallback — see comment in body{} above. */
+  /* M2: progressive fallback — see comment in body{} above.
+     [BUG-T8 2026-05-13] --app-height fallback */
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
 }
 .zr-panel {
   background: var(--bg);
@@ -777,9 +783,11 @@ select.zac-select optgroup {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* M2: progressive fallback — see comment in body{} above. */
+  /* M2: progressive fallback — see comment in body{} above.
+     [BUG-T8 2026-05-13] --app-height fallback */
   height: 100vh;
   height: 100dvh;
+  height: var(--app-height, 100dvh);
   background: var(--bg);
 }
 .zr-loading__text {
@@ -799,9 +807,11 @@ select.zac-select optgroup {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* M2: progressive fallback — see comment in body{} above. */
+  /* M2: progressive fallback — see comment in body{} above.
+     [BUG-T8 2026-05-13] --app-height fallback */
   min-height: 100vh;
   min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
   background: var(--bg);
   padding: 16px;
 }
