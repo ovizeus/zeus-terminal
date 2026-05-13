@@ -568,6 +568,15 @@ function setMode(userId, mode) {
         us.killActive = false;
     }
 
+    // [BUG-T7 FOLLOWUP 2026-05-13] Sync legacy `atActive` cu new engineMode
+    // flag. Without this, UI (useServerSync.ts:62 reads data.atActive) shows
+    // STALE value din ultimul toggle când user switches between modes:
+    //   demo toggle ON → atActiveDemo=true, atActive=true (sync demo)
+    //   switch to live → engineMode=live BUT atActive stays true (stale)
+    //   UI display: shows ON pe live deși atActiveLive=false (real state)
+    // Fix: resync atActive cu mode-specific flag pe fiecare setMode call.
+    us.atActive = !!us[us.engineMode === 'live' ? 'atActiveLive' : 'atActiveDemo'];
+
     _persistState(userId);
 
     // [LIVE-PARITY] Auto-init liveBalanceRef from Binance on live mode switch (non-blocking)
@@ -2652,8 +2661,12 @@ function getFullState(userId) {
     const serverBrainDemoEnabled = !!(MF && MF.SERVER_BRAIN_DEMO) && _isDemoUser;
     return {
         mode: us.engineMode,
-        enabled: us.atActive, // [F1] LEGACY — synced cu current engineMode flag
-        atActive: us.atActive, // [F1] LEGACY — synced cu current engineMode flag
+        // [BUG-T7 FOLLOWUP 2026-05-13] enabled + atActive computed DYNAMIC pe baza
+        // engineMode + atActive[Demo|Live] flags. Defensive — chiar dacă in-memory
+        // us.atActive ar fi stale, getFullState garantează UI primește valoarea
+        // corectă pentru current engineMode (no stale flash on mode switch).
+        enabled: _isATActiveForMode(us, us.engineMode), // [F1] LEGACY — computed dynamic
+        atActive: _isATActiveForMode(us, us.engineMode), // [F1] LEGACY — computed dynamic
         atActiveDemo: us.atActiveDemo, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
         atActiveLive: us.atActiveLive, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
         serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
