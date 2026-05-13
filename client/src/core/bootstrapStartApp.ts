@@ -15,6 +15,8 @@ import { _checkAppUpdate } from './bootstrapError'
 import { _srUpdateStats, setDslStripOpen } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
 import { startWidgetSync } from './widgetSync'
+// [MOB-5 2026-05-13] Android back button native handler (no-op pe web).
+import { initBackButtonHandler } from './backButtonHandler'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed, initZeusGroups } from './bootstrapInit'
 import { initCharts, fetchKlines } from '../data/marketDataChart'
@@ -391,6 +393,9 @@ export async function startApp(): Promise<void> {
   setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); _pinUpdateUI() }, 15000)
   setTimeout(() => { _showWelcomeModal() }, 2500)
   setTimeout(() => { try { startWidgetSync() } catch (_) {} }, 8000)
+  // [MOB-5 2026-05-13] Attach Android Back button handler. No-op pe web.
+  // Mobile UX: Back navighează modal → pageview → confirm-exit (NU exit instant).
+  setTimeout(() => { try { initBackButtonHandler() } catch (e: any) { console.warn('[MOB-5] init failed:', e?.message || e) } }, 1000)
   setTimeout(w._srEnsureVisible, 3000)
   setTimeout(_devEnsureVisible, 3500)
   setTimeout(() => { atLog('info', '[AT] Zeus Auto Trade Engine initializat.') }, 6000)

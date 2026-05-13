@@ -12,6 +12,7 @@
     "audit:check": "npm audit --omit=dev --audit-level=high"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@sentry/node": "^10.47.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
