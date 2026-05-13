@@ -66,3 +66,12 @@ export function stopSettingsRealtime(): void {
 export function getLastKnownSettingsTs(): number {
   return _lastKnownTs
 }
+
+// [SETTINGS-SYNC-1 2026-05-13] Setter pentru a sync `_lastKnownTs` cu
+// POST response `updated_at`. Eliminează own-echo loop: după POST success,
+// WS `settings.changed` cu același ts arrive at originator → check
+// `remoteTs <= _lastKnownTs` filtrează echo-ul → NU mai trigger GET inutil.
+// Apelat din config.ts `_usApplyPostResponse` la fiecare POST OK.
+export function setLastKnownSettingsTs(ts: number): void {
+  if (ts > _lastKnownTs) _lastKnownTs = ts
+}

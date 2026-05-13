@@ -25,6 +25,9 @@ import { useDslStore } from '../stores/dslStore'
 import { useBrainStore } from '../stores/brainStore'
 import { useAresStore } from '../stores/aresStore'
 import type { BrainMode } from '../types'
+// [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` cu POST response în
+// _usApplyPostResponse — filtrează own-echo WS push (no spurious GET refresh).
+import { setLastKnownSettingsTs } from '../services/settingsRealtime'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -1718,6 +1721,10 @@ export function _usApplyServerResponse(data: { settings?: Record<string, any>; u
   const flat = data.settings || {}
   _usApplyFlatToUserSettings(flat)
   _usSettingsRemoteTs = Number(data.updated_at) || 0
+  // [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` cu GET response ts.
+  // Mirror behavior din `_usApplyPostResponse` — keeps the two tracking
+  // variables aligned to prevent divergence-driven 409 cascades.
+  try { setLastKnownSettingsTs(_usSettingsRemoteTs) } catch (_) { /* defensive */ }
   console.log('[US] fetched remote settings (updated_at=' + _usSettingsRemoteTs + ', keys=' + Object.keys(flat).length + ')')
   return _usSettingsRemoteTs
 }
@@ -1731,7 +1738,13 @@ export function _usApplyServerResponse(data: { settings?: Record<string, any>; u
 // converge on this helper, keeping one source of WS-dedup truth.
 export function _usApplyPostResponse(data: { ok?: boolean; updated_at?: number } | null | undefined): void {
   if (data && data.ok && data.updated_at) {
-    _usSettingsRemoteTs = Number(data.updated_at) || _usSettingsRemoteTs
+    const newTs = Number(data.updated_at) || _usSettingsRemoteTs
+    _usSettingsRemoteTs = newTs
+    // [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` din settingsRealtime
+    // cu POST response ts. Eliminează own-echo loop: WS `settings.changed`
+    // arriving back at originator cu același ts e filtrat de existing
+    // `remoteTs <= _lastKnownTs` guard în WS handler → NU mai trigger GET inutil.
+    try { setLastKnownSettingsTs(newTs) } catch (_) { /* defensive */ }
   }
 }
 
