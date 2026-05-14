@@ -163,10 +163,22 @@ export function initBackButtonHandler(): void {
         console.warn('[MOB-5] init platform check failed:', e?.message || e);
         return;
     }
+    // [MOB-5 PROMISE-CATCH 2026-05-14] `App.addListener()` returns a Promise.
+    // Pe APK-uri vechi (pre-FOLLOWUP-3, fără `registerPlugin(AppPlugin.class)`),
+    // promise-ul rejectează cu '"App" plugin is not implemented on android'.
+    // Fără .catch() rejection rămâne unhandled → bootstrapError.ts:_showDegradedBanner
+    // fires → user vede "ENGINE ERROR — fallback mode active" banner. .catch()
+    // swallow → banner NU mai apare. Functional impact: back button still won't
+    // work on old APK (need to install latest v1.7.13+), but app stays clean.
     try {
-        App.addListener('backButton', _handleBack);
-        console.log('[MOB-5] ✅ backButton listener attached on native platform');
+        const _addRes: any = App.addListener('backButton', _handleBack);
+        if (_addRes && typeof _addRes.catch === 'function') {
+            _addRes.catch((e: any) => {
+                console.warn('[MOB-5] addListener rejection (likely old APK without AppPlugin registered):', e?.message || e);
+            });
+        }
+        console.log('[MOB-5] backButton listener attach attempted on native platform');
     } catch (e: any) {
-        console.warn('[MOB-5] Failed to attach backButton listener:', e?.message || e);
+        console.warn('[MOB-5] Failed to attach backButton listener (sync):', e?.message || e);
     }
 }

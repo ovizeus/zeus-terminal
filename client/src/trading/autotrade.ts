@@ -216,7 +216,16 @@ export function _applyATToggleUI(enabled: any): void {
     }
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = true + push to server for cross-device sync
-    if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
+    // [MODE-RESTORE-FIX 2026-05-14] REMOVED `w._usScheduleSave()` — AT toggle
+    // state is NOT in SETTINGS_WHITELIST (server/routes/trading.js:512). AT
+    // enabled/atActive go via /api/at/toggle endpoint (server-authoritative,
+    // broadcast as at_update WS). user_settings is for trading CONFIG (lev,
+    // sl, rr, size, etc) which don't change on a toggle. Calling _usScheduleSave
+    // here triggered redundant POST /api/user/settings 800ms after every WS
+    // at_update reception (state.ts:1227 calls _applyATToggleUI as server-sync)
+    // → 409 cascade on multi-device. Comment "also push AT state via user-
+    // context" was misleading: user-context (/api/sync/user-context) is a
+    // different endpoint entirely.
     _emitATChanged()
   } else {
     _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configure below', action: null } })
@@ -224,7 +233,10 @@ export function _applyATToggleUI(enabled: any): void {
     w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = false + push to server for cross-device sync
-    if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
+    // [MODE-RESTORE-FIX 2026-05-14] REMOVED `w._usScheduleSave()` — see comment
+    // în the `if (enabled)` branch above. Same rationale: AT state is not in
+    // SETTINGS_WHITELIST; toggle doesn't change settings config; redundant POST
+    // triggered 409 cascade pe WS-driven sync path.
     _emitATChanged()
   }
 }

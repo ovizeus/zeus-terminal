@@ -1193,25 +1193,23 @@ export const ZState = (() => {
         const _kpEl = document.getElementById('atKillPct') as HTMLInputElement | null
         if (_kpEl) _kpEl.value = String(state.killPct)
       }
-      if (!AT._enabledPerMode) AT._enabledPerMode = {}
+      // [MODE-RESTORE-FIX 2026-05-14] Removed legacy `AT._enabledPerMode` cache +
+      // auto-restore via setTimeout(toggleAutoTrade, 600) on WS mode switch.
+      // Post-BUG-T7 (atActive split into atActiveDemo + atActiveLive 2026-05-13),
+      // server `state.atActive` IS already per-mode authoritative — block below
+      // (`if (typeof state.atActive === 'boolean') ...`) syncs AT.enabled from
+      // server truth and calls _applyATToggleUI. Legacy auto-restore raced with
+      // it: 600ms later toggleAutoTrade() FLIPPED state, undid server-correct
+      // value, triggered POST /api/at/toggle + _usScheduleSave 800ms later →
+      // POST /api/user/settings → 409 cascade când multi-device. Audit_log
+      // smoking gun: AT_MODE_CHANGE imediat urmat de AT_TOGGLE was=true→now=false
+      // la +1 sec, NU operator-initiated.
       const _prevMode = AT._serverMode || AT.mode || 'demo'
-      if (state.mode && state.mode !== _prevMode) {
-        AT._enabledPerMode[_prevMode] = !!AT.enabled
-        if (AT.enabled) {
-          AT.enabled = false
-          if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
-          clearInterval(AT.interval); AT.interval = null
-          useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF' })
-        }
-        if (AT._enabledPerMode[state.mode]) {
-          atLog('info', '\u25B6 AT restoring — was ON in ' + state.mode.toUpperCase())
-          setTimeout(function () {
-            if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
-          }, 600)
-        } else {
-          useATStore.getState().patchUI({ status: { icon: null, text: '\u23F9 AT paused \u2014 mode switched to ' + state.mode.toUpperCase(), action: null } })
-          atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
-        }
+      if (state.mode && state.mode !== _prevMode && AT.enabled) {
+        AT.enabled = false
+        if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
+        clearInterval(AT.interval); AT.interval = null
+        useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF' })
       }
       if (state.mode) { AT.mode = state.mode; AT._serverMode = state.mode; AT._modeConfirmed = true }
       AT._serverStats = state.stats || null
