@@ -14,6 +14,8 @@
  * Spec: _review/audit/LIQ_FEED_PROXY_PLAN_20260514.md
  */
 
+import { llvRequestRender } from '../data/marketDataOverlays'
+
 const w = window as any
 
 export interface LiqFeedEvent {
@@ -28,11 +30,48 @@ export interface LiqFeedEvent {
 }
 
 /**
+ * [LIQ-FEED PROXY 2026-05-14 FIX] Populate w.S.llvBuckets for chart overlay
+ * walls — same logic as marketDataWS.procLiq lines ~200-213. When server
+ * feed bypasses direct WS, chart walls (renderLiqLevels) lost their data
+ * source. This replicates llvBuckets population for BTC events.
+ */
+function _updateLlvBuckets(liq: LiqFeedEvent): void {
+    if (!w.S || !w.S.llvSettings) return
+    // Only BTC (chart shows current symbol; walls bucketed by % from price).
+    if (!liq.symbol || !liq.symbol.toUpperCase().startsWith('BTC')) return
+    const price = liq.p
+    const qty = liq.q
+    const usd = liq.vol
+    if (!isFinite(price) || price <= 0 || !isFinite(usd) || usd <= 0) return
+    const _bkt = w.S.llvSettings.bucketPct || 0.3
+    const _step = price * _bkt / 100
+    if (!_step || !isFinite(_step) || _step <= 0) return
+    let _pkey: number = Math.round(price / _step) * _step
+    _pkey = Math.round(_pkey)
+    w.S.llvBuckets = w.S.llvBuckets || {}
+    w.S.llvBuckets[_pkey] = w.S.llvBuckets[_pkey] || { price: _pkey, longUSD: 0, shortUSD: 0, longBTC: 0, shortBTC: 0, ts: Date.now() }
+    if (liq.isLong) {
+        w.S.llvBuckets[_pkey].longUSD += usd
+        w.S.llvBuckets[_pkey].longBTC += qty
+    } else {
+        w.S.llvBuckets[_pkey].shortUSD += usd
+        w.S.llvBuckets[_pkey].shortBTC += qty
+    }
+    w.S.llvBuckets[_pkey].ts = Date.now()
+    // Trigger chart overlay re-render (debounced 250ms inside llvRequestRender)
+    if (w.S.overlays && w.S.overlays.llv) {
+        try { llvRequestRender() } catch (_) { /* defensive */ }
+    }
+}
+
+/**
  * Process a single `liq.feed` frame and dispatch the appropriate
- * CustomEvent. Pure presentation — no state mutation.
+ * CustomEvent. Also populates w.S.llvBuckets for chart overlay walls.
  */
 export function handleLiqFeedFrame(liq: LiqFeedEvent | null | undefined): void {
     if (!liq || !liq.exchange) return
+    // Update chart overlay buckets (BTC walls visualization)
+    _updateLlvBuckets(liq)
     if (liq.exchange === 'okx') {
         // Quant Monitor `addLiq('okx', ...)` expects exchange='OKX' upper.
         const detail = { ...liq, exchange: 'OKX' }
