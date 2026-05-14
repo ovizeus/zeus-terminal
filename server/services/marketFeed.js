@@ -400,6 +400,14 @@ function getHealth() {
     };
 }
 
+// [RECON-SUBSCRIBE 2026-05-14] Expose immutable view of subscribed symbols.
+// Used by serverAT recon loop pentru a auto-subscribe missing symbols
+// (positions on non-mainstream symbols like ZECUSDT). Returns NEW Set
+// pentru a preveni external mutation a internal _activeSymbols state.
+function getActiveSymbols() {
+    return new Set(_activeSymbols);
+}
+
 module.exports = {
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
@@ -409,5 +417,6 @@ module.exports = {
     fetchOpenInterest,
     on,
     getHealth,
+    getActiveSymbols,  // [RECON-SUBSCRIBE 2026-05-14]
     STALE_DATA_MS,
 };

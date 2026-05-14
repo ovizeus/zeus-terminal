@@ -14,6 +14,8 @@ import { getSymPrice, savePosSLTP, cancelPendingOrder, modifyPendingPrice, close
 import { closeDemoPos } from '../../data/marketDataClose'
 import { _safePnl } from '../../utils/guards'
 import { useUiStore } from '../../stores'
+import { toast } from '../../data/marketDataHelpers'
+import { _ZI } from '../../constants/icons'
 
 // [Phase 12.A — Batch D5] Resolve exchange chip label for a LIVE position.
 //   Prefer the position's own exchange field (if server ever attaches one),
@@ -248,6 +250,11 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
   // [BUG-CLOSE FIX 2026-05-14] React-native click handler. First click sets
   // pendingConfirm state (visible via render). Second click within 2.5s fires
   // closeLivePos. Timer auto-resets pending state if user doesn't confirm.
+  //
+  // [BUG-CLOSE-3 FIX 2026-05-14] Hint toast on first click — operator UX
+  // discovery: users may not realize 2-click confirm pattern is required.
+  // Short cyan hint "Click again to confirm" la primul click; nu se mai
+  // arată pe al doilea click (close fires direct).
   const _onCloseClick = () => {
     if (pendingConfirm) {
       if (_confirmTimerRef.current) {
@@ -259,6 +266,7 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
       return
     }
     setPendingConfirm(true)
+    toast('Click again to confirm close', 1500, _ZI.w)
     if (_confirmTimerRef.current) clearTimeout(_confirmTimerRef.current)
     _confirmTimerRef.current = setTimeout(() => {
       setPendingConfirm(false)

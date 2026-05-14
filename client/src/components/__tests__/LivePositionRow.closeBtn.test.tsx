@@ -36,6 +36,14 @@ vi.mock('../../engine/events', async (importOriginal) => {
     return { ...actual, attachConfirmClose: vi.fn() }
 })
 
+// [BUG-CLOSE-3 FIX 2026-05-14] Hint toast on first click — operator hint
+// for new users that 2-click confirm is required.
+vi.mock('../../data/marketDataHelpers', () => ({
+    toast: vi.fn(),
+    fmtNow: vi.fn(() => '12:00:00'),
+}))
+import { toast } from '../../data/marketDataHelpers'
+
 import { closeLivePos } from '../../data/marketDataPositions'
 
 const livePos = (id: number, sym = 'BTCUSDT', overrides: any = {}) => ({
@@ -63,6 +71,30 @@ describe('LivePositionRow close button (BUG-CLOSE FIX)', () => {
         // After first click, button text should switch (state-driven, NOT DOM mutation)
         expect(screen.getByText(/CONFIRM/i)).toBeInTheDocument()
         expect(closeLivePos).not.toHaveBeenCalled()
+    })
+
+    it('[BUG-CLOSE-3] first click shows hint toast "Click again to confirm"', () => {
+        const pos = livePos(1776859652887)
+        render(<LivePositionRow pos={pos} />)
+        const btn = screen.getByText(/✕ CLOSE/i)
+        act(() => { btn.click() })
+        expect(toast).toHaveBeenCalledWith(
+            expect.stringMatching(/click again to confirm/i),
+            expect.any(Number),
+            expect.anything(),
+        )
+    })
+
+    it('[BUG-CLOSE-3] second click does NOT re-show hint toast', () => {
+        const pos = livePos(1776859652887)
+        render(<LivePositionRow pos={pos} />)
+        const btn = screen.getByText(/✕ CLOSE/i)
+        act(() => { btn.click() })
+        ;(toast as any).mockClear()
+        const confirmBtn = screen.getByText(/CONFIRM/i)
+        act(() => { confirmBtn.click() })
+        // Toast NOT called again on second click (close happens, no hint needed)
+        expect(toast).not.toHaveBeenCalled()
     })
 
     it('second click within window fires closeLivePos with pos.id', () => {

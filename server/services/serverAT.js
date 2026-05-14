@@ -21,6 +21,7 @@ const { buildBinanceHeldMap, findExitTrade } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const db = require('./database');
+const marketFeed = require('./marketFeed');
 
 // ══════════════════════════════════════════════════════════════════
 // Per-User Position Tracker
@@ -4135,6 +4136,29 @@ async function _runReconciliation(isStartup) {
         for (const [userId, userLivePositions] of byUser) {
             const creds = getExchangeCreds(userId);
             if (!creds) continue;
+
+            // [RECON-SUBSCRIBE 2026-05-14] Auto-subscribe market feed for symbols
+            // cu poziții deschise dar fără feed activ. Pre-fix: AT could open
+            // positions on symbols outside boot subscription set (BTC/ETH/SOL/BNB)
+            // — ZECUSDT exemplu real 2026-05-14 — feed nu trăgea preț live → DSL
+            // trailing SL miscalculated + close button silent fail (partial mitigation
+            // în BUG-CLOSE-AT via fallback chain; THIS hook restores live price flow).
+            try {
+                const activeSyms = marketFeed.getActiveSymbols();
+                const seenInThisCycle = new Set();
+                for (const _p of userLivePositions) {
+                    if (!_p.symbol || seenInThisCycle.has(_p.symbol)) continue;
+                    seenInThisCycle.add(_p.symbol);
+                    if (!activeSyms.has(_p.symbol)) {
+                        logger.info(label, `Auto-subscribing ${_p.symbol} — open position detected uid=${userId} seq=${_p.seq}`);
+                        marketFeed.subscribe(_p.symbol).catch(subErr => {
+                            logger.warn(label, `Auto-subscribe failed for ${_p.symbol}: ${subErr.message}`);
+                        });
+                    }
+                }
+            } catch (subErr) {
+                logger.warn(label, `Auto-subscribe block failed: ${subErr.message}`);
+            }
 
             // 1. Query Binance position risk
             let binancePositions;
