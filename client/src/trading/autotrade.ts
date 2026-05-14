@@ -3,6 +3,32 @@
 // AutoTrade engine: conditions, execution, monitoring, kill switch
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
+/**
+ * [BUG-T2d FIX 2026-05-14] Derive position quantity from Binance MARKET fill,
+ * with leverage-aware fallback for status=NEW (executedQty="0.000").
+ *
+ * Main MARKET order is placed with `quantity = (adaptFinalSize * lev) / entry`
+ * (autotrade.ts line ~1134). When Binance returns NEW (fill not yet confirmed),
+ * `executedQty` is "0.000" — parseFloat → 0 → falsy. Prior fallback was
+ * `adaptFinalSize / fillPrice`, MISSING the leverage multiplier — so SL/TP
+ * orders placed downstream covered only 1/lev of the actual position.
+ *
+ * Real incident 2026-05-14 ZECUSDT SHORT lev=10: position qty=18.343,
+ * SL on Binance qty=1.834 → 90% unprotected exposure.
+ *
+ * Fix: fallback must mirror main-order qty exactly: (size * lev) / fillPrice.
+ */
+export function _computeFillQtyFallback(
+    executedQtyStr: string | null | undefined,
+    adaptFinalSize: number,
+    lev: number,
+    fillPrice: number,
+): number {
+    const parsed = parseFloat(executedQtyStr as any)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+    return (adaptFinalSize * lev) / fillPrice
+}
+
 import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
@@ -1156,7 +1182,13 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           sl: _liveSL,
           liqPrice: _liveLiq,
           pnl: 0,
-          qty: parseFloat(result.executedQty) || (adaptFinalSize / fillPrice),
+          // [BUG-T2d FIX 2026-05-14] Use leverage-aware fallback when Binance
+          // returns status=NEW + executedQty="0.000" (async fill). Prior
+          // `adaptFinalSize / fillPrice` produced 1/lev of correct qty →
+          // SL/TP placed downstream covered only 10% of position (lev=10).
+          // See _computeFillQtyFallback() at top of file + ZECUSDT incident
+          // 2026-05-14 (audit_log seq=1776859652888).
+          qty: _computeFillQtyFallback(result.executedQty, adaptFinalSize, lev, fillPrice),
           margin: adaptFinalSize, // [FIX BUG3] Consistent with demo — margin = notional size (not divided by lev)
           tpPnl: (_liveTpDist / fillPrice) * adaptFinalSize * lev,
           slPnl: -(_liveSlDist / fillPrice) * adaptFinalSize * lev,
