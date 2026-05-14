@@ -1,6 +1,7 @@
 // QM Render — 1:1 port from ZeuS Modern Quantitative Trading.html render()
 import { QM, getLiqTotals } from '../state'
 import { bar, binLine, fmtUSD, heatBarOB, asciiChart, cvdChart } from './ascii'
+import { escHtml } from '../../utils/dom'
 
 const w = window as any
 const REQ = 75
@@ -613,6 +614,24 @@ export function renderFrame(): string {
   const bybSt = (LIQS as any).bybit?.connected ? '<span class="g">\u25CF ON</span>' : '<span class="r">\u25CB OFF</span>'
   const okxSt = (LIQS as any).okx?.connected ? '<span class="g">\u25CF ON</span>' : '<span class="r">\u25CB OFF</span>'
   L(`  <span class="dg">EXCHANGES    :</span> <span class="c">BINANCE</span> ${binSt}  <span class="p">BYBIT</span> ${bybSt}  <span class="y">OKX</span> ${okxSt}`)
+
+  // [WS-DIAG 2026-05-14] Detailed WebSocket state + event counts. Surfaces
+  // DNS/network failures (e.g. ERR_NAME_NOT_RESOLVED) immediately \u00EEn UI f\u0103r\u0103
+  // a deschide DevTools console. Each exchange shows state + last error
+  // message + total event count + seconds since last event.
+  const _diag = (w.S as any)?._wsDiag || { bnb: {}, byb: {}, okx: {} }
+  const _fmtDiagEntry = (label: string, d: any, colorCls: string): string => {
+    const state = String(d?.state || '\u2014')
+    const stClr = state === 'OPEN' ? 'g' : state === 'CONNECTING' ? 'y' : state === 'CLOSED' || state === 'ERROR' || state === 'EXCEPTION' ? 'r' : 'dg'
+    const ev = Number(d?.ev || 0)
+    const lastEv = d?.lastEv ? Math.round((Date.now() - d.lastEv) / 1000) : null
+    const lastEvStr = lastEv != null ? `${lastEv}s ago` : 'NEVER'
+    const err = d?.err ? ` <span class="r">err=${escHtml(String(d.err))}</span>` : ''
+    return `<span class="${colorCls}">${label}</span> <span class="${stClr}">[${state}]</span> <span class="w">ev=${ev}</span> <span class="dg">last=${lastEvStr}</span>${err}`
+  }
+  L(`  <span class="dg">WS DIAG      :</span> ${_fmtDiagEntry('BIN', _diag.bnb, 'c')}`)
+  L(`  <span class="dg">             :</span> ${_fmtDiagEntry('BYB', _diag.byb, 'p')}`)
+  L(`  <span class="dg">             :</span> ${_fmtDiagEntry('OKX', _diag.okx, 'y')}`)
   L(``)
 
   // Futures stats

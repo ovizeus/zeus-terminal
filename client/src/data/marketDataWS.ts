@@ -33,6 +33,18 @@ function _nextBackoff(key: string, base: number, cap: number): number {
 function _resetBackoff(key: string): void { _wsBackoff[key] = 0 }
 
 // ===== CONNECT BINANCE WS =====
+// [WS-DIAG 2026-05-14] Centralized WebSocket state tracker exposed via
+// `w.S._wsDiag.{bnb,byb,okx}` for QuantMonitor render layer. Captures state
+// transition history (CONNECTING → OPEN → CLOSED), last error label, event
+// count, and last event timestamp. Operator-driven diagnostic post-DNS
+// failure investigation (ERR_NAME_NOT_RESOLVED in browser console on
+// fstream.binance.com).
+function _setWsDiag(name: string, patch: any) {
+  if (!w.S) return
+  w.S._wsDiag = w.S._wsDiag || { bnb: {}, byb: {}, okx: {} }
+  w.S._wsDiag[name] = Object.assign({}, w.S._wsDiag[name] || {}, patch, { ts: Date.now() })
+}
+
 export function connectBNB(): void {
   const sym = (w.S.symbol || 'BTCUSDT').toLowerCase()
   // [Phase 2 S3.1d] ALT_WS_FEEDS workaround — when markPrice@1s is silently
@@ -43,10 +55,11 @@ export function connectBNB(): void {
   const url = `wss://fstream.binance.com/stream?streams=${_priceStream}/${sym}@depth20@500ms/!forceOrder@arr`
   const _bnbGen = w.__wsGen
   console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen} | altFeeds=${_altFeeds}`)
+  _setWsDiag('bnb', { state: 'CONNECTING', url: 'fstream.binance.com', err: '' })
   w.WS.open('bnb', url, {
-    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); updConn() },
-    onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
-    onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; updConn() },
+    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); updConn(); _setWsDiag('bnb', { state: 'OPEN', err: '' }) },
+    onclose: (e: any) => { console.log(`[connectBNB] onclose code=${e?.code} reason=${e?.reason}`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); updConn(); _setWsDiag('bnb', { state: 'CLOSED', err: (e && e.code ? `code=${e.code}${e.reason ? ' '+e.reason : ''}` : 'unknown') }); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
+    onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; updConn(); _setWsDiag('bnb', { state: 'ERROR', err: 'onerror_event' }) },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bnbGen) return
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
@@ -93,6 +106,7 @@ export function connectBYB(): void {
   const sym = w.S.symbol || 'BTCUSDT'
   const _bybGen = w.__wsGen
   console.log(`[connectBYB] attempt | sym=${sym} | gen=${_bybGen}`)
+  _setWsDiag('byb', { state: 'CONNECTING', url: 'stream.bybit.com', err: '' })
   w.WS.open('byb', 'wss://stream.bybit.com/v5/public/linear', {
     onopen: () => {
       console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); _exitDegradedMode('BYB'); updConn()
@@ -100,9 +114,10 @@ export function connectBYB(): void {
       const wsi = w.WS.get('byb'); if (wsi) wsi.send(JSON.stringify({ op: 'subscribe', args: [`liquidation.${sym}`] }))
       _stopBybPing()
       _bybPingTimer = setInterval(() => { try { const ws = w.WS.get('byb'); if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' })) } catch (_) { } }, 20000)
+      _setWsDiag('byb', { state: 'OPEN', err: '' })
     },
-    onclose: () => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); updConn(); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
-    onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror') },
+    onclose: (e: any) => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); updConn(); _setWsDiag('byb', { state: 'CLOSED', err: (e && e.code ? `code=${e.code}${e.reason ? ' '+e.reason : ''}` : 'unknown') }); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
+    onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror'); _setWsDiag('byb', { state: 'ERROR', err: 'onerror_event' }) },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bybGen) return
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
@@ -137,6 +152,17 @@ function procLiq(o: any, src?: string): void {
   const qty = +o.q, price = +o.p
   const sym = (o.s || '').replace('USDT', '').substring(0, 3)
   const usd = qty * price
+  // [WS-DIAG 2026-05-14] Increment event counter per exchange even pentru
+  // simboluri non-BTC (full feed visibility). Operator can see if Binance
+  // forceOrder firehose delivers anything indifferent de symbol.
+  try {
+    if (w.S) {
+      w.S._wsDiag = w.S._wsDiag || { bnb: {}, byb: {}, okx: {} }
+      const k = src === 'byb' ? 'byb' : 'bnb'
+      w.S._wsDiag[k].ev = (w.S._wsDiag[k].ev || 0) + 1
+      w.S._wsDiag[k].lastEv = Date.now()
+    }
+  } catch (_) { /* defensive */ }
   // [BUG5.5.2] Feed QM liquidation map unfiltered so the map does not starve
   // below liqMinUsd. Dispatch BEFORE the classic-feed threshold filter.
   if (sym === 'BTC' && usd > 0 && Number.isFinite(usd)) {
