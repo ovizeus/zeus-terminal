@@ -23,12 +23,15 @@
 
 ## 5 Cross-Cutting Concerns
 
-| Dir | Concern |
+Per memory `project_ml_v3_expert_acceptance_and_ux_scope_20260514.md` — concerns that touch every ring rather than living inside one. R-1 and R7 are rings whose purpose is inherently cross-cutting (test harness wraps all rings; event bus connects all rings).
+
+| Dir / Ring | Concern |
 |---|---|
-| `_audit/`       | Audit Trail (every decision loggable + replay-able) |
-| `_voice/`       | The Voice Layer (OMEGA personality, mood, thoughts) |
-| `_operator/`    | Operator Interaction Layer (approval queue, signature, cooldown) |
-| `R7_communication/` | Inter-ring event bus (R7 ring) |
+| `_audit/`            | Audit Trail (every decision loggable + replay-able) |
+| `_voice/`            | The Voice Layer (OMEGA personality, mood, thoughts) |
+| `_operator/`         | Operator Interaction Layer (approval queue, signature, cooldown) |
+| `R-1_testHarness/`   | Test Harness — R-1 ring; cross-cutting because it mocks/replays/chaos-tests every other ring |
+| `R7_communication/`  | Inter-ring event bus — R7 ring; cross-cutting because every ring publishes/subscribes via it |
 
 ## Constraints absolute
 
