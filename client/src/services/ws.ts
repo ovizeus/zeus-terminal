@@ -25,6 +25,11 @@ function _onMessage(ev: MessageEvent) {
   try {
     const msg = JSON.parse(ev.data) as WsMessage
     _listeners.forEach((fn) => fn(msg))
+    // [LIQ-FEED PROXY 2026-05-14] Mirror parsed frame to global CustomEvent
+    // so module subscribers (e.g. liqFeedClient) can react without joining
+    // the typed _listeners pipeline. Cheap fire-and-forget — no impact on
+    // existing listeners. Frame shape: { type: '...', data: ... }.
+    try { window.dispatchEvent(new CustomEvent('zeus:wsFrame', { detail: msg })) } catch (_) { /* defensive */ }
   } catch {
     // ignore malformed messages
   }

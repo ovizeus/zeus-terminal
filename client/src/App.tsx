@@ -17,6 +17,7 @@ import { wsService } from './services/ws'
 import { startSettingsRealtime, stopSettingsRealtime } from './services/settingsRealtime'
 import { startPositionsRealtime, stopPositionsRealtime } from './services/positionsRealtime'
 import { startMarketRadarRealtime, stopMarketRadarRealtime } from './services/marketRadarRealtime'
+import { start as startLiqFeedClient, stop as stopLiqFeedClient } from './services/liqFeedClient'
 import './app.css'
 
 export function App() {
@@ -49,7 +50,13 @@ export function App() {
       // Server emits market.radar frames via wsBroadcastAll. Silent no-op
       // when MARKET_RADAR_ENABLED=0 on the server (no frames arrive).
       startMarketRadarRealtime()
+      // [LIQ-FEED PROXY 2026-05-14] Server-aggregated liq feed subscriber.
+      // Listens to zeus:wsFrame, filters `liq.feed` type, re-dispatches
+      // zeus:liq / zeus:okxLiq events for Quant Monitor consumption.
+      // Active when MF.LIQ_FEED_VIA_SERVER true (default).
+      startLiqFeedClient()
       return () => {
+        stopLiqFeedClient()
         stopMarketRadarRealtime()
         stopPositionsRealtime()
         stopSettingsRealtime()

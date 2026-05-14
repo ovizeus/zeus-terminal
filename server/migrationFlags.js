@@ -103,6 +103,13 @@ const DEFAULTS = {
     // — default ON because production safety must NOT default to unsafe behavior
     // (Master Working Rule 0: server-truth/no-fake-data).
     LIVE_ENTRY_UNIFIED: true,
+    // [LIQ-FEED PROXY 2026-05-14] When true, clients listen to server-side
+    // aggregated liq feed (`liq.feed` WS frames) instead of opening direct
+    // exchange WebSockets. Eliminates DNS/network filter failures on
+    // ERR_NAME_NOT_RESOLVED for fstream.binance.com etc. Default true post-
+    // deploy. Set false to fall back to client-side direct connections.
+    // Spec: _review/audit/LIQ_FEED_PROXY_PLAN_20260514.md
+    LIQ_FEED_VIA_SERVER: true,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -251,6 +258,9 @@ module.exports = {
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED — controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path.
     get LIVE_ENTRY_UNIFIED() { return flags.LIVE_ENTRY_UNIFIED; },
+    // [LIQ-FEED PROXY 2026-05-14] LIQ_FEED_VIA_SERVER — client liq feed
+    // source: server proxy (true) vs direct exchange WS (false).
+    get LIQ_FEED_VIA_SERVER() { return flags.LIQ_FEED_VIA_SERVER; },
     // Methods
     set,
     getAll,

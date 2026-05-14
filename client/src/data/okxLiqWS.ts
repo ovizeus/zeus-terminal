@@ -13,6 +13,15 @@ function _setOkxDiag(patch: any) {
 }
 
 export function connectOKXLiq(): void {
+  // [LIQ-FEED PROXY 2026-05-14] Skip direct OKX connection when server-side
+  // aggregator broadcasts via `liq.feed` frames (liqFeedClient consumes).
+  if (w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true) {
+    _setOkxDiag({ state: 'SKIPPED', err: 'server-side feed active (MF.LIQ_FEED_VIA_SERVER)' })
+    if (typeof w.ZLOG !== 'undefined') {
+      try { w.ZLOG.push('OKX-LIQ', '[OKX-LIQ] skipped — using server-side feed') } catch (_) {}
+    }
+    return
+  }
   if (_ws && _ws.readyState <= 1) return
   try {
     _setOkxDiag({ state: 'CONNECTING', url: 'ws.okx.com', err: '' })

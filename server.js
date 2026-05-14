@@ -1304,6 +1304,19 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.error('SERVER', `[LIQ] boot failed: ${err.message}`);
   }
 
+  // [LIQ-FEED PROXY 2026-05-14] Server-side unfiltered liq aggregator for
+  // Quant Monitor heatmap (separate from Market Radar feed above which
+  // applies $100k filter + 30s dedup). Broadcasts `liq.feed` frames; clients
+  // listen via liqFeedClient.ts when MF.LIQ_FEED_VIA_SERVER is true.
+  // Spec: LIQ_FEED_PROXY_PLAN_20260514.md
+  try {
+    const liqFeedAggregator = require('./server/services/liqFeedAggregator');
+    liqFeedAggregator.start();
+    logger.info('SERVER', '[LIQ-FEED] aggregator started (BNB + BYB + OKX, unfiltered passthrough)');
+  } catch (err) {
+    logger.error('SERVER', `[LIQ-FEED] boot failed: ${err.message}`);
+  }
+
   // [b65] Reflection engine: start + backfill from history regardless of SERVER_BRAIN.
   // Dashboard reads thoughts/rules/self-score directly from in-memory Maps —
   // without this seed, every pm2 reload leaves the dashboard empty until a fresh
