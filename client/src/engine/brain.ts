@@ -2018,35 +2018,12 @@ export function renderBrainCockpit(): void {
     })
   }
 
-  // [ZT5-E] Q-FORECAST + WHY ENGINE routed through brainStatsStore
-  ;(function renderQForecast() {
-    const qf = w.S.quantumForecast
-    const sent = qf?.sentiment || 'neutral'
-    const strength = +(qf?.strength) || 0
-    const rangeLow = qf?.rangeLow
-    const rangeHigh = qf?.rangeHigh
-    const qfState = qf?.state || '—'
-
-    const sentLower = sent.toLowerCase()
-    const sentCls = sentLower.includes('bull') ? 'bull'
-      : sentLower.includes('bear') ? 'bear'
-        : 'neut'
-    const glowCls = strength > 70 ? ' glow' : ''
-    const dimCls = strength < 40 ? ' dim' : ''
-
-    const sentLabel = strength > 0
-      ? sent.charAt(0).toUpperCase() + sent.slice(1).toLowerCase() + ' (' + strength + ')'
-      : 'Neutral (0)'
-
-    useBrainStatsStore.getState().patchStats({
-      forecast: {
-        mainText: sentLabel,
-        mainCls: 'bf-main ' + sentCls + glowCls + dimCls,
-        rangeText: (rangeLow && rangeHigh) ? fP(rangeLow) + ' – ' + fP(rangeHigh) : '—',
-        stateText: strength > 0 ? qfState : '—',
-      },
-    })
-  })()
+  // [BUG-D-2 FIX 2026-05-14] renderQForecast IIFE removed — pure dead code.
+  // Q-FORECAST UI block was removed în BUG-D-1 (2026-05-07, QForecastBlock
+  // function + #brain-forecast CSS section); the IIFE that fed `forecast` field
+  // în brainStatsStore had zero downstream consumers but kept running on every
+  // brain cycle (~5s). Companion removal: BrainForecast interface +
+  // snapshot.forecast field + initial state din brainStatsStore.ts.
 
   ;(function renderWhyEngine() {
     const why = w.S.why

@@ -130,7 +130,7 @@ function ArmDetail() {
   )
 }
 
-// [BUG-D-1] QForecastBlock removed 2026-05-07 — was never invoked (Pack C / L5 dead-code from 2026-04-28). brainStatsStore.forecast field + brain.ts renderQForecast IIFE retained as YELLOW-deferred D-2 (touches engine/brain.ts, out of QW client-only lane).
+// [BUG-D-1 + D-2 CLOSED 2026-05-14] QForecastBlock removed 2026-05-07 (was never invoked, Pack C / L5 dead-code from 2026-04-28). brainStatsStore.forecast field + brain.ts renderQForecast IIFE + BrainForecast interface removed în D-2 fix (2026-05-14) post zero-consumer verification. Q-FORECAST surface fully eliminated.
 
 function WhyEngineBlock() {
   const s = useBrainStatsStore((st) => st.snapshot.why)
@@ -504,7 +504,7 @@ export const BrainCockpit = memo(function BrainCockpit() {
 
       </div>{/* end cockpit panel */}
 
-      {/* [Pack C / L5] Q-FORECAST removed from render — WHY ENGINE remains, grid is single column. QForecastBlock dead function + #brain-forecast CSS cleaned up via BUG-D-1 (2026-05-07). brainStatsStore.forecast field + brain.ts renderQForecast IIFE retained as D-2 deferred follow-up. */}
+      {/* [Pack C / L5] Q-FORECAST removed from render — WHY ENGINE remains, grid is single column. BUG-D-1 (2026-05-07): QForecastBlock dead function + #brain-forecast CSS cleaned. BUG-D-2 (2026-05-14): brainStatsStore.forecast field + brain.ts renderQForecast IIFE + BrainForecast type removed. Q-FORECAST surface now fully eliminated. */}
       <div style={{ padding: '4px 6px 0' }}>
         <WhyEngineBlock />
       </div>

@@ -70,12 +70,10 @@ export interface BrainOfi {
   sellPct: number
 }
 
-export interface BrainForecast {
-  mainText: string
-  mainCls: string
-  rangeText: string
-  stateText: string
-}
+// [BUG-D-2 FIX 2026-05-14] BrainForecast interface removed — pure dead code.
+// QForecastBlock (consumer) was removed în BUG-D-1 (2026-05-07); this type
+// had zero remaining consumers. Companion removal: renderQForecast IIFE
+// în brain.ts:2022 + `forecast` field în BrainStatsSnapshot + initial state.
 
 export interface BrainWhy {
   stateText: string
@@ -107,7 +105,6 @@ export interface BrainStatsSnapshot {
   regimeBadge2: BrainRegimeBadge
   regimeDetail: string
   ofi: BrainOfi
-  forecast: BrainForecast
   why: BrainWhy
   neurons: BrainNeurons
 }
@@ -158,7 +155,6 @@ export const emptyBrainStatsSnapshot: BrainStatsSnapshot = {
   regimeBadge2: emptyRegimeBadge,
   regimeDetail: 'ADX: — | VOL: — | STRUCT: —',
   ofi: { buyPct: 50, sellPct: 50 },
-  forecast: { mainText: 'Neutral (0)', mainCls: 'bf-main neut', rangeText: '—', stateText: '—' },
   why: { stateText: 'WAIT', stateCls: 'bw-state wait', whyList: [], riskList: [] },
   neurons: emptyNeurons,
 }
