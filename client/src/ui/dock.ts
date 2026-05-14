@@ -74,7 +74,11 @@ export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'ares', 'p
 // ── Z-glyph "Coming Soon" toast (UI-POLISH-1 2026-05-13) ──────
 // Operator-approved dedicated brand-aligned overlay (NU emoji).
 // Z rune SVG sharp angular, cyan brand, Orbitron 900, glow pulse.
-function _zComingSoon(): void {
+// [UI-POLISH-1 REACT-FIX 2026-05-14] Exported pentru React PanelShell
+// handleDockClick — previously `if (id==='more') return` silently
+// exited, never showed overlay în React UI. Legacy initZeusDock
+// branch still uses local reference at line 136 (no behavior change).
+export function _zComingSoon(): void {
   let t = document.getElementById('z-coming-soon-toast') as any;
   if (!t) {
     t = document.createElement('div');

@@ -8,6 +8,7 @@ import { StatusBar } from './StatusBar'
 import WatchlistBar from './WatchlistBar'
 import { ZeusDock } from './ZeusDock'
 import { PageView } from './PageView'
+import { _zComingSoon } from '../../ui/dock'
 import { ModeBar } from './ModeBar'
 import { MarketRadar } from '../radar/MarketRadar'
 // ── Legacy panel init functions (1:1 from old openPageView in pageview.ts) ──
@@ -118,7 +119,14 @@ export function PanelShell() {
   }, [closeModal, openModal])
 
   function handleDockClick(id: string) {
-    if (id === 'more') return
+    // [UI-POLISH-1 REACT-FIX 2026-05-14] More icon → Z-glyph Coming Soon
+    // overlay. Pre-fix: silent `return` skipped both dock activation AND
+    // overlay. Now triggers shared `_zComingSoon` from dock.ts (same
+    // implementation as legacy initZeusDock branch).
+    if (id === 'more') {
+      _zComingSoon()
+      return
+    }
     const next = dockActive === id ? null : id
     setDockActive(next)
     try { if (next) sessionStorage.setItem('zeusDock', next); else sessionStorage.removeItem('zeusDock') } catch {}
