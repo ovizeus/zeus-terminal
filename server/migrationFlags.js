@@ -110,6 +110,50 @@ const DEFAULTS = {
     // deploy. Set false to fall back to client-side direct connections.
     // Spec: _review/audit/LIQ_FEED_PROXY_PLAN_20260514.md
     LIQ_FEED_VIA_SERVER: true,
+
+    // ─── OMEGA ML migration flags (Wave 1A 2026-05-14) ───
+    // All default OFF. Influence gates chained per spec frozen:
+    // DEMO (post S6) → TESTNET (post S8) → REAL (post S10/S11).
+    // Spec: project_ml_architecture_frozen.md migration flags section.
+    //
+    // ML_INGEST_ENABLED — Stage 1 ingest activator. When true, R-1 test
+    // harness + R0 substrate can write decision logs to ml_decision_*
+    // tables. Pure observability; no trading influence.
+    ML_INGEST_ENABLED: false,
+    // ML_PIPELINE_SHADOW — shadow mode for pipeline stages. Pipeline runs
+    // but never influences live trading; outputs compared against client
+    // brain via parity log. Required for soak validation pre-influence.
+    ML_PIPELINE_SHADOW: false,
+    // ML_DEMO_INFLUENCE_ENABLED — DEMO env influence gate (post S6).
+    // When true, R4 execution may consult R5A bandit on DEMO trades.
+    // Per-user opt-in NOT required for DEMO (no real money).
+    ML_DEMO_INFLUENCE_ENABLED: false,
+    // ML_TESTNET_INFLUENCE_ENABLED — TESTNET influence gate (post S8).
+    // Same as DEMO but for testnet flow. Per-user opt-in not required.
+    ML_TESTNET_INFLUENCE_ENABLED: false,
+    // ML_LIVE_INFLUENCE_ENABLED — REAL influence gate (post S10/S11).
+    // Master switch for real-money ML influence. Requires LIVE_OPTIN_REQUIRED
+    // per-user check below. NEVER flip without operator GO + canary plan.
+    ML_LIVE_INFLUENCE_ENABLED: false,
+    // ML_LIVE_OPTIN_REQUIRED — per-user explicit opt-in for REAL ML influence.
+    // When true (default), user MUST acknowledge ML influence before R4 may
+    // use bandit on REAL trades, even if ML_LIVE_INFLUENCE_ENABLED is true.
+    ML_LIVE_OPTIN_REQUIRED: false,
+    // ML_BANDIT_AUTO_APPLY_MINOR — auto-apply MINOR proposals without
+    // operator approval (per spec point 252* tiered authority). MAJOR
+    // and CRITICAL always require operator decision. Default OFF until
+    // R5B governance proven in shadow.
+    ML_BANDIT_AUTO_APPLY_MINOR: false,
+    // ML_HYBRID_POOLING_ENABLED — Cornercase A hybrid partial pooling.
+    // When true, pooled evidence is computed as read-only prior for
+    // proposals but writes remain strict per-(user, env, symbol, feature).
+    // Default OFF until R5A learning facade ships.
+    ML_HYBRID_POOLING_ENABLED: false,
+    // ML_OVERRIDE_RESOLVER_ENABLED — Cornercase B 7-layer effectiveStatus
+    // resolver. When true, R5B reads ml_feature_global_overrides table
+    // to compute effective feature status per (scope → cell → registry).
+    // Default OFF until R5B governance facade ships.
+    ML_OVERRIDE_RESOLVER_ENABLED: false,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -261,6 +305,17 @@ module.exports = {
     // [LIQ-FEED PROXY 2026-05-14] LIQ_FEED_VIA_SERVER — client liq feed
     // source: server proxy (true) vs direct exchange WS (false).
     get LIQ_FEED_VIA_SERVER() { return flags.LIQ_FEED_VIA_SERVER; },
+    // [OMEGA Wave 1A 2026-05-14] ML influence chain — default OFF on all.
+    // DEMO (post S6) → TESTNET (post S8) → REAL (post S10/S11).
+    get ML_INGEST_ENABLED() { return flags.ML_INGEST_ENABLED; },
+    get ML_PIPELINE_SHADOW() { return flags.ML_PIPELINE_SHADOW; },
+    get ML_DEMO_INFLUENCE_ENABLED() { return flags.ML_DEMO_INFLUENCE_ENABLED; },
+    get ML_TESTNET_INFLUENCE_ENABLED() { return flags.ML_TESTNET_INFLUENCE_ENABLED; },
+    get ML_LIVE_INFLUENCE_ENABLED() { return flags.ML_LIVE_INFLUENCE_ENABLED; },
+    get ML_LIVE_OPTIN_REQUIRED() { return flags.ML_LIVE_OPTIN_REQUIRED; },
+    get ML_BANDIT_AUTO_APPLY_MINOR() { return flags.ML_BANDIT_AUTO_APPLY_MINOR; },
+    get ML_HYBRID_POOLING_ENABLED() { return flags.ML_HYBRID_POOLING_ENABLED; },
+    get ML_OVERRIDE_RESOLVER_ENABLED() { return flags.ML_OVERRIDE_RESOLVER_ENABLED; },
     // Methods
     set,
     getAll,
