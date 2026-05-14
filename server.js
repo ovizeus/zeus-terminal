@@ -256,6 +256,20 @@ app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
   res.json({ ok: true });
 });
 
+// [LIQ-FEED DIAG 2026-05-14] Temporary diagnostic endpoint — exposes live
+// state of both liq feed modules (filtered Market Radar + unfiltered
+// aggregator pentru Quant Monitor). Public read-only; no auth needed for
+// diagnostic. Remove post-confirmation.
+app.get('/api/diag/liq-feed', (_req, res) => {
+  try {
+    const mr = require('./server/services/liquidationFeed').getState();
+    const ag = require('./server/services/liqFeedAggregator').getState();
+    res.json({ marketRadarFeed: mr, aggregator: ag, ts: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Migration Flags (admin-only control for gradual migration) ───
 app.get('/api/migration/flags', (_req, res) => {
   res.json(MF.getAll());

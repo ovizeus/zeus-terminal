@@ -93,7 +93,7 @@ function createSessionAuth(jwtSecret) {
         // (curl GET) and any internal monitoring poll, while closing the write path.
         const ip = req.ip || req.connection.remoteAddress || '';
         const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-        const localSafePaths = ['/api/status', '/api/metrics', '/api/health', '/api/migration/flags', '/api/dashboard', '/api/sd/health'];
+        const localSafePaths = ['/api/status', '/api/metrics', '/api/health', '/api/migration/flags', '/api/dashboard', '/api/sd/health', '/api/diag/liq-feed'];
         if (isLocal && req.method === 'GET' && localSafePaths.some(p => req.path === p)) return next();
 
         // Check JWT cookie

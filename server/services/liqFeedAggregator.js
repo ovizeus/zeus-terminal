@@ -231,11 +231,16 @@ function _connectOkx() {
     s.ws.on('open', () => {
         s.connected = true;
         s.reconnectMs = RECONNECT_MIN_MS;
-        logger.info('LIQ-FEED', 'OKX connected — liquidation-orders SWAP BTC-USDT');
+        logger.info('LIQ-FEED', 'OKX connected — liquidation-orders SWAP (all instruments)');
         try {
+            // [LIQ-FEED OKX FIX 2026-05-14] Subscribe with instType only.
+            // Previously included `instFamily: 'BTC-USDT'` care a returnat
+            // close code 4004 (invalid args). instType alone subscribes la
+            // ALL SWAP liquidations (multi-symbol filter applied client-side
+            // in _normalizeOkx). Verified live via wscat — subscribe ack OK.
             s.ws.send(JSON.stringify({
                 op: 'subscribe',
-                args: [{ channel: 'liquidation-orders', instType: 'SWAP', instFamily: 'BTC-USDT' }],
+                args: [{ channel: 'liquidation-orders', instType: 'SWAP' }],
             }));
         } catch (_) {}
     });
@@ -274,6 +279,29 @@ function _scheduleReconnect(ex, connectFn) {
     s.reconnectMs = Math.min(s.reconnectMs * 2, RECONNECT_MAX_MS);
 }
 
+// [LIQ-FEED DIAG 2026-05-14] Periodic state log — surface frame/event
+// counts every 30s pentru post-deploy verification. Cheap (1 log line/30s).
+// Plus prominent warning if BNB silent >2min (datacenter network issue with
+// fstream.binance.com confirmed by direct WS test — handshake OK but zero
+// data flow despite REST + SPOT WS + Bybit + OKX all working).
+let _diagTimer = null;
+let _bnbSilentSince = Date.now();
+function _startDiagLog() {
+    if (_diagTimer) return;
+    _diagTimer = setInterval(() => {
+        const s = _state;
+        logger.info('LIQ-FEED', `state | BNB[conn=${s.bnb.connected} frames=${s.bnb.framesReceived} ev=${s.bnb.eventsEmitted}] BYB[conn=${s.byb.connected} frames=${s.byb.framesReceived} ev=${s.byb.eventsEmitted}] OKX[conn=${s.okx.connected} frames=${s.okx.framesReceived} ev=${s.okx.eventsEmitted}]`);
+        // Persistent BNB silence detection — known datacenter issue 2026-05-14
+        if (s.bnb.framesReceived === 0 && (Date.now() - _bnbSilentSince) > 120000) {
+            logger.warn('LIQ-FEED', `BNB silent >2min — datacenter network appears to block fstream.binance.com WS data flow (REST+SPOT WS work; FUTURES WS silent). Quant heatmap will populate from Bybit + OKX only until network path restored.`);
+            _bnbSilentSince = Date.now(); // re-log every 2 min
+        } else if (s.bnb.framesReceived > 0) {
+            _bnbSilentSince = Date.now(); // reset on any successful frame
+        }
+    }, 30000);
+    _diagTimer.unref && _diagTimer.unref();
+}
+
 // ── Public API ──
 function start() {
     if (_running) return;
@@ -282,6 +310,7 @@ function start() {
     _connectBnb();
     _connectByb();
     _connectOkx();
+    _startDiagLog();
     logger.info('LIQ-FEED', 'aggregator started (BNB + BYB + OKX)');
 }
 
