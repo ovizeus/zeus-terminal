@@ -653,6 +653,241 @@ migrate('033_ml_runtime_features', () => {
     `);
 });
 
+// [OMEGA Wave 1A 2026-05-14] R5A feature audit log — append-only history of
+// state changes per feature. Cornercase B reference: status transitions logged.
+migrate('034_ml_feature_audit_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_feature_audit_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol          TEXT NOT NULL,
+            feature_id      TEXT NOT NULL,
+            event_type      TEXT NOT NULL CHECK(event_type IN (
+                'PROPOSED','PROMOTED','DEMOTED','QUARANTINED','UNQUARANTINED',
+                'RETIRED','WEIGHT_UPDATED','SAMPLE_INCREMENTED'
+            )),
+            old_value_json  TEXT,
+            new_value_json  TEXT,
+            actor           TEXT NOT NULL,
+            reason          TEXT,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfal_feature_ts
+            ON ml_feature_audit_log(user_id, resolved_env, symbol, feature_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlfal_event_ts
+            ON ml_feature_audit_log(event_type, created_at);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] R5A bandit proposals — Thompson sampling output
+// awaiting auto-apply (MINOR + 252*) or operator approval (MAJOR/CRITICAL).
+migrate('035_ml_feature_proposals', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_feature_proposals (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol            TEXT NOT NULL,
+            feature_id        TEXT NOT NULL,
+            proposed_weight   REAL NOT NULL,
+            current_weight    REAL,
+            delta_class       TEXT NOT NULL CHECK(delta_class IN ('MINOR','MAJOR','CRITICAL')),
+            evidence_json     TEXT,
+            state             TEXT NOT NULL DEFAULT 'PENDING'
+                              CHECK(state IN ('PENDING','APPLIED','REJECTED','EXPIRED')),
+            decided_at        INTEGER,
+            decided_by        TEXT,
+            created_at        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfp_state_created
+            ON ml_feature_proposals(state, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlfp_user_env_pending
+            ON ml_feature_proposals(user_id, resolved_env, state) WHERE state = 'PENDING';
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] R5B Cornercase B — global override resolver table.
+// Resolver order: CHARTER → GLOBAL → RESOLVED_ENV → SYMBOL → ENV_SYMBOL
+// → per-cell runtime_state → registry default. Zero cascade writes (40K+ cells safe).
+migrate('036_ml_feature_global_overrides', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_feature_global_overrides (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            scope             TEXT NOT NULL CHECK(scope IN (
+                'CHARTER','GLOBAL','RESOLVED_ENV','SYMBOL','ENV_SYMBOL'
+            )),
+            scope_key         TEXT NOT NULL,
+            feature_id        TEXT NOT NULL,
+            override_status   TEXT NOT NULL CHECK(override_status IN (
+                'QUARANTINED','RETIRED','BLOCKED','FORCED_ACTIVE'
+            )),
+            reason            TEXT NOT NULL,
+            created_by        TEXT NOT NULL,
+            created_at        INTEGER NOT NULL,
+            expires_at        INTEGER,
+            UNIQUE(scope, scope_key, feature_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfgo_resolver
+            ON ml_feature_global_overrides(scope, feature_id);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] Cross-cutting TIER 1 — full decision snapshots
+// per Cornercase D. Retention 30 days. Spec invariant #6: replay determinism
+// via decision_digest + snapshot_json.
+migrate('037_ml_decision_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_decision_snapshots (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol                   TEXT NOT NULL,
+            snapshot_event_type      TEXT NOT NULL CHECK(snapshot_event_type IN (
+                'TRADE','ABSTAIN_CRITIC','NEAR_THRESHOLD','OPERATOR_OVERRIDE',
+                'QUARANTINE_TRIGGER','PROMOTION_TRIGGER','ANOMALY_DRIFT'
+            )),
+            decision_digest          TEXT NOT NULL,
+            snapshot_json            TEXT NOT NULL,
+            registry_digest          TEXT NOT NULL,
+            input_snapshot_ref       TEXT,
+            created_at               INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlds_user_env_ts
+            ON ml_decision_snapshots(user_id, resolved_env, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlds_digest
+            ON ml_decision_snapshots(decision_digest);
+        CREATE INDEX IF NOT EXISTS idx_mlds_event_ts
+            ON ml_decision_snapshots(snapshot_event_type, created_at);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] Cross-cutting light — NO_TRADE summary per
+// Cornercase D. Retention 90 days. Compact row for billions/year scale.
+migrate('038_ml_decision_light', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_decision_light (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol              TEXT NOT NULL,
+            decision_digest     TEXT NOT NULL,
+            score               REAL,
+            top5_features_json  TEXT,
+            abstain_count       INTEGER NOT NULL DEFAULT 0,
+            reason_code         TEXT,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldl_user_env_ts
+            ON ml_decision_light(user_id, resolved_env, created_at);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] R5A attribution — close-of-trade outcomes wired
+// back to decision_digest for bandit learning loop. operator_feedback per
+// Rule 22-derived FEEDBACK-N1 (operator thumb up/down ground truth).
+migrate('039_ml_attribution_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_attribution_events (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            decision_digest      TEXT NOT NULL,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol               TEXT NOT NULL,
+            pos_id               TEXT,
+            outcome_class        TEXT NOT NULL CHECK(outcome_class IN (
+                'WIN','LOSS','BREAKEVEN','TIMEOUT','MANUAL_CLOSE','ABSTAIN_CORRECT','ABSTAIN_WRONG'
+            )),
+            r_multiple           REAL,
+            pnl_pct              REAL,
+            operator_feedback    INTEGER,
+            attributed_at        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlae_digest
+            ON ml_attribution_events(decision_digest);
+        CREATE INDEX IF NOT EXISTS idx_mlae_user_env_ts
+            ON ml_attribution_events(user_id, resolved_env, attributed_at);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] Voice Layer — every Ω utterance logged for
+// replay + history. Powers A-Z raid item H (history/replay). NU storing
+// audio — only text + mood + context. TTS happens client-side.
+migrate('040_ml_voice_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_voice_log (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            utterance_type    TEXT NOT NULL CHECK(utterance_type IN (
+                'THOUGHT','CHAT_REPLY','GREETING','FAREWELL','CRITICAL_ALERT','REACTION'
+            )),
+            mood              TEXT NOT NULL CHECK(mood IN (
+                'CALM','FOCUSED','EXCITED','NERVOUS','ANGRY','SAD','BORED'
+            )),
+            text              TEXT NOT NULL,
+            template_id       TEXT,
+            context_json      TEXT,
+            decision_digest   TEXT,
+            created_at        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlvl_user_ts
+            ON ml_voice_log(user_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlvl_type_mood
+            ON ml_voice_log(utterance_type, mood);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] Operator Interaction Layer — approval queue
+// for MAJOR/CRITICAL changes per spec 252* tiered authority. CRITICAL =
+// 24h cooldown_until enforced before decision applies.
+migrate('041_ml_operator_approval', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_operator_approval (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            request_type             TEXT NOT NULL CHECK(request_type IN (
+                'PROMOTION','DEMOTION','QUARANTINE','RESUME','CHARTER_CHANGE',
+                'OVERRIDE_ADD','OVERRIDE_REMOVE','EMERGENCY_HALT','RESUME_FROM_HALT'
+            )),
+            request_payload_json     TEXT NOT NULL,
+            tier                     TEXT NOT NULL CHECK(tier IN ('MINOR','MAJOR','CRITICAL')),
+            queue_state              TEXT NOT NULL DEFAULT 'PENDING'
+                                     CHECK(queue_state IN ('PENDING','APPROVED','REJECTED','EXPIRED','APPLIED')),
+            cooldown_until           INTEGER,
+            requested_at             INTEGER NOT NULL,
+            decided_at               INTEGER,
+            decided_by               TEXT,
+            decision                 TEXT,
+            signature                TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloa_user_state
+            ON ml_operator_approval(user_id, queue_state);
+        CREATE INDEX IF NOT EXISTS idx_mloa_tier_state
+            ON ml_operator_approval(tier, queue_state);
+    `);
+});
+
+// [OMEGA Wave 1A 2026-05-14] R7 Communication — health check per ring.
+// Single row per ring_id (PK), updated on heartbeat/error. R7 event bus
+// gates degraded ring access; operator dashboard reads this for status.
+migrate('042_ml_ring_health', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ring_health (
+            ring_id           TEXT PRIMARY KEY CHECK(ring_id IN (
+                'R-1','R0','R1','R2','R3A','R3B','R4','R5A','R5B','R6','R7'
+            )),
+            state             TEXT NOT NULL CHECK(state IN (
+                'OK','DEGRADED','OFFLINE','DISABLED','INITIALIZING'
+            )),
+            last_heartbeat    INTEGER NOT NULL,
+            error_count_1h    INTEGER NOT NULL DEFAULT 0,
+            last_error_text   TEXT,
+            last_error_at     INTEGER,
+            updated_at        INTEGER NOT NULL
+        );
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
