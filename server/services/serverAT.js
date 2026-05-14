@@ -4314,10 +4314,16 @@ async function _runReconciliation(isStartup) {
 
             // 3. Check for ORPHAN positions (Binance has, server doesn't track)
             // [V5.4] 2-cycle confirmation + SAT_ prefix check before auto-close
-            for (const [symbol, bpos] of binanceHeld) {
+            // [BUG-RECON-SYMBOL FIX 2026-05-14] Iterate cu destructure `[heldKey,
+            // bpos]` — map key is composite SYMBOL_SIDE (BUG-T2a hedge-aware).
+            // Use bpos.symbol (pure) pentru downstream Binance API calls; pre-fix
+            // sent composite key as `symbol` param → "Invalid symbol" errors +
+            // orphan auto-close + cancel calls silently broken.
+            for (const [heldKey, bpos] of binanceHeld) {
+                const symbol = bpos.symbol;
                 const tracked = userLivePositions.find(p => p.symbol === symbol && p.side === bpos.side);
                 if (!tracked) {
-                    const _orphanKey = `${userId}:${symbol}:${bpos.side}`;
+                    const _orphanKey = `${userId}:${heldKey}`;
 
                     if (!_orphanPending.has(_orphanKey)) {
                         // First detection — mark pending, alert, wait for next cycle
@@ -4413,7 +4419,9 @@ async function _runReconciliation(isStartup) {
                     }
                 } else {
                     // Position is tracked — clean up any stale pending entry
-                    const _orphanKey = `${userId}:${symbol}:${bpos.side}`;
+                    // [BUG-RECON-SYMBOL FIX 2026-05-14] _orphanKey must match the
+                    // format set at orphan-detection branch above ({userId}:{heldKey}).
+                    const _orphanKey = `${userId}:${heldKey}`;
                     if (_orphanPending.has(_orphanKey)) {
                         _orphanPending.delete(_orphanKey);
                         logger.info(label, `Orphan false alarm cleared: ${bpos.side} ${symbol} uid=${userId}`);
@@ -4424,9 +4432,12 @@ async function _runReconciliation(isStartup) {
             // [LIVE-PARITY] Check pending live closes — resolve or escalate
             for (const [seq, pending] of _pendingLiveCloses) {
                 if (pending.pos.userId !== userId) continue;
+                // [BUG-RECON-SYMBOL FIX 2026-05-14] Lookup using composite key
+                // (BUG-T2a map keys SYMBOL_SIDE); previous pure-symbol lookup
+                // never matched → stillOnExchange always false → valid live
+                // positions silently dropped from pending close queue.
                 const key = `${pending.pos.symbol}_${pending.pos.side}`;
-                const stillOnExchange = binanceHeld.has(pending.pos.symbol) &&
-                    binanceHeld.get(pending.pos.symbol).side === pending.pos.side;
+                const stillOnExchange = binanceHeld.has(key);
                 if (!stillOnExchange) {
                     // Position closed on exchange (by SL/TP/liquidation) — remove from queue
                     _pendingLiveCloses.delete(seq);

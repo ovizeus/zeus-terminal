@@ -22,8 +22,15 @@
  * Key: `symbol_side` tuple (e.g. 'BTCUSDT_LONG').
  * Skips positions cu zero positionAmt.
  *
+ * [BUG-RECON-SYMBOL FIX 2026-05-14] Value includes pure `symbol` field
+ * (without side suffix). Downstream callers in serverAT.js iterate the map
+ * via `for (const [key, bpos] of binanceHeld)` and previously used the
+ * destructured composite key as the `symbol` query param to Binance →
+ * "Invalid symbol" errors + orphan auto-close silent failure on real
+ * orphans. Reading `bpos.symbol` keeps API calls correct.
+ *
  * @param {Array} binancePositions — from /fapi/v2/positionRisk API
- * @returns {Map<string, {amt, side, entryPrice, markPrice, unrealizedProfit}>}
+ * @returns {Map<string, {symbol, amt, side, entryPrice, markPrice, unrealizedProfit}>}
  */
 function buildBinanceHeldMap(binancePositions) {
     const map = new Map();
@@ -34,6 +41,7 @@ function buildBinanceHeldMap(binancePositions) {
         const side = amt > 0 ? 'LONG' : 'SHORT';
         const key = bp.symbol + '_' + side;
         map.set(key, {
+            symbol: bp.symbol, // [BUG-RECON-SYMBOL FIX] pure symbol for downstream API calls
             amt, side,
             entryPrice: parseFloat(bp.entryPrice || 0),
             markPrice: parseFloat(bp.markPrice || 0),
