@@ -47,6 +47,10 @@ Desktop.ini
 
 # Test artifacts / scratch working files (R31 sweep — all debris prefixed with `_`)
 _*
+# Exception: OMEGA ML cross-cutting concerns (required)
+!server/services/ml/_audit/
+!server/services/ml/_voice/
+!server/services/ml/_operator/
 
 # React app build output
 public/app/
