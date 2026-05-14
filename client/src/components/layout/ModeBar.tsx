@@ -1,6 +1,9 @@
 /** Zeus Mode Bar — engine-mode-driven execution toggle.
  *  Phase 2C: env semantics read from canonical executionEnv (server truth).
- *  null + non-demo → LOCKED. Click delegates to switchGlobalMode() legacy. */
+ *  null + non-demo → LOCKED. Click delegates to switchGlobalMode() legacy.
+ *  [MODEBAR NEON PULSE 2026-05-14] data-zmb-mode attribute drives CSS
+ *  variants in app.css (#zeus-mode-bar[data-zmb-mode="demo|testnet|locked|real"]).
+ */
 import { useATStore, useUiStore } from '../../stores'
 import { switchGlobalMode } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
@@ -14,13 +17,18 @@ export function ModeBar() {
   const activeExchange = useUiStore((s) => s.activeExchange)
   const openModal = useUiStore((s) => s.openModal)
 
-  const _exchSuffix = activeExchange === 'binance' ? ' \u00B7 BINANCE' : activeExchange === 'bybit' ? ' \u00B7 BYBIT' : ''
+  const _exchSuffix = activeExchange === 'binance' ? ' · BINANCE' : activeExchange === 'bybit' ? ' · BYBIT' : ''
 
   let barClass = 'zeus-mode-bar'
   let modeText = ''
   let btnText = ''
   let btnClass = 'zmb-btn'
   let indClass = 'zmb-indicator'
+  // [MODEBAR NEON PULSE 2026-05-14] modeKey drives data-zmb-mode attribute
+  // for CSS targeting (#zeus-mode-bar[data-zmb-mode="..."]). Single source
+  // of truth for the 4-way visual variant. Logic duplicates legacy barClass
+  // branching but exposes a stable key without parsing className strings.
+  let modeKey: 'demo' | 'testnet' | 'locked' | 'real' = 'demo'
 
   if (engineMode === 'demo' || executionEnv === 'DEMO') {
     barClass += ' zmb-demo'
@@ -28,24 +36,28 @@ export function ModeBar() {
     btnText = 'EXIT DEMO'
     btnClass += ' zmb-btn-exit'
     indClass += ' zmb-ind-demo'
+    modeKey = 'demo'
   } else if (executionEnv === null) {
     barClass += ' zmb-locked'
-    modeText = 'LIVE \u2014 LOCKED'
+    modeText = 'LIVE — LOCKED'
     btnText = 'CONFIGURE LIVE'
     btnClass += ' zmb-btn-locked'
     indClass += ' zmb-ind-locked'
+    modeKey = 'locked'
   } else if (executionEnv === 'TESTNET') {
     barClass += ' zmb-testnet'
     modeText = 'TESTNET' + _exchSuffix
     btnText = 'ACTIVATE DEMO'
     btnClass += ' zmb-btn-demo'
     indClass += ' zmb-ind-testnet'
+    modeKey = 'testnet'
   } else {
     barClass += ' zmb-real'
     modeText = 'REAL' + _exchSuffix
     btnText = 'ACTIVATE DEMO'
     btnClass += ' zmb-btn-demo'
     indClass += ' zmb-ind-real'
+    modeKey = 'real'
   }
 
   function handleSwitch() {
@@ -67,7 +79,7 @@ export function ModeBar() {
   }
 
   return (
-    <div id="zeus-mode-bar" className={barClass}>
+    <div id="zeus-mode-bar" className={barClass} data-zmb-mode={modeKey}>
       <div className="zmb-status">
         <div className={indClass} id="zmbIndicator"></div>
         <div className="zmb-info">

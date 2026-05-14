@@ -5893,3 +5893,175 @@ select option {
   0%   { filter: drop-shadow(0 0 8px  #00d4ff66); }
   100% { filter: drop-shadow(0 0 18px #00d4ffcc); }
 }
+
+/* ── ModeBar NEON PULSE redesign (2026-05-14) ────────────────────────
+   3-layer background: gradient mode-tint + CRT scan lines + shimmer sweep.
+   Mode text 18-19px Orbitron BLACK with adaptive glow + risk-level pulse.
+   Spec: _review/audit/MODEBAR_REDESIGN_20260514.md
+   Backup: app.css.bak.pre-modebar-redesign-20260514
+   ──────────────────────────────────────────────────────────────────── */
+
+#zeus-mode-bar {
+  position: relative;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(255, 255, 255, 0.03) 2px,
+    rgba(255, 255, 255, 0.03) 3px
+  );
+}
+
+#zeus-mode-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: zmb-shimmer 4s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#zeus-mode-bar .zmb-status,
+#zeus-mode-bar .zmb-btn {
+  position: relative;
+  z-index: 2;
+}
+
+#zeus-mode-bar .zmb-label {
+  font-size: 10px !important;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+#zeus-mode-bar .zmb-mode {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 18px !important;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+@keyframes zmb-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(280%); }
+}
+
+/* ─── DEMO (cyan, calm) ─── */
+#zeus-mode-bar[data-zmb-mode="demo"] {
+  background-color: rgba(0, 212, 255, 0.04);
+  background-image:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.10), rgba(0, 212, 255, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="demo"] .zmb-mode {
+  color: #00d4ff;
+  animation: zmb-pulse-demo 2s ease-in-out infinite alternate;
+}
+#zeus-mode-bar[data-zmb-mode="demo"] .zmb-indicator {
+  filter: drop-shadow(0 0 4px #00d4ffaa);
+  animation: zmb-dot-pulse-demo 2s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-demo {
+  0%   { text-shadow: 0 0 4px #00d4ff66, 0 0 8px #00d4ff44; }
+  100% { text-shadow: 0 0 8px #00d4ffcc, 0 0 16px #00d4ff66; }
+}
+@keyframes zmb-dot-pulse-demo {
+  0%   { filter: drop-shadow(0 0 2px #00d4ff66); }
+  100% { filter: drop-shadow(0 0 10px #00d4ffcc); }
+}
+
+/* ─── TESTNET (electric orange, caution — NU gold) ─── */
+#zeus-mode-bar[data-zmb-mode="testnet"] {
+  background-color: rgba(255, 102, 0, 0.05);
+  background-image:
+    linear-gradient(135deg, rgba(255, 102, 0, 0.12), rgba(255, 102, 0, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="testnet"] .zmb-mode {
+  color: #ff6600;
+  animation: zmb-pulse-testnet 1.5s ease-in-out infinite alternate;
+}
+#zeus-mode-bar[data-zmb-mode="testnet"] .zmb-indicator {
+  filter: drop-shadow(0 0 6px #ff6600bb);
+  animation: zmb-dot-pulse-testnet 1.5s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-testnet {
+  0%   { text-shadow: 0 0 6px #ff660066, 0 0 12px #ff660044; }
+  100% { text-shadow: 0 0 12px #ff6600dd, 0 0 22px #ff660088; }
+}
+@keyframes zmb-dot-pulse-testnet {
+  0%   { filter: drop-shadow(0 0 3px #ff660066); }
+  100% { filter: drop-shadow(0 0 14px #ff6600dd); }
+}
+
+/* ─── LOCKED (hot magenta) ─── */
+#zeus-mode-bar[data-zmb-mode="locked"] {
+  background-color: rgba(255, 0, 170, 0.05);
+  background-image:
+    linear-gradient(135deg, rgba(255, 0, 170, 0.12), rgba(255, 0, 170, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="locked"] .zmb-mode {
+  color: #ff00aa;
+  animation: zmb-pulse-locked 1.5s ease-in-out infinite alternate;
+}
+#zeus-mode-bar[data-zmb-mode="locked"] .zmb-indicator {
+  filter: drop-shadow(0 0 8px #ff00aabb);
+  animation: zmb-dot-pulse-locked 1.5s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-locked {
+  0%   { text-shadow: 0 0 6px #ff00aa66, 0 0 12px #ff00aa44; }
+  100% { text-shadow: 0 0 14px #ff00aadd, 0 0 24px #ff00aa88; }
+}
+@keyframes zmb-dot-pulse-locked {
+  0%   { filter: drop-shadow(0 0 4px #ff00aa66); }
+  100% { filter: drop-shadow(0 0 16px #ff00aadd); }
+}
+
+/* ─── REAL (neon red crimson, danger urgent) ─── */
+#zeus-mode-bar[data-zmb-mode="real"] {
+  background-color: rgba(255, 0, 51, 0.06);
+  background-image:
+    linear-gradient(135deg, rgba(255, 0, 51, 0.14), rgba(255, 0, 51, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.04) 2px, rgba(255, 255, 255, 0.04) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="real"] .zmb-mode {
+  font-size: 19px !important;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ff0033;
+  animation:
+    zmb-pulse-real 0.8s ease-in-out infinite alternate,
+    zmb-flicker-real 8s linear infinite;
+}
+#zeus-mode-bar[data-zmb-mode="real"] .zmb-indicator {
+  filter: drop-shadow(0 0 10px #ff0033cc);
+  animation: zmb-dot-pulse-real 0.8s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-real {
+  0%   { text-shadow: 0 0 8px #ff003388, 0 0 16px #ff003366, 0 0 24px #ff003333; }
+  100% { text-shadow: 0 0 16px #ff0033ee, 0 0 32px #ff0033bb, 0 0 48px #ff003366; }
+}
+@keyframes zmb-dot-pulse-real {
+  0%   { filter: drop-shadow(0 0 4px #ff003388); }
+  100% { filter: drop-shadow(0 0 20px #ff0033ee); }
+}
+@keyframes zmb-flicker-real {
+  0%, 90%, 100% { opacity: 1; }
+  92%           { opacity: 0.55; }
+  93%           { opacity: 1; }
+  95%           { opacity: 0.6; }
+  96%           { opacity: 1; }
+}
