@@ -173,6 +173,29 @@ router.get('/positions', async (req, res) => {
 
 // ─── POST /api/order/place ───
 router.post('/order/place', validateOrderBody, async (req, res) => {
+  // [M1.2 Cat D 2026-05-14] Demo mode bypass — demo entries NU touch Binance.
+  // Route through registerManualPosition (unified path) pentru consistent
+  // entry shape + local state tracking. Returns 200 + ok=true direct fără
+  // marginType/leverage/order Binance round-trips.
+  if (req.body.mode === 'demo') {
+    try {
+      const regResult = await _getServerAT().registerManualPosition(req.user.id, {
+        symbol: req.body.symbol,
+        side: req.body.side,
+        entryPrice: parseFloat(req.body.entryPrice) || parseFloat(req.body.price) || 0,
+        qty: parseFloat(req.body.quantity) || 0,
+        leverage: parseInt(req.body.leverage, 10) || 1,
+        sl: req.body.sl ? parseFloat(req.body.sl) : null,
+        tp: req.body.tp ? parseFloat(req.body.tp) : null,
+        mode: 'demo',
+        source: req.body.source,
+        dslParams: req.body.dslParams,
+      });
+      return res.status(regResult.ok ? 200 : 400).json(regResult);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
   // Idempotency check — reject missing key or duplicate submissions
   const idem = _checkIdempotency(req);
   if (idem && idem.reject) {
@@ -327,7 +350,9 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       try {
         const _entryPriceFallback = parseFloat(data.avgPrice) || parseFloat(data.price) || parseFloat(req.body.referencePrice) || 0;
         const _qtyFallback = parseFloat(data.executedQty) || parseFloat(quantity) || 0;
-        const regResult = _getServerAT().registerManualPosition(req.user.id, {
+        // [M1.2 Cat C 2026-05-14] registerManualPosition acum async — await pentru
+        // a obține regResult sincron. Caller route handler e async, await safe.
+        const regResult = await _getServerAT().registerManualPosition(req.user.id, {
           symbol,
           side,
           entryPrice: _entryPriceFallback,
