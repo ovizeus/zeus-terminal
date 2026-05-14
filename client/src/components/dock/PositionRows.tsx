@@ -214,9 +214,16 @@ export const DemoPositionRow = memo(function DemoPositionRow({ pos }: { pos: any
 // ── Live position row (editable SL/TP + Close) ──────────────────────────────
 // [PERF-8 2026-05-13] memo wrapper — see PendingOrderRow comment.
 export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any }) {
-  const btnRef = useRef<HTMLButtonElement>(null)
   const [sl, setSl] = useState<string>(pos.sl ? String(pos.sl) : '')
   const [tp, setTp] = useState<string>(pos.tp ? String(pos.tp) : '')
+  // [BUG-CLOSE FIX 2026-05-14] React-native 2-click confirm pattern, replaces
+  // attachConfirmClose direct DOM mutation. Previous pattern set
+  // `btn.innerHTML = '✓ CONFIRM?'` which React reconciliation wiped on the
+  // very next price-tick re-render — operator never saw the visible state
+  // change and clicked again, thinking the button was broken. State-driven
+  // button text survives React render cycles.
+  const [pendingConfirm, setPendingConfirm] = useState(false)
+  const _confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const activeExchange = useUiStore((s) => s.activeExchange)
   const exchLabel = _resolveExchangeLabel(pos, activeExchange)
 
@@ -227,12 +234,42 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
     setTp(pos.tp ? String(pos.tp) : '')
   }, [pos.sl, pos.tp])
 
+  // [BUG-CLOSE FIX 2026-05-14] Cleanup timer on unmount to prevent setState
+  // on unmounted component during fast position close→reopen cycles.
   useEffect(() => {
-    if (!btnRef.current) return
-    if (typeof attachConfirmClose === 'function') {
-      attachConfirmClose(btnRef.current, () => closeLivePos(pos.id))
+    return () => {
+      if (_confirmTimerRef.current) {
+        clearTimeout(_confirmTimerRef.current)
+        _confirmTimerRef.current = null
+      }
     }
-  }, [pos.id])
+  }, [])
+
+  // [BUG-CLOSE FIX 2026-05-14] React-native click handler. First click sets
+  // pendingConfirm state (visible via render). Second click within 2.5s fires
+  // closeLivePos. Timer auto-resets pending state if user doesn't confirm.
+  const _onCloseClick = () => {
+    if (pendingConfirm) {
+      if (_confirmTimerRef.current) {
+        clearTimeout(_confirmTimerRef.current)
+        _confirmTimerRef.current = null
+      }
+      setPendingConfirm(false)
+      closeLivePos(pos.id)
+      return
+    }
+    setPendingConfirm(true)
+    if (_confirmTimerRef.current) clearTimeout(_confirmTimerRef.current)
+    _confirmTimerRef.current = setTimeout(() => {
+      setPendingConfirm(false)
+      _confirmTimerRef.current = null
+    }, 2500)
+  }
+
+  const _closeBtnText = pendingConfirm ? '✓ CONFIRM?' : '✕ CLOSE'
+  const _closeBtnBg = pendingConfirm ? '#1a1200' : '#2a0010'
+  const _closeBtnBorder = pendingConfirm ? 'var(--gold)' : '#ff4466'
+  const _closeBtnColor = pendingConfirm ? 'var(--gold)' : '#ff4466'
 
   const cur = _getCurPrice(pos.sym)
   const symBase = (pos.sym || '').replace('USDT', '')
@@ -249,7 +286,7 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
               <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6, letterSpacing: 1 }}>{exchLabel}</span>
             )}
           </span>
-          <button ref={btnRef} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
+          <button data-live-id={pos.id} onClick={_onCloseClick} style={{ padding: '10px 14px', background: _closeBtnBg, border: `2px solid ${_closeBtnBorder}`, color: _closeBtnColor, borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>{_closeBtnText}</button>
         </div>
         <div style={{ fontSize: 13, marginTop: 3, color: '#ff8800' }}>Price unavailable</div>
       </div>
@@ -273,7 +310,7 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
             <span style={{ background: '#00d4ff1a', color: '#00d4ff', padding: '1px 5px', borderRadius: 3, fontSize: 10, fontWeight: 700, marginLeft: 6, letterSpacing: 1 }}>{exchLabel}</span>
           )}
         </span>
-        <button ref={btnRef} data-live-id={pos.id} style={{ padding: '10px 14px', background: '#2a0010', border: '2px solid #ff4466', color: '#ff4466', borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>✕ CLOSE</button>
+        <button data-live-id={pos.id} onClick={_onCloseClick} style={{ padding: '10px 14px', background: _closeBtnBg, border: `2px solid ${_closeBtnBorder}`, color: _closeBtnColor, borderRadius: 4, fontSize: 10, cursor: 'pointer', minHeight: 52, fontWeight: 700 }}>{_closeBtnText}</button>
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 3 }}>
         <span style={{ color: 'var(--dim)' }}>Entry: ${fP(pos.entry)} | Now: ${fP(cur)}</span>
