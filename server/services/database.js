@@ -625,6 +625,34 @@ migrate('032_at_closed_fk_user', () => {
     `);
 });
 
+// [OMEGA Wave 1A 2026-05-14] R5A Learning Core — bandit runtime state per
+// (user, env, symbol, feature_id). Per Cornercase A (hybrid pooling) writes
+// strict per-cell. Spec frozen: project_ml_architecture_frozen.md table list.
+migrate('033_ml_runtime_features', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_runtime_features (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol            TEXT NOT NULL,
+            feature_id        TEXT NOT NULL,
+            effective_weight  REAL NOT NULL DEFAULT 0.0,
+            sample_count      INTEGER NOT NULL DEFAULT 0,
+            success_count     INTEGER NOT NULL DEFAULT 0,
+            status            TEXT NOT NULL DEFAULT 'ACTIVE'
+                              CHECK(status IN ('ACTIVE','QUARANTINED','RETIRED','SHADOW','PROPOSED')),
+            evidence_json     TEXT,
+            last_updated_at   INTEGER NOT NULL,
+            created_at        INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, symbol, feature_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrf_user_env_sym
+            ON ml_runtime_features(user_id, resolved_env, symbol);
+        CREATE INDEX IF NOT EXISTS idx_mlrf_status_env
+            ON ml_runtime_features(status, resolved_env);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
