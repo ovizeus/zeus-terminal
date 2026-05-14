@@ -309,18 +309,24 @@ describe('_executeLiveEntryCore (M1.1 Cat B — core safety machinery)', () => {
 
     describe('global halt pre-execution gate', () => {
         it('aborts entry if isGlobalHaltActive() returns true (GLOBAL_HALT)', async () => {
-            // setGlobalHalt cu active=true before invoking core
-            try { serverAT.setGlobalHalt(true, 1, 'test-halt'); } catch (_) {}
+            // Mock db.atGetState să returneze halt state pentru 'global:halt' key.
+            // isGlobalHaltActive() reads via db.atGetState — fără mock returns null/false.
+            const db = require('../../server/services/database');
+            const haltSpy = jest.spyOn(db, 'atGetState').mockImplementation((key) => {
+                if (key === 'global:halt') return { active: true, by: 1, ts: Date.now(), reason: 'test-halt' };
+                return null;
+            });
 
-            const entry = makeValidLiveEntry();
-            const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
+            try {
+                const entry = makeValidLiveEntry();
+                const result = await serverAT._executeLiveEntryCore(entry, mockStc, mockCreds);
 
-            expect(result.live.status).toBe('GLOBAL_HALT');
-            // No exchange calls — fail-fast on halt
-            expect(sendSignedRequest).not.toHaveBeenCalled();
-
-            // Cleanup: lift halt for other tests
-            try { serverAT.setGlobalHalt(false, 1, 'test-cleanup'); } catch (_) {}
+                expect(result.live.status).toBe('GLOBAL_HALT');
+                // No exchange calls — fail-fast on halt
+                expect(sendSignedRequest).not.toHaveBeenCalled();
+            } finally {
+                haltSpy.mockRestore();
+            }
         });
     });
 

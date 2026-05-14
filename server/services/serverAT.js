@@ -2860,6 +2860,218 @@ function _buildEntryFromOrderPlace(reqBody, userId) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat B 2026-05-14] _executeLiveEntryCore
+// Core safety machinery — atomic entry + SL/TP placement + emergency close.
+// Extracted din _executeLiveEntry pattern per ADR-001 §3.3 migration architecture.
+//
+// Designed pentru BOTH paths post-M1:
+//   - Brain dispatch (processBrainDecision → _executeLiveEntry → core)
+//   - Client-side AT (registerManualPosition post-M1 refactor → core)
+//
+// Signature: `_executeLiveEntryCore(entry, stc, creds) → entry (cu .live populated)`
+//
+// Safety contract (ADR-001 §3.2):
+//   1. Pre-fill hard assertion: mode=live + sl=null → throw SafetyAssertionError
+//   2. Demo bypass: mode=demo returns early fără exchange calls
+//   3. Global halt check: aborts dacă isGlobalHaltActive() true
+//   4. Lock guard: rejects concurrent on same userId:symbol cu LOCK_BLOCKED
+//   5. Atomic SL placement: safety SL @ 15% OTM → real SL retry 3x → emergency close fallback
+//   6. TP placement (only if !entry.dslParams): retry 3x → emergency close on exhaustion
+//   7. Status invariants: LIVE | EMERGENCY_CLOSED | LIVE_NO_SL | DEMO | GLOBAL_HALT | LOCK_BLOCKED
+//
+// Refs: ADR-001 §3.2 + §3.3; TEST_SCAFFOLDING_M1 §4.
+// ══════════════════════════════════════════════════════════════════
+async function _executeLiveEntryCore(entryInput, stc, creds) {
+    if (!entryInput || typeof entryInput !== 'object') {
+        const err = new Error('_executeLiveEntryCore: entry object required');
+        err.name = 'SafetyAssertionError';
+        throw err;
+    }
+    if (!entryInput.symbol) {
+        throw new Error('_executeLiveEntryCore: entry.symbol missing');
+    }
+
+    // [ADR-001 §3.2] Hard safety assertion — live entry MUST have SL pre-fill.
+    if (entryInput.mode === 'live' && (entryInput.sl == null || entryInput.sl === 0)) {
+        const err = new Error('SafetyAssertionError: Live entry requires sl (mode=live, sl=null rejected per ADR-001 §3.2)');
+        err.name = 'SafetyAssertionError';
+        err.code = 'LIVE_ENTRY_SL_REQUIRED';
+        throw err;
+    }
+
+    // [M1.2 Cat B] Operate on shallow clone — prevents shared-reference last-write-wins
+    // bug când caller passes same entry pe concurrent invocations (idempotency LOCK_BLOCKED
+    // test scenario). entryInput preserved as read-only contract; result is fresh.
+    const entry = { ...entryInput };
+
+    // Demo bypass — no exchange interaction (per ADR-001 §3.1)
+    if (entry.mode === 'demo') {
+        entry.live = { status: 'DEMO', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false };
+        return entry;
+    }
+
+    // Global halt pre-execution gate (Phase 2 S2.B parity)
+    if (isGlobalHaltActive()) {
+        entry.live = { status: 'GLOBAL_HALT', slOrderId: null, tpOrderId: null };
+        return entry;
+    }
+
+    // Lock guard pentru concurrent same-userId+symbol prevenire
+    const _lockKey = entry.userId + ':' + entry.symbol;
+    if (_liveEntryLocks.has(_lockKey)) {
+        entry.live = { status: 'LOCK_BLOCKED', slOrderId: null, tpOrderId: null };
+        return entry;
+    }
+    _liveEntryLocks.add(_lockKey);
+
+    try {
+        // 1. marginType + leverage init (fire-and-recover — exchange may already be set)
+        try { await sendSignedRequest('POST', '/fapi/v1/marginType', { symbol: entry.symbol, marginType: 'CROSSED' }, creds); } catch (_) {}
+        try { await sendSignedRequest('POST', '/fapi/v1/leverage', { symbol: entry.symbol, leverage: entry.lev || 1 }, creds); } catch (_) {}
+
+        // 2. Main entry order (MARKET)
+        const exchangeSide = entry.side === 'LONG' ? 'BUY' : 'SELL';
+        const mainOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+            symbol: entry.symbol,
+            side: exchangeSide,
+            type: 'MARKET',
+            quantity: entry.qty,
+        }, creds);
+
+        if (!mainOrder || !mainOrder.orderId) {
+            entry.live = { status: 'ENTRY_FAILED', slOrderId: null, tpOrderId: null };
+            return entry;
+        }
+
+        const fillPrice = parseFloat(mainOrder.avgPrice || entry.entryPrice);
+        const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
+
+        // 3. Safety SL @ 15% OTM (covers retry window) — best-effort
+        let safetySlOrder = null;
+        try {
+            const safetyDist = fillPrice * 0.15;
+            const safetyPrice = entry.side === 'LONG' ? fillPrice - safetyDist : fillPrice + safetyDist;
+            safetySlOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+                symbol: entry.symbol,
+                side: closeSide,
+                type: 'STOP_MARKET',
+                stopPrice: safetyPrice,
+                reduceOnly: true,
+                quantity: entry.qty,
+            }, creds);
+        } catch (_) { safetySlOrder = null; }
+
+        // 4. Real SL retry 3x cu user-specified price
+        let slOrder = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                const candidate = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    symbol: entry.symbol,
+                    side: closeSide,
+                    type: 'STOP_MARKET',
+                    stopPrice: entry.sl,
+                    reduceOnly: true,
+                    quantity: entry.qty,
+                }, creds);
+                if (candidate && candidate.orderId) {
+                    slOrder = candidate;
+                    break;
+                }
+            } catch (_) { /* retry */ }
+        }
+
+        // 5. SL placement failure → EMERGENCY MARKET CLOSE (preserve safety SL as backstop if emergency fails)
+        if (!slOrder || !slOrder.orderId) {
+            try {
+                await sendSignedRequest('POST', '/fapi/v1/order', {
+                    symbol: entry.symbol,
+                    side: closeSide,
+                    type: 'MARKET',
+                    quantity: entry.qty,
+                    reduceOnly: true,
+                }, creds);
+                entry.live = {
+                    status: 'EMERGENCY_CLOSED',
+                    slOrderId: null, tpOrderId: null,
+                    slPlaced: false, tpPlaced: false,
+                };
+                return entry;
+            } catch (_emgErr) {
+                // Emergency close itself failed — keep safety SL (15% OTM) as last backstop, alert user
+                try {
+                    telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${fillPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL on Binance.\nSafety SL (15% OTM) still active as backstop.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
+                } catch (_) {}
+                entry.live = {
+                    status: 'LIVE_NO_SL',
+                    slOrderId: null, tpOrderId: null,
+                    slPlaced: false, tpPlaced: false,
+                };
+                return entry;
+            }
+        }
+
+        // 6. Real SL placed — cancel safety SL (no longer needed)
+        if (safetySlOrder && safetySlOrder.orderId) {
+            try { await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol: entry.symbol, orderId: safetySlOrder.orderId }, creds); } catch (_) {}
+        }
+
+        // 7. TP placement — skip dacă entry.dslParams (DSL manages exit pe price-tick pivots)
+        let tpOrder = null;
+        if (!entry.dslParams) {
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    const candidate = await sendSignedRequest('POST', '/fapi/v1/order', {
+                        symbol: entry.symbol,
+                        side: closeSide,
+                        type: 'TAKE_PROFIT_MARKET',
+                        stopPrice: entry.tp,
+                        reduceOnly: true,
+                        quantity: entry.qty,
+                    }, creds);
+                    if (candidate && candidate.orderId) {
+                        tpOrder = candidate;
+                        break;
+                    }
+                } catch (_) { /* retry */ }
+            }
+
+            if (!tpOrder || !tpOrder.orderId) {
+                // TP failed all retries — emergency close (no native exit available)
+                try {
+                    await sendSignedRequest('POST', '/fapi/v1/order', {
+                        symbol: entry.symbol,
+                        side: closeSide,
+                        type: 'MARKET',
+                        quantity: entry.qty,
+                        reduceOnly: true,
+                    }, creds);
+                } catch (_) {}
+                entry.live = {
+                    status: 'EMERGENCY_CLOSED',
+                    slOrderId: slOrder.orderId, tpOrderId: null,
+                    slPlaced: true, tpPlaced: false,
+                };
+                return entry;
+            }
+        }
+
+        // 8. Success — populate entry.live cu final state
+        entry.live = {
+            status: 'LIVE',
+            slOrderId: slOrder.orderId,
+            tpOrderId: tpOrder ? tpOrder.orderId : null,
+            slPlaced: true,
+            tpPlaced: !!tpOrder,
+            avgPrice: fillPrice,
+            mainOrderId: mainOrder.orderId,
+        };
+        return entry;
+    } finally {
+        _liveEntryLocks.delete(_lockKey);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Register manual LIVE/TESTNET position as server-tracked Zeus object
 // Called after successful exchange fill for PT/manual orders
 // ══════════════════════════════════════════════════════════════════
@@ -4108,6 +4320,10 @@ module.exports = {
     // [M1.2 Cat A] Pure transform helper: /api/order/place reqBody → canonical entry.
     // Used by _executeLiveEntryCore + post-M1 refactored registerManualPosition.
     _buildEntryFromOrderPlace,
+    // [M1.2 Cat B] Core safety machinery: atomic entry + SL/TP placement + emergency close.
+    // Extracted din _executeLiveEntry pattern; reusable pentru BOTH Path A (Brain dispatch)
+    // AND Path B (registerManualPosition post-M1 unification) per ADR-001 Decision 3.1.
+    _executeLiveEntryCore,
     patchPositionFill,
     closeBySeq,
     addOnPosition,
