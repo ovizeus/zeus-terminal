@@ -2789,6 +2789,77 @@ setInterval(() => {
 }, 60000);
 
 // ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat A 2026-05-14] _buildEntryFromOrderPlace
+// Pure transform: /api/order/place reqBody → canonical entry object.
+//
+// Consumed by `_executeLiveEntryCore` (Cat B, extracted din _executeLiveEntry)
+// + post-M1.2 refactored `registerManualPosition` (delegates to core).
+//
+// Hard safety assertion (ADR-001 §3.2): mode='live' + sl=null → throws
+// SafetyAssertionError pre-fill, before any state mutation. Demo allows null
+// (no exchange safety burden per ADR-001 §3.1).
+//
+// Pure function — no I/O, no side effects. Easy to test (Cat A 10 tests).
+//
+// Refs: ADR-001 §3.2 + §3.3; TEST_SCAFFOLDING_M1 §3.
+// ══════════════════════════════════════════════════════════════════
+function _buildEntryFromOrderPlace(reqBody, userId) {
+    if (!reqBody || typeof reqBody !== 'object') {
+        throw new Error('_buildEntryFromOrderPlace: missing required fields (reqBody must be object)');
+    }
+    if (!reqBody.symbol || !reqBody.side || reqBody.quantity == null || reqBody.entryPrice == null) {
+        throw new Error('_buildEntryFromOrderPlace: missing required fields (symbol, side, quantity, entryPrice required)');
+    }
+    const qty = parseFloat(reqBody.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+        throw new Error('_buildEntryFromOrderPlace: invalid quantity (must be positive number, got ' + reqBody.quantity + ')');
+    }
+    const mode = reqBody.mode || 'demo';
+    const sl = (reqBody.sl != null) ? parseFloat(reqBody.sl) : null;
+
+    // [ADR-001 §3.2] Hard safety assertion — live entry MUST have SL pre-fill.
+    // Demo allowed null (no exchange safety burden). This gate fires BEFORE
+    // any state mutation, before _placeConditionalOrder is even imaginable.
+    if (mode === 'live' && (sl == null || sl === 0)) {
+        const err = new Error('SafetyAssertionError: Live entry requires sl (mode=live, sl=null rejected per ADR-001 §3.2)');
+        err.name = 'SafetyAssertionError';
+        err.code = 'LIVE_ENTRY_SL_REQUIRED';
+        throw err;
+    }
+
+    const side = reqBody.side === 'BUY' ? 'LONG' : (reqBody.side === 'SELL' ? 'SHORT' : reqBody.side);
+    const lev = (reqBody.leverage !== undefined && reqBody.leverage !== null)
+        ? (parseInt(reqBody.leverage, 10) || 1)
+        : 1;
+    const tp = (reqBody.tp != null) ? parseFloat(reqBody.tp) : null;
+    const source = reqBody.source || 'manual';
+    const autoTrade = source === 'auto';
+    const entryPrice = parseFloat(reqBody.entryPrice);
+    const size = (lev > 0) ? (qty * entryPrice / lev) : (qty * entryPrice);
+
+    return {
+        userId: userId,
+        symbol: reqBody.symbol,
+        side: side,
+        mode: mode,
+        entryPrice: entryPrice,
+        qty: qty,
+        lev: lev,
+        sl: sl,
+        tp: tp,
+        size: size,
+        autoTrade: autoTrade,
+        // dslParams: undefined → defaults null (DSL OFF); explicit null preserved; object preserved
+        dslParams: (reqBody.dslParams !== undefined) ? reqBody.dslParams : null,
+        // clientReqId pentru idempotency (replays din client transient network fail)
+        clientReqId: reqBody.clientReqId || null,
+        // seq: temporary timestamp-based; properly allocated post-M1.2 via _uState(userId).seq
+        seq: Date.now(),
+        ts: Date.now(),
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Register manual LIVE/TESTNET position as server-tracked Zeus object
 // Called after successful exchange fill for PT/manual orders
 // ══════════════════════════════════════════════════════════════════
@@ -4034,6 +4105,9 @@ module.exports = {
     setGlobalHalt,
     // Client actions
     registerManualPosition,
+    // [M1.2 Cat A] Pure transform helper: /api/order/place reqBody → canonical entry.
+    // Used by _executeLiveEntryCore + post-M1 refactored registerManualPosition.
+    _buildEntryFromOrderPlace,
     patchPositionFill,
     closeBySeq,
     addOnPosition,
