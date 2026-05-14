@@ -4,6 +4,40 @@
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
 /**
+ * [BUG-CLOSE-AT FIX 2026-05-14] Resolve a usable price for closing a position
+ * via explicit fallback chain. Eliminates silent-return bug în closeAutoPos
+ * that broke ZECUSDT (and any non-mainstream symbol) close button.
+ *
+ * Prior code: `const cur = getSymPrice(pos); if (cur == null) return;` — silent
+ * exit when symbol not în market feed (only BTC/ETH/SOL/BNB subscribed). User
+ * clicked Close, nothing happened, no toast, no log, no network request.
+ *
+ * Fallback chain (first valid > 0 wins):
+ *   1. Live market price via getSymPrice (handles allPrices/wlPrices/klines)
+ *   2. pos.live.avgPrice — Binance fill price stored at entry
+ *   3. pos.entry — original entry price (last-resort approximation)
+ *   4. 0 — caller must show error toast (never silent)
+ *
+ * Numeric validation: rejects NaN, negative, zero values at each layer.
+ */
+export function _resolveClosePrice(pos: any): number {
+    if (!pos || typeof pos !== 'object') return 0
+    // Layer 1: live market price
+    try {
+        const live = getSymPrice(pos)
+        if (Number.isFinite(live) && live > 0) return live as number
+    } catch (_) { /* defensive */ }
+    // Layer 2: pos.live.avgPrice (Binance fill at entry)
+    const liveAvg = pos.live && Number(pos.live.avgPrice)
+    if (Number.isFinite(liveAvg) && liveAvg > 0) return liveAvg
+    // Layer 3: pos.entry (original entry approximation)
+    const entry = Number(pos.entry)
+    if (Number.isFinite(entry) && entry > 0) return entry
+    // Layer 4: no usable price
+    return 0
+}
+
+/**
  * [BUG-T2d FIX 2026-05-14] Derive position quantity from Binance MARKET fill,
  * with leverage-aware fallback for status=NEW (executedQty="0.000").
  *
@@ -2066,8 +2100,17 @@ export function closeAutoPos(id: any): void {
   // ─── Check live positions first ───
   const livePos = TP.livePositions.find((p: any) => (p.id === numId || p.id === id) && !p.closed)
   if (livePos) {
-    const cur = getSymPrice(livePos)
-    if (cur == null) { renderATPositions(); return }
+    // [BUG-CLOSE-AT FIX 2026-05-14] Use _resolveClosePrice fallback chain.
+    // Prior `getSymPrice(livePos); if (cur == null) return;` silently exited
+    // pe simbolurile fără feed (ZECUSDT etc.) — operator click ✕ CLOSE,
+    // nothing happened, no toast. Now falls back to live.avgPrice or
+    // pos.entry; only emits toast (NEVER silent) when no price anywhere.
+    const cur = _resolveClosePrice(livePos)
+    if (!cur || cur <= 0) {
+      toast('Cannot close: no price available for ' + (livePos.sym || 'symbol'), 3000, _ZI.w)
+      renderATPositions()
+      return
+    }
     const diff = cur - livePos.entry
     const pnl = _safePnl(livePos.side, diff, livePos.entry, livePos.size, livePos.lev, true)
     closeLivePos(numId, 'Manual close')
@@ -2082,8 +2125,13 @@ export function closeAutoPos(id: any): void {
   const pos = TP.demoPositions.find((p: any) => (p.id === numId || p.id === id) && !p.closed)
   if (!pos) { renderATPositions(); return }
 
-  const cur = getSymPrice(pos)
-  if (cur == null) { renderATPositions(); return }
+  // [BUG-CLOSE-AT FIX 2026-05-14] Same fallback chain as live branch above.
+  const cur = _resolveClosePrice(pos)
+  if (!cur || cur <= 0) {
+    toast('Cannot close: no price available for ' + (pos.sym || 'symbol'), 3000, _ZI.w)
+    renderATPositions()
+    return
+  }
   const diff = cur - pos.entry
   const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
 
