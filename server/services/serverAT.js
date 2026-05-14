@@ -3072,6 +3072,190 @@ async function _executeLiveEntryCore(entryInput, stc, creds) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// [BUG-T2c FIX 2026-05-14] _placeProtectionForExistingEntry
+//
+// Path B safety net for /api/order/place (trading.js manual + client AT entries).
+// Trading.js places main MARKET order on Binance, then calls THIS helper with
+// the filled order data; helper places SL (HARD) + TP (conditional on !dslParams)
+// per DSL rule. Returns {slOrderId, tpOrderId, status} for caller to pass into
+// registerManualPosition so live.slOrderId / live.tpOrderId reflect real
+// exchange orderIds (not null).
+//
+// DSL rule (serverAT.js:1537-1541):
+//   DSL ON  → no native TP (DSL trail SL handles exit via PL hit).
+//   DSL OFF → place native TP from RISK MANAGEMENT.
+//
+// Failure semantics — mirrors _executeLiveEntry / _executeLiveEntryCore:
+//   • Safety SL 15% OTM placed first (covers retry window)
+//   • Real SL retries 3x (1s, 3s backoff)
+//   • All SL retries fail → EMERGENCY MARKET close (return status='EMERGENCY_CLOSED')
+//   • TP (DSL OFF only) retries 3x; all-fail → EMERGENCY MARKET close
+//   • TP emergency close failed → status='LIVE_NO_TP' (rare; alerted via Telegram)
+//   • Returns { slOrderId, tpOrderId, status, emergencyClosed?, emergencyPrice?, emergencyPnl? }
+//
+// status values: 'LIVE' | 'LIVE_NO_SL' | 'EMERGENCY_CLOSED' | 'LIVE_NO_TP'
+//
+// Refs: BUG-T2c, OPEN_BUGS_PRIORITY_RANKING, M1 closure handbook.
+// ══════════════════════════════════════════════════════════════════
+async function _placeProtectionForExistingEntry(entry, creds) {
+    if (!entry || typeof entry !== 'object') throw new Error('Missing entry');
+    if (!creds) throw new Error('Missing exchange creds');
+    if (!entry.symbol || !entry.side) throw new Error('Missing entry.symbol/side');
+    if (!entry.sl || !(entry.sl > 0)) throw new Error('Missing entry.sl (live entry requires SL)');
+    if (!(entry.avgPrice > 0)) throw new Error('Missing entry.avgPrice');
+    if (!(entry.executedQty > 0)) throw new Error('Missing entry.executedQty');
+
+    const userId = entry.userId;
+    const liveSeq = entry.seq || Date.now();
+    const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
+    const avgPrice = entry.avgPrice;
+    const executedQty = entry.executedQty;
+    const fillQty = String(roundOrderParams(entry.symbol, executedQty).quantity || executedQty);
+    const rounded = roundOrderParams(entry.symbol, executedQty, entry.sl);
+    const roundedTp = entry.tp ? roundOrderParams(entry.symbol, executedQty, entry.tp) : null;
+
+    // Safety SL — far-OTM 15% backstop covering retry window
+    let safetySlOrder = null;
+    try {
+        const safetyRaw = entry.side === 'LONG' ? avgPrice * 0.85 : avgPrice * 1.15;
+        const safetyRounded = roundOrderParams(entry.symbol, executedQty, safetyRaw);
+        const safetyStopPrice = String(safetyRounded.stopPrice != null ? safetyRounded.stopPrice : safetyRaw.toFixed(2));
+        safetySlOrder = await _placeConditionalOrder({
+            symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
+            quantity: fillQty, stopPrice: safetyStopPrice,
+            reduceOnly: true, newClientOrderId: `PB_SLSAFE_${liveSeq}`,
+        }, creds);
+        logger.info('AT_LIVE_PB', `[${liveSeq}] Safety SL placed @ $${safetyStopPrice} (15% OTM)`);
+    } catch (safeErr) {
+        logger.warn('AT_LIVE_PB', `[${liveSeq}] Safety SL placement failed: ${safeErr.message}`);
+        try { Sentry.captureException(safeErr, { level: 'warning', tags: { module: 'AT', action: 'pb_safety_sl_failed', symbol: entry.symbol } }); } catch (_) {}
+    }
+
+    // Real SL with retry 3x
+    let slOrder = null;
+    const SL_RETRY_DELAYS = [1000, 3000];
+    for (let attempt = 0; attempt <= SL_RETRY_DELAYS.length; attempt++) {
+        try {
+            slOrder = await _placeConditionalOrder({
+                symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
+                quantity: fillQty,
+                stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl),
+                reduceOnly: true, newClientOrderId: `PB_SL_${liveSeq}_${attempt}`,
+            }, creds);
+            if (attempt > 0) logger.info('AT_LIVE_PB', `[${liveSeq}] SL succeeded on retry #${attempt}`);
+            break;
+        } catch (slErr) {
+            logger.error('AT_LIVE_PB', `[${liveSeq}] SL attempt ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed: ${slErr.message}`);
+            if (attempt < SL_RETRY_DELAYS.length) {
+                try { telegram.sendToUser(userId, `⚠️ SL retry ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${SL_RETRY_DELAYS[attempt] / 1000}s...`); } catch (_) {}
+                await new Promise(r => setTimeout(r, SL_RETRY_DELAYS[attempt]));
+            }
+        }
+    }
+
+    // Cancel safety SL if real SL placed
+    if (slOrder && safetySlOrder && safetySlOrder.orderId) {
+        await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
+        safetySlOrder = null;
+    }
+
+    // SL retries exhausted → EMERGENCY MARKET CLOSE
+    if (!slOrder) {
+        logger.error('AT_LIVE_PB', `[${liveSeq}] ALL SL retries exhausted — EMERGENCY MARKET CLOSE`);
+        try { Sentry.captureMessage(`PB EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_sl', symbol: entry.symbol } }); } catch (_) {}
+        try { telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing.`); } catch (_) {}
+        try {
+            const emgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                symbol: entry.symbol, side: closeSide, type: 'MARKET',
+                quantity: fillQty, reduceOnly: true,
+                newClientOrderId: `PB_EMGCLOSE_${liveSeq}`,
+            }, creds);
+            const _emgRaw = parseFloat(emgResult.avgPrice);
+            const emgPrice = (Number.isFinite(_emgRaw) && _emgRaw > 0) ? _emgRaw : avgPrice;
+            const lev = entry.leverage || 1;
+            const size = entry.size || (avgPrice * executedQty / lev);
+            const emgPnl = avgPrice > 0 ? (entry.side === 'LONG'
+                ? +((emgPrice - avgPrice) / avgPrice * size * lev).toFixed(2)
+                : +((avgPrice - emgPrice) / avgPrice * size * lev).toFixed(2)) : 0;
+            try { telegram.sendToUser(userId, `✅ Emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${emgPrice.toFixed(2)} — PnL: $${emgPnl.toFixed(2)}`); } catch (_) {}
+            try { audit.record('PB_EMERGENCY_CLOSE', { userId, seq: liveSeq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'PATH_B'); } catch (_) {}
+            if (safetySlOrder && safetySlOrder.orderId) {
+                await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
+            }
+            return { slOrderId: null, tpOrderId: null, status: 'EMERGENCY_CLOSED', emergencyClosed: true, emergencyPrice: emgPrice, emergencyPnl: emgPnl, reason: 'SL_ALL_RETRIES_FAILED' };
+        } catch (emgErr) {
+            logger.error('AT_LIVE_PB', `[${liveSeq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
+            try { Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_failed', symbol: entry.symbol } }); } catch (_) {}
+            const safetyMsg = safetySlOrder ? `\nSafety SL (15% OTM) still active.` : '';
+            try { telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nUNPROTECTED on Binance.${safetyMsg}\n*MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`); } catch (_) {}
+            return { slOrderId: safetySlOrder ? safetySlOrder.orderId : null, tpOrderId: null, status: 'LIVE_NO_SL', reason: 'SL_RETRIES_AND_EMERGENCY_FAILED' };
+        }
+    }
+
+    // TP placement — DOAR dacă DSL OFF (regulă: DSL ON = trail SL handles exit)
+    let tpOrder = null;
+    const TP_RETRY_DELAYS = [1000, 3000];
+    if (!entry.dslParams && entry.tp && entry.tp > 0 && roundedTp) {
+        for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
+            try {
+                tpOrder = await _placeConditionalOrder({
+                    symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
+                    quantity: fillQty,
+                    stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
+                    reduceOnly: true, newClientOrderId: `PB_TP_${liveSeq}_${tpAttempt}`,
+                }, creds);
+                if (tpAttempt > 0) logger.info('AT_LIVE_PB', `[${liveSeq}] TP succeeded on retry #${tpAttempt}`);
+                break;
+            } catch (tpErr) {
+                logger.error('AT_LIVE_PB', `[${liveSeq}] TP attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
+                if (tpAttempt < TP_RETRY_DELAYS.length) {
+                    try { telegram.sendToUser(userId, `⚠️ TP retry ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${TP_RETRY_DELAYS[tpAttempt] / 1000}s...`); } catch (_) {}
+                    await new Promise(r => setTimeout(r, TP_RETRY_DELAYS[tpAttempt]));
+                }
+            }
+        }
+
+        // TP retries exhausted (DSL OFF only) → EMERGENCY MARKET CLOSE
+        if (!tpOrder) {
+            logger.error('AT_LIVE_PB', `[${liveSeq}] ALL TP retries exhausted (DSL OFF) — EMERGENCY MARKET CLOSE`);
+            try { Sentry.captureMessage(`PB EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_tp', symbol: entry.symbol } }); } catch (_) {}
+            try { telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll TP attempts failed (DSL OFF requires TP).\nEmergency closing.`); } catch (_) {}
+            if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
+            try {
+                const tpEmgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    symbol: entry.symbol, side: closeSide, type: 'MARKET',
+                    quantity: fillQty, reduceOnly: true,
+                    newClientOrderId: `PB_TPEMG_${liveSeq}`,
+                }, creds);
+                const _tpEmgRaw = parseFloat(tpEmgResult.avgPrice);
+                const tpEmgPrice = (Number.isFinite(_tpEmgRaw) && _tpEmgRaw > 0) ? _tpEmgRaw : avgPrice;
+                const lev = entry.leverage || 1;
+                const size = entry.size || (avgPrice * executedQty / lev);
+                const tpEmgPnl = avgPrice > 0 ? (entry.side === 'LONG'
+                    ? +((tpEmgPrice - avgPrice) / avgPrice * size * lev).toFixed(2)
+                    : +((avgPrice - tpEmgPrice) / avgPrice * size * lev).toFixed(2)) : 0;
+                try { telegram.sendToUser(userId, `✅ TP emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${tpEmgPrice.toFixed(2)} — PnL: $${tpEmgPnl.toFixed(2)}`); } catch (_) {}
+                try { audit.record('PB_EMERGENCY_CLOSE', { userId, seq: liveSeq, symbol: entry.symbol, side: entry.side, emgPrice: tpEmgPrice, emgPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' }, 'PATH_B'); } catch (_) {}
+                return { slOrderId: null, tpOrderId: null, status: 'EMERGENCY_CLOSED', emergencyClosed: true, emergencyPrice: tpEmgPrice, emergencyPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' };
+            } catch (tpEmgErr) {
+                logger.error('AT_LIVE_PB', `[${liveSeq}] TP EMERGENCY CLOSE FAILED: ${tpEmgErr.message}`);
+                try { Sentry.captureException(tpEmgErr, { level: 'fatal', tags: { module: 'AT', action: 'pb_tp_emergency_failed', symbol: entry.symbol } }); } catch (_) {}
+                try { telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol}\nHas SL but NO TP.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`); } catch (_) {}
+                return { slOrderId: slOrder.orderId, tpOrderId: null, status: 'LIVE_NO_TP', reason: 'TP_RETRIES_AND_EMERGENCY_FAILED' };
+            }
+        }
+    }
+
+    // Success — SL placed (+ TP if DSL OFF)
+    try { audit.record('PB_SL_PLACED', { userId, seq: liveSeq, symbol: entry.symbol, side: entry.side, slOrderId: slOrder.orderId, tpOrderId: tpOrder ? tpOrder.orderId : null, dslOn: !!entry.dslParams }, 'PATH_B'); } catch (_) {}
+    return {
+        slOrderId: slOrder.orderId,
+        tpOrderId: tpOrder ? tpOrder.orderId : null,
+        status: 'LIVE',
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
 // [M1.2 Cat C 2026-05-14] registerManualPosition — async unified wrapper
 //
 // Per ADR-001 Decision 3.1: thin wrapper that flag-gated routes între:
@@ -4472,6 +4656,11 @@ module.exports = {
     // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
     // source='external' marker, NO SL placement responsibility, warning log.
     _syncExternalPosition,
+    // [BUG-T2c FIX 2026-05-14] Path B SL placement helper (trading.js).
+    // Called from /api/order/place after main MARKET order success. Places SL HARD
+    // + TP conditional on !dslParams (DSL ON skip per regulă). Returns
+    // { slOrderId, tpOrderId, status } for caller to pass to registerManualPosition.
+    _placeProtectionForExistingEntry,
     patchPositionFill,
     closeBySeq,
     addOnPosition,

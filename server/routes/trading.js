@@ -350,6 +350,35 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       try {
         const _entryPriceFallback = parseFloat(data.avgPrice) || parseFloat(data.price) || parseFloat(req.body.referencePrice) || 0;
         const _qtyFallback = parseFloat(data.executedQty) || parseFloat(quantity) || 0;
+        // [BUG-T2c FIX 2026-05-14] Place SL on Binance after main order success.
+        // Pre-M1, Path B (trading.js → registerManualPosition) NEVER placed SL on
+        // exchange — only memorized locally. M1 unified path expected mode='live'
+        // but trading.js never passed it, so fell through to legacy (silent
+        // sl=null accept). 1678/1720 (97.6%) live testnet positions had no
+        // Binance SL → BUG-T2c. Fix: place SL (HARD) + TP (conditional on
+        // !dslParams) BEFORE registerManualPosition, pass orderIds explicitly.
+        // DSL rule: DSL ON → no native TP (trail SL exits via PL hit).
+        const _sl = req.body.sl ? parseFloat(req.body.sl) : null;
+        const _tp = req.body.tp ? parseFloat(req.body.tp) : null;
+        let _protection = { slOrderId: null, tpOrderId: null, status: 'LIVE_NO_SL' };
+        if (_sl && _sl > 0 && req.body.mode !== 'demo') {
+          try {
+            _protection = await _getServerAT()._placeProtectionForExistingEntry({
+              userId: req.user.id,
+              symbol, side,
+              sl: _sl, tp: _tp,
+              executedQty: _qtyFallback,
+              avgPrice: _entryPriceFallback,
+              dslParams: req.body.dslParams,
+              leverage: parseInt(leverage, 10) || 1,
+              seq: data.orderId,
+            }, req.exchangeCreds);
+          } catch (protErr) {
+            logger.error('ORDER', `Path B protection failed: ${protErr.message}`, { symbol, side, orderId: data.orderId });
+            audit.record('PB_PROTECTION_FAILED', { userId: req.user.id, symbol, side, orderId: data.orderId, error: protErr.message }, 'PATH_B', req.ip);
+            try { telegram.sendToUser(req.user.id, `🚨 *PATH B SL FAILED*\n${side} ${symbol}\nMain order ${data.orderId} placed but SL helper threw.\nPosition may be UNPROTECTED — verify on Binance.\nError: ${protErr.message}`); } catch (_) {}
+          }
+        }
         // [M1.2 Cat C 2026-05-14] registerManualPosition acum async — await pentru
         // a obține regResult sincron. Caller route handler e async, await safe.
         const regResult = await _getServerAT().registerManualPosition(req.user.id, {
@@ -359,8 +388,17 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
           qty: _qtyFallback,
           leverage: parseInt(leverage, 10) || 1,
           orderId: data.orderId,
-          sl: req.body.sl ? parseFloat(req.body.sl) : null,
-          tp: req.body.tp ? parseFloat(req.body.tp) : null,
+          sl: _sl,
+          tp: _tp,
+          // [BUG-T2c FIX 2026-05-14] Real exchange orderIds from protection helper.
+          // legacy _registerManualPositionLegacy reads these into entry.live.{slOrderId,tpOrderId}.
+          // NOTE: mode NU propagat intentionally — wrapper defaults to 'demo' and routes
+          // to legacy fallback (us.engineMode='live'). This avoids unified path triggering
+          // _executeLiveEntryCore which would attempt to place ANOTHER main order
+          // (trading.js already placed it above). Path B = main order pe trading.js +
+          // SL/TP pe _placeProtectionForExistingEntry; registration only stores state.
+          slOrderId: _protection.slOrderId,
+          tpOrderId: _protection.tpOrderId,
           // [Phase 7 — Manual Parity GAP-1] Forward client-computed DSL preset so manual LIVE
           // registers with the user's params (same as manual DEMO via /api/at/register-manual).
           // undefined → serverAT falls back to DSL_DEFAULTS (legacy clients); null → DSL OFF.
