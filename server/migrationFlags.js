@@ -95,6 +95,14 @@ const DEFAULTS = {
     // BYBIT_LIVE_ENABLED=false (TESTNET/REAL safety — DEMO carve-out must
     // never accidentally route to a real exchange).
     SERVER_AT_DEMO: false,
+    // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED controls Path A/B unification
+    // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path (registerManualPosition
+    // delegates la _executeLiveEntryCore + hard SafetyAssertionError pre-fill).
+    // Set FALSE pentru emergency rollback la legacy Path B (silent sl=null accept,
+    // no exchange SL placement). Flag toggle e mecanism rollback, NU staged rollout
+    // — default ON because production safety must NOT default to unsafe behavior
+    // (Master Working Rule 0: server-truth/no-fake-data).
+    LIVE_ENTRY_UNIFIED: true,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -240,6 +248,9 @@ module.exports = {
     // S6-B1..B6 ship.
     get SERVER_BRAIN_DEMO() { return flags.SERVER_BRAIN_DEMO; },
     get SERVER_AT_DEMO() { return flags.SERVER_AT_DEMO; },
+    // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED — controls Path A/B unification
+    // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path.
+    get LIVE_ENTRY_UNIFIED() { return flags.LIVE_ENTRY_UNIFIED; },
     // Methods
     set,
     getAll,

@@ -327,7 +327,9 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       try {
         const _entryPriceFallback = parseFloat(data.avgPrice) || parseFloat(data.price) || parseFloat(req.body.referencePrice) || 0;
         const _qtyFallback = parseFloat(data.executedQty) || parseFloat(quantity) || 0;
-        const regResult = _getServerAT().registerManualPosition(req.user.id, {
+        // [M1.2 Cat C 2026-05-14] registerManualPosition acum async — await pentru
+        // a obține regResult sincron. Caller route handler e async, await safe.
+        const regResult = await _getServerAT().registerManualPosition(req.user.id, {
           symbol,
           side,
           entryPrice: _entryPriceFallback,

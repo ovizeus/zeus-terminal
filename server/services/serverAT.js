@@ -3072,10 +3072,103 @@ async function _executeLiveEntryCore(entryInput, stc, creds) {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat C 2026-05-14] registerManualPosition — async unified wrapper
+//
+// Per ADR-001 Decision 3.1: thin wrapper that flag-gated routes între:
+//   - MF.LIVE_ENTRY_UNIFIED=true (default): unified path — validate via
+//     _buildEntryFromOrderPlace (catches sl=null+live cu SafetyAssertionError),
+//     delegate la _executeLiveEntryCore pentru atomic SL/TP placement,
+//     merge live state into legacy return shape (ok, seq, live, position).
+//   - MF.LIVE_ENTRY_UNIFIED=false: legacy Path B (silent sl=null accept,
+//     no exchange SL — for emergency rollback only).
+//
+// Calls module.exports.X (not local X) pentru jest.spyOn interceptability —
+// test scaffolding relies pe spy verification of _buildEntryFromOrderPlace
+// and _executeLiveEntryCore invocations.
+//
+// Returns Promise<result> (async API). Callers must await.
+// trading.js:330 caller updated cu await.
+//
+// Refs: ADR-001 §3.1 + §3.3; TEST_SCAFFOLDING_M1 §5; MILESTONES_M1-M8 §M1.2/M1.6.
+// ══════════════════════════════════════════════════════════════════
+async function registerManualPosition(userId, data) {
+    if (!userId) return { ok: false, error: 'Missing userId' };
+    if (!data || typeof data !== 'object') return { ok: false, error: 'Missing data object' };
+
+    // Flag-gated routing: unified safe path (default) vs legacy rollback
+    if (MF.LIVE_ENTRY_UNIFIED) {
+        // Pre-fill validation via _buildEntryFromOrderPlace (calls cu module.exports.X
+        // pentru jest.spyOn interceptability). Catches:
+        // - Missing required fields (symbol, side, quantity, entryPrice)
+        // - Invalid quantity (zero/negative)
+        // - mode='live' + sl=null → SafetyAssertionError per ADR-001 §3.2
+        const reqBody = {
+            symbol: data.symbol,
+            side: data.side, // Accepts both 'BUY'/'SELL' și 'LONG'/'SHORT'
+            quantity: data.qty,
+            leverage: data.leverage,
+            sl: data.sl,
+            tp: data.tp,
+            mode: data.mode || 'demo',
+            source: data.source,
+            dslParams: data.dslParams,
+            entryPrice: data.entryPrice,
+            clientReqId: data.clientReqId,
+        };
+        // Translate LONG/SHORT to BUY/SELL pentru _buildEntryFromOrderPlace
+        // (which expects exchange-side convention)
+        if (reqBody.side === 'LONG') reqBody.side = 'BUY';
+        else if (reqBody.side === 'SHORT') reqBody.side = 'SELL';
+
+        let validated;
+        try {
+            validated = module.exports._buildEntryFromOrderPlace(reqBody, userId);
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+
+        // For live mode, delegate la _executeLiveEntryCore pentru atomic SL/TP placement.
+        // SKIP legacy _registerManualPositionLegacy entirely — unified path doesn't
+        // need legacy _alignQtyToLotSize (core handles aligned qty); allocate seq
+        // + push la _positions inline pentru clean unified flow.
+        if (validated.mode === 'live') {
+            try {
+                const coreResult = await module.exports._executeLiveEntryCore(validated, null, null);
+                // Allocate seq + push to _positions (local state tracking)
+                const us = _uState(userId);
+                const seq = ++us.seq;
+                coreResult.seq = seq;
+                _positions.push(coreResult);
+                try { _persistState(userId); } catch (_) { /* defensive */ }
+                return {
+                    ok: true,
+                    seq,
+                    live: coreResult.live,
+                    position: coreResult,
+                };
+            } catch (e) {
+                return { ok: false, error: e.message };
+            }
+        }
+
+        // Demo mode — _buildEntryFromOrderPlace called for validation
+        // (test 4 verifies spy called for demo too); then route through legacy
+        // pentru existing demo behavior (no exchange interaction).
+        return _registerManualPositionLegacy(userId, data);
+    }
+
+    // Flag OFF (MF.LIVE_ENTRY_UNIFIED=false) — legacy Path B unchanged
+    return _registerManualPositionLegacy(userId, data);
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Register manual LIVE/TESTNET position as server-tracked Zeus object
 // Called after successful exchange fill for PT/manual orders
+//
+// [M1.2 Cat C 2026-05-14] Renamed la `_registerManualPositionLegacy` —
+// preserved pentru flag-OFF rollback path + delegated-to under new async wrapper.
 // ══════════════════════════════════════════════════════════════════
-function registerManualPosition(userId, data) {
+function _registerManualPositionLegacy(userId, data) {
     if (!userId) return { ok: false, error: 'Missing userId' };
     if (!data || !data.symbol || !data.side || !data.entryPrice || !data.qty) {
         return { ok: false, error: 'Missing required fields (symbol, side, entryPrice, qty)' };
@@ -3203,6 +3296,58 @@ function registerManualPosition(userId, data) {
     logger.info('AT_ENGINE', `[${seq}] uid=${userId} ${_srcAuto ? 'AUTO' : 'MANUAL'} ${side} ${data.symbol} @ $${price.toFixed(2)} | Size=$${size.toFixed(0)} Lev=${lev}x | Registered as server-tracked`);
 
     return { ok: true, seq, position: entry };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat C 2026-05-14] _syncExternalPosition
+// Register externally-discovered Binance position (recon found poziție pe care
+// Zeus NU a deschis-o — e.g., operator a deschis manual pe Binance UI direct).
+//
+// Distinct from registerManualPosition:
+//   - source='external' marker pentru audit trail
+//   - NO SL placement (position is PRE-EXISTING pe exchange — Zeus didn't open it,
+//     so Zeus shouldn't presume SL responsibility)
+//   - Returns warning string în result pentru caller logging visibility
+//   - Logs WARN level audit trail despre external position lacking exchange SL
+//
+// Critical pentru BUG-T2c — distinguish "external sync needed" de "orphan
+// detected". Pre-M1: recon flagged ALL un-tracked positions ca PHANTOM, including
+// fresh externals (false-positive root cause).
+//
+// Refs: ADR-001 §3.1 + §3.3; TEST_SCAFFOLDING_M1 §5; BUG-T2c root cause.
+// ══════════════════════════════════════════════════════════════════
+function _syncExternalPosition(data) {
+    if (!data || typeof data !== 'object') {
+        return { ok: false, error: 'Missing data object' };
+    }
+    if (!data.userId || !data.symbol || !data.side || !data.entryPrice || !data.qty) {
+        return { ok: false, error: 'Missing required fields (userId, symbol, side, entryPrice, qty)' };
+    }
+    const userId = data.userId;
+    const us = _uState(userId);
+    const seq = ++us.seq;
+    const entry = {
+        seq,
+        userId,
+        symbol: data.symbol,
+        side: data.side,
+        entry: parseFloat(data.entryPrice),
+        qty: parseFloat(data.qty),
+        mode: 'live',
+        source: 'external',
+        // External position has NO SL placement responsibility — pre-existing on exchange
+        live: { status: 'EXTERNAL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false },
+        ts: Date.now(),
+        externalSync: true,
+    };
+    _positions.push(entry);
+    try { _persistState(userId); } catch (_) {}
+    logger.warn('AT_RECON', `External position synced uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — no SL placement (pre-existing pe exchange, source=external)`);
+    return {
+        ok: true,
+        seq,
+        warning: 'External position registered without SL placement on exchange (pre-existing position, source=external)',
+    };
 }
 
 // [batch3-W] Patch a registered position's entry price + qty after an async
@@ -4324,6 +4469,9 @@ module.exports = {
     // Extracted din _executeLiveEntry pattern; reusable pentru BOTH Path A (Brain dispatch)
     // AND Path B (registerManualPosition post-M1 unification) per ADR-001 Decision 3.1.
     _executeLiveEntryCore,
+    // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
+    // source='external' marker, NO SL placement responsibility, warning log.
+    _syncExternalPosition,
     patchPositionFill,
     closeBySeq,
     addOnPosition,
