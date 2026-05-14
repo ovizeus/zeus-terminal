@@ -529,8 +529,14 @@ function setMode(userId, mode) {
     // run under demo logic, live positions under live logic, regardless of
     // engine-mode flips. Switching engine mode is a UI-routing concern, not a
     // retagging operation, so no cross-mode position gate is needed. Existing
-    // positions in the new mode (if any) continue independently; the confirm
-    // dialog already warns the user.
+    // positions in the OPPOSITE mode continue independently in backend tracking.
+    //
+    // [BUG-T3 FIX 2026-05-14] Client-side surfaces this hide explicitly via:
+    //   - Enriched confirm dialog at switch (`_buildModeSwitchMessage` injects
+    //     opposite-count into the message body)
+    //   - Persistent banner in ManualTradePanel when opposite-mode count > 0
+    // Prior to BUG-T3 fix this comment claimed the confirm dialog warned the
+    // user — it did NOT (message was static, no count). Fix lands on client.
 
     // [V3.1] Guard: live mode requires valid exchange credentials
     if (mode === 'live') {

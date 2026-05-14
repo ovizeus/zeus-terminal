@@ -27,17 +27,127 @@ const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 // ═══════════════════════════════════════════════════════
 // GLOBAL MODE SWITCH
 // ═══════════════════════════════════════════════════════
+
+/**
+ * [BUG-T3 FIX 2026-05-14] Count open positions in the opposite engine mode.
+ *
+ * Pure helper used by:
+ *   - `_buildModeSwitchMessage` to inject count into confirm-dialog message
+ *   - `ManualTradePanel` for the persistent opposite-mode hidden-positions banner
+ *
+ * Defensive against null/undefined/non-array inputs (real usage reads from
+ * Zustand store + window globals — both can be transiently absent at boot).
+ * Treats positions without `mode` field as demo (legacy back-compat).
+ */
+export function _countOppositeModeOpenPositions(
+    currentMode: 'demo' | 'live',
+    demoPositions: any[] | null | undefined,
+    livePositions: any[] | null | undefined,
+): number {
+    const target = currentMode === 'live' ? demoPositions : livePositions
+    if (!Array.isArray(target)) return 0
+    if (currentMode === 'live') {
+        // Counting demo positions visible from live mode
+        return target.filter(p => p && !p.closed && (p.mode || 'demo') !== 'live').length
+    }
+    // Counting live positions visible from demo mode
+    return target.filter(p => p && !p.closed && (p.mode || 'demo') === 'live').length
+}
+
+/**
+ * [BUG-T3 FIX 2026-05-14] Build mode-switch confirm dialog title + message.
+ *
+ * Replaces the previous static message that did not surface count of
+ * opposite-mode positions. After switch, those positions remain active on
+ * Binance but hidden from UI — user must know how many before confirming.
+ *
+ * Returns object directly consumable by `_showConfirmDialog(title, message,
+ * cancelText, confirmText, onConfirm)`.
+ */
+export function _buildModeSwitchMessage(
+    targetMode: 'demo' | 'live',
+    oppositeCount: number,
+    isTestnet: boolean,
+): { title: string; message: string; cancelText: string; confirmText: string } {
+    const cancelText = 'Cancel'
+    if (targetMode === 'demo') {
+        const title = 'Activate Demo Mode?'
+        const confirmText = 'Activate Demo'
+        const baseLines: string[] = [
+            'You are about to switch the entire system to DEMO mode.',
+            '',
+            'All new manual and auto trades will run in simulated mode.',
+            'No real Binance orders will be executed.',
+            'Live mode will be turned off.',
+        ]
+        if (oppositeCount > 0) {
+            const plural = oppositeCount === 1 ? 'position' : 'positions'
+            baseLines.push('')
+            baseLines.push(`⚠️ You have ${oppositeCount} LIVE ${plural} currently open on Binance.`)
+            baseLines.push('They will remain active on the exchange but hidden from this UI.')
+            baseLines.push('Switch back to LIVE mode to view or close them.')
+        } else {
+            baseLines.push('')
+            baseLines.push('Existing live positions (if any) will remain live and continue independently.')
+        }
+        return { title, message: baseLines.join('\n'), cancelText, confirmText }
+    }
+
+    // targetMode === 'live'
+    const title = isTestnet ? 'Activate Testnet Mode?' : 'Activate Real Trading Mode?'
+    const confirmText = isTestnet ? 'Activate Testnet' : 'Activate Live'
+    const baseLines: string[] = isTestnet ? [
+        'You are about to switch to exchange-backed TESTNET mode.',
+        '',
+        'All new trades will execute on Binance TESTNET with TEST funds.',
+        'No real money is involved.',
+        'Demo mode will be turned off.',
+    ] : [
+        'You are about to switch the entire system to LIVE mode.',
+        '',
+        'All new manual and auto trades may use REAL funds.',
+        'Real Binance execution requires valid API keys configured in Settings.',
+        'Demo mode will be turned off.',
+    ]
+    if (oppositeCount > 0) {
+        const plural = oppositeCount === 1 ? 'position' : 'positions'
+        baseLines.push('')
+        baseLines.push(`⚠️ You have ${oppositeCount} DEMO ${plural} currently open.`)
+        baseLines.push('They will remain tracked in demo mode but hidden from this UI.')
+        baseLines.push('Switch back to DEMO mode to view or close them.')
+    } else {
+        baseLines.push('')
+        baseLines.push('Existing demo positions (if any) will remain demo and continue independently.')
+    }
+    if (!isTestnet) {
+        baseLines.push('')
+        baseLines.push('Only continue if you understand the risks of real-money trading.')
+    }
+    return { title, message: baseLines.join('\n'), cancelText, confirmText }
+}
+
 export function switchGlobalMode(mode: any): void {
   const currentMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   console.log('[BRAIN-SPLIT] switchGlobalMode(' + mode + ') currentMode=' + currentMode)
   if (currentMode === mode) { _toggleManualPanel(); return }
-  if (mode === 'demo') {
-    _showConfirmDialog('Activate Demo Mode?', 'You are about to switch the entire system to DEMO mode.\n\nAll new manual and auto trades will run in simulated mode.\nNo real Binance orders will be executed.\nLive mode will be turned off.\n\nExisting live positions will remain live and continue independently.', 'Cancel', 'Activate Demo', function () { _executeGlobalModeSwitch('demo') })
-  } else {
-    const _switchEnv = w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'
-    const _switchIsTestnet = _switchEnv === 'TESTNET'
-    _showConfirmDialog(_switchIsTestnet ? 'Activate Testnet Mode?' : 'Activate Real Trading Mode?', _switchIsTestnet ? 'You are about to switch to exchange-backed TESTNET mode.\n\nAll new trades will execute on Binance TESTNET with TEST funds.\nNo real money is involved.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.' : 'You are about to switch the entire system to LIVE mode.\n\nAll new manual and auto trades may use REAL funds.\nReal Binance execution requires valid API keys configured in Settings.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.\n\nOnly continue if you understand the risks of real-money trading.', 'Cancel', _switchIsTestnet ? 'Activate Testnet' : 'Activate Live', function () { _executeGlobalModeSwitch('live') })
+  // [BUG-T3 FIX 2026-05-14] Inject opposite-mode positions count into confirm
+  // message. Reads from positionsStore (canonical store-truth) with window.TP
+  // fallback (boot window). Empty arrays → "no count phrase" path.
+  let _demoPos: any[] = []
+  let _livePos: any[] = []
+  try {
+    const _ps = usePositionsStore.getState()
+    _demoPos = Array.isArray(_ps.demoPositions) ? _ps.demoPositions : []
+    _livePos = Array.isArray(_ps.livePositions) ? _ps.livePositions : []
+  } catch (_) {
+    // store transiently unavailable — fall back to window.TP mirror
+    _demoPos = Array.isArray(w.TP?.demoPositions) ? w.TP.demoPositions : []
+    _livePos = Array.isArray(w.TP?.livePositions) ? w.TP.livePositions : []
   }
+  const _oppositeCount = _countOppositeModeOpenPositions(currentMode, _demoPos, _livePos)
+  const _switchIsTestnet = mode === 'live' && w._exchangeMode === 'testnet'
+  const built = _buildModeSwitchMessage(mode, _oppositeCount, _switchIsTestnet)
+  _showConfirmDialog(built.title, built.message, built.cancelText, built.confirmText, function () { _executeGlobalModeSwitch(mode) })
 }
 
 function _executeGlobalModeSwitch(mode: string): void {

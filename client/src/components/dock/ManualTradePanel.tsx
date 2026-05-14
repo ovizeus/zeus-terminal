@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useUiStore, usePositionsStore, useMarketStore, useATStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
-import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
+import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds, _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
 import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow } from './PositionRows'
 
@@ -57,6 +57,12 @@ export function ManualTradePanel() {
   const pendingRender = (engineMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
   const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && _isManualOwned(p))
   const isLiveMode = engineMode === 'live'
+  // [BUG-T3 FIX 2026-05-14] Count opposite-mode open positions. Surfaces hidden
+  // positions to user via the banner below — prevents forgotten unprotected
+  // exposure scenario where user switches mode and forgets active positions on
+  // the opposite side. Pure read from positionsStore + canonical helper.
+  const oppositeCount = _countOppositeModeOpenPositions(engineMode as 'demo' | 'live', demoPositions, livePositions)
+  const oppositeModeLabel = isLiveMode ? 'DEMO' : 'LIVE'
   // null → LOCKED, REAL/TESTNET → as-is, DEMO label not rendered in live mode (engineMode guards)
   const envLabel: 'TESTNET' | 'REAL' | 'LOCKED' = executionEnv === 'TESTNET' ? 'TESTNET' : (executionEnv === 'REAL' ? 'REAL' : 'LOCKED')
   // [Phase 12.A — Batch D3] Exchange suffix for live-mode header + balance prefix.
@@ -307,6 +313,28 @@ export function ManualTradePanel() {
           <span>OPEN POSITIONS</span>
           <button ref={closeAllRef} id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
         </div>
+        {/* [BUG-T3 FIX 2026-05-14] Opposite-mode hidden positions banner.
+            Visible only when there ARE positions in the opposite mode (count > 0).
+            Surfaces the otherwise-silent UI hide so user knows there are active
+            positions on Binance / in demo tracking that aren't shown here. */}
+        {oppositeCount > 0 && (
+          <div
+            data-testid="bug-t3-opposite-mode-banner"
+            style={{
+              fontSize: 9,
+              padding: '6px 8px',
+              margin: '4px 0',
+              background: oppositeModeLabel === 'LIVE' ? '#2a0a0a' : '#2a1a00',
+              border: `1px solid ${oppositeModeLabel === 'LIVE' ? '#ff4466' : '#f0c040'}`,
+              borderRadius: 3,
+              color: oppositeModeLabel === 'LIVE' ? '#ff8899' : '#f0d080',
+              letterSpacing: '0.5px',
+              lineHeight: 1.5,
+            }}
+          >
+            ⚠️ {oppositeCount} {oppositeModeLabel} {oppositeCount === 1 ? 'position' : 'positions'} hidden — switch to {oppositeModeLabel} mode to view
+          </div>
+        )}
         {/* [R9] React-owned demo/live-mode manual positions — reads positionsStore.demoPositions */}
         <div id="demoPosTable">
           {manualDemoPositions.length === 0
