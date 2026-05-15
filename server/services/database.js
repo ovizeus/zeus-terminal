@@ -994,6 +994,32 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §49 HUMAN OVERRIDE PERFORMANCE TRACKER 2026-05-15] Operator canonical PDF
+// — canonical PDF §49 (lines 1574-1582). Log override + delta vs hypothetical.
+migrate('093_ml_override_performance', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_override_performance (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id                      TEXT,
+            symbol                      TEXT,
+            direction                   TEXT,
+            override_type               TEXT NOT NULL CHECK(override_type IN
+                                        ('entry','exit','size','sl','tp','cancel','skip')),
+            original_decision_json      TEXT NOT NULL,
+            final_decision_json         TEXT NOT NULL,
+            actor                       TEXT NOT NULL,
+            actual_pnl                  REAL,
+            hypothetical_bot_pnl        REAL,
+            delta                       REAL,
+            created_at                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlop_user_env_ts
+            ON ml_override_performance(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §45 LATENCY-AWARE EXECUTION 2026-05-15] R4 canonical PDF
 // — canonical PDF §45 (lines 1528-1538). E2E latency measurement + behavior
 // adaptation: <50ms scalping / 50-150ms swing / >150ms observer.
