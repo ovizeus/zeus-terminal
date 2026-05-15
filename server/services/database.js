@@ -901,6 +901,29 @@ migrate('043_ml_attribution_causal', () => {
     `);
 });
 
+// [OMEGA Wave 2 §17 METRICI PE REGIM 2026-05-15] R5A Learning Core
+// — extend ml_attribution_events with regime/session/score/excursion/slip/time
+// columns + 2 indexes for fast per-regime / per-session query slicing per
+// canonical spec §17. All ADD COLUMN nullable; existing rows = NULL.
+// drift_by_regime + calibration_quality_by_regime per spec live in §20/§21
+// implementations (Wave 2 later points) — not stored as columns here.
+migrate('044_ml_attribution_regime', () => {
+    db.exec(`
+        ALTER TABLE ml_attribution_events ADD COLUMN regime TEXT;
+        ALTER TABLE ml_attribution_events ADD COLUMN session TEXT;
+        ALTER TABLE ml_attribution_events ADD COLUMN score_at_entry REAL;
+        ALTER TABLE ml_attribution_events ADD COLUMN mfe_pct REAL;
+        ALTER TABLE ml_attribution_events ADD COLUMN mae_pct REAL;
+        ALTER TABLE ml_attribution_events ADD COLUMN slippage_pct REAL;
+        ALTER TABLE ml_attribution_events ADD COLUMN time_in_trade_min REAL;
+        ALTER TABLE ml_attribution_events ADD COLUMN side TEXT;
+        CREATE INDEX IF NOT EXISTS idx_mlae_regime_ts
+            ON ml_attribution_events(regime, attributed_at);
+        CREATE INDEX IF NOT EXISTS idx_mlae_session_ts
+            ON ml_attribution_events(session, attributed_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {

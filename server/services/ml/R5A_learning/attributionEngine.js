@@ -175,12 +175,16 @@ function assessQuestions(trade, snapshot) {
 
 // ── recordAttribution — orchestrator ────────────────────────────────
 const _stmts = {
+    // [§17 extended 2026-05-15] adds regime/session/score/mfe/mae/slippage/time/side
     insert: db.prepare(`
         INSERT INTO ml_attribution_events
         (decision_digest, user_id, resolved_env, symbol, pos_id,
          outcome_class, r_multiple, pnl_pct, operator_feedback,
-         causal_class, assessment_json, attributed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         causal_class, assessment_json,
+         regime, session, score_at_entry, mfe_pct, mae_pct,
+         slippage_pct, time_in_trade_min, side,
+         attributed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     setFeedback: db.prepare(`
         UPDATE ml_attribution_events SET operator_feedback = ? WHERE id = ?
@@ -229,6 +233,17 @@ function recordAttribution(params) {
         throw new Error(`recordAttribution: invalid causal ${causal}`);
     }
 
+    // [§17 extended] extract regime metrics fields from trade + snapshot
+    const numOrNull = v => (v === undefined || v === null || !Number.isFinite(Number(v))) ? null : Number(v);
+    const regime = snapshot.regime || trade.regime || null;
+    const session = snapshot.session || trade.session || null;
+    const score_at_entry = numOrNull(trade.score_at_entry);
+    const mfe_pct = numOrNull(snapshot.mfe !== undefined ? snapshot.mfe : trade.mfe_pct);
+    const mae_pct = numOrNull(snapshot.mae !== undefined ? snapshot.mae : trade.mae_pct);
+    const slippage_pct = numOrNull(trade.slippage_pct);
+    const time_in_trade_min = numOrNull(trade.time_in_trade_min);
+    const side = trade.side || null;
+
     const result = _stmts.insert.run(
         snapshot.decision_digest || trade.decision_digest || `omega_attr_${Date.now()}`,
         userId,
@@ -241,6 +256,8 @@ function recordAttribution(params) {
         null,  // operator_feedback set later via setOperatorFeedback
         causal,
         JSON.stringify(assessment),
+        regime, session, score_at_entry, mfe_pct, mae_pct,
+        slippage_pct, time_in_trade_min, side,
         Date.now()
     );
     return { id: result.lastInsertRowid, outcome_class: outcome, causal_class: causal };
