@@ -965,6 +965,37 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §248* BLACK SWAN ABSTENTION 2026-05-15] R3A safety
+// — regime-level OOD events (flash crash, structural break). Severity
+// derived from # triggered conditions (5 detection signals). Cooldown
+// ladder: MINOR 1h auto-clear, MAJOR 24h auto-clear, CRITICAL 168h
+// operator-only clear. Hard invariant: CRITICAL must be manually cleared
+// by an actor prefixed 'operator'.
+// Spec: project_ml_brain_pro_244.md §248* (Claude-extras 2026-04-29).
+migrate('050_ml_black_swan_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_black_swan_events (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol              TEXT NOT NULL,
+            severity            TEXT NOT NULL CHECK(severity IN ('MINOR','MAJOR','CRITICAL')),
+            signals_json        TEXT NOT NULL,
+            triggers_json       TEXT NOT NULL,
+            abstention_state    TEXT NOT NULL DEFAULT 'ACTIVE'
+                                CHECK(abstention_state IN ('ACTIVE','CLEARED','EXPIRED')),
+            cooldown_until      INTEGER NOT NULL,
+            actor               TEXT NOT NULL,
+            detected_at         INTEGER NOT NULL,
+            cleared_at          INTEGER,
+            cleared_by          TEXT,
+            clear_reason        TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbs_user_env_state
+            ON ml_black_swan_events(user_id, resolved_env, abstention_state);
+    `);
+});
+
 // [OMEGA Wave 3 §246* GRADUATED DD RECOVERY 2026-05-15] R3A safety
 // — ADD COLUMN x3 la ml_dd_pauses pentru 4-stage recovery ladder
 // (25%/50%/75%/100% size) post-§255* auto-resume. Pure additive
