@@ -994,6 +994,29 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 RAID-N TELEGRAM PUSHER 2026-05-15] Operator A-Z raid
+// — A-Z raid MUST-ADD item N. Critical-only Telegram push with dedup + audit.
+migrate('085_ml_telegram_pushes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_telegram_pushes (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            event_type      TEXT NOT NULL,
+            severity        TEXT NOT NULL CHECK(severity IN ('CRITICAL','HIGH','MEDIUM','LOW')),
+            message         TEXT NOT NULL,
+            payload_json    TEXT NOT NULL,
+            dedup_key       TEXT,
+            delivery_status TEXT NOT NULL DEFAULT 'PENDING'
+                            CHECK(delivery_status IN ('PENDING','SENT','FAILED','DEDUPED')),
+            created_at      INTEGER NOT NULL,
+            delivered_at    INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltp_user_env_dedup
+            ON ml_telegram_pushes(user_id, resolved_env, dedup_key, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 RAID-L LATENCY BUDGET GUARD 2026-05-15] cross-cutting A-Z raid
 // — A-Z raid MUST-ADD item L. Hard cap latency budgets (voice_push <100ms).
 migrate('084_ml_latency_budget_log', () => {
