@@ -994,6 +994,27 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §46 LOSS STREAK DETECTION GEOMETRIC 2026-05-15] R3A canonical PDF
+// — canonical PDF §46 (lines 1540-1551). Geometric size reduction pe consecutive
+// losses: 2→50% / 3→25% / 4+→0 + gradual recovery on wins.
+// Distinct de §246* (post-DD recovery) și OBS-2 (pre-production ramp).
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §46.
+migrate('090_ml_loss_streak_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_loss_streak_state (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            consecutive_losses  INTEGER NOT NULL DEFAULT 0,
+            size_multiplier     REAL NOT NULL DEFAULT 1.0,
+            last_win_at         INTEGER,
+            recovery_progress   INTEGER NOT NULL DEFAULT 0,
+            updated_at          INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 §43 NO TRADE EXPLAINABILITY 2026-05-15] cross-cutting canonical PDF
 // — canonical PDF §43 (lines 1524-1525). Closes asymmetric learning gap:
 // log every NO_TRADE refusal + retrospective outcome (MISSED 3R+ / GOOD_SKIP / NEUTRAL).
