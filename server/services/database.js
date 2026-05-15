@@ -994,6 +994,37 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §56 LIMIT QUEUE POSITION + FILL PROBABILITY 2026-05-15] R4 canonical PDF
+// — canonical PDF §56 (lines 1605-1623). Models queue rank at submit, fill prob
+// decay over time + movement, maker vs taker decision, cancel penalty, missed-fill risk.
+// "Diferenta dintre model bun pe hartie si executie reala."
+migrate('100_ml_queue_fill_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_queue_fill_observations (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol                  TEXT NOT NULL,
+            side                    TEXT NOT NULL CHECK(side IN ('LONG','SHORT')),
+            queue_rank_est          INTEGER NOT NULL,
+            fill_prob_est           REAL NOT NULL,
+            decay_rate              REAL NOT NULL,
+            maker_cost_bps          REAL NOT NULL,
+            taker_cost_bps          REAL NOT NULL,
+            decision                TEXT NOT NULL CHECK(decision IN ('maker','taker','reprice','abstain')),
+            actual_filled           INTEGER NOT NULL CHECK(actual_filled IN (0,1)),
+            time_to_fill_ms         INTEGER,
+            cancelled               INTEGER NOT NULL CHECK(cancelled IN (0,1)),
+            cancel_count            INTEGER NOT NULL DEFAULT 0,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlqf_user_env_symbol_ts
+            ON ml_queue_fill_observations(user_id, resolved_env, symbol, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlqf_user_env_decision_ts
+            ON ml_queue_fill_observations(user_id, resolved_env, decision, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §55 POINT-IN-TIME FEATURE STORE + REPLAY 2026-05-15] R0 canonical PDF
 // — canonical PDF §55 (lines 1589-1602). Coloana vertebrala a reproductibilitatii:
 // salveaza features as-of time (NOT recalculated), snapshot complet (market+features
