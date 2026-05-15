@@ -994,6 +994,69 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §51 TCA/FILL SIMULATOR 2026-05-15] R4 canonical PDF
+// — canonical PDF §51 (line 1585). L2 depth historic + per-exchange-per-symbol
+// slippage calibration + backtest/shadow integration. Complement §23 TCA.
+migrate('119_ml_l2_depth_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_l2_depth_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            exchange        TEXT NOT NULL,
+            symbol          TEXT NOT NULL,
+            bids_json       TEXT NOT NULL,
+            asks_json       TEXT NOT NULL,
+            mid_price       REAL NOT NULL,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mll2_user_env_ex_sym_ts
+            ON ml_l2_depth_snapshots(user_id, resolved_env, exchange, symbol, ts);
+    `);
+});
+
+migrate('120_ml_slippage_calibration', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_slippage_calibration (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            exchange        TEXT NOT NULL,
+            symbol          TEXT NOT NULL,
+            sample_count    INTEGER NOT NULL,
+            alpha           REAL NOT NULL,
+            beta            REAL NOT NULL,
+            r_squared       REAL NOT NULL,
+            last_updated    INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, exchange, symbol)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsc_user_env_ex_sym
+            ON ml_slippage_calibration(user_id, resolved_env, exchange, symbol);
+    `);
+});
+
+migrate('121_ml_fill_simulations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_fill_simulations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            exchange                    TEXT NOT NULL,
+            symbol                      TEXT NOT NULL,
+            mode                        TEXT NOT NULL CHECK(mode IN ('backtest','shadow')),
+            order_side                  TEXT NOT NULL CHECK(order_side IN ('LONG','SHORT')),
+            order_size                  REAL NOT NULL,
+            simulated_avg_price         REAL NOT NULL,
+            simulated_slippage_bps      REAL NOT NULL,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfs_user_env_mode_ts
+            ON ml_fill_simulations(user_id, resolved_env, mode, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlfs_user_env_ex_sym_ts
+            ON ml_fill_simulations(user_id, resolved_env, exchange, symbol, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §66 REGULATORY / COMPLIANCE LAYER 2026-05-15] cross-cutting canonical PDF
 // — canonical PDF §66 (lines 1741-1742). Self-pattern detection: quote stuffing,
 // wash trading, event-sync manipulation. Logs economic justification per decision.
