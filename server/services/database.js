@@ -994,6 +994,30 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §32 OPTIONS / GEX / MAX PAIN 2026-05-15] R2
+// — canonical PDF §32 (lines 1313-1321). Options market context observations.
+// INVARIANT line 1321: "options data nu este obligatoriu semnal primar,
+//                       dar poate modifica bias-ul, riscul si probabilitatea
+//                       de reversion / pinning"
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §32.
+migrate('071_ml_options', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_options_observations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_type TEXT NOT NULL CHECK(observation_type IN
+                            ('gex_profile','gamma_pin','gamma_squeeze',
+                             'max_pain','expiration_proximity')),
+            payload_json    TEXT NOT NULL,
+            symbol          TEXT,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloo_user_env_type_ts
+            ON ml_options_observations(user_id, resolved_env, observation_type, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §31 CROSS-VENUE / SMART MONEY / CASCADE PREDICTION 2026-05-15] R2
 // — canonical PDF §31 (lines 1291-1307). Per-signal rolling observations
 // stats for 10 smart money signal types. Per (user × env × signal × regime).
