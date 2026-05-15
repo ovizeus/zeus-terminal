@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §66 REGULATORY / COMPLIANCE LAYER 2026-05-15] cross-cutting canonical PDF
+// — canonical PDF §66 (lines 1741-1742). Self-pattern detection: quote stuffing,
+// wash trading, event-sync manipulation. Logs economic justification per decision.
+// "Exact ceea ce un regulator ar cere daca vreodata activitatea e investigata."
+migrate('117_ml_compliance_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_compliance_violations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            violation_type  TEXT NOT NULL CHECK(violation_type IN
+                            ('quote_stuff','wash_trade','event_sync','cancel_rate','other')),
+            severity        TEXT NOT NULL CHECK(severity IN ('info','warn','critical')),
+            context_json    TEXT,
+            action_taken    TEXT,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcv_user_env_type_ts
+            ON ml_compliance_violations(user_id, resolved_env, violation_type, ts);
+    `);
+});
+
+migrate('118_ml_economic_justifications', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_economic_justifications (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id                     TEXT NOT NULL,
+            action_type                     TEXT NOT NULL,
+            justification_text              TEXT NOT NULL,
+            supporting_signals_json         TEXT,
+            expected_economic_outcome       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlej_user_env_decision
+            ON ml_economic_justifications(user_id, resolved_env, decision_id);
+        CREATE INDEX IF NOT EXISTS idx_mlej_user_env_ts
+            ON ml_economic_justifications(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §65 EPISODIC MEMORY / FINGERPRINTING 2026-05-15] R5A canonical PDF
 // — canonical PDF §65 (lines 1739-1740). "Mai am vazut asta": multi-factor
 // fingerprint (funding/OI/BTC.D/macro) + cosine similarity vs historical archive.
