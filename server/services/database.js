@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §24 ARHITECTURA ML SI DETECTORS 2026-05-15] R2
+// — canonical PDF §24 (lines 1122-1150). Detector registry + per-call outputs:
+//   ml_detector_registry: catalog of detectors with input/output schema,
+//                         time horizon, weight, allowed regimes, model type
+//   ml_detector_outputs:  audit log of detector invocations per user×env
+// Per Plan v3 wrap-not-rewrite: this is the registry SCAFFOLD; concrete
+// detector implementations come in subsequent waves with real ML models.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §24.
+migrate('062_ml_detector_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_detector_registry (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            detector_id           TEXT NOT NULL UNIQUE,
+            kind                  TEXT NOT NULL CHECK(kind IN
+                                  ('order_flow','liquidity_sweep','regime_classifier',
+                                   'derivatives_stress','macro_filter','venue_divergence',
+                                   'options_context','portfolio_risk','execution_quality')),
+            input_schema_json     TEXT NOT NULL,
+            output_schema_json    TEXT NOT NULL,
+            time_horizon_ms       INTEGER NOT NULL,
+            weight                REAL NOT NULL CHECK(weight >= 0 AND weight <= 1),
+            allowed_regimes_json  TEXT NOT NULL,
+            model_type            TEXT NOT NULL CHECK(model_type IN
+                                  ('LIGHTGBM','XGBOOST','TRANSFORMER','LSTM','HEURISTIC')),
+            model_version         TEXT NOT NULL,
+            enabled               INTEGER NOT NULL DEFAULT 1,
+            created_at            INTEGER NOT NULL,
+            updated_at            INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_detector_outputs (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            detector_id           TEXT NOT NULL,
+            pos_id                TEXT,
+            output_json           TEXT NOT NULL,
+            regime                TEXT,
+            model_version         TEXT,
+            created_at            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldo_user_env_det_ts
+            ON ml_detector_outputs(user_id, resolved_env, detector_id, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §12 STATE MACHINE A POZITIEI 2026-05-15] R4
 // — canonical PDF §12 (lines 828-849). 12-state FSM lifecycle (IDLE →
 // WATCHING → ARMED → READY → ENTERED → MANAGING → PARTIAL_TAKEN →
