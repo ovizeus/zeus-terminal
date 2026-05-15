@@ -994,6 +994,42 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 OBS-3 CONFIG ROLLBACK <60s 2026-05-15] R0 expert-obs P1
+// — expert observation 2026-05-05. Rapid config rollback distinct de §19 versionRegistry.
+// Spec: project_ml_v3_expert_observations_2026-05-05.md
+migrate('080_ml_config_rollback', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_config_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            config_key      TEXT NOT NULL,
+            value_json      TEXT NOT NULL,
+            version         TEXT NOT NULL,
+            is_active       INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            actor           TEXT NOT NULL,
+            reason          TEXT,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_config_rollback_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            config_key      TEXT NOT NULL,
+            from_version    TEXT,
+            to_version      TEXT NOT NULL,
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            duration_ms     INTEGER,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcs_user_env_key_active
+            ON ml_config_snapshots(user_id, resolved_env, config_key, is_active);
+        CREATE INDEX IF NOT EXISTS idx_mlcrl_user_env_ts
+            ON ml_config_rollback_log(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 OBS-2 SIZE-RAMP ALGORITHM 2026-05-15] R3A expert-obs P1
 // — expert observation 2026-05-05. Size ramping for first N live trades.
 // Spec: project_ml_v3_expert_observations_2026-05-05.md
