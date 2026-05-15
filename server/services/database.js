@@ -994,6 +994,28 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 DOM-N1 SPOOFING DETECTOR 2026-05-15] R2 audit-gap P2
+// — audit gap 2026-05-05. Spoofing + fake wall + layering pattern detection.
+// Spec: project_ml_v3_additional_gaps_audit_2026-05-05.md
+migrate('077_ml_spoofing_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_spoofing_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            event_type      TEXT NOT NULL CHECK(event_type IN
+                            ('suspected_spoof','fake_wall_detected',
+                             'pulled_orders','layering_pattern')),
+            symbol          TEXT,
+            severity        REAL NOT NULL DEFAULT 0,
+            payload_json    TEXT NOT NULL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlse_user_env_sym_ts
+            ON ml_spoofing_events(user_id, resolved_env, symbol, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 EXEC-N1 SMART POST-ONLY PRICE-SHADE 2026-05-15] R4 audit-gap P1
 // — audit gap 2026-05-05. Post-only order optimization with adaptive
 // price shading + fill outcome tracking + rolling stats.
