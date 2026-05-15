@@ -994,6 +994,29 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 OPS-N1 OPERATOR PANIC BUTTON 2026-05-15] Operator audit-gap P1
+// — audit gap 2026-05-05. Hard halt mechanism.
+// Compose §29 setBreakerLevel('L5') + §34 setEmergencyKillSwitch('ON').
+// Manual recovery only (does NOT auto-reset breaker on clear).
+// Spec: /root/.claude/projects/-root/memory/project_ml_v3_additional_gaps_audit_2026-05-05.md
+migrate('075_ml_panic_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_panic_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            severity        TEXT NOT NULL CHECK(severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            state           TEXT NOT NULL CHECK(state IN ('ACTIVE','CLEARED')),
+            triggered_at    INTEGER NOT NULL,
+            cleared_at      INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpe_user_env_state
+            ON ml_panic_events(user_id, resolved_env, state);
+    `);
+});
+
 // [OMEGA Wave 3 EXEC-N2 FUNDING-AWARE EXIT TIMING 2026-05-15] R4 audit-gap P1 HIGH
 // — audit gap 2026-05-05. 8h funding ping awareness + exposure cost + exit
 // recommendation. Per (user × env × pos) evaluation log.
