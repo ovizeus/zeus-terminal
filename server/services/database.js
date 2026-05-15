@@ -994,6 +994,46 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §36 REGULI NUMERICE SI PRAGURI CONCRETE 2026-05-15] R3B
+// — canonical PDF §36 (lines 1390-1410). 2 tables forming single source
+// of truth for ALL numerical thresholds:
+//   ml_thresholds_canonical: name UNIQUE, default_value, category (17 spec)
+//                            Pre-populated on module load with concrete values.
+//   ml_threshold_overrides:  per (user × env × regime) override, with audit.
+//                            Resolution chain: regime-override > general-override > canonical.
+// INVARIANT (line 1409-1410): "Aceste valori nu trebuie lasate vagi in
+// implementare. Trebuie definite explicit." Enforced via validateAllSet().
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §36.
+migrate('067_ml_thresholds', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_thresholds_canonical (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            name            TEXT NOT NULL UNIQUE,
+            category        TEXT NOT NULL,
+            default_value   REAL NOT NULL,
+            description     TEXT,
+            version         TEXT NOT NULL,
+            created_at      INTEGER NOT NULL,
+            updated_at      INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_threshold_overrides (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            threshold_name  TEXT NOT NULL,
+            value           REAL NOT NULL,
+            regime          TEXT,
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlto_user_env_name_reg
+            ON ml_threshold_overrides(user_id, resolved_env, threshold_name, regime);
+        CREATE INDEX IF NOT EXISTS idx_mltc_category
+            ON ml_thresholds_canonical(category);
+    `);
+});
+
 // [OMEGA Wave 3 §23 SIMULARE COSTURI / TCA / MARKET IMPACT 2026-05-15] R4
 // — canonical PDF §23 (lines 1102-1116). Per-decision TCA estimate +
 // optional actual reconciliation:
