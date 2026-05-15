@@ -994,6 +994,38 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §15 CONFIDENCE DECAY SI TIME-TO-THESIS 2026-05-15] R2
+// — canonical PDF §15 (lines 909-927). Per-position confidence lifecycle:
+// entry baseline + decay history + thesis criteria + signal-driven decay.
+// UNIQUE(user_id, resolved_env, pos_id) — one active state per position.
+// First OMEGA module in R2 cognition layer.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §15.
+migrate('060_ml_confidence_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_confidence_state (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id                   TEXT NOT NULL,
+            symbol                   TEXT NOT NULL,
+            entry_confidence         REAL NOT NULL,
+            current_confidence       REAL NOT NULL,
+            max_stagnation_ms        INTEGER NOT NULL,
+            validation_window_ms     INTEGER NOT NULL,
+            thesis_criteria_json     TEXT,
+            decay_signals_json       TEXT,
+            last_signal_at           INTEGER,
+            created_at               INTEGER NOT NULL,
+            updated_at               INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, pos_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcs_user_env_pos
+            ON ml_confidence_state(user_id, resolved_env, pos_id);
+        CREATE INDEX IF NOT EXISTS idx_mlcs_updated
+            ON ml_confidence_state(updated_at);
+    `);
+});
+
 // [OMEGA Wave 3 §30 PORTOFOLIU CORELATII SI CAPITAL GOVERNANCE 2026-05-15] R3A
 // — canonical PDF §30 (lines 1273-1285). Audit log table for 5 portfolio
 // governance primitives: evaluateNewPositionRisk (POSITION_RISK),
