@@ -994,6 +994,38 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §9 FORMULA LUI CORECTA DE GANDIRE 2026-05-15] R2
+// — canonical PDF §9 (lines 749-760). Per-decision step trace through
+// 12 thinking steps. Conductor module for brain reasoning pipeline.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §9.
+migrate('073_ml_thinking_traces', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_thinking_traces (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id     TEXT NOT NULL,
+            step            TEXT NOT NULL CHECK(step IN
+                            ('OBSERVA','CLASIFICA_REGIMUL','VERIFICA_BIAS_GLOBAL',
+                             'MAPEAZA_STRUCTURA','IDENTIFICA_LICHIDITATEA',
+                             'VERIFICA_PARTICIPAREA_REALA',
+                             'VERIFICA_MACRO_CORELATII_OPTIONS_VENUES',
+                             'EVALUAZA_RISCUL_SI_EXECUTIA','CALCULEAZA_AVANTAJUL',
+                             'DECIDE_SAU_STA','GESTIONEAZA','INVATA')),
+            step_index      INTEGER NOT NULL,
+            input_json      TEXT,
+            output_json     TEXT,
+            status          TEXT NOT NULL CHECK(status IN ('OK','SKIPPED','ERROR')),
+            duration_ms     INTEGER,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltt_user_env_dec_step
+            ON ml_thinking_traces(user_id, resolved_env, decision_id, step_index);
+        CREATE INDEX IF NOT EXISTS idx_mltt_step_status
+            ON ml_thinking_traces(step, status);
+    `);
+});
+
 // [OMEGA Wave 3 §26 ML AVANSAT SI RL PENTRU MANAGEMENT 2026-05-15] R6
 // — canonical PDF §26 (lines 1174-1188). 2 tables:
 //   ml_rl_decisions: per-action audit (proposed/allowed/blockers/reward)
