@@ -994,6 +994,30 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §54 XAI LAYER 2026-05-15] cross-cutting canonical PDF
+// — canonical PDF §54 (line 1588). Top-3 factori + confidence interval +
+// counterfactual "ce ar fi trebuit sa se schimbe ca sa nu iau trade-ul".
+// Complement §25 explainability — §54 adds CI + counterfactual breakeven.
+migrate('124_ml_xai_explanations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_xai_explanations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id         TEXT NOT NULL,
+            action              TEXT NOT NULL,
+            top_factors_json    TEXT NOT NULL,
+            counterfactual_json TEXT,
+            confidence_level    REAL NOT NULL,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlxe_user_env_decision
+            ON ml_xai_explanations(user_id, resolved_env, decision_id);
+        CREATE INDEX IF NOT EXISTS idx_mlxe_user_env_ts
+            ON ml_xai_explanations(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §52 DRIFT ORCHESTRATION 2026-05-15] R5A canonical PDF
 // — canonical PDF §52 (line 1586). Monitor PSI/KS/Brier; canary retrain on
 // PSI > 0.2 OR Brier degrade; block live deploy until validation passes.
