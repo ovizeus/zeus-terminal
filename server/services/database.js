@@ -994,6 +994,28 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §41 STRATEGY CROWDING DETECTION 2026-05-15] R5A canonical PDF
+// — canonical PDF §41 (lines 1520-1521). 3rd drift type: edge decay from
+// crowding. Not detectable by KS/PSI (distribution looks normal).
+migrate('097_ml_strategy_crowding', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_strategy_crowding (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_type      TEXT NOT NULL CHECK(setup_type IN
+                            ('liquidity_sweep','funding_extreme','cross_venue_div',
+                             'stop_run_reclaim','cvd_divergence','breakout',
+                             'mean_reversion','momentum_continuation')),
+            hit_rate        REAL NOT NULL,
+            slippage_bps    REAL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsc_user_env_setup_ts
+            ON ml_strategy_crowding(user_id, resolved_env, setup_type, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §40 STRUCTURAL CAUSAL MODEL 2026-05-15] R2 canonical PDF
 // — canonical PDF §40 (lines 1518-1519). Explicit causal chains
 // (DXY → risk → liquidations → bounce) for distribution-shift robustness.
