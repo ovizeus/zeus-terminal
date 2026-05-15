@@ -42,6 +42,18 @@ const DOCK_ITEMS: DockItem[] = [
         <path d="M3 20h18" stroke="currentColor" strokeWidth="1" opacity=".2" strokeLinecap="round" />
       </>
     ) },
+  // [OMEGA Wave 1 UI 2026-05-15] Ω rune — position 4 (after DSL, before ARES).
+  // Geometric capital omega: arching crown + vertical legs + halo dot.
+  { id: 'omega', label: 'OMEGA', group: 'trading',
+    icon: (
+      <>
+        <circle cx="12" cy="12" r="10" fill="currentColor" opacity=".05" />
+        <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth="0.8" opacity=".4" />
+        <path d="M7 19 L9 19 L9 15 C9 12 10 9 12 9 C14 9 15 12 15 15 L15 19 L17 19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="12" cy="6.5" r="1.2" fill="currentColor" opacity=".7" />
+        <circle cx="12" cy="12" r="2" fill="currentColor" opacity=".15" />
+      </>
+    ) },
   { id: 'ares', label: 'ARES', group: 'trading',
     icon: (
       <>

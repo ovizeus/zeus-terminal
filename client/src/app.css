@@ -6076,9 +6076,9 @@ select option {
    for timestamps; system sans for body. */
 
 /* ── Dock icon highlight when active ───────────────────────────── */
-.zd-item[data-id="omega"]              { color: #00d4ff; }
-.zd-item[data-id="omega"]:hover        { color: #ff00d4; filter: drop-shadow(0 0 6px #ff00d4); }
-.zd-item[data-id="omega"].active       { color: #ffffff; filter: drop-shadow(0 0 10px #00d4ff) drop-shadow(0 0 18px #ff00d4); }
+.zd-item[data-dock="omega"]              { color: #00d4ff; }
+.zd-item[data-dock="omega"]:hover        { color: #ff00d4; filter: drop-shadow(0 0 6px #ff00d4); }
+.zd-item[data-dock="omega"].active       { color: #ffffff; filter: drop-shadow(0 0 10px #00d4ff) drop-shadow(0 0 18px #ff00d4); }
 
 /* ── Page root ─────────────────────────────────────────────────── */
 .omega-page {
