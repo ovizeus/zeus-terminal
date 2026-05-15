@@ -924,6 +924,41 @@ migrate('044_ml_attribution_regime', () => {
     `);
 });
 
+// [OMEGA Wave 3 §19 GOVERNANCE SI VERSIONING 2026-05-15] R5B foundation
+// — version registry for all 5 spec component types (model/detector/
+// feature_schema/risk_config/execution_config). State lifecycle:
+// PROPOSED → ACTIVE → ROLLED_BACK or RETIRED. Atomicity guarded in
+// versionRegistry.js (only ONE ACTIVE per component at a time).
+// Parent chain via parent_version_id enables clean rollback to previous.
+// Spec: project_ml_brain_pro_244.md §19 + ml_architecture_frozen.
+migrate('045_ml_governance_versions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_governance_versions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            component_type      TEXT NOT NULL CHECK(component_type IN (
+                'model', 'detector', 'feature_schema', 'risk_config', 'execution_config'
+            )),
+            component_id        TEXT NOT NULL,
+            version             TEXT NOT NULL,
+            config_json         TEXT NOT NULL,
+            config_hash         TEXT NOT NULL,
+            parent_version_id   INTEGER,
+            motivation          TEXT NOT NULL,
+            actor               TEXT NOT NULL,
+            kpi_delta_json      TEXT,
+            state               TEXT NOT NULL DEFAULT 'PROPOSED'
+                                CHECK(state IN ('PROPOSED', 'ACTIVE', 'ROLLED_BACK', 'RETIRED')),
+            activated_at        INTEGER,
+            rolled_back_at      INTEGER,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgv_component_state
+            ON ml_governance_versions(component_type, component_id, state);
+        CREATE INDEX IF NOT EXISTS idx_mlgv_created_at
+            ON ml_governance_versions(created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
