@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §69 SINGLE-DECISION OOD GATE 2026-05-15] R3A canonical PDF
+// — canonical PDF §69 (lines 1837-1878). Per-decision novelty score across 5
+// dimensions (feature/regime/microstructure/macro/portfolio). Refuse exotic cases.
+// "OOD local NU e drift global. Un singur caz ciudat poate justifica NO TRADE."
+migrate('129_ml_ood_manifold', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ood_manifold (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            dimension           TEXT NOT NULL CHECK(dimension IN
+                                ('feature_vector','regime_state','microstructure_state',
+                                 'macro_context','portfolio_state')),
+            reference_points_json TEXT NOT NULL,
+            n_samples           INTEGER NOT NULL,
+            last_updated        INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, dimension)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlom_user_env_dim
+            ON ml_ood_manifold(user_id, resolved_env, dimension);
+    `);
+});
+
+migrate('130_ml_ood_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ood_decisions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id             TEXT NOT NULL,
+            novelty_score           REAL NOT NULL,
+            dimension_scores_json   TEXT NOT NULL,
+            classification          TEXT NOT NULL CHECK(classification IN
+                                    ('drift_slow','local_outlier','new_valid',
+                                     'dangerous_unseen')),
+            action                  TEXT NOT NULL CHECK(action IN
+                                    ('continue_normal','reduce_size',
+                                     'observer','alert')),
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlod_user_env_classif_ts
+            ON ml_ood_decisions(user_id, resolved_env, classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlod_user_env_action_ts
+            ON ml_ood_decisions(user_id, resolved_env, action, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §68 THESIS GRAPH / EVIDENCE DEPENDENCY ENGINE 2026-05-15] R2 canonical PDF
 // — canonical PDF §68 (lines 1784-1834). Each trade has explicit thesis structured
 // as evidence DAG: 7 node types + edges (requires/supports/invalidates) + decay.
