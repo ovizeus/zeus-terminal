@@ -994,6 +994,34 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §59 UNIFIED OBJECTIVE / UTILITY FUNCTION 2026-05-15] meta canonical PDF
+// — canonical PDF §59 (lines 1667-1685). Single scalar utility = "verdictul final".
+// totalUtility = expectancy_after_costs - tail_risk - turnover - latency - concentration
+// "Scorurile sunt ingrediente. Utility function este verdictul."
+migrate('105_ml_utility_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_utility_evaluations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id         TEXT NOT NULL,
+            expectancy_after_costs  REAL NOT NULL,
+            tail_risk_penalty   REAL NOT NULL,
+            turnover_penalty    REAL NOT NULL,
+            latency_penalty     REAL NOT NULL,
+            concentration_penalty  REAL NOT NULL,
+            crowding_penalty    REAL NOT NULL,
+            total_utility       REAL NOT NULL,
+            weights_json        TEXT,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlue_user_env_ts
+            ON ml_utility_evaluations(user_id, resolved_env, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlue_decision_id
+            ON ml_utility_evaluations(decision_id);
+    `);
+});
+
 // [OMEGA Wave 3 §58 FACTOR RISK DECOMPOSITION + NETTING 2026-05-15] R3A canonical PDF
 // — canonical PDF §58 (lines 1645-1664). 6-factor exposure (btc_beta/market_beta
 // /vol/liquidity/funding/macro). Detects when "3 diferite" sunt acelasi pariu.
