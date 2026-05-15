@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §65 EPISODIC MEMORY / FINGERPRINTING 2026-05-15] R5A canonical PDF
+// — canonical PDF §65 (lines 1739-1740). "Mai am vazut asta": multi-factor
+// fingerprint (funding/OI/BTC.D/macro) + cosine similarity vs historical archive.
+// Bayesian prior, NOT prediction. "Analogie structurata."
+migrate('115_ml_episodic_archive', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_episodic_archive (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            archive_id              TEXT NOT NULL,
+            label                   TEXT NOT NULL,
+            start_ts                INTEGER NOT NULL,
+            end_ts                  INTEGER NOT NULL,
+            fingerprint_vector_json TEXT NOT NULL,
+            outcome_summary         TEXT,
+            lessons_json            TEXT,
+            created_at              INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, archive_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlea_user_env
+            ON ml_episodic_archive(user_id, resolved_env);
+    `);
+});
+
+migrate('116_ml_fingerprint_matches', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_fingerprint_matches (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            query_fingerprint_json      TEXT NOT NULL,
+            archive_id                  TEXT NOT NULL,
+            similarity_score            REAL NOT NULL,
+            ranked_position             INTEGER NOT NULL,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfm_user_env_ts
+            ON ml_fingerprint_matches(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §64 REGIME DURATION MODELING 2026-05-15] R2 canonical PDF
 // — canonical PDF §64 (lines 1737-1738). Trend 3 weeks vs 3 days = different
 // probability. Track regime age + duration distribution + adjust aggressiveness.
