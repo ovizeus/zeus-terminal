@@ -994,6 +994,37 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 OBS-5 FAILURE MODE RUNBOOK 2026-05-15] Operator expert-obs P1
+// — expert observation 2026-05-05. Ops-grade runbooks per failure mode.
+migrate('081_ml_runbooks', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_runbooks (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            runbook_id          TEXT NOT NULL UNIQUE,
+            name                TEXT NOT NULL,
+            trigger_signals_json TEXT NOT NULL,
+            steps_json          TEXT NOT NULL,
+            auto_execute        INTEGER NOT NULL DEFAULT 0,
+            severity            TEXT NOT NULL CHECK(severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+            created_at          INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_runbook_executions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            runbook_id          TEXT NOT NULL,
+            mode                TEXT NOT NULL CHECK(mode IN ('AUTO','MANUAL','DRY_RUN')),
+            actor               TEXT NOT NULL,
+            matched_signals_json TEXT NOT NULL,
+            steps_executed      INTEGER NOT NULL DEFAULT 0,
+            status              TEXT NOT NULL CHECK(status IN ('EXECUTED','SIMULATED','FAILED')),
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlre_user_env_rb_ts
+            ON ml_runbook_executions(user_id, resolved_env, runbook_id, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 OBS-3 CONFIG ROLLBACK <60s 2026-05-15] R0 expert-obs P1
 // — expert observation 2026-05-05. Rapid config rollback distinct de §19 versionRegistry.
 // Spec: project_ml_v3_expert_observations_2026-05-05.md
