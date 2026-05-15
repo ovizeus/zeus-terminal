@@ -994,6 +994,56 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §71 INTERNAL DEBATE / PROPOSER-CRITIC-JUDGE 2026-05-15] R6 canonical PDF
+// — canonical PDF §71 (lines 1924-1973). 4 roles: proposer/critic/risk_prosecutor/judge.
+// Veto power critic/risk → NO_TRADE. Per-role quality tracking. "Orice semnal trebuie
+// contestat intern. Aprobarea finala = confruntare structurata, nu o singura voce."
+migrate('133_ml_debate_sessions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_debate_sessions (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            debate_id                   TEXT NOT NULL UNIQUE,
+            proposer_thesis             TEXT,
+            critic_concerns_json        TEXT,
+            risk_prosecutor_args_json   TEXT,
+            judge_verdict               TEXT CHECK(judge_verdict IN
+                                        ('LONG','SHORT','NO_TRADE','WAIT','REDUCE')),
+            pro_score                   REAL NOT NULL DEFAULT 0,
+            con_score                   REAL NOT NULL DEFAULT 0,
+            vetoed_by                   TEXT NOT NULL DEFAULT 'none' CHECK(vetoed_by IN
+                                        ('none','critic','risk_prosecutor','both')),
+            explanation                 TEXT,
+            created_at                  INTEGER NOT NULL,
+            verdict_ts                  INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlds_user_env_verdict
+            ON ml_debate_sessions(user_id, resolved_env, judge_verdict);
+        CREATE INDEX IF NOT EXISTS idx_mlds_user_env_ts
+            ON ml_debate_sessions(user_id, resolved_env, created_at);
+    `);
+});
+
+migrate('134_ml_role_performance', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_role_performance (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            role                TEXT NOT NULL CHECK(role IN
+                                ('proposer','critic','risk_prosecutor','judge')),
+            total_decisions     INTEGER NOT NULL DEFAULT 0,
+            correct_calls       INTEGER NOT NULL DEFAULT 0,
+            false_positives     INTEGER NOT NULL DEFAULT 0,
+            false_negatives     INTEGER NOT NULL DEFAULT 0,
+            quality_score       REAL NOT NULL DEFAULT 0,
+            last_updated        INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, role)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 §70 EVIDENCE SUFFICIENCY / MINIMUM SUPPORT GATE 2026-05-15] R5A canonical PDF
 // — canonical PDF §70 (lines 1881-1921). Support count gate per setup×regime×asset×tf.
 // Maturity classification: observational/shadow/probation/mature. Size multiplier
