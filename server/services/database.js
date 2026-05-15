@@ -994,6 +994,34 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 RAID-M MOOD EMA TRACKER 2026-05-15] cross-cutting A-Z raid
+// — A-Z raid MUST-ADD item M. Anti-flicker EMA smoothing for Ω mood.
+migrate('083_ml_mood_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_mood_state (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            smoothed_score  REAL NOT NULL,
+            sample_count    INTEGER NOT NULL DEFAULT 0,
+            last_raw_score  REAL,
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE TABLE IF NOT EXISTS ml_mood_history (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            raw_score       REAL NOT NULL,
+            smoothed_score  REAL NOT NULL,
+            alpha_used      REAL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmh_user_env_ts
+            ON ml_mood_history(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 OBS-6 DB CONTENTION MONITOR 2026-05-15] R0 expert-obs P1 PERF
 // — expert observation 2026-05-05. SQLite contention monitoring at scale.
 migrate('082_ml_db_contention', () => {
