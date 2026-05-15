@@ -965,6 +965,35 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §34 HUMAN-IN-THE-LOOP 2026-05-15] Operator Interaction
+// — canonical PDF §34 (lines 1340-1354). Trigger detection (ambiguous
+// confidence / intermediate threshold / unusual exposure / operational
+// conflict) + emergency kill switch state. Composes Wave 1D approvalQueue
+// for review routing.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §34.
+migrate('054_ml_human_overrides', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_human_overrides (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_type     TEXT NOT NULL CHECK(record_type IN (
+                'OVERRIDE', 'KILL_SWITCH', 'REVIEW_REQUEST'
+            )),
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            override_kind   TEXT,
+            state           TEXT NOT NULL DEFAULT 'ACTIVE'
+                            CHECK(state IN ('ACTIVE', 'CLEARED', 'APPROVED', 'REJECTED')),
+            payload_json    TEXT,
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            created_at      INTEGER NOT NULL,
+            cleared_at      INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlho_user_env_type_state
+            ON ml_human_overrides(user_id, resolved_env, record_type, state);
+    `);
+});
+
 // [OMEGA Wave 3 §33 A/B TESTING / SHADOW COMPARE 2026-05-15] R6
 // — canonical PDF §33 (lines 1324-1336). 2 NEW tables for experiment
 // lifecycle: ml_experiments + ml_experiment_outcomes. Pairs cu §19
