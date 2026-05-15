@@ -994,6 +994,24 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 RAID-Q QUIET HOURS SCHEDULER 2026-05-15] Operator A-Z raid
+// — A-Z raid MUST-ADD item Q. Window-based quiet hours for alert suppression.
+migrate('087_ml_quiet_hours', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_quiet_hours (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            windows_json    TEXT NOT NULL,
+            timezone        TEXT NOT NULL DEFAULT 'UTC',
+            actor           TEXT NOT NULL,
+            enabled         INTEGER NOT NULL DEFAULT 1 CHECK(enabled IN (0,1)),
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 RAID-O OPERATOR PRESENCE 2026-05-15] Operator A-Z raid
 // — A-Z raid MUST-ADD item O. Heartbeat-driven operator presence detection.
 migrate('086_ml_operator_presence', () => {
