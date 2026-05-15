@@ -994,6 +994,38 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §27 PATTERNS TEMPORALE 2026-05-15] R2
+// — canonical PDF §27 (lines 1194-1211). Per-pattern rolling outcome stats:
+//   Track how 10 temporal patterns (sessions, day-of-week, EOM/EOQ, etc.)
+//   correlate with trade outcomes per (user × env × regime).
+// UNIQUE per (user_id, resolved_env, pattern, regime) — one row per cell.
+// INVARIANT (line 1211): "NU sunt semnale suficiente singure pentru intrare"
+// — enforced in evaluateScoreAdjustment which caps cumulative effect.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §27.
+migrate('065_ml_temporal_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_temporal_observations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pattern         TEXT NOT NULL CHECK(pattern IN
+                            ('seasonality_intraday','day_of_week',
+                             'friday_evening','sunday_morning','wednesday_noon',
+                             'end_of_month','end_of_quarter',
+                             'london_open','new_york_open','asia_drift')),
+            sample_count    INTEGER NOT NULL DEFAULT 0,
+            mean_outcome    REAL NOT NULL DEFAULT 0,
+            regime          TEXT,
+            last_seen_at    INTEGER,
+            created_at      INTEGER NOT NULL,
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, pattern, regime)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlto_user_env_pat_reg
+            ON ml_temporal_observations(user_id, resolved_env, pattern, regime);
+    `);
+});
+
 // [OMEGA Wave 3 §35 MONITORING / LOGGING / KPI DASHBOARDS 2026-05-15] cross-cutting
 // — canonical PDF §35 (lines 1358-1384). 2 tables:
 //   ml_observability_events: generic event stream (13 spec event types)
