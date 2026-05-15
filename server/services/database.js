@@ -994,6 +994,52 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §68 THESIS GRAPH / EVIDENCE DEPENDENCY ENGINE 2026-05-15] R2 canonical PDF
+// — canonical PDF §68 (lines 1784-1834). Each trade has explicit thesis structured
+// as evidence DAG: 7 node types + edges (requires/supports/invalidates) + decay.
+// "Nu exista trade fara thesis graph. Nu exista management din inertie."
+migrate('127_ml_thesis_graphs', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_thesis_graphs (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            thesis_id               TEXT NOT NULL UNIQUE,
+            position_id             TEXT,
+            nodes_json              TEXT NOT NULL,
+            edges_json              TEXT NOT NULL,
+            break_conditions_json   TEXT,
+            status                  TEXT NOT NULL CHECK(status IN
+                                    ('ACTIVE','PARTIAL_DEGRADED','INVALID',
+                                     'CONFIRMED_STRENGTHENED')),
+            created_at              INTEGER NOT NULL,
+            last_updated            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltg_user_env_status
+            ON ml_thesis_graphs(user_id, resolved_env, status);
+    `);
+});
+
+migrate('128_ml_thesis_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_thesis_evaluations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            thesis_id           TEXT NOT NULL,
+            evaluation_ts       INTEGER NOT NULL,
+            overall_health      TEXT NOT NULL CHECK(overall_health IN
+                                ('active','degraded','invalid','strengthened')),
+            failing_nodes_json  TEXT,
+            action_recommended  TEXT NOT NULL CHECK(action_recommended IN
+                                ('HOLD','EXIT_PARTIAL','EXIT_FULL','SCALE_UP')),
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlte_user_env_thesis_ts
+            ON ml_thesis_evaluations(user_id, resolved_env, thesis_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §67 CONFORMAL PREDICTION / ABSTENTION BOUNDS 2026-05-15] R5A canonical PDF
 // — canonical PDF §67 (lines 1747-1781). Per-decision formal coverage bounds.
 // Uncertainty-aware NO_TRADE fallback when prediction set too ambiguous.
