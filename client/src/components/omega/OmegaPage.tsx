@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
+import { R5AStats } from './R5AStats'
 import type { Utterance, Mood, HealthState } from './omegaApi'
 import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
 
@@ -102,6 +103,8 @@ export function OmegaPage() {
                     </button>
                 </div>
             </div>
+
+            <R5AStats />
 
             <div className="omega-page-grid">
                 <div className="omega-page-orb-zone">

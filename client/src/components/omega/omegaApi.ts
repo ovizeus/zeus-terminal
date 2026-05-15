@@ -62,6 +62,36 @@ export async function fetchHealth(): Promise<HealthState> {
     return _json<HealthState>(resp)
 }
 
+export interface R5aStats {
+    ok: true
+    env: string
+    attribution: {
+        total_count: number
+        hit_rate: number
+        avg_pnl_pct: number
+        outcome_breakdown: Record<string, number>
+    }
+    calibration: {
+        sample_count: number
+        brier_score: number
+        ece: number
+        calibration_quality: number
+    }
+    drift: {
+        sample_count: { reference: number; current: number }
+        drift_score: number
+        drift_level: 'STABLE' | 'MODERATE' | 'UNSTABLE'
+        outcome_drift: { psi: number; ks_d: number; ks_p: number; level: string }
+        score_drift: { psi: number; ks_d: number; ks_p: number; level: string }
+    }
+    wave: string
+}
+
+export async function fetchR5aStats(env = 'DEMO'): Promise<R5aStats> {
+    const resp = await fetch(`/api/omega/r5a-stats?env=${env}`, { credentials: 'include' })
+    return _json<R5aStats>(resp)
+}
+
 export async function sendChat(text: string): Promise<{ ok: true; reply: string; mood: Mood }> {
     const resp = await fetch('/api/omega/chat', {
         method: 'POST',

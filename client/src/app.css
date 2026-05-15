@@ -6339,3 +6339,78 @@ select option {
 }
 .omega-chat-send:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
 .omega-chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ════════════════════════════════════════════════════════════════════
+   OMEGA R5A Stats (Wave 2 UI Bonus 2026-05-15)
+   ════════════════════════════════════════════════════════════════════
+   Compact strip surfacing R5A measurement triad below page header. */
+
+.omega-r5a {
+  position: relative; z-index: 2;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(0,212,255,0.12);
+  background: linear-gradient(180deg, rgba(0,212,255,0.025) 0%, transparent 100%);
+}
+.omega-r5a-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px;
+}
+.omega-r5a-title {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 10px; letter-spacing: 0.3em; color: #6a4f8a;
+}
+.omega-r5a-env {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #00d4ff; letter-spacing: 0.1em;
+}
+.omega-r5a-loading,
+.omega-r5a-error {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: #6a4f8a; padding: 4px 0;
+}
+.omega-r5a-error { color: #ff1744; }
+
+.omega-r5a-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+@media (max-width: 720px) {
+  .omega-r5a { padding: 6px 10px; }
+  .omega-r5a-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.omega-r5a-card {
+  padding: 6px 10px; border-radius: 5px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(0,212,255,0.18);
+  display: flex; flex-direction: column; gap: 2px;
+  transition: border-color 0.3s;
+}
+.omega-r5a-card-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase;
+}
+.omega-r5a-card-value {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 16px; color: #d6e8ff;
+}
+.omega-r5a-card-value.pos { color: #00d4ff; }
+.omega-r5a-card-value.neg { color: #ff8800; }
+.omega-r5a-card-sub {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: #6a4f8a; letter-spacing: 0.05em;
+}
+
+/* Drift card mood-tint */
+.omega-r5a-drift-stable    { border-color: rgba(0,212,255,0.18); }
+.omega-r5a-drift-stable .omega-r5a-card-value    { color: #00d4ff; }
+.omega-r5a-drift-moderate  { border-color: rgba(255,136,0,0.35);
+                              box-shadow: inset 0 0 8px rgba(255,136,0,0.08); }
+.omega-r5a-drift-moderate .omega-r5a-card-value  { color: #ff8800; }
+.omega-r5a-drift-unstable  { border-color: rgba(255,23,68,0.5);
+                              box-shadow: inset 0 0 12px rgba(255,23,68,0.12);
+                              animation: omega-r5a-drift-pulse 1.8s ease-in-out infinite; }
+.omega-r5a-drift-unstable .omega-r5a-card-value  { color: #ff1744; }
+@keyframes omega-r5a-drift-pulse {
+  0%,100% { box-shadow: inset 0 0 12px rgba(255,23,68,0.12); }
+  50%     { box-shadow: inset 0 0 20px rgba(255,23,68,0.25); }
+}

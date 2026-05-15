@@ -19,6 +19,10 @@ const { db } = require('../services/database');
 const voiceLogger = require('../services/ml/_voice/voiceLogger');
 const auditTrail = require('../services/ml/_audit/auditTrail');
 const R0 = require('../services/ml/R0_substrate');
+// [OMEGA Wave 2 UI Bonus 2026-05-15] R5A measurement triad surfacing
+const attribution = require('../services/ml/R5A_learning/attributionEngine');
+const calibration = require('../services/ml/R5A_learning/calibration');
+const drift = require('../services/ml/R5A_learning/driftDetection');
 
 const MOODS = ['CALM', 'FOCUSED', 'EXCITED', 'NERVOUS', 'ANGRY', 'SAD', 'BORED'];
 
@@ -91,6 +95,56 @@ router.get('/health', (req, res) => {
             utterances_24h: utterancesLast24h,
             decisions_24h: decisionsLast24h,
             wave: 'WAVE 1 — read-only UI mode (ML not yet learning)'
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err && err.message || err) });
+    }
+});
+
+// ── GET /api/omega/r5a-stats ────────────────────────────────────────
+// Wave 2 R5A measurement triad summary: attribution aggregate stats +
+// calibration_quality + drift_score (7-day ref window vs 24h current).
+// Read-only; null-safe if no attribution data exists yet (Wave 1 state).
+router.get('/r5a-stats', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const env = String(req.query.env || 'DEMO');
+        const validEnv = ['DEMO', 'TESTNET', 'REAL'].includes(env) ? env : 'DEMO';
+        const now = Date.now();
+        const sevenDaysAgo = now - 7 * 86_400_000;
+        const oneDayAgo = now - 86_400_000;
+
+        const stats = attribution.getAttributionStats({
+            userId, resolvedEnv: validEnv, sinceMs: 0
+        });
+        const calib = calibration.getCalibration({
+            userId, resolvedEnv: validEnv, sinceMs: 0
+        });
+        const driftResult = drift.getDrift({
+            userId, resolvedEnv: validEnv,
+            referenceWindow: { fromMs: sevenDaysAgo, toMs: oneDayAgo },
+            currentWindow: { fromMs: oneDayAgo, toMs: now }
+        });
+
+        res.json({
+            ok: true,
+            env: validEnv,
+            attribution: stats,
+            calibration: {
+                sample_count: calib.sample_count,
+                brier_score: calib.brier_score,
+                ece: calib.ece,
+                calibration_quality: calib.calibration_quality
+            },
+            drift: {
+                sample_count: driftResult.sample_count,
+                drift_score: driftResult.drift_score,
+                drift_level: driftResult.drift_level,
+                outcome_drift: driftResult.outcome_drift,
+                score_drift: driftResult.score_drift
+            },
+            wave: 'WAVE 2 — R5A measurement triad operational (attribution + calibration + drift)'
         });
     } catch (err) {
         res.status(500).json({ ok: false, error: String(err && err.message || err) });
