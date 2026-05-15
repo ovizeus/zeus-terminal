@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §63 DEAD MAN'S SWITCH 2026-05-15] R0 canonical PDF
+// — canonical PDF §63 (lines 1735-1736). External independent process receives
+// heartbeat; if absent → close positions + cancel orders + alert. Wave 3 scope
+// = state primitives + emergency ledger. External watchdog deployment = ops layer.
+// "Nu e modul de siguranta. E siguranta de rezerva a modului de siguranta."
+migrate('111_ml_heartbeat_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_heartbeat_state (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            last_heartbeat_ts       INTEGER NOT NULL,
+            expected_interval_ms    INTEGER NOT NULL,
+            staleness_threshold_ms  INTEGER NOT NULL,
+            dead_threshold_ms       INTEGER NOT NULL,
+            status                  TEXT NOT NULL CHECK(status IN
+                                    ('HEALTHY','STALE','DEAD')),
+            last_check_ts           INTEGER,
+            updated_at              INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlhs_user_env
+            ON ml_heartbeat_state(user_id, resolved_env);
+    `);
+});
+
+migrate('112_ml_dead_man_emergencies', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dead_man_emergencies (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trigger_reason              TEXT NOT NULL CHECK(trigger_reason IN
+                                        ('heartbeat_dead','manual','external_watchdog')),
+            positions_closed_count      INTEGER,
+            orders_cancelled_count      INTEGER,
+            alert_sent                  INTEGER NOT NULL DEFAULT 0 CHECK(alert_sent IN (0,1)),
+            completed_at                INTEGER,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldme_user_env_ts
+            ON ml_dead_man_emergencies(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §62 ADVERSARIAL MARKET AWARENESS 2026-05-15] R3A canonical PDF
 // — canonical PDF §62 (lines 1733-1734). Bot is observable. Randomize timing
 // /sizing/order-type so HFT/MM cannot read pattern. Self-fingerprint detection.
