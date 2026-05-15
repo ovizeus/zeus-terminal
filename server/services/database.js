@@ -994,6 +994,22 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §47 INACTIVITY DECAY 2026-05-15] meta canonical PDF
+// — canonical PDF §47 (lines 1553-1560). Anti-FOMO: threshold INCREASES
+// after X days of inactivity (spec EXPLICIT: do NOT decrease).
+migrate('094_ml_inactivity_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_inactivity_state (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            last_trade_at   INTEGER NOT NULL,
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 §49 HUMAN OVERRIDE PERFORMANCE TRACKER 2026-05-15] Operator canonical PDF
 // — canonical PDF §49 (lines 1574-1582). Log override + delta vs hypothetical.
 migrate('093_ml_override_performance', () => {
