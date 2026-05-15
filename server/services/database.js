@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §35 MONITORING / LOGGING / KPI DASHBOARDS 2026-05-15] cross-cutting
+// — canonical PDF §35 (lines 1358-1384). 2 tables:
+//   ml_observability_events: generic event stream (13 spec event types)
+//   ml_kpi_snapshots:        KPI time-series (11 spec KPIs)
+// Cross-cutting foundation. Closes OBS-4 alert channel by providing uniform
+// pipe for all rings (R0-R6 + Operator + Cross-cutting) to emit observability.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §35.
+migrate('064_ml_observability', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_observability_events (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            event_type    TEXT NOT NULL CHECK(event_type IN
+                          ('decision_log','raw_features','detector_score',
+                           'meta_score','execution_event','fill','pnl',
+                           'slippage','latency','reconciliation_status',
+                           'drift_status','veto_reason','explainability_snapshot')),
+            payload_json  TEXT NOT NULL,
+            regime        TEXT,
+            pos_id        TEXT,
+            ts            INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_kpi_snapshots (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            kpi           TEXT NOT NULL CHECK(kpi IN
+                          ('kpi_per_regime','pnl_per_regime','hit_rate_per_regime',
+                           'avg_rr','avg_slippage','avg_latency','fill_quality',
+                           'confidence_calibration','drift_monitor',
+                           'false_breakout_monitor','venue_divergence_monitor')),
+            value         REAL NOT NULL,
+            regime        TEXT,
+            ts            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloe_user_env_type_ts
+            ON ml_observability_events(user_id, resolved_env, event_type, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlks_user_env_kpi_ts
+            ON ml_kpi_snapshots(user_id, resolved_env, kpi, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlks_regime
+            ON ml_kpi_snapshots(regime, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §25 EXPLAINABILITY / SHAP / LIMBAJ UMAN 2026-05-15] cross-cutting
 // — canonical PDF §25 (lines 1156-1168). 2 tables:
 //   ml_explanations:    per-decision SHAP values + derived top3 factors
