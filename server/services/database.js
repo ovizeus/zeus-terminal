@@ -965,6 +965,36 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §243 DISASTER RECOVERY 2026-05-15] R0 substrate
+// — DR orchestration: heartbeat tracking, backup manifest, failover
+// state machine, DR drill log. §243 is chat-precedent addition
+// (2026-04, BEFORE Claude-extras 04-29), NOT in canonical PDF.
+// Spec: project_ml_brain_pro_244.md "243 → R0 (VPS single point of
+// failure, requires DISASTER_RECOVERY.md + off-site backup +
+// standby + heartbeat.ts + failover.ts)". Code primitives only;
+// actual S3/Backblaze + VPS provisioning = operator infra config.
+migrate('051_ml_dr_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dr_state (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            record_type     TEXT NOT NULL CHECK(record_type IN (
+                'HEARTBEAT', 'BACKUP', 'FAILOVER', 'DRILL'
+            )),
+            node_id         TEXT,
+            role            TEXT,
+            state           TEXT,
+            payload_json    TEXT NOT NULL,
+            actor           TEXT,
+            created_at      INTEGER NOT NULL,
+            expires_at      INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldr_type_ts
+            ON ml_dr_state(record_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mldr_node_type
+            ON ml_dr_state(node_id, record_type, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §248* BLACK SWAN ABSTENTION 2026-05-15] R3A safety
 // — regime-level OOD events (flash crash, structural break). Severity
 // derived from # triggered conditions (5 detection signals). Cooldown
