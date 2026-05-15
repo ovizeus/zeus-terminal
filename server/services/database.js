@@ -994,6 +994,37 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §57 EXACTLY-ONCE EXECUTION / IDEMPOTENCY 2026-05-15] R4 canonical PDF
+// — canonical PDF §57 (lines 1626-1642). Unique intent_id + dedup submit/cancel
+// + retry safety + immutable execution ledger. "Idempotency previne ca acel
+// ceva sa se intample." UNIQUE constraint at DB = physically impossible duplicate.
+migrate('102_ml_execution_intents', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_execution_intents (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            intent_id       TEXT NOT NULL UNIQUE,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            action_type     TEXT NOT NULL CHECK(action_type IN
+                            ('place_order','cancel_order','modify_order','close_position')),
+            payload_hash    TEXT NOT NULL,
+            payload_json    TEXT NOT NULL,
+            status          TEXT NOT NULL CHECK(status IN
+                            ('PENDING','CONFIRMED','REJECTED','EXPIRED')),
+            order_id        TEXT,
+            fill_id         TEXT,
+            position_id     TEXT,
+            reject_reason   TEXT,
+            created_at      INTEGER NOT NULL,
+            confirmed_at    INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlei_user_env_status_ts
+            ON ml_execution_intents(user_id, resolved_env, status, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlei_user_env_payload_hash
+            ON ml_execution_intents(user_id, resolved_env, payload_hash);
+    `);
+});
+
 // [OMEGA Wave 3 §53 ADVERSARIAL SUITE MONTE-CARLO 2026-05-15] R-1 canonical PDF
 // — canonical PDF §53 (line 1587). Defines stress scenarios (funding_spike,
 // oi_cascade, venue_outage, flash_crash, liquidity_evaporation), runs Monte-Carlo
