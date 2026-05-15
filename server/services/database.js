@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §67 CONFORMAL PREDICTION / ABSTENTION BOUNDS 2026-05-15] R5A canonical PDF
+// — canonical PDF §67 (lines 1747-1781). Per-decision formal coverage bounds.
+// Uncertainty-aware NO_TRADE fallback when prediction set too ambiguous.
+// Complement §20 calibration — §67 adds per-case in/out-of-coverage zone.
+migrate('125_ml_conformal_calibration', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_conformal_calibration (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trading_mode            TEXT NOT NULL CHECK(trading_mode IN
+                                    ('scalp','intraday','swing','news_risk')),
+            regime_type             TEXT NOT NULL,
+            coverage_target         REAL NOT NULL,
+            calibration_scores_json TEXT NOT NULL,
+            n_calibration_samples   INTEGER NOT NULL,
+            last_updated            INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, trading_mode, regime_type)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcc_user_env_mode_regime
+            ON ml_conformal_calibration(user_id, resolved_env, trading_mode, regime_type);
+    `);
+});
+
+migrate('126_ml_conformal_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_conformal_decisions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id         TEXT NOT NULL,
+            trading_mode        TEXT NOT NULL CHECK(trading_mode IN
+                                ('scalp','intraday','swing','news_risk')),
+            regime_type         TEXT NOT NULL,
+            prediction_set_size INTEGER NOT NULL,
+            conformal_score     REAL NOT NULL,
+            coverage_target     REAL NOT NULL,
+            in_coverage_zone    INTEGER NOT NULL CHECK(in_coverage_zone IN (0,1)),
+            decision_action     TEXT NOT NULL CHECK(decision_action IN
+                                ('TRADE','NO_TRADE','WAIT')),
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcd_user_env_mode_ts
+            ON ml_conformal_decisions(user_id, resolved_env, trading_mode, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlcd_user_env_regime_ts
+            ON ml_conformal_decisions(user_id, resolved_env, regime_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §54 XAI LAYER 2026-05-15] cross-cutting canonical PDF
 // — canonical PDF §54 (line 1588). Top-3 factori + confidence interval +
 // counterfactual "ce ar fi trebuit sa se schimbe ca sa nu iau trade-ul".
