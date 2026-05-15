@@ -994,6 +994,37 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §53 ADVERSARIAL SUITE MONTE-CARLO 2026-05-15] R-1 canonical PDF
+// — canonical PDF §53 (line 1587). Defines stress scenarios (funding_spike,
+// oi_cascade, venue_outage, flash_crash, liquidity_evaporation), runs Monte-Carlo
+// PnL distribution. Distinct de §44 adversarialSelfTester (binary safety hold).
+migrate('101_ml_adversarial_mc_runs', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_adversarial_mc_runs (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            scenario_type           TEXT NOT NULL CHECK(scenario_type IN
+                                    ('funding_spike','oi_cascade','venue_outage',
+                                     'flash_crash','liquidity_evaporation')),
+            scenario_params_json    TEXT,
+            num_simulations         INTEGER NOT NULL,
+            base_pnl                REAL NOT NULL,
+            mc_mean_pnl             REAL NOT NULL,
+            mc_p5_pnl               REAL NOT NULL,
+            mc_p50_pnl              REAL NOT NULL,
+            mc_p95_pnl              REAL NOT NULL,
+            mc_p99_pnl              REAL NOT NULL,
+            max_drawdown            REAL NOT NULL,
+            max_loss                REAL NOT NULL,
+            stress_factor           REAL NOT NULL,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlamc_user_env_scenario_ts
+            ON ml_adversarial_mc_runs(user_id, resolved_env, scenario_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §56 LIMIT QUEUE POSITION + FILL PROBABILITY 2026-05-15] R4 canonical PDF
 // — canonical PDF §56 (lines 1605-1623). Models queue rank at submit, fill prob
 // decay over time + movement, maker vs taker decision, cancel penalty, missed-fill risk.
