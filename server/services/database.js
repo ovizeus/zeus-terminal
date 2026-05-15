@@ -994,6 +994,28 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 RAID-L LATENCY BUDGET GUARD 2026-05-15] cross-cutting A-Z raid
+// — A-Z raid MUST-ADD item L. Hard cap latency budgets (voice_push <100ms).
+migrate('084_ml_latency_budget_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_latency_budget_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            task_type       TEXT NOT NULL,
+            latency_ms      INTEGER NOT NULL,
+            budget_ms       INTEGER NOT NULL,
+            accepted        INTEGER NOT NULL CHECK(accepted IN (0,1)),
+            drop_reason     TEXT,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mllbl_user_env_task_ts
+            ON ml_latency_budget_log(user_id, resolved_env, task_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mllbl_accepted
+            ON ml_latency_budget_log(accepted, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 RAID-M MOOD EMA TRACKER 2026-05-15] cross-cutting A-Z raid
 // — A-Z raid MUST-ADD item M. Anti-flicker EMA smoothing for Ω mood.
 migrate('083_ml_mood_state', () => {
