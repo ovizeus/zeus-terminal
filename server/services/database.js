@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §12 STATE MACHINE A POZITIEI 2026-05-15] R4
+// — canonical PDF §12 (lines 828-849). 12-state FSM lifecycle (IDLE →
+// WATCHING → ARMED → READY → ENTERED → MANAGING → PARTIAL_TAKEN →
+// RUNNER_ACTIVE → EXITED + INVALIDATED/LOCKED/COOLDOWN safety states).
+// 2 tables: state (current per pos, UNIQUE) + transitions (audit log).
+// First OMEGA module in R4 execution layer.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §12.
+migrate('061_ml_position_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_position_state (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id        TEXT NOT NULL,
+            symbol        TEXT NOT NULL,
+            state         TEXT NOT NULL CHECK(state IN
+                          ('IDLE','WATCHING','ARMED','READY','ENTERED','MANAGING',
+                           'PARTIAL_TAKEN','RUNNER_ACTIVE','EXITED','INVALIDATED',
+                           'LOCKED','COOLDOWN')),
+            state_since   INTEGER NOT NULL,
+            created_at    INTEGER NOT NULL,
+            updated_at    INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, pos_id)
+        );
+        CREATE TABLE IF NOT EXISTS ml_position_transitions (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id        TEXT NOT NULL,
+            from_state    TEXT NOT NULL CHECK(from_state IN
+                          ('IDLE','WATCHING','ARMED','READY','ENTERED','MANAGING',
+                           'PARTIAL_TAKEN','RUNNER_ACTIVE','EXITED','INVALIDATED',
+                           'LOCKED','COOLDOWN')),
+            to_state      TEXT NOT NULL CHECK(to_state IN
+                          ('IDLE','WATCHING','ARMED','READY','ENTERED','MANAGING',
+                           'PARTIAL_TAKEN','RUNNER_ACTIVE','EXITED','INVALIDATED',
+                           'LOCKED','COOLDOWN')),
+            event         TEXT,
+            reason        TEXT NOT NULL,
+            actor         TEXT NOT NULL,
+            created_at    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpt_user_env_pos_ts
+            ON ml_position_transitions(user_id, resolved_env, pos_id, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §15 CONFIDENCE DECAY SI TIME-TO-THESIS 2026-05-15] R2
 // — canonical PDF §15 (lines 909-927). Per-position confidence lifecycle:
 // entry baseline + decay history + thesis criteria + signal-driven decay.
