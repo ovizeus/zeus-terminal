@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §62 ADVERSARIAL MARKET AWARENESS 2026-05-15] R3A canonical PDF
+// — canonical PDF §62 (lines 1733-1734). Bot is observable. Randomize timing
+// /sizing/order-type so HFT/MM cannot read pattern. Self-fingerprint detection.
+// "NU pentru executie mai buna, ci pentru ca pattern-ul sa nu fie citit."
+migrate('109_ml_fingerprint_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_fingerprint_observations (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_type              TEXT NOT NULL,
+            entry_delay_ms          INTEGER NOT NULL,
+            size_jitter_pct         REAL NOT NULL,
+            order_type_used         TEXT NOT NULL CHECK(order_type_used IN
+                                    ('market','limit','post_only','ioc')),
+            actual_slippage_bps     REAL NOT NULL,
+            expected_slippage_bps   REAL NOT NULL,
+            slippage_excess_bps     REAL NOT NULL,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfo_user_env_setup_ts
+            ON ml_fingerprint_observations(user_id, resolved_env, setup_type, ts);
+    `);
+});
+
+migrate('110_ml_fingerprint_alerts', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_fingerprint_alerts (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_type              TEXT NOT NULL,
+            slippage_trend_bps      REAL NOT NULL,
+            samples_in_window       INTEGER NOT NULL,
+            severity                TEXT NOT NULL CHECK(severity IN ('warn','critical')),
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfa_user_env_setup_ts
+            ON ml_fingerprint_alerts(user_id, resolved_env, setup_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §61 RUNTIME INVARIANT ENGINE 2026-05-15] R3A canonical PDF
 // — canonical PDF §61 (lines 1710-1732). 6 built-in invariants + custom registry.
 // Pre/post action verification + lock/alert/snapshot/forensic_log on violation.
