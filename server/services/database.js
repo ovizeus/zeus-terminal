@@ -994,6 +994,26 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 RAID-R REACTION SYSTEM 2026-05-15] Operator A-Z raid
+// — A-Z raid MUST-ADD item R. Ω personality commentary on Manual/DSL trades.
+migrate('088_ml_omega_reactions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_omega_reactions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id              TEXT,
+            outcome_type        TEXT NOT NULL CHECK(outcome_type IN
+                                ('big_win','win','breakeven','loss','big_loss','missed_opportunity')),
+            reaction_text       TEXT NOT NULL,
+            trade_context_json  TEXT NOT NULL,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlor_user_env_ts
+            ON ml_omega_reactions(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 RAID-Q QUIET HOURS SCHEDULER 2026-05-15] Operator A-Z raid
 // — A-Z raid MUST-ADD item Q. Window-based quiet hours for alert suppression.
 migrate('087_ml_quiet_hours', () => {
