@@ -994,6 +994,45 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §64 REGIME DURATION MODELING 2026-05-15] R2 canonical PDF
+// — canonical PDF §64 (lines 1737-1738). Trend 3 weeks vs 3 days = different
+// probability. Track regime age + duration distribution + adjust aggressiveness.
+// "Un bot care stie ca trendul are medie 80h si sunt deja 72h se comporta diferit."
+migrate('113_ml_regime_history', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_regime_history (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            regime_type         TEXT NOT NULL CHECK(regime_type IN
+                                ('trend_up','trend_down','range','chop','volatile_expansion')),
+            start_ts            INTEGER NOT NULL,
+            end_ts              INTEGER,
+            duration_ms         INTEGER,
+            terminated_naturally INTEGER CHECK(terminated_naturally IN (0,1)),
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrh_user_env_type_ts
+            ON ml_regime_history(user_id, resolved_env, regime_type, start_ts);
+    `);
+});
+
+migrate('114_ml_regime_current_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_regime_current_state (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            regime_type         TEXT NOT NULL CHECK(regime_type IN
+                                ('trend_up','trend_down','range','chop','volatile_expansion')),
+            started_at          INTEGER NOT NULL,
+            history_id          INTEGER,
+            last_updated        INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 §63 DEAD MAN'S SWITCH 2026-05-15] R0 canonical PDF
 // — canonical PDF §63 (lines 1735-1736). External independent process receives
 // heartbeat; if absent → close positions + cancel orders + alert. Wave 3 scope
