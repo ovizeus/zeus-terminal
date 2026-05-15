@@ -994,6 +994,39 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §45 LATENCY-AWARE EXECUTION 2026-05-15] R4 canonical PDF
+// — canonical PDF §45 (lines 1528-1538). E2E latency measurement + behavior
+// adaptation: <50ms scalping / 50-150ms swing / >150ms observer.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §45.
+migrate('092_ml_latency_aware', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_latency_measurements (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            e2e_ms                  INTEGER NOT NULL,
+            feed_to_decision_ms     INTEGER,
+            decision_to_order_ms    INTEGER,
+            order_to_ack_ms         INTEGER,
+            mode                    TEXT NOT NULL CHECK(mode IN
+                                    ('SCALPING_ALLOWED','SWING_ONLY','OBSERVER_ONLY')),
+            created_at              INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_latency_modes (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            mode                    TEXT NOT NULL CHECK(mode IN
+                                    ('SCALPING_ALLOWED','SWING_ONLY','OBSERVER_ONLY')),
+            current_latency_ms      INTEGER NOT NULL,
+            updated_at              INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mllm_user_env_ts
+            ON ml_latency_measurements(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §44 ADVERSARIAL SELF-TESTING 2026-05-15] cross-cutting canonical PDF
 // — canonical PDF §44 (lines 1526-1527). Red team scenarios periodic.
 // 6 scenario types: veto_bypass / state_machine_edge / api_saturation /
