@@ -994,6 +994,35 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §13 DATA FRESHNESS SI VALIDARE FEED 2026-05-15] R3A
+// — canonical PDF §13 (lines 852-872). Audit log table for feed health
+// evaluations. Records each evaluateFeedHealth() call: action (OK / OBSERVER /
+// ALERT / PAUSE / REDUCE_RISK / NO_TRADE), issue_count, stale feeds + source
+// divergences + snapshot issues (JSON arrays), clock drift ms, optional context.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §13.
+migrate('056_ml_freshness_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_freshness_log (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            action                TEXT NOT NULL CHECK(action IN
+                                  ('OK','OBSERVER','ALERT','PAUSE','REDUCE_RISK','NO_TRADE')),
+            issue_count           INTEGER NOT NULL DEFAULT 0,
+            stale_feeds_json      TEXT NOT NULL,
+            divergences_json      TEXT NOT NULL,
+            snapshot_issues_json  TEXT NOT NULL,
+            clock_drift_ms        REAL,
+            context_json          TEXT,
+            created_at            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfl_user_env_ts
+            ON ml_freshness_log(user_id, resolved_env, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlfl_action_ts
+            ON ml_freshness_log(action, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §14 CONFLICT RESOLUTION SI VETO RULES 2026-05-15] R3A
 // — canonical PDF §14 (lines 875-903). Audit log table for veto evaluations.
 // Records each evaluateVetoSignals() call: decision (BLOCK/PROCEED/PENALIZED),
