@@ -994,6 +994,34 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §38 DEFINITIA INTELIGENTEI REALE 2026-05-15] meta
+// — canonical PDF §38 (lines 1451-1469). Per-criterion intelligence audit:
+// 12 spec criteria + 4 anti-patterns. Records satisfied/score/evidence
+// per (user × env). Self-assessment dashboard for OMEGA brain.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §38.
+migrate('069_ml_intelligence_checks', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_intelligence_checks (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            criterion     TEXT NOT NULL CHECK(criterion IN
+                          ('knows_regime','knows_context','knows_no_edge',
+                           'knows_signal_conflict','knows_execution_compromised',
+                           'knows_data_degraded','knows_model_drift',
+                           'knows_portfolio_overloaded','knows_when_to_reduce',
+                           'knows_when_to_stop','knows_how_to_explain',
+                           'knows_how_to_learn_honestly')),
+            satisfied     INTEGER NOT NULL CHECK(satisfied IN (0, 1)),
+            score         REAL,
+            evidence_json TEXT,
+            created_at    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlic_user_env_crit_ts
+            ON ml_intelligence_checks(user_id, resolved_env, criterion, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §37 FILOZOFIA CORECTA DE FRECVENTA 2026-05-15] meta
 // — canonical PDF §37 (lines 1416-1445). 2 tables:
 //   ml_frequency_mode_state:       current mode per (user × env) UNIQUE
