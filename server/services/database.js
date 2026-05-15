@@ -959,6 +959,36 @@ migrate('045_ml_governance_versions', () => {
     `);
 });
 
+// [OMEGA Wave 3 §255* AUTO-RESUME DD MEDIUM 2026-05-15] R5B governance
+// — DD pause lifecycle tracking. State: ACTIVE → RESUMED / EXPIRED.
+// Auto-resume eligibility per spec §255*: cooldown 24h + 3 shadow wins
+// + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
+// invariant: dd_at_pause >= 15% never auto-resumes regardless.
+// Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+migrate('047_ml_dd_pauses', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dd_pauses (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pause_reason             TEXT NOT NULL,
+            dd_at_pause              REAL NOT NULL,
+            state                    TEXT NOT NULL DEFAULT 'ACTIVE'
+                                     CHECK(state IN ('ACTIVE', 'RESUMED', 'EXPIRED')),
+            resume_eligible_after    INTEGER NOT NULL,
+            shadow_wins_count        INTEGER NOT NULL DEFAULT 0,
+            auto_resumed             INTEGER NOT NULL DEFAULT 0,
+            paused_at                INTEGER NOT NULL,
+            resumed_at               INTEGER,
+            resumed_by               TEXT,
+            resume_reason            TEXT,
+            paused_by                TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldp_user_env_state
+            ON ml_dd_pauses(user_id, resolved_env, state);
+    `);
+});
+
 // [OMEGA Wave 3 §247* HYPOTHESIS PRE-REGISTRATION 2026-05-15] R5B
 // anti-p-hacking discipline. Each registration locks: hypothesis,
 // predicted metrics, success criteria, eval window, hash. Once
