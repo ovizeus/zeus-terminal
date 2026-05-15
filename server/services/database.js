@@ -994,6 +994,34 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §55 POINT-IN-TIME FEATURE STORE + REPLAY 2026-05-15] R0 canonical PDF
+// — canonical PDF §55 (lines 1589-1602). Coloana vertebrala a reproductibilitatii:
+// salveaza features as-of time (NOT recalculated), snapshot complet (market+features
+// +model+vetos+scores+intent), replay determinist tick-cu-tick, time-travel debugging.
+migrate('099_ml_pit_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_pit_snapshots (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_type       TEXT NOT NULL CHECK(snapshot_type IN
+                                ('decision','tick','event','manual')),
+            ts                  INTEGER NOT NULL,
+            market_state_json   TEXT,
+            feature_state_json  TEXT,
+            model_output_json   TEXT,
+            vetos_json          TEXT,
+            scores_json         TEXT,
+            order_intent_json   TEXT,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpit_user_env_ts
+            ON ml_pit_snapshots(user_id, resolved_env, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlpit_user_env_type_ts
+            ON ml_pit_snapshots(user_id, resolved_env, snapshot_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §42 COUNTERFACTUAL LEARNING ENGINE 2026-05-15] R5A canonical PDF
 // — canonical PDF §42 (lines 1522-1523). Shadow alternative simulations
 // (alt entry/SL/size/TP on actual price path) to calibrate future params.
