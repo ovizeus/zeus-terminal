@@ -888,6 +888,19 @@ migrate('042_ml_ring_health', () => {
     `);
 });
 
+// [OMEGA Wave 2 §16 POST-TRADE ATTRIBUTION 2026-05-15] R5A Learning Core
+// — add causal classification + 6-question assessment columns to attribution
+// events. Strictly additive (ADD COLUMN nullable, no DROP/RENAME, preserves
+// existing data). causal_class CHECK enforced in attributionEngine.js (not
+// in SQL) because adding CHECK via ALTER on SQLite requires table rebuild.
+// Canonical spec: /root/_review/ml_brain/ml_brain_canonic.txt §16.
+migrate('043_ml_attribution_causal', () => {
+    db.exec(`
+        ALTER TABLE ml_attribution_events ADD COLUMN causal_class TEXT;
+        ALTER TABLE ml_attribution_events ADD COLUMN assessment_json TEXT;
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
