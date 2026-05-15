@@ -965,6 +965,19 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §246* GRADUATED DD RECOVERY 2026-05-15] R3A safety
+// — ADD COLUMN x3 la ml_dd_pauses pentru 4-stage recovery ladder
+// (25%/50%/75%/100% size) post-§255* auto-resume. Pure additive
+// (default NULL/0); existing rows safe.
+// Spec: project_ml_brain_pro_244.md §246* (Claude-extras 2026-04-29).
+migrate('049_ml_dd_pauses_graduated_recovery', () => {
+    db.exec(`
+        ALTER TABLE ml_dd_pauses ADD COLUMN recovery_stage INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE ml_dd_pauses ADD COLUMN recovery_wins_at_stage INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE ml_dd_pauses ADD COLUMN recovery_started_at INTEGER;
+    `);
+});
+
 // [OMEGA Wave 3 §253* OPERATOR UNAVAILABILITY LADDER 2026-05-15]
 // Operator Interaction Layer + R5B. Escalation audit log: 24h WARN /
 // 72h HANDOVER / 7d FALLBACK. Hard invariant: FALLBACK sets approval
