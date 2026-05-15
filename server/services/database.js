@@ -994,6 +994,29 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 EXEC-N3 RATE-LIMIT PRIORITY QUEUE 2026-05-15] R4 audit-gap P2 LAST
+// — audit gap 2026-05-05. API rate limit budget priority queue.
+// Spec: project_ml_v3_additional_gaps_audit_2026-05-05.md
+migrate('078_ml_api_request_queue', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_api_request_queue (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            exchange        TEXT NOT NULL,
+            request_type    TEXT NOT NULL,
+            priority        TEXT NOT NULL CHECK(priority IN ('CRITICAL','HIGH','NORMAL','LOW')),
+            payload_json    TEXT NOT NULL,
+            status          TEXT NOT NULL CHECK(status IN ('PENDING','SENT','EXPIRED','DROPPED')),
+            deadline_at     INTEGER,
+            enqueued_at     INTEGER NOT NULL,
+            processed_at    INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlaq_user_env_ex_prio_status
+            ON ml_api_request_queue(user_id, resolved_env, exchange, priority, status);
+    `);
+});
+
 // [OMEGA Wave 3 DOM-N1 SPOOFING DETECTOR 2026-05-15] R2 audit-gap P2
 // — audit gap 2026-05-05. Spoofing + fake wall + layering pattern detection.
 // Spec: project_ml_v3_additional_gaps_audit_2026-05-05.md
