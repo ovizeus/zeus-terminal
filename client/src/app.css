@@ -6065,3 +6065,256 @@ select option {
   95%           { opacity: 0.6; }
   96%           { opacity: 1; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   OMEGA UI — Wave 1 read-only (2026-05-15)
+   ════════════════════════════════════════════════════════════════════
+   Dock icon, dedicated page (Orb + Voice + Chat), mood-tinted theme.
+   Palette: cyan #00d4ff / magenta #ff00d4 / purple #6a4f8a / black space.
+   NO GOLD anywhere per Zeus ops palette rules.
+   Typography: Orbitron / Audiowide for headings + glyphs; system mono
+   for timestamps; system sans for body. */
+
+/* ── Dock icon highlight when active ───────────────────────────── */
+.zd-item[data-id="omega"]              { color: #00d4ff; }
+.zd-item[data-id="omega"]:hover        { color: #ff00d4; filter: drop-shadow(0 0 6px #ff00d4); }
+.zd-item[data-id="omega"].active       { color: #ffffff; filter: drop-shadow(0 0 10px #00d4ff) drop-shadow(0 0 18px #ff00d4); }
+
+/* ── Page root ─────────────────────────────────────────────────── */
+.omega-page {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  background: radial-gradient(ellipse at 50% 0%, #0a1830 0%, #050510 50%, #000005 100%);
+  color: #d6e8ff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  overflow: hidden;
+  position: relative;
+}
+.omega-page::before {
+  /* subtle scanline overlay */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0, transparent 3px, rgba(0,212,255,0.012) 3px, rgba(0,212,255,0.012) 4px);
+  z-index: 1;
+}
+
+/* ── Page header ───────────────────────────────────────────────── */
+.omega-page-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(0,212,255,0.2);
+  background: linear-gradient(180deg, rgba(0,212,255,0.05) 0%, transparent 100%);
+  position: relative; z-index: 2;
+}
+.omega-page-title {
+  display: flex; align-items: baseline; gap: 12px;
+  margin: 0; padding: 0;
+  font-family: 'Orbitron', 'Audiowide', sans-serif;
+  font-weight: 900; font-size: 22px; letter-spacing: 0.15em;
+}
+.omega-title-glyph {
+  font-size: 32px; color: #00d4ff;
+  text-shadow: 0 0 12px #00d4ff, 0 0 24px rgba(0,212,255,0.6);
+  animation: omega-glyph-pulse 3s ease-in-out infinite;
+}
+@keyframes omega-glyph-pulse {
+  0%,100% { text-shadow: 0 0 12px #00d4ff, 0 0 24px rgba(0,212,255,0.6); }
+  50%     { text-shadow: 0 0 18px #ff00d4, 0 0 32px rgba(255,0,212,0.5); }
+}
+.omega-title-name { color: #ffffff; }
+.omega-title-tag {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 400;
+  letter-spacing: 0.2em; color: #6a4f8a; padding-left: 8px; opacity: 0.8;
+}
+.omega-page-meta { display: flex; gap: 14px; align-items: center; }
+.omega-meta-item { display: flex; flex-direction: column; align-items: flex-end; }
+.omega-meta-label { font-size: 9px; color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase; }
+.omega-meta-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #00d4ff; font-weight: 600; }
+.omega-state-ok { color: #00d4ff; }
+.omega-state-degraded { color: #ff8800; }
+.omega-state-offline { color: #ff1744; }
+.omega-state-initializing { color: #b3f0ff; }
+
+.omega-voice-toggle {
+  background: transparent; border: 1px solid rgba(0,212,255,0.4);
+  color: #6a4f8a; padding: 6px 12px; border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  letter-spacing: 0.1em; cursor: pointer; transition: all 0.2s;
+}
+.omega-voice-toggle:hover { border-color: #00d4ff; color: #00d4ff; }
+.omega-voice-toggle.on { border-color: #ff00d4; color: #ff00d4; box-shadow: 0 0 8px rgba(255,0,212,0.3); }
+
+/* ── Grid layout ───────────────────────────────────────────────── */
+.omega-page-grid {
+  flex: 1; display: grid;
+  grid-template-rows: 320px 1fr 220px;
+  gap: 8px; padding: 12px;
+  min-height: 0; position: relative; z-index: 2;
+}
+@media (max-width: 720px) {
+  .omega-page-grid { grid-template-rows: 240px 1fr 200px; padding: 8px; gap: 6px; }
+  .omega-page-title { font-size: 18px; }
+  .omega-title-glyph { font-size: 26px; }
+}
+
+.omega-page-orb-zone,
+.omega-page-voice-zone,
+.omega-page-chat-zone {
+  min-height: 0; position: relative;
+  border: 1px solid rgba(0,212,255,0.18);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(0,212,255,0.025) 0%, transparent 100%);
+  overflow: hidden;
+}
+
+/* ── THE ORB ───────────────────────────────────────────────────── */
+.omega-orb-wrap { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; }
+.omega-orb-canvas { width: 100%; height: 100%; display: block; }
+.omega-orb-mood {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 14px; letter-spacing: 0.3em; color: #ffffff;
+  text-shadow: 0 0 6px currentColor;
+}
+.omega-orb-mood-bar {
+  width: 80px; height: 3px; background: rgba(255,255,255,0.1);
+  border-radius: 2px; overflow: hidden;
+}
+.omega-orb-mood-fill {
+  display: block; height: 100%; transition: width 0.4s ease, background 0.4s ease;
+}
+
+/* ── THE VOICE ─────────────────────────────────────────────────── */
+.omega-voice { width: 100%; height: 100%; display: flex; flex-direction: column; }
+.omega-voice-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,212,255,0.15);
+  background: rgba(0,212,255,0.03);
+}
+.omega-voice-title {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 11px; letter-spacing: 0.3em; color: #00d4ff;
+}
+.omega-voice-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6a4f8a;
+}
+.omega-voice-feed {
+  flex: 1; overflow-y: auto; padding: 8px 12px;
+  scrollbar-width: thin; scrollbar-color: #6a4f8a transparent;
+}
+.omega-voice-feed::-webkit-scrollbar { width: 6px; }
+.omega-voice-feed::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
+.omega-voice-empty {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: #6a4f8a;
+}
+.omega-voice-empty-glyph { font-size: 48px; color: #00d4ff; opacity: 0.4; animation: omega-empty-pulse 4s ease-in-out infinite; }
+@keyframes omega-empty-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.7; } }
+.omega-voice-empty-text {
+  max-width: 420px; text-align: center; font-size: 13px;
+  font-family: 'JetBrains Mono', monospace; line-height: 1.6; letter-spacing: 0.04em;
+}
+
+.omega-utter {
+  border-left: 3px solid #00d4ff;
+  padding: 6px 10px; margin-bottom: 8px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 0 4px 4px 0;
+  animation: omega-utter-in 0.3s ease;
+}
+@keyframes omega-utter-in { 0% { opacity: 0; transform: translateX(-8px); } 100% { opacity: 1; transform: translateX(0); } }
+.omega-utter-head {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #6a4f8a; margin-bottom: 4px;
+}
+.omega-utter-glyph { font-size: 14px; font-weight: bold; }
+.omega-utter-time { letter-spacing: 0.05em; }
+.omega-utter-type { letter-spacing: 0.15em; font-size: 9px; opacity: 0.7; }
+.omega-utter-text {
+  font-size: 14px; line-height: 1.5; color: #d6e8ff;
+  font-family: 'Inter', sans-serif; letter-spacing: 0.01em;
+}
+.omega-utter-critical_alert { background: rgba(255,23,68,0.08); animation: omega-utter-in 0.3s ease, omega-critical-pulse 1.2s ease-in-out infinite; }
+@keyframes omega-critical-pulse { 0%,100% { box-shadow: inset 0 0 0 rgba(255,23,68,0); } 50% { box-shadow: inset 0 0 20px rgba(255,23,68,0.15); } }
+
+/* ── TALK WITH ME ──────────────────────────────────────────────── */
+.omega-chat { width: 100%; height: 100%; display: flex; flex-direction: column; }
+.omega-chat-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,212,255,0.15);
+  background: rgba(255,0,212,0.04);
+}
+.omega-chat-title {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 11px; letter-spacing: 0.3em; color: #ff00d4;
+}
+.omega-chat-hint {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #6a4f8a;
+}
+.omega-chat-scroll {
+  flex: 1; overflow-y: auto; padding: 8px 12px;
+  scrollbar-width: thin; scrollbar-color: #6a4f8a transparent;
+}
+.omega-chat-scroll::-webkit-scrollbar { width: 6px; }
+.omega-chat-scroll::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
+.omega-chat-empty {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+}
+.omega-chat-empty-glyph {
+  font-family: 'Orbitron', sans-serif; font-size: 36px; font-weight: 900;
+  color: #ff00d4; text-shadow: 0 0 12px #ff00d4;
+  animation: omega-glyph-pulse 3s ease-in-out infinite;
+}
+.omega-chat-empty-text {
+  color: #6a4f8a; font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; letter-spacing: 0.05em;
+}
+.omega-chat-row { margin-bottom: 6px; display: flex; }
+.omega-chat-you { justify-content: flex-end; }
+.omega-chat-omega { justify-content: flex-start; }
+.omega-chat-bubble {
+  max-width: 80%; padding: 6px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(0,212,255,0.18);
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.omega-chat-you .omega-chat-bubble { background: rgba(0,212,255,0.08); border-color: rgba(0,212,255,0.35); }
+.omega-chat-omega .omega-chat-bubble { background: rgba(255,0,212,0.04); border-color: rgba(255,0,212,0.3); }
+.omega-chat-prefix {
+  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 900;
+  letter-spacing: 0.2em; color: #6a4f8a; flex-shrink: 0;
+}
+.omega-chat-you .omega-chat-prefix { color: #00d4ff; }
+.omega-chat-omega .omega-chat-prefix { color: #ff00d4; }
+.omega-chat-text { font-size: 13px; line-height: 1.4; color: #d6e8ff; }
+.omega-chat-error {
+  font-size: 11px; color: #ff1744; padding: 4px 12px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.omega-chat-input-row {
+  display: flex; gap: 8px; padding: 8px 12px;
+  border-top: 1px solid rgba(0,212,255,0.15);
+  background: rgba(0,0,0,0.3);
+}
+.omega-chat-input {
+  flex: 1; padding: 8px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(0,212,255,0.25); border-radius: 4px;
+  color: #d6e8ff;
+  font-family: 'Inter', sans-serif; font-size: 13px;
+  letter-spacing: 0.01em; outline: none; transition: all 0.2s;
+}
+.omega-chat-input:focus { border-color: #00d4ff; box-shadow: 0 0 10px rgba(0,212,255,0.25); }
+.omega-chat-input::placeholder { color: #6a4f8a; }
+.omega-chat-input:disabled { opacity: 0.5; }
+.omega-chat-send {
+  padding: 8px 14px; background: linear-gradient(135deg, #00d4ff 0%, #ff00d4 100%);
+  border: none; border-radius: 4px; cursor: pointer;
+  color: #050510; font-family: 'Orbitron', sans-serif; font-weight: 900;
+  font-size: 14px; transition: all 0.2s;
+}
+.omega-chat-send:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+.omega-chat-send:disabled { opacity: 0.4; cursor: not-allowed; }

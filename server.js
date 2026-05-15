@@ -1111,6 +1111,13 @@ app.use('/api/journal', journalRoutes);
 const brainParityRoutes = require('./server/routes/brainParity');
 app.use('/api/brain/parity', brainParityRoutes);
 
+// ─── [OMEGA Wave 1 UI 2026-05-15] Read-only OMEGA UI feed ───
+// Mounts GET /api/omega/{voice,mood,health} + POST /api/omega/chat. Read
+// model only — no mutation paths. ML write-side is dormant (Wave 2+ wires
+// the actual learning). Frontend OmegaPage consumes these endpoints.
+const omegaRoutes = require('./server/routes/omega');
+app.use('/api/omega', omegaRoutes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);

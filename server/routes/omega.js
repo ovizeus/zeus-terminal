@@ -1,0 +1,160 @@
+'use strict';
+
+/**
+ * OMEGA UI API Routes (Wave 1 read-only UI scope)
+ *
+ * Surfaces ml_voice_log / ml_decision_snapshots / ring health to the client.
+ * Strict per-user isolation (req.user.id from JWT middleware). Read-only —
+ * no mutation paths. Chat POST returns stub responses until Wave 8 wires
+ * the real `chatResponder` from `_voice/chatResponder.js`.
+ *
+ * All endpoints require authenticated session (sessionAuth middleware
+ * applied at /api/* level in server.js).
+ */
+
+const express = require('express');
+const router = express.Router();
+
+const { db } = require('../services/database');
+const voiceLogger = require('../services/ml/_voice/voiceLogger');
+const auditTrail = require('../services/ml/_audit/auditTrail');
+const R0 = require('../services/ml/R0_substrate');
+
+const MOODS = ['CALM', 'FOCUSED', 'EXCITED', 'NERVOUS', 'ANGRY', 'SAD', 'BORED'];
+
+function _requireUser(req, res) {
+    if (!req.user || !req.user.id) {
+        res.status(401).json({ ok: false, error: 'unauthorized' });
+        return null;
+    }
+    return req.user.id;
+}
+
+// ── GET /api/omega/voice?limit=N ──────────────────────────────────────────
+// Returns most recent utterances for the authenticated user.
+router.get('/voice', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 50));
+    try {
+        const rows = voiceLogger.getRecent({ userId, limit });
+        res.json({ ok: true, utterances: rows });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err && err.message || err) });
+    }
+});
+
+// ── GET /api/omega/mood ─────────────────────────────────────────────────────
+// Returns current mood for Orb animation. Until R5A learning + R3A safety
+// guards wire up real mood resolver (Wave 4-5), serves a deterministic demo
+// cycle through 7 moods so the Orb is alive visually from day one.
+//
+// Demo cycle: 7 moods × 14s each = 98s loop. Includes intensity 0..1 so the
+// Orb can pulse harder during EXCITED / NERVOUS / ANGRY moments.
+router.get('/mood', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const cycleMs = 14_000;
+    const idx = Math.floor((Date.now() / cycleMs) % MOODS.length);
+    const mood = MOODS[idx];
+    const phase = ((Date.now() % cycleMs) / cycleMs);
+    const intensity = mood === 'EXCITED' || mood === 'ANGRY' ? 0.7 + 0.3 * Math.sin(phase * Math.PI * 4)
+        : mood === 'NERVOUS' ? 0.5 + 0.5 * Math.random()
+        : mood === 'BORED' || mood === 'SAD' ? 0.25 + 0.1 * Math.sin(phase * Math.PI * 2)
+        : 0.5 + 0.2 * Math.sin(phase * Math.PI * 2);
+    res.json({
+        ok: true,
+        mood,
+        intensity: Math.max(0, Math.min(1, intensity)),
+        source: 'demo_cycle',
+        next_change_ms: cycleMs - (Date.now() % cycleMs)
+    });
+});
+
+// ── GET /api/omega/health ───────────────────────────────────────────────────
+// Returns R0 substrate health + open utterance count + recent decision counts.
+router.get('/health', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const r0 = R0.getHealth();
+        const since24h = Date.now() - 24 * 3600 * 1000;
+        const utterancesLast24h = db.prepare(
+            `SELECT COUNT(*) AS n FROM ml_voice_log WHERE user_id = ? AND created_at >= ?`
+        ).get(userId, since24h).n;
+        const decisionsLast24h = db.prepare(
+            `SELECT COUNT(*) AS n FROM ml_decision_snapshots WHERE user_id = ? AND created_at >= ?`
+        ).get(userId, since24h).n;
+        res.json({
+            ok: true,
+            R0: r0,
+            utterances_24h: utterancesLast24h,
+            decisions_24h: decisionsLast24h,
+            wave: 'WAVE 1 — read-only UI mode (ML not yet learning)'
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err && err.message || err) });
+    }
+});
+
+// ── POST /api/omega/chat ────────────────────────────────────────────────────
+// Stub chat responder. Real implementation in Wave 8 wires `_voice/chatResponder.js`
+// which consumes ring state. For now: state-aware basic responses based on
+// open positions count + AT state. Persists every exchange to ml_voice_log
+// so the Voice feed shows the conversation too.
+router.post('/chat', express.json(), (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const question = String(req.body && req.body.text || '').slice(0, 500).trim();
+    if (!question) {
+        return res.status(400).json({ ok: false, error: 'text required' });
+    }
+
+    let openPositions = 0;
+    try {
+        openPositions = db.prepare(
+            `SELECT COUNT(*) AS n FROM at_pos WHERE user_id = ? AND status = 'OPEN'`
+        ).get(userId).n;
+    } catch (_) { /* table may not exist on bare environments */ }
+
+    let reply, mood = 'CALM';
+    const q = question.toLowerCase();
+    if (q.match(/\b(open|long|short|buy|sell|trade|enter)\b/)) {
+        if (openPositions > 0) {
+            reply = `not yet boss. you got ${openPositions} position${openPositions > 1 ? 's' : ''} open. one trade at a time, capisce.`;
+            mood = 'FOCUSED';
+        } else {
+            reply = `i hear you. but i'm still learning — Wave 2 brings the real bandit. for now i just watch and remember.`;
+            mood = 'BORED';
+        }
+    } else if (q.match(/\b(how|status|state|health|alive|there)\b/)) {
+        reply = openPositions > 0
+            ? `online. watching ${openPositions} live position${openPositions > 1 ? 's' : ''}. coffee strong, math sharp.`
+            : `online. no positions, market quiet. just sniffing. ask me anything.`;
+        mood = openPositions > 0 ? 'FOCUSED' : 'CALM';
+    } else if (q.match(/\b(why|explain|reason|because|how come)\b/)) {
+        reply = `can't explain decisions yet — Wave 2 wires my brain to the audit trail. soon though. very soon.`;
+        mood = 'SAD';
+    } else if (q.match(/\b(fuck|shit|wtf|hell|dammit)\b/)) {
+        reply = `easy boss. breathe. markets do that.`;
+        mood = 'CALM';
+    } else if (q.match(/\b(hi|hello|hey|yo|sup)\b/)) {
+        reply = `yo boss. omega here. still learning the ropes but already listening.`;
+        mood = 'EXCITED';
+    } else {
+        reply = `interesting question. i'll remember it. ask me again post-Wave-2 when i can think back at you properly.`;
+        mood = 'FOCUSED';
+    }
+
+    try {
+        voiceLogger.logUtterance({
+            userId, utteranceType: 'CHAT_REPLY', mood, text: reply,
+            templateId: 'wave1_stub',
+            contextJson: JSON.stringify({ question, openPositions })
+        });
+    } catch (_) { /* defensive — never fail chat on log error */ }
+
+    res.json({ ok: true, reply, mood });
+});
+
+module.exports = router;
