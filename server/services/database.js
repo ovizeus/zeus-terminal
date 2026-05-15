@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §72 META-LEARNING / RAPID ADAPTATION 2026-05-15] R5A canonical PDF
+// — canonical PDF §72 (lines 1974-1975). Track adaptation speed per regime transition.
+// Bot normal 3-6 weeks → bot cu meta-learning 3-5 days. Wave 3 scope = adaptation
+// episode tracking + speedup measurement. Model training infra deferred to ML phase.
+migrate('135_ml_meta_adaptation_episodes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_meta_adaptation_episodes (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            episode_id                  TEXT NOT NULL UNIQUE,
+            from_regime                 TEXT NOT NULL,
+            to_regime                   TEXT NOT NULL,
+            detection_ts                INTEGER NOT NULL,
+            recalibration_complete_ts   INTEGER,
+            samples_used                INTEGER NOT NULL DEFAULT 0,
+            recalibration_quality_score REAL,
+            status                      TEXT NOT NULL CHECK(status IN
+                                        ('DETECTING','ADAPTING','CALIBRATED','FAILED')),
+            failure_reason              TEXT,
+            created_at                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmae_user_env_status_ts
+            ON ml_meta_adaptation_episodes(user_id, resolved_env, status, created_at);
+    `);
+});
+
+migrate('136_ml_meta_baseline_speed', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_meta_baseline_speed (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            avg_adaptation_hours        REAL NOT NULL DEFAULT 0,
+            p50_samples_to_calibrate    INTEGER NOT NULL DEFAULT 0,
+            p95_samples_to_calibrate    INTEGER NOT NULL DEFAULT 0,
+            episodes_observed           INTEGER NOT NULL DEFAULT 0,
+            last_updated                INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 §71 INTERNAL DEBATE / PROPOSER-CRITIC-JUDGE 2026-05-15] R6 canonical PDF
 // — canonical PDF §71 (lines 1924-1973). 4 roles: proposer/critic/risk_prosecutor/judge.
 // Veto power critic/risk → NO_TRADE. Per-role quality tracking. "Orice semnal trebuie
