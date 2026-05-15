@@ -994,6 +994,38 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §23 SIMULARE COSTURI / TCA / MARKET IMPACT 2026-05-15] R4
+// — canonical PDF §23 (lines 1102-1116). Per-decision TCA estimate +
+// optional actual reconciliation:
+//   estimated_*_bps = pre-trade estimates per slippage/fees/total
+//   actual_*_bps    = filled-in post-fill from execution layer
+//   is_viable       = INVARIANT (line 1116) check at decision time
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §23.
+migrate('066_ml_tca_estimates', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_tca_estimates (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id                      TEXT,
+            exchange                    TEXT NOT NULL,
+            order_size_usd              REAL NOT NULL,
+            estimated_slippage_bps      REAL NOT NULL,
+            estimated_fees_bps          REAL NOT NULL,
+            estimated_total_cost_bps    REAL NOT NULL,
+            actual_slippage_bps         REAL,
+            actual_fees_bps             REAL,
+            is_viable                   INTEGER NOT NULL CHECK(is_viable IN (0, 1)),
+            expected_edge_bps           REAL,
+            created_at                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltca_user_env_ex_ts
+            ON ml_tca_estimates(user_id, resolved_env, exchange, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mltca_viable
+            ON ml_tca_estimates(is_viable, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §27 PATTERNS TEMPORALE 2026-05-15] R2
 // — canonical PDF §27 (lines 1194-1211). Per-pattern rolling outcome stats:
 //   Track how 10 temporal patterns (sessions, day-of-week, EOM/EOQ, etc.)
