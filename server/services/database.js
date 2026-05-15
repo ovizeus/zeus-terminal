@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §29 CIRCUIT BREAKER MULTI-NIVEL 2026-05-15] R3A
+// — canonical PDF §29 (lines 1237-1267). State machine + history:
+//   - ml_circuit_state: current breaker state per (user × env) — UNIQUE.
+//     Level L0-L5, optional probation, manual_required flag.
+//   - ml_circuit_history: append-only transitions log for audit.
+// 5-level escalation per spec (L1 reduce size → L2 stop new entries →
+// L3 management-only → L4 full stop → L5 flatten). Probation prevents
+// direct return to full power post-incident (canonical recovery logic).
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §29.
+migrate('058_ml_circuit_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_circuit_state (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            level                         TEXT NOT NULL CHECK(level IN ('L0','L1','L2','L3','L4','L5')),
+            reason                        TEXT NOT NULL,
+            actor                         TEXT NOT NULL,
+            probation_active              INTEGER NOT NULL DEFAULT 0,
+            probation_trades_remaining    INTEGER NOT NULL DEFAULT 0,
+            manual_required               INTEGER NOT NULL DEFAULT 0,
+            since                         INTEGER NOT NULL,
+            updated_at                    INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE TABLE IF NOT EXISTS ml_circuit_history (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            old_level       TEXT,
+            new_level       TEXT NOT NULL CHECK(new_level IN ('L0','L1','L2','L3','L4','L5')),
+            transition_type TEXT NOT NULL CHECK(transition_type IN
+                            ('ESCALATE','PROBATION_ENTER','PROBATION_DECREMENT','RESUME')),
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlch_user_env_ts
+            ON ml_circuit_history(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §28 OPERATIONAL SAFETY SI POSITION RECONCILIATION 2026-05-15] R3A
 // — canonical PDF §28 (lines 1217-1231). Audit log table for 3 operational
 // safety primitives: reconcilePosition (RECON), monitorLatency (LATENCY),
