@@ -994,6 +994,44 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §37 FILOZOFIA CORECTA DE FRECVENTA 2026-05-15] meta
+// — canonical PDF §37 (lines 1416-1445). 2 tables:
+//   ml_frequency_mode_state:       current mode per (user × env) UNIQUE
+//   ml_frequency_mode_transitions: append-only mode change history
+// 4 modes per spec: SNIPER/SCALP/OBSERVER/ADAPTIVE.
+// Principle: "regimul pietei decide frecventa" (line 1419).
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §37.
+migrate('068_ml_frequency_modes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_frequency_mode_state (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            mode          TEXT NOT NULL CHECK(mode IN ('SNIPER','SCALP','OBSERVER','ADAPTIVE')),
+            since         INTEGER NOT NULL,
+            reason        TEXT NOT NULL,
+            actor         TEXT NOT NULL,
+            regime        TEXT,
+            created_at    INTEGER NOT NULL,
+            updated_at    INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE TABLE IF NOT EXISTS ml_frequency_mode_transitions (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            from_mode     TEXT,
+            to_mode       TEXT NOT NULL CHECK(to_mode IN ('SNIPER','SCALP','OBSERVER','ADAPTIVE')),
+            reason        TEXT NOT NULL,
+            actor         TEXT NOT NULL,
+            regime        TEXT,
+            created_at    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfmt_user_env_ts
+            ON ml_frequency_mode_transitions(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §36 REGULI NUMERICE SI PRAGURI CONCRETE 2026-05-15] R3B
 // — canonical PDF §36 (lines 1390-1410). 2 tables forming single source
 // of truth for ALL numerical thresholds:
