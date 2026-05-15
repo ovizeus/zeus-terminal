@@ -994,6 +994,47 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §26 ML AVANSAT SI RL PENTRU MANAGEMENT 2026-05-15] R6
+// — canonical PDF §26 (lines 1174-1188). 2 tables:
+//   ml_rl_decisions: per-action audit (proposed/allowed/blockers/reward)
+//   ml_rl_validation_state: per (user × env) validation stage (UNIQUE)
+// 5 INVARIANTS enforced "in cusca de risc" (lines 1184-1188).
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §26.
+migrate('072_ml_rl_management', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_rl_decisions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id          TEXT,
+            action_type     TEXT NOT NULL CHECK(action_type IN
+                            ('take_partial','activate_trailing','force_exit',
+                             'leave_runner','aggressive_reduce')),
+            proposed_at     INTEGER,
+            allowed         INTEGER NOT NULL DEFAULT 0,
+            blockers_json   TEXT NOT NULL DEFAULT '[]',
+            executed        INTEGER NOT NULL DEFAULT 0,
+            reward          REAL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_rl_validation_state (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            stage           TEXT NOT NULL CHECK(stage IN
+                            ('simulator','backtest','shadow','probation','live')),
+            since           INTEGER NOT NULL,
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            created_at      INTEGER NOT NULL,
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrd_user_env_pos
+            ON ml_rl_decisions(user_id, resolved_env, pos_id);
+    `);
+});
+
 // [OMEGA Wave 3 §32 OPTIONS / GEX / MAX PAIN 2026-05-15] R2
 // — canonical PDF §32 (lines 1313-1321). Options market context observations.
 // INVARIANT line 1321: "options data nu este obligatoriu semnal primar,
