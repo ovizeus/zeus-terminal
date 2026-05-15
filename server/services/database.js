@@ -965,6 +965,47 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §33 A/B TESTING / SHADOW COMPARE 2026-05-15] R6
+// — canonical PDF §33 (lines 1324-1336). 2 NEW tables for experiment
+// lifecycle: ml_experiments + ml_experiment_outcomes. Pairs cu §19
+// versionRegistry (winner promotion via activateVersion).
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §33.
+migrate('053_ml_experiments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_experiments (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            name                TEXT NOT NULL,
+            version_a_id        INTEGER NOT NULL,
+            version_b_id        INTEGER NOT NULL,
+            allocation_pct_b    REAL NOT NULL CHECK(allocation_pct_b >= 0 AND allocation_pct_b <= 100),
+            isolation_mode      TEXT NOT NULL CHECK(isolation_mode IN ('STRICT','SHARED_CAPITAL')),
+            state               TEXT NOT NULL DEFAULT 'CREATED'
+                                CHECK(state IN ('CREATED','RUNNING','COMPLETED','PROMOTED','ROLLED_BACK')),
+            started_at          INTEGER,
+            completed_at        INTEGER,
+            decided_at          INTEGER,
+            decided_by          TEXT,
+            decision_reason     TEXT,
+            actor               TEXT NOT NULL,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlexp_state
+            ON ml_experiments(state, created_at);
+
+        CREATE TABLE IF NOT EXISTS ml_experiment_outcomes (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            experiment_id       INTEGER NOT NULL,
+            arm                 TEXT NOT NULL CHECK(arm IN ('A','B')),
+            decision_digest     TEXT NOT NULL,
+            outcome             TEXT NOT NULL,
+            pnl_pct             REAL,
+            recorded_at         INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlexpo_exp_arm
+            ON ml_experiment_outcomes(experiment_id, arm);
+    `);
+});
+
 // [OMEGA Wave 3 §18 SHADOW MODE SI LANSARE CONTROLATA 2026-05-15] R5B
 // — canonical PDF §18 (lines 990-1015). 6-stage deployment ladder cu
 // transition log: ENTER/EXIT/DEGRADE/PAUSE/ROLLBACK. Pairs cu §19
