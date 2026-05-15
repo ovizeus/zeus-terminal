@@ -994,6 +994,28 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §48 ENSEMBLE VOTING 2026-05-15] R6 canonical PDF
+// — canonical PDF §48 (lines 1562-1572). 3-model voting:
+//   3/3 → 100% size, 2/3 → 50%, 1-0/3 → NO_TRADE.
+migrate('095_ml_ensemble_votes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ensemble_votes (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id         TEXT NOT NULL,
+            model_type          TEXT NOT NULL,
+            vote_action         TEXT NOT NULL CHECK(vote_action IN ('BUY','SELL','NO_TRADE')),
+            vote_confidence     REAL NOT NULL,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlev_user_env_dec
+            ON ml_ensemble_votes(user_id, resolved_env, decision_id);
+        CREATE INDEX IF NOT EXISTS idx_mlev_model_action
+            ON ml_ensemble_votes(model_type, vote_action);
+    `);
+});
+
 // [OMEGA Wave 3 §47 INACTIVITY DECAY 2026-05-15] meta canonical PDF
 // — canonical PDF §47 (lines 1553-1560). Anti-FOMO: threshold INCREASES
 // after X days of inactivity (spec EXPLICIT: do NOT decrease).
