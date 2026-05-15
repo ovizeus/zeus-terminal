@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §25 EXPLAINABILITY / SHAP / LIMBAJ UMAN 2026-05-15] cross-cutting
+// — canonical PDF §25 (lines 1156-1168). 2 tables:
+//   ml_explanations:    per-decision SHAP values + derived top3 factors
+//                       + decisive factor + human-language explanation
+//   ml_feature_health:  rolling feature importance tracking + degradation
+//                       detection + disable-in-model flag
+// First module in NEW _crosscutting/ directory. Serves R2/R5A/R6 rings.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §25.
+migrate('063_ml_explanations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_explanations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id         TEXT NOT NULL,
+            pos_id              TEXT,
+            decision            TEXT NOT NULL,
+            shap_values_json    TEXT NOT NULL,
+            top_positive_json   TEXT NOT NULL,
+            top_negative_json   TEXT NOT NULL,
+            decisive_factor     TEXT,
+            human_language      TEXT,
+            model_version       TEXT,
+            created_at          INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, decision_id)
+        );
+        CREATE TABLE IF NOT EXISTS ml_feature_health (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            feature_name        TEXT NOT NULL,
+            sample_count        INTEGER NOT NULL DEFAULT 0,
+            mean_importance     REAL NOT NULL DEFAULT 0,
+            last_seen_at        INTEGER,
+            disabled            INTEGER NOT NULL DEFAULT 0,
+            disabled_reason     TEXT,
+            disabled_at         INTEGER,
+            created_at          INTEGER NOT NULL,
+            updated_at          INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, feature_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlex_user_env_dec
+            ON ml_explanations(user_id, resolved_env, decision_id);
+        CREATE INDEX IF NOT EXISTS idx_mlfh_user_env_feat
+            ON ml_feature_health(user_id, resolved_env, feature_name);
+    `);
+});
+
 // [OMEGA Wave 3 §24 ARHITECTURA ML SI DETECTORS 2026-05-15] R2
 // — canonical PDF §24 (lines 1122-1150). Detector registry + per-call outputs:
 //   ml_detector_registry: catalog of detectors with input/output schema,

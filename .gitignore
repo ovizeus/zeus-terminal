@@ -51,6 +51,7 @@ _*
 !server/services/ml/_audit/
 !server/services/ml/_voice/
 !server/services/ml/_operator/
+!server/services/ml/_crosscutting/
 
 # React app build output
 public/app/
