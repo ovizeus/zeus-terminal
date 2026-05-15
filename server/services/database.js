@@ -994,6 +994,30 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 OBS-2 SIZE-RAMP ALGORITHM 2026-05-15] R3A expert-obs P1
+// — expert observation 2026-05-05. Size ramping for first N live trades.
+// Spec: project_ml_v3_expert_observations_2026-05-05.md
+migrate('079_ml_size_ramp_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_size_ramp_state (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            stage               TEXT NOT NULL CHECK(stage IN
+                                ('STAGE_1','STAGE_2','STAGE_3','STAGE_4','COMPLETE')),
+            trades_completed    INTEGER NOT NULL DEFAULT 0,
+            wins_count          INTEGER NOT NULL DEFAULT 0,
+            losses_count        INTEGER NOT NULL DEFAULT 0,
+            current_multiplier  REAL NOT NULL DEFAULT 0.25,
+            planned_trades      INTEGER NOT NULL,
+            started_at          INTEGER NOT NULL,
+            completed_at        INTEGER,
+            updated_at          INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env)
+        );
+    `);
+});
+
 // [OMEGA Wave 3 EXEC-N3 RATE-LIMIT PRIORITY QUEUE 2026-05-15] R4 audit-gap P2 LAST
 // — audit gap 2026-05-05. API rate limit budget priority queue.
 // Spec: project_ml_v3_additional_gaps_audit_2026-05-05.md
