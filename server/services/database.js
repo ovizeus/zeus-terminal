@@ -994,6 +994,27 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 OBS-6 DB CONTENTION MONITOR 2026-05-15] R0 expert-obs P1 PERF
+// — expert observation 2026-05-05. SQLite contention monitoring at scale.
+migrate('082_ml_db_contention', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_db_contention_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            operation       TEXT NOT NULL,
+            duration_ms     INTEGER NOT NULL,
+            lock_wait_ms    INTEGER,
+            error_msg       TEXT,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldcl_user_env_op_ts
+            ON ml_db_contention_log(user_id, resolved_env, operation, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mldcl_duration
+            ON ml_db_contention_log(duration_ms);
+    `);
+});
+
 // [OMEGA Wave 3 OBS-5 FAILURE MODE RUNBOOK 2026-05-15] Operator expert-obs P1
 // — expert observation 2026-05-05. Ops-grade runbooks per failure mode.
 migrate('081_ml_runbooks', () => {
