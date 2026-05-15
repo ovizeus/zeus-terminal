@@ -994,6 +994,36 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §42 COUNTERFACTUAL LEARNING ENGINE 2026-05-15] R5A canonical PDF
+// — canonical PDF §42 (lines 1522-1523). Shadow alternative simulations
+// (alt entry/SL/size/TP on actual price path) to calibrate future params.
+// "Singura metoda obiectiva de optimizare a executiei fara look-ahead bias."
+migrate('098_ml_counterfactual_runs', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_counterfactual_runs (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trade_id            TEXT NOT NULL,
+            param_type          TEXT NOT NULL CHECK(param_type IN ('entry','sl','size','tp')),
+            actual_value        REAL NOT NULL,
+            alt_value           REAL NOT NULL,
+            actual_pnl          REAL NOT NULL,
+            alt_pnl             REAL NOT NULL,
+            would_have_hit_sl   INTEGER NOT NULL CHECK(would_have_hit_sl IN (0,1)),
+            would_have_hit_tp   INTEGER NOT NULL CHECK(would_have_hit_tp IN (0,1)),
+            improvement         REAL NOT NULL,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcf_user_env_ts
+            ON ml_counterfactual_runs(user_id, resolved_env, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlcf_user_env_param
+            ON ml_counterfactual_runs(user_id, resolved_env, param_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlcf_trade
+            ON ml_counterfactual_runs(trade_id);
+    `);
+});
+
 // [OMEGA Wave 3 §41 STRATEGY CROWDING DETECTION 2026-05-15] R5A canonical PDF
 // — canonical PDF §41 (lines 1520-1521). 3rd drift type: edge decay from
 // crowding. Not detectable by KS/PSI (distribution looks normal).
