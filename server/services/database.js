@@ -994,6 +994,39 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §40 STRUCTURAL CAUSAL MODEL 2026-05-15] R2 canonical PDF
+// — canonical PDF §40 (lines 1518-1519). Explicit causal chains
+// (DXY → risk → liquidations → bounce) for distribution-shift robustness.
+migrate('096_ml_structural_causal_model', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_causal_chains (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            chain_id            TEXT NOT NULL UNIQUE,
+            name                TEXT NOT NULL,
+            edges_json          TEXT NOT NULL,
+            expected_outcome    TEXT NOT NULL,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_causal_observations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            chain_id            TEXT NOT NULL,
+            state               TEXT NOT NULL CHECK(state IN
+                                ('LATENT','TRIGGERED','RESOLVED','INVALIDATED')),
+            trigger_event_json  TEXT,
+            evidence_json       TEXT,
+            actual_outcome      TEXT,
+            matched             INTEGER,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlco_user_env_chain
+            ON ml_causal_observations(user_id, resolved_env, chain_id);
+        CREATE INDEX IF NOT EXISTS idx_mlco_state
+            ON ml_causal_observations(state, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §48 ENSEMBLE VOTING 2026-05-15] R6 canonical PDF
 // — canonical PDF §48 (lines 1562-1572). 3-model voting:
 //   3/3 → 100% size, 2/3 → 50%, 1-0/3 → NO_TRADE.
