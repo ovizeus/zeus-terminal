@@ -994,6 +994,34 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §30 PORTOFOLIU CORELATII SI CAPITAL GOVERNANCE 2026-05-15] R3A
+// — canonical PDF §30 (lines 1273-1285). Audit log table for 5 portfolio
+// governance primitives: evaluateNewPositionRisk (POSITION_RISK),
+// calculateExposure (EXPOSURE), assessClusterRisk (CLUSTER),
+// estimateRuinProbability (RUIN), computeCorrelationMatrix (CORRELATION).
+// Per (user × env) isolation. Composability: BLOCK → §14 portfolio_risk.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §30.
+migrate('059_ml_portfolio_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_portfolio_state (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            check_kind            TEXT NOT NULL CHECK(check_kind IN
+                                  ('POSITION_RISK','EXPOSURE','CLUSTER','RUIN','CORRELATION')),
+            decision              TEXT NOT NULL CHECK(decision IN ('ALLOW','RESTRICT','BLOCK')),
+            total_exposure_pct    REAL,
+            risk_score            REAL,
+            details_json          TEXT,
+            created_at            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlps_user_env_kind_ts
+            ON ml_portfolio_state(user_id, resolved_env, check_kind, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlps_decision_ts
+            ON ml_portfolio_state(decision, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §29 CIRCUIT BREAKER MULTI-NIVEL 2026-05-15] R3A
 // — canonical PDF §29 (lines 1237-1267). State machine + history:
 //   - ml_circuit_state: current breaker state per (user × env) — UNIQUE.
