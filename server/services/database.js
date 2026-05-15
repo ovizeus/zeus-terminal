@@ -965,6 +965,35 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §18 SHADOW MODE SI LANSARE CONTROLATA 2026-05-15] R5B
+// — canonical PDF §18 (lines 990-1015). 6-stage deployment ladder cu
+// transition log: ENTER/EXIT/DEGRADE/PAUSE/ROLLBACK. Pairs cu §19
+// versionRegistry + §20 calibration + §21 drift for gate criteria.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §18.
+migrate('052_ml_shadow_stage_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_shadow_stage_log (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_id              INTEGER NOT NULL,
+            stage                   TEXT NOT NULL CHECK(stage IN (
+                'offline_backtest', 'walk_forward', 'paper',
+                'shadow_live', 'limited_probation', 'normal_live'
+            )),
+            transition_type         TEXT NOT NULL CHECK(transition_type IN (
+                'ENTER', 'EXIT', 'DEGRADE', 'PAUSE', 'ROLLBACK'
+            )),
+            metrics_json            TEXT,
+            threshold_breach_json   TEXT,
+            reason                  TEXT NOT NULL,
+            actor                   TEXT NOT NULL,
+            started_at              INTEGER NOT NULL,
+            ended_at                INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlssl_version_ts
+            ON ml_shadow_stage_log(version_id, started_at);
+    `);
+});
+
 // [OMEGA Wave 3 §243 DISASTER RECOVERY 2026-05-15] R0 substrate
 // — DR orchestration: heartbeat tracking, backup manifest, failover
 // state machine, DR drill log. §243 is chat-precedent addition
