@@ -994,6 +994,43 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §43 NO TRADE EXPLAINABILITY 2026-05-15] cross-cutting canonical PDF
+// — canonical PDF §43 (lines 1524-1525). Closes asymmetric learning gap:
+// log every NO_TRADE refusal + retrospective outcome (MISSED 3R+ / GOOD_SKIP / NEUTRAL).
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §43.
+migrate('089_ml_no_trade_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_no_trade_decisions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol                  TEXT,
+            signal_candidate_json   TEXT NOT NULL,
+            veto_reason             TEXT NOT NULL,
+            score                   REAL NOT NULL,
+            threshold               REAL NOT NULL,
+            regime                  TEXT,
+            expected_direction      TEXT,
+            created_at              INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_no_trade_outcomes (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            no_trade_id             INTEGER NOT NULL,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            market_move_r           REAL NOT NULL,
+            direction_matched       INTEGER NOT NULL CHECK(direction_matched IN (0,1)),
+            outcome_type            TEXT NOT NULL CHECK(outcome_type IN
+                                    ('MISSED_OPPORTUNITY','GOOD_SKIP','NEUTRAL','PENDING')),
+            validated_at            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlntd_user_env_reason_ts
+            ON ml_no_trade_decisions(user_id, resolved_env, veto_reason, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlnto_user_env_outcome
+            ON ml_no_trade_outcomes(user_id, resolved_env, outcome_type);
+    `);
+});
+
 // [OMEGA Wave 3 RAID-R REACTION SYSTEM 2026-05-15] Operator A-Z raid
 // — A-Z raid MUST-ADD item R. Ω personality commentary on Manual/DSL trades.
 migrate('088_ml_omega_reactions', () => {
