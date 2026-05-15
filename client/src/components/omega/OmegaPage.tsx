@@ -83,11 +83,11 @@ export function OmegaPage() {
                                 <span className={`omega-meta-val omega-state-${health.R0.state.toLowerCase()}`}>{health.R0.state}</span>
                             </span>
                             <span className="omega-meta-item">
-                                <span className="omega-meta-label">voice/24h</span>
+                                <span className="omega-meta-label">V·24h</span>
                                 <span className="omega-meta-val">{health.utterances_24h}</span>
                             </span>
                             <span className="omega-meta-item">
-                                <span className="omega-meta-label">decisions/24h</span>
+                                <span className="omega-meta-label">D·24h</span>
                                 <span className="omega-meta-val">{health.decisions_24h}</span>
                             </span>
                         </>

@@ -6104,6 +6104,7 @@ select option {
   border-bottom: 1px solid rgba(0,212,255,0.2);
   background: linear-gradient(180deg, rgba(0,212,255,0.05) 0%, transparent 100%);
   position: relative; z-index: 2;
+  flex-wrap: wrap; gap: 8px; min-width: 0;
 }
 .omega-page-title {
   display: flex; align-items: baseline; gap: 12px;
@@ -6125,10 +6126,30 @@ select option {
   font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 400;
   letter-spacing: 0.2em; color: #6a4f8a; padding-left: 8px; opacity: 0.8;
 }
-.omega-page-meta { display: flex; gap: 14px; align-items: center; }
-.omega-meta-item { display: flex; flex-direction: column; align-items: flex-end; }
-.omega-meta-label { font-size: 9px; color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase; }
-.omega-meta-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #00d4ff; font-weight: 600; }
+.omega-page-meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.omega-meta-item { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.omega-meta-label { font-size: 9px; color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase; white-space: nowrap; }
+.omega-meta-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #00d4ff; font-weight: 600; white-space: nowrap; }
+
+/* Compact mobile / narrow-screen layout ─────────────────────────── */
+@media (max-width: 720px) {
+  .omega-page-header { padding: 8px 10px; gap: 6px; }
+  .omega-title-tag { display: none; }
+  .omega-page-title { font-size: 18px; gap: 8px; }
+  .omega-title-glyph { font-size: 24px; }
+  .omega-page-meta { gap: 8px; }
+  .omega-meta-label { font-size: 8px; letter-spacing: 0.1em; }
+  .omega-meta-val { font-size: 10.5px; }
+  .omega-voice-toggle { padding: 4px 8px; font-size: 9.5px; letter-spacing: 0.06em; }
+}
+@media (max-width: 460px) {
+  .omega-page-header { flex-direction: column; align-items: stretch; padding: 6px 10px; gap: 4px; }
+  .omega-page-title { justify-content: flex-start; font-size: 16px; }
+  .omega-title-glyph { font-size: 20px; }
+  .omega-page-meta { justify-content: space-between; width: 100%; gap: 4px; }
+  .omega-meta-item { flex-direction: row; gap: 4px; align-items: center; }
+  .omega-voice-toggle { margin-left: auto; }
+}
 .omega-state-ok { color: #00d4ff; }
 .omega-state-degraded { color: #ff8800; }
 .omega-state-offline { color: #ff1744; }
