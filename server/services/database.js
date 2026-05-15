@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §60 DATA INTEGRITY / POISONING / CONSENSUS 2026-05-15] R3A canonical PDF
+// — canonical PDF §60 (lines 1688-1707). Distinct from §13 dataFreshness (fresh ≠ true).
+// Multi-source consensus + trust score per source + 6 anomaly detectors.
+// "Un feed proaspat poate fi totusi mincinos."
+migrate('106_ml_source_trust', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_source_trust (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            source_id           TEXT NOT NULL,
+            trust_score         REAL NOT NULL,
+            total_observations  INTEGER NOT NULL DEFAULT 0,
+            anomaly_count       INTEGER NOT NULL DEFAULT 0,
+            last_anomaly_ts     INTEGER,
+            status              TEXT NOT NULL CHECK(status IN
+                                ('TRUSTED','DEGRADED','EXCLUDED')),
+            updated_at          INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, source_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlst_user_env_status
+            ON ml_source_trust(user_id, resolved_env, status);
+    `);
+});
+
+migrate('107_ml_anomaly_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_anomaly_events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            source_id       TEXT NOT NULL,
+            anomaly_type    TEXT NOT NULL CHECK(anomaly_type IN
+                            ('impossible_print','ts_spoof','packet_corrupt',
+                             'venue_anomaly','sentiment_burst','signal_burst')),
+            severity        TEXT NOT NULL CHECK(severity IN ('low','med','high')),
+            payload_hash    TEXT,
+            details_json    TEXT,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlae_user_env_source_ts
+            ON ml_anomaly_events(user_id, resolved_env, source_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlae_anomaly_type_ts
+            ON ml_anomaly_events(anomaly_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §59 UNIFIED OBJECTIVE / UTILITY FUNCTION 2026-05-15] meta canonical PDF
 // — canonical PDF §59 (lines 1667-1685). Single scalar utility = "verdictul final".
 // totalUtility = expectancy_after_costs - tail_risk - turnover - latency - concentration
