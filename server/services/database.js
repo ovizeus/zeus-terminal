@@ -994,6 +994,50 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §58 FACTOR RISK DECOMPOSITION + NETTING 2026-05-15] R3A canonical PDF
+// — canonical PDF §58 (lines 1645-1664). 6-factor exposure (btc_beta/market_beta
+// /vol/liquidity/funding/macro). Detects when "3 diferite" sunt acelasi pariu.
+// "Corelatia = fotografie. Factor decomposition = anatomie."
+migrate('103_ml_factor_exposures', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_factor_exposures (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            position_id     TEXT NOT NULL,
+            btc_beta        REAL NOT NULL,
+            market_beta     REAL NOT NULL,
+            vol_factor      REAL NOT NULL,
+            liquidity_factor  REAL NOT NULL,
+            funding_factor  REAL NOT NULL,
+            macro_factor    REAL NOT NULL,
+            gross_exposure  REAL NOT NULL,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfe_user_env_pos_ts
+            ON ml_factor_exposures(user_id, resolved_env, position_id, ts);
+    `);
+});
+
+migrate('104_ml_netting_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_netting_decisions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_type       TEXT NOT NULL CHECK(decision_type IN
+                                ('NET','HEDGE','REDUCE','REPLACE','HOLD')),
+            positions_json      TEXT NOT NULL,
+            dominant_factor     TEXT NOT NULL,
+            factor_overlap_score REAL NOT NULL,
+            recommended_action  TEXT,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlnd_user_env_ts
+            ON ml_netting_decisions(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §57 EXACTLY-ONCE EXECUTION / IDEMPOTENCY 2026-05-15] R4 canonical PDF
 // — canonical PDF §57 (lines 1626-1642). Unique intent_id + dedup submit/cancel
 // + retry safety + immutable execution ledger. "Idempotency previne ca acel
