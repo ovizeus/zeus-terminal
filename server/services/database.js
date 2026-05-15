@@ -965,6 +965,31 @@ migrate('045_ml_governance_versions', () => {
 // + current DD <8% + regime stable + dd_at_pause <15%. Manual-only
 // invariant: dd_at_pause >= 15% never auto-resumes regardless.
 // Spec: project_ml_brain_pro_244.md §255* (Claude-extras 2026-04-29).
+// [OMEGA Wave 3 §253* OPERATOR UNAVAILABILITY LADDER 2026-05-15]
+// Operator Interaction Layer + R5B. Escalation audit log: 24h WARN /
+// 72h HANDOVER / 7d FALLBACK. Hard invariant: FALLBACK sets approval
+// state='EXPIRED' (status quo), NEVER 'APPROVED'.
+// Spec: project_ml_brain_pro_244.md §253* (Claude-extras 2026-04-29).
+migrate('048_ml_operator_escalations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_operator_escalations (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            approval_id              INTEGER NOT NULL,
+            level                    TEXT NOT NULL CHECK(level IN (
+                'WARN', 'HANDOVER', 'FALLBACK'
+            )),
+            hours_since_request      REAL NOT NULL,
+            action_taken             TEXT NOT NULL,
+            actor                    TEXT NOT NULL,
+            notified_operators_json  TEXT,
+            created_at               INTEGER NOT NULL,
+            UNIQUE(approval_id, level)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloe_approval_ts
+            ON ml_operator_escalations(approval_id, created_at);
+    `);
+});
+
 migrate('047_ml_dd_pauses', () => {
     db.exec(`
         CREATE TABLE IF NOT EXISTS ml_dd_pauses (
