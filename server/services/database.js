@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §52 DRIFT ORCHESTRATION 2026-05-15] R5A canonical PDF
+// — canonical PDF §52 (line 1586). Monitor PSI/KS/Brier; canary retrain on
+// PSI > 0.2 OR Brier degrade; block live deploy until validation passes.
+// Complement §21 driftDetection (compute metrics) — §52 orchestrates response.
+migrate('122_ml_drift_orchestration_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_drift_orchestration_state (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            model_id        TEXT NOT NULL,
+            status          TEXT NOT NULL CHECK(status IN
+                            ('HEALTHY','DEGRADED','RETRAIN_QUEUED',
+                             'CANARY_RUNNING','BLOCKED')),
+            psi             REAL,
+            brier           REAL,
+            ks              REAL,
+            last_trigger_ts INTEGER,
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, model_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldos_user_env_status
+            ON ml_drift_orchestration_state(user_id, resolved_env, status);
+    `);
+});
+
+migrate('123_ml_retrain_canary_runs', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_retrain_canary_runs (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            model_id            TEXT NOT NULL,
+            canary_run_id       TEXT NOT NULL UNIQUE,
+            trigger_metric      TEXT NOT NULL CHECK(trigger_metric IN ('psi','brier','ks')),
+            trigger_value       REAL NOT NULL,
+            status              TEXT NOT NULL CHECK(status IN
+                                ('PENDING','RUNNING','PASSED','FAILED')),
+            live_blocked        INTEGER NOT NULL CHECK(live_blocked IN (0,1)),
+            metrics_json        TEXT,
+            started_at          INTEGER NOT NULL,
+            completed_at        INTEGER,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrcr_user_env_model_ts
+            ON ml_retrain_canary_runs(user_id, resolved_env, model_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §51 TCA/FILL SIMULATOR 2026-05-15] R4 canonical PDF
 // — canonical PDF §51 (line 1585). L2 depth historic + per-exchange-per-symbol
 // slippage calibration + backtest/shadow integration. Complement §23 TCA.
