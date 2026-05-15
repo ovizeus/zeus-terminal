@@ -994,6 +994,31 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §61 RUNTIME INVARIANT ENGINE 2026-05-15] R3A canonical PDF
+// — canonical PDF §61 (lines 1710-1732). 6 built-in invariants + custom registry.
+// Pre/post action verification + lock/alert/snapshot/forensic_log on violation.
+// "Gardul logic suprem care sta deasupra modulelor."
+migrate('108_ml_invariant_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_invariant_violations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            invariant_id    TEXT NOT NULL,
+            severity        TEXT NOT NULL CHECK(severity IN ('warn','critical')),
+            context_json    TEXT,
+            snapshot_id     TEXT,
+            action_taken    TEXT NOT NULL CHECK(action_taken IN
+                            ('lock','alert','snapshot','forensic_log','noop')),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mliv_user_env_inv_ts
+            ON ml_invariant_violations(user_id, resolved_env, invariant_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mliv_severity_ts
+            ON ml_invariant_violations(severity, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §60 DATA INTEGRITY / POISONING / CONSENSUS 2026-05-15] R3A canonical PDF
 // — canonical PDF §60 (lines 1688-1707). Distinct from §13 dataFreshness (fresh ≠ true).
 // Multi-source consensus + trust score per source + 6 anomaly detectors.
