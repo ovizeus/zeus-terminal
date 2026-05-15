@@ -994,6 +994,34 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 EXEC-N1 SMART POST-ONLY PRICE-SHADE 2026-05-15] R4 audit-gap P1
+// — audit gap 2026-05-05. Post-only order optimization with adaptive
+// price shading + fill outcome tracking + rolling stats.
+// Spec: project_ml_v3_additional_gaps_audit_2026-05-05.md
+migrate('076_ml_post_only_orders', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_post_only_orders (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id          TEXT,
+            exchange        TEXT NOT NULL,
+            side            TEXT NOT NULL CHECK(side IN ('BUY','SELL')),
+            placed_price    REAL NOT NULL,
+            shaded_price    REAL NOT NULL,
+            reference_best  REAL NOT NULL,
+            urgency         TEXT NOT NULL CHECK(urgency IN ('LOW','MEDIUM','HIGH')),
+            strategy        TEXT NOT NULL CHECK(strategy IN ('PASSIVE','MODERATE','AGGRESSIVE')),
+            outcome         TEXT NOT NULL CHECK(outcome IN ('FILLED','MISSED','PENDING','CANCELLED')),
+            filled_price    REAL,
+            cost_savings_bps REAL,
+            created_at      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpoo_user_env_ex_ts
+            ON ml_post_only_orders(user_id, resolved_env, exchange, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 OPS-N1 OPERATOR PANIC BUTTON 2026-05-15] Operator audit-gap P1
 // — audit gap 2026-05-05. Hard halt mechanism.
 // Compose §29 setBreakerLevel('L5') + §34 setEmergencyKillSwitch('ON').
