@@ -994,6 +994,35 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §31 CROSS-VENUE / SMART MONEY / CASCADE PREDICTION 2026-05-15] R2
+// — canonical PDF §31 (lines 1291-1307). Per-signal rolling observations
+// stats for 10 smart money signal types. Per (user × env × signal × regime).
+// "Unde este durerea celorlalti" + "Cine controleaza miscarea".
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §31.
+migrate('070_ml_smart_money', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_smart_money_observations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            signal_type     TEXT NOT NULL CHECK(signal_type IN
+                            ('institutional_divergence','venue_divergence',
+                             'smart_money_signature','absorption_post_sweep',
+                             'hidden_distribution','cluster_short_above',
+                             'cluster_long_below','cascade_probability',
+                             'heatmap_pressure','liquidation_magnet')),
+            sample_count    INTEGER NOT NULL DEFAULT 0,
+            mean_strength   REAL NOT NULL DEFAULT 0,
+            regime          TEXT,
+            created_at      INTEGER NOT NULL,
+            updated_at      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, signal_type, regime)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsmo_user_env_sig
+            ON ml_smart_money_observations(user_id, resolved_env, signal_type);
+    `);
+});
+
 // [OMEGA Wave 3 §38 DEFINITIA INTELIGENTEI REALE 2026-05-15] meta
 // — canonical PDF §38 (lines 1451-1469). Per-criterion intelligence audit:
 // 12 spec criteria + 4 anti-patterns. Records satisfied/score/evidence
