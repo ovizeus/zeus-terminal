@@ -994,6 +994,30 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 EXEC-N2 FUNDING-AWARE EXIT TIMING 2026-05-15] R4 audit-gap P1 HIGH
+// — audit gap 2026-05-05. 8h funding ping awareness + exposure cost + exit
+// recommendation. Per (user × env × pos) evaluation log.
+// Spec: /root/.claude/projects/-root/memory/project_ml_v3_additional_gaps_audit_2026-05-05.md
+migrate('074_ml_funding_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_funding_evaluations (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pos_id                  TEXT,
+            current_funding_rate    REAL NOT NULL,
+            time_to_funding_ms      INTEGER NOT NULL,
+            estimated_cost_usd      REAL NOT NULL,
+            recommendation          TEXT NOT NULL CHECK(recommendation IN ('HOLD','REDUCE','EXIT')),
+            should_exit             INTEGER NOT NULL CHECK(should_exit IN (0, 1)),
+            reason                  TEXT,
+            created_at              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfe_user_env_pos_ts
+            ON ml_funding_evaluations(user_id, resolved_env, pos_id, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §9 FORMULA LUI CORECTA DE GANDIRE 2026-05-15] R2
 // — canonical PDF §9 (lines 749-760). Per-decision step trace through
 // 12 thinking steps. Conductor module for brain reasoning pipeline.
