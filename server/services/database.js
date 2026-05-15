@@ -994,6 +994,37 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §14 CONFLICT RESOLUTION SI VETO RULES 2026-05-15] R3A
+// — canonical PDF §14 (lines 875-903). Audit log table for veto evaluations.
+// Records each evaluateVetoSignals() call: decision (BLOCK/PROCEED/PENALIZED),
+// winning signal + hierarchy when applicable, blockers + penalties JSON arrays,
+// score input vs adjusted, optional context (symbol/side/etc). Per (user × env)
+// isolation strict via user_id + resolved_env CHECK.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §14.
+migrate('055_ml_veto_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_veto_log (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision            TEXT NOT NULL CHECK(decision IN ('BLOCK','PROCEED','PENALIZED')),
+            winning_signal      TEXT,
+            winning_severity    TEXT CHECK(winning_severity IN ('BLOCK','SCORE_PENALTY') OR winning_severity IS NULL),
+            winning_hierarchy   TEXT,
+            blockers_json       TEXT NOT NULL,
+            penalties_json      TEXT NOT NULL,
+            score_input         REAL,
+            score_adjusted      REAL,
+            context_json        TEXT,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlvl_user_env_ts
+            ON ml_veto_log(user_id, resolved_env, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlvl_decision_ts
+            ON ml_veto_log(decision, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §33 A/B TESTING / SHADOW COMPARE 2026-05-15] R6
 // — canonical PDF §33 (lines 1324-1336). 2 NEW tables for experiment
 // lifecycle: ml_experiments + ml_experiment_outcomes. Pairs cu §19
