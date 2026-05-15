@@ -994,6 +994,35 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §28 OPERATIONAL SAFETY SI POSITION RECONCILIATION 2026-05-15] R3A
+// — canonical PDF §28 (lines 1217-1231). Audit log table for 3 operational
+// safety primitives: reconcilePosition (RECON), monitorLatency (LATENCY),
+// checkRateLimit (RATE_LIMIT). Records action (OK/ALERT/LOCK/FLATTEN),
+// severity score, divergences JSON, optional details. Per (user × env) isolation.
+// Composability: severe RECON → §14 reconciliation_failed; LATENCY alert →
+// §14 api_latency_severe.
+// Spec: /root/_review/ml_brain/ml_brain_canonic.txt §28.
+migrate('057_ml_recon_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_recon_log (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            check_type        TEXT NOT NULL CHECK(check_type IN ('RECON','LATENCY','RATE_LIMIT')),
+            subject           TEXT,
+            action            TEXT NOT NULL CHECK(action IN ('OK','ALERT','LOCK','FLATTEN')),
+            severity          REAL NOT NULL DEFAULT 0,
+            divergences_json  TEXT NOT NULL DEFAULT '[]',
+            details_json      TEXT,
+            created_at        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrl_user_env_type_ts
+            ON ml_recon_log(user_id, resolved_env, check_type, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlrl_action_ts
+            ON ml_recon_log(action, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 §13 DATA FRESHNESS SI VALIDARE FEED 2026-05-15] R3A
 // — canonical PDF §13 (lines 852-872). Audit log table for feed health
 // evaluations. Records each evaluateFeedHealth() call: action (OK / OBSERVER /
