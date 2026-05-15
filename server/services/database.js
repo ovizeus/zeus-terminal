@@ -959,6 +959,37 @@ migrate('045_ml_governance_versions', () => {
     `);
 });
 
+// [OMEGA Wave 3 §247* HYPOTHESIS PRE-REGISTRATION 2026-05-15] R5B
+// anti-p-hacking discipline. Each registration locks: hypothesis,
+// predicted metrics, success criteria, eval window, hash. Once
+// REGISTERED, content is immutable. evaluate() requires
+// eval_window_to <= now (no early peek-cheat). Only ONE REGISTERED
+// per version_id at a time.
+// Spec: project_ml_brain_pro_244.md §247* (Claude-extras 2026-04-29).
+migrate('046_ml_hypothesis_pre_registrations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_hypothesis_pre_registrations (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_id               INTEGER NOT NULL,
+            hypothesis               TEXT NOT NULL,
+            predicted_metrics_json   TEXT NOT NULL,
+            success_criteria_json    TEXT NOT NULL,
+            eval_window_from         INTEGER NOT NULL,
+            eval_window_to           INTEGER NOT NULL,
+            registration_hash        TEXT NOT NULL,
+            state                    TEXT NOT NULL DEFAULT 'REGISTERED'
+                                     CHECK(state IN ('REGISTERED', 'EVALUATING', 'PASS', 'FAIL', 'INVALID')),
+            actual_metrics_json      TEXT,
+            pass_fail_details_json   TEXT,
+            actor                    TEXT NOT NULL,
+            registered_at            INTEGER NOT NULL,
+            evaluated_at             INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlhpr_version_state
+            ON ml_hypothesis_pre_registrations(version_id, state);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
