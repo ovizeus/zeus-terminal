@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §70 EVIDENCE SUFFICIENCY / MINIMUM SUPPORT GATE 2026-05-15] R5A canonical PDF
+// — canonical PDF §70 (lines 1881-1921). Support count gate per setup×regime×asset×tf.
+// Maturity classification: observational/shadow/probation/mature. Size multiplier
+// scales with maturity. "Am voie sa cred in pattern-uri" — evidence-based gate.
+migrate('131_ml_evidence_support', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_evidence_support (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_key                   TEXT NOT NULL,
+            setup_type                  TEXT NOT NULL,
+            regime_type                 TEXT NOT NULL,
+            asset                       TEXT NOT NULL,
+            timeframe                   TEXT NOT NULL,
+            total_observations          INTEGER NOT NULL DEFAULT 0,
+            win_count                   INTEGER NOT NULL DEFAULT 0,
+            quality_weighted_score      REAL NOT NULL DEFAULT 0,
+            recent_observations         INTEGER NOT NULL DEFAULT 0,
+            oldest_ts                   INTEGER,
+            last_updated                INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, setup_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mles_user_env_type
+            ON ml_evidence_support(user_id, resolved_env, setup_type);
+    `);
+});
+
+migrate('132_ml_setup_maturity', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_setup_maturity (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_key               TEXT NOT NULL,
+            maturity_class          TEXT NOT NULL CHECK(maturity_class IN
+                                    ('observational','shadow','probation','mature')),
+            authority_level         TEXT NOT NULL CHECK(authority_level IN
+                                    ('none','reduced','full')),
+            evidence_sufficient     INTEGER NOT NULL CHECK(evidence_sufficient IN (0,1)),
+            size_multiplier         REAL NOT NULL,
+            last_classified_ts      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, setup_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsm_user_env_class
+            ON ml_setup_maturity(user_id, resolved_env, maturity_class);
+    `);
+});
+
 // [OMEGA Wave 3 §69 SINGLE-DECISION OOD GATE 2026-05-15] R3A canonical PDF
 // — canonical PDF §69 (lines 1837-1878). Per-decision novelty score across 5
 // dimensions (feature/regime/microstructure/macro/portfolio). Refuse exotic cases.
