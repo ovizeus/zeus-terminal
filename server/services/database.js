@@ -994,6 +994,33 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 RAID-O OPERATOR PRESENCE 2026-05-15] Operator A-Z raid
+// — A-Z raid MUST-ADD item O. Heartbeat-driven operator presence detection.
+migrate('086_ml_operator_presence', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_operator_presence (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            state               TEXT NOT NULL CHECK(state IN ('ACTIVE','AWAY','UNKNOWN')),
+            last_activity_at    INTEGER NOT NULL,
+            updated_at          INTEGER NOT NULL,
+            explicit_reason     TEXT,
+            UNIQUE(user_id, resolved_env)
+        );
+        CREATE TABLE IF NOT EXISTS ml_operator_activity_log (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            activity_type       TEXT NOT NULL,
+            source              TEXT,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloal_user_env_ts
+            ON ml_operator_activity_log(user_id, resolved_env, created_at);
+    `);
+});
+
 // [OMEGA Wave 3 RAID-N TELEGRAM PUSHER 2026-05-15] Operator A-Z raid
 // — A-Z raid MUST-ADD item N. Critical-only Telegram push with dedup + audit.
 migrate('085_ml_telegram_pushes', () => {
