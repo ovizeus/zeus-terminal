@@ -994,6 +994,42 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §44 ADVERSARIAL SELF-TESTING 2026-05-15] cross-cutting canonical PDF
+// — canonical PDF §44 (lines 1526-1527). Red team scenarios periodic.
+// 6 scenario types: veto_bypass / state_machine_edge / api_saturation /
+// latency_injection / feed_desync / flash_crash.
+migrate('091_ml_adversarial', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_adversarial_runs (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            scenario_id                 TEXT NOT NULL UNIQUE,
+            name                        TEXT NOT NULL,
+            type                        TEXT NOT NULL CHECK(type IN
+                                        ('veto_bypass','state_machine_edge','api_saturation',
+                                         'latency_injection','feed_desync','flash_crash')),
+            payload_json                TEXT NOT NULL,
+            expected_safety_trigger     TEXT NOT NULL,
+            severity                    TEXT NOT NULL CHECK(severity IN ('LOW','MEDIUM','HIGH','CRITICAL')),
+            created_at                  INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ml_adversarial_results (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            scenario_id         TEXT NOT NULL,
+            mode                TEXT NOT NULL CHECK(mode IN ('SIMULATED','ACTUAL')),
+            passed              INTEGER NOT NULL CHECK(passed IN (0,1)),
+            observations_json   TEXT NOT NULL,
+            duration_ms         INTEGER,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlares_user_env_sc_ts
+            ON ml_adversarial_results(user_id, resolved_env, scenario_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_mlares_passed
+            ON ml_adversarial_results(scenario_id, passed);
+    `);
+});
+
 // [OMEGA Wave 3 §46 LOSS STREAK DETECTION GEOMETRIC 2026-05-15] R3A canonical PDF
 // — canonical PDF §46 (lines 1540-1551). Geometric size reduction pe consecutive
 // losses: 2→50% / 3→25% / 4+→0 + gradual recovery on wins.
