@@ -6087,7 +6087,13 @@ select option {
   background: radial-gradient(ellipse at 50% 0%, #0a1830 0%, #050510 50%, #000005 100%);
   color: #d6e8ff;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  overflow: hidden;
+  /* [Chat-pushed-down fix 2026-05-15] was: overflow: hidden. On short
+     viewports (mobile, split keyboard), strict 280+280+180 grid + header +
+     R5AStats exceeded available height → chat clipped off-screen. Now the
+     page can scroll vertically when total content exceeds viewport while
+     short viewports still show chat (user scrolls down to reveal). */
+  overflow-y: auto;
+  overflow-x: hidden;
   position: relative;
 }
 .omega-page::before {
@@ -6167,15 +6173,18 @@ select option {
 /* ── Grid layout ───────────────────────────────────────────────── */
 .omega-page-grid {
   flex: 1; display: grid;
-  /* Voice cramping fix 2026-05-15: orb 280 (was 320) + voice min 280
-     (was just 1fr — now flex AND min-height) + chat 180 (was 220). */
-  grid-template-rows: 280px minmax(280px, 1fr) 180px;
+  /* [Chat-pushed-down fix 2026-05-15] Voice min was 280 — combined with
+     orb 280 + chat 180 + header + R5AStats it exceeded short viewports
+     and clipped chat. Relaxed voice min to 220 (still readable). Page
+     overflow-y:auto allows scroll when total exceeds viewport. */
+  grid-template-rows: 280px minmax(220px, 1fr) 180px;
   gap: 8px; padding: 12px;
   min-height: 0; position: relative; z-index: 2;
 }
 @media (max-width: 720px) {
   .omega-page-grid {
-    grid-template-rows: 220px minmax(240px, 1fr) 170px;
+    /* Tablet: voice min 200 — gentler still */
+    grid-template-rows: 220px minmax(200px, 1fr) 170px;
     padding: 8px; gap: 6px;
   }
   .omega-page-title { font-size: 18px; }
@@ -6183,7 +6192,8 @@ select option {
 }
 @media (max-width: 460px) {
   .omega-page-grid {
-    grid-template-rows: 180px minmax(220px, 1fr) 160px;
+    /* Mobile narrow: voice min 180 — most aggressive, chat still visible */
+    grid-template-rows: 180px minmax(180px, 1fr) 160px;
     padding: 6px; gap: 5px;
   }
 }
