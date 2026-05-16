@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §83 HIERARCHICAL TEMPORAL PLANNING 2026-05-16] R3A canonical PDF
+// — canonical PDF §83 (lines 2147-2148). 3-level hierarchy: strategic > tactical >
+// execution. "Nivelul inferior NU poate contrazice mandatul nivelului superior."
+migrate('155_ml_strategic_mandates', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_strategic_mandates (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            mandate_id          TEXT NOT NULL UNIQUE,
+            level               TEXT NOT NULL CHECK(level IN
+                                ('strategic','tactical','execution')),
+            constraint_type     TEXT NOT NULL CHECK(constraint_type IN
+                                ('max_exposure','asset_block','regime_block',
+                                 'direction_limit','exposure_cap')),
+            parameters_json     TEXT NOT NULL,
+            valid_from          INTEGER NOT NULL,
+            valid_until         INTEGER NOT NULL,
+            status              TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                                ('ACTIVE','EXPIRED')),
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsm83_user_env_level_status
+            ON ml_strategic_mandates(user_id, resolved_env, level, status);
+    `);
+});
+
+migrate('156_ml_hierarchical_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_hierarchical_decisions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id             TEXT NOT NULL UNIQUE,
+            level                   TEXT NOT NULL CHECK(level IN
+                                    ('strategic','tactical','execution')),
+            candidate_action_json   TEXT NOT NULL,
+            mandates_checked_json   TEXT NOT NULL,
+            violations_json         TEXT,
+            decision                TEXT NOT NULL CHECK(decision IN
+                                    ('APPROVED','REJECTED_BY_HIGHER_LEVEL','MODIFIED')),
+            reasoning               TEXT,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlhd_user_env_level_decision
+            ON ml_hierarchical_decisions(user_id, resolved_env, level, decision);
+    `);
+});
+
 // [OMEGA Wave 3 §82 COMPOSITIONAL GENERALIZATION 2026-05-16] R2 canonical PDF
 // — canonical PDF §82 (lines 2145-2146). Decompose novel case into known atomic
 // conditions + reason via composition. "Diferit de OOD blocheaza — §82 rationam."
