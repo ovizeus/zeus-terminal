@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §105 LATENT STATE ESTIMATION 2026-05-16] R2 canonical PDF —
+// §105 (lines 2628-2671). Bayesian belief-state engine over unobservables:
+// inventory pressure / liquidity withdrawal / crowd fragility / squeeze /
+// regime transition / forced flow. "Ce se intampla probabil in spatele a
+// ceea ce vad?"
+migrate('199_ml_latent_states', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_latent_states (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            state_id                 TEXT NOT NULL UNIQUE,
+            kind                     TEXT NOT NULL CHECK(kind IN
+                                     ('inventory_pressure','liquidity_withdrawal',
+                                      'crowd_fragility','squeeze_pressure',
+                                      'regime_transition','forced_flow')),
+            belief_value             REAL NOT NULL CHECK(belief_value >= 0 AND belief_value <= 1),
+            confidence               REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1),
+            inference_tier           TEXT NOT NULL CHECK(inference_tier IN
+                                     ('direct_observation','inference',
+                                      'weak_hypothesis','strong_hypothesis')),
+            supporting_sources_json  TEXT,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlls_user_env_kind_ts
+            ON ml_latent_states(user_id, resolved_env, kind, ts);
+    `);
+});
+
+migrate('200_ml_belief_updates', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_updates (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            update_id         TEXT NOT NULL UNIQUE,
+            state_id          TEXT NOT NULL,
+            prior_belief      REAL NOT NULL CHECK(prior_belief >= 0 AND prior_belief <= 1),
+            posterior_belief  REAL NOT NULL CHECK(posterior_belief >= 0 AND posterior_belief <= 1),
+            likelihood        REAL NOT NULL CHECK(likelihood >= 0 AND likelihood <= 1),
+            evidence_json     TEXT,
+            delta             REAL NOT NULL,
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbu_user_env_state_ts
+            ON ml_belief_updates(user_id, resolved_env, state_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §104 INTEGRITY CONSTRAINT LAYER 2026-05-16] cross-cutting
 // canonical PDF — §104 (line 2625). Self-imposed ethical/ecosystem
 // constraints beyond legal compliance. "Un sistem fara integritate e un
