@@ -994,6 +994,50 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §103 WISDOM LAYER 2026-05-16] meta canonical PDF —
+// canonical PDF §103 (line 2623). Judgment overlay: when signal quality is
+// poor + decision complexity high, downgrade to simple heuristics. "Opusul
+// intelligence-ului — e judecata."
+migrate('195_ml_wisdom_heuristics', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_wisdom_heuristics (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            heuristic_id    TEXT NOT NULL UNIQUE,
+            rule_text       TEXT NOT NULL,
+            kind            TEXT NOT NULL CHECK(kind IN
+                            ('timing','regime','cognition','risk')),
+            priority        INTEGER NOT NULL DEFAULT 0,
+            is_active       INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlwh_user_env_kind_active
+            ON ml_wisdom_heuristics(user_id, resolved_env, kind, is_active);
+    `);
+});
+
+migrate('196_ml_wisdom_overrides', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_wisdom_overrides (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id            INTEGER NOT NULL,
+            resolved_env       TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            override_id        TEXT NOT NULL UNIQUE,
+            heuristic_id       TEXT,
+            decision_context   TEXT NOT NULL,
+            complexity_score   REAL NOT NULL CHECK(complexity_score >= 0),
+            signal_quality     REAL NOT NULL CHECK(signal_quality >= 0 AND signal_quality <= 1),
+            ratio              REAL NOT NULL,
+            override_action    TEXT NOT NULL CHECK(override_action IN
+                               ('SIMPLIFY','ABSTAIN','PROCEED_NORMAL')),
+            ts                 INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlwo_user_env_action_ts
+            ON ml_wisdom_overrides(user_id, resolved_env, override_action, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §102 CROSS-DOMAIN ANALOGY 2026-05-16] R2 canonical PDF —
 // canonical PDF §102 (line 2621). Structural analogies from ecology/
 // epidemiology/hydrodynamics/thermodynamics applied to market. "Captureaza
