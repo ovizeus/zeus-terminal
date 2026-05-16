@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §91 TOPOLOGICAL DATA ANALYSIS 2026-05-16] R2 canonical PDF
+// — canonical PDF §91 (line 2372). Persistent homology primitive on price feature
+// space. Detects regime shifts via Betti numbers (B0=components, B1=loops) before
+// statistical drift surfaces. "Squeeze pre-explozie are topologie diferita."
+migrate('171_ml_topology_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_topology_snapshots (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id              TEXT NOT NULL UNIQUE,
+            feature_window_size      INTEGER NOT NULL,
+            betti_0                  INTEGER NOT NULL,
+            betti_1                  INTEGER NOT NULL,
+            persistence_diagram_json TEXT,
+            regime_label             TEXT,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlts_user_env_ts
+            ON ml_topology_snapshots(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('172_ml_topology_transitions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_topology_transitions (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id            INTEGER NOT NULL,
+            resolved_env       TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            transition_id      TEXT NOT NULL UNIQUE,
+            from_snapshot_id   TEXT NOT NULL,
+            to_snapshot_id     TEXT NOT NULL,
+            betti_delta_json   TEXT NOT NULL,
+            transition_type    TEXT NOT NULL CHECK(transition_type IN
+                               ('STABLE','REGIME_SHIFT','CORRELATION_BREAKDOWN')),
+            severity           REAL NOT NULL,
+            ts                 INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltt_user_env_ts
+            ON ml_topology_transitions(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §90 GOODHART'S LAW PROTECTION 2026-05-16] R5B canonical PDF
 // — canonical PDF §90 (line 2370). Metric gaming prevention via composite,
 // holdout (model-invisible) + rotation. "Cand metrica devine tinta, inceteaza
