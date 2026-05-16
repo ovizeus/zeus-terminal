@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §130 MIND-CHANGE CRITERIA ENGINE 2026-05-16] _meta canonical
+// PDF — §130 (lines 3761-3791). Pre-declared belief reversal criteria. 4
+// reversal actions (weakening/flipping/abandoning/escalating). Inertia vs
+// reversibility balance. "Ce anume m-ar convinge ca ma insel?". Distinct
+// from §247 preRegistration (locks WHAT you believe), §113 socraticSelf
+// Doubt (adversarial), §112 competingHypotheses (thesis market), §129
+// assumptionSurfaceMapper (premise registry). §130 = pre-lock al
+// criteriilor de REVIZUIRE a credintei.
+migrate('249_ml_mind_change_criteria', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_mind_change_criteria (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            criterion_id        TEXT NOT NULL UNIQUE,
+            belief_id           TEXT NOT NULL,
+            reversal_action     TEXT NOT NULL CHECK(reversal_action IN
+                                ('weakening','flipping','abandoning','escalating')),
+            trigger_condition   TEXT NOT NULL,
+            evidence_threshold  REAL NOT NULL CHECK(evidence_threshold >= 0 AND evidence_threshold <= 1),
+            inertia_factor      REAL NOT NULL CHECK(inertia_factor >= 0 AND inertia_factor <= 1),
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmcc_user_env_belief_ts
+            ON ml_mind_change_criteria(user_id, resolved_env, belief_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlmcc_user_env_action_ts
+            ON ml_mind_change_criteria(user_id, resolved_env, reversal_action, ts);
+    `);
+});
+
+migrate('250_ml_mind_change_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_mind_change_events (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            event_id             TEXT NOT NULL UNIQUE,
+            criterion_id         TEXT NOT NULL,
+            actual_evidence      REAL NOT NULL CHECK(actual_evidence >= 0),
+            surprise_score       REAL NOT NULL CHECK(surprise_score >= 0 AND surprise_score <= 1),
+            reversal_executed    INTEGER NOT NULL CHECK(reversal_executed IN (0,1)),
+            ts                   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmce_user_env_criterion_ts
+            ON ml_mind_change_events(user_id, resolved_env, criterion_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §129 ASSUMPTION SURFACE MAPPER 2026-05-16] _meta canonical
 // PDF — §129 (lines 3714-3759). Per-decision tacit premise registry + 6-type
 // taxonomy (structural/causal/execution/data_integrity/regime_persistence/
