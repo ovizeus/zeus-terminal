@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §117 EPISTEMIC PROVENANCE 2026-05-16] _audit canonical PDF
+// — §117 (lines 3118-3161). Belief lineage DAG cu 7 node kinds + 5 source
+// types per canonical taxonomy. "Nu exista belief important fara lineage."
+// Distinct from auditTrail.js (flat snapshots), §16 attribution (PnL
+// decomposition), §25 explainability (output XAI), §35 monitoring (KPI).
+migrate('223_ml_belief_nodes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_nodes (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                INTEGER NOT NULL,
+            resolved_env           TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            node_id                TEXT NOT NULL UNIQUE,
+            belief_id              TEXT NOT NULL,
+            kind                   TEXT NOT NULL CHECK(kind IN
+                                   ('raw_feed','preprocess','detector_output',
+                                    'score_transform','gating_event',
+                                    'thesis_node','policy_verdict')),
+            source_type            TEXT NOT NULL CHECK(source_type IN
+                                   ('direct_observation','derived_inference',
+                                    'propagated_hypothesis',
+                                    'historical_prior','episodic_analogy')),
+            parent_node_ids_json   TEXT NOT NULL,
+            content_summary        TEXT NOT NULL,
+            ts                     INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbn_user_env_belief_ts
+            ON ml_belief_nodes(user_id, resolved_env, belief_id, ts);
+    `);
+});
+
+migrate('224_ml_belief_lineages', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_lineages (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            lineage_id          TEXT NOT NULL UNIQUE,
+            belief_id           TEXT NOT NULL,
+            root_node_id        TEXT NOT NULL,
+            terminal_node_id    TEXT NOT NULL,
+            decision_id         TEXT NOT NULL,
+            node_count          INTEGER NOT NULL CHECK(node_count >= 1),
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbl_user_env_belief_ts
+            ON ml_belief_lineages(user_id, resolved_env, belief_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §116 CONSTITUTIONAL CHARTER 2026-05-16] R1 canonical PDF —
 // §116 (lines 3076-3115). Immutable charter cu 6 principles ierarhie
 // (safety > truth > compliance > integrity > long_term_survivability >
