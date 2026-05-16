@@ -994,6 +994,44 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §137 EXPLANATION COMPRESSION TEST 2026-05-16] _meta canonical
+// PDF — §137 (lines 4045-4090). Understanding density engine. Measures
+// explanation quality via compression + density metrics. 5 categories
+// (healthy / redundant / circular / decorative / over_compressed) + trust
+// penalty per category. "Pot explica asta clar, scurt si cu miez, sau doar
+// vorbesc mult?". Distinct from §43 noTradeExplainability (no-trade
+// specific), §132 semanticGroundingCheck (numeric anchoring), §117
+// epistemicProvenance (lineage), §134 representationDebtTracker (predict
+// vs actual). §137 = understanding density as compression proxy.
+migrate('260_ml_explanation_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_explanation_assessments (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id       TEXT NOT NULL UNIQUE,
+            decision_id         TEXT NOT NULL,
+            explanation_text    TEXT NOT NULL,
+            word_count          INTEGER NOT NULL CHECK(word_count >= 1),
+            claim_count         INTEGER NOT NULL CHECK(claim_count >= 0),
+            premise_count       INTEGER NOT NULL CHECK(premise_count >= 0),
+            explanatory_power   REAL NOT NULL CHECK(explanatory_power >= 0 AND explanatory_power <= 1),
+            compression_score   REAL NOT NULL CHECK(compression_score >= 0 AND compression_score <= 1),
+            density_metric      REAL NOT NULL CHECK(density_metric >= 0 AND density_metric <= 1),
+            is_circular         INTEGER NOT NULL CHECK(is_circular IN (0,1)),
+            issue_kind          TEXT NOT NULL CHECK(issue_kind IN
+                                ('healthy','redundant','circular',
+                                 'decorative','over_compressed')),
+            trust_penalty       REAL NOT NULL CHECK(trust_penalty >= 0 AND trust_penalty <= 1),
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlea_user_env_decision_ts
+            ON ml_explanation_assessments(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlea_user_env_issue_ts
+            ON ml_explanation_assessments(user_id, resolved_env, issue_kind, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §136 IRREVERSIBILITY / OPTION-PRESERVATION 2026-05-16] R3A
 // canonical PDF — §136 (lines 3997-4044). Per-action optionality cost
 // accounting. 3 reversibility categories (reversible/partial_reversible/
