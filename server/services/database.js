@@ -994,6 +994,52 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §86 STRATEGY CAPACITY / EDGE CAPACITY CEILING 2026-05-16] R5A canonical PDF
+// — canonical PDF §86 (lines 2196-2236). Capacity estimation per strategy×regime×asset.
+// "Edge-ul NU scaleaza liniar. Cat capital poate absorbi inainte sa se strice?"
+migrate('161_ml_capacity_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_capacity_observations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            strategy_id                 TEXT NOT NULL,
+            regime                      TEXT NOT NULL,
+            asset                       TEXT NOT NULL,
+            deployed_capital            REAL NOT NULL,
+            observed_pnl                REAL NOT NULL,
+            observed_slippage_bps       REAL NOT NULL,
+            observed_impact_bps         REAL NOT NULL,
+            marginal_alpha              REAL,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlco_user_env_strat_regime_asset
+            ON ml_capacity_observations(user_id, resolved_env, strategy_id, regime, asset);
+    `);
+});
+
+migrate('162_ml_capacity_ceilings', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_capacity_ceilings (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            strategy_id                     TEXT NOT NULL,
+            regime                          TEXT NOT NULL,
+            asset                           TEXT NOT NULL,
+            soft_cap_capital                REAL NOT NULL,
+            hard_cap_capital                REAL NOT NULL,
+            diminishing_returns_inflection  REAL NOT NULL,
+            last_validated                  INTEGER NOT NULL,
+            status                          TEXT NOT NULL CHECK(status IN
+                                            ('VALID','STALE','EXCEEDED')),
+            UNIQUE(user_id, resolved_env, strategy_id, regime, asset)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcc86_user_env_status
+            ON ml_capacity_ceilings(user_id, resolved_env, status);
+    `);
+});
+
 // [OMEGA Wave 3 §85 REAL-TIME DEADLINE / COMPUTE BUDGET GOVERNOR 2026-05-16] R4 canonical PDF
 // — canonical PDF §85 (lines 2152-2191). Deadline enforcement per decision type +
 // inference mode selection. "Decizie la timp > sofisticata intarziata."
