@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §84 GAME THEORY ON MICROSTRUCTURE 2026-05-16] R2 canonical PDF
+// — canonical PDF §84 (lines 2149-2150). Rational agent modeling: market_maker /
+// liquidation / whale / arb_bot / retail. "Nu statistica — rationament strategic."
+migrate('157_ml_agent_models', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_agent_models (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            agent_id                    TEXT NOT NULL UNIQUE,
+            agent_type                  TEXT NOT NULL CHECK(agent_type IN
+                                        ('market_maker','liquidation_engine','whale',
+                                         'arb_bot','retail')),
+            objective_function_json     TEXT NOT NULL,
+            decision_parameters_json    TEXT NOT NULL,
+            last_updated                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlam_user_env_type
+            ON ml_agent_models(user_id, resolved_env, agent_type);
+    `);
+});
+
+migrate('158_ml_game_predictions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_game_predictions (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            prediction_id               TEXT NOT NULL UNIQUE,
+            agent_id                    TEXT NOT NULL,
+            scenario_json               TEXT NOT NULL,
+            predicted_action            TEXT NOT NULL CHECK(predicted_action IN
+                                        ('widen_spread','withdraw_liquidity','execute_market',
+                                         'accumulate','distribute','no_action')),
+            confidence                  REAL NOT NULL,
+            expected_impact_bps         REAL NOT NULL,
+            time_horizon_seconds        INTEGER NOT NULL,
+            actual_action               TEXT,
+            actual_impact_bps           REAL,
+            validated                   INTEGER NOT NULL DEFAULT 0 CHECK(validated IN (0,1)),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgp_user_env_agent_ts
+            ON ml_game_predictions(user_id, resolved_env, agent_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §83 HIERARCHICAL TEMPORAL PLANNING 2026-05-16] R3A canonical PDF
 // — canonical PDF §83 (lines 2147-2148). 3-level hierarchy: strategic > tactical >
 // execution. "Nivelul inferior NU poate contrazice mandatul nivelului superior."
