@@ -994,6 +994,57 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §126 SECOND-ORDER UNCERTAINTY 2026-05-16] R5A canonical
+// PDF — §126 (lines 3554-3605). Confidence-of-confidence engine + 4
+// quadrant classifier (high_conf_robust/high_conf_fragile/low_conf_robust/
+// low_conf_noisy). "Cat de mult am voie sa cred in propriul meu
+// confidence?" Distinct from §20 calibration (history), §92
+// uncertaintyPropagation (first-order pipeline), §15 confidenceDecay
+// (time), §122 selfModel (module trust).
+migrate('241_ml_confidence_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_confidence_assessments (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id               TEXT NOT NULL UNIQUE,
+            decision_id                 TEXT NOT NULL,
+            primary_confidence          REAL NOT NULL CHECK(primary_confidence >= 0 AND primary_confidence <= 1),
+            confidence_of_confidence    REAL NOT NULL CHECK(confidence_of_confidence >= 0 AND confidence_of_confidence <= 1),
+            calibration_reliability     REAL NOT NULL CHECK(calibration_reliability >= 0 AND calibration_reliability <= 1),
+            local_drift                 REAL NOT NULL CHECK(local_drift >= 0 AND local_drift <= 1),
+            quadrant                    TEXT NOT NULL CHECK(quadrant IN
+                                        ('high_conf_robust','high_conf_fragile',
+                                         'low_conf_robust','low_conf_noisy')),
+            penalized_confidence        REAL NOT NULL CHECK(penalized_confidence >= 0 AND penalized_confidence <= 1),
+            recommended_action          TEXT NOT NULL CHECK(recommended_action IN
+                                        ('proceed','size_reduce','wait',
+                                         'active_sensing','observer')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlca_user_env_quadrant_ts
+            ON ml_confidence_assessments(user_id, resolved_env, quadrant, ts);
+    `);
+});
+
+migrate('242_ml_calibration_drift_audit', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_calibration_drift_audit (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id          TEXT NOT NULL UNIQUE,
+            assessment_id     TEXT NOT NULL,
+            drift_source      TEXT NOT NULL,
+            drift_magnitude   REAL NOT NULL CHECK(drift_magnitude >= 0 AND drift_magnitude <= 1),
+            notes             TEXT,
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcda_user_env_assessment_ts
+            ON ml_calibration_drift_audit(user_id, resolved_env, assessment_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §125 EPISTEMIC TENSION FIELD 2026-05-16] _meta canonical
 // PDF — §125 (lines 3494-3552). Pre-contradiction stress engine peste 8
 // surse canonice + 4 gradient kinds + 5 action states. "Sistemul meu este
