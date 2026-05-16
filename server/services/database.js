@@ -994,6 +994,45 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §131 ABSTRACTION LADDER CONTROLLER 2026-05-16] _meta canonical
+// PDF — §131 (lines 3798-3842). Level-of-thought switcher. 6 abstraction
+// levels (tick_microstructure → execution → intraday_structure → htf_regime
+// → macro_cross_asset → strategic_constitutional). Per-decision logging cu
+// switch_action (initial/descend/rise/stay) + cost-benefit. "La ce nivel
+// trebuie sa gandesc problema asta?". Distinct from §114 conceptLibrary
+// (semantic abstraction = what concepts mean), §123 ontologyRevisionEngine
+// (vocabulary evolution), §117 epistemicProvenance (lineage). §131 =
+// horizontal level switcher, not semantic content.
+migrate('251_ml_abstraction_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_abstraction_log (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id            INTEGER NOT NULL,
+            resolved_env       TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            entry_id           TEXT NOT NULL UNIQUE,
+            decision_id        TEXT NOT NULL,
+            abstraction_level  TEXT NOT NULL CHECK(abstraction_level IN
+                               ('tick_microstructure','execution',
+                                'intraday_structure','htf_regime',
+                                'macro_cross_asset','strategic_constitutional')),
+            prev_level         TEXT CHECK(prev_level IS NULL OR prev_level IN
+                               ('tick_microstructure','execution',
+                                'intraday_structure','htf_regime',
+                                'macro_cross_asset','strategic_constitutional')),
+            switch_action      TEXT NOT NULL CHECK(switch_action IN
+                               ('initial','descend','rise','stay')),
+            cost_score         REAL NOT NULL CHECK(cost_score >= 0 AND cost_score <= 1),
+            benefit_score      REAL NOT NULL CHECK(benefit_score >= 0 AND benefit_score <= 1),
+            net_value          REAL NOT NULL,
+            ts                 INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlal_user_env_decision_ts
+            ON ml_abstraction_log(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlal_user_env_level_ts
+            ON ml_abstraction_log(user_id, resolved_env, abstraction_level, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §130 MIND-CHANGE CRITERIA ENGINE 2026-05-16] _meta canonical
 // PDF — §130 (lines 3761-3791). Pre-declared belief reversal criteria. 4
 // reversal actions (weakening/flipping/abandoning/escalating). Inertia vs
