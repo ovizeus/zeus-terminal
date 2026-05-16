@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §114 CONCEPT LIBRARY / SEMANTIC ABSTRACTION 2026-05-16]
+// R5A canonical PDF — §114 (lines 3001-3033). Named compound concept
+// library (exhausted_breakout, fragile_squeeze...) with empirical support
+// + utility tracking. "Conceptele NU sunt etichete decorative." Distinct
+// from §93 regimeGrammar (atomic primitive dims), §27 temporalPatterns
+// (time recurrence), §102 crossDomainAnalogy (external domains).
+migrate('217_ml_concepts', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_concepts (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            concept_id           TEXT NOT NULL UNIQUE,
+            label                TEXT NOT NULL,
+            description          TEXT NOT NULL,
+            support_count        INTEGER NOT NULL DEFAULT 0 CHECK(support_count >= 0),
+            utility_score        REAL NOT NULL DEFAULT 0 CHECK(utility_score >= 0 AND utility_score <= 1),
+            confidence           REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1),
+            status               TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                                 ('ACTIVE','MERGED','SPLIT','RETIRED')),
+            parent_concept_id    TEXT,
+            ts_created           INTEGER NOT NULL,
+            ts_last_updated      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlc_user_env_status_label
+            ON ml_concepts(user_id, resolved_env, status, label);
+    `);
+});
+
+migrate('218_ml_concept_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_concept_observations (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                INTEGER NOT NULL,
+            resolved_env           TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_id         TEXT NOT NULL UNIQUE,
+            concept_id             TEXT NOT NULL,
+            market_state_json      TEXT NOT NULL,
+            outcome                TEXT NOT NULL,
+            decision_relevance     REAL NOT NULL CHECK(decision_relevance >= 0 AND decision_relevance <= 1),
+            ts                     INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlco_user_env_concept_ts
+            ON ml_concept_observations(user_id, resolved_env, concept_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §113 CAUSAL DISCOVERY / GRAPH REVISION 2026-05-16] R2
 // canonical PDF — §113 (lines 2971-2998). SCM edge revision proposals
 // with proposal-confirm-apply lifecycle. "Descoperirea cauzala NU modifica
