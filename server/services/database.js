@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §98 DEPENDENCY GRAPH / BLAST RADIUS 2026-05-16] R3A canonical
+// PDF — canonical PDF §98 (lines 2524-2566). Operational dependency map for
+// SPOF detection + blast radius via BFS. "Daca pica asta, ce altceva moare
+// odata cu el?"
+migrate('185_ml_dependency_nodes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dependency_nodes (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            node_id              TEXT NOT NULL UNIQUE,
+            node_type            TEXT NOT NULL CHECK(node_type IN
+                                 ('feed','detector','model','execution_path',
+                                  'safety_module','monitoring')),
+            name                 TEXT NOT NULL,
+            owner                TEXT NOT NULL,
+            blast_radius_score   REAL NOT NULL DEFAULT 0 CHECK(blast_radius_score >= 0),
+            criticality          TEXT NOT NULL CHECK(criticality IN
+                                 ('critical','important','optional')),
+            is_active            INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            ts                   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldn_user_env_type
+            ON ml_dependency_nodes(user_id, resolved_env, node_type);
+    `);
+});
+
+migrate('186_ml_dependency_edges', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dependency_edges (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            edge_id         TEXT NOT NULL UNIQUE,
+            from_node_id    TEXT NOT NULL,
+            to_node_id      TEXT NOT NULL,
+            edge_type       TEXT NOT NULL CHECK(edge_type IN
+                            ('depends_on','feeds','monitors')),
+            strength        REAL NOT NULL CHECK(strength >= 0 AND strength <= 1),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlde_user_env_from
+            ON ml_dependency_edges(user_id, resolved_env, from_node_id);
+        CREATE INDEX IF NOT EXISTS idx_mlde_user_env_to
+            ON ml_dependency_edges(user_id, resolved_env, to_node_id);
+    `);
+});
+
 // [OMEGA Wave 3 §97 FORGETTING ENGINE 2026-05-16] R5B canonical PDF —
 // canonical PDF §97 (lines 2471-2520). TTL/decay-based knowledge expiry
 // with ladder WEAKEN→QUARANTINE→RETIRE→REVIVE. "Uitarea nu este stergere
