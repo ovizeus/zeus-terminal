@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §77 CROSS-HORIZON ARBITRATION 2026-05-16] R3A canonical PDF
+// — canonical PDF §77 (lines 1985-2024). Horizon ownership per position +
+// signal conflict arbitration (HTF/MTF/LTF/micro). "Cine are autoritate?"
+migrate('144_ml_horizon_ownership', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_horizon_ownership (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            position_id         TEXT NOT NULL,
+            thesis_horizon      TEXT NOT NULL CHECK(thesis_horizon IN
+                                ('scalp','intraday','swing','macro_defensive')),
+            owner_timeframe     TEXT NOT NULL CHECK(owner_timeframe IN
+                                ('HTF','MTF','LTF','micro')),
+            assigned_at         INTEGER NOT NULL,
+            status              TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN ('ACTIVE','RETIRED')),
+            retired_at          INTEGER,
+            UNIQUE(user_id, resolved_env, position_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlho_user_env_status
+            ON ml_horizon_ownership(user_id, resolved_env, status);
+    `);
+});
+
+migrate('145_ml_horizon_conflicts', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_horizon_conflicts (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            position_id         TEXT NOT NULL,
+            signal_timeframe    TEXT NOT NULL CHECK(signal_timeframe IN
+                                ('HTF','MTF','LTF','micro')),
+            signal_strength     REAL NOT NULL,
+            conflict_score      REAL NOT NULL,
+            action_recommended  TEXT NOT NULL CHECK(action_recommended IN
+                                ('ignore','hedge','reduce','exit')),
+            resolution_reasoning TEXT,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlhc_user_env_position_ts
+            ON ml_horizon_conflicts(user_id, resolved_env, position_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §76 COUNTERFACTUAL MARKET BASELINE 2026-05-16] R5A canonical PDF
 // — canonical PDF §76 (lines 1982-1983). Shadow HODL baseline ("nicio actiune")
 // vs bot PnL. Alpha real = bot - HODL. Complement §16 attribution, §42, §242.
