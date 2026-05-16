@@ -994,6 +994,31 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §80 VALUE OF INFORMATION (VOI) 2026-05-16] R2 canonical PDF
+// — canonical PDF §80 (lines 2141-2142). Formal VOI calculus: benefit of waiting
+// minus cost of delay. "WAIT fara VOI = emotional. WAIT cu VOI = matematica."
+migrate('150_ml_voi_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_voi_evaluations (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id                     TEXT NOT NULL UNIQUE,
+            expected_confirmation_value     REAL NOT NULL,
+            funding_cost_bps                REAL NOT NULL,
+            opportunity_cost                REAL NOT NULL,
+            slippage_cost_bps               REAL NOT NULL,
+            total_cost                      REAL NOT NULL,
+            voi                             REAL NOT NULL,
+            recommendation                  TEXT NOT NULL CHECK(recommendation IN
+                                            ('WAIT','ACT_NOW')),
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlve_user_env_rec_ts
+            ON ml_voi_evaluations(user_id, resolved_env, recommendation, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §79 GLOBAL OPPORTUNITY SCHEDULER 2026-05-16] R3A canonical PDF
 // — canonical PDF §79 (lines 2086-2125). Capital auction arbitrating between
 // simultaneously valid setups. "Pe care il merit cu adevarat?" + 4 budgets.
