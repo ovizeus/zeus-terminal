@@ -994,6 +994,52 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §108 PROGRESSIVE COMMITMENT 2026-05-16] R4 canonical PDF —
+// §108 (lines 2773-2815). Real-options entry engine: probe → expand on
+// confirmation, abort on contradiction. "Merita sa cumpar informatie
+// printr-o pozitie mica inainte de a ma angaja complet?"
+migrate('205_ml_commitment_setups', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_commitment_setups (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_id              TEXT NOT NULL UNIQUE,
+            target_total_size     REAL NOT NULL CHECK(target_total_size >= 0),
+            current_filled_size   REAL NOT NULL DEFAULT 0 CHECK(current_filled_size >= 0),
+            status                TEXT NOT NULL DEFAULT 'probing' CHECK(status IN
+                                  ('probing','confirming','full','aborted','completed')),
+            thesis_id             TEXT,
+            ts_created            INTEGER NOT NULL,
+            ts_last_updated       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcs108_user_env_status
+            ON ml_commitment_setups(user_id, resolved_env, status);
+    `);
+});
+
+migrate('206_ml_commitment_tranches', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_commitment_tranches (
+            id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                   INTEGER NOT NULL,
+            resolved_env              TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            tranche_id                TEXT NOT NULL UNIQUE,
+            setup_id                  TEXT NOT NULL,
+            kind                      TEXT NOT NULL CHECK(kind IN
+                                      ('exploratory','conviction',
+                                       'confirmation_add','defensive_reduce')),
+            size                      REAL NOT NULL,
+            market_response_score     REAL,
+            decision_after            TEXT CHECK(decision_after IS NULL OR decision_after IN
+                                      ('expand','hold','abort','exit')),
+            ts                        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlct108_user_env_setup_ts
+            ON ml_commitment_tranches(user_id, resolved_env, setup_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §107 INVARIANCE / NUISANCE-ROBUSTNESS 2026-05-16] R5A
 // canonical PDF — §107 (lines 2729-2770). Stability tests pe perturbari
 // irelevante (scale/jitter/resampling/feed/representation). "Daca nu s-a
