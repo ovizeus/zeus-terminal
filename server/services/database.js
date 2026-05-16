@@ -994,6 +994,43 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §136 IRREVERSIBILITY / OPTION-PRESERVATION 2026-05-16] R3A
+// canonical PDF — §136 (lines 3997-4044). Per-action optionality cost
+// accounting. 3 reversibility categories (reversible/partial_reversible/
+// nearly_irreversible) + EV penalty for consumed optionality + epistemic
+// standard map (nearly_irreversible cere conviction ≥0.75). "Daca fac asta
+// acum, cate optiuni bune imi omor pentru viitorul apropiat?". Distinct
+// from valueOfInformation (R2 — info gathering value), horizonArbitration
+// (R3A — timeframe), §111 scenarioTreePlanner (tree-of-thought), §135
+// epistemicHumilityGovernor (right-to-be-bold).
+migrate('259_ml_action_optionality_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_action_optionality_assessments (
+            id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                      INTEGER NOT NULL,
+            resolved_env                 TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id                TEXT NOT NULL UNIQUE,
+            action_id                    TEXT NOT NULL,
+            action_kind                  TEXT NOT NULL,
+            expected_value               REAL NOT NULL,
+            irreversibility_score        REAL NOT NULL CHECK(irreversibility_score >= 0 AND irreversibility_score <= 1),
+            optionality_consumed         REAL NOT NULL CHECK(optionality_consumed >= 0 AND optionality_consumed <= 1),
+            future_options_killed_count  INTEGER NOT NULL CHECK(future_options_killed_count >= 0),
+            epistemic_standard_required  REAL NOT NULL CHECK(epistemic_standard_required >= 0 AND epistemic_standard_required <= 1),
+            primary_conviction           REAL NOT NULL CHECK(primary_conviction >= 0 AND primary_conviction <= 1),
+            reversibility_category       TEXT NOT NULL CHECK(reversibility_category IN
+                                         ('reversible','partial_reversible','nearly_irreversible')),
+            net_value_after_penalty      REAL NOT NULL,
+            approved                     INTEGER NOT NULL CHECK(approved IN (0,1)),
+            ts                           INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlaoa_user_env_action_ts
+            ON ml_action_optionality_assessments(user_id, resolved_env, action_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlaoa_user_env_category_ts
+            ON ml_action_optionality_assessments(user_id, resolved_env, reversibility_category, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §135 EPISTEMIC HUMILITY GOVERNOR 2026-05-16] _meta canonical
 // PDF — §135 (lines 3954-3996). Right-to-be-bold engine. Aggregates 7 meta
 // signals (primary_confidence + confidence_of_confidence + competence +
