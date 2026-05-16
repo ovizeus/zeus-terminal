@@ -994,6 +994,58 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §119 PRE-MORTEM FAILURE REHEARSAL 2026-05-16] R3A canonical
+// PDF — §119 (lines 3204-3246). 8-mode failure rehearsal cu severity ×
+// detectability × recoverability + 5 action plans. "Daca trade-ul moare
+// urat, cum moare cel mai probabil si ce fac atunci?" Distinct from §111
+// scenarioTree (5 futures), §44 adversarialSelfTester (attacks), §88
+// accountStressEngine (liquidation only).
+migrate('227_ml_premortem_sessions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_premortem_sessions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            session_id              TEXT NOT NULL UNIQUE,
+            decision_id             TEXT NOT NULL,
+            dominant_failure_mode   TEXT,
+            total_failure_modes     INTEGER NOT NULL DEFAULT 0 CHECK(total_failure_modes >= 0),
+            max_severity            REAL NOT NULL DEFAULT 0 CHECK(max_severity >= 0 AND max_severity <= 1),
+            aggregate_risk_score    REAL NOT NULL DEFAULT 0,
+            status                  TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN ('OPEN','CLOSED')),
+            ts_started              INTEGER NOT NULL,
+            ts_closed               INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlps_user_env_decision_status
+            ON ml_premortem_sessions(user_id, resolved_env, decision_id, status);
+    `);
+});
+
+migrate('228_ml_premortem_failure_modes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_premortem_failure_modes (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            mode_id           TEXT NOT NULL UNIQUE,
+            session_id        TEXT NOT NULL,
+            failure_kind      TEXT NOT NULL CHECK(failure_kind IN
+                              ('thesis_invalidation_rapid','fakeout',
+                               'liquidity_vacuum','slippage_blowout',
+                               'venue_failure','latency_miss',
+                               'macro_interruption','cross_asset_contagion')),
+            severity          REAL NOT NULL CHECK(severity >= 0 AND severity <= 1),
+            detectability     REAL NOT NULL CHECK(detectability >= 0 AND detectability <= 1),
+            recoverability    REAL NOT NULL CHECK(recoverability >= 0 AND recoverability <= 1),
+            action_plan       TEXT NOT NULL CHECK(action_plan IN
+                              ('reduce','hedge','exit','observer','lock')),
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpfm_user_env_session
+            ON ml_premortem_failure_modes(user_id, resolved_env, session_id);
+    `);
+});
+
 // [OMEGA Wave 3 §118 BELIEF UPDATE REGULARIZER 2026-05-16] R5A canonical
 // PDF — §118 (lines 3164-3201). Velocity-limiter + evidence classifier
 // (structural_signal/strident_event/lucky_streak/unlucky_streak). "Credintele
