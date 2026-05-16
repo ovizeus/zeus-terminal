@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §122 SELF-MODEL / INTROSPECTIVE CAPABILITY 2026-05-16]
+// _meta canonical PDF — §122 (lines 3350-3398). Module-level self-trust
+// graph cu 6 module kinds × 4 capability states. "Pot sa am incredere in
+// mine insumi acum?" Distinct from §106 competenceMap (market validity),
+// §35 monitoring (raw KPI), §98 dependencyGraph (topology), §38
+// intelligenceChecker (per-decision eval).
+migrate('233_ml_self_capability_graph', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_capability_graph (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            capability_id       TEXT NOT NULL UNIQUE,
+            module_id           TEXT NOT NULL,
+            module_kind         TEXT NOT NULL CHECK(module_kind IN
+                                ('detector','scorer','policy','execution',
+                                 'memory_learning','safety')),
+            health              REAL NOT NULL CHECK(health >= 0 AND health <= 1),
+            reliability         REAL NOT NULL CHECK(reliability >= 0 AND reliability <= 1),
+            recency             REAL NOT NULL CHECK(recency >= 0 AND recency <= 1),
+            trust_score         REAL NOT NULL CHECK(trust_score >= 0 AND trust_score <= 1),
+            state               TEXT NOT NULL CHECK(state IN
+                                ('strong','degraded','uncertain','unavailable')),
+            ts_last_assessed    INTEGER NOT NULL,
+            ts_created          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlscg_user_env_state_kind
+            ON ml_self_capability_graph(user_id, resolved_env, state, module_kind);
+    `);
+});
+
+migrate('234_ml_introspective_summaries', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_introspective_summaries (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            summary_id               TEXT NOT NULL UNIQUE,
+            decision_id              TEXT NOT NULL,
+            modules_relied_on_json   TEXT NOT NULL,
+            self_trust_aggregate     REAL NOT NULL CHECK(self_trust_aggregate >= 0 AND self_trust_aggregate <= 1),
+            confidence_modifier      REAL NOT NULL CHECK(confidence_modifier >= 0 AND confidence_modifier <= 1),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlis_user_env_decision_ts
+            ON ml_introspective_summaries(user_id, resolved_env, decision_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §121 REFLECTIVE EQUILIBRIUM 2026-05-16] _meta canonical PDF
 // — §121 (lines 3297-3347). Cross-layer coherence audit pe 6 canonical
 // layers (constitution/utility/regime_grammar/concept_library/thesis_graph/
