@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §125 EPISTEMIC TENSION FIELD 2026-05-16] _meta canonical
+// PDF — §125 (lines 3494-3552). Pre-contradiction stress engine peste 8
+// surse canonice + 4 gradient kinds + 5 action states. "Sistemul meu este
+// pe cale sa se rupa din interior?" NU inlocuieste veto/drift/OOD — le
+// SUPRAPUNE intr-un stres compus. Distinct from §120 unknownsRegistry
+// (explicit ignorance), §121 reflectiveEquilibrium (post-hoc audit), §44
+// adversarialSelfTester (post-attack), §29 circuitBreaker (active).
+migrate('239_ml_tension_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_tension_assessments (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id        TEXT NOT NULL UNIQUE,
+            sources_json         TEXT NOT NULL,
+            tension_score        REAL NOT NULL CHECK(tension_score >= 0 AND tension_score <= 1),
+            gradient_kind        TEXT NOT NULL CHECK(gradient_kind IN
+                                 ('local','global','persistent','acute')),
+            recommended_state    TEXT NOT NULL CHECK(recommended_state IN
+                                 ('continue','caution','reduce_size',
+                                  'observer','full_freeze')),
+            ts                   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlta_user_env_state_ts
+            ON ml_tension_assessments(user_id, resolved_env, recommended_state, ts);
+    `);
+});
+
+migrate('240_ml_tension_sources_audit', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_tension_sources_audit (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id             TEXT NOT NULL UNIQUE,
+            assessment_id        TEXT NOT NULL,
+            source_kind          TEXT NOT NULL CHECK(source_kind IN
+                                 ('hypotheses','thesis_nodes','regime_beliefs',
+                                  'confidence_bounds','unknowns','competence',
+                                  'operational_health','utility_priorities')),
+            contribution_score   REAL NOT NULL CHECK(contribution_score >= 0 AND contribution_score <= 1),
+            notes                TEXT,
+            ts                   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltsa_user_env_assessment_source
+            ON ml_tension_sources_audit(user_id, resolved_env, assessment_id, source_kind);
+    `);
+});
+
 // [OMEGA Wave 3 §124 PLURAL SELF / RIVAL WORLDVIEW 2026-05-16] R6 canonical
 // PDF — §124 (lines 3445-3491). N worldview agents cu ontologii diferite
 // (trend_following/mean_reversion/liquidity_hunt/macro_dominant/
