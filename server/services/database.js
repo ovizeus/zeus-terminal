@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §92 UNCERTAINTY PROPAGATION 2026-05-16] cross-cutting canonical PDF
+// — canonical PDF §92 (line 2374). Pipeline-level uncertainty compounding via
+// linear/product propagation algebra. "Confidence 74% pe pipeline degradat
+// = 74% ± 18%, NU ± 3%." Distinct from §20 calibration (output-only).
+migrate('173_ml_uncertainty_nodes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_uncertainty_nodes (
+            id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                      INTEGER NOT NULL,
+            resolved_env                 TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            node_id                      TEXT NOT NULL UNIQUE,
+            pipeline_id                  TEXT NOT NULL,
+            kind                         TEXT NOT NULL CHECK(kind IN
+                                         ('data','detector','aggregator','decision')),
+            point_estimate               REAL NOT NULL,
+            variance                     REAL NOT NULL CHECK(variance >= 0),
+            contributing_node_ids_json   TEXT,
+            ts                           INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlun_user_env_pipe
+            ON ml_uncertainty_nodes(user_id, resolved_env, pipeline_id);
+    `);
+});
+
+migrate('174_ml_uncertainty_pipelines', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_uncertainty_pipelines (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pipeline_id                 TEXT NOT NULL UNIQUE,
+            name                        TEXT NOT NULL,
+            decision_node_id            TEXT,
+            total_propagated_variance   REAL,
+            status                      TEXT NOT NULL DEFAULT 'HEALTHY' CHECK(status IN
+                                        ('HEALTHY','DEGRADED','UNRELIABLE')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlup_user_env_status
+            ON ml_uncertainty_pipelines(user_id, resolved_env, status);
+    `);
+});
+
 // [OMEGA Wave 3 §91 TOPOLOGICAL DATA ANALYSIS 2026-05-16] R2 canonical PDF
 // — canonical PDF §91 (line 2372). Persistent homology primitive on price feature
 // space. Detects regime shifts via Betti numbers (B0=components, B1=loops) before
