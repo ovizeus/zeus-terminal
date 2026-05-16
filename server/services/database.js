@@ -994,6 +994,59 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §141 ERGODICITY AWARENESS 2026-05-16] R3A canonical PDF —
+// §141 (lines 4707-4708). Non-ergodicity detector + framework switcher.
+// "Diferenta dintre medie si traiectorie te poate distruge." 3 signal-uri
+// (vol expansion + sequential drawdown + relative leverage increase) →
+// non_ergodicity_score → 2-regime switch (ergodic_normal/non_ergodic_
+// survival) → 2 framework modes (expected_value / minimax_survival).
+// Distinct from §246 ddRecoveryGraduated (post-incident ladder), §136
+// optionPreservationEngine (per-action cost), adversarialMonteCarlo (R-1).
+// §141 = SINGULAR detector of non-ergodicity in OMEGA.
+migrate('267_ml_ergodicity_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ergodicity_assessments (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id                 TEXT NOT NULL UNIQUE,
+            vol_expansion_rate            REAL NOT NULL,
+            sequential_drawdown           REAL NOT NULL CHECK(sequential_drawdown >= 0),
+            relative_leverage_increase    REAL NOT NULL,
+            non_ergodicity_score          REAL NOT NULL CHECK(non_ergodicity_score >= 0 AND non_ergodicity_score <= 1),
+            regime                        TEXT NOT NULL CHECK(regime IN
+                                          ('ergodic_normal','non_ergodic_survival')),
+            framework_mode                TEXT NOT NULL CHECK(framework_mode IN
+                                          ('expected_value','minimax_survival')),
+            triggered_signals_json        TEXT NOT NULL,
+            ts                            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlea_user_env_regime_ts
+            ON ml_ergodicity_assessments(user_id, resolved_env, regime, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlea_user_env_ts
+            ON ml_ergodicity_assessments(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('268_ml_ergodicity_regime_transitions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ergodicity_regime_transitions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            transition_id            TEXT NOT NULL UNIQUE,
+            from_regime              TEXT NOT NULL CHECK(from_regime IN
+                                     ('ergodic_normal','non_ergodic_survival')),
+            to_regime                TEXT NOT NULL CHECK(to_regime IN
+                                     ('ergodic_normal','non_ergodic_survival')),
+            trigger_signals_json     TEXT NOT NULL,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlert_user_env_ts
+            ON ml_ergodicity_regime_transitions(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §140 COGNITIVE CONTAINMENT ZONES 2026-05-16] R5B canonical
 // PDF — §140 (lines 4181-4234). Idea quarantine engine. 6 idea_kinds
 // (concept/rule/causality/heuristic/signal/ontology) + 7-stage progression
