@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §93 REGIME GRAMMAR 2026-05-16] R2 canonical PDF — canonical
+// PDF §93 (line 2376). Compositional regime language with 5 orthogonal
+// primitives (volatility × trend × liquidity × derivatives × macro). Replaces
+// flat taxonomy; enables hybrid/transition regimes + knowledge transfer via
+// primitive overlap.
+migrate('175_ml_regime_sentences', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_regime_sentences (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            sentence_id     TEXT NOT NULL UNIQUE,
+            regime_label    TEXT NOT NULL,
+            primitives_json TEXT NOT NULL,
+            source_context  TEXT,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrs_user_env_ts
+            ON ml_regime_sentences(user_id, resolved_env, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlrs_user_env_label
+            ON ml_regime_sentences(user_id, resolved_env, regime_label);
+    `);
+});
+
+migrate('176_ml_regime_overlaps', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_regime_overlaps (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id          INTEGER NOT NULL,
+            resolved_env     TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            overlap_id       TEXT NOT NULL UNIQUE,
+            sentence_a_id    TEXT NOT NULL,
+            sentence_b_id    TEXT NOT NULL,
+            overlap_count    INTEGER NOT NULL CHECK(overlap_count BETWEEN 0 AND 5),
+            overlap_ratio    REAL NOT NULL,
+            ts               INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlro_user_env_ts
+            ON ml_regime_overlaps(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §92 UNCERTAINTY PROPAGATION 2026-05-16] cross-cutting canonical PDF
 // — canonical PDF §92 (line 2374). Pipeline-level uncertainty compounding via
 // linear/product propagation algebra. "Confidence 74% pe pipeline degradat
