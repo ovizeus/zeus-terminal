@@ -994,6 +994,72 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §140 COGNITIVE CONTAINMENT ZONES 2026-05-16] R5B canonical
+// PDF — §140 (lines 4181-4234). Idea quarantine engine. 6 idea_kinds
+// (concept/rule/causality/heuristic/signal/ontology) + 7-stage progression
+// (idea_detected → quarantined → replay_tested → shadow_tested → canary_
+// influence → core_admitted | retired) + contamination risk score +
+// incubation period + staged promotion. "E o descoperire reala sau doar o
+// tentatie intelectuala prematura?". Distinct from §138 counterOntology
+// Sandbox (special-case for ontology only, 3-state); §140 = GENERAL
+// framework subsuming §138 mechanic for all 6 idea types.
+migrate('265_ml_quarantined_ideas', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_quarantined_ideas (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            idea_id                  TEXT NOT NULL UNIQUE,
+            idea_kind                TEXT NOT NULL CHECK(idea_kind IN
+                                     ('concept','rule','causality',
+                                      'heuristic','signal','ontology')),
+            title                    TEXT NOT NULL,
+            description              TEXT NOT NULL,
+            stage                    TEXT NOT NULL CHECK(stage IN
+                                     ('idea_detected','quarantined',
+                                      'replay_tested','shadow_tested',
+                                      'canary_influence','core_admitted',
+                                      'retired')),
+            contamination_risk       REAL NOT NULL CHECK(contamination_risk >= 0 AND contamination_risk <= 1),
+            incubation_started_ts    INTEGER,
+            replay_test_passed       INTEGER NOT NULL CHECK(replay_test_passed IN (0,1)),
+            shadow_test_passed       INTEGER NOT NULL CHECK(shadow_test_passed IN (0,1)),
+            canary_test_passed       INTEGER NOT NULL CHECK(canary_test_passed IN (0,1)),
+            decision_count           INTEGER NOT NULL CHECK(decision_count >= 0),
+            active                   INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlqi_user_env_stage_active
+            ON ml_quarantined_ideas(user_id, resolved_env, stage, active);
+        CREATE INDEX IF NOT EXISTS idx_mlqi_user_env_kind_ts
+            ON ml_quarantined_ideas(user_id, resolved_env, idea_kind, ts);
+    `);
+});
+
+migrate('266_ml_idea_promotions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_idea_promotions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            promotion_id    TEXT NOT NULL UNIQUE,
+            idea_id         TEXT NOT NULL,
+            from_stage      TEXT NOT NULL CHECK(from_stage IN
+                            ('idea_detected','quarantined','replay_tested',
+                             'shadow_tested','canary_influence',
+                             'core_admitted','retired')),
+            to_stage        TEXT NOT NULL CHECK(to_stage IN
+                            ('idea_detected','quarantined','replay_tested',
+                             'shadow_tested','canary_influence',
+                             'core_admitted','retired')),
+            reason          TEXT NOT NULL,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlip_user_env_idea_ts
+            ON ml_idea_promotions(user_id, resolved_env, idea_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §139 TEMPORAL COMMITMENT LEDGER 2026-05-16] _meta canonical
 // PDF — §139 (lines 4138-4180). Promise-to-self consistency engine. 6
 // commitment kinds + 3 strength levels + 4 statuses + 3 violation kinds +
