@@ -994,6 +994,43 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §135 EPISTEMIC HUMILITY GOVERNOR 2026-05-16] _meta canonical
+// PDF — §135 (lines 3954-3996). Right-to-be-bold engine. Aggregates 7 meta
+// signals (primary_confidence + confidence_of_confidence + competence +
+// unknowns_debt + false_consensus + representation_debt + tension_field)
+// into humility_score → 3-state permission ladder (humble_observer /
+// moderate / bold) + size multiplier (0 / 0.5 / 1.0). "Nu doar pot intra,
+// dar am dreptul epistemic sa intru tare?". Aggregator INTEGRATIV — combina
+// output-uri din §126/§122/§120/§128/§134/§125 plus primary confidence;
+// nu duplica niciun modul existent.
+migrate('258_ml_humility_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_humility_assessments (
+            id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                    INTEGER NOT NULL,
+            resolved_env               TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id              TEXT NOT NULL UNIQUE,
+            decision_id                TEXT NOT NULL,
+            primary_confidence         REAL NOT NULL CHECK(primary_confidence >= 0 AND primary_confidence <= 1),
+            confidence_of_confidence   REAL NOT NULL CHECK(confidence_of_confidence >= 0 AND confidence_of_confidence <= 1),
+            competence_score           REAL NOT NULL CHECK(competence_score >= 0 AND competence_score <= 1),
+            unknowns_debt              REAL NOT NULL CHECK(unknowns_debt >= 0 AND unknowns_debt <= 1),
+            false_consensus_penalty    REAL NOT NULL CHECK(false_consensus_penalty >= 0 AND false_consensus_penalty <= 1),
+            representation_debt        REAL NOT NULL CHECK(representation_debt >= 0 AND representation_debt <= 1),
+            tension_field_level        REAL NOT NULL CHECK(tension_field_level >= 0 AND tension_field_level <= 1),
+            humility_score             REAL NOT NULL CHECK(humility_score >= 0 AND humility_score <= 1),
+            boldness_permission        TEXT NOT NULL CHECK(boldness_permission IN
+                                       ('humble_observer','moderate','bold')),
+            size_multiplier            REAL NOT NULL CHECK(size_multiplier >= 0 AND size_multiplier <= 1),
+            ts                         INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlha_user_env_decision_ts
+            ON ml_humility_assessments(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlha_user_env_perm_ts
+            ON ml_humility_assessments(user_id, resolved_env, boldness_permission, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §134 REPRESENTATION DEBT TRACKER 2026-05-16] _meta canonical
 // PDF — §134 (lines 3913-3953). Map-territory misfit engine. Cumulative drift
 // between internal representations (concepts/regimes/primitives/explanations/
