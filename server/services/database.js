@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §90 GOODHART'S LAW PROTECTION 2026-05-16] R5B canonical PDF
+// — canonical PDF §90 (line 2370). Metric gaming prevention via composite,
+// holdout (model-invisible) + rotation. "Cand metrica devine tinta, inceteaza
+// sa mai fie buna." Governance layer over metrics.
+migrate('169_ml_metric_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_metric_registry (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            metric_id       TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL,
+            formula_hash    TEXT NOT NULL,
+            kind            TEXT NOT NULL CHECK(kind IN ('primary','secondary','holdout')),
+            model_visible   INTEGER NOT NULL DEFAULT 1 CHECK(model_visible IN (0,1)),
+            status          TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                            ('ACTIVE','RETIRED','ROTATED')),
+            active_from     INTEGER NOT NULL,
+            retired_at      INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmr_user_env_kind_status
+            ON ml_metric_registry(user_id, resolved_env, kind, status);
+    `);
+});
+
+migrate('170_ml_metric_rotations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_metric_rotations (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            rotation_id          TEXT NOT NULL UNIQUE,
+            retired_metric_ids   TEXT NOT NULL,
+            new_metric_ids       TEXT NOT NULL,
+            rotation_reason      TEXT NOT NULL,
+            ts                   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmrot_user_env_ts
+            ON ml_metric_rotations(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §89 TEACHER-STUDENT DISTILLATION 2026-05-16] R5A canonical PDF
 // — canonical PDF §89 (lines 2335-2368). Teacher (heavy/research) vs student
 // (light/live). Consistency monitoring + fallback rules. "Cat de aproape live?"
