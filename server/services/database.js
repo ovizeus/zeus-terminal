@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §73 INFORMATION-THEORETIC EDGE 2026-05-15] R5A canonical PDF
+// — canonical PDF §73 (lines 1976-1977). Edge in BITS via Mutual Information.
+// "MI zero = zero predictive content, indiferent cat arata frumos pe backtest."
+// Redundancy + synergy detection between signals.
+migrate('137_ml_signal_mi_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_signal_mi_observations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            signal_id           TEXT NOT NULL,
+            signal_value_bin    INTEGER NOT NULL CHECK(signal_value_bin >= 0 AND signal_value_bin <= 9),
+            outcome             TEXT NOT NULL CHECK(outcome IN ('win','loss','scratch')),
+            count               INTEGER NOT NULL DEFAULT 0,
+            last_updated        INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, signal_id, signal_value_bin, outcome)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsmo_user_env_signal
+            ON ml_signal_mi_observations(user_id, resolved_env, signal_id);
+    `);
+});
+
+migrate('138_ml_signal_mi_scores', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_signal_mi_scores (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            signal_id                   TEXT NOT NULL,
+            mutual_information_bits     REAL NOT NULL,
+            joint_entropy_bits          REAL NOT NULL,
+            sample_count                INTEGER NOT NULL,
+            redundancy_partners_json    TEXT,
+            synergy_partners_json       TEXT,
+            last_computed               INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, signal_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsms_user_env_mi
+            ON ml_signal_mi_scores(user_id, resolved_env, mutual_information_bits);
+    `);
+});
+
 // [OMEGA Wave 3 §72 META-LEARNING / RAPID ADAPTATION 2026-05-15] R5A canonical PDF
 // — canonical PDF §72 (lines 1974-1975). Track adaptation speed per regime transition.
 // Bot normal 3-6 weeks → bot cu meta-learning 3-5 days. Wave 3 scope = adaptation
