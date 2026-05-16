@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §107 INVARIANCE / NUISANCE-ROBUSTNESS 2026-05-16] R5A
+// canonical PDF — §107 (lines 2729-2770). Stability tests pe perturbari
+// irelevante (scale/jitter/resampling/feed/representation). "Daca nu s-a
+// schimbat sensul pietei, de ce s-a schimbat decizia?"
+migrate('203_ml_invariance_tests', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_invariance_tests (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            test_id             TEXT NOT NULL UNIQUE,
+            model_id            TEXT NOT NULL,
+            perturbation_kind   TEXT NOT NULL CHECK(perturbation_kind IN
+                                ('scale','timestamp_jitter','resampling',
+                                 'feed_perturbation','representation')),
+            original_verdict    TEXT NOT NULL,
+            perturbed_verdict   TEXT NOT NULL,
+            verdict_stable      INTEGER NOT NULL CHECK(verdict_stable IN (0,1)),
+            magnitude           REAL,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlit_user_env_model_kind
+            ON ml_invariance_tests(user_id, resolved_env, model_id, perturbation_kind);
+    `);
+});
+
+migrate('204_ml_robustness_scores', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_robustness_scores (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            score_id        TEXT NOT NULL UNIQUE,
+            model_id        TEXT NOT NULL,
+            kind            TEXT NOT NULL CHECK(kind IN
+                            ('scale','timestamp_jitter','resampling',
+                             'feed_perturbation','representation','aggregate')),
+            score           REAL NOT NULL CHECK(score >= 0 AND score <= 1),
+            sample_count    INTEGER NOT NULL CHECK(sample_count >= 0),
+            status          TEXT NOT NULL CHECK(status IN
+                            ('ROBUST','FRAGILE','INSUFFICIENT')),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrs_user_env_model_status_ts
+            ON ml_robustness_scores(user_id, resolved_env, model_id, status, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §106 COMPETENCE MAP 2026-05-16] R5B canonical PDF —
 // §106 (lines 2673-2726). Domain-of-validity cartography with per-cell
 // action permission. "Performanta globala buna NU acorda permisiune
