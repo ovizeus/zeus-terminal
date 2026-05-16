@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §113 CAUSAL DISCOVERY / GRAPH REVISION 2026-05-16] R2
+// canonical PDF — §113 (lines 2971-2998). SCM edge revision proposals
+// with proposal-confirm-apply lifecycle. "Descoperirea cauzala NU modifica
+// direct live graph fara validare." Distinct from §40 structuralCausalModel
+// (static chains), §42 interventionalReasoning (do-calculus on STATIC),
+// §68 thesisGraph (per-trade DAG).
+migrate('215_ml_causal_edge_proposals', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_causal_edge_proposals (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            proposal_id          TEXT NOT NULL UNIQUE,
+            from_node            TEXT NOT NULL,
+            to_node              TEXT NOT NULL,
+            proposed_change      TEXT NOT NULL CHECK(proposed_change IN
+                                 ('ADD','STRENGTHEN','WEAKEN','INVERT',
+                                  'REMOVE','CONTEXTUALIZE')),
+            candidate_strength   REAL NOT NULL CHECK(candidate_strength >= 0 AND candidate_strength <= 1),
+            evidence_summary     TEXT NOT NULL,
+            evidence_count       INTEGER NOT NULL CHECK(evidence_count >= 0),
+            status               TEXT NOT NULL DEFAULT 'PROPOSED' CHECK(status IN
+                                 ('PROPOSED','SHADOW_VALIDATING','CONFIRMED','REJECTED')),
+            human_approved       INTEGER NOT NULL DEFAULT 0 CHECK(human_approved IN (0,1)),
+            ts_proposed          INTEGER NOT NULL,
+            ts_decided           INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcep_user_env_status
+            ON ml_causal_edge_proposals(user_id, resolved_env, status);
+    `);
+});
+
+migrate('216_ml_graph_revisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_graph_revisions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            revision_id              TEXT NOT NULL UNIQUE,
+            version                  INTEGER NOT NULL CHECK(version >= 1),
+            applied_proposals_json   TEXT NOT NULL,
+            revision_reason          TEXT NOT NULL,
+            ts_applied               INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgr_user_env_version
+            ON ml_graph_revisions(user_id, resolved_env, version);
+    `);
+});
+
 // [OMEGA Wave 3 §112 COMPETING HYPOTHESES ENGINE 2026-05-16] R2 canonical
 // PDF — §112 (lines 2936-2968). Live market-wide hypothesis registry cu
 // posterior transfer. "Nicio teza dominanta fara alternative explicite."
