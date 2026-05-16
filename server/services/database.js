@@ -994,6 +994,50 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §106 COMPETENCE MAP 2026-05-16] R5B canonical PDF —
+// §106 (lines 2673-2726). Domain-of-validity cartography with per-cell
+// action permission. "Performanta globala buna NU acorda permisiune
+// universala — fiecare regiune isi castiga dreptul la capital."
+migrate('201_ml_competence_cells', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_competence_cells (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            cell_id             TEXT NOT NULL UNIQUE,
+            dimensions_json     TEXT NOT NULL,
+            validity_score      REAL NOT NULL CHECK(validity_score >= 0 AND validity_score <= 1),
+            sample_count        INTEGER NOT NULL CHECK(sample_count >= 0),
+            win_rate            REAL,
+            action_permission   TEXT NOT NULL CHECK(action_permission IN
+                                ('allowed','reduced_size','shadow_only','observer_only')),
+            last_updated        INTEGER NOT NULL,
+            ts_created          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcc_user_env_permission
+            ON ml_competence_cells(user_id, resolved_env, action_permission);
+    `);
+});
+
+migrate('202_ml_competence_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_competence_decisions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id         TEXT NOT NULL UNIQUE,
+            cell_id             TEXT,
+            decision_context    TEXT NOT NULL,
+            action_permission   TEXT NOT NULL CHECK(action_permission IN
+                                ('allowed','reduced_size','shadow_only','observer_only')),
+            reason              TEXT NOT NULL,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcd_user_env_permission_ts
+            ON ml_competence_decisions(user_id, resolved_env, action_permission, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §105 LATENT STATE ESTIMATION 2026-05-16] R2 canonical PDF —
 // §105 (lines 2628-2671). Bayesian belief-state engine over unobservables:
 // inventory pressure / liquidity withdrawal / crowd fragility / squeeze /
