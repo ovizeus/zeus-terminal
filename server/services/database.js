@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §82 COMPOSITIONAL GENERALIZATION 2026-05-16] R2 canonical PDF
+// — canonical PDF §82 (lines 2145-2146). Decompose novel case into known atomic
+// conditions + reason via composition. "Diferit de OOD blocheaza — §82 rationam."
+migrate('153_ml_condition_components', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_condition_components (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            condition_id            TEXT NOT NULL UNIQUE,
+            name                    TEXT NOT NULL,
+            atomic_features_json    TEXT NOT NULL,
+            known_outcomes_json     TEXT NOT NULL,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcc_user_env
+            ON ml_condition_components(user_id, resolved_env);
+    `);
+});
+
+migrate('154_ml_compositional_predictions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_compositional_predictions (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            prediction_id               TEXT NOT NULL UNIQUE,
+            components_used_json        TEXT NOT NULL,
+            interaction_rule            TEXT NOT NULL CHECK(interaction_rule IN
+                                        ('additive','multiplicative','min','max')),
+            interaction_score           REAL NOT NULL,
+            predicted_outcome_json      TEXT NOT NULL,
+            confidence                  REAL NOT NULL,
+            actual_outcome_json         TEXT,
+            validated                   INTEGER NOT NULL DEFAULT 0 CHECK(validated IN (0,1)),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcp_user_env_ts
+            ON ml_compositional_predictions(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §81 DISTRIBUTIONAL ROBUSTNESS OPTIMIZATION 2026-05-16] R5A canonical PDF
 // — canonical PDF §81 (lines 2143-2144). DRO: optimize WORST-case across uncertainty set,
 // not expected value. "Robustetea in coada valoreaza mai mult decat media." Floor garantat.
