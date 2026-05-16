@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §100 NARRATIVE COHERENCE 2026-05-16] R2 canonical PDF —
+// canonical PDF §100 (line 2617). Causal-story validator over aggregated
+// signals. "Diferit de thesis graph (dependente logice) — narrative engine
+// mapeaza plauzibilitate cauzala umana."
+migrate('189_ml_narrative_threads', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_narrative_threads (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            thread_id             TEXT NOT NULL UNIQUE,
+            why_moving            TEXT,
+            who_selling           TEXT,
+            who_buying            TEXT,
+            trapped_side          TEXT,
+            expected_resolution   TEXT,
+            coherence_score       REAL NOT NULL DEFAULT 0 CHECK(coherence_score >= 0 AND coherence_score <= 1),
+            status                TEXT NOT NULL DEFAULT 'PENDING' CHECK(status IN
+                                  ('COHERENT','INCOHERENT','PENDING')),
+            ts                    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlnt_user_env_status
+            ON ml_narrative_threads(user_id, resolved_env, status);
+    `);
+});
+
+migrate('190_ml_narrative_arc_links', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_narrative_arc_links (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            link_id         TEXT NOT NULL UNIQUE,
+            thread_id       TEXT NOT NULL,
+            signal_id       TEXT NOT NULL,
+            supports        INTEGER NOT NULL CHECK(supports IN (0,1)),
+            contribution    REAL,
+            reason          TEXT,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlnl_user_env_thread
+            ON ml_narrative_arc_links(user_id, resolved_env, thread_id);
+    `);
+});
+
 // [OMEGA Wave 3 §99 ACTIVE SENSING POLICY 2026-05-16] R4 canonical PDF —
 // canonical PDF §99 (lines 2569-2615). Cost-aware observability acquisition.
 // "Merita sa consum resurse acum pentru inca o bucata de cunoastere?" Decisions
