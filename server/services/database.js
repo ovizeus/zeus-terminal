@@ -994,6 +994,56 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §111 SCENARIO TREE PLANNER 2026-05-16] R6 canonical PDF —
+// §111 (lines 2901-2933). Tree-of-thought multi-future projection per
+// decision. "Daca intru acum, care sunt cele mai probabile 3-5 lumi care
+// urmeaza?" Distinct from §71 internalDebate (1 decision, 3 voices),
+// §48 ensembleVoting (aggregate predictions), §96 synthetic-for-training,
+// §100 narrativeCoherence (1 story).
+migrate('211_ml_scenario_trees', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_scenario_trees (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            tree_id                  TEXT NOT NULL UNIQUE,
+            decision_id              TEXT NOT NULL,
+            dominant_branch          TEXT NOT NULL CHECK(dominant_branch IN
+                                     ('continuation','fakeout','squeeze',
+                                      'mean_reversion','macro_interruption')),
+            active_branches_count    INTEGER NOT NULL CHECK(active_branches_count >= 0),
+            weighted_score           REAL NOT NULL,
+            adverse_share            REAL NOT NULL CHECK(adverse_share >= 0 AND adverse_share <= 1),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlst_user_env_ts
+            ON ml_scenario_trees(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('212_ml_scenario_branches', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_scenario_branches (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            branch_id         TEXT NOT NULL UNIQUE,
+            tree_id           TEXT NOT NULL,
+            branch_kind       TEXT NOT NULL CHECK(branch_kind IN
+                              ('continuation','fakeout','squeeze',
+                               'mean_reversion','macro_interruption')),
+            probability       REAL NOT NULL CHECK(probability >= 0 AND probability <= 1),
+            expected_action   TEXT NOT NULL,
+            expected_pnl      REAL NOT NULL,
+            is_pruned         INTEGER NOT NULL CHECK(is_pruned IN (0,1)),
+            reason            TEXT,
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsb_user_env_tree
+            ON ml_scenario_branches(user_id, resolved_env, tree_id);
+    `);
+});
+
 // [OMEGA Wave 3 §110 ADAPTIVE REASONING ROUTER 2026-05-16] R2 canonical PDF
 // — §110 (lines 2869-2898). Context-aware reasoning module selection with
 // safety/veto enforcement. "Pentru acest caz concret, ce fir de gandire
