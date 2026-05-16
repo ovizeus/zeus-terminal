@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §128 FALSE CONSENSUS DETECTOR 2026-05-16] R6 canonical PDF
+// — §128 (lines 3665-3722). Epistemic dependence graph + consensus inflation
+// penalty. "Am multe dovezi diferite sau doar mai multe ecouri ale aceleiasi
+// dovezi?". 3 verdicts: robust_independent/partially_shared/highly_coupled_
+// pseudo. Distinct from §117 epistemicProvenance (lineage tracking), §48
+// ensembleVoting (raw vote counting), §124 pluralSelfChamber (rival worldview
+// dissent), §51 dataIntegrityConsensus (price median anomaly).
+migrate('245_ml_consensus_dependence_edges', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_consensus_dependence_edges (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            edge_id               TEXT NOT NULL UNIQUE,
+            signal_id             TEXT NOT NULL,
+            upstream_source_id    TEXT NOT NULL,
+            ts                    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcde_user_env_signal_ts
+            ON ml_consensus_dependence_edges(user_id, resolved_env, signal_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlcde_user_env_source_ts
+            ON ml_consensus_dependence_edges(user_id, resolved_env, upstream_source_id, ts);
+    `);
+});
+
+migrate('246_ml_consensus_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_consensus_assessments (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id               TEXT NOT NULL UNIQUE,
+            signals_json                TEXT NOT NULL,
+            raw_count                   INTEGER NOT NULL CHECK(raw_count >= 0),
+            effective_count             REAL NOT NULL CHECK(effective_count >= 0),
+            mean_pairwise_dependence    REAL NOT NULL CHECK(mean_pairwise_dependence >= 0 AND mean_pairwise_dependence <= 1),
+            inflation_factor            REAL NOT NULL CHECK(inflation_factor >= 0 AND inflation_factor <= 1),
+            verdict                     TEXT NOT NULL CHECK(verdict IN
+                                        ('robust_independent','partially_shared',
+                                         'highly_coupled_pseudo')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlca_user_env_verdict_ts
+            ON ml_consensus_assessments(user_id, resolved_env, verdict, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §127 IDENTITY CONTINUITY 2026-05-16] _meta canonical PDF
 // — §127 (lines 3608-3662). 7-axis identity hash snapshots + cumulative
 // drift tracking. "Sunt tot eu, doar mai bun, sau am devenit alt agent?"
