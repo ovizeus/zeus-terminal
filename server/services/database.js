@@ -994,6 +994,52 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §78 LABEL RELIABILITY / OUTCOME PURITY 2026-05-16] R5A canonical PDF
+// — canonical PDF §78 (lines 2034-2080). 4-class label purity + 8 contamination
+// types + sample weighting for ML training. "Rezultatul reflecta calitatea?"
+migrate('146_ml_label_purity_scores', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_label_purity_scores (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trade_id                    TEXT NOT NULL UNIQUE,
+            label_classification        TEXT NOT NULL CHECK(label_classification IN
+                                        ('clean','noisy','censored','excluded')),
+            purity_score                REAL NOT NULL,
+            sample_weight               REAL NOT NULL,
+            outcome                     TEXT NOT NULL,
+            contamination_reasons_json  TEXT,
+            last_updated                INTEGER NOT NULL,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mllps_user_env_class
+            ON ml_label_purity_scores(user_id, resolved_env, label_classification);
+    `);
+});
+
+migrate('147_ml_contamination_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_contamination_events (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trade_id            TEXT NOT NULL,
+            contamination_type  TEXT NOT NULL CHECK(contamination_type IN
+                                ('stiri_majore','exchange_outage','venue_anomaly',
+                                 'spread_spike','feed_degradation','execution_failure',
+                                 'forced_flatten_extern','dead_man_event')),
+            severity            TEXT NOT NULL CHECK(severity IN ('low','med','high')),
+            details_json        TEXT,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlce_user_env_trade_ts
+            ON ml_contamination_events(user_id, resolved_env, trade_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlce_user_env_type_ts
+            ON ml_contamination_events(user_id, resolved_env, contamination_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §77 CROSS-HORIZON ARBITRATION 2026-05-16] R3A canonical PDF
 // — canonical PDF §77 (lines 1985-2024). Horizon ownership per position +
 // signal conflict arbitration (HTF/MTF/LTF/micro). "Cine are autoritate?"
