@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §74 INTERVENTIONAL REASONING / DO-CALCULUS 2026-05-16] R2 canonical PDF
+// — canonical PDF §74 (lines 1978-1979). Do-calculus pre-action: price perturbation
+// + queue shift + signal emission + 2nd-order reaction. Complement §40 SCM + §23 TCA.
+// "A actiona inseamna a schimba mediul in care actionezi."
+migrate('139_ml_intervention_predictions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_intervention_predictions (
+            id                                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                             INTEGER NOT NULL,
+            resolved_env                        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            intervention_id                     TEXT NOT NULL UNIQUE,
+            action_type                         TEXT NOT NULL CHECK(action_type IN
+                                                ('market_buy','market_sell','limit_buy','limit_sell')),
+            size                                REAL NOT NULL,
+            baseline_state_json                 TEXT,
+            predicted_price_perturbation_bps    REAL NOT NULL,
+            predicted_queue_shift               REAL NOT NULL,
+            predicted_signal_emission           REAL NOT NULL,
+            predicted_second_order_risk         REAL NOT NULL,
+            predicted_second_order_json         TEXT,
+            ts                                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlip_user_env_action_ts
+            ON ml_intervention_predictions(user_id, resolved_env, action_type, ts);
+    `);
+});
+
+migrate('140_ml_intervention_outcomes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_intervention_outcomes (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            intervention_id                 TEXT NOT NULL,
+            actual_price_perturbation_bps   REAL NOT NULL,
+            actual_queue_shift              REAL NOT NULL,
+            actual_reaction_score           REAL NOT NULL,
+            prediction_error_score          REAL NOT NULL,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlio_intervention
+            ON ml_intervention_outcomes(intervention_id);
+        CREATE INDEX IF NOT EXISTS idx_mlio_user_env_ts
+            ON ml_intervention_outcomes(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §73 INFORMATION-THEORETIC EDGE 2026-05-15] R5A canonical PDF
 // — canonical PDF §73 (lines 1976-1977). Edge in BITS via Mutual Information.
 // "MI zero = zero predictive content, indiferent cat arata frumos pe backtest."
