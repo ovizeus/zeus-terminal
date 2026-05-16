@@ -994,6 +994,64 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §138 COUNTER-ONTOLOGY SANDBOX 2026-05-16] R5B canonical PDF
+// — §138 (lines 4091-4137). Alien frame generator. Generates ENTIRELY NEW
+// conceptual families (flow-as-pressure, market-as-network-fracture,
+// liquidity-as-phase-transition etc.) — distinct from §123 ontologyRevision
+// Engine (modifies existing primitives) and §124 pluralSelfChamber (rival
+// worldviews same family). 3-state progression ladder (sandbox → shadow →
+// live_candidate) cu evaluation pe 4 axe (explanatory_novelty + predictive_
+// novelty + semantic_compression + stability). "Daca limbajul meu de acum
+// e prea sarac, prin ce alta lume conceptuala as putea intelege cazul?".
+// Reguli stricte: NU intra direct in live, sandbox/shadow/replay obligatoriu,
+// novelty fara putere explicativa = respinsa.
+migrate('261_ml_alien_frames', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_alien_frames (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            frame_id                 TEXT NOT NULL UNIQUE,
+            frame_name               TEXT NOT NULL,
+            frame_description        TEXT NOT NULL,
+            primary_primitives_json  TEXT NOT NULL,
+            source_metaphor          TEXT NOT NULL,
+            mode                     TEXT NOT NULL CHECK(mode IN
+                                     ('sandbox','shadow','live_candidate')),
+            explanatory_novelty      REAL NOT NULL CHECK(explanatory_novelty >= 0 AND explanatory_novelty <= 1),
+            predictive_novelty       REAL NOT NULL CHECK(predictive_novelty >= 0 AND predictive_novelty <= 1),
+            semantic_compression     REAL NOT NULL CHECK(semantic_compression >= 0 AND semantic_compression <= 1),
+            stability_score          REAL NOT NULL CHECK(stability_score >= 0 AND stability_score <= 1),
+            overall_value_score      REAL NOT NULL CHECK(overall_value_score >= 0 AND overall_value_score <= 1),
+            active                   INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlaf_user_env_mode_active
+            ON ml_alien_frames(user_id, resolved_env, mode, active);
+    `);
+});
+
+migrate('262_ml_alien_frame_comparisons', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_alien_frame_comparisons (
+            id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                   INTEGER NOT NULL,
+            resolved_env              TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            comparison_id             TEXT NOT NULL UNIQUE,
+            frame_id                  TEXT NOT NULL,
+            baseline_ontology_id      TEXT NOT NULL,
+            test_case_count           INTEGER NOT NULL CHECK(test_case_count >= 0),
+            frame_wins_count          INTEGER NOT NULL CHECK(frame_wins_count >= 0),
+            baseline_wins_count       INTEGER NOT NULL CHECK(baseline_wins_count >= 0),
+            draw_count                INTEGER NOT NULL CHECK(draw_count >= 0),
+            frame_advantage_score     REAL NOT NULL CHECK(frame_advantage_score >= -1 AND frame_advantage_score <= 1),
+            ts                        INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlafc_user_env_frame_ts
+            ON ml_alien_frame_comparisons(user_id, resolved_env, frame_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §137 EXPLANATION COMPRESSION TEST 2026-05-16] _meta canonical
 // PDF — §137 (lines 4045-4090). Understanding density engine. Measures
 // explanation quality via compression + density metrics. 5 categories
