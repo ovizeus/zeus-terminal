@@ -994,6 +994,59 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §133 STEELMAN ADVERSARY ENGINE 2026-05-16] R6 canonical PDF
+// — §133 (lines 3881-3912). Strongest opposing worldview builder. Library of
+// counter-arguments per thesis_type + active construction per decision +
+// quality score + approval gap ladder. "Daca cel mai inteligent adversar
+// al meu ar incerca sa ma contrazica, ce ar spune?". Distinct from §124
+// pluralSelfChamber (passive worldview registry), §113 socraticSelfDoubt
+// (adversarial counterfactual questions), §112 competingHypotheses (thesis
+// market), §128 falseConsensusDetector (fake consensus detection).
+migrate('254_ml_steelman_arguments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_steelman_arguments (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            argument_id              TEXT NOT NULL UNIQUE,
+            against_thesis_type      TEXT NOT NULL,
+            argument_text            TEXT NOT NULL,
+            argument_strength        REAL NOT NULL CHECK(argument_strength >= 0 AND argument_strength <= 1),
+            evidence_requirements_json TEXT NOT NULL,
+            active                   INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsa_user_env_type_active
+            ON ml_steelman_arguments(user_id, resolved_env, against_thesis_type, active);
+    `);
+});
+
+migrate('255_ml_steelman_constructions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_steelman_constructions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            construction_id          TEXT NOT NULL UNIQUE,
+            decision_id              TEXT NOT NULL,
+            primary_thesis           TEXT NOT NULL,
+            opposing_thesis_type     TEXT NOT NULL,
+            selected_arguments_json  TEXT NOT NULL,
+            composed_steelman        TEXT NOT NULL,
+            quality_score            REAL NOT NULL CHECK(quality_score >= 0 AND quality_score <= 1),
+            quality_verdict          TEXT NOT NULL CHECK(quality_verdict IN
+                                     ('weak','moderate','strong')),
+            primary_conviction       REAL NOT NULL CHECK(primary_conviction >= 0 AND primary_conviction <= 1),
+            decision_approved        INTEGER NOT NULL CHECK(decision_approved IN (0,1)),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsc_user_env_decision_ts
+            ON ml_steelman_constructions(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlsc_user_env_verdict_ts
+            ON ml_steelman_constructions(user_id, resolved_env, quality_verdict, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §132 SEMANTIC GROUNDING CHECK 2026-05-16] _meta canonical PDF
 // — §132 (lines 3843-3880). Word-to-world alignment engine. Anchors per
 // concept (RSI/volume/ATR thresholds) + runtime checks + 3-band classification
