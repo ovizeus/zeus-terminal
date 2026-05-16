@@ -994,6 +994,60 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §120 UNKNOWNS REGISTRY 2026-05-16] _meta canonical PDF —
+// §120 (lines 3249-3295). Explicit ignorance ledger cu 5 unknown kinds +
+// 5-axis impact tracking + 5-action debt response. "Necunoscutele NU au
+// voie sa ramana invizibile in decizie." Distinct from §47 inactivityDecay
+// (time decay), §97 forgettingEngine (knowledge retire), §103 wisdomLayer
+// (judgment), §106 competenceMap (validity), §99 activeSensingPolicy.
+migrate('229_ml_unknowns', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_unknowns (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            unknown_id               TEXT NOT NULL UNIQUE,
+            kind                     TEXT NOT NULL CHECK(kind IN
+                                     ('unknown_known','known_unknown',
+                                      'unresolved_ambiguity',
+                                      'fragile_assumption',
+                                      'temporary_operational')),
+            description              TEXT NOT NULL,
+            impact_sizing            REAL NOT NULL CHECK(impact_sizing >= 0 AND impact_sizing <= 1),
+            impact_confidence        REAL NOT NULL CHECK(impact_confidence >= 0 AND impact_confidence <= 1),
+            impact_regime            REAL NOT NULL CHECK(impact_regime >= 0 AND impact_regime <= 1),
+            impact_execution         REAL NOT NULL CHECK(impact_execution >= 0 AND impact_execution <= 1),
+            impact_portfolio_risk    REAL NOT NULL CHECK(impact_portfolio_risk >= 0 AND impact_portfolio_risk <= 1),
+            debt_score               REAL NOT NULL CHECK(debt_score >= 0 AND debt_score <= 1),
+            status                   TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN
+                                     ('OPEN','RESOLVED','ACCEPTED')),
+            ts_registered            INTEGER NOT NULL,
+            ts_resolved              INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlu_user_env_status_debt
+            ON ml_unknowns(user_id, resolved_env, status, debt_score);
+    `);
+});
+
+migrate('230_ml_assumption_debt_audit', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_assumption_debt_audit (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id        TEXT NOT NULL UNIQUE,
+            unknown_id      TEXT NOT NULL,
+            action_taken    TEXT NOT NULL CHECK(action_taken IN
+                            ('size_reduce','wait','active_sensing',
+                             'observer','resolve')),
+            reason          TEXT NOT NULL,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlada_user_env_unknown_ts
+            ON ml_assumption_debt_audit(user_id, resolved_env, unknown_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §119 PRE-MORTEM FAILURE REHEARSAL 2026-05-16] R3A canonical
 // PDF — §119 (lines 3204-3246). 8-mode failure rehearsal cu severity ×
 // detectability × recoverability + 5 action plans. "Daca trade-ul moare
