@@ -994,6 +994,52 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §101 SOCRATIC SELF-DOUBT 2026-05-16] meta canonical PDF —
+// canonical PDF §101 (line 2619). Periodic worldview falsification protocol.
+// "Atacă premisele generale, nu un trade specific. Un sistem care nu se
+// indoieste sistematic de sine devine dogmatic."
+migrate('191_ml_socratic_sessions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_socratic_sessions (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            session_id          TEXT NOT NULL UNIQUE,
+            trigger             TEXT NOT NULL CHECK(trigger IN
+                                ('periodic_interval','post_good_performance','manual')),
+            beliefs_examined    INTEGER NOT NULL DEFAULT 0,
+            beliefs_falsified   INTEGER NOT NULL DEFAULT 0,
+            status              TEXT NOT NULL DEFAULT 'OPEN' CHECK(status IN
+                                ('OPEN','CLOSED')),
+            ts_started          INTEGER NOT NULL,
+            ts_closed           INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlss_user_env_status_ts
+            ON ml_socratic_sessions(user_id, resolved_env, status, ts_started);
+    `);
+});
+
+migrate('192_ml_socratic_challenges', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_socratic_challenges (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            challenge_id            TEXT NOT NULL UNIQUE,
+            session_id              TEXT NOT NULL,
+            belief_id               TEXT NOT NULL,
+            premise                 TEXT NOT NULL,
+            counterfactual          TEXT NOT NULL,
+            falsification_result    TEXT NOT NULL CHECK(falsification_result IN
+                                    ('CONFIRMED','QUESTIONED','REFUTED','INCONCLUSIVE')),
+            evidence_score          REAL,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsc_user_env_session
+            ON ml_socratic_challenges(user_id, resolved_env, session_id);
+    `);
+});
+
 // [OMEGA Wave 3 §100 NARRATIVE COHERENCE 2026-05-16] R2 canonical PDF —
 // canonical PDF §100 (line 2617). Causal-story validator over aggregated
 // signals. "Diferit de thesis graph (dependente logice) — narrative engine
