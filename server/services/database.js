@@ -994,6 +994,56 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §97 FORGETTING ENGINE 2026-05-16] R5B canonical PDF —
+// canonical PDF §97 (lines 2471-2520). TTL/decay-based knowledge expiry
+// with ladder WEAKEN→QUARANTINE→RETIRE→REVIVE. "Uitarea nu este stergere
+// haotica... orice cunostinta retrasa explicabila si eventual restaurata."
+migrate('183_ml_knowledge_items', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_knowledge_items (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            item_id              TEXT NOT NULL UNIQUE,
+            kind                 TEXT NOT NULL CHECK(kind IN
+                                 ('heuristic','threshold','episodic_analogy',
+                                  'prior','causal_relation','execution_rule')),
+            content_json         TEXT NOT NULL,
+            freshness_score      REAL NOT NULL CHECK(freshness_score >= 0 AND freshness_score <= 1),
+            status               TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                                 ('ACTIVE','WEAKENED','QUARANTINED','RETIRED','REVIVED')),
+            ts_created           INTEGER NOT NULL,
+            ts_last_relevance    INTEGER NOT NULL,
+            ts_status_changed    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlki_user_env_status
+            ON ml_knowledge_items(user_id, resolved_env, status);
+        CREATE INDEX IF NOT EXISTS idx_mlki_user_env_kind
+            ON ml_knowledge_items(user_id, resolved_env, kind);
+    `);
+});
+
+migrate('184_ml_forgetting_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_forgetting_decisions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id     TEXT NOT NULL UNIQUE,
+            item_id         TEXT NOT NULL,
+            action          TEXT NOT NULL CHECK(action IN
+                            ('WEAKEN','QUARANTINE','RETIRE','REVIVE')),
+            prior_status    TEXT NOT NULL,
+            new_status      TEXT NOT NULL,
+            reason          TEXT NOT NULL,
+            evidence_json   TEXT,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfd_user_env_item_ts
+            ON ml_forgetting_decisions(user_id, resolved_env, item_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §96 SYNTHETIC MARKET WORLD MODEL 2026-05-16] R5A canonical PDF
 // — canonical PDF §96 (lines 2427-2469). Plausible scenario generator with
 // transition-matrix realism + KL plausibility validation. is_synthetic=1
