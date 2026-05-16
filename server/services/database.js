@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §99 ACTIVE SENSING POLICY 2026-05-16] R4 canonical PDF —
+// canonical PDF §99 (lines 2569-2615). Cost-aware observability acquisition.
+// "Merita sa consum resurse acum pentru inca o bucata de cunoastere?" Decisions
+// query_now/wait/skip via IG-vs-cost ratio + deadline budget.
+migrate('187_ml_observability_queries', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_observability_queries (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            query_id                TEXT NOT NULL UNIQUE,
+            observation_type        TEXT NOT NULL CHECK(observation_type IN
+                                    ('deep_book','venue_confirmation',
+                                     'options_refresh','funding_oi_refresh',
+                                     'sentiment_refresh')),
+            decision                TEXT NOT NULL CHECK(decision IN
+                                    ('query_now','wait','skip')),
+            expected_ig             REAL NOT NULL CHECK(expected_ig >= 0),
+            cost_estimate           REAL NOT NULL CHECK(cost_estimate >= 0),
+            utility_ratio           REAL NOT NULL,
+            deadline_remaining_ms   INTEGER NOT NULL,
+            reason                  TEXT,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloq_user_env_type_ts
+            ON ml_observability_queries(user_id, resolved_env, observation_type, ts);
+    `);
+});
+
+migrate('188_ml_observability_outcomes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_observability_outcomes (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            outcome_id        TEXT NOT NULL UNIQUE,
+            query_id          TEXT NOT NULL,
+            actual_ig         REAL NOT NULL,
+            actual_cost       REAL NOT NULL CHECK(actual_cost >= 0),
+            verdict_changed   INTEGER NOT NULL CHECK(verdict_changed IN (0,1)),
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloo_user_env_query
+            ON ml_observability_outcomes(user_id, resolved_env, query_id);
+    `);
+});
+
 // [OMEGA Wave 3 §98 DEPENDENCY GRAPH / BLAST RADIUS 2026-05-16] R3A canonical
 // PDF — canonical PDF §98 (lines 2524-2566). Operational dependency map for
 // SPOF detection + blast radius via BFS. "Daca pica asta, ce altceva moare
