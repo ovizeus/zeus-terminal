@@ -994,6 +994,65 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §139 TEMPORAL COMMITMENT LEDGER 2026-05-16] _meta canonical
+// PDF — §139 (lines 4138-4180). Promise-to-self consistency engine. 6
+// commitment kinds + 3 strength levels + 4 statuses + 3 violation kinds +
+// 3×3 epistemic cost matrix + justified override mechanism. "Mi-am incalcat
+// propria promisiune strategica pentru un impuls tactic?". Distinct from
+// §130 mindChangeCriteriaEngine (belief reversal), §247 preRegistration
+// (hypothesis hash-lock), §136 optionPreservationEngine (per-action cost),
+// §135 epistemicHumilityGovernor (right-to-be-bold). §139 = action-level
+// commitment tracking with inter-temporal consistency.
+migrate('263_ml_temporal_commitments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_temporal_commitments (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            commitment_id     TEXT NOT NULL UNIQUE,
+            commitment_kind   TEXT NOT NULL CHECK(commitment_kind IN
+                              ('no_altcoins_until','no_trade_before_event',
+                               'max_long_exposure',
+                               'observer_until_regime_clarified',
+                               'reduced_size_until_reconciliation',
+                               'custom')),
+            title             TEXT NOT NULL,
+            description       TEXT NOT NULL,
+            parameters_json   TEXT NOT NULL,
+            strength_level    TEXT NOT NULL CHECK(strength_level IN
+                              ('soft','medium','hard')),
+            start_ts          INTEGER NOT NULL,
+            expires_ts        INTEGER,
+            status            TEXT NOT NULL CHECK(status IN
+                              ('active','fulfilled','violated','expired')),
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltc_user_env_status_ts
+            ON ml_temporal_commitments(user_id, resolved_env, status, ts);
+        CREATE INDEX IF NOT EXISTS idx_mltc_user_env_kind_ts
+            ON ml_temporal_commitments(user_id, resolved_env, commitment_kind, ts);
+    `);
+});
+
+migrate('264_ml_commitment_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_commitment_violations (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            violation_id             TEXT NOT NULL UNIQUE,
+            commitment_id            TEXT NOT NULL,
+            violation_kind           TEXT NOT NULL CHECK(violation_kind IN
+                                     ('unjustified','justified_override','partial')),
+            override_justification   TEXT NOT NULL,
+            epistemic_cost           REAL NOT NULL CHECK(epistemic_cost >= 0 AND epistemic_cost <= 1),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcv_user_env_commitment_ts
+            ON ml_commitment_violations(user_id, resolved_env, commitment_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §138 COUNTER-ONTOLOGY SANDBOX 2026-05-16] R5B canonical PDF
 // — §138 (lines 4091-4137). Alien frame generator. Generates ENTIRELY NEW
 // conceptual families (flow-as-pressure, market-as-network-fracture,
