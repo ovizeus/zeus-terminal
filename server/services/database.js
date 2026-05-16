@@ -994,6 +994,52 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §95 CURIOSITY ENGINE 2026-05-16] R6 canonical PDF — canonical
+// PDF §95 (lines 2381-2425). Bounded exploration with explicit capital separation
+// exploitation vs exploration. Ladder EXPLORE → OBSERVE → VALIDATE → GRADUATED.
+// "Cat capital sunt dispus sa risc pentru a afla ceva nou?"
+migrate('179_ml_curiosity_setups', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_curiosity_setups (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            setup_id            TEXT NOT NULL UNIQUE,
+            hypothesis          TEXT NOT NULL,
+            stage               TEXT NOT NULL DEFAULT 'EXPLORE' CHECK(stage IN
+                                ('EXPLORE','OBSERVE','VALIDATE','GRADUATED','RETIRED')),
+            allocated_capital   REAL NOT NULL CHECK(allocated_capital >= 0),
+            max_capital_cap     REAL NOT NULL CHECK(max_capital_cap >= 0),
+            observations_count  INTEGER NOT NULL DEFAULT 0,
+            pnl_cumulative      REAL NOT NULL DEFAULT 0,
+            ts_created          INTEGER NOT NULL,
+            ts_last_updated     INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcs_user_env_stage
+            ON ml_curiosity_setups(user_id, resolved_env, stage);
+    `);
+});
+
+migrate('180_ml_curiosity_trades', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_curiosity_trades (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id       INTEGER NOT NULL,
+            resolved_env  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trade_id      TEXT NOT NULL UNIQUE,
+            setup_id      TEXT NOT NULL,
+            source        TEXT NOT NULL CHECK(source IN ('exploitation','exploration')),
+            capital_used  REAL NOT NULL CHECK(capital_used >= 0),
+            pnl           REAL NOT NULL,
+            ts            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlct_user_env_source_ts
+            ON ml_curiosity_trades(user_id, resolved_env, source, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlct_setup_ts
+            ON ml_curiosity_trades(setup_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §94 COMPLEXITY BUDGET / MDL 2026-05-16] R5B canonical PDF
 // — canonical PDF §94 (line 2378). Parsimony principle: features must justify
 // marginal IG vs complexity cost via MDL/BIC. "Cele care nu trec sunt eliminate,
