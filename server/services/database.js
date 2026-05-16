@@ -994,6 +994,56 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §118 BELIEF UPDATE REGULARIZER 2026-05-16] R5A canonical
+// PDF — §118 (lines 3164-3201). Velocity-limiter + evidence classifier
+// (structural_signal/strident_event/lucky_streak/unlucky_streak). "Credintele
+// centrale NU au voie sa se rescrie brutal fara evidenta suficienta."
+// Distinct from §15 confidenceDecay (time decay), §21 driftDetection
+// (statistical drift), §97 forgettingEngine (TTL), §105 latentStateFilter
+// (Bayesian update history), §107 invarianceLayer (perturbation).
+migrate('225_ml_belief_regularization_audit', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_regularization_audit (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id                 TEXT NOT NULL UNIQUE,
+            belief_id                TEXT NOT NULL,
+            prior_value              REAL NOT NULL,
+            proposed_value           REAL NOT NULL,
+            applied_value            REAL NOT NULL,
+            evidence_kind            TEXT NOT NULL CHECK(evidence_kind IN
+                                     ('structural_signal','strident_event',
+                                      'lucky_streak','unlucky_streak')),
+            regularization_factor    REAL NOT NULL CHECK(regularization_factor >= 0 AND regularization_factor <= 1),
+            reason                   TEXT,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbra_user_env_belief_ts
+            ON ml_belief_regularization_audit(user_id, resolved_env, belief_id, ts);
+    `);
+});
+
+migrate('226_ml_belief_update_limits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_update_limits (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            limit_id                 TEXT NOT NULL UNIQUE,
+            belief_category          TEXT NOT NULL,
+            max_delta_per_update     REAL NOT NULL CHECK(max_delta_per_update > 0),
+            max_updates_per_window   INTEGER NOT NULL CHECK(max_updates_per_window > 0),
+            window_seconds           INTEGER NOT NULL CHECK(window_seconds > 0),
+            regime_modifier_json     TEXT,
+            ts_created               INTEGER NOT NULL,
+            ts_last_updated          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbul_user_env_category
+            ON ml_belief_update_limits(user_id, resolved_env, belief_category);
+    `);
+});
+
 // [OMEGA Wave 3 §117 EPISTEMIC PROVENANCE 2026-05-16] _audit canonical PDF
 // — §117 (lines 3118-3161). Belief lineage DAG cu 7 node kinds + 5 source
 // types per canonical taxonomy. "Nu exista belief important fara lineage."
