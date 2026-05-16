@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §79 GLOBAL OPPORTUNITY SCHEDULER 2026-05-16] R3A canonical PDF
+// — canonical PDF §79 (lines 2086-2125). Capital auction arbitrating between
+// simultaneously valid setups. "Pe care il merit cu adevarat?" + 4 budgets.
+migrate('148_ml_opportunity_candidates', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_opportunity_candidates (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            opportunity_id      TEXT NOT NULL UNIQUE,
+            symbol              TEXT NOT NULL,
+            opportunity_score   REAL NOT NULL,
+            capital_required    REAL NOT NULL,
+            margin_required     REAL NOT NULL,
+            classification      TEXT NOT NULL CHECK(classification IN
+                                ('best_trade_available','good_but_inferior',
+                                 'valid_but_crowded','valid_but_execution_poor')),
+            status              TEXT NOT NULL CHECK(status IN
+                                ('PENDING','ACCEPTED','DEFERRED','REPLACED','REJECTED')),
+            submitted_at        INTEGER NOT NULL,
+            decided_at          INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloc_user_env_status
+            ON ml_opportunity_candidates(user_id, resolved_env, status);
+    `);
+});
+
+migrate('149_ml_capital_auction_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_capital_auction_decisions (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            auction_id                  TEXT NOT NULL UNIQUE,
+            candidates_json             TEXT NOT NULL,
+            accepted_ids_json           TEXT NOT NULL,
+            deferred_ids_json           TEXT NOT NULL,
+            rejected_ids_json           TEXT NOT NULL,
+            total_capital_available     REAL NOT NULL,
+            total_capital_used          REAL NOT NULL,
+            reasoning                   TEXT,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcad_user_env_ts
+            ON ml_capital_auction_decisions(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §78 LABEL RELIABILITY / OUTCOME PURITY 2026-05-16] R5A canonical PDF
 // — canonical PDF §78 (lines 2034-2080). 4-class label purity + 8 contamination
 // types + sample weighting for ML training. "Rezultatul reflecta calitatea?"
