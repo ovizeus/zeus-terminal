@@ -994,6 +994,58 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §129 ASSUMPTION SURFACE MAPPER 2026-05-16] _meta canonical
+// PDF — §129 (lines 3714-3759). Per-decision tacit premise registry + 6-type
+// taxonomy (structural/causal/execution/data_integrity/regime_persistence/
+// cross_venue_validity) + 3 strength levels + dependency graph + fragility-
+// driven size penalty. "Pe ce ma bazez, chiar daca nu am spus-o explicit?"
+// Distinct from §120 unknownsRegistry (gap inventory; THIS = positive
+// premise registry), §117 epistemicProvenance (lineage), §113 socratic
+// SelfDoubt (adversarial falsification), §122 selfModel (capability graph).
+migrate('247_ml_assumptions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_assumptions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assumption_id   TEXT NOT NULL UNIQUE,
+            decision_id     TEXT NOT NULL,
+            premise_type    TEXT NOT NULL CHECK(premise_type IN
+                            ('structural','causal','execution',
+                             'data_integrity','regime_persistence',
+                             'cross_venue_validity')),
+            strength_level  TEXT NOT NULL CHECK(strength_level IN
+                            ('strong','fragile','speculative')),
+            fragility_score REAL NOT NULL CHECK(fragility_score >= 0 AND fragility_score <= 1),
+            statement       TEXT NOT NULL,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mla_user_env_decision_ts
+            ON ml_assumptions(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mla_user_env_strength_ts
+            ON ml_assumptions(user_id, resolved_env, strength_level, ts);
+    `);
+});
+
+migrate('248_ml_assumption_dependencies', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_assumption_dependencies (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                INTEGER NOT NULL,
+            resolved_env           TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            dependency_id          TEXT NOT NULL UNIQUE,
+            parent_assumption_id   TEXT NOT NULL,
+            child_assumption_id    TEXT NOT NULL,
+            ts                     INTEGER NOT NULL,
+            CHECK(parent_assumption_id <> child_assumption_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlad_user_env_parent_ts
+            ON ml_assumption_dependencies(user_id, resolved_env, parent_assumption_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlad_user_env_child_ts
+            ON ml_assumption_dependencies(user_id, resolved_env, child_assumption_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §128 FALSE CONSENSUS DETECTOR 2026-05-16] R6 canonical PDF
 // — §128 (lines 3665-3722). Epistemic dependence graph + consensus inflation
 // penalty. "Am multe dovezi diferite sau doar mai multe ecouri ale aceleiasi
