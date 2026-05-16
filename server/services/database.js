@@ -994,6 +994,58 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §123 ONTOLOGY REVISION / PRIMITIVE DISCOVERY 2026-05-16]
+// R5B canonical PDF — §123 (lines 3401-3442). Revises VOCABULARY/categories.
+// 7 operations × 4 gain metrics × 4-stage lifecycle. "Primitivele noi NU
+// intra direct in live fara shadow + validation." Distinct from §93
+// regimeGrammar (atomic primitives FIXED), §114 conceptLibrary (named
+// compound concepts), §113 causalDiscoveryEngine (causal edges), §94
+// complexityBudget (feature pruning).
+migrate('235_ml_primitive_proposals', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_primitive_proposals (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            proposal_id          TEXT NOT NULL UNIQUE,
+            target_kind          TEXT NOT NULL CHECK(target_kind IN
+                                 ('concept','regime_primitive')),
+            operation            TEXT NOT NULL CHECK(operation IN
+                                 ('add','split','merge','rename',
+                                  'widen','narrow','remove_redundant')),
+            proposal_summary     TEXT NOT NULL,
+            explanatory_gain     REAL NOT NULL CHECK(explanatory_gain >= 0 AND explanatory_gain <= 1),
+            compression_gain     REAL NOT NULL CHECK(compression_gain >= 0 AND compression_gain <= 1),
+            predictive_gain      REAL NOT NULL CHECK(predictive_gain >= 0 AND predictive_gain <= 1),
+            complexity_cost      REAL NOT NULL CHECK(complexity_cost >= 0 AND complexity_cost <= 1),
+            net_score            REAL NOT NULL,
+            status               TEXT NOT NULL DEFAULT 'PROPOSED' CHECK(status IN
+                                 ('PROPOSED','SHADOW','CONFIRMED','REJECTED')),
+            ts_proposed          INTEGER NOT NULL,
+            ts_decided           INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpp_user_env_status
+            ON ml_primitive_proposals(user_id, resolved_env, status);
+    `);
+});
+
+migrate('236_ml_ontology_versions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ontology_versions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            version_id               TEXT NOT NULL UNIQUE,
+            version_number           INTEGER NOT NULL CHECK(version_number >= 1),
+            applied_proposals_json   TEXT NOT NULL,
+            revision_reason          TEXT NOT NULL,
+            ts_applied               INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlov_user_env_version
+            ON ml_ontology_versions(user_id, resolved_env, version_number);
+    `);
+});
+
 // [OMEGA Wave 3 §122 SELF-MODEL / INTROSPECTIVE CAPABILITY 2026-05-16]
 // _meta canonical PDF — §122 (lines 3350-3398). Module-level self-trust
 // graph cu 6 module kinds × 4 capability states. "Pot sa am incredere in
