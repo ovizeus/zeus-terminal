@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §127 IDENTITY CONTINUITY 2026-05-16] _meta canonical PDF
+// — §127 (lines 3608-3662). 7-axis identity hash snapshots + cumulative
+// drift tracking. "Sunt tot eu, doar mai bun, sau am devenit alt agent?"
+// 4-state ladder: evolution_normal/identity_drift/major_self_rewrite/
+// forced_governance_review. Distinct from §116 charter (immutable),
+// §123 ontologyRevision (vocabulary), §247 preRegistration (hash-locked).
+migrate('243_ml_identity_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_identity_snapshots (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id                   TEXT NOT NULL UNIQUE,
+            version_label                 TEXT NOT NULL,
+            charter_hash                  TEXT NOT NULL,
+            ontology_hash                 TEXT NOT NULL,
+            concepts_hash                 TEXT NOT NULL,
+            utility_priorities_hash       TEXT NOT NULL,
+            regime_grammar_hash           TEXT NOT NULL,
+            policy_style_hash             TEXT NOT NULL,
+            risk_philosophy_hash          TEXT NOT NULL,
+            ts                            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlis_user_env_version_ts
+            ON ml_identity_snapshots(user_id, resolved_env, version_label, ts);
+    `);
+});
+
+migrate('244_ml_identity_drift_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_identity_drift_audits (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id            INTEGER NOT NULL,
+            resolved_env       TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id           TEXT NOT NULL UNIQUE,
+            from_snapshot_id   TEXT NOT NULL,
+            to_snapshot_id     TEXT NOT NULL,
+            axis_drifts_json   TEXT NOT NULL,
+            continuity_score   REAL NOT NULL CHECK(continuity_score >= 0 AND continuity_score <= 1),
+            drift_kind         TEXT NOT NULL CHECK(drift_kind IN
+                               ('evolution_normal','identity_drift',
+                                'major_self_rewrite','forced_governance_review')),
+            ts                 INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlida_user_env_drift_ts
+            ON ml_identity_drift_audits(user_id, resolved_env, drift_kind, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §126 SECOND-ORDER UNCERTAINTY 2026-05-16] R5A canonical
 // PDF — §126 (lines 3554-3605). Confidence-of-confidence engine + 4
 // quadrant classifier (high_conf_robust/high_conf_fragile/low_conf_robust/
