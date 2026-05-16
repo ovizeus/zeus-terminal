@@ -994,6 +994,53 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §76 COUNTERFACTUAL MARKET BASELINE 2026-05-16] R5A canonical PDF
+// — canonical PDF §76 (lines 1982-1983). Shadow HODL baseline ("nicio actiune")
+// vs bot PnL. Alpha real = bot - HODL. Complement §16 attribution, §42, §242.
+// "Singura masura care conteaza cu adevarat: alpha real fata de beta de piata."
+migrate('142_ml_inactivity_baseline_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_inactivity_baseline_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            asset           TEXT NOT NULL,
+            hodl_quantity   REAL NOT NULL,
+            mark_price      REAL NOT NULL,
+            hodl_value      REAL NOT NULL,
+            initial_value   REAL NOT NULL,
+            ts              INTEGER NOT NULL,
+            last_updated    INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, asset)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlibs_user_env_asset
+            ON ml_inactivity_baseline_snapshots(user_id, resolved_env, asset);
+    `);
+});
+
+migrate('143_ml_alpha_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_alpha_observations (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            period_id       TEXT NOT NULL,
+            asset           TEXT NOT NULL,
+            bot_pnl         REAL NOT NULL,
+            baseline_pnl    REAL NOT NULL,
+            alpha_real      REAL NOT NULL,
+            alpha_pct       REAL NOT NULL,
+            market_regime   TEXT NOT NULL CHECK(market_regime IN
+                            ('bull','bear','range','high_vol','low_vol')),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlao_user_env_period
+            ON ml_alpha_observations(user_id, resolved_env, period_id);
+        CREATE INDEX IF NOT EXISTS idx_mlao_user_env_ts
+            ON ml_alpha_observations(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §75 BELIEF PROPAGATION 2026-05-16] R2 canonical PDF
 // — canonical PDF §75 (lines 1980-1981). Real-time cascade updates through
 // thesis graph edges (requires/supports/invalidates). Complement §68 thesisGraph.
