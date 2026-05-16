@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §89 TEACHER-STUDENT DISTILLATION 2026-05-16] R5A canonical PDF
+// — canonical PDF §89 (lines 2335-2368). Teacher (heavy/research) vs student
+// (light/live). Consistency monitoring + fallback rules. "Cat de aproape live?"
+migrate('167_ml_model_distillation_pairs', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_model_distillation_pairs (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            pair_id                 TEXT NOT NULL UNIQUE,
+            teacher_model_id        TEXT NOT NULL,
+            student_model_id        TEXT NOT NULL,
+            regime_scope            TEXT NOT NULL,
+            divergence_threshold    REAL NOT NULL,
+            status                  TEXT NOT NULL DEFAULT 'HEALTHY' CHECK(status IN
+                                    ('HEALTHY','DRIFTING','FALLBACK_ACTIVE')),
+            last_validated          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmdp_user_env_status
+            ON ml_model_distillation_pairs(user_id, resolved_env, status);
+    `);
+});
+
+migrate('168_ml_distillation_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_distillation_observations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_id      TEXT NOT NULL UNIQUE,
+            pair_id             TEXT NOT NULL,
+            decision_context    TEXT,
+            teacher_output_json TEXT NOT NULL,
+            student_output_json TEXT NOT NULL,
+            divergence          REAL NOT NULL,
+            fallback_triggered  INTEGER NOT NULL DEFAULT 0 CHECK(fallback_triggered IN (0,1)),
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldo89_user_env_pair_ts
+            ON ml_distillation_observations(user_id, resolved_env, pair_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §88 ACCOUNT LIQUIDATION SURFACE / PATH STRESS 2026-05-16] R3A canonical PDF
 // — canonical PDF §88 (lines 2290-2333). Path-dependent margin stress simulation.
 // 6 path types. "Nu doar daca pot pierde, ci prin ce secventa devine vulnerabil?"
