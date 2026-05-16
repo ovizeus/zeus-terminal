@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §109 POLICY REGRET 2026-05-16] R5A canonical PDF —
+// §109 (lines 2818-2867). Feasible hindsight oracle gap engine. "Cat de
+// departe am fost de cea mai buna decizie pe care chiar aveam voie sa o iau
+// atunci?" Distinct from §16 attribution / §242 counterfactual / §49
+// override-tracker — §109 = absolute distance vs constrained oracle.
+migrate('207_ml_oracle_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_oracle_decisions (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            oracle_id                       TEXT NOT NULL UNIQUE,
+            decision_id                     TEXT NOT NULL,
+            actual_action_json              TEXT NOT NULL,
+            optimal_feasible_action_json    TEXT NOT NULL,
+            total_regret                    REAL NOT NULL CHECK(total_regret >= 0),
+            feasibility_constraints_json    TEXT NOT NULL,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlod_user_env_ts
+            ON ml_oracle_decisions(user_id, resolved_env, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlod_decision
+            ON ml_oracle_decisions(decision_id);
+    `);
+});
+
+migrate('208_ml_regret_components', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_regret_components (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            component_id      TEXT NOT NULL UNIQUE,
+            oracle_id         TEXT NOT NULL,
+            regret_kind       TEXT NOT NULL CHECK(regret_kind IN
+                              ('signal','timing','sizing','execution','abstention')),
+            component_value   REAL NOT NULL CHECK(component_value >= 0),
+            notes             TEXT,
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrc_user_env_oracle_kind
+            ON ml_regret_components(user_id, resolved_env, oracle_id, regret_kind);
+    `);
+});
+
 // [OMEGA Wave 3 §108 PROGRESSIVE COMMITMENT 2026-05-16] R4 canonical PDF —
 // §108 (lines 2773-2815). Real-options entry engine: probe → expand on
 // confirmation, abort on contradiction. "Merita sa cumpar informatie
