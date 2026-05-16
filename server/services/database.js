@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §96 SYNTHETIC MARKET WORLD MODEL 2026-05-16] R5A canonical PDF
+// — canonical PDF §96 (lines 2427-2469). Plausible scenario generator with
+// transition-matrix realism + KL plausibility validation. is_synthetic=1
+// hard CHECK to prevent confusion with real data. "Realism structural
+// obligatoriu... scenariile marcate clar."
+migrate('181_ml_data_fingerprints', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_data_fingerprints (
+            id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                    INTEGER NOT NULL,
+            resolved_env               TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            fingerprint_id             TEXT NOT NULL UNIQUE,
+            marginal_distributions_json TEXT NOT NULL,
+            transition_matrix_json     TEXT NOT NULL,
+            sample_count               INTEGER NOT NULL CHECK(sample_count >= 0),
+            ts                         INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldf_user_env_ts
+            ON ml_data_fingerprints(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('182_ml_synthetic_scenarios', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_synthetic_scenarios (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            scenario_id              TEXT NOT NULL UNIQUE,
+            regime_sequence_json     TEXT NOT NULL,
+            scenario_type            TEXT NOT NULL CHECK(scenario_type IN
+                                     ('trend_to_panic','range_to_squeeze',
+                                      'macro_shock','venue_fragmentation','custom')),
+            source_fingerprint_id    TEXT,
+            plausibility_score       REAL,
+            is_synthetic             INTEGER NOT NULL DEFAULT 1 CHECK(is_synthetic = 1),
+            flagged_for_review       INTEGER NOT NULL DEFAULT 0 CHECK(flagged_for_review IN (0,1)),
+            flag_reason              TEXT,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlss_user_env_type
+            ON ml_synthetic_scenarios(user_id, resolved_env, scenario_type);
+    `);
+});
+
 // [OMEGA Wave 3 §95 CURIOSITY ENGINE 2026-05-16] R6 canonical PDF — canonical
 // PDF §95 (lines 2381-2425). Bounded exploration with explicit capital separation
 // exploitation vs exploration. Ladder EXPLORE → OBSERVE → VALIDATE → GRADUATED.
