@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §85 REAL-TIME DEADLINE / COMPUTE BUDGET GOVERNOR 2026-05-16] R4 canonical PDF
+// — canonical PDF §85 (lines 2152-2191). Deadline enforcement per decision type +
+// inference mode selection. "Decizie la timp > sofisticata intarziata."
+migrate('159_ml_compute_budgets', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_compute_budgets (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_type       TEXT NOT NULL CHECK(decision_type IN
+                                ('scalp','intraday','swing','emergency_exit')),
+            deadline_ms         INTEGER NOT NULL,
+            compute_budget_ms   INTEGER NOT NULL,
+            safety_priority     TEXT NOT NULL CHECK(safety_priority IN
+                                ('low','normal','high','critical')),
+            last_updated        INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, decision_type)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcb_user_env_type
+            ON ml_compute_budgets(user_id, resolved_env, decision_type);
+    `);
+});
+
+migrate('160_ml_inference_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_inference_decisions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            inference_id            TEXT NOT NULL UNIQUE,
+            decision_type           TEXT NOT NULL CHECK(decision_type IN
+                                    ('scalp','intraday','swing','emergency_exit')),
+            time_remaining_ms       INTEGER NOT NULL,
+            estimated_cost_ms       INTEGER NOT NULL,
+            chosen_mode             TEXT NOT NULL CHECK(chosen_mode IN
+                                    ('full_stack','reduced_stack','emergency_safety')),
+            early_exit_triggered    INTEGER NOT NULL DEFAULT 0 CHECK(early_exit_triggered IN (0,1)),
+            reasoning               TEXT,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlid_user_env_mode_ts
+            ON ml_inference_decisions(user_id, resolved_env, chosen_mode, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §84 GAME THEORY ON MICROSTRUCTURE 2026-05-16] R2 canonical PDF
 // — canonical PDF §84 (lines 2149-2150). Rational agent modeling: market_maker /
 // liquidation / whale / arb_bot / retail. "Nu statistica — rationament strategic."
