@@ -994,6 +994,56 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §124 PLURAL SELF / RIVAL WORLDVIEW 2026-05-16] R6 canonical
+// PDF — §124 (lines 3445-3491). N worldview agents cu ontologii diferite
+// (trend_following/mean_reversion/liquidity_hunt/macro_dominant/
+// risk_minimalist). "Dissent mare → size_reduce / WAIT / active_sensing /
+// observer." Distinct from §71 internalDebate (same ontology), §112
+// competingHypothesesEngine (market explanations), §111 scenarioTreePlanner
+// (future worlds), §48 ensembleVoting (predictions).
+migrate('237_ml_worldview_agents', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_worldview_agents (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            agent_id                 TEXT NOT NULL UNIQUE,
+            worldview_kind           TEXT NOT NULL CHECK(worldview_kind IN
+                                     ('trend_following','mean_reversion',
+                                      'liquidity_hunt','macro_dominant',
+                                      'risk_minimalist','custom')),
+            priors_json              TEXT NOT NULL,
+            signal_preferences_json  TEXT NOT NULL,
+            is_active                INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            ts_registered            INTEGER NOT NULL,
+            ts_retired               INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlwa_user_env_kind_active
+            ON ml_worldview_agents(user_id, resolved_env, worldview_kind, is_active);
+    `);
+});
+
+migrate('238_ml_plural_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_plural_decisions (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                INTEGER NOT NULL,
+            resolved_env           TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id            TEXT NOT NULL UNIQUE,
+            market_context_json    TEXT NOT NULL,
+            votes_json             TEXT NOT NULL,
+            dissent_index          REAL NOT NULL CHECK(dissent_index >= 0 AND dissent_index <= 1),
+            dominant_agent_id      TEXT,
+            consensus_action       TEXT NOT NULL CHECK(consensus_action IN
+                                   ('proceed','reduce_size','wait',
+                                    'active_sensing','observer')),
+            ts                     INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpd_user_env_action_ts
+            ON ml_plural_decisions(user_id, resolved_env, consensus_action, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §123 ONTOLOGY REVISION / PRIMITIVE DISCOVERY 2026-05-16]
 // R5B canonical PDF — §123 (lines 3401-3442). Revises VOCABULARY/categories.
 // 7 operations × 4 gain metrics × 4-stage lifecycle. "Primitivele noi NU
