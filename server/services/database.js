@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §87 VENUE COUNTERPARTY / EXCHANGE CREDIT RISK 2026-05-16] R3A canonical PDF
+// — canonical PDF §87 (lines 2242-2283). Exchange = counterparty risk + operational
+// trust. 6 incident types + 7 factors. "Edge NU bate riscul existential de contraparte."
+migrate('163_ml_venue_risk_scores', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_venue_risk_scores (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            venue_id                    TEXT NOT NULL,
+            counterparty_risk_score     REAL NOT NULL,
+            operational_trust_score     REAL NOT NULL,
+            factor_scores_json          TEXT NOT NULL,
+            capital_limit_pct           REAL NOT NULL,
+            status                      TEXT NOT NULL CHECK(status IN
+                                        ('HEALTHY','DEGRADED','RESTRICTED','MIGRATE')),
+            last_evaluated              INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, venue_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlvrs_user_env_status
+            ON ml_venue_risk_scores(user_id, resolved_env, status);
+    `);
+});
+
+migrate('164_ml_venue_incidents', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_venue_incidents (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            venue_id        TEXT NOT NULL,
+            incident_type   TEXT NOT NULL CHECK(incident_type IN
+                            ('withdrawal_freeze','insolvency','insurance_fund_weakness',
+                             'regulatory_freeze','api_instability','operational_failure')),
+            severity        TEXT NOT NULL CHECK(severity IN ('low','med','high','critical')),
+            details_json    TEXT,
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlvi_user_env_venue_ts
+            ON ml_venue_incidents(user_id, resolved_env, venue_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §86 STRATEGY CAPACITY / EDGE CAPACITY CEILING 2026-05-16] R5A canonical PDF
 // — canonical PDF §86 (lines 2196-2236). Capacity estimation per strategy×regime×asset.
 // "Edge-ul NU scaleaza liniar. Cat capital poate absorbi inainte sa se strice?"
