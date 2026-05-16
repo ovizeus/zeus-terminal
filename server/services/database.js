@@ -994,6 +994,50 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §110 ADAPTIVE REASONING ROUTER 2026-05-16] R2 canonical PDF
+// — §110 (lines 2869-2898). Context-aware reasoning module selection with
+// safety/veto enforcement. "Pentru acest caz concret, ce fir de gandire
+// merita rulat?" Distinct from §9 thinkingPipeline (fixed chain), §24
+// detectorRegistry (catalog), §85 computeBudgetGovernor (mode binary).
+migrate('209_ml_module_priorities', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_module_priorities (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            priority_id         TEXT NOT NULL UNIQUE,
+            module_id           TEXT NOT NULL,
+            kind                TEXT NOT NULL CHECK(kind IN
+                                ('safety','veto','normal')),
+            constant_priority   INTEGER NOT NULL,
+            is_active           INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            last_invoked        INTEGER,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmp_user_env_kind_active
+            ON ml_module_priorities(user_id, resolved_env, kind, is_active);
+    `);
+});
+
+migrate('210_ml_reasoning_paths', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_reasoning_paths (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            path_id                  TEXT NOT NULL UNIQUE,
+            decision_context_json    TEXT NOT NULL,
+            modules_included_json    TEXT NOT NULL,
+            modules_skipped_json     TEXT NOT NULL,
+            cognitive_budget_used    REAL NOT NULL CHECK(cognitive_budget_used >= 0),
+            justification            TEXT NOT NULL,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrp_user_env_ts
+            ON ml_reasoning_paths(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §109 POLICY REGRET 2026-05-16] R5A canonical PDF —
 // §109 (lines 2818-2867). Feasible hindsight oracle gap engine. "Cat de
 // departe am fost de cea mai buna decizie pe care chiar aveam voie sa o iau
