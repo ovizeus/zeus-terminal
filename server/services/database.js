@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §94 COMPLEXITY BUDGET / MDL 2026-05-16] R5B canonical PDF
+// — canonical PDF §94 (line 2378). Parsimony principle: features must justify
+// marginal IG vs complexity cost via MDL/BIC. "Cele care nu trec sunt eliminate,
+// nu pastrate din inertie." Distinct from §90 goodhart (gaming) + §254*
+// autoQuarantine (failure).
+migrate('177_ml_complexity_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_complexity_registry (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            feature_id        TEXT NOT NULL UNIQUE,
+            complexity_units  REAL NOT NULL CHECK(complexity_units >= 0),
+            information_gain  REAL,
+            mdl_score         REAL,
+            status            TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                              ('ACTIVE','EVALUATING','PRUNED')),
+            last_evaluated    INTEGER,
+            ts                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcr_user_env_status
+            ON ml_complexity_registry(user_id, resolved_env, status);
+    `);
+});
+
+migrate('178_ml_complexity_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_complexity_evaluations (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                INTEGER NOT NULL,
+            resolved_env           TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            evaluation_id          TEXT NOT NULL UNIQUE,
+            feature_id             TEXT NOT NULL,
+            marginal_ig            REAL NOT NULL,
+            marginal_complexity    REAL NOT NULL CHECK(marginal_complexity >= 0),
+            mdl_delta              REAL,
+            decision               TEXT NOT NULL CHECK(decision IN ('KEEP','WATCH','PRUNE')),
+            reason                 TEXT,
+            ts                     INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlce_user_env_feat_ts
+            ON ml_complexity_evaluations(user_id, resolved_env, feature_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §93 REGIME GRAMMAR 2026-05-16] R2 canonical PDF — canonical
 // PDF §93 (line 2376). Compositional regime language with 5 orthogonal
 // primitives (volatility × trend × liquidity × derivatives × macro). Replaces
