@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §116 CONSTITUTIONAL CHARTER 2026-05-16] R1 canonical PDF —
+// §116 (lines 3076-3115). Immutable charter cu 6 principles ierarhie
+// (safety > truth > compliance > integrity > long_term_survivability >
+// profit). "Constitutional blocks BAT utility optimization." Distinct
+// from §10 supremePrinciple (cognitive), §104 integrityConstraint
+// (ecosystem), §66 compliance (legal).
+migrate('221_ml_charter_principles', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_charter_principles (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            principle_id      TEXT NOT NULL UNIQUE,
+            kind              TEXT NOT NULL CHECK(kind IN
+                              ('profit','safety','truth','compliance',
+                               'integrity','long_term_survivability')),
+            priority_rank     INTEGER NOT NULL CHECK(priority_rank >= 1),
+            description       TEXT NOT NULL,
+            is_active         INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            ts_created        INTEGER NOT NULL,
+            ts_last_updated   INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcp116_user_env_rank
+            ON ml_charter_principles(user_id, resolved_env, priority_rank);
+    `);
+});
+
+migrate('222_ml_charter_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_charter_decisions (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id                 TEXT NOT NULL UNIQUE,
+            action_summary              TEXT NOT NULL,
+            conflicting_principles_json TEXT NOT NULL,
+            charter_status              TEXT NOT NULL CHECK(charter_status IN
+                                        ('CONSTITUTIONAL_COMPLIANT',
+                                         'CONSTITUTIONALLY_DEGRADED',
+                                         'CONSTITUTIONALLY_BLOCKED')),
+            utility_score               REAL,
+            override_reason             TEXT,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcd116_user_env_status_ts
+            ON ml_charter_decisions(user_id, resolved_env, charter_status, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §115 SELF-REPAIR ENGINE 2026-05-16] meta canonical PDF —
 // §115 (lines 3036-3074). Autonomous improvement proposal engine across
 // 6 issue kinds × 6 remediation types. Lifecycle PROPOSED→SHADOW→CANARY
