@@ -994,6 +994,46 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §81 DISTRIBUTIONAL ROBUSTNESS OPTIMIZATION 2026-05-16] R5A canonical PDF
+// — canonical PDF §81 (lines 2143-2144). DRO: optimize WORST-case across uncertainty set,
+// not expected value. "Robustetea in coada valoreaza mai mult decat media." Floor garantat.
+migrate('151_ml_dro_uncertainty_sets', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dro_uncertainty_sets (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            set_id                  TEXT NOT NULL UNIQUE,
+            set_name                TEXT NOT NULL,
+            distribution_configs_json TEXT NOT NULL,
+            num_distributions       INTEGER NOT NULL,
+            last_updated            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldus_user_env
+            ON ml_dro_uncertainty_sets(user_id, resolved_env);
+    `);
+});
+
+migrate('152_ml_dro_optimizations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_dro_optimizations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            optimization_id             TEXT NOT NULL UNIQUE,
+            set_id                      TEXT NOT NULL,
+            candidate_params_json       TEXT NOT NULL,
+            worst_case_score            REAL NOT NULL,
+            average_score               REAL NOT NULL,
+            robustness_premium          REAL NOT NULL,
+            recommended_params_json     TEXT NOT NULL,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldo_user_env_ts
+            ON ml_dro_optimizations(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §80 VALUE OF INFORMATION (VOI) 2026-05-16] R2 canonical PDF
 // — canonical PDF §80 (lines 2141-2142). Formal VOI calculus: benefit of waiting
 // minus cost of delay. "WAIT fara VOI = emotional. WAIT cu VOI = matematica."
