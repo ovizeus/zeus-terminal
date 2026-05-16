@@ -994,6 +994,57 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §121 REFLECTIVE EQUILIBRIUM 2026-05-16] _meta canonical PDF
+// — §121 (lines 3297-3347). Cross-layer coherence audit pe 6 canonical
+// layers (constitution/utility/regime_grammar/concept_library/thesis_graph/
+// policy_layer). "Sistemul meu, ca intreg, inca coerent cu el insusi?"
+// Distinct from §116 charter (immutable), §115 selfRepair (proposals),
+// §114/§93/§68 (individual layers).
+migrate('231_ml_coherence_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_coherence_audits (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id              TEXT NOT NULL UNIQUE,
+            layers_checked_json   TEXT NOT NULL,
+            equilibrium_score     REAL NOT NULL CHECK(equilibrium_score >= 0 AND equilibrium_score <= 1),
+            conflicts_detected    INTEGER NOT NULL CHECK(conflicts_detected >= 0),
+            recurring_count       INTEGER NOT NULL CHECK(recurring_count >= 0),
+            ts                    INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlca_user_env_ts
+            ON ml_coherence_audits(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('232_ml_systemic_contradictions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_systemic_contradictions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            contradiction_id        TEXT NOT NULL UNIQUE,
+            audit_id                TEXT NOT NULL,
+            layer_a                 TEXT NOT NULL CHECK(layer_a IN
+                                    ('constitution','utility','regime_grammar',
+                                     'concept_library','thesis_graph','policy_layer')),
+            layer_b                 TEXT NOT NULL CHECK(layer_b IN
+                                    ('constitution','utility','regime_grammar',
+                                     'concept_library','thesis_graph','policy_layer')),
+            conflict_description    TEXT NOT NULL,
+            recurrence_count        INTEGER NOT NULL CHECK(recurrence_count >= 1),
+            recommended_action      TEXT NOT NULL CHECK(recommended_action IN
+                                    ('review_rule','weaken_concept',
+                                     'quarantine_heuristic',
+                                     'escalate_governance','no_action')),
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsc_user_env_layers
+            ON ml_systemic_contradictions(user_id, resolved_env, layer_a, layer_b);
+    `);
+});
+
 // [OMEGA Wave 3 §120 UNKNOWNS REGISTRY 2026-05-16] _meta canonical PDF —
 // §120 (lines 3249-3295). Explicit ignorance ledger cu 5 unknown kinds +
 // 5-axis impact tracking + 5-action debt response. "Necunoscutele NU au
