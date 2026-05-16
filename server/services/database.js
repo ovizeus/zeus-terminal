@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §132 SEMANTIC GROUNDING CHECK 2026-05-16] _meta canonical PDF
+// — §132 (lines 3843-3880). Word-to-world alignment engine. Anchors per
+// concept (RSI/volume/ATR thresholds) + runtime checks + 3-band classification
+// (well_grounded / partial / rhetorical) + decision penalty. "Cand spun
+// 'trend puternic', ce inseamna exact ACUM, in date?". Distinct from §114
+// conceptLibrary (semantic abstraction — what concepts MEAN), §123
+// ontologyRevisionEngine (vocabulary evolution events), §117 epistemic
+// Provenance (lineage). §132 = runtime numeric anchoring check.
+migrate('252_ml_grounding_anchors', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_grounding_anchors (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            anchor_id       TEXT NOT NULL UNIQUE,
+            concept_name    TEXT NOT NULL,
+            metric_name     TEXT NOT NULL,
+            threshold_min   REAL,
+            threshold_max   REAL,
+            active          INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlga_user_env_concept_active
+            ON ml_grounding_anchors(user_id, resolved_env, concept_name, active);
+    `);
+});
+
+migrate('253_ml_grounding_checks', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_grounding_checks (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            check_id                 TEXT NOT NULL UNIQUE,
+            concept_name             TEXT NOT NULL,
+            actual_metrics_json      TEXT NOT NULL,
+            matched_anchors_count    INTEGER NOT NULL CHECK(matched_anchors_count >= 0),
+            total_anchors_count      INTEGER NOT NULL CHECK(total_anchors_count >= 0),
+            grounding_score          REAL NOT NULL CHECK(grounding_score >= 0 AND grounding_score <= 1),
+            grounding_status         TEXT NOT NULL CHECK(grounding_status IN
+                                    ('well_grounded','partial_grounded','rhetorical')),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgc_user_env_concept_ts
+            ON ml_grounding_checks(user_id, resolved_env, concept_name, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §131 ABSTRACTION LADDER CONTROLLER 2026-05-16] _meta canonical
 // PDF — §131 (lines 3798-3842). Level-of-thought switcher. 6 abstraction
 // levels (tick_microstructure → execution → intraday_structure → htf_regime
