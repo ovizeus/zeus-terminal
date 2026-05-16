@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §88 ACCOUNT LIQUIDATION SURFACE / PATH STRESS 2026-05-16] R3A canonical PDF
+// — canonical PDF §88 (lines 2290-2333). Path-dependent margin stress simulation.
+// 6 path types. "Nu doar daca pot pierde, ci prin ce secventa devine vulnerabil?"
+migrate('165_ml_account_stress_simulations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_account_stress_simulations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            simulation_id               TEXT NOT NULL UNIQUE,
+            portfolio_snapshot_json     TEXT NOT NULL,
+            path_type                   TEXT NOT NULL CHECK(path_type IN
+                                        ('trend_adverse','whipsaw','spike_retrace',
+                                         'funding_shock','volatility_expansion',
+                                         'correlation_breakdown')),
+            trajectory_steps_json       TEXT NOT NULL,
+            distance_to_liquidation     REAL NOT NULL,
+            peak_margin_used_pct        REAL NOT NULL,
+            liquidation_triggered       INTEGER NOT NULL CHECK(liquidation_triggered IN (0,1)),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlass_user_env_path_ts
+            ON ml_account_stress_simulations(user_id, resolved_env, path_type, ts);
+    `);
+});
+
+migrate('166_ml_liquidation_warnings', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_liquidation_warnings (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            warning_id                  TEXT NOT NULL UNIQUE,
+            portfolio_snapshot_json     TEXT NOT NULL,
+            closest_path                TEXT NOT NULL,
+            distance                    REAL NOT NULL,
+            recommended_action          TEXT NOT NULL CHECK(recommended_action IN
+                                        ('CONTINUE','REDUCE_SIZE','DEFENSIVE',
+                                         'CLOSE_PARTIAL','EMERGENCY_EXIT')),
+            severity                    TEXT NOT NULL CHECK(severity IN
+                                        ('info','warn','critical')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mllw_user_env_severity_ts
+            ON ml_liquidation_warnings(user_id, resolved_env, severity, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §87 VENUE COUNTERPARTY / EXCHANGE CREDIT RISK 2026-05-16] R3A canonical PDF
 // — canonical PDF §87 (lines 2242-2283). Exchange = counterparty risk + operational
 // trust. 6 incident types + 7 factors. "Edge NU bate riscul existential de contraparte."
