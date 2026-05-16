@@ -994,6 +994,29 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §75 BELIEF PROPAGATION 2026-05-16] R2 canonical PDF
+// — canonical PDF §75 (lines 1980-1981). Real-time cascade updates through
+// thesis graph edges (requires/supports/invalidates). Complement §68 thesisGraph.
+// "Nu la urmatorul ciclu. Acum. Organism viu reactionand continuu."
+migrate('141_ml_belief_propagation_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_propagation_log (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            thesis_id               TEXT NOT NULL,
+            source_node_id          TEXT NOT NULL,
+            source_old_conf         REAL NOT NULL,
+            source_new_conf         REAL NOT NULL,
+            propagation_chain_json  TEXT NOT NULL,
+            propagation_depth       INTEGER NOT NULL,
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbpl_user_env_thesis_ts
+            ON ml_belief_propagation_log(user_id, resolved_env, thesis_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §74 INTERVENTIONAL REASONING / DO-CALCULUS 2026-05-16] R2 canonical PDF
 // — canonical PDF §74 (lines 1978-1979). Do-calculus pre-action: price perturbation
 // + queue shift + signal emission + 2nd-order reaction. Complement §40 SCM + §23 TCA.
