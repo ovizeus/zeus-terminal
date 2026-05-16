@@ -994,6 +994,57 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §112 COMPETING HYPOTHESES ENGINE 2026-05-16] R2 canonical
+// PDF — §112 (lines 2936-2968). Live market-wide hypothesis registry cu
+// posterior transfer. "Nicio teza dominanta fara alternative explicite."
+// Distinct from §68 thesisGraph (1 trade DAG), §247 preRegistration
+// (hash-locked pre-test), §111 scenarioTree (FUTURE worlds), §100
+// narrativeCoherence (1 story).
+migrate('213_ml_hypothesis_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_hypothesis_registry (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            hypothesis_id                 TEXT NOT NULL UNIQUE,
+            kind                          TEXT NOT NULL CHECK(kind IN
+                                          ('continuation','distribution',
+                                           'short_covering','liquidity_grab',
+                                           'macro_override')),
+            posterior_score               REAL NOT NULL CHECK(posterior_score >= 0 AND posterior_score <= 1),
+            status                        TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                                          ('ACTIVE','RETIRED','DOMINANT')),
+            invalidation_conditions_json  TEXT NOT NULL,
+            ts_created                    INTEGER NOT NULL,
+            ts_last_updated               INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlhr_user_env_status
+            ON ml_hypothesis_registry(user_id, resolved_env, status);
+    `);
+});
+
+migrate('214_ml_hypothesis_transitions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_hypothesis_transitions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            transition_id            TEXT NOT NULL UNIQUE,
+            from_hypothesis_id       TEXT NOT NULL,
+            to_hypothesis_id         TEXT NOT NULL,
+            evidence_summary         TEXT NOT NULL,
+            posterior_from_before    REAL NOT NULL CHECK(posterior_from_before >= 0 AND posterior_from_before <= 1),
+            posterior_from_after     REAL NOT NULL CHECK(posterior_from_after >= 0 AND posterior_from_after <= 1),
+            posterior_to_before      REAL NOT NULL CHECK(posterior_to_before >= 0 AND posterior_to_before <= 1),
+            posterior_to_after       REAL NOT NULL CHECK(posterior_to_after >= 0 AND posterior_to_after <= 1),
+            amount_transferred       REAL NOT NULL CHECK(amount_transferred >= 0),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlht_user_env_ts
+            ON ml_hypothesis_transitions(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §111 SCENARIO TREE PLANNER 2026-05-16] R6 canonical PDF —
 // §111 (lines 2901-2933). Tree-of-thought multi-future projection per
 // decision. "Daca intru acum, care sunt cele mai probabile 3-5 lumi care
