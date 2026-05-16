@@ -994,6 +994,62 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §115 SELF-REPAIR ENGINE 2026-05-16] meta canonical PDF —
+// §115 (lines 3036-3074). Autonomous improvement proposal engine across
+// 6 issue kinds × 6 remediation types. Lifecycle PROPOSED→SHADOW→CANARY
+// →APPLIED enforces canonical line 3068 "NU se auto-modifica direct in live".
+// Distinct from §113 causalDiscoveryEngine (causal-specific), §44
+// adversarialSelfTester (attacks), §38 intelligenceChecker (self-eval),
+// §101 socraticSelfDoubt (worldview), §254 autoQuarantine (post-hoc failure).
+migrate('219_ml_repair_proposals', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_repair_proposals (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            proposal_id              TEXT NOT NULL UNIQUE,
+            issue_kind               TEXT NOT NULL CHECK(issue_kind IN
+                                     ('threshold','regime_misclassification',
+                                      'sizing','execution_drift',
+                                      'feature_redundancy','stale_concepts')),
+            remediation_type         TEXT NOT NULL CHECK(remediation_type IN
+                                     ('retune','retrain','disable','replace',
+                                      'quarantine','shadow_experiment')),
+            affected_component_id    TEXT NOT NULL,
+            expected_benefit         REAL NOT NULL CHECK(expected_benefit >= 0 AND expected_benefit <= 1),
+            expected_risk            REAL NOT NULL CHECK(expected_risk >= 0 AND expected_risk <= 1),
+            rank_score               REAL NOT NULL,
+            status                   TEXT NOT NULL DEFAULT 'PROPOSED' CHECK(status IN
+                                     ('PROPOSED','SHADOW','CANARY','APPLIED','REJECTED')),
+            justification            TEXT NOT NULL,
+            ts_proposed              INTEGER NOT NULL,
+            ts_decided               INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrp115_user_env_status
+            ON ml_repair_proposals(user_id, resolved_env, status);
+    `);
+});
+
+migrate('220_ml_repair_outcomes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_repair_outcomes (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            outcome_id          TEXT NOT NULL UNIQUE,
+            proposal_id         TEXT NOT NULL,
+            observed_benefit    REAL NOT NULL,
+            observed_risk       REAL NOT NULL,
+            decision            TEXT NOT NULL CHECK(decision IN
+                                ('PROMOTE','REJECT','EXTEND_SHADOW')),
+            reason              TEXT,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlro115_user_env_proposal
+            ON ml_repair_outcomes(user_id, resolved_env, proposal_id);
+    `);
+});
+
 // [OMEGA Wave 3 §114 CONCEPT LIBRARY / SEMANTIC ABSTRACTION 2026-05-16]
 // R5A canonical PDF — §114 (lines 3001-3033). Named compound concept
 // library (exhausted_breakout, fragile_squeeze...) with empirical support
