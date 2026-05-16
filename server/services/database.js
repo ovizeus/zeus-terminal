@@ -994,6 +994,50 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §104 INTEGRITY CONSTRAINT LAYER 2026-05-16] cross-cutting
+// canonical PDF — §104 (line 2625). Self-imposed ethical/ecosystem
+// constraints beyond legal compliance. "Un sistem fara integritate e un
+// participant care mananca ecosistemul din care traieste."
+migrate('197_ml_integrity_constraints', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_integrity_constraints (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            constraint_id   TEXT NOT NULL UNIQUE,
+            kind            TEXT NOT NULL CHECK(kind IN
+                            ('venue_health','ecosystem_impact',
+                             'peer_predation','liquidity_provision')),
+            description     TEXT NOT NULL,
+            severity        TEXT NOT NULL CHECK(severity IN ('advisory','strict')),
+            is_active       INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            ts              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlic_user_env_kind_active
+            ON ml_integrity_constraints(user_id, resolved_env, kind, is_active);
+    `);
+});
+
+migrate('198_ml_integrity_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_integrity_violations (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id          INTEGER NOT NULL,
+            resolved_env     TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            violation_id     TEXT NOT NULL UNIQUE,
+            constraint_id    TEXT,
+            action_context   TEXT NOT NULL,
+            severity_score   REAL NOT NULL CHECK(severity_score >= 0 AND severity_score <= 1),
+            decision         TEXT NOT NULL CHECK(decision IN
+                             ('BLOCK','REDUCE_SIZE','WARN','ACCEPT')),
+            reason           TEXT,
+            ts               INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mliv_user_env_decision_ts
+            ON ml_integrity_violations(user_id, resolved_env, decision, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §103 WISDOM LAYER 2026-05-16] meta canonical PDF —
 // canonical PDF §103 (line 2623). Judgment overlay: when signal quality is
 // poor + decision complexity high, downgrade to simple heuristics. "Opusul
