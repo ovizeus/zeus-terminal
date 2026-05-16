@@ -994,6 +994,69 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §134 REPRESENTATION DEBT TRACKER 2026-05-16] _meta canonical
+// PDF — §134 (lines 3913-3953). Map-territory misfit engine. Cumulative drift
+// between internal representations (concepts/regimes/primitives/explanations/
+// ontology) and observed outcomes. 4 misfit kinds + 3 debt verdicts + 5
+// representation kinds. "Harta mea despre piata incepe sa ramana in urma
+// realitatii?". Distinct from §132 semanticGroundingCheck (concept NOW),
+// §123 ontologyRevisionEngine (event), §114 conceptLibrary (definition),
+// §120 unknownsRegistry (gaps). §134 = cumulative drift snapshot.
+migrate('256_ml_representation_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_representation_observations (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_id           TEXT NOT NULL UNIQUE,
+            representation_kind      TEXT NOT NULL CHECK(representation_kind IN
+                                     ('concept','regime','primitive',
+                                      'explanation','ontology')),
+            representation_id        TEXT NOT NULL,
+            predicted_outcome_json   TEXT NOT NULL,
+            actual_outcome_json      TEXT NOT NULL,
+            misfit_score             REAL NOT NULL CHECK(misfit_score >= 0 AND misfit_score <= 1),
+            misfit_kind              TEXT NOT NULL CHECK(misfit_kind IN
+                                     ('no_misfit','compression_excessive',
+                                      'forced_category',
+                                      'over_confident_under_explanatory')),
+            prediction_confidence    REAL NOT NULL CHECK(prediction_confidence >= 0 AND prediction_confidence <= 1),
+            explanatory_power        REAL NOT NULL CHECK(explanatory_power >= 0 AND explanatory_power <= 1),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlro_user_env_kind_repr_ts
+            ON ml_representation_observations(user_id, resolved_env,
+                                               representation_kind,
+                                               representation_id, ts);
+    `);
+});
+
+migrate('257_ml_representation_debt_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_representation_debt_snapshots (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id              TEXT NOT NULL UNIQUE,
+            representation_kind      TEXT NOT NULL CHECK(representation_kind IN
+                                     ('concept','regime','primitive',
+                                      'explanation','ontology')),
+            window_start_ts          INTEGER NOT NULL,
+            window_end_ts            INTEGER NOT NULL,
+            observations_count       INTEGER NOT NULL CHECK(observations_count >= 0),
+            mean_misfit              REAL NOT NULL CHECK(mean_misfit >= 0 AND mean_misfit <= 1),
+            debt_score               REAL NOT NULL CHECK(debt_score >= 0 AND debt_score <= 1),
+            debt_verdict             TEXT NOT NULL CHECK(debt_verdict IN
+                                     ('healthy','accumulating','critical')),
+            revision_recommendation  TEXT NOT NULL,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrds_user_env_kind_ts
+            ON ml_representation_debt_snapshots(user_id, resolved_env,
+                                                 representation_kind, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §133 STEELMAN ADVERSARY ENGINE 2026-05-16] R6 canonical PDF
 // — §133 (lines 3881-3912). Strongest opposing worldview builder. Library of
 // counter-arguments per thesis_type + active construction per decision +
