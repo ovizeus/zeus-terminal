@@ -994,6 +994,51 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §102 CROSS-DOMAIN ANALOGY 2026-05-16] R2 canonical PDF —
+// canonical PDF §102 (line 2621). Structural analogies from ecology/
+// epidemiology/hydrodynamics/thermodynamics applied to market. "Captureaza
+// MECANISMUL, nu pattern-ul... modele matematice exportabile."
+migrate('193_ml_analogy_templates', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_analogy_templates (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            template_id             TEXT NOT NULL UNIQUE,
+            source_domain           TEXT NOT NULL CHECK(source_domain IN
+                                    ('ecology','epidemiology','hydrodynamics',
+                                     'thermodynamics','physics','network_theory','biology')),
+            structural_pattern_json TEXT NOT NULL,
+            market_application      TEXT NOT NULL,
+            status                  TEXT NOT NULL DEFAULT 'ACTIVE' CHECK(status IN
+                                    ('ACTIVE','RETIRED')),
+            ts                      INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlat_user_env_domain_status
+            ON ml_analogy_templates(user_id, resolved_env, source_domain, status);
+    `);
+});
+
+migrate('194_ml_analogy_matches', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_analogy_matches (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            match_id                 TEXT NOT NULL UNIQUE,
+            template_id              TEXT NOT NULL,
+            market_situation_id      TEXT NOT NULL,
+            structural_similarity    REAL NOT NULL CHECK(structural_similarity >= 0 AND structural_similarity <= 1),
+            predicted_outcome        TEXT NOT NULL,
+            actual_outcome           TEXT,
+            accuracy                 REAL,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlam_user_env_template_ts
+            ON ml_analogy_matches(user_id, resolved_env, template_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §101 SOCRATIC SELF-DOUBT 2026-05-16] meta canonical PDF —
 // canonical PDF §101 (line 2619). Periodic worldview falsification protocol.
 // "Atacă premisele generale, nu un trade specific. Un sistem care nu se
