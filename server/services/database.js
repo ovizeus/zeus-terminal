@@ -994,6 +994,112 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §207-§211 cluster: labels/reification/obsolescence/reciprocity/luck 2026-05-17]
+migrate('344_ml_performative_label_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_performative_label_registry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            label_id TEXT NOT NULL UNIQUE,
+            label_text TEXT NOT NULL,
+            commitment_strength TEXT NOT NULL CHECK(commitment_strength IN
+                ('tentative','working','strong','operationally_binding')),
+            sensitivity_audit_score REAL NOT NULL CHECK(sensitivity_audit_score >= 0 AND sensitivity_audit_score <= 1),
+            premature_naming_flag INTEGER NOT NULL CHECK(premature_naming_flag IN (0,1)),
+            downstream_consequences_json TEXT NOT NULL,
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlplr_user_env_strength_ts
+            ON ml_performative_label_registry(user_id, resolved_env, commitment_strength, ts);
+    `);
+});
+
+migrate('345_ml_counter_reification_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_counter_reification_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            expression_text TEXT NOT NULL,
+            classification TEXT NOT NULL CHECK(classification IN
+                ('descriptive_metaphor','heuristic_shorthand',
+                 'mechanism_supported_claim','unsupported_reified_construct')),
+            reification_risk_score REAL NOT NULL CHECK(reification_risk_score >= 0 AND reification_risk_score <= 1),
+            mechanism_translation TEXT,
+            penalty_applied REAL NOT NULL CHECK(penalty_applied >= 0 AND penalty_applied <= 1),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcra_user_env_class_ts
+            ON ml_counter_reification_audits(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('346_ml_graceful_obsolescence_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_graceful_obsolescence_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id TEXT NOT NULL UNIQUE,
+            self_version_label TEXT NOT NULL,
+            excess_patches_score REAL NOT NULL CHECK(excess_patches_score >= 0 AND excess_patches_score <= 1),
+            ontological_debt_score REAL NOT NULL CHECK(ontological_debt_score >= 0 AND ontological_debt_score <= 1),
+            defensive_conservation_score REAL NOT NULL CHECK(defensive_conservation_score >= 0 AND defensive_conservation_score <= 1),
+            low_epistemic_intake_score REAL NOT NULL CHECK(low_epistemic_intake_score >= 0 AND low_epistemic_intake_score <= 1),
+            obsolescence_score REAL NOT NULL CHECK(obsolescence_score >= 0 AND obsolescence_score <= 1),
+            sunset_recommended INTEGER NOT NULL CHECK(sunset_recommended IN (0,1)),
+            legacy_extraction_text TEXT,
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgoa_user_env_sunset_ts
+            ON ml_graceful_obsolescence_assessments(user_id, resolved_env, sunset_recommended, ts);
+    `);
+});
+
+migrate('347_ml_epistemic_reciprocity_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_epistemic_reciprocity_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            thesis_label TEXT NOT NULL,
+            confirmation_seeking_ratio REAL NOT NULL CHECK(confirmation_seeking_ratio >= 0 AND confirmation_seeking_ratio <= 1),
+            clarification_seeking_ratio REAL NOT NULL CHECK(clarification_seeking_ratio >= 0 AND clarification_seeking_ratio <= 1),
+            falsification_seeking_ratio REAL NOT NULL CHECK(falsification_seeking_ratio >= 0 AND falsification_seeking_ratio <= 1),
+            reciprocity_score REAL NOT NULL CHECK(reciprocity_score >= 0 AND reciprocity_score <= 1),
+            disconfirmatory_observations_count INTEGER NOT NULL CHECK(disconfirmatory_observations_count >= 0),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlera_user_env_ts
+            ON ml_epistemic_reciprocity_audits(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('348_ml_moral_luck_adjustments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_moral_luck_adjustments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            adjustment_id TEXT NOT NULL UNIQUE,
+            decision_id TEXT NOT NULL,
+            character_quality_score REAL NOT NULL CHECK(character_quality_score >= 0 AND character_quality_score <= 1),
+            outcome_quality_score REAL NOT NULL CHECK(outcome_quality_score >= 0 AND outcome_quality_score <= 1),
+            luck_classification TEXT NOT NULL CHECK(luck_classification IN
+                ('skilled_and_lucky','skilled_but_unlucky',
+                 'lucky_salvation','deserved_loss',
+                 'character_outcome_aligned')),
+            prestige_correction REAL NOT NULL CHECK(prestige_correction >= -1 AND prestige_correction <= 1),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlma_user_env_class_ts
+            ON ml_moral_luck_adjustments(user_id, resolved_env, luck_classification, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §197-§201 cluster: exteriority/tragic/mourning/sacred/reverence 2026-05-17]
 migrate('339_ml_exteriority_validation_requirements', () => {
     db.exec(`
