@@ -994,6 +994,67 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §143 SEMANTIC MEMORY CONSOLIDATION 2026-05-17] _meta
+// Canonical PDF §143 (line 4711). Sleep-analog consolidation: examines
+// groups of related episodes, extracts structural principle. NOT "I've
+// seen sweep+reclaim 47 times" but "authentic sweep distinguished from
+// fake by volume distribution in first 3sec after touching level".
+// Distinct from §65 episodicMemory (storage), §114 conceptLibrary
+// (compression), §123 ontologyRevisionEngine (vocab evolution), §138
+// counterOntologySandbox (alien frames), §140 cognitiveContainmentZones
+// (quarantine). §143 = ACTIVE periodic process of extracting generalizable
+// principles from episode clusters.
+migrate('284_ml_consolidation_sessions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_consolidation_sessions (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            session_id                  TEXT NOT NULL UNIQUE,
+            trigger_kind                TEXT NOT NULL CHECK(trigger_kind IN
+                                        ('scheduled','episode_threshold','manual')),
+            session_status              TEXT NOT NULL CHECK(session_status IN
+                                        ('open','closed')),
+            episodes_examined_count     INTEGER NOT NULL CHECK(episodes_examined_count >= 0),
+            clusters_formed_count       INTEGER NOT NULL CHECK(clusters_formed_count >= 0),
+            principles_extracted_count  INTEGER NOT NULL CHECK(principles_extracted_count >= 0),
+            principles_promoted_count   INTEGER NOT NULL CHECK(principles_promoted_count >= 0),
+            principles_rejected_count   INTEGER NOT NULL CHECK(principles_rejected_count >= 0),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcs_user_env_trigger_ts
+            ON ml_consolidation_sessions(user_id, resolved_env, trigger_kind, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlcs_user_env_status_ts
+            ON ml_consolidation_sessions(user_id, resolved_env, session_status, ts);
+    `);
+});
+
+migrate('285_ml_consolidated_principles', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_consolidated_principles (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            principle_id             TEXT NOT NULL UNIQUE,
+            session_id               TEXT NOT NULL,
+            principle_text           TEXT NOT NULL,
+            source_episode_ids_json  TEXT NOT NULL,
+            generalizability_score   REAL NOT NULL CHECK(generalizability_score >= 0 AND generalizability_score <= 1),
+            testability_score        REAL NOT NULL CHECK(testability_score >= 0 AND testability_score <= 1),
+            transferability_score    REAL NOT NULL CHECK(transferability_score >= 0 AND transferability_score <= 1),
+            overall_quality_score    REAL NOT NULL CHECK(overall_quality_score >= 0 AND overall_quality_score <= 1),
+            status                   TEXT NOT NULL CHECK(status IN
+                                     ('extracted','tested','promoted','rejected')),
+            ts                       INTEGER NOT NULL,
+            FOREIGN KEY(session_id) REFERENCES ml_consolidation_sessions(session_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcp_user_env_session_ts
+            ON ml_consolidated_principles(user_id, resolved_env, session_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlcp_user_env_status_ts
+            ON ml_consolidated_principles(user_id, resolved_env, status, ts);
+    `);
+});
+
 // [OMEGA Wave 3 Claude-Extra #2 v2 ADVERSARIAL ML DEFENSE 2026-05-17]
 // Reviewer feedback: add versioning (detection_model_version + sanitization
 // _policy_version) for reproducibility + anomaly_embedding_json for
