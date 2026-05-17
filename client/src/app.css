@@ -6250,6 +6250,9 @@ select option {
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(255, 60, 20, 0.04) 0%, transparent 100%);
   padding: 14px 16px;
+  position: relative;
+  z-index: 2;
+  background-color: #050510;
 }
 .omega-doctor-panel { display: flex; flex-direction: column; gap: 10px; }
 .omega-doctor-header {
@@ -6570,6 +6573,11 @@ select option {
   border-radius: 8px;
   background: linear-gradient(180deg, rgba(0, 212, 255, 0.04) 0%, transparent 100%);
   padding: 14px 16px;
+  position: relative;
+  z-index: 2;
+  /* Opaque solid background prevents the omega-page-grid (flex:1, z-index:2)
+     from bleeding visually through the cyan-tinted gradient. */
+  background-color: #050510;
 }
 
 /* ── Ring5 panel (Day 6 Phase B observability) ───────────────────── */
