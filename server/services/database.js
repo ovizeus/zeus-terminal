@@ -994,6 +994,40 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §142 METACOGNITIVE LOAD MONITOR 2026-05-16] _meta canonical
+// PDF — §142 (lines 4709-4710). System-level cognitive overload detector.
+// 5-axis aggregation (hypotheses + positions + degraded modules + scenario
+// depth + belief updates queue) → 3-mode classification (normal/elevated/
+// overloaded) → 3 interventions (none/simplify_hypotheses/simple_rules_
+// mode). "Complexitatea excesiva in momente de incertitudine inalta NU e
+// intelepciune — e RISC." Distinct from §85 computeBudgetGovernor (per-
+// inference time) — §142 = HOLISTIC system state.
+migrate('269_ml_metacognitive_load_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_metacognitive_load_assessments (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id               TEXT NOT NULL UNIQUE,
+            active_hypotheses_count     INTEGER NOT NULL CHECK(active_hypotheses_count >= 0),
+            managed_positions_count     INTEGER NOT NULL CHECK(managed_positions_count >= 0),
+            degraded_modules_count      INTEGER NOT NULL CHECK(degraded_modules_count >= 0),
+            scenario_tree_depth         INTEGER NOT NULL CHECK(scenario_tree_depth >= 0),
+            belief_updates_queue_size   INTEGER NOT NULL CHECK(belief_updates_queue_size >= 0),
+            load_score                  REAL NOT NULL CHECK(load_score >= 0 AND load_score <= 1),
+            cognitive_mode              TEXT NOT NULL CHECK(cognitive_mode IN
+                                        ('normal','elevated','overloaded')),
+            intervention_applied        TEXT NOT NULL CHECK(intervention_applied IN
+                                        ('none','simplify_hypotheses','simple_rules_mode')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmla_user_env_mode_ts
+            ON ml_metacognitive_load_assessments(user_id, resolved_env, cognitive_mode, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlmla_user_env_ts
+            ON ml_metacognitive_load_assessments(user_id, resolved_env, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §141 ERGODICITY AWARENESS 2026-05-16] R3A canonical PDF —
 // §141 (lines 4707-4708). Non-ergodicity detector + framework switcher.
 // "Diferenta dintre medie si traiectorie te poate distruge." 3 signal-uri
