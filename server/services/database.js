@@ -994,6 +994,27 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [ML Plan v3 Phase 2 — Ring5LearningService module state per SPEC-1 contract 2026-05-17]
+migrate('369_ml_module_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_module_state (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            symbol TEXT NOT NULL,
+            module_id TEXT NOT NULL,
+            version INTEGER NOT NULL CHECK(version > 0),
+            last_observed_ts INTEGER NOT NULL,
+            trust_score REAL NOT NULL CHECK(trust_score >= 0 AND trust_score <= 1),
+            bandit_params_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, symbol, module_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlms_cell_module
+            ON ml_module_state(user_id, resolved_env, symbol, module_id);
+    `);
+});
+
 // [OMEGA Doctor D-5 quarantine + override journal 2026-05-17]
 migrate('367_ml_module_quarantines', () => {
     db.exec(`
