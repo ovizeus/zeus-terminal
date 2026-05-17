@@ -6208,6 +6208,95 @@ select option {
   overflow: hidden;
 }
 
+/* ── DOCTOR ZONE (D-4 admin-only) ─────────────────────────────── */
+.omega-page-doctor-zone {
+  margin-top: 16px;
+  border: 1px solid rgba(255, 90, 50, 0.25);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 60, 20, 0.04) 0%, transparent 100%);
+  padding: 14px 16px;
+}
+.omega-doctor-panel { display: flex; flex-direction: column; gap: 10px; }
+.omega-doctor-header {
+  display: flex; align-items: center; gap: 12px;
+  font-family: 'Orbitron', sans-serif;
+}
+.omega-doctor-title {
+  font-size: 14px; font-weight: 900; letter-spacing: 0.2em;
+  color: #ff5a32; text-shadow: 0 0 8px rgba(255, 90, 50, 0.5);
+}
+.omega-doctor-tag {
+  font-size: 10px; opacity: 0.6; letter-spacing: 0.15em;
+}
+.omega-doctor-state-badge {
+  margin-left: auto;
+  padding: 4px 12px; border-radius: 4px;
+  font-size: 12px; font-weight: 900; letter-spacing: 0.15em;
+}
+.omega-doctor-state-healthy { background: rgba(0,255,128,0.15); color: #00ff80; }
+.omega-doctor-state-degraded { background: rgba(255,200,0,0.15); color: #ffc800; }
+.omega-doctor-state-compromised { background: rgba(255,90,50,0.20); color: #ff5a32; }
+.omega-doctor-state-safemode { background: rgba(220,30,30,0.25); color: #ff3030; }
+.omega-doctor-state-dead { background: rgba(180,0,0,0.40); color: #ffffff; }
+.omega-doctor-reason {
+  font-size: 12px; opacity: 0.8; font-style: italic;
+}
+.omega-doctor-error {
+  color: #ff5a32; font-size: 13px; padding: 8px;
+}
+.omega-doctor-loading {
+  color: rgba(255,255,255,0.5); font-size: 13px; padding: 8px;
+}
+.omega-doctor-stats {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.omega-doctor-stat { display: flex; flex-direction: column; gap: 2px; }
+.omega-doctor-stat-label {
+  font-size: 10px; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.omega-doctor-stat-val {
+  font-size: 18px; font-weight: 800; font-family: 'Orbitron', sans-serif;
+}
+.omega-doctor-quotas {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  font-size: 11px; opacity: 0.85;
+}
+.omega-doctor-quota { padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.04); }
+.omega-doctor-quota-flood { background: rgba(255,30,30,0.25); color: #ff5050; font-weight: 700; }
+.omega-doctor-section { margin-top: 4px; }
+.omega-doctor-section-title {
+  font-size: 11px; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.omega-doctor-list { margin: 0; padding-left: 18px; font-size: 12px; }
+.omega-doctor-list li { padding: 2px 0; }
+.omega-doctor-events { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.omega-doctor-empty { font-size: 11px; opacity: 0.4; padding: 6px; }
+.omega-doctor-event {
+  display: grid;
+  grid-template-columns: 90px 70px 1fr 1fr auto;
+  gap: 8px; align-items: center;
+  padding: 4px 6px; border-radius: 3px;
+  font-family: 'Courier New', monospace; font-size: 11px;
+  background: rgba(255,255,255,0.02);
+}
+.omega-doctor-event-p0 { border-left: 3px solid #ff3030; }
+.omega-doctor-event-p1 { border-left: 3px solid #ff5a32; }
+.omega-doctor-event-p2 { border-left: 3px solid #ffc800; }
+.omega-doctor-event-p3 { border-left: 3px solid rgba(255,255,255,0.2); }
+.omega-doctor-event-p0flood { border-left: 3px solid #ff00ff; background: rgba(255,0,255,0.05); }
+.omega-doctor-event-ts { opacity: 0.6; }
+.omega-doctor-event-sev { font-weight: 700; }
+.omega-doctor-event-mod { color: #00d4ff; }
+.omega-doctor-event-type { opacity: 0.7; }
+.omega-doctor-verdict-select {
+  background: rgba(0,0,0,0.4); color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px; font-size: 10px; padding: 2px 4px;
+}
+
 /* ── THE ORB ───────────────────────────────────────────────────── */
 .omega-orb-wrap { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; }
 .omega-orb-canvas { width: 100%; height: 100%; display: block; }

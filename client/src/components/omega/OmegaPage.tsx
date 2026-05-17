@@ -3,6 +3,8 @@ import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
 import { R5AStats } from './R5AStats'
+import { DoctorPanel } from './DoctorPanel'
+import { useAuthStore } from '../../stores/authStore'
 import type { Utterance, Mood, HealthState } from './omegaApi'
 import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
 
@@ -117,6 +119,18 @@ export function OmegaPage() {
                     <TalkWithMe voiceOn={voiceOn} onUtteranceLogged={handleUtteranceLogged} />
                 </div>
             </div>
+
+            <DoctorZone />
+        </div>
+    )
+}
+
+function DoctorZone() {
+    const role = useAuthStore((s) => s.role)
+    if (role !== 'admin') return null
+    return (
+        <div className="omega-page-doctor-zone">
+            <DoctorPanel />
         </div>
     )
 }
