@@ -994,6 +994,39 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 Claude-Extra #3 EXECUTION FINGERPRINT OBFUSCATOR 2026-05-17]
+// R4. LEGAL execution diversification within SINGLE account. Operator's
+// original "autopoietic chameleon" idea (multi-account ZKP fronting) was
+// illegal (wash trading + concealment of beneficial ownership). This
+// version: order type variation (limit/IOC/GTC) + timing jitter + size
+// split with random sum-equal children + venue routing variation. ONE
+// account, no manipulation, no concealment.
+migrate('279_ml_obfuscated_orders', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_obfuscated_orders (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            original_order_id        TEXT NOT NULL UNIQUE,
+            asset                    TEXT NOT NULL,
+            original_size            REAL NOT NULL CHECK(original_size > 0),
+            original_order_type      TEXT NOT NULL CHECK(original_order_type IN
+                                     ('limit','market','ioc','gtc','stop','stop_limit')),
+            obfuscation_strategy     TEXT NOT NULL CHECK(obfuscation_strategy IN
+                                     ('none','timing_jitter','size_split',
+                                      'type_variation','full_obfuscation')),
+            child_orders_json        TEXT NOT NULL,
+            jitter_ms                INTEGER NOT NULL CHECK(jitter_ms >= 0),
+            child_count              INTEGER NOT NULL CHECK(child_count >= 1),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloo_user_env_asset_ts
+            ON ml_obfuscated_orders(user_id, resolved_env, asset, ts);
+        CREATE INDEX IF NOT EXISTS idx_mloo_user_env_strategy_ts
+            ON ml_obfuscated_orders(user_id, resolved_env, obfuscation_strategy, ts);
+    `);
+});
+
 // [OMEGA Wave 3 Claude-Extra #2 ADVERSARIAL ML DEFENSE 2026-05-17] R3A
 // DEFENSIVE version of operator-flagged "neuro-weapons" idea. Detects when
 // OTHER bots try to induce psychosis in our ML via adversarial patterns
