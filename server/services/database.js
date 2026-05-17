@@ -994,6 +994,60 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [ML Plan v3 Phase 3 — Thompson Sampling bandit posteriors per SPEC-8 hierarchy 2026-05-17]
+migrate('370_ml_bandit_posteriors', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_bandit_posteriors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            level INTEGER NOT NULL CHECK(level >= 0 AND level <= 4),
+            cell_key TEXT NOT NULL,
+            alpha REAL NOT NULL CHECK(alpha > 0),
+            beta REAL NOT NULL CHECK(beta > 0),
+            observation_count INTEGER NOT NULL DEFAULT 0 CHECK(observation_count >= 0),
+            updated_at INTEGER NOT NULL,
+            UNIQUE(level, cell_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbp_level_cell
+            ON ml_bandit_posteriors(level, cell_key);
+    `);
+});
+
+// [ML Plan v3 Phase 3 — Pooled evidence per SPEC-7 lazy-with-TTL refresh 2026-05-17]
+migrate('371_ml_pooled_evidence', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_pooled_evidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cell_key TEXT NOT NULL UNIQUE,
+            last_refresh_ts INTEGER NOT NULL,
+            pooled_alpha REAL NOT NULL CHECK(pooled_alpha > 0),
+            pooled_beta REAL NOT NULL CHECK(pooled_beta > 0),
+            sum_contribution REAL NOT NULL DEFAULT 0,
+            staleness_observations_count INTEGER NOT NULL DEFAULT 0,
+            updated_at INTEGER NOT NULL
+        );
+    `);
+});
+
+// [ML Plan v3 Phase 3 — Atomic bandit evidence per SPEC-7 source of truth 2026-05-17]
+migrate('372_ml_bandit_evidence', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_bandit_evidence (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cell_key TEXT NOT NULL,
+            module_id TEXT NOT NULL,
+            contribution REAL NOT NULL,
+            confidence REAL NOT NULL CHECK(confidence >= 0 AND confidence <= 1),
+            outcome_class TEXT NOT NULL CHECK(outcome_class IN ('positive','negative','neutral')),
+            ts INTEGER NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbe_cell_ts
+            ON ml_bandit_evidence(cell_key, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlbe_module_ts
+            ON ml_bandit_evidence(module_id, ts);
+    `);
+});
+
 // [ML Plan v3 Phase 2 — Ring5LearningService module state per SPEC-1 contract 2026-05-17]
 migrate('369_ml_module_state', () => {
     db.exec(`
