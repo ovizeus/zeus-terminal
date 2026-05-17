@@ -80,11 +80,43 @@ function listLowTrustModules() {
     return result;
 }
 
+// === DECAY SUPPORT (D-3.4) ===
+// listAllScores + applyDecay let decayScheduler iterate and adjust without
+// triggering observationCount increment. lastUpdateTs is the timestamp of
+// the most recent updateTrust() call (NOT decay) — used for idle detection.
+
+function listAllScores() {
+    const result = [];
+    for (const [moduleId, entry] of _scores.entries()) {
+        result.push({
+            moduleId,
+            trustScore: entry.trustScore,
+            observationCount: entry.observationCount,
+            lastUpdateTs: entry.lastUpdateTs
+        });
+    }
+    return result;
+}
+
+function applyDecay(params) {
+    const moduleId = _required(params, 'moduleId');
+    const newScore = _required(params, 'newScore');
+    if (typeof newScore !== 'number' || newScore < 0 || newScore > 1) {
+        throw new Error(`trustScorer.applyDecay: newScore must be in [0,1]`);
+    }
+    const entry = _scores.get(moduleId);
+    if (!entry) return { applied: false, reason: 'unknown_module' };
+    entry.trustScore = newScore;
+    // Deliberately do NOT update lastUpdateTs — decay should not mask staleness.
+    return { applied: true, trustScore: newScore };
+}
+
 function resetForTest() {
     _scores.clear();
 }
 
 module.exports = {
     EMA_ALPHA, TRUST_THRESHOLD, INITIAL_TRUST,
-    updateTrust, getTrustScore, isLowTrust, listLowTrustModules, resetForTest
+    updateTrust, getTrustScore, isLowTrust, listLowTrustModules,
+    listAllScores, applyDecay, resetForTest
 };
