@@ -994,6 +994,25 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Doctor D-1 module registry: contracts + role tags + cycle detection 2026-05-17]
+migrate('364_ml_module_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_module_registry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_id TEXT NOT NULL UNIQUE,
+            role_tag TEXT NOT NULL CHECK(role_tag IN
+                ('hot_path_critical', 'hot_path_assist', 'shadow_assist',
+                 'governance', 'forensic', 'introspection_meta', 'philosophical')),
+            criticality TEXT NOT NULL CHECK(criticality IN ('low','medium','high','critical')),
+            runtime_mode TEXT NOT NULL CHECK(runtime_mode IN ('live','shadow','offline')),
+            contract_json TEXT NOT NULL,
+            registered_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmr_role_runtime
+            ON ml_module_registry(role_tag, runtime_mode);
+    `);
+});
+
 // [OMEGA Wave 3 §237-§241 CAPSTONE cluster: articulation/triangulation/power_renunciation/return_path/rightful_unknown 2026-05-17]
 migrate('359_ml_articulation_loss_audits', () => {
     db.exec(`
