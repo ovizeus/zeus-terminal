@@ -166,4 +166,28 @@ describe('Ring5LearningService Phase 2 facade', () => {
             );
         });
     });
+
+    describe('migration 373_ml_influence_audit', () => {
+        test('table exists with required columns', () => {
+            const cols = db.prepare("PRAGMA table_info(ml_influence_audit)").all();
+            const names = cols.map(c => c.name);
+            expect(names).toEqual(expect.arrayContaining([
+                'id', 'user_id', 'env', 'symbol', 'regime',
+                'phase2_dir', 'phase2_confidence', 'phase2_score',
+                'proposed_dir', 'proposed_confidence', 'proposed_score',
+                'gate_status', 'gate_reason', 'rationale_json',
+                'created_at'
+            ]));
+        });
+        test('gate_status CHECK constraint accepts only valid values', () => {
+            const stmt = db.prepare(`INSERT INTO ml_influence_audit
+                (user_id, env, symbol, regime, phase2_dir, phase2_confidence, phase2_score,
+                 proposed_dir, proposed_confidence, proposed_score, gate_status, gate_reason, rationale_json, created_at)
+                VALUES (1, 'DEMO', 'BTCUSDT', 'trending', 'LONG', 70, 5, 'LONG', 80, 5.5, ?, 'ok', '{}', ?)`);
+            expect(() => stmt.run('accepted', Date.now())).not.toThrow();
+            expect(() => stmt.run('rejected', Date.now())).not.toThrow();
+            expect(() => stmt.run('skipped', Date.now())).not.toThrow();
+            expect(() => stmt.run('INVALID', Date.now())).toThrow();
+        });
+    });
 });

@@ -1028,6 +1028,36 @@ migrate('371_ml_pooled_evidence', () => {
     `);
 });
 
+// [ML Phase B Day 3 — Phase 4] PRE-gate audit trail for Ring5 influence-mode
+// decisions. Every attempt (accepted/rejected/skipped) recorded with phase2 vs
+// proposed deltas + full rationale. PVR-5 two-table strategy: this is the
+// PRE-gate trail; brain_decisions remains the POST-gate canonical trail.
+migrate('373_ml_influence_audit', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_influence_audit (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            env                 TEXT NOT NULL CHECK(env IN ('DEMO','TESTNET','REAL')),
+            symbol              TEXT NOT NULL,
+            regime              TEXT NOT NULL,
+            phase2_dir          TEXT NOT NULL,
+            phase2_confidence   REAL NOT NULL,
+            phase2_score        REAL NOT NULL,
+            proposed_dir        TEXT NOT NULL,
+            proposed_confidence REAL NOT NULL,
+            proposed_score      REAL NOT NULL,
+            gate_status         TEXT NOT NULL CHECK(gate_status IN ('accepted','rejected','skipped')),
+            gate_reason         TEXT NOT NULL,
+            rationale_json      TEXT NOT NULL,
+            created_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ml_inf_audit_user_env_ts
+            ON ml_influence_audit(user_id, env, created_at);
+        CREATE INDEX IF NOT EXISTS idx_ml_inf_audit_status_ts
+            ON ml_influence_audit(gate_status, created_at);
+    `);
+});
+
 // [ML Plan v3 Phase 3 — Atomic bandit evidence per SPEC-7 source of truth 2026-05-17]
 migrate('372_ml_bandit_evidence', () => {
     db.exec(`
