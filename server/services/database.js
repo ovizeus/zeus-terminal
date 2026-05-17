@@ -994,6 +994,68 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §153 SOURCE ABLATION ROBUSTNESS 2026-05-17] _audit
+// Canonical PDF §153 (lines 5087-5129). Belief-survives-deletion test.
+// "daca pierd exact dovezile pe care ma bazez cel mai mult, credinta mea
+//  mai are coloana?" Two tables: ablation_tests (one per belief × category
+// × ablated_source) cu survival_score auto-computed + classification
+// (robust/brittle/source_captured), fragility_snapshots (aggregate
+// across multiple ablations per belief la moment t). Result trebuie sa
+// influențeze size, explainability, boldness permission. Distinct de
+// falseConsensus (pseudo-acord), §125 epistemicTension, §147
+// honestyAudit, §148 humility, §149 purpose drift.
+migrate('304_ml_belief_ablation_tests', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_ablation_tests (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            test_id                     TEXT NOT NULL UNIQUE,
+            belief_id                   TEXT NOT NULL,
+            original_support_score      REAL NOT NULL CHECK(original_support_score >= 0 AND original_support_score <= 1),
+            supporting_sources_json     TEXT NOT NULL,
+            ablation_category           TEXT NOT NULL CHECK(ablation_category IN
+                                        ('top_source','top_detector','top_venue',
+                                         'top_macro','top_concept')),
+            ablated_source_label        TEXT NOT NULL,
+            post_ablation_support_score REAL NOT NULL CHECK(post_ablation_support_score >= 0 AND post_ablation_support_score <= 1),
+            survival_score              REAL NOT NULL CHECK(survival_score >= 0 AND survival_score <= 1),
+            classification              TEXT NOT NULL CHECK(classification IN
+                                        ('robust','brittle','source_captured')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbat_user_env_belief_ts
+            ON ml_belief_ablation_tests(user_id, resolved_env, belief_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlbat_classification_ts
+            ON ml_belief_ablation_tests(classification, ts);
+    `);
+});
+
+migrate('305_ml_belief_fragility_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_belief_fragility_snapshots (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id                     TEXT NOT NULL UNIQUE,
+            belief_id                       TEXT NOT NULL,
+            ablation_tests_count            INTEGER NOT NULL CHECK(ablation_tests_count > 0),
+            mean_survival_score             REAL NOT NULL CHECK(mean_survival_score >= 0 AND mean_survival_score <= 1),
+            min_survival_score              REAL NOT NULL CHECK(min_survival_score >= 0 AND min_survival_score <= 1),
+            max_single_source_dependency    REAL NOT NULL CHECK(max_single_source_dependency >= 0 AND max_single_source_dependency <= 1),
+            captured_by_source_label        TEXT,
+            classification                  TEXT NOT NULL CHECK(classification IN
+                                            ('robust','brittle','source_captured')),
+            boldness_penalty                REAL NOT NULL CHECK(boldness_penalty >= 0 AND boldness_penalty <= 1),
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbfs_user_env_belief_ts
+            ON ml_belief_fragility_snapshots(user_id, resolved_env, belief_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlbfs_classification_ts
+            ON ml_belief_fragility_snapshots(classification, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §152 NEGATIVE EVIDENCE SEMANTICS 2026-05-17] R2_cognition
 // Canonical PDF §152 (lines 5034-5084). Absence-as-signal engine.
 // Registers expected signals per trigger event (e.g. "liquidity_sweep_
