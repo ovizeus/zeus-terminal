@@ -43,6 +43,7 @@ const DEFAULT_FORM: QueryForm = {
 }
 
 export function Ring5Panel() {
+    const [expanded, setExpanded] = useState(false)
     const [audit, setAudit] = useState<Ring5AuditRow[]>([])
     const [auditLoading, setAuditLoading] = useState(false)
     const [auditError, setAuditError] = useState<string | null>(null)
@@ -69,10 +70,11 @@ export function Ring5Panel() {
     }, [])
 
     useEffect(() => {
+        if (!expanded) return
         reloadAudit()
         const t = setInterval(reloadAudit, POLL_INTERVAL_MS)
         return () => clearInterval(t)
-    }, [reloadAudit])
+    }, [reloadAudit, expanded])
 
     async function handleCheckEligibility(e: React.FormEvent) {
         e.preventDefault()
@@ -110,10 +112,19 @@ export function Ring5Panel() {
 
     return (
         <div className="omega-ring5-panel">
-            <div className="omega-ring5-header">
+            <button
+                type="button"
+                className={`omega-ring5-header omega-ring5-header-button${expanded ? ' expanded' : ''}`}
+                onClick={() => setExpanded(e => !e)}
+                aria-expanded={expanded}
+            >
+                <span className="omega-ring5-chevron">{expanded ? '▼' : '▶'}</span>
                 <span className="omega-ring5-title">RING5 INFLUENCE PIPELINE</span>
                 <span className="omega-ring5-tag">Day 5 admin-only</span>
-            </div>
+            </button>
+
+            {!expanded && null}
+            {expanded && <>
 
             <section className="omega-ring5-section">
                 <h3 className="omega-ring5-section-title">
@@ -260,6 +271,8 @@ export function Ring5Panel() {
                     </table>
                 )}
             </section>
+
+            </>}
         </div>
     )
 }
