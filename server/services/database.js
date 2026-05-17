@@ -994,6 +994,45 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §169 MODAL STABILITY TEST 2026-05-17] R2_cognition
+// Canonical PDF §169 (lines 5568-5618). Nearby-possible-worlds endorsement.
+// "as mai aproba aceasta decizie daca lumea reala ar fi aproape la fel,
+//  dar nu exact identica?" Decision stability across N micro-counterfactual
+// worlds compatible with info-then. 4 verdict classes (stable / moderately
+// fragile / edge_on_a_knife / world_specific). Boldness multiplier
+// per verdict. 5 recommended actions (proceed / size_reduced /
+// progressive / wait / observer). Distinct de §69 OOD gate (single-feature
+// novelty), §67 conformal (calibration), §148 ontology humility (residual).
+migrate('326_ml_modal_stability_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_modal_stability_evaluations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            evaluation_id               TEXT NOT NULL UNIQUE,
+            decision_id                 TEXT NOT NULL,
+            num_nearby_worlds_tested    INTEGER NOT NULL CHECK(num_nearby_worlds_tested >= 5),
+            endorsement_count           INTEGER NOT NULL CHECK(endorsement_count >= 0),
+            stability_score             REAL NOT NULL CHECK(stability_score >= 0 AND stability_score <= 1),
+            verdict                     TEXT NOT NULL CHECK(verdict IN
+                                        ('stable_across_nearby_worlds',
+                                         'moderately_fragile',
+                                         'edge_on_a_knife',
+                                         'world_specific')),
+            boldness_adjustment         REAL NOT NULL CHECK(boldness_adjustment >= 0 AND boldness_adjustment <= 1),
+            recommended_action          TEXT NOT NULL CHECK(recommended_action IN
+                                        ('proceed','size_reduced','progressive','wait','observer')),
+            reasoning                   TEXT,
+            ts                          INTEGER NOT NULL,
+            CHECK(endorsement_count <= num_nearby_worlds_tested)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmse_user_env_verdict_ts
+            ON ml_modal_stability_evaluations(user_id, resolved_env, verdict, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlmse_decision
+            ON ml_modal_stability_evaluations(decision_id);
+    `);
+});
+
 // [OMEGA Wave 3 §168 DEONTIC LOOPHOLE DETECTOR 2026-05-17] _meta
 // Canonical PDF §168 (lines 5519-5565). Spirit-of-the-rule guard.
 // "respect regula in fond sau doar ma strecor printre cuvintele ei?"
