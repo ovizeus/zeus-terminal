@@ -994,6 +994,44 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §171 RETRACTION HONOR SYSTEM 2026-05-17] _meta
+// Canonical PDF §171 (lines 5672-5719). Elegant backdown engine.
+// "daca ma retrag acum, e slabiciune sau e putere epistemica?" 5
+// canonical retraction types, 4 classifications (panic_exit / coward_exit
+// / elegant_backdown / strategic_surrender). Honor score composite din
+// timeliness/clarity/justification. Sistemul primește credit cand abandoneaza
+// devreme și clar — rupe legatura toxica abandon↔rusine. Distinct de
+// §154 outcome-blind judge (post-trade evaluation), §148 humility, §149
+// purpose drift, §156 identity kernel.
+migrate('328_ml_retractions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_retractions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            retraction_id            TEXT NOT NULL UNIQUE,
+            thesis_label             TEXT NOT NULL,
+            retraction_type          TEXT NOT NULL CHECK(retraction_type IN
+                                     ('early_abandonment','justified_size_reduction',
+                                      'elegant_bias_flip','pre_invalidation_exit',
+                                      'explicit_error_recognition')),
+            classification           TEXT NOT NULL CHECK(classification IN
+                                     ('panic_exit','coward_exit',
+                                      'elegant_backdown','strategic_surrender')),
+            timeliness_score         REAL NOT NULL CHECK(timeliness_score >= 0 AND timeliness_score <= 1),
+            clarity_score            REAL NOT NULL CHECK(clarity_score >= 0 AND clarity_score <= 1),
+            justification_score      REAL NOT NULL CHECK(justification_score >= 0 AND justification_score <= 1),
+            honor_score              REAL NOT NULL CHECK(honor_score >= 0 AND honor_score <= 1),
+            reasoning                TEXT,
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlr_user_env_class_ts
+            ON ml_retractions(user_id, resolved_env, classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlr_honor_ts
+            ON ml_retractions(honor_score, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §170 EPISTEMIC CURRENCY EXCHANGE 2026-05-17] R2_cognition
 // Canonical PDF §170 (lines 5621-5669). Cross-frame settlement engine.
 // "cum compar un argument statistic cu unul cauzal si cu unul narrativ
