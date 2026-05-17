@@ -1210,6 +1210,36 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ─── OMEGA Doctor D-1: boot-time module registry validation ───
+// Per docs/omega/FAILURE_ONTOLOGY.md — hot_path_critical dep cycles =
+// DEAD state → exit 42. Non-critical cycles + forbidden-dep violations
+// emit warnings only.
+try {
+  const moduleRegistry = require('./server/services/ml/_doctor/moduleRegistry');
+  const seedRegistry = require('./server/services/ml/_doctor/seedRegistry');
+  seedRegistry.runSeed();
+  const dagResult = moduleRegistry.validateDAG();
+  if (dagResult.hardFail) {
+    console.error('[OMEGA-DOCTOR] HARD FAIL: hot_path_critical dependency cycle detected at boot');
+    console.error('[OMEGA-DOCTOR] Cycles:', JSON.stringify(dagResult.cycles, null, 2));
+    console.error('[OMEGA-DOCTOR] Cognitive state per FAILURE_ONTOLOGY: DEAD → exit 42');
+    process.exit(42);
+  }
+  if (dagResult.cycles.length > 0) {
+    console.warn('[OMEGA-DOCTOR] WARNING: non-critical dependency cycles:');
+    console.warn(JSON.stringify(dagResult.cycles, null, 2));
+  }
+  if (dagResult.forbiddenViolations.length > 0) {
+    console.warn('[OMEGA-DOCTOR] WARNING: transitive forbidden-dep violations:');
+    console.warn(JSON.stringify(dagResult.forbiddenViolations, null, 2));
+  }
+  const total = moduleRegistry.listAll().length;
+  console.log(`[OMEGA-DOCTOR] D-1 registry: ${total} modules registered, DAG valid`);
+} catch (err) {
+  console.error('[OMEGA-DOCTOR] Boot validation error:', err.message);
+  console.error('[OMEGA-DOCTOR] Server continues but registry may be incomplete');
+}
+
 // ─── Bind to 0.0.0.0 for LAN access (phone over Wi-Fi) ───
 const server = app.listen(PORT, '0.0.0.0', () => {
   // Request timeout — prevent hung connections
