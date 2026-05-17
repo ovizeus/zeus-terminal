@@ -994,6 +994,44 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §180 ANTI-IDOLATRY ENGINE 2026-05-17] _audit
+// Canonical PDF §180 (lines 5887-5926). No-model-deserves-worship.
+// "mai cred in componenta asta pentru ca functioneaza acum sau pentru ca
+//  am ajuns sa o veneram?" 4 component types (model/concept/source/
+// detector), 3 classifications (proven_high_value / prestigious_but_
+// accountable / untouchable_idol — FORBIDDEN), prestige-to-contribution
+// ratio detection. Distinct de §117 epistemicProvenance (lineage), §153
+// sourceAblationRobustness (single source removal), §174 false consensus.
+migrate('332_ml_anti_idolatry_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_anti_idolatry_audits (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id                        TEXT NOT NULL UNIQUE,
+            component_id                    TEXT NOT NULL,
+            component_type                  TEXT NOT NULL CHECK(component_type IN
+                                            ('model','concept','source','detector')),
+            historical_prestige_score       REAL NOT NULL CHECK(historical_prestige_score >= 0 AND historical_prestige_score <= 1),
+            recent_contribution_score       REAL NOT NULL CHECK(recent_contribution_score >= 0 AND recent_contribution_score <= 1),
+            prestige_to_contribution_ratio  REAL NOT NULL CHECK(prestige_to_contribution_ratio >= 0),
+            classification                  TEXT NOT NULL CHECK(classification IN
+                                            ('proven_high_value_component',
+                                             'prestigious_but_accountable',
+                                             'untouchable_idol')),
+            challenge_required              INTEGER NOT NULL CHECK(challenge_required IN (0,1)),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlaia_user_env_class_ts
+            ON ml_anti_idolatry_audits(user_id, resolved_env, classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlaia_component
+            ON ml_anti_idolatry_audits(component_id);
+        CREATE INDEX IF NOT EXISTS idx_mlaia_challenge_ts
+            ON ml_anti_idolatry_audits(challenge_required, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §179 WORLDHOOD PRESSURE INDEX 2026-05-17] _meta
 // Canonical PDF §179 (lines 5834-5884). How-much-reality-is-not-fitting.
 // "cat de multa realitate incepe sa nu mai incapa in lumea mea interna?"
