@@ -1122,6 +1122,10 @@ app.use('/api/omega', omegaRoutes);
 const doctorRoutes = require('./server/routes/doctor');
 app.use('/api/omega/doctor', doctorRoutes);
 
+// ML Plan v3 Phase B Day 5 — Ring5 influence pipeline admin observability API.
+const ring5Routes = require('./server/routes/ring5');
+app.use('/api/ring5', ring5Routes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
