@@ -994,6 +994,57 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 Claude-Extra #1 v3 INSTITUTIONAL GRAVITY SCANNER 2026-05-17]
+// Reviewer feedback v3 integration: lifecycle states (5 enum) + provenance
+// (inference_method/model_version/source_provider) + settlement_accuracy_
+// score [0,1] continuous (replaces binary) + net_vector_strength [-1,1]
+// numeric (alongside enum direction) + normalized ml_gravity_conflict_
+// members (FK conflict + FK zone + weight). ALTER TABLE ADD COLUMN additive
+// — enum validation at module layer (SQLite ALTER limitation).
+migrate('273_ml_gravity_zones_v3_lifecycle_provenance', () => {
+    db.exec(`
+        ALTER TABLE ml_gravity_zones ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'active';
+        ALTER TABLE ml_gravity_zones ADD COLUMN inference_method TEXT NOT NULL DEFAULT 'manual';
+        ALTER TABLE ml_gravity_zones ADD COLUMN model_version TEXT;
+        ALTER TABLE ml_gravity_zones ADD COLUMN source_provider TEXT;
+        CREATE INDEX IF NOT EXISTS idx_mlgz_user_env_lifecycle_ts
+            ON ml_gravity_zones(user_id, resolved_env, lifecycle_state, ts);
+    `);
+});
+
+migrate('274_ml_gravity_observations_v3_accuracy_score', () => {
+    db.exec(`
+        ALTER TABLE ml_gravity_observations ADD COLUMN settlement_accuracy_score REAL NOT NULL DEFAULT 0;
+    `);
+});
+
+migrate('275_ml_gravity_conflicts_v3_vector_strength', () => {
+    db.exec(`
+        ALTER TABLE ml_gravity_conflicts ADD COLUMN net_vector_strength REAL NOT NULL DEFAULT 0;
+    `);
+});
+
+migrate('276_ml_gravity_conflict_members', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_gravity_conflict_members (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            conflict_id     TEXT NOT NULL,
+            zone_id         TEXT NOT NULL,
+            weight          REAL NOT NULL CHECK(weight >= 0 AND weight <= 1),
+            ts              INTEGER NOT NULL,
+            FOREIGN KEY(conflict_id) REFERENCES ml_gravity_conflicts(conflict_id) ON DELETE CASCADE,
+            FOREIGN KEY(zone_id) REFERENCES ml_gravity_zones(zone_id) ON DELETE RESTRICT,
+            UNIQUE(conflict_id, zone_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgcm_user_env_conflict
+            ON ml_gravity_conflict_members(user_id, resolved_env, conflict_id);
+        CREATE INDEX IF NOT EXISTS idx_mlgcm_user_env_zone_ts
+            ON ml_gravity_conflict_members(user_id, resolved_env, zone_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 Claude-Extra #1 v2 INSTITUTIONAL GRAVITY SCANNER 2026-05-17]
 // R2. Operator-flagged retrocausal gravity engine, redesigned per audit
 // feedback: FK integrity + semantic naming (zone_center / predicted_

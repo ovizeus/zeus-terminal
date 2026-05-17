@@ -1,25 +1,39 @@
 'use strict';
 
 /**
- * OMEGA R2 Cognition — institutionalGravityScanner v2 (Claude-Extra #1)
+ * OMEGA R2 Cognition — institutionalGravityScanner v3 (Claude-Extra #1)
  *
- * "Institutional force-field simulator" — research-grade redesign per audit.
- * Pure analysis of others' contractual/mathematical obligations (futures
- * expiry, GEX hedging cliffs, TWAP/VWAP execution schedules, liquidation
- * clusters, funding arbitrage windows). NO market manipulation, NO spoofing.
+ * "Institutional force-field simulator" — research-grade. Pure analysis of
+ * others' contractual/mathematical obligations (futures expiry, GEX
+ * hedging cliffs, TWAP/VWAP execution schedules, liquidation clusters,
+ * funding arbitrage windows). NO market manipulation, NO spoofing.
  *
- * v2 changes vs v1:
- * - FK integrity: ml_gravity_observations.zone_id + ml_gravity_conflicts.
- *   dominant_zone_id formally reference ml_gravity_zones.zone_id
- * - Semantic naming: zone_center_price (zone) + predicted_settlement_price
- *   (observation) — no ambiguity
- * - Temporal lifecycle: zone_expires_at_ts (absolute) + observation_window_ms
- *   + settlement_type CHECK enum (5 canonical)
- * - Confidence modeling: 4 sub-scores (confidence/source_quality/
- *   liquidity_depth/volatility_sensitivity) + computeCompositeConfidence
- * - Conflict dynamics: separate ml_gravity_conflicts table with
- *   net_vector_direction enum + gravity_conflict_score + dominant_zone_id;
- *   pure helpers computeNetVector + computeGravityConflictScore
+ * SEMANTIC CLARIFICATION (v3, per reviewer):
+ * - gravity_strength = ESTIMATED PULLING FORCE MAGNITUDE [0,1]
+ *   "How strong is the institutional obligation pulling price?"
+ * - confidence_score = CERTAINTY THE ESTIMATE IS CORRECT [0,1]
+ *   "How confident are we in the gravity_strength number?"
+ * Downstream consumers must NOT confuse these two.
+ *
+ * v3 changes vs v2:
+ * - lifecycle_state CHECK enum (5: emerging/active/decaying/settled/
+ *   invalidated) — granular replaces simple active 0/1
+ * - inference_method (manual/ml_inferred/rule_based) + model_version +
+ *   source_provider — reproducibility provenance
+ * - settlement_accuracy_score REAL [0,1] continuous (replaces binary
+ *   prediction_was_correct as primary signal; binary kept for backward
+ *   compat). Linear decay: 1.0 perfect → 0.5 at tolerance → 0 at 2×.
+ * - net_vector_strength REAL [-1,1] numeric alongside enum direction
+ * - ml_gravity_conflict_members table normalizes participating zones
+ *   (FK conflict_id + FK zone_id + weight). UNIQUE(conflict_id, zone_id).
+ * - transitionZoneLifecycle helper with valid transition graph
+ *
+ * source_data_json discipline (v3): raw evidence blob ONLY. All
+ * critical fields MUST live as explicit columns. No JSON swamp.
+ *
+ * NOT A "PRICE MAGNET ORACLE": this is constraint analysis +
+ * probabilistic directional pressure. Deterministic price prediction is
+ * NOT the goal — and zones can be invalidated, decay, or fail to settle.
  *
  * Distinct from §141 (regime), §111 (planning), §51 (data layer).
  */
@@ -38,6 +52,25 @@ const SETTLEMENT_TYPES = Object.freeze([
 ]);
 
 const NET_VECTOR_DIRECTIONS = Object.freeze(['up', 'down', 'sideways']);
+
+// v3: lifecycle states (5 canonical, replaces simple active 0/1).
+const LIFECYCLE_STATES = Object.freeze([
+    'emerging', 'active', 'decaying', 'settled', 'invalidated'
+]);
+
+// v3: inference method (provenance metadata).
+const INFERENCE_METHODS = Object.freeze([
+    'manual', 'ml_inferred', 'rule_based'
+]);
+
+// v3: valid lifecycle transitions (DAG). Any active state → invalidated.
+const VALID_LIFECYCLE_TRANSITIONS = Object.freeze({
+    emerging: Object.freeze(['active', 'invalidated']),
+    active: Object.freeze(['decaying', 'invalidated']),
+    decaying: Object.freeze(['settled', 'invalidated']),
+    settled: Object.freeze([]),          // terminal
+    invalidated: Object.freeze([])        // terminal
+});
 
 const GRAVITY_STRENGTH_THRESHOLDS = Object.freeze({
     strong: 0.70, moderate: 0.40
@@ -82,8 +115,13 @@ const _stmts = {
          confidence_score, source_quality_score,
          liquidity_depth_score, volatility_sensitivity_score,
          time_to_settlement_ms, zone_expires_at_ts,
-         source_data_json, active, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         source_data_json, active, ts,
+         lifecycle_state, inference_method, model_version, source_provider)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    updateLifecycleState: db.prepare(`
+        UPDATE ml_gravity_zones SET lifecycle_state = ?, ts = ?
+        WHERE user_id = ? AND resolved_env = ? AND zone_id = ?
     `),
     deactivateZone: db.prepare(`
         UPDATE ml_gravity_zones SET active = 0, ts = ?
@@ -105,8 +143,9 @@ const _stmts = {
         (user_id, resolved_env, observation_id, zone_id,
          predicted_settlement_price, actual_price_at_settlement,
          observation_window_ms, distance_to_target_pct,
-         prediction_was_correct, tolerance_pct, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         prediction_was_correct, tolerance_pct, ts,
+         settlement_accuracy_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listObsByKind: db.prepare(`
         SELECT o.* FROM ml_gravity_observations o
@@ -122,8 +161,13 @@ const _stmts = {
         (user_id, resolved_env, conflict_id, asset,
          participating_zone_ids_json,
          gravity_conflict_score, net_vector_direction,
-         dominant_zone_id, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+         dominant_zone_id, ts, net_vector_strength)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `),
+    insertConflictMember: db.prepare(`
+        INSERT INTO ml_gravity_conflict_members
+        (user_id, resolved_env, conflict_id, zone_id, weight, ts)
+        VALUES (?, ?, ?, ?, ?, ?)
     `)
 };
 
@@ -265,6 +309,66 @@ function computeDistanceToTarget(params) {
     return { distancePct: Math.abs(cur - tgt) / tgt };
 }
 
+// ── computeSettlementAccuracyScore (pure) — NEW v3 ─────────────────
+// Linear decay: 1.0 at perfect match → 0.5 at tolerance → 0 at 2× tolerance.
+// Replaces binary prediction_was_correct as primary signal.
+function computeSettlementAccuracyScore(params) {
+    const dist = _required(params, 'distancePct');
+    const tol = _required(params, 'tolerancePct');
+    if (tol <= 0) {
+        throw new Error('institutionalGravityScanner: tolerancePct must be > 0');
+    }
+    if (dist < 0) {
+        throw new Error('institutionalGravityScanner: distancePct must be ≥ 0');
+    }
+    const score = 1 - dist / (2 * tol);
+    return { accuracyScore: Math.max(0, Math.min(1, score)) };
+}
+
+// ── computeNetVectorStrength (pure) — NEW v3 ───────────────────────
+// Numeric [-1,1] equivalent of net_vector_direction.
+// +1 = strong UP, -1 = strong DOWN, 0 = balanced sideways.
+// Computed as weighted average of normalized signed distances.
+function computeNetVectorStrength(params) {
+    const cur = _required(params, 'currentPrice');
+    const zones = _required(params, 'zones');
+    if (!Array.isArray(zones) || zones.length === 0) {
+        throw new Error('institutionalGravityScanner: zones must be non-empty array');
+    }
+    if (cur <= 0) {
+        throw new Error('institutionalGravityScanner: currentPrice must be > 0');
+    }
+    let weightedSum = 0;
+    let totalWeight = 0;
+    for (const z of zones) {
+        const signedDistPct = (z.zoneCenterPrice - cur) / cur;
+        // tanh squashes magnitude into [-1,1] gracefully
+        const squashed = Math.tanh(signedDistPct * 10);
+        weightedSum += squashed * z.gravityStrength;
+        totalWeight += z.gravityStrength;
+    }
+    if (totalWeight === 0) return { netVectorStrength: 0 };
+    const raw = weightedSum / totalWeight;
+    return { netVectorStrength: Math.max(-1, Math.min(1, raw)) };
+}
+
+// ── isValidLifecycleTransition (pure) — NEW v3 ─────────────────────
+function isValidLifecycleTransition(params) {
+    const from = _required(params, 'fromState');
+    const to = _required(params, 'toState');
+    if (!LIFECYCLE_STATES.includes(from)) {
+        throw new Error(
+            `institutionalGravityScanner: invalid fromState "${from}"`
+        );
+    }
+    if (!LIFECYCLE_STATES.includes(to)) {
+        throw new Error(
+            `institutionalGravityScanner: invalid toState "${to}"`
+        );
+    }
+    return { valid: VALID_LIFECYCLE_TRANSITIONS[from].includes(to) };
+}
+
 // ── assessAccuracy (pure) ──────────────────────────────────────────
 function assessAccuracy(params) {
     const pred = _required(params, 'predicted');
@@ -321,15 +425,37 @@ function registerGravityZone(params) {
     if (tts < 0) {
         throw new Error('institutionalGravityScanner: timeToSettlementMs ≥ 0');
     }
+    // v3: lifecycle + provenance (with defaults)
+    const lifecycleState = (params && params.lifecycleState !== undefined &&
+                             params.lifecycleState !== null)
+        ? params.lifecycleState : 'active';
+    const inferenceMethod = (params && params.inferenceMethod !== undefined &&
+                              params.inferenceMethod !== null)
+        ? params.inferenceMethod : 'manual';
+    const modelVersion = (params && params.modelVersion !== undefined)
+        ? params.modelVersion : null;
+    const sourceProvider = (params && params.sourceProvider !== undefined)
+        ? params.sourceProvider : null;
+    if (!LIFECYCLE_STATES.includes(lifecycleState)) {
+        throw new Error(
+            `institutionalGravityScanner: invalid lifecycleState "${lifecycleState}"`
+        );
+    }
+    if (!INFERENCE_METHODS.includes(inferenceMethod)) {
+        throw new Error(
+            `institutionalGravityScanner: invalid inferenceMethod "${inferenceMethod}"`
+        );
+    }
     try {
         _stmts.insertZone.run(
             userId, env, zoneId, asset, zoneKind, settlementType,
             zoneCenter, gravityStrength,
             conf, srcQ, liqD, volS,
             tts, expiresAt,
-            JSON.stringify(sourceData), 1, ts
+            JSON.stringify(sourceData), 1, ts,
+            lifecycleState, inferenceMethod, modelVersion, sourceProvider
         );
-        return { registered: true, zoneId };
+        return { registered: true, zoneId, lifecycleState };
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
             (err.message && err.message.includes('UNIQUE'))) {
@@ -339,6 +465,41 @@ function registerGravityZone(params) {
         }
         throw err;
     }
+}
+
+// ── transitionZoneLifecycle — NEW v3 ───────────────────────────────
+function transitionZoneLifecycle(params) {
+    const userId = _required(params, 'userId');
+    const env = _required(params, 'resolvedEnv');
+    const zoneId = _required(params, 'zoneId');
+    const newState = _required(params, 'newState');
+    const ts = (params && params.ts) ? params.ts : Date.now();
+
+    if (!LIFECYCLE_STATES.includes(newState)) {
+        throw new Error(
+            `institutionalGravityScanner: invalid lifecycleState "${newState}"`
+        );
+    }
+    const zone = _stmts.getZone.get(userId, env, zoneId);
+    if (!zone) {
+        throw new Error(
+            `institutionalGravityScanner: zone not found "${zoneId}"`
+        );
+    }
+    const transition = isValidLifecycleTransition({
+        fromState: zone.lifecycle_state, toState: newState
+    });
+    if (!transition.valid) {
+        throw new Error(
+            `institutionalGravityScanner: invalid transition from "${zone.lifecycle_state}" to "${newState}"`
+        );
+    }
+    _stmts.updateLifecycleState.run(newState, ts, userId, env, zoneId);
+    return {
+        transitioned: true, zoneId,
+        oldState: zone.lifecycle_state,
+        newState
+    };
 }
 
 // ── recordObservation (integration) ────────────────────────────────
@@ -358,16 +519,21 @@ function recordObservation(params) {
     const { correct, distancePct } = assessAccuracy({
         predicted, actual, tolerancePct: tol
     });
+    // v3: continuous accuracy score
+    const { accuracyScore } = computeSettlementAccuracyScore({
+        distancePct, tolerancePct: tol
+    });
     try {
         _stmts.insertObs.run(
             userId, env, obsId, zoneId,
             predicted, actual, winMs, distancePct,
-            correct ? 1 : 0, tol, ts
+            correct ? 1 : 0, tol, ts, accuracyScore
         );
         return {
             recorded: true, observationId: obsId,
             distanceToTargetPct: distancePct,
-            predictionWasCorrect: correct
+            predictionWasCorrect: correct,
+            settlementAccuracyScore: accuracyScore
         };
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
@@ -421,23 +587,42 @@ function recordConflict(params) {
     const { netVectorDirection } = computeNetVector({
         currentPrice, zones
     });
+    const { netVectorStrength } = computeNetVectorStrength({
+        currentPrice, zones
+    });
 
     // Dominant zone = highest gravityStrength
     const dominant = zones.reduce((a, b) =>
         a.gravityStrength >= b.gravityStrength ? a : b);
+
+    // Compute weights for member rows: normalize gravityStrength to [0,1]
+    // share of total. (Already in [0,1] but make explicit it's a share.)
+    const totalGrav = zones.reduce((s, z) => s + z.gravityStrength, 0);
+    const memberWeights = zones.map(z => ({
+        zoneId: z.zoneId,
+        weight: totalGrav > 0 ? z.gravityStrength / totalGrav : 0
+    }));
 
     try {
         _stmts.insertConflict.run(
             userId, env, conflictId, asset,
             JSON.stringify(zoneIds),
             conflictScore, netVectorDirection,
-            dominant.zoneId, ts
+            dominant.zoneId, ts, netVectorStrength
         );
+        // v3: insert normalized members
+        for (const m of memberWeights) {
+            _stmts.insertConflictMember.run(
+                userId, env, conflictId, m.zoneId, m.weight, ts
+            );
+        }
         return {
             recorded: true, conflictId,
             gravityConflictScore: conflictScore,
             netVectorDirection,
-            dominantZoneId: dominant.zoneId
+            netVectorStrength,
+            dominantZoneId: dominant.zoneId,
+            memberCount: memberWeights.length
         };
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
@@ -484,7 +669,12 @@ function _rowToZone(r) {
         zoneExpiresAtTs: r.zone_expires_at_ts,
         sourceData: JSON.parse(r.source_data_json),
         active: r.active === 1,
-        ts: r.ts
+        ts: r.ts,
+        // v3 fields
+        lifecycleState: r.lifecycle_state,
+        inferenceMethod: r.inference_method,
+        modelVersion: r.model_version,
+        sourceProvider: r.source_provider
     };
 }
 
@@ -533,6 +723,9 @@ module.exports = {
     ZONE_KINDS,
     SETTLEMENT_TYPES,
     NET_VECTOR_DIRECTIONS,
+    LIFECYCLE_STATES,
+    INFERENCE_METHODS,
+    VALID_LIFECYCLE_TRANSITIONS,
     GRAVITY_STRENGTH_THRESHOLDS,
     SOURCE_WEIGHTS,
     CONFIDENCE_WEIGHTS,
@@ -542,10 +735,14 @@ module.exports = {
     computeCompositeConfidence,
     classifyZoneStrength,
     computeNetVector,
+    computeNetVectorStrength,
     computeGravityConflictScore,
+    computeSettlementAccuracyScore,
+    isValidLifecycleTransition,
     computeDistanceToTarget,
     assessAccuracy,
     registerGravityZone,
+    transitionZoneLifecycle,
     recordObservation,
     recordConflict,
     deactivateZone,

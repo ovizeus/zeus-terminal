@@ -62,7 +62,11 @@ function _registerSimpleZone(u, zid, opts = {}) {
         timeToSettlementMs: opts.timeToSettlementMs || 3600000,
         zoneExpiresAtTs: opts.zoneExpiresAtTs || (Date.now() + 3600000),
         sourceData: opts.sourceData || {},
-        ts: opts.ts || _now()
+        ts: opts.ts || _now(),
+        lifecycleState: opts.lifecycleState,
+        inferenceMethod: opts.inferenceMethod,
+        modelVersion: opts.modelVersion,
+        sourceProvider: opts.sourceProvider
     });
 }
 
@@ -498,6 +502,338 @@ describe('Claude-Extra #1 v2 INSTITUTIONAL GRAVITY SCANNER', () => {
                 zoneId: 'z_deac', reason: 'expired'
             });
             expect(r.deactivated).toBe(true);
+        });
+    });
+
+    // ─────────────────────────────────────────────────────────────
+    // v3 ADDITIONS (per reviewer feedback round 2)
+    // ─────────────────────────────────────────────────────────────
+
+    describe('v3 Migrations 273-276', () => {
+        test('273 lifecycle_state + provenance applied', () => {
+            expect(db.prepare("SELECT name FROM _migrations WHERE name=?").get('273_ml_gravity_zones_v3_lifecycle_provenance')).toBeTruthy();
+            const cols = db.prepare("PRAGMA table_info(ml_gravity_zones)").all();
+            const names = cols.map(c => c.name);
+            expect(names).toContain('lifecycle_state');
+            expect(names).toContain('inference_method');
+            expect(names).toContain('model_version');
+            expect(names).toContain('source_provider');
+        });
+        test('274 settlement_accuracy_score applied', () => {
+            const cols = db.prepare("PRAGMA table_info(ml_gravity_observations)").all();
+            expect(cols.map(c => c.name)).toContain('settlement_accuracy_score');
+        });
+        test('275 net_vector_strength applied', () => {
+            const cols = db.prepare("PRAGMA table_info(ml_gravity_conflicts)").all();
+            expect(cols.map(c => c.name)).toContain('net_vector_strength');
+        });
+        test('276 ml_gravity_conflict_members applied', () => {
+            expect(db.prepare("SELECT name FROM _migrations WHERE name=?").get('276_ml_gravity_conflict_members')).toBeTruthy();
+        });
+    });
+
+    describe('v3 Constants', () => {
+        test('LIFECYCLE_STATES frozen 5 entries', () => {
+            expect(M.LIFECYCLE_STATES).toEqual([
+                'emerging', 'active', 'decaying', 'settled', 'invalidated'
+            ]);
+            expect(Object.isFrozen(M.LIFECYCLE_STATES)).toBe(true);
+        });
+        test('INFERENCE_METHODS frozen 3', () => {
+            expect(M.INFERENCE_METHODS).toEqual([
+                'manual', 'ml_inferred', 'rule_based'
+            ]);
+            expect(Object.isFrozen(M.INFERENCE_METHODS)).toBe(true);
+        });
+        test('VALID_LIFECYCLE_TRANSITIONS defined', () => {
+            expect(M.VALID_LIFECYCLE_TRANSITIONS.emerging).toContain('active');
+            expect(M.VALID_LIFECYCLE_TRANSITIONS.active).toContain('decaying');
+            expect(M.VALID_LIFECYCLE_TRANSITIONS.decaying).toContain('settled');
+            expect(M.VALID_LIFECYCLE_TRANSITIONS.settled).toEqual([]);
+            expect(M.VALID_LIFECYCLE_TRANSITIONS.invalidated).toEqual([]);
+        });
+    });
+
+    describe('v3 computeSettlementAccuracyScore (pure)', () => {
+        test('exact match → 1.0', () => {
+            expect(M.computeSettlementAccuracyScore({
+                distancePct: 0, tolerancePct: 0.01
+            }).accuracyScore).toBe(1.0);
+        });
+        test('distance == tolerance → 0.5 (borderline)', () => {
+            expect(M.computeSettlementAccuracyScore({
+                distancePct: 0.01, tolerancePct: 0.01
+            }).accuracyScore).toBeCloseTo(0.5, 6);
+        });
+        test('distance == 2× tolerance → 0 (clear miss)', () => {
+            expect(M.computeSettlementAccuracyScore({
+                distancePct: 0.02, tolerancePct: 0.01
+            }).accuracyScore).toBe(0);
+        });
+        test('distance >> tolerance → 0 (clamped)', () => {
+            expect(M.computeSettlementAccuracyScore({
+                distancePct: 0.5, tolerancePct: 0.01
+            }).accuracyScore).toBe(0);
+        });
+        test('tolerance 0 throws', () => {
+            expect(() => M.computeSettlementAccuracyScore({
+                distancePct: 0, tolerancePct: 0
+            })).toThrow();
+        });
+    });
+
+    describe('v3 computeNetVectorStrength (pure)', () => {
+        test('all UP zones → positive', () => {
+            const r = M.computeNetVectorStrength({
+                currentPrice: 64000,
+                zones: [
+                    { zoneCenterPrice: 65000, gravityStrength: 0.8 },
+                    { zoneCenterPrice: 65500, gravityStrength: 0.7 }
+                ]
+            });
+            expect(r.netVectorStrength).toBeGreaterThan(0);
+            expect(r.netVectorStrength).toBeLessThanOrEqual(1);
+        });
+        test('all DOWN zones → negative', () => {
+            const r = M.computeNetVectorStrength({
+                currentPrice: 65000,
+                zones: [
+                    { zoneCenterPrice: 64000, gravityStrength: 0.8 },
+                    { zoneCenterPrice: 63500, gravityStrength: 0.7 }
+                ]
+            });
+            expect(r.netVectorStrength).toBeLessThan(0);
+            expect(r.netVectorStrength).toBeGreaterThanOrEqual(-1);
+        });
+        test('balanced opposing → near 0', () => {
+            const r = M.computeNetVectorStrength({
+                currentPrice: 65000,
+                zones: [
+                    { zoneCenterPrice: 65800, gravityStrength: 0.7 },
+                    { zoneCenterPrice: 64200, gravityStrength: 0.7 }
+                ]
+            });
+            expect(Math.abs(r.netVectorStrength)).toBeLessThan(0.1);
+        });
+        test('clamped to [-1, 1]', () => {
+            const r = M.computeNetVectorStrength({
+                currentPrice: 1000,
+                zones: [
+                    { zoneCenterPrice: 10000, gravityStrength: 1.0 }
+                ]
+            });
+            expect(r.netVectorStrength).toBeLessThanOrEqual(1);
+        });
+    });
+
+    describe('v3 isValidLifecycleTransition (pure)', () => {
+        test('emerging → active OK', () => {
+            expect(M.isValidLifecycleTransition({
+                fromState: 'emerging', toState: 'active'
+            }).valid).toBe(true);
+        });
+        test('active → decaying OK', () => {
+            expect(M.isValidLifecycleTransition({
+                fromState: 'active', toState: 'decaying'
+            }).valid).toBe(true);
+        });
+        test('decaying → settled OK', () => {
+            expect(M.isValidLifecycleTransition({
+                fromState: 'decaying', toState: 'settled'
+            }).valid).toBe(true);
+        });
+        test('any → invalidated OK', () => {
+            expect(M.isValidLifecycleTransition({
+                fromState: 'active', toState: 'invalidated'
+            }).valid).toBe(true);
+            expect(M.isValidLifecycleTransition({
+                fromState: 'decaying', toState: 'invalidated'
+            }).valid).toBe(true);
+        });
+        test('skip blocked', () => {
+            expect(M.isValidLifecycleTransition({
+                fromState: 'emerging', toState: 'settled'
+            }).valid).toBe(false);
+        });
+        test('terminal states blocked', () => {
+            expect(M.isValidLifecycleTransition({
+                fromState: 'settled', toState: 'active'
+            }).valid).toBe(false);
+        });
+    });
+
+    describe('v3 registerGravityZone (lifecycle + provenance)', () => {
+        test('persists with v3 fields', () => {
+            const r = M.registerGravityZone({
+                userId: UID, resolvedEnv: ENV,
+                zoneId: 'z_v3_full', asset: 'BTC',
+                zoneKind: 'futures_expiry',
+                settlementType: 'cme_quarterly',
+                zoneCenterPrice: 65000, gravityStrength: 0.7,
+                confidenceScore: 0.7, sourceQualityScore: 0.7,
+                liquidityDepthScore: 0.7, volatilitySensitivityScore: 0.7,
+                timeToSettlementMs: 1000,
+                zoneExpiresAtTs: _now() + 3600000,
+                sourceData: {}, ts: _now(),
+                lifecycleState: 'emerging',
+                inferenceMethod: 'ml_inferred',
+                modelVersion: 'v1.0.3',
+                sourceProvider: 'cme_glassnode'
+            });
+            expect(r.registered).toBe(true);
+            const z = db.prepare(
+                "SELECT lifecycle_state, inference_method, model_version, source_provider FROM ml_gravity_zones WHERE zone_id=?"
+            ).get('z_v3_full');
+            expect(z.lifecycle_state).toBe('emerging');
+            expect(z.inference_method).toBe('ml_inferred');
+            expect(z.model_version).toBe('v1.0.3');
+            expect(z.source_provider).toBe('cme_glassnode');
+        });
+        test('defaults lifecycle to active', () => {
+            _registerSimpleZone(UID, 'z_v3_default');
+            const z = db.prepare("SELECT lifecycle_state FROM ml_gravity_zones WHERE zone_id=?").get('z_v3_default');
+            expect(z.lifecycle_state).toBe('active');
+        });
+        test('invalid lifecycle_state throws (module layer)', () => {
+            expect(() => M.registerGravityZone({
+                userId: UID, resolvedEnv: ENV,
+                zoneId: 'z_v3_bad', asset: 'BTC',
+                zoneKind: 'futures_expiry',
+                settlementType: 'cme_quarterly',
+                zoneCenterPrice: 65000, gravityStrength: 0.7,
+                confidenceScore: 0.7, sourceQualityScore: 0.7,
+                liquidityDepthScore: 0.7, volatilitySensitivityScore: 0.7,
+                timeToSettlementMs: 1000,
+                zoneExpiresAtTs: _now() + 3600000,
+                sourceData: {}, ts: _now(),
+                lifecycleState: 'BOGUS'
+            })).toThrow(/invalid lifecycleState/);
+        });
+        test('invalid inferenceMethod throws', () => {
+            expect(() => M.registerGravityZone({
+                userId: UID, resolvedEnv: ENV,
+                zoneId: 'z_v3_bad2', asset: 'BTC',
+                zoneKind: 'futures_expiry',
+                settlementType: 'cme_quarterly',
+                zoneCenterPrice: 65000, gravityStrength: 0.7,
+                confidenceScore: 0.7, sourceQualityScore: 0.7,
+                liquidityDepthScore: 0.7, volatilitySensitivityScore: 0.7,
+                timeToSettlementMs: 1000,
+                zoneExpiresAtTs: _now() + 3600000,
+                sourceData: {}, ts: _now(),
+                inferenceMethod: 'BOGUS'
+            })).toThrow(/invalid inferenceMethod/);
+        });
+    });
+
+    describe('v3 transitionZoneLifecycle', () => {
+        test('emerging → active', () => {
+            _registerSimpleZone(UID, 'z_tr_1', { lifecycleState: 'emerging' });
+            const r = M.transitionZoneLifecycle({
+                userId: UID, resolvedEnv: ENV,
+                zoneId: 'z_tr_1', newState: 'active'
+            });
+            expect(r.transitioned).toBe(true);
+            const z = db.prepare("SELECT lifecycle_state FROM ml_gravity_zones WHERE zone_id=?").get('z_tr_1');
+            expect(z.lifecycle_state).toBe('active');
+        });
+        test('skip transition blocked', () => {
+            _registerSimpleZone(UID, 'z_tr_skip', { lifecycleState: 'emerging' });
+            expect(() => M.transitionZoneLifecycle({
+                userId: UID, resolvedEnv: ENV,
+                zoneId: 'z_tr_skip', newState: 'settled'
+            })).toThrow(/invalid transition/i);
+        });
+        test('terminal state cannot transition further', () => {
+            _registerSimpleZone(UID, 'z_tr_term');
+            M.transitionZoneLifecycle({ userId: UID, resolvedEnv: ENV, zoneId: 'z_tr_term', newState: 'decaying' });
+            M.transitionZoneLifecycle({ userId: UID, resolvedEnv: ENV, zoneId: 'z_tr_term', newState: 'settled' });
+            expect(() => M.transitionZoneLifecycle({
+                userId: UID, resolvedEnv: ENV,
+                zoneId: 'z_tr_term', newState: 'active'
+            })).toThrow();
+        });
+    });
+
+    describe('v3 recordObservation auto-accuracy_score', () => {
+        test('exact match → accuracy 1.0', () => {
+            _registerSimpleZone(UID_OBS, 'z_acc_exact');
+            const r = M.recordObservation({
+                userId: UID_OBS, resolvedEnv: ENV,
+                observationId: 'o_acc_exact', zoneId: 'z_acc_exact',
+                predictedSettlementPrice: 65000,
+                actualPriceAtSettlement: 65000,
+                observationWindowMs: 60000,
+                tolerancePct: 0.01, ts: _now()
+            });
+            expect(r.settlementAccuracyScore).toBe(1.0);
+        });
+        test('at tolerance → accuracy 0.5', () => {
+            _registerSimpleZone(UID_OBS, 'z_acc_tol');
+            const r = M.recordObservation({
+                userId: UID_OBS, resolvedEnv: ENV,
+                observationId: 'o_acc_tol', zoneId: 'z_acc_tol',
+                predictedSettlementPrice: 65000,
+                actualPriceAtSettlement: 65000 * 1.01,  // exactly 1% off
+                observationWindowMs: 60000,
+                tolerancePct: 0.01, ts: _now()
+            });
+            expect(r.settlementAccuracyScore).toBeCloseTo(0.5, 6);
+        });
+        test('far miss → accuracy 0', () => {
+            _registerSimpleZone(UID_OBS, 'z_acc_miss');
+            const r = M.recordObservation({
+                userId: UID_OBS, resolvedEnv: ENV,
+                observationId: 'o_acc_miss', zoneId: 'z_acc_miss',
+                predictedSettlementPrice: 65000,
+                actualPriceAtSettlement: 70000,
+                observationWindowMs: 60000,
+                tolerancePct: 0.01, ts: _now()
+            });
+            expect(r.settlementAccuracyScore).toBe(0);
+        });
+    });
+
+    describe('v3 recordConflict + members + vector_strength', () => {
+        test('persists members + net_vector_strength', () => {
+            _registerSimpleZone(UID_CONF, 'z_cv3_up',
+                { zoneCenterPrice: 65800, gravityStrength: 0.8 });
+            _registerSimpleZone(UID_CONF, 'z_cv3_dn',
+                { zoneCenterPrice: 64200, gravityStrength: 0.6 });
+            const r = M.recordConflict({
+                userId: UID_CONF, resolvedEnv: ENV,
+                conflictId: 'cv3_1', asset: 'BTC',
+                currentPrice: 65000,
+                participatingZoneIds: ['z_cv3_up', 'z_cv3_dn'],
+                ts: _now()
+            });
+            expect(r.recorded).toBe(true);
+            expect(typeof r.netVectorStrength).toBe('number');
+            expect(r.netVectorStrength).toBeGreaterThanOrEqual(-1);
+            expect(r.netVectorStrength).toBeLessThanOrEqual(1);
+            // Verify members table populated
+            const members = db.prepare(
+                "SELECT zone_id, weight FROM ml_gravity_conflict_members WHERE conflict_id=?"
+            ).all('cv3_1');
+            expect(members.length).toBe(2);
+            const zoneIds = members.map(m => m.zone_id).sort();
+            expect(zoneIds).toEqual(['z_cv3_dn', 'z_cv3_up']);
+        });
+        test('members FK cascade — delete conflict cleans members', () => {
+            _registerSimpleZone(UID_CONF, 'z_cas_1');
+            _registerSimpleZone(UID_CONF, 'z_cas_2', { zoneCenterPrice: 64000 });
+            M.recordConflict({
+                userId: UID_CONF, resolvedEnv: ENV,
+                conflictId: 'c_cas', asset: 'BTC',
+                currentPrice: 65000,
+                participatingZoneIds: ['z_cas_1', 'z_cas_2'],
+                ts: _now()
+            });
+            db.prepare("DELETE FROM ml_gravity_conflicts WHERE conflict_id=?").run('c_cas');
+            const orphans = db.prepare(
+                "SELECT * FROM ml_gravity_conflict_members WHERE conflict_id=?"
+            ).all('c_cas');
+            expect(orphans.length).toBe(0);
         });
     });
 
