@@ -994,6 +994,55 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 Claude-Extra #1 INSTITUTIONAL GRAVITY SCANNER 2026-05-17] R2
+// Operator-flagged retrocausal gravity engine. Detects "gravity wells" —
+// zones where MM/institutional obligations (futures expiry, GEX, TWAP,
+// liquidation clusters, funding arbitrage) MECHANICALLY pull price toward
+// a target. NO market manipulation — pure analysis of others' contractual/
+// mathematical obligations.
+migrate('270_ml_gravity_zones', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_gravity_zones (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            zone_id                  TEXT NOT NULL UNIQUE,
+            asset                    TEXT NOT NULL,
+            zone_kind                TEXT NOT NULL CHECK(zone_kind IN
+                                     ('futures_expiry','gamma_wall',
+                                      'twap_target','liquidation_cluster',
+                                      'funding_arbitrage')),
+            target_price             REAL NOT NULL CHECK(target_price > 0),
+            gravity_strength         REAL NOT NULL CHECK(gravity_strength >= 0 AND gravity_strength <= 1),
+            time_to_settlement_ms    INTEGER NOT NULL CHECK(time_to_settlement_ms >= 0),
+            source_data_json         TEXT NOT NULL,
+            active                   INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgz_user_env_asset_kind_active
+            ON ml_gravity_zones(user_id, resolved_env, asset, zone_kind, active);
+    `);
+});
+
+migrate('271_ml_gravity_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_gravity_observations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_id              TEXT NOT NULL UNIQUE,
+            zone_id                     TEXT NOT NULL,
+            predicted_price             REAL NOT NULL CHECK(predicted_price > 0),
+            actual_price_at_settlement  REAL NOT NULL CHECK(actual_price_at_settlement > 0),
+            distance_to_target          REAL NOT NULL,
+            prediction_was_correct      INTEGER NOT NULL CHECK(prediction_was_correct IN (0,1)),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgo_user_env_zone_ts
+            ON ml_gravity_observations(user_id, resolved_env, zone_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §142 METACOGNITIVE LOAD MONITOR 2026-05-16] _meta canonical
 // PDF — §142 (lines 4709-4710). System-level cognitive overload detector.
 // 5-axis aggregation (hypotheses + positions + degraded modules + scenario
