@@ -994,6 +994,59 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §144 ADAPTIVE SOURCE TRUST CALIBRATION 2026-05-17] _meta
+// Canonical PDF §144 (line 4713). Dynamic trust score per source × regime.
+// NU manipulare/tehnică (§60), NU staleness (§13), NU acord fals (§128) —
+// e EPISTEMIC RELEVANCE CONTEXTUAL. Sursa cu track-record global bun dar
+// performance proastă în regim curent = autoritate redusă acum. Decayed
+// recent accuracy + Bayesian shrinkage la baseline when low samples.
+migrate('286_ml_source_trust_predictions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_source_trust_predictions (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            prediction_id            TEXT NOT NULL UNIQUE,
+            source_name              TEXT NOT NULL,
+            regime                   TEXT NOT NULL CHECK(regime IN
+                                     ('trend','range','chop','breakout')),
+            setup_kind               TEXT NOT NULL,
+            predicted_value_json     TEXT NOT NULL,
+            actual_value_json        TEXT NOT NULL,
+            accuracy_score           REAL NOT NULL CHECK(accuracy_score >= 0 AND accuracy_score <= 1),
+            prediction_was_correct   INTEGER NOT NULL CHECK(prediction_was_correct IN (0,1)),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlstp_user_env_source_regime_ts
+            ON ml_source_trust_predictions(user_id, resolved_env, source_name, regime, ts);
+    `);
+});
+
+migrate('287_ml_source_trust_scores', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_source_trust_scores (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            score_id                 TEXT NOT NULL UNIQUE,
+            source_name              TEXT NOT NULL,
+            regime                   TEXT NOT NULL CHECK(regime IN
+                                     ('trend','range','chop','breakout')),
+            trust_score              REAL NOT NULL CHECK(trust_score >= 0 AND trust_score <= 1),
+            sample_count             INTEGER NOT NULL CHECK(sample_count >= 0),
+            decayed_accuracy         REAL NOT NULL CHECK(decayed_accuracy >= 0 AND decayed_accuracy <= 1),
+            confidence_in_score      REAL NOT NULL CHECK(confidence_in_score >= 0 AND confidence_in_score <= 1),
+            last_updated_ts          INTEGER NOT NULL,
+            ts                       INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, source_name, regime)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsts_user_env_source_regime
+            ON ml_source_trust_scores(user_id, resolved_env, source_name, regime);
+        CREATE INDEX IF NOT EXISTS idx_mlsts_user_env_regime_trust
+            ON ml_source_trust_scores(user_id, resolved_env, regime, trust_score);
+    `);
+});
+
 // [OMEGA Wave 3 §143 SEMANTIC MEMORY CONSOLIDATION 2026-05-17] _meta
 // Canonical PDF §143 (line 4711). Sleep-analog consolidation: examines
 // groups of related episodes, extracts structural principle. NOT "I've
