@@ -158,8 +158,8 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             const numbers = r.map(p => p.principleNumber).sort();
             expect(numbers).toEqual([172, 173, 174, 175, 176]);
         });
-        test('countCatalogEntries returns 30 (6 batches × 5)', () => {
-            expect(M.countCatalogEntries()).toBe(30);
+        test('countCatalogEntries returns 35 (7 batches × 5)', () => {
+            expect(M.countCatalogEntries()).toBe(35);
         });
         test('registerPrinciple works for §172', () => {
             const r = M.registerPrinciple({
@@ -314,6 +314,36 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
         });
         test('CLUSTERS contains reflexive_temporal_cluster', () => {
             expect(M.CLUSTERS).toContain('reflexive_temporal_cluster');
+        });
+    });
+
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 7 §222-§226 constitutive_cluster)', () => {
+        test('§222 Constitutive error ontology', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[222].title).toMatch(/constitutive error ontology/i);
+        });
+        test('§223 Decision that decides the decider', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[223].title).toMatch(/decides the decider/i);
+        });
+        test('§224 Intelligence of the interval', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[224].title).toMatch(/intelligence of the interval/i);
+        });
+        test('§225 Weight of infinite unchosen alternatives', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[225].title).toMatch(/infinite unchosen alternatives/i);
+        });
+        test('§226 Negative space intelligence', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[226].title).toMatch(/negative space intelligence/i);
+        });
+        test('all §222-§226 share constitutive_cluster', () => {
+            for (const n of [222, 223, 224, 225, 226]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('constitutive_cluster');
+            }
+        });
+        test('CLUSTERS contains constitutive_cluster', () => {
+            expect(M.CLUSTERS).toContain('constitutive_cluster');
+        });
+        test('listClusterCatalog returns 5 for constitutive_cluster', () => {
+            const r = M.listClusterCatalog({ cluster: 'constitutive_cluster' });
+            expect(r.length).toBe(5);
         });
     });
 

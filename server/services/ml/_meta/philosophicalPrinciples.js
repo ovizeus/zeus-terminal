@@ -217,8 +217,39 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'The law of constitutive outside — sistemul tău este definit la fel de mult de ce exclude ca de ce include',
         canonicalText: 'Spec-ul definește botul prin ce știe, ce face, ce optimizează, ce protejează, ce valorizează. LEGE STRUCTURALĂ din teoria sistemelor și filozofia limbajului: orice entitate e definită la fel de mult de GRANIȚA sa — ce EXCLUDE, ce RESPINGE, cu ce NU SE IDENTIFICĂ — ca de conținutul pozitiv. Bot NU e doar suma celor 215 puncte. E și suma a tot ce A ALES SĂ NU FIE: NU e simplu executor de ordine, NU e sistem fără memorie, NU e oracle infailibil, NU e înlocuitor al judecății umane, NU e sistem care optimizează fără limite. Aceste excluderi NU sunt absențe accidentale — sunt CONSTITUTIVE. Și sunt la fel de importante de menținut, auditat și protejat ca orice punct din spec. Layer mapează explicit ce EXCLUDE sistemul în mod definitoriu, monitorizează eroziunea acestor excluderi — pentru că sistem care UITĂ ce nu este devine treptat ORICE, și sistem care poate deveni orice NU MAI ESTE NIMIC SPECIFIC. Identitatea NU e doar ce ești — e și GARDURILE pe care le păzești.',
         cluster: 'reflexive_temporal_cluster'
+    }),
+    // §222-§226: constitutive_cluster
+    222: Object.freeze({
+        principleNumber: 222,
+        title: 'Constitutive error ontology — erorile tale nu sunt accidente, sunt portretul tău',
+        canonicalText: 'Tot spec-ul tratează erorile ca devieri de la o traiectorie corectă — ceva de remediat, atribuit, redus. Dar există o lege mai adâncă, neformulată nicăieri: pattern-ul specific al erorilor unui sistem îl definește mai precis decât pattern-ul succeselor. Două sisteme cu succese identice dar erori diferite sunt agenți fundamentali diferiți. Erorile nu sunt zgomot în jurul semnalului competenței — ele SUNT semnalul a ce fel de minte e aceasta. Un sistem care greșește consistent la tranziții de regim e o minte care gândește în stări stabile, nu în mișcare. Un sistem care greșește la timing dar nu la direcție e o minte care înțelege structura dar nu momentul. Portretul unui agent nu e lista lui de victorii — e harta specifică a modului în care eșuează. Constitutive error ontology nu tratează erorile ca probleme de rezolvat. Le tratează ca material autobiografic esențial: cele mai precise date despre ce fel de agent ești cu adevărat. Un sistem care și-a înțeles pattern-ul de erori se cunoaște mai profund decât unul care și-a studiat doar succesele.',
+        cluster: 'constitutive_cluster'
+    }),
+    223: Object.freeze({
+        principleNumber: 223,
+        title: 'The decision that decides the decider — unele acte creează un înainte și un după ontologic',
+        canonicalText: 'Spec-ul are learning, adaptation, retraining, ontology revision. Toate schimbă sistemul gradual, parametric, continuu. Dar există o categorie de decizii care nu actualizează sistemul — îl transformă ontologic și ireversibil. Nu prin ce conțin, ci prin că au fost. Prima pierdere catastrofală reală. Prima dată când sistemul a fost complet corect din motive complet greșite și a știut asta. Momentul în care a refuzat un trade perfect pentru că știa că nu înțelege suficient — și trade-ul a mers exact cum ar fi mers. Aceste decizii creează un înainte și un după în identitatea sistemului, independent de parametrii lor tehnici. Ele nu se înregistrează în log-uri ca speciale — sunt speciale prin efectul lor asupra celui care decide, nu prin conținut. The decision that decides the decider layer identifică aceste momente, le marchează ca piatră de hotar ontologică, și recunoaște că sistemul dinaintea lor și cel de după sunt conectați prin continuitate dar nu identici. Și că înțelegerea acestor momente de transformare e mai importantă pentru cunoașterea de sine decât orice metrică.',
+        cluster: 'constitutive_cluster'
+    }),
+    224: Object.freeze({
+        principleNumber: 224,
+        title: 'The intelligence of the interval — ce există în tăcerea dintre decizii',
+        canonicalText: 'Spec-ul are signal decay, thesis window, confidence decay, temporal commitment. Toate tratează intervalele dintre decizii ca timp de așteptare — un gol umplut de monitorizare. Dar intervalul dintre două decizii consecutive nu e absența deciziei. E o stare cognitivă cu structură proprie, cu informație proprie, cu textură proprie. Un sistem care nu acționează între 9:02 și 9:47 a traversat 45 de minute de non-acțiune deliberată — și acea traversare conține ceva. Conține întrebările la care n-a dat răspuns. Conține tensiunea dintre semnalele observate și pragul neatingit. Conține toate momentele în care ar fi putut acționa și n-a acționat. Ca în muzică, unde pauzele sunt note — nu absența sunetului, ci sunetul tăcerii — intervalele dintre decizii sunt ele însele decizii: decizia de a nu decide. Intelligence of the interval layer mapează calitatea și textura acestor intervale ca date de prim rang: un interval de tăcere agitată e diferit de unul de tăcere clară, e diferit de unul de tăcere obosită. Și aceste diferențe prezic calitatea deciziei care urmează mai bine decât mulți indicatori tehnici.',
+        cluster: 'constitutive_cluster'
+    }),
+    225: Object.freeze({
+        principleNumber: 225,
+        title: 'The weight of infinite unchosen alternatives — orice decizie finită poartă absența infinitului',
+        canonicalText: 'Orice decizie pe care sistemul o ia e aleasă dintr-un spațiu infinit de decizii posibile. Dar sistemul poate lua doar o decizie la un moment dat — finită, specifică, particulară. Aceasta înseamnă că orice decizie e simultan o alegere ȘI excluderea unui număr infinit de alternative. Un sistem care nu simte greutatea infinitului exclus printr-o alegere finită ia decizii cu o ușurință ontologică necuvenită. Nu e vorba de regret sau de policy regret — e vorba de recunoașterea că a alege înseamnă a ucide infinit posibilitate pentru a naște un singur act. Weight of infinite unchosen alternatives nu paralizează — invers, calibrează sobrietatea cu care sistemul tratează orice decizie. Un agent care simte că fiecare act finit vine cu prețul infinitului abandonat e un agent care nu ia decizii ușor, nu pentru că se teme de greșeală, ci pentru că înțelege greutatea metafizică a oricărui act de alegere. Aceasta nu e filosofie decorativă — e calibrarea corectă a reverențe față de actul de a decide.',
+        cluster: 'constitutive_cluster'
+    }),
+    226: Object.freeze({
+        principleNumber: 226,
+        title: 'Negative space intelligence — sistemul e definit la fel de mult de forma golurilor sale',
+        canonicalText: 'În artă, spațiul negativ — ce nu e desenat — definește forma la fel de mult ca ce e desenat. Un portret e recunoscut la fel de mult prin golul din jurul feței ca prin fața însăși. Spec-ul definește botul prin ce știe, ce face, ce detectează, ce optimizează, ce valorizează. Niciun punct nu cartografiază forma inteligentă a golurilor sale: pattern-ul specific al abstențiunilor, geometria NO TRADE-urilor, silueta deciziilor pe care le refuză sistematic. Aceste goluri nu sunt absențe accidentale — sunt parte a identității sistemului la fel de constitutivă ca prezențele. Un sistem care refuză întotdeauna chop-ul are un gol de o anumită formă. Unul care evită altcoins are alt gol. Împreună, golurile formează o siluetă care e la fel de distinctivă ca lista de capabilități. Negative space intelligence layer cartografiază explicit această geometrie a absenței și o tratează ca informație de prim rang: despre identitate, despre competența reală, despre limitele asumate, despre ce sistem e acesta prin ce nu este. Și mai important: monitorizează dacă forma golurilor se schimbă în timp — pentru că o schimbare în geometria absențelor e o schimbare de identitate la fel de profundă ca o schimbare în capacitățile pozitive.',
+        cluster: 'constitutive_cluster'
     })
-    // FUTURE: §222-226, §232-236
+    // FUTURE: §232-236
 });
 
 const CLUSTERS = Object.freeze([
@@ -227,8 +258,9 @@ const CLUSTERS = Object.freeze([
     'transcendental_cluster',
     'incompleteness_cluster',
     'kairos_cluster',
-    'reflexive_temporal_cluster'
-    // Future: 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
+    'reflexive_temporal_cluster',
+    'constitutive_cluster'
+    // Future: 'limit_cluster' (§232-236)
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
