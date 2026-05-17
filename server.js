@@ -1242,6 +1242,11 @@ try {
   telemetryCollector.start();
   persistentLogWriter.start();
   console.log('[OMEGA-DOCTOR] D-2 telemetry + log writer started');
+
+  // D-3: start analyzer (5s loop computes cognitive state per FAILURE_ONTOLOGY)
+  const analyzer = require('./server/services/ml/_doctor/analyzer');
+  analyzer.start();
+  console.log('[OMEGA-DOCTOR] D-3 analyzer started (5s tick)');
 } catch (err) {
   console.error('[OMEGA-DOCTOR] Boot validation error:', err.message);
   console.error('[OMEGA-DOCTOR] Server continues but registry may be incomplete');
