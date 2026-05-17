@@ -994,6 +994,66 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §161 ALIVENESS SIMULATION LAYER 2026-05-17] _meta
+// Canonical PDF §161 (lines 5403-5455). Operational vitality index.
+// Composite vitality from 8 canonical components (self_model_health,
+// coherence, tension_field, capability_trust, learning_freshness,
+// identity_continuity, unknowns_pressure, decision_integrity) — tension
+// and unknowns INVERTED in formula. 6 states (lucid/strained/degraded/
+// guarded/observer/shutdown_worthy). PDF: "nu constiinta, nu persoana,
+// ci vitalitate de agent." NOT consciousness — just operational health
+// beacon for self-reporting.
+migrate('320_ml_vitality_index_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_vitality_index_snapshots (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id                 TEXT NOT NULL UNIQUE,
+            self_model_health           REAL NOT NULL CHECK(self_model_health >= 0 AND self_model_health <= 1),
+            coherence                   REAL NOT NULL CHECK(coherence >= 0 AND coherence <= 1),
+            tension_field               REAL NOT NULL CHECK(tension_field >= 0 AND tension_field <= 1),
+            capability_trust            REAL NOT NULL CHECK(capability_trust >= 0 AND capability_trust <= 1),
+            learning_freshness          REAL NOT NULL CHECK(learning_freshness >= 0 AND learning_freshness <= 1),
+            identity_continuity         REAL NOT NULL CHECK(identity_continuity >= 0 AND identity_continuity <= 1),
+            unknowns_pressure           REAL NOT NULL CHECK(unknowns_pressure >= 0 AND unknowns_pressure <= 1),
+            decision_integrity          REAL NOT NULL CHECK(decision_integrity >= 0 AND decision_integrity <= 1),
+            composite_vitality_score    REAL NOT NULL CHECK(composite_vitality_score >= 0 AND composite_vitality_score <= 1),
+            state                       TEXT NOT NULL CHECK(state IN
+                                        ('lucid','strained','degraded',
+                                         'guarded','observer','shutdown_worthy')),
+            self_report_text            TEXT NOT NULL,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlvis_user_env_state_ts
+            ON ml_vitality_index_snapshots(user_id, resolved_env, state, ts);
+    `);
+});
+
+migrate('321_ml_vitality_state_transitions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_vitality_state_transitions (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            transition_id        TEXT NOT NULL UNIQUE,
+            from_state           TEXT NOT NULL CHECK(from_state IN
+                                 ('lucid','strained','degraded',
+                                  'guarded','observer','shutdown_worthy')),
+            to_state             TEXT NOT NULL CHECK(to_state IN
+                                 ('lucid','strained','degraded',
+                                  'guarded','observer','shutdown_worthy')),
+            trigger_reason       TEXT NOT NULL,
+            snapshot_id          TEXT,
+            ts                   INTEGER NOT NULL,
+            FOREIGN KEY(snapshot_id)
+                REFERENCES ml_vitality_index_snapshots(snapshot_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlvst_user_env_to_ts
+            ON ml_vitality_state_transitions(user_id, resolved_env, to_state, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §160 SELF-PRESERVATION WITHOUT GOAL CORRUPTION 2026-05-17] _meta
 // Canonical PDF §160 (lines 5371-5400). "ma apar ca sa imi servesc rolul
 // sau imi servesc rolul ca sa ma apar?" Bounded self-preservation —
