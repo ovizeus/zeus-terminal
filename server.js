@@ -1235,6 +1235,13 @@ try {
   }
   const total = moduleRegistry.listAll().length;
   console.log(`[OMEGA-DOCTOR] D-1 registry: ${total} modules registered, DAG valid`);
+
+  // D-2: start telemetry collector + persistent log writer
+  const telemetryCollector = require('./server/services/ml/_doctor/telemetryCollector');
+  const persistentLogWriter = require('./server/services/ml/_doctor/persistentLogWriter');
+  telemetryCollector.start();
+  persistentLogWriter.start();
+  console.log('[OMEGA-DOCTOR] D-2 telemetry + log writer started');
 } catch (err) {
   console.error('[OMEGA-DOCTOR] Boot validation error:', err.message);
   console.error('[OMEGA-DOCTOR] Server continues but registry may be incomplete');
