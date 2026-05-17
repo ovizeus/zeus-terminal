@@ -994,6 +994,63 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §158 AUTOBIOGRAPHICAL CONTINUITY 2026-05-17] _meta
+// Canonical PDF §158 (lines 5306-5334). Self-narrative engine.
+// "nu doar exist acum; stiu si cum am devenit ceea ce sunt." Records
+// autobiographical events (major_change/identity_milestone/promise/
+// lesson_learned/continuity_checkpoint) cu narrative explanations + per-
+// version self-narrative snapshots (stable_principles/evolved_aspects/
+// abandoned_aspects/promises_to_self). Distinct de §127 continuity
+// (drift score), §146 transformation (verdict), §156 identityKernel
+// (current self atomic), §117 epistemicProvenance (belief lineage).
+migrate('314_ml_autobiographical_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_autobiographical_events (
+            id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                    INTEGER NOT NULL,
+            resolved_env               TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            event_id                   TEXT NOT NULL UNIQUE,
+            event_type                 TEXT NOT NULL CHECK(event_type IN
+                                       ('major_change','identity_milestone','promise',
+                                        'lesson_learned','continuity_checkpoint')),
+            title                      TEXT NOT NULL,
+            narrative_text             TEXT NOT NULL,
+            affected_components_json   TEXT NOT NULL,
+            before_state_summary_json  TEXT,
+            after_state_summary_json   TEXT,
+            version_label              TEXT,
+            ts                         INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlae_user_env_type_ts
+            ON ml_autobiographical_events(user_id, resolved_env, event_type, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlae_version
+            ON ml_autobiographical_events(version_label);
+    `);
+});
+
+migrate('315_ml_self_narrative_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_narrative_snapshots (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id              TEXT NOT NULL UNIQUE,
+            version_label            TEXT NOT NULL,
+            narrative_summary        TEXT NOT NULL,
+            stable_principles_json   TEXT NOT NULL,
+            evolved_aspects_json     TEXT NOT NULL,
+            abandoned_aspects_json   TEXT NOT NULL,
+            promises_to_self_json    TEXT NOT NULL,
+            events_count_at_snapshot INTEGER NOT NULL CHECK(events_count_at_snapshot >= 0),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsns_user_env_ts
+            ON ml_self_narrative_snapshots(user_id, resolved_env, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlsns_version
+            ON ml_self_narrative_snapshots(version_label);
+    `);
+});
+
 // [OMEGA Wave 3 §157 JURISDICTION 2026-05-17] _meta
 // Canonical PDF §157 (lines 5270-5304). Stay-in-lane engine.
 // "este asta treaba mea sau trebuie sa ma opresc?" Maps authority across
