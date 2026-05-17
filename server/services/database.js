@@ -994,6 +994,70 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §152 NEGATIVE EVIDENCE SEMANTICS 2026-05-17] R2_cognition
+// Canonical PDF §152 (lines 5034-5084). Absence-as-signal engine.
+// Registers expected signals per trigger event (e.g. "liquidity_sweep_
+// authentic" → expects "follow_through" within X seconds). When trigger
+// fires, creates pending negative_evidence_event row. State machine
+// transitions: pending → normal_absence → significant_absence → expired
+// (or → observed if signal appears). Absence significance ramps with
+// elapsed/window ratio. Distinct de circuitBreaker (absence pe feeds,
+// not signals). Integrates cu thesisGraph/beliefPropagation/narrative-
+// Coherence — "ce ar fi trebuit sa vad pana acum si n-am vazut?"
+migrate('302_ml_expected_signals_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_expected_signals_registry (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            expected_signal_id       TEXT NOT NULL UNIQUE,
+            event_trigger            TEXT NOT NULL,
+            expected_signal_name     TEXT NOT NULL,
+            normal_window_ms         INTEGER NOT NULL CHECK(normal_window_ms > 0),
+            significant_window_ms    INTEGER NOT NULL CHECK(significant_window_ms > 0),
+            max_window_ms            INTEGER NOT NULL CHECK(max_window_ms > 0),
+            causal_interpretation    TEXT NOT NULL,
+            thesis_link_label        TEXT,
+            registered_at            INTEGER NOT NULL,
+            CHECK(normal_window_ms <= significant_window_ms
+                  AND significant_window_ms <= max_window_ms)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlesr_user_env_trigger
+            ON ml_expected_signals_registry(user_id, resolved_env, event_trigger);
+    `);
+});
+
+migrate('303_ml_negative_evidence_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_negative_evidence_events (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            evidence_id                   TEXT NOT NULL UNIQUE,
+            expected_signal_id            TEXT NOT NULL,
+            trigger_event_label           TEXT NOT NULL,
+            trigger_ts                    INTEGER NOT NULL,
+            observation_deadline_ts       INTEGER NOT NULL,
+            observed                      INTEGER NOT NULL DEFAULT 0 CHECK(observed IN (0,1)),
+            observed_ts                   INTEGER,
+            absence_significance_score    REAL NOT NULL DEFAULT 0
+                                          CHECK(absence_significance_score >= 0
+                                                AND absence_significance_score <= 1),
+            state                         TEXT NOT NULL CHECK(state IN
+                                          ('pending','normal_absence',
+                                           'significant_absence','observed','expired')),
+            resolved_ts                   INTEGER,
+            ts                            INTEGER NOT NULL,
+            FOREIGN KEY(expected_signal_id)
+                REFERENCES ml_expected_signals_registry(expected_signal_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlnee_user_env_state_ts
+            ON ml_negative_evidence_events(user_id, resolved_env, state, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlnee_signal
+            ON ml_negative_evidence_events(expected_signal_id);
+    `);
+});
+
 // [OMEGA Wave 3 §151 FUTURE-SELF TREATY 2026-05-17] _meta
 // Canonical PDF §151 (lines 4984-5031). Possible-selves negotiation chamber.
 // Registers 5 canonical possible-self archetypes (conservative/aggressive/
