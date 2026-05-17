@@ -994,6 +994,47 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §181 COSMIC LOCALITY CHECK 2026-05-17] R2_cognition
+// Canonical PDF §181 (lines 5929-5976). Do-not-universalize-the-parish.
+// "descoperirea mea este un adevar mare sau doar un adevar de cartier?"
+// 7 canonical scope tags (local / regime_bound / asset_bound /
+// venue_bound / session_bound / likely_general / unknown_scope).
+// Portability score + universalization penalty când scope claimed > scope
+// evidenced. Distinct de §164 temporal texture (time-bound truth), §93
+// regime grammar, §134 representation debt.
+migrate('333_ml_locality_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_locality_assessments (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id                   TEXT NOT NULL UNIQUE,
+            thesis_label                    TEXT NOT NULL,
+            declared_scope                  TEXT NOT NULL CHECK(declared_scope IN
+                                            ('local','regime_bound','asset_bound',
+                                             'venue_bound','session_bound',
+                                             'likely_general','unknown_scope')),
+            tested_contexts_count           INTEGER NOT NULL CHECK(tested_contexts_count >= 0),
+            supporting_contexts_count       INTEGER NOT NULL CHECK(supporting_contexts_count >= 0),
+            portability_score               REAL NOT NULL CHECK(portability_score >= 0 AND portability_score <= 1),
+            claimed_generality              REAL NOT NULL CHECK(claimed_generality >= 0 AND claimed_generality <= 1),
+            evidenced_generality            REAL NOT NULL CHECK(evidenced_generality >= 0 AND evidenced_generality <= 1),
+            universalization_penalty        REAL NOT NULL CHECK(universalization_penalty >= 0 AND universalization_penalty <= 1),
+            recommended_scope               TEXT NOT NULL CHECK(recommended_scope IN
+                                            ('local','regime_bound','asset_bound',
+                                             'venue_bound','session_bound',
+                                             'likely_general','unknown_scope')),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL,
+            CHECK(supporting_contexts_count <= tested_contexts_count)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlla_user_env_scope_ts
+            ON ml_locality_assessments(user_id, resolved_env, declared_scope, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlla_recommended_ts
+            ON ml_locality_assessments(recommended_scope, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §180 ANTI-IDOLATRY ENGINE 2026-05-17] _audit
 // Canonical PDF §180 (lines 5887-5926). No-model-deserves-worship.
 // "mai cred in componenta asta pentru ca functioneaza acum sau pentru ca
