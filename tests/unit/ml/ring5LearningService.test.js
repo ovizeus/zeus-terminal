@@ -167,6 +167,50 @@ describe('Ring5LearningService Phase 2 facade', () => {
         });
     });
 
+    describe('wrap influence mode (Phase 4)', () => {
+        const _phase2 = (over = {}) => ({ dir: 'LONG', confidence: 70, score: 5, reasons: ['t1'], ts: Date.now(), ...over });
+
+        beforeEach(() => {
+            if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ml_influence_audit'").get()) {
+                db.prepare("DELETE FROM ml_influence_audit").run();
+            }
+        });
+
+        test('mode=shadow (default) preserves Day 1 behavior — no audit row', () => {
+            const r = ring5.wrap({
+                userId: 1, resolvedEnv: 'DEMO', symbol: 'BTCUSDT',
+                phase2Decision: _phase2(), mlBrainProInputs: null
+            });
+            expect(r.layeredBy).toBe('phase2-only');
+            const audit = db.prepare("SELECT COUNT(*) c FROM ml_influence_audit").get();
+            expect(audit.c).toBe(0);
+        });
+
+        test('mode=influence with no mlBrainProInputs -> skipped audit row', () => {
+            const r = ring5.wrap({
+                userId: 1, resolvedEnv: 'DEMO', symbol: 'BTCUSDT',
+                regime: 'trending', marketContext: {}, nowTs: Date.now(),
+                mode: 'influence',
+                phase2Decision: _phase2(), mlBrainProInputs: null
+            });
+            expect(r.layeredBy).toBe('ring5-influence-skipped');
+            const audit = db.prepare("SELECT gate_status FROM ml_influence_audit").get();
+            expect(audit.gate_status).toBe('skipped');
+        });
+
+        test('mode=influence with neutral signals -> skipped (no proposal)', () => {
+            const r = ring5.wrap({
+                userId: 1, resolvedEnv: 'DEMO', symbol: 'BTCUSDT',
+                regime: 'trending', marketContext: {}, nowTs: Date.now(),
+                mode: 'influence',
+                phase2Decision: _phase2(),
+                mlBrainProInputs: { contributions: [{ moduleId: 'm', contribution: 0.0 }] }
+            });
+            expect(r.layeredBy).toBe('ring5-influence-skipped');
+            expect(r.confidence).toBe(70);
+        });
+    });
+
     describe('migration 373_ml_influence_audit', () => {
         test('table exists with required columns', () => {
             const cols = db.prepare("PRAGMA table_info(ml_influence_audit)").all();

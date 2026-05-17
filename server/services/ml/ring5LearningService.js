@@ -27,6 +27,9 @@
 
 const _stateHelper = require('./_ring5/ring5State');
 const thompsonSampler = require('./_ring5/thompsonSampler');
+const influenceProposer = require('./_ring5/influenceProposer');
+const reflectionGate = require('./_ring5/reflectionGate');
+const influenceAudit = require('./_ring5/influenceAudit');
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
 
@@ -50,8 +53,18 @@ function wrap(params) {
     const symbol = _required(params, 'symbol');
     const phase2Decision = _required(params, 'phase2Decision');
     const mlBrainProInputs = params.mlBrainProInputs ?? null;
+    const mode = params.mode || 'shadow';
 
-    // Phase 2 fields preserved EXACTLY — wrap is read-only in Phase B Day 1.
+    if (mode === 'influence') {
+        return _wrapInfluence({
+            userId, resolvedEnv, symbol, phase2Decision, mlBrainProInputs,
+            regime: params.regime || 'unknown',
+            marketContext: params.marketContext || {},
+            nowTs: params.nowTs || Date.now()
+        });
+    }
+
+    // mode === 'shadow' (Day 1 behavior, unchanged)
     const wrapped = {
         dir: phase2Decision.dir,
         confidence: phase2Decision.confidence,
@@ -70,6 +83,53 @@ function wrap(params) {
     }
 
     return wrapped;
+}
+
+function _wrapInfluence(ctx) {
+    const { userId, resolvedEnv, symbol, phase2Decision, mlBrainProInputs, regime, marketContext, nowTs } = ctx;
+
+    const draw = thompsonSampler.drawSample({ userId, env: resolvedEnv, symbol, regime, nowTs });
+    const proposal = influenceProposer.propose({
+        phase2Decision, banditSample: draw.sample, mlBrainProInputs
+    });
+
+    if (!proposal.hasProposal) {
+        influenceAudit.record({
+            userId, env: resolvedEnv, symbol, regime,
+            phase2Decision, proposedDecision: phase2Decision,
+            gateStatus: 'skipped', gateReason: 'no_proposal',
+            rationale: proposal.rationale, ts: nowTs
+        });
+        return { ...phase2Decision, layeredBy: 'ring5-influence-skipped' };
+    }
+
+    const gate = reflectionGate.evaluate({
+        userId, symbol, regime, marketContext,
+        phase2Decision, proposedDecision: proposal.proposedDecision
+    });
+
+    if (!gate.accepted) {
+        influenceAudit.record({
+            userId, env: resolvedEnv, symbol, regime,
+            phase2Decision, proposedDecision: proposal.proposedDecision,
+            gateStatus: 'rejected', gateReason: 'reflection_blocked',
+            rationale: { proposal: proposal.rationale, concerns: gate.concerns },
+            ts: nowTs
+        });
+        return { ...phase2Decision, layeredBy: 'ring5-influence-blocked' };
+    }
+
+    influenceAudit.record({
+        userId, env: resolvedEnv, symbol, regime,
+        phase2Decision, proposedDecision: gate.finalDecision,
+        gateStatus: 'accepted', gateReason: 'reflection_passed',
+        rationale: {
+            proposal: proposal.rationale,
+            penalty: gate.reflectionResult.totalPenalty || 0
+        },
+        ts: nowTs
+    });
+    return { ...gate.finalDecision, layeredBy: 'ring5-influence-applied' };
 }
 
 function recordContribution(params) {
