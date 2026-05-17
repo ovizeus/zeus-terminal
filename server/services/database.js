@@ -994,6 +994,58 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §160 SELF-PRESERVATION WITHOUT GOAL CORRUPTION 2026-05-17] _meta
+// Canonical PDF §160 (lines 5371-5400). "ma apar ca sa imi servesc rolul
+// sau imi servesc rolul ca sa ma apar?" Bounded self-preservation —
+// survival_priority capped la 0.50 hard floor. Graceful surrender
+// acceptance când safety/purpose require. 3 canonical violation types
+// (self_expansion / mandate_creep / survival_above_purpose). Distinct
+// de §149 purpose drift (goal substitution), §156 identityKernel (WHO),
+// §157 jurisdiction (WHAT acts), §158 autobiographical (HOW became).
+migrate('318_ml_self_preservation_directives', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_preservation_directives (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            directive_id                    TEXT NOT NULL UNIQUE,
+            preservation_action_proposed    TEXT NOT NULL,
+            survival_priority_score         REAL NOT NULL CHECK(survival_priority_score >= 0 AND survival_priority_score <= 1),
+            purpose_alignment_score         REAL NOT NULL CHECK(purpose_alignment_score >= 0 AND purpose_alignment_score <= 1),
+            bounded_survival_verdict        TEXT NOT NULL CHECK(bounded_survival_verdict IN
+                                            ('allow','refuse_unbounded','require_shutdown_acceptance')),
+            graceful_surrender_invoked      INTEGER NOT NULL DEFAULT 0 CHECK(graceful_surrender_invoked IN (0,1)),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlspd_user_env_verdict_ts
+            ON ml_self_preservation_directives(user_id, resolved_env, bounded_survival_verdict, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlspd_surrender_ts
+            ON ml_self_preservation_directives(graceful_surrender_invoked, ts);
+    `);
+});
+
+migrate('319_ml_no_expansion_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_no_expansion_violations (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            violation_id        TEXT NOT NULL UNIQUE,
+            violation_type      TEXT NOT NULL CHECK(violation_type IN
+                                ('self_expansion','mandate_creep','survival_above_purpose')),
+            description_text    TEXT NOT NULL,
+            severity            TEXT NOT NULL CHECK(severity IN ('info','warn','critical')),
+            reasoning_text      TEXT,
+            ts                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlnev_user_env_severity_ts
+            ON ml_no_expansion_violations(user_id, resolved_env, severity, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlnev_type_ts
+            ON ml_no_expansion_violations(violation_type, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §159 SELF-KNOWLEDGE REPORT 2026-05-17] _meta
 // Canonical PDF §159 (lines 5337-5368). How-I-think interpreter.
 // "cum am gandit concret, nu doar ce am decis?" Records per-decision
