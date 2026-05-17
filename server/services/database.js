@@ -994,6 +994,67 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §151 FUTURE-SELF TREATY 2026-05-17] _meta
+// Canonical PDF §151 (lines 4984-5031). Possible-selves negotiation chamber.
+// Registers 5 canonical possible-self archetypes (conservative/aggressive/
+// research_heavy/survival_first/integrity_max) + records treaties per
+// (change × archetype × horizon) cu approval_score + regret_score +
+// composite treaty_score + verdict (approve/quarantine/governance_review/
+// reject). "daca versiunea mea mai inteleapta de peste 6 luni ar privi
+// decizia asta, ar multumi sau ar protesta?" Distinct de §127
+// identityContinuity (cumulative over time), §146 identityUnder-
+// TransformationTest (verdict pe o transformare data), §149
+// purposeDriftDetector (scope substitution). §151 = INTER-TEMPORAL
+// negotiation BEFORE accept schimbare.
+migrate('300_ml_possible_self_archetypes', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_possible_self_archetypes (
+            id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                INTEGER NOT NULL,
+            resolved_env           TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            archetype_id           TEXT NOT NULL UNIQUE,
+            archetype_name         TEXT NOT NULL CHECK(archetype_name IN
+                                   ('conservative','aggressive','research_heavy',
+                                    'survival_first','integrity_max','custom')),
+            traits_json            TEXT NOT NULL,
+            priority_weights_json  TEXT NOT NULL,
+            description            TEXT NOT NULL,
+            registered_at          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpsa_user_env_name
+            ON ml_possible_self_archetypes(user_id, resolved_env, archetype_name);
+    `);
+});
+
+migrate('301_ml_future_self_treaties', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_future_self_treaties (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id             INTEGER NOT NULL,
+            resolved_env        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            treaty_id           TEXT NOT NULL UNIQUE,
+            change_label        TEXT NOT NULL,
+            archetype_id        TEXT NOT NULL,
+            horizon             TEXT NOT NULL CHECK(horizon IN ('near_term','long_horizon')),
+            approval_score      REAL NOT NULL CHECK(approval_score >= 0 AND approval_score <= 1),
+            regret_score        REAL NOT NULL CHECK(regret_score >= 0 AND regret_score <= 1),
+            treaty_score        REAL NOT NULL CHECK(treaty_score >= 0 AND treaty_score <= 1),
+            verdict             TEXT NOT NULL CHECK(verdict IN
+                                ('approve','quarantine','governance_review','reject')),
+            reasoning_text      TEXT,
+            ts                  INTEGER NOT NULL,
+            FOREIGN KEY(archetype_id)
+                REFERENCES ml_possible_self_archetypes(archetype_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlfst_user_env_change
+            ON ml_future_self_treaties(user_id, resolved_env, change_label);
+        CREATE INDEX IF NOT EXISTS idx_mlfst_verdict_ts
+            ON ml_future_self_treaties(verdict, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlfst_archetype
+            ON ml_future_self_treaties(archetype_id);
+    `);
+});
+
 // [OMEGA Wave 3 §150 META-EPISTEMIC SANDBOX 2026-05-17] _meta
 // Canonical PDF §150 (lines 4924-4982). Alternate laws-of-mind lab.
 // Tests not contents of knowledge but the RULES by which knowledge is
