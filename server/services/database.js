@@ -994,6 +994,67 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §159 SELF-KNOWLEDGE REPORT 2026-05-17] _meta
+// Canonical PDF §159 (lines 5337-5368). How-I-think interpreter.
+// "cum am gandit concret, nu doar ce am decis?" Records per-decision
+// self-knowledge reports cu 6 explanation layers (what_i_saw / inferred
+// / assumed / doubted / changed_my_mind / limited_action) + 4 distinctions
+// (reasoning_path_used / alternative_paths_rejected / missing_information
+// / blocked_authority). Separate critique table cu self-criticism +
+// self-limitation + completeness_score + inventiveness_flag (anti-
+// "se inventeaza"). Distinct de §17 attribution (post-trade), §25
+// explainability (SHAP), §43 noTradeExplainability, §147 honesty audit,
+// §148 humility, §158 autobiographicalContinuity (narrative cross-events).
+migrate('316_ml_self_knowledge_reports', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_knowledge_reports (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            report_id                       TEXT NOT NULL UNIQUE,
+            decision_id                     TEXT NOT NULL,
+            what_i_saw_json                 TEXT NOT NULL,
+            what_i_inferred_json            TEXT NOT NULL,
+            what_i_assumed_json             TEXT NOT NULL,
+            what_i_doubted_json             TEXT NOT NULL,
+            what_changed_my_mind_text       TEXT,
+            what_limited_my_action_json     TEXT NOT NULL,
+            reasoning_path_used             TEXT NOT NULL,
+            alternative_paths_rejected_json TEXT NOT NULL,
+            missing_information_json        TEXT NOT NULL,
+            blocked_authority_text          TEXT,
+            short_summary                   TEXT NOT NULL,
+            completeness_score              REAL NOT NULL CHECK(completeness_score >= 0 AND completeness_score <= 1),
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlskr_user_env_decision_ts
+            ON ml_self_knowledge_reports(user_id, resolved_env, decision_id, ts);
+    `);
+});
+
+migrate('317_ml_self_knowledge_critique', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_knowledge_critique (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            critique_id           TEXT NOT NULL UNIQUE,
+            report_id             TEXT NOT NULL,
+            self_criticism_text   TEXT NOT NULL,
+            self_limitation_text  TEXT NOT NULL,
+            inventiveness_flag    INTEGER NOT NULL CHECK(inventiveness_flag IN (0,1)),
+            inventiveness_reason  TEXT,
+            ts                    INTEGER NOT NULL,
+            FOREIGN KEY(report_id)
+                REFERENCES ml_self_knowledge_reports(report_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlskc_user_env_report_ts
+            ON ml_self_knowledge_critique(user_id, resolved_env, report_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlskc_invent_ts
+            ON ml_self_knowledge_critique(inventiveness_flag, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §158 AUTOBIOGRAPHICAL CONTINUITY 2026-05-17] _meta
 // Canonical PDF §158 (lines 5306-5334). Self-narrative engine.
 // "nu doar exist acum; stiu si cum am devenit ceea ce sunt." Records
