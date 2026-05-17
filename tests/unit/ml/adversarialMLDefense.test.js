@@ -322,6 +322,212 @@ describe('Claude-Extra #2 ADVERSARIAL ML DEFENSE', () => {
         });
     });
 
+    // ─────────────────────────────────────────────────────────────
+    // v2 tests (versioning + embedding + external_link)
+    // ─────────────────────────────────────────────────────────────
+
+    describe('v2 Migrations 280+281', () => {
+        test('280 applied', () => {
+            expect(db.prepare("SELECT name FROM _migrations WHERE name=?").get('280_alter_adversarial_detections_v2')).toBeTruthy();
+            const cols = db.prepare("PRAGMA table_info(ml_adversarial_attack_detections)").all();
+            const names = cols.map(c => c.name);
+            expect(names).toContain('detection_model_version');
+            expect(names).toContain('sanitization_policy_version');
+            expect(names).toContain('anomaly_embedding_json');
+            expect(names).toContain('external_link_kind');
+            expect(names).toContain('external_link_id');
+        });
+        test('281 applied', () => {
+            expect(db.prepare("SELECT name FROM _migrations WHERE name=?").get('281_alter_sanitization_log_v2')).toBeTruthy();
+            const cols = db.prepare("PRAGMA table_info(ml_signal_sanitization_log)").all();
+            expect(cols.map(c => c.name)).toContain('sanitization_policy_version');
+        });
+    });
+
+    describe('v2 Constants', () => {
+        test('DETECTION_MODEL_VERSION semver', () => {
+            expect(M.DETECTION_MODEL_VERSION).toMatch(/^v\d+\.\d+\.\d+$/);
+        });
+        test('SANITIZATION_POLICY_VERSION semver', () => {
+            expect(M.SANITIZATION_POLICY_VERSION).toMatch(/^v\d+\.\d+\.\d+$/);
+        });
+        test('EXTERNAL_LINK_KINDS frozen 2', () => {
+            expect(M.EXTERNAL_LINK_KINDS).toEqual([
+                'gravity_zone', 'gravity_conflict'
+            ]);
+            expect(Object.isFrozen(M.EXTERNAL_LINK_KINDS)).toBe(true);
+        });
+    });
+
+    describe('v2 computeAnomalyEmbedding (pure)', () => {
+        test('returns vector with one dim per attack pattern', () => {
+            const r = M.computeAnomalyEmbedding({
+                evidence: { cancelRatePerSec: 250 }
+            });
+            expect(r.embedding.length).toBe(M.ATTACK_PATTERNS.length);
+        });
+        test('missing evidence → zero dim', () => {
+            const r = M.computeAnomalyEmbedding({ evidence: {} });
+            expect(r.embedding.every(v => v === 0)).toBe(true);
+        });
+        test('above threshold → near 1.0 dim', () => {
+            const r = M.computeAnomalyEmbedding({
+                evidence: { syntheticRatio: 1.0 }
+            });
+            const volIdx = M.ATTACK_PATTERNS.indexOf('volume_anomaly');
+            expect(r.embedding[volIdx]).toBeGreaterThan(0.9);
+        });
+        test('all-zero values produce zero vector', () => {
+            const r = M.computeAnomalyEmbedding({
+                evidence: {
+                    cancelRatePerSec: 0, flickerCountPerWindow: 0,
+                    cyclesPerMinute: 0, syntheticRatio: 0
+                }
+            });
+            expect(r.embedding).toEqual([0, 0, 0, 0]);
+        });
+        test('negative value throws', () => {
+            expect(() => M.computeAnomalyEmbedding({
+                evidence: { cancelRatePerSec: -5 }
+            })).toThrow();
+        });
+    });
+
+    describe('v2 recordDetection with versioning + embedding', () => {
+        test('persists versions + embedding by default', () => {
+            const r = M.recordDetection({
+                userId: UID_DET, resolvedEnv: ENV,
+                detectionId: 'v2_d_def', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 }, ts: _now()
+            });
+            expect(r.detectionModelVersion).toBe(M.DETECTION_MODEL_VERSION);
+            expect(r.sanitizationPolicyVersion).toBe(M.SANITIZATION_POLICY_VERSION);
+            expect(Array.isArray(r.anomalyEmbedding)).toBe(true);
+            expect(r.anomalyEmbedding.length).toBe(M.ATTACK_PATTERNS.length);
+        });
+        test('custom versions accepted', () => {
+            const r = M.recordDetection({
+                userId: UID_DET, resolvedEnv: ENV,
+                detectionId: 'v2_d_custom', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 },
+                detectionModelVersion: 'v2.0.0',
+                sanitizationPolicyVersion: 'v1.5.0',
+                ts: _now()
+            });
+            expect(r.detectionModelVersion).toBe('v2.0.0');
+            expect(r.sanitizationPolicyVersion).toBe('v1.5.0');
+        });
+    });
+
+    describe('v2 recordDetection with external_link', () => {
+        test('links to gravity_zone', () => {
+            const r = M.recordDetection({
+                userId: UID_DET, resolvedEnv: ENV,
+                detectionId: 'v2_d_link', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 },
+                externalLinkKind: 'gravity_zone',
+                externalLinkId: 'z_some_zone',
+                ts: _now()
+            });
+            expect(r.externalLinkKind).toBe('gravity_zone');
+            expect(r.externalLinkId).toBe('z_some_zone');
+        });
+        test('invalid externalLinkKind throws', () => {
+            expect(() => M.recordDetection({
+                userId: UID_DET, resolvedEnv: ENV,
+                detectionId: 'v2_d_bad_link', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 },
+                externalLinkKind: 'BOGUS',
+                externalLinkId: 'x',
+                ts: _now()
+            })).toThrow(/invalid externalLinkKind/);
+        });
+        test('externalLinkKind set without externalLinkId throws', () => {
+            expect(() => M.recordDetection({
+                userId: UID_DET, resolvedEnv: ENV,
+                detectionId: 'v2_d_no_id', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 },
+                externalLinkKind: 'gravity_zone',
+                // externalLinkId missing
+                ts: _now()
+            })).toThrow(/externalLinkId required/);
+        });
+        test('no link → both null', () => {
+            const r = M.recordDetection({
+                userId: UID_DET, resolvedEnv: ENV,
+                detectionId: 'v2_d_nolink', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 }, ts: _now()
+            });
+            expect(r.externalLinkKind).toBeNull();
+            expect(r.externalLinkId).toBeNull();
+        });
+    });
+
+    describe('v2 recordSanitization with policy_version', () => {
+        test('default version applied', () => {
+            M.recordDetection({
+                userId: UID_SAN, resolvedEnv: ENV,
+                detectionId: 'v2_d_san_v', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 }, ts: _now()
+            });
+            const r = M.recordSanitization({
+                userId: UID_SAN, resolvedEnv: ENV,
+                sanitizationId: 'v2_s_v', detectionId: 'v2_d_san_v',
+                originalSignal: { x: 1 }, sanitizedSignal: { x: null },
+                sanitizationApplied: true, ts: _now()
+            });
+            expect(r.sanitizationPolicyVersion).toBe(M.SANITIZATION_POLICY_VERSION);
+        });
+        test('custom version accepted', () => {
+            M.recordDetection({
+                userId: UID_SAN, resolvedEnv: ENV,
+                detectionId: 'v2_d_san_cv', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 }, ts: _now()
+            });
+            const r = M.recordSanitization({
+                userId: UID_SAN, resolvedEnv: ENV,
+                sanitizationId: 'v2_s_cv', detectionId: 'v2_d_san_cv',
+                originalSignal: {}, sanitizedSignal: {},
+                sanitizationApplied: true,
+                sanitizationPolicyVersion: 'v2.0.0',
+                ts: _now()
+            });
+            expect(r.sanitizationPolicyVersion).toBe('v2.0.0');
+        });
+    });
+
+    describe('v2 getRecentDetections returns embedding + versions', () => {
+        test('all v2 fields present', () => {
+            const u = UID_HIST;
+            M.recordDetection({
+                userId: u, resolvedEnv: ENV,
+                detectionId: 'v2_h_full', asset: 'BTC',
+                attackPattern: 'spoofing_storm',
+                evidence: { cancelRatePerSec: 250 }, ts: 1000
+            });
+            const rows = M.getRecentDetections({
+                userId: u, resolvedEnv: ENV,
+                asset: 'BTC', severity: 'high', limit: 10
+            });
+            expect(rows.length).toBe(1);
+            const r = rows[0];
+            expect(r.detectionModelVersion).toBeDefined();
+            expect(r.sanitizationPolicyVersion).toBeDefined();
+            expect(Array.isArray(r.anomalyEmbedding)).toBe(true);
+            expect(r.anomalyEmbedding.length).toBe(M.ATTACK_PATTERNS.length);
+            expect(r.externalLinkKind).toBeNull();
+            expect(r.externalLinkId).toBeNull();
+        });
+    });
+
     describe('isolation', () => {
         test('uid', () => {
             M.recordDetection({

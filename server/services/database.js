@@ -994,6 +994,89 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 Claude-Extra #2 v2 ADVERSARIAL ML DEFENSE 2026-05-17]
+// Reviewer feedback: add versioning (detection_model_version + sanitization
+// _policy_version) for reproducibility + anomaly_embedding_json for
+// continuous-vector representation (labels become secondary interpretation
+// only) + external_link fields for integration with gravity zones/conflicts
+// downstream. ALTER TABLE additive.
+migrate('280_alter_adversarial_detections_v2', () => {
+    db.exec(`
+        ALTER TABLE ml_adversarial_attack_detections ADD COLUMN detection_model_version TEXT NOT NULL DEFAULT 'v1.0.0';
+        ALTER TABLE ml_adversarial_attack_detections ADD COLUMN sanitization_policy_version TEXT NOT NULL DEFAULT 'v1.0.0';
+        ALTER TABLE ml_adversarial_attack_detections ADD COLUMN anomaly_embedding_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE ml_adversarial_attack_detections ADD COLUMN external_link_kind TEXT;
+        ALTER TABLE ml_adversarial_attack_detections ADD COLUMN external_link_id TEXT;
+        CREATE INDEX IF NOT EXISTS idx_mlaad_user_env_link_ts
+            ON ml_adversarial_attack_detections(user_id, resolved_env, external_link_kind, external_link_id, ts);
+    `);
+});
+
+migrate('281_alter_sanitization_log_v2', () => {
+    db.exec(`
+        ALTER TABLE ml_signal_sanitization_log ADD COLUMN sanitization_policy_version TEXT NOT NULL DEFAULT 'v1.0.0';
+    `);
+});
+
+// [OMEGA Wave 3 Claude-Extra #3 v2 EXECUTION OPTIMIZATION ENGINE 2026-05-17]
+// FULL REBRAND per reviewer feedback. Removes "obfuscation" terminology
+// (semantically gray-area for compliance) and repositions as institutional-
+// grade execution optimization engine for liquidity-aware order
+// distribution. Deterministic execution buffers (NOT random jitter),
+// explicit execution_intent, relational child_orders table, policy
+// versioning, guardrails (max ratios + max delay + allowed modes).
+migrate('282_ml_execution_optimization_orders', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_execution_optimization_orders (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            parent_order_id             TEXT NOT NULL UNIQUE,
+            asset                       TEXT NOT NULL,
+            original_size               REAL NOT NULL CHECK(original_size > 0),
+            original_order_type         TEXT NOT NULL CHECK(original_order_type IN
+                                        ('limit','market','ioc','gtc','stop','stop_limit')),
+            execution_strategy          TEXT NOT NULL CHECK(execution_strategy IN
+                                        ('passthrough','latency_buffered',
+                                         'liquidity_based_splitting',
+                                         'type_substitution',
+                                         'optimized_distribution')),
+            execution_intent            TEXT NOT NULL CHECK(execution_intent IN
+                                        ('minimize_slippage','reduce_market_impact',
+                                         'improve_fill_quality')),
+            execution_delay_ms          INTEGER NOT NULL CHECK(execution_delay_ms >= 0),
+            child_count                 INTEGER NOT NULL CHECK(child_count >= 1),
+            execution_policy_version    TEXT NOT NULL DEFAULT 'v2.0.0',
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mleoo_user_env_asset_ts
+            ON ml_execution_optimization_orders(user_id, resolved_env, asset, ts);
+        CREATE INDEX IF NOT EXISTS idx_mleoo_user_env_strategy_ts
+            ON ml_execution_optimization_orders(user_id, resolved_env, execution_strategy, ts);
+    `);
+});
+
+migrate('283_ml_execution_child_orders', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_execution_child_orders (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            child_order_id           TEXT NOT NULL UNIQUE,
+            parent_order_id          TEXT NOT NULL,
+            child_size               REAL NOT NULL CHECK(child_size > 0),
+            child_order_type         TEXT NOT NULL CHECK(child_order_type IN
+                                     ('limit','market','ioc','gtc','stop','stop_limit')),
+            child_index              INTEGER NOT NULL CHECK(child_index >= 0),
+            split_reason             TEXT NOT NULL,
+            ts                       INTEGER NOT NULL,
+            FOREIGN KEY(parent_order_id) REFERENCES ml_execution_optimization_orders(parent_order_id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_mleco_user_env_parent_ts
+            ON ml_execution_child_orders(user_id, resolved_env, parent_order_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 Claude-Extra #3 EXECUTION FINGERPRINT OBFUSCATOR 2026-05-17]
 // R4. LEGAL execution diversification within SINGLE account. Operator's
 // original "autopoietic chameleon" idea (multi-account ZKP fronting) was

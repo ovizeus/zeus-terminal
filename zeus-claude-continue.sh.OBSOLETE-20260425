@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# zeus-claude-continue.sh — Resume the current good Zeus Claude session.
+#
+# This script is NOT runtime code, NOT in the Zeus build, NOT referenced by
+# the app. It is a personal recovery helper. Safe to delete.
+#
+# Why it exists:
+#   `claude --continue` resumes the MOST RECENT session in the current dir,
+#   which can drift to a wrong/broken/empty session if other Claude sessions
+#   were touched. This script forces an explicit `--resume <uuid>` so you
+#   always land in the known-good Zeus session.
+#
+# If the pinned UUID below is no longer valid (because you intentionally
+# started a fresh good session), update it after re-confirming via:
+#   ls -lt ~/.claude/projects/-root/*.jsonl | head -3
+#
+# IMPORTANT: All Zeus sessions on this machine record cwd="/root", not
+# "/root/zeus-terminal". `claude --resume <uuid>` looks under the encoded
+# cwd of the session, so we `cd /root` before invoking it.
+
+set -u
+
+PIN_UUID="8416db34-72fd-4493-9689-3fcebece26cc"
+PIN_JSONL="$HOME/.claude/projects/-root/${PIN_UUID}.jsonl"
+RECOVERY_DOC="/root/zeus-terminal/SESSION_RECOVERY_CURRENT.md"
+
+if [ ! -f "$PIN_JSONL" ]; then
+  echo "[!] Pinned session jsonl not found:"
+  echo "    $PIN_JSONL"
+  echo
+  echo "Falling back to interactive picker. Look for the most recent"
+  echo "session with cwd=/root and pick it manually."
+  echo
+  cd /root || exit 1
+  exec claude --resume
+fi
+
+echo "[i] Pinned Zeus session: $PIN_UUID"
+echo "[i] jsonl: $PIN_JSONL"
+echo "[i] mtime: $(stat -c '%y' "$PIN_JSONL" | cut -d. -f1)"
+echo "[i] size:  $(stat -c '%s' "$PIN_JSONL") bytes"
+echo
+echo "[i] If this session opens with stale state, paste this into Claude:"
+echo
+echo "    Read $RECOVERY_DOC and continue from there. Do not implement"
+echo "    anything. First report S3.1 status, S4 blocked, A1-B7 status,"
+echo "    and current git diff."
+echo
+echo "[i] Resuming now..."
+
+cd /root || exit 1
+exec claude --resume "$PIN_UUID"

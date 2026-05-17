@@ -1,17 +1,27 @@
 'use strict';
 
 /**
- * OMEGA R3A Safety — adversarialMLDefense (Claude-Extra #2)
+ * OMEGA R3A Safety — adversarialMLDefense v2 (Claude-Extra #2)
  *
  * DEFENSIVE version of operator's "neuro-weapons" idea. Detects when OTHER
- * bots try to induce psychosis in our ML via adversarial patterns:
- *  - spoofing_storm (cancellation rate anomalies)
- *  - ghost_liquidity (orderbook depth flickering)
- *  - micro_cancel_pattern (cyclic place/cancel micro-orders)
- *  - volume_anomaly (synthetic vs natural volume divergence)
+ * bots try to induce psychosis in our ML via adversarial patterns.
  *
- * Sanitizes affected signals (null out suspect values, increase caution
- * weight, or pause trading). NO offensive action — pure defense.
+ * v2 changes per reviewer feedback:
+ * - detection_model_version + sanitization_policy_version (reproducibility)
+ * - anomaly_embedding_json: continuous vector representation of anomaly.
+ *   Labels (attack_pattern enum) become SECONDARY INTERPRETATION ONLY —
+ *   primary signal is the embedding. Pattern enum stays for human/legacy
+ *   readability and easy filtering. Future: embedding-based classifier
+ *   replaces pattern enum entirely.
+ * - external_link_kind + external_link_id: optional FK-like reference to
+ *   downstream entities affected by attack detection (gravity_zone /
+ *   gravity_conflict). Integration hook for §141/Extra#1 lifecycle
+ *   transitions (e.g., affected zone → decaying state).
+ * - evidence_json CLARIFIED as raw forensic payload (NOT semantic source).
+ *   All decision-critical fields are explicit columns.
+ *
+ * Sanitizes affected signals (null out suspect values, increase caution,
+ * or pause trading). NO offensive action — pure defense.
  *
  * LEGAL: detection + signal sanitization is legal/legitimate. WE do NOT
  * spoof, manipulate, or place adversarial orders ourselves.
@@ -48,6 +58,17 @@ const DETECTION_THRESHOLDS = Object.freeze({
     })
 });
 
+// v2: versioning constants (semver). Bump when detection algorithm or
+// sanitization policy changes — preserves reproducibility of past
+// detections.
+const DETECTION_MODEL_VERSION = 'v1.0.0';
+const SANITIZATION_POLICY_VERSION = 'v1.0.0';
+
+// v2: external link kinds for integration with downstream subsystems.
+const EXTERNAL_LINK_KINDS = Object.freeze([
+    'gravity_zone', 'gravity_conflict'
+]);
+
 const _SEVERITY_TO_ACTION = Object.freeze({
     low: 'ignore_signal',
     medium: 'increase_caution',
@@ -65,15 +86,17 @@ const _stmts = {
     insertDetection: db.prepare(`
         INSERT INTO ml_adversarial_attack_detections
         (user_id, resolved_env, detection_id, asset, attack_pattern,
-         anomaly_score, severity, evidence_json, defense_action, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         anomaly_score, severity, evidence_json, defense_action, ts,
+         detection_model_version, sanitization_policy_version,
+         anomaly_embedding_json, external_link_kind, external_link_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     insertSanitization: db.prepare(`
         INSERT INTO ml_signal_sanitization_log
         (user_id, resolved_env, sanitization_id, detection_id,
          original_signal_json, sanitized_signal_json,
-         sanitization_applied, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         sanitization_applied, ts, sanitization_policy_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     listRecentByAssetSeverity: db.prepare(`
         SELECT * FROM ml_adversarial_attack_detections
@@ -116,6 +139,26 @@ function computeAnomalyScore(params) {
     const threshold = DETECTION_THRESHOLDS[pattern][key];
     const score = observed / (2 * threshold);
     return { anomalyScore: Math.max(0, Math.min(1, score)) };
+}
+
+// ── computeAnomalyEmbedding (pure) — NEW v2 ────────────────────────
+// Encodes the anomaly as a fixed-length vector. Each dimension corresponds
+// to a known attack pattern; value = normalized signal strength relative
+// to threshold. Captures gradient information (continuous) that the enum
+// label loses. Future ML classifiers consume this vector as input.
+function computeAnomalyEmbedding(params) {
+    const evidence = _required(params, 'evidence');
+    const vector = ATTACK_PATTERNS.map(pattern => {
+        const key = _evidenceKeyForPattern(pattern);
+        const observed = evidence[key];
+        if (observed === undefined || observed === null) return 0;
+        if (observed < 0) {
+            throw new Error(`adversarialMLDefense: evidence ${key} must be ≥ 0`);
+        }
+        const threshold = DETECTION_THRESHOLDS[pattern][key];
+        return Math.max(0, Math.min(1, observed / (2 * threshold)));
+    });
+    return { embedding: vector };
 }
 
 // ── classifySeverity (pure) ────────────────────────────────────────
@@ -170,16 +213,46 @@ function recordDetection(params) {
     });
     const { severity } = classifySeverity({ anomalyScore });
     const { defenseAction } = selectDefenseAction({ severity });
+    // v2: continuous vector representation
+    const { embedding } = computeAnomalyEmbedding({ evidence });
+    // v2: optional integration link
+    const externalLinkKind = (params && params.externalLinkKind !== undefined &&
+                              params.externalLinkKind !== null)
+        ? params.externalLinkKind : null;
+    const externalLinkId = (params && params.externalLinkId !== undefined &&
+                            params.externalLinkId !== null)
+        ? params.externalLinkId : null;
+    if (externalLinkKind !== null && !EXTERNAL_LINK_KINDS.includes(externalLinkKind)) {
+        throw new Error(
+            `adversarialMLDefense: invalid externalLinkKind "${externalLinkKind}"`
+        );
+    }
+    if (externalLinkKind !== null && externalLinkId === null) {
+        throw new Error(
+            'adversarialMLDefense: externalLinkId required when externalLinkKind set'
+        );
+    }
+    // v2: versioning (params optional, default to module constants)
+    const detVer = (params && params.detectionModelVersion)
+        ? params.detectionModelVersion : DETECTION_MODEL_VERSION;
+    const sanVer = (params && params.sanitizationPolicyVersion)
+        ? params.sanitizationPolicyVersion : SANITIZATION_POLICY_VERSION;
 
     try {
         _stmts.insertDetection.run(
             userId, env, detId, asset, pattern,
             anomalyScore, severity,
-            JSON.stringify(evidence), defenseAction, ts
+            JSON.stringify(evidence), defenseAction, ts,
+            detVer, sanVer, JSON.stringify(embedding),
+            externalLinkKind, externalLinkId
         );
         return {
             recorded: true, detectionId: detId,
-            anomalyScore, severity, defenseAction
+            anomalyScore, severity, defenseAction,
+            anomalyEmbedding: embedding,
+            detectionModelVersion: detVer,
+            sanitizationPolicyVersion: sanVer,
+            externalLinkKind, externalLinkId
         };
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
@@ -203,13 +276,18 @@ function recordSanitization(params) {
     const applied = _required(params, 'sanitizationApplied');
     const ts = (params && params.ts) ? params.ts : Date.now();
 
+    const sanVer = (params && params.sanitizationPolicyVersion)
+        ? params.sanitizationPolicyVersion : SANITIZATION_POLICY_VERSION;
     try {
         _stmts.insertSanitization.run(
             userId, env, sanId, detId,
             JSON.stringify(original), JSON.stringify(sanitized),
-            applied ? 1 : 0, ts
+            applied ? 1 : 0, ts, sanVer
         );
-        return { recorded: true, sanitizationId: sanId };
+        return {
+            recorded: true, sanitizationId: sanId,
+            sanitizationPolicyVersion: sanVer
+        };
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
             (err.message && err.message.includes('UNIQUE'))) {
@@ -247,7 +325,14 @@ function getRecentDetections(params) {
         severity: r.severity,
         evidence: JSON.parse(r.evidence_json),
         defenseAction: r.defense_action,
-        ts: r.ts
+        ts: r.ts,
+        // v2 fields
+        detectionModelVersion: r.detection_model_version,
+        sanitizationPolicyVersion: r.sanitization_policy_version,
+        anomalyEmbedding: r.anomaly_embedding_json
+            ? JSON.parse(r.anomaly_embedding_json) : [],
+        externalLinkKind: r.external_link_kind,
+        externalLinkId: r.external_link_id
     }));
 }
 
@@ -257,7 +342,11 @@ module.exports = {
     DEFENSE_ACTIONS,
     SEVERITY_THRESHOLDS,
     DETECTION_THRESHOLDS,
+    DETECTION_MODEL_VERSION,
+    SANITIZATION_POLICY_VERSION,
+    EXTERNAL_LINK_KINDS,
     computeAnomalyScore,
+    computeAnomalyEmbedding,
     classifySeverity,
     selectDefenseAction,
     shouldSanitizeSignal,
