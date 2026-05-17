@@ -158,8 +158,8 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             const numbers = r.map(p => p.principleNumber).sort();
             expect(numbers).toEqual([172, 173, 174, 175, 176]);
         });
-        test('countCatalogEntries returns 15 (5 batch1 + 5 batch2 + 5 batch3)', () => {
-            expect(M.countCatalogEntries()).toBe(15);
+        test('countCatalogEntries returns 20 (5 batch1 + 5 batch2 + 5 batch3 + 5 batch4)', () => {
+            expect(M.countCatalogEntries()).toBe(20);
         });
         test('registerPrinciple works for §172', () => {
             const r = M.registerPrinciple({
@@ -228,6 +228,36 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             });
             expect(r.registered).toBe(true);
             expect(r.cluster).toBe('transcendental_cluster');
+        });
+    });
+
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 4 §192-§196 incompleteness_cluster)', () => {
+        test('§192 Gödelian', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[192].title).toMatch(/Gödelian/i);
+        });
+        test('§193 Ethics of attention', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[193].title).toMatch(/Ethics of attention/i);
+        });
+        test('§194 Dialectical', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[194].title).toMatch(/Dialectical/i);
+        });
+        test('§195 Structural silence', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[195].title).toMatch(/Structural silence/i);
+        });
+        test('§196 Ontological courage', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[196].title).toMatch(/Ontological courage/i);
+        });
+        test('all §192-§196 share cluster incompleteness_cluster', () => {
+            for (const n of [192, 193, 194, 195, 196]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('incompleteness_cluster');
+            }
+        });
+        test('CLUSTERS contains incompleteness_cluster', () => {
+            expect(M.CLUSTERS).toContain('incompleteness_cluster');
+        });
+        test('listClusterCatalog returns 5 for incompleteness_cluster', () => {
+            const r = M.listClusterCatalog({ cluster: 'incompleteness_cluster' });
+            expect(r.length).toBe(5);
         });
     });
 

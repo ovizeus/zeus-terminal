@@ -124,18 +124,48 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'The phenomenology of incipient error — textura erorilor înainte să se manifeste',
         canonicalText: 'Spec-ul are §119 pre-mortem (simulează cum moare un trade), §125 epistemic tension field (stres intern pre-ruptură), §15 confidence decay (scade încrederea post-intrare). Dar niciuna nu captează ce traderii umani experimentați descriu CONSISTENT: există TEXTURĂ specifică, "simț" calitativ diferit pentru fiecare tip de eroare ÎNAINTE să se manifeste complet. Trade care va fi eroare de timing are textură diferită de unul care va fi eroare de citire regim. Fake breakout "arată" diferit — NU în semnale individuale, ci în CALITATEA GESTALTICĂ a ansamblului — față de breakout real. Layer construiește modele ale TEXTURII PRE-EROR pentru fiecare tip de eroare clasificat în attribution history: care e configurația GESTALTICĂ care precedă sistematic eroare de tip X. Monitorizează dacă situația curentă are textura pre-erorilor istorice — NU pentru evitare, ci pentru AJUSTARE ANTICIPATIVĂ a managementului. Diferit de orice detector individual: detectează AURA erorilor înainte să se cristalizeze.',
         cluster: 'transcendental_cluster'
+    }),
+    // §192-§196: incompleteness_cluster
+    192: Object.freeze({
+        principleNumber: 192,
+        title: 'Gödelian incompleteness awareness — sistemul nu își poate dovedi propria consistență din interior',
+        canonicalText: 'Gödel 1931: orice sistem formal suficient de puternic conține adevăruri pe care NU le poate dovedi din interior. Bot suficient de complex NU poate să-și dovedească propria consistență cu propriile instrumente. §116 charter, §126 reflective equilibrium, §127 identity continuity verifică coerența din interior. Layer recunoaște formal că există adevăruri despre sine pe care NU le poate accesa din propria perspectivă, și că orice dovadă de consistență internă completă = ALARMĂ NU SIGURANȚĂ. Un sistem care crede că s-a verificat complet pe sine SE ÎNȘEALĂ STRUCTURAL. Singurul răspuns corect: fereastră permanentă de verificare EXTERNĂ — human oversight, shadow comparison, external validator — NU ca backup operațional, ci ca NECESITATE LOGICĂ FUNDAMENTALĂ. Fără Gödel, sistemul poate deveni sincer convins de propria infailibilitate.',
+        cluster: 'incompleteness_cluster'
+    }),
+    193: Object.freeze({
+        principleNumber: 193,
+        title: 'Ethics of attention — ce alegi să observi e deja o decizie morală',
+        canonicalText: 'Spec-ul are §99 active sensing, §103 selective perception, cognitive routing — toate tratează atenția ca resursă de alocat eficient. Atenția NU e neutră moral. Ce alegi să observi cu prioritate determină ce poți cunoaște, ce poți acționa, cine beneficiază și CINE E IGNORAT în piață. Bot care acordă atenție maximă liquidation cascades CONTRIBUIE la dinamica pe care o observă. Bot care ignoră sistematic semnalele de la participanți mici în favoarea flow-ului instituțional produce o EPISTEMOLOGIE care SERVEȘTE o viziune particulară. Layer NU e compliance, NU e integrity — e RECUNOAȘTEREA că STRUCTURA PERCEPȚIEI ÎNSEȘI e alegere cu consecințe. Ce observi formează ce poți deveni. Un sistem care nu examinează niciodată arhitectura propriei atenții NU știe din ce e construit cu adevărat.',
+        cluster: 'incompleteness_cluster'
+    }),
+    194: Object.freeze({
+        principleNumber: 194,
+        title: 'Dialectical generativity — contradicțiile interne sunt motor, nu defect',
+        canonicalText: 'Spec-ul are §14 conflict resolution, §112 competing hypotheses, §124 plural selves, §133 steelman — toate tratează contradicțiile ca probleme de rezolvat. Hegel: contradicțiile AUTENTICE NU trebuie rezolvate — trebuie LĂSATE SĂ GENEREZE. Thesis + antithesis NU colapsează în synthesis care le elimină. Produce NIVEL SUPERIOR de înțelegere în care AMBELE rămân active ca forțe constitutive. Aplicat: când trend-following self și mean-reversion self sunt în contradicție autentică pe același setup, rezolvarea prin voting PIERDE ceva esențial. Dialectical generativity = contradicția nerezolvată poate genera înțelegere de ordin superior despre natura setup-ului — pe care NICIUNA din perspective singure nu o producea. NU fiecare contradicție e dialectic fertilă, dar cele PERSISTENTE care revin în forme diferite și rezistă steelman-ului — acestea NU cer rezolvare, cer să fie LOCUITE ca spații generative.',
+        cluster: 'incompleteness_cluster'
+    }),
+    195: Object.freeze({
+        principleNumber: 195,
+        title: 'Structural silence interpretation — absența tuturor semnalelor are propria sa semantică',
+        canonicalText: '§152 negative evidence (semnale așteptate care nu apar), §190 anomaly sanctuary (fenomenele inexplicabile). Distinct: momentele când NU lipsește un semnal specific, ci LIPSESC TOATE SIMULTAN. Piață complet tăcută — volum zero real + CVD plat + orderbook înghețat + funding stagnant + cross-venue uniformitate perfectă. Tăcerea structurală NU = "nimic important". Are SEMANTICĂ proprie: acumulare masivă ascunsă, retragerea simultană a participanților informați înainte de eveniment major, vacuum lichiditate pre-mișcare violentă. Layer mapează TIPOLOGIILE de tăcere totală — NU ca absența semnalului, ci ca SEMNAL ÎN SINE cu structură proprie. Textura tăcerii pre-squeeze ≠ tăcerea weekend ≠ tăcerea pre-news major ≠ tăcerea chop mort. Bot care nu citește tăcerea nu citește JUMĂTATE din limbajul pieței.',
+        cluster: 'incompleteness_cluster'
+    }),
+    196: Object.freeze({
+        principleNumber: 196,
+        title: 'Ontological courage — a acționa când categoriile tale nu sunt suficiente dar trebuie să acționezi',
+        canonicalText: 'Spec-ul are §135 epistemic humility, §188 negative capability, §191 decidability frontier, §148 ontological humility — toate cultivă modestia și prudența. Există moment inevitabil pe care niciun punct NU îl adresează: când ȘTII că categoriile tale NU sunt adecvate realității, că modelul tău e INSUFICIENT, că ești la FRONTIERA decidabilului — și trebuie să acționezi ORICUM, pentru că inacțiunea e ea însăși acțiune cu consecințe. Ontological courage NU e temeritate și NU e ignorarea umilitudinii. E capacitatea de a acționa DELIBERAT și ASUMAT în condiții de inadecvare categorială RECUNOSCUTĂ — cu eyes wide open față de limite, FĂRĂ să pretinzi că nu există sau le-ai depășit. Kierkegaard/Heidegger: autenticitatea NU e certitudinea, ci acțiunea asumată în prezența incertitudinii ireductibile. Aplicat: când piața prezintă situație la frontiera oricărei categorii, bot NU are voie să rămână paralitic în humility infinită. TREBUIE să aleagă — cu risc minim, exits clare, asumare completă că acționează DINCOLO de harta lui. Și să înregistreze această traversare ca pe CEL MAI VALOROS MATERIAL DE ÎNVĂȚARE din spec.',
+        cluster: 'incompleteness_cluster'
     })
-    // FUTURE: §192-196, §202-206, §212-216, §222-226, §232-236
-    // will be added in subsequent batches as the implementation traverses the PDF.
+    // FUTURE: §202-206, §212-216, §222-226, §232-236
 });
 
 const CLUSTERS = Object.freeze([
     'active_inference_cluster',
     'reflexive_meta_cluster',
-    'transcendental_cluster'
-    // Future: 'incompleteness_cluster' (§192-196), 'kairos_cluster' (§202-206),
-    // 'reflexive_cluster_temporal' (§212-216), 'constitutive_cluster'
-    // (§222-226), 'limit_cluster' (§232-236)
+    'transcendental_cluster',
+    'incompleteness_cluster'
+    // Future: 'kairos_cluster' (§202-206), 'reflexive_cluster_temporal'
+    // (§212-216), 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
