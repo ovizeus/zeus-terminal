@@ -994,6 +994,43 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Doctor D-2 telemetry collector + event log 2026-05-17]
+migrate('365_ml_module_heartbeats', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_module_heartbeats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_id TEXT NOT NULL,
+            ts INTEGER NOT NULL,
+            latency_ms REAL NOT NULL CHECK(latency_ms >= 0),
+            ran_ok INTEGER NOT NULL CHECK(ran_ok IN (0,1)),
+            invocation_count INTEGER NOT NULL DEFAULT 1 CHECK(invocation_count > 0)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmhb_module_ts
+            ON ml_module_heartbeats(module_id, ts);
+    `);
+});
+
+migrate('366_ml_diagnostic_events', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_diagnostic_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT NOT NULL UNIQUE,
+            severity TEXT NOT NULL CHECK(severity IN
+                ('P0', 'P1', 'P2', 'P3', 'P0-FLOOD')),
+            module_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            verdict TEXT CHECK(verdict IS NULL OR verdict IN
+                ('real_incident', 'false_positive', 'inconclusive', 'partial')),
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlde_severity_ts
+            ON ml_diagnostic_events(severity, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlde_module_verdict
+            ON ml_diagnostic_events(module_id, verdict);
+    `);
+});
+
 // [OMEGA Doctor D-1 module registry: contracts + role tags + cycle detection 2026-05-17]
 migrate('364_ml_module_registry', () => {
     db.exec(`
