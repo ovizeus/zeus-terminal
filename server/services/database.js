@@ -994,6 +994,73 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §150 META-EPISTEMIC SANDBOX 2026-05-17] _meta
+// Canonical PDF §150 (lines 4924-4982). Alternate laws-of-mind lab.
+// Tests not contents of knowledge but the RULES by which knowledge is
+// produced. Compare 6 epistemic regimes (evidence/causality/prudence/
+// simplicity/antifragility/dissent-first) on 6 axes (robustness/coherence/
+// humility/speed/tail_survival/alpha_quality). Quarantine → shadow →
+// canary → live admission path. Distinct de §125 epistemicTensionField
+// (intra-regime), §135 epistemicHumilityGovernor (within-knowledge),
+// §138 counterOntologySandbox (alien frames pe content). §150 = compară
+// regimuri întregi DE A ȘTI, nu conținuturi ale cunoașterii.
+migrate('298_ml_epistemic_regime_candidates', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_epistemic_regime_candidates (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            regime_id             TEXT NOT NULL UNIQUE,
+            regime_name           TEXT NOT NULL,
+            declared_priority     TEXT NOT NULL CHECK(declared_priority IN
+                                  ('evidence','causality','prudence',
+                                   'simplicity','antifragility','dissent')),
+            description           TEXT NOT NULL,
+            status                TEXT NOT NULL CHECK(status IN
+                                  ('quarantined','shadow','canary','live','rejected')),
+            registered_at         INTEGER NOT NULL,
+            last_transition_at    INTEGER NOT NULL,
+            last_transition_note  TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlerc_user_env_status
+            ON ml_epistemic_regime_candidates(user_id, resolved_env, status);
+        CREATE INDEX IF NOT EXISTS idx_mlerc_priority
+            ON ml_epistemic_regime_candidates(declared_priority);
+    `);
+});
+
+migrate('299_ml_epistemic_regime_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_epistemic_regime_evaluations (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            evaluation_id                 TEXT NOT NULL UNIQUE,
+            regime_id                     TEXT NOT NULL,
+            eval_window_start_ts          INTEGER NOT NULL,
+            eval_window_end_ts            INTEGER NOT NULL,
+            robustness_score              REAL NOT NULL CHECK(robustness_score >= 0 AND robustness_score <= 1),
+            coherence_score               REAL NOT NULL CHECK(coherence_score >= 0 AND coherence_score <= 1),
+            humility_score                REAL NOT NULL CHECK(humility_score >= 0 AND humility_score <= 1),
+            speed_score                   REAL NOT NULL CHECK(speed_score >= 0 AND speed_score <= 1),
+            tail_survival_score           REAL NOT NULL CHECK(tail_survival_score >= 0 AND tail_survival_score <= 1),
+            alpha_quality_score           REAL NOT NULL CHECK(alpha_quality_score >= 0 AND alpha_quality_score <= 1),
+            composite_score               REAL NOT NULL CHECK(composite_score >= 0 AND composite_score <= 1),
+            comparison_baseline_regime_id TEXT,
+            verdict                       TEXT NOT NULL CHECK(verdict IN ('pass','fail','inconclusive')),
+            ts                            INTEGER NOT NULL,
+            FOREIGN KEY(regime_id)
+                REFERENCES ml_epistemic_regime_candidates(regime_id) ON DELETE RESTRICT,
+            FOREIGN KEY(comparison_baseline_regime_id)
+                REFERENCES ml_epistemic_regime_candidates(regime_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlere_user_env_regime_ts
+            ON ml_epistemic_regime_evaluations(user_id, resolved_env, regime_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlere_verdict_ts
+            ON ml_epistemic_regime_evaluations(verdict, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §149 PURPOSE DRIFT DETECTOR 2026-05-17] _meta
 // Canonical PDF §149 (lines 4869-4922). Ends-means misalignment engine.
 // Tracks purpose hierarchy (final → proximate → intermediate_metric →
