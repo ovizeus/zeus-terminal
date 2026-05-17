@@ -31,6 +31,11 @@ const serverVolatilityEngine = require('./serverVolatilityEngine');
 const brainLogger = require('./brainLogger');
 const MF = require('../migrationFlags');
 
+// [ML Phase B Day 7] Ring5 influence-mode telemetry — wraps fusion decision so
+// audit / eligibility / posteriors get populated from real brain flow. Day 7
+// is observation-only: wrap output is logged + audited but NOT used downstream.
+const ring5LearningService = require('./ml/ring5LearningService');
+
 // ══════════════════════════════════════════════════════════════════
 // Configuration
 // ══════════════════════════════════════════════════════════════════
@@ -686,9 +691,36 @@ function _runCycle() {
                 };
                 if (!loggedDecision) loggedDecision = decision;
 
+                // [ML Phase B Day 7] Ring5 influence-mode telemetry. Fires on EVERY
+                // fusion (NO_TRADE included) — wrap internally short-circuits via
+                // eligibility check, writes audit row, returns wrapped decision.
+                // Day 7 = observation-only: return value NOT used downstream. Phase 2
+                // fusion math + reflection + execution path UNTOUCHED. Audit / posteriors
+                // populate from real brain flow so operator can validate before Day 8
+                // promotes wrap output to actual influence (mode-flip moment).
+                const _ring5MarketCtx = _buildMarketContext(snap, bars, userId);
+                try {
+                    const _execEnv = serverAT._resolveExecutionEnv(userId);
+                    if (_execEnv && _execEnv.env) {
+                        ring5LearningService.wrap({
+                            userId,
+                            resolvedEnv: _execEnv.env,
+                            symbol: snap.symbol,
+                            phase2Decision: fusion,
+                            mlBrainProInputs: null, // Day 8 will feed R5A attribution
+                            mode: 'influence',
+                            regime: regime.regime,
+                            marketContext: _ring5MarketCtx,
+                            nowTs: Date.now()
+                        });
+                    }
+                } catch (_ring5Err) {
+                    // Ring5 telemetry must NEVER affect brain flow — swallow any error.
+                }
+
                 if (fusion.decision !== 'NO_TRADE') {
                     // [REFLECTION] Pre-trade questioning — brain asks itself "am I sure?"
-                    const marketCtx = _buildMarketContext(snap, bars, userId);
+                    const marketCtx = _ring5MarketCtx;
                     const questioning = serverReflection.questionEntry(
                         snap.symbol, fusion.dir, fusion.confidence, regime.regime, marketCtx, userId
                     );

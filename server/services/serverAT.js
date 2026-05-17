@@ -4702,6 +4702,9 @@ module.exports = {
     // + TP conditional on !dslParams (DSL ON skip per regulă). Returns
     // { slOrderId, tpOrderId, status } for caller to pass to registerManualPosition.
     _placeProtectionForExistingEntry,
+    // [ML Phase B Day 7] Canonical execution-env resolver exposed for Ring5
+    // facade wiring in serverBrain. Returns { env: 'DEMO'|'TESTNET'|'REAL'|null, blockedReason }.
+    _resolveExecutionEnv,
     patchPositionFill,
     closeBySeq,
     addOnPosition,
