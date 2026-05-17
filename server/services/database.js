@@ -994,6 +994,57 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §145 INFORMATION TEMPO RESONANCE 2026-05-17] _meta
+// Canonical PDF §145 (line 4715). RELAȚIONAL between signal tempo and
+// decision cadence — not individual freshness (§15/§27/§13 already cover).
+// Scalp + macro signal = desync; scalp + microstructure = in sync. Penalty
+// applied to decision_quality when desync detected. 4 signal categories,
+// 3 desync severities.
+migrate('288_ml_signal_tempos', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_signal_tempos (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            tempo_id                TEXT NOT NULL UNIQUE,
+            signal_kind             TEXT NOT NULL,
+            signal_category         TEXT NOT NULL CHECK(signal_category IN
+                                    ('microstructure','flow','structural','macro')),
+            natural_period_ms       INTEGER NOT NULL CHECK(natural_period_ms > 0),
+            period_tolerance_pct    REAL NOT NULL CHECK(period_tolerance_pct >= 0 AND period_tolerance_pct <= 1),
+            active                  INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts                      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, signal_kind)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlst_user_env_category_active
+            ON ml_signal_tempos(user_id, resolved_env, signal_category, active);
+    `);
+});
+
+migrate('289_ml_decision_tempo_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_decision_tempo_assessments (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id               TEXT NOT NULL UNIQUE,
+            decision_id                 TEXT NOT NULL,
+            decision_horizon_ms         INTEGER NOT NULL CHECK(decision_horizon_ms > 0),
+            contributing_signals_json   TEXT NOT NULL,
+            mean_signal_period_ms       REAL NOT NULL CHECK(mean_signal_period_ms > 0),
+            resonance_score             REAL NOT NULL CHECK(resonance_score >= 0 AND resonance_score <= 1),
+            desync_severity             TEXT NOT NULL CHECK(desync_severity IN
+                                        ('in_sync','mild_desync','severe_desync')),
+            decision_quality_penalty    REAL NOT NULL CHECK(decision_quality_penalty >= 0 AND decision_quality_penalty <= 1),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldta_user_env_decision_ts
+            ON ml_decision_tempo_assessments(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mldta_user_env_severity_ts
+            ON ml_decision_tempo_assessments(user_id, resolved_env, desync_severity, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §144 ADAPTIVE SOURCE TRUST CALIBRATION 2026-05-17] _meta
 // Canonical PDF §144 (line 4713). Dynamic trust score per source × regime.
 // NU manipulare/tehnică (§60), NU staleness (§13), NU acord fals (§128) —
