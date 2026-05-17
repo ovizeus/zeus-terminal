@@ -994,6 +994,91 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 Claude-Extra #1 v2 INSTITUTIONAL GRAVITY SCANNER 2026-05-17]
+// R2. Operator-flagged retrocausal gravity engine, redesigned per audit
+// feedback: FK integrity + semantic naming (zone_center / predicted_
+// settlement) + temporal lifecycle (zone_expires_at_ts + observation_window
+// + settlement_type) + confidence modeling (4 sub-scores) + conflict
+// dynamics (separate table net_vector_direction). LEGAL: pure analysis
+// of others' obligations, NO market manipulation.
+migrate('270_ml_gravity_zones', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_gravity_zones (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            zone_id                         TEXT NOT NULL UNIQUE,
+            asset                           TEXT NOT NULL,
+            zone_kind                       TEXT NOT NULL CHECK(zone_kind IN
+                                            ('futures_expiry','gamma_wall',
+                                             'twap_target','liquidation_cluster',
+                                             'funding_arbitrage')),
+            settlement_type                 TEXT NOT NULL CHECK(settlement_type IN
+                                            ('cme_quarterly','monthly_options',
+                                             'perpetual_funding','twap_window',
+                                             'liquidation_cascade')),
+            zone_center_price               REAL NOT NULL CHECK(zone_center_price > 0),
+            gravity_strength                REAL NOT NULL CHECK(gravity_strength >= 0 AND gravity_strength <= 1),
+            confidence_score                REAL NOT NULL CHECK(confidence_score >= 0 AND confidence_score <= 1),
+            source_quality_score            REAL NOT NULL CHECK(source_quality_score >= 0 AND source_quality_score <= 1),
+            liquidity_depth_score           REAL NOT NULL CHECK(liquidity_depth_score >= 0 AND liquidity_depth_score <= 1),
+            volatility_sensitivity_score    REAL NOT NULL CHECK(volatility_sensitivity_score >= 0 AND volatility_sensitivity_score <= 1),
+            time_to_settlement_ms           INTEGER NOT NULL CHECK(time_to_settlement_ms >= 0),
+            zone_expires_at_ts              INTEGER NOT NULL,
+            source_data_json                TEXT NOT NULL,
+            active                          INTEGER NOT NULL CHECK(active IN (0,1)),
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgz_user_env_asset_kind_active
+            ON ml_gravity_zones(user_id, resolved_env, asset, zone_kind, active);
+        CREATE INDEX IF NOT EXISTS idx_mlgz_user_env_expires
+            ON ml_gravity_zones(user_id, resolved_env, zone_expires_at_ts);
+    `);
+});
+
+migrate('271_ml_gravity_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_gravity_observations (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_id                  TEXT NOT NULL UNIQUE,
+            zone_id                         TEXT NOT NULL,
+            predicted_settlement_price      REAL NOT NULL CHECK(predicted_settlement_price > 0),
+            actual_price_at_settlement      REAL NOT NULL CHECK(actual_price_at_settlement > 0),
+            observation_window_ms           INTEGER NOT NULL CHECK(observation_window_ms >= 0),
+            distance_to_target_pct          REAL NOT NULL,
+            prediction_was_correct          INTEGER NOT NULL CHECK(prediction_was_correct IN (0,1)),
+            tolerance_pct                   REAL NOT NULL CHECK(tolerance_pct >= 0 AND tolerance_pct <= 1),
+            ts                              INTEGER NOT NULL,
+            FOREIGN KEY(zone_id) REFERENCES ml_gravity_zones(zone_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgo_user_env_zone_ts
+            ON ml_gravity_observations(user_id, resolved_env, zone_id, ts);
+    `);
+});
+
+migrate('272_ml_gravity_conflicts', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_gravity_conflicts (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            conflict_id                 TEXT NOT NULL UNIQUE,
+            asset                       TEXT NOT NULL,
+            participating_zone_ids_json TEXT NOT NULL,
+            gravity_conflict_score      REAL NOT NULL CHECK(gravity_conflict_score >= 0 AND gravity_conflict_score <= 1),
+            net_vector_direction        TEXT NOT NULL CHECK(net_vector_direction IN
+                                        ('up','down','sideways')),
+            dominant_zone_id            TEXT NOT NULL,
+            ts                          INTEGER NOT NULL,
+            FOREIGN KEY(dominant_zone_id) REFERENCES ml_gravity_zones(zone_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlgc_user_env_asset_ts
+            ON ml_gravity_conflicts(user_id, resolved_env, asset, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §142 METACOGNITIVE LOAD MONITOR 2026-05-16] _meta canonical
 // PDF — §142 (lines 4709-4710). System-level cognitive overload detector.
 // 5-axis aggregation (hypotheses + positions + degraded modules + scenario
