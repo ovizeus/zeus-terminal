@@ -24,7 +24,10 @@ import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
  * of "alive"), voice + health polled every 5s. Aborts in-flight requests
  * on unmount.
  */
+type OmegaView = 'main' | 'doctor' | 'ring5'
+
 export function OmegaPage() {
+    const [view, setView] = useState<OmegaView>('main')
     const [mood, setMood] = useState<Mood>('CALM')
     const [intensity, setIntensity] = useState(0.5)
     const [utterances, setUtterances] = useState<Utterance[]>([])
@@ -32,6 +35,8 @@ export function OmegaPage() {
     const [health, setHealth] = useState<HealthState | null>(null)
     const [voiceOn, setVoiceOn] = useState(false)
     const [refreshTick, setRefreshTick] = useState(0)
+    const role = useAuthStore((s) => s.role)
+    const isAdmin = role === 'admin'
 
     // Mood polling — fast cadence so orb feels alive
     useEffect(() => {
@@ -71,6 +76,54 @@ export function OmegaPage() {
         setRefreshTick(t => t + 1)
     }, [])
 
+    if (view === 'doctor' && isAdmin) {
+        return (
+            <div className="omega-page omega-page-dedicated" data-mood={mood}>
+                <div className="omega-page-header">
+                    <button
+                        type="button"
+                        className="omega-back-button"
+                        onClick={() => setView('main')}
+                        aria-label="back to OMEGA main"
+                    >
+                        ← OMEGA
+                    </button>
+                    <h1 className="omega-page-title">
+                        <span className="omega-title-name">OMEGA DOCTOR</span>
+                        <span className="omega-title-tag">D-4 admin-only</span>
+                    </h1>
+                </div>
+                <div className="omega-page-dedicated-body">
+                    <DoctorPanel />
+                </div>
+            </div>
+        )
+    }
+
+    if (view === 'ring5' && isAdmin) {
+        return (
+            <div className="omega-page omega-page-dedicated" data-mood={mood}>
+                <div className="omega-page-header">
+                    <button
+                        type="button"
+                        className="omega-back-button"
+                        onClick={() => setView('main')}
+                        aria-label="back to OMEGA main"
+                    >
+                        ← OMEGA
+                    </button>
+                    <h1 className="omega-page-title">
+                        <span className="omega-title-name">RING5</span>
+                        <span className="omega-title-tag">Phase B · admin-only</span>
+                    </h1>
+                </div>
+                <div className="omega-page-dedicated-body">
+                    <Ring5Panel forceExpanded />
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="omega-page" data-mood={mood}>
             <div className="omega-page-header">
@@ -94,6 +147,26 @@ export function OmegaPage() {
                                 <span className="omega-meta-label">D·24h</span>
                                 <span className="omega-meta-val">{health.decisions_24h}</span>
                             </span>
+                        </>
+                    )}
+                    {isAdmin && (
+                        <>
+                            <button
+                                type="button"
+                                className="omega-nav-button"
+                                onClick={() => setView('ring5')}
+                                title="Open Ring5 influence pipeline observability"
+                            >
+                                RING5
+                            </button>
+                            <button
+                                type="button"
+                                className="omega-nav-button"
+                                onClick={() => setView('doctor')}
+                                title="Open Doctor cognitive diagnostics"
+                            >
+                                DOCTOR
+                            </button>
                         </>
                     )}
                     <button
@@ -120,40 +193,7 @@ export function OmegaPage() {
                     <TalkWithMe voiceOn={voiceOn} onUtteranceLogged={handleUtteranceLogged} />
                 </div>
             </div>
-
-            <Ring5Zone />
-            <DoctorZone />
         </div>
     )
 }
 
-function DoctorZone() {
-    const role = useAuthStore((s) => s.role)
-    const [expanded, setExpanded] = useState(false)
-    if (role !== 'admin') return null
-    return (
-        <div className="omega-page-doctor-zone">
-            <button
-                type="button"
-                className={`omega-doctor-header omega-doctor-header-button${expanded ? ' expanded' : ''}`}
-                onClick={() => setExpanded(e => !e)}
-                aria-expanded={expanded}
-            >
-                <span className="omega-doctor-chevron">{expanded ? '▼' : '▶'}</span>
-                <span className="omega-doctor-title">OMEGA DOCTOR</span>
-                <span className="omega-doctor-tag">D-4 admin-only</span>
-            </button>
-            {expanded && <DoctorPanel />}
-        </div>
-    )
-}
-
-function Ring5Zone() {
-    const role = useAuthStore((s) => s.role)
-    if (role !== 'admin') return null
-    return (
-        <div className="omega-page-ring5-zone">
-            <Ring5Panel />
-        </div>
-    )
-}

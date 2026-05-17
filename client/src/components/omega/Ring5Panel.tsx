@@ -42,8 +42,13 @@ const DEFAULT_FORM: QueryForm = {
     userId: '1', env: 'DEMO', symbol: 'BTCUSDT', regime: 'trending'
 }
 
-export function Ring5Panel() {
-    const [expanded, setExpanded] = useState(false)
+interface Ring5PanelProps {
+    forceExpanded?: boolean
+}
+
+export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
+    const [expandedState, setExpanded] = useState(false)
+    const expanded = forceExpanded || expandedState
     const [audit, setAudit] = useState<Ring5AuditRow[]>([])
     const [auditLoading, setAuditLoading] = useState(false)
     const [auditError, setAuditError] = useState<string | null>(null)
@@ -112,18 +117,19 @@ export function Ring5Panel() {
 
     return (
         <div className="omega-ring5-panel">
-            <button
-                type="button"
-                className={`omega-ring5-header omega-ring5-header-button${expanded ? ' expanded' : ''}`}
-                onClick={() => setExpanded(e => !e)}
-                aria-expanded={expanded}
-            >
-                <span className="omega-ring5-chevron">{expanded ? '▼' : '▶'}</span>
-                <span className="omega-ring5-title">RING5 INFLUENCE PIPELINE</span>
-                <span className="omega-ring5-tag">Day 5 admin-only</span>
-            </button>
+            {!forceExpanded && (
+                <button
+                    type="button"
+                    className={`omega-ring5-header omega-ring5-header-button${expanded ? ' expanded' : ''}`}
+                    onClick={() => setExpanded(e => !e)}
+                    aria-expanded={expanded}
+                >
+                    <span className="omega-ring5-chevron">{expanded ? '▼' : '▶'}</span>
+                    <span className="omega-ring5-title">RING5 INFLUENCE PIPELINE</span>
+                    <span className="omega-ring5-tag">Day 5 admin-only</span>
+                </button>
+            )}
 
-            {!expanded && null}
             {expanded && <>
 
             <section className="omega-ring5-section">
