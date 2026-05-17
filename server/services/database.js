@@ -994,6 +994,45 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Doctor D-5 quarantine + override journal 2026-05-17]
+migrate('367_ml_module_quarantines', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_module_quarantines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_id TEXT NOT NULL,
+            quarantine_action TEXT NOT NULL CHECK(quarantine_action IN
+                ('clamp_influence', 'shadow_only', 'disable')),
+            reason TEXT NOT NULL,
+            operator_id INTEGER,
+            quarantined_at INTEGER NOT NULL,
+            lifted_at INTEGER,
+            lift_reason TEXT,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlmq_module_active
+            ON ml_module_quarantines(module_id, lifted_at);
+    `);
+});
+
+migrate('368_ml_doctor_override_journal', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_doctor_override_journal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_id TEXT NOT NULL,
+            doctor_recommended_action TEXT NOT NULL,
+            operator_forced_action TEXT NOT NULL,
+            operator_reason TEXT,
+            operator_id INTEGER NOT NULL,
+            outcome_verdict TEXT CHECK(outcome_verdict IS NULL OR outcome_verdict IN
+                ('doctor_was_right', 'operator_was_right', 'inconclusive', 'partial')),
+            decided_at INTEGER NOT NULL,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldoj_module_ts
+            ON ml_doctor_override_journal(module_id, ts);
+    `);
+});
+
 // [OMEGA Doctor D-2 telemetry collector + event log 2026-05-17]
 migrate('365_ml_module_heartbeats', () => {
     db.exec(`
