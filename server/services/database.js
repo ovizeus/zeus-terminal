@@ -994,6 +994,69 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §156 IDENTITY KERNEL 2026-05-17] _meta
+// Canonical PDF §156 (lines 5234-5268). Who-am-I engine.
+// Explicit operational identity nucleus: role + purpose + world + 4
+// canonical "not-self" assertions (eu nu sunt piata/exchange/operator/
+// scopul, sunt instrumentul) + identity_checksum SHA-256 across all.
+// One active kernel per user×env (registerKernel deactivates previous).
+// Violations log when system tries to claim what it is not. Distinct de
+// §127 identityContinuity (cumulative), §146 identityUnderTransformation
+// (transformation verdict), §10 supremePrinciple (criteria), §116 charter.
+migrate('310_ml_identity_kernel', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_identity_kernel (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            kernel_id                   TEXT NOT NULL UNIQUE,
+            role                        TEXT NOT NULL CHECK(role IN
+                                        ('market_reasoning_agent',
+                                         'risk_aware_decision_system',
+                                         'execution_constrained_policy_engine',
+                                         'custom')),
+            purpose_statement           TEXT NOT NULL,
+            world_context               TEXT NOT NULL,
+            not_self_assertions_json    TEXT NOT NULL,
+            charter_hash                TEXT,
+            competence_areas_json       TEXT NOT NULL,
+            identity_checksum           TEXT NOT NULL,
+            active                      INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            registered_at               INTEGER NOT NULL,
+            deactivated_at              INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlik_user_env_active
+            ON ml_identity_kernel(user_id, resolved_env, active);
+    `);
+});
+
+migrate('311_ml_identity_role_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_identity_role_violations (
+            id                           INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                      INTEGER NOT NULL,
+            resolved_env                 TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            violation_id                 TEXT NOT NULL UNIQUE,
+            kernel_id                    TEXT NOT NULL,
+            violation_type               TEXT NOT NULL CHECK(violation_type IN
+                                         ('claimed_market','claimed_exchange',
+                                          'claimed_operator','claimed_purpose',
+                                          'out_of_competence')),
+            claimed_role_or_identity     TEXT NOT NULL,
+            severity                     TEXT NOT NULL CHECK(severity IN
+                                         ('info','warn','critical')),
+            reasoning_text               TEXT,
+            ts                           INTEGER NOT NULL,
+            FOREIGN KEY(kernel_id)
+                REFERENCES ml_identity_kernel(kernel_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlirv_user_env_severity_ts
+            ON ml_identity_role_violations(user_id, resolved_env, severity, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlirv_kernel
+            ON ml_identity_role_violations(kernel_id);
+    `);
+});
+
 // [OMEGA Wave 3 §155 UNKNOWN-UNKNOWN RESERVE 2026-05-17] R3A_safety
 // Canonical PDF §155 (lines 5181-5232). Sacred slack engine.
 // "ce parte din prudenta mea este rezervata pentru lucruri pe care nici
