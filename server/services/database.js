@@ -994,6 +994,68 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §147 INTELLECTUAL HONESTY AUDIT 2026-05-17] _meta
+// Canonical PDF §147 (lines 4776-4820). Anti-rationalization engine.
+// Timestamped reason commitment (pre/post-decision/post-outcome stages)
+// + 3-stage drift comparison + 4 canonical rationalization patterns +
+// honesty penalty + investigation flag. Distinct from §117 epistemic
+// Provenance (lineage), §137 explanationCompressionTest (density), §134
+// representationDebtTracker (map drift). §147 = TEMPORAL CONSISTENCY of
+// explanations. Reasons "locked" at commitment time via hash; later
+// changes must be explicitly marked as reinterpretations.
+migrate('292_ml_reason_commitments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_reason_commitments (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            commitment_id           TEXT NOT NULL UNIQUE,
+            decision_id             TEXT NOT NULL,
+            stage                   TEXT NOT NULL CHECK(stage IN
+                                    ('pre_decision','post_decision','post_outcome')),
+            reasons_text            TEXT NOT NULL,
+            reasons_hash            TEXT NOT NULL,
+            locked_at_ts            INTEGER NOT NULL,
+            is_reinterpretation     INTEGER NOT NULL CHECK(is_reinterpretation IN (0,1)),
+            ts                      INTEGER NOT NULL,
+            UNIQUE(user_id, resolved_env, decision_id, stage)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrc_user_env_decision_stage
+            ON ml_reason_commitments(user_id, resolved_env, decision_id, stage);
+    `);
+});
+
+migrate('293_ml_honesty_audit_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_honesty_audit_assessments (
+            id                                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                             INTEGER NOT NULL,
+            resolved_env                        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id                       TEXT NOT NULL UNIQUE,
+            decision_id                         TEXT NOT NULL,
+            pre_decision_commitment_id          TEXT NOT NULL,
+            post_decision_commitment_id         TEXT,
+            post_outcome_commitment_id          TEXT,
+            pre_to_post_decision_drift          REAL NOT NULL CHECK(pre_to_post_decision_drift >= 0 AND pre_to_post_decision_drift <= 1),
+            pre_to_post_outcome_drift           REAL NOT NULL CHECK(pre_to_post_outcome_drift >= 0 AND pre_to_post_outcome_drift <= 1),
+            post_decision_to_post_outcome_drift REAL NOT NULL CHECK(post_decision_to_post_outcome_drift >= 0 AND post_decision_to_post_outcome_drift <= 1),
+            max_drift_score                     REAL NOT NULL CHECK(max_drift_score >= 0 AND max_drift_score <= 1),
+            rationalization_pattern             TEXT NOT NULL CHECK(rationalization_pattern IN
+                                                ('none','post_hoc_beautification',
+                                                 'explanatory_inflation','retrofitting_causal',
+                                                 'self_excusing_narrative')),
+            honesty_penalty                     REAL NOT NULL CHECK(honesty_penalty >= 0 AND honesty_penalty <= 1),
+            investigation_required              INTEGER NOT NULL CHECK(investigation_required IN (0,1)),
+            ts                                  INTEGER NOT NULL,
+            FOREIGN KEY(pre_decision_commitment_id) REFERENCES ml_reason_commitments(commitment_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlhaa_user_env_decision_ts
+            ON ml_honesty_audit_assessments(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlhaa_user_env_pattern_ts
+            ON ml_honesty_audit_assessments(user_id, resolved_env, rationalization_pattern, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §146 v2 IDENTITY-UNDER-TRANSFORMATION TEST 2026-05-17] _meta
 // Reviewer feedback integration: drift_explanation_json (auditability) +
 // identity_confidence_score (verdicts are probabilistic, not absolute) +
