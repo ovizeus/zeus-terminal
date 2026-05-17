@@ -994,6 +994,47 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §146 IDENTITY-UNDER-TRANSFORMATION TEST 2026-05-17] _meta
+// Canonical PDF §146 (lines 4718-4775). Extension de §127 identityContinuity
+// (score) cu THRESHOLD TEST + GOVERNANCE ESCALATION (decizie verdict). 6
+// drift dimensions (charter/utility/policy/ontology/regime/boldness) +
+// replay divergence + semantic equivalence → composite_drift → 3-verdict
+// (same_agent/evolved_variant/materially_new_agent). Materially_new →
+// mandatory governance escalation (shadow+canary+capital+audit SEPARATE).
+// FK la ml_identity_snapshots (§127) pentru baseline + current refs.
+migrate('290_ml_identity_transformation_tests', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_identity_transformation_tests (
+            id                                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                                 INTEGER NOT NULL,
+            resolved_env                            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            test_id                                 TEXT NOT NULL UNIQUE,
+            baseline_snapshot_id                    TEXT NOT NULL,
+            current_snapshot_id                     TEXT NOT NULL,
+            charter_drift_score                     REAL NOT NULL CHECK(charter_drift_score >= 0 AND charter_drift_score <= 1),
+            utility_function_drift_score            REAL NOT NULL CHECK(utility_function_drift_score >= 0 AND utility_function_drift_score <= 1),
+            policy_style_drift_score                REAL NOT NULL CHECK(policy_style_drift_score >= 0 AND policy_style_drift_score <= 1),
+            ontology_drift_score                    REAL NOT NULL CHECK(ontology_drift_score >= 0 AND ontology_drift_score <= 1),
+            regime_interpretation_drift_score       REAL NOT NULL CHECK(regime_interpretation_drift_score >= 0 AND regime_interpretation_drift_score <= 1),
+            boldness_humility_drift_score           REAL NOT NULL CHECK(boldness_humility_drift_score >= 0 AND boldness_humility_drift_score <= 1),
+            replay_divergence_pct                   REAL NOT NULL CHECK(replay_divergence_pct >= 0 AND replay_divergence_pct <= 1),
+            semantic_equivalence_score              REAL NOT NULL CHECK(semantic_equivalence_score >= 0 AND semantic_equivalence_score <= 1),
+            composite_drift_score                   REAL NOT NULL CHECK(composite_drift_score >= 0 AND composite_drift_score <= 1),
+            identity_verdict                        TEXT NOT NULL CHECK(identity_verdict IN
+                                                    ('same_agent','evolved_variant','materially_new_agent')),
+            governance_escalation_required          INTEGER NOT NULL CHECK(governance_escalation_required IN (0,1)),
+            ts                                      INTEGER NOT NULL,
+            FOREIGN KEY(baseline_snapshot_id) REFERENCES ml_identity_snapshots(snapshot_id) ON DELETE RESTRICT,
+            FOREIGN KEY(current_snapshot_id) REFERENCES ml_identity_snapshots(snapshot_id) ON DELETE RESTRICT,
+            CHECK(baseline_snapshot_id <> current_snapshot_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlitt_user_env_verdict_ts
+            ON ml_identity_transformation_tests(user_id, resolved_env, identity_verdict, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlitt_user_env_escalation_ts
+            ON ml_identity_transformation_tests(user_id, resolved_env, governance_escalation_required, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §145 INFORMATION TEMPO RESONANCE 2026-05-17] _meta
 // Canonical PDF §145 (line 4715). RELAȚIONAL between signal tempo and
 // decision cadence — not individual freshness (§15/§27/§13 already cover).
