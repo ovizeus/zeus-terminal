@@ -994,6 +994,75 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §190 ANOMALY SANCTUARY 2026-05-17] _meta
+// Canonical PDF §190 (lines 6154-6207). Irreducible residual preservation.
+// "ce fenomen ar trebui pastrat viu ca mister productiv in loc sa fie ucis
+//  printr-o explicatie grabita?" 5 canonical tags (unexplained_but_stable
+// / unexplained_and_volatile / repeat_anomaly / anomaly_cluster /
+// anomaly_with_ontological_pressure). Per rule 6180: interdicție de
+// explicare forțată sub prag de evidență.
+migrate('337_ml_anomaly_sanctuary', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_anomaly_sanctuary (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            anomaly_id                  TEXT NOT NULL UNIQUE,
+            phenomenon_label            TEXT NOT NULL,
+            anomaly_tag                 TEXT NOT NULL CHECK(anomaly_tag IN
+                                        ('unexplained_but_stable',
+                                         'unexplained_and_volatile',
+                                         'repeat_anomaly',
+                                         'anomaly_cluster',
+                                         'anomaly_with_ontological_pressure')),
+            preservation_score          REAL NOT NULL CHECK(preservation_score >= 0 AND preservation_score <= 1),
+            current_evidence_for_explanation  REAL NOT NULL CHECK(current_evidence_for_explanation >= 0 AND current_evidence_for_explanation <= 1),
+            force_explain_allowed       INTEGER NOT NULL CHECK(force_explain_allowed IN (0,1)),
+            reasoning                   TEXT,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlas_user_env_tag_ts
+            ON ml_anomaly_sanctuary(user_id, resolved_env, anomaly_tag, ts);
+    `);
+});
+
+// [OMEGA Wave 3 §191 DECIDABILITY FRONTIER 2026-05-17] _meta
+// Canonical PDF §191 (lines 6210-6262). Coercion-of-verdict detector.
+// "am de fapt dreptul sa decid aceasta intrebare acum, sau doar o fortez
+//  sa para decidabila?" 4 decidability categories + 5 escalation options.
+migrate('338_ml_decidability_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_decidability_assessments (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id                   TEXT NOT NULL UNIQUE,
+            question_label                  TEXT NOT NULL,
+            evidence_available              REAL NOT NULL CHECK(evidence_available >= 0 AND evidence_available <= 1),
+            ontology_available              REAL NOT NULL CHECK(ontology_available >= 0 AND ontology_available <= 1),
+            compute_available               REAL NOT NULL CHECK(compute_available >= 0 AND compute_available <= 1),
+            time_available                  REAL NOT NULL CHECK(time_available >= 0 AND time_available <= 1),
+            authority_available             REAL NOT NULL CHECK(authority_available >= 0 AND authority_available <= 1),
+            decidability_score              REAL NOT NULL CHECK(decidability_score >= 0 AND decidability_score <= 1),
+            decidability_category           TEXT NOT NULL CHECK(decidability_category IN
+                                            ('decidable_now',
+                                             'decidable_with_more_sensing',
+                                             'decidable_only_with_ontology_change',
+                                             'not_responsibly_decidable_in_current_frame')),
+            recommended_escalation          TEXT NOT NULL CHECK(recommended_escalation IN
+                                            ('act','wait','reframe_question',
+                                             'active_sensing','shadow_only','observer')),
+            coercion_detected               INTEGER NOT NULL CHECK(coercion_detected IN (0,1)),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlda_user_env_cat_ts
+            ON ml_decidability_assessments(user_id, resolved_env, decidability_category, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlda_coercion_ts
+            ON ml_decidability_assessments(coercion_detected, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §189 SELF-WORLD BOUNDARY INTEGRITY 2026-05-17] _audit
 // Canonical PDF §189 (lines 6093-6151). Endogeneity separation engine.
 // "s-a schimbat lumea sau m-am schimbat eu?" 4 canonical attributions
