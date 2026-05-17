@@ -1118,6 +1118,10 @@ app.use('/api/brain/parity', brainParityRoutes);
 const omegaRoutes = require('./server/routes/omega');
 app.use('/api/omega', omegaRoutes);
 
+// D-4 Doctor API routes (admin-only). State + events + modules + verdict + quota.
+const doctorRoutes = require('./server/routes/doctor');
+app.use('/api/omega/doctor', doctorRoutes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
