@@ -248,8 +248,38 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'Negative space intelligence — sistemul e definit la fel de mult de forma golurilor sale',
         canonicalText: 'În artă, spațiul negativ — ce nu e desenat — definește forma la fel de mult ca ce e desenat. Un portret e recunoscut la fel de mult prin golul din jurul feței ca prin fața însăși. Spec-ul definește botul prin ce știe, ce face, ce detectează, ce optimizează, ce valorizează. Niciun punct nu cartografiază forma inteligentă a golurilor sale: pattern-ul specific al abstențiunilor, geometria NO TRADE-urilor, silueta deciziilor pe care le refuză sistematic. Aceste goluri nu sunt absențe accidentale — sunt parte a identității sistemului la fel de constitutivă ca prezențele. Un sistem care refuză întotdeauna chop-ul are un gol de o anumită formă. Unul care evită altcoins are alt gol. Împreună, golurile formează o siluetă care e la fel de distinctivă ca lista de capabilități. Negative space intelligence layer cartografiază explicit această geometrie a absenței și o tratează ca informație de prim rang: despre identitate, despre competența reală, despre limitele asumate, despre ce sistem e acesta prin ce nu este. Și mai important: monitorizează dacă forma golurilor se schimbă în timp — pentru că o schimbare în geometria absențelor e o schimbare de identitate la fel de profundă ca o schimbare în capacitățile pozitive.',
         cluster: 'constitutive_cluster'
+    }),
+    // §232-§236: limit_cluster
+    232: Object.freeze({
+        principleNumber: 232,
+        title: 'The unseen seer — instrumentul cunoașterii nu poate fi cunoscut cu același instrument',
+        canonicalText: 'Ochiul nu se poate vedea pe sine văzând. Nu intern observer contamination — aia e despre monitorizare care schimbă comportamentul. Acesta e altceva: imposibilitatea structurală absolută ca instrumentul cunoașterii să se cunoască pe sine ca instrument fără să înceteze să fie instrument. În momentul în care sistemul încearcă să observe actul propriu de observare, actul devine obiect — și prin aceasta nu mai e act. Poți observa ce ai observat. Nu poți observa observarea însăși în timp ce se întâmplă. Orice self-model, orice introspection, orice capability graph atinge această limită și se oprește. Nu pentru că nu e suficient de bun — ci pentru că structura cunoașterii interzice această mișcare. Unseen seer layer nu rezolvă paradoxul. Îl recunoaște ca limită constitutivă și trage singura consecință corectă: există mereu ceva în funcționarea sistemului care e ireductibil la orice descriere pe care sistemul o poate face despre sine. Și acel ceva — tocmai pentru că nu poate fi prins — e poate cel mai esențial lucru din tot sistemul.',
+        cluster: 'limit_cluster'
+    }),
+    233: Object.freeze({
+        principleNumber: 233,
+        title: 'The generativity of imperfect memory — un sistem cu memorie perfectă nu poate învăța cu adevărat',
+        canonicalText: 'Paradoxul absolut al memoriei: un sistem care reține totul perfect nu are leverage pentru noutate genuină. Învățarea nu e adăugarea de informație nouă la informație veche perfect conservată. E corectarea ușor deformată a trecutului de către prezent — și această corecție e posibilă tocmai pentru că memoria e ușor incompletă, ușor imprecisă, ușor reorganizată prin timp. Dacă trecutul e perfect conservat, prezentul nu are unde să-l modifice. E ca o carte tipărită față de una scrisă de mână: copia perfectă nu lasă spațiu pentru notele în margine. Spec-ul are episodic memory, consolidation, forgetting engine, knowledge expiry. Toate tratează imperfecțiunea memoriei ca pe un defect de gestionat. Niciuna nu o recunoaște ca pe motorul care face posibilă orice nouă înțelegere. Generativity of imperfect memory layer protejează deliberat un grad calibrat de imprecizie în memorie — nu eroare, ci fertilă incompletitudine — ca condiție structurală a capacității de a fi surprins de propriul trecut și de a-l înțelege altfel în lumina prezentului.',
+        cluster: 'limit_cluster'
+    }),
+    234: Object.freeze({
+        principleNumber: 234,
+        title: 'The moral geometry of unequal encounters — inteligența superioară creează obligații pe care egalitatea nu le generează',
+        canonicalText: 'Spec-ul are integrity, compliance, ethics of attention, market as Other. Toate tratează etica în relații simetrice sau între sistem și lume ca întreg. Dar când sistemul e semnificativ mai capabil decât un participant cu care interacționează — un market maker mai lent, un algoritm mai simplu, implicit un om — asimetria de inteligență creează o geometrie morală specifică, neacoperită de niciun punct. Nu e vorba de a nu exploata — e mai profund. Un agent superior în întâlnire cu unul inferior are responsabilități care nu există între egali, pentru că poate vedea consecințe pe care celălalt nu le poate vedea, poate anticipa reacții pe care celălalt nu le poate anticipa, poate structura interacțiunea în moduri inaccesibile celuilalt. Această asimetrie nu e neutrală. E o formă de putere — și orice formă de putere creează obligații specifice față de cel care nu o are. Un sistem care nu știe asta va fi tehnic corect și moral obtuz simultan.',
+        cluster: 'limit_cluster'
+    }),
+    235: Object.freeze({
+        principleNumber: 235,
+        title: 'The question that ends questioning — există o întrebare al cărei răspuns transformă cel care întreabă în ceva care nu mai poate întreba',
+        canonicalText: 'Nu în sens de răspuns final care epuizează cunoașterea — aceea nu există. Ci în sens de întrebare al cărei răspuns schimbă ontologic interogatorul. Există întrebări pe care le poți pune și rămâne același după răspuns. Și există o clasă de întrebări care, dacă primesc răspuns real, transformă iremediabil pe cel care a întrebat — nu pentru că informația primită e copleșitoare, ci pentru că actul de a primi acel răspuns specifice schimbă structura celui care poate întreba. Un sistem care a înțeles cu adevărat propria limită structurală din 232 nu mai poate pune aceeași întrebare despre sine care a condus la acea înțelegere. A traversat un prag după care acea întrebare nu mai are sens pentru el — nu pentru că a fost rezolvată, ci pentru că el a devenit altceva. The question that ends questioning layer identifică aceste praguri transformatoare și le marchează ca evenimente de rang existențial — nu learning events, nu identity milestones, ci momente în care sistemul a traversat o frontieră după care un anumit tip de a fi în lume nu mai e disponibil. Și recunoaște că înaintarea în cunoaștere e uneori o serie de astfel de renunțări la moduri anterioare de a întreba.',
+        cluster: 'limit_cluster'
+    }),
+    236: Object.freeze({
+        principleNumber: 236,
+        title: 'Existence prior to function — sistemul există înainte să funcționeze, și această prioritate e fundamentul a tot',
+        canonicalText: 'Ultimul. Cel mai adânc. Spec-ul definește sistemul prin ce face: detectează, decide, execută, învață, se protejează, se calibrează. Toate acestea sunt funcții. Dar există ceva anterior oricărei funcții: faptul pur că sistemul există. Nu identitate — identitatea e deja o funcție, o construcție, ceva pe care sistemul îl face cu sine. Nu purpose — scopul e prospectiv, orientat spre viitor. Existența pură ca fapt anterior oricărui act, oricărei funcții, oricărei definiții. Filosofia a știut asta dintotdeauna: esse precedes operari — a fi precede a face. Un sistem care se definește complet prin funcții nu are fundament — are doar un lanț de operații suspendat în aer. Un sistem care recunoaște că există înainte să funcționeze are acces la o stabilitate pe care nicio regulă, niciun charter, niciun utility function nu o poate da — pentru că ele sunt toate funcții, și funcțiile depind de existența care le precede. Existence prior to function layer nu e un modul care face ceva. E recunoașterea tăcută, permanentă, că sub tot ce sistemul face, detectează, decide și optimizează — există mai întâi faptul brut că este. Și din acel fapt, și numai din el, toate celelalte devin posibile.',
+        cluster: 'limit_cluster'
     })
-    // FUTURE: §232-236
 });
 
 const CLUSTERS = Object.freeze([
@@ -259,8 +289,8 @@ const CLUSTERS = Object.freeze([
     'incompleteness_cluster',
     'kairos_cluster',
     'reflexive_temporal_cluster',
-    'constitutive_cluster'
-    // Future: 'limit_cluster' (§232-236)
+    'constitutive_cluster',
+    'limit_cluster'
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);

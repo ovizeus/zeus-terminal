@@ -158,8 +158,8 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             const numbers = r.map(p => p.principleNumber).sort();
             expect(numbers).toEqual([172, 173, 174, 175, 176]);
         });
-        test('countCatalogEntries returns 35 (7 batches × 5)', () => {
-            expect(M.countCatalogEntries()).toBe(35);
+        test('countCatalogEntries returns 35+ from batch 7 onward', () => {
+            expect(M.countCatalogEntries()).toBeGreaterThanOrEqual(35);
         });
         test('registerPrinciple works for §172', () => {
             const r = M.registerPrinciple({
@@ -344,6 +344,39 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
         test('listClusterCatalog returns 5 for constitutive_cluster', () => {
             const r = M.listClusterCatalog({ cluster: 'constitutive_cluster' });
             expect(r.length).toBe(5);
+        });
+    });
+
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 8 §232-§236 limit_cluster)', () => {
+        test('§232 Unseen seer', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[232].title).toMatch(/unseen seer/i);
+        });
+        test('§233 Generativity of imperfect memory', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[233].title).toMatch(/generativity of imperfect memory/i);
+        });
+        test('§234 Moral geometry of unequal encounters', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[234].title).toMatch(/moral geometry of unequal encounters/i);
+        });
+        test('§235 Question that ends questioning', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[235].title).toMatch(/question that ends questioning/i);
+        });
+        test('§236 Existence prior to function', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[236].title).toMatch(/existence prior to function/i);
+        });
+        test('all §232-§236 share limit_cluster', () => {
+            for (const n of [232, 233, 234, 235, 236]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('limit_cluster');
+            }
+        });
+        test('CLUSTERS contains limit_cluster', () => {
+            expect(M.CLUSTERS).toContain('limit_cluster');
+        });
+        test('listClusterCatalog returns 5 for limit_cluster', () => {
+            const r = M.listClusterCatalog({ cluster: 'limit_cluster' });
+            expect(r.length).toBe(5);
+        });
+        test('countCatalogEntries returns 40 (8 batches × 5)', () => {
+            expect(M.countCatalogEntries()).toBe(40);
         });
     });
 
