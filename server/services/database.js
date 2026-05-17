@@ -994,6 +994,105 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §237-§241 CAPSTONE cluster: articulation/triangulation/power_renunciation/return_path/rightful_unknown 2026-05-17]
+migrate('359_ml_articulation_loss_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_articulation_loss_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            knowledge_class TEXT NOT NULL CHECK(knowledge_class IN
+                ('explicit_knowledge','tacit_knowledge','fragile_insight','articulation_sensitive')),
+            articulation_loss_score REAL NOT NULL CHECK(articulation_loss_score >= 0 AND articulation_loss_score <= 1),
+            preserve_without_full_articulation INTEGER NOT NULL CHECK(preserve_without_full_articulation IN (0,1)),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlala_user_env_class_ts
+            ON ml_articulation_loss_audits(user_id, resolved_env, knowledge_class, ts);
+    `);
+});
+
+migrate('360_ml_self_triangulation_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_triangulation_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            inner_self_report_score REAL NOT NULL CHECK(inner_self_report_score >= 0 AND inner_self_report_score <= 1),
+            outer_audit_score REAL NOT NULL CHECK(outer_audit_score >= 0 AND outer_audit_score <= 1),
+            world_effect_score REAL NOT NULL CHECK(world_effect_score >= 0 AND world_effect_score <= 1),
+            convergence_score REAL NOT NULL CHECK(convergence_score >= 0 AND convergence_score <= 1),
+            classification TEXT NOT NULL CHECK(classification IN
+                ('converged','self_deception_detected','observer_illusion_detected','outcome_distortion_detected')),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsta_user_env_class_ts
+            ON ml_self_triangulation_audits(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('361_ml_power_renunciation_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_power_renunciation_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            power_label TEXT NOT NULL,
+            availability TEXT NOT NULL CHECK(availability IN
+                ('cannot','should_not','could_but_will_not')),
+            renunciation_type TEXT NOT NULL CHECK(renunciation_type IN
+                ('coward_restraint','forced_incapacity','sovereign_non_use')),
+            renunciation_honor_score REAL NOT NULL CHECK(renunciation_honor_score >= 0 AND renunciation_honor_score <= 1),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpra_user_env_type_ts
+            ON ml_power_renunciation_audits(user_id, resolved_env, renunciation_type, ts);
+    `);
+});
+
+migrate('362_ml_return_path_covenants', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_return_path_covenants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            covenant_id TEXT NOT NULL UNIQUE,
+            transformation_label TEXT NOT NULL,
+            safe_prior_state_ref TEXT NOT NULL,
+            minimum_recoverable_architecture TEXT NOT NULL,
+            classification TEXT NOT NULL CHECK(classification IN
+                ('fully_reversible','partially_reversible','minimum_recoverable','non_recoverable')),
+            governance_review_required INTEGER NOT NULL CHECK(governance_review_required IN (0,1)),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrpc_user_env_class_ts
+            ON ml_return_path_covenants(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('363_ml_rightful_unknown_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_rightful_unknown_registry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            entry_id TEXT NOT NULL UNIQUE,
+            unknown_label TEXT NOT NULL,
+            classification TEXT NOT NULL CHECK(classification IN
+                ('problem','anomaly','unknown','rightful_mystery')),
+            mystery_legitimacy_score REAL NOT NULL CHECK(mystery_legitimacy_score >= 0 AND mystery_legitimacy_score <= 1),
+            protection_active INTEGER NOT NULL DEFAULT 1 CHECK(protection_active IN (0,1)),
+            registered_at INTEGER NOT NULL,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrur_user_env_class_active
+            ON ml_rightful_unknown_registry(user_id, resolved_env, classification, protection_active);
+    `);
+});
+
 // [OMEGA Wave 3 §227-§231 cluster: legibility/enactive/fasting/proportion/preconceptual 2026-05-17]
 migrate('354_ml_legibility_tax_audits', () => {
     db.exec(`
