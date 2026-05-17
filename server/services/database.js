@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §179 WORLDHOOD PRESSURE INDEX 2026-05-17] _meta
+// Canonical PDF §179 (lines 5834-5884). How-much-reality-is-not-fitting.
+// "cat de multa realitate incepe sa nu mai incapa in lumea mea interna?"
+// 7 canonical aggregation components (unexplained_residuals / ontology_
+// strain / unknown_pressure / narrative_fractures / weak_semantic_
+// grounding / repeated_low_dignity_explanations / regime_grammar_tension).
+// 5 threshold-driven actions (continue / simplify / research_escalation
+// / ontology_revision / observer_retreat). 3 trend directions. Distinct
+// de §120 unknowns (one type), §134 representation debt (one type),
+// §148 ontology humility (one type) — §179 e INDEXUL COMPUS al tuturor.
+migrate('331_ml_worldhood_pressure_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_worldhood_pressure_snapshots (
+            id                                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                             INTEGER NOT NULL,
+            resolved_env                        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id                         TEXT NOT NULL UNIQUE,
+            unexplained_residuals               REAL NOT NULL CHECK(unexplained_residuals >= 0 AND unexplained_residuals <= 1),
+            ontology_strain                     REAL NOT NULL CHECK(ontology_strain >= 0 AND ontology_strain <= 1),
+            unknown_pressure                    REAL NOT NULL CHECK(unknown_pressure >= 0 AND unknown_pressure <= 1),
+            narrative_fractures                 REAL NOT NULL CHECK(narrative_fractures >= 0 AND narrative_fractures <= 1),
+            weak_semantic_grounding             REAL NOT NULL CHECK(weak_semantic_grounding >= 0 AND weak_semantic_grounding <= 1),
+            repeated_low_dignity_explanations   REAL NOT NULL CHECK(repeated_low_dignity_explanations >= 0 AND repeated_low_dignity_explanations <= 1),
+            regime_grammar_tension              REAL NOT NULL CHECK(regime_grammar_tension >= 0 AND regime_grammar_tension <= 1),
+            composite_pressure_score            REAL NOT NULL CHECK(composite_pressure_score >= 0 AND composite_pressure_score <= 1),
+            recommended_action                  TEXT NOT NULL CHECK(recommended_action IN
+                                                ('continue','simplify','research_escalation',
+                                                 'ontology_revision','observer_retreat')),
+            trend_direction                     TEXT NOT NULL CHECK(trend_direction IN
+                                                ('rising','steady','falling')),
+            persistent_zones_json               TEXT NOT NULL,
+            reasoning                           TEXT,
+            ts                                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlwps_user_env_action_ts
+            ON ml_worldhood_pressure_snapshots(user_id, resolved_env, recommended_action, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlwps_trend_ts
+            ON ml_worldhood_pressure_snapshots(trend_direction, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlwps_pressure_ts
+            ON ml_worldhood_pressure_snapshots(composite_pressure_score, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §178 CAUSAL DIGNITY TEST 2026-05-17] R2_cognition
 // Canonical PDF §178 (lines 5792-5832). Does-explanation-respect-the-world.
 // "explicatia mea chiar respecta felul in care pare sa functioneze lumea
