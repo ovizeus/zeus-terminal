@@ -994,6 +994,48 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §170 EPISTEMIC CURRENCY EXCHANGE 2026-05-17] R2_cognition
+// Canonical PDF §170 (lines 5621-5669). Cross-frame settlement engine.
+// "cum compar un argument statistic cu unul cauzal si cu unul narrativ
+//  fara sa le amestec prost?" 6 evidence currencies (probability /
+// causal_force / narrative_coherence / information_gain / adversarial_
+// pressure / risk_of_being_wrong). Settlement = weighted composite +
+// commensurability score (1 - std/max_score). Incommensurability flag
+// when frames diverge severely — system marks the gap, NU inventeaza
+// echivalente. Distinct de §70 evidence sufficiency (min support gate),
+// §71 internal debate (proposer-critic), §76 counterfactual baseline.
+migrate('327_ml_epistemic_settlements', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_epistemic_settlements (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            settlement_id                   TEXT NOT NULL UNIQUE,
+            decision_id                     TEXT NOT NULL,
+            probability_evidence_score      REAL NOT NULL CHECK(probability_evidence_score >= 0 AND probability_evidence_score <= 1),
+            causal_force_score              REAL NOT NULL CHECK(causal_force_score >= 0 AND causal_force_score <= 1),
+            narrative_coherence_score       REAL NOT NULL CHECK(narrative_coherence_score >= 0 AND narrative_coherence_score <= 1),
+            information_gain_score          REAL NOT NULL CHECK(information_gain_score >= 0 AND information_gain_score <= 1),
+            adversarial_pressure_score      REAL NOT NULL CHECK(adversarial_pressure_score >= 0 AND adversarial_pressure_score <= 1),
+            risk_of_being_wrong_score       REAL NOT NULL CHECK(risk_of_being_wrong_score >= 0 AND risk_of_being_wrong_score <= 1),
+            settlement_score                REAL NOT NULL CHECK(settlement_score >= 0 AND settlement_score <= 1),
+            commensurability_score          REAL NOT NULL CHECK(commensurability_score >= 0 AND commensurability_score <= 1),
+            incommensurability_flagged      INTEGER NOT NULL CHECK(incommensurability_flagged IN (0,1)),
+            dominant_currency               TEXT NOT NULL CHECK(dominant_currency IN
+                                            ('probability_evidence','causal_force',
+                                             'narrative_coherence','information_gain',
+                                             'adversarial_pressure','risk_of_being_wrong',
+                                             'multi_balanced')),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mles_user_env_dom_ts
+            ON ml_epistemic_settlements(user_id, resolved_env, dominant_currency, ts);
+        CREATE INDEX IF NOT EXISTS idx_mles_incomm_ts
+            ON ml_epistemic_settlements(incommensurability_flagged, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §169 MODAL STABILITY TEST 2026-05-17] R2_cognition
 // Canonical PDF §169 (lines 5568-5618). Nearby-possible-worlds endorsement.
 // "as mai aproba aceasta decizie daca lumea reala ar fi aproape la fel,
