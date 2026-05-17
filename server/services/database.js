@@ -994,6 +994,57 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 Claude-Extra #2 ADVERSARIAL ML DEFENSE 2026-05-17] R3A
+// DEFENSIVE version of operator-flagged "neuro-weapons" idea. Detects when
+// OTHER bots try to induce psychosis in our ML via adversarial patterns
+// (spoofing storms, ghost liquidity, micro-cancel storms, synthetic volume).
+// Sanitizes affected signals. NO offensive action — pure defense.
+// LEGAL: detection + signal sanitization, NO spoofing/manipulation by us.
+migrate('277_ml_adversarial_attack_detections', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_adversarial_attack_detections (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            detection_id             TEXT NOT NULL UNIQUE,
+            asset                    TEXT NOT NULL,
+            attack_pattern           TEXT NOT NULL CHECK(attack_pattern IN
+                                     ('spoofing_storm','ghost_liquidity',
+                                      'micro_cancel_pattern','volume_anomaly')),
+            anomaly_score            REAL NOT NULL CHECK(anomaly_score >= 0 AND anomaly_score <= 1),
+            severity                 TEXT NOT NULL CHECK(severity IN
+                                     ('low','medium','high')),
+            evidence_json            TEXT NOT NULL,
+            defense_action           TEXT NOT NULL CHECK(defense_action IN
+                                     ('ignore_signal','increase_caution','pause_trading')),
+            ts                       INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlaad_user_env_asset_pattern_ts
+            ON ml_adversarial_attack_detections(user_id, resolved_env, asset, attack_pattern, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlaad_user_env_severity_ts
+            ON ml_adversarial_attack_detections(user_id, resolved_env, severity, ts);
+    `);
+});
+
+migrate('278_ml_signal_sanitization_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_signal_sanitization_log (
+            id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                  INTEGER NOT NULL,
+            resolved_env             TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            sanitization_id          TEXT NOT NULL UNIQUE,
+            detection_id             TEXT NOT NULL,
+            original_signal_json     TEXT NOT NULL,
+            sanitized_signal_json    TEXT NOT NULL,
+            sanitization_applied     INTEGER NOT NULL CHECK(sanitization_applied IN (0,1)),
+            ts                       INTEGER NOT NULL,
+            FOREIGN KEY(detection_id) REFERENCES ml_adversarial_attack_detections(detection_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlssl_user_env_detection_ts
+            ON ml_signal_sanitization_log(user_id, resolved_env, detection_id, ts);
+    `);
+});
+
 // [OMEGA Wave 3 Claude-Extra #1 v3 INSTITUTIONAL GRAVITY SCANNER 2026-05-17]
 // Reviewer feedback v3 integration: lifecycle states (5 enum) + provenance
 // (inference_method/model_version/source_provider) + settlement_accuracy_
