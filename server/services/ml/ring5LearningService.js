@@ -26,6 +26,7 @@
  */
 
 const _stateHelper = require('./_ring5/ring5State');
+const thompsonSampler = require('./_ring5/thompsonSampler');
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
 
@@ -79,13 +80,25 @@ function recordContribution(params) {
     const contribution = _required(params, 'contribution');
     const confidence = _required(params, 'confidence');
     const ts = _required(params, 'ts');
+    const regime = params.regime || 'unknown';
 
-    // Phase B Day 1: trust_score initialized to confidence; bandit params stub.
-    // Phase 3 will replace this with real Thompson Sampling α/β state.
+    // [Phase 3 2026-05-17] Map contribution to outcome class. Threshold ±0.1
+    // — small contributions don't move bandit; clear signals do.
+    const outcomeClass = contribution >= 0.1 ? 'positive'
+                      : contribution <= -0.1 ? 'negative'
+                      : 'neutral';
+
+    // Thompson Sampling: write evidence + L4 posterior + invalidate cache.
+    thompsonSampler.recordObservation({
+        userId, env: resolvedEnv, symbol, regime,
+        moduleId, contribution, confidence, outcomeClass, ts
+    });
+
+    // Continue persisting Ring5 module state (Day 1 contract) for compatibility.
     _stateHelper.updateModuleState({
         userId, resolvedEnv, symbol, moduleId,
         trustScore: Math.max(0, Math.min(1, confidence)),
-        banditParams: { alpha: 1, beta: 1, lastContribution: contribution },
+        banditParams: { lastContribution: contribution, outcomeClass },
         lastObservedTs: ts,
         ts
     });
