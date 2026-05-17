@@ -71,6 +71,19 @@ export function OmegaPage() {
         return () => { alive = false; clearInterval(id) }
     }, [refreshTick])
 
+    // Intercept PageView "Back" when in dedicated sub-view (Ring5/Doctor).
+    // Back returns to OMEGA main instead of closing the OMEGA panel entirely.
+    useEffect(() => {
+        function onPageBack(e: Event) {
+            if (view !== 'main') {
+                e.preventDefault()
+                setView('main')
+            }
+        }
+        window.addEventListener('zeus:page-back', onPageBack)
+        return () => window.removeEventListener('zeus:page-back', onPageBack)
+    }, [view])
+
     const handleUtteranceLogged = useCallback(() => {
         // Chat reply was logged to ml_voice_log — trigger a refresh
         setRefreshTick(t => t + 1)
@@ -80,14 +93,6 @@ export function OmegaPage() {
         return (
             <div className="omega-page omega-page-dedicated" data-mood={mood}>
                 <div className="omega-page-header">
-                    <button
-                        type="button"
-                        className="omega-back-button"
-                        onClick={() => setView('main')}
-                        aria-label="back to OMEGA main"
-                    >
-                        ← OMEGA
-                    </button>
                     <h1 className="omega-page-title">
                         <span className="omega-title-name">OMEGA DOCTOR</span>
                         <span className="omega-title-tag">D-4 admin-only</span>
@@ -104,14 +109,6 @@ export function OmegaPage() {
         return (
             <div className="omega-page omega-page-dedicated" data-mood={mood}>
                 <div className="omega-page-header">
-                    <button
-                        type="button"
-                        className="omega-back-button"
-                        onClick={() => setView('main')}
-                        aria-label="back to OMEGA main"
-                    >
-                        ← OMEGA
-                    </button>
                     <h1 className="omega-page-title">
                         <span className="omega-title-name">RING5</span>
                         <span className="omega-title-tag">Phase B · admin-only</span>

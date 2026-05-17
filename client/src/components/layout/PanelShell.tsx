@@ -135,6 +135,14 @@ export function PanelShell() {
   }
 
   function closePageView() {
+    // [Ring5/Doctor sub-view 2026-05-17] allow active panel to intercept
+    // the back action and handle internal navigation (e.g. OmegaPage
+    // returning from a dedicated sub-view to its main view) by listening
+    // for this cancelable event and calling preventDefault.
+    const ev = new CustomEvent('zeus:page-back', { cancelable: true })
+    window.dispatchEvent(ev)
+    if (ev.defaultPrevented) return
+
     setDockActive(null)
     try { sessionStorage.removeItem('zeusDock') } catch {}
   }
