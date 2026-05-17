@@ -3,9 +3,12 @@
  *  null + non-demo → LOCKED. Click delegates to switchGlobalMode() legacy.
  *  [MODEBAR NEON PULSE 2026-05-14] data-zmb-mode attribute drives CSS
  *  variants in app.css (#zeus-mode-bar[data-zmb-mode="demo|testnet|locked|real"]).
+ *  [BUG-T3+T7 2026-05-17] Hard-disable button when opposite-mode positions
+ *  exist; opposite-mode AT badge surfaces other-engine AT-active state.
  */
-import { useATStore, useUiStore } from '../../stores'
+import { useATStore, useUiStore, usePositionsStore } from '../../stores'
 import { switchGlobalMode } from '../../data/marketDataTrading'
+import { _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
 
@@ -16,6 +19,16 @@ export function ModeBar() {
   // [Phase 12.A — Batch D2] Append exchange identity to TESTNET/REAL labels.
   const activeExchange = useUiStore((s) => s.activeExchange)
   const openModal = useUiStore((s) => s.openModal)
+  // [BUG-T7 2026-05-17] Opposite-mode AT-active mirror (synced from server
+  // state.atActiveDemo/atActiveLive via core/state.ts at_update handler).
+  const oppositeModeAtEnabled = useUiStore((s) => s.oppositeModeAtEnabled)
+  // [BUG-T3 2026-05-17] Position counts feed the hard-disable rule.
+  const demoPositions = usePositionsStore((s) => s.demoPositions)
+  const livePositions = usePositionsStore((s) => s.livePositions)
+  const oppositeCount = _countOppositeModeOpenPositions(
+    engineMode as 'demo' | 'live', demoPositions, livePositions,
+  )
+  const oppositeModeLabel = engineMode === 'live' ? 'DEMO' : 'LIVE'
 
   const _exchSuffix = activeExchange === 'binance' ? ' · BINANCE' : activeExchange === 'bybit' ? ' · BYBIT' : ''
 
@@ -60,7 +73,25 @@ export function ModeBar() {
     modeKey = 'real'
   }
 
+  // [BUG-T3 2026-05-17] Hard-disable mode switch when opposite-mode positions
+  // exist. Confirm dialog (switchGlobalMode → _buildModeSwitchMessage) was
+  // soft-gate only; operator chose Opțiunea C → strict block until those
+  // positions are closed. Per `feedback_engine_mode_switch_position_safety`.
+  const hardDisableForOppositePositions = oppositeCount > 0
+  const disabledTitle = hardDisableForOppositePositions
+    ? `${oppositeCount} ${oppositeModeLabel} ${oppositeCount === 1 ? 'position' : 'positions'} open — close them first to switch mode`
+    : undefined
+  if (hardDisableForOppositePositions) {
+    btnClass += ' zmb-btn-disabled-locked'
+  }
+
   function handleSwitch() {
+    if (hardDisableForOppositePositions) {
+      // Defensive — button is disabled but onClick may still fire on synthetic
+      // events; surface a toast so the operator sees why nothing happened.
+      toast(disabledTitle as string, 4000, _ZI.lock)
+      return
+    }
     if (engineMode === 'demo') {
       if (executionEnv === null) {
         toast('LIVE MODE LOCKED: ' + (executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w)
@@ -87,7 +118,24 @@ export function ModeBar() {
           <span className="zmb-mode" id="zmbMode">{modeText}</span>
         </div>
       </div>
-      <button className={btnClass} id="zmbBtn" onClick={handleSwitch}>{btnText}</button>
+      {oppositeModeAtEnabled && (
+        <span
+          className="zmb-opp-at-badge"
+          data-zmb-opp-at-badge="true"
+          title={`AutoTrade is currently ENABLED in ${oppositeModeLabel} mode`}
+        >
+          ⚠ {oppositeModeLabel} AT ON
+        </span>
+      )}
+      <button
+        className={btnClass}
+        id="zmbBtn"
+        onClick={handleSwitch}
+        disabled={hardDisableForOppositePositions}
+        title={disabledTitle}
+      >
+        {btnText}
+      </button>
     </div>
   )
 }

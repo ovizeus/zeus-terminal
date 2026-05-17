@@ -64,6 +64,13 @@ interface UiStore {
   isPlacingLive: boolean
   setIsPlacingLive: (placing: boolean) => void
 
+  /** [BUG-T7 2026-05-17] Mirror of OPPOSITE-mode AT-active flag.
+   *  When engineMode=demo this reflects server `state.atActiveLive`; when
+   *  engineMode=live this reflects server `state.atActiveDemo`. Drives
+   *  ModeBar opposite-mode badge so operator sees that the other engine
+   *  mode still has AT running. */
+  oppositeModeAtEnabled: boolean
+
   /** Merge partial state */
   patch: (partial: Partial<UiStore>) => void
   /** [Phase 3B] Reset all non-UI-preference state on logout. Preserves theme. */
@@ -105,6 +112,7 @@ export const useUiStore = create<UiStore>()((set) => ({
 
   isPlacingLive: false,
   setIsPlacingLive: (placing) => set({ isPlacingLive: !!placing }),
+  oppositeModeAtEnabled: false,
 
   setTheme: (theme) => {
     try {
@@ -144,5 +152,6 @@ export const useUiStore = create<UiStore>()((set) => ({
     sbPosCount: 0,
     sbPnl: 0,
     isPlacingLive: false,
+    oppositeModeAtEnabled: false,
   }),
 }))

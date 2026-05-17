@@ -1227,6 +1227,19 @@ export const ZState = (() => {
         if (typeof _applyATToggleUI === 'function') _applyATToggleUI(state.atActive)
       }
     }
+    // [BUG-T7 2026-05-17] Mirror per-mode atActive into uiStore for ModeBar
+    // opposite-mode badge. Server already split atActive into atActiveDemo +
+    // atActiveLive (BUG-T7 2026-05-13); the opposite-mode value is whichever
+    // is NOT the current engineMode. False when server omits the field.
+    try {
+      const _cur = (state.mode || AT.mode || 'demo')
+      const _opp = _cur === 'live' ? state.atActiveDemo : state.atActiveLive
+      const _oppBool = typeof _opp === 'boolean' ? _opp : false
+      const _uiState: any = require('../stores/uiStore').useUiStore.getState()
+      if (_uiState.oppositeModeAtEnabled !== _oppBool && typeof _uiState.patch === 'function') {
+        _uiState.patch({ oppositeModeAtEnabled: _oppBool })
+      }
+    } catch (_) {}
     w._apiConfigured = !!state.apiConfigured
     w._exchangeMode = state.exchangeMode || null
     // [Phase 3D] resolvedEnv mirror uses server canonical truth directly — no false derivation.
