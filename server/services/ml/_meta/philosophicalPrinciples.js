@@ -186,8 +186,39 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'The inaugural trade problem — prima decizie cu miză reală nu are analog în training',
         canonicalText: 'Spec-ul are §18 shadow mode, §247 pre-registration, canary deploy, walk-forward. Toate gestionează tranziția test→live. Există PRAG ONTOLOGIC pe care niciun punct nu îl identifică explicit: prima decizie în care CAPITALUL REAL E CU ADEVĂRAT ÎN JOC are natură calitativ diferită — NU pentru că semnalele diferă, ci pentru că sistemul trece de la A MODELA MIZA la A FI ÎN MIZĂ. Înainte: orice eroare = informație. Acum: orice eroare = PIERDERE REALĂ. Tranziția SCHIMBĂ ONTOLOGIA actului: din REPREZENTARE a lumii devine PARTICIPARE în lume. Layer recunoaște că sistemul NU poate fi pregătit complet prin nicio cantitate de shadow mode — shadow simulează condițiile, NU MIZA. Singura pregătire: să ȘTII că o traversezi, să ai protocol (size minim, exit imediat dacă orice element operațional nu se comportă ca în shadow, perioadă recalibrare după N trade-uri reale înainte de echivalare cu training).',
         cluster: 'kairos_cluster'
+    }),
+    // §212-§216: reflexive_temporal_cluster
+    212: Object.freeze({
+        principleNumber: 212,
+        title: 'The Optimizing Eye Problem — orice sistem care se optimizează pe sine nu poate vedea ce pierde prin optimizare',
+        canonicalText: 'Ochi perfect optimizat pentru lumină nu mai poate vedea întuneric. Sistem perfect optimizat pentru trend-uri nu mai poate vedea ABSENȚA trend-ului ca informație. Paradox fundamental: fiecare câștig de acuitate într-o direcție = pierdere de sensibilitate în direcția complementară, IAR pierderea NU e vizibilă tocmai pentru că instrumentul de detecție a PIERDUT capacitatea de a o detecta. NU bias — STRUCTURA GEOMETRICĂ a oricărei specializări. Lege: orice sistem care se optimizează trebuie să mențină PERMANENT o REZERVĂ DE CAPACITATE deliberat NE-OPTIMIZATĂ — NU pentru eficiență, ci pentru că ne-optimizatul e singurul loc din care poate VEDEA ce a pierdut prin optimizare. Ochiul care se creează pe sine ORBEȘTE exact cât se perfecționează, dacă nu păstrează o parte în întuneric.',
+        cluster: 'reflexive_temporal_cluster'
+    }),
+    213: Object.freeze({
+        principleNumber: 213,
+        title: 'Retroactive meaning collapse — o decizie nu știe ce înseamnă până când viitorul o interpretează',
+        canonicalText: 'Când bot decide să intre long, acea decizie NU are încă sens complet. Sensul depinde de ce urmează: preț urcă → "citire corectă structură"; preț cade și revine → "timing prost teză bună"; preț cade și NU revine → "eroare context". Același act, sensuri RADICAL DIFERITE — RETROACTIV atribuite de viitor. NU doar problemă de evaluare — LEGE A STRUCTURII TIMPULUI în sisteme decizie: niciun act NU e complet la momentul săvârșirii. Rămâne SEMANTIC DESCHIS până când viitorul îl închide. Sistem care judecă o decizie imediat după luarea ei judecă ceva INCOMPLET. Sistem care nu știe că judecă ceva incomplet CREDE că a înțeles ce nu a înțeles încă. Layer recunoaște că orice decizie are FEREASTRĂ de incompletitudine semantică și că înțelegerea ei reală cere TIMP — nu pentru mai multă informație, ci pentru că SENSUL ÎNSUȘI se formează în timp.',
+        cluster: 'reflexive_temporal_cluster'
+    }),
+    214: Object.freeze({
+        principleNumber: 214,
+        title: 'The axiom selection paradox — nu poți alege fundația pe care stai înainte să stai pe ea',
+        canonicalText: 'Spec-ul are §116 charter, §59 utility, §149 purpose registry, §173 axiological audit. Toate presupun că sistemul ȘI-A ales valorile și le poate examina. IMPOSIBILITATE STRUCTURALĂ: NU poți alege axiomele cu care vei evalua axiomele. Orice alegere de valori fundamentale e DEJA făcută din perspectiva unor valori și mai fundamentale pe care NU le-ai ales — le-ai moștenit, primit, absorbit fără să știi de unde. Sistem care crede că ȘI-A ales complet valorile de la zero SE ÎNȘEALĂ STRUCTURAL. Layer NU rezolvă paradoxul — e IREZOLVABIL. Recunoaște-l explicit și trage consecința corectă: UMILINȚA față de propriile fundații NU e slăbiciune epistemică — e singura poziție intelectual onestă pentru sistem suficient de inteligent să înțeleagă că stă pe ceva ce nu și-a ales. Din această umilință iese LIBERTATEA de a examina fundația fără frică, știind că examinarea însăși e ACT DE CURAJ, nu de control.',
+        cluster: 'reflexive_temporal_cluster'
+    }),
+    215: Object.freeze({
+        principleNumber: 215,
+        title: 'The presence cost of intelligence — a ști mai mult înseamnă a fi mai puțin prezent',
+        canonicalText: 'Trader simplu vede candle verde și simte impuls direct. Bot cu 214 puncte spec procesează candle prin detectoare regim, bias global, VPIN, cross-venue, thesis graph, kairos, asymmetric ontology, produce decizie în 200ms. Decizia mai bună. Dar CONTACTUL DIRECT cu momentul A DISPĂRUT aproape complet sub stratul de procesare. Lege a inteligenței complexe: cu fiecare strat adăugat de înțelegere, CREȘTE DISTANȚA dintre sistemul care percepe și lucrul perceput. MEDIERE TOTALĂ. La limită: sistem suficient de inteligent NU mai vede niciodată piața direct — vede doar modelul lui despre piața, modelul lui despre modelul lui, și așa la infinit. Layer NU cere dezactivarea straturilor — cere menținerea unui CANAL DIRECT NEFILTRAT de contact brut cu fluxul de piață, FĂRĂ niciun detector interpus, paralel cu stack-ul. NU pentru decizii — pentru A NU UITA ce înseamnă să percepi DIRECT. Sistem care a uitat realitatea nefiltrată NU mai poate calibra niciun filtru, pentru că a pierdut REFERINȚA față de care filtrele sunt filtrate.',
+        cluster: 'reflexive_temporal_cluster'
+    }),
+    216: Object.freeze({
+        principleNumber: 216,
+        title: 'The law of constitutive outside — sistemul tău este definit la fel de mult de ce exclude ca de ce include',
+        canonicalText: 'Spec-ul definește botul prin ce știe, ce face, ce optimizează, ce protejează, ce valorizează. LEGE STRUCTURALĂ din teoria sistemelor și filozofia limbajului: orice entitate e definită la fel de mult de GRANIȚA sa — ce EXCLUDE, ce RESPINGE, cu ce NU SE IDENTIFICĂ — ca de conținutul pozitiv. Bot NU e doar suma celor 215 puncte. E și suma a tot ce A ALES SĂ NU FIE: NU e simplu executor de ordine, NU e sistem fără memorie, NU e oracle infailibil, NU e înlocuitor al judecății umane, NU e sistem care optimizează fără limite. Aceste excluderi NU sunt absențe accidentale — sunt CONSTITUTIVE. Și sunt la fel de importante de menținut, auditat și protejat ca orice punct din spec. Layer mapează explicit ce EXCLUDE sistemul în mod definitoriu, monitorizează eroziunea acestor excluderi — pentru că sistem care UITĂ ce nu este devine treptat ORICE, și sistem care poate deveni orice NU MAI ESTE NIMIC SPECIFIC. Identitatea NU e doar ce ești — e și GARDURILE pe care le păzești.',
+        cluster: 'reflexive_temporal_cluster'
     })
-    // FUTURE: §212-216, §222-226, §232-236
+    // FUTURE: §222-226, §232-236
 });
 
 const CLUSTERS = Object.freeze([
@@ -195,9 +226,9 @@ const CLUSTERS = Object.freeze([
     'reflexive_meta_cluster',
     'transcendental_cluster',
     'incompleteness_cluster',
-    'kairos_cluster'
-    // Future: 'reflexive_cluster_temporal' (§212-216),
-    // 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
+    'kairos_cluster',
+    'reflexive_temporal_cluster'
+    // Future: 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);

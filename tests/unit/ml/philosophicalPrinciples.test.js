@@ -158,8 +158,8 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             const numbers = r.map(p => p.principleNumber).sort();
             expect(numbers).toEqual([172, 173, 174, 175, 176]);
         });
-        test('countCatalogEntries returns 25 (5 batch1 + 5 batch2 + 5 batch3 + 5 batch4 + 5 batch5)', () => {
-            expect(M.countCatalogEntries()).toBe(25);
+        test('countCatalogEntries returns 30 (6 batches × 5)', () => {
+            expect(M.countCatalogEntries()).toBe(30);
         });
         test('registerPrinciple works for §172', () => {
             const r = M.registerPrinciple({
@@ -288,6 +288,32 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
         test('listClusterCatalog returns 5 for kairos_cluster', () => {
             const r = M.listClusterCatalog({ cluster: 'kairos_cluster' });
             expect(r.length).toBe(5);
+        });
+    });
+
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 6 §212-§216 reflexive_temporal_cluster)', () => {
+        test('§212 Optimizing Eye', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[212].title).toMatch(/Optimizing Eye/i);
+        });
+        test('§213 Retroactive meaning', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[213].title).toMatch(/Retroactive meaning/i);
+        });
+        test('§214 Axiom selection paradox', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[214].title).toMatch(/axiom selection paradox/i);
+        });
+        test('§215 Presence cost', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[215].title).toMatch(/presence cost of intelligence/i);
+        });
+        test('§216 Constitutive outside', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[216].title).toMatch(/constitutive outside/i);
+        });
+        test('all §212-§216 share reflexive_temporal_cluster', () => {
+            for (const n of [212, 213, 214, 215, 216]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('reflexive_temporal_cluster');
+            }
+        });
+        test('CLUSTERS contains reflexive_temporal_cluster', () => {
+            expect(M.CLUSTERS).toContain('reflexive_temporal_cluster');
         });
     });
 
