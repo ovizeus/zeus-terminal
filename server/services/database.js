@@ -994,6 +994,60 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §148 ONTOLOGICAL HUMILITY GOVERNOR 2026-05-17] _meta
+// Canonical PDF §148 (lines 4821-4868). Reality-exceeds-model governor.
+// Open remainder analysis (phenomena that don't fit categories) + periodic
+// humility assessments + aggression penalty when humility low. NU dublează
+// §120 unknownsRegistry (gap inventory), §134 representationDebtTracker
+// (predict vs actual), §138 counterOntologySandbox (alien frames). §148 =
+// explicit "harta ≠ teritoriul" reminder + penalty pe overclosure.
+migrate('294_ml_open_remainder_observations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_open_remainder_observations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            observation_id              TEXT NOT NULL UNIQUE,
+            decision_id                 TEXT,
+            phenomenon_description      TEXT NOT NULL,
+            attempted_categories_json   TEXT NOT NULL,
+            best_match_score            REAL NOT NULL CHECK(best_match_score >= 0 AND best_match_score <= 1),
+            residual_score              REAL NOT NULL CHECK(residual_score >= 0 AND residual_score <= 1),
+            flagged_category            TEXT NOT NULL CHECK(flagged_category IN
+                                        ('captured','partially_captured',
+                                         'unexplained','forces_new_category')),
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloro_user_env_flag_ts
+            ON ml_open_remainder_observations(user_id, resolved_env, flagged_category, ts);
+    `);
+});
+
+migrate('295_ml_ontological_humility_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ontological_humility_assessments (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id                 TEXT NOT NULL UNIQUE,
+            window_start_ts               INTEGER NOT NULL,
+            window_end_ts                 INTEGER NOT NULL,
+            observations_count            INTEGER NOT NULL CHECK(observations_count >= 0),
+            mean_residual_score           REAL NOT NULL CHECK(mean_residual_score >= 0 AND mean_residual_score <= 1),
+            overclosure_attempts_count    INTEGER NOT NULL CHECK(overclosure_attempts_count >= 0),
+            humility_score                REAL NOT NULL CHECK(humility_score >= 0 AND humility_score <= 1),
+            humility_level                TEXT NOT NULL CHECK(humility_level IN
+                                          ('low','moderate','high')),
+            aggression_penalty            REAL NOT NULL CHECK(aggression_penalty >= 0 AND aggression_penalty <= 1),
+            recommended_action            TEXT NOT NULL CHECK(recommended_action IN
+                                          ('continue','increase_observation','expand_ontology')),
+            ts                            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mloha_user_env_level_ts
+            ON ml_ontological_humility_assessments(user_id, resolved_env, humility_level, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §147 INTELLECTUAL HONESTY AUDIT 2026-05-17] _meta
 // Canonical PDF §147 (lines 4776-4820). Anti-rationalization engine.
 // Timestamped reason commitment (pre/post-decision/post-outcome stages)
