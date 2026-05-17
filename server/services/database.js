@@ -994,6 +994,65 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §155 UNKNOWN-UNKNOWN RESERVE 2026-05-17] R3A_safety
+// Canonical PDF §155 (lines 5181-5232). Sacred slack engine.
+// "ce parte din prudenta mea este rezervata pentru lucruri pe care nici
+//  macar nu stiu inca sa le numesc?" Maintains permanent reserves across
+// 5 budget types (risk/latency/cognitive/optionality/trust) cu hard
+// floor enforcement. Activation gated by 4 canonical triggers — convenience
+// drawdown prohibited by enum CHECK. Distinct de §120 unknownsRegistry
+// (known unknowns), §148 ontologicalHumility (reality vs model),
+// blackSwanAbstention (reactive abstain, this = proactive permanent buffer).
+migrate('308_ml_unknown_unknown_reserves', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_unknown_unknown_reserves (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            resolved_env            TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            reserve_id              TEXT NOT NULL UNIQUE,
+            reserve_type            TEXT NOT NULL CHECK(reserve_type IN
+                                    ('risk_budget','latency_budget',
+                                     'cognitive_budget','optionality_budget',
+                                     'trust_budget')),
+            allocated_fraction      REAL NOT NULL CHECK(allocated_fraction > 0 AND allocated_fraction <= 1),
+            never_below_floor       REAL NOT NULL CHECK(never_below_floor >= 0 AND never_below_floor <= 1),
+            current_consumed        REAL NOT NULL DEFAULT 0
+                                    CHECK(current_consumed >= 0 AND current_consumed <= 1),
+            description             TEXT NOT NULL,
+            registered_at           INTEGER NOT NULL,
+            CHECK(never_below_floor <= allocated_fraction)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mluur_user_env_type
+            ON ml_unknown_unknown_reserves(user_id, resolved_env, reserve_type);
+    `);
+});
+
+migrate('309_ml_reserve_activations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_reserve_activations (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            activation_id                   TEXT NOT NULL UNIQUE,
+            reserve_id                      TEXT NOT NULL,
+            activation_trigger              TEXT NOT NULL CHECK(activation_trigger IN
+                                            ('unclassifiable_event','unexplained_residual',
+                                             'ontology_failure','precontradiction_extreme')),
+            pre_activation_reserve_score    REAL NOT NULL CHECK(pre_activation_reserve_score >= 0 AND pre_activation_reserve_score <= 1),
+            drawdown_amount                 REAL NOT NULL CHECK(drawdown_amount > 0 AND drawdown_amount <= 1),
+            post_activation_reserve_score   REAL NOT NULL CHECK(post_activation_reserve_score >= 0 AND post_activation_reserve_score <= 1),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL,
+            FOREIGN KEY(reserve_id)
+                REFERENCES ml_unknown_unknown_reserves(reserve_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlra_user_env_reserve_ts
+            ON ml_reserve_activations(user_id, resolved_env, reserve_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlra_trigger_ts
+            ON ml_reserve_activations(activation_trigger, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §154 OUTCOME-BLIND POLICY JUDGE 2026-05-17] _audit
 // Canonical PDF §154 (lines 5132-5178). Veil-of-result governance.
 // "a fost asta o decizie buna chiar daca n-as sti deloc cum s-a terminat?"
