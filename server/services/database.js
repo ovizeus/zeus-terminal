@@ -994,6 +994,73 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §157 JURISDICTION 2026-05-17] _meta
+// Canonical PDF §157 (lines 5270-5304). Stay-in-lane engine.
+// "este asta treaba mea sau trebuie sa ma opresc?" Maps authority across
+// 5 canonical domains (reasoning/risk/execution/governance/human_authority)
+// cu authority_levels (full/advisory/escalate_only/refuse). recordDecision
+// auto-classifies action + emits verdict (act/escalate/refuse). One
+// active row per (user × env × domain). Distinct de §156 identityKernel
+// (WHO am I), §149 purposeDriftDetector (goal substitution), §116 charter
+// (principles). §157 = WHAT ACTS am I authorized to perform.
+migrate('312_ml_jurisdiction_map', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_jurisdiction_map (
+            id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                    INTEGER NOT NULL,
+            resolved_env               TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            jurisdiction_id            TEXT NOT NULL UNIQUE,
+            domain                     TEXT NOT NULL CHECK(domain IN
+                                       ('reasoning','risk','execution',
+                                        'governance','human_authority')),
+            authority_level            TEXT NOT NULL CHECK(authority_level IN
+                                       ('full','advisory','escalate_only','refuse')),
+            allowed_actions_json       TEXT NOT NULL,
+            forbidden_actions_json     TEXT NOT NULL,
+            escalation_target          TEXT CHECK(escalation_target IS NULL OR escalation_target IN
+                                       ('operator','governance','human')),
+            description                TEXT NOT NULL,
+            active                     INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            registered_at              INTEGER NOT NULL,
+            deactivated_at             INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mljm_user_env_domain_active
+            ON ml_jurisdiction_map(user_id, resolved_env, domain, active);
+    `);
+});
+
+migrate('313_ml_jurisdiction_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_jurisdiction_decisions (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id                     TEXT NOT NULL UNIQUE,
+            jurisdiction_id                 TEXT NOT NULL,
+            proposed_action_label           TEXT NOT NULL,
+            action_domain                   TEXT NOT NULL CHECK(action_domain IN
+                                            ('reasoning','risk','execution',
+                                             'governance','human_authority')),
+            action_classification           TEXT NOT NULL CHECK(action_classification IN
+                                            ('in_allowed','in_forbidden','unknown')),
+            verdict                         TEXT NOT NULL CHECK(verdict IN
+                                            ('act','escalate','refuse')),
+            authority_level_at_decision     TEXT NOT NULL CHECK(authority_level_at_decision IN
+                                            ('full','advisory','escalate_only','refuse')),
+            escalation_target               TEXT CHECK(escalation_target IS NULL OR escalation_target IN
+                                            ('operator','governance','human')),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL,
+            FOREIGN KEY(jurisdiction_id)
+                REFERENCES ml_jurisdiction_map(jurisdiction_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mljd_user_env_verdict_ts
+            ON ml_jurisdiction_decisions(user_id, resolved_env, verdict, ts);
+        CREATE INDEX IF NOT EXISTS idx_mljd_jurisdiction
+            ON ml_jurisdiction_decisions(jurisdiction_id);
+    `);
+});
+
 // [OMEGA Wave 3 §156 IDENTITY KERNEL 2026-05-17] _meta
 // Canonical PDF §156 (lines 5234-5268). Who-am-I engine.
 // Explicit operational identity nucleus: role + purpose + world + 4
