@@ -994,6 +994,49 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §178 CAUSAL DIGNITY TEST 2026-05-17] R2_cognition
+// Canonical PDF §178 (lines 5792-5832). Does-explanation-respect-the-world.
+// "explicatia mea chiar respecta felul in care pare sa functioneze lumea
+//  sau doar exploateaza o scurtatura?" 5 dignity criteria (mechanical_
+// realism / inter_regime_stability / transferability / intervention_
+// supportability / causal_structure_compatibility), 3 classifications
+// (explanation_works / explanation_respects_mechanism / explanation_is_
+// exploitative_shortcut), 3 use_tiers (heuristic_only / local_application
+// / ontological_foundation). Predictive power alone insufficient.
+// Distinct de §17 attribution (post-trade), §24 ML architecture, §31
+// smart money detection, §69 OOD, §76 counterfactual baseline.
+migrate('330_ml_causal_dignity_evaluations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_causal_dignity_evaluations (
+            id                                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                           INTEGER NOT NULL,
+            resolved_env                      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            evaluation_id                     TEXT NOT NULL UNIQUE,
+            explanation_label                 TEXT NOT NULL,
+            predictive_accuracy               REAL NOT NULL CHECK(predictive_accuracy >= 0 AND predictive_accuracy <= 1),
+            mechanical_realism                REAL NOT NULL CHECK(mechanical_realism >= 0 AND mechanical_realism <= 1),
+            inter_regime_stability            REAL NOT NULL CHECK(inter_regime_stability >= 0 AND inter_regime_stability <= 1),
+            transferability                   REAL NOT NULL CHECK(transferability >= 0 AND transferability <= 1),
+            intervention_supportability       REAL NOT NULL CHECK(intervention_supportability >= 0 AND intervention_supportability <= 1),
+            causal_structure_compatibility    REAL NOT NULL CHECK(causal_structure_compatibility >= 0 AND causal_structure_compatibility <= 1),
+            composite_dignity_score           REAL NOT NULL CHECK(composite_dignity_score >= 0 AND composite_dignity_score <= 1),
+            classification                    TEXT NOT NULL CHECK(classification IN
+                                              ('explanation_works',
+                                               'explanation_respects_mechanism',
+                                               'explanation_is_exploitative_shortcut')),
+            allowed_use_tier                  TEXT NOT NULL CHECK(allowed_use_tier IN
+                                              ('heuristic_only','local_application',
+                                               'ontological_foundation')),
+            reasoning                         TEXT,
+            ts                                INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlcde_user_env_class_ts
+            ON ml_causal_dignity_evaluations(user_id, resolved_env, classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlcde_tier_ts
+            ON ml_causal_dignity_evaluations(allowed_use_tier, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §177 EPISTEMIC METABOLISM ENGINE 2026-05-17] R5A_learning
 // Canonical PDF §177 (lines 5730-5789). How-fast-can-i-digest-truth.
 // "cat de repede am voie sa transform ce tocmai am vazut in adevar
