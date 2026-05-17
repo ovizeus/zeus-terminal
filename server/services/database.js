@@ -994,6 +994,108 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §197-§201 cluster: exteriority/tragic/mourning/sacred/reverence 2026-05-17]
+migrate('339_ml_exteriority_validation_requirements', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_exteriority_validation_requirements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            requirement_id TEXT NOT NULL UNIQUE,
+            category_label TEXT NOT NULL,
+            validation_zone TEXT NOT NULL CHECK(validation_zone IN
+                ('self_knowledge_internal','self_knowledge_external_only','mixed_validation')),
+            external_validator_required INTEGER NOT NULL CHECK(external_validator_required IN (0,1)),
+            self_sufficiency_penalty REAL NOT NULL CHECK(self_sufficiency_penalty >= 0 AND self_sufficiency_penalty <= 1),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlevr_user_env_zone_ts
+            ON ml_exteriority_validation_requirements(user_id, resolved_env, validation_zone, ts);
+    `);
+});
+
+migrate('340_ml_tragic_choice_decisions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_tragic_choice_decisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            decision_id TEXT NOT NULL UNIQUE,
+            dilemma_label TEXT NOT NULL,
+            conflicting_values_json TEXT NOT NULL,
+            chosen_option TEXT NOT NULL,
+            sacrificed_values_json TEXT NOT NULL,
+            preserved_values_json TEXT NOT NULL,
+            least_betrayal_score REAL NOT NULL CHECK(least_betrayal_score >= 0 AND least_betrayal_score <= 1),
+            dignity_of_loss_acknowledged INTEGER NOT NULL CHECK(dignity_of_loss_acknowledged IN (0,1)),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mltcd_user_env_ts
+            ON ml_tragic_choice_decisions(user_id, resolved_env, ts);
+    `);
+});
+
+migrate('341_ml_ontological_mourning_records', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ontological_mourning_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            mourning_id TEXT NOT NULL UNIQUE,
+            framework_label TEXT NOT NULL,
+            framework_type TEXT NOT NULL CHECK(framework_type IN
+                ('concept','detector','causal_belief','strategy_archetype','worldview')),
+            reason_for_death TEXT NOT NULL CHECK(reason_for_death IN
+                ('crowding','drift','ontological_insufficiency','causal_collapse','local_only_truth_universalized')),
+            epitaph_text TEXT NOT NULL,
+            preserved_lesson_text TEXT,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlomr_user_env_type_ts
+            ON ml_ontological_mourning_records(user_id, resolved_env, framework_type, ts);
+    `);
+});
+
+migrate('342_ml_sacred_non_optimization_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_sacred_non_optimization_registry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            entry_id TEXT NOT NULL UNIQUE,
+            protected_quantity_label TEXT NOT NULL,
+            optimization_tier TEXT NOT NULL CHECK(optimization_tier IN
+                ('may_be_optimized','conditional_optimization_only','never_purely_instrumental')),
+            reasoning TEXT,
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            registered_at INTEGER NOT NULL,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsnor_user_env_tier_active
+            ON ml_sacred_non_optimization_registry(user_id, resolved_env, optimization_tier, active);
+    `);
+});
+
+migrate('343_ml_residual_reverence_assessments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_residual_reverence_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assessment_id TEXT NOT NULL UNIQUE,
+            residual_label TEXT NOT NULL,
+            reverence_score REAL NOT NULL CHECK(reverence_score >= 0 AND reverence_score <= 1),
+            entitlement_to_fit_detected INTEGER NOT NULL CHECK(entitlement_to_fit_detected IN (0,1)),
+            forcing_attempt_detected INTEGER NOT NULL CHECK(forcing_attempt_detected IN (0,1)),
+            recommended_posture TEXT NOT NULL CHECK(recommended_posture IN
+                ('continue','observe','retreat','reduce_pretension')),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrra_user_env_posture_ts
+            ON ml_residual_reverence_assessments(user_id, resolved_env, recommended_posture, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §190 ANOMALY SANCTUARY 2026-05-17] _meta
 // Canonical PDF §190 (lines 6154-6207). Irreducible residual preservation.
 // "ce fenomen ar trebui pastrat viu ca mister productiv in loc sa fie ucis
