@@ -10,6 +10,9 @@ const registry = require('../services/ml/_doctor/moduleRegistry');
 const analyzer = require('../services/ml/_doctor/analyzer');
 const severityClassifier = require('../services/ml/_doctor/severityClassifier');
 const falsePositiveAuditor = require('../services/ml/_doctor/falsePositiveAuditor');
+const quarantineManager = require('../services/ml/_doctor/quarantineManager');
+const shedManager = require('../services/ml/_doctor/shedManager');
+const overrideJournal = require('../services/ml/_doctor/overrideJournal');
 
 function _requireAdmin(req, res, next) {
     if (!req.user || req.user.role !== 'admin') {
@@ -123,6 +126,128 @@ router.get('/quota', _requireAdmin, (req, res) => {
     } catch (err) {
         res.status(500).json({ ok: false, error: err.message });
     }
+});
+
+// === D-5 routes ===
+
+// POST /api/omega/doctor/quarantine
+// Body: { moduleId, action, reason }
+router.post('/quarantine', _requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const { moduleId, action, reason } = body;
+    if (!moduleId || !action || !reason) {
+        return res.status(400).json({ ok: false, error: 'moduleId/action/reason required' });
+    }
+    try {
+        const r = quarantineManager.quarantine({
+            moduleId, action, reason,
+            operatorId: req.user.id, ts: Date.now()
+        });
+        res.status(200).json({ ok: true, ...r });
+    } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/omega/doctor/lift
+// Body: { moduleId, liftReason }
+router.post('/lift', _requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const { moduleId, liftReason } = body;
+    if (!moduleId || !liftReason) {
+        return res.status(400).json({ ok: false, error: 'moduleId/liftReason required' });
+    }
+    try {
+        const r = quarantineManager.lift({
+            moduleId, liftReason, ts: Date.now()
+        });
+        res.status(200).json({ ok: true, ...r });
+    } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/omega/doctor/quarantines
+// List of active quarantines.
+router.get('/quarantines', _requireAdmin, (req, res) => {
+    res.status(200).json({
+        ok: true,
+        active: quarantineManager.getActiveQuarantines(),
+        counts: quarantineManager.getActiveCountsByRole()
+    });
+});
+
+// GET /api/omega/doctor/shed-state
+router.get('/shed-state', _requireAdmin, (req, res) => {
+    res.status(200).json({
+        ok: true,
+        state: shedManager.getCurrentState(),
+        thresholds: shedManager.SHED_THRESHOLDS
+    });
+});
+
+// POST /api/omega/doctor/shed-state
+// Body: { state, reason }
+router.post('/shed-state', _requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const { state, reason } = body;
+    if (state == null || !reason) {
+        return res.status(400).json({ ok: false, error: 'state/reason required' });
+    }
+    try {
+        const r = shedManager.setState({ state, reason, ts: Date.now() });
+        res.status(200).json({ ok: true, ...r });
+    } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/omega/doctor/override
+// Body: { moduleId, doctorRecommendedAction, operatorForcedAction, operatorReason }
+router.post('/override', _requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const { moduleId, doctorRecommendedAction, operatorForcedAction, operatorReason } = body;
+    if (!moduleId || !doctorRecommendedAction || !operatorForcedAction || !operatorReason) {
+        return res.status(400).json({ ok: false,
+            error: 'moduleId/doctorRecommendedAction/operatorForcedAction/operatorReason required' });
+    }
+    try {
+        const r = overrideJournal.recordOverride({
+            moduleId, doctorRecommendedAction, operatorForcedAction,
+            operatorReason, operatorId: req.user.id, ts: Date.now()
+        });
+        res.status(200).json({ ok: true, ...r });
+    } catch (err) {
+        res.status(400).json({ ok: false, error: err.message });
+    }
+});
+
+// POST /api/omega/doctor/override-verdict
+// Body: { id, outcomeVerdict }
+router.post('/override-verdict', _requireAdmin, (req, res) => {
+    const body = req.body || {};
+    const { id, outcomeVerdict } = body;
+    if (id == null || !outcomeVerdict) {
+        return res.status(400).json({ ok: false, error: 'id/outcomeVerdict required' });
+    }
+    try {
+        const r = overrideJournal.setOutcomeVerdict({ id, outcomeVerdict });
+        res.status(200).json({ ok: true, ...r });
+    } catch (err) {
+        const status = err.message.includes('not found') ? 404 : 400;
+        res.status(status).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/omega/doctor/overrides
+router.get('/overrides', _requireAdmin, (req, res) => {
+    let limit = parseInt(req.query.limit, 10);
+    if (isNaN(limit) || limit <= 0) limit = 50;
+    if (limit > 500) limit = 500;
+    res.status(200).json({
+        ok: true,
+        overrides: overrideJournal.listRecentOverrides({ limit })
+    });
 });
 
 module.exports = router;

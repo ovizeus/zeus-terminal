@@ -24,6 +24,8 @@ const eventBus = require('./eventBus');
 const severityClassifier = require('./severityClassifier');
 const trustScorer = require('./trustScorer');
 const falsePositiveAuditor = require('./falsePositiveAuditor');
+const quarantineManager = require('./quarantineManager');
+const shedManager = require('./shedManager');
 
 const COGNITIVE_STATES = Object.freeze([
     'HEALTHY', 'DEGRADED', 'COMPROMISED', 'SAFE_MODE', 'DEAD'
@@ -113,11 +115,10 @@ function analyze(params) {
     const activeP0 = _countActive('P0', nowTs - 86400_000);
     const activeP1 = _countActive('P1', nowTs - 3600_000);
 
-    // D-5 will provide real quarantine counts; for D-3 we default to 0
-    // (no quarantine manager wired yet). When D-5 ships, expose a query
-    // via quarantineManager.getActiveCountsByRole() and consume here.
-    const hotPathCriticalQuarantined = 0;
-    const hotPathAssistQuarantined = 0;
+    // D-5 wired: real quarantine counts from quarantineManager.
+    const qCounts = quarantineManager.getActiveCountsByRole();
+    const hotPathCriticalQuarantined = qCounts.hot_path_critical;
+    const hotPathAssistQuarantined = qCounts.hot_path_assist;
 
     // Doctor self-stale: when telemetryCollector hasn't recorded a Doctor
     // heartbeat in >30s. For D-3 we assume Doctor itself running (false).
@@ -160,7 +161,9 @@ function analyze(params) {
         hotPathCriticalQuarantined, hotPathAssistQuarantined,
         quotaStatus: severityClassifier.getQuotaStatus({ nowTs }),
         lowTrustModules: trustScorer.listLowTrustModules(),
-        downweightedModules: falsePositiveAuditor.listDownweightedModules({ nowTs })
+        downweightedModules: falsePositiveAuditor.listDownweightedModules({ nowTs }),
+        shedState: shedManager.getCurrentState(),
+        activeQuarantines: quarantineManager.getActiveQuarantines()
     };
 }
 
