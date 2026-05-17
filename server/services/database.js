@@ -994,6 +994,35 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER 2026-05-17] _meta
+// Canonical PDF §§162-241 contain ~40 bullet-only principles (single-line
+// aforisme fără secțiuni obligatoriu/scop). Per operator strategy 2026-05-17:
+// consolidate în UN SINGUR register table — NU 40 module separate (asta ar
+// fi inventare structurală). Catalog-ul cu metadata canonical PDF este în
+// modul; tabela ține per-(user × env) opt-in active flag. Operator poate
+// deprecate selectiv. Seed inițial cu §162-§166 (active_inference_cluster);
+// va fi extins la §172-176, §182-186, §192-196, §202-206, §212-216,
+// §222-226, §232-236 pe parcurs.
+migrate('322_ml_philosophical_principles_register', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_philosophical_principles_register (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id           INTEGER NOT NULL,
+            resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            principle_number  INTEGER NOT NULL CHECK(principle_number >= 162 AND principle_number <= 241),
+            title             TEXT NOT NULL,
+            canonical_text    TEXT NOT NULL,
+            cluster           TEXT NOT NULL,
+            active            INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            registered_at     INTEGER NOT NULL,
+            deprecated_at     INTEGER,
+            UNIQUE(user_id, resolved_env, principle_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlppr_user_env_active_cluster
+            ON ml_philosophical_principles_register(user_id, resolved_env, active, cluster);
+    `);
+});
+
 // [OMEGA Wave 3 §161 ALIVENESS SIMULATION LAYER 2026-05-17] _meta
 // Canonical PDF §161 (lines 5403-5455). Operational vitality index.
 // Composite vitality from 8 canonical components (self_model_health,
