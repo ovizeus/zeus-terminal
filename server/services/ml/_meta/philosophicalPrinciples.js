@@ -60,17 +60,49 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'Market as Language — piața comunică, nu doar fluctuează',
         canonicalText: 'Piață ca sistem de comunicare între participanți — limbaj cu acte de vorbire intenționate. Sweep liquidity = "prețul acceptat aici a dispărut"; reclaim = "participanții care au vândut s-au înșelat"; funding extrem = declarație colectivă de poziționare. Capacitate de interpretare pragmatică: nu doar "ce s-a întâmplat" ci "ce s-a intenționat, ce s-a comunicat, ce răspuns e așteptat". Absența unui răspuns așteptat (§152 negative evidence) = tăcerea ca formă de comunicare.',
         cluster: 'active_inference_cluster'
+    }),
+    // §172-§176: reflexive_meta_cluster
+    // Canonical PDF lines 5719-5728
+    172: Object.freeze({
+        principleNumber: 172,
+        title: 'Reflexivity engine — modelul tău schimbă realitatea pe care o modelează',
+        canonicalText: 'Piața e reflexivă (Soros): credințele participanților o schimbă, iar piața schimbată schimbă credințele. Un bot suficient de activ NU e observator — e participant care modifică piața prin propriile acțiuni, care modifică modelul, care modifică acțiunile. §74 interventional reasoning calculează efect single-order; §62 adversarial market awareness ascunde amprenta — dar nicio combinație nu modelează BUCLA COMPLETĂ. Dacă botul cumpără consistent după sweep-uri BTC, alții vor anticipa, vor front-runa, schimbând caracterul evenimentului, invalidând modelul. Reflexivity engine modelează cum acțiunile botului modifică statistica pe care e antrenat botul + cum trebuie ajustate modelele pentru a corecta distorsiunea pe care prezența lui o introduce în date.',
+        cluster: 'reflexive_meta_cluster'
+    }),
+    173: Object.freeze({
+        principleNumber: 173,
+        title: 'Axiological audit — de ce valorile din utility function merită să fie acolo',
+        canonicalText: 'Spec-ul verifică dacă sistemul URMĂREȘTE valorile declarate (§59 utility, §149 purpose drift, §116 charter, §104 integrity). Niciuna nu întreabă dacă valorile DECLARATE sunt cele corecte. Axiological audit examinează periodic fundamentarea valorilor înseși: de ce "alpha sustenabil" și nu "capital maxim rapid"? De ce "integritate" > "performanță"? De ce "explicabilitate" e valoare și nu cost? NU pentru a răsturna — pentru a verifica că sunt alese deliberat, nu moștenite din inerție sau copiere nechestionată. Raport periodic: "iată valorile, iată DE CE există fiecare, ce s-ar pierde dacă ar dispărea, ce ar câștiga un adversar care le-ar eroda".',
+        cluster: 'reflexive_meta_cluster'
+    }),
+    174: Object.freeze({
+        principleNumber: 174,
+        title: 'Gestalt recognition engine — întregul care apare brusc, dincolo de suma părților',
+        canonicalText: 'Spec-ul agregă componente: meta-controller, narrative coherence, competing hypotheses. Toate procesează părți. Dar trader experimentat are uneori experiență calitativ diferită: NU "am 6 semnale verzi 2 roșii", ci "văd brusc întregul tabloul și e clar". Gestalt = recunoașterea HOLISTICĂ a unui pattern complet — toate elementele se cristalizează simultan într-o imagine care nu mai poate fi redusă la componente. Detector de coerență gestaltică paralel cu scoring-ul analitic — NU înlocuiește, detectează momentele când toate "se prind" cu claritate emergentă. Gestalt înalt + meta înalt = A+. Gestalt scăzut cu meta bun = ceva nu "se leagă" → informație.',
+        cluster: 'reflexive_meta_cluster'
+    }),
+    175: Object.freeze({
+        principleNumber: 175,
+        title: 'Strategic sequence coherence — șirul deciziilor în timp trebuie să aibă sens ca strategie',
+        canonicalText: 'Spec-ul evaluează decizii individual: entry quality, attribution, policy regret, outcome-blind judge. §139 temporal commitment ledger monitorizează angajamentele. §158 autobiographical continuity urmărește evoluția. Dar niciuna nu evaluează dacă seria deciziilor din ultima săptămână/lună formează o STRATEGIE COERENTĂ ca întreg. Decizii individual bune pot constitui strategie proastă: 3 long-uri trend + 2 short-uri contra-trend + 1 scalp chop + 2 altcoins fără legătură — fiecare justificat local, împreună fără direcție/tematică/coerență. Strategic sequence coherence examinează periodic pattern-ul deciziilor ca întreg: există logică de ansamblu? Narativă strategică sau colecție de oportunisme? Diferit de policy regret (decizie vs optim) — aceasta compară șirul cu un agent cu strategie deliberată pe același orizont.',
+        cluster: 'reflexive_meta_cluster'
+    }),
+    176: Object.freeze({
+        principleNumber: 176,
+        title: 'Apophenia guard — separarea pattern-urilor reale de cele imaginate în zgomot',
+        canonicalText: 'Spec-ul combate erorile semnalelor REALE (wash trading, false consensus, evidence sufficiency, invariance, Goodhart). Dar există eroare opusă §69 OOD: NU "n-am mai văzut asta", ci "văd pattern unde e doar zgomot". Apofenia = tendința creierelor inteligente (umane sau artificiale) de a detecta structuri semnificative în date aleatorii. Un model suficient de complex va găsi pattern-uri în ORICE date suficient de mari, inclusiv zgomot pur. Backtest-uri frumoase pe date random — această origine. Apophenia guard implementează test formal al nulei pentru fiecare pattern nou: pareidolie computațională sau real? Permutation tests + surrogate data + phase-randomized surrogates. Pattern care pare real pe date originale dar dispare pe surrogate = apofenie. Cu cât modelul e mai complex și datele mai multe, riscul "a vedea" pattern-uri inexistente CREȘTE, nu scade.',
+        cluster: 'reflexive_meta_cluster'
     })
-    // FUTURE: §172-176, §182-186, §192-196, §202-206, §212-216, §222-226, §232-236
+    // FUTURE: §182-186, §192-196, §202-206, §212-216, §222-226, §232-236
     // will be added in subsequent batches as the implementation traverses the PDF.
 });
 
 const CLUSTERS = Object.freeze([
-    'active_inference_cluster'
-    // Future: 'meta_epistemic_cluster' (§172-176), 'transcendental_cluster'
-    // (§182-186), 'incompleteness_cluster' (§192-196), 'kairos_cluster'
-    // (§202-206), 'reflexive_cluster' (§212-216), 'constitutive_cluster'
-    // (§222-226), 'limit_cluster' (§232-236)
+    'active_inference_cluster',
+    'reflexive_meta_cluster'
+    // Future: 'transcendental_cluster' (§182-186), 'incompleteness_cluster'
+    // (§192-196), 'kairos_cluster' (§202-206), 'reflexive_cluster_temporal'
+    // (§212-216), 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);

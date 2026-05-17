@@ -116,6 +116,74 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
         });
     });
 
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 2 §172-§176 reflexive_meta_cluster)', () => {
+        test('catalog has §172 Reflexivity entry', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[172]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[172].title).toMatch(/Reflexivity/i);
+        });
+        test('catalog has §173 Axiological entry', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[173]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[173].title).toMatch(/Axiological/i);
+        });
+        test('catalog has §174 Gestalt entry', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[174]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[174].title).toMatch(/Gestalt/i);
+        });
+        test('catalog has §175 Strategic sequence entry', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[175]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[175].title).toMatch(/Strategic sequence/i);
+        });
+        test('catalog has §176 Apophenia entry', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[176]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[176].title).toMatch(/Apophenia/i);
+        });
+        test('all §172-§176 share cluster reflexive_meta_cluster', () => {
+            for (const n of [172, 173, 174, 175, 176]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('reflexive_meta_cluster');
+            }
+        });
+        test('all §172-§176 entries have canonicalText non-empty', () => {
+            for (const n of [172, 173, 174, 175, 176]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].canonicalText.length).toBeGreaterThan(50);
+            }
+        });
+        test('CLUSTERS contains reflexive_meta_cluster (batch 2)', () => {
+            expect(M.CLUSTERS).toContain('reflexive_meta_cluster');
+        });
+        test('listClusterCatalog returns 5 for reflexive_meta_cluster', () => {
+            const r = M.listClusterCatalog({
+                cluster: 'reflexive_meta_cluster'
+            });
+            expect(r.length).toBe(5);
+            const numbers = r.map(p => p.principleNumber).sort();
+            expect(numbers).toEqual([172, 173, 174, 175, 176]);
+        });
+        test('countCatalogEntries returns 10 (5 batch1 + 5 batch2)', () => {
+            expect(M.countCatalogEntries()).toBe(10);
+        });
+        test('registerPrinciple works for §172', () => {
+            const r = M.registerPrinciple({
+                userId: UID_REG, resolvedEnv: ENV,
+                principleNumber: 172, ts: _now()
+            });
+            expect(r.registered).toBe(true);
+            expect(r.cluster).toBe('reflexive_meta_cluster');
+        });
+        test('listByCluster works for reflexive_meta_cluster', () => {
+            for (const n of [172, 173, 174]) {
+                M.registerPrinciple({
+                    userId: UID_GET, resolvedEnv: ENV,
+                    principleNumber: n, ts: _now()
+                });
+            }
+            const r = M.listByCluster({
+                userId: UID_GET, resolvedEnv: ENV,
+                cluster: 'reflexive_meta_cluster'
+            });
+            expect(r.length).toBe(3);
+        });
+    });
+
     describe('getPrincipleFromCatalog (pure)', () => {
         test('returns metadata for known principle', () => {
             const r = M.getPrincipleFromCatalog({ principleNumber: 162 });
