@@ -122,6 +122,7 @@ export function OmegaPage() {
             </div>
 
             <DoctorZone />
+            <Ring5Zone />
         </div>
     )
 }
@@ -132,6 +133,15 @@ function DoctorZone() {
     return (
         <div className="omega-page-doctor-zone">
             <DoctorPanel />
+        </div>
+    )
+}
+
+function Ring5Zone() {
+    const role = useAuthStore((s) => s.role)
+    if (role !== 'admin') return null
+    return (
+        <div className="omega-page-ring5-zone">
             <Ring5Panel />
         </div>
     )
