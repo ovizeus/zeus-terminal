@@ -994,6 +994,42 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §188 NEGATIVE CAPABILITY RESERVOIR 2026-05-17] _meta
+// Canonical PDF §188 (lines 6042-6090). Structured ambiguity holding.
+// "pot sa traiesc lucid cu faptul ca situatia nu este inca inteligibila?"
+// 3 canonical classifications (healthy_tolerated_ambiguity / anxious /
+// artificial_closure_avoidance), 4 handling modes (unresolved_thesis /
+// unresolved_but_stable / wait / observer). Per rule 6086: ambiguity prea
+// mult fără plan → escalate. Distinct de §125 epistemic tension (intra
+// stress), §148 humility (residual), §155 unknown-unknown reserve.
+migrate('335_ml_negative_capability_states', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_negative_capability_states (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            state_id                        TEXT NOT NULL UNIQUE,
+            thesis_label                    TEXT NOT NULL,
+            ambiguity_classification        TEXT NOT NULL CHECK(ambiguity_classification IN
+                                            ('healthy_tolerated_ambiguity',
+                                             'anxious_ambiguity',
+                                             'artificial_closure_avoidance')),
+            handling_mode                   TEXT NOT NULL CHECK(handling_mode IN
+                                            ('unresolved_thesis','unresolved_but_stable',
+                                             'wait','observer')),
+            negative_capability_score       REAL NOT NULL CHECK(negative_capability_score >= 0 AND negative_capability_score <= 1),
+            ambiguity_duration_ms           INTEGER NOT NULL CHECK(ambiguity_duration_ms >= 0),
+            escalation_required             INTEGER NOT NULL CHECK(escalation_required IN (0,1)),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlncs_user_env_class_ts
+            ON ml_negative_capability_states(user_id, resolved_env, ambiguity_classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlncs_escal_ts
+            ON ml_negative_capability_states(escalation_required, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §187 REALITY CONTACT RATIO 2026-05-17] R3A_safety
 // Canonical PDF §187 (lines 5989-6039). Live-world grounding covenant.
 // "cat din aceasta decizie vine din realitatea de acum si cat vine din ce
