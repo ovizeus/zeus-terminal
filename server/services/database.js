@@ -994,6 +994,44 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §167 AGENCY ATTRIBUTION LEDGER 2026-05-17] R2_cognition
+// Canonical PDF §167 (lines 5457-5516). Who-caused-what engine.
+// "ce s-a schimbat, si mai ales cine a produs probabil schimbarea?"
+// Posterior distribution over 5 canonical agency categories (self_caused
+// / market_endogenous / adversary_induced / macro_exogenous /
+// venue_artifact). Ambiguous attribution → reduced learning_weight.
+// Plasare R2_cognition (next to beliefPropagation, structuralCausalModel,
+// interventionalReasoning, narrativeCoherence — integrates cu acestea
+// per PDF rule 5493-5498).
+migrate('323_ml_agency_attribution_records', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_agency_attribution_records (
+            id                                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                             INTEGER NOT NULL,
+            resolved_env                        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            record_id                           TEXT NOT NULL UNIQUE,
+            state_change_label                  TEXT NOT NULL,
+            state_change_magnitude              REAL NOT NULL CHECK(state_change_magnitude >= 0 AND state_change_magnitude <= 1),
+            self_caused_probability             REAL NOT NULL CHECK(self_caused_probability >= 0 AND self_caused_probability <= 1),
+            market_endogenous_probability       REAL NOT NULL CHECK(market_endogenous_probability >= 0 AND market_endogenous_probability <= 1),
+            adversary_induced_probability       REAL NOT NULL CHECK(adversary_induced_probability >= 0 AND adversary_induced_probability <= 1),
+            macro_exogenous_probability         REAL NOT NULL CHECK(macro_exogenous_probability >= 0 AND macro_exogenous_probability <= 1),
+            venue_artifact_probability          REAL NOT NULL CHECK(venue_artifact_probability >= 0 AND venue_artifact_probability <= 1),
+            dominant_attribution                TEXT NOT NULL CHECK(dominant_attribution IN
+                                                ('self_caused','market_endogenous','adversary_induced',
+                                                 'macro_exogenous','venue_artifact','ambiguous')),
+            confidence_score                    REAL NOT NULL CHECK(confidence_score >= 0 AND confidence_score <= 1),
+            learning_weight                     REAL NOT NULL CHECK(learning_weight >= 0 AND learning_weight <= 1),
+            reasoning                           TEXT,
+            ts                                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlaar_user_env_attr_ts
+            ON ml_agency_attribution_records(user_id, resolved_env, dominant_attribution, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlaar_confidence
+            ON ml_agency_attribution_records(confidence_score, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER 2026-05-17] _meta
 // Canonical PDF §§162-241 contain ~40 bullet-only principles (single-line
 // aforisme fără secțiuni obligatoriu/scop). Per operator strategy 2026-05-17:
