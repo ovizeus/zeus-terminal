@@ -158,8 +158,8 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             const numbers = r.map(p => p.principleNumber).sort();
             expect(numbers).toEqual([172, 173, 174, 175, 176]);
         });
-        test('countCatalogEntries returns 20 (5 batch1 + 5 batch2 + 5 batch3 + 5 batch4)', () => {
-            expect(M.countCatalogEntries()).toBe(20);
+        test('countCatalogEntries returns 25 (5 batch1 + 5 batch2 + 5 batch3 + 5 batch4 + 5 batch5)', () => {
+            expect(M.countCatalogEntries()).toBe(25);
         });
         test('registerPrinciple works for §172', () => {
             const r = M.registerPrinciple({
@@ -257,6 +257,36 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
         });
         test('listClusterCatalog returns 5 for incompleteness_cluster', () => {
             const r = M.listClusterCatalog({ cluster: 'incompleteness_cluster' });
+            expect(r.length).toBe(5);
+        });
+    });
+
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 5 §202-§206 kairos_cluster)', () => {
+        test('§202 Kairos', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[202].title).toMatch(/Kairos vs Chronos/i);
+        });
+        test('§203 Asymmetric entry/exit', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[203].title).toMatch(/Asymmetric ontology/i);
+        });
+        test('§204 Weight of having been right', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[204].title).toMatch(/weight of having been right/i);
+        });
+        test('§205 Market as Other', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[205].title).toMatch(/market as Other/i);
+        });
+        test('§206 Inaugural trade problem', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[206].title).toMatch(/inaugural trade/i);
+        });
+        test('all §202-§206 share kairos_cluster', () => {
+            for (const n of [202, 203, 204, 205, 206]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('kairos_cluster');
+            }
+        });
+        test('CLUSTERS contains kairos_cluster', () => {
+            expect(M.CLUSTERS).toContain('kairos_cluster');
+        });
+        test('listClusterCatalog returns 5 for kairos_cluster', () => {
+            const r = M.listClusterCatalog({ cluster: 'kairos_cluster' });
             expect(r.length).toBe(5);
         });
     });

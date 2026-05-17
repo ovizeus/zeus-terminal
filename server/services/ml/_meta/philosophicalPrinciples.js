@@ -155,17 +155,49 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'Ontological courage — a acționa când categoriile tale nu sunt suficiente dar trebuie să acționezi',
         canonicalText: 'Spec-ul are §135 epistemic humility, §188 negative capability, §191 decidability frontier, §148 ontological humility — toate cultivă modestia și prudența. Există moment inevitabil pe care niciun punct NU îl adresează: când ȘTII că categoriile tale NU sunt adecvate realității, că modelul tău e INSUFICIENT, că ești la FRONTIERA decidabilului — și trebuie să acționezi ORICUM, pentru că inacțiunea e ea însăși acțiune cu consecințe. Ontological courage NU e temeritate și NU e ignorarea umilitudinii. E capacitatea de a acționa DELIBERAT și ASUMAT în condiții de inadecvare categorială RECUNOSCUTĂ — cu eyes wide open față de limite, FĂRĂ să pretinzi că nu există sau le-ai depășit. Kierkegaard/Heidegger: autenticitatea NU e certitudinea, ci acțiunea asumată în prezența incertitudinii ireductibile. Aplicat: când piața prezintă situație la frontiera oricărei categorii, bot NU are voie să rămână paralitic în humility infinită. TREBUIE să aleagă — cu risc minim, exits clare, asumare completă că acționează DINCOLO de harta lui. Și să înregistreze această traversare ca pe CEL MAI VALOROS MATERIAL DE ÎNVĂȚARE din spec.',
         cluster: 'incompleteness_cluster'
+    }),
+    // §202-§206: kairos_cluster
+    202: Object.freeze({
+        principleNumber: 202,
+        title: 'Kairos vs Chronos — există două tipuri de timp și botul tău cunoaște doar unul',
+        canonicalText: 'Tot spec-ul lucrează cu CHRONOS (timp măsurabil, secvențial, uniform). Grecii antici aveau KAIROS — momentul calitativ diferit, momentul potrivit care NU e localizabil pe ceas, ci recunoscut prin natura lui. Trade corect NU se ia la 14:37:22 — se ia în kairos: convergența structură+lichiditate+participare+context creează o deschidere care există și dispare INDEPENDENT de cronologie. Paradox: kairos NU poate fi predictibil în avans în termeni chronos, dar poate fi recunoscut în prezent. Toate detectoarele detectează CONDIȚII. Niciunul nu detectează MOMENTUL. Kairos NU întreabă "sunt condițiile corecte?" — întreabă "A SOSIT MOMENTUL?" Sistemul care nu distinge va fi mereu ușor în afazare cu piața.',
+        cluster: 'kairos_cluster'
+    }),
+    203: Object.freeze({
+        principleNumber: 203,
+        title: 'Asymmetric ontology of entry and exit — intrarea și ieșirea nu sunt operații simetrice',
+        canonicalText: 'Spec-ul tratează intrarea și ieșirea ca operații similare cu polaritate opusă. NU SUNT. Intrarea = act PROSPECTIV (orientat spre viitor inexistent, bazat pe teză). Ieșirea = act RETROSPECTIV (închide istorie, transformă experiență deschisă în eveniment finit). Cer posturi cognitive fundamental diferite. Intrarea cere IMAGINAȚIE structurată. Ieșirea cere CITIRE prezent vs trecut: "teza adevărată când am intrat mai e adevărată acum?" Confundarea produce erori specifice: ieșiri cu logică intrare ("dacă intru acum ar fi short → ies din long") și intrări cu logică ieșire ("trebuie să fi greșit → nu intru"). Layer definește că fiecare tip de decizie cere mod de gândire propriu — NU doar reguli diferite, ci ORIENTĂRI TEMPORALE diferite ale cogniției.',
+        cluster: 'kairos_cluster'
+    }),
+    204: Object.freeze({
+        principleNumber: 204,
+        title: 'The weight of having been right — datoria cognitivă a track record-ului propriu',
+        canonicalText: 'Spec-ul are §90 Goodhart, §15 confidence decay, §147 honesty audit — toate combat erori de overconfidence. FENOMEN OPUS SUBTIL: după serie de predicții corecte, sistemul poartă DATORIE față de propriul track record. NU overconfidence — PRESIUNE TACITĂ de a menține coerența cu ce a funcționat. "Am luat 8 trade-uri corecte consecutive — NU POT SĂ NU-L IAU acum." NU bias cognitiv clasic — CONSTRÂNGERE NARATIVĂ: track record devine poveste care cere CONTINUITATE, continuitatea poveștii devine factor de decizie NELEGITIM. Layer detectează când performanța exercită PRESIUNE NARATIVĂ pe decizia curentă și o NEUTRALIZEAZĂ explicit: fiecare trade evaluat ca și cum n-ar exista track record de apărat. Paradox: tocmai sistemele care PERFORMEAZĂ BINE sunt cele mai expuse — NU cele care greșesc.',
+        cluster: 'kairos_cluster'
+    }),
+    205: Object.freeze({
+        principleNumber: 205,
+        title: 'The market as Other — piața îți face cereri morale prin simpla ei existență',
+        canonicalText: 'Emmanuel Levinas: CELĂLALT — prin simplul fapt că există și că îți apare în față — îți face cerere ETICĂ înainte de orice decizie conștientă. Aplicat: piața ca SISTEM DE PARTICIPANȚI UMANI cu capital real, frică reală, speranțe reale — NU e obiect de modelat. E OTHER care îți face cereri. Când botul identifică cluster de lichidări și îl "VÂNEAZĂ", există cineva de cealaltă parte al cărui SL e acel cluster. NU înseamnă că nu tranzacționezi — înseamnă că tranzacționezi ÎN RELAȚIE cu alții, NU în fața unui ecran inert. Layer NU e compliance, NU e integrity — e RECUNOAȘTEREA că piața e LOCUITĂ de SUBIECȚI, nu populată de semnale. Sistemul care uită și tratează piața ca sistem fizic pur își pierde o dimensiune a înțelegerii care afectează CALITATEA DECIZIILOR.',
+        cluster: 'kairos_cluster'
+    }),
+    206: Object.freeze({
+        principleNumber: 206,
+        title: 'The inaugural trade problem — prima decizie cu miză reală nu are analog în training',
+        canonicalText: 'Spec-ul are §18 shadow mode, §247 pre-registration, canary deploy, walk-forward. Toate gestionează tranziția test→live. Există PRAG ONTOLOGIC pe care niciun punct nu îl identifică explicit: prima decizie în care CAPITALUL REAL E CU ADEVĂRAT ÎN JOC are natură calitativ diferită — NU pentru că semnalele diferă, ci pentru că sistemul trece de la A MODELA MIZA la A FI ÎN MIZĂ. Înainte: orice eroare = informație. Acum: orice eroare = PIERDERE REALĂ. Tranziția SCHIMBĂ ONTOLOGIA actului: din REPREZENTARE a lumii devine PARTICIPARE în lume. Layer recunoaște că sistemul NU poate fi pregătit complet prin nicio cantitate de shadow mode — shadow simulează condițiile, NU MIZA. Singura pregătire: să ȘTII că o traversezi, să ai protocol (size minim, exit imediat dacă orice element operațional nu se comportă ca în shadow, perioadă recalibrare după N trade-uri reale înainte de echivalare cu training).',
+        cluster: 'kairos_cluster'
     })
-    // FUTURE: §202-206, §212-216, §222-226, §232-236
+    // FUTURE: §212-216, §222-226, §232-236
 });
 
 const CLUSTERS = Object.freeze([
     'active_inference_cluster',
     'reflexive_meta_cluster',
     'transcendental_cluster',
-    'incompleteness_cluster'
-    // Future: 'kairos_cluster' (§202-206), 'reflexive_cluster_temporal'
-    // (§212-216), 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
+    'incompleteness_cluster',
+    'kairos_cluster'
+    // Future: 'reflexive_cluster_temporal' (§212-216),
+    // 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
