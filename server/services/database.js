@@ -994,6 +994,113 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §227-§231 cluster: legibility/enactive/fasting/proportion/preconceptual 2026-05-17]
+migrate('354_ml_legibility_tax_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_legibility_tax_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            inner_fidelity_score REAL NOT NULL CHECK(inner_fidelity_score >= 0 AND inner_fidelity_score <= 1),
+            outer_fidelity_score REAL NOT NULL CHECK(outer_fidelity_score >= 0 AND outer_fidelity_score <= 1),
+            legibility_tax_score REAL NOT NULL CHECK(legibility_tax_score >= 0 AND legibility_tax_score <= 1),
+            classification TEXT NOT NULL CHECK(classification IN
+                ('truth_preserving_explanation','explanation_shaped_behavior',
+                 'audience_conditioned_cognition','performative_explainability_drift')),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mllta_user_env_class_ts
+            ON ml_legibility_tax_audits(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('355_ml_enactive_truth_residue', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_enactive_truth_residue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            residue_id TEXT NOT NULL UNIQUE,
+            truth_class TEXT NOT NULL CHECK(truth_class IN
+                ('observational','inferential','simulated','enactive')),
+            commitment_threshold_crossed INTEGER NOT NULL CHECK(commitment_threshold_crossed IN (0,1)),
+            unobtainable_without_action INTEGER NOT NULL CHECK(unobtainable_without_action IN (0,1)),
+            weight_multiplier REAL NOT NULL CHECK(weight_multiplier >= 1 AND weight_multiplier <= 5),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mletr_user_env_class_ts
+            ON ml_enactive_truth_residue(user_id, resolved_env, truth_class, ts);
+    `);
+});
+
+migrate('356_ml_epistemic_fasting_windows', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_epistemic_fasting_windows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            window_id TEXT NOT NULL UNIQUE,
+            source_label TEXT NOT NULL,
+            info_class TEXT NOT NULL CHECK(info_class IN
+                ('beneficial','neutral','contaminating','premature')),
+            duration_ms INTEGER NOT NULL CHECK(duration_ms >= 0),
+            purpose TEXT NOT NULL,
+            exit_condition TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            started_at INTEGER NOT NULL,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlefw_user_env_active_ts
+            ON ml_epistemic_fasting_windows(user_id, resolved_env, active, ts);
+    `);
+});
+
+migrate('357_ml_proportion_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_proportion_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            stake_score REAL NOT NULL CHECK(stake_score >= 0 AND stake_score <= 1),
+            irreversibility_score REAL NOT NULL CHECK(irreversibility_score >= 0 AND irreversibility_score <= 1),
+            cognitive_cost_score REAL NOT NULL CHECK(cognitive_cost_score >= 0 AND cognitive_cost_score <= 1),
+            proportionality_score REAL NOT NULL CHECK(proportionality_score >= 0 AND proportionality_score <= 1),
+            classification TEXT NOT NULL CHECK(classification IN
+                ('proportionate','minor_over_investigation','theatrical_depth',
+                 'philosophical_inflation_of_trivia')),
+            simplification_mandate INTEGER NOT NULL CHECK(simplification_mandate IN (0,1)),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpa_user_env_class_ts
+            ON ml_proportion_audits(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('358_ml_preconceptual_trace_vault', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_preconceptual_trace_vault (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            trace_id TEXT NOT NULL UNIQUE,
+            trace_type TEXT NOT NULL CHECK(trace_type IN
+                ('texture_fragment','timing_irregularity','pre_pattern_discomfort',
+                 'unclassified_perceptual_signature','something_was_off')),
+            naming_status TEXT NOT NULL CHECK(naming_status IN
+                ('already_nameable','preserved_as_raw','resisting_concept')),
+            raw_payload_json TEXT NOT NULL,
+            persistence_score REAL NOT NULL CHECK(persistence_score >= 0 AND persistence_score <= 1),
+            forced_label_attempted INTEGER NOT NULL DEFAULT 0 CHECK(forced_label_attempted IN (0,1)),
+            captured_at INTEGER NOT NULL,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlptv_user_env_status_ts
+            ON ml_preconceptual_trace_vault(user_id, resolved_env, naming_status, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §217-§221 cluster: framing/recursion/abstraction/self-absence/incompletion 2026-05-17]
 migrate('349_ml_unchosen_question_audits', () => {
     db.exec(`
