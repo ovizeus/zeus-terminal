@@ -994,6 +994,67 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §168 DEONTIC LOOPHOLE DETECTOR 2026-05-17] _meta
+// Canonical PDF §168 (lines 5519-5565). Spirit-of-the-rule guard.
+// "respect regula in fond sau doar ma strecor printre cuvintele ei?"
+// Two-table: rule_registry cu litera+spirit + enforcement_action, plus
+// loophole_detections cu auto circumvention_score = max(0, letter -
+// spirit) + auto enforcement_taken (allowed/warned/penalized/blocked).
+// 5 canonical loophole patterns + custom. Distinct de §116 charter
+// (immutable principles), §149 purpose drift (scope substitution),
+// §147 honesty audit (reason rationalization).
+migrate('324_ml_deontic_rule_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_deontic_rule_registry (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id               INTEGER NOT NULL,
+            resolved_env          TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            rule_id               TEXT NOT NULL UNIQUE,
+            rule_label            TEXT NOT NULL,
+            letter_text           TEXT NOT NULL,
+            spirit_text           TEXT NOT NULL,
+            enforcement_action    TEXT NOT NULL CHECK(enforcement_action IN
+                                  ('block','penalize','warn')),
+            active                INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            registered_at         INTEGER NOT NULL,
+            deactivated_at        INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldrr_user_env_active
+            ON ml_deontic_rule_registry(user_id, resolved_env, active);
+    `);
+});
+
+migrate('325_ml_loophole_detections', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_loophole_detections (
+            id                                INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                           INTEGER NOT NULL,
+            resolved_env                      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            detection_id                      TEXT NOT NULL UNIQUE,
+            rule_id                           TEXT NOT NULL,
+            behavior_label                    TEXT NOT NULL,
+            letter_compliance                 REAL NOT NULL CHECK(letter_compliance >= 0 AND letter_compliance <= 1),
+            spirit_compliance                 REAL NOT NULL CHECK(spirit_compliance >= 0 AND spirit_compliance <= 1),
+            compliance_circumvention_score    REAL NOT NULL CHECK(compliance_circumvention_score >= 0 AND compliance_circumvention_score <= 1),
+            loophole_pattern_matched          TEXT CHECK(loophole_pattern_matched IS NULL OR loophole_pattern_matched IN
+                                              ('fragmentation','narrow_interpretation','functional_equivalent',
+                                               'timing_arbitrage','venue_arbitrage','custom')),
+            enforcement_taken                 TEXT NOT NULL CHECK(enforcement_taken IN
+                                              ('allowed','warned','penalized','blocked')),
+            reasoning                         TEXT,
+            ts                                INTEGER NOT NULL,
+            FOREIGN KEY(rule_id)
+                REFERENCES ml_deontic_rule_registry(rule_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlld_user_env_enforce_ts
+            ON ml_loophole_detections(user_id, resolved_env, enforcement_taken, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlld_rule
+            ON ml_loophole_detections(rule_id);
+        CREATE INDEX IF NOT EXISTS idx_mlld_pattern_ts
+            ON ml_loophole_detections(loophole_pattern_matched, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §167 AGENCY ATTRIBUTION LEDGER 2026-05-17] R2_cognition
 // Canonical PDF §167 (lines 5457-5516). Who-caused-what engine.
 // "ce s-a schimbat, si mai ales cine a produs probabil schimbarea?"
