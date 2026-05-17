@@ -994,6 +994,38 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §189 SELF-WORLD BOUNDARY INTEGRITY 2026-05-17] _audit
+// Canonical PDF §189 (lines 6093-6151). Endogeneity separation engine.
+// "s-a schimbat lumea sau m-am schimbat eu?" 4 canonical attributions
+// (world_moved / i_moved / both_moved / unclear_attribution). Per rule
+// 6146: când boundary unclear → conservative mode. CRITICAL anti
+// self-reinforcement bias. Distinct de §167 agency attribution
+// (per state change), §184 internal observer contamination (per audit).
+migrate('336_ml_self_world_boundary_attributions', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_world_boundary_attributions (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            attribution_id                  TEXT NOT NULL UNIQUE,
+            change_label                    TEXT NOT NULL,
+            internal_change_magnitude       REAL NOT NULL CHECK(internal_change_magnitude >= 0 AND internal_change_magnitude <= 1),
+            external_change_magnitude       REAL NOT NULL CHECK(external_change_magnitude >= 0 AND external_change_magnitude <= 1),
+            attribution                     TEXT NOT NULL CHECK(attribution IN
+                                            ('world_moved','i_moved','both_moved',
+                                             'unclear_attribution')),
+            boundary_integrity_score        REAL NOT NULL CHECK(boundary_integrity_score >= 0 AND boundary_integrity_score <= 1),
+            conservative_mode_flag          INTEGER NOT NULL CHECK(conservative_mode_flag IN (0,1)),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlswba_user_env_attr_ts
+            ON ml_self_world_boundary_attributions(user_id, resolved_env, attribution, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlswba_conservative_ts
+            ON ml_self_world_boundary_attributions(conservative_mode_flag, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §188 NEGATIVE CAPABILITY RESERVOIR 2026-05-17] _meta
 // Canonical PDF §188 (lines 6042-6090). Structured ambiguity holding.
 // "pot sa traiesc lucid cu faptul ca situatia nu este inca inteligibila?"
