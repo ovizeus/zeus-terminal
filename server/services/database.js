@@ -994,6 +994,68 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §149 PURPOSE DRIFT DETECTOR 2026-05-17] _meta
+// Canonical PDF §149 (lines 4869-4922). Ends-means misalignment engine.
+// Tracks purpose hierarchy (final → proximate → intermediate_metric →
+// policy_action) + periodic drift audits cu 4 substitution patterns:
+// metric_becomes_purpose / convenience_becomes_strategy /
+// safety_theater_becomes_paralysis / confidence_becomes_identity.
+// Distinct de §10 supremePrinciple (absolute criteria), §59 unifiedUtility
+// (scalar verdict formula), §147 intellectualHonestyAudit (reason drift on
+// decisions). §149 = SCOPE drift detector — "mai servesc scopul real sau
+// doar mecanismele mele locale?"
+migrate('296_ml_purpose_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_purpose_registry (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id              INTEGER NOT NULL,
+            resolved_env         TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            purpose_id           TEXT NOT NULL UNIQUE,
+            level                TEXT NOT NULL CHECK(level IN
+                                 ('final','proximate','intermediate_metric','policy_action')),
+            parent_purpose_id    TEXT,
+            description          TEXT NOT NULL,
+            telos_statement      TEXT,
+            active               INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            created_at           INTEGER NOT NULL,
+            retired_at           INTEGER,
+            FOREIGN KEY(parent_purpose_id)
+                REFERENCES ml_purpose_registry(purpose_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpr_user_env_level_active
+            ON ml_purpose_registry(user_id, resolved_env, level, active);
+        CREATE INDEX IF NOT EXISTS idx_mlpr_parent
+            ON ml_purpose_registry(parent_purpose_id);
+    `);
+});
+
+migrate('297_ml_purpose_drift_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_purpose_drift_audits (
+            id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                    INTEGER NOT NULL,
+            resolved_env               TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id                   TEXT NOT NULL UNIQUE,
+            audited_purpose_id         TEXT NOT NULL,
+            justification_score        REAL NOT NULL CHECK(justification_score >= 0 AND justification_score <= 1),
+            substitution_pattern       TEXT CHECK(substitution_pattern IS NULL OR substitution_pattern IN
+                                       ('metric_becomes_purpose','convenience_becomes_strategy',
+                                        'safety_theater_becomes_paralysis','confidence_becomes_identity')),
+            drift_score                REAL NOT NULL CHECK(drift_score >= 0 AND drift_score <= 1),
+            drift_severity             TEXT NOT NULL CHECK(drift_severity IN ('none','moderate','severe')),
+            recommended_action         TEXT NOT NULL CHECK(recommended_action IN
+                                       ('continue','governance_review','retire_purpose')),
+            ts                         INTEGER NOT NULL,
+            FOREIGN KEY(audited_purpose_id)
+                REFERENCES ml_purpose_registry(purpose_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlpda_user_env_purpose_ts
+            ON ml_purpose_drift_audits(user_id, resolved_env, audited_purpose_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlpda_severity_ts
+            ON ml_purpose_drift_audits(drift_severity, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §148 ONTOLOGICAL HUMILITY GOVERNOR 2026-05-17] _meta
 // Canonical PDF §148 (lines 4821-4868). Reality-exceeds-model governor.
 // Open remainder analysis (phenomena that don't fit categories) + periodic
