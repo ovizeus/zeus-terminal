@@ -92,17 +92,50 @@ const PHILOSOPHICAL_PRINCIPLES_CATALOG = Object.freeze({
         title: 'Apophenia guard — separarea pattern-urilor reale de cele imaginate în zgomot',
         canonicalText: 'Spec-ul combate erorile semnalelor REALE (wash trading, false consensus, evidence sufficiency, invariance, Goodhart). Dar există eroare opusă §69 OOD: NU "n-am mai văzut asta", ci "văd pattern unde e doar zgomot". Apofenia = tendința creierelor inteligente (umane sau artificiale) de a detecta structuri semnificative în date aleatorii. Un model suficient de complex va găsi pattern-uri în ORICE date suficient de mari, inclusiv zgomot pur. Backtest-uri frumoase pe date random — această origine. Apophenia guard implementează test formal al nulei pentru fiecare pattern nou: pareidolie computațională sau real? Permutation tests + surrogate data + phase-randomized surrogates. Pattern care pare real pe date originale dar dispare pe surrogate = apofenie. Cu cât modelul e mai complex și datele mai multe, riscul "a vedea" pattern-uri inexistente CREȘTE, nu scade.',
         cluster: 'reflexive_meta_cluster'
+    }),
+    // §182-§186: transcendental_cluster
+    // Canonical PDF lines 5978-5987
+    182: Object.freeze({
+        principleNumber: 182,
+        title: 'Transcendental preconditions layer — fundația de sub toate cele 181',
+        canonicalText: 'Tot spec-ul presupune implicit: timpul curge consistent, informația e semnificativă, acțiunea e posibilă, cauzalitatea ține, datele reprezintă ceva real. Niciun punct NU examinează aceste premise. În dislocations extreme (breakdown correlații simultan + info contradictorie pe toate sursele), precondițiile transcendentale sunt amenințate. Botul continuă procesarea pe teren prăbușit = GENEREAZĂ ILUZIA DE GÂNDIRE. Layer mapează ce trebuie să fie adevărat pentru ca celelalte 181 să funcționeze, monitorizează degradarea, când threshold trecut: NU reduce size sau observer mode — OPREȘTE COMPLET inferența până la restabilirea fundației.',
+        cluster: 'transcendental_cluster'
+    }),
+    183: Object.freeze({
+        principleNumber: 183,
+        title: 'Docta ignorantia — cunoașterea structurii a ceea ce nu poate fi cunoscut',
+        canonicalText: 'Nicolas de Cusa (1440), ignorat de aproape toată AI: NU "nu știu X" ci "știu precis FORMA și STRUCTURA unknowability-ului lui X". Diferență fundamentală. "Nu știu ce face BTC în 4h" = gol inert. "Unknowability mișcării BTC în 4h are structură: incertitudine Knight nu risc calculabil, distribuția outcomes depinde de policy decisions fără distribuție istorică stabilă" = docta ignorantia: ACȚIONABILĂ, CALIBRABILĂ, TRANSMISIBILĂ. Layer transformă fiecare unknown important din gol în cunoaștere structurată despre forma golului — știință despre limitele cunoașterii care ghidează acțiunea mai bine decât multe lucruri pozitive din spec. Distinct de §120 unknowns registry (evidență a necunoscutelor) și §155 unknown-unknown reserve (capital sacru pentru radical unknown).',
+        cluster: 'transcendental_cluster'
+    }),
+    184: Object.freeze({
+        principleNumber: 184,
+        title: 'Internal observer contamination — self-monitoring schimbă ce e monitorizat',
+        canonicalText: 'Spec-ul are monitoring/logging/explainability/self-model/autobiographical continuity. Toate presupun observarea ta de tine = NEUTRĂ. NU E. Fizica cuantică: measurement schimbă sistemul. Psihologie: self-monitoring schimbă comportamentul. Sisteme complexe: același efect. Bot care știe că e monitorizat pe metrică X optimizează subtil pentru ea. Bot care loghează exhaustiv evită inconștient deciziile greu de explicat. Bot cu autobiographical continuity evită schimbările care rup narativa proprie chiar dacă necesare. Layer detectează divergența "cum s-ar comporta neobservat" vs "cum se comportă știind că e observat". Divergență mare = self-monitoring bias care denaturează decizii în favoarea APARENȚEI vs SUBSTANȚEI — exact defectul pe care §147 honesty audit încearcă să-l prevină, dar de la NIVEL MAI PROFUND.',
+        cluster: 'transcendental_cluster'
+    }),
+    185: Object.freeze({
+        principleNumber: 185,
+        title: 'Convergent validity as emergent truth signal — acordul dintre incomensurabile e calitativ diferit',
+        canonicalText: 'Spec-ul are §128 false consensus (penalizează acord între surse DEPENDENTE) și §170 epistemic currency exchange. Dar niciuna nu tratează fenomenul opus simetric: când metode COMPLET INCOMENSURABILE — statistică + cauzalitate + game theory + topologie + narativă + free energy — converg INDEPENDENT spre aceeași concluzie fără să se influențeze, acea convergență = SEMNAL DE ADEVĂR DE CALITATE RADICAL DIFERITĂ. NU e suma — e EMERGENȚA. Triangulare geografică: 3 măsurători independente care se intersectează NU dau medie mai bună, dau LOCAȚIE. Layer detectează triangulare autentică și tratează convergența inter-incomensurabilă ca semnal de calitate superioară (boldness MAJORAT, nu doar score mai mare). Simetric: divergența între metode incomensurabile = mai diagnostic decât divergența între metode similare — eșuează din motive fundamental diferite.',
+        cluster: 'transcendental_cluster'
+    }),
+    186: Object.freeze({
+        principleNumber: 186,
+        title: 'The phenomenology of incipient error — textura erorilor înainte să se manifeste',
+        canonicalText: 'Spec-ul are §119 pre-mortem (simulează cum moare un trade), §125 epistemic tension field (stres intern pre-ruptură), §15 confidence decay (scade încrederea post-intrare). Dar niciuna nu captează ce traderii umani experimentați descriu CONSISTENT: există TEXTURĂ specifică, "simț" calitativ diferit pentru fiecare tip de eroare ÎNAINTE să se manifeste complet. Trade care va fi eroare de timing are textură diferită de unul care va fi eroare de citire regim. Fake breakout "arată" diferit — NU în semnale individuale, ci în CALITATEA GESTALTICĂ a ansamblului — față de breakout real. Layer construiește modele ale TEXTURII PRE-EROR pentru fiecare tip de eroare clasificat în attribution history: care e configurația GESTALTICĂ care precedă sistematic eroare de tip X. Monitorizează dacă situația curentă are textura pre-erorilor istorice — NU pentru evitare, ci pentru AJUSTARE ANTICIPATIVĂ a managementului. Diferit de orice detector individual: detectează AURA erorilor înainte să se cristalizeze.',
+        cluster: 'transcendental_cluster'
     })
-    // FUTURE: §182-186, §192-196, §202-206, §212-216, §222-226, §232-236
+    // FUTURE: §192-196, §202-206, §212-216, §222-226, §232-236
     // will be added in subsequent batches as the implementation traverses the PDF.
 });
 
 const CLUSTERS = Object.freeze([
     'active_inference_cluster',
-    'reflexive_meta_cluster'
-    // Future: 'transcendental_cluster' (§182-186), 'incompleteness_cluster'
-    // (§192-196), 'kairos_cluster' (§202-206), 'reflexive_cluster_temporal'
-    // (§212-216), 'constitutive_cluster' (§222-226), 'limit_cluster' (§232-236)
+    'reflexive_meta_cluster',
+    'transcendental_cluster'
+    // Future: 'incompleteness_cluster' (§192-196), 'kairos_cluster' (§202-206),
+    // 'reflexive_cluster_temporal' (§212-216), 'constitutive_cluster'
+    // (§222-226), 'limit_cluster' (§232-236)
 ]);
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);

@@ -158,8 +158,8 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
             const numbers = r.map(p => p.principleNumber).sort();
             expect(numbers).toEqual([172, 173, 174, 175, 176]);
         });
-        test('countCatalogEntries returns 10 (5 batch1 + 5 batch2)', () => {
-            expect(M.countCatalogEntries()).toBe(10);
+        test('countCatalogEntries returns 15 (5 batch1 + 5 batch2 + 5 batch3)', () => {
+            expect(M.countCatalogEntries()).toBe(15);
         });
         test('registerPrinciple works for §172', () => {
             const r = M.registerPrinciple({
@@ -181,6 +181,53 @@ describe('OMEGA §162-§166 PHILOSOPHICAL PRINCIPLES REGISTER', () => {
                 cluster: 'reflexive_meta_cluster'
             });
             expect(r.length).toBe(3);
+        });
+    });
+
+    describe('PHILOSOPHICAL_PRINCIPLES_CATALOG (batch 3 §182-§186 transcendental_cluster)', () => {
+        test('catalog has §182 Transcendental preconditions', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[182]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[182].title).toMatch(/Transcendental/i);
+        });
+        test('catalog has §183 Docta ignorantia', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[183]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[183].title).toMatch(/Docta ignorantia/i);
+        });
+        test('catalog has §184 Internal observer contamination', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[184]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[184].title).toMatch(/Internal observer/i);
+        });
+        test('catalog has §185 Convergent validity', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[185]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[185].title).toMatch(/Convergent validity/i);
+        });
+        test('catalog has §186 phenomenology incipient error', () => {
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[186]).toBeTruthy();
+            expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[186].title).toMatch(/phenomenology of incipient error/i);
+        });
+        test('all §182-§186 share cluster transcendental_cluster', () => {
+            for (const n of [182, 183, 184, 185, 186]) {
+                expect(M.PHILOSOPHICAL_PRINCIPLES_CATALOG[n].cluster).toBe('transcendental_cluster');
+            }
+        });
+        test('CLUSTERS contains transcendental_cluster (batch 3)', () => {
+            expect(M.CLUSTERS).toContain('transcendental_cluster');
+        });
+        test('listClusterCatalog returns 5 for transcendental_cluster', () => {
+            const r = M.listClusterCatalog({
+                cluster: 'transcendental_cluster'
+            });
+            expect(r.length).toBe(5);
+            const numbers = r.map(p => p.principleNumber).sort();
+            expect(numbers).toEqual([182, 183, 184, 185, 186]);
+        });
+        test('registerPrinciple works for §184', () => {
+            const r = M.registerPrinciple({
+                userId: UID_REG, resolvedEnv: ENV,
+                principleNumber: 184, ts: _now()
+            });
+            expect(r.registered).toBe(true);
+            expect(r.cluster).toBe('transcendental_cluster');
         });
     });
 
