@@ -994,6 +994,54 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §177 EPISTEMIC METABOLISM ENGINE 2026-05-17] R5A_learning
+// Canonical PDF §177 (lines 5730-5789). How-fast-can-i-digest-truth.
+// "cat de repede am voie sa transform ce tocmai am vazut in adevar
+//  operational?" 5 knowledge types (pattern / rule / concept /
+// causal_relation / ontological_change), 4 digestion stages (observed /
+// metabolized / stabilized / constitutionalized), 3 indigestion patterns
+// (premature_integration / overloaded_revision / unstable_concept_absorption),
+// 3 modes (slow_cook / standard / fast_assimilation). Plasament R5A
+// (learning layer — controlează viteza de învățare). Distinct de §21
+// drift detection (regimes), §123 ontology revision (concept changes),
+// §137 memory density.
+migrate('329_ml_epistemic_metabolism_assimilations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_epistemic_metabolism_assimilations (
+            id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                     INTEGER NOT NULL,
+            resolved_env                TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            assimilation_id             TEXT NOT NULL UNIQUE,
+            knowledge_label             TEXT NOT NULL,
+            knowledge_type              TEXT NOT NULL CHECK(knowledge_type IN
+                                        ('new_pattern','new_rule','new_concept',
+                                         'new_causal_relation','ontological_change')),
+            current_stage               TEXT NOT NULL CHECK(current_stage IN
+                                        ('observed','metabolized',
+                                         'stabilized','constitutionalized')),
+            severity                    REAL NOT NULL CHECK(severity >= 0 AND severity <= 1),
+            empirical_support           REAL NOT NULL CHECK(empirical_support >= 0 AND empirical_support <= 1),
+            cost_of_error               REAL NOT NULL CHECK(cost_of_error >= 0 AND cost_of_error <= 1),
+            ontology_compatibility      REAL NOT NULL CHECK(ontology_compatibility >= 0 AND ontology_compatibility <= 1),
+            assimilation_rate           REAL NOT NULL CHECK(assimilation_rate >= 0 AND assimilation_rate <= 1),
+            recommended_mode            TEXT NOT NULL CHECK(recommended_mode IN
+                                        ('slow_cook','standard','fast_assimilation')),
+            indigestion_flag            INTEGER NOT NULL CHECK(indigestion_flag IN (0,1)),
+            indigestion_type            TEXT CHECK(indigestion_type IS NULL OR indigestion_type IN
+                                        ('premature_integration','overloaded_revision',
+                                         'unstable_concept_absorption')),
+            reasoning                   TEXT,
+            ts                          INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlema_user_env_stage_ts
+            ON ml_epistemic_metabolism_assimilations(user_id, resolved_env, current_stage, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlema_mode_ts
+            ON ml_epistemic_metabolism_assimilations(recommended_mode, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlema_indigest_ts
+            ON ml_epistemic_metabolism_assimilations(indigestion_flag, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §171 RETRACTION HONOR SYSTEM 2026-05-17] _meta
 // Canonical PDF §171 (lines 5672-5719). Elegant backdown engine.
 // "daca ma retrag acum, e slabiciune sau e putere epistemica?" 5
