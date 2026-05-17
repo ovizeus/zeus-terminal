@@ -994,6 +994,73 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §154 OUTCOME-BLIND POLICY JUDGE 2026-05-17] _audit
+// Canonical PDF §154 (lines 5132-5178). Veil-of-result governance.
+// "a fost asta o decizie buna chiar daca n-as sti deloc cum s-a terminat?"
+// Evaluates decisions on 6 canonical axes (info_quality, thesis_integrity,
+// risk_appropriateness, execution_appropriateness, reversibility,
+// opportunity_ranking) PRE-OUTCOME (locked_pre_outcome flag). Later
+// outcome comparison emits interpretation: lucky_good (low decision +
+// good outcome) / skilled_good / unlucky_bad / deserved_bad / aligned
+// (gap < 0.20). Distinct de §16 attribution (post-trade), §147 honesty
+// audit (reason drift), §153 ablation (source robustness).
+migrate('306_ml_blind_decision_judgments', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_blind_decision_judgments (
+            id                                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                             INTEGER NOT NULL,
+            resolved_env                        TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            judgment_id                         TEXT NOT NULL UNIQUE,
+            decision_id                         TEXT NOT NULL,
+            info_quality_score                  REAL NOT NULL CHECK(info_quality_score >= 0 AND info_quality_score <= 1),
+            thesis_integrity_score              REAL NOT NULL CHECK(thesis_integrity_score >= 0 AND thesis_integrity_score <= 1),
+            risk_appropriateness_score          REAL NOT NULL CHECK(risk_appropriateness_score >= 0 AND risk_appropriateness_score <= 1),
+            execution_appropriateness_score     REAL NOT NULL CHECK(execution_appropriateness_score >= 0 AND execution_appropriateness_score <= 1),
+            reversibility_score                 REAL NOT NULL CHECK(reversibility_score >= 0 AND reversibility_score <= 1),
+            opportunity_ranking_score           REAL NOT NULL CHECK(opportunity_ranking_score >= 0 AND opportunity_ranking_score <= 1),
+            composite_decision_quality          REAL NOT NULL CHECK(composite_decision_quality >= 0 AND composite_decision_quality <= 1),
+            classification                      TEXT NOT NULL CHECK(classification IN
+                                                ('excellent','sound','marginal','poor')),
+            locked_pre_outcome                  INTEGER NOT NULL DEFAULT 1 CHECK(locked_pre_outcome IN (0,1)),
+            judge_reasoning                     TEXT,
+            ts                                  INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlbdj_user_env_decision_ts
+            ON ml_blind_decision_judgments(user_id, resolved_env, decision_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlbdj_classification_ts
+            ON ml_blind_decision_judgments(classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlbdj_locked_ts
+            ON ml_blind_decision_judgments(locked_pre_outcome, ts);
+    `);
+});
+
+migrate('307_ml_decision_outcome_comparisons', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_decision_outcome_comparisons (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                       INTEGER NOT NULL,
+            resolved_env                  TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            comparison_id                 TEXT NOT NULL UNIQUE,
+            judgment_id                   TEXT NOT NULL,
+            outcome_quality_score         REAL NOT NULL CHECK(outcome_quality_score >= 0 AND outcome_quality_score <= 1),
+            outcome_label                 TEXT NOT NULL CHECK(outcome_label IN
+                                          ('win','loss','breakeven','cancelled')),
+            decision_quality_at_judgment  REAL NOT NULL CHECK(decision_quality_at_judgment >= 0 AND decision_quality_at_judgment <= 1),
+            gap_score                     REAL NOT NULL CHECK(gap_score >= 0 AND gap_score <= 1),
+            interpretation                TEXT NOT NULL CHECK(interpretation IN
+                                          ('lucky_good','skilled_good','unlucky_bad',
+                                           'deserved_bad','aligned')),
+            ts                            INTEGER NOT NULL,
+            FOREIGN KEY(judgment_id)
+                REFERENCES ml_blind_decision_judgments(judgment_id) ON DELETE RESTRICT
+        );
+        CREATE INDEX IF NOT EXISTS idx_mldoc_user_env_judgment
+            ON ml_decision_outcome_comparisons(user_id, resolved_env, judgment_id);
+        CREATE INDEX IF NOT EXISTS idx_mldoc_interpretation_ts
+            ON ml_decision_outcome_comparisons(interpretation, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §153 SOURCE ABLATION ROBUSTNESS 2026-05-17] _audit
 // Canonical PDF §153 (lines 5087-5129). Belief-survives-deletion test.
 // "daca pierd exact dovezile pe care ma bazez cel mai mult, credinta mea
