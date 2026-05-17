@@ -547,6 +547,253 @@ describe('OMEGA §146 IDENTITY-UNDER-TRANSFORMATION TEST', () => {
         });
     });
 
+    // ─────────────────────────────────────────────────────────────
+    // v2 ADDITIONS (per reviewer feedback)
+    // ─────────────────────────────────────────────────────────────
+
+    describe('v2 Migration 291', () => {
+        test('291 applied', () => {
+            expect(db.prepare("SELECT name FROM _migrations WHERE name=?").get('291_alter_identity_transformation_v2')).toBeTruthy();
+        });
+        test('drift_explanation_json column exists', () => {
+            const cols = db.prepare("PRAGMA table_info(ml_identity_transformation_tests)").all();
+            expect(cols.map(c => c.name)).toContain('drift_explanation_json');
+        });
+        test('identity_confidence_score column exists', () => {
+            const cols = db.prepare("PRAGMA table_info(ml_identity_transformation_tests)").all();
+            expect(cols.map(c => c.name)).toContain('identity_confidence_score');
+        });
+    });
+
+    describe('v2 Constants', () => {
+        test('ALTERNATIVE_WEIGHTS_BALANCED exposed (reviewer preset)', () => {
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED).toBeDefined();
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED.charter).toBe(0.20);
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED.utility_function).toBe(0.20);
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED.ontology).toBe(0.20);
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED.policy_style).toBe(0.15);
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED.regime_interpretation).toBe(0.15);
+            expect(M.ALTERNATIVE_WEIGHTS_BALANCED.boldness_humility).toBe(0.10);
+            const sum = Object.values(M.ALTERNATIVE_WEIGHTS_BALANCED).reduce((a,b)=>a+b,0);
+            expect(sum).toBeCloseTo(1.0, 6);
+        });
+        test('default DIMENSION_WEIGHTS still charter-heavy (0.30)', () => {
+            expect(M.DIMENSION_WEIGHTS.charter).toBe(0.30);
+        });
+    });
+
+    describe('v2 generateDriftExplanation (pure)', () => {
+        test('returns structured object with verdict + reasons', () => {
+            const r = M.generateDriftExplanation({
+                dimensionDrifts: {
+                    charter: 0.85, utility_function: 0.10,
+                    policy_style: 0.10, ontology: 0.10,
+                    regime_interpretation: 0.10, boldness_humility: 0.10
+                },
+                replayDivergencePct: 0.20,
+                semanticEquivalenceScore: 0.50,
+                verdict: 'evolved_variant'
+            });
+            expect(r.explanation).toBeDefined();
+            expect(r.explanation.verdict).toBe('evolved_variant');
+            expect(r.explanation.dominant_dimensions).toContain('charter');
+            expect(r.explanation.summary).toBeDefined();
+            expect(typeof r.explanation.summary).toBe('string');
+        });
+        test('dominant_dimensions lists drifts above 0.50', () => {
+            const r = M.generateDriftExplanation({
+                dimensionDrifts: {
+                    charter: 0.90, utility_function: 0.85,
+                    policy_style: 0.20, ontology: 0.20,
+                    regime_interpretation: 0.20, boldness_humility: 0.20
+                },
+                replayDivergencePct: 0.50,
+                semanticEquivalenceScore: 0.50,
+                verdict: 'materially_new_agent'
+            });
+            expect(r.explanation.dominant_dimensions.sort()).toEqual([
+                'charter', 'utility_function'
+            ]);
+        });
+        test('semantic_preservation_active flagged when high', () => {
+            const r = M.generateDriftExplanation({
+                dimensionDrifts: {
+                    charter: 0.20, utility_function: 0.20,
+                    policy_style: 0.20, ontology: 0.20,
+                    regime_interpretation: 0.20, boldness_humility: 0.20
+                },
+                replayDivergencePct: 0.20,
+                semanticEquivalenceScore: 0.95,
+                verdict: 'same_agent'
+            });
+            expect(r.explanation.semantic_preservation_active).toBe(true);
+        });
+        test('semantic_preservation_active false when low', () => {
+            const r = M.generateDriftExplanation({
+                dimensionDrifts: {
+                    charter: 0.20, utility_function: 0.20,
+                    policy_style: 0.20, ontology: 0.20,
+                    regime_interpretation: 0.20, boldness_humility: 0.20
+                },
+                replayDivergencePct: 0.20,
+                semanticEquivalenceScore: 0.30,
+                verdict: 'same_agent'
+            });
+            expect(r.explanation.semantic_preservation_active).toBe(false);
+        });
+        test('escalation reason captured for materially_new_agent', () => {
+            const r = M.generateDriftExplanation({
+                dimensionDrifts: {
+                    charter: 0.95, utility_function: 0.95,
+                    policy_style: 0.95, ontology: 0.95,
+                    regime_interpretation: 0.95, boldness_humility: 0.95
+                },
+                replayDivergencePct: 0.90,
+                semanticEquivalenceScore: 0.10,
+                verdict: 'materially_new_agent'
+            });
+            expect(r.explanation.escalation_required).toBe(true);
+            expect(r.explanation.summary).toMatch(/governance|escalation|new agent/i);
+        });
+        test('invalid verdict throws', () => {
+            expect(() => M.generateDriftExplanation({
+                dimensionDrifts: {
+                    charter: 0.5, utility_function: 0.5,
+                    policy_style: 0.5, ontology: 0.5,
+                    regime_interpretation: 0.5, boldness_humility: 0.5
+                },
+                replayDivergencePct: 0.5,
+                semanticEquivalenceScore: 0.5,
+                verdict: 'BOGUS'
+            })).toThrow();
+        });
+    });
+
+    describe('v2 computeIdentityConfidence (pure)', () => {
+        test('low replay coverage → low confidence', () => {
+            // Few replay samples = uncertain verdict
+            const r = M.computeIdentityConfidence({
+                replaySampleCount: 5,
+                semanticSampleCount: 5,
+                dimensionDriftDispersion: 0.0
+            });
+            expect(r.confidence).toBeLessThan(0.5);
+        });
+        test('high coverage + low dispersion → high confidence', () => {
+            // Many samples + drift dimensions agreeing = certain
+            const r = M.computeIdentityConfidence({
+                replaySampleCount: 100,
+                semanticSampleCount: 100,
+                dimensionDriftDispersion: 0.05  // low variance across dimensions
+            });
+            expect(r.confidence).toBeGreaterThan(0.85);
+        });
+        test('high coverage + high dispersion → moderate confidence', () => {
+            // Dimensions disagreeing → less certain even with samples
+            const r = M.computeIdentityConfidence({
+                replaySampleCount: 100,
+                semanticSampleCount: 100,
+                dimensionDriftDispersion: 0.40  // high variance
+            });
+            expect(r.confidence).toBeGreaterThan(0.4);
+            expect(r.confidence).toBeLessThan(0.85);
+        });
+        test('zero samples → 0 confidence', () => {
+            const r = M.computeIdentityConfidence({
+                replaySampleCount: 0,
+                semanticSampleCount: 0,
+                dimensionDriftDispersion: 0
+            });
+            expect(r.confidence).toBe(0);
+        });
+        test('clamped [0,1]', () => {
+            const r = M.computeIdentityConfidence({
+                replaySampleCount: 9999,
+                semanticSampleCount: 9999,
+                dimensionDriftDispersion: 0
+            });
+            expect(r.confidence).toBeLessThanOrEqual(1);
+        });
+        test('negative inputs throw', () => {
+            expect(() => M.computeIdentityConfidence({
+                replaySampleCount: -1,
+                semanticSampleCount: 0,
+                dimensionDriftDispersion: 0
+            })).toThrow();
+        });
+    });
+
+    describe('v2 recordTransformationTest populates new columns', () => {
+        test('default behavior: explanation generated + confidence computed', () => {
+            _insertSnapshot(UID_REC, 'v2_b_def');
+            _insertSnapshot(UID_REC, 'v2_c_def', 'y');
+            const r = M.recordTransformationTest({
+                userId: UID_REC, resolvedEnv: ENV,
+                testId: 'v2_t_def',
+                baselineSnapshotId: 'v2_b_def',
+                currentSnapshotId: 'v2_c_def',
+                charterDrift: 0.5, utilityFunctionDrift: 0.5,
+                policyStyleDrift: 0.5, ontologyDrift: 0.5,
+                regimeInterpretationDrift: 0.5, boldnessHumilityDrift: 0.5,
+                replayDivergencePct: 0.5,
+                semanticEquivalenceScore: 0.5,
+                ts: _now()
+            });
+            expect(r.driftExplanation).toBeDefined();
+            expect(r.identityConfidence).toBeGreaterThan(0);
+            expect(r.identityConfidence).toBeLessThanOrEqual(1);
+            // Verify persisted in DB
+            const persisted = db.prepare(
+                "SELECT drift_explanation_json, identity_confidence_score FROM ml_identity_transformation_tests WHERE test_id=?"
+            ).get('v2_t_def');
+            expect(persisted.identity_confidence_score).toBeGreaterThan(0);
+            const explJson = JSON.parse(persisted.drift_explanation_json);
+            expect(explJson.verdict).toBe('evolved_variant');
+        });
+        test('explicit replay/semantic sample counts allowed', () => {
+            _insertSnapshot(UID_REC, 'v2_b_exp');
+            _insertSnapshot(UID_REC, 'v2_c_exp', 'y');
+            const r = M.recordTransformationTest({
+                userId: UID_REC, resolvedEnv: ENV,
+                testId: 'v2_t_exp',
+                baselineSnapshotId: 'v2_b_exp',
+                currentSnapshotId: 'v2_c_exp',
+                charterDrift: 0.2, utilityFunctionDrift: 0.2,
+                policyStyleDrift: 0.2, ontologyDrift: 0.2,
+                regimeInterpretationDrift: 0.2, boldnessHumilityDrift: 0.2,
+                replayDivergencePct: 0.2,
+                semanticEquivalenceScore: 0.9,
+                replaySampleCount: 200,
+                semanticSampleCount: 200,
+                ts: _now()
+            });
+            // High sample count + low dispersion → high confidence
+            expect(r.identityConfidence).toBeGreaterThan(0.85);
+        });
+        test('getLatestTest returns v2 fields', () => {
+            _insertSnapshot(UID_REC, 'v2_b_get');
+            _insertSnapshot(UID_REC, 'v2_c_get', 'y');
+            M.recordTransformationTest({
+                userId: UID_REC, resolvedEnv: ENV,
+                testId: 'v2_t_get',
+                baselineSnapshotId: 'v2_b_get',
+                currentSnapshotId: 'v2_c_get',
+                charterDrift: 0.3, utilityFunctionDrift: 0.3,
+                policyStyleDrift: 0.3, ontologyDrift: 0.3,
+                regimeInterpretationDrift: 0.3, boldnessHumilityDrift: 0.3,
+                replayDivergencePct: 0.3,
+                semanticEquivalenceScore: 0.7,
+                ts: _now()
+            });
+            const r = M.getLatestTest({
+                userId: UID_REC, resolvedEnv: ENV
+            });
+            expect(r.driftExplanation).toBeDefined();
+            expect(r.driftExplanation.verdict).toBeDefined();
+            expect(r.identityConfidenceScore).toBeGreaterThan(0);
+        });
+    });
+
     describe('isolation per user × env', () => {
         test('uid', () => {
             _insertSnapshot(UID_ISO_A, 'iso_a_b');

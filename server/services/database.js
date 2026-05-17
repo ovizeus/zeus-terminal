@@ -994,6 +994,18 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §146 v2 IDENTITY-UNDER-TRANSFORMATION TEST 2026-05-17] _meta
+// Reviewer feedback integration: drift_explanation_json (auditability) +
+// identity_confidence_score (verdicts are probabilistic, not absolute) +
+// formalized composite weighting formula in module JSDoc with alternative
+// presets exposed. ALTER ADD COLUMN additive.
+migrate('291_alter_identity_transformation_v2', () => {
+    db.exec(`
+        ALTER TABLE ml_identity_transformation_tests ADD COLUMN drift_explanation_json TEXT NOT NULL DEFAULT '{}';
+        ALTER TABLE ml_identity_transformation_tests ADD COLUMN identity_confidence_score REAL NOT NULL DEFAULT 1.0;
+    `);
+});
+
 // [OMEGA Wave 3 §146 IDENTITY-UNDER-TRANSFORMATION TEST 2026-05-17] _meta
 // Canonical PDF §146 (lines 4718-4775). Extension de §127 identityContinuity
 // (score) cu THRESHOLD TEST + GOVERNANCE ESCALATION (decizie verdict). 6

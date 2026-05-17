@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * OMEGA _meta — identityUnderTransformationTest (canonical §146)
+ * OMEGA _meta — identityUnderTransformationTest v2 (canonical §146)
  *
  * §146 IDENTITY-UNDER-TRANSFORMATION TEST / SAME-AGENT OR NEW-AGENT CHECK.
  * Source: /root/_review/ml_brain/ml_brain_canonic.txt lines 4718-4775.
@@ -11,15 +11,41 @@
  * Extension de §127 identityContinuity (score) cu THRESHOLD TEST +
  * GOVERNANCE ESCALATION (decizie verdict).
  *
- * Algorithm:
- *   structural_drift = Σ (dim_drift × weight) across 6 dimensions
- *                       (charter 0.30 heaviest — constitutional)
- *   composite_drift = structural × 0.70 + replay × 0.30
- *                      − semantic_preserve_bonus (if equiv ≥ 0.90)
+ * FORMALIZED COMPOSITE FORMULA (v2 — per reviewer feedback):
+ *
+ *   structural_drift =
+ *     0.30 × charter +              ← constitutional layer most binding
+ *     0.20 × utility_function +     ← what bot optimizes for
+ *     0.15 × ontology +             ← vocabulary
+ *     0.15 × boldness_humility +    ← risk attitude
+ *     0.10 × policy_style +
+ *     0.10 × regime_interpretation
+ *
+ *   composite_drift = structural × 0.70 + replay_divergence × 0.30
+ *                     − semantic_preserve_bonus(if semantic ≥ 0.90: 0.10)
+ *
  *   verdict = composite < 0.40 → same_agent
  *           = 0.40 ≤ composite < 0.70 → evolved_variant
  *           = composite ≥ 0.70 → materially_new_agent
+ *
  *   governance_escalation_required = (verdict === materially_new_agent)
+ *
+ *   identity_confidence_score = function of (replay_sample_count,
+ *     semantic_sample_count, dimension_dispersion). Captures verdict
+ *     UNCERTAINTY — verdicts are probabilistic, not absolute.
+ *
+ * ALTERNATIVE WEIGHTING PRESET (per reviewer): more balanced distribution
+ *   exposed as ALTERNATIVE_WEIGHTS_BALANCED (charter:0.20, utility:0.20,
+ *   ontology:0.20, policy:0.15, regime:0.15, boldness:0.10). Default
+ *   remains charter-heavy per PDF §116 "constitutional immutable
+ *   hierarchy" emphasis. Operator may compose own weights from either.
+ *
+ * V2 ADDITIONS:
+ * - drift_explanation_json: structured audit object with verdict,
+ *   dominant_dimensions, summary, semantic_preservation_active,
+ *   escalation_required.
+ * - identity_confidence_score: probabilistic confidence in verdict
+ *   based on sample sufficiency + dimension agreement.
  *
  * RULES (canonical, explicit):
  * - "mai performant ≠ aceeasi identitate"
@@ -59,6 +85,18 @@ const DIMENSION_WEIGHTS = Object.freeze({
     regime_interpretation: 0.10
 });
 
+// v2: alternative preset (reviewer-suggested distribution — more balanced)
+// Operator may import + use this as DIMENSION_WEIGHTS override per session
+// if they prefer balanced weighting over charter-heavy default.
+const ALTERNATIVE_WEIGHTS_BALANCED = Object.freeze({
+    charter: 0.20,
+    utility_function: 0.20,
+    ontology: 0.20,
+    policy_style: 0.15,
+    regime_interpretation: 0.15,
+    boldness_humility: 0.10
+});
+
 const STRUCTURAL_WEIGHT = 0.70;
 const REPLAY_WEIGHT = 0.30;
 const SEMANTIC_PRESERVE_THRESHOLD = 0.90;
@@ -80,8 +118,9 @@ const _stmts = {
          regime_interpretation_drift_score, boldness_humility_drift_score,
          replay_divergence_pct, semantic_equivalence_score,
          composite_drift_score, identity_verdict,
-         governance_escalation_required, ts)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         governance_escalation_required, ts,
+         drift_explanation_json, identity_confidence_score)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `),
     latestTest: db.prepare(`
         SELECT * FROM ml_identity_transformation_tests
@@ -192,6 +231,101 @@ function assessSemanticEquivalence(params) {
     return { equivalenceScore: matches / baseline.length };
 }
 
+// ── generateDriftExplanation (pure) — NEW v2 ───────────────────────
+// Builds structured audit object explaining verdict origin. Auditability
+// + operator interpretability gain per reviewer feedback.
+function generateDriftExplanation(params) {
+    const dims = _required(params, 'dimensionDrifts');
+    const replay = _required(params, 'replayDivergencePct');
+    const semantic = _required(params, 'semanticEquivalenceScore');
+    const verdict = _required(params, 'verdict');
+    if (!IDENTITY_VERDICTS.includes(verdict)) {
+        throw new Error(
+            `identityUnderTransformationTest: invalid verdict "${verdict}"`
+        );
+    }
+
+    // Dominant dimensions = drifts above 0.50 (operator-tunable threshold)
+    const DOMINANT_THRESHOLD = 0.50;
+    const dominantDimensions = DRIFT_DIMENSIONS.filter(
+        d => (dims[d] || 0) >= DOMINANT_THRESHOLD
+    );
+
+    const semanticPreserveActive = semantic >= SEMANTIC_PRESERVE_THRESHOLD;
+    const escalationRequired = verdict === 'materially_new_agent';
+
+    // Human-readable summary string
+    let summary;
+    if (escalationRequired) {
+        summary = `Materially new agent verdict — governance escalation required (shadow + canary + capital + audit separate). Dominant drift: ${dominantDimensions.join(', ') || 'multiple dimensions'}.`;
+    } else if (verdict === 'evolved_variant') {
+        summary = `Evolved variant — drift detected on ${dominantDimensions.length} dimension(s) but below materially-new threshold. Continue monitoring.`;
+    } else {
+        summary = `Same agent — drift within tolerance (replay divergence ${(replay * 100).toFixed(1)}%, semantic equivalence ${(semantic * 100).toFixed(1)}%).`;
+    }
+
+    return {
+        explanation: {
+            verdict,
+            dominant_dimensions: dominantDimensions,
+            summary,
+            semantic_preservation_active: semanticPreserveActive,
+            escalation_required: escalationRequired,
+            replay_divergence_pct: replay,
+            semantic_equivalence_score: semantic
+        }
+    };
+}
+
+// ── computeIdentityConfidence (pure) — NEW v2 ──────────────────────
+// Confidence captures HOW SURE we are about the verdict — not the
+// verdict itself. Verdicts are probabilistic, not absolute (reviewer
+// feedback). Confidence depends on:
+//  - replay sample sufficiency (more replays = more certain)
+//  - semantic sample sufficiency
+//  - dimension dispersion (if all 6 dims agree, more certain; if half
+//    say one thing and half another, less certain)
+function computeIdentityConfidence(params) {
+    const replaySamples = _required(params, 'replaySampleCount');
+    const semanticSamples = _required(params, 'semanticSampleCount');
+    const dispersion = _required(params, 'dimensionDriftDispersion');
+
+    if (replaySamples < 0 || semanticSamples < 0 || dispersion < 0) {
+        throw new Error(
+            'identityUnderTransformationTest: counts/dispersion must be ≥ 0'
+        );
+    }
+    if (replaySamples === 0 && semanticSamples === 0) {
+        return { confidence: 0 };
+    }
+
+    // Sample sufficiency: 50 replays + 50 semantic = "full sample" baseline
+    const SAMPLE_TARGET = 50;
+    const replaySufficiency = Math.min(1, replaySamples / SAMPLE_TARGET);
+    const semanticSufficiency = Math.min(1, semanticSamples / SAMPLE_TARGET);
+    const sampleScore = (replaySufficiency + semanticSufficiency) / 2;
+
+    // Dispersion penalty: high dispersion (dims disagree) reduces confidence
+    // Max dispersion = 1.0 (one dim 0, another 1)
+    const dispersionPenalty = Math.min(1, dispersion);
+    const agreementScore = 1 - dispersionPenalty;
+
+    // Combined: sample score weight 0.60, agreement weight 0.40
+    const raw = sampleScore * 0.60 + agreementScore * 0.40;
+    return { confidence: Math.max(0, Math.min(1, raw)) };
+}
+
+// ── _computeDriftDispersion (internal helper) ──────────────────────
+function _computeDriftDispersion(driftMap) {
+    const values = DRIFT_DIMENSIONS.map(d => driftMap[d] || 0);
+    if (values.length === 0) return 0;
+    const mean = values.reduce((a, b) => a + b, 0) / values.length;
+    const variance = values.reduce(
+        (sum, v) => sum + Math.pow(v - mean, 2), 0
+    ) / values.length;
+    return Math.sqrt(variance);  // stddev
+}
+
 // ── recordTransformationTest (integration) ─────────────────────────
 function recordTransformationTest(params) {
     const userId = _required(params, 'userId');
@@ -225,10 +359,11 @@ function recordTransformationTest(params) {
         }
     }
 
-    const { structuralDrift } = computeStructuralDrift({
+    const dimensionDrifts = {
         charter, utility_function: utility, policy_style: policy,
         ontology, regime_interpretation: regime, boldness_humility: boldness
-    });
+    };
+    const { structuralDrift } = computeStructuralDrift(dimensionDrifts);
     const { compositeDrift } = computeCompositeDrift({
         structuralDrift,
         replayDivergencePct: replay,
@@ -237,17 +372,36 @@ function recordTransformationTest(params) {
     const { verdict } = classifyIdentityVerdict({ compositeDrift });
     const { escalationRequired } = isGovernanceEscalationRequired({ verdict });
 
+    // v2: explanation + confidence
+    const { explanation } = generateDriftExplanation({
+        dimensionDrifts, replayDivergencePct: replay,
+        semanticEquivalenceScore: semantic, verdict
+    });
+    const replaySamples = (params && params.replaySampleCount !== undefined)
+        ? params.replaySampleCount : 30;  // default = moderate sample
+    const semanticSamples = (params && params.semanticSampleCount !== undefined)
+        ? params.semanticSampleCount : 30;
+    const dispersion = _computeDriftDispersion(dimensionDrifts);
+    const { confidence } = computeIdentityConfidence({
+        replaySampleCount: replaySamples,
+        semanticSampleCount: semanticSamples,
+        dimensionDriftDispersion: dispersion
+    });
+
     try {
         _stmts.insertTest.run(
             userId, env, testId, baselineId, currentId,
             charter, utility, policy, ontology, regime, boldness,
             replay, semantic, compositeDrift, verdict,
-            escalationRequired ? 1 : 0, ts
+            escalationRequired ? 1 : 0, ts,
+            JSON.stringify(explanation), confidence
         );
         return {
             recorded: true, testId,
             structuralDrift, compositeDrift,
-            verdict, escalationRequired
+            verdict, escalationRequired,
+            driftExplanation: explanation,
+            identityConfidence: confidence
         };
     } catch (err) {
         if (err.code === 'SQLITE_CONSTRAINT_UNIQUE' ||
@@ -277,7 +431,11 @@ function _rowToTest(r) {
         compositeDriftScore: r.composite_drift_score,
         identityVerdict: r.identity_verdict,
         governanceEscalationRequired: r.governance_escalation_required === 1,
-        ts: r.ts
+        ts: r.ts,
+        // v2 fields
+        driftExplanation: r.drift_explanation_json
+            ? JSON.parse(r.drift_explanation_json) : {},
+        identityConfidenceScore: r.identity_confidence_score
     };
 }
 
@@ -310,6 +468,7 @@ module.exports = {
     DRIFT_DIMENSIONS,
     VERDICT_THRESHOLDS,
     DIMENSION_WEIGHTS,
+    ALTERNATIVE_WEIGHTS_BALANCED,
     STRUCTURAL_WEIGHT,
     REPLAY_WEIGHT,
     SEMANTIC_PRESERVE_THRESHOLD,
@@ -319,6 +478,8 @@ module.exports = {
     classifyIdentityVerdict,
     isGovernanceEscalationRequired,
     assessSemanticEquivalence,
+    generateDriftExplanation,
+    computeIdentityConfidence,
     recordTransformationTest,
     getLatestTest,
     getTestsByVerdict
