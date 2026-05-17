@@ -4,6 +4,7 @@ import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
 import { R5AStats } from './R5AStats'
 import { DoctorPanel } from './DoctorPanel'
+import { Ring5Panel } from './Ring5Panel'
 import { useAuthStore } from '../../stores/authStore'
 import type { Utterance, Mood, HealthState } from './omegaApi'
 import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
@@ -131,6 +132,7 @@ function DoctorZone() {
     return (
         <div className="omega-page-doctor-zone">
             <DoctorPanel />
+            <Ring5Panel />
         </div>
     )
 }
