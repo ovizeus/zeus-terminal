@@ -994,6 +994,46 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §187 REALITY CONTACT RATIO 2026-05-17] R3A_safety
+// Canonical PDF §187 (lines 5989-6039). Live-world grounding covenant.
+// "cat din aceasta decizie vine din realitatea de acum si cat vine din ce
+//  cred deja despre realitate?" 6 contribution sources (direct_observed_
+// data / derived_inferences / episodic_memories / consolidated_concepts
+// / structural_priors / historical_ontologies). reality_contact_ratio +
+// scholastic_drift flag + 4 grounding classifications. Plasare R3A_safety
+// (anti-fantasy safety guard). Distinct de §148 ontology humility
+// (reality exceeds model), §157 jurisdiction (acts), §178 causal dignity.
+migrate('334_ml_reality_contact_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_reality_contact_snapshots (
+            id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                         INTEGER NOT NULL,
+            resolved_env                    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            snapshot_id                     TEXT NOT NULL UNIQUE,
+            decision_id                     TEXT NOT NULL,
+            direct_observed_data_weight     REAL NOT NULL CHECK(direct_observed_data_weight >= 0 AND direct_observed_data_weight <= 1),
+            derived_inferences_weight       REAL NOT NULL CHECK(derived_inferences_weight >= 0 AND derived_inferences_weight <= 1),
+            episodic_memories_weight        REAL NOT NULL CHECK(episodic_memories_weight >= 0 AND episodic_memories_weight <= 1),
+            consolidated_concepts_weight    REAL NOT NULL CHECK(consolidated_concepts_weight >= 0 AND consolidated_concepts_weight <= 1),
+            structural_priors_weight        REAL NOT NULL CHECK(structural_priors_weight >= 0 AND structural_priors_weight <= 1),
+            historical_ontologies_weight    REAL NOT NULL CHECK(historical_ontologies_weight >= 0 AND historical_ontologies_weight <= 1),
+            reality_contact_ratio           REAL NOT NULL CHECK(reality_contact_ratio >= 0 AND reality_contact_ratio <= 1),
+            scholastic_drift_detected       INTEGER NOT NULL CHECK(scholastic_drift_detected IN (0,1)),
+            grounding_classification        TEXT NOT NULL CHECK(grounding_classification IN
+                                            ('live','balanced','drift','scholastic')),
+            boldness_adjustment             REAL NOT NULL CHECK(boldness_adjustment >= 0 AND boldness_adjustment <= 1),
+            reasoning                       TEXT,
+            ts                              INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlrcs_user_env_class_ts
+            ON ml_reality_contact_snapshots(user_id, resolved_env, grounding_classification, ts);
+        CREATE INDEX IF NOT EXISTS idx_mlrcs_decision
+            ON ml_reality_contact_snapshots(decision_id);
+        CREATE INDEX IF NOT EXISTS idx_mlrcs_scholastic_ts
+            ON ml_reality_contact_snapshots(scholastic_drift_detected, ts);
+    `);
+});
+
 // [OMEGA Wave 3 §181 COSMIC LOCALITY CHECK 2026-05-17] R2_cognition
 // Canonical PDF §181 (lines 5929-5976). Do-not-universalize-the-parish.
 // "descoperirea mea este un adevar mare sau doar un adevar de cartier?"
