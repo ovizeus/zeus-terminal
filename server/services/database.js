@@ -994,6 +994,110 @@ migrate('054_ml_human_overrides', () => {
     `);
 });
 
+// [OMEGA Wave 3 §217-§221 cluster: framing/recursion/abstraction/self-absence/incompletion 2026-05-17]
+migrate('349_ml_unchosen_question_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_unchosen_question_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            current_question TEXT NOT NULL,
+            latent_questions_json TEXT NOT NULL,
+            framing_stress_score REAL NOT NULL CHECK(framing_stress_score >= 0 AND framing_stress_score <= 1),
+            question_status TEXT NOT NULL CHECK(question_status IN
+                ('answered_question','avoided_question','suppressed_question','missing_higher_order_question')),
+            recommended_action TEXT NOT NULL CHECK(recommended_action IN
+                ('proceed','wait','reframe','escalate','observe')),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mluqa_user_env_status_ts
+            ON ml_unchosen_question_audits(user_id, resolved_env, question_status, ts);
+    `);
+});
+
+migrate('350_ml_semantic_event_horizon_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_semantic_event_horizon_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            recursive_depth INTEGER NOT NULL CHECK(recursive_depth >= 0),
+            saturation_score REAL NOT NULL CHECK(saturation_score >= 0 AND saturation_score <= 1),
+            reflection_classification TEXT NOT NULL CHECK(reflection_classification IN
+                ('useful_reflection','heavy_reflection','self_referential_orbit','epistemic_blackhole_risk')),
+            collapse_to_world_invoked INTEGER NOT NULL CHECK(collapse_to_world_invoked IN (0,1)),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlseha_user_env_class_ts
+            ON ml_semantic_event_horizon_audits(user_id, resolved_env, reflection_classification, ts);
+    `);
+});
+
+migrate('351_ml_ontic_friction_audits', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_ontic_friction_audits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            audit_id TEXT NOT NULL UNIQUE,
+            transformation_chain_json TEXT NOT NULL,
+            per_layer_losses_json TEXT NOT NULL,
+            cumulative_loss_score REAL NOT NULL CHECK(cumulative_loss_score >= 0 AND cumulative_loss_score <= 1),
+            classification TEXT NOT NULL CHECK(classification IN
+                ('productive_compression','acceptable_loss',
+                 'dangerous_oversmoothing','semantic_sanding_of_reality')),
+            recommend_raw_replay INTEGER NOT NULL CHECK(recommend_raw_replay IN (0,1)),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlofa_user_env_class_ts
+            ON ml_ontic_friction_audits(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('352_ml_self_absence_counterfactuals', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_self_absence_counterfactuals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            counterfactual_id TEXT NOT NULL UNIQUE,
+            phenomenon_label TEXT NOT NULL,
+            dependency_score REAL NOT NULL CHECK(dependency_score >= 0 AND dependency_score <= 1),
+            classification TEXT NOT NULL CHECK(classification IN
+                ('truly_external_signal','weakly_self_influenced_signal',
+                 'heavily_self_shaped_signal','self_created_task')),
+            boldness_adjustment REAL NOT NULL CHECK(boldness_adjustment >= 0 AND boldness_adjustment <= 1),
+            reasoning TEXT, ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsac_user_env_class_ts
+            ON ml_self_absence_counterfactuals(user_id, resolved_env, classification, ts);
+    `);
+});
+
+migrate('353_ml_sacred_incompletion_registry', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_sacred_incompletion_registry (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            resolved_env TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL')),
+            entry_id TEXT NOT NULL UNIQUE,
+            zone_label TEXT NOT NULL,
+            zone_type TEXT NOT NULL CHECK(zone_type IN
+                ('unfinished_concept','open_ontology',
+                 'structurally_open_question','exploratory_channel')),
+            completion_pressure_score REAL NOT NULL CHECK(completion_pressure_score >= 0 AND completion_pressure_score <= 1),
+            premature_closure_flag INTEGER NOT NULL CHECK(premature_closure_flag IN (0,1)),
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            registered_at INTEGER NOT NULL,
+            ts INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_mlsir_user_env_type_active
+            ON ml_sacred_incompletion_registry(user_id, resolved_env, zone_type, active);
+    `);
+});
+
 // [OMEGA Wave 3 §207-§211 cluster: labels/reification/obsolescence/reciprocity/luck 2026-05-17]
 migrate('344_ml_performative_label_registry', () => {
     db.exec(`
