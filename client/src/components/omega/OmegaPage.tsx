@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
@@ -121,18 +121,29 @@ export function OmegaPage() {
                 </div>
             </div>
 
-            <DoctorZone />
             <Ring5Zone />
+            <DoctorZone />
         </div>
     )
 }
 
 function DoctorZone() {
     const role = useAuthStore((s) => s.role)
+    const [expanded, setExpanded] = useState(false)
     if (role !== 'admin') return null
     return (
         <div className="omega-page-doctor-zone">
-            <DoctorPanel />
+            <button
+                type="button"
+                className={`omega-doctor-header omega-doctor-header-button${expanded ? ' expanded' : ''}`}
+                onClick={() => setExpanded(e => !e)}
+                aria-expanded={expanded}
+            >
+                <span className="omega-doctor-chevron">{expanded ? '▼' : '▶'}</span>
+                <span className="omega-doctor-title">OMEGA DOCTOR</span>
+                <span className="omega-doctor-tag">D-4 admin-only</span>
+            </button>
+            {expanded && <DoctorPanel />}
         </div>
     )
 }

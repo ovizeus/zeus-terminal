@@ -6254,6 +6254,10 @@ select option {
   z-index: 2;
   background-color: #050510;
 }
+.omega-doctor-header-button { background: transparent; border: 0; padding: 4px 0; color: inherit; cursor: pointer; text-align: left; width: 100%; font: inherit; font-family: 'Orbitron', sans-serif; }
+.omega-doctor-header-button:hover { color: rgba(255, 90, 50, 0.9); }
+.omega-doctor-header-button.expanded { color: rgba(255, 90, 50, 0.9); }
+.omega-doctor-chevron { display: inline-block; width: 14px; font-size: 10px; opacity: 0.7; margin-right: 4px; }
 .omega-doctor-panel { display: flex; flex-direction: column; gap: 10px; }
 .omega-doctor-header {
   display: flex; align-items: center; gap: 12px;
