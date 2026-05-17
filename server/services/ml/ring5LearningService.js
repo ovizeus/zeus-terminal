@@ -30,6 +30,7 @@ const thompsonSampler = require('./_ring5/thompsonSampler');
 const influenceProposer = require('./_ring5/influenceProposer');
 const reflectionGate = require('./_ring5/reflectionGate');
 const influenceAudit = require('./_ring5/influenceAudit');
+const influenceEligibility = require('./_ring5/influenceEligibility');
 
 const RESOLVED_ENVS = new Set(['DEMO', 'TESTNET', 'REAL']);
 
@@ -87,6 +88,21 @@ function wrap(params) {
 
 function _wrapInfluence(ctx) {
     const { userId, resolvedEnv, symbol, phase2Decision, mlBrainProInputs, regime, marketContext, nowTs } = ctx;
+
+    const eligibility = influenceEligibility.checkEligibility({
+        userId, env: resolvedEnv, symbol, regime, nowTs
+    });
+    if (!eligibility.eligible) {
+        influenceAudit.record({
+            userId, env: resolvedEnv, symbol, regime,
+            phase2Decision, proposedDecision: phase2Decision,
+            gateStatus: 'skipped',
+            gateReason: `not_eligible_${eligibility.reason}`,
+            rationale: { eligibility },
+            ts: nowTs
+        });
+        return { ...phase2Decision, layeredBy: 'ring5-influence-not-eligible' };
+    }
 
     const draw = thompsonSampler.drawSample({ userId, env: resolvedEnv, symbol, regime, nowTs });
     const proposal = influenceProposer.propose({

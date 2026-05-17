@@ -15,6 +15,16 @@ const _now = () => Date.now();
 
 function clean() {
     db.prepare("DELETE FROM ml_module_state").run();
+    // Clean cross-test pollution from sibling ML test files (shared DB).
+    if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ml_bandit_posteriors'").get()) {
+        db.prepare("DELETE FROM ml_bandit_posteriors").run();
+    }
+    if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ml_hypothesis_pre_registrations'").get()) {
+        db.prepare("DELETE FROM ml_hypothesis_pre_registrations").run();
+    }
+    if (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ml_governance_versions'").get()) {
+        db.prepare("DELETE FROM ml_governance_versions").run();
+    }
 }
 
 describe('Ring5LearningService Phase 2 facade', () => {
@@ -186,19 +196,20 @@ describe('Ring5LearningService Phase 2 facade', () => {
             expect(audit.c).toBe(0);
         });
 
-        test('mode=influence with no mlBrainProInputs -> skipped audit row', () => {
+        test('mode=influence with no mlBrainProInputs -> not-eligible (no seeded version)', () => {
             const r = ring5.wrap({
                 userId: 1, resolvedEnv: 'DEMO', symbol: 'BTCUSDT',
                 regime: 'trending', marketContext: {}, nowTs: Date.now(),
                 mode: 'influence',
                 phase2Decision: _phase2(), mlBrainProInputs: null
             });
-            expect(r.layeredBy).toBe('ring5-influence-skipped');
-            const audit = db.prepare("SELECT gate_status FROM ml_influence_audit").get();
+            expect(r.layeredBy).toBe('ring5-influence-not-eligible');
+            const audit = db.prepare("SELECT gate_status, gate_reason FROM ml_influence_audit").get();
             expect(audit.gate_status).toBe('skipped');
+            expect(audit.gate_reason).toMatch(/not_eligible/);
         });
 
-        test('mode=influence with neutral signals -> skipped (no proposal)', () => {
+        test('mode=influence with neutral signals -> not-eligible (no seeded version)', () => {
             const r = ring5.wrap({
                 userId: 1, resolvedEnv: 'DEMO', symbol: 'BTCUSDT',
                 regime: 'trending', marketContext: {}, nowTs: Date.now(),
@@ -206,8 +217,23 @@ describe('Ring5LearningService Phase 2 facade', () => {
                 phase2Decision: _phase2(),
                 mlBrainProInputs: { contributions: [{ moduleId: 'm', contribution: 0.0 }] }
             });
-            expect(r.layeredBy).toBe('ring5-influence-skipped');
+            expect(r.layeredBy).toBe('ring5-influence-not-eligible');
             expect(r.confidence).toBe(70);
+        });
+
+        test('mode=influence not eligible -> skipped + layeredBy=not-eligible + audit gate_reason=not_eligible_*', () => {
+            const r = ring5.wrap({
+                userId: 99, resolvedEnv: 'DEMO', symbol: 'BTCUSDT',
+                regime: 'trending', marketContext: {}, nowTs: Date.now(),
+                mode: 'influence',
+                phase2Decision: _phase2(),
+                mlBrainProInputs: { contributions: [{ moduleId: 'm', contribution: 0.30 }] }
+            });
+            expect(r.layeredBy).toBe('ring5-influence-not-eligible');
+            expect(r.confidence).toBe(70);
+            const audit = db.prepare("SELECT gate_status, gate_reason FROM ml_influence_audit WHERE user_id=99 ORDER BY id DESC LIMIT 1").get();
+            expect(audit.gate_status).toBe('skipped');
+            expect(audit.gate_reason).toMatch(/^not_eligible_/);
         });
     });
 
