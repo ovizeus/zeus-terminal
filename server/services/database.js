@@ -9538,6 +9538,31 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Wave 7a] R7 Meta — inter-ring communication trace. Lightweight rolling
+// log of ring-to-ring calls (caller, callee, method, input/output summary,
+// duration, ok flag). Used by Doctor + /api/omega/inter-ring/recent.
+// Volume-aware: kept compact via input_summary/output_summary truncation
+// at insert site (not column-level).
+migrate('377_ml_inter_ring_trace', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_inter_ring_trace (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            caller_module   TEXT NOT NULL,
+            callee_module   TEXT NOT NULL,
+            method          TEXT NOT NULL,
+            input_summary   TEXT,
+            output_summary  TEXT,
+            duration_ms     REAL,
+            ok              INTEGER NOT NULL DEFAULT 1,
+            ts              INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        );
+        CREATE INDEX IF NOT EXISTS idx_r7_trace_ts
+            ON ml_inter_ring_trace(ts);
+        CREATE INDEX IF NOT EXISTS idx_r7_trace_callee_ts
+            ON ml_inter_ring_trace(callee_module, ts);
+    `);
+});
+
 // [Wave 5] R1 Constitution — audit log for principle violations. Logged
 // regardless of enforcement_mode (advisory|blocking). Operator surfaces
 // via /api/omega/constitution/violations + future UI tab.
