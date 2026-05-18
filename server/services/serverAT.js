@@ -35,6 +35,23 @@ function _getRing5() {
     return _ring5LearningService || null;
 }
 
+// [Day 17 2026-05-18] Doctor telemetry — emit alerts on safety paths.
+// Lazy require + try/catch swallow: telemetry never affects AT flow.
+let _doctorEventBus = null;
+function _getDoctorBus() {
+    if (_doctorEventBus === null) {
+        try { _doctorEventBus = require('./ml/_doctor/eventBus'); }
+        catch (_) { _doctorEventBus = false; }
+    }
+    return _doctorEventBus || null;
+}
+function _emitDoctor(event) {
+    try {
+        const bus = _getDoctorBus();
+        if (bus && typeof bus.emit === 'function') bus.emit(event);
+    } catch (_) { /* never block AT flow */ }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Per-User Position Tracker
 // ══════════════════════════════════════════════════════════════════
@@ -1512,6 +1529,11 @@ async function _executeLiveEntry(entry, stc) {
     // [FIX1] EMERGENCY CLOSE: if all SL retries failed, market-close + properly remove from _positions
     if (!slOrder) {
         logger.error('AT_LIVE', `[${entry.seq}] ALL SL retries exhausted — executing EMERGENCY MARKET CLOSE`);
+        _emitDoctor({
+            eventType: 'alert', severity: 'P0',
+            moduleId: 'serverAT.emergencyClose', ts: Date.now(),
+            payload: { seq: entry.seq, symbol: entry.symbol, side: entry.side, userId, reason: 'SL_ALL_RETRIES_FAILED' }
+        });
         Sentry.captureMessage(`EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_sl', symbol: entry.symbol }, user: { id: String(userId) } });
         telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing position to prevent unprotected exposure.`);
         // [ZT-AUD-C6] Keep safety SL active during emergency close. It's reduceOnly so concurrent

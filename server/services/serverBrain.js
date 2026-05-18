@@ -36,6 +36,23 @@ const MF = require('../migrationFlags');
 // is observation-only: wrap output is logged + audited but NOT used downstream.
 const ring5LearningService = require('./ml/ring5LearningService');
 
+// [Day 17 2026-05-18] Doctor telemetry — emit heartbeat per brain cycle + alerts
+// on safety-relevant events. Lazy require to avoid circular dep risk.
+let _doctorEventBus = null;
+function _getDoctorBus() {
+    if (_doctorEventBus === null) {
+        try { _doctorEventBus = require('./ml/_doctor/eventBus'); }
+        catch (_) { _doctorEventBus = false; }
+    }
+    return _doctorEventBus || null;
+}
+function _emitDoctor(event) {
+    try {
+        const bus = _getDoctorBus();
+        if (bus && typeof bus.emit === 'function') bus.emit(event);
+    } catch (_) { /* never block brain flow */ }
+}
+
 // [ML Phase B Day 13] R5A-driven mlBrainProInputs builder. Maps per-module
 // modifiers (structure/liquidity/journal/knn/etc.) — the actual signed deltas
 // applied during _computeFusion — to contributions for the influence proposer.
@@ -483,6 +500,9 @@ function _runCycle() {
     _running = true;
     _cycleCount++;
 
+    // [Day 17] Doctor heartbeat per cycle (subsystem 'serverBrain' alive).
+    _emitDoctor({ eventType: 'heartbeat', moduleId: 'serverBrain', ts: Date.now() });
+
     try {
         // ── [MULTI-SYM] Get all symbols with sufficient data ──
         const readySymbols = serverState.getReadySymbols();
@@ -754,6 +774,12 @@ function _runCycle() {
 
                     if (!questioning.proceed) {
                         // Brain blocked its own entry
+                        _emitDoctor({
+                            eventType: 'alert', severity: 'P2',
+                            moduleId: 'serverBrain.reflection', ts: Date.now(),
+                            payload: { symbol: snap.symbol, dir: fusion.dir, conf: fusion.confidence,
+                                       concerns: questioning.concerns.map(c => c.type), userId }
+                        });
                         serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: questioning.concerns.map(c => c.type),
@@ -806,6 +832,12 @@ function _runCycle() {
                     const openPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [];
                     const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
                     if (!corrCheck.allowed) {
+                        _emitDoctor({
+                            eventType: 'alert', severity: 'P2',
+                            moduleId: 'serverBrain.correlationGuard', ts: Date.now(),
+                            payload: { symbol: snap.symbol, dir: fusion.dir, reason: corrCheck.reason,
+                                       correlatedWith: corrCheck.correlatedWith || [], userId }
+                        });
                         _logDecision('BLOCKED', 'correlation', decision, { reason: corrCheck.reason });
                         _pushBlock(userId, symbol, ['correlation:' + (corrCheck.reason || 'na')], 'correlation', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
                         try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {

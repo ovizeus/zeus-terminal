@@ -49,6 +49,16 @@ function alertOrphanRisk(err, ctx) {
       extra: { userId, symbol, side, type, quantity },
     });
   } catch (_) { /* best-effort isolation */ }
+
+  // [4/4 Day 17 2026-05-18] Doctor alert — P1 orphan position risk.
+  try {
+    const eventBus = require('./ml/_doctor/eventBus');
+    eventBus.emit({
+      eventType: 'alert', severity: 'P1',
+      moduleId: 'serverAT.orphanRisk', ts: Date.now(),
+      payload: { userId, symbol, side, type, quantity, orderId, error: errMsg }
+    });
+  } catch (_) { /* best-effort isolation */ }
 }
 
 module.exports = { alertOrphanRisk };
