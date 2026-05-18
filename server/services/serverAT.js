@@ -600,6 +600,15 @@ function setMode(userId, mode) {
 
     us.engineMode = mode;
 
+    // [Wave 7b] Mode flip → audit chain (tamper-evident)
+    try {
+        const chain = require('./ml/_audit/chainedTrail');
+        chain.append({
+            kind: 'MODE_CHANGE',
+            payload: { userId, oldMode: oldMode || null, newMode: mode, ts: Date.now() },
+        });
+    } catch (_) { /* never block mode change */ }
+
     // [ZT-AUD-#14 / C12] On live→demo switch, refresh demoStartBalance to the
     // current demoBalance so kill-switch drawdown calculations restart from
     // the current state instead of the original $10k. If demoBalance is below
@@ -2022,6 +2031,22 @@ function _closePosition(idx, pos, exitType, price, pnl) {
             });
         } catch (_) { /* never block close flow */ }
     }
+
+    // [Wave 7b] Tamper-evident audit — every position close appended to
+    // chained hash trail. Operator can verify entire chain via
+    // /api/omega/audit/chain/verify; any tampering breaks subsequent links.
+    try {
+        const chain = require('./ml/_audit/chainedTrail');
+        chain.append({
+            kind: 'POSITION_CLOSE',
+            payload: {
+                userId, seq: pos.seq, symbol: pos.symbol, side: pos.side,
+                entry: pos.price, exit: price, pnl: +pnl.toFixed(2),
+                exitType, mode: pos.mode || 'demo', lev: pos.lev,
+                openTs: pos.openTs, closeTs: Date.now(),
+            },
+        });
+    } catch (_) { /* never block close flow */ }
 
     // Entry/Exit quality scoring (MAE/MFE)
     if (pos.price > 0 && price > 0) {

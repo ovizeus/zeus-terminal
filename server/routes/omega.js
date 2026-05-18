@@ -56,6 +56,44 @@ router.get('/constitution/violations', (req, res) => {
     }
 });
 
+// ── GET /api/omega/audit/chain/recent?limit=N ───────────────────────────────
+// [Wave 7b] Chained audit trail — last N entries (admin observability).
+router.get('/audit/chain/recent', (req, res) => {
+    try {
+        const chain = require('../services/ml/_audit/chainedTrail');
+        const limit = parseInt(req.query.limit, 10) || 50;
+        res.json({ ok: true, ts: Date.now(), entries: chain.recent(limit) });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ── GET /api/omega/audit/chain/verify[?fromTs=&toTs=] ──────────────────────
+// [Wave 7b] Walk chain + recompute hashes. Returns {ok, entries, firstBroken, reason}.
+router.get('/audit/chain/verify', (req, res) => {
+    try {
+        const chain = require('../services/ml/_audit/chainedTrail');
+        const opts = {};
+        if (req.query.fromTs) opts.fromTs = parseInt(req.query.fromTs, 10);
+        if (req.query.toTs) opts.toTs = parseInt(req.query.toTs, 10);
+        const result = chain.verify(opts);
+        res.json({ ok: true, ts: Date.now(), result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ── GET /api/omega/audit/chain/head ─────────────────────────────────────────
+// [Wave 7b] Current head (latest entry_hash + id + kind + ts).
+router.get('/audit/chain/head', (_req, res) => {
+    try {
+        const chain = require('../services/ml/_audit/chainedTrail');
+        res.json({ ok: true, head: chain.head() });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ── GET /api/omega/inter-ring/recent?limit=N ────────────────────────────────
 // [Wave 7a] R7 Meta — last N inter-ring call traces (admin observability).
 // Records every caller→callee invocation with input/output summaries +

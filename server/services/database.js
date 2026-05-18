@@ -9538,6 +9538,27 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Wave 7b] Audit trail with chained hash — every entry links to previous
+// via sha256(prev_hash || payload || ts). Tampering with any entry breaks
+// the chain (entry_hash mismatch propagates forward). Append-on-demand
+// from critical sites (position open/close, mode flip, kill switch).
+migrate('378_ml_audit_chain', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_audit_chain (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            prev_hash    TEXT NOT NULL,
+            entry_hash   TEXT NOT NULL UNIQUE,
+            kind         TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            ts           INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_chain_ts
+            ON ml_audit_chain(ts);
+        CREATE INDEX IF NOT EXISTS idx_audit_chain_kind_ts
+            ON ml_audit_chain(kind, ts);
+    `);
+});
+
 // [Wave 7a] R7 Meta — inter-ring communication trace. Lightweight rolling
 // log of ring-to-ring calls (caller, callee, method, input/output summary,
 // duration, ok flag). Used by Doctor + /api/omega/inter-ring/recent.
