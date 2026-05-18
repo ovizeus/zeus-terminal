@@ -9538,6 +9538,30 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Wave 5] R1 Constitution — audit log for principle violations. Logged
+// regardless of enforcement_mode (advisory|blocking). Operator surfaces
+// via /api/omega/constitution/violations + future UI tab.
+migrate('376_ml_r1_violations', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_r1_violations (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            principle_id            TEXT NOT NULL,
+            principle_name          TEXT NOT NULL,
+            symbol                  TEXT,
+            side                    TEXT,
+            severity                TEXT NOT NULL CHECK(severity IN ('hard','soft','advisory')),
+            decision_payload_json   TEXT NOT NULL,
+            enforcement_mode        TEXT NOT NULL CHECK(enforcement_mode IN ('advisory','blocking')),
+            ts                      INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        );
+        CREATE INDEX IF NOT EXISTS idx_r1_violations_user_ts
+            ON ml_r1_violations(user_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_r1_violations_principle
+            ON ml_r1_violations(principle_id, ts);
+    `);
+});
+
 // [Wave 4] R3B Safety — calibration buffer for Conformal Prediction +
 // OOD detection feature histograms. Additive only; consumed by R3B_safety
 // modules (conformalPrediction.js / oodDetector.js).
