@@ -33,16 +33,27 @@ function clean() {
 describe('chatResponder.respond', () => {
     beforeEach(clean);
 
-    test('greeting intent', async () => {
+    test('greeting intent EN', async () => {
         const r = await responder.respond({ userId: 1, text: 'hi' });
         expect(r.reply).toMatch(/yo boss|omega/i);
         expect(r.mood).toBeDefined();
     });
 
-    test('help intent', async () => {
+    test('greeting intent RO (Romanian markers detected → Romanian reply)', async () => {
+        const r = await responder.respond({ userId: 1, text: 'salut ce faci' });
+        expect(r.reply).toMatch(/salut|boss|omega/i);
+        expect(r.reply).toMatch(/poziții|întreabă|starea/i);  // Romanian phrasing
+    });
+
+    test('help intent EN', async () => {
         const r = await responder.respond({ userId: 1, text: 'help' });
         expect(r.reply).toMatch(/positions|pnl|mood/i);
         expect(r.mood).toBe('CALM');
+    });
+
+    test('help intent RO (Romanian markers)', async () => {
+        const r = await responder.respond({ userId: 1, text: 'ce poti sa faci' });
+        expect(r.reply).toMatch(/poziții|alerte|decizii/i);
     });
 
     test('positions intent — empty when no positions', async () => {

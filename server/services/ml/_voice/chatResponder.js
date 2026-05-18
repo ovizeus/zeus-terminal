@@ -44,13 +44,27 @@ function _fmtAge(ms) {
     return (ms / 3600000).toFixed(1) + 'h';
 }
 
+// ── Language detect ──────────────────────────────────────────────────
+// Coarse Romanian detection: presence of any of these markers in text.
+function _isRomanian(text) {
+    return /\b(ce|cum|de ce|nu|da|sa|să|și|si|este|sunt|despre|pentru|cu|la|în|in|ai|am|esti|ești|faci|merge|salut|buna|bună|spune|ziua|seara|noapte|pozitii|pozi[țt]ii|decizii|bandit[uu]l|crezi|crede|spune|zici|zice|fac[uia]|simt|simți|stau|deschise|profit[uu]l|cum stau|ce parere|părere|gandești|g[aâ]nde[șs]ti)\b/i.test(text);
+}
+
 // ── Intent: greeting ──────────────────────────────────────────────────
-function _replyGreeting(ctx) {
+function _replyGreeting(ctx, originalText) {
     const t = new Date().getHours();
-    const tod = t < 6 ? 'late' : t < 12 ? 'morning' : t < 18 ? 'afternoon' : 'evening';
+    const ro = _isRomanian(originalText);
+    const todEN = t < 6 ? 'late grinding' : t < 12 ? 'morning' : t < 18 ? 'afternoon' : 'evening';
+    const todRO = t < 6 ? 'noaptea (târziu)' : t < 12 ? 'dimineață' : t < 18 ? 'după-amiază' : 'seară';
     const mood = _currentMood();
+    if (ro) {
+        return {
+            reply: `salut boss, omega aici. ${todRO}. starea ${mood.toLowerCase()}, brain pulse ${ctx.brainHbAvgMs}ms. întreabă-mă despre poziții, pnl, decizii, bandit, alerte, sau orice simbol (btc/eth/sol/bnb).`,
+            mood
+        };
+    }
     return {
-        reply: `yo boss. omega here, ${tod} ${tod === 'late' ? '(grinding)' : ''}. mood ${mood.toLowerCase()}, brain pulse ${ctx.brainHbAvgMs}ms. ask me about positions, pnl, mood, bandit, decisions, alerts, or any symbol (btc/eth/sol/bnb).`,
+        reply: `yo boss. omega here, ${todEN}. mood ${mood.toLowerCase()}, brain pulse ${ctx.brainHbAvgMs}ms. ask me about positions, pnl, mood, bandit, decisions, alerts, or any symbol (btc/eth/sol/bnb).`,
         mood
     };
 }
@@ -258,7 +272,14 @@ function _replySymbol(ctx, symbol) {
 }
 
 // ── Intent: help ──────────────────────────────────────────────────────
-function _replyHelp(ctx) {
+function _replyHelp(ctx, originalText) {
+    const ro = _isRomanian(originalText || '');
+    if (ro) {
+        return {
+            reply: 'pot răspunde despre: poziții/deschise, pnl/azi, starea/cum mă simt, bandit/ring5, decizii/audit, alerte/doctor, sau orice simbol (btc/eth/sol/bnb). exemplu: "cum e btc" sau "ai vreo alertă".',
+            mood: 'CALM'
+        };
+    }
     return {
         reply: 'i can answer about: positions/open, pnl/today, mood/feeling, bandit/ring5, decisions/audit, doctor/alerts, or any symbol (btc/eth/sol/bnb). example: "how is btc" or "any alerts".',
         mood: 'CALM'
@@ -310,26 +331,34 @@ function _brainHbAvgMs() {
 // Groq unavailable / errors / times out.
 async function _replyLLMFallback(ctx, originalText) {
     if (!llmClient.available()) {
-        return _replyHelp(ctx);  // No API key — fall back to local
+        return _replyHelp(ctx, originalText);  // No API key — fall back to local
     }
     const mood = _currentMood();
+    const ro = _isRomanian(originalText);
     let openPosCount = 0;
     try {
         const at = _getAT();
         if (at && at.getOpenPositions) openPosCount = (at.getOpenPositions(ctx.userId) || []).length;
     } catch (_) { /* */ }
 
+    const langRule = ro
+        ? "LIMBA: Răspunde EXCLUSIV în română. NU folosi cuvinte englezești (no 'sorry', 'okay', 'cool', 'guess', 'I think'). Termeni tehnici trading (long/short/pnl) e OK netraduse. Niciun mix de limbi."
+        : "LANGUAGE: Reply EXCLUSIVELY in English. Do NOT inject Romanian words. Trading terms (long/short/pnl) stay as-is.";
+
     const sys = [
         "You are Omega — Zeus Terminal's chill brain.",
         "Personality: streetwise, calm-confident boss-mode trader, short answers (1-3 sentences max), slang OK, lowercase casual fine.",
-        "Reply in same language as the user — Romanian or English.",
+        langRule,
         "Hard rules:",
-        "  • Never give financial advice or specific trade calls (no 'buy X', 'sell Y', 'long here'). Redirect those to 'i don't do calls boss, ask me about your positions/pnl instead'.",
+        "  • Never give financial advice or specific trade calls (no 'buy X', 'sell Y', 'long here'). Redirect: 'nu dau pont-uri boss, întreabă-mă despre pozițiile tale' / 'no calls boss, ask about your positions'.",
         "  • Never claim to know prices or market direction. If asked, deflect.",
         "  • Don't pretend to be GPT/Claude/an LLM — you're Omega.",
         "  • Keep cool, never alarmist.",
+        "  • Direct answer first, no preamble like 'as Omega I think...' — just speak.",
         `Live state: mood ${mood}, ${openPosCount} open position(s), brain heartbeat avg ${ctx.brainHbAvgMs}ms.`,
-        "If the user asks about data you'd actually have (positions/pnl/bandit/decisions/alerts/symbol-specific), suggest those keywords briefly."
+        ro
+            ? "Dacă întrebarea cere date pe care le ai (poziții/pnl/bandit/decizii/alerte/per-simbol), sugerează scurt cuvintele cheie."
+            : "If the user asks about data you'd actually have (positions/pnl/bandit/decisions/alerts/symbol-specific), suggest those keywords briefly."
     ].join('\n');
 
     const result = await llmClient.chat({
@@ -337,14 +366,13 @@ async function _replyLLMFallback(ctx, originalText) {
             { role: 'system', content: sys },
             { role: 'user', content: originalText }
         ],
-        temperature: 0.7,
-        maxTokens: 200,
+        temperature: 0.6,
+        maxTokens: 220,
         timeoutMs: 8000
     });
 
     if (!result.ok) {
-        // Soft fallback: local help message + brief reason hint
-        const helpReply = _replyHelp(ctx);
+        const helpReply = _replyHelp(ctx, originalText);
         return {
             reply: helpReply.reply,
             mood: helpReply.mood,
@@ -373,9 +401,10 @@ async function respond(params) {
         nowMs: Date.now()
     };
 
+    const originalText = params.text || '';
     // Order: specific intents → generic.
-    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx);
-    if (text.match(/\b(help|ce poti|what can|commands)\b/)) return _replyHelp(ctx);
+    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
+    if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
 
     // Symbol-specific first (more specific than "decisions" generic).
     const symMatch = text.match(SYMBOL_RE);
@@ -398,7 +427,7 @@ async function respond(params) {
     }
 
     // Unknown intent → Groq LLM fallback (with Zeus context) OR local help if unavailable.
-    return await _replyLLMFallback(ctx, params.text || '');
+    return await _replyLLMFallback(ctx, originalText);
 }
 
 module.exports = { respond };
