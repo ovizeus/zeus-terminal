@@ -87,17 +87,41 @@ function _fmtAge(ms) {
 // stronger markers first. EN is default fallback.
 function _detectLanguage(text) {
     const t = String(text || '').toLowerCase();
-    // Romanian — strong markers
-    if (/\b(ce|cum|de ce|sunt|este|să|și|despre|pentru|în|în|ai|am|esti|ești|faci|salut|bună|spune|pozi[țt]ii|decizii|părere|gândește|gândesc|piață)\b/i.test(t)) return 'RO';
-    // Portuguese — check BEFORE ES (shared "mercado" word). "você/voce/hoje"
-    // are exclusive PT markers.
+
+    // [Day 35 bugfix] Strong-distinguishing markers (ES/FR/DE/PT first) BEFORE
+    // RO so loanword-heavy RO queries don't false-positive. RO diacritics ț/ș/ă
+    // are RO-exclusive (Vietnamese ă rare in trading chat); use them as strong
+    // catch-all. Plus an expanded RO marker list covering common diacritic-less
+    // operator phrasings ("intram long", "fac un long", "vezi vreo...").
+
+    // 1. PT — "você/hoje" are exclusive markers, check before ES (shared "mercado")
     if (/\b(voc[eê]|hoje|n[aã]o sei|olha o mercado|como vai)\b/i.test(t)) return 'PT';
-    // Spanish — strong markers (inverted ?/! or unique words)
-    if (/(¿|¡)/.test(t) || /\b(cómo|c[oó]mo ves|qu[eé] ves|hoy|el d[ií]a|cu[aá]l|por qu[eé]|me preguntas|por favor|mercado hoy)\b/i.test(t)) return 'ES';
-    // French — strong markers (apostrophe + tu/vous + accents)
+
+    // 2. ES — inverted punctuation or unique markers
+    if (/(¿|¡)/.test(t) || /\b(cómo|c[oó]mo ves|qu[eé] ves|hoy|el d[ií]a|cu[aá]l|por qu[eé]|me preguntas|mercado hoy)\b/i.test(t)) return 'ES';
+
+    // 3. FR — distinguishing markers (apostrophe contractions, "comment tu")
     if (/\b(comment tu|qu['']est|qu['']?est-ce|comment vois|marché|aujourd['']?hui|vois-tu|est-ce que|s['']il vous|vous voyez|tu vois le|comment ça)\b/i.test(t)) return 'FR';
-    // German — strong markers
-    if (/\b(wie siehst|wie geht|der markt|den markt|heute|wirklich|warum|kannst du|kannst|bitte|guten tag)\b/i.test(t)) return 'DE';
+
+    // 4. DE — distinguishing markers
+    if (/\b(wie siehst|wie geht|der markt|den markt|heute|wirklich|warum|kannst du|guten tag)\b/i.test(t)) return 'DE';
+
+    // 5. RO — RO-exclusive diacritics ț/ș/ă are decisive (other Latin langs
+    // don't use these specific T-comma/S-comma/breve characters in normal
+    // text). If any present → RO.
+    if (/[țșă]/i.test(t)) return 'RO';
+
+    // 6. RO marker list expanded (no-diacritic operator queries). Covers:
+    //   pronouns: ce, cum, de ce, ai, am, mi, ti, lui, ne, ne-am
+    //   short verbs: fac, faci, face, fac sa, vezi, vad, vede, mergi, merge,
+    //                stau, stai, sta, vrei, vreau, vrem, vreo, scad, scade,
+    //                intru, intri, intra, intram, cumpar, vand, urca, scade
+    //   conjunctions: dar, sau, daca, atunci, ca, sa
+    //   adverbs: azi, ieri, maine, acum, aici, aproape, putin
+    //   nouns: pont, poarta, piata, intrebare, ras, raspuns
+    //   particles: e (= este), ii, oare
+    if (/\b(ce|cum|de ce|sunt|este|sa|si|despre|pentru|in|ai|am|esti|faci|salut|buna|spune|pozitii|decizii|parere|gandeste|gandesc|piata|vezi|vad|vede|vrei|vreau|vrem|vreo|fac|faci|face|merge|mergi|mergem|stau|stai|sta|scade|cumpar|cumperi|cumparam|vand|vinde|vindem|intru|intri|intra|intram|urca|scade|pompeaza|pompeazã|crezi|crede|spune|zice|zici|poti|poate|putem|treb|trebui|spune.?mi|sa.?mi|sa.?ti|momentul|azi|maine|acum|aici|aproape|pont|poarta|piata|intrebare|brain.?ul|aia|asta|astia|astea|ai.?ul|asa|altfel|altul|alta|altele|alti|oare)\b/i.test(t)) return 'RO';
+
     return 'EN';
 }
 
