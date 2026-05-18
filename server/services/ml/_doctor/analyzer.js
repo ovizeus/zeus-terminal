@@ -32,6 +32,11 @@ const COGNITIVE_STATES = Object.freeze([
     'HEALTHY', 'DEGRADED', 'COMPROMISED', 'SAFE_MODE', 'DEAD'
 ]);
 const ANALYZER_INTERVAL_MS = 5000;
+// [Day 22] DB integrity check throttle — `PRAGMA integrity_check` is expensive
+// (full DB scan); run at most once per 5 min. Cached result reused between checks.
+const DB_INTEGRITY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+let _lastDbIntegrityCheckTs = 0;
+let _lastDbIntegrityFail = false;
 
 let _lastState = null;
 let _running = false;
@@ -138,8 +143,20 @@ function analyze(params) {
     // moneyFrozen: hook for §28 reconcilePosition status. For D-3 always false.
     const moneyFrozen = false;
 
-    // dbIntegrityFail: SQLite PRAGMA integrity_check. For D-3 always false.
-    const dbIntegrityFail = false;
+    // [Day 22] DB integrity check periodic — runs at most once per 5 min.
+    // PRAGMA integrity_check returns 'ok' if healthy, error list otherwise.
+    let dbIntegrityFail = _lastDbIntegrityFail;
+    if (nowTs - _lastDbIntegrityCheckTs >= DB_INTEGRITY_CHECK_INTERVAL_MS) {
+        _lastDbIntegrityCheckTs = nowTs;
+        try {
+            const rows = db.prepare('PRAGMA integrity_check(1)').all();
+            // Healthy: single row [{integrity_check: 'ok'}]. Anything else = fail.
+            dbIntegrityFail = !(rows.length === 1 && rows[0].integrity_check === 'ok');
+        } catch (_) {
+            dbIntegrityFail = true; // exception running pragma = DB unreadable
+        }
+        _lastDbIntegrityFail = dbIntegrityFail;
+    }
 
     const { state, reason } = computeCognitiveState({
         activeP0, activeP1,
@@ -184,9 +201,24 @@ function start() {
     if (_running) return;
     _running = true;
     _timer = setInterval(() => {
-        try { analyze({ nowTs: Date.now() }); }
+        // [Day 22] Analyzer self-heartbeat via telemetryCollector — closes
+        // recursive observability loop (Doctor monitors itself; if analyzer
+        // freezes, its own staleness gets reported when re-running).
+        const tickStart = Date.now();
+        let tickOk = 1;
+        try { analyze({ nowTs: tickStart }); }
         catch (err) {
+            tickOk = 0;
             console.error('[OMEGA-DOCTOR analyzer] tick error:', err.message);
+        } finally {
+            try {
+                telemetryCollector.recordInvocation({
+                    moduleId: '_doctor_analyzer',
+                    latencyMs: Date.now() - tickStart,
+                    ranOk: tickOk,
+                    ts: Date.now()
+                });
+            } catch (_) { /* never block tick */ }
         }
     }, ANALYZER_INTERVAL_MS);
     if (_timer.unref) _timer.unref();
