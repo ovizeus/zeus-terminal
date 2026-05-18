@@ -73,25 +73,17 @@ export function ModeBar() {
     modeKey = 'real'
   }
 
-  // [BUG-T3 2026-05-17] Hard-disable mode switch when opposite-mode positions
-  // exist. Confirm dialog (switchGlobalMode → _buildModeSwitchMessage) was
-  // soft-gate only; operator chose Opțiunea C → strict block until those
-  // positions are closed. Per `feedback_engine_mode_switch_position_safety`.
-  const hardDisableForOppositePositions = oppositeCount > 0
-  const disabledTitle = hardDisableForOppositePositions
-    ? `${oppositeCount} ${oppositeModeLabel} ${oppositeCount === 1 ? 'position' : 'positions'} open — close them first to switch mode`
-    : undefined
-  if (hardDisableForOppositePositions) {
-    btnClass += ' zmb-btn-disabled-locked'
-  }
+  // [2026-05-18 operator reversal] Hard-disable removed. Per operator
+  // request: demo & live are independent sandboxes — switching mode keeps
+  // opposite-mode positions tracked on their side (server already handles
+  // this; positions don't dissolve on flip). Confirm dialog
+  // (_buildModeSwitchMessage) already surfaces opposite-mode position count
+  // + clear warning that they remain active on the other side.
+  // Memory updated: feedback_engine_mode_switch_position_safety reversed.
+  const hardDisableForOppositePositions = false
+  const disabledTitle: string | undefined = undefined
 
   function handleSwitch() {
-    if (hardDisableForOppositePositions) {
-      // Defensive — button is disabled but onClick may still fire on synthetic
-      // events; surface a toast so the operator sees why nothing happened.
-      toast(disabledTitle as string, 4000, _ZI.lock)
-      return
-    }
     if (engineMode === 'demo') {
       if (executionEnv === null) {
         toast('LIVE MODE LOCKED: ' + (executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w)
