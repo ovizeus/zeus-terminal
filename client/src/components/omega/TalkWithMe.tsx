@@ -31,8 +31,17 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [expanded, setExpanded] = useState(false)
-    const inputRef = useRef<HTMLInputElement | null>(null)
+    const inputRef = useRef<HTMLTextAreaElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
+
+    // [Day 35] Auto-grow textarea up to 6 lines, then scroll. Run on every input change.
+    useEffect(() => {
+        const el = inputRef.current
+        if (!el) return
+        el.style.height = 'auto'
+        const newH = Math.min(el.scrollHeight, 160) // ~6 lines × ~26px
+        el.style.height = newH + 'px'
+    }, [input])
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -119,7 +128,8 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
         }
     }
 
-    function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+        // [Day 35] Enter sends, Shift+Enter inserts newline (textarea convention).
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault()
             handleSend()
@@ -153,23 +163,24 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
             </div>
             {error && <div className="omega-chat-error">⚠ {error}</div>}
             <div className="omega-chat-input-row">
-                <input
+                <textarea
                     ref={inputRef}
                     className="omega-chat-input"
-                    placeholder="ask omega anything..."
+                    placeholder="ask omega anything... (Shift+Enter = newline, Enter = send)"
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => {
                         if (e.key === 'Escape') {
                             setExpanded(false);
-                            (e.target as HTMLInputElement).blur();
+                            (e.target as HTMLTextAreaElement).blur();
                         } else {
                             handleKeyDown(e);
                         }
                     }}
                     onFocus={() => setExpanded(true)}
                     disabled={sending}
-                    maxLength={500}
+                    maxLength={5000}
+                    rows={1}
                 />
                 <button
                     className="omega-chat-send"

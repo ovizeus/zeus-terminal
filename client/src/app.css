@@ -6558,14 +6558,30 @@ select option {
   display: flex; gap: 8px; padding: 8px 12px;
   border-top: 1px solid rgba(0,212,255,0.15);
   background: rgba(0,0,0,0.3);
+  align-items: flex-end;
 }
+/* [Day 35] Textarea variant — multi-line, auto-grow up to ~6 lines.
+   Height is controlled inline via React (auto-grow useEffect). */
 .omega-chat-input {
-  flex: 1; padding: 8px 12px;
+  flex: 1;
+  padding: 10px 12px;
   background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(0,212,255,0.25); border-radius: 4px;
+  border: 1px solid rgba(0,212,255,0.25);
+  border-radius: 4px;
   color: #d6e8ff;
-  font-family: 'Inter', sans-serif; font-size: 13px;
-  letter-spacing: 0.01em; outline: none; transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  resize: none;            /* React handles height */
+  overflow-y: auto;
+  min-height: 36px;
+  max-height: 160px;       /* ~6 lines; scroll past */
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
 }
 .omega-chat-input:focus { border-color: #00d4ff; box-shadow: 0 0 10px rgba(0,212,255,0.25); }
 .omega-chat-input::placeholder { color: #6a4f8a; }
@@ -6575,6 +6591,8 @@ select option {
   border: none; border-radius: 4px; cursor: pointer;
   color: #050510; font-family: 'Orbitron', sans-serif; font-weight: 900;
   font-size: 14px; transition: all 0.2s;
+  align-self: flex-end;
+  height: 36px;
 }
 .omega-chat-send:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
 .omega-chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
