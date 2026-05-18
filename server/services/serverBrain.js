@@ -84,7 +84,8 @@ function _getVoiceLogger() {
 }
 const _lastThoughtTs = new Map(); // key="userId:symbol:kind" → lastMs
 const _lastRegime = new Map();    // key="userId:symbol" → last regime
-const THOUGHT_THROTTLE_MS = 60 * 1000; // 1 thought per (user, symbol, kind) per minute
+const THOUGHT_THROTTLE_MS = 60 * 1000; // default 1/min per (user, symbol, kind)
+const THOUGHT_THROTTLE_NEUTRAL_MS = 3 * 60 * 1000; // 3min for neutral filler
 function _writeThought(params) {
     try {
         const vl = _getVoiceLogger();
@@ -92,7 +93,9 @@ function _writeThought(params) {
         const key = `${params.userId}:${params.symbol || '_'}:${params.kind || 'gen'}`;
         const now = Date.now();
         const last = _lastThoughtTs.get(key) || 0;
-        if (now - last < THOUGHT_THROTTLE_MS) return;
+        const throttle = params.kind === 'neutral_watch'
+            ? THOUGHT_THROTTLE_NEUTRAL_MS : THOUGHT_THROTTLE_MS;
+        if (now - last < throttle) return;
         _lastThoughtTs.set(key, now);
         vl.logUtterance({
             userId: params.userId,
@@ -782,6 +785,15 @@ function _runCycle() {
                 // Lowered confidence threshold to 50 — more frequent thoughts
                 // showing what brain is genuinely considering. Different
                 // mood/wording for each confidence band.
+                // [Day 29.5] Also write neutral/flat thoughts (throttled longer)
+                // so feed isn't dead during sideways markets.
+                if (fusion.dir === 'neut') {
+                    _writeThought({
+                        userId, symbol: snap.symbol, kind: 'neutral_watch', mood: 'CALM',
+                        text: `watching ${snap.symbol} (${regime.regime}) — flat signal, no edge yet.`,
+                        contextJson: JSON.stringify({ regime: regime.regime, confidence: fusion.confidence })
+                    });
+                }
                 if (fusion.dir !== 'neut') {
                     const sideWord = fusion.dir === 'bull' ? 'LONG' : 'SHORT';
                     let kind, moodTh, text;
