@@ -301,7 +301,13 @@ export const LivePositionRow = memo(function LivePositionRow({ pos }: { pos: any
     )
   }
 
-  const pnl = (pos.fromExchange && Number.isFinite(pos.pnl)) ? pos.pnl : calcPosPnL(pos, cur)
+  // [2026-05-18 PnL parity fix] For LIVE positions, prefer Binance-fetched
+  // unrealizedPnL (pos.pnl, mark-price-based). Local last-price calc differs
+  // from Binance UI on volatile assets. Server-authoritative positions don't
+  // have fromExchange flag but DO have pos.pnl populated from periodic sync.
+  const pnl = ((pos.fromExchange || pos.mode === 'live') && Number.isFinite(pos.pnl))
+    ? pos.pnl
+    : calcPosPnL(pos, cur)
   if (!pos.fromExchange) pos.pnl = pnl
   const pnlPct = pos.size > 0 ? (pnl / (pos.size || 1) * 100).toFixed(2) : '0.00'
 

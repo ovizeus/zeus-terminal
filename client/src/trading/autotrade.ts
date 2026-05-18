@@ -1918,7 +1918,17 @@ export function renderATPositions(): void {
     const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
       : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
     const diff = symPrice - pos.entry
-    const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+    // [2026-05-18 PnL parity fix] For LIVE positions, prefer Binance-fetched
+    // unrealizedPnL when available (pos.pnl, set by liveApiSyncState from
+    // /fapi/v2/positionRisk = mark-price-based). Local last-price calc
+    // differs from Binance UI by $4-20 on volatile assets (mark vs last).
+    // Operator-reported -44 (Zeus local) vs -26 (Binance mark) on ETHUSDT.
+    // Falls back to local computation when pnl missing/NaN (e.g., during
+    // first 60s before liveApiSyncState polls).
+    const _localPnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+    const pnl = ((pos.mode === 'live' || pos.fromExchange) && Number.isFinite(pos.pnl))
+      ? pos.pnl
+      : _localPnl
     const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
     const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
     const safeSide = escHtml(pos.side)
