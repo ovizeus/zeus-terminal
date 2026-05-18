@@ -13,13 +13,32 @@ import {
     postRing5InfluenceSeed,
     fetchRing5Aggregate,
     fetchRing5Cells,
+    fetchRing5Timeseries,
     type Ring5AuditRow,
     type Ring5EligibilityResult,
     type Ring5PosteriorsResponse,
     type Ring5InfluenceStatusResponse,
     type Ring5AggregateBucket,
     type Ring5Cell,
+    type Ring5TimeseriesBucket,
 } from './ring5Api'
+
+// SVG sparkline — minimal, no chart lib. Renders a polyline through n values
+// normalized to height. Width scales to fit container; height fixed.
+function Sparkline({ data, color = '#00d4ff', width = 200, height = 36 }:
+    { data: number[]; color?: string; width?: number; height?: number }) {
+    if (!data || data.length === 0) return null
+    const max = Math.max(...data, 1)
+    const stepX = data.length > 1 ? width / (data.length - 1) : 0
+    const points = data.map((v, i) =>
+        `${(i * stepX).toFixed(1)},${(height - (v / max) * height).toFixed(1)}`
+    ).join(' ')
+    return (
+        <svg className="omega-ring5-sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+            <polyline points={points} fill="none" stroke={color} strokeWidth="1.5" />
+        </svg>
+    )
+}
 
 const POLL_INTERVAL_MS = 5000
 const AUDIT_LIMIT = 50
@@ -81,6 +100,7 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
     const [aggError, setAggError] = useState<string | null>(null)
     const [cells, setCells] = useState<Ring5Cell[]>([])
     const [cellsError, setCellsError] = useState<string | null>(null)
+    const [tsBuckets, setTsBuckets] = useState<Ring5TimeseriesBucket[]>([])
 
     const reloadAggregate = useCallback(async () => {
         try {
@@ -103,16 +123,25 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
         }
     }, [])
 
+    const reloadTimeseries = useCallback(async () => {
+        try {
+            const r = await fetchRing5Timeseries()
+            setTsBuckets(r.buckets)
+        } catch (_) { /* silent — sparkline optional */ }
+    }, [])
+
     useEffect(() => {
         if (!expanded) return
         reloadAggregate()
         reloadCells()
+        reloadTimeseries()
         const t = setInterval(() => {
             reloadAggregate()
             reloadCells()
+            reloadTimeseries()
         }, POLL_INTERVAL_MS * 2)  // poll at half audit cadence
         return () => clearInterval(t)
-    }, [reloadAggregate, reloadCells, expanded])
+    }, [reloadAggregate, reloadCells, reloadTimeseries, expanded])
 
     const reloadInfluenceStatus = useCallback(async () => {
         try {
@@ -244,6 +273,15 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
                 <h3 className="omega-ring5-section-title">
                     Audit aggregate (last 24h, {aggTotal} rows total)
                 </h3>
+                {tsBuckets.length > 0 && (
+                    <div className="omega-ring5-sparkline-wrap">
+                        <span className="omega-ring5-sparkline-label">Activity 2h (5min buckets):</span>
+                        <Sparkline data={tsBuckets.map(b => b.n)} />
+                        <span className="omega-ring5-sparkline-meta">
+                            {tsBuckets.length} buckets · max {Math.max(...tsBuckets.map(b => b.n))} rows
+                        </span>
+                    </div>
+                )}
                 {aggError && <div className="omega-ring5-error">{aggError}</div>}
                 {aggBuckets.length === 0 && !aggError && (
                     <div className="omega-ring5-empty">No audit data in last 24h.</div>

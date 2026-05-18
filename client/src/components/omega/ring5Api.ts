@@ -171,6 +171,25 @@ export interface Ring5CellsResponse {
     cells: Ring5Cell[]
 }
 
+export interface Ring5TimeseriesBucket {
+    ts: number
+    n: number
+    accepted: number
+    rejected: number
+    skipped: number
+}
+
+export interface Ring5TimeseriesResponse {
+    ok: boolean
+    bucketMs: number
+    windowMs: number
+    buckets: Ring5TimeseriesBucket[]
+}
+
+export async function fetchRing5Timeseries(): Promise<Ring5TimeseriesResponse> {
+    return _get<Ring5TimeseriesResponse>('/api/ring5/audit/timeseries')
+}
+
 export async function fetchRing5Aggregate(
     params: { since?: number } = {}
 ): Promise<Ring5AggregateResponse> {
