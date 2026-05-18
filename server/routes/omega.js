@@ -236,7 +236,7 @@ router.get('/r5a-stats', (req, res) => {
 // which consumes ring state. For now: state-aware basic responses based on
 // open positions count + AT state. Persists every exchange to ml_voice_log
 // so the Voice feed shows the conversation too.
-router.post('/chat', express.json(), (req, res) => {
+router.post('/chat', express.json(), async (req, res) => {
     const userId = _requireUser(req, res);
     if (!userId) return;
     const question = String(req.body && req.body.text || '').slice(0, 500).trim();
@@ -244,13 +244,14 @@ router.post('/chat', express.json(), (req, res) => {
         return res.status(400).json({ ok: false, error: 'text required' });
     }
 
-    // [Day 26] Real local responder — queries live Zeus state. 9 intents
-    // (greeting/help/positions/pnl/mood/bandit/decisions/doctor/symbol+fallback).
-    let reply, mood = 'CALM';
+    // [Day 26] Smart local responder + Groq LLM fallback for unscripted Qs.
+    let reply, mood = 'CALM', llmFallback = false, llmModel = null;
     try {
-        const r = chatResponder.respond({ userId, text: question });
+        const r = await chatResponder.respond({ userId, text: question });
         reply = r.reply;
         mood = r.mood;
+        llmFallback = !!r.llmFallback;
+        llmModel = r.llmModel || null;
     } catch (err) {
         reply = `brain hiccup: ${err.message}. try again or ask 'help'.`;
         mood = 'SAD';
@@ -259,8 +260,8 @@ router.post('/chat', express.json(), (req, res) => {
     try {
         voiceLogger.logUtterance({
             userId, utteranceType: 'CHAT_REPLY', mood, text: reply,
-            templateId: 'wave1_smart_responder',
-            contextJson: JSON.stringify({ question })
+            templateId: llmFallback ? 'wave1_groq_llm' : 'wave1_smart_responder',
+            contextJson: JSON.stringify({ question, llmFallback, llmModel })
         });
     } catch (_) { /* defensive — never fail chat on log error */ }
 

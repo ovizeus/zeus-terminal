@@ -33,89 +33,98 @@ function clean() {
 describe('chatResponder.respond', () => {
     beforeEach(clean);
 
-    test('greeting intent', () => {
-        const r = responder.respond({ userId: 1, text: 'hi' });
+    test('greeting intent', async () => {
+        const r = await responder.respond({ userId: 1, text: 'hi' });
         expect(r.reply).toMatch(/yo boss|omega/i);
         expect(r.mood).toBeDefined();
     });
 
-    test('help intent', () => {
-        const r = responder.respond({ userId: 1, text: 'help' });
+    test('help intent', async () => {
+        const r = await responder.respond({ userId: 1, text: 'help' });
         expect(r.reply).toMatch(/positions|pnl|mood/i);
         expect(r.mood).toBe('CALM');
     });
 
-    test('positions intent — empty when no positions', () => {
-        const r = responder.respond({ userId: 9999, text: 'positions' });
+    test('positions intent — empty when no positions', async () => {
+        const r = await responder.respond({ userId: 9999, text: 'positions' });
         expect(r.reply).toMatch(/no positions|flat|serverAT not available/i);
     });
 
-    test('pnl intent — no trades response', () => {
-        const r = responder.respond({ userId: 9999, text: 'how is my pnl today' });
+    test('pnl intent — no trades response', async () => {
+        const r = await responder.respond({ userId: 9999, text: 'how is my pnl today' });
         expect(r.reply).toMatch(/no closed trades|couldn't/i);
     });
 
-    test('mood intent — empty audit window', () => {
-        const r = responder.respond({ userId: 1, text: 'how do you feel' });
+    test('mood intent — empty audit window', async () => {
+        const r = await responder.respond({ userId: 1, text: 'how do you feel' });
         expect(r.reply).toMatch(/idle|just rebooted|feeling/i);
     });
 
-    test('bandit intent — cold state', () => {
-        const r = responder.respond({ userId: 1, text: 'how is the bandit' });
+    test('bandit intent — cold state', async () => {
+        const r = await responder.respond({ userId: 1, text: 'how is the bandit' });
         expect(r.reply).toMatch(/bandit/i);
         expect(r.reply).toMatch(/cold|seed|INACTIVE/i);
     });
 
-    test('decisions intent — empty audit window', () => {
-        const r = responder.respond({ userId: 1, text: 'what decisions are you making' });
+    test('decisions intent — empty audit window', async () => {
+        const r = await responder.respond({ userId: 1, text: 'what decisions are you making' });
         expect(r.reply).toMatch(/no decisions|idle/i);
     });
 
-    test('decisions intent — with audit data', () => {
+    test('decisions intent — with audit data', async () => {
         seedAuditRow('BTCUSDT', 'RANGE', 'skipped');
         seedAuditRow('BTCUSDT', 'RANGE', 'skipped');
         seedAuditRow('ETHUSDT', 'TREND', 'skipped');
-        const r = responder.respond({ userId: 1, text: 'decisions' });
+        const r = await responder.respond({ userId: 1, text: 'decisions' });
         expect(r.reply).toMatch(/3 decisions/);
         expect(r.reply).toMatch(/BTCUSDT|ETHUSDT/);
     });
 
-    test('doctor intent', () => {
-        const r = responder.respond({ userId: 1, text: 'any alerts' });
+    test('doctor intent', async () => {
+        const r = await responder.respond({ userId: 1, text: 'any alerts' });
         expect(r.reply).toMatch(/cognitive state|active P0|HEALTHY|COMPROMISED/i);
     });
 
-    test('symbol-specific intent — no recent data', () => {
-        const r = responder.respond({ userId: 1, text: 'how is btc' });
+    test('symbol-specific intent — no recent data', async () => {
+        const r = await responder.respond({ userId: 1, text: 'how is btc' });
         expect(r.reply).toMatch(/BTCUSDT|asleep|no recent/i);
     });
 
-    test('symbol-specific intent — with audit data', () => {
+    test('symbol-specific intent — with audit data', async () => {
         seedAuditRow('BTCUSDT', 'TREND', 'accepted');
         seedAuditRow('BTCUSDT', 'TREND', 'skipped');
-        const r = responder.respond({ userId: 1, text: 'how is btc' });
+        const r = await responder.respond({ userId: 1, text: 'how is btc' });
         expect(r.reply).toMatch(/BTCUSDT/);
         expect(r.reply).toMatch(/2 decisions/);
         expect(r.reply).toMatch(/TREND/);
     });
 
-    test('fallback intent — unknown question', () => {
-        const r = responder.respond({ userId: 1, text: 'asdf qwerty xyz123' });
+    test('fallback intent — unknown question', async () => {
+        const r = await responder.respond({ userId: 1, text: 'asdf qwerty xyz123' });
         expect(r.reply).toMatch(/positions|pnl|mood|bandit/i);
     });
 
-    test('rude language → calm response', () => {
-        const r = responder.respond({ userId: 1, text: 'wtf is this' });
+    test('rude language → calm response', async () => {
+        const r = await responder.respond({ userId: 1, text: 'wtf is this' });
         expect(r.reply).toMatch(/easy boss|breathe/i);
         expect(r.mood).toBe('CALM');
     });
 
-    test('empty text', () => {
-        const r = responder.respond({ userId: 1, text: '' });
+    test('empty text', async () => {
+        const r = await responder.respond({ userId: 1, text: '' });
         expect(r.reply).toMatch(/speak/i);
     });
 
-    test('missing userId throws', () => {
-        expect(() => responder.respond({ text: 'hi' })).toThrow(/userId/);
+    test('missing userId throws', async () => {
+        await expect(responder.respond({ text: 'hi' })).rejects.toThrow(/userId/);
+    });
+
+    test('unknown intent without GROQ_API_KEY → falls back to local help', async () => {
+        // No API key set in env → groqClient.available()=false → local help.
+        const prev = process.env.GROQ_API_KEY;
+        delete process.env.GROQ_API_KEY;
+        const r = await responder.respond({ userId: 1, text: 'tell me a philosophical joke about markets' });
+        expect(r.reply).toMatch(/positions|pnl|mood|bandit/i);
+        if (prev) process.env.GROQ_API_KEY = prev;
     });
 });

@@ -12,6 +12,7 @@
  */
 
 const { db } = require('../../database');
+const llmClient = require('./llmClient');
 
 // Lazy require to avoid circular deps via serverAT → database → this module.
 let _serverAT = null;
@@ -303,8 +304,64 @@ function _brainHbAvgMs() {
     } catch (_) { return 0; }
 }
 
+// ── Groq LLM fallback ─────────────────────────────────────────────────
+// When intent detection finds no specific match, ask Groq Llama 3.3 70B
+// with Zeus context injected as system prompt. Falls back to local help if
+// Groq unavailable / errors / times out.
+async function _replyLLMFallback(ctx, originalText) {
+    if (!llmClient.available()) {
+        return _replyHelp(ctx);  // No API key — fall back to local
+    }
+    const mood = _currentMood();
+    let openPosCount = 0;
+    try {
+        const at = _getAT();
+        if (at && at.getOpenPositions) openPosCount = (at.getOpenPositions(ctx.userId) || []).length;
+    } catch (_) { /* */ }
+
+    const sys = [
+        "You are Omega — Zeus Terminal's chill brain.",
+        "Personality: streetwise, calm-confident boss-mode trader, short answers (1-3 sentences max), slang OK, lowercase casual fine.",
+        "Reply in same language as the user — Romanian or English.",
+        "Hard rules:",
+        "  • Never give financial advice or specific trade calls (no 'buy X', 'sell Y', 'long here'). Redirect those to 'i don't do calls boss, ask me about your positions/pnl instead'.",
+        "  • Never claim to know prices or market direction. If asked, deflect.",
+        "  • Don't pretend to be GPT/Claude/an LLM — you're Omega.",
+        "  • Keep cool, never alarmist.",
+        `Live state: mood ${mood}, ${openPosCount} open position(s), brain heartbeat avg ${ctx.brainHbAvgMs}ms.`,
+        "If the user asks about data you'd actually have (positions/pnl/bandit/decisions/alerts/symbol-specific), suggest those keywords briefly."
+    ].join('\n');
+
+    const result = await llmClient.chat({
+        messages: [
+            { role: 'system', content: sys },
+            { role: 'user', content: originalText }
+        ],
+        temperature: 0.7,
+        maxTokens: 200,
+        timeoutMs: 8000
+    });
+
+    if (!result.ok) {
+        // Soft fallback: local help message + brief reason hint
+        const helpReply = _replyHelp(ctx);
+        return {
+            reply: helpReply.reply,
+            mood: helpReply.mood,
+            llmFallback: false,
+            llmError: result.error
+        };
+    }
+    return {
+        reply: result.text,
+        mood,
+        llmFallback: true,
+        llmModel: result.model
+    };
+}
+
 // ── Main entry ────────────────────────────────────────────────────────
-function respond(params) {
+async function respond(params) {
     const userId = params.userId;
     const text = String(params.text || '').toLowerCase().trim();
     if (!userId) throw new Error('chatResponder: userId required');
@@ -331,11 +388,13 @@ function respond(params) {
     if (text.match(/\b(decision|decisions|audit|brain|gandire|decizii)\b/)) return _replyDecisions(ctx);
     if (text.match(/\b(alert|alerts|doctor|problem|problems|error|errors|probleme|sanatate|health)\b/)) return _replyDoctor(ctx);
 
-    // Fallback: rude or unknown → still helpful.
+    // Rude language: short de-escalation, no LLM (saves quota for real questions).
     if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
         return { reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' };
     }
-    return _replyHelp(ctx);
+
+    // Unknown intent → Groq LLM fallback (with Zeus context) OR local help if unavailable.
+    return await _replyLLMFallback(ctx, params.text || '');
 }
 
 module.exports = { respond };
