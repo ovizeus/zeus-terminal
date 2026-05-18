@@ -177,6 +177,102 @@ describe('Ring5 admin routes', () => {
         });
     });
 
+    describe('GET /audit/aggregate', () => {
+        test('rejects non-admin', async () => {
+            const app = buildApp({ id: 5, role: 'user' });
+            const res = await request(app).get('/api/ring5/audit/aggregate');
+            expect(res.status).toBe(403);
+        });
+
+        test('returns empty buckets when no audit data', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/audit/aggregate');
+            expect(res.body.ok).toBe(true);
+            expect(res.body.buckets).toEqual([]);
+            expect(res.body.totalRows).toBe(0);
+        });
+
+        test('groups by (symbol, regime, status) with counts', async () => {
+            const t = _now();
+            seedAudit(1, 'accepted', t);
+            seedAudit(1, 'accepted', t + 1);
+            seedAudit(1, 'rejected', t + 2);
+            seedAudit(2, 'skipped', t + 3);
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/audit/aggregate');
+            expect(res.body.totalRows).toBe(4);
+            expect(res.body.buckets.length).toBeGreaterThan(0);
+            const acceptedBucket = res.body.buckets.find(b => b.gate_status === 'accepted');
+            expect(acceptedBucket).toBeDefined();
+            expect(acceptedBucket.n).toBe(2);
+            expect(acceptedBucket.symbol).toBe('BTCUSDT');
+            expect(acceptedBucket.regime).toBe('trending');
+        });
+
+        test('respects since filter (default last 24h)', async () => {
+            const t = _now();
+            seedAudit(1, 'accepted', t - 48 * 3600 * 1000);  // 48h ago
+            seedAudit(1, 'rejected', t);  // now
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/audit/aggregate');
+            expect(res.body.totalRows).toBe(1);
+            expect(res.body.buckets[0].gate_status).toBe('rejected');
+        });
+
+        test('explicit since=0 returns all rows', async () => {
+            const t = _now();
+            seedAudit(1, 'accepted', t - 48 * 3600 * 1000);
+            seedAudit(1, 'rejected', t);
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/audit/aggregate?since=0');
+            expect(res.body.totalRows).toBe(2);
+        });
+    });
+
+    describe('GET /cells', () => {
+        test('rejects non-admin', async () => {
+            const app = buildApp({ id: 5, role: 'user' });
+            const res = await request(app).get('/api/ring5/cells');
+            expect(res.status).toBe(403);
+        });
+
+        test('returns empty when no posteriors', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/cells');
+            expect(res.body.ok).toBe(true);
+            expect(res.body.cells).toEqual([]);
+        });
+
+        test('returns L4 cells sorted by observationCount desc', async () => {
+            for (let i = 0; i < 5; i++) {
+                bp.updatePosterior({ level: 4, cellKey: '1:DEMO:BTCUSDT:trending', outcomeClass: 'positive', ts: _now() });
+            }
+            for (let i = 0; i < 10; i++) {
+                bp.updatePosterior({ level: 4, cellKey: '1:DEMO:ETHUSDT:ranging', outcomeClass: 'positive', ts: _now() });
+            }
+            for (let i = 0; i < 3; i++) {
+                bp.updatePosterior({ level: 4, cellKey: '2:TESTNET:SOLUSDT:trending', outcomeClass: 'negative', ts: _now() });
+            }
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/cells');
+            expect(res.body.cells.length).toBe(3);
+            expect(res.body.cells[0].cellKey).toBe('1:DEMO:ETHUSDT:ranging');
+            expect(res.body.cells[0].observationCount).toBe(10);
+            expect(res.body.cells[1].cellKey).toBe('1:DEMO:BTCUSDT:trending');
+            expect(res.body.cells[1].observationCount).toBe(5);
+        });
+
+        test('respects limit query', async () => {
+            for (let i = 0; i < 5; i++) {
+                bp.updatePosterior({ level: 4, cellKey: '1:DEMO:BTCUSDT:trending', outcomeClass: 'positive', ts: _now() });
+                bp.updatePosterior({ level: 4, cellKey: '1:DEMO:ETHUSDT:ranging', outcomeClass: 'positive', ts: _now() });
+            }
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/cells?limit=1');
+            expect(res.body.cells.length).toBe(1);
+        });
+    });
+
     describe('POST /influence/seed (admin activator)', () => {
         test('rejects non-admin', async () => {
             const app = buildApp({ id: 5, role: 'user' });

@@ -118,6 +118,58 @@ router.get('/posteriors', _requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/ring5/audit/aggregate?since=ts
+// Group audit rows by (symbol, regime, gate_status). Default window = last 24h.
+router.get('/audit/aggregate', _requireAdmin, (req, res) => {
+    try {
+        const sinceRaw = req.query.since;
+        let since;
+        if (sinceRaw !== undefined) {
+            const parsed = parseInt(sinceRaw, 10);
+            since = isNaN(parsed) ? Date.now() - 24 * 3600 * 1000 : parsed;
+        } else {
+            since = Date.now() - 24 * 3600 * 1000;
+        }
+        const where = since > 0 ? 'WHERE created_at >= ?' : '';
+        const params = since > 0 ? [since] : [];
+        const buckets = db.prepare(`
+            SELECT symbol, regime, gate_status, COUNT(*) as n,
+                   AVG(phase2_confidence) as avg_p2_conf,
+                   AVG(proposed_confidence) as avg_proposed_conf
+            FROM ml_influence_audit
+            ${where}
+            GROUP BY symbol, regime, gate_status
+            ORDER BY n DESC, symbol ASC, regime ASC, gate_status ASC
+        `).all(...params);
+        const totalRows = buckets.reduce((s, b) => s + b.n, 0);
+        res.status(200).json({ ok: true, buckets, totalRows, since });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// GET /api/ring5/cells?limit=N
+// List L4 bandit cells sorted by observation count descending.
+router.get('/cells', _requireAdmin, (req, res) => {
+    try {
+        let limit = parseInt(req.query.limit, 10);
+        if (isNaN(limit) || limit <= 0) limit = 100;
+        if (limit > 500) limit = 500;
+        const rows = db.prepare(`
+            SELECT cell_key as cellKey, alpha, beta,
+                   observation_count as observationCount,
+                   updated_at as updatedAt
+            FROM ml_bandit_posteriors
+            WHERE level = 4
+            ORDER BY observation_count DESC, updated_at DESC
+            LIMIT ?
+        `).all(limit);
+        res.status(200).json({ ok: true, cells: rows });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // POST /api/ring5/influence/seed — idempotent activator. Creates active version
 // + non-terminal preReg for the influence component if none exist. Returns
 // existing IDs if already active. Required for eligibility gate to ever pass.
