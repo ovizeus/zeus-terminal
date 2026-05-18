@@ -4387,6 +4387,13 @@ async function _runReconciliation(isStartup) {
                         }
                     }
                     audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl, estimatedClose }, 'SERVER_AT');
+                    // [Day 19] Doctor P1 alert — phantom position detected (Zeus tracked, Binance gone).
+                    _emitDoctor({
+                        eventType: 'alert', severity: 'P1',
+                        moduleId: 'serverAT.recon.phantom', ts: Date.now(),
+                        payload: { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId,
+                                   realExitPrice, realPnl, estimatedClose }
+                    });
                     continue;
                 }
 

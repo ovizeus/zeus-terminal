@@ -370,6 +370,14 @@ setInterval(() => {
     for (const [id, s] of _states) {
         if (s.lastTickTs && s.lastTickTs < cutoff) {
             logger.info('DSL', `[S${id}] Orphan cleanup — no tick for 2h`);
+            // [Day 19] Doctor P3 alert — DSL state went stale (2h no tick).
+            try {
+                require('./ml/_doctor/eventBus').emit({
+                    eventType: 'alert', severity: 'P3',
+                    moduleId: 'serverDSL.orphanCleanup', ts: Date.now(),
+                    payload: { stateId: id, symbol: s.symbol, side: s.side, lastTickTs: s.lastTickTs }
+                });
+            } catch (_) { /* telemetry never blocks */ }
             _states.delete(id);
         }
     }
