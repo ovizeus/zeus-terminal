@@ -6329,6 +6329,17 @@ select option {
 .omega-doctor-event-p2 { border-left: 3px solid #ffc800; }
 .omega-doctor-event-p3 { border-left: 3px solid rgba(255,255,255,0.2); }
 .omega-doctor-event-p0flood { border-left: 3px solid #ff00ff; background: rgba(255,0,255,0.05); }
+.omega-doctor-event-fresh { animation: omega-doctor-event-flash 1.5s ease-in-out 2; }
+@keyframes omega-doctor-event-flash {
+  0%,100% { background: transparent; }
+  50%     { background: rgba(255,90,50,0.18); }
+}
+.omega-doctor-stat-alert-p0 { background: rgba(255,48,48,0.18); border: 1px solid rgba(255,48,48,0.45); animation: omega-doctor-alert-pulse 1.5s ease-in-out infinite alternate; }
+.omega-doctor-stat-alert-p1 { background: rgba(255,90,50,0.14); border: 1px solid rgba(255,90,50,0.4); }
+@keyframes omega-doctor-alert-pulse {
+  0%   { box-shadow: 0 0 6px rgba(255,48,48,0.4); }
+  100% { box-shadow: 0 0 14px rgba(255,48,48,0.7); }
+}
 .omega-doctor-event-ts { opacity: 0.6; }
 .omega-doctor-event-sev { font-weight: 700; }
 .omega-doctor-event-mod { color: #00d4ff; }

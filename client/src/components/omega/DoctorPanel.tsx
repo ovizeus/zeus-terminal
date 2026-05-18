@@ -116,11 +116,11 @@ export function DoctorPanel() {
             <div className="omega-doctor-reason">{state.reason}</div>
 
             <div className="omega-doctor-stats">
-                <div className="omega-doctor-stat">
+                <div className={`omega-doctor-stat${state.activeP0 > 0 ? ' omega-doctor-stat-alert-p0' : ''}`}>
                     <span className="omega-doctor-stat-label">Active P0</span>
                     <span className="omega-doctor-stat-val">{state.activeP0}</span>
                 </div>
-                <div className="omega-doctor-stat">
+                <div className={`omega-doctor-stat${state.activeP1 > 0 ? ' omega-doctor-stat-alert-p1' : ''}`}>
                     <span className="omega-doctor-stat-label">Active P1</span>
                     <span className="omega-doctor-stat-val">{state.activeP1}</span>
                 </div>
@@ -181,8 +181,12 @@ export function DoctorPanel() {
                 <div className="omega-doctor-section-title">Recent Events ({events.length})</div>
                 <div className="omega-doctor-events">
                     {events.length === 0 && <div className="omega-doctor-empty">no events</div>}
-                    {events.map((e) => (
-                        <div key={e.event_id} className={`omega-doctor-event omega-doctor-event-${e.severity.toLowerCase().replace('-', '')}`}>
+                    {events.map((e) => {
+                        const ageMs = Date.now() - e.ts
+                        const isFresh = ageMs < 30000  // pulse if event within last 30s
+                        const sevClass = `omega-doctor-event-${e.severity.toLowerCase().replace('-', '')}`
+                        return (
+                        <div key={e.event_id} className={`omega-doctor-event ${sevClass}${isFresh ? ' omega-doctor-event-fresh' : ''}`}>
                             <span className="omega-doctor-event-ts">{fmtTs(e.ts)}</span>
                             <span className="omega-doctor-event-sev">{e.severity}</span>
                             <span className="omega-doctor-event-mod">{e.module_id}</span>
@@ -201,7 +205,8 @@ export function DoctorPanel() {
                                 </select>
                             )}
                         </div>
-                    ))}
+                    )
+                    })}
                 </div>
             </div>
         </div>
