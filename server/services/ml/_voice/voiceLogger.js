@@ -37,6 +37,14 @@ const _stmts = {
         WHERE user_id = ?
         ORDER BY created_at DESC
         LIMIT ?
+    `),
+    // [Day 29] Voice feed should show only OMEGA "thinking" — NOT chat replies.
+    // Chat conversations live in TalkWithMe; voice shows real ML cognition.
+    getRecentThoughts: db.prepare(`
+        SELECT * FROM ml_voice_log
+        WHERE user_id = ? AND utterance_type != 'CHAT_REPLY'
+        ORDER BY created_at DESC
+        LIMIT ?
     `)
 };
 
@@ -68,9 +76,16 @@ function getRecent(params) {
     return _stmts.getRecent.all(userId, limit);
 }
 
+function getRecentThoughts(params) {
+    const userId = _required(params, 'userId');
+    const limit = Math.max(1, Math.min(1000, params.limit || 100));
+    return _stmts.getRecentThoughts.all(userId, limit);
+}
+
 module.exports = {
     logUtterance,
     getRecent,
+    getRecentThoughts,
     UTTERANCE_TYPES,
     MOODS
 };

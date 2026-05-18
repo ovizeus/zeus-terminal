@@ -71,6 +71,40 @@ function _recordInvocation(moduleId, latencyMs, ranOk) {
     } catch (_) { /* never block brain flow */ }
 }
 
+// [Day 29] Voice thought stream — write THOUGHT utterances when brain has
+// something noteworthy (confidence high, regime shift, etc.) so TheVoice UI
+// shows real ML cognition. Throttled per user×symbol to avoid spam.
+let _voiceLogger = null;
+function _getVoiceLogger() {
+    if (_voiceLogger === null) {
+        try { _voiceLogger = require('./ml/_voice/voiceLogger'); }
+        catch (_) { _voiceLogger = false; }
+    }
+    return _voiceLogger || null;
+}
+const _lastThoughtTs = new Map(); // key="userId:symbol:kind" → lastMs
+const _lastRegime = new Map();    // key="userId:symbol" → last regime
+const THOUGHT_THROTTLE_MS = 60 * 1000; // 1 thought per (user, symbol, kind) per minute
+function _writeThought(params) {
+    try {
+        const vl = _getVoiceLogger();
+        if (!vl || !params.userId) return;
+        const key = `${params.userId}:${params.symbol || '_'}:${params.kind || 'gen'}`;
+        const now = Date.now();
+        const last = _lastThoughtTs.get(key) || 0;
+        if (now - last < THOUGHT_THROTTLE_MS) return;
+        _lastThoughtTs.set(key, now);
+        vl.logUtterance({
+            userId: params.userId,
+            utteranceType: 'THOUGHT',
+            mood: params.mood || 'FOCUSED',
+            text: params.text,
+            templateId: params.kind || 'brain_thought',
+            contextJson: params.contextJson || null
+        });
+    } catch (_) { /* never block brain flow */ }
+}
+
 // [ML Phase B Day 13] R5A-driven mlBrainProInputs builder. Maps per-module
 // modifiers (structure/liquidity/journal/knn/etc.) — the actual signed deltas
 // applied during _computeFusion — to contributions for the influence proposer.
@@ -743,6 +777,33 @@ function _runCycle() {
                     fusion: fusion,
                 };
                 if (!loggedDecision) loggedDecision = decision;
+
+                // [Day 29] Brain thoughts → TheVoice feed (throttled 1/min/cell).
+                // Confident fusion → "feeling X about Y, confluence Z".
+                if (fusion.confidence >= 70 && fusion.dir !== 'neut') {
+                    const sideWord = fusion.dir === 'bull' ? 'LONG' : 'SHORT';
+                    const moodTh = fusion.confidence >= 83 ? 'EXCITED' : 'FOCUSED';
+                    _writeThought({
+                        userId, symbol: snap.symbol, kind: 'conf_high', mood: moodTh,
+                        text: `confident ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, tier ${fusion.decision}.`,
+                        contextJson: JSON.stringify({
+                            confidence: fusion.confidence, dir: fusion.dir,
+                            regime: regime.regime, tier: fusion.decision
+                        })
+                    });
+                }
+
+                // Regime shift detected on this symbol for this user.
+                const _regKey = `${userId}:${snap.symbol}`;
+                const _lastReg = _lastRegime.get(_regKey);
+                if (_lastReg && _lastReg !== regime.regime) {
+                    _writeThought({
+                        userId, symbol: snap.symbol, kind: 'regime_shift', mood: 'FOCUSED',
+                        text: `regime shift on ${snap.symbol}: ${_lastReg} → ${regime.regime}. recalibrating.`,
+                        contextJson: JSON.stringify({ from: _lastReg, to: regime.regime })
+                    });
+                }
+                _lastRegime.set(_regKey, regime.regime);
 
                 // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
                 // applied downstream when layeredBy='ring5-influence-applied' (i.e.

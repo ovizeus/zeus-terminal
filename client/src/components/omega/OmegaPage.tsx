@@ -194,16 +194,21 @@ export function OmegaPage() {
 
             <R5AStats />
 
-            <div className="omega-page-grid">
+            {/* [Day 29] Layout: 2-row grid (orb + voice) — chat moved to
+                sticky bottom container below for WhatsApp-style UX. */}
+            <div className="omega-page-grid omega-page-grid-no-chat">
                 <div className="omega-page-orb-zone">
                     <TheOrb mood={mood} intensity={intensity} />
                 </div>
                 <div className="omega-page-voice-zone">
                     <TheVoice utterances={utterances} loading={voiceLoading} />
                 </div>
-                <div className="omega-page-chat-zone">
-                    <TalkWithMe voiceOn={voiceOn} onUtteranceLogged={handleUtteranceLogged} />
-                </div>
+            </div>
+
+            {/* [Day 29] Chat sticky bottom — WhatsApp style.
+                Default: header + input row. Tap input → expand. ESC → collapse. */}
+            <div className="omega-page-chat-sticky">
+                <TalkWithMe voiceOn={voiceOn} onUtteranceLogged={handleUtteranceLogged} />
             </div>
         </div>
     )

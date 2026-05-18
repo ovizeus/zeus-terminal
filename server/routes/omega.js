@@ -42,7 +42,12 @@ router.get('/voice', (req, res) => {
     if (!userId) return;
     const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 50));
     try {
-        const rows = voiceLogger.getRecent({ userId, limit });
+        // [Day 29] Default to thoughts-only feed (excludes CHAT_REPLY).
+        // ?include_chat=1 to include chat replies (admin/debug).
+        const includeChat = req.query.include_chat === '1';
+        const rows = includeChat
+            ? voiceLogger.getRecent({ userId, limit })
+            : voiceLogger.getRecentThoughts({ userId, limit });
         res.json({ ok: true, utterances: rows });
     } catch (err) {
         res.status(500).json({ ok: false, error: String(err && err.message || err) });

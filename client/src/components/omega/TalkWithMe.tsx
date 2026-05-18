@@ -30,6 +30,7 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
     const [input, setInput] = useState('')
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
+    const [expanded, setExpanded] = useState(false)
     const inputRef = useRef<HTMLInputElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
 
@@ -76,10 +77,12 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
     }
 
     return (
-        <section className="omega-chat">
-            <div className="omega-chat-header">
+        <section className={`omega-chat${expanded ? ' omega-chat-expanded' : ''}`}>
+            <div className="omega-chat-header" onClick={() => setExpanded(e => !e)}>
                 <span className="omega-chat-title">💬 TALK WITH ME</span>
-                <span className="omega-chat-hint">enter to send · esc to clear</span>
+                <span className="omega-chat-hint">
+                    {expanded ? 'tap to minimize · esc' : history.length > 0 ? `${history.length} messages — tap to open` : 'tap to chat'}
+                </span>
             </div>
             <div className="omega-chat-scroll" ref={scrollRef}>
                 {history.length === 0 ? (
@@ -106,7 +109,15 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
                     placeholder="ask omega anything..."
                     value={input}
                     onChange={e => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
+                    onKeyDown={e => {
+                        if (e.key === 'Escape') {
+                            setExpanded(false);
+                            (e.target as HTMLInputElement).blur();
+                        } else {
+                            handleKeyDown(e);
+                        }
+                    }}
+                    onFocus={() => setExpanded(true)}
                     disabled={sending}
                     maxLength={500}
                 />

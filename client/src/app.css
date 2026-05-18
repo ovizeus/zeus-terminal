@@ -6356,6 +6356,55 @@ select option {
 .omega-mode-testnet { color: #ffc800; background: rgba(255, 200, 0, 0.10); }
 .omega-mode-real    { color: #ff3030; background: rgba(255, 48, 48, 0.12); box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); animation: omega-real-pulse 2s ease-in-out infinite alternate; }
 .omega-mode-locked  { color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.3); }
+
+/* [Day 29] Chat sticky bottom — WhatsApp-style minimize/expand.
+   Default: small bar with header + input. Expand on focus to overlay
+   with full scroll history visible. */
+.omega-page-grid-no-chat { grid-template-rows: 280px minmax(260px, 1fr) !important; }
+@media (max-width: 720px) {
+  .omega-page-grid-no-chat { grid-template-rows: 220px minmax(220px, 1fr) !important; }
+}
+@media (max-width: 460px) {
+  .omega-page-grid-no-chat { grid-template-rows: 180px minmax(200px, 1fr) !important; }
+}
+
+.omega-page-chat-sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: rgba(5, 5, 16, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(0, 212, 255, 0.18);
+  margin: 12px -12px 0 -12px;
+  padding: 0 12px;
+}
+
+/* Collapsed state — only header + input row visible, scroll hidden. */
+.omega-chat {
+  transition: max-height 0.3s ease-in-out;
+  max-height: 110px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Expanded state — overlay with 70% viewport height. */
+.omega-chat-expanded {
+  max-height: 70vh;
+}
+
+.omega-chat-expanded .omega-chat-scroll {
+  max-height: calc(70vh - 110px);
+  overflow-y: auto;
+}
+
+.omega-chat:not(.omega-chat-expanded) .omega-chat-scroll {
+  display: none;
+}
+
+.omega-chat-header { cursor: pointer; user-select: none; padding: 8px 12px; }
+.omega-chat-header:hover { color: #00d4ff; }
 @keyframes omega-real-pulse {
   0%   { box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); }
   100% { box-shadow: 0 0 16px rgba(255, 48, 48, 0.7); }
