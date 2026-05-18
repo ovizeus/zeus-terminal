@@ -1155,7 +1155,15 @@ function _runCycle() {
                                 correlatedExposure: { totalPct: 0 },  // serverCorrelationGuard already enforces; pass-through 0
                             },
                         });
-                        if (_r1Result.violations && _r1Result.violations.length > 0) {
+                        // [Wave 7b post-validation fix] Mobile Claude flagged: hardcoded
+                        // sl=null at this layer would false-positive NO_LIVE_WITHOUT_SL on
+                        // every live entry. The principle IS enforced downstream (
+                        // validateOrderBody middleware + M1.2 Cat C _executeLiveEntryCore
+                        // safety SL + Path B _placeProtectionForExistingEntry), so skip
+                        // the principle at this layer to avoid noise. Defense in depth
+                        // remains via downstream enforcement.
+                        const _r1Filtered = _r1Result.violations.filter(v => v.id !== 'NO_LIVE_WITHOUT_SL');
+                        if (_r1Filtered.length > 0) {
                             r1.logViolations({
                                 userId,
                                 decision: {
@@ -1164,7 +1172,7 @@ function _runCycle() {
                                     size: sizingStc.size, leverage: sizingStc.lev,
                                     mode: us ? us.engineMode : 'demo',
                                 },
-                                violations: _r1Result.violations,
+                                violations: _r1Filtered,
                                 enforcementMode: 'advisory',
                             });
                         }
