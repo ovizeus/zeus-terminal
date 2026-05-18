@@ -342,10 +342,43 @@ function stopDepthPolling() {
     if (_depthTimer) { clearInterval(_depthTimer); _depthTimer = null; }
 }
 
+// [Day 35 #3] Public accessors for chat layer. Returns null if no depth
+// has been polled yet for the symbol (e.g. not in _depthSymbols list).
+function getOrderBook(symbol) {
+    if (!symbol) return null;
+    const cached = _depthCache.get(symbol.toUpperCase());
+    if (!cached) return null;
+    return {
+        bids: cached.bids.slice(),
+        asks: cached.asks.slice(),
+        ts: cached.ts,
+        ageMs: Date.now() - cached.ts,
+    };
+}
+
+function getWalls(symbol) {
+    if (!symbol) return [];
+    return _findWalls(symbol.toUpperCase());
+}
+
+// Test-only ingestion — bypass live polling for unit tests
+function _ingestDepthForTest(symbol, bids, asks) {
+    _depthCache.set(symbol.toUpperCase(), {
+        bids: bids.map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) })),
+        asks: asks.map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) })),
+        ts: Date.now(),
+    });
+}
+function _resetDepthForTest() {
+    _depthCache.clear();
+}
+
 module.exports = {
     getLiquidity,
     getLiquidityModifier,
     getAnticipation,
     startDepthPolling,
     stopDepthPolling,
+    getOrderBook, getWalls,
+    _ingestDepthForTest, _resetDepthForTest,
 };

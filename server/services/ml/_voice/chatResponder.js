@@ -540,6 +540,87 @@ function _replyForgetPref(ctx, originalText) {
     };
 }
 
+// ── Helper: lazy-resolve serverLiquidity ─────────────────────────────
+function _getServerLiquidity() {
+    try { return require('../../serverLiquidity'); } catch (_) { return null; }
+}
+
+function _getOrderBook(symbol) {
+    const sl = _getServerLiquidity();
+    if (!sl || typeof sl.getOrderBook !== 'function') return null;
+    const ob = sl.getOrderBook(symbol);
+    if (!ob || !ob.bids.length || !ob.asks.length) return null;
+    const topBid = ob.bids[0].price;
+    const topAsk = ob.asks[0].price;
+    const spread = topAsk - topBid;
+    const spreadPct = topBid > 0 ? (spread / topBid) * 100 : 0;
+    const bidsTotal = ob.bids.reduce((s, b) => s + b.qty, 0);
+    const asksTotal = ob.asks.reduce((s, a) => s + a.qty, 0);
+    return {
+        topBid, topAsk, spread, spreadPct,
+        bidsTotal, asksTotal,
+        bids: ob.bids.slice(0, 5),
+        asks: ob.asks.slice(0, 5),
+        ageMs: ob.ageMs,
+    };
+}
+
+function _getWalls(symbol) {
+    const sl = _getServerLiquidity();
+    if (!sl || typeof sl.getWalls !== 'function') return [];
+    return sl.getWalls(symbol);
+}
+
+// ── Intent: order book / depth ────────────────────────────────────────
+function _replyOrderBook(ctx, symbolHint, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    const ob = _getOrderBook(sym);
+    if (!ob) {
+        return {
+            reply: ro
+                ? `nu am depth pe ${sym} momentan. radarul polluiește 60s — încearcă în puțin sau verifică dacă ${sym} e în watchlist.`
+                : `no depth on ${sym} right now. radar polls 60s — try shortly or check ${sym} is in the watchlist.`,
+            mood: 'BORED',
+        };
+    }
+    const ageS = (ob.ageMs / 1000).toFixed(0);
+    const fmtP = (p) => p >= 1 ? p.toFixed(2) : p.toFixed(6);
+    if (ro) {
+        return {
+            reply: `${sym} order book (age ${ageS}s): top bid $${fmtP(ob.topBid)} / top ask $${fmtP(ob.topAsk)}, spread ${ob.spreadPct.toFixed(3)}%. cumpărări totale 5 niveluri: ${ob.bidsTotal.toFixed(1)}, vânzări: ${ob.asksTotal.toFixed(1)}.`,
+            mood: 'FOCUSED',
+        };
+    }
+    return {
+        reply: `${sym} order book (age ${ageS}s): top bid $${fmtP(ob.topBid)} / top ask $${fmtP(ob.topAsk)}, spread ${ob.spreadPct.toFixed(3)}%. bids total top 5: ${ob.bidsTotal.toFixed(1)}, asks total: ${ob.asksTotal.toFixed(1)}.`,
+        mood: 'FOCUSED',
+    };
+}
+
+// ── Intent: liquidity walls ──────────────────────────────────────────
+function _replyLiquidityWalls(ctx, symbolHint, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    const walls = _getWalls(sym);
+    if (!walls || walls.length === 0) {
+        return {
+            reply: ro
+                ? `niciun wall pe ${sym} (>3× qty mediu). carte echilibrată momentan.`
+                : `no walls on ${sym} (>3× avg qty). book is balanced right now.`,
+            mood: 'CALM',
+        };
+    }
+    const fmtP = (p) => p >= 1 ? p.toFixed(2) : p.toFixed(6);
+    const list = walls.slice(0, 5).map(w => `${w.side === 'bid' ? 'BID' : 'ASK'} $${fmtP(w.price)} (qty ${w.qty.toFixed(1)}, ${w.strength.toFixed(1)}×)`).join(', ');
+    return {
+        reply: ro
+            ? `${sym} liquidity walls: ${list}.`
+            : `${sym} liquidity walls: ${list}.`,
+        mood: 'FOCUSED',
+    };
+}
+
 // ── Helper: pull live structure from serverStructure ─────────────────
 function _getStructure(symbol) {
     try {
@@ -1027,6 +1108,8 @@ function _buildLLMContext(params) {
             regimeMix,
             indicators: _getIndicators(sym),
             structure: _getStructure(sym),
+            orderBook: _getOrderBook(sym),
+            walls: _getWalls(sym),
         };
     }
 
@@ -1281,6 +1364,16 @@ async function _tryLocalIntent(ctx, text, originalText) {
         if (fcMatch && symInFc) return _replyLongTermForecast(ctx, symInFc[1], originalText);
     }
     {
+        const wallsMatch = text.match(/\b(liquidity walls?|order book walls?|wall(uri)?|zid(uri)?|pereți)\b/i);
+        const symInWalls = originalText.match(SYMBOL_RE);
+        if (wallsMatch && symInWalls) return _replyLiquidityWalls(ctx, symInWalls[1], originalText);
+    }
+    {
+        const obMatch = text.match(/\b(order book|orderbook|depth|carte de ordine|registru de ordine|carnet|liquidit[aă]te|book pe|book on)\b/i);
+        const symInOb = originalText.match(SYMBOL_RE);
+        if (obMatch && symInOb) return _replyOrderBook(ctx, symInOb[1], originalText);
+    }
+    {
         const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
         const symInStruct = originalText.match(SYMBOL_RE);
         if (structMatch && symInStruct) return _replyStructure(ctx, symInStruct[1], originalText);
@@ -1379,6 +1472,18 @@ async function _respondImpl(params, text) {
         const fcMatch = text.match(/\b(long.?term|forecast|prognoz[aă]|termen lung|pe termen lung|long range)\b/i);
         const symInFc = originalText.match(SYMBOL_RE);
         if (fcMatch && symInFc) return _replyLongTermForecast(ctx, symInFc[1], originalText);
+    }
+
+    // [Day 35 #3] Order book / walls intents — match BEFORE structure.
+    {
+        const wallsMatch = text.match(/\b(liquidity walls?|order book walls?|wall(uri)?|zid(uri)?|pereți)\b/i);
+        const symInWalls = originalText.match(SYMBOL_RE);
+        if (wallsMatch && symInWalls) return _replyLiquidityWalls(ctx, symInWalls[1], originalText);
+    }
+    {
+        const obMatch = text.match(/\b(order book|orderbook|depth|carte de ordine|registru de ordine|carnet|liquidit[aă]te|book pe|book on)\b/i);
+        const symInOb = originalText.match(SYMBOL_RE);
+        if (obMatch && symInOb) return _replyOrderBook(ctx, symInOb[1], originalText);
     }
 
     // [Day 34 #1] Structure intent — match BEFORE TA indicators (more specific).
