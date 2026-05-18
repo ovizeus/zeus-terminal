@@ -36,6 +36,32 @@ const MF = require('../migrationFlags');
 // is observation-only: wrap output is logged + audited but NOT used downstream.
 const ring5LearningService = require('./ml/ring5LearningService');
 
+// [ML Phase B Day 10] Build mlBrainProInputs feed from fusion score components.
+// Each component is normalized [0..1] (per _computeFusion). Map to [-1..+1]
+// signed contribution where neutral 0.5 -> 0, strong agree 1.0 -> +1.0, strong
+// disagree 0.0 -> -1.0. Proposer in wrap() can then fire when ML signal AND
+// bandit both lean strongly in same direction.
+function _buildRing5MlInputs(fusion) {
+    if (!fusion || !fusion._intermediates) return null;
+    const i = fusion._intermediates;
+    const components = [
+        ['fus_regime', i.fusRegimeScore],
+        ['fus_alignment', i.fusAlignScore],
+        ['fus_indicator', i.fusIndScore],
+        ['fus_mtf', i.fusMtfScore],
+        ['fus_structure', i.fusStructScore],
+        ['fus_flow', i.fusFlowScore],
+        ['fus_sentiment', i.fusSentScore]
+    ];
+    const contributions = [];
+    for (const [moduleId, val] of components) {
+        if (typeof val !== 'number' || !isFinite(val)) continue;
+        const signed = Math.max(-1, Math.min(1, (val - 0.5) * 2));
+        contributions.push({ moduleId, contribution: signed });
+    }
+    return contributions.length > 0 ? { contributions } : null;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Configuration
 // ══════════════════════════════════════════════════════════════════
@@ -711,7 +737,10 @@ function _runCycle() {
                             resolvedEnv: _execEnv.env,
                             symbol: snap.symbol,
                             phase2Decision: fusion,
-                            mlBrainProInputs: null, // Day 10 will feed R5A attribution
+                            // [Day 10] Real ML signal from fusion score components.
+                            // Proposer requires sumContribution >= 0.10 (boost) or
+                            // <= -0.10 (cut), AND bandit sample to confirm.
+                            mlBrainProInputs: _buildRing5MlInputs(fusion),
                             mode: 'influence',
                             regime: regime.regime,
                             marketContext: _ring5MarketCtx,
