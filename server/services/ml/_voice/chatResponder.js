@@ -15,6 +15,12 @@ const { db } = require('../../database');
 const llmClient = require('./llmClient');
 const marketRadar = require('../../marketRadar');
 
+// Lazy-resolve serverState — avoids circular require at module load time and
+// lets tests monkey-patch getSnapshotForSymbol post-require.
+function _getServerState() {
+    try { return require('../../serverState'); } catch (_) { return null; }
+}
+
 // [Day 30] In-memory conversation history per user — last N exchanges fed to
 // LLM so multi-turn follow-ups work ("and eth?" after "how is btc").
 // Reset on server restart (acceptable trade-off vs DB persistence overhead).
@@ -391,6 +397,60 @@ function _radarEnrichSymbol(symbol) {
     return ` price ${price}, 24h ${_fmtPct(entry.priceChangePercent24h)}.`;
 }
 
+// ── Helper: pull live indicators snapshot from serverState ───────────
+function _getIndicators(symbol) {
+    const ss = _getServerState();
+    if (!ss || typeof ss.getSnapshotForSymbol !== 'function') return null;
+    const snap = ss.getSnapshotForSymbol(symbol);
+    if (!snap) return null;
+    return {
+        price: snap.price,
+        rsi: snap.rsi || {},
+        adx: snap.adx,
+        atr: snap.atr,
+        fr: snap.fr,
+        oi: snap.oi,
+        macdDir: snap.indicators && snap.indicators.macdDir,
+        macdHist: snap.indicators && snap.indicators.macdHist,
+        stDir: snap.indicators && snap.indicators.stDir,
+        mtf: snap.mtfIndicators || {},
+        stale: !!snap.stale,
+    };
+}
+
+// ── Intent: indicators (Day 33 #3) ────────────────────────────────────
+function _replyIndicators(ctx, symbolHint, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    const ind = _getIndicators(sym);
+    if (!ind) {
+        return {
+            reply: ro
+                ? `nu am date live pe ${sym}. ori radarul nu îl urmărește, ori feed-ul nu s-a încălzit.`
+                : `no live data on ${sym}. radar may not track it, or feed isn't warm yet.`,
+            mood: 'BORED',
+        };
+    }
+    const rsiTfs = Object.entries(ind.rsi)
+        .filter(([, v]) => typeof v === 'number')
+        .map(([tf, v]) => `${tf} ${v.toFixed(0)}`)
+        .join(', ');
+    const adxStr = ind.adx != null ? `ADX ${ind.adx.toFixed(0)}` : 'ADX n/a';
+    const atrStr = ind.atr != null ? `ATR ${ind.atr.toFixed(2)}` : 'ATR n/a';
+    const macdStr = ind.macdDir ? `MACD ${ind.macdDir}${ind.macdHist != null ? ` (hist ${ind.macdHist.toFixed(0)})` : ''}` : 'MACD n/a';
+    const stStr = ind.stDir ? `ST ${ind.stDir}` : 'ST n/a';
+    if (ro) {
+        return {
+            reply: `${sym} indicatori: RSI ${rsiTfs || 'n/a'}. ${adxStr}, ${atrStr}. ${macdStr}, ${stStr}.${ind.stale ? ' (feed stale)' : ''}`,
+            mood: 'FOCUSED',
+        };
+    }
+    return {
+        reply: `${sym} indicators: RSI ${rsiTfs || 'n/a'}. ${adxStr}, ${atrStr}. ${macdStr}, ${stStr}.${ind.stale ? ' (feed stale)' : ''}`,
+        mood: 'FOCUSED',
+    };
+}
+
 // ── Intent: learnings (Day 33 #1) — what has the bot learned ──────────
 // Synthesizes serverJournal regimeWinRate / dirPerf / symbolPerf with Ring5
 // bandit L4 cell snapshot. Surfaces what Ring5 is converging on. Honest
@@ -650,6 +710,7 @@ function _buildLLMContext(params) {
             qv: radarEntry ? radarEntry.quoteVolume : null,
             decisions,
             regimeMix,
+            indicators: _getIndicators(sym),
         };
     }
 
@@ -877,6 +938,11 @@ async function _tryLocalIntent(ctx, text, originalText) {
     if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
         return _replyLearnings(ctx, originalText);
     }
+    {
+        const taMatch = text.match(/\b(rsi|macd|adx|atr|indicators?|indicatori\w*|ta)\b/i);
+        const symInTa = text.match(SYMBOL_RE);
+        if (taMatch && symInTa) return _replyIndicators(ctx, symInTa[1], originalText);
+    }
     if (text.match(/\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i)) {
         return _replyTopMovers(ctx, 'gainers', originalText);
     }
@@ -935,6 +1001,17 @@ async function _respondImpl(params, text) {
     // symbol regex (originalText "ce ai învățat" could contain ada/btc otherwise).
     if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
         return _replyLearnings(ctx, originalText);
+    }
+
+    // [Day 33 #3] Indicators intent — RSI/MACD/ADX/etc. Requires a symbol
+    // hint in the text. Match BEFORE symbol-only path so "RSI on BTC" goes
+    // to indicators (richer) not _replySymbol (audit-only).
+    {
+        const taMatch = text.match(/\b(rsi|macd|adx|atr|indicators?|indicatori\w*|ta)\b/i);
+        const symInTa = text.match(SYMBOL_RE);
+        if (taMatch && symInTa) {
+            return _replyIndicators(ctx, symInTa[1], originalText);
+        }
     }
 
     // [Day 32B] Market intents — match BEFORE symbol regex so "care a urcat
