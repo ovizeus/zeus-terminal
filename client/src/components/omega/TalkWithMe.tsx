@@ -54,9 +54,21 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
             setHistory(prev => [...prev, omegaRow])
             if (voiceOn && typeof window.speechSynthesis !== 'undefined') {
                 try {
-                    const utt = new SpeechSynthesisUtterance(reply.reply)
-                    utt.rate = 0.95
-                    utt.pitch = 0.85
+                    // [Day 30] Smarter TTS — auto-detect language + cancel prior speech.
+                    const txt = reply.reply
+                    const isRo = /\b(este|sunt|despre|pentru|cu|în|ai|am|esti|ești|faci|salut|bună|și|ce|cum|nu|da|să|simt|gândesc|părere)\b/i.test(txt)
+                    const lang = isRo ? 'ro-RO' : 'en-US'
+                    window.speechSynthesis.cancel() // stop any in-flight speech
+                    const utt = new SpeechSynthesisUtterance(txt)
+                    utt.lang = lang
+                    utt.rate = 1.0
+                    utt.pitch = 0.95
+                    utt.volume = 0.85
+                    // Pick best available voice for the language (browser may have multiple).
+                    const voices = window.speechSynthesis.getVoices()
+                    const match = voices.find(v => v.lang === lang)
+                              || voices.find(v => v.lang.startsWith(lang.split('-')[0]))
+                    if (match) utt.voice = match
                     window.speechSynthesis.speak(utt)
                 } catch (_) { /* TTS optional */ }
             }

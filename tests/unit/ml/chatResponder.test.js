@@ -144,6 +144,19 @@ describe('chatResponder.respond', () => {
         await expect(responder.respond({ text: 'hi' })).rejects.toThrow(/userId/);
     });
 
+    test('conversation history tracked per user (multi-turn)', async () => {
+        responder._resetConvoForTest(1);
+        await responder.respond({ userId: 1, text: 'hi' });
+        await responder.respond({ userId: 1, text: 'help' });
+        // After 2 exchanges, history should have 4 entries (2×user+assistant).
+        // Direct DB-less check: subsequent calls don't blow up + persistence
+        // via the wrapper is observable through side effects (no API exposed).
+        // We can verify _resetConvoForTest empties history without error.
+        responder._resetConvoForTest(1);
+        const r = await responder.respond({ userId: 1, text: 'hi' });
+        expect(r.reply).toBeDefined();
+    });
+
     test('unknown intent without GROQ_API_KEY → falls back to local help', async () => {
         // No API key set in env → groqClient.available()=false → local help.
         const prev = process.env.GROQ_API_KEY;

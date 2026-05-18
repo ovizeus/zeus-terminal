@@ -14,6 +14,37 @@
 const { db } = require('../../database');
 const llmClient = require('./llmClient');
 
+// [Day 30] In-memory conversation history per user — last N exchanges fed to
+// LLM so multi-turn follow-ups work ("and eth?" after "how is btc").
+// Reset on server restart (acceptable trade-off vs DB persistence overhead).
+const _convoHistory = new Map(); // userId → Array<{role, content, ts}>
+const CONVO_MAX_TURNS = 10; // user+assistant pairs to keep (=20 messages max)
+const CONVO_TTL_MS = 30 * 60 * 1000; // drop entries older than 30min
+
+function _pushConvo(userId, role, content) {
+    if (!userId) return;
+    let arr = _convoHistory.get(userId);
+    if (!arr) { arr = []; _convoHistory.set(userId, arr); }
+    const now = Date.now();
+    // Drop old entries (TTL).
+    while (arr.length > 0 && (now - arr[0].ts) > CONVO_TTL_MS) arr.shift();
+    arr.push({ role, content, ts: now });
+    // Cap at CONVO_MAX_TURNS * 2 (user + assistant per turn).
+    while (arr.length > CONVO_MAX_TURNS * 2) arr.shift();
+}
+
+function _getConvo(userId) {
+    const arr = _convoHistory.get(userId) || [];
+    const now = Date.now();
+    // Filter fresh (within TTL).
+    return arr.filter(m => (now - m.ts) <= CONVO_TTL_MS);
+}
+
+function _resetConvoForTest(userId) {
+    if (userId) _convoHistory.delete(userId);
+    else _convoHistory.clear();
+}
+
 // Lazy require to avoid circular deps via serverAT → database → this module.
 let _serverAT = null;
 function _getAT() {
@@ -361,11 +392,17 @@ async function _replyLLMFallback(ctx, originalText) {
             : "If the user asks about data you'd actually have (positions/pnl/bandit/decisions/alerts/symbol-specific), suggest those keywords briefly."
     ].join('\n');
 
+    // [Day 30] Multi-turn: prepend last N exchanges so LLM has conversation
+    // context (follow-ups, references to prior questions).
+    const history = _getConvo(ctx.userId).map(m => ({ role: m.role, content: m.content }));
+    const messages = [
+        { role: 'system', content: sys },
+        ...history,
+        { role: 'user', content: originalText }
+    ];
+
     const result = await llmClient.chat({
-        messages: [
-            { role: 'system', content: sys },
-            { role: 'user', content: originalText }
-        ],
+        messages,
         temperature: 0.6,
         maxTokens: 220,
         timeoutMs: 8000
@@ -394,6 +431,16 @@ async function respond(params) {
     const text = String(params.text || '').toLowerCase().trim();
     if (!userId) throw new Error('chatResponder: userId required');
     if (!text) return { reply: 'speak boss.', mood: 'CALM' };
+
+    const result = await _respondImpl(params, text);
+    // [Day 30] Track exchange in convo history for multi-turn context.
+    _pushConvo(userId, 'user', params.text || '');
+    _pushConvo(userId, 'assistant', result.reply || '');
+    return result;
+}
+
+async function _respondImpl(params, text) {
+    const userId = params.userId;
 
     const ctx = {
         userId,
@@ -430,4 +477,4 @@ async function respond(params) {
     return await _replyLLMFallback(ctx, originalText);
 }
 
-module.exports = { respond };
+module.exports = { respond, _resetConvoForTest };
