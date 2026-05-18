@@ -26,6 +26,7 @@ const trustScorer = require('./trustScorer');
 const falsePositiveAuditor = require('./falsePositiveAuditor');
 const quarantineManager = require('./quarantineManager');
 const shedManager = require('./shedManager');
+const telemetryCollector = require('./telemetryCollector');
 
 const COGNITIVE_STATES = Object.freeze([
     'HEALTHY', 'DEGRADED', 'COMPROMISED', 'SAFE_MODE', 'DEAD'
@@ -120,11 +121,19 @@ function analyze(params) {
     const hotPathCriticalQuarantined = qCounts.hot_path_critical;
     const hotPathAssistQuarantined = qCounts.hot_path_assist;
 
-    // Doctor self-stale: when telemetryCollector hasn't recorded a Doctor
-    // heartbeat in >30s. For D-3 we assume Doctor itself running (false).
-    // When D-3.5 boot integration emits its own heartbeat, we'll query
-    // telemetryCollector.isStale({moduleId: '_doctor_analyzer'}).
-    const doctorHeartbeatStale = false;
+    // [Day 21] Brain heartbeat staleness check. serverBrain emits heartbeats
+    // every cycle (~30s) via telemetryCollector.recordInvocation. If no
+    // heartbeat in >30s (STALENESS_THRESHOLD_MS), brain is dead/stuck → mark
+    // doctorHeartbeatStale=true → escalates cognitive state to COMPROMISED.
+    let doctorHeartbeatStale = false;
+    try {
+        const staleness = telemetryCollector.isStale({ moduleId: 'serverBrain', nowTs });
+        // Cold-start guard: ignore stale=true when lastHeartbeatTs is null
+        // (no rows yet → system just booted, give it time before alarming).
+        if (staleness && staleness.stale && staleness.lastHeartbeatTs != null) {
+            doctorHeartbeatStale = true;
+        }
+    } catch (_) { /* fall through to false */ }
 
     // moneyFrozen: hook for §28 reconcilePosition status. For D-3 always false.
     const moneyFrozen = false;
