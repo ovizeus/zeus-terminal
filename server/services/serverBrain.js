@@ -699,6 +699,13 @@ function _runCycle() {
                 const refBalance = us ? (us.demoBalance || us.liveBalanceRef || 10000) : 10000;
                 const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
                 if (ddAssess.locked) {
+                    // [Day 20] Doctor P1 alert pe drawdown lockout — user portfolio circuit-breaker fired.
+                    _emitDoctor({
+                        eventType: 'alert', severity: 'P1',
+                        moduleId: 'serverBrain.drawdownGuard', ts: Date.now(),
+                        payload: { userId, symbol, drawdownPct: ddAssess.drawdownPct,
+                                   tier: ddAssess.tier ? ddAssess.tier.label : 'LOCKOUT' }
+                    });
                     _logDecision('BLOCKED', 'drawdown_lockout', null, { drawdownPct: ddAssess.drawdownPct });
                     _pushBlock(userId, symbol, ['drawdown_lockout:' + (ddAssess.drawdownPct != null ? ddAssess.drawdownPct.toFixed(1) + '%' : 'na')], 'drawdown', { score: confluence.score, adx: ind.adx });
                     try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {

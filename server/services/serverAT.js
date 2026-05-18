@@ -222,6 +222,12 @@ function setGlobalHalt(active, byUserId, reason) {
     db.atSetState('global:halt', payload, byUserId);
     logger.warn('AT_ENGINE', `GLOBAL_HALT ${active ? 'ARMED' : 'DISARMED'} by uid=${byUserId}` + (reason ? ' — ' + reason : ''));
     try { audit.record('GLOBAL_HALT_TOGGLE', { active: !!active, by: byUserId, reason: reason || null }, 'SERVER_AT'); } catch (_) { /* best-effort */ }
+    // [Day 20] Doctor P0 alert pe GLOBAL HALT toggle (operator panic = critical event).
+    _emitDoctor({
+        eventType: 'alert', severity: 'P0',
+        moduleId: 'serverAT.globalHalt', ts: Date.now(),
+        payload: { active: !!active, by: byUserId, reason: reason || null }
+    });
     try {
         telegram.sendToUser(byUserId, active
             ? `🛑 *GLOBAL HALT ARMED*${reason ? '\nReason: ' + reason : ''}\nAll new entries blocked server-wide.`
@@ -2214,6 +2220,12 @@ function activateKillSwitch(userId) {
     try { require('./serverPendingEntry').cancelAllForUser(userId); } catch (_) {}
     audit.record('KILL_SWITCH_MANUAL', { userId, action: 'activate' }, 'user');
     logger.warn('AT_ENGINE', `Kill switch manually activated uid=${userId}`);
+    // [Day 20] Doctor P0 alert pe kill switch activation (operator panic = critical event).
+    _emitDoctor({
+        eventType: 'alert', severity: 'P0',
+        moduleId: 'serverAT.killSwitch', ts: Date.now(),
+        payload: { userId, action: 'activate' }
+    });
     telegram.sendToUser(userId, '🛑 *Kill Switch MANUALLY Activated*\nAll new entries BLOCKED until manual reset or UTC day change');
     _notifyChange(userId);
     return { ok: true, killActive: true };
