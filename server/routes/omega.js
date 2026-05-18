@@ -17,6 +17,7 @@ const router = express.Router();
 
 const { db } = require('../services/database');
 const voiceLogger = require('../services/ml/_voice/voiceLogger');
+const chatResponder = require('../services/ml/_voice/chatResponder');
 const auditTrail = require('../services/ml/_audit/auditTrail');
 const R0 = require('../services/ml/R0_substrate');
 // [OMEGA Wave 2 UI Bonus 2026-05-15] R5A measurement triad surfacing
@@ -243,47 +244,23 @@ router.post('/chat', express.json(), (req, res) => {
         return res.status(400).json({ ok: false, error: 'text required' });
     }
 
-    let openPositions = 0;
-    try {
-        openPositions = db.prepare(
-            `SELECT COUNT(*) AS n FROM at_pos WHERE user_id = ? AND status = 'OPEN'`
-        ).get(userId).n;
-    } catch (_) { /* table may not exist on bare environments */ }
-
+    // [Day 26] Real local responder — queries live Zeus state. 9 intents
+    // (greeting/help/positions/pnl/mood/bandit/decisions/doctor/symbol+fallback).
     let reply, mood = 'CALM';
-    const q = question.toLowerCase();
-    if (q.match(/\b(open|long|short|buy|sell|trade|enter)\b/)) {
-        if (openPositions > 0) {
-            reply = `not yet boss. you got ${openPositions} position${openPositions > 1 ? 's' : ''} open. one trade at a time, capisce.`;
-            mood = 'FOCUSED';
-        } else {
-            reply = `i hear you. but i'm still learning — Wave 2 brings the real bandit. for now i just watch and remember.`;
-            mood = 'BORED';
-        }
-    } else if (q.match(/\b(how|status|state|health|alive|there)\b/)) {
-        reply = openPositions > 0
-            ? `online. watching ${openPositions} live position${openPositions > 1 ? 's' : ''}. coffee strong, math sharp.`
-            : `online. no positions, market quiet. just sniffing. ask me anything.`;
-        mood = openPositions > 0 ? 'FOCUSED' : 'CALM';
-    } else if (q.match(/\b(why|explain|reason|because|how come)\b/)) {
-        reply = `can't explain decisions yet — Wave 2 wires my brain to the audit trail. soon though. very soon.`;
+    try {
+        const r = chatResponder.respond({ userId, text: question });
+        reply = r.reply;
+        mood = r.mood;
+    } catch (err) {
+        reply = `brain hiccup: ${err.message}. try again or ask 'help'.`;
         mood = 'SAD';
-    } else if (q.match(/\b(fuck|shit|wtf|hell|dammit)\b/)) {
-        reply = `easy boss. breathe. markets do that.`;
-        mood = 'CALM';
-    } else if (q.match(/\b(hi|hello|hey|yo|sup)\b/)) {
-        reply = `yo boss. omega here. still learning the ropes but already listening.`;
-        mood = 'EXCITED';
-    } else {
-        reply = `interesting question. i'll remember it. ask me again post-Wave-2 when i can think back at you properly.`;
-        mood = 'FOCUSED';
     }
 
     try {
         voiceLogger.logUtterance({
             userId, utteranceType: 'CHAT_REPLY', mood, text: reply,
-            templateId: 'wave1_stub',
-            contextJson: JSON.stringify({ question, openPositions })
+            templateId: 'wave1_smart_responder',
+            contextJson: JSON.stringify({ question })
         });
     } catch (_) { /* defensive — never fail chat on log error */ }
 
