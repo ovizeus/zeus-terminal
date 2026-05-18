@@ -391,6 +391,112 @@ function _radarEnrichSymbol(symbol) {
     return ` price ${price}, 24h ${_fmtPct(entry.priceChangePercent24h)}.`;
 }
 
+// ── Intent: learnings (Day 33 #1) — what has the bot learned ──────────
+// Synthesizes serverJournal regimeWinRate / dirPerf / symbolPerf with Ring5
+// bandit L4 cell snapshot. Surfaces what Ring5 is converging on. Honest
+// fallback when insufficient trades (<10).
+function _replyLearnings(ctx, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const userId = ctx.userId;
+
+    // Pull at_closed directly (don't depend on serverJournal hourly cron
+    // having run — chat needs live truth).
+    let closedRows = [];
+    try {
+        closedRows = db.prepare(
+            `SELECT data FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT 500`
+        ).all(userId);
+    } catch (_) {}
+    const trades = [];
+    for (const r of closedRows) {
+        try {
+            const t = JSON.parse(r.data);
+            if (t.closePnl != null && t.closeReason && !String(t.closeReason).startsWith('ENTRY_FAILED')) {
+                trades.push(t);
+            }
+        } catch (_) {}
+    }
+
+    if (trades.length < 10) {
+        return {
+            reply: ro
+                ? `nu am destule trade-uri închise încă (${trades.length}/10 minim). adună mai multe închideri reale — pe urmă pot vorbi cu statistici reale.`
+                : `not enough closed trades yet (${trades.length}/10 minimum). need more real closes — then i can talk with real stats.`,
+            mood: 'BORED',
+        };
+    }
+
+    // Aggregate per regime / dir / symbol
+    const wr = (group) => {
+        const total = group.length;
+        const wins = group.filter(t => (t.closePnl || 0) > 0).length;
+        return { total, wins, losses: total - wins, winRate: total ? wins / total : 0 };
+    };
+    const byRegime = _groupBy(trades, t => t.regime || 'UNKNOWN');
+    const byDir = _groupBy(trades, t => (t.side || t.dir || 'UNKNOWN'));
+    const bySymbol = _groupBy(trades, t => (t.sym || t.symbol || 'UNKNOWN'));
+
+    const fmtRow = (label, stat) => `${label} ${(stat.winRate * 100).toFixed(0)}% (${stat.wins}/${stat.total})`;
+    const sortByCount = (obj) => Object.entries(obj).sort((a, b) => b[1].length - a[1].length);
+    const top = (entries, n = 3) => entries.slice(0, n).map(([k, arr]) => fmtRow(k, wr(arr)));
+
+    const regimeLines = top(sortByCount(byRegime));
+    const dirLines = top(sortByCount(byDir));
+    const symbolLines = top(sortByCount(bySymbol));
+
+    // Bandit L4 cells for this user (top by observation_count)
+    let banditLines = [];
+    try {
+        const rows = db.prepare(
+            `SELECT cell_key, alpha, beta, observation_count
+             FROM ml_bandit_posteriors
+             WHERE level = 4 AND cell_key LIKE ?
+             ORDER BY observation_count DESC LIMIT 3`
+        ).all(`${userId}|%`);
+        banditLines = rows.map(r => {
+            const wrPct = r.observation_count > 0
+                ? ((r.alpha - 1) / r.observation_count * 100).toFixed(0)
+                : 'n/a';
+            // cell_key = "userId|env|symbol|regime"
+            const parts = r.cell_key.split('|');
+            const label = parts.length === 4 ? `${parts[2]}/${parts[3]}` : r.cell_key;
+            return `${label} α${r.alpha}/β${r.beta} obs${r.observation_count} ~${wrPct}%`;
+        });
+    } catch (_) {}
+
+    const overall = wr(trades);
+    if (ro) {
+        const parts = [
+            `am ${trades.length} trade-uri închise. overall ${(overall.winRate * 100).toFixed(0)}% (${overall.wins}/${overall.total}).`,
+        ];
+        if (regimeLines.length) parts.push(`pe regime: ${regimeLines.join(', ')}.`);
+        if (dirLines.length) parts.push(`direcții: ${dirLines.join(', ')}.`);
+        if (symbolLines.length) parts.push(`simboluri: ${symbolLines.join(', ')}.`);
+        if (banditLines.length) parts.push(`bandit cells: ${banditLines.join(' | ')}.`);
+        else parts.push(`bandit cells: cold încă — n-am cells L4 cu observații pentru tine.`);
+        return { reply: parts.join(' '), mood: 'FOCUSED' };
+    }
+    const parts = [
+        `${trades.length} closed trades. overall ${(overall.winRate * 100).toFixed(0)}% (${overall.wins}/${overall.total}).`,
+    ];
+    if (regimeLines.length) parts.push(`by regime: ${regimeLines.join(', ')}.`);
+    if (dirLines.length) parts.push(`dir: ${dirLines.join(', ')}.`);
+    if (symbolLines.length) parts.push(`symbols: ${symbolLines.join(', ')}.`);
+    if (banditLines.length) parts.push(`bandit cells: ${banditLines.join(' | ')}.`);
+    else parts.push(`bandit cells: still cold — no L4 cells with obs for you yet.`);
+    return { reply: parts.join(' '), mood: 'FOCUSED' };
+}
+
+function _groupBy(arr, fn) {
+    const out = {};
+    for (const item of arr) {
+        const k = fn(item);
+        if (!out[k]) out[k] = [];
+        out[k].push(item);
+    }
+    return out;
+}
+
 // ── Intent: help ──────────────────────────────────────────────────────
 function _replyHelp(ctx, originalText) {
     const ro = _isRomanian(originalText || '');
@@ -760,6 +866,9 @@ async function respondStream(params) {
 async function _tryLocalIntent(ctx, text, originalText) {
     if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
+    if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
+        return _replyLearnings(ctx, originalText);
+    }
     if (text.match(/\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i)) {
         return _replyTopMovers(ctx, 'gainers', originalText);
     }
@@ -813,6 +922,12 @@ async function _respondImpl(params, text) {
     // Order: specific intents → generic.
     if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
+
+    // [Day 33 #1] Learnings intent — what has the bot learned. Match BEFORE
+    // symbol regex (originalText "ce ai învățat" could contain ada/btc otherwise).
+    if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
+        return _replyLearnings(ctx, originalText);
+    }
 
     // [Day 32B] Market intents — match BEFORE symbol regex so "care a urcat
     // cel mai mult" doesn't accidentally hit the symbol path.
