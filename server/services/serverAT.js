@@ -23,6 +23,18 @@ const serverDSL = require('./serverDSL');
 const db = require('./database');
 const marketFeed = require('./marketFeed');
 
+// [ML Phase B Day 8] Ring5 outcome telemetry — recordContribution on close
+// feeds bandit posteriors with real win/loss observations. Lazy-required to
+// avoid circular dep risk through ring5LearningService -> database -> serverAT.
+let _ring5LearningService = null;
+function _getRing5() {
+    if (_ring5LearningService === null) {
+        try { _ring5LearningService = require('./ml/ring5LearningService'); }
+        catch (_) { _ring5LearningService = false; }
+    }
+    return _ring5LearningService || null;
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Per-User Position Tracker
 // ══════════════════════════════════════════════════════════════════
@@ -1881,6 +1893,30 @@ function _closePosition(idx, pos, exitType, price, pnl) {
             pos.closeRegimeConf = snap.indicators.regimeConf || null;
         }
     } catch (_) { /* serverState not ready */ }
+
+    // [ML Phase B Day 8] Ring5 loop closure — outcome feeds bandit posteriors.
+    // Binary mapping: win (pnl > 0) → +0.5, loss (pnl < 0) → -0.5, flat → 0.
+    // recordContribution internally writes ml_bandit_evidence + updates L4
+    // posterior + invalidates LRU cache. Telemetry-only mode: errors swallowed
+    // so close flow never affected. RESET exit excluded (admin reset, not real trade).
+    if (exitType !== 'RESET') {
+        try {
+            const ring5 = _getRing5();
+            if (ring5 && pos.env && pos.symbol && pos.regime) {
+                const contribution = pnl > 0 ? 0.5 : pnl < 0 ? -0.5 : 0;
+                ring5.recordContribution({
+                    userId,
+                    resolvedEnv: pos.env,
+                    symbol: pos.symbol,
+                    moduleId: 'ring5_outcome',
+                    contribution,
+                    confidence: Math.max(0, Math.min(1, (pos.confidence || 0) / 100)),
+                    ts: Date.now(),
+                    regime: pos.regime
+                });
+            }
+        } catch (_ring5Err) { /* never block close flow */ }
+    }
     // Entry/Exit quality scoring (MAE/MFE)
     if (pos.price > 0 && price > 0) {
         const minP = pos._minPrice || pos.price;
