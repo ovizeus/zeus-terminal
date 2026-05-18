@@ -798,6 +798,36 @@ function _runCycle() {
 
                 const gates = _checkGates(snap, ind, confluence, volAdjustedStc, userId);
                 const fusion = _computeFusion(snap, ind, confluence, regime, gates, bars, userId);
+
+                // [Wave 4] R3B Safety — additive observability (NOT blocking).
+                // cp = prediction interval validity for fusion.confidence; ood =
+                // distribution rarity. Attached to fusion._r3b for downstream
+                // audit consumers. observeOutcome feeds histograms organically.
+                try {
+                    const r3b = require('./ml/R3B_safety');
+                    const r3bFeatures = {
+                        rsi: ind.rsi, adx: ind.adx, atr: ind.atr,
+                        score: confluence.score, confidence: fusion.confidence,
+                    };
+                    fusion._r3b = r3b.evaluate({
+                        regime: regime.regime,
+                        confidence: fusion.confidence,
+                        predicted: (fusion.confidence || 0) / 100,
+                        features: r3bFeatures,
+                    });
+                    // Feed OOD histograms every cycle so distribution stays current.
+                    // CP outcome recorded post-trade close (see Day 8 recordContribution
+                    // wire — future enhancement); for now use confidence as proxy
+                    // outcome so the buffer warms.
+                    r3b.observeOutcome({
+                        regime: regime.regime,
+                        confidence: fusion.confidence,
+                        predicted: (fusion.confidence || 0) / 100,
+                        actual: (fusion.confidence || 0) / 100,
+                        features: r3bFeatures,
+                    });
+                } catch (_) { /* never block brain flow */ }
+
                 const decision = {
                     ts: Date.now(),
                     cycle: _cycleCount,
