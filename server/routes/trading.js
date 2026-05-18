@@ -267,15 +267,16 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     // err.code numeric (propagated by binanceSigner.js:211 from
     // Binance data.code), not message-substring.
     if (_isOpening) {
+      // [Day 35 bugfix] Idempotent — Binance refuses redundant set when symbol
+      // has open orders (-4144 / -4048); helper verifies actual marginType via
+      // positionRisk and treats refusal as silent if state already CROSSED.
       try {
-        await sendSignedRequest('POST', '/fapi/v1/marginType', { symbol, marginType: 'CROSSED' }, req.exchangeCreds);
+        const marginHelper = require('../services/marginTypeHelper');
+        await marginHelper.ensureCrossed(symbol, req.exchangeCreds, sendSignedRequest);
       } catch (mtErr) {
-        if (!(mtErr && mtErr.code === -4046)) {
-          console.error('[API] marginType set failed:', mtErr.message);
-          if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
-          return res.status(500).json({ error: 'Failed to set margin type: ' + _safeError(mtErr) });
-        }
-        // -4046 idempotent — already CROSSED, proceed silently (no log noise)
+        console.error('[API] marginType set failed:', mtErr.message);
+        if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
+        return res.status(500).json({ error: 'Failed to set margin type: ' + _safeError(mtErr) });
       }
     }
 

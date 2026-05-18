@@ -1300,17 +1300,14 @@ async function _executeLiveEntry(entry, stc) {
     // line 211 from Binance data.code) — reliable, not message-substring based.
     for (let mtAttempt = 0; mtAttempt < 2; mtAttempt++) {
         try {
-            await sendSignedRequest('POST', '/fapi/v1/marginType', {
-                symbol: entry.symbol, marginType: 'CROSSED',
-            }, creds);
-            logger.info('AT_LIVE', `[${entry.seq}] Margin type CROSSED set (was different)`);
-            break; // success — change applied
+            // [Day 35 bugfix] Idempotent helper — verifies actual marginType via
+            // positionRisk if Binance refuses redundant set (-4144 / -4048 with
+            // existing open orders on symbol). See marginTypeHelper.js.
+            const marginHelper = require('./marginTypeHelper');
+            await marginHelper.ensureCrossed(entry.symbol, creds, sendSignedRequest);
+            logger.info('AT_LIVE', `[${entry.seq}] Margin type CROSSED verified/set`);
+            break; // success — change applied or already correct
         } catch (mtErr) {
-            // Idempotent: already CROSSED — Binance numeric code -4046
-            if (mtErr && mtErr.code === -4046) {
-                logger.info('AT_LIVE', `[${entry.seq}] Margin type already CROSSED (idempotent)`);
-                break;
-            }
             // Real failure — mirror leverage pattern (1 retry, then block)
             if (mtAttempt === 0) {
                 logger.warn('AT_LIVE', `[${entry.seq}] Margin type set failed, retrying: ${mtErr.message}`);
