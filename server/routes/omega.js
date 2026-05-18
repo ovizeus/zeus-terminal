@@ -49,15 +49,94 @@ router.get('/voice', (req, res) => {
 });
 
 // ── GET /api/omega/mood ─────────────────────────────────────────────────────
-// Returns current mood for Orb animation. Until R5A learning + R3A safety
-// guards wire up real mood resolver (Wave 4-5), serves a deterministic demo
-// cycle through 7 moods so the Orb is alive visually from day one.
+// Returns current mood for Orb animation, derived from REAL Ring5 audit
+// activity in the last 5 minutes. Fall back to demo cycle when no audit data
+// exists yet (very early in deployment or after a clean).
 //
-// Demo cycle: 7 moods × 14s each = 98s loop. Includes intensity 0..1 so the
-// Orb can pulse harder during EXCITED / NERVOUS / ANGRY moments.
+// Mood resolution:
+//   accepted dominant       -> EXCITED  (proposer firing successfully)
+//   rejected dominant       -> NERVOUS  (wants to act, blocked by reflection)
+//   skipped/no_proposal     -> FOCUSED  (eligibility OK, ML neutral signal)
+//   skipped/not_eligible    -> CALM     (bandit cold, still learning)
+//   no rows at all          -> BORED    (decision flow stalled)
+//
+// Intensity = audit_rows_last_1min / 30 clamped [0.1, 1.0].
+function _resolveRing5Mood() {
+    try {
+        const nowMs = Date.now();
+        const since5m = nowMs - 5 * 60 * 1000;
+        const since1m = nowMs - 60 * 1000;
+
+        // Check ml_influence_audit table exists (Day 3+ schema).
+        const has = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='ml_influence_audit'"
+        ).get();
+        if (!has) return null;
+
+        const dist = db.prepare(`
+            SELECT gate_status, gate_reason, COUNT(*) AS n
+            FROM ml_influence_audit
+            WHERE created_at >= ?
+            GROUP BY gate_status, gate_reason
+        `).all(since5m);
+
+        const total = dist.reduce((s, r) => s + r.n, 0);
+        if (total === 0) return null; // fall back to demo cycle
+
+        let accepted = 0, rejected = 0, skippedNoProp = 0, skippedNotElig = 0;
+        for (const r of dist) {
+            if (r.gate_status === 'accepted') accepted += r.n;
+            else if (r.gate_status === 'rejected') rejected += r.n;
+            else if (r.gate_status === 'skipped') {
+                if (r.gate_reason === 'no_proposal') skippedNoProp += r.n;
+                else if (r.gate_reason && r.gate_reason.startsWith('not_eligible_')) skippedNotElig += r.n;
+            }
+        }
+
+        const last1m = db.prepare(
+            "SELECT COUNT(*) AS n FROM ml_influence_audit WHERE created_at >= ?"
+        ).get(since1m).n;
+
+        let mood;
+        const acceptRatio = accepted / total;
+        const rejectRatio = rejected / total;
+        const noPropRatio = skippedNoProp / total;
+        if (acceptRatio > 0.10) mood = 'EXCITED';
+        else if (rejectRatio > 0.10) mood = 'NERVOUS';
+        else if (noPropRatio > 0.30) mood = 'FOCUSED';
+        else if (skippedNotElig / total > 0.50) mood = 'CALM';
+        else mood = 'CALM';
+
+        const intensity = Math.max(0.1, Math.min(1.0, last1m / 30));
+
+        return {
+            mood,
+            intensity,
+            source: 'ring5_activity',
+            metrics: {
+                total_5m: total,
+                accepted_5m: accepted,
+                rejected_5m: rejected,
+                skipped_no_proposal_5m: skippedNoProp,
+                skipped_not_eligible_5m: skippedNotElig,
+                rows_last_1m: last1m
+            }
+        };
+    } catch (_) {
+        return null; // any error -> fall back to demo cycle
+    }
+}
+
 router.get('/mood', (req, res) => {
     const userId = _requireUser(req, res);
     if (!userId) return;
+
+    const real = _resolveRing5Mood();
+    if (real) {
+        return res.json({ ok: true, ...real });
+    }
+
+    // Fallback: deterministic demo cycle (used only when no audit rows yet)
     const cycleMs = 14_000;
     const idx = Math.floor((Date.now() / cycleMs) % MOODS.length);
     const mood = MOODS[idx];
