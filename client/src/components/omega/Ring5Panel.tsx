@@ -11,10 +11,14 @@ import {
     fetchRing5Posteriors,
     fetchRing5InfluenceStatus,
     postRing5InfluenceSeed,
+    fetchRing5Aggregate,
+    fetchRing5Cells,
     type Ring5AuditRow,
     type Ring5EligibilityResult,
     type Ring5PosteriorsResponse,
     type Ring5InfluenceStatusResponse,
+    type Ring5AggregateBucket,
+    type Ring5Cell,
 } from './ring5Api'
 
 const POLL_INTERVAL_MS = 5000
@@ -67,6 +71,44 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
     const [influenceStatus, setInfluenceStatus] = useState<Ring5InfluenceStatusResponse | null>(null)
     const [influenceError, setInfluenceError] = useState<string | null>(null)
     const [seedBusy, setSeedBusy] = useState(false)
+
+    const [aggBuckets, setAggBuckets] = useState<Ring5AggregateBucket[]>([])
+    const [aggTotal, setAggTotal] = useState(0)
+    const [aggError, setAggError] = useState<string | null>(null)
+    const [cells, setCells] = useState<Ring5Cell[]>([])
+    const [cellsError, setCellsError] = useState<string | null>(null)
+
+    const reloadAggregate = useCallback(async () => {
+        try {
+            const r = await fetchRing5Aggregate()
+            setAggBuckets(r.buckets)
+            setAggTotal(r.totalRows)
+            setAggError(null)
+        } catch (err) {
+            setAggError(err instanceof Error ? err.message : String(err))
+        }
+    }, [])
+
+    const reloadCells = useCallback(async () => {
+        try {
+            const r = await fetchRing5Cells({ limit: 50 })
+            setCells(r.cells)
+            setCellsError(null)
+        } catch (err) {
+            setCellsError(err instanceof Error ? err.message : String(err))
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!expanded) return
+        reloadAggregate()
+        reloadCells()
+        const t = setInterval(() => {
+            reloadAggregate()
+            reloadCells()
+        }, POLL_INTERVAL_MS * 2)  // poll at half audit cadence
+        return () => clearInterval(t)
+    }, [reloadAggregate, reloadCells, expanded])
 
     const reloadInfluenceStatus = useCallback(async () => {
         try {
@@ -191,6 +233,81 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
                     <div className="omega-ring5-loading">
                         Seeding creates version + 30-day preReg. Eligibility still requires ≥30 obs per cell before wrap mutates fusion.
                     </div>
+                )}
+            </section>
+
+            <section className="omega-ring5-section">
+                <h3 className="omega-ring5-section-title">
+                    Audit aggregate (last 24h, {aggTotal} rows total)
+                </h3>
+                {aggError && <div className="omega-ring5-error">{aggError}</div>}
+                {aggBuckets.length === 0 && !aggError && (
+                    <div className="omega-ring5-empty">No audit data in last 24h.</div>
+                )}
+                {aggBuckets.length > 0 && (
+                    <table className="omega-ring5-audit-table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Regime</th>
+                                <th>Status</th>
+                                <th>Count</th>
+                                <th>Avg P2 conf</th>
+                                <th>Avg proposed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {aggBuckets.map((b, i) => (
+                                <tr key={`${b.symbol}-${b.regime}-${b.gate_status}-${i}`}>
+                                    <td>{b.symbol}</td>
+                                    <td>{b.regime}</td>
+                                    <td className={statusClass(b.gate_status)}>{b.gate_status}</td>
+                                    <td>{b.n}</td>
+                                    <td>{b.avg_p2_conf ? b.avg_p2_conf.toFixed(1) : '—'}</td>
+                                    <td>{b.avg_proposed_conf ? b.avg_proposed_conf.toFixed(1) : '—'}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
+            </section>
+
+            <section className="omega-ring5-section">
+                <h3 className="omega-ring5-section-title">
+                    Bandit cells (L4 user-owned, top {cells.length})
+                </h3>
+                {cellsError && <div className="omega-ring5-error">{cellsError}</div>}
+                {cells.length === 0 && !cellsError && (
+                    <div className="omega-ring5-empty">No bandit observations yet — waiting for trade closes.</div>
+                )}
+                {cells.length > 0 && (
+                    <table className="omega-ring5-post-table">
+                        <thead>
+                            <tr>
+                                <th>Cell key (user:env:symbol:regime)</th>
+                                <th>α</th>
+                                <th>β</th>
+                                <th>Observations</th>
+                                <th>Win rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {cells.map(c => {
+                                const winRate = c.observationCount > 0
+                                    ? ((c.alpha - 1) / c.observationCount * 100).toFixed(1)
+                                    : '—'
+                                return (
+                                    <tr key={c.cellKey}>
+                                        <td>{c.cellKey}</td>
+                                        <td>{c.alpha}</td>
+                                        <td>{c.beta}</td>
+                                        <td>{c.observationCount}</td>
+                                        <td>{winRate === '—' ? '—' : winRate + '%'}</td>
+                                    </tr>
+                                )
+                            })}
+                        </tbody>
+                    </table>
                 )}
             </section>
 

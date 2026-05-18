@@ -142,6 +142,53 @@ export async function postRing5InfluenceSeed(): Promise<Ring5SeedResponse> {
     return res.json() as Promise<Ring5SeedResponse>
 }
 
+export interface Ring5AggregateBucket {
+    symbol: string
+    regime: string
+    gate_status: Ring5GateStatus
+    n: number
+    avg_p2_conf: number
+    avg_proposed_conf: number
+}
+
+export interface Ring5AggregateResponse {
+    ok: boolean
+    buckets: Ring5AggregateBucket[]
+    totalRows: number
+    since: number
+}
+
+export interface Ring5Cell {
+    cellKey: string
+    alpha: number
+    beta: number
+    observationCount: number
+    updatedAt: number
+}
+
+export interface Ring5CellsResponse {
+    ok: boolean
+    cells: Ring5Cell[]
+}
+
+export async function fetchRing5Aggregate(
+    params: { since?: number } = {}
+): Promise<Ring5AggregateResponse> {
+    const q = new URLSearchParams()
+    if (params.since !== undefined) q.set('since', String(params.since))
+    const qs = q.toString()
+    return _get<Ring5AggregateResponse>(`/api/ring5/audit/aggregate${qs ? '?' + qs : ''}`)
+}
+
+export async function fetchRing5Cells(
+    params: { limit?: number } = {}
+): Promise<Ring5CellsResponse> {
+    const q = new URLSearchParams()
+    if (params.limit !== undefined) q.set('limit', String(params.limit))
+    const qs = q.toString()
+    return _get<Ring5CellsResponse>(`/api/ring5/cells${qs ? '?' + qs : ''}`)
+}
+
 export async function fetchRing5Posteriors(
     params: { userId: number; env: string; symbol: string; regime: string }
 ): Promise<Ring5PosteriorsResponse> {
