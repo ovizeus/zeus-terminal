@@ -102,6 +102,58 @@ export async function sendChat(text: string): Promise<{ ok: true; reply: string;
     return _json<{ ok: true; reply: string; mood: Mood }>(resp)
 }
 
+// [Day 32D] Streaming chat — calls /api/omega/chat-stream and dispatches
+// each SSE chunk through onChunk. Resolves with the final mood + model once
+// the 'done' frame arrives. Falls back gracefully on parse errors.
+export interface StreamChatResult { reply: string; mood: Mood; streamed: boolean; model: string | null }
+export async function sendChatStream(
+    text: string,
+    onChunk: (partial: string) => void,
+): Promise<StreamChatResult> {
+    const resp = await fetch('/api/omega/chat-stream', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+    })
+    if (!resp.ok || !resp.body) throw new Error(`chat-stream HTTP ${resp.status}`)
+    const reader = resp.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let acc = ''
+    let mood: Mood = 'CALM'
+    let model: string | null = null
+    let streamed = false
+    for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let nlIdx
+        while ((nlIdx = buffer.indexOf('\n\n')) !== -1) {
+            const frame = buffer.slice(0, nlIdx)
+            buffer = buffer.slice(nlIdx + 2)
+            for (const line of frame.split('\n')) {
+                if (!line.startsWith('data:')) continue
+                const payload = line.slice(5).trim()
+                if (!payload) continue
+                let parsed: any
+                try { parsed = JSON.parse(payload) } catch (_) { continue }
+                if (parsed && parsed.type === 'chunk' && typeof parsed.text === 'string') {
+                    acc += parsed.text
+                    try { onChunk(parsed.text) } catch (_) {}
+                } else if (parsed && parsed.type === 'done') {
+                    mood = (parsed.mood as Mood) || 'CALM'
+                    model = parsed.model || null
+                    streamed = !!parsed.streamed
+                } else if (parsed && parsed.type === 'error') {
+                    throw new Error(parsed.error || 'stream_error')
+                }
+            }
+        }
+    }
+    return { reply: acc, mood, streamed, model }
+}
+
 /** Mood → hex color (cyan/purple/red palette, NO gold per Zeus ops rules). */
 export const MOOD_COLOR: Record<Mood, string> = {
     CALM: '#00d4ff',       // cyan

@@ -273,6 +273,55 @@ router.post('/chat', express.json(), async (req, res) => {
     res.json({ ok: true, reply, mood });
 });
 
+// ── POST /api/omega/chat-stream ─────────────────────────────────────────────
+// [Day 32D] SSE-style streaming chat. Frames:
+//   data: {"type":"chunk","text":"hello"}\n\n
+//   data: {"type":"done","mood":"FOCUSED","model":"groq","streamed":true}\n\n
+// Local intents emit a single chunk + done. LLM fallback streams tokens.
+router.post('/chat-stream', express.json(), async (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const question = String(req.body && req.body.text || '').slice(0, 500).trim();
+    if (!question) {
+        return res.status(400).json({ ok: false, error: 'text required' });
+    }
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');  // disable nginx buffering if proxied
+    res.flushHeaders && res.flushHeaders();
+
+    const send = (obj) => {
+        try { res.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch (_) { /* socket dead */ }
+    };
+
+    try {
+        const result = await chatResponder.respondStream({
+            userId, text: question,
+            onChunk: (text) => send({ type: 'chunk', text }),
+        });
+        send({
+            type: 'done',
+            mood: result.mood,
+            streamed: !!result.streamed,
+            model: result.llmModel || null,
+            llmFallback: !!result.llmFallback,
+        });
+        try {
+            voiceLogger.logUtterance({
+                userId, utteranceType: 'CHAT_REPLY',
+                mood: result.mood, text: result.reply,
+                templateId: result.streamed ? 'wave1_groq_stream' : (result.llmFallback ? 'wave1_groq_llm' : 'wave1_smart_responder'),
+                contextJson: JSON.stringify({ question, llmFallback: !!result.llmFallback, llmModel: result.llmModel || null }),
+            });
+        } catch (_) { /* never fail stream on log error */ }
+    } catch (err) {
+        send({ type: 'error', error: err.message || String(err) });
+    } finally {
+        try { res.end(); } catch (_) {}
+    }
+});
+
 // [Day 30.2] Server-side TTS proxy — Google Translate unofficial endpoint.
 // Returns MP3 audio for the given text+lang. Works cross-platform (mobile +
 // desktop) without browser SpeechSynthesis quirks. No API key needed.

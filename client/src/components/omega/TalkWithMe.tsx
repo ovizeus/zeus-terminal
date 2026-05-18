@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import type { Mood } from './omegaApi'
-import { sendChat, MOOD_COLOR } from './omegaApi'
+import { sendChatStream, MOOD_COLOR } from './omegaApi'
 
 /**
  * Talk With Me — OMEGA chat panel.
@@ -46,12 +46,33 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
         setError(null)
         setSending(true)
         const userRow: ChatRow = { role: 'you', text, ts: Date.now() }
-        setHistory(prev => [...prev, userRow])
+        // [Day 32D] Streaming — append an omega placeholder row immediately
+        // and mutate its text as chunks arrive. Final mood comes from 'done' frame.
+        const omegaTs = Date.now()
+        const omegaPlaceholder: ChatRow = { role: 'omega', text: '', mood: 'CALM', ts: omegaTs }
+        setHistory(prev => [...prev, userRow, omegaPlaceholder])
         setInput('')
         try {
-            const reply = await sendChat(text)
-            const omegaRow: ChatRow = { role: 'omega', text: reply.reply, mood: reply.mood, ts: Date.now() }
-            setHistory(prev => [...prev, omegaRow])
+            const reply = await sendChatStream(text, (chunk) => {
+                setHistory(prev => {
+                    const next = prev.slice()
+                    // last row is the omega placeholder
+                    const last = next[next.length - 1]
+                    if (last && last.role === 'omega' && last.ts === omegaTs) {
+                        next[next.length - 1] = { ...last, text: (last.text || '') + chunk }
+                    }
+                    return next
+                })
+            })
+            // Patch final mood on the row in case 'done' carried a refined mood
+            setHistory(prev => {
+                const next = prev.slice()
+                const last = next[next.length - 1]
+                if (last && last.role === 'omega' && last.ts === omegaTs) {
+                    next[next.length - 1] = { ...last, mood: reply.mood, text: reply.reply || last.text }
+                }
+                return next
+            })
             if (voiceOn) {
                 // [Day 30.2] Server-side TTS via /api/omega/tts (Google Translate
                 // proxy → MP3). Works reliably cross-platform: desktop + mobile,

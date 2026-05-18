@@ -680,6 +680,112 @@ async function _replyLLMFallback(ctx, originalText) {
     };
 }
 
+// ── Streaming entry (Day 32D) ─────────────────────────────────────────
+// Same routing as respond(), but LLM fallback streams tokens through the
+// onChunk callback. Local intents emit a single chunk = the full reply so
+// the consumer (SSE proxy on /api/omega/chat-stream) sees a uniform shape.
+async function respondStream(params) {
+    const userId = params.userId;
+    const text = String(params.text || '').toLowerCase().trim();
+    const onChunk = typeof params.onChunk === 'function' ? params.onChunk : () => {};
+    if (!userId) throw new Error('chatResponder: userId required');
+    if (!text) {
+        const reply = 'speak boss.';
+        try { onChunk(reply); } catch (_) {}
+        return { reply, mood: 'CALM', streamed: false };
+    }
+
+    const ctx = {
+        userId,
+        brainHbAvgMs: _brainHbAvgMs(),
+        nowMs: Date.now(),
+    };
+
+    // Detect if intent path or LLM fallback would handle this — we peek by
+    // running the same routing but return early when LLM is needed so we
+    // can swap chat() for chatStream().
+    const originalText = params.text || '';
+    const localResult = await _tryLocalIntent(ctx, text, originalText);
+    if (localResult) {
+        try { onChunk(localResult.reply); } catch (_) {}
+        _pushConvo(userId, 'user', originalText);
+        _pushConvo(userId, 'assistant', localResult.reply || '');
+        return { ...localResult, streamed: false };
+    }
+
+    // LLM fallback path — stream tokens
+    if (!llmClient.available()) {
+        const fallback = _replyHelp(ctx, originalText);
+        try { onChunk(fallback.reply); } catch (_) {}
+        _pushConvo(userId, 'user', originalText);
+        _pushConvo(userId, 'assistant', fallback.reply || '');
+        return { ...fallback, streamed: false };
+    }
+
+    const sys = _buildSystemPrompt({ userId, text: originalText });
+    const mood = _currentMood();
+    const history = _getConvo(userId).map(m => ({ role: m.role, content: m.content }));
+    const messages = [
+        { role: 'system', content: sys },
+        ...history,
+        { role: 'user', content: originalText },
+    ];
+
+    const result = await llmClient.chatStream({
+        messages, onChunk,
+        temperature: 0.7, maxTokens: 320, timeoutMs: 8000,
+    });
+
+    if (!result.ok) {
+        const fallback = _replyHelp(ctx, originalText);
+        try { onChunk(fallback.reply); } catch (_) {}
+        _pushConvo(userId, 'user', originalText);
+        _pushConvo(userId, 'assistant', fallback.reply || '');
+        return { ...fallback, streamed: false, llmError: result.error };
+    }
+    _pushConvo(userId, 'user', originalText);
+    _pushConvo(userId, 'assistant', result.text || '');
+    return {
+        reply: result.text,
+        mood,
+        streamed: true,
+        llmModel: result.model,
+        llmFallback: true,
+    };
+}
+
+// Internal helper: returns the intent reply if one matches, else null
+// (= LLM fallback needed). Mirrors _respondImpl routing exactly but
+// without invoking the LLM path itself.
+async function _tryLocalIntent(ctx, text, originalText) {
+    if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
+    if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
+    if (text.match(/\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i)) {
+        return _replyTopMovers(ctx, 'gainers', originalText);
+    }
+    if (text.match(/\b(top losers?|biggest losers?|cei mai sc[aă]zu[țt]i|care a sc[aă]zut|care e cel mai sc[aă]zut|cea mai sc[aă]zut)/i)) {
+        return _replyTopMovers(ctx, 'losers', originalText);
+    }
+    if (text.match(/\b(top volume|biggest volume|cel mai mare volum|care e cel mai mare volum|cel mai tranzac[țt]ionat|cele mai tranzac[țt]ionate)/i)) {
+        return _replyTopMovers(ctx, 'volume', originalText);
+    }
+    if (text.match(/\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i)) {
+        return _replyMarketOverview(ctx, originalText);
+    }
+    const symMatch = text.match(SYMBOL_RE);
+    if (symMatch) return _replySymbol(ctx, symMatch[1]);
+    if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
+    if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
+    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
+    if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
+    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
+    if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
+    if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
+        return { reply: 'easy boss. breathe. markets do that. what do you want — positions, pnl, mood?', mood: 'CALM' };
+    }
+    return null;
+}
+
 // ── Main entry ────────────────────────────────────────────────────────
 async function respond(params) {
     const userId = params.userId;
@@ -749,6 +855,7 @@ async function _respondImpl(params, text) {
 
 module.exports = {
     respond,
+    respondStream,
     _resetConvoForTest,
     // [Day 32C] Test-only hooks for the context layer fed to the LLM.
     _buildLLMContextForTest: _buildLLMContext,
