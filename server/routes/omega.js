@@ -273,4 +273,33 @@ router.post('/chat', express.json(), async (req, res) => {
     res.json({ ok: true, reply, mood });
 });
 
+// [Day 30.2] Server-side TTS proxy — Google Translate unofficial endpoint.
+// Returns MP3 audio for the given text+lang. Works cross-platform (mobile +
+// desktop) without browser SpeechSynthesis quirks. No API key needed.
+// Limitations: 200-char max per request; unofficial endpoint may change.
+router.get('/tts', async (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const text = String(req.query.text || '').slice(0, 200).trim();
+    const lang = String(req.query.lang || 'en').slice(0, 8);
+    if (!text) {
+        return res.status(400).json({ ok: false, error: 'text required' });
+    }
+    try {
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
+        const upstream = await fetch(url, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Zeus/1.0)' }
+        });
+        if (!upstream.ok) {
+            return res.status(502).json({ ok: false, error: `upstream_${upstream.status}` });
+        }
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.send(buf);
+    } catch (err) {
+        res.status(500).json({ ok: false, error: String(err && err.message || err) });
+    }
+});
+
 module.exports = router;

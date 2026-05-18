@@ -52,52 +52,39 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
             const reply = await sendChat(text)
             const omegaRow: ChatRow = { role: 'omega', text: reply.reply, mood: reply.mood, ts: Date.now() }
             setHistory(prev => [...prev, omegaRow])
-            if (voiceOn && typeof window.speechSynthesis !== 'undefined') {
+            if (voiceOn) {
+                // [Day 30.2] Server-side TTS via /api/omega/tts (Google Translate
+                // proxy → MP3). Works reliably cross-platform: desktop + mobile,
+                // no SpeechSynthesis API quirks. Chunks long replies to 180-char
+                // segments (Google limit ~200). Plays sequentially.
                 try {
-                    const txt = reply.reply
+                    const txt = reply.reply.slice(0, 1000) // hard cap to avoid endless queue
                     const isRo = /\b(este|sunt|despre|pentru|cu|în|ai|am|esti|ești|faci|salut|bună|și|ce|cum|nu|da|să|simt|gândesc|părere)\b/i.test(txt)
-                    const lang = isRo ? 'ro-RO' : 'en-US'
-
-                    // Helper: actually speak using current voice list.
-                    const doSpeak = () => {
-                        const utt = new SpeechSynthesisUtterance(txt)
-                        utt.lang = lang
-                        utt.rate = 1.0
-                        utt.pitch = 0.95
-                        utt.volume = 1.0
-                        const voices = window.speechSynthesis.getVoices()
-                        const match = voices.find(v => v.lang === lang)
-                                  || voices.find(v => v.lang.startsWith(lang.split('-')[0]))
-                                  || voices.find(v => /english/i.test(v.name))
-                        if (match) utt.voice = match
-                        utt.onerror = (ev) => console.warn('[TTS] error', (ev as any).error || ev)
-                        // Diagnostic — first call surfaces what's available.
-                        if (typeof (window as any).__zeusTtsLogged === 'undefined') {
-                            (window as any).__zeusTtsLogged = true
-                            console.log('[TTS] voices loaded:', voices.length, 'picked:', match ? `${match.name} (${match.lang})` : 'default', 'lang:', lang)
+                    const lang = isRo ? 'ro' : 'en'
+                    // Split into ≤180-char chunks at sentence boundaries when possible.
+                    const chunks: string[] = []
+                    const parts = txt.split(/([.!?]\s+|,\s+)/g) // keep delimiter via capture
+                    let buf = ''
+                    for (const p of parts) {
+                        if ((buf + p).length > 180) {
+                            if (buf) chunks.push(buf.trim())
+                            buf = p
+                        } else {
+                            buf += p
                         }
-                        window.speechSynthesis.speak(utt)
                     }
-
-                    // Chrome loads voices async — if empty, wait for voiceschanged event once.
-                    const initialVoices = window.speechSynthesis.getVoices()
-                    if (initialVoices.length === 0) {
-                        const onVoicesReady = () => {
-                            window.speechSynthesis.removeEventListener('voiceschanged', onVoicesReady)
-                            doSpeak()
-                        }
-                        window.speechSynthesis.addEventListener('voiceschanged', onVoicesReady)
-                        // Trigger voice load (some browsers need this kick).
-                        window.speechSynthesis.getVoices()
-                        // Fallback: speak after 500ms even if event didn't fire.
-                        setTimeout(() => {
-                            if ((window as any).speechSynthesis.speaking) return
-                            window.speechSynthesis.removeEventListener('voiceschanged', onVoicesReady)
-                            doSpeak()
-                        }, 500)
-                    } else {
-                        doSpeak()
+                    if (buf.trim()) chunks.push(buf.trim())
+                    // Play chunks sequentially.
+                    let i = 0
+                    const playNext = () => {
+                        if (i >= chunks.length) return
+                        const chunk = chunks[i++]
+                        const audio = new Audio(`/api/omega/tts?text=${encodeURIComponent(chunk)}&lang=${lang}`)
+                        audio.onended = playNext
+                        audio.onerror = (ev) => console.warn('[TTS] audio error', ev)
+                        audio.play().catch(err => console.warn('[TTS] play() rejected', err))
                     }
+                    playNext()
                 } catch (err) {
                     console.warn('[TTS] threw', err)
                 }
