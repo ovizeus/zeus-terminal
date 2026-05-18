@@ -639,6 +639,18 @@ function _runCycle() {
             _persistRegimeBaseline();
 
             // ── Per-user gate check + fusion + AT execution ──
+            // [Day 29.6] Write a global "watching" thought for all users
+            // before per-user AT gate. This ensures TheVoice has activity even
+            // when AT is OFF (observation mode). Throttled per symbol — 1 every
+            // 3min — uses uid=1 (admin) as default carrier for now.
+            try {
+                _writeThought({
+                    userId: 1, symbol: symbol, kind: 'neutral_watch', mood: 'CALM',
+                    text: `scanning ${symbol} — regime ${regime.regime}, confluence ${(confluence.score || 0).toFixed(0)}.`,
+                    contextJson: JSON.stringify({ regime: regime.regime, score: confluence.score || 0 })
+                });
+            } catch (_) { /* */ }
+
             for (const [userId, stc] of users) {
                 // Skip users who have AT disabled — no point computing gates/fusion
                 if (!serverAT.isATActive(userId)) continue;
