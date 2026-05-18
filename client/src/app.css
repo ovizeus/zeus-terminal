@@ -6339,6 +6339,27 @@ select option {
 .omega-doctor-audio-toggle { background: transparent; border: 1px solid rgba(255,90,50,0.3); color: rgba(255,255,255,0.6); padding: 3px 10px; font-family: 'Orbitron', sans-serif; font-size: 11px; cursor: pointer; border-radius: 4px; margin-left: auto; }
 .omega-doctor-audio-toggle:hover { color: #ff5a32; border-color: rgba(255,90,50,0.6); }
 .omega-doctor-audio-toggle.on { color: #ff3030; border-color: rgba(255,48,48,0.7); background: rgba(255,48,48,0.08); }
+
+/* OMEGA mode badge (DEMO/TESTNET/REAL/LOCKED) — reflects execution env in header */
+.omega-mode-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 3px 9px;
+  margin-left: 8px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+.omega-mode-demo    { color: #00d4ff; background: rgba(0, 212, 255, 0.10); }
+.omega-mode-testnet { color: #ffc800; background: rgba(255, 200, 0, 0.10); }
+.omega-mode-real    { color: #ff3030; background: rgba(255, 48, 48, 0.12); box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); animation: omega-real-pulse 2s ease-in-out infinite alternate; }
+.omega-mode-locked  { color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.3); }
+@keyframes omega-real-pulse {
+  0%   { box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); }
+  100% { box-shadow: 0 0 16px rgba(255, 48, 48, 0.7); }
+}
 @keyframes omega-doctor-alert-pulse {
   0%   { box-shadow: 0 0 6px rgba(255,48,48,0.4); }
   100% { box-shadow: 0 0 14px rgba(255,48,48,0.7); }

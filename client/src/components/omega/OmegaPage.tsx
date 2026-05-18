@@ -5,6 +5,7 @@ import { TalkWithMe } from './TalkWithMe'
 import { R5AStats } from './R5AStats'
 import { DoctorPanel } from './DoctorPanel'
 import { Ring5Panel } from './Ring5Panel'
+import { useATStore, useUiStore } from '../../stores'
 import { useAuthStore } from '../../stores/authStore'
 import type { Utterance, Mood, HealthState } from './omegaApi'
 import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
@@ -37,6 +38,17 @@ export function OmegaPage() {
     const [refreshTick, setRefreshTick] = useState(0)
     const role = useAuthStore((s) => s.role)
     const isAdmin = role === 'admin'
+    const engineMode = useATStore((s) => s.mode) || 'demo'
+    const executionEnv = useUiStore((s) => s.executionEnv)
+    // Resolve label: DEMO if engineMode demo OR env DEMO; TESTNET/REAL from env; LOCKED if no creds
+    const modeLabel = (engineMode === 'demo' || executionEnv === 'DEMO') ? 'DEMO'
+        : executionEnv === 'TESTNET' ? 'TESTNET'
+        : executionEnv === 'REAL' ? 'REAL'
+        : 'LOCKED'
+    const modeColorClass = modeLabel === 'DEMO' ? 'omega-mode-demo'
+        : modeLabel === 'TESTNET' ? 'omega-mode-testnet'
+        : modeLabel === 'REAL' ? 'omega-mode-real'
+        : 'omega-mode-locked'
 
     // Mood polling — fast cadence so orb feels alive
     useEffect(() => {
@@ -127,6 +139,9 @@ export function OmegaPage() {
                 <h1 className="omega-page-title">
                     <span className="omega-title-glyph">Ω</span>
                     <span className="omega-title-name">OMEGA</span>
+                    <span className={`omega-mode-badge ${modeColorClass}`} title={`execution env: ${modeLabel}`}>
+                        {modeLabel}
+                    </span>
                     <span className="omega-title-tag">read-only · wave 1 foundation</span>
                 </h1>
                 <div className="omega-page-meta">
