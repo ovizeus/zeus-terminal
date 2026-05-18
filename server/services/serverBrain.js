@@ -60,6 +60,24 @@ function _emitDoctor(event) {
         if (bus && typeof bus.emit === 'function') bus.emit(event);
     } catch (_) { /* never block brain flow */ }
 }
+
+// [Day 35 fix] Dedup repeat alerts — operator-reported "P2 spam from
+// serverBrain.correlationGuard 25× in 24h same (sym, dir, reason)".
+// Brain cycle fires every 30s; correlationGuard block fires every cycle
+// while operator has correlated positions open. Without dedup, Doctor log
+// fills with identical entries. Suppress same key within 5 min.
+const _doctorEmitThrottle = new Map();  // `${moduleId}|${key}` → lastEmitTs
+const _DOCTOR_DEDUP_MS = 5 * 60 * 1000;
+
+function _emitDoctorThrottled(event, dedupKey) {
+    if (!dedupKey) { _emitDoctor(event); return; }
+    const mapKey = `${event.moduleId}|${dedupKey}`;
+    const now = Date.now();
+    const last = _doctorEmitThrottle.get(mapKey) || 0;
+    if (now - last < _DOCTOR_DEDUP_MS) return;  // suppress duplicate
+    _doctorEmitThrottle.set(mapKey, now);
+    _emitDoctor(event);
+}
 // [Day 18] Per-invocation telemetry — accumulates in-memory, flushed to
 // ml_module_heartbeats every 1s by telemetryCollector start() (called at boot).
 function _recordInvocation(moduleId, latencyMs, ranOk) {
@@ -749,12 +767,12 @@ function _runCycle() {
                 const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
                 if (ddAssess.locked) {
                     // [Day 20] Doctor P1 alert pe drawdown lockout — user portfolio circuit-breaker fired.
-                    _emitDoctor({
+                    _emitDoctorThrottled({
                         eventType: 'alert', severity: 'P1',
                         moduleId: 'serverBrain.drawdownGuard', ts: Date.now(),
                         payload: { userId, symbol, drawdownPct: ddAssess.drawdownPct,
                                    tier: ddAssess.tier ? ddAssess.tier.label : 'LOCKOUT' }
-                    });
+                    }, `${userId}:${symbol}`);
                     _logDecision('BLOCKED', 'drawdown_lockout', null, { drawdownPct: ddAssess.drawdownPct });
                     _pushBlock(userId, symbol, ['drawdown_lockout:' + (ddAssess.drawdownPct != null ? ddAssess.drawdownPct.toFixed(1) + '%' : 'na')], 'drawdown', { score: confluence.score, adx: ind.adx });
                     try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
@@ -903,12 +921,12 @@ function _runCycle() {
 
                     if (!questioning.proceed) {
                         // Brain blocked its own entry
-                        _emitDoctor({
+                        _emitDoctorThrottled({
                             eventType: 'alert', severity: 'P2',
                             moduleId: 'serverBrain.reflection', ts: Date.now(),
                             payload: { symbol: snap.symbol, dir: fusion.dir, conf: fusion.confidence,
                                        concerns: questioning.concerns.map(c => c.type), userId }
-                        });
+                        }, `${userId}:${snap.symbol}:${fusion.dir}`);
                         // [Day 29.4] Voice: brain self-doubts.
                         _writeThought({
                             userId, symbol: snap.symbol, kind: 'reflection_block', mood: 'NERVOUS',
@@ -967,12 +985,12 @@ function _runCycle() {
                     const openPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [];
                     const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
                     if (!corrCheck.allowed) {
-                        _emitDoctor({
+                        _emitDoctorThrottled({
                             eventType: 'alert', severity: 'P2',
                             moduleId: 'serverBrain.correlationGuard', ts: Date.now(),
                             payload: { symbol: snap.symbol, dir: fusion.dir, reason: corrCheck.reason,
                                        correlatedWith: corrCheck.correlatedWith || [], userId }
-                        });
+                        }, `${userId}:${snap.symbol}:${fusion.dir}`);
                         // [Day 29.4] Voice: correlation guard fires.
                         const corrWith = (corrCheck.correlatedWith || []).slice(0, 2).join(', ') || 'open positions';
                         _writeThought({
