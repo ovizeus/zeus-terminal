@@ -28,6 +28,40 @@ const serverSessionProfile = require('./serverSessionProfile');
 const serverDrawdownGuard = require('./serverDrawdownGuard');
 const serverMultiEntry = require('./serverMultiEntry');
 const serverVolatilityEngine = require('./serverVolatilityEngine');
+
+// [Wave 7a] R7 Meta — instrumented variants of the 3 most-called ring
+// boundary functions. Pure observability — same return semantics as
+// originals. Loaded lazily to avoid circular-require issues at boot.
+let _tracedReflection = null;
+let _tracedCorrGuard = null;
+let _tracedDDGuard = null;
+function _r7QuestionEntry(...args) {
+    if (!_tracedReflection) {
+        try {
+            const tracer = require('./ml/R7_meta/interRingTracer');
+            _tracedReflection = tracer.wrap('serverBrain', 'serverReflection', 'questionEntry', serverReflection.questionEntry);
+        } catch (_) { _tracedReflection = serverReflection.questionEntry; }
+    }
+    return _tracedReflection(...args);
+}
+function _r7CheckEntry(...args) {
+    if (!_tracedCorrGuard) {
+        try {
+            const tracer = require('./ml/R7_meta/interRingTracer');
+            _tracedCorrGuard = tracer.wrap('serverBrain', 'serverCorrelationGuard', 'checkEntry', serverCorrelationGuard.checkEntry);
+        } catch (_) { _tracedCorrGuard = serverCorrelationGuard.checkEntry; }
+    }
+    return _tracedCorrGuard(...args);
+}
+function _r7AssessDD(...args) {
+    if (!_tracedDDGuard) {
+        try {
+            const tracer = require('./ml/R7_meta/interRingTracer');
+            _tracedDDGuard = tracer.wrap('serverBrain', 'serverDrawdownGuard', 'assessDrawdown', serverDrawdownGuard.assessDrawdown);
+        } catch (_) { _tracedDDGuard = serverDrawdownGuard.assessDrawdown; }
+    }
+    return _tracedDDGuard(...args);
+}
 const brainLogger = require('./brainLogger');
 const MF = require('../migrationFlags');
 
@@ -764,7 +798,7 @@ function _runCycle() {
                 const us = serverAT.getUserState ? serverAT.getUserState(userId) : null;
                 const dailyPnL = us ? (us.dailyPnL || 0) : 0;
                 const refBalance = us ? (us.demoBalance || us.liveBalanceRef || 10000) : 10000;
-                const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
+                const ddAssess = _r7AssessDD(dailyPnL, refBalance);
                 if (ddAssess.locked) {
                     // [Day 20] Doctor P1 alert pe drawdown lockout — user portfolio circuit-breaker fired.
                     _emitDoctorThrottled({
@@ -945,7 +979,7 @@ function _runCycle() {
                 if (fusion.decision !== 'NO_TRADE') {
                     // [REFLECTION] Pre-trade questioning — brain asks itself "am I sure?"
                     const marketCtx = _ring5MarketCtx;
-                    const questioning = serverReflection.questionEntry(
+                    const questioning = _r7QuestionEntry(
                         snap.symbol, fusion.dir, fusion.confidence, regime.regime, marketCtx, userId
                     );
 
@@ -1013,7 +1047,7 @@ function _runCycle() {
 
                     // [V3] Correlation guard — block if too much correlated exposure
                     const openPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [];
-                    const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
+                    const corrCheck = _r7CheckEntry(snap.symbol, fusion.dir, openPos);
                     if (!corrCheck.allowed) {
                         _emitDoctorThrottled({
                             eventType: 'alert', severity: 'P2',

@@ -56,6 +56,20 @@ router.get('/constitution/violations', (req, res) => {
     }
 });
 
+// ── GET /api/omega/inter-ring/recent?limit=N ────────────────────────────────
+// [Wave 7a] R7 Meta — last N inter-ring call traces (admin observability).
+// Records every caller→callee invocation with input/output summaries +
+// duration + ok flag. Default 50, cap 500.
+router.get('/inter-ring/recent', (req, res) => {
+    try {
+        const tracer = require('../services/ml/R7_meta/interRingTracer');
+        const limit = parseInt(req.query.limit, 10) || 50;
+        res.json({ ok: true, ts: Date.now(), traces: tracer.recent(limit) });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ── GET /api/omega/constitution/principles ──────────────────────────────────
 // [Wave 5] Returns the 7 locked principles (id, name, severity, description).
 router.get('/constitution/principles', (_req, res) => {
