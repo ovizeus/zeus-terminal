@@ -9,9 +9,12 @@ import {
     fetchRing5Audit,
     fetchRing5Eligibility,
     fetchRing5Posteriors,
+    fetchRing5InfluenceStatus,
+    postRing5InfluenceSeed,
     type Ring5AuditRow,
     type Ring5EligibilityResult,
     type Ring5PosteriorsResponse,
+    type Ring5InfluenceStatusResponse,
 } from './ring5Api'
 
 const POLL_INTERVAL_MS = 5000
@@ -60,6 +63,37 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
     const [postForm, setPostForm] = useState<QueryForm>(DEFAULT_FORM)
     const [postResult, setPostResult] = useState<Ring5PosteriorsResponse | null>(null)
     const [postError, setPostError] = useState<string | null>(null)
+
+    const [influenceStatus, setInfluenceStatus] = useState<Ring5InfluenceStatusResponse | null>(null)
+    const [influenceError, setInfluenceError] = useState<string | null>(null)
+    const [seedBusy, setSeedBusy] = useState(false)
+
+    const reloadInfluenceStatus = useCallback(async () => {
+        try {
+            const s = await fetchRing5InfluenceStatus()
+            setInfluenceStatus(s)
+        } catch (err) {
+            setInfluenceError(err instanceof Error ? err.message : String(err))
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!expanded) return
+        reloadInfluenceStatus()
+    }, [reloadInfluenceStatus, expanded])
+
+    async function handleSeed() {
+        setSeedBusy(true)
+        setInfluenceError(null)
+        try {
+            await postRing5InfluenceSeed()
+            await reloadInfluenceStatus()
+        } catch (err) {
+            setInfluenceError(err instanceof Error ? err.message : String(err))
+        } finally {
+            setSeedBusy(false)
+        }
+    }
 
     const reloadAudit = useCallback(async () => {
         setAuditLoading(true)
@@ -131,6 +165,34 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
             )}
 
             {expanded && <>
+
+            <section className="omega-ring5-section">
+                <h3 className="omega-ring5-section-title">Influence activation</h3>
+                {influenceError && <div className="omega-ring5-error">{influenceError}</div>}
+                {influenceStatus && (
+                    <div className="omega-ring5-result">
+                        <div>
+                            Status:{' '}
+                            <strong className={influenceStatus.active ? 'omega-ring5-status-accepted' : 'omega-ring5-status-skipped'}>
+                                {influenceStatus.active ? 'ACTIVE' : 'INACTIVE'}
+                            </strong>
+                        </div>
+                        <div>Version ID: <code>{influenceStatus.versionId ?? '—'}</code></div>
+                        <div>PreReg ID: <code>{influenceStatus.preRegId ?? '—'}</code></div>
+                        <div>PreReg State: <code>{influenceStatus.preRegState ?? '—'}</code></div>
+                    </div>
+                )}
+                <div className="omega-ring5-form">
+                    <button type="button" onClick={handleSeed} disabled={seedBusy}>
+                        {seedBusy ? 'Seeding…' : (influenceStatus?.active ? 'Re-check status' : 'Seed influence (activate)')}
+                    </button>
+                </div>
+                {!influenceStatus?.active && (
+                    <div className="omega-ring5-loading">
+                        Seeding creates version + 30-day preReg. Eligibility still requires ≥30 obs per cell before wrap mutates fusion.
+                    </div>
+                )}
+            </section>
 
             <section className="omega-ring5-section">
                 <h3 className="omega-ring5-section-title">

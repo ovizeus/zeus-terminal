@@ -107,6 +107,41 @@ export async function fetchRing5Eligibility(
     return _get<Ring5EligibilityResponse>(`/api/ring5/eligibility?${q.toString()}`)
 }
 
+export interface Ring5InfluenceStatusResponse {
+    ok: boolean
+    active: boolean
+    versionId: number | null
+    preRegId: number | null
+    preRegState: string | null
+}
+
+export interface Ring5SeedResponse {
+    ok: boolean
+    status: 'seeded' | 'already_active'
+    versionId: number
+    preRegId: number
+}
+
+export async function fetchRing5InfluenceStatus(): Promise<Ring5InfluenceStatusResponse> {
+    return _get<Ring5InfluenceStatusResponse>('/api/ring5/influence/status')
+}
+
+export async function postRing5InfluenceSeed(): Promise<Ring5SeedResponse> {
+    const res = await fetch('/api/ring5/influence/seed', {
+        method: 'POST',
+        credentials: 'include'
+    })
+    if (!res.ok) {
+        let msg = `${res.status} ${res.statusText}`
+        try {
+            const body = await res.json()
+            if (body && body.error) msg = body.error
+        } catch { /* keep statusText */ }
+        throw new Error(msg)
+    }
+    return res.json() as Promise<Ring5SeedResponse>
+}
+
 export async function fetchRing5Posteriors(
     params: { userId: number; env: string; symbol: string; regime: string }
 ): Promise<Ring5PosteriorsResponse> {
