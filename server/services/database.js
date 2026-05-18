@@ -6,7 +6,13 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, '..', '..', 'data', 'zeus.db');
+// [Day 16 2026-05-18] Read ZEUS_DB_PATH env if set (used by tests + dev to
+// point at temp/isolated DBs). Falls back to canonical prod path so existing
+// runtime behavior unchanged when env not set. Paired with _seedBaselineIfFresh()
+// — fresh DBs get schema snapshot instead of failing on 200+ migration ordering bugs.
+const DB_PATH = process.env.ZEUS_DB_PATH
+    ? path.resolve(process.env.ZEUS_DB_PATH)
+    : path.join(__dirname, '..', '..', 'data', 'zeus.db');
 
 // Ensure data directory exists
 const dataDir = path.dirname(DB_PATH);
