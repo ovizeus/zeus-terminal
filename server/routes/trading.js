@@ -40,8 +40,34 @@ function _checkIdempotency(req) {
   }
   const fullKey = `${req.user.id}:${key}`;
   if (_idempotencyCache.has(fullKey)) return { duplicate: true, key: fullKey };
+
+  // [Wave 6] Cross-restart guarantee — consult DB ledger when in-memory
+  // cache misses (typical after PM2 reload). If ledger has the key with
+  // an unexpired record, treat as duplicate + return cached result.
+  try {
+    const ledger = require('../services/ml/R4_execution/exactlyOnceLedger');
+    const seen = ledger.seen(fullKey);
+    if (seen) {
+      _idempotencyCache.set(fullKey, Date.now());  // warm in-memory cache
+      return { duplicate: true, key: fullKey, cachedResult: seen.result };
+    }
+  } catch (_) { /* ledger unavailable — fall through to mark fresh */ }
+
   _idempotencyCache.set(fullKey, Date.now());
   return null;
+}
+
+// [Wave 6] Record successful order placement in DB ledger for cross-restart
+// dedup. Called after Binance accepts the order. Errors swallowed — order
+// already placed, dedup is best-effort.
+function _recordIdempotencySuccess(req, payload, result) {
+  try {
+    const key = req.headers['x-idempotency-key'];
+    if (!key) return;
+    const fullKey = `${req.user.id}:${key}`;
+    const ledger = require('../services/ml/R4_execution/exactlyOnceLedger');
+    ledger.record(fullKey, payload, result);
+  } catch (_) { /* never block order response */ }
 }
 
 // [Bug#3 STEP 2] In-memory per-user+exchange+symbol+side OPEN-order barrier.
@@ -202,6 +228,14 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     return res.status(400).json({ error: idem.reason });
   }
   if (idem && idem.duplicate) {
+    // [Wave 6] If we have a cached result from DB ledger (cross-restart hit),
+    // return it (200) instead of 409. This preserves exactly-once semantics
+    // across PM2 reloads. If only in-memory duplicate (no cached result),
+    // keep legacy 409 behavior — caller likely retrying a still-processing
+    // submission.
+    if (idem.cachedResult) {
+      return res.status(200).json({ ...idem.cachedResult, _idempotent: 'replayed_from_ledger' });
+    }
     return res.status(409).json({ error: 'Duplicate order — already processing (key: ' + req.headers['x-idempotency-key'] + ')' });
   }
   if (!config.tradingEnabled) {
@@ -443,7 +477,7 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
         } catch (_) { /* best-effort isolation — outer wrapper safety */ }
       }
     }
-    res.json({
+    const _placeResult = {
       orderId: data.orderId,
       status: data.status,
       avgPrice: parseFloat(data.avgPrice || 0),
@@ -451,7 +485,10 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       symbol: data.symbol,
       side: data.side,
       type: data.type,
-    });
+    };
+    // [Wave 6] Record success in DB ledger for cross-restart dedup
+    _recordIdempotencySuccess(req, { symbol, side, type, quantity, leverage }, _placeResult);
+    res.json(_placeResult);
   } catch (err) {
     // [BE-01] Release idempotency key only if order confirmed NOT executed (4xx = Binance rejected)
     // Do NOT release on 5xx/timeout — order status is ambiguous, keeping key prevents duplicate
