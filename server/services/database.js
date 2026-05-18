@@ -14,6 +14,46 @@ if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
 const db = new Database(DB_PATH);
 
+// [Day 16 2026-05-18] Baseline schema seeding for fresh DBs.
+// On a truly fresh DB (no _migrations table), exec the prod schema snapshot
+// + bulk-insert all known migration names as already-applied. Existing
+// migrate() calls then become no-ops on fresh DB (already marked applied),
+// bypassing latent ordering bugs (ALTER migrations referencing tables
+// created later in file).
+// Prod DB unaffected — `_migrations` already populated → seed step skipped.
+function _seedBaselineIfFresh() {
+    try {
+        const hasMigrationsTable = db.prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='_migrations'"
+        ).get();
+        if (hasMigrationsTable) return;
+
+        const schemaSqlPath = path.join(__dirname, 'baseline_schema.sql');
+        const migListPath = path.join(__dirname, 'baseline_migrations.txt');
+        if (!fs.existsSync(schemaSqlPath) || !fs.existsSync(migListPath)) {
+            return;
+        }
+
+        const schemaSql = fs.readFileSync(schemaSqlPath, 'utf8');
+        const migList = fs.readFileSync(migListPath, 'utf8')
+            .split('\n').map(s => s.trim()).filter(Boolean);
+
+        db.exec('BEGIN;\n' + schemaSql + '\nCOMMIT;');
+
+        const insert = db.prepare("INSERT OR IGNORE INTO _migrations (name, applied_at) VALUES (?, datetime('now'))");
+        const tx = db.transaction((names) => {
+            for (const name of names) insert.run(name);
+        });
+        tx(migList);
+
+        console.log(`[DB] Baseline schema seeded: ${migList.length} migrations marked applied`);
+    } catch (err) {
+        console.warn('[DB] Baseline seed failed (will fall back to per-migration apply):', err.message);
+    }
+}
+
+_seedBaselineIfFresh();
+
 // WAL mode for better concurrency
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
