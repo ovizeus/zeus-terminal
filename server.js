@@ -1365,6 +1365,27 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.error('SERVER', `[RADAR] boot failed: ${err.message}`);
   }
 
+  // [Wave 8 G] Omega greeting — written to ml_voice_log on boot for each
+  // active user so TheVoice feed shows life on startup. Best-effort.
+  try {
+    const voiceLogger = require('./server/services/ml/_voice/voiceLogger');
+    const usersList = db.listUsers ? db.listUsers() : [];
+    for (const u of usersList) {
+      try {
+        voiceLogger.logUtterance({
+          userId: u.id,
+          utteranceType: 'GREETING',
+          mood: 'CALM',
+          text: 'Ω online. let me look around.',
+          templateId: 'omega_boot_greeting',
+          contextJson: JSON.stringify({ ts: Date.now() }),
+        });
+      } catch (_) { /* per-user best-effort */ }
+    }
+  } catch (err) {
+    logger.warn('SERVER', `[OMEGA-GREETING] boot emit failed: ${err.message}`);
+  }
+
   // [LIQ] Binance public liquidation feed — one persistent WS to
   // !forceOrder@arr, filtered to notional ≥ $100k. Read-only public data,
   // no trading side effects. Gated by MARKET_RADAR_LIQ_ENABLED.
@@ -1668,6 +1689,25 @@ global.__zeusWsBroadcastAll = app.locals.wsBroadcastAll;
 function _gracefulShutdown(signal) {
   logger.warn('SERVER', 'Shutdown signal received: ' + signal);
   console.log('\n🛑 Shutting down gracefully (' + signal + ')...');
+
+  // [Wave 8 G] Omega farewell — best-effort, before sockets close
+  try {
+    const voiceLogger = require('./server/services/ml/_voice/voiceLogger');
+    const usersList = db.listUsers ? db.listUsers() : [];
+    for (const u of usersList) {
+      try {
+        voiceLogger.logUtterance({
+          userId: u.id,
+          utteranceType: 'FAREWELL',
+          mood: 'CALM',
+          text: 'Ω resting. catch you later boss.',
+          templateId: 'omega_shutdown_farewell',
+          contextJson: JSON.stringify({ signal, ts: Date.now() }),
+        });
+      } catch (_) {}
+    }
+  } catch (_) { /* best-effort during shutdown */ }
+
   telegramBot.stop();
   clearInterval(_wsPing);
   wss.clients.forEach(ws => ws.terminate());

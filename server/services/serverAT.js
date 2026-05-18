@@ -2089,6 +2089,47 @@ function _closePosition(idx, pos, exitType, price, pnl) {
         else if (pnl < 0) us.demoStats.losses++;
     }
 
+    // [Wave 8 E] Easter eggs — detect milestone moments + emit special TheVoice
+    // utterance. Best-effort isolation; never blocks close flow.
+    try {
+        const _totalExits = us.stats.exits || (us.stats.wins + us.stats.losses);
+        const _totalWins = us.stats.wins;
+        const _milestoneText = (() => {
+            // Win milestones
+            if (pnl > 0) {
+                if (_totalWins === 100) return '🎉 boss, 100 wins. that\'s the click of a habit becoming a craft.';
+                if (_totalWins === 500) return '🎉 500 wins logged. you\'re not gambling anymore, you\'re running an edge.';
+                if (_totalWins === 1000) return '🎉 1000 wins. four-digit territory. taking screenshots in the matrix.';
+            }
+            // Trade count milestones
+            if (_totalExits === 50) return '⚡ 50 trades closed. starting to look like a track record.';
+            if (_totalExits === 250) return '⚡ 250 trades closed. discipline is showing through the noise.';
+            if (_totalExits === 1000) return '⚡ 1000 trades closed. you\'ve out-traded most retail accounts on this planet.';
+            // First profit day detection (today wins exceed losses, first time)
+            // Coarse: check if dailyPnL just crossed positive after being negative
+            const _firstProfitDayKey = '_firstProfitDayShown';
+            if (pnl > 0 && (us.dailyPnL || 0) > 0 && !us[_firstProfitDayKey]) {
+                // Check that today's gross dailyPnL minus this trade was <= 0 (just flipped green)
+                if ((us.dailyPnL - pnl) <= 0) {
+                    us[_firstProfitDayKey] = new Date().toISOString().slice(0, 10);
+                    return '☀️ first green day this session. flipping the script.';
+                }
+            }
+            return null;
+        })();
+        if (_milestoneText) {
+            const vl = require('./ml/_voice/voiceLogger');
+            vl.logUtterance({
+                userId, utteranceType: 'MILESTONE', mood: 'EXCITED',
+                text: _milestoneText,
+                templateId: 'omega_easter_egg',
+                contextJson: JSON.stringify({
+                    totalExits: _totalExits, totalWins: _totalWins, pnl: +pnl.toFixed(2),
+                }),
+            });
+        }
+    } catch (_) { /* never block close flow */ }
+
     // ── Demo: refund margin + apply PnL ──
     if (pos.mode === 'demo') {
         us.demoBalance = +(us.demoBalance + pos.margin + pnl).toFixed(2);

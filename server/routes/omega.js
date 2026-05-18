@@ -56,6 +56,40 @@ router.get('/constitution/violations', (req, res) => {
     }
 });
 
+// ── GET /api/omega/dd-status ────────────────────────────────────────────────
+// [Wave 8 D] DD awareness — daily drawdown % + tier + color hint for
+// OmegaPage header indicator. Green <3%, Yellow 3-7%, Red >7%.
+router.get('/dd-status', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const ddGuard = require('../services/serverDrawdownGuard');
+        const serverAT = require('../services/serverAT');
+        const us = serverAT.getUserState ? serverAT.getUserState(userId) : null;
+        const dailyPnL = us ? (us.dailyPnL || 0) : 0;
+        const refBalance = us
+            ? (us.engineMode === 'live' ? (us.liveBalanceRef || 0) : (us.demoBalance || 10000))
+            : 10000;
+        const assess = ddGuard.assessDrawdown(dailyPnL, refBalance);
+        const drawdownPct = assess.drawdownPct || 0;
+        let color = 'green';
+        if (drawdownPct >= 7) color = 'red';
+        else if (drawdownPct >= 3) color = 'yellow';
+        res.json({
+            ok: true,
+            drawdownPct: +drawdownPct.toFixed(2),
+            dailyPnL: +dailyPnL.toFixed(2),
+            refBalance: +refBalance.toFixed(2),
+            tier: assess.tier ? assess.tier.label : 'GREEN',
+            locked: !!assess.locked,
+            color,
+            ts: Date.now(),
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ── GET /api/omega/audit/chain/recent?limit=N ───────────────────────────────
 // [Wave 7b] Chained audit trail — last N entries (admin observability).
 router.get('/audit/chain/recent', (req, res) => {
