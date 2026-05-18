@@ -4932,17 +4932,38 @@ select.zac-select optgroup {
 .zmb-locked .zmb-mode { color: var(--orange) }
 .zmb-btn { font-family: var(--ff); font-size: 10px; font-weight: 600; letter-spacing: 0.8px; padding: 6px 14px; border-radius: 6px; border: 1px solid; cursor: pointer; transition: background var(--trans), border-color var(--trans), transform var(--trans); -webkit-tap-highlight-color: transparent; white-space: nowrap }
 .zmb-btn:active { transform: scale(0.96) }
-.zmb-btn-demo { background: rgba(170,68,255,0.08); border-color: rgba(170,68,255,0.3); color: var(--pur) }
-.zmb-btn-demo:active { background: rgba(170,68,255,0.18) }
-.zmb-btn-exit { background: rgba(90,110,130,0.08); border-color: rgba(90,110,130,0.3); color: var(--txt) }
-.zmb-btn-exit:active { background: rgba(90,110,130,0.18) }
+/* [Wave 8 polish 2026-05-18] EXIT DEMO / ACTIVATE DEMO buttons now use the
+ * same magenta accent as OMEGA VOICE ON (#ff00d4) for better visibility
+ * vs the prior grey EXIT button which blended into the dock. Glow on
+ * hover matches voice-toggle.on style. LOCKED + disabled-locked variants
+ * KEEP their orange/red signals to preserve lockout-state distinction. */
+.zmb-btn-demo {
+  background: rgba(255,0,212,0.08);
+  border-color: rgba(255,0,212,0.4);
+  color: #ff00d4;
+}
+.zmb-btn-demo:active { background: rgba(255,0,212,0.18) }
+.zmb-btn-exit {
+  background: rgba(255,0,212,0.08);
+  border-color: rgba(255,0,212,0.4);
+  color: #ff00d4;
+}
+.zmb-btn-exit:active { background: rgba(255,0,212,0.18) }
 /* [Phase 3G] LOCKED state — orange tint matches .zmb-locked / .zmb-ind-locked chain. Signals
  * "non-demo blocked" (executionEnv === null) clearly: distinct from demo-purple and real-red. */
 .zmb-btn-locked { background: rgba(255,136,0,0.08); border-color: rgba(255,136,0,0.4); color: var(--orange) }
 .zmb-btn-locked:active { background: rgba(255,136,0,0.18) }
 @media (hover: hover) {
-  .zmb-btn-demo:hover { background: rgba(170,68,255,0.15); border-color: rgba(170,68,255,0.5) }
-  .zmb-btn-exit:hover { background: rgba(90,110,130,0.15); border-color: rgba(90,110,130,0.5) }
+  .zmb-btn-demo:hover {
+    background: rgba(255,0,212,0.18);
+    border-color: #ff00d4;
+    box-shadow: 0 0 8px rgba(255,0,212,0.3);
+  }
+  .zmb-btn-exit:hover {
+    background: rgba(255,0,212,0.18);
+    border-color: #ff00d4;
+    box-shadow: 0 0 8px rgba(255,0,212,0.3);
+  }
   .zmb-btn-locked:hover { background: rgba(255,136,0,0.18); border-color: rgba(255,136,0,0.6) }
 }
 @media (max-width: 360px) {
