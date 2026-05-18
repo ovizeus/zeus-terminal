@@ -43,12 +43,50 @@ function fmtTs(ts: number): string {
     return `${hh}:${mm}:${ss}.${ms}`
 }
 
+// [Day 25] Synthesized beep via Web Audio API — no audio asset required.
+// Single 880Hz tone, 200ms, with quick attack/decay. Triggered ONLY on new P0
+// events when operator has enabled audio ping (localStorage flag).
+function _playP0Beep(): void {
+    try {
+        const AC = (window as any).AudioContext || (window as any).webkitAudioContext
+        if (!AC) return
+        const ctx: AudioContext = new AC()
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.type = 'sine'
+        osc.frequency.value = 880
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        const now = ctx.currentTime
+        gain.gain.setValueAtTime(0, now)
+        gain.gain.linearRampToValueAtTime(0.25, now + 0.02)
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.20)
+        osc.start(now)
+        osc.stop(now + 0.22)
+        setTimeout(() => { try { ctx.close() } catch (_) { /* */ } }, 300)
+    } catch (_) { /* audio not available — silent fallback */ }
+}
+
+const AUDIO_PING_LS_KEY = 'zeus_doctor_audio_ping'
+
 export function DoctorPanel() {
     const [state, setState] = useState<DoctorStateResponse | null>(null)
     const [events, setEvents] = useState<DoctorEvent[]>([])
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [updatingVerdict, setUpdatingVerdict] = useState<string | null>(null)
+    const [audioPing, setAudioPing] = useState<boolean>(() => {
+        try { return localStorage.getItem(AUDIO_PING_LS_KEY) === '1' } catch { return false }
+    })
+    const [seenP0Ids, setSeenP0Ids] = useState<Set<string>>(new Set())
+
+    function toggleAudioPing() {
+        setAudioPing(v => {
+            const nv = !v
+            try { localStorage.setItem(AUDIO_PING_LS_KEY, nv ? '1' : '0') } catch { /* */ }
+            return nv
+        })
+    }
 
     const reload = useCallback(async () => {
         setLoading(true)
@@ -59,13 +97,31 @@ export function DoctorPanel() {
                 fetchDoctorEvents({ limit: EVENTS_LIMIT }),
             ])
             setState(s)
+            // [Day 25] Detect new P0 events vs previous seen set → trigger audio
+            // ping if operator enabled. Avoids replaying historical alerts on
+            // each refresh.
+            setSeenP0Ids(prev => {
+                const next = new Set(prev)
+                let newP0Count = 0
+                for (const ev of e.events) {
+                    if (ev.severity === 'P0' && !prev.has(ev.event_id)) {
+                        newP0Count++
+                        next.add(ev.event_id)
+                    }
+                }
+                // First load: don't beep (just seed). Skip when prev is empty.
+                if (prev.size > 0 && newP0Count > 0 && audioPing) {
+                    _playP0Beep()
+                }
+                return next
+            })
             setEvents(e.events)
         } catch (err) {
             setError(err instanceof Error ? err.message : String(err))
         } finally {
             setLoading(false)
         }
-    }, [])
+    }, [audioPing])
 
     useEffect(() => {
         reload()
@@ -111,6 +167,15 @@ export function DoctorPanel() {
                 <span className={`omega-doctor-state-badge ${stateColorClass(state.state)}`}>
                     {state.state}
                 </span>
+                <button
+                    type="button"
+                    className={`omega-doctor-audio-toggle${audioPing ? ' on' : ''}`}
+                    onClick={toggleAudioPing}
+                    title={audioPing ? 'P0 audio ping ON — click to mute' : 'P0 audio ping OFF — click to enable'}
+                    aria-label="toggle P0 audio ping"
+                >
+                    {audioPing ? '🔔 P0 PING' : '🔕 mute'}
+                </button>
             </div>
 
             <div className="omega-doctor-reason">{state.reason}</div>

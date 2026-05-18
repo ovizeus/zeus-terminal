@@ -6336,6 +6336,9 @@ select option {
 }
 .omega-doctor-stat-alert-p0 { background: rgba(255,48,48,0.18); border: 1px solid rgba(255,48,48,0.45); animation: omega-doctor-alert-pulse 1.5s ease-in-out infinite alternate; }
 .omega-doctor-stat-alert-p1 { background: rgba(255,90,50,0.14); border: 1px solid rgba(255,90,50,0.4); }
+.omega-doctor-audio-toggle { background: transparent; border: 1px solid rgba(255,90,50,0.3); color: rgba(255,255,255,0.6); padding: 3px 10px; font-family: 'Orbitron', sans-serif; font-size: 11px; cursor: pointer; border-radius: 4px; margin-left: auto; }
+.omega-doctor-audio-toggle:hover { color: #ff5a32; border-color: rgba(255,90,50,0.6); }
+.omega-doctor-audio-toggle.on { color: #ff3030; border-color: rgba(255,48,48,0.7); background: rgba(255,48,48,0.08); }
 @keyframes omega-doctor-alert-pulse {
   0%   { box-shadow: 0 0 6px rgba(255,48,48,0.4); }
   100% { box-shadow: 0 0 14px rgba(255,48,48,0.7); }
