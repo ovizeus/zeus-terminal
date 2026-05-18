@@ -83,9 +83,27 @@ function _fmtAge(ms) {
 }
 
 // ── Language detect ──────────────────────────────────────────────────
-// Coarse Romanian detection: presence of any of these markers in text.
+// Multi-lang detector: returns code (RO/ES/FR/DE/PT/EN). Order matters —
+// stronger markers first. EN is default fallback.
+function _detectLanguage(text) {
+    const t = String(text || '').toLowerCase();
+    // Romanian — strong markers
+    if (/\b(ce|cum|de ce|sunt|este|să|și|despre|pentru|în|în|ai|am|esti|ești|faci|salut|bună|spune|pozi[țt]ii|decizii|părere|gândește|gândesc|piață)\b/i.test(t)) return 'RO';
+    // Portuguese — check BEFORE ES (shared "mercado" word). "você/voce/hoje"
+    // are exclusive PT markers.
+    if (/\b(voc[eê]|hoje|n[aã]o sei|olha o mercado|como vai)\b/i.test(t)) return 'PT';
+    // Spanish — strong markers (inverted ?/! or unique words)
+    if (/(¿|¡)/.test(t) || /\b(cómo|c[oó]mo ves|qu[eé] ves|hoy|el d[ií]a|cu[aá]l|por qu[eé]|me preguntas|por favor|mercado hoy)\b/i.test(t)) return 'ES';
+    // French — strong markers (apostrophe + tu/vous + accents)
+    if (/\b(comment tu|qu['']est|qu['']?est-ce|comment vois|marché|aujourd['']?hui|vois-tu|est-ce que|s['']il vous|vous voyez|tu vois le|comment ça)\b/i.test(t)) return 'FR';
+    // German — strong markers
+    if (/\b(wie siehst|wie geht|der markt|den markt|heute|wirklich|warum|kannst du|kannst|bitte|guten tag)\b/i.test(t)) return 'DE';
+    return 'EN';
+}
+
+// Backward-compat: many call sites still ask isRomanian boolean
 function _isRomanian(text) {
-    return /\b(ce|cum|de ce|nu|da|sa|să|și|si|este|sunt|despre|pentru|cu|la|în|in|ai|am|esti|ești|faci|merge|salut|buna|bună|spune|ziua|seara|noapte|pozitii|pozi[țt]ii|decizii|bandit[uu]l|crezi|crede|spune|zici|zice|fac[uia]|simt|simți|stau|deschise|profit[uu]l|cum stau|ce parere|părere|gandești|g[aâ]nde[șs]ti)\b/i.test(text);
+    return _detectLanguage(text) === 'RO';
 }
 
 // ── Intent: greeting ──────────────────────────────────────────────────
@@ -498,6 +516,176 @@ function _replyForgetPref(ctx, originalText) {
     };
 }
 
+// ── Helper: pull live structure from serverStructure ─────────────────
+function _getStructure(symbol) {
+    try {
+        const ss = require('../../serverStructure');
+        const stateMod = _getServerState();
+        const bars = stateMod && stateMod.getBarsForSymbol ? stateMod.getBarsForSymbol(symbol) : [];
+        if (!ss || typeof ss.getStructure !== 'function') return null;
+        const r = ss.getStructure(symbol, bars || []);
+        if (!r || r.trend === 'none') return null;
+        return r;
+    } catch (_) { return null; }
+}
+
+// ── Intent #1: structure ──────────────────────────────────────────────
+function _replyStructure(ctx, symbolHint, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    const s = _getStructure(sym);
+    if (!s) {
+        return {
+            reply: ro
+                ? `nu am structură clară pe ${sym} (insufficient swing pivots).`
+                : `no clear structure on ${sym} (insufficient swing pivots).`,
+            mood: 'BORED',
+        };
+    }
+    const trendStr = s.trend;
+    const score = (s.structureScore * 100).toFixed(0);
+    const bos = s.lastBOS ? ` BOS @ ${s.lastBOS.price}` : '';
+    const choch = s.lastCHoCH ? ` CHoCH @ ${s.lastCHoCH.price}` : '';
+    if (ro) {
+        return {
+            reply: `${sym} structură: ${trendStr} (score ${score}/100).${bos}${choch}`,
+            mood: trendStr.includes('up') ? 'EXCITED' : trendStr.includes('down') ? 'NERVOUS' : 'CALM',
+        };
+    }
+    return {
+        reply: `${sym} structure: ${trendStr} (score ${score}/100).${bos}${choch}`,
+        mood: trendStr.includes('up') ? 'EXCITED' : trendStr.includes('down') ? 'NERVOUS' : 'CALM',
+    };
+}
+
+// ── Intent #2: AI predictivity (Ring5 cell surface) ──────────────────
+function _replyPredictivity(ctx, symbolHint, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    let rows = [];
+    try {
+        rows = db.prepare(
+            `SELECT cell_key, alpha, beta, observation_count
+             FROM ml_bandit_posteriors
+             WHERE level = 4 AND cell_key LIKE ?
+             ORDER BY observation_count DESC LIMIT 5`
+        ).all(`${ctx.userId}|%|${sym}|%`);
+    } catch (_) {}
+    if (rows.length === 0 || rows.every(r => r.observation_count < 10)) {
+        return {
+            reply: ro
+                ? `${sym}: bandit cold start, no edge yet. încă învață — adună observații.`
+                : `${sym}: bandit cold start, no edge yet. still learning — needs more observations.`,
+            mood: 'BORED',
+        };
+    }
+    const cells = rows.filter(r => r.observation_count >= 10).map(r => {
+        const wr = ((r.alpha - 1) / r.observation_count * 100).toFixed(0);
+        const parts = r.cell_key.split('|');
+        const regime = parts[3] || '?';
+        return `${regime} ${wr}% (obs ${r.observation_count})`;
+    });
+    return {
+        reply: ro
+            ? `${sym} Ring5 bias: ${cells.join(', ')}. cell mai cu edge câștigă bias-ul.`
+            : `${sym} Ring5 bias: ${cells.join(', ')}. cell with best edge wins bias.`,
+        mood: 'FOCUSED',
+    };
+}
+
+// ── Intent #5: market sentiment synthesis ─────────────────────────────
+function _replySentiment(ctx, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const snap = marketRadar.getTopSnapshot({ kind: 'volume', limit: 30 });
+    if (!snap || snap.symbols.length === 0) {
+        return {
+            reply: ro ? 'sentiment: radar gol, nu pot evalua.' : 'sentiment: radar empty, can\'t read.',
+            mood: 'BORED',
+        };
+    }
+    const green = snap.symbols.filter(s => s.priceChangePercent24h > 0).length;
+    const red = snap.symbols.filter(s => s.priceChangePercent24h < 0).length;
+    const avg = snap.symbols.reduce((a, s) => a + (s.priceChangePercent24h || 0), 0) / snap.symbols.length;
+    const breadth = green / snap.symbols.length;
+    let label;
+    if (avg > 2 && breadth > 0.65) label = ro ? 'risk-on puternic' : 'strong risk-on';
+    else if (avg > 0.5 && breadth > 0.55) label = ro ? 'risk-on ușor' : 'mild risk-on';
+    else if (avg < -2 && breadth < 0.35) label = ro ? 'risk-off puternic' : 'strong risk-off';
+    else if (avg < -0.5 && breadth < 0.45) label = ro ? 'risk-off ușor' : 'mild risk-off';
+    else label = ro ? 'mixt / neutru' : 'mixed / neutral';
+    const btc = marketRadar.getSymbolFromSnapshot('BTCUSDT');
+    const eth = marketRadar.getSymbolFromSnapshot('ETHUSDT');
+    if (ro) {
+        return {
+            reply: `sentiment: ${label}. breadth ${green}/${snap.symbols.length} verde, avg ${_fmtPct(avg)}. BTC ${btc ? _fmtPct(btc.priceChangePercent24h) : 'n/a'}, ETH ${eth ? _fmtPct(eth.priceChangePercent24h) : 'n/a'}.`,
+            mood: avg > 1 ? 'EXCITED' : avg < -1 ? 'NERVOUS' : 'CALM',
+        };
+    }
+    return {
+        reply: `sentiment: ${label}. breadth ${green}/${snap.symbols.length} green, avg ${_fmtPct(avg)}. BTC ${btc ? _fmtPct(btc.priceChangePercent24h) : 'n/a'}, ETH ${eth ? _fmtPct(eth.priceChangePercent24h) : 'n/a'}.`,
+        mood: avg > 1 ? 'EXCITED' : avg < -1 ? 'NERVOUS' : 'CALM',
+    };
+}
+
+// ── Intent #6: pump / manipulation detection ─────────────────────────
+function _replyManipulationCheck(ctx, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const snap = marketRadar.getTopSnapshot({ kind: 'gainers', limit: 10 });
+    if (!snap) {
+        return {
+            reply: ro ? 'radar gol, nu pot verifica.' : 'radar empty, can\'t check.',
+            mood: 'BORED',
+        };
+    }
+    const outliers = snap.symbols.filter(s => Math.abs(s.priceChangePercent24h) > 20);
+    if (outliers.length === 0) {
+        return {
+            reply: ro
+                ? 'curat în top 300 — niciun pump outlier (>20% 24h).'
+                : 'clean in top 300 — no pump outliers (>20% 24h).',
+            mood: 'CALM',
+        };
+    }
+    const list = outliers.map(s => `${_displaySym(s.symbol)} ${_fmtPct(s.priceChangePercent24h)}`).join(', ');
+    return {
+        reply: ro
+            ? `posibili outlieri (>20% 24h): ${list}. spoofing/wash necesită order book real-time (deferred).`
+            : `potential outliers (>20% 24h): ${list}. spoofing/wash detection needs real-time order book (deferred).`,
+        mood: 'NERVOUS',
+    };
+}
+
+// ── Intent #9: long-term forecast (regime-based, hedged) ─────────────
+function _replyLongTermForecast(ctx, symbolHint, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    const ind = _getIndicators(sym);
+    const struct = _getStructure(sym);
+    const radarEntry = marketRadar.getSymbolFromSnapshot(sym);
+
+    const parts = [];
+    if (struct) parts.push(`structure ${struct.trend}`);
+    if (ind && ind.mtf) {
+        const tfs = Object.entries(ind.mtf).map(([tf, m]) => `${tf} ${m.stDir || '?'}`).join(', ');
+        if (tfs) parts.push(`MTF ${tfs}`);
+    }
+    if (radarEntry) parts.push(`24h ${_fmtPct(radarEntry.priceChangePercent24h)}`);
+    const btc = marketRadar.getSymbolFromSnapshot('BTCUSDT');
+    if (btc && sym !== 'BTCUSDT') parts.push(`BTC ref ${_fmtPct(btc.priceChangePercent24h)}`);
+
+    const summary = parts.length > 0 ? parts.join(' | ') : (ro ? 'date insuficiente' : 'insufficient data');
+    if (ro) {
+        return {
+            reply: `${sym} prognoză termen lung: ${summary}. bias contextual, nu pot da număr exact — piața nu e deterministă.`,
+            mood: 'FOCUSED',
+        };
+    }
+    return {
+        reply: `${sym} long-term read: ${summary}. contextual bias only, no exact targets — market isn't deterministic.`,
+        mood: 'FOCUSED',
+    };
+}
+
 // ── Helper: pull live indicators snapshot from serverState ───────────
 function _getIndicators(symbol) {
     const ss = _getServerState();
@@ -814,6 +1002,7 @@ function _buildLLMContext(params) {
             decisions,
             regimeMix,
             indicators: _getIndicators(sym),
+            structure: _getStructure(sym),
         };
     }
 
@@ -860,10 +1049,17 @@ function _formatSymbolDeep(sd) {
 
 function _buildSystemPrompt(params) {
     const ctx = _buildLLMContext(params);
-    const ro = _isRomanian(params.text || '');
-    const langDirective = ro
-        ? 'LIMBA: Răspunde EXCLUSIV în română (RO). NU folosi engleză în răspuns (excepție termeni trading: long/short/pnl/SL/TP/breakout/reversal — astea rămân netraduse). Niciun mix.'
-        : 'LANGUAGE: Reply EXCLUSIVELY in English. Trading terms stay as-is (long/short/pnl/SL/TP).';
+    const lang = _detectLanguage(params.text || '');
+    const ro = lang === 'RO';
+    const langDirectives = {
+        'RO': 'LIMBA (RO): Răspunde EXCLUSIV în română. NU folosi engleză în răspuns (excepție termeni trading: long/short/pnl/SL/TP/breakout/reversal — netraduse). Niciun mix.',
+        'EN': 'LANGUAGE (EN): Reply EXCLUSIVELY in English. Trading terms stay as-is (long/short/pnl/SL/TP).',
+        'ES': 'IDIOMA (ES / Spanish): Responde EXCLUSIVAMENTE en español. Términos de trading (long/short/pnl/SL/TP) no se traducen.',
+        'FR': 'LANGUE (FR / French): Réponds EXCLUSIVEMENT en français. Termes de trading (long/short/pnl/SL/TP) restent en anglais.',
+        'DE': 'SPRACHE (DE / German): Antworte AUSSCHLIESSLICH auf Deutsch. Trading-Begriffe (long/short/pnl/SL/TP) bleiben auf Englisch.',
+        'PT': 'IDIOMA (PT / Portuguese): Responda EXCLUSIVAMENTE em português. Termos de trading (long/short/pnl/SL/TP) permanecem em inglês.',
+    };
+    const langDirective = langDirectives[lang] || langDirectives['EN'];
     const breadth = ctx.market.breadth
         ? `${ctx.market.breadth.greenCount}/${ctx.market.breadth.totalCount} green, avg ${_fmtPct(ctx.market.breadth.avgPct24h)}`
         : 'n/a';
@@ -1056,6 +1252,27 @@ async function _tryLocalIntent(ctx, text, originalText) {
         return _replyLearnings(ctx, originalText);
     }
     {
+        const fcMatch = text.match(/\b(long.?term|forecast|prognoz[aă]|termen lung|pe termen lung|long range)\b/i);
+        const symInFc = originalText.match(SYMBOL_RE);
+        if (fcMatch && symInFc) return _replyLongTermForecast(ctx, symInFc[1], originalText);
+    }
+    {
+        const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
+        const symInStruct = originalText.match(SYMBOL_RE);
+        if (structMatch && symInStruct) return _replyStructure(ctx, symInStruct[1], originalText);
+    }
+    {
+        const aiMatch = text.match(/\b(ai (prediction|bias|forecast|predict|edge)|ai-?ul|ce zice ai|predictivity|ce prezice)\b/i);
+        const symInAi = originalText.match(SYMBOL_RE);
+        if (aiMatch && symInAi) return _replyPredictivity(ctx, symInAi[1], originalText);
+    }
+    if (text.match(/\b(sentiment|sentimentul|risk.?on|risk.?off|breadth|mood market|cum e sentimentul)\b/i)) {
+        return _replySentiment(ctx, originalText);
+    }
+    if (text.match(/\b(pump|wash|spoof|manipulation|manipul[aă]r[ie]|outlier|schem[ăa])\b/i)) {
+        return _replyManipulationCheck(ctx, originalText);
+    }
+    {
         const taMatch = text.match(/\b(rsi|macd|adx|atr|indicators?|indicatori\w*|ta)\b/i);
         const symInTa = text.match(SYMBOL_RE);
         if (taMatch && symInTa) return _replyIndicators(ctx, symInTa[1], originalText);
@@ -1130,6 +1347,38 @@ async function _respondImpl(params, text) {
     // symbol regex (originalText "ce ai învățat" could contain ada/btc otherwise).
     if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
         return _replyLearnings(ctx, originalText);
+    }
+
+    // [Day 34 #9] Long-term forecast — needs symbol hint. Match BEFORE structure
+    // (so "long-term forecast on BTC" doesn't go to plain structure).
+    {
+        const fcMatch = text.match(/\b(long.?term|forecast|prognoz[aă]|termen lung|pe termen lung|long range)\b/i);
+        const symInFc = originalText.match(SYMBOL_RE);
+        if (fcMatch && symInFc) return _replyLongTermForecast(ctx, symInFc[1], originalText);
+    }
+
+    // [Day 34 #1] Structure intent — match BEFORE TA indicators (more specific).
+    {
+        const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
+        const symInStruct = originalText.match(SYMBOL_RE);
+        if (structMatch && symInStruct) return _replyStructure(ctx, symInStruct[1], originalText);
+    }
+
+    // [Day 34 #2] AI predictivity / Ring5 bias surface — needs symbol hint.
+    {
+        const aiMatch = text.match(/\b(ai (prediction|bias|forecast|predict|edge)|ai-?ul|ce zice ai|predictivity|ce prezice)\b/i);
+        const symInAi = originalText.match(SYMBOL_RE);
+        if (aiMatch && symInAi) return _replyPredictivity(ctx, symInAi[1], originalText);
+    }
+
+    // [Day 34 #5] Sentiment intent (market-wide, no symbol needed)
+    if (text.match(/\b(sentiment|sentimentul|risk.?on|risk.?off|breadth|mood market|cum e sentimentul)\b/i)) {
+        return _replySentiment(ctx, originalText);
+    }
+
+    // [Day 34 #6] Manipulation / pump detection (market-wide)
+    if (text.match(/\b(pump|wash|spoof|manipulation|manipul[aă]r[ie]|outlier|schem[ăa])\b/i)) {
+        return _replyManipulationCheck(ctx, originalText);
     }
 
     // [Day 33 #3] Indicators intent — RSI/MACD/ADX/etc. Requires a symbol
