@@ -43,7 +43,9 @@ export function TheVoice({ utterances, loading }: Props) {
                     <div className="omega-voice-empty">
                         <div className="omega-voice-empty-glyph">⟡</div>
                         <div className="omega-voice-empty-text">
-                            {loading ? 'connecting to OMEGA...' : 'awaiting omega learning — Wave 2 will wake the bandit and i\'ll start thinking out loud here.'}
+                            {loading
+                                ? 'connecting to OMEGA…'
+                                : 'brain quiet right now — no recent thoughts. waiting for confidence ≥ 30 or regime shift to start narrating.'}
                         </div>
                     </div>
                 ) : (

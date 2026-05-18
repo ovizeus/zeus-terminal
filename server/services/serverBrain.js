@@ -778,19 +778,37 @@ function _runCycle() {
                 };
                 if (!loggedDecision) loggedDecision = decision;
 
-                // [Day 29] Brain thoughts → TheVoice feed (throttled 1/min/cell).
-                // Confident fusion → "feeling X about Y, confluence Z".
-                if (fusion.confidence >= 70 && fusion.dir !== 'neut') {
+                // [Day 29.4] Brain thoughts → TheVoice feed (throttled 1/min/cell).
+                // Lowered confidence threshold to 50 — more frequent thoughts
+                // showing what brain is genuinely considering. Different
+                // mood/wording for each confidence band.
+                if (fusion.dir !== 'neut') {
                     const sideWord = fusion.dir === 'bull' ? 'LONG' : 'SHORT';
-                    const moodTh = fusion.confidence >= 83 ? 'EXCITED' : 'FOCUSED';
-                    _writeThought({
-                        userId, symbol: snap.symbol, kind: 'conf_high', mood: moodTh,
-                        text: `confident ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, tier ${fusion.decision}.`,
-                        contextJson: JSON.stringify({
-                            confidence: fusion.confidence, dir: fusion.dir,
-                            regime: regime.regime, tier: fusion.decision
-                        })
-                    });
+                    let kind, moodTh, text;
+                    if (fusion.confidence >= 83) {
+                        kind = 'conf_very_high'; moodTh = 'EXCITED';
+                        text = `strong ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, tier ${fusion.decision}.`;
+                    } else if (fusion.confidence >= 70) {
+                        kind = 'conf_high'; moodTh = 'FOCUSED';
+                        text = `confident ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, tier ${fusion.decision}.`;
+                    } else if (fusion.confidence >= 50) {
+                        kind = 'conf_mid'; moodTh = 'FOCUSED';
+                        text = `leaning ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, not enough edge yet.`;
+                    } else if (fusion.confidence >= 30) {
+                        kind = 'conf_low'; moodTh = 'CALM';
+                        text = `watching ${snap.symbol} (${regime.regime}) — weak signal, conf ${fusion.confidence.toFixed(0)}.`;
+                    } else {
+                        kind = null; // skip very-low signal
+                    }
+                    if (kind) {
+                        _writeThought({
+                            userId, symbol: snap.symbol, kind, mood: moodTh, text,
+                            contextJson: JSON.stringify({
+                                confidence: fusion.confidence, dir: fusion.dir,
+                                regime: regime.regime, tier: fusion.decision
+                            })
+                        });
+                    }
                 }
 
                 // Regime shift detected on this symbol for this user.
@@ -867,6 +885,12 @@ function _runCycle() {
                             payload: { symbol: snap.symbol, dir: fusion.dir, conf: fusion.confidence,
                                        concerns: questioning.concerns.map(c => c.type), userId }
                         });
+                        // [Day 29.4] Voice: brain self-doubts.
+                        _writeThought({
+                            userId, symbol: snap.symbol, kind: 'reflection_block', mood: 'NERVOUS',
+                            text: `second-guessed ${fusion.dir === 'bull' ? 'LONG' : 'SHORT'} ${snap.symbol} — ${questioning.concerns.map(c => c.type).join(', ')} flagged.`,
+                            contextJson: JSON.stringify({ concerns: questioning.concerns.map(c => c.type) })
+                        });
                         serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: questioning.concerns.map(c => c.type),
@@ -924,6 +948,13 @@ function _runCycle() {
                             moduleId: 'serverBrain.correlationGuard', ts: Date.now(),
                             payload: { symbol: snap.symbol, dir: fusion.dir, reason: corrCheck.reason,
                                        correlatedWith: corrCheck.correlatedWith || [], userId }
+                        });
+                        // [Day 29.4] Voice: correlation guard fires.
+                        const corrWith = (corrCheck.correlatedWith || []).slice(0, 2).join(', ') || 'open positions';
+                        _writeThought({
+                            userId, symbol: snap.symbol, kind: 'corr_block', mood: 'FOCUSED',
+                            text: `skipping ${snap.symbol} — too correlated with ${corrWith}.`,
+                            contextJson: JSON.stringify({ correlatedWith: corrCheck.correlatedWith || [], reason: corrCheck.reason })
                         });
                         _logDecision('BLOCKED', 'correlation', decision, { reason: corrCheck.reason });
                         _pushBlock(userId, symbol, ['correlation:' + (corrCheck.reason || 'na')], 'correlation', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
