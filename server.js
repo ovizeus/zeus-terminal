@@ -1129,6 +1129,7 @@ app.use('/api/ring5', ring5Routes);
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
+app.use('/api/market', require('./server/routes/market'));
 
 // ─── [C7] Client Error Forwarding (+ Sentry) ───
 app.post('/api/client-error', (req, res) => {

@@ -95,6 +95,11 @@ const _dedupe = new Map();     // `${symbol}:${category}` -> ts
 const _streaks = new Map();    // `${symbol}:${category}` -> { count, lastTs }
 let _btcDelta = null;          // BTCUSDT priceChangePercent24h from the latest poll
 
+// [Day 32A] Snapshot of the current top-N tickers — populated on every poll,
+// queried by chatResponder / /api/market/top for top gainers/losers/volume
+// without re-hitting Binance. Replaced atomically per tick.
+let _lastSnapshot = null;      // { ts, tickers: [{symbol, price, quoteVolume, priceChangePercent24h, priceChangePercent1h}, ...] }
+
 function _broadcast(payload) {
     const fn = global.__zeusWsBroadcastAll;
     if (typeof fn !== 'function') return 0;
@@ -209,6 +214,11 @@ async function _pollOnce() {
     const currentTopSet = new Set(top.map(t => t.symbol));
     const now = Date.now();
     _tickCount++;
+
+    // [Day 32A] Replace snapshot so getTopSnapshot/getSymbolFromSnapshot see
+    // fresh data on the next chat query. Populated AFTER sort so 'volume' kind
+    // already aligns with the polled order.
+    _setSnapshot(top);
 
     // Per-symbol detection
     for (let i = 0; i < top.length; i++) {
@@ -464,7 +474,65 @@ function getState() {
         streakEntries: _streaks.size,
         btcDelta: _btcDelta,
         universe: 'binance-futures-usdt-perps/quoteVolume24h',
+        snapshotTs: _lastSnapshot ? _lastSnapshot.ts : null,
+        snapshotSize: _lastSnapshot ? _lastSnapshot.tickers.length : 0,
     };
 }
 
-module.exports = { start, stop, getState };
+// [Day 32A] Internal: replace _lastSnapshot atomically. Called from _pollOnce
+// after the top-N sort + from _ingestSnapshotForTest in unit tests.
+function _setSnapshot(tickers) {
+    _lastSnapshot = {
+        ts: Date.now(),
+        tickers: tickers.map(t => ({
+            symbol: t.symbol,
+            price: t.price,
+            quoteVolume: t.quoteVolume,
+            priceChangePercent24h: t.priceChangePercent24h,
+            priceChangePercent1h: typeof t.priceChangePercent1h === 'number' ? t.priceChangePercent1h : null,
+        })),
+    };
+}
+
+// [Day 32A] Query latest snapshot — top gainers / losers / volume / oi.
+// Returns null if no poll has completed yet (caller decides UX, e.g. "radar
+// still warming up"). Limit floored at 1, ceiling at 50, clamped to size.
+function getTopSnapshot(opts) {
+    if (!_lastSnapshot) return null;
+    const o = opts || {};
+    let kind = o.kind;
+    if (kind !== 'gainers' && kind !== 'losers' && kind !== 'volume') kind = 'volume';
+    let limit = Number.isFinite(o.limit) ? Math.floor(o.limit) : 10;
+    if (limit < 1) limit = 1;
+    if (limit > 50) limit = 50;
+    const all = _lastSnapshot.tickers.slice();
+    if (kind === 'gainers') all.sort((a, b) => b.priceChangePercent24h - a.priceChangePercent24h);
+    else if (kind === 'losers') all.sort((a, b) => a.priceChangePercent24h - b.priceChangePercent24h);
+    else all.sort((a, b) => b.quoteVolume - a.quoteVolume);
+    return {
+        ts: _lastSnapshot.ts,
+        kind,
+        universeSize: _lastSnapshot.tickers.length,
+        symbols: all.slice(0, Math.min(limit, all.length)),
+    };
+}
+
+// [Day 32A] Single-symbol lookup. Accepts "BTCUSDT" or short form "BTC" / "btc".
+function getSymbolFromSnapshot(input) {
+    if (!_lastSnapshot || typeof input !== 'string') return null;
+    let needle = input.trim().toUpperCase();
+    if (!needle) return null;
+    if (!needle.endsWith('USDT')) needle = needle + 'USDT';
+    return _lastSnapshot.tickers.find(t => t.symbol === needle) || null;
+}
+
+// Test hooks — never invoked în prod runtime
+function _ingestSnapshotForTest(tickers) { _setSnapshot(tickers); }
+function _resetSnapshotForTest() { _lastSnapshot = null; }
+
+module.exports = {
+    start, stop, getState,
+    // [Day 32A] Snapshot accessors for chat/analytics layer
+    getTopSnapshot, getSymbolFromSnapshot,
+    _ingestSnapshotForTest, _resetSnapshotForTest,
+};
