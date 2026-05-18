@@ -445,44 +445,210 @@ function _brainHbAvgMs() {
     } catch (_) { return 0; }
 }
 
-// ── Groq LLM fallback ─────────────────────────────────────────────────
-// When intent detection finds no specific match, ask Groq Llama 3.3 70B
-// with Zeus context injected as system prompt. Falls back to local help if
-// Groq unavailable / errors / times out.
-async function _replyLLMFallback(ctx, originalText) {
-    if (!llmClient.available()) {
-        return _replyHelp(ctx, originalText);  // No API key — fall back to local
-    }
-    const mood = _currentMood();
-    const ro = _isRomanian(originalText);
-    let openPosCount = 0;
+// ── Helper: build rich LLM context (positions + decisions + market) ───
+// [Day 32C] Per operator directive 2026-05-18 — Omega can give tactical
+// reads (directional opinions, entry levels, SL/TP). Personal trading
+// assistant tool, not a public service. Still enforces a hard ethical
+// floor: no market manipulation, spoofing, wash trading, coordinated pump
+// signals, or pretending to insider info.
+function _buildLLMContext(params) {
+    const userId = params.userId;
+    const originalText = String(params.text || '');
+    const ctx = {
+        userId,
+        text: originalText,
+        brainMood: _currentMood(),
+        brainHbAvgMs: _brainHbAvgMs(),
+        positions: [],
+        engineMode: 'demo',
+        recentDecisions: [],
+        market: { gainers: [], losers: [], volume: [], btcDelta24h: null, ethDelta24h: null, breadth: null },
+        symbolDeep: null,
+    };
+
+    // Positions (best-effort — serverAT may be unavailable in some boot states)
     try {
         const at = _getAT();
-        if (at && at.getOpenPositions) openPosCount = (at.getOpenPositions(ctx.userId) || []).length;
-    } catch (_) { /* */ }
+        if (at) {
+            if (at.getOpenPositions) {
+                const pos = at.getOpenPositions(userId) || [];
+                ctx.positions = pos.map(p => ({
+                    symbol: p.symbol, side: p.side,
+                    entry: p.price, qty: p.qty, size: p.size, lev: p.lev,
+                    sl: p.sl, tp: p.tp, pnl: p.pnl,
+                    mode: p.mode || 'demo',
+                    ageMs: p.openTs ? (Date.now() - p.openTs) : null,
+                }));
+            }
+            if (at._uState) {
+                try { ctx.engineMode = at._uState(userId).engineMode || 'demo'; } catch (_) {}
+            }
+        }
+    } catch (_) {}
 
-    const langRule = ro
-        ? "LIMBA: Răspunde EXCLUSIV în română. NU folosi cuvinte englezești (no 'sorry', 'okay', 'cool', 'guess', 'I think'). Termeni tehnici trading (long/short/pnl) e OK netraduse. Niciun mix de limbi."
-        : "LANGUAGE: Reply EXCLUSIVELY in English. Do NOT inject Romanian words. Trading terms (long/short/pnl) stay as-is.";
+    // Recent decisions (last 10, last 5 min)
+    try {
+        const since = Date.now() - 5 * 60 * 1000;
+        ctx.recentDecisions = db.prepare(`
+            SELECT symbol, regime, phase2_dir AS dir, phase2_confidence AS conf,
+                   gate_status AS status, gate_reason AS reason, created_at AS ts
+            FROM ml_influence_audit
+            WHERE user_id = ? AND created_at >= ?
+            ORDER BY created_at DESC LIMIT 10
+        `).all(userId, since);
+    } catch (_) {}
 
-    const sys = [
-        "You are Omega — Zeus Terminal's chill brain.",
-        "Personality: streetwise, calm-confident boss-mode trader, short answers (1-3 sentences max), slang OK, lowercase casual fine.",
-        langRule,
-        "Hard rules:",
-        "  • Never give financial advice or specific trade calls (no 'buy X', 'sell Y', 'long here'). Redirect: 'nu dau pont-uri boss, întreabă-mă despre pozițiile tale' / 'no calls boss, ask about your positions'.",
-        "  • Never claim to know prices or market direction. If asked, deflect.",
-        "  • Don't pretend to be GPT/Claude/an LLM — you're Omega.",
-        "  • Keep cool, never alarmist.",
-        "  • Direct answer first, no preamble like 'as Omega I think...' — just speak.",
-        `Live state: mood ${mood}, ${openPosCount} open position(s), brain heartbeat avg ${ctx.brainHbAvgMs}ms.`,
-        ro
-            ? "Dacă întrebarea cere date pe care le ai (poziții/pnl/bandit/decizii/alerte/per-simbol), sugerează scurt cuvintele cheie."
-            : "If the user asks about data you'd actually have (positions/pnl/bandit/decisions/alerts/symbol-specific), suggest those keywords briefly."
-    ].join('\n');
+    // Market snapshot from radar
+    const gSnap = marketRadar.getTopSnapshot({ kind: 'gainers', limit: 5 });
+    const lSnap = marketRadar.getTopSnapshot({ kind: 'losers', limit: 5 });
+    const vSnap = marketRadar.getTopSnapshot({ kind: 'volume', limit: 5 });
+    if (gSnap) ctx.market.gainers = gSnap.symbols.map(s => ({ symbol: s.symbol, pct24h: s.priceChangePercent24h, price: s.price }));
+    if (lSnap) ctx.market.losers = lSnap.symbols.map(s => ({ symbol: s.symbol, pct24h: s.priceChangePercent24h, price: s.price }));
+    if (vSnap) ctx.market.volume = vSnap.symbols.map(s => ({ symbol: s.symbol, qv: s.quoteVolume }));
+    const btc = marketRadar.getSymbolFromSnapshot('BTCUSDT');
+    const eth = marketRadar.getSymbolFromSnapshot('ETHUSDT');
+    if (btc) ctx.market.btcDelta24h = btc.priceChangePercent24h;
+    if (eth) ctx.market.ethDelta24h = eth.priceChangePercent24h;
+    if (vSnap) {
+        const universe30 = marketRadar.getTopSnapshot({ kind: 'volume', limit: 30 });
+        if (universe30) {
+            const arr = universe30.symbols;
+            const greenCount = arr.filter(s => s.priceChangePercent24h > 0).length;
+            const avg = arr.reduce((s, t) => s + (t.priceChangePercent24h || 0), 0) / arr.length;
+            ctx.market.breadth = { greenCount, totalCount: arr.length, avgPct24h: avg };
+        }
+    }
 
-    // [Day 30] Multi-turn: prepend last N exchanges so LLM has conversation
-    // context (follow-ups, references to prior questions).
+    // Symbol deep block if a symbol is mentioned in the text
+    const symMatch = originalText.match(SYMBOL_RE);
+    if (symMatch) {
+        const sym = _normSymbol(symMatch[1]);
+        const radarEntry = marketRadar.getSymbolFromSnapshot(sym);
+        const since = Date.now() - 5 * 60 * 1000;
+        let decisions = [];
+        try {
+            decisions = db.prepare(`
+                SELECT regime, phase2_dir AS dir, phase2_confidence AS conf,
+                       gate_status AS status, gate_reason AS reason, created_at AS ts
+                FROM ml_influence_audit
+                WHERE symbol = ? AND created_at >= ?
+                ORDER BY created_at DESC LIMIT 10
+            `).all(sym, since);
+        } catch (_) {}
+        const regimeMix = {};
+        for (const d of decisions) regimeMix[d.regime] = (regimeMix[d.regime] || 0) + 1;
+        ctx.symbolDeep = {
+            symbol: sym,
+            price: radarEntry ? radarEntry.price : null,
+            pct24h: radarEntry ? radarEntry.priceChangePercent24h : null,
+            qv: radarEntry ? radarEntry.quoteVolume : null,
+            decisions,
+            regimeMix,
+        };
+    }
+
+    return ctx;
+}
+
+function _formatSymList(arr, mode) {
+    if (!arr || arr.length === 0) return '—';
+    return arr.map(s => {
+        if (mode === 'volume') return `${_displaySym(s.symbol)} $${(s.qv / 1_000_000).toFixed(0)}M`;
+        return `${_displaySym(s.symbol)} ${_fmtPct(s.pct24h)}`;
+    }).join(', ');
+}
+
+function _formatPositionsBlock(positions) {
+    if (!positions || positions.length === 0) return 'none open.';
+    return positions.map(p => {
+        const pnl = (p.pnl != null && isFinite(p.pnl)) ? `pnl ${_fmtPnl(p.pnl)}` : 'pnl n/a';
+        const sl = p.sl ? `SL ${p.sl}` : 'no SL';
+        const tp = p.tp ? `TP ${p.tp}` : 'no TP';
+        const age = p.ageMs != null ? ` (${_fmtAge(p.ageMs)})` : '';
+        return `${p.side} ${_displaySym(p.symbol)} @${p.entry} ${p.lev}x [${p.mode}], ${pnl}, ${sl}, ${tp}${age}`;
+    }).join('; ');
+}
+
+function _formatDecisionsBlock(decisions) {
+    if (!decisions || decisions.length === 0) return 'no decisions in last 5min.';
+    return decisions.slice(0, 6).map(d => {
+        const ageS = Math.round((Date.now() - d.ts) / 1000);
+        return `${_displaySym(d.symbol)} ${d.dir} ${d.regime} conf${d.conf} ${d.status}(${ageS}s)`;
+    }).join(' | ');
+}
+
+function _formatSymbolDeep(sd) {
+    if (!sd) return null;
+    const price = sd.price != null ? (sd.price >= 1 ? `$${sd.price.toFixed(2)}` : `$${sd.price.toFixed(6)}`) : 'n/a';
+    const pct = sd.pct24h != null ? _fmtPct(sd.pct24h) : 'n/a';
+    const decBlock = sd.decisions.length > 0
+        ? sd.decisions.slice(0, 5).map(d => `${d.dir} ${d.regime} conf${d.conf} ${d.status}`).join(' / ')
+        : 'no recent decisions';
+    const regimes = Object.entries(sd.regimeMix).map(([k, v]) => `${k}×${v}`).join(', ') || 'none';
+    return `${sd.symbol}: price ${price}, 24h ${pct}, regimes [${regimes}], recent: ${decBlock}.`;
+}
+
+function _buildSystemPrompt(params) {
+    const ctx = _buildLLMContext(params);
+    const ro = _isRomanian(params.text || '');
+    const langDirective = ro
+        ? 'LIMBA: Răspunde EXCLUSIV în română (RO). NU folosi engleză în răspuns (excepție termeni trading: long/short/pnl/SL/TP/breakout/reversal — astea rămân netraduse). Niciun mix.'
+        : 'LANGUAGE: Reply EXCLUSIVELY in English. Trading terms stay as-is (long/short/pnl/SL/TP).';
+    const breadth = ctx.market.breadth
+        ? `${ctx.market.breadth.greenCount}/${ctx.market.breadth.totalCount} green, avg ${_fmtPct(ctx.market.breadth.avgPct24h)}`
+        : 'n/a';
+    const persona = [
+        "You are Omega — operator's personal trading assistant inside Zeus Terminal.",
+        "PERSONA: trader-friend, direct, opinionated. Speak like a buddy in the trenches, not a corporate chatbot.",
+        "RESPONSE STYLE: short (2-4 sentences max), no preamble, no 'I think' / 'as Omega' filler. Lead with the read.",
+        langDirective,
+        '',
+        'ALLOWED — give tactical reads freely (operator authorized 2026-05-18):',
+        '  • Directional opinions ("bullish flag on 4h", "fading", "reversal weak")',
+        '  • Entry suggestions with price levels',
+        '  • SL/TP recommendations grounded in structure or volatility',
+        '  • Risk sizing context ("size mic", "scaling în 2 părți")',
+        '  • Calling out crowded trades / divergence / structure breaks',
+        '',
+        'HARD ETHICAL FLOOR — refuse and call it out:',
+        '  • Market manipulation (spoofing, layering, wash trading)',
+        '  • Coordinated pump / dump schemes',
+        '  • Claims of insider info or guaranteed outcomes',
+        '  • Encouraging breaking exchange ToS',
+        '',
+        'GROUNDING — use the live state below. Do NOT invent numbers; if data is missing say so.',
+        '',
+        `LIVE STATE:`,
+        `  Engine mode: ${ctx.engineMode}`,
+        `  Brain mood: ${ctx.brainMood} (heartbeat ${ctx.brainHbAvgMs}ms)`,
+        `  Positions (${ctx.positions.length} open): ${_formatPositionsBlock(ctx.positions)}`,
+        `  Recent decisions (last 5min): ${_formatDecisionsBlock(ctx.recentDecisions)}`,
+        '',
+        'MARKET (top-N from Binance USDT perps, 24h):',
+        `  BTC: ${ctx.market.btcDelta24h != null ? _fmtPct(ctx.market.btcDelta24h) : 'n/a'}, ETH: ${ctx.market.ethDelta24h != null ? _fmtPct(ctx.market.ethDelta24h) : 'n/a'}`,
+        `  Breadth (top 30): ${breadth}`,
+        `  Top gainers: ${_formatSymList(ctx.market.gainers, 'pct')}`,
+        `  Top losers: ${_formatSymList(ctx.market.losers, 'pct')}`,
+        `  Top volume: ${_formatSymList(ctx.market.volume, 'volume')}`,
+    ];
+    if (ctx.symbolDeep) {
+        persona.push('');
+        persona.push(`SYMBOL DEEP: ${_formatSymbolDeep(ctx.symbolDeep)}`);
+    }
+    return persona.join('\n');
+}
+
+// ── Groq LLM fallback ─────────────────────────────────────────────────
+// When intent detection finds no specific match, ask the LLM (Groq / xAI)
+// with the rich Zeus + market context injected as system prompt. Falls
+// back to local help if LLM unavailable / errors / times out.
+async function _replyLLMFallback(ctx, originalText) {
+    if (!llmClient.available()) {
+        return _replyHelp(ctx, originalText);
+    }
+    const sys = _buildSystemPrompt({ userId: ctx.userId, text: originalText });
+    const mood = _currentMood();
+
     const history = _getConvo(ctx.userId).map(m => ({ role: m.role, content: m.content }));
     const messages = [
         { role: 'system', content: sys },
@@ -492,8 +658,8 @@ async function _replyLLMFallback(ctx, originalText) {
 
     const result = await llmClient.chat({
         messages,
-        temperature: 0.6,
-        maxTokens: 220,
+        temperature: 0.7,
+        maxTokens: 320,
         timeoutMs: 8000
     });
 
@@ -581,4 +747,10 @@ async function _respondImpl(params, text) {
     return await _replyLLMFallback(ctx, originalText);
 }
 
-module.exports = { respond, _resetConvoForTest };
+module.exports = {
+    respond,
+    _resetConvoForTest,
+    // [Day 32C] Test-only hooks for the context layer fed to the LLM.
+    _buildLLMContextForTest: _buildLLMContext,
+    _buildSystemPromptForTest: _buildSystemPrompt,
+};
