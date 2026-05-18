@@ -177,6 +177,41 @@ describe('Ring5 admin routes', () => {
         });
     });
 
+    describe('GET /audit/timeseries', () => {
+        test('rejects non-admin', async () => {
+            const app = buildApp({ id: 5, role: 'user' });
+            const res = await request(app).get('/api/ring5/audit/timeseries');
+            expect(res.status).toBe(403);
+        });
+
+        test('returns empty buckets when no audit data (default window)', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/audit/timeseries');
+            expect(res.body.ok).toBe(true);
+            expect(Array.isArray(res.body.buckets)).toBe(true);
+            expect(res.body.bucketMs).toBe(300000);
+        });
+
+        test('counts rows in 5min buckets across 2h window', async () => {
+            const t = _now();
+            // 3 rows in current 5min bucket
+            seedAudit(1, 'skipped', t);
+            seedAudit(1, 'skipped', t - 1000);
+            seedAudit(1, 'skipped', t - 2000);
+            // 2 rows in previous 5min bucket (~6 min ago)
+            seedAudit(1, 'accepted', t - 6 * 60 * 1000);
+            seedAudit(1, 'accepted', t - 6 * 60 * 1000 + 100);
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/audit/timeseries');
+            expect(res.body.buckets.length).toBeGreaterThanOrEqual(2);
+            const totalCount = res.body.buckets.reduce((s, b) => s + b.n, 0);
+            expect(totalCount).toBe(5);
+            // Sum of accepted = 2
+            const totalAccepted = res.body.buckets.reduce((s, b) => s + b.accepted, 0);
+            expect(totalAccepted).toBe(2);
+        });
+    });
+
     describe('GET /audit/aggregate', () => {
         test('rejects non-admin', async () => {
             const app = buildApp({ id: 5, role: 'user' });

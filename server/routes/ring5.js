@@ -118,6 +118,36 @@ router.get('/posteriors', _requireAdmin, (req, res) => {
     }
 });
 
+// GET /api/ring5/audit/timeseries — bucketed counts for sparkline.
+// Default: 5min buckets across last 2h (24 points).
+router.get('/audit/timeseries', _requireAdmin, (req, res) => {
+    try {
+        const bucketMs = 300000; // 5 min
+        const windowMs = 2 * 3600 * 1000; // 2h
+        const nowMs = Date.now();
+        const sinceMs = nowMs - windowMs;
+        const rows = db.prepare(`
+            SELECT
+                CAST((created_at - ?) / ? AS INTEGER) AS bucket_idx,
+                SUM(CASE WHEN gate_status='accepted' THEN 1 ELSE 0 END) AS accepted,
+                SUM(CASE WHEN gate_status='rejected' THEN 1 ELSE 0 END) AS rejected,
+                SUM(CASE WHEN gate_status='skipped'  THEN 1 ELSE 0 END) AS skipped,
+                COUNT(*) AS n
+            FROM ml_influence_audit
+            WHERE created_at >= ?
+            GROUP BY bucket_idx
+            ORDER BY bucket_idx ASC
+        `).all(sinceMs, bucketMs, sinceMs);
+        const buckets = rows.map(r => ({
+            ts: sinceMs + r.bucket_idx * bucketMs,
+            n: r.n, accepted: r.accepted, rejected: r.rejected, skipped: r.skipped
+        }));
+        res.status(200).json({ ok: true, bucketMs, windowMs, buckets });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // GET /api/ring5/audit/aggregate?since=ts
 // Group audit rows by (symbol, regime, gate_status). Default window = last 24h.
 router.get('/audit/aggregate', _requireAdmin, (req, res) => {
