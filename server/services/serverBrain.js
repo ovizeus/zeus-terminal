@@ -1082,6 +1082,60 @@ function _runCycle() {
                         sessionName: sessionBlock.session || null,
                     };
 
+                    // [Wave 5] R1 Constitution — advisory mode: log violations to
+                    // ml_r1_violations without blocking. Existing per-feature guards
+                    // (correlationGuard, reflection, drawdownGuard, etc.) continue to
+                    // enforce; R1 is centralized observability + defense-in-depth audit.
+                    // Operator can flip to enforcement_mode='blocking' later via env flag.
+                    try {
+                        const r1 = require('./ml/R1_constitution/enforcementEngine');
+                        const _r1Balance = us
+                            ? (us.engineMode === 'live' ? (us.liveBalanceRef || 0) : (us.demoBalance || 10000))
+                            : 10000;
+                        const _openPos = serverAT.getOpenPositions ? (serverAT.getOpenPositions(userId) || []) : [];
+                        let _recentCloses = [];
+                        try {
+                            const rows = db.prepare(
+                                `SELECT data, closed_at FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT 3`
+                            ).all(userId);
+                            _recentCloses = rows.map(r => {
+                                try {
+                                    const t = JSON.parse(r.data);
+                                    return { closePnl: t.closePnl, closedAt: new Date(r.closed_at).getTime() };
+                                } catch (_) { return null; }
+                            }).filter(Boolean);
+                        } catch (_) {}
+                        const _r1Result = r1.evaluate({
+                            userId,
+                            decision: {
+                                symbol: snap.symbol,
+                                side: fusion.dir === 'bull' ? 'LONG' : 'SHORT',
+                                size: sizingStc.size,
+                                balance: _r1Balance,
+                                leverage: sizingStc.lev,
+                                sl: null,  // SL computed downstream; live-without-SL caught at order/place layer
+                                mode: us ? us.engineMode : 'demo',
+                                reflection: { proceed: questioning.proceed, concerns: (questioning.concerns || []).map(c => c.type) },
+                                openPositions: _openPos.map(p => ({ symbol: p.symbol, side: p.side, size: p.size })),
+                                recentCloses: _recentCloses,
+                                correlatedExposure: { totalPct: 0 },  // serverCorrelationGuard already enforces; pass-through 0
+                            },
+                        });
+                        if (_r1Result.violations && _r1Result.violations.length > 0) {
+                            r1.logViolations({
+                                userId,
+                                decision: {
+                                    symbol: snap.symbol,
+                                    side: fusion.dir === 'bull' ? 'LONG' : 'SHORT',
+                                    size: sizingStc.size, leverage: sizingStc.lev,
+                                    mode: us ? us.engineMode : 'demo',
+                                },
+                                violations: _r1Result.violations,
+                                enforcementMode: 'advisory',
+                            });
+                        }
+                    } catch (_) { /* never block brain flow */ }
+
                     // [2G] Pending Entry System — wait for pullback instead of instant entry
                     const pending = serverPendingEntry.createPending(decision, sizingStc, userId, marketCtx);
                     if (pending) {

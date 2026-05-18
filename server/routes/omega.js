@@ -35,6 +35,38 @@ function _requireUser(req, res) {
     return req.user.id;
 }
 
+// ── GET /api/omega/constitution/violations?limit=N ──────────────────────────
+// [Wave 5] R1 Constitution audit — last N violations per authenticated user.
+// Logged in advisory mode by serverBrain; future UI surfacing.
+router.get('/constitution/violations', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
+    try {
+        const rows = db.prepare(
+            `SELECT id, principle_id, principle_name, symbol, side, severity,
+                    enforcement_mode, ts
+             FROM ml_r1_violations
+             WHERE user_id = ?
+             ORDER BY ts DESC LIMIT ?`
+        ).all(userId, limit);
+        res.json({ ok: true, ts: Date.now(), violations: rows });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ── GET /api/omega/constitution/principles ──────────────────────────────────
+// [Wave 5] Returns the 7 locked principles (id, name, severity, description).
+router.get('/constitution/principles', (_req, res) => {
+    try {
+        const principles = require('../services/ml/R1_constitution/principles');
+        res.json({ ok: true, principles: principles.list() });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ── GET /api/omega/voice?limit=N ──────────────────────────────────────────
 // Returns most recent utterances for the authenticated user.
 router.get('/voice', (req, res) => {
