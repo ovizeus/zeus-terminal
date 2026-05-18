@@ -691,31 +691,48 @@ function _runCycle() {
                 };
                 if (!loggedDecision) loggedDecision = decision;
 
-                // [ML Phase B Day 7] Ring5 influence-mode telemetry. Fires on EVERY
-                // fusion (NO_TRADE included) — wrap internally short-circuits via
-                // eligibility check, writes audit row, returns wrapped decision.
-                // Day 7 = observation-only: return value NOT used downstream. Phase 2
-                // fusion math + reflection + execution path UNTOUCHED. Audit / posteriors
-                // populate from real brain flow so operator can validate before Day 8
-                // promotes wrap output to actual influence (mode-flip moment).
+                // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
+                // applied downstream when layeredBy='ring5-influence-applied' (i.e.
+                // eligibility passed AND proposer fired AND reflectionGate accepted).
+                // Otherwise wrap returns the original phase2 decision — no change.
+                //
+                // Mutation strategy: confidence + reasons mutated in place; dir/score
+                // never touched (Phase 4 proposer is confidence-only per spec).
+                // Cut → re-evaluate tier (downgrade to SMALL or NO_TRADE). Boost →
+                // tier stays at Phase 2's authoritative level (no sizing-up risk).
+                //
+                // Day 7+8 invariants preserved: try/catch isolation, error swallow.
                 const _ring5MarketCtx = _buildMarketContext(snap, bars, userId);
                 try {
                     const _execEnv = serverAT._resolveExecutionEnv(userId);
                     if (_execEnv && _execEnv.env) {
-                        ring5LearningService.wrap({
+                        const _ring5Wrap = ring5LearningService.wrap({
                             userId,
                             resolvedEnv: _execEnv.env,
                             symbol: snap.symbol,
                             phase2Decision: fusion,
-                            mlBrainProInputs: null, // Day 8 will feed R5A attribution
+                            mlBrainProInputs: null, // Day 10 will feed R5A attribution
                             mode: 'influence',
                             regime: regime.regime,
                             marketContext: _ring5MarketCtx,
                             nowTs: Date.now()
                         });
+                        if (_ring5Wrap && _ring5Wrap.layeredBy === 'ring5-influence-applied') {
+                            fusion.confidence = _ring5Wrap.confidence;
+                            if (Array.isArray(_ring5Wrap.reasons)) fusion.reasons = _ring5Wrap.reasons;
+                            fusion.layeredBy = 'ring5-influence-applied';
+                            // Tier re-eval on cut. Boost never upgrades tier (sizing
+                            // stays at Phase 2 authoritative level for safety).
+                            if (fusion.confidence < 62 && fusion.decision !== 'NO_TRADE') {
+                                fusion.decision = 'NO_TRADE';
+                            } else if (fusion.confidence < 72 &&
+                                       (fusion.decision === 'MEDIUM' || fusion.decision === 'LARGE')) {
+                                fusion.decision = 'SMALL';
+                            }
+                        }
                     }
                 } catch (_ring5Err) {
-                    // Ring5 telemetry must NEVER affect brain flow — swallow any error.
+                    // Ring5 influence must NEVER affect brain flow — swallow any error.
                 }
 
                 if (fusion.decision !== 'NO_TRADE') {
