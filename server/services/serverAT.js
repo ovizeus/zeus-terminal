@@ -35,6 +35,18 @@ function _getRing5() {
     return _ring5LearningService || null;
 }
 
+// [Day 28 2026-05-18] R5A attribution telemetry — recordAttribution on close
+// feeds ml_attribution_events for §16 measurement triad (attribution + hit_rate
+// + per-symbol+regime). Lazy require to avoid circular deps.
+let _r5aAttribution = null;
+function _getR5AAttribution() {
+    if (_r5aAttribution === null) {
+        try { _r5aAttribution = require('./ml/R5A_learning/attributionEngine'); }
+        catch (_) { _r5aAttribution = false; }
+    }
+    return _r5aAttribution || null;
+}
+
 // [Day 17 2026-05-18] Doctor telemetry — emit alerts on safety paths.
 // Lazy require + try/catch swallow: telemetry never affects AT flow.
 let _doctorEventBus = null;
@@ -1944,6 +1956,42 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                 });
             }
         } catch (_ring5Err) { /* never block close flow */ }
+    }
+
+    // [Day 28] R5A attribution recording — feeds §16 measurement triad
+    // (ml_attribution_events). Normal closes only — exclude RESET (admin) +
+    // EMERGENCY_CLOSED (anomaly) + RECON_PHANTOM (external sync). Skip env
+    // missing or pos.size invalid (can't compute pnl%).
+    const _attribSkipExits = new Set(['RESET', 'EMERGENCY_CLOSED', 'RECON_PHANTOM', 'RECON_EXCHANGE_CLOSED', 'RECON_PHANTOM_MERGED_DUP']);
+    if (!_attribSkipExits.has(exitType) && pos.env && pos.size > 0) {
+        try {
+            const attrib = _getR5AAttribution();
+            if (attrib && attrib.recordAttribution) {
+                const pnlPct = (pnl / pos.size) * 100;
+                attrib.recordAttribution({
+                    userId,
+                    resolvedEnv: pos.env,
+                    trade: {
+                        symbol: pos.symbol,
+                        pos_id: String(pos.seq || ''),
+                        side: pos.side,
+                        closed_by: exitType === 'MANUAL_CLIENT' ? 'manual'
+                                  : exitType === 'HIT_TP' ? 'tp'
+                                  : exitType === 'HIT_SL' ? 'sl'
+                                  : exitType.toLowerCase(),
+                        pnl_pct: pnlPct,
+                        r_multiple: pos.rr && pnl !== 0 ? (pnl > 0 ? Math.abs(pnlPct / pos.slPct || 1) : -1) : null,
+                        regime: pos.regime,
+                        score_at_entry: pos.confluenceScore || null
+                    },
+                    snapshot: {
+                        regime: pos.regime,
+                        mfe: pos.quality ? pos.quality.mfe : null,
+                        mae: pos.quality ? pos.quality.mae : null
+                    }
+                });
+            }
+        } catch (_attErr) { /* never block close flow */ }
     }
     // Entry/Exit quality scoring (MAE/MFE)
     if (pos.price > 0 && price > 0) {

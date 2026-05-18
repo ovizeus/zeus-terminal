@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { R5aStats } from './omegaApi'
 import { fetchR5aStats } from './omegaApi'
+import { useATStore, useUiStore } from '../../stores'
 
 /**
  * R5A Stats — Wave 2 measurement triad surfacing
@@ -15,12 +16,21 @@ export function R5AStats() {
     const [stats, setStats] = useState<R5aStats | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    // [Day 28] Read live env instead of hardcoded 'DEMO' default. Stats are
+    // per-env filtered server-side — passing wrong env hid real data when in
+    // TESTNET/REAL.
+    const engineMode = useATStore((s) => s.mode) || 'demo'
+    const executionEnv = useUiStore((s) => s.executionEnv)
+    const effectiveEnv = (engineMode === 'demo' || executionEnv === 'DEMO') ? 'DEMO'
+        : executionEnv === 'TESTNET' ? 'TESTNET'
+        : executionEnv === 'REAL' ? 'REAL'
+        : 'DEMO'  // fallback
 
     useEffect(() => {
         let alive = true
         async function poll() {
             try {
-                const s = await fetchR5aStats()
+                const s = await fetchR5aStats(effectiveEnv)
                 if (alive) { setStats(s); setError(null) }
             } catch (err: any) {
                 if (alive) setError(String(err && err.message || err))
@@ -31,7 +41,7 @@ export function R5AStats() {
         poll()
         const id = setInterval(poll, 30_000)
         return () => { alive = false; clearInterval(id) }
-    }, [])
+    }, [effectiveEnv])
 
     if (loading) {
         return <section className="omega-r5a"><div className="omega-r5a-loading">loading R5A signals...</div></section>
