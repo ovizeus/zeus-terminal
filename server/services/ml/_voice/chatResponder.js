@@ -13,6 +13,7 @@
 
 const { db } = require('../../database');
 const llmClient = require('./llmClient');
+const marketRadar = require('../../marketRadar');
 
 // [Day 30] In-memory conversation history per user — last N exchanges fed to
 // LLM so multi-turn follow-ups work ("and eth?" after "how is btc").
@@ -287,8 +288,9 @@ function _replySymbol(ctx, symbol) {
         WHERE symbol = ? AND created_at >= ?
         ORDER BY created_at DESC LIMIT 10
     `).all(sym, since5m);
+    const radarTail = _radarEnrichSymbol(sym);
     if (rows.length === 0) {
-        return { reply: `no recent decisions on ${sym}. asleep on that one.`, mood: 'BORED' };
+        return { reply: `no recent decisions on ${sym}. asleep on that one.${radarTail}`, mood: 'BORED' };
     }
     const latest = rows[0];
     const ageS = Math.round((Date.now() - latest.created_at) / 1000);
@@ -297,9 +299,96 @@ function _replySymbol(ctx, symbol) {
     for (const r of rows) regimeMix[r.regime] = (regimeMix[r.regime] || 0) + 1;
     const regimeStr = Object.entries(regimeMix).map(([k, v]) => `${k}×${v}`).join(', ');
     return {
-        reply: `${sym} last 5min: ${rows.length} decisions. latest ${ageS}s ago — regime ${latest.regime}, dir ${latest.phase2_dir}, conf ${latest.phase2_confidence}, status ${latest.gate_status}. avg conf ${avgConf}. regimes seen: ${regimeStr}.`,
+        reply: `${sym} last 5min: ${rows.length} decisions. latest ${ageS}s ago — regime ${latest.regime}, dir ${latest.phase2_dir}, conf ${latest.phase2_confidence}, status ${latest.gate_status}. avg conf ${avgConf}. regimes seen: ${regimeStr}.${radarTail}`,
         mood: 'FOCUSED'
     };
+}
+
+// ── Helper: format symbol for human display (strip USDT suffix) ───────
+function _displaySym(symbol) {
+    if (typeof symbol !== 'string') return '';
+    return symbol.endsWith('USDT') ? symbol.slice(0, -4) : symbol;
+}
+
+function _fmtPct(n) {
+    if (n == null || !isFinite(n)) return '0.0%';
+    const sign = n >= 0 ? '+' : '';
+    return `${sign}${n.toFixed(2)}%`;
+}
+
+// ── Intent: top gainers/losers/volume from marketRadar snapshot ───────
+function _replyTopMovers(ctx, kind, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const snap = marketRadar.getTopSnapshot({ kind, limit: 5 });
+    if (!snap) {
+        return {
+            reply: ro
+                ? 'radar încă se încălzește — nu am snapshot de top încă. încearcă în 30s.'
+                : 'radar warming up — no top snapshot yet. try again in 30s.',
+            mood: 'BORED',
+        };
+    }
+    const parts = snap.symbols.map(s => {
+        if (kind === 'volume') {
+            const volM = (s.quoteVolume / 1_000_000).toFixed(0);
+            return `${_displaySym(s.symbol)} $${volM}M`;
+        }
+        return `${_displaySym(s.symbol)} ${_fmtPct(s.priceChangePercent24h)}`;
+    });
+    const label = kind === 'gainers'
+        ? (ro ? 'cei mai urcați 24h' : 'top gainers 24h')
+        : kind === 'losers'
+            ? (ro ? 'cei mai scăzuți 24h' : 'top losers 24h')
+            : (ro ? 'top volum 24h' : 'top volume 24h');
+    const mood = kind === 'gainers' ? 'EXCITED' : kind === 'losers' ? 'NERVOUS' : 'FOCUSED';
+    return {
+        reply: `${label}: ${parts.join(' · ')}.`,
+        mood,
+    };
+}
+
+// ── Intent: market overview ───────────────────────────────────────────
+function _replyMarketOverview(ctx, originalText) {
+    const ro = _isRomanian(originalText || '');
+    const snap = marketRadar.getTopSnapshot({ kind: 'volume', limit: 30 });
+    if (!snap || snap.symbols.length === 0) {
+        return {
+            reply: ro
+                ? 'piață: radar gol momentan, nu pot da overview. revino în 30s.'
+                : 'market: radar empty right now, can\'t paint a picture. back in 30s.',
+            mood: 'BORED',
+        };
+    }
+    const btc = snap.symbols.find(s => s.symbol === 'BTCUSDT');
+    const eth = snap.symbols.find(s => s.symbol === 'ETHUSDT');
+    const gainers = snap.symbols.filter(s => s.priceChangePercent24h > 0).length;
+    const losers = snap.symbols.filter(s => s.priceChangePercent24h < 0).length;
+    const avg = snap.symbols.reduce((s, t) => s + (t.priceChangePercent24h || 0), 0) / snap.symbols.length;
+    const sentiment = avg > 1.5 ? (ro ? 'risk-on' : 'risk-on')
+        : avg < -1.5 ? (ro ? 'risk-off' : 'risk-off')
+            : (ro ? 'mixt' : 'mixed');
+    const gainersSnap = marketRadar.getTopSnapshot({ kind: 'gainers', limit: 3 });
+    const losersSnap = marketRadar.getTopSnapshot({ kind: 'losers', limit: 3 });
+    const topG = gainersSnap ? gainersSnap.symbols.map(s => `${_displaySym(s.symbol)} ${_fmtPct(s.priceChangePercent24h)}`).join(', ') : '—';
+    const topL = losersSnap ? losersSnap.symbols.map(s => `${_displaySym(s.symbol)} ${_fmtPct(s.priceChangePercent24h)}`).join(', ') : '—';
+    if (ro) {
+        return {
+            reply: `piață ${sentiment}, avg ${_fmtPct(avg)} pe top 30. BTC ${btc ? _fmtPct(btc.priceChangePercent24h) : 'n/a'}, ETH ${eth ? _fmtPct(eth.priceChangePercent24h) : 'n/a'}. ${gainers}/${snap.symbols.length} verde, ${losers} roșu. urcat: ${topG}. scăzut: ${topL}.`,
+            mood: avg > 1 ? 'EXCITED' : avg < -1 ? 'NERVOUS' : 'CALM',
+        };
+    }
+    return {
+        reply: `market ${sentiment}, avg ${_fmtPct(avg)} on top 30. BTC ${btc ? _fmtPct(btc.priceChangePercent24h) : 'n/a'}, ETH ${eth ? _fmtPct(eth.priceChangePercent24h) : 'n/a'}. ${gainers}/${snap.symbols.length} green, ${losers} red. gainers: ${topG}. losers: ${topL}.`,
+        mood: avg > 1 ? 'EXCITED' : avg < -1 ? 'NERVOUS' : 'CALM',
+    };
+}
+
+// ── Helper: enrich symbol reply with marketRadar price/24h ────────────
+function _radarEnrichSymbol(symbol) {
+    const entry = marketRadar.getSymbolFromSnapshot(symbol);
+    if (!entry) return '';
+    const price = entry.price >= 1 ? `$${entry.price.toFixed(2)}` : `$${entry.price.toFixed(6)}`;
+    return ` price ${price}, 24h ${_fmtPct(entry.priceChangePercent24h)}.`;
 }
 
 // ── Intent: help ──────────────────────────────────────────────────────
@@ -452,6 +541,21 @@ async function _respondImpl(params, text) {
     // Order: specific intents → generic.
     if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
+
+    // [Day 32B] Market intents — match BEFORE symbol regex so "care a urcat
+    // cel mai mult" doesn't accidentally hit the symbol path.
+    if (text.match(/\b(top gainers?|biggest gainers?|cei mai urca[țt]i|care a urcat|care e cel mai urcat|cei mai inal[țt]i|cea mai urcat)/i)) {
+        return _replyTopMovers(ctx, 'gainers', originalText);
+    }
+    if (text.match(/\b(top losers?|biggest losers?|cei mai sc[aă]zu[țt]i|care a sc[aă]zut|care e cel mai sc[aă]zut|cea mai sc[aă]zut)/i)) {
+        return _replyTopMovers(ctx, 'losers', originalText);
+    }
+    if (text.match(/\b(top volume|biggest volume|cel mai mare volum|care e cel mai mare volum|cel mai tranzac[țt]ionat|cele mai tranzac[țt]ionate)/i)) {
+        return _replyTopMovers(ctx, 'volume', originalText);
+    }
+    if (text.match(/\b(how is the market|market overview|how.s the market|cum vezi pia[țt]a|cum e pia[țt]a|ce face pia[țt]a|ce vezi pe pia[țt]a|cum se mi[șs]c[aă] pia[țt]a)/i)) {
+        return _replyMarketOverview(ctx, originalText);
+    }
 
     // Symbol-specific first (more specific than "decisions" generic).
     const symMatch = text.match(SYMBOL_RE);
