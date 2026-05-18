@@ -80,6 +80,20 @@ describe('chatResponder.respond', () => {
         expect(r.reply).toMatch(/BTCUSDT|ETHUSDT/);
     });
 
+    test('Romanian unscripted question does NOT trigger wrong intent (azi bug fix)', async () => {
+        // Previously "ce parere despre crypto azi" caught "azi" → pnl intent.
+        // Now should fall through to LLM fallback / help.
+        delete process.env.GROQ_API_KEY;
+        const r = await responder.respond({ userId: 1, text: 'ce parere ai despre crypto azi' });
+        expect(r.reply).not.toMatch(/no closed trades|wins\/losses|net /);
+    });
+
+    test('Romanian "deciziile tale" still triggers decisions intent', async () => {
+        seedAuditRow('BTCUSDT', 'RANGE', 'skipped');
+        const r = await responder.respond({ userId: 1, text: 'spune-mi deciziile tale' });
+        expect(r.reply).toMatch(/decisions|BTCUSDT/);
+    });
+
     test('doctor intent', async () => {
         const r = await responder.respond({ userId: 1, text: 'any alerts' });
         expect(r.reply).toMatch(/cognitive state|active P0|HEALTHY|COMPROMISED/i);

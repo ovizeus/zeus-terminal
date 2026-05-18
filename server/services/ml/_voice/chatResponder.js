@@ -381,12 +381,16 @@ async function respond(params) {
     const symMatch = text.match(SYMBOL_RE);
     if (symMatch) return _replySymbol(ctx, symMatch[1]);
 
-    if (text.match(/\b(position|positions|open|long|short|pozitii|poziție|deschise)\b/)) return _replyPositions(ctx);
-    if (text.match(/\b(pnl|p&l|profit|today|azi|cum stau|wins|losses|trades|24h)\b/)) return _replyPnl(ctx);
-    if (text.match(/\b(mood|feel|feeling|ce simti|cum esti|emotion|stare)\b/)) return _replyMood(ctx);
-    if (text.match(/\b(bandit|ring5|influence|learn|learning|eligibility)\b/)) return _replyBandit(ctx);
-    if (text.match(/\b(decision|decisions|audit|brain|gandire|decizii)\b/)) return _replyDecisions(ctx);
-    if (text.match(/\b(alert|alerts|doctor|problem|problems|error|errors|probleme|sanatate|health)\b/)) return _replyDoctor(ctx);
+    // [Day 26.3] Tightened intent regexes — short Romanian/English particles
+    // like "azi"/"today" alone were catching unrelated philosophical questions
+    // (e.g. "ce parere despre crypto azi" → pnl intent triggered wrongly).
+    // Now require domain-specific anchor words (pnl/profit/positions/etc).
+    if (text.match(/\b(positions?|pozitii|poziții|poziție|deschise|long position|short position)\b/)) return _replyPositions(ctx);
+    if (text.match(/\b(pnl|p&l|profit|profitul|wins|losses|win.?rate|cum stau cu|trades closed|24h|pierderi|c[aâ][sș]tig)\b/)) return _replyPnl(ctx);
+    if (text.match(/\b(mood|feel|feeling|feelings|emotion|emotions|ce simti|cum te simti|cum esti|cum e[sș]ti|starea ta)\b/)) return _replyMood(ctx);
+    if (text.match(/\b(bandit|ring5|ring 5|influence|eligibility)\b/)) return _replyBandit(ctx);
+    if (text.match(/\b(decisions|audit trail|decizii|deciziile|ce decizii)\b/)) return _replyDecisions(ctx);
+    if (text.match(/\b(alerts?|doctor panel|errors?|problems?|probleme|health check|sanatate|s[aă]n[aă]tate)\b/)) return _replyDoctor(ctx);
 
     // Rude language: short de-escalation, no LLM (saves quota for real questions).
     if (text.match(/\b(fuck|shit|wtf|hell|dammit|fute)\b/)) {
