@@ -112,15 +112,16 @@ function _detectLanguage(text) {
     if (/[țșă]/i.test(t)) return 'RO';
 
     // 6. RO marker list expanded (no-diacritic operator queries). Covers:
-    //   pronouns: ce, cum, de ce, ai, am, mi, ti, lui, ne, ne-am
-    //   short verbs: fac, faci, face, fac sa, vezi, vad, vede, mergi, merge,
+    //   pronouns: ce, cum, de ce, cine, cui, cuia, ai, am, mi, ti, lui, ne, ne-am
+    //   short verbs: fac, faci, face, vezi, vad, vede, mergi, merge,
     //                stau, stai, sta, vrei, vreau, vrem, vreo, scad, scade,
-    //                intru, intri, intra, intram, cumpar, vand, urca, scade
+    //                intru, intri, intra, intram, cumpar, vand, urca, scade,
+    //                stii, stiai, stiu (Day 35 ext)
     //   conjunctions: dar, sau, daca, atunci, ca, sa
-    //   adverbs: azi, ieri, maine, acum, aici, aproape, putin
-    //   nouns: pont, poarta, piata, intrebare, ras, raspuns
-    //   particles: e (= este), ii, oare
-    if (/\b(ce|cum|de ce|sunt|este|sa|si|despre|pentru|in|ai|am|esti|faci|salut|buna|spune|pozitii|decizii|parere|gandeste|gandesc|piata|vezi|vad|vede|vrei|vreau|vrem|vreo|fac|faci|face|merge|mergi|mergem|stau|stai|sta|scade|cumpar|cumperi|cumparam|vand|vinde|vindem|intru|intri|intra|intram|urca|scade|pompeaza|pompeazã|crezi|crede|spune|zice|zici|poti|poate|putem|treb|trebui|spune.?mi|sa.?mi|sa.?ti|momentul|azi|maine|acum|aici|aproape|pont|poarta|piata|intrebare|brain.?ul|aia|asta|astia|astea|ai.?ul|asa|altfel|altul|alta|altele|alti|oare)\b/i.test(t)) return 'RO';
+    //   adverbs: azi, ieri, maine, acum, aici, aproape, putin, inainte
+    //   nouns: pont, poarta, piata, intrebare, ras, raspuns, actualizare
+    //   particles: e (= este), ii, oare, tea (= ti-a / te-a familiar)
+    if (/\b(ce|cum|de ce|cine|cui|cuia|c[aâ]te?|c[aâ][țt]i|c[aâ]teva|sunt|este|sa|si|despre|pentru|in|ai|am|esti|faci|salut|buna|spune|spunemi|pozitii|decizii|parere|gandeste|gandesc|piata|vezi|vad|vede|vrei|vreau|vrem|vreo|fac|face|merge|mergi|mergem|stau|stai|sta|stii|stiai|stiu|scade|cumpar|cumperi|cumparam|vand|vinde|vindem|intru|intri|intra|intram|urca|pompeaza|crezi|crede|zice|zici|poti|poate|putem|trebui|spune.?mi|sa.?mi|sa.?ti|momentul|azi|maine|acum|aici|aproape|inainte|pont|poarta|intrebare|brain.?ul|aia|asta|astia|astea|ai.?ul|asa|altfel|altul|alta|altele|alti|oare|tea|actualizare|update|incercare)\b/i.test(t)) return 'RO';
 
     return 'EN';
 }
@@ -951,6 +952,56 @@ function _groupBy(arr, fn) {
     return out;
 }
 
+// ── LLM error UX (Day 35 b) — graceful per error type ────────────────
+// Previously any LLM failure fell to _replyHelp (the generic capabilities
+// blurb). Operator reported "Omega regression — repeats help on
+// everything". Root cause: Groq free-tier rate limit (http_429). New
+// behavior: per error type, give the operator an honest reply they can
+// act on (wait, swap key, etc.).
+function _llmErrorReply(ctx, originalText, errCode) {
+    const ro = _isRomanian(originalText || '');
+    const code = String(errCode || '');
+    if (code.startsWith('http_429') || code === 'rate_limited') {
+        return {
+            reply: ro
+                ? 'creierul e rate-limited momentan (Groq free tier). așteaptă ~30s și încearcă din nou. dacă tot apare, schimbă tier-ul sau cheia.'
+                : 'brain is rate-limited right now (Groq free tier). give it ~30s and try again. if persistent, swap tier/key.',
+            mood: 'NERVOUS',
+        };
+    }
+    if (code === 'timeout') {
+        return {
+            reply: ro
+                ? 'LLM-ul a depășit timeout-ul (8s). încearcă din nou cu o întrebare mai scurtă.'
+                : 'LLM timed out (8s). retry with a shorter question.',
+            mood: 'BORED',
+        };
+    }
+    if (code.startsWith('http_5')) {
+        return {
+            reply: ro
+                ? 'eroare pe upstream LLM (5xx Groq). încearcă în câteva secunde.'
+                : 'upstream LLM error (5xx Groq). retry in a few seconds.',
+            mood: 'SAD',
+        };
+    }
+    if (code === 'no_api_key') {
+        return {
+            reply: ro
+                ? 'nu am cheie LLM configurată — pot răspunde doar pe intent-uri cunoscute. setează GROQ_API_KEY și restart server pentru reads libere.'
+                : 'no LLM key configured — i can only handle known intents. set GROQ_API_KEY + restart server for free-form reads.',
+            mood: 'CALM',
+        };
+    }
+    // Unknown error — surface code + suggest help intents as last resort
+    return {
+        reply: ro
+            ? `LLM error: ${code || 'unknown'}. încearcă din nou sau folosește intent-uri (poziții/pnl/decizii/sentiment/structură/RSI/order book).`
+            : `LLM error: ${code || 'unknown'}. retry or use known intents (positions/pnl/decisions/sentiment/structure/RSI/order book).`,
+        mood: 'SAD',
+    };
+}
+
 // ── Intent: help ──────────────────────────────────────────────────────
 function _replyHelp(ctx, originalText) {
     const ro = _isRomanian(originalText || '');
@@ -1252,10 +1303,10 @@ async function _replyLLMFallback(ctx, originalText) {
     });
 
     if (!result.ok) {
-        const helpReply = _replyHelp(ctx, originalText);
+        const err = _llmErrorReply(ctx, originalText, result.error);
         return {
-            reply: helpReply.reply,
-            mood: helpReply.mood,
+            reply: err.reply,
+            mood: err.mood,
             llmFallback: false,
             llmError: result.error
         };
@@ -1325,7 +1376,7 @@ async function respondStream(params) {
     });
 
     if (!result.ok) {
-        const fallback = _replyHelp(ctx, originalText);
+        const fallback = _llmErrorReply(ctx, originalText, result.error);
         try { onChunk(fallback.reply); } catch (_) {}
         _pushConvo(userId, 'user', originalText);
         _pushConvo(userId, 'assistant', fallback.reply || '');

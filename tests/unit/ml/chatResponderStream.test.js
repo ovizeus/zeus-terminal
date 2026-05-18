@@ -85,7 +85,7 @@ describe('chatResponder.respondStream', () => {
         }
     });
 
-    test('LLM stream error falls back to local help reply', async () => {
+    test('LLM stream rate-limit (429) returns honest rate-limit message (not generic help)', async () => {
         process.env.GROQ_API_KEY = 'test_key';
         jest.resetModules();
         const responder2 = require('../../../server/services/ml/_voice/chatResponder');
@@ -101,7 +101,10 @@ describe('chatResponder.respondStream', () => {
                 onChunk: (c) => chunks.push(c),
             });
             expect(chunks.length).toBe(1);
-            expect(result.reply).toMatch(/positions|pnl|mood|bandit/i);
+            // [Day 35 bugfix] Reply MUST acknowledge rate-limit, NOT dump
+            // generic help capabilities. Operator-reported regression.
+            expect(result.reply).toMatch(/rate.?limit|brain is rate|throttl|30s|try again/i);
+            expect(result.reply).not.toMatch(/positions\/open.*pnl\/today.*mood\/feeling/);
         } finally {
             llmClient.chatStream = originalChatStream;
             delete process.env.GROQ_API_KEY;
