@@ -13,7 +13,19 @@ import { wsService } from '../services/ws'
 import { syncApi, api } from '../services/api'
 import { usePositionsStore, useATStore, useUiStore } from '../stores'
 import { useJournalStore } from '../stores/journalStore'
+import { liveApiSyncState } from '../trading/liveApi'
+import { startLiveBalanceAutoSync, stopLiveBalanceAutoSync } from '../trading/liveBalanceAutoSync'
 import type { WsMessage, ServerATState, ServerDemoBalance } from '../types'
+
+const LIVE_BALANCE_REFRESH_MS = 60000
+
+function _refreshLiveBalanceFor(env: 'DEMO' | 'TESTNET' | 'REAL' | null, apiConfigured: boolean): void {
+  startLiveBalanceAutoSync({
+    env, apiConfigured,
+    syncFn: () => liveApiSyncState(),
+    intervalMs: LIVE_BALANCE_REFRESH_MS,
+  })
+}
 
 /** Extract numeric balance from server's demoBalance (can be number or {balance,pnl,startBalance}) */
 function extractBalance(raw: number | ServerDemoBalance | undefined): { balance: number; pnl: number } {
@@ -213,6 +225,8 @@ export function useServerSync(authenticated: boolean) {
           executionEnv: (d.executionEnv ?? null) as 'DEMO' | 'TESTNET' | 'REAL' | null,
           executionBlockedReason: (d.executionBlockedReason ?? null) as 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null,
         })
+        // Live balance refresh is wired via the uiStore subscription below
+        // (see section 7) — it re-arms whenever executionEnv/apiConfigured flip.
       }
       if (msg.type === 'sync') {
         // Cross-device sync signal — re-pull balance only; positions via state.ts bridge
@@ -270,9 +284,21 @@ export function useServerSync(authenticated: boolean) {
       useUiStore.getState().setConnected(wsService.isConnected())
     }, 3000)
 
+    // 7. Live balance auto-sync — single subscription that re-evaluates whenever
+    //    executionEnv or apiConfigured flips (regardless of source: at_update,
+    //    exchange.changed WS frame, REST pullATState, etc.). Recovers TP.liveBalance
+    //    after circuit-breaker stalls and on first boot when API is configured.
+    const _ui0 = useUiStore.getState()
+    _refreshLiveBalanceFor(_ui0.executionEnv, _ui0.apiConfigured)
+    const unsubUi = useUiStore.subscribe((s) => {
+      _refreshLiveBalanceFor(s.executionEnv, s.apiConfigured)
+    })
+
     return () => {
       clearTimeout(initTimer)
       unsub()
+      unsubUi()
+      stopLiveBalanceAutoSync()
       if (pollRef.current) clearInterval(pollRef.current)
       clearInterval(connInterval)
     }
