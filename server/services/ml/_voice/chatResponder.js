@@ -397,6 +397,107 @@ function _radarEnrichSymbol(symbol) {
     return ` price ${price}, 24h ${_fmtPct(entry.priceChangePercent24h)}.`;
 }
 
+// ── Trader profile (Day 33 #2) ────────────────────────────────────────
+function _getTraderProfile(userId) {
+    try {
+        const rows = db.prepare(
+            `SELECT id, preference FROM trader_profile_preferences WHERE user_id = ? ORDER BY created_at`
+        ).all(userId);
+        return rows.map(r => ({ id: r.id, text: r.preference }));
+    } catch (_) { return []; }
+}
+
+function _extractPreference(text) {
+    // Match "remember that I X" / "remember I X" / "reține că X" / "reține X"
+    const patterns = [
+        /\bremember(?:\s+that)?\s+(?:i\s+)?(.+?)$/i,
+        /\bre[țt]ine(?:\s+c[ăa])?\s+(.+?)$/i,
+        /\bnoteaz[ăa](?:\s+c[ăa])?\s+(.+?)$/i,
+    ];
+    for (const re of patterns) {
+        const m = text.match(re);
+        if (m && m[1]) return m[1].trim();
+    }
+    return null;
+}
+
+function _replyRememberPref(ctx, originalText) {
+    const ro = _isRomanian(originalText);
+    const pref = _extractPreference(originalText);
+    if (!pref || pref.length < 3) {
+        return {
+            reply: ro ? 'spune-mi ce să rețin (ex: "reține că prefer SL strâns 1-2%")'
+                       : 'tell me what to remember (e.g. "remember I prefer tight SL 1-2%")',
+            mood: 'BORED',
+        };
+    }
+    try {
+        db.prepare(`INSERT INTO trader_profile_preferences (user_id, preference) VALUES (?, ?)`).run(ctx.userId, pref);
+    } catch (err) {
+        return {
+            reply: ro ? `eroare la salvare: ${err.message}` : `save error: ${err.message}`,
+            mood: 'SAD',
+        };
+    }
+    return {
+        reply: ro ? `reținut: "${pref}". îl voi folosi în următoarele reads.`
+                   : `got it, noted: "${pref}". i'll use it on next reads.`,
+        mood: 'FOCUSED',
+    };
+}
+
+function _replyShowProfile(ctx, originalText) {
+    const ro = _isRomanian(originalText);
+    const prefs = _getTraderProfile(ctx.userId);
+    if (prefs.length === 0) {
+        return {
+            reply: ro ? 'nu am salvat nimic despre tine încă. spune-mi cum tradeuiești cu "reține că ..."'
+                       : 'nothing saved about you yet. tell me with "remember that ..."',
+            mood: 'BORED',
+        };
+    }
+    const list = prefs.map(p => `• ${p.text}`).join('\n');
+    return {
+        reply: ro ? `iată ce știu despre tine:\n${list}` : `here's what i remember about you:\n${list}`,
+        mood: 'FOCUSED',
+    };
+}
+
+function _replyForgetPref(ctx, originalText) {
+    const ro = _isRomanian(originalText);
+    // Match "forget that I X" / "forget X" / "uită că X" / "uită X"
+    const patterns = [
+        /\bforget(?:\s+that)?\s+(?:i\s+)?(.+?)$/i,
+        /\bui[țt][ăa](?:\s+c[ăa])?\s+(.+?)$/i,
+    ];
+    let target = null;
+    for (const re of patterns) {
+        const m = originalText.match(re);
+        if (m && m[1]) { target = m[1].trim().toLowerCase(); break; }
+    }
+    if (!target) {
+        return {
+            reply: ro ? 'spune-mi ce să uit (ex: "uită că prefer SL strâns")'
+                       : 'tell me what to forget (e.g. "forget that I prefer tight SL")',
+            mood: 'BORED',
+        };
+    }
+    const prefs = _getTraderProfile(ctx.userId);
+    const match = prefs.find(p => p.text.toLowerCase().includes(target) || target.includes(p.text.toLowerCase()));
+    if (!match) {
+        return {
+            reply: ro ? `nu am găsit o preferință care să se potrivească cu "${target}".`
+                       : `no preference matched "${target}".`,
+            mood: 'BORED',
+        };
+    }
+    db.prepare(`DELETE FROM trader_profile_preferences WHERE id = ?`).run(match.id);
+    return {
+        reply: ro ? `uitat: "${match.text}".` : `forgotten: "${match.text}".`,
+        mood: 'CALM',
+    };
+}
+
 // ── Helper: pull live indicators snapshot from serverState ───────────
 function _getIndicators(symbol) {
     const ss = _getServerState();
@@ -630,6 +731,8 @@ function _buildLLMContext(params) {
         recentDecisions: [],
         market: { gainers: [], losers: [], volume: [], btcDelta24h: null, ethDelta24h: null, breadth: null },
         symbolDeep: null,
+        // [Day 33 #2] Operator-stated preferences ("remember that I prefer tight SL")
+        traderProfile: _getTraderProfile(userId).map(p => p.text),
     };
 
     // Positions (best-effort — serverAT may be unavailable in some boot states)
@@ -810,6 +913,13 @@ function _buildSystemPrompt(params) {
         persona.push('');
         persona.push(`SYMBOL DEEP: ${_formatSymbolDeep(ctx.symbolDeep)}`);
     }
+    if (ctx.traderProfile && ctx.traderProfile.length > 0) {
+        persona.push('');
+        persona.push('OPERATOR PREFERENCES (preferințele operatorului — respect them in your reads):');
+        for (const pref of ctx.traderProfile) {
+            persona.push(`  • ${pref}`);
+        }
+    }
     return persona.join('\n');
 }
 
@@ -935,6 +1045,13 @@ async function respondStream(params) {
 async function _tryLocalIntent(ctx, text, originalText) {
     if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
+    if (text.match(/\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i)) {
+        return _replyShowProfile(ctx, originalText);
+    }
+    if (text.match(/\b(forget|ui[țt][ăa])\b/) && text.match(/\b(prefer|sl|tp|size|alts?|leverage|c[uăa]t|cum)\b/i) || text.match(/^(forget|ui[țt][ăa])\b/i)) {
+        return _replyForgetPref(ctx, originalText);
+    }
+    if (text.match(/\b(remember|re[țt]ine|noteaz[ăa])\b/)) return _replyRememberPref(ctx, originalText);
     if (text.match(/\b(what (have you|did you|you) learn|learnings|ce ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at|ce-?ai [iî]nv[aă][țt]at din|ce-?am [iî]nv[aă][țt]at)/i)) {
         return _replyLearnings(ctx, originalText);
     }
@@ -996,6 +1113,18 @@ async function _respondImpl(params, text) {
     // Order: specific intents → generic.
     if (text.match(/\b(hi|hello|hey|yo|sup|salut|buna|bună)\b/)) return _replyGreeting(ctx, originalText);
     if (text.match(/\b(help|ce poti|ce stii sa faci|ce poate|what can|commands)\b/)) return _replyHelp(ctx, originalText);
+
+    // [Day 33 #2] Trader profile intents — match BEFORE symbol regex.
+    // Show-profile MUST come before remember (so "what do you remember about me" wins).
+    if (text.match(/\b(what (do you|d'?you|you) remember|ce [șs]tii despre mine|ce ai re[țt]inut|preferin[țt]ele mele|my preferences|show.+profile)/i)) {
+        return _replyShowProfile(ctx, originalText);
+    }
+    if (text.match(/\b(forget|ui[țt][ăa])\b/) && text.match(/\b(prefer|sl|tp|size|alts?|leverage|c[uăa]t|cum)\b/i) || text.match(/^(forget|ui[țt][ăa])\b/i)) {
+        return _replyForgetPref(ctx, originalText);
+    }
+    if (text.match(/\b(remember|re[țt]ine|noteaz[ăa])\b/)) {
+        return _replyRememberPref(ctx, originalText);
+    }
 
     // [Day 33 #1] Learnings intent — what has the bot learned. Match BEFORE
     // symbol regex (originalText "ce ai învățat" could contain ada/btc otherwise).

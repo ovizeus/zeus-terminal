@@ -9538,6 +9538,23 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Day 33 #2] Operator-stated preferences surfaced via chat ("remember
+// that I prefer tight SL"). Injected into Omega's LLM system prompt so
+// tactical reads respect operator's stated trading style.
+migrate('374_trader_profile_preferences', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS trader_profile_preferences (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            preference  TEXT NOT NULL,
+            created_at  INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_trader_profile_user
+            ON trader_profile_preferences(user_id);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
