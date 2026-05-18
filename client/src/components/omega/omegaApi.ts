@@ -46,8 +46,11 @@ async function _json<T>(resp: Response): Promise<T> {
     return resp.json() as Promise<T>
 }
 
-export async function fetchVoice(limit = 50): Promise<Utterance[]> {
-    const resp = await fetch(`/api/omega/voice?limit=${limit}`, { credentials: 'include' })
+export async function fetchVoice(limit = 50, opts?: { sinceTs?: number; untilTs?: number }): Promise<Utterance[]> {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (opts && opts.sinceTs != null) params.set('sinceTs', String(opts.sinceTs))
+    if (opts && opts.untilTs != null) params.set('untilTs', String(opts.untilTs))
+    const resp = await fetch(`/api/omega/voice?${params.toString()}`, { credentials: 'include' })
     const data = await _json<{ ok: true; utterances: Utterance[] }>(resp)
     return data.utterances
 }

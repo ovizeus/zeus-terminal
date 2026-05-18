@@ -6491,6 +6491,52 @@ select option {
 .omega-utter-glyph { font-size: 14px; font-weight: bold; }
 .omega-utter-time { letter-spacing: 0.05em; }
 .omega-utter-type { letter-spacing: 0.15em; font-size: 9px; opacity: 0.7; }
+/* [Wave 8 C] Confidence chip + regime tag inline cu utterance header */
+.omega-utter-conf {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  letter-spacing: 0.05em;
+}
+.omega-utter-regime {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  opacity: 0.55;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(0,212,255,0.08);
+  color: #6ad6ff;
+}
+/* [Wave 8 H] History/replay slider bar pe TheVoice */
+.omega-voice-history-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(0,212,255,0.12);
+  background: rgba(0,0,0,0.25);
+}
+.omega-voice-history-btn {
+  flex: 1;
+  padding: 4px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(0,212,255,0.18);
+  color: #6a7c8e;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.omega-voice-history-btn:hover { background: rgba(0,212,255,0.08); color: #00d4ff; }
+.omega-voice-history-btn.active {
+  background: linear-gradient(135deg, #00d4ff22, #ff00d422);
+  border-color: #00d4ff;
+  color: #d6e8ff;
+}
 .omega-utter-text {
   font-size: 15px; line-height: 1.55; color: #d6e8ff;
   font-family: 'Inter', sans-serif; letter-spacing: 0.01em;
@@ -6719,6 +6765,60 @@ select option {
   overflow-y: auto;
   position: relative; z-index: 2;
 }
+
+/* [Wave 8 P] Report card aggregate dashboard */
+.omega-reportcard { display: flex; flex-direction: column; gap: 12px; }
+.omega-rc-loading { padding: 32px; text-align: center; color: #6a4f8a; font-family: 'Orbitron', sans-serif; letter-spacing: 0.2em; font-size: 11px; }
+.omega-rc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.omega-rc-card {
+  background: linear-gradient(135deg, rgba(0,212,255,0.04), rgba(255,0,212,0.03));
+  border: 1px solid rgba(0,212,255,0.18);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.omega-rc-card-title {
+  font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 0.2em;
+  color: #6a4f8a; margin-bottom: 8px;
+}
+.omega-rc-big {
+  font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 900;
+  color: #d6e8ff; line-height: 1.1; letter-spacing: 0.02em;
+}
+.omega-rc-dd-green { color: #00d97a; }
+.omega-rc-dd-yellow { color: #f0c040; }
+.omega-rc-dd-red { color: #ff4444; }
+.omega-rc-ok { color: #00d97a; }
+.omega-rc-bad { color: #ff4444; }
+.omega-rc-sub {
+  font-size: 10px; color: #6a7c8e; margin-top: 4px; line-height: 1.4;
+}
+.omega-rc-locked { color: #ff4444; font-weight: 700; }
+.omega-rc-empty { color: #4a4a4a; font-size: 11px; padding: 8px 0; }
+.omega-rc-row {
+  display: flex; justify-content: space-between;
+  font-size: 10px; padding: 3px 0;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  margin-top: 4px;
+}
+.omega-rc-row-label { color: #6ad6ff; font-family: 'Inter', sans-serif; }
+.omega-rc-row-val { color: #d6e8ff; font-weight: 700; }
+.omega-rc-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 4px; border-top: 1px solid rgba(0,212,255,0.1);
+}
+.omega-rc-refresh {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #00d4ff22, #ff00d422);
+  border: 1px solid #00d4ff; color: #d6e8ff;
+  font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 0.15em;
+  border-radius: 3px; cursor: pointer; transition: all 0.15s;
+}
+.omega-rc-refresh:hover { filter: brightness(1.2); }
+.omega-rc-hint { font-size: 9px; color: #4a4a4a; letter-spacing: 0.1em; }
 
 /* ── Ring5 zone wrapper (mirrors .omega-page-doctor-zone shape, cyan accent) ── */
 .omega-page-ring5-zone {

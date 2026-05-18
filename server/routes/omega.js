@@ -153,19 +153,34 @@ router.get('/constitution/principles', (_req, res) => {
     }
 });
 
-// ── GET /api/omega/voice?limit=N ──────────────────────────────────────────
+// ── GET /api/omega/voice?limit=N[&sinceTs=&untilTs=&include_chat=1] ─────────
 // Returns most recent utterances for the authenticated user.
+// [Wave 8 H] sinceTs/untilTs window enable time-travel replay in TheVoice UI.
 router.get('/voice', (req, res) => {
     const userId = _requireUser(req, res);
     if (!userId) return;
     const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 50));
+    const sinceTs = req.query.sinceTs ? parseInt(req.query.sinceTs, 10) : null;
+    const untilTs = req.query.untilTs ? parseInt(req.query.untilTs, 10) : null;
     try {
-        // [Day 29] Default to thoughts-only feed (excludes CHAT_REPLY).
-        // ?include_chat=1 to include chat replies (admin/debug).
         const includeChat = req.query.include_chat === '1';
-        const rows = includeChat
-            ? voiceLogger.getRecent({ userId, limit })
-            : voiceLogger.getRecentThoughts({ userId, limit });
+        let rows;
+        if (sinceTs != null || untilTs != null) {
+            // Time-window query — direct SQL with bounds + chat-filter consistent
+            const lo = sinceTs != null ? sinceTs : 0;
+            const hi = untilTs != null ? untilTs : Date.now();
+            const sql = includeChat
+                ? `SELECT * FROM ml_voice_log WHERE user_id = ? AND created_at >= ? AND created_at <= ?
+                   ORDER BY created_at DESC LIMIT ?`
+                : `SELECT * FROM ml_voice_log WHERE user_id = ? AND utterance_type != 'CHAT_REPLY'
+                   AND created_at >= ? AND created_at <= ?
+                   ORDER BY created_at DESC LIMIT ?`;
+            rows = db.prepare(sql).all(userId, lo, hi, limit);
+        } else {
+            rows = includeChat
+                ? voiceLogger.getRecent({ userId, limit })
+                : voiceLogger.getRecentThoughts({ userId, limit });
+        }
         res.json({ ok: true, utterances: rows });
     } catch (err) {
         res.status(500).json({ ok: false, error: String(err && err.message || err) });

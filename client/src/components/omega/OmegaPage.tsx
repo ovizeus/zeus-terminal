@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
+import { ReportCard } from './ReportCard'
 import { R5AStats } from './R5AStats'
 import { DoctorPanel } from './DoctorPanel'
 import { Ring5Panel } from './Ring5Panel'
@@ -25,7 +26,7 @@ import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
  * of "alive"), voice + health polled every 5s. Aborts in-flight requests
  * on unmount.
  */
-type OmegaView = 'main' | 'doctor' | 'ring5'
+type OmegaView = 'main' | 'doctor' | 'ring5' | 'report'
 
 export function OmegaPage() {
     const [view, setView] = useState<OmegaView>('main')
@@ -133,6 +134,22 @@ export function OmegaPage() {
         )
     }
 
+    if (view === 'report') {
+        return (
+            <div className="omega-page omega-page-dedicated" data-mood={mood}>
+                <div className="omega-page-header">
+                    <h1 className="omega-page-title">
+                        <span className="omega-title-name">REPORT</span>
+                        <span className="omega-title-tag">Wave 8 P · operator dashboard</span>
+                    </h1>
+                </div>
+                <div className="omega-page-dedicated-body">
+                    <ReportCard />
+                </div>
+            </div>
+        )
+    }
+
     return (
         <div className="omega-page" data-mood={mood}>
             <div className="omega-page-header">
@@ -161,6 +178,14 @@ export function OmegaPage() {
                             </span>
                         </>
                     )}
+                    <button
+                        type="button"
+                        className="omega-nav-button"
+                        onClick={() => setView('report')}
+                        title="Open performance report card (Wave 8 P)"
+                    >
+                        REPORT
+                    </button>
                     {isAdmin && (
                         <>
                             <button
