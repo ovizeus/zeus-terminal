@@ -9538,6 +9538,31 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Wave 4] R3B Safety — calibration buffer for Conformal Prediction +
+// OOD detection feature histograms. Additive only; consumed by R3B_safety
+// modules (conformalPrediction.js / oodDetector.js).
+migrate('375_ml_r3b_calibration_buffer', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_r3b_calibration (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            regime            TEXT NOT NULL,
+            confidence_bucket INTEGER NOT NULL,
+            residual          REAL NOT NULL,
+            outcome           REAL NOT NULL,
+            ts                INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        );
+        CREATE INDEX IF NOT EXISTS idx_r3b_calib_regime_ts
+            ON ml_r3b_calibration(regime, ts);
+        CREATE TABLE IF NOT EXISTS ml_r3b_ood_histogram (
+            feature_name TEXT NOT NULL,
+            bin_id       INTEGER NOT NULL,
+            count        INTEGER NOT NULL DEFAULT 0,
+            updated_at   INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+            PRIMARY KEY (feature_name, bin_id)
+        );
+    `);
+});
+
 // [Day 33 #2] Operator-stated preferences surfaced via chat ("remember
 // that I prefer tight SL"). Injected into Omega's LLM system prompt so
 // tactical reads respect operator's stated trading style.
