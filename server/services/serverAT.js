@@ -1993,6 +1993,39 @@ function _closePosition(idx, pos, exitType, price, pnl) {
             }
         } catch (_attErr) { /* never block close flow */ }
     }
+
+    // [Day 31] Write REACTION utterance to TheVoice feed on every normal close.
+    // Mood + tone scaled by pnl magnitude. Skip RESET/EMERGENCY/RECON (anomaly).
+    if (!_attribSkipExits.has(exitType)) {
+        try {
+            const vl = require('./ml/_voice/voiceLogger');
+            const pnlPct = pos.size > 0 ? (pnl / pos.size) * 100 : 0;
+            const absPct = Math.abs(pnlPct);
+            let mood, suffix;
+            if (pnl > 0 && absPct >= 1.5) { mood = 'EXCITED'; suffix = 'felt right.'; }
+            else if (pnl > 0)             { mood = 'FOCUSED'; suffix = 'small win, taking it.'; }
+            else if (pnl < 0 && absPct >= 1.5) { mood = 'SAD';     suffix = 'taking the L.'; }
+            else if (pnl < 0)             { mood = 'CALM';    suffix = 'minor bleed.'; }
+            else                           { mood = 'BORED';   suffix = 'washed out, flat.'; }
+            const exitWord = exitType === 'HIT_TP' ? 'TP hit'
+                          : exitType === 'HIT_SL' ? 'SL hit'
+                          : exitType === 'MANUAL_CLIENT' ? 'manual close'
+                          : exitType === 'DSL_PL' ? 'DSL profit lock'
+                          : exitType === 'DSL_TTP' ? 'DSL trailing TP'
+                          : exitType.toLowerCase();
+            const sign = pnl >= 0 ? '+' : '';
+            const text = `${pos.side} ${pos.symbol} closed (${exitWord}) ${sign}$${pnl.toFixed(2)} — ${suffix}`;
+            vl.logUtterance({
+                userId, utteranceType: 'REACTION', mood, text,
+                templateId: 'trade_close',
+                contextJson: JSON.stringify({
+                    seq: pos.seq, symbol: pos.symbol, side: pos.side,
+                    exitType, pnl: +pnl.toFixed(2), pnlPct: +pnlPct.toFixed(2)
+                })
+            });
+        } catch (_) { /* never block close flow */ }
+    }
+
     // Entry/Exit quality scoring (MAE/MFE)
     if (pos.price > 0 && price > 0) {
         const minP = pos._minPrice || pos.price;
