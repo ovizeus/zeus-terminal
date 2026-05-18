@@ -54,23 +54,53 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
             setHistory(prev => [...prev, omegaRow])
             if (voiceOn && typeof window.speechSynthesis !== 'undefined') {
                 try {
-                    // [Day 30] Smarter TTS — auto-detect language + cancel prior speech.
                     const txt = reply.reply
                     const isRo = /\b(este|sunt|despre|pentru|cu|în|ai|am|esti|ești|faci|salut|bună|și|ce|cum|nu|da|să|simt|gândesc|părere)\b/i.test(txt)
                     const lang = isRo ? 'ro-RO' : 'en-US'
-                    window.speechSynthesis.cancel() // stop any in-flight speech
-                    const utt = new SpeechSynthesisUtterance(txt)
-                    utt.lang = lang
-                    utt.rate = 1.0
-                    utt.pitch = 0.95
-                    utt.volume = 0.85
-                    // Pick best available voice for the language (browser may have multiple).
-                    const voices = window.speechSynthesis.getVoices()
-                    const match = voices.find(v => v.lang === lang)
-                              || voices.find(v => v.lang.startsWith(lang.split('-')[0]))
-                    if (match) utt.voice = match
-                    window.speechSynthesis.speak(utt)
-                } catch (_) { /* TTS optional */ }
+
+                    // Helper: actually speak using current voice list.
+                    const doSpeak = () => {
+                        const utt = new SpeechSynthesisUtterance(txt)
+                        utt.lang = lang
+                        utt.rate = 1.0
+                        utt.pitch = 0.95
+                        utt.volume = 1.0
+                        const voices = window.speechSynthesis.getVoices()
+                        const match = voices.find(v => v.lang === lang)
+                                  || voices.find(v => v.lang.startsWith(lang.split('-')[0]))
+                                  || voices.find(v => /english/i.test(v.name))
+                        if (match) utt.voice = match
+                        utt.onerror = (ev) => console.warn('[TTS] error', (ev as any).error || ev)
+                        // Diagnostic — first call surfaces what's available.
+                        if (typeof (window as any).__zeusTtsLogged === 'undefined') {
+                            (window as any).__zeusTtsLogged = true
+                            console.log('[TTS] voices loaded:', voices.length, 'picked:', match ? `${match.name} (${match.lang})` : 'default', 'lang:', lang)
+                        }
+                        window.speechSynthesis.speak(utt)
+                    }
+
+                    // Chrome loads voices async — if empty, wait for voiceschanged event once.
+                    const initialVoices = window.speechSynthesis.getVoices()
+                    if (initialVoices.length === 0) {
+                        const onVoicesReady = () => {
+                            window.speechSynthesis.removeEventListener('voiceschanged', onVoicesReady)
+                            doSpeak()
+                        }
+                        window.speechSynthesis.addEventListener('voiceschanged', onVoicesReady)
+                        // Trigger voice load (some browsers need this kick).
+                        window.speechSynthesis.getVoices()
+                        // Fallback: speak after 500ms even if event didn't fire.
+                        setTimeout(() => {
+                            if ((window as any).speechSynthesis.speaking) return
+                            window.speechSynthesis.removeEventListener('voiceschanged', onVoicesReady)
+                            doSpeak()
+                        }, 500)
+                    } else {
+                        doSpeak()
+                    }
+                } catch (err) {
+                    console.warn('[TTS] threw', err)
+                }
             }
             onUtteranceLogged()
         } catch (err: any) {
