@@ -177,6 +177,64 @@ describe('Ring5 admin routes', () => {
         });
     });
 
+    describe('POST /influence/seed (admin activator)', () => {
+        test('rejects non-admin', async () => {
+            const app = buildApp({ id: 5, role: 'user' });
+            const res = await request(app).post('/api/ring5/influence/seed');
+            expect(res.status).toBe(403);
+        });
+
+        test('creates active version + preReg when none exists', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).post('/api/ring5/influence/seed');
+            expect(res.status).toBe(200);
+            expect(res.body.ok).toBe(true);
+            expect(res.body.status).toBe('seeded');
+            expect(res.body.versionId).toBeGreaterThan(0);
+            expect(res.body.preRegId).toBeGreaterThan(0);
+
+            const vrow = db.prepare("SELECT * FROM ml_governance_versions WHERE id=?").get(res.body.versionId);
+            expect(vrow.state).toBe('ACTIVE');
+            expect(vrow.component_id).toBe('ring5-bandit-influence-phase4');
+
+            const prRow = db.prepare("SELECT * FROM ml_hypothesis_pre_registrations WHERE id=?").get(res.body.preRegId);
+            expect(prRow.state).toBe('REGISTERED');
+            expect(prRow.version_id).toBe(res.body.versionId);
+        });
+
+        test('idempotent: second seed returns already_active', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const first = await request(app).post('/api/ring5/influence/seed');
+            expect(first.body.status).toBe('seeded');
+            const second = await request(app).post('/api/ring5/influence/seed');
+            expect(second.body.ok).toBe(true);
+            expect(second.body.status).toBe('already_active');
+            expect(second.body.versionId).toBe(first.body.versionId);
+            expect(second.body.preRegId).toBe(first.body.preRegId);
+        });
+    });
+
+    describe('GET /influence/status', () => {
+        test('returns inactive when no version exists', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const res = await request(app).get('/api/ring5/influence/status');
+            expect(res.body.ok).toBe(true);
+            expect(res.body.active).toBe(false);
+            expect(res.body.versionId).toBeNull();
+            expect(res.body.preRegId).toBeNull();
+        });
+
+        test('returns active after seed', async () => {
+            const app = buildApp({ id: 1, role: 'admin' });
+            const seed = await request(app).post('/api/ring5/influence/seed');
+            const res = await request(app).get('/api/ring5/influence/status');
+            expect(res.body.active).toBe(true);
+            expect(res.body.versionId).toBe(seed.body.versionId);
+            expect(res.body.preRegId).toBe(seed.body.preRegId);
+            expect(res.body.preRegState).toBe('REGISTERED');
+        });
+    });
+
     describe('GET /posteriors', () => {
         test('400 when required params missing', async () => {
             const app = buildApp({ id: 1, role: 'admin' });
