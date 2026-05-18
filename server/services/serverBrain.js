@@ -39,6 +39,7 @@ const ring5LearningService = require('./ml/ring5LearningService');
 // [Day 17 2026-05-18] Doctor telemetry — emit heartbeat per brain cycle + alerts
 // on safety-relevant events. Lazy require to avoid circular dep risk.
 let _doctorEventBus = null;
+let _doctorTelemetry = null;
 function _getDoctorBus() {
     if (_doctorEventBus === null) {
         try { _doctorEventBus = require('./ml/_doctor/eventBus'); }
@@ -46,10 +47,27 @@ function _getDoctorBus() {
     }
     return _doctorEventBus || null;
 }
+function _getDoctorTelemetry() {
+    if (_doctorTelemetry === null) {
+        try { _doctorTelemetry = require('./ml/_doctor/telemetryCollector'); }
+        catch (_) { _doctorTelemetry = false; }
+    }
+    return _doctorTelemetry || null;
+}
 function _emitDoctor(event) {
     try {
         const bus = _getDoctorBus();
         if (bus && typeof bus.emit === 'function') bus.emit(event);
+    } catch (_) { /* never block brain flow */ }
+}
+// [Day 18] Per-invocation telemetry — accumulates in-memory, flushed to
+// ml_module_heartbeats every 1s by telemetryCollector start() (called at boot).
+function _recordInvocation(moduleId, latencyMs, ranOk) {
+    try {
+        const t = _getDoctorTelemetry();
+        if (t && typeof t.recordInvocation === 'function') {
+            t.recordInvocation({ moduleId, latencyMs, ranOk, ts: Date.now() });
+        }
     } catch (_) { /* never block brain flow */ }
 }
 
@@ -500,8 +518,9 @@ function _runCycle() {
     _running = true;
     _cycleCount++;
 
-    // [Day 17] Doctor heartbeat per cycle (subsystem 'serverBrain' alive).
-    _emitDoctor({ eventType: 'heartbeat', moduleId: 'serverBrain', ts: Date.now() });
+    // [Day 18] Per-cycle invocation telemetry — measured latency + success.
+    const _cycleStartTs = Date.now();
+    let _cycleRanOk = 1;
 
     try {
         // ── [MULTI-SYM] Get all symbols with sufficient data ──
@@ -961,10 +980,20 @@ function _runCycle() {
         }
 
     } catch (err) {
+        _cycleRanOk = 0;
         logger.error('BRAIN', 'Brain cycle error: ' + String(err) + ' | ' + (err && err.stack ? err.stack : 'no stack'));
         Sentry.captureException(err, { tags: { module: 'brain', cycle: _cycleCount } });
         _logDecision('ERROR', 'EXCEPTION', null, { error: err.message });
+        // [Day 18] P0 alert on brain cycle crash.
+        _emitDoctor({
+            eventType: 'alert', severity: 'P0',
+            moduleId: 'serverBrain', ts: Date.now(),
+            payload: { cycle: _cycleCount, error: err.message }
+        });
     } finally {
+        // [Day 18] Record cycle invocation (latency + ranOk) → flushed to
+        // ml_module_heartbeats every 1s by telemetryCollector.
+        _recordInvocation('serverBrain', Date.now() - _cycleStartTs, _cycleRanOk);
         _running = false;
         brainLock.release('brainCycle');
     }
