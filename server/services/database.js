@@ -9538,6 +9538,24 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
+// order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
+// trading.js stays as fast path; this ledger backs it up so PM2 reload
+// doesn't lose dedup state. TTL default 24h; purgeExpired() callable.
+migrate('379_ml_idempotency_ledger', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_idempotency_ledger (
+            idempotency_key TEXT PRIMARY KEY,
+            payload_hash    TEXT NOT NULL,
+            result_json     TEXT NOT NULL,
+            created_at      INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+            ttl_ms          INTEGER NOT NULL DEFAULT 86400000
+        );
+        CREATE INDEX IF NOT EXISTS idx_idem_created_at
+            ON ml_idempotency_ledger(created_at);
+    `);
+});
+
 // [Wave 7b] Audit trail with chained hash — every entry links to previous
 // via sha256(prev_hash || payload || ts). Tampering with any entry breaks
 // the chain (entry_hash mismatch propagates forward). Append-on-demand
