@@ -47,6 +47,9 @@ Desktop.ini
 
 # Test artifacts / scratch working files (R31 sweep — all debris prefixed with `_`)
 _*
+# Exception: vitest __tests__ directories (double-underscore convention)
+!**/__tests__/
+!**/__tests__/**
 # Exception: OMEGA ML cross-cutting concerns (required)
 !server/services/ml/_audit/
 !server/services/ml/_voice/
