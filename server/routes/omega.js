@@ -142,6 +142,58 @@ router.get('/inter-ring/recent', (req, res) => {
     }
 });
 
+// ── GET /api/omega/ring5/bandit/posterior?limit=N ───────────────────────────
+// [Wave 9 Worktrack B] Ring5 Thompson Sampling bandit posterior dashboard.
+// Decision-support for operator T+48h "Seed influence" go/no-go: surfaces
+// per-cell (level × env × symbol × regime) alpha/beta posterior, observation
+// count vs eligibility threshold (30 obs), and computed posterior_mean.
+// Read-only. Default 200 cells, capped at 500.
+router.get('/ring5/bandit/posterior', (req, res) => {
+    const ELIGIBILITY_THRESHOLD = 30;
+    const limit = Math.max(1, Math.min(500, parseInt(req.query.limit, 10) || 200));
+    try {
+        const total = db.prepare('SELECT COUNT(*) AS n FROM ml_bandit_posteriors').get();
+        const eligible = db.prepare(
+            'SELECT COUNT(*) AS n FROM ml_bandit_posteriors WHERE observation_count >= ?'
+        ).get(ELIGIBILITY_THRESHOLD);
+        const rows = db.prepare(
+            `SELECT level, cell_key, alpha, beta, observation_count, updated_at
+             FROM ml_bandit_posteriors
+             ORDER BY observation_count DESC, level ASC
+             LIMIT ?`
+        ).all(limit);
+        const cells = rows.map(r => {
+            const parts = (typeof r.cell_key === 'string') ? r.cell_key.split(':') : [];
+            const env = parts.length >= 4 ? parts[1] : null;
+            const symbol = parts.length >= 4 ? parts[2] : null;
+            const regime = parts.length >= 4 ? parts[3] : null;
+            const denom = (r.alpha || 0) + (r.beta || 0);
+            return {
+                level: r.level,
+                cell_key: r.cell_key,
+                env, symbol, regime,
+                alpha: r.alpha, beta: r.beta,
+                observation_count: r.observation_count,
+                posterior_mean: denom > 0 ? r.alpha / denom : null,
+                eligible: r.observation_count >= ELIGIBILITY_THRESHOLD,
+                updated_at: r.updated_at,
+            };
+        });
+        res.json({
+            ok: true,
+            ts: Date.now(),
+            summary: {
+                total_cells: total ? total.n : 0,
+                eligible_cells: eligible ? eligible.n : 0,
+                threshold_obs: ELIGIBILITY_THRESHOLD,
+            },
+            cells,
+        });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // ── GET /api/omega/constitution/principles ──────────────────────────────────
 // [Wave 5] Returns the 7 locked principles (id, name, severity, description).
 router.get('/constitution/principles', (_req, res) => {

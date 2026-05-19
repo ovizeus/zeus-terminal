@@ -208,6 +208,41 @@ export async function fetchRing5Cells(
     return _get<Ring5CellsResponse>(`/api/ring5/cells${qs ? '?' + qs : ''}`)
 }
 
+// [Wave 9 Worktrack B] Bandit posterior eligibility tracker — decision-support
+// view for operator T+48h seed go/no-go. Returns summary (total/eligible) +
+// per-cell parsed (env/symbol/regime) + posterior_mean + eligibility flag.
+export interface Ring5BanditCell {
+    level: number
+    cell_key: string
+    env: string | null
+    symbol: string | null
+    regime: string | null
+    alpha: number
+    beta: number
+    observation_count: number
+    posterior_mean: number | null
+    eligible: boolean
+    updated_at: number
+}
+export interface Ring5BanditPosteriorResponse {
+    ok: boolean
+    ts: number
+    summary: {
+        total_cells: number
+        eligible_cells: number
+        threshold_obs: number
+    }
+    cells: Ring5BanditCell[]
+}
+export async function fetchRing5BanditPosterior(
+    params: { limit?: number } = {}
+): Promise<Ring5BanditPosteriorResponse> {
+    const q = new URLSearchParams()
+    if (params.limit !== undefined) q.set('limit', String(params.limit))
+    const qs = q.toString()
+    return _get<Ring5BanditPosteriorResponse>(`/api/omega/ring5/bandit/posterior${qs ? '?' + qs : ''}`)
+}
+
 export async function fetchRing5Posteriors(
     params: { userId: number; env: string; symbol: string; regime: string }
 ): Promise<Ring5PosteriorsResponse> {

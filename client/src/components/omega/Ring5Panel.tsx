@@ -14,6 +14,7 @@ import {
     fetchRing5Aggregate,
     fetchRing5Cells,
     fetchRing5Timeseries,
+    fetchRing5BanditPosterior,
     type Ring5AuditRow,
     type Ring5EligibilityResult,
     type Ring5PosteriorsResponse,
@@ -21,6 +22,7 @@ import {
     type Ring5AggregateBucket,
     type Ring5Cell,
     type Ring5TimeseriesBucket,
+    type Ring5BanditPosteriorResponse,
 } from './ring5Api'
 
 // SVG sparkline — minimal, no chart lib. Renders a polyline through n values
@@ -102,6 +104,10 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
     const [cellsError, setCellsError] = useState<string | null>(null)
     const [tsBuckets, setTsBuckets] = useState<Ring5TimeseriesBucket[]>([])
 
+    // [Wave 9 Worktrack B] Bandit eligibility tracker — operator decision support
+    const [banditView, setBanditView] = useState<Ring5BanditPosteriorResponse | null>(null)
+    const [banditError, setBanditError] = useState<string | null>(null)
+
     const reloadAggregate = useCallback(async () => {
         try {
             const r = await fetchRing5Aggregate()
@@ -130,18 +136,30 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
         } catch (_) { /* silent — sparkline optional */ }
     }, [])
 
+    const reloadBanditView = useCallback(async () => {
+        try {
+            const r = await fetchRing5BanditPosterior({ limit: 100 })
+            setBanditView(r)
+            setBanditError(null)
+        } catch (err) {
+            setBanditError(err instanceof Error ? err.message : String(err))
+        }
+    }, [])
+
     useEffect(() => {
         if (!expanded) return
         reloadAggregate()
         reloadCells()
         reloadTimeseries()
+        reloadBanditView()
         const t = setInterval(() => {
             reloadAggregate()
             reloadCells()
             reloadTimeseries()
+            reloadBanditView()
         }, POLL_INTERVAL_MS * 2)  // poll at half audit cadence
         return () => clearInterval(t)
-    }, [reloadAggregate, reloadCells, reloadTimeseries, expanded])
+    }, [reloadAggregate, reloadCells, reloadTimeseries, reloadBanditView, expanded])
 
     const reloadInfluenceStatus = useCallback(async () => {
         try {
@@ -311,6 +329,66 @@ export function Ring5Panel({ forceExpanded = false }: Ring5PanelProps = {}) {
                             ))}
                         </tbody>
                     </table>
+                )}
+            </section>
+
+            <section className="omega-ring5-section">
+                <h3 className="omega-ring5-section-title">
+                    Eligibility tracker — seed go/no-go signal
+                </h3>
+                {banditError && <div className="omega-ring5-error">{banditError}</div>}
+                {banditView && (
+                    <>
+                        <div className="omega-ring5-result">
+                            <div>
+                                Eligible cells:{' '}
+                                <strong className={banditView.summary.eligible_cells > 0 ? 'omega-ring5-status-accepted' : 'omega-ring5-status-skipped'}>
+                                    {banditView.summary.eligible_cells} / {banditView.summary.total_cells}
+                                </strong>{' '}
+                                (threshold: {banditView.summary.threshold_obs} obs)
+                            </div>
+                            <div>
+                                {banditView.summary.eligible_cells === 0
+                                    ? 'Cold start — bandit gathering observations. Seed safe but inert until any cell reaches threshold.'
+                                    : 'At least one cell eligible — seeding will activate influence on eligible cells.'}
+                            </div>
+                        </div>
+                        {banditView.cells.length > 0 && (
+                            <table className="omega-ring5-post-table">
+                                <thead>
+                                    <tr>
+                                        <th>Lvl</th>
+                                        <th>Env</th>
+                                        <th>Symbol</th>
+                                        <th>Regime</th>
+                                        <th>Obs</th>
+                                        <th>Posterior</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {banditView.cells.slice(0, 20).map(c => {
+                                        const eligColor = c.eligible
+                                            ? 'omega-ring5-status-accepted'
+                                            : (c.observation_count >= 10 ? '' : 'omega-ring5-status-skipped')
+                                        return (
+                                            <tr key={`${c.level}:${c.cell_key}`}>
+                                                <td>{c.level}</td>
+                                                <td>{c.env ?? '—'}</td>
+                                                <td>{c.symbol ?? '—'}</td>
+                                                <td>{c.regime ?? '—'}</td>
+                                                <td>{c.observation_count}</td>
+                                                <td>{c.posterior_mean != null ? c.posterior_mean.toFixed(3) : '—'}</td>
+                                                <td className={eligColor}>
+                                                    {c.eligible ? 'ELIGIBLE' : (c.observation_count >= 10 ? 'WARMING' : 'COLD')}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </>
                 )}
             </section>
 
