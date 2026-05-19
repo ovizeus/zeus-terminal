@@ -24,6 +24,7 @@ const R0 = require('../services/ml/R0_substrate');
 const attribution = require('../services/ml/R5A_learning/attributionEngine');
 const calibration = require('../services/ml/R5A_learning/calibration');
 const drift = require('../services/ml/R5A_learning/driftDetection');
+const logger = require('../services/logger');
 
 const MOODS = ['CALM', 'FOCUSED', 'EXCITED', 'NERVOUS', 'ANGRY', 'SAD', 'BORED'];
 
@@ -504,6 +505,55 @@ router.post('/chat-stream', express.json(), async (req, res) => {
         send({ type: 'error', error: err.message || String(err) });
     } finally {
         try { res.end(); } catch (_) {}
+    }
+});
+
+// ── GET /api/omega/chat/history?limit=N ─────────────────────────────────────
+// [Sub-A 2026-05-19] Per-user chat history for TalkWithMe mount load + brain
+// rehydration. Reads ml_voice_log rows of type CHAT_REPLY, expands each into
+// [you, omega] ChatRow pair. Edge cases for missing user question render
+// placeholder '(?)' instead of skipping rows.
+router.get('/chat/history', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const rawLimit = parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
+    const dbRows = Math.ceil(limit / 2);
+    try {
+        const rows = db.prepare(`
+            SELECT id, mood, text, context_json, created_at
+            FROM ml_voice_log
+            WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
+            ORDER BY created_at DESC
+            LIMIT ?
+        `).all(userId, dbRows);
+        const totalRow = db.prepare(`
+            SELECT COUNT(*) as c FROM ml_voice_log
+            WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
+        `).get(userId);
+        const total = totalRow ? totalRow.c : 0;
+
+        // Expand rows into ChatRow pairs (you, omega). Reverse to chronological.
+        const history = [];
+        for (const row of rows.reverse()) {
+            let questionText = '(?)';
+            if (row.context_json) {
+                try {
+                    const ctx = JSON.parse(row.context_json);
+                    if (ctx && typeof ctx.question === 'string' && ctx.question.length > 0) {
+                        questionText = ctx.question;
+                    }
+                } catch (parseErr) {
+                    logger.warn('OMEGA', `[chat/history] malformed context_json on row id=${row.id} uid=${userId}: ${parseErr.message}`);
+                }
+            }
+            history.push({ role: 'you', text: questionText, ts: row.created_at - 1 });
+            history.push({ role: 'omega', text: row.text, mood: row.mood, ts: row.created_at });
+        }
+        res.json({ ok: true, history, total });
+    } catch (err) {
+        logger.error('OMEGA', `[chat/history] error uid=${userId}: ${err.message}`);
+        res.status(500).json({ ok: false, error: err.message });
     }
 });
 
