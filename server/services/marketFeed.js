@@ -122,6 +122,55 @@ function releaseRef(refKey) {
     return emptied;
 }
 
+// [BIN-TELEM Phase B 2026-05-19] Orphan sweep — defensive cleanup.
+// _closePosition already releases refs on normal close paths, but
+// reconciliation gaps, crashes, missed events, or restarts may leave
+// dangling refs. Sweep queries DB for each refKey "uid|env|seq" — if
+// seq is not OPEN in at_positions, release the ref.
+function _sweepOrphanRefs(db) {
+    if (!db || typeof db.prepare !== 'function') return [];
+    const released = [];
+    const stmt = db.prepare("SELECT COUNT(*) as c FROM at_positions WHERE seq=? AND status='OPEN'");
+    // Snapshot keys first — releaseRef mutates _symbolRefs
+    const allRefs = new Set();
+    for (const refs of _symbolRefs.values()) for (const k of refs) allRefs.add(k);
+    for (const refKey of allRefs) {
+        if (refKey === 'boot|system') continue;  // sticky
+        const parts = refKey.split('|');
+        if (parts.length !== 3) continue;        // malformed → skip defensive
+        const seq = parseInt(parts[2], 10);
+        if (!Number.isFinite(seq)) continue;
+        try {
+            const row = stmt.get(seq);
+            if (!row || row.c === 0) {
+                releaseRef(refKey);
+                released.push(refKey);
+            }
+        } catch (e) {
+            logger.warn('FEED', `[refcount] sweep error refKey=${refKey}: ${e.message}`);
+        }
+    }
+    if (released.length > 0) logger.info('FEED', `[refcount] orphan sweep released ${released.length} refs: ${released.join(',')}`);
+    return released;
+}
+
+let _sweepTimer = null;
+function startOrphanSweep(db, intervalMs) {
+    if (_sweepTimer) clearInterval(_sweepTimer);
+    const ms = intervalMs || 5 * 60 * 1000;  // 5min default
+    _sweepTimer = setInterval(() => {
+        try { _sweepOrphanRefs(db); } catch (e) {
+            logger.warn('FEED', `[refcount] sweep tick error: ${e.message}`);
+        }
+    }, ms);
+    if (typeof _sweepTimer.unref === 'function') _sweepTimer.unref();
+    logger.info('FEED', `[refcount] orphan sweeper started, interval ${ms / 1000}s`);
+}
+
+function stopOrphanSweep() {
+    if (_sweepTimer) { clearInterval(_sweepTimer); _sweepTimer = null; }
+}
+
 function _unsubscribeSymbolReal(symbol) {
     const sym = String(symbol).toUpperCase();
     // Close WS streams for this symbol (kline_*, markPrice@1s, bookTicker, trade, aggTrade)
@@ -556,6 +605,9 @@ module.exports = {
     subscribeMultiWithBootRef,  // [BIN-TELEM Phase B 2026-05-19]
     subscribeForRef,   // [BIN-TELEM Phase B 2026-05-19]
     releaseRef,        // [BIN-TELEM Phase B 2026-05-19]
+    startOrphanSweep,  // [BIN-TELEM Phase B 2026-05-19]
+    stopOrphanSweep,   // [BIN-TELEM Phase B 2026-05-19]
+    _sweepOrphanRefs,  // [BIN-TELEM Phase B 2026-05-19]
     unsubscribeAll,
     fetchKlines,
     fetchFundingRate,

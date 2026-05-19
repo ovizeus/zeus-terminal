@@ -1336,6 +1336,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     serverState.init(SD_SYMBOLS, SD_TFS);
     marketFeed.subscribeMultiWithBootRef(SD_SYMBOLS, SD_TFS).then(() => {
       logger.info('SERVER', `[P2] Market feed active for [${SD_SYMBOLS.join(',')}] [${SD_TFS}]`);
+      try {
+        const dbRef = require('./server/services/database').db;
+        marketFeed.startOrphanSweep(dbRef);
+      } catch (e) {
+        logger.warn('SERVER', `[Phase B] orphan sweeper boot failed: ${e.message}`);
+      }
     }).catch(err => {
       logger.error('SERVER', '[P2] Market feed failed:', err.message);
     });

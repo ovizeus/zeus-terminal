@@ -122,3 +122,34 @@ describe('marketFeed — boot sticky', () => {
         marketFeed._setSubscribeFnForTest(null);
     });
 });
+
+describe('marketFeed — orphan sweep', () => {
+    test('_sweepOrphanRefs releases refs whose posSeq is not OPEN in DB', () => {
+        marketFeed._addRefForTest('XRPUSDT', '1|TESTNET|111');
+        marketFeed._addRefForTest('ETHUSDT', '1|TESTNET|222');
+        marketFeed._addRefForTest('BTCUSDT', 'boot|system');
+
+        // Mock DB: only seq=222 is OPEN
+        const fakeDb = {
+            prepare: () => ({
+                get: (seq) => seq === 222 ? { c: 1 } : { c: 0 },
+            }),
+        };
+
+        marketFeed._setUnsubscribeSymbolFnForTest(() => {});
+        const released = marketFeed._sweepOrphanRefs(fakeDb);
+
+        expect(released).toContain('1|TESTNET|111');
+        expect(released).not.toContain('1|TESTNET|222');
+        expect(released).not.toContain('boot|system');
+    });
+
+    test('_sweepOrphanRefs skips boot|system refs entirely', () => {
+        marketFeed._addRefForTest('BTCUSDT', 'boot|system');
+        const fakeDb = { prepare: () => ({ get: () => ({ c: 0 }) }) };
+        marketFeed._setUnsubscribeSymbolFnForTest(() => {});
+        const released = marketFeed._sweepOrphanRefs(fakeDb);
+        expect(released).not.toContain('boot|system');
+        expect(marketFeed._refCountForTest('BTCUSDT')).toBe(1);
+    });
+});
