@@ -1377,6 +1377,17 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.error('SERVER', `[RADAR] boot failed: ${err.message}`);
   }
 
+  // [FUND Wave 9 / Canonical PDF #8] CoinGecko fundamentals refresher — warms
+  // ml_fundamentals_cache every 5min so serverBrain hot-path sync read has
+  // market_cap_rank / dominance / vol_24h / 24h_chg available without HTTP.
+  try {
+    const fundamentals = require('./server/services/fundamentals');
+    fundamentals.startBackgroundRefresh();
+    logger.info('SERVER', '[FUND] fundamentals refresher started (5min TTL)');
+  } catch (err) {
+    logger.error('SERVER', `[FUND] boot failed: ${err.message}`);
+  }
+
   // [Wave 8 G] Omega greeting — written to ml_voice_log on boot for each
   // active user so TheVoice feed shows life on startup. Best-effort.
   try {

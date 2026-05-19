@@ -70,6 +70,26 @@ const MF = require('../migrationFlags');
 // is observation-only: wrap output is logged + audited but NOT used downstream.
 const ring5LearningService = require('./ml/ring5LearningService');
 
+// [Wave 9 / Canonical PDF #8] Fundamentals — CoinGecko-backed market context
+// (market_cap_rank, dominance_pct, vol_24h, price_change_24h). Sync hot-path
+// read only; background refresher warms cache at boot. Lazy require + try
+// for safety — fundamentals failure must never block brain.
+let _fundamentals = null;
+function _getFundamentals() {
+    if (_fundamentals === null) {
+        try { _fundamentals = require('./fundamentals'); }
+        catch (_) { _fundamentals = false; }
+    }
+    return _fundamentals || null;
+}
+function _safeFundamentals(symbol) {
+    try {
+        const f = _getFundamentals();
+        if (!f || typeof f.getFundamentalsCached !== 'function') return null;
+        return f.getFundamentalsCached(symbol);
+    } catch (_) { return null; }
+}
+
 // [Day 17 2026-05-18] Doctor telemetry — emit heartbeat per brain cycle + alerts
 // on safety-relevant events. Lazy require to avoid circular dep risk.
 let _doctorEventBus = null;
@@ -585,6 +605,17 @@ function _buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fu
             s.modTilt = fusion._intermediates.modifiers.tilt;
             s.modTrapRisk = fusion._intermediates.modifiers.trapRisk;
             s.modRegimeDanger = fusion._intermediates.modifiers.regimeDanger;
+        }
+        // Fundamentals (Wave 9 / Canonical PDF #8) — additive sync read
+        // from cache. fusion math untouched per ARCH-4. Available downstream
+        // for voice/chat/future ring decisions.
+        const fund = _safeFundamentals(symbol);
+        if (fund) {
+            s.fundMcapRank = fund.market_cap_rank != null ? fund.market_cap_rank : null;
+            s.fundDominancePct = fund.dominance_pct != null ? fund.dominance_pct : null;
+            s.fundVol24hUsd = fund.vol_24h_usd != null ? fund.vol_24h_usd : null;
+            s.fundChg24hPct = fund.price_change_24h_pct != null ? fund.price_change_24h_pct : null;
+            s.fundCacheAgeMs = fund.cache_age_ms != null ? fund.cache_age_ms : null;
         }
         // Extra fields from caller
         if (extra) Object.assign(s, extra);

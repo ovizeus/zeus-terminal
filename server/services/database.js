@@ -9538,6 +9538,22 @@ migrate('046_ml_hypothesis_pre_registrations', () => {
     `);
 });
 
+// [Wave 9 / Canonical PDF #8] Fundamentals cache — TTL-based store for
+// CoinGecko market data (global dominance, top-200 markets) so brain has
+// fundamental context (market_cap_rank, dominance, vol_24h) on top of
+// regime/signals/structure. Additive — fusion math unchanged.
+migrate('380_ml_fundamentals_cache', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_fundamentals_cache (
+            cache_key   TEXT PRIMARY KEY,
+            value_json  TEXT NOT NULL,
+            fetched_at  INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+        );
+        CREATE INDEX IF NOT EXISTS idx_fundamentals_fetched_at
+            ON ml_fundamentals_cache(fetched_at);
+    `);
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload
