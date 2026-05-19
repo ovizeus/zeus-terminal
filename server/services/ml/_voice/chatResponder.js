@@ -62,6 +62,67 @@ function _resetConvoForTest(userId) {
     else _convoHistory.clear();
 }
 
+// [Sub-A 2026-05-19] Lazy DB rehydration for _convoHistory.
+// Map<userId, Promise<void>> tracks load state — value is the in-flight or
+// resolved Promise, used for dedup of concurrent calls. After resolution
+// the Promise remains in the Map (signaling "already loaded for this user"),
+// so subsequent calls return the cached Promise instantly without re-querying.
+const _loadedForUser = new Map();
+
+async function _loadConvoHistory(userId) {
+    if (!userId) return;
+    if (_loadedForUser.has(userId)) return _loadedForUser.get(userId);
+    const p = (async () => {
+        try {
+            const rows = db.prepare(`
+                SELECT text, context_json
+                FROM ml_voice_log
+                WHERE user_id = ? AND utterance_type = 'CHAT_REPLY'
+                ORDER BY created_at DESC
+                LIMIT ?
+            `).all(userId, CONVO_MAX_TURNS);
+            // Reverse for chronological order, push into convo
+            const arr = _convoHistory.get(userId) || [];
+            for (const row of rows.reverse()) {
+                let question = null;
+                if (row.context_json) {
+                    try {
+                        const ctx = JSON.parse(row.context_json);
+                        if (ctx && typeof ctx.question === 'string' && ctx.question.length > 0) {
+                            question = ctx.question;
+                        }
+                    } catch (_) { /* skip malformed row entirely */ }
+                }
+                if (question == null) continue; // skip rows without recoverable user question
+                arr.push({ role: 'user', content: question });
+                arr.push({ role: 'assistant', content: row.text });
+            }
+            _convoHistory.set(userId, arr);
+        } catch (err) {
+            // DB unavailable — log + set empty array so next attempt may retry
+            if (typeof logger !== 'undefined' && logger && logger.warn) {
+                logger.warn('CHAT_RESP', `_loadConvoHistory uid=${userId} failed: ${err.message}`);
+            }
+            _convoHistory.set(userId, _convoHistory.get(userId) || []);
+        }
+    })();
+    _loadedForUser.set(userId, p);
+    return p;
+}
+
+function _invalidateConvoHistory(userId) {
+    if (!userId) return;
+    _convoHistory.delete(userId);
+    _loadedForUser.delete(userId);
+}
+
+function _resetLoadedForTest(userId) {
+    if (userId) _loadedForUser.delete(userId);
+}
+function _getConvoForTest(userId) {
+    return (_convoHistory.get(userId) || []).slice();
+}
+
 // Lazy require to avoid circular deps via serverAT → database → this module.
 let _serverAT = null;
 function _getAT() {
@@ -1548,6 +1609,8 @@ async function respond(params) {
     const text = String(params.text || '').toLowerCase().trim();
     if (!userId) throw new Error('chatResponder: userId required');
     if (!text) return { reply: 'speak boss.', mood: 'CALM' };
+    // [Sub-A 2026-05-19] Lazy DB rehydration on first chat per user post-restart
+    await _loadConvoHistory(userId);
 
     const result = await _respondImpl(params, text);
     // [Day 30] Track exchange in convo history for multi-turn context.
@@ -1694,6 +1757,11 @@ module.exports = {
     respond,
     respondStream,
     _resetConvoForTest,
+    // [Sub-A 2026-05-19] Lazy rehydration exports
+    _loadConvoHistory,
+    _invalidateConvoHistory,
+    _resetLoadedForTest,
+    _getConvoForTest,
     // [Day 32C] Test-only hooks for the context layer fed to the LLM.
     _buildLLMContextForTest: _buildLLMContext,
     _buildSystemPromptForTest: _buildSystemPrompt,
