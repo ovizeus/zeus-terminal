@@ -114,7 +114,7 @@ export function QuotaIndicator() {
   }
   const tip = tipLines.join('\n')
 
-  // Compact display: just dot + pct. Host detail surfaces in tooltip.
+  // Compact display: dot + "QUOTA" label + pct. Host detail surfaces in tooltip.
   return (
     <span
       className={`zmb-quota-indicator ${colorClass}`}
@@ -123,6 +123,7 @@ export function QuotaIndicator() {
       data-zmb-quota-host={worstHost}
     >
       <span className="zmb-quota-dot"></span>
+      <span className="zmb-quota-label">QUOTA</span>
       <span className="zmb-quota-pct">{worstPct.toFixed(0)}%</span>
     </span>
   )
