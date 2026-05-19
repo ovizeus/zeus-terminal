@@ -589,6 +589,10 @@ function getActiveSymbols() {
 // [BIN-TELEM 2026-05-19] Snapshot pollers state pentru diag endpoint.
 // activeSymbols + altKlinePollers count + WS streams count = leak indicator.
 function getPollerStats() {
+    const symbolRefs = {};
+    for (const [sym, refs] of _symbolRefs) {
+        symbolRefs[sym] = refs.size;
+    }
     return {
         activeSymbols: Array.from(_activeSymbols),
         activeSymbolsCount: _activeSymbols.size,
@@ -596,6 +600,8 @@ function getPollerStats() {
         altKlinePollerKeys: Object.keys(_altKlinePollers),
         wsStreamsCount: Object.keys(_streams).length,
         timeframes: _timeframes.slice(),
+        symbolRefs,
+        symbolRefsTotal: Object.values(symbolRefs).reduce((s, n) => s + n, 0),
     };
 }
 

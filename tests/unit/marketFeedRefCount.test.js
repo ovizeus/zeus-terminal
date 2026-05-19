@@ -153,3 +153,16 @@ describe('marketFeed — orphan sweep', () => {
         expect(marketFeed._refCountForTest('BTCUSDT')).toBe(1);
     });
 });
+
+describe('marketFeed — getPollerStats includes refs', () => {
+    test('getPollerStats reports symbolRefs map with sizes', () => {
+        marketFeed._addRefForTest('BTCUSDT', 'boot|system');
+        marketFeed._addRefForTest('BTCUSDT', '1|TESTNET|111');
+        marketFeed._addRefForTest('XRPUSDT', '2|REAL|222');
+
+        const stats = marketFeed.getPollerStats();
+        expect(stats.symbolRefs).toBeDefined();
+        expect(stats.symbolRefs.BTCUSDT).toBe(2);
+        expect(stats.symbolRefs.XRPUSDT).toBe(1);
+    });
+});
