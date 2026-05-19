@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
-import type { Mood } from './omegaApi'
 import { sendChatStream, MOOD_COLOR } from './omegaApi'
+import { useOmegaChatStore, type ChatRow } from '../../stores/omegaChatStore'
 
 /**
  * Talk With Me — OMEGA chat panel.
@@ -18,21 +18,22 @@ interface Props {
     onUtteranceLogged: () => void
 }
 
-interface ChatRow {
-    role: 'you' | 'omega'
-    text: string
-    mood?: Mood
-    ts: number
-}
-
 export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
-    const [history, setHistory] = useState<ChatRow[]>([])
+    // [Sub-A 2026-05-19] consume Zustand store instead of local state — enables
+    // cross-component sync with Settings Clear button + persistence on refresh
+    const history = useOmegaChatStore((s) => s.history)
+    const loadHistory = useOmegaChatStore((s) => s.loadHistory)
     const [input, setInput] = useState('')
     const [sending, setSending] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [expanded, setExpanded] = useState(false)
     const inputRef = useRef<HTMLTextAreaElement | null>(null)
     const scrollRef = useRef<HTMLDivElement | null>(null)
+
+    // [Sub-A 2026-05-19] Load chat history from DB on mount
+    useEffect(() => {
+        void loadHistory()
+    }, [loadHistory])
 
     // [Day 35] Auto-grow textarea up to 6 lines, then scroll. Run on every input change.
     useEffect(() => {
@@ -59,28 +60,28 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
         // and mutate its text as chunks arrive. Final mood comes from 'done' frame.
         const omegaTs = Date.now()
         const omegaPlaceholder: ChatRow = { role: 'omega', text: '', mood: 'CALM', ts: omegaTs }
-        setHistory(prev => [...prev, userRow, omegaPlaceholder])
+        useOmegaChatStore.setState((s) => ({ history: [...s.history, userRow, omegaPlaceholder] }))
         setInput('')
         try {
             const reply = await sendChatStream(text, (chunk) => {
-                setHistory(prev => {
-                    const next = prev.slice()
+                useOmegaChatStore.setState((s) => {
+                    const next = s.history.slice()
                     // last row is the omega placeholder
                     const last = next[next.length - 1]
                     if (last && last.role === 'omega' && last.ts === omegaTs) {
                         next[next.length - 1] = { ...last, text: (last.text || '') + chunk }
                     }
-                    return next
+                    return { history: next }
                 })
             })
             // Patch final mood on the row in case 'done' carried a refined mood
-            setHistory(prev => {
-                const next = prev.slice()
+            useOmegaChatStore.setState((s) => {
+                const next = s.history.slice()
                 const last = next[next.length - 1]
                 if (last && last.role === 'omega' && last.ts === omegaTs) {
                     next[next.length - 1] = { ...last, mood: reply.mood, text: reply.reply || last.text }
                 }
-                return next
+                return { history: next }
             })
             if (voiceOn) {
                 // [Day 30.2] Server-side TTS via /api/omega/tts (Google Translate
@@ -153,7 +154,7 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
                 ) : (
                     history.map((row, i) => (
                         <div key={i} className={`omega-chat-row omega-chat-${row.role}`}>
-                            <div className="omega-chat-bubble" style={row.role === 'omega' && row.mood ? { borderColor: MOOD_COLOR[row.mood] } : undefined}>
+                            <div className={`omega-chat-bubble${row.role === 'you' && row.text === '(?)' ? ' omega-chat-orphan' : ''}`} style={row.role === 'omega' && row.mood ? { borderColor: MOOD_COLOR[row.mood] } : undefined}>
                                 <span className="omega-chat-prefix">{row.role === 'you' ? 'YOU' : 'Ω'}</span>
                                 <span className="omega-chat-text">{row.text}</span>
                             </div>
