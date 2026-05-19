@@ -44,6 +44,26 @@ function laneForSrc(src) {
     return DEFAULT_LANE;
 }
 
+// [Phase A.2 2026-05-19] Detect signer ops that should auto-trigger critical
+// section. Mirrors P0 lane patterns but on (method, path) shape directly so
+// callers can decide BEFORE building the src tag.
+const ORDER_OP_RULES = [
+    { method: 'POST', pattern: /^\/fapi\/v\d+\/order\b/ },
+    { method: 'POST', pattern: /^\/fapi\/v\d+\/algoOrder\b/ },
+    { method: 'DELETE', pattern: /^\/fapi\/v\d+\/order\b/ },
+    { method: 'DELETE', pattern: /^\/fapi\/v\d+\/algoOrder\b/ },
+    { method: 'POST', pattern: /^\/fapi\/v\d+\/leverage\b/ },
+    { method: 'POST', pattern: /^\/fapi\/v\d+\/marginType\b/ },
+];
+
+function isOrderOp(method, path) {
+    if (typeof method !== 'string' || typeof path !== 'string') return false;
+    for (const rule of ORDER_OP_RULES) {
+        if (method === rule.method && rule.pattern.test(path)) return true;
+    }
+    return false;
+}
+
 function _p4AcceptProbability(pressure) {
     if (pressure < 0.80) return 1.0;
     if (pressure < 0.90) return 0.50;
@@ -191,6 +211,7 @@ module.exports = {
     beginCriticalSection,
     endCriticalSection,
     getActiveCriticalSections,
+    isOrderOp,
     _resetForTest,
     _setRngForTest,
     _setNowForTest,

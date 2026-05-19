@@ -235,3 +235,33 @@ describe('binanceScheduler — critical section ref-counted', () => {
         expect(scheduler.getActiveCriticalSections()).toBe(0);
     });
 });
+
+describe('binanceScheduler — auto critical section detection helper', () => {
+    test('isOrderOp detects POST /fapi/v1/order', () => {
+        expect(scheduler.isOrderOp('POST', '/fapi/v1/order')).toBe(true);
+    });
+
+    test('isOrderOp detects POST /fapi/v1/algoOrder', () => {
+        expect(scheduler.isOrderOp('POST', '/fapi/v1/algoOrder')).toBe(true);
+    });
+
+    test('isOrderOp detects DELETE /fapi/v1/order (cancel)', () => {
+        expect(scheduler.isOrderOp('DELETE', '/fapi/v1/order')).toBe(true);
+        expect(scheduler.isOrderOp('DELETE', '/fapi/v1/algoOrder')).toBe(true);
+    });
+
+    test('isOrderOp detects POST /fapi/v1/leverage and marginType', () => {
+        expect(scheduler.isOrderOp('POST', '/fapi/v1/leverage')).toBe(true);
+        expect(scheduler.isOrderOp('POST', '/fapi/v1/marginType')).toBe(true);
+    });
+
+    test('isOrderOp returns false for GET requests', () => {
+        expect(scheduler.isOrderOp('GET', '/fapi/v2/balance')).toBe(false);
+        expect(scheduler.isOrderOp('GET', '/fapi/v2/positionRisk')).toBe(false);
+        expect(scheduler.isOrderOp('GET', '/fapi/v1/order')).toBe(false);
+    });
+
+    test('isOrderOp returns false for non-order POST', () => {
+        expect(scheduler.isOrderOp('POST', '/fapi/v1/userTrades')).toBe(false);
+    });
+});

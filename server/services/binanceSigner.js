@@ -150,6 +150,19 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   const MAX_RETRIES = 2;
   const RETRY_DELAY_MS = 300;
 
+  // [Phase A.2 2026-05-19] Auto critical section for order ops — begin before
+  // retry loop, end in finally so lane-based degradation pauses for the entire
+  // order pipeline (place + algoOrder for SL/TP + retries).
+  let _criticalOpId = null;
+  try {
+    const _scheduler = require('./binanceScheduler');
+    if (_scheduler.isOrderOp(method, path)) {
+      _criticalOpId = `signer:${creds.userId || creds.apiKey}:${method}:${path}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`;
+      _scheduler.beginCriticalSection(_criticalOpId);
+    }
+  } catch (_) { _criticalOpId = null; }
+
+  try {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     // Re-sign on each attempt so timestamp stays fresh within recvWindow
     const signed = signParams(params, creds.apiSecret);
@@ -227,6 +240,11 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
 
     _cbRecordSuccess(_cbKey);
     return data;
+  }
+  } finally {
+    if (_criticalOpId) {
+      try { require('./binanceScheduler').endCriticalSection(_criticalOpId); } catch (_) {}
+    }
   }
 }
 
