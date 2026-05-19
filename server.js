@@ -270,6 +270,20 @@ app.get('/api/diag/liq-feed', (_req, res) => {
   }
 });
 
+// [BIN-TELEM 2026-05-19] Binance rate-limit diagnostic. Read-only snapshot
+// of per-source call counts, per-host used-weight (X-MBX-USED-WEIGHT-1M),
+// top endpoints, active pollers. Local-IP allowlist via sessionAuth.
+// Scop: investiga incident 429 din 2026-05-19 07:47 + dovedi/infirma leak
+// pe auto-subscribe în marketFeed. Remove după Phase A patch.
+app.get('/api/diag/binance-rates', (_req, res) => {
+  try {
+    const telem = require('./server/services/binanceTelemetry');
+    res.json(Object.assign({}, telem.getSnapshot(), { ts: Date.now() }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Migration Flags (admin-only control for gradual migration) ───
 app.get('/api/migration/flags', (_req, res) => {
   res.json(MF.getAll());
@@ -1386,6 +1400,24 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info('SERVER', '[FUND] fundamentals refresher started (5min TTL)');
   } catch (err) {
     logger.error('SERVER', `[FUND] boot failed: ${err.message}`);
+  }
+
+  // [BIN-TELEM 2026-05-19] Register active pollers provider so diag snapshot
+  // includes marketFeed _activeSymbols + _altKlinePollers count. Catches the
+  // suspected leak (auto-subscribe adăugă pollers fără cleanup).
+  try {
+    const telem = require('./server/services/binanceTelemetry');
+    telem.registerActivePollersProvider(() => {
+      const out = { marketFeed: marketFeed.getPollerStats() };
+      try {
+        const liq = require('./server/services/serverLiquidity');
+        if (liq && typeof liq.getDepthSymbols === 'function') out.serverLiquidity = liq.getDepthSymbols();
+      } catch (_) { /* optional */ }
+      return out;
+    });
+    logger.info('SERVER', '[BIN-TELEM] telemetry pollers provider registered');
+  } catch (err) {
+    logger.error('SERVER', `[BIN-TELEM] register failed: ${err.message}`);
   }
 
   // [Wave 8 G] Omega greeting — written to ml_voice_log on boot for each

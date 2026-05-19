@@ -121,10 +121,20 @@ async function _pollAllDepth() {
     }
 }
 
+// [BIN-TELEM 2026-05-19] lazy-require telemetry wrapper
+let _telem = null;
+function _getTelem() {
+    if (_telem === null) {
+        try { _telem = require('./binanceTelemetry'); } catch (_) { _telem = false; }
+    }
+    return _telem || null;
+}
+
 async function _pollDepth(symbol) {
     // Use public endpoint — no auth needed
     const url = `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=${DEPTH_LIMIT}`;
-    const res = await fetch(url);
+    const t = _getTelem();
+    const res = t ? await t.wrapFetch(fetch, url, { __src: 'serverLiquidity:depth', __weight: 2 }) : await fetch(url);
     if (!res.ok) return;
 
     const data = await res.json();

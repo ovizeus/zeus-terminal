@@ -170,9 +170,23 @@ function _volRatio(buf, currentVolume) {
 
 async function _fetchTicker24h() {
     const url = `${BINANCE_REST}/fapi/v1/ticker/24hr`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await _telemFetch(url, { signal: AbortSignal.timeout(10000), __src: 'marketRadar:ticker24h', __weight: 40 });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
+}
+
+// [BIN-TELEM 2026-05-19] lazy-require telemetry wrapper — never blocks call path
+let _telem = null;
+function _getTelem() {
+    if (_telem === null) {
+        try { _telem = require('./binanceTelemetry'); } catch (_) { _telem = false; }
+    }
+    return _telem || null;
+}
+async function _telemFetch(url, opts) {
+    const t = _getTelem();
+    if (!t) return fetch(url, opts);
+    try { return await t.wrapFetch(fetch, url, opts); } catch (e) { throw e; }
 }
 
 async function _pollOnce() {
@@ -367,7 +381,7 @@ async function _pollOnce() {
 // ══════════════════════════════════════════════════════════════════
 async function _pollFunding(top, currentTopSet, now) {
     const url = `${BINANCE_REST}/fapi/v1/premiumIndex`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const res = await _telemFetch(url, { signal: AbortSignal.timeout(10000), __src: 'marketRadar:funding', __weight: 1 });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const rows = await res.json();
     if (!Array.isArray(rows)) return;
@@ -404,7 +418,7 @@ async function _pollFunding(top, currentTopSet, now) {
 // ══════════════════════════════════════════════════════════════════
 async function _fetchOI(symbol) {
     const url = `${BINANCE_REST}/fapi/v1/openInterest?symbol=${encodeURIComponent(symbol)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketRadar:oi', __weight: 1 });
     if (!res.ok) return null;
     const data = await res.json();
     const oi = parseFloat(data.openInterest);

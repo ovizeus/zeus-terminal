@@ -6,6 +6,15 @@
 const crypto = require('crypto');
 const metrics = require('./metrics');
 
+// [BIN-TELEM 2026-05-19] lazy-require telemetry — never block signing path
+let _telem = null;
+function _getTelem() {
+    if (_telem === null) {
+        try { _telem = require('./binanceTelemetry'); } catch (_) { _telem = false; }
+    }
+    return _telem || null;
+}
+
 // ─── Circuit Breaker — per-user isolation [BE-04] ───
 const _CB_THRESHOLD = 5;        // consecutive failures to trip
 const _CB_RESET_MS = 30000;     // 30s cooldown before retrying
@@ -168,7 +177,10 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     const _t0 = Date.now();
     let res;
     try {
-      res = await fetch(url, options);
+      // [BIN-TELEM 2026-05-19] Tag source from creds.__src (caller-supplied) or default
+      const _src = (creds && creds.__src) || ('signer:' + method + ' ' + path);
+      const _t = _getTelem();
+      res = _t ? await _t.wrapFetch(fetch, url, Object.assign({}, options, { __src: _src, __weight: 5 })) : await fetch(url, options);
     } catch (fetchErr) {
       if (attempt < MAX_RETRIES) {
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));

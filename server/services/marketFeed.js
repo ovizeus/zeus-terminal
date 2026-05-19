@@ -21,6 +21,20 @@ const PING_INTERVAL_MS = parseInt(process.env.FEED_PING_INTERVAL_MS, 10) || 1800
 const KLINE_HISTORY = parseInt(process.env.FEED_KLINE_HISTORY, 10) || 200;           // initial candle fetch count
 const STALE_DATA_MS = parseInt(process.env.FEED_STALE_DATA_MS, 10) || 120000;        // 2min data staleness threshold
 
+// [BIN-TELEM 2026-05-19] lazy-require telemetry wrapper
+let _telem = null;
+function _getTelem() {
+    if (_telem === null) {
+        try { _telem = require('./binanceTelemetry'); } catch (_) { _telem = false; }
+    }
+    return _telem || null;
+}
+async function _telemFetch(url, opts) {
+    const t = _getTelem();
+    if (!t) return fetch(url, opts);
+    return t.wrapFetch(fetch, url, opts);
+}
+
 // ── Active streams ──
 const _streams = {};    // { streamKey: { ws, reconnects, timer, alive } }
 const _activeSymbols = new Set();  // [MULTI-SYM] all subscribed symbols (uppercase)
@@ -53,7 +67,7 @@ async function fetchKlines(symbol, interval, limit) {
     limit = limit || KLINE_HISTORY;
     const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
     try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        const res = await _telemFetch(url, { signal: AbortSignal.timeout(10000), __src: 'marketFeed:klines-init', __weight: 5 });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const raw = await res.json();
         return raw.map(k => ({
@@ -76,7 +90,7 @@ async function fetchKlines(symbol, interval, limit) {
 async function fetchFundingRate(symbol) {
     const url = `${BINANCE_REST}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`;
     try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketFeed:funding', __weight: 1 });
         if (!res.ok) return null;
         const data = await res.json();
         return data.lastFundingRate ? parseFloat(data.lastFundingRate) : null;
@@ -92,7 +106,7 @@ async function fetchFundingRate(symbol) {
 async function fetchOpenInterest(symbol) {
     const url = `${BINANCE_REST}/fapi/v1/openInterest?symbol=${encodeURIComponent(symbol)}`;
     try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+        const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketFeed:oi', __weight: 1 });
         if (!res.ok) return null;
         const data = await res.json();
         return data.openInterest ? parseFloat(data.openInterest) : null;
@@ -172,7 +186,7 @@ function _connectStream(streamName, onMessage) {
 // ══════════════════════════════════════════════════════════════════
 async function _altFetchKlinesLatest(symbol, interval, limit) {
     const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&limit=${encodeURIComponent(limit)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketFeed:alt-klines', __weight: 1 });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const raw = await res.json();
     return raw.map(k => ({
@@ -408,6 +422,19 @@ function getActiveSymbols() {
     return new Set(_activeSymbols);
 }
 
+// [BIN-TELEM 2026-05-19] Snapshot pollers state pentru diag endpoint.
+// activeSymbols + altKlinePollers count + WS streams count = leak indicator.
+function getPollerStats() {
+    return {
+        activeSymbols: Array.from(_activeSymbols),
+        activeSymbolsCount: _activeSymbols.size,
+        altKlinePollersCount: Object.keys(_altKlinePollers).length,
+        altKlinePollerKeys: Object.keys(_altKlinePollers),
+        wsStreamsCount: Object.keys(_streams).length,
+        timeframes: _timeframes.slice(),
+    };
+}
+
 module.exports = {
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
@@ -418,5 +445,6 @@ module.exports = {
     on,
     getHealth,
     getActiveSymbols,  // [RECON-SUBSCRIBE 2026-05-14]
+    getPollerStats,    // [BIN-TELEM 2026-05-19]
     STALE_DATA_MS,
 };

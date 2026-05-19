@@ -4436,7 +4436,7 @@ async function _runReconciliation(isStartup) {
             // 1. Query Binance position risk
             let binancePositions;
             try {
-                binancePositions = await sendSignedRequest('GET', '/fapi/v2/positionRisk', {}, creds);
+                binancePositions = await sendSignedRequest('GET', '/fapi/v2/positionRisk', {}, Object.assign({}, creds, { __src: 'serverAT:recon-positionRisk' }));
             } catch (err) {
                 logger.warn(label, `Binance positionRisk query failed uid=${userId}: ${err.message}`);
                 continue;
