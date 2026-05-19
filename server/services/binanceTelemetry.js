@@ -42,6 +42,35 @@ function recordCall(entry) {
     _prune();
 }
 
+// [Phase A.1 2026-05-19] Quota pressure gate. Reads X-MBX-USED-WEIGHT-1M
+// (captured in byHost.lastUsedWeight) and blocks new requests when quota
+// crosses threshold. Env override: BINANCE_QUOTA_CAP/BLOCK_PUBLIC_PCT/BLOCK_SIGNED_PCT.
+function _intEnv(name, def) {
+    const v = parseInt(process.env[name], 10);
+    return Number.isFinite(v) && v > 0 ? v : def;
+}
+const QUOTA_CAP = _intEnv('BINANCE_QUOTA_CAP', 6000);
+const BLOCK_PUBLIC_PCT = _intEnv('BINANCE_QUOTA_BLOCK_PUBLIC_PCT', 95);
+const BLOCK_SIGNED_PCT = _intEnv('BINANCE_QUOTA_BLOCK_SIGNED_PCT', 97);
+
+function getQuotaPressure(host) {
+    _prune();
+    const hostData = _aggregateByHost()[host];
+    if (!hostData || hostData.lastUsedWeight == null) return 0;
+    return hostData.lastUsedWeight / QUOTA_CAP;
+}
+
+function isSignedSource(src) {
+    if (typeof src !== 'string') return false;
+    return src.startsWith('signer:') || src.startsWith('serverAT:');
+}
+
+function shouldBlockForPressure(host, src) {
+    const pressure = getQuotaPressure(host);
+    const cap = isSignedSource(src) ? (BLOCK_SIGNED_PCT / 100) : (BLOCK_PUBLIC_PCT / 100);
+    return pressure >= cap;
+}
+
 function parseUsedWeight(headers) {
     if (!headers) return null;
     let raw = null;
@@ -187,6 +216,9 @@ function _setNowForTest(ts) { _now = ts; }
 module.exports = {
     recordCall,
     parseUsedWeight,
+    getQuotaPressure,
+    isSignedSource,
+    shouldBlockForPressure,
     wrapFetch,
     registerActivePollersProvider,
     getSnapshot,

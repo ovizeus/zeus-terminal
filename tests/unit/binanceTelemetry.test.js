@@ -186,3 +186,47 @@ describe('binanceTelemetry — growth markers', () => {
         expect(snap.callsPer5min).toBe(2);
     });
 });
+
+describe('binanceTelemetry — quota pressure (Phase A.1)', () => {
+    test('getQuotaPressure returns 0 when no calls recorded', () => {
+        expect(telemetry.getQuotaPressure('fapi.binance.com')).toBe(0);
+    });
+
+    test('getQuotaPressure returns lastUsedWeight/CAP ratio', () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/a', source: 'marketRadar',
+            weight: 40, status: 200, latencyMs: 50, usedWeight: 3000,
+        });
+        // Default CAP 6000 → 3000/6000 = 0.5
+        expect(telemetry.getQuotaPressure('fapi.binance.com')).toBe(0.5);
+    });
+
+    test('getQuotaPressure unknown host returns 0', () => {
+        expect(telemetry.getQuotaPressure('nowhere.example.com')).toBe(0);
+    });
+
+    test('getQuotaPressure tracks lastUsedWeight (not peak)', () => {
+        telemetry.recordCall({ host: 'h', path: '/a', source: 's', weight: 1, status: 200, latencyMs: 1, usedWeight: 5000 });
+        telemetry.recordCall({ host: 'h', path: '/a', source: 's', weight: 1, status: 200, latencyMs: 1, usedWeight: 2000 });
+        // last=2000, peak=5000. Pressure must reflect LAST not peak (recovery aware).
+        expect(telemetry.getQuotaPressure('h')).toBeCloseTo(2000 / 6000, 4);
+    });
+
+    test('isSignedSource detects signer: prefix', () => {
+        expect(telemetry.isSignedSource('signer:GET /fapi/v2/balance')).toBe(true);
+        expect(telemetry.isSignedSource('signer:POST /fapi/v1/order')).toBe(true);
+    });
+
+    test('isSignedSource detects serverAT: prefix', () => {
+        expect(telemetry.isSignedSource('serverAT:recon-positionRisk')).toBe(true);
+    });
+
+    test('isSignedSource returns false for public sources', () => {
+        expect(telemetry.isSignedSource('marketRadar:oi')).toBe(false);
+        expect(telemetry.isSignedSource('marketFeed:alt-klines')).toBe(false);
+        expect(telemetry.isSignedSource('serverLiquidity:depth')).toBe(false);
+        expect(telemetry.isSignedSource('unknown')).toBe(false);
+        expect(telemetry.isSignedSource(null)).toBe(false);
+        expect(telemetry.isSignedSource(undefined)).toBe(false);
+    });
+});
