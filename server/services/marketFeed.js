@@ -47,6 +47,44 @@ let _timeframes = [];   // active timeframes ['5m', '1h', '4h']
 const ALT_KLINE_POLL_MS = 10000;    // 10s — balances freshness vs weight limits
 const _altKlinePollers = {};        // { 'BTCUSDT|5m': { timer, lastOpenTs } }
 
+// [BIN-TELEM Phase B 2026-05-19] Ref-counting for symbol subscriptions.
+// Each symbol holds a Set of refKeys. refKey = "userId|env|posSeq" for
+// position-driven subs, "boot|system" for sticky boot symbols.
+// When a symbol's Set becomes empty (and contains no boot|system ref),
+// fully unsubscribe the symbol (close WS + clear ALT pollers).
+const _symbolRefs = new Map();  // symbol -> Set<refKey>
+
+function _addRef(symbol, refKey) {
+    const sym = String(symbol).toUpperCase();
+    if (!_symbolRefs.has(sym)) _symbolRefs.set(sym, new Set());
+    _symbolRefs.get(sym).add(refKey);
+}
+
+function _releaseRefByKey(refKey) {
+    // Remove refKey from every symbol's Set; return list of symbols whose
+    // Set became empty (or only contains zero non-boot refs). The
+    // 'boot|system' refKey is sticky by data-structure invariant — never
+    // removable by this function regardless of caller intent.
+    if (refKey === 'boot|system') return [];
+    const emptied = [];
+    for (const [sym, refs] of _symbolRefs) {
+        if (refs.delete(refKey)) {
+            if (refs.size === 0) emptied.push(sym);
+        }
+    }
+    return emptied;
+}
+
+function _hasSymbolRef(symbol) {
+    const refs = _symbolRefs.get(String(symbol).toUpperCase());
+    return !!(refs && refs.size > 0);
+}
+
+function _refCount(symbol) {
+    const refs = _symbolRefs.get(String(symbol).toUpperCase());
+    return refs ? refs.size : 0;
+}
+
 // ── Event listeners ──
 const _listeners = { kline: [], price: [], fundingRate: [], openInterest: [], aggTrade: [] };
 
@@ -447,4 +485,10 @@ module.exports = {
     getActiveSymbols,  // [RECON-SUBSCRIBE 2026-05-14]
     getPollerStats,    // [BIN-TELEM 2026-05-19]
     STALE_DATA_MS,
+    // [BIN-TELEM Phase B 2026-05-19] Test helpers
+    _resetRefsForTest: () => { _symbolRefs.clear(); },
+    _addRefForTest: _addRef,
+    _releaseRefByKeyForTest: _releaseRefByKey,
+    _hasSymbolRefForTest: _hasSymbolRef,
+    _refCountForTest: _refCount,
 };
