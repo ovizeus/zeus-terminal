@@ -70,6 +70,41 @@ function _incReason(reason) {
     _stats.byReason[reason] = (_stats.byReason[reason] || 0) + 1;
 }
 
+// Critical section ref-counted state
+const CRITICAL_SECTION_DEFAULT_MS = 5000;
+let _criticalSections = new Map();
+let _now = null;
+
+function _ts() { return _now == null ? Date.now() : _now; }
+
+function _pruneExpiredSections() {
+    const now = _ts();
+    for (const [opId, expiresAt] of _criticalSections) {
+        if (expiresAt <= now) _criticalSections.delete(opId);
+    }
+}
+
+function beginCriticalSection(opId, maxMs) {
+    if (!opId) return;
+    const dur = (typeof maxMs === 'number' && maxMs > 0) ? maxMs : CRITICAL_SECTION_DEFAULT_MS;
+    _criticalSections.set(opId, _ts() + dur);
+}
+
+function endCriticalSection(opId) {
+    if (!opId) return;
+    _criticalSections.delete(opId);
+}
+
+function getActiveCriticalSections() {
+    _pruneExpiredSections();
+    return _criticalSections.size;
+}
+
+function _isCriticalSectionActive() {
+    _pruneExpiredSections();
+    return _criticalSections.size > 0;
+}
+
 function canProceed({ pressure, src }) {
     const lane = laneForSrc(src);
     _stats.totalDecisions++;
@@ -77,6 +112,13 @@ function canProceed({ pressure, src }) {
     if (lane === 'P0' || lane === 'P1') {
         _stats.byLane[lane].accepted++;
         return { accept: true, lane, pressure };
+    }
+
+    // Critical section override — when active, reject all P3/P4/P5 regardless of pressure
+    if (_isCriticalSectionActive() && (lane === 'P3' || lane === 'P4' || lane === 'P5')) {
+        _stats.byLane[lane].rejected++;
+        _incReason('critical_section');
+        return { accept: false, lane, pressure, retryable: true, reason: 'critical_section' };
     }
 
     if (lane === 'P5' && pressure >= 0.70) {
@@ -136,13 +178,20 @@ function _resetForTest() {
         byReason: {},
     };
     _rng = Math.random;
+    _criticalSections = new Map();
+    _now = null;
 }
 function _setRngForTest(fn) { _rng = typeof fn === 'function' ? fn : Math.random; }
+function _setNowForTest(ts) { _now = ts; }
 
 module.exports = {
     laneForSrc,
     canProceed,
     getStats,
+    beginCriticalSection,
+    endCriticalSection,
+    getActiveCriticalSections,
     _resetForTest,
     _setRngForTest,
+    _setNowForTest,
 };

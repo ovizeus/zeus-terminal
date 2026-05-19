@@ -158,3 +158,80 @@ describe('binanceScheduler — stats introspection', () => {
         expect(s.byLane.P0.accepted).toBe(1);
     });
 });
+
+describe('binanceScheduler — critical section ref-counted', () => {
+    test('beginCriticalSection adds to active map', () => {
+        scheduler.beginCriticalSection('order-1');
+        expect(scheduler.getActiveCriticalSections()).toBe(1);
+    });
+
+    test('endCriticalSection removes from active map', () => {
+        scheduler.beginCriticalSection('order-1');
+        scheduler.endCriticalSection('order-1');
+        expect(scheduler.getActiveCriticalSections()).toBe(0);
+    });
+
+    test('two overlapping sections — end of one does NOT release until both ended', () => {
+        scheduler.beginCriticalSection('order-A');
+        scheduler.beginCriticalSection('order-B');
+        expect(scheduler.getActiveCriticalSections()).toBe(2);
+        scheduler.endCriticalSection('order-A');
+        expect(scheduler.getActiveCriticalSections()).toBe(1);
+        scheduler.endCriticalSection('order-B');
+        expect(scheduler.getActiveCriticalSections()).toBe(0);
+    });
+
+    test('beginCriticalSection with same opId is idempotent (no double-count)', () => {
+        scheduler.beginCriticalSection('order-1');
+        scheduler.beginCriticalSection('order-1');
+        expect(scheduler.getActiveCriticalSections()).toBe(1);
+    });
+
+    test('endCriticalSection on unknown opId is no-op', () => {
+        scheduler.endCriticalSection('never-started');
+        expect(scheduler.getActiveCriticalSections()).toBe(0);
+    });
+
+    test('expired sections are cleaned lazily on next access', () => {
+        scheduler._setNowForTest(1000);
+        scheduler.beginCriticalSection('order-1', 100);
+        expect(scheduler.getActiveCriticalSections()).toBe(1);
+        scheduler._setNowForTest(1200);
+        expect(scheduler.getActiveCriticalSections()).toBe(0);
+    });
+
+    test('during critical section P3/P4/P5 always reject regardless of pressure', () => {
+        scheduler.beginCriticalSection('order-1');
+        const r5 = scheduler.canProceed({ pressure: 0.10, src: 'marketRadar:oi' });
+        expect(r5.accept).toBe(false);
+        expect(r5.reason).toBe('critical_section');
+        const r4 = scheduler.canProceed({ pressure: 0.10, src: 'marketFeed:alt-klines' });
+        expect(r4.accept).toBe(false);
+        expect(r4.reason).toBe('critical_section');
+        const r3 = scheduler.canProceed({ pressure: 0.10, src: 'marketFeed:klines-init' });
+        expect(r3.accept).toBe(false);
+        expect(r3.reason).toBe('critical_section');
+    });
+
+    test('during critical section P0/P1/P2 still accept (preserved)', () => {
+        scheduler.beginCriticalSection('order-1');
+        expect(scheduler.canProceed({ pressure: 0.10, src: 'signer:POST /fapi/v1/order' }).accept).toBe(true);
+        expect(scheduler.canProceed({ pressure: 0.10, src: 'serverAT:recon-positionRisk' }).accept).toBe(true);
+        expect(scheduler.canProceed({ pressure: 0.10, src: 'signer:GET /fapi/v2/balance' }).accept).toBe(true);
+    });
+
+    test('after endCriticalSection P3/P4/P5 resume normal threshold rules', () => {
+        scheduler.beginCriticalSection('order-1');
+        scheduler.endCriticalSection('order-1');
+        expect(scheduler.canProceed({ pressure: 0.10, src: 'marketRadar:oi' }).accept).toBe(true);
+    });
+
+    test('default maxMs is 5000', () => {
+        scheduler._setNowForTest(1000);
+        scheduler.beginCriticalSection('order-1');
+        scheduler._setNowForTest(5999);
+        expect(scheduler.getActiveCriticalSections()).toBe(1);
+        scheduler._setNowForTest(6001);
+        expect(scheduler.getActiveCriticalSections()).toBe(0);
+    });
+});
