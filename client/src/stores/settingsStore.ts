@@ -3,6 +3,7 @@ import { userSettingsApi } from '../services/api'
 import { useATStore } from './atStore'
 import { _usApplyServerResponse, _usApplyPostResponse, _usGetSettingsRemoteTs } from '../core/config'
 import type { SettingsPayload } from '../types/settings-contracts'
+import { debounce } from '../utils/debounce'
 
 // [MIGRATION-F0 commit 6] Unified settings code path.
 //
@@ -126,12 +127,16 @@ interface SettingsStoreState {
   get: <K extends keyof SettingsPayload>(key: K) => SettingsPayload[K]
 }
 
-export const useSettingsStore = create<SettingsStoreState>()((set, getState) => ({
-  settings: { ...DEFAULT_SETTINGS },
-  loaded: false,
-  saving: false,
+// Module-scope debouncer — single shared instance across all callers.
+// 300ms trailing window coalesces config-save storms (operator rapid
+// edits, settings.changed WS bursts, reconnect cascades).
+let _debouncedSettingsLoad: (() => void) | null = null
+// Direct (non-debounced) ref used by saveToServer's stale-refresh path,
+// which needs to await the fetch synchronously within the same call frame.
+let _settingsLoadImpl: (() => Promise<void>) | null = null
 
-  loadFromServer: async () => {
+export const useSettingsStore = create<SettingsStoreState>()((set, getState) => {
+  const loadImpl = async (): Promise<void> => {
     // [MIGRATION-F4 commit 2] Direct GET via userSettingsApi.fetch().
     // Side-effect hydration (USER_SETTINGS + _usSettingsRemoteTs + the
     // canonical "[US] fetched remote settings" log) is delegated to
@@ -173,7 +178,19 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     } catch {
       set({ settings: { ...DEFAULT_SETTINGS }, loaded: true })
     }
-  },
+  }
+
+  if (!_debouncedSettingsLoad) {
+    _debouncedSettingsLoad = debounce(() => { void loadImpl() }, 300)
+  }
+  _settingsLoadImpl = loadImpl
+
+  return {
+  settings: { ...DEFAULT_SETTINGS },
+  loaded: false,
+  saving: false,
+
+  loadFromServer: async () => { _debouncedSettingsLoad!() },
 
   loadFromLegacy: () => {
     const projected = _projectFromLegacy()
@@ -211,7 +228,9 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
           // Refresh from server so legacy projections + store reflect the
           // fresher baseline. Do not silently merge the in-flight payload —
           // user must re-issue the save with eyes on the updated values.
-          await getState().loadFromServer()
+          // Use _settingsLoadImpl directly (bypass debounce) so the refresh
+          // is awaited synchronously within this save call frame.
+          if (_settingsLoadImpl) await _settingsLoadImpl()
         } else {
           _usApplyPostResponse(j)
         }
@@ -246,8 +265,8 @@ export const useSettingsStore = create<SettingsStoreState>()((set, getState) => 
     const s = getState().settings
     return (s[key] ?? DEFAULT_SETTINGS[key]) as SettingsPayload[K]
   },
-}));
-(window as any).__zeusSettingsStore = useSettingsStore
+}})
+;(window as any).__zeusSettingsStore = useSettingsStore
 
 /**
  * [R4] After loadFromServer hydrates USER_SETTINGS (including the per-mode

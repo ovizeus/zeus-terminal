@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
 // Mock the api module before importing the store so userSettingsApi is
 // replaced in every consumer of services/api.
@@ -17,8 +17,24 @@ vi.mock('../../services/api', () => ({
 
 import { useSettingsStore } from '../settingsStore'
 
+/**
+ * Helper: call loadFromServer (which schedules a 300ms debounce), advance
+ * fake timers past the window, then drain the microtask queue so the
+ * async loadImpl body fully resolves before assertions run.
+ */
+async function triggerLoad(): Promise<void> {
+  void useSettingsStore.getState().loadFromServer()
+  // Advance past the 300ms trailing-edge delay.
+  vi.advanceTimersByTime(350)
+  // Drain microtasks so the async fetch + set() calls settle.
+  await Promise.resolve()
+  await Promise.resolve()
+  await Promise.resolve()
+}
+
 describe('settingsStore multi-tab versioning [Phase 8D2]', () => {
   beforeEach(() => {
+    vi.useFakeTimers()
     saveMock.mockReset()
     fetchMock.mockReset()
     useSettingsStore.setState({
@@ -28,10 +44,14 @@ describe('settingsStore multi-tab versioning [Phase 8D2]', () => {
     })
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('passes ifUpdatedAt from config remote ts into userSettingsApi.save', async () => {
     // Seed remote ts via the mocked loadFromServer path.
     fetchMock.mockResolvedValueOnce({ ok: true, settings: { confMin: 70 }, updated_at: 1111 })
-    await useSettingsStore.getState().loadFromServer()
+    await triggerLoad()
 
     saveMock.mockResolvedValueOnce({ ok: true, updated_at: 2222 })
     await useSettingsStore.getState().saveToServer()
@@ -44,7 +64,7 @@ describe('settingsStore multi-tab versioning [Phase 8D2]', () => {
 
   it('on 409 stale response refreshes from server and does not retry the stale write', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, settings: { confMin: 70 }, updated_at: 1111 })
-    await useSettingsStore.getState().loadFromServer()
+    await triggerLoad()
 
     // Stale response: saveMock should resolve (not throw) with stale:true.
     saveMock.mockResolvedValueOnce({
@@ -55,9 +75,13 @@ describe('settingsStore multi-tab versioning [Phase 8D2]', () => {
       current_settings: { confMin: 99 },
     })
     // Refresh path triggered by stale: a second fetch call seeds the newer state.
+    // saveToServer calls loadFromServer internally on stale — that also goes
+    // through the debouncer, so advance timers again to flush it.
     fetchMock.mockResolvedValueOnce({ ok: true, settings: { confMin: 99 }, updated_at: 2222 })
 
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    // saveToServer uses _settingsLoadImpl directly for the stale-refresh path
+    // (bypasses debounce), so no timer advancing needed here.
     await useSettingsStore.getState().saveToServer()
 
     // saveMock called exactly once (no auto-retry of the stale write)
@@ -72,7 +96,7 @@ describe('settingsStore multi-tab versioning [Phase 8D2]', () => {
 
   it('happy path advances remote ts via _usApplyPostResponse (no stale, no refresh)', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, settings: { confMin: 70 }, updated_at: 1111 })
-    await useSettingsStore.getState().loadFromServer()
+    await triggerLoad()
 
     saveMock.mockResolvedValueOnce({ ok: true, updated_at: 3333 })
     await useSettingsStore.getState().saveToServer()

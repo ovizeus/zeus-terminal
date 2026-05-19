@@ -4,6 +4,7 @@ import type { AresStoreUI } from '../types/ares'
 import { DEFAULT_ARES_UI } from '../types/ares'
 import { _aresRender } from '../engine/aresUI'
 import { ARES_MONITOR } from '../engine/aresMonitor'
+import { debounce } from '../utils/debounce'
 
 const DEFAULT_ARES = {
   balance: 0,
@@ -48,13 +49,13 @@ interface AresStoreState {
   closeAllArePositions: () => void
 }
 
-export const useAresStore = create<AresStoreState>()((set, getState) => ({
-  ...DEFAULT_ARES,
-  loaded: false,
-  saving: false,
-  ui: DEFAULT_ARES_UI,
+// Module-scope debouncer — single shared instance across all callers.
+// 300ms trailing window coalesces config-save storms (operator rapid
+// edits, ares.changed WS bursts, reconnect cascades).
+let _debouncedAresLoad: (() => void) | null = null
 
-  loadFromServer: async () => {
+export const useAresStore = create<AresStoreState>()((set, getState) => {
+  const loadImpl = async (): Promise<void> => {
     try {
       const data = await api.raw<{ ok: boolean; ares?: Record<string, unknown> }>('GET', '/api/user/ares')
       const server = (data.ok && data.ares) ? data.ares : {}
@@ -65,7 +66,19 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
       _readFromEngine(set)
       set({ loaded: true })
     }
-  },
+  }
+
+  if (!_debouncedAresLoad) {
+    _debouncedAresLoad = debounce(() => { void loadImpl() }, 300)
+  }
+
+  return {
+  ...DEFAULT_ARES,
+  loaded: false,
+  saving: false,
+  ui: DEFAULT_ARES_UI,
+
+  loadFromServer: async () => { _debouncedAresLoad!() },
 
   saveToServer: async () => {
     const s = getState()
@@ -143,7 +156,7 @@ export const useAresStore = create<AresStoreState>()((set, getState) => ({
       }
     } catch (_) {}
   },
-}))
+}})
 
 /** Read ARES state from engine (localStorage/window.ARES) */
 function _readFromEngine(set: any) {
