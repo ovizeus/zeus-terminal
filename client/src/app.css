@@ -5044,6 +5044,16 @@ select.zac-select optgroup {
   font-variant-numeric: tabular-nums;
   font-weight: 900;
 }
+.zmb-quota-indicator .zmb-quota-crit {
+  margin-left: 4px;
+  font-size: 11px;
+  filter: drop-shadow(0 0 3px rgba(0,255,200,0.7));
+  animation: zmb-crit-pulse 1.4s ease-in-out infinite;
+}
+@keyframes zmb-crit-pulse {
+  0%, 100% { opacity: 0.7 }
+  50%      { opacity: 1.0 }
+}
 .zmb-quota-green {
   border: 1px solid rgba(0, 255, 120, 0.35);
   background: rgba(0, 255, 120, 0.06);

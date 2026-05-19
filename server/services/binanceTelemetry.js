@@ -269,7 +269,12 @@ function getSnapshot() {
         quotaPressure[host] = v.lastUsedWeight != null ? v.lastUsedWeight / QUOTA_CAP : 0;
     }
     let schedulerStats = null;
-    try { schedulerStats = require('./binanceScheduler').getStats(); } catch (_) { /* optional */ }
+    let activeCriticalSections = 0;
+    try {
+        const sch = require('./binanceScheduler');
+        schedulerStats = sch.getStats();
+        activeCriticalSections = sch.getActiveCriticalSections();
+    } catch (_) { /* optional */ }
     return {
         bootTs: _bootTs,
         uptimeMs: _ts() - _bootTs,
@@ -287,6 +292,7 @@ function getSnapshot() {
             blockSignedPct: BLOCK_SIGNED_PCT,
         },
         schedulerStats,
+        activeCriticalSections,
     };
 }
 

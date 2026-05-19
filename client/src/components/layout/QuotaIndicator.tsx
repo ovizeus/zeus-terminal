@@ -22,11 +22,19 @@ import { toast } from '../../data/marketDataHelpers'
 
 type HostPressure = Record<string, number>
 type Thresholds = { cap: number; blockPublicPct: number; blockSignedPct: number }
+type LaneStats = { accepted: number; rejected: number }
+type SchedulerStats = {
+  totalDecisions: number
+  byLane: Record<string, LaneStats>
+  byReason: Record<string, number>
+}
 
 interface DiagSnapshot {
   quotaPressure?: HostPressure
   quotaThresholds?: Thresholds
   byHost?: Record<string, { peakUsedWeight: number; lastUsedWeight: number | null; calls: number }>
+  schedulerStats?: SchedulerStats
+  activeCriticalSections?: number
 }
 
 const POLL_INTERVAL_MS = 30000
@@ -41,6 +49,7 @@ function _classify(pressurePct: number, blockPct: number): 'green' | 'amber' | '
 export function QuotaIndicator() {
   const [snap, setSnap] = useState<DiagSnapshot | null>(null)
   const lastLevel = useRef<string>('green')
+  const lastSchedRejected = useRef<number>(0)
 
   useEffect(() => {
     let cancelled = false
@@ -72,6 +81,18 @@ export function QuotaIndicator() {
             toast(`Binance quota at gate threshold: ${worstHost} ${worstPct.toFixed(0)}% — preemptive 429 active`, 5000)
           }
           lastLevel.current = level
+        }
+
+        // [Phase A.2 visibility] Toast on first scheduler reject (per session)
+        const sched = data.schedulerStats
+        if (sched) {
+          const totalRejected = Object.values(sched.byLane || {}).reduce((s, v) => s + ((v as LaneStats).rejected || 0), 0)
+          if (totalRejected > lastSchedRejected.current && lastSchedRejected.current === 0) {
+            const reasons = sched.byReason || {}
+            const reasonStr = Object.entries(reasons).map(([k, v]) => `${k}:${v}`).join(' ')
+            toast(`Scheduler backpressure: ${totalRejected} rejected (${reasonStr})`, 4000)
+          }
+          lastSchedRejected.current = totalRejected
         }
       } catch (_) {
         // silent — diag endpoint failures shouldn't show user errors
@@ -112,9 +133,31 @@ export function QuotaIndicator() {
     const peakUsed = snap.byHost?.[h]?.peakUsedWeight ?? '?'
     tipLines.push(`${h}: ${pct}% (last ${lastUsed}, peak ${peakUsed})`)
   }
+
+  // [Phase A.2 visibility] Scheduler breakdown
+  const sched = snap.schedulerStats
+  if (sched && sched.totalDecisions > 0) {
+    tipLines.push('')
+    tipLines.push(`Scheduler: ${sched.totalDecisions} decisions`)
+    const laneSummary = Object.entries(sched.byLane || {})
+      .map(([lane, v]) => `${lane}:${(v as LaneStats).accepted}/${(v as LaneStats).rejected}`)
+      .filter((s) => !s.endsWith(':0/0'))
+      .join(' ')
+    if (laneSummary) tipLines.push(`  Lanes (acc/rej): ${laneSummary}`)
+    const reasonSummary = Object.entries(sched.byReason || {})
+      .map(([r, v]) => `${r}:${v}`)
+      .join(' ')
+    if (reasonSummary) tipLines.push(`  Rejected: ${reasonSummary}`)
+  }
+  const crit = snap.activeCriticalSections || 0
+  if (crit > 0) {
+    tipLines.push('')
+    tipLines.push(`⚠ ${crit} critical section(s) active — order pipeline protected`)
+  }
   const tip = tipLines.join('\n')
 
-  // Compact display: dot + "QUOTA" label + pct. Host detail surfaces in tooltip.
+  // Compact display: dot + "QUOTA" label + pct. Optional CRIT badge when
+  // critical section active. Host detail + scheduler stats in tooltip.
   return (
     <span
       className={`zmb-quota-indicator ${colorClass}`}
@@ -125,6 +168,7 @@ export function QuotaIndicator() {
       <span className="zmb-quota-dot"></span>
       <span className="zmb-quota-label">QUOTA</span>
       <span className="zmb-quota-pct">{worstPct.toFixed(0)}%</span>
+      {crit > 0 && <span className="zmb-quota-crit" title="Order pipeline protected — critical section active">🛡</span>}
     </span>
   )
 }
