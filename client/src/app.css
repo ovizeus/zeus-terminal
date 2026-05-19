@@ -5010,13 +5010,14 @@ select.zac-select optgroup {
  * shows Binance IP X-MBX-USED-WEIGHT-1M consumption with color-coded badge.
  * Color logic in QuotaIndicator.tsx; CSS provides 4 visual states. */
 .zmb-quota-indicator {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 3px 8px; margin: 0 8px;
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 6px; margin: 0 4px;
   border-radius: 4px;
   font-family: 'Orbitron', sans-serif;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
   cursor: help;
   user-select: none;
+  flex-shrink: 0;
 }
 .zmb-quota-indicator .zmb-quota-dot {
   display: inline-block; width: 7px; height: 7px; border-radius: 50%;

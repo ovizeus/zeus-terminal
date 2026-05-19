@@ -114,17 +114,15 @@ export function QuotaIndicator() {
   }
   const tip = tipLines.join('\n')
 
-  // Short host suffix for display (testnet/live)
-  const shortHost = worstHost.includes('testnet') ? 'TN' : worstHost.includes('fapi') ? 'LIVE' : '?'
-
+  // Compact display: just dot + pct. Host detail surfaces in tooltip.
   return (
     <span
       className={`zmb-quota-indicator ${colorClass}`}
       title={tip}
       data-zmb-quota-level={level}
+      data-zmb-quota-host={worstHost}
     >
       <span className="zmb-quota-dot"></span>
-      <span className="zmb-quota-label">QUOTA {shortHost}</span>
       <span className="zmb-quota-pct">{worstPct.toFixed(0)}%</span>
     </span>
   )
