@@ -15,6 +15,7 @@ import { usePositionsStore, useATStore, useUiStore } from '../stores'
 import { useJournalStore } from '../stores/journalStore'
 import { liveApiSyncState } from '../trading/liveApi'
 import { startLiveBalanceAutoSync, stopLiveBalanceAutoSync } from '../trading/liveBalanceAutoSync'
+import { isTabVisible, onVisibilityChange } from '../utils/tabVisibility'
 import type { WsMessage, ServerATState, ServerDemoBalance } from '../types'
 
 const LIVE_BALANCE_REFRESH_MS = 60000
@@ -276,8 +277,19 @@ export function useServerSync(authenticated: boolean) {
       useUiStore.getState().setConnected(true)
     })
 
-    // 5. AT polling fallback — every 30s (old JS already polls at 10s, avoid double-hit)
-    pollRef.current = setInterval(pullATState, 30000)
+    // 5. AT polling fallback — every 30s, gated on tab visibility.
+    // [Phase C 2026-05-19] Background tabs skip the tick to reduce
+    // multi-tab fanout. Foreground tab does the work; background tabs
+    // receive updates via WS or the next visible transition.
+    pollRef.current = setInterval(() => {
+        if (isTabVisible()) pullATState()
+    }, 30000)
+
+    // [Phase C 2026-05-19] Immediate pull when tab becomes visible after
+    // being hidden — state may be stale.
+    const offVis = onVisibilityChange((visible) => {
+        if (visible) pullATState()
+    })
 
     // 6. Connection status check
     const connInterval = setInterval(() => {
@@ -298,6 +310,7 @@ export function useServerSync(authenticated: boolean) {
       clearTimeout(initTimer)
       unsub()
       unsubUi()
+      offVis()
       stopLiveBalanceAutoSync()
       if (pollRef.current) clearInterval(pollRef.current)
       clearInterval(connInterval)
