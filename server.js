@@ -1354,6 +1354,18 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false, PARITY_SHADOW_ENABLED=false)');
   }
 
+  // [Wave 1 R0 fix 2026-05-19] R0 substrate ring orchestrator was never
+  // initialized at boot — `_state` stuck at 'OFFLINE' permanently. UI
+  // `/api/omega/health` returned R0: OFFLINE forever. Call init() so the
+  // ring transitions to 'OK' state + heartbeat ticks.
+  try {
+    const R0 = require('./server/services/ml/R0_substrate');
+    R0.init();
+    logger.info('SERVER', '[R0] substrate ring initialized → OK');
+  } catch (err) {
+    logger.error('SERVER', `[R0] init failed: ${err.message}`);
+  }
+
   // [RADAR] Market Radar scanner — polls Binance top-300 USDT perps once/min
   // and broadcasts spike / volume / rank / top-300 events via wsBroadcastAll.
   // Always on — no migration flag. Read-only, no trading side effects.
