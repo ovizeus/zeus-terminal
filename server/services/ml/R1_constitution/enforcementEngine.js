@@ -52,19 +52,22 @@ function evaluate({ userId, decision }) {
         }
     }
 
-    // 4. NO_OPPOSITE_ENTRY_ON_OPEN — same-mode only (Wave 8 sandbox model:
-    //    cross-mode opposite e intenționat; demo & live independent).
+    // 4. NO_OPPOSITE_ENTRY_ON_OPEN — same-mode (any symbol). Extended
+    //    2026-05-19: not just same-symbol opposite, but ANY opposite-direction
+    //    position în same mode. Operator policy: no mixed LONG+SHORT book per
+    //    mode. Cross-mode allowed per Wave 8 sandbox model.
     if (Array.isArray(d.openPositions) && d.symbol && d.side) {
         const opposite = d.side === 'LONG' ? 'SHORT' : 'LONG';
         const decMode = d.mode || 'demo';
         const conflict = d.openPositions.find(p =>
-            p.symbol === d.symbol &&
             p.side === opposite &&
             (p.mode || 'demo') === decMode
         );
         if (conflict) {
-            violations.push(_violation('NO_OPPOSITE_ENTRY_ON_OPEN',
-                `${d.side} blocked — ${opposite} ${d.symbol} already open (same mode ${decMode})`));
+            const reason = conflict.symbol === d.symbol
+                ? `${d.side} blocked — ${opposite} ${d.symbol} already open (same mode ${decMode})`
+                : `${d.side} ${d.symbol} blocked — book on ${decMode} already has ${opposite} ${conflict.symbol} (no mixed bias)`;
+            violations.push(_violation('NO_OPPOSITE_ENTRY_ON_OPEN', reason));
         }
     }
 

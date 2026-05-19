@@ -64,11 +64,11 @@ describe('processBrainDecision — opposite-side same-mode guard', () => {
         expect(long1).toBeNull();
     });
 
-    test('Different symbol opposite-side allowed', () => {
+    test('Different symbol SAME side allowed (consistent bias across book)', () => {
         serverAT.processBrainDecision(_decision('BTCUSDT', 'LONG'), STC, 1, STC.size);
-        const ethShort = serverAT.processBrainDecision(_decision('ETHUSDT', 'SHORT'), STC, 1, STC.size);
-        expect(ethShort).not.toBeNull();
-        expect(ethShort.side).toBe('SHORT');
+        const ethLong = serverAT.processBrainDecision(_decision('ETHUSDT', 'LONG'), STC, 1, STC.size);
+        expect(ethLong).not.toBeNull();
+        expect(ethLong.side).toBe('LONG');
     });
 
     test('Same symbol same side dedupes (existing dup check still works)', () => {
@@ -76,6 +76,49 @@ describe('processBrainDecision — opposite-side same-mode guard', () => {
         expect(long1).not.toBeNull();
         const long2 = serverAT.processBrainDecision(_decision('BTCUSDT', 'LONG'), STC, 1, STC.size);
         expect(long2).toBeNull();
+    });
+});
+
+describe('processBrainDecision — multi-symbol mixed-bias guard (Day 2026-05-19)', () => {
+    test('SHORT entry on different symbol blocked when LONG exists same mode', () => {
+        // LONG BTC in demo
+        const long = serverAT.processBrainDecision(
+            { symbol: 'BTCUSDT', priceTs: Date.now(), price: 70000, fusion: { decision: 'MEDIUM', dir: 'LONG', confidence: 70, score: 5 }, regime: { regime: 'TREND' }, cycle: 'm1' },
+            STC, 1, STC.size
+        );
+        expect(long).not.toBeNull();
+        // Brain attempts SHORT on ETH (different symbol) same mode — should block
+        const short = serverAT.processBrainDecision(
+            { symbol: 'ETHUSDT', priceTs: Date.now(), price: 3000, fusion: { decision: 'MEDIUM', dir: 'SHORT', confidence: 70, score: 5 }, regime: { regime: 'TREND' }, cycle: 'm2' },
+            STC, 1, STC.size
+        );
+        expect(short).toBeNull();
+    });
+
+    test('LONG entry on different symbol blocked when SHORT exists same mode', () => {
+        const short = serverAT.processBrainDecision(
+            { symbol: 'BTCUSDT', priceTs: Date.now(), price: 70000, fusion: { decision: 'MEDIUM', dir: 'SHORT', confidence: 70, score: 5 }, regime: { regime: 'TREND' }, cycle: 'm3' },
+            STC, 1, STC.size
+        );
+        expect(short).not.toBeNull();
+        const long = serverAT.processBrainDecision(
+            { symbol: 'ETHUSDT', priceTs: Date.now(), price: 3000, fusion: { decision: 'MEDIUM', dir: 'LONG', confidence: 70, score: 5 }, regime: { regime: 'TREND' }, cycle: 'm4' },
+            STC, 1, STC.size
+        );
+        expect(long).toBeNull();
+    });
+
+    test('LONG on different symbol allowed when only LONGs exist (consistent bias)', () => {
+        const long1 = serverAT.processBrainDecision(
+            { symbol: 'BTCUSDT', priceTs: Date.now(), price: 70000, fusion: { decision: 'MEDIUM', dir: 'LONG', confidence: 70, score: 5 }, regime: { regime: 'TREND' }, cycle: 'cb1' },
+            STC, 1, STC.size
+        );
+        expect(long1).not.toBeNull();
+        const long2 = serverAT.processBrainDecision(
+            { symbol: 'ETHUSDT', priceTs: Date.now(), price: 3000, fusion: { decision: 'MEDIUM', dir: 'LONG', confidence: 70, score: 5 }, regime: { regime: 'TREND' }, cycle: 'cb2' },
+            STC, 1, STC.size
+        );
+        expect(long2).not.toBeNull(); // consistent direction allowed
     });
 });
 
@@ -114,6 +157,40 @@ describe('R1 enforcementEngine — same-mode-aware NO_OPPOSITE_ENTRY_ON_OPEN', (
         });
         const ids = r.violations.map(v => v.id);
         expect(ids).toContain('NO_OPPOSITE_ENTRY_ON_OPEN');
+    });
+
+    test('cross-symbol same-mode opposite IS flagged (Wave 2026-05-19 extension)', () => {
+        const r = r1.evaluate({
+            userId: 1,
+            decision: {
+                symbol: 'ETHUSDT', side: 'SHORT', mode: 'demo',
+                size: 100, balance: 1000, leverage: 5, sl: 1500,
+                reflection: { proceed: true, concerns: [] },
+                openPositions: [
+                    { symbol: 'BTCUSDT', side: 'LONG', size: 200, mode: 'demo' },  // different SYMBOL, same MODE
+                ],
+                recentCloses: [], correlatedExposure: { totalPct: 0 },
+            },
+        });
+        const ids = r.violations.map(v => v.id);
+        expect(ids).toContain('NO_OPPOSITE_ENTRY_ON_OPEN');
+    });
+
+    test('cross-symbol same-direction same-mode NOT flagged (consistent bias)', () => {
+        const r = r1.evaluate({
+            userId: 1,
+            decision: {
+                symbol: 'ETHUSDT', side: 'LONG', mode: 'demo',
+                size: 100, balance: 1000, leverage: 5, sl: 1500,
+                reflection: { proceed: true, concerns: [] },
+                openPositions: [
+                    { symbol: 'BTCUSDT', side: 'LONG', size: 200, mode: 'demo' },
+                ],
+                recentCloses: [], correlatedExposure: { totalPct: 0 },
+            },
+        });
+        const ids = r.violations.map(v => v.id);
+        expect(ids).not.toContain('NO_OPPOSITE_ENTRY_ON_OPEN');
     });
 
     test('missing mode on existing pos treats as demo (backward compat)', () => {

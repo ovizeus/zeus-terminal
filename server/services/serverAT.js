@@ -917,29 +917,37 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     const existing = _positions.find(p => p.userId === userId && p.symbol === decision.symbol && p.side === side);
     if (existing) return null;
 
-    // [2026-05-19 opposite-side guard] Operator-reported: brain opening LONG +
-    // SHORT same symbol same mode = directional incoherence ("lapte acru
-    // murat"). Hard block same-mode opposite. Cross-mode opposite ALLOWED per
-    // Wave 8 reversal — demo & live are independent sandboxes; brain emits
-    // an informational voice thought to surface the awareness.
+    // [2026-05-19 same-mode directional bias guard] Operator-mandated: within
+    // a single mode, all positions must share direction (no mixed LONG+SHORT
+    // book). Extended 2026-05-19 from same-symbol-only to ANY symbol same
+    // mode — "lapte acru murat" if brain opens LONG ETH + SHORT BTC pe live.
+    // Cross-mode opposite ALLOWED per Wave 8 reversal (demo & live = independent
+    // sandboxes). Voice thought emitted in both block + cross-mode-info cases.
     const oppositeSide = side === 'LONG' ? 'SHORT' : 'LONG';
+    const decMode = us.engineMode || 'demo';
     const sameModeOpposite = _positions.find(p =>
-        p.userId === userId && p.symbol === decision.symbol && p.side === oppositeSide &&
-        (p.mode || 'demo') === (us.engineMode || 'demo')
+        p.userId === userId && p.side === oppositeSide &&
+        (p.mode || 'demo') === decMode
     );
     if (sameModeOpposite) {
+        const sameSymbol = sameModeOpposite.symbol === decision.symbol;
+        const reasonTag = sameSymbol ? 'OPPOSITE_SIDE_SAME_MODE' : 'MIXED_DIRECTION_SAME_MODE';
+        const thoughtText = sameSymbol
+            ? `skipping ${side} ${decision.symbol} — already ${oppositeSide} same mode (${decMode}).`
+            : `skipping ${side} ${decision.symbol} on ${decMode} — book already has ${oppositeSide} ${sameModeOpposite.symbol}. no mixed bias.`;
         logger.warn('AT_ENGINE',
-            `Entry blocked uid=${userId} ${decision.symbol} ${side} ${us.engineMode || 'demo'} — opposite side already open (seq=${sameModeOpposite.seq})`);
-        _recordMissedTrade(userId, decision, 'OPPOSITE_SIDE_SAME_MODE');
+            `Entry blocked uid=${userId} ${decision.symbol} ${side} ${decMode} — ${reasonTag} (existing ${sameModeOpposite.symbol}/${oppositeSide}/seq=${sameModeOpposite.seq})`);
+        _recordMissedTrade(userId, decision, reasonTag);
         try {
             const vl = require('./ml/_voice/voiceLogger');
             vl.logUtterance({
                 userId, utteranceType: 'THOUGHT', mood: 'FOCUSED',
-                text: `skipping ${side} ${decision.symbol} — already ${oppositeSide} same mode (${us.engineMode || 'demo'}).`,
-                templateId: 'opposite_side_skip',
+                text: thoughtText,
+                templateId: sameSymbol ? 'opposite_side_skip' : 'mixed_bias_skip',
                 contextJson: JSON.stringify({
                     symbol: decision.symbol, attemptedSide: side,
-                    existingSide: oppositeSide, mode: us.engineMode || 'demo',
+                    existingSymbol: sameModeOpposite.symbol,
+                    existingSide: oppositeSide, mode: decMode,
                 }),
             });
         } catch (_) {}
@@ -948,19 +956,19 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     // Cross-mode opposite — informational only, allow per Wave 8 sandbox model
     const crossModeOpposite = _positions.find(p =>
         p.userId === userId && p.symbol === decision.symbol && p.side === oppositeSide &&
-        (p.mode || 'demo') !== (us.engineMode || 'demo')
+        (p.mode || 'demo') !== decMode
     );
     if (crossModeOpposite) {
         logger.info('AT_ENGINE',
-            `Cross-mode opposite OK uid=${userId} ${decision.symbol} ${side}/${us.engineMode}: ${crossModeOpposite.mode}/${oppositeSide} exists`);
+            `Cross-mode opposite OK uid=${userId} ${decision.symbol} ${side}/${decMode}: ${crossModeOpposite.mode}/${oppositeSide} exists`);
         try {
             const vl = require('./ml/_voice/voiceLogger');
             vl.logUtterance({
                 userId, utteranceType: 'THOUGHT', mood: 'CALM',
-                text: `${side} ${decision.symbol} on ${us.engineMode || 'demo'} — ${crossModeOpposite.mode} side has ${oppositeSide}. independent sandbox.`,
+                text: `${side} ${decision.symbol} on ${decMode} — ${crossModeOpposite.mode} side has ${oppositeSide}. independent sandbox.`,
                 templateId: 'cross_mode_opposite_aware',
                 contextJson: JSON.stringify({
-                    symbol: decision.symbol, side, mode: us.engineMode || 'demo',
+                    symbol: decision.symbol, side, mode: decMode,
                     crossSide: oppositeSide, crossMode: crossModeOpposite.mode,
                 }),
             });
