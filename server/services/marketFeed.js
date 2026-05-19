@@ -85,6 +85,73 @@ function _refCount(symbol) {
     return refs ? refs.size : 0;
 }
 
+// [BIN-TELEM Phase B 2026-05-19] Pluggable subscribe/unsubscribe for tests.
+let _subscribeFn = null;          // override default subscribe(symbol, timeframes)
+let _unsubscribeSymbolFn = null;  // override default _unsubscribeSymbolReal(symbol)
+
+async function subscribeForRef(symbol, refKey, timeframes) {
+    const sym = String(symbol).toUpperCase();
+    const had = _symbolRefs.has(sym) && _symbolRefs.get(sym).has(refKey);
+    if (had) return false;
+    _addRef(sym, refKey);
+    // First ref for this symbol → trigger actual subscribe.
+    // If subscribe throws on first-ref path, rollback ref so caller can retry
+    // (otherwise the symbol is permanently marked subscribed with no underlying
+    // connection and retry returns false on duplicate).
+    if (_symbolRefs.get(sym).size === 1) {
+        const fn = _subscribeFn || subscribe;
+        try {
+            await fn(sym, timeframes);
+        } catch (err) {
+            logger.warn('FEED', `[refcount] subscribe ${sym} for ${refKey} failed: ${err.message}`);
+            _releaseRefByKey(refKey);
+            return false;
+        }
+    }
+    return true;
+}
+
+function releaseRef(refKey) {
+    const emptied = _releaseRefByKey(refKey);
+    for (const sym of emptied) {
+        const fn = _unsubscribeSymbolFn || _unsubscribeSymbolReal;
+        try { fn(sym); } catch (err) {
+            logger.warn('FEED', `[refcount] unsubscribe ${sym} failed: ${err.message}`);
+        }
+    }
+    return emptied;
+}
+
+function _unsubscribeSymbolReal(symbol) {
+    const sym = String(symbol).toUpperCase();
+    // Close WS streams for this symbol (kline_*, markPrice@1s, bookTicker, trade, aggTrade)
+    const symLower = sym.toLowerCase();
+    for (const key of Object.keys(_streams)) {
+        if (key.startsWith(symLower + '@')) {
+            const entry = _streams[key];
+            if (entry.timer) clearInterval(entry.timer);
+            if (entry.ws) {
+                try { entry.ws.removeAllListeners(); } catch (_) {}
+                if (entry.ws.readyState === WebSocket.OPEN) {
+                    try { entry.ws.close(); } catch (_) {}
+                }
+            }
+            delete _streams[key];
+        }
+    }
+    // Stop ALT klinePollers for this symbol
+    for (const key of Object.keys(_altKlinePollers)) {
+        if (key.startsWith(sym + '|')) {
+            const state = _altKlinePollers[key];
+            if (state && state.timer) clearInterval(state.timer);
+            delete _altKlinePollers[key];
+        }
+    }
+    _activeSymbols.delete(sym);
+    _symbolRefs.delete(sym);
+    logger.info('FEED', `[refcount] ${sym} unsubscribed (last ref released)`);
+}
+
 // ── Event listeners ──
 const _listeners = { kline: [], price: [], fundingRate: [], openInterest: [], aggTrade: [] };
 
@@ -476,6 +543,8 @@ function getPollerStats() {
 module.exports = {
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
+    subscribeForRef,   // [BIN-TELEM Phase B 2026-05-19]
+    releaseRef,        // [BIN-TELEM Phase B 2026-05-19]
     unsubscribeAll,
     fetchKlines,
     fetchFundingRate,
@@ -486,9 +555,15 @@ module.exports = {
     getPollerStats,    // [BIN-TELEM 2026-05-19]
     STALE_DATA_MS,
     // [BIN-TELEM Phase B 2026-05-19] Test helpers
-    _resetRefsForTest: () => { _symbolRefs.clear(); },
+    _resetRefsForTest: () => {
+        _symbolRefs.clear();
+        _subscribeFn = null;
+        _unsubscribeSymbolFn = null;
+    },
     _addRefForTest: _addRef,
     _releaseRefByKeyForTest: _releaseRefByKey,
     _hasSymbolRefForTest: _hasSymbolRef,
     _refCountForTest: _refCount,
+    _setSubscribeFnForTest: (fn) => { _subscribeFn = fn; },
+    _setUnsubscribeSymbolFnForTest: (fn) => { _unsubscribeSymbolFn = fn; },
 };
