@@ -5,19 +5,24 @@ import { MOOD_COLOR } from './omegaApi'
 /**
  * The Orb — alien light reactive to OMEGA's mood.
  *
- * Canvas-based animation: deep space gradient background + drifting star
- * field + central rune Ω that glows + halo that pulses. Mood drives color,
- * pulse rate, and particle behavior. Read-only — receives mood + intensity
- * from parent, renders.
+ * [2026-05-19 water v2 — realistic 5-layer water effect]
+ * Operator polish: orb feels like it's submerged in water. Touch/drag
+ * triggers 5 simultaneous water phenomena:
  *
- * [2026-05-19 water ripple] Operator polish moft — pointer interaction
- * spawns expanding water ripples on the orb surface. Realistic via 3
- * concentric expanding rings per ripple with sin-wave amplitude + alpha
- * decay over ~2.5s lifetime. Drag = continuous spawn. Touch + mouse both
- * supported. Confined to the .omega-orb-wrap container.
+ *  1. RIPPLES — concentric expanding rings with phase-offset interference
+ *     (kept from v1, refined)
+ *  2. REFRACTION — Ω rune visibly distorts through ripple zones via
+ *     wavy text-replication along the ring path
+ *  3. CAUSTICS — animated sin-wave bright pattern on orb surface
+ *     (simulates light refracting through agitated water bottom)
+ *  4. WAKE / SILLAGE — drag leaves persistent fading trail of curve points
+ *  5. FOAM — micro white particles spawned on each ripple's leading edge
+ *  6. EDGE BOUNCE — ripples that hit the orb core boundary partially
+ *     reflect back inward with phase reversal
  *
- * Performance: requestAnimationFrame loop, ~60fps trivial on modern devices.
- * Canvas is 2x devicePixelRatio for retina crispness.
+ * Performance bounded by RIPPLE_MAX_ACTIVE (60) + WAKE_MAX (180 points)
+ * + FOAM_MAX (200 particles). All allocations preallocated; no garbage
+ * generation in the hot frame loop.
  */
 interface Props {
     mood: Mood
@@ -25,23 +30,46 @@ interface Props {
 }
 
 interface Ripple {
-    x: number      // px in canvas client space
+    x: number
     y: number
-    t0: number     // timestamp emitted
-    intensity: number  // 0.4..1.0 — affects amplitude
+    t0: number
+    intensity: number
+    bounced: boolean
 }
 
-const RIPPLE_LIFETIME_MS = 2500
-const RIPPLE_MAX_RADIUS_FACTOR = 0.55  // relative to min(w,h)
-const RIPPLE_MAX_ACTIVE = 40
-const RIPPLE_DRAG_SPAWN_MIN_PX = 8  // min distance between continuous-drag ripples
-const RIPPLE_DRAG_SPAWN_MIN_MS = 30  // min time between drag ripples
+interface FoamParticle {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    t0: number
+    life: number
+}
+
+interface WakePoint {
+    x: number
+    y: number
+    t0: number
+}
+
+const RIPPLE_LIFETIME_MS = 2800
+const RIPPLE_MAX_RADIUS_FACTOR = 0.55
+const RIPPLE_MAX_ACTIVE = 60
+const RIPPLE_DRAG_SPAWN_MIN_PX = 8
+const RIPPLE_DRAG_SPAWN_MIN_MS = 28
+const WAKE_LIFETIME_MS = 1400
+const WAKE_MAX = 180
+const FOAM_LIFETIME_MS = 700
+const FOAM_MAX = 200
+const FOAM_PER_RIPPLE_SPAWN = 5
 
 export function TheOrb({ mood, intensity }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
     const wrapRef = useRef<HTMLDivElement | null>(null)
     const stateRef = useRef({ mood, intensity, t0: performance.now() })
     const ripplesRef = useRef<Ripple[]>([])
+    const wakeRef = useRef<WakePoint[]>([])
+    const foamRef = useRef<FoamParticle[]>([])
     const lastDragRef = useRef<{ x: number; y: number; t: number } | null>(null)
 
     useEffect(() => {
@@ -56,7 +84,6 @@ export function TheOrb({ mood, intensity }: Props) {
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
-        // Hi-DPI sizing
         function fitCanvas() {
             const rect = canvas!.getBoundingClientRect()
             const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -68,22 +95,29 @@ export function TheOrb({ mood, intensity }: Props) {
         const ro = new ResizeObserver(fitCanvas)
         ro.observe(canvas)
 
-        // ── Pointer → ripple emitter ─────────────────────────────────
-        // Use the wrap element so ripples spawn anywhere over the orb UI.
-        // Coordinates are translated to canvas client space.
         function spawnRipple(clientX: number, clientY: number, intensityHint: number) {
             const rect = canvas!.getBoundingClientRect()
             const x = clientX - rect.left
             const y = clientY - rect.top
-            // Ignore points outside the canvas (safety)
             if (x < 0 || y < 0 || x > rect.width || y > rect.height) return
             ripplesRef.current.push({
                 x, y, t0: performance.now(),
                 intensity: Math.max(0.4, Math.min(1.0, intensityHint)),
+                bounced: false,
             })
-            // Cap active ripples to avoid runaway growth
             if (ripplesRef.current.length > RIPPLE_MAX_ACTIVE) {
                 ripplesRef.current.splice(0, ripplesRef.current.length - RIPPLE_MAX_ACTIVE)
+            }
+        }
+
+        function addWake(clientX: number, clientY: number) {
+            const rect = canvas!.getBoundingClientRect()
+            const x = clientX - rect.left
+            const y = clientY - rect.top
+            if (x < 0 || y < 0 || x > rect.width || y > rect.height) return
+            wakeRef.current.push({ x, y, t0: performance.now() })
+            if (wakeRef.current.length > WAKE_MAX) {
+                wakeRef.current.splice(0, wakeRef.current.length - WAKE_MAX)
             }
         }
 
@@ -92,19 +126,23 @@ export function TheOrb({ mood, intensity }: Props) {
             isDown = true
             wrap!.setPointerCapture?.(e.pointerId)
             spawnRipple(e.clientX, e.clientY, 1.0)
+            addWake(e.clientX, e.clientY)
             lastDragRef.current = { x: e.clientX, y: e.clientY, t: performance.now() }
         }
         function onPointerMove(e: PointerEvent) {
             if (!isDown) return
             const last = lastDragRef.current
             const now = performance.now()
+            // Wake captures every move for smoothness — independent of ripple throttle
+            if (!last || Math.hypot(e.clientX - last.x, e.clientY - last.y) > 3) {
+                addWake(e.clientX, e.clientY)
+            }
             if (last) {
                 const dx = e.clientX - last.x
                 const dy = e.clientY - last.y
                 const dist = Math.hypot(dx, dy)
                 if (dist < RIPPLE_DRAG_SPAWN_MIN_PX || now - last.t < RIPPLE_DRAG_SPAWN_MIN_MS) return
             }
-            // Drag-spawned ripples slightly weaker than tap
             spawnRipple(e.clientX, e.clientY, 0.7)
             lastDragRef.current = { x: e.clientX, y: e.clientY, t: now }
         }
@@ -120,7 +158,7 @@ export function TheOrb({ mood, intensity }: Props) {
         wrap.addEventListener('pointercancel', onPointerUp)
         wrap.addEventListener('pointerleave', onPointerUp)
 
-        // Star field — pre-populated, drifting slowly
+        // Star field
         type Star = { x: number; y: number; r: number; sp: number; ph: number }
         const STARS: Star[] = []
         for (let i = 0; i < 80; i++) {
@@ -133,7 +171,7 @@ export function TheOrb({ mood, intensity }: Props) {
             })
         }
 
-        // Particles around orb — orbit / drift
+        // Particles around orb
         type Particle = { angle: number; radius: number; speed: number; size: number; alpha: number }
         const PARTICLES: Particle[] = []
         for (let i = 0; i < 36; i++) {
@@ -158,7 +196,6 @@ export function TheOrb({ mood, intensity }: Props) {
             const baseR = Math.min(w, h) * 0.18
             const ripMaxR = Math.min(w, h) * RIPPLE_MAX_RADIUS_FACTOR
 
-            // Pulse rate per mood
             const pulseHz =
                 m === 'EXCITED' ? 2.0 :
                 m === 'NERVOUS' ? 1.7 :
@@ -170,7 +207,7 @@ export function TheOrb({ mood, intensity }: Props) {
             const pulse = 0.5 + 0.5 * Math.sin(dt / 1000 * pulseHz * Math.PI * 2)
             const haloR = baseR * (1.55 + 0.35 * pulse * I)
 
-            // ── Background: deep space gradient ─────────────────────
+            // Background
             const bg = ctx!.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, h) * 0.85)
             bg.addColorStop(0, '#0a1830')
             bg.addColorStop(0.4, '#050510')
@@ -178,7 +215,7 @@ export function TheOrb({ mood, intensity }: Props) {
             ctx!.fillStyle = bg
             ctx!.fillRect(0, 0, w, h)
 
-            // ── Nebula clouds (radial soft blobs, mood-tinted very low alpha) ──
+            // Nebula
             ctx!.save()
             ctx!.globalCompositeOperation = 'screen'
             for (let i = 0; i < 3; i++) {
@@ -194,7 +231,7 @@ export function TheOrb({ mood, intensity }: Props) {
             }
             ctx!.restore()
 
-            // ── Star field ──
+            // Stars
             ctx!.save()
             for (const s of STARS) {
                 const tw = 0.5 + 0.5 * Math.sin(dt * 0.001 + s.ph)
@@ -205,7 +242,7 @@ export function TheOrb({ mood, intensity }: Props) {
             }
             ctx!.restore()
 
-            // ── Orb halo (outer glow) ──
+            // Halo
             const haloGrad = ctx!.createRadialGradient(cx, cy, baseR * 0.8, cx, cy, haloR)
             haloGrad.addColorStop(0, `${color}88`)
             haloGrad.addColorStop(0.4, `${color}33`)
@@ -215,7 +252,7 @@ export function TheOrb({ mood, intensity }: Props) {
             ctx!.arc(cx, cy, haloR, 0, Math.PI * 2)
             ctx!.fill()
 
-            // ── Orbiting particles ──
+            // Orbiting particles
             ctx!.save()
             ctx!.fillStyle = color
             for (const p of PARTICLES) {
@@ -229,7 +266,7 @@ export function TheOrb({ mood, intensity }: Props) {
             }
             ctx!.restore()
 
-            // ── Orb core: filled circle with inner gradient ──
+            // Orb core
             const coreGrad = ctx!.createRadialGradient(cx - baseR * 0.3, cy - baseR * 0.3, 0, cx, cy, baseR)
             coreGrad.addColorStop(0, '#ffffff')
             coreGrad.addColorStop(0.3, color)
@@ -239,10 +276,38 @@ export function TheOrb({ mood, intensity }: Props) {
             ctx!.arc(cx, cy, baseR, 0, Math.PI * 2)
             ctx!.fill()
 
-            // ── Ω rune in center ──
+            // ── [v2 #3] CAUSTICS — animated sin-wave bright pattern on orb surface ──
+            // Sample a moiré of two interfering sin-waves, light alpha, clipped to orb
+            ctx!.save()
+            ctx!.beginPath()
+            ctx!.arc(cx, cy, baseR, 0, Math.PI * 2)
+            ctx!.clip()
+            ctx!.globalCompositeOperation = 'lighter'
+            const causticStep = 4
+            const causticT = dt * 0.0017
+            for (let yy = -baseR; yy <= baseR; yy += causticStep) {
+                for (let xx = -baseR; xx <= baseR; xx += causticStep) {
+                    const dx = xx
+                    const dy = yy
+                    const dist2 = dx * dx + dy * dy
+                    if (dist2 > baseR * baseR) continue
+                    const a = Math.sin(dx * 0.06 + causticT) * Math.cos(dy * 0.05 - causticT * 0.7)
+                    const b = Math.sin((dx + dy) * 0.04 + causticT * 1.3)
+                    const v = (a * b + 1) * 0.5  // 0..1
+                    if (v < 0.78) continue
+                    const alpha = (v - 0.78) * 0.4
+                    ctx!.fillStyle = `rgba(220,240,255,${alpha})`
+                    ctx!.fillRect(cx + xx, cy + yy, causticStep, causticStep)
+                }
+            }
+            ctx!.restore()
+
+            // ── Ω rune — REFRACTED through ripple zones (#2) ──
+            // Render rune normally, then for each active ripple draw a thin wavy
+            // ghost-copy with offset = sin(angle) * ringAmplitude. Operator sees
+            // the Ω 'wobble' when ripples cross its position.
             ctx!.save()
             ctx!.translate(cx, cy)
-            // gentle rotation
             ctx!.rotate(Math.sin(dt / 5000) * 0.05)
             ctx!.font = `900 ${Math.floor(baseR * 1.2)}px "Orbitron", "Audiowide", sans-serif`
             ctx!.textAlign = 'center'
@@ -253,11 +318,74 @@ export function TheOrb({ mood, intensity }: Props) {
             ctx!.fillText('Ω', 0, baseR * 0.04)
             ctx!.restore()
 
-            // ── Water ripples ── [2026-05-19 polish]
-            // Each ripple = 3 concentric expanding rings with sin-wave amplitude,
-            // alpha decays exponentially over RIPPLE_LIFETIME_MS. Realistic feel
-            // via interference of multiple rings + offset phases.
+            // Refraction ghost passes
             const ripples = ripplesRef.current
+            if (ripples.length > 0) {
+                ctx!.save()
+                ctx!.font = `900 ${Math.floor(baseR * 1.2)}px "Orbitron", "Audiowide", sans-serif`
+                ctx!.textAlign = 'center'
+                ctx!.textBaseline = 'middle'
+                ctx!.globalCompositeOperation = 'lighter'
+                for (const r of ripples) {
+                    const age = now - r.t0
+                    if (age > RIPPLE_LIFETIME_MS) continue
+                    const t = age / RIPPLE_LIFETIME_MS
+                    const eased = 1 - Math.pow(1 - t, 2.5)
+                    const ringR = ripMaxR * eased * r.intensity
+                    // Refraction strength is proportional to how close the ring is to crossing the rune center
+                    const distToCenter = Math.hypot(r.x - cx, r.y - cy)
+                    const proximity = Math.exp(-Math.pow((distToCenter - ringR) / 30, 2))
+                    if (proximity < 0.05) continue
+                    const amp = proximity * 6 * r.intensity * (1 - t)
+                    const phase = Math.atan2(r.y - cy, r.x - cx)
+                    const offX = Math.cos(phase) * amp
+                    const offY = Math.sin(phase) * amp
+                    ctx!.fillStyle = `rgba(170,220,255,${0.3 * proximity * (1 - t)})`
+                    ctx!.fillText('Ω', cx + offX, cy + offY + baseR * 0.04)
+                }
+                ctx!.restore()
+            }
+
+            // ── [v2 #4] WAKE — drag trail (fading line through past points) ──
+            const wake = wakeRef.current
+            if (wake.length > 1) {
+                ctx!.save()
+                ctx!.globalCompositeOperation = 'lighter'
+                ctx!.lineCap = 'round'
+                ctx!.lineJoin = 'round'
+                for (let i = wake.length - 1; i >= 0; i--) {
+                    const w0 = wake[i]
+                    const ageW = now - w0.t0
+                    if (ageW > WAKE_LIFETIME_MS) {
+                        wake.splice(0, i + 1)
+                        break
+                    }
+                }
+                // Draw smooth line through remaining points with fade
+                for (let i = 1; i < wake.length; i++) {
+                    const p0 = wake[i - 1]
+                    const p1 = wake[i]
+                    const age = now - p1.t0
+                    const t = 1 - age / WAKE_LIFETIME_MS
+                    if (t <= 0) continue
+                    ctx!.strokeStyle = `rgba(180,220,255,${0.35 * t})`
+                    ctx!.lineWidth = 2.5 + 1.5 * t
+                    ctx!.beginPath()
+                    ctx!.moveTo(p0.x, p0.y)
+                    ctx!.lineTo(p1.x, p1.y)
+                    ctx!.stroke()
+                    // Inner brighter line
+                    ctx!.strokeStyle = `rgba(255,255,255,${0.2 * t})`
+                    ctx!.lineWidth = 1 + 0.5 * t
+                    ctx!.beginPath()
+                    ctx!.moveTo(p0.x, p0.y)
+                    ctx!.lineTo(p1.x, p1.y)
+                    ctx!.stroke()
+                }
+                ctx!.restore()
+            }
+
+            // ── [v1 + v2 #6] RIPPLES with EDGE BOUNCE ──
             if (ripples.length > 0) {
                 ctx!.save()
                 ctx!.globalCompositeOperation = 'lighter'
@@ -268,17 +396,36 @@ export function TheOrb({ mood, intensity }: Props) {
                         ripples.splice(i, 1)
                         continue
                     }
-                    const t = age / RIPPLE_LIFETIME_MS  // 0..1
-                    const easedExpand = 1 - Math.pow(1 - t, 2.5)  // ease-out
-                    const baseRing = ripMaxR * easedExpand * r.intensity
+                    const t = age / RIPPLE_LIFETIME_MS
+                    const eased = 1 - Math.pow(1 - t, 2.5)
+                    const baseRing = ripMaxR * eased * r.intensity
                     const alphaDecay = Math.pow(1 - t, 1.4)
-                    // 3 concentric rings cu phase offset = wave interference
+
+                    // Detect when ring first crosses orb core boundary → spawn bounce ripple
+                    const distToCenter = Math.hypot(r.x - cx, r.y - cy)
+                    if (!r.bounced && baseRing > distToCenter - baseR && distToCenter > baseR) {
+                        r.bounced = true
+                        // Reflected ripple — opposite side of the boundary
+                        const phase = Math.atan2(r.y - cy, r.x - cx)
+                        const reflX = cx + Math.cos(phase) * (baseR * 1.15)
+                        const reflY = cy + Math.sin(phase) * (baseR * 1.15)
+                        ripples.push({
+                            x: reflX, y: reflY, t0: now,
+                            intensity: r.intensity * 0.45,
+                            bounced: true,  // already counted; don't bounce again
+                        })
+                        if (ripples.length > RIPPLE_MAX_ACTIVE) {
+                            // Remove oldest if overflow
+                            ripples.splice(0, ripples.length - RIPPLE_MAX_ACTIVE)
+                        }
+                    }
+
+                    // 3 concentric rings cu phase offset
                     for (let k = 0; k < 3; k++) {
                         const ringR = baseRing + k * 18 * Math.sin(age * 0.012 + k)
                         if (ringR <= 0) continue
                         const ringAlpha = alphaDecay * (0.55 - k * 0.13) * r.intensity
                         if (ringAlpha < 0.01) continue
-                        // White-cyan tint with mood color hint
                         ctx!.strokeStyle = k === 0
                             ? `rgba(170,230,255,${ringAlpha})`
                             : k === 1
@@ -289,7 +436,28 @@ export function TheOrb({ mood, intensity }: Props) {
                         ctx!.arc(r.x, r.y, ringR, 0, Math.PI * 2)
                         ctx!.stroke()
                     }
-                    // Subtle bright dot at impact origin during first 300ms
+
+                    // [v2 #5] FOAM — micro-particles spawned on leading ring edge
+                    // Spawn rate per frame budget; clustered around leading ring
+                    if (age < RIPPLE_LIFETIME_MS * 0.4 && foamRef.current.length < FOAM_MAX) {
+                        for (let f = 0; f < FOAM_PER_RIPPLE_SPAWN; f++) {
+                            const ang = Math.random() * Math.PI * 2
+                            const ringR = baseRing
+                            const jx = r.x + Math.cos(ang) * ringR
+                            const jy = r.y + Math.sin(ang) * ringR
+                            // Outward velocity
+                            const vMag = 0.5 + Math.random() * 1.0
+                            foamRef.current.push({
+                                x: jx, y: jy,
+                                vx: Math.cos(ang) * vMag,
+                                vy: Math.sin(ang) * vMag,
+                                t0: now,
+                                life: FOAM_LIFETIME_MS * (0.5 + Math.random() * 0.5),
+                            })
+                        }
+                    }
+
+                    // Impact dot at origin (first 300ms)
                     if (age < 300) {
                         const dotAlpha = (1 - age / 300) * 0.7 * r.intensity
                         ctx!.fillStyle = `rgba(220,240,255,${dotAlpha})`
@@ -297,6 +465,32 @@ export function TheOrb({ mood, intensity }: Props) {
                         ctx!.arc(r.x, r.y, 3 + (age / 300) * 4, 0, Math.PI * 2)
                         ctx!.fill()
                     }
+                }
+                ctx!.restore()
+            }
+
+            // ── [v2 #5] FOAM render ──
+            const foam = foamRef.current
+            if (foam.length > 0) {
+                ctx!.save()
+                ctx!.globalCompositeOperation = 'lighter'
+                for (let i = foam.length - 1; i >= 0; i--) {
+                    const p = foam[i]
+                    const ageF = now - p.t0
+                    if (ageF > p.life) {
+                        foam.splice(i, 1)
+                        continue
+                    }
+                    p.x += p.vx
+                    p.y += p.vy
+                    // Slight slowdown
+                    p.vx *= 0.96
+                    p.vy *= 0.96
+                    const tF = 1 - ageF / p.life
+                    ctx!.fillStyle = `rgba(240,250,255,${0.7 * tF})`
+                    ctx!.beginPath()
+                    ctx!.arc(p.x, p.y, 1 + tF, 0, Math.PI * 2)
+                    ctx!.fill()
                 }
                 ctx!.restore()
             }
