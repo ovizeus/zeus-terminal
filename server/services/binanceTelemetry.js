@@ -219,6 +219,11 @@ function getSnapshot() {
     if (_pollersProvider) {
         try { activePollers = _pollersProvider(); } catch (_) { activePollers = null; }
     }
+    const byHost = _aggregateByHost();
+    const quotaPressure = {};
+    for (const [host, v] of Object.entries(byHost)) {
+        quotaPressure[host] = v.lastUsedWeight != null ? v.lastUsedWeight / QUOTA_CAP : 0;
+    }
     return {
         bootTs: _bootTs,
         uptimeMs: _ts() - _bootTs,
@@ -226,9 +231,15 @@ function getSnapshot() {
         callsPer1min: _countSince(ONE_MIN_MS),
         callsPer5min: _countSince(FIVE_MIN_MS),
         bySource: _aggregateBySource(),
-        byHost: _aggregateByHost(),
+        byHost,
         topEndpoints: _topEndpoints(),
         activePollers,
+        quotaPressure,
+        quotaThresholds: {
+            cap: QUOTA_CAP,
+            blockPublicPct: BLOCK_PUBLIC_PCT,
+            blockSignedPct: BLOCK_SIGNED_PCT,
+        },
     };
 }
 

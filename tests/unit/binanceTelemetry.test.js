@@ -320,3 +320,28 @@ describe('binanceTelemetry — wrapFetch preemptive gate (Phase A.1)', () => {
         expect(res.headers.get('x-mbx-used-weight-1m')).toBe('5800');
     });
 });
+
+describe('binanceTelemetry — getSnapshot exposes pressure (Phase A.1)', () => {
+    test('snapshot.quotaPressure reports ratio per host', () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/a', source: 's',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 3000,
+        });
+        telemetry.recordCall({
+            host: 'testnet.binancefuture.com', path: '/b', source: 's',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5400,
+        });
+        const snap = telemetry.getSnapshot();
+        expect(snap.quotaPressure).toBeDefined();
+        expect(snap.quotaPressure['fapi.binance.com']).toBeCloseTo(0.5, 3);
+        expect(snap.quotaPressure['testnet.binancefuture.com']).toBeCloseTo(0.9, 3);
+    });
+
+    test('snapshot.quotaThresholds reports configured caps', () => {
+        const snap = telemetry.getSnapshot();
+        expect(snap.quotaThresholds).toBeDefined();
+        expect(snap.quotaThresholds.cap).toBe(6000);
+        expect(snap.quotaThresholds.blockPublicPct).toBe(95);
+        expect(snap.quotaThresholds.blockSignedPct).toBe(97);
+    });
+});
