@@ -1150,7 +1150,7 @@ function _runCycle() {
                                 sl: null,  // SL computed downstream; live-without-SL caught at order/place layer
                                 mode: us ? us.engineMode : 'demo',
                                 reflection: { proceed: questioning.proceed, concerns: (questioning.concerns || []).map(c => c.type) },
-                                openPositions: _openPos.map(p => ({ symbol: p.symbol, side: p.side, size: p.size })),
+                                openPositions: _openPos.map(p => ({ symbol: p.symbol, side: p.side, size: p.size, mode: p.mode || 'demo' })),
                                 recentCloses: _recentCloses,
                                 correlatedExposure: { totalPct: 0 },  // serverCorrelationGuard already enforces; pass-through 0
                             },

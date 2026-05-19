@@ -917,6 +917,57 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     const existing = _positions.find(p => p.userId === userId && p.symbol === decision.symbol && p.side === side);
     if (existing) return null;
 
+    // [2026-05-19 opposite-side guard] Operator-reported: brain opening LONG +
+    // SHORT same symbol same mode = directional incoherence ("lapte acru
+    // murat"). Hard block same-mode opposite. Cross-mode opposite ALLOWED per
+    // Wave 8 reversal — demo & live are independent sandboxes; brain emits
+    // an informational voice thought to surface the awareness.
+    const oppositeSide = side === 'LONG' ? 'SHORT' : 'LONG';
+    const sameModeOpposite = _positions.find(p =>
+        p.userId === userId && p.symbol === decision.symbol && p.side === oppositeSide &&
+        (p.mode || 'demo') === (us.engineMode || 'demo')
+    );
+    if (sameModeOpposite) {
+        logger.warn('AT_ENGINE',
+            `Entry blocked uid=${userId} ${decision.symbol} ${side} ${us.engineMode || 'demo'} — opposite side already open (seq=${sameModeOpposite.seq})`);
+        _recordMissedTrade(userId, decision, 'OPPOSITE_SIDE_SAME_MODE');
+        try {
+            const vl = require('./ml/_voice/voiceLogger');
+            vl.logUtterance({
+                userId, utteranceType: 'THOUGHT', mood: 'FOCUSED',
+                text: `skipping ${side} ${decision.symbol} — already ${oppositeSide} same mode (${us.engineMode || 'demo'}).`,
+                templateId: 'opposite_side_skip',
+                contextJson: JSON.stringify({
+                    symbol: decision.symbol, attemptedSide: side,
+                    existingSide: oppositeSide, mode: us.engineMode || 'demo',
+                }),
+            });
+        } catch (_) {}
+        return null;
+    }
+    // Cross-mode opposite — informational only, allow per Wave 8 sandbox model
+    const crossModeOpposite = _positions.find(p =>
+        p.userId === userId && p.symbol === decision.symbol && p.side === oppositeSide &&
+        (p.mode || 'demo') !== (us.engineMode || 'demo')
+    );
+    if (crossModeOpposite) {
+        logger.info('AT_ENGINE',
+            `Cross-mode opposite OK uid=${userId} ${decision.symbol} ${side}/${us.engineMode}: ${crossModeOpposite.mode}/${oppositeSide} exists`);
+        try {
+            const vl = require('./ml/_voice/voiceLogger');
+            vl.logUtterance({
+                userId, utteranceType: 'THOUGHT', mood: 'CALM',
+                text: `${side} ${decision.symbol} on ${us.engineMode || 'demo'} — ${crossModeOpposite.mode} side has ${oppositeSide}. independent sandbox.`,
+                templateId: 'cross_mode_opposite_aware',
+                contextJson: JSON.stringify({
+                    symbol: decision.symbol, side, mode: us.engineMode || 'demo',
+                    crossSide: oppositeSide, crossMode: crossModeOpposite.mode,
+                }),
+            });
+        } catch (_) {}
+        // NO return — entry proceeds
+    }
+
     // ── Max positions gate (per-user) ──
     const userPosCount = _positions.filter(p => p.userId === userId).length;
     if (userPosCount >= stc.maxPos) { _recordMissedTrade(userId, decision, 'MAX_POSITIONS'); return null; }

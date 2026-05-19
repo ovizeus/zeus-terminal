@@ -52,13 +52,19 @@ function evaluate({ userId, decision }) {
         }
     }
 
-    // 4. NO_OPPOSITE_ENTRY_ON_OPEN
+    // 4. NO_OPPOSITE_ENTRY_ON_OPEN — same-mode only (Wave 8 sandbox model:
+    //    cross-mode opposite e intenționat; demo & live independent).
     if (Array.isArray(d.openPositions) && d.symbol && d.side) {
         const opposite = d.side === 'LONG' ? 'SHORT' : 'LONG';
-        const conflict = d.openPositions.find(p => p.symbol === d.symbol && p.side === opposite);
+        const decMode = d.mode || 'demo';
+        const conflict = d.openPositions.find(p =>
+            p.symbol === d.symbol &&
+            p.side === opposite &&
+            (p.mode || 'demo') === decMode
+        );
         if (conflict) {
             violations.push(_violation('NO_OPPOSITE_ENTRY_ON_OPEN',
-                `${d.side} blocked — ${opposite} ${d.symbol} already open`));
+                `${d.side} blocked — ${opposite} ${d.symbol} already open (same mode ${decMode})`));
         }
     }
 

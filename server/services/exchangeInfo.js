@@ -74,6 +74,12 @@ function getFilters(symbol) {
     return _cache[symbol] || null;
 }
 
+// [test-only] Inject filters into cache so unit tests can exercise code
+// paths that depend on _getExchangeFilters without hitting Binance.
+function _setFiltersForTest(symbol, filters) {
+    _cache[symbol] = filters;
+}
+
 /**
  * Round order quantity and stopPrice for a given symbol.
  * Returns { quantity, stopPrice } with corrected values.
@@ -92,4 +98,4 @@ function roundOrderParams(symbol, quantity, stopPrice) {
 }
 
 // [BUG-TM-8] Export getFilters so callers can prove cache hit before relying on roundOrderParams output (cannot detect cache miss via output equality alone — already-aligned qty looks identical to passthrough).
-module.exports = { startAutoRefresh, roundOrderParams, getFilters };
+module.exports = { startAutoRefresh, roundOrderParams, getFilters, _setFiltersForTest };
