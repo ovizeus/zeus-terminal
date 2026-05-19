@@ -111,16 +111,18 @@ export function ModeBar() {
           <span className="zmb-mode" id="zmbMode">{modeText}</span>
         </div>
       </div>
-      {oppositeModeAtEnabled && (
-        <span
-          className="zmb-opp-at-badge"
-          data-zmb-opp-at-badge="true"
-          title={`AutoTrade is currently ENABLED in ${oppositeModeLabel} mode`}
-        >
-          ⚠ {oppositeModeLabel} AT ON
-        </span>
-      )}
-      <QuotaIndicator />
+      <div className="zmb-badge-stack">
+        {oppositeModeAtEnabled && (
+          <span
+            className="zmb-opp-at-badge"
+            data-zmb-opp-at-badge="true"
+            title={`AutoTrade is currently ENABLED in ${oppositeModeLabel} mode`}
+          >
+            ⚠ {oppositeModeLabel} AT ON
+          </span>
+        )}
+        <QuotaIndicator />
+      </div>
       <button
         className={btnClass}
         id="zmbBtn"

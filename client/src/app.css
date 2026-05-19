@@ -4990,8 +4990,8 @@ select.zac-select optgroup {
  * across mode boundaries. Yellow warning treatment, sits between status
  * cluster and the action button. */
 .zmb-opp-at-badge {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 6px; margin: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  padding: 2px 6px; margin: 0;
   border: 1px solid rgba(255,200,0,0.45);
   background: rgba(255,200,0,0.10);
   color: #ffc800;
@@ -5003,6 +5003,18 @@ select.zac-select optgroup {
   flex-shrink: 0;
   white-space: nowrap;
 }
+
+/* [Phase A.1 stack 2026-05-19] Vertical stack for the two info badges
+ * (AT ON + QUOTA) — operator request: stivuite una sub alta sa incapa
+ * mai bine in mode bar pe testnet/real. Both badges share width inside. */
+.zmb-badge-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+  margin: 0 6px;
+  flex-shrink: 0;
+}
 @keyframes zmb-opp-pulse {
   0%, 100% { box-shadow: 0 0 4px rgba(255,200,0,0.2) }
   50%      { box-shadow: 0 0 10px rgba(255,200,0,0.6) }
@@ -5012,8 +5024,8 @@ select.zac-select optgroup {
  * shows Binance IP X-MBX-USED-WEIGHT-1M consumption with color-coded badge.
  * Color logic in QuotaIndicator.tsx; CSS provides 4 visual states. */
 .zmb-quota-indicator {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 6px; margin: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 2px 6px; margin: 0;
   border-radius: 4px;
   font-family: 'Orbitron', sans-serif;
   font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
