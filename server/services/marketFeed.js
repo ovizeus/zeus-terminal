@@ -480,6 +480,16 @@ async function subscribeMulti(symbols, timeframes) {
     logger.info('FEED', `All symbols subscribed: [${[..._activeSymbols].join(',')}]`);
 }
 
+// [BIN-TELEM Phase B 2026-05-19] Boot-time subscribe with sticky ref so
+// SD_SYMBOLS (BTC/ETH/SOL/BNB) cannot be torn down by position close.
+// Each boot symbol gets the 'boot|system' refKey, which is sticky by
+// _releaseRefByKey invariant (Task 1).
+async function subscribeMultiWithBootRef(symbols, timeframes) {
+    for (const sym of symbols) {
+        await subscribeForRef(sym, 'boot|system', timeframes);
+    }
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Unsubscribe — close all streams
 // ══════════════════════════════════════════════════════════════════
@@ -543,6 +553,7 @@ function getPollerStats() {
 module.exports = {
     subscribe,
     subscribeMulti,    // [MULTI-SYM]
+    subscribeMultiWithBootRef,  // [BIN-TELEM Phase B 2026-05-19]
     subscribeForRef,   // [BIN-TELEM Phase B 2026-05-19]
     releaseRef,        // [BIN-TELEM Phase B 2026-05-19]
     unsubscribeAll,

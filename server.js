@@ -1334,7 +1334,7 @@ const server = app.listen(PORT, '0.0.0.0', () => {
         .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     const SD_TFS = (process.env.SD_TIMEFRAMES || '5m,1h,4h').split(',');
     serverState.init(SD_SYMBOLS, SD_TFS);
-    marketFeed.subscribeMulti(SD_SYMBOLS, SD_TFS).then(() => {
+    marketFeed.subscribeMultiWithBootRef(SD_SYMBOLS, SD_TFS).then(() => {
       logger.info('SERVER', `[P2] Market feed active for [${SD_SYMBOLS.join(',')}] [${SD_TFS}]`);
     }).catch(err => {
       logger.error('SERVER', '[P2] Market feed failed:', err.message);

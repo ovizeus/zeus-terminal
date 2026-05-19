@@ -108,3 +108,17 @@ describe('marketFeed — subscribeForRef public API', () => {
         marketFeed._setSubscribeFnForTest(null);
     });
 });
+
+describe('marketFeed — boot sticky', () => {
+    test('subscribeMultiWithBootRef adds boot|system ref to each symbol', async () => {
+        marketFeed._setSubscribeFnForTest(async () => {});
+        await marketFeed.subscribeMultiWithBootRef(['BTCUSDT', 'ETHUSDT'], ['5m']);
+        expect(marketFeed._refCountForTest('BTCUSDT')).toBe(1);
+        expect(marketFeed._refCountForTest('ETHUSDT')).toBe(1);
+        // Release any user ref later — boot still sticky
+        marketFeed._addRefForTest('BTCUSDT', '1|TESTNET|111');
+        marketFeed.releaseRef('1|TESTNET|111');
+        expect(marketFeed._refCountForTest('BTCUSDT')).toBe(1); // boot survives
+        marketFeed._setSubscribeFnForTest(null);
+    });
+});
