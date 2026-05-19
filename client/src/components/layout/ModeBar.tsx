@@ -11,6 +11,7 @@ import { switchGlobalMode } from '../../data/marketDataTrading'
 import { _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { toast } from '../../data/marketDataHelpers'
 import { _ZI } from '../../constants/icons'
+import { QuotaIndicator } from './QuotaIndicator'
 
 export function ModeBar() {
   const engineMode = useATStore((s) => s.mode) || 'demo'
@@ -119,6 +120,7 @@ export function ModeBar() {
           ⚠ {oppositeModeLabel} AT ON
         </span>
       )}
+      <QuotaIndicator />
       <button
         className={btnClass}
         id="zmbBtn"

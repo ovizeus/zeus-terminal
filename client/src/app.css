@@ -5006,6 +5006,56 @@ select.zac-select optgroup {
   50%      { box-shadow: 0 0 10px rgba(255,200,0,0.6) }
 }
 
+/* [Phase A.1 Operator Visibility 2026-05-19] Quota pressure indicator —
+ * shows Binance IP X-MBX-USED-WEIGHT-1M consumption with color-coded badge.
+ * Color logic in QuotaIndicator.tsx; CSS provides 4 visual states. */
+.zmb-quota-indicator {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 8px; margin: 0 8px;
+  border-radius: 4px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.10em;
+  cursor: help;
+  user-select: none;
+}
+.zmb-quota-indicator .zmb-quota-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+}
+.zmb-quota-indicator .zmb-quota-pct {
+  font-variant-numeric: tabular-nums;
+}
+.zmb-quota-green {
+  border: 1px solid rgba(0, 255, 120, 0.35);
+  background: rgba(0, 255, 120, 0.06);
+  color: #00ff78;
+}
+.zmb-quota-green .zmb-quota-dot { background: #00ff78; box-shadow: 0 0 4px rgba(0,255,120,0.5) }
+.zmb-quota-amber {
+  border: 1px solid rgba(255, 200, 0, 0.45);
+  background: rgba(255, 200, 0, 0.10);
+  color: #ffc800;
+}
+.zmb-quota-amber .zmb-quota-dot { background: #ffc800; box-shadow: 0 0 6px rgba(255,200,0,0.6) }
+.zmb-quota-red {
+  border: 1px solid rgba(255, 80, 80, 0.55);
+  background: rgba(255, 80, 80, 0.12);
+  color: #ff5050;
+  animation: zmb-quota-pulse 2s ease-in-out infinite;
+}
+.zmb-quota-red .zmb-quota-dot { background: #ff5050; box-shadow: 0 0 8px rgba(255,80,80,0.7) }
+.zmb-quota-block {
+  border: 1px solid rgba(255, 0, 60, 0.75);
+  background: rgba(255, 0, 60, 0.18);
+  color: #ff0040;
+  font-weight: 900;
+  animation: zmb-quota-pulse 0.8s ease-in-out infinite;
+}
+.zmb-quota-block .zmb-quota-dot { background: #ff0040; box-shadow: 0 0 12px rgba(255,0,60,0.9) }
+@keyframes zmb-quota-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(255,80,80,0.2) }
+  50%      { box-shadow: 0 0 14px rgba(255,80,80,0.7) }
+}
+
 /* ══════════════════════════════════════════════════════════════════
    MODAL SYSTEM — .mover + .modal + shared controls
    ══════════════════════════════════════════════════════════════════ */
