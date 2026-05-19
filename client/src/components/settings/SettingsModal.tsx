@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useUiStore, useSettingsStore, useAuthStore } from '../../stores'
 import { authApi } from '../../services/api'
 import type { ThemeId } from '../../types'
+import { OmegaMemorySection } from './OmegaMemorySection'
 
 const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'native', label: 'Obsidian' },
@@ -9,7 +10,7 @@ const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'light', label: 'Ivory' },
 ]
 
-type Tab = 'general' | 'trading' | 'account'
+type Tab = 'general' | 'trading' | 'account' | 'omega'
 
 export function SettingsModal() {
   const open = useUiStore((s) => s.settingsOpen)
@@ -38,7 +39,7 @@ export function SettingsModal() {
         </div>
 
         <div className="zr-modal__tabs">
-          {(['general', 'trading', 'account'] as Tab[]).map((t) => (
+          {(['general', 'trading', 'account', 'omega'] as Tab[]).map((t) => (
             <button
               key={t}
               className={`zr-modal__tab ${tab === t ? 'zr-modal__tab--active' : ''}`}
@@ -146,6 +147,12 @@ export function SettingsModal() {
               <button className="zr-login__btn zr-login__btn--danger" onClick={handleLogout}>
                 Logout
               </button>
+            </div>
+          )}
+
+          {tab === 'omega' && (
+            <div className="zr-settings-section">
+              <OmegaMemorySection />
             </div>
           )}
         </div>

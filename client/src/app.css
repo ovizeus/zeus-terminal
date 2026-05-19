@@ -6965,3 +6965,41 @@ select option {
 .omega-ring5-sparkline-label { color: rgba(0,212,255,0.7); }
 .omega-ring5-sparkline { vertical-align: middle; }
 .omega-ring5-sparkline-meta { opacity: 0.55; }
+
+/* [Sub-A omega chat 2026-05-19] Orphan user bubble — rows from DB with
+ * missing/malformed context_json.question. Visually softer than normal. */
+.omega-chat-bubble.omega-chat-orphan {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* [Sub-A omega chat] Settings Omega section danger button + confirm block */
+.zr-btn-danger {
+    background: rgba(255, 60, 60, 0.15);
+    border-color: rgba(255, 60, 60, 0.5);
+    color: #ff8080;
+}
+.zr-btn-danger:hover:not(:disabled) {
+    background: rgba(255, 60, 60, 0.25);
+}
+.zr-confirm-block {
+    border: 1px solid rgba(255, 60, 60, 0.4);
+    background: rgba(255, 60, 60, 0.05);
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.zr-settings-subsection h4 {
+    margin: 0 0 6px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+}
+.zr-settings-desc, .zr-settings-meta {
+    font-size: 11px;
+    color: var(--text-dim, #888);
+    margin: 4px 0;
+}
