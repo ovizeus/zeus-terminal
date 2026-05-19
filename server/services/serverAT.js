@@ -2288,6 +2288,22 @@ function _closePosition(idx, pos, exitType, price, pnl) {
         logger.warn('AT_ENGINE', `Reflection hook failed: ${reflErr.message}`);
     }
     _notifyChange(userId);
+
+    // [Phase B 2026-05-19] Release marketFeed ref so pollers can be torn down
+    // when last position on this symbol closes. Sticky boot symbols are
+    // unaffected (their boot|system ref persists). Safe-guard: only release
+    // for live positions — demo positions never subscribed via ref-count.
+    if (pos.mode === 'live' && pos.userId && pos.env && pos.seq) {
+        try {
+            const refKey = `${pos.userId}|${pos.env}|${pos.seq}`;
+            const released = marketFeed.releaseRef(refKey);
+            if (released.length > 0) {
+                logger.info('AT_ENGINE', `[Phase B] released marketFeed refs: ${released.join(',')} (refKey=${refKey})`);
+            }
+        } catch (e) {
+            logger.warn('AT_ENGINE', `[Phase B] releaseRef failed seq=${pos.seq}: ${e.message}`);
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════

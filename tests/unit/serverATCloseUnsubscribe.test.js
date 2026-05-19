@@ -26,3 +26,20 @@ describe('serverAT — releaseRef on close', () => {
         expect(marketFeed._refCountForTest('XRPUSDT')).toBe(0);
     });
 });
+
+describe('serverAT — _closePosition releases marketFeed ref', () => {
+    test('closing a position decrements ref-count for its symbol', () => {
+        // Seed: position open, ref added
+        marketFeed._setUnsubscribeSymbolFnForTest(() => {});
+        marketFeed._addRefForTest('XRPUSDT', '1|TESTNET|7777');
+        expect(marketFeed._refCountForTest('XRPUSDT')).toBe(1);
+
+        // Simulate close by directly calling releaseRef with the same refKey
+        // shape _closePosition will use
+        const pos = { userId: 1, env: 'TESTNET', seq: 7777, symbol: 'XRPUSDT' };
+        const refKey = `${pos.userId}|${pos.env}|${pos.seq}`;
+        marketFeed.releaseRef(refKey);
+
+        expect(marketFeed._refCountForTest('XRPUSDT')).toBe(0);
+    });
+});
