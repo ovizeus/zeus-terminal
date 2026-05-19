@@ -508,6 +508,30 @@ router.post('/chat-stream', express.json(), async (req, res) => {
     }
 });
 
+// [Sub-A 2026-05-19] In-memory rate limit for DELETE /chat/history.
+// 1 clear per user per 15 seconds. Reset on process restart (acceptable —
+// next restart unblocks anyway). Stored as Map<userId, lastClearedAtMs>.
+const _CLEAR_RATE_LIMIT_MS = 15 * 1000;
+const _lastClearByUser = new Map();
+
+function _canClearNow(userId) {
+    const now = Date.now();
+    const last = _lastClearByUser.get(userId);
+    if (last == null) return { allowed: true, remainingSec: 0 };
+    const elapsed = now - last;
+    if (elapsed >= _CLEAR_RATE_LIMIT_MS) return { allowed: true, remainingSec: 0 };
+    return { allowed: false, remainingSec: Math.ceil((_CLEAR_RATE_LIMIT_MS - elapsed) / 1000) };
+}
+
+function _markCleared(userId) {
+    _lastClearByUser.set(userId, Date.now());
+}
+
+// Test helper — clears rate-limit Map (called from tests)
+function _resetRateLimitForTest() {
+    _lastClearByUser.clear();
+}
+
 // ── GET /api/omega/chat/history?limit=N ─────────────────────────────────────
 // [Sub-A 2026-05-19] Per-user chat history for TalkWithMe mount load + brain
 // rehydration. Reads ml_voice_log rows of type CHAT_REPLY, expands each into
@@ -557,6 +581,55 @@ router.get('/chat/history', (req, res) => {
     }
 });
 
+// ── DELETE /api/omega/chat/history ──────────────────────────────────────────
+// [Sub-A 2026-05-19] Per-user nuclear wipe of chat-type utterances.
+// Preserves THOUGHT (brain narration) and CRITICAL_ALERT (operator alerts).
+// Rate limit: 1 per user per 15s. Creates audit_log entry on every call.
+// Invalidates chatResponder in-memory _convoHistory for this user.
+router.delete('/chat/history', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    const gate = _canClearNow(userId);
+    if (!gate.allowed) {
+        return res.status(429).json({
+            ok: false,
+            error: `Rate limit: wait ${gate.remainingSec}s before next clear`,
+            remainingSec: gate.remainingSec,
+        });
+    }
+    try {
+        const result = db.prepare(`
+            DELETE FROM ml_voice_log
+            WHERE user_id = ? AND utterance_type IN ('CHAT_REPLY', 'GREETING', 'FAREWELL', 'REACTION')
+        `).run(userId);
+        const deletedCount = result.changes || 0;
+
+        // Audit log entry (best-effort, never block response)
+        try {
+            db.prepare(`
+                INSERT INTO audit_log (user_id, action, details, ip, created_at)
+                VALUES (?, 'OMEGA_CHAT_HISTORY_CLEARED', ?, ?, ?)
+            `).run(userId, JSON.stringify({ deletedCount, ip: req.ip }), req.ip || null, Date.now());
+        } catch (auditErr) {
+            logger.warn('OMEGA', `[chat/history] audit_log write failed uid=${userId}: ${auditErr.message}`);
+        }
+
+        // Invalidate chatResponder cache for this user (best-effort)
+        try {
+            const chatResponderModule = require('../services/ml/_voice/chatResponder');
+            if (typeof chatResponderModule._invalidateConvoHistory === 'function') {
+                chatResponderModule._invalidateConvoHistory(userId);
+            }
+        } catch (invErr) { /* swallow — telemetry never blocks */ }
+
+        _markCleared(userId);
+        res.json({ ok: true, deletedCount });
+    } catch (err) {
+        logger.error('OMEGA', `[chat/history DELETE] error uid=${userId}: ${err.message}`);
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 // [Day 30.2] Server-side TTS proxy — Google Translate unofficial endpoint.
 // Returns MP3 audio for the given text+lang. Works cross-platform (mobile +
 // desktop) without browser SpeechSynthesis quirks. No API key needed.
@@ -587,3 +660,4 @@ router.get('/tts', async (req, res) => {
 });
 
 module.exports = router;
+module.exports._resetRateLimitForTest = _resetRateLimitForTest;

@@ -13,6 +13,15 @@ const cookieParser = require('cookie-parser');
 const { db } = require('../../server/services/database');
 const omegaRoutes = require('../../server/routes/omega');
 
+// Reset rate-limit state between tests so each test starts with clean cooldown
+beforeEach(() => {
+    // Force-clear in-memory rate-limit Map by requiring the route module's helper
+    try {
+        const omegaModule = require('../../server/routes/omega');
+        if (omegaModule._resetRateLimitForTest) omegaModule._resetRateLimitForTest();
+    } catch (_) { /* not exposed yet */ }
+});
+
 function _makeApp(userId) {
     const app = express();
     app.use(cookieParser());
@@ -118,5 +127,76 @@ describe('GET /api/omega/chat/history', () => {
         const res = await request(_makeApp(1)).get('/api/omega/chat/history');
         expect(res.body.history.length).toBe(2);
         expect(res.body.history[1].text).toBe('real-chat');
+    });
+});
+
+describe('DELETE /api/omega/chat/history', () => {
+    beforeEach(() => {
+        // Ensure audit_log table exists
+        db.prepare(`CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER, action TEXT, details TEXT, ip TEXT, created_at INTEGER
+        )`).run();
+        db.prepare('DELETE FROM audit_log').run();
+    });
+
+    test('deletes all CHAT_REPLY rows for this user, returns deletedCount', async () => {
+        _seedRow(1, 'CHAT_REPLY', 'r1', { question: 'q1' });
+        _seedRow(1, 'CHAT_REPLY', 'r2', { question: 'q2' });
+        _seedRow(1, 'GREETING', 'salut', null);  // also gets cleared
+        _seedRow(1, 'THOUGHT', 'thinking', null); // PRESERVED
+        _seedRow(2, 'CHAT_REPLY', 'other-user', { question: 'q' }); // PRESERVED
+        const res = await request(_makeApp(1)).delete('/api/omega/chat/history');
+        expect(res.status).toBe(200);
+        expect(res.body.ok).toBe(true);
+        expect(res.body.deletedCount).toBe(3); // 2 CHAT_REPLY + 1 GREETING
+
+        const remaining = db.prepare(`SELECT user_id, utterance_type FROM ml_voice_log`).all();
+        expect(remaining.length).toBe(2);
+        expect(remaining.find(r => r.user_id === 1 && r.utterance_type === 'THOUGHT')).toBeDefined();
+        expect(remaining.find(r => r.user_id === 2)).toBeDefined();
+    });
+
+    test('creates audit_log entry on DELETE', async () => {
+        _seedRow(1, 'CHAT_REPLY', 'r1', { question: 'q1' });
+        await request(_makeApp(1)).delete('/api/omega/chat/history');
+        const entries = db.prepare(`SELECT * FROM audit_log WHERE action = 'OMEGA_CHAT_HISTORY_CLEARED'`).all();
+        expect(entries.length).toBe(1);
+        expect(entries[0].user_id).toBe(1);
+        const details = JSON.parse(entries[0].details);
+        expect(details.deletedCount).toBe(1);
+    });
+
+    test('rate limit: second DELETE within 15s returns 429', async () => {
+        _seedRow(1, 'CHAT_REPLY', 'r1', { question: 'q1' });
+        const r1 = await request(_makeApp(1)).delete('/api/omega/chat/history');
+        expect(r1.status).toBe(200);
+        const r2 = await request(_makeApp(1)).delete('/api/omega/chat/history');
+        expect(r2.status).toBe(429);
+        expect(r2.body.ok).toBe(false);
+        expect(r2.body.error).toMatch(/rate limit/i);
+    });
+
+    test('rate limit is per-user (user 2 not blocked by user 1)', async () => {
+        _seedRow(1, 'CHAT_REPLY', 'r1', { question: 'q' });
+        _seedRow(2, 'CHAT_REPLY', 'r2', { question: 'q' });
+        await request(_makeApp(1)).delete('/api/omega/chat/history');
+        const r2 = await request(_makeApp(2)).delete('/api/omega/chat/history');
+        expect(r2.status).toBe(200);
+    });
+
+    test('preserves THOUGHT and CRITICAL_ALERT — only clears chat-type utterances', async () => {
+        _seedRow(1, 'THOUGHT', 't1', null);
+        _seedRow(1, 'CRITICAL_ALERT', 'a1', null);
+        _seedRow(1, 'CHAT_REPLY', 'c1', { question: 'q' });
+        await request(_makeApp(1)).delete('/api/omega/chat/history');
+        const remaining = db.prepare(`SELECT utterance_type FROM ml_voice_log WHERE user_id = 1`).all();
+        expect(remaining.map(r => r.utterance_type).sort()).toEqual(['CRITICAL_ALERT', 'THOUGHT']);
+    });
+
+    test('returns 0 deletedCount when nothing to delete', async () => {
+        const res = await request(_makeApp(99)).delete('/api/omega/chat/history');
+        expect(res.status).toBe(200);
+        expect(res.body.deletedCount).toBe(0);
     });
 });
