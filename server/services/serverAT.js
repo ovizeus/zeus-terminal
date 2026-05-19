@@ -4423,8 +4423,16 @@ async function _runReconciliation(isStartup) {
                     if (!_p.symbol || seenInThisCycle.has(_p.symbol)) continue;
                     seenInThisCycle.add(_p.symbol);
                     if (!activeSyms.has(_p.symbol)) {
-                        logger.info(label, `Auto-subscribing ${_p.symbol} — open position detected uid=${userId} seq=${_p.seq}`);
-                        marketFeed.subscribe(_p.symbol).catch(subErr => {
+                        // [Phase B 2026-05-19] ref-counted subscribe — released
+                        // when position closes (see _closePosition in Task 5).
+                        // Sticky boot symbols (BTC/ETH/SOL/BNB) keep their own
+                        // boot|system ref regardless of position lifecycle.
+                        const refKey = `${userId}|${_p.env || 'TESTNET'}|${_p.seq}`;
+                        marketFeed.subscribeForRef(_p.symbol, refKey).then(added => {
+                            if (added && !activeSyms.has(_p.symbol)) {
+                                logger.info(label, `Auto-subscribed ${_p.symbol} uid=${userId} seq=${_p.seq} refKey=${refKey}`);
+                            }
+                        }).catch(subErr => {
                             logger.warn(label, `Auto-subscribe failed for ${_p.symbol}: ${subErr.message}`);
                         });
                     }
