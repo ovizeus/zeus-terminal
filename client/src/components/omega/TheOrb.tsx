@@ -10,6 +10,12 @@ import { MOOD_COLOR } from './omegaApi'
  * pulse rate, and particle behavior. Read-only — receives mood + intensity
  * from parent, renders.
  *
+ * [2026-05-19 water ripple] Operator polish moft — pointer interaction
+ * spawns expanding water ripples on the orb surface. Realistic via 3
+ * concentric expanding rings per ripple with sin-wave amplitude + alpha
+ * decay over ~2.5s lifetime. Drag = continuous spawn. Touch + mouse both
+ * supported. Confined to the .omega-orb-wrap container.
+ *
  * Performance: requestAnimationFrame loop, ~60fps trivial on modern devices.
  * Canvas is 2x devicePixelRatio for retina crispness.
  */
@@ -18,9 +24,25 @@ interface Props {
     intensity: number
 }
 
+interface Ripple {
+    x: number      // px in canvas client space
+    y: number
+    t0: number     // timestamp emitted
+    intensity: number  // 0.4..1.0 — affects amplitude
+}
+
+const RIPPLE_LIFETIME_MS = 2500
+const RIPPLE_MAX_RADIUS_FACTOR = 0.55  // relative to min(w,h)
+const RIPPLE_MAX_ACTIVE = 40
+const RIPPLE_DRAG_SPAWN_MIN_PX = 8  // min distance between continuous-drag ripples
+const RIPPLE_DRAG_SPAWN_MIN_MS = 30  // min time between drag ripples
+
 export function TheOrb({ mood, intensity }: Props) {
     const canvasRef = useRef<HTMLCanvasElement | null>(null)
+    const wrapRef = useRef<HTMLDivElement | null>(null)
     const stateRef = useRef({ mood, intensity, t0: performance.now() })
+    const ripplesRef = useRef<Ripple[]>([])
+    const lastDragRef = useRef<{ x: number; y: number; t: number } | null>(null)
 
     useEffect(() => {
         stateRef.current.mood = mood
@@ -29,7 +51,8 @@ export function TheOrb({ mood, intensity }: Props) {
 
     useEffect(() => {
         const canvas = canvasRef.current
-        if (!canvas) return
+        const wrap = wrapRef.current
+        if (!canvas || !wrap) return
         const ctx = canvas.getContext('2d')
         if (!ctx) return
 
@@ -44,6 +67,58 @@ export function TheOrb({ mood, intensity }: Props) {
         fitCanvas()
         const ro = new ResizeObserver(fitCanvas)
         ro.observe(canvas)
+
+        // ── Pointer → ripple emitter ─────────────────────────────────
+        // Use the wrap element so ripples spawn anywhere over the orb UI.
+        // Coordinates are translated to canvas client space.
+        function spawnRipple(clientX: number, clientY: number, intensityHint: number) {
+            const rect = canvas!.getBoundingClientRect()
+            const x = clientX - rect.left
+            const y = clientY - rect.top
+            // Ignore points outside the canvas (safety)
+            if (x < 0 || y < 0 || x > rect.width || y > rect.height) return
+            ripplesRef.current.push({
+                x, y, t0: performance.now(),
+                intensity: Math.max(0.4, Math.min(1.0, intensityHint)),
+            })
+            // Cap active ripples to avoid runaway growth
+            if (ripplesRef.current.length > RIPPLE_MAX_ACTIVE) {
+                ripplesRef.current.splice(0, ripplesRef.current.length - RIPPLE_MAX_ACTIVE)
+            }
+        }
+
+        let isDown = false
+        function onPointerDown(e: PointerEvent) {
+            isDown = true
+            wrap!.setPointerCapture?.(e.pointerId)
+            spawnRipple(e.clientX, e.clientY, 1.0)
+            lastDragRef.current = { x: e.clientX, y: e.clientY, t: performance.now() }
+        }
+        function onPointerMove(e: PointerEvent) {
+            if (!isDown) return
+            const last = lastDragRef.current
+            const now = performance.now()
+            if (last) {
+                const dx = e.clientX - last.x
+                const dy = e.clientY - last.y
+                const dist = Math.hypot(dx, dy)
+                if (dist < RIPPLE_DRAG_SPAWN_MIN_PX || now - last.t < RIPPLE_DRAG_SPAWN_MIN_MS) return
+            }
+            // Drag-spawned ripples slightly weaker than tap
+            spawnRipple(e.clientX, e.clientY, 0.7)
+            lastDragRef.current = { x: e.clientX, y: e.clientY, t: now }
+        }
+        function onPointerUp(e: PointerEvent) {
+            isDown = false
+            try { wrap!.releasePointerCapture?.(e.pointerId) } catch (_) {}
+            lastDragRef.current = null
+        }
+
+        wrap.addEventListener('pointerdown', onPointerDown)
+        wrap.addEventListener('pointermove', onPointerMove)
+        wrap.addEventListener('pointerup', onPointerUp)
+        wrap.addEventListener('pointercancel', onPointerUp)
+        wrap.addEventListener('pointerleave', onPointerUp)
 
         // Star field — pre-populated, drifting slowly
         type Star = { x: number; y: number; r: number; sp: number; ph: number }
@@ -81,6 +156,7 @@ export function TheOrb({ mood, intensity }: Props) {
             const cx = w / 2
             const cy = h / 2
             const baseR = Math.min(w, h) * 0.18
+            const ripMaxR = Math.min(w, h) * RIPPLE_MAX_RADIUS_FACTOR
 
             // Pulse rate per mood
             const pulseHz =
@@ -177,6 +253,54 @@ export function TheOrb({ mood, intensity }: Props) {
             ctx!.fillText('Ω', 0, baseR * 0.04)
             ctx!.restore()
 
+            // ── Water ripples ── [2026-05-19 polish]
+            // Each ripple = 3 concentric expanding rings with sin-wave amplitude,
+            // alpha decays exponentially over RIPPLE_LIFETIME_MS. Realistic feel
+            // via interference of multiple rings + offset phases.
+            const ripples = ripplesRef.current
+            if (ripples.length > 0) {
+                ctx!.save()
+                ctx!.globalCompositeOperation = 'lighter'
+                for (let i = ripples.length - 1; i >= 0; i--) {
+                    const r = ripples[i]
+                    const age = now - r.t0
+                    if (age > RIPPLE_LIFETIME_MS) {
+                        ripples.splice(i, 1)
+                        continue
+                    }
+                    const t = age / RIPPLE_LIFETIME_MS  // 0..1
+                    const easedExpand = 1 - Math.pow(1 - t, 2.5)  // ease-out
+                    const baseRing = ripMaxR * easedExpand * r.intensity
+                    const alphaDecay = Math.pow(1 - t, 1.4)
+                    // 3 concentric rings cu phase offset = wave interference
+                    for (let k = 0; k < 3; k++) {
+                        const ringR = baseRing + k * 18 * Math.sin(age * 0.012 + k)
+                        if (ringR <= 0) continue
+                        const ringAlpha = alphaDecay * (0.55 - k * 0.13) * r.intensity
+                        if (ringAlpha < 0.01) continue
+                        // White-cyan tint with mood color hint
+                        ctx!.strokeStyle = k === 0
+                            ? `rgba(170,230,255,${ringAlpha})`
+                            : k === 1
+                                ? `rgba(255,255,255,${ringAlpha * 0.7})`
+                                : `${color}${Math.floor(ringAlpha * 90).toString(16).padStart(2, '0')}`
+                        ctx!.lineWidth = 1.8 + Math.sin(age * 0.01 + k) * 0.8
+                        ctx!.beginPath()
+                        ctx!.arc(r.x, r.y, ringR, 0, Math.PI * 2)
+                        ctx!.stroke()
+                    }
+                    // Subtle bright dot at impact origin during first 300ms
+                    if (age < 300) {
+                        const dotAlpha = (1 - age / 300) * 0.7 * r.intensity
+                        ctx!.fillStyle = `rgba(220,240,255,${dotAlpha})`
+                        ctx!.beginPath()
+                        ctx!.arc(r.x, r.y, 3 + (age / 300) * 4, 0, Math.PI * 2)
+                        ctx!.fill()
+                    }
+                }
+                ctx!.restore()
+            }
+
             raf = requestAnimationFrame(frame)
         }
         raf = requestAnimationFrame(frame)
@@ -184,11 +308,16 @@ export function TheOrb({ mood, intensity }: Props) {
         return () => {
             cancelAnimationFrame(raf)
             ro.disconnect()
+            wrap.removeEventListener('pointerdown', onPointerDown)
+            wrap.removeEventListener('pointermove', onPointerMove)
+            wrap.removeEventListener('pointerup', onPointerUp)
+            wrap.removeEventListener('pointercancel', onPointerUp)
+            wrap.removeEventListener('pointerleave', onPointerUp)
         }
     }, [])
 
     return (
-        <div className="omega-orb-wrap">
+        <div className="omega-orb-wrap" ref={wrapRef} style={{ touchAction: 'none' }}>
             <canvas ref={canvasRef} className="omega-orb-canvas" aria-label="OMEGA mood orb" />
             <div className="omega-orb-mood" data-mood={mood}>
                 <span className="omega-orb-mood-label">{mood}</span>
