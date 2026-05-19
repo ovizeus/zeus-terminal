@@ -232,15 +232,16 @@ describe('binanceTelemetry — quota pressure (Phase A.1)', () => {
 });
 
 describe('binanceTelemetry — wrapFetch preemptive gate (Phase A.1)', () => {
-    test('wrapFetch returns synthetic 429 when public pressure >= 95%', async () => {
-        // Seed pressure at 95.5%
+    test('wrapFetch returns synthetic 429 when signed P1 pressure >= 97%', async () => {
+        // Phase A.2: scheduler passes P1 (recon) but A.1 still blocks signed
+        // sources at 97%. P1 (serverAT:recon-) at 97.2% must be blocked by A.1.
         telemetry.recordCall({
-            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
-            weight: 1, status: 200, latencyMs: 1, usedWeight: 5730,  // 5730/6000 = 95.5%
+            host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5830,  // 97.2%
         });
         let fetchCalled = false;
         const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
-        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'marketRadar:oi' });
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'serverAT:recon-positionRisk' });
         expect(fetchCalled).toBe(false);
         expect(res.status).toBe(429);
         expect(res.ok).toBe(false);
@@ -249,53 +250,60 @@ describe('binanceTelemetry — wrapFetch preemptive gate (Phase A.1)', () => {
         expect(body.msg).toMatch(/preemptive/i);
     });
 
-    test('wrapFetch allows public request when pressure < 95%', async () => {
+    test('wrapFetch allows P5 request when pressure < 70% (below scheduler threshold)', async () => {
+        // Phase A.2: P5 (marketRadar) scheduler threshold is 70%. Below that,
+        // scheduler passes and A.1 95% gate is not reached — request proceeds.
         telemetry.recordCall({
             host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
-            weight: 1, status: 200, latencyMs: 1, usedWeight: 5000,  // 83.3%
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 3000,  // 50%
         });
         let fetchCalled = false;
-        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => '5050' }, json: async () => ({}) }; };
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => '3050' }, json: async () => ({}) }; };
         const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'marketRadar:oi' });
         expect(fetchCalled).toBe(true);
         expect(res.status).toBe(200);
     });
 
-    test('wrapFetch signed tolerates higher pressure — blocks only at 97%', async () => {
-        // 96% pressure: public would block, signed should NOT
+    test('wrapFetch P0 signed tolerates pressure below A.1 signed threshold (97%)', async () => {
+        // Phase A.2: P0 bypasses scheduler; A.1 signed threshold is 97%.
+        // At 96% P0 must proceed.
         telemetry.recordCall({
             host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
             weight: 1, status: 200, latencyMs: 1, usedWeight: 5760,  // 96%
         });
         let fetchCalled = false;
         const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
-        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'signer:GET /fapi/v2/balance' });
-        expect(fetchCalled).toBe(true);  // signed gets through at 96%
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'signer:POST /fapi/v1/order' });
+        expect(fetchCalled).toBe(true);  // P0 gets through scheduler + A.1 at 96%
         expect(res.status).toBe(200);
     });
 
-    test('wrapFetch signed DOES block at 97% pressure', async () => {
+    test('wrapFetch P1 DOES block at 97% pressure via A.1', async () => {
+        // Phase A.2: P1 bypasses scheduler; A.1 signed threshold is 97%.
+        // Different recon path to confirm all serverAT:recon- variants blocked.
         telemetry.recordCall({
             host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
-            weight: 1, status: 200, latencyMs: 1, usedWeight: 5830,  // 97.2%
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5900,  // 98.3%
         });
         let fetchCalled = false;
         const fakeFetch = async () => { fetchCalled = true; return { status: 200 }; };
-        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'signer:GET /fapi/v2/balance' });
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'serverAT:recon-balance' });
         expect(fetchCalled).toBe(false);
         expect(res.status).toBe(429);
     });
 
-    test('synthetic 429 records blockedByPressure counter per source', async () => {
+    test('synthetic 429 records blockedByPressure counter for P1 source', async () => {
+        // Phase A.2: P1 (serverAT:recon-) bypasses scheduler but not A.1.
+        // At 97.2% A.1 blocks the signed P1 source (signed threshold = 97%).
         telemetry.recordCall({
-            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
-            weight: 1, status: 200, latencyMs: 1, usedWeight: 5800,
+            host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5830,  // 97.2%
         });
         const fakeFetch = async () => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) });
-        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
-        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/y', { __src: 'marketRadar:oi' });
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'serverAT:recon-positionRisk' });
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/y', { __src: 'serverAT:recon-positionRisk' });
         const snap = telemetry.getSnapshot();
-        expect(snap.bySource['marketRadar:oi'].blockedByPressure).toBe(2);
+        expect(snap.bySource['serverAT:recon-positionRisk'].blockedByPressure).toBe(2);
     });
 
     test('non-blocked request does NOT increment blockedByPressure', async () => {
@@ -311,13 +319,15 @@ describe('binanceTelemetry — wrapFetch preemptive gate (Phase A.1)', () => {
         expect(cnt).toBe(0);
     });
 
-    test('synthetic 429 response.headers.get returns last usedWeight', async () => {
+    test('synthetic 429 response.headers.get returns last usedWeight (P1 source)', async () => {
+        // Phase A.2: P1 (serverAT:recon-) bypasses scheduler but not A.1.
+        // At 97.2% A.1 blocks and returns headers with usedWeight.
         telemetry.recordCall({
-            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
-            weight: 1, status: 200, latencyMs: 1, usedWeight: 5800,
+            host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5830,  // 97.2%
         });
-        const res = await telemetry.wrapFetch(async () => ({}), 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
-        expect(res.headers.get('x-mbx-used-weight-1m')).toBe('5800');
+        const res = await telemetry.wrapFetch(async () => ({}), 'https://fapi.binance.com/x', { __src: 'serverAT:recon-positionRisk' });
+        expect(res.headers.get('x-mbx-used-weight-1m')).toBe('5830');
     });
 });
 
@@ -343,5 +353,68 @@ describe('binanceTelemetry — getSnapshot exposes pressure (Phase A.1)', () => 
         expect(snap.quotaThresholds.cap).toBe(6000);
         expect(snap.quotaThresholds.blockPublicPct).toBe(95);
         expect(snap.quotaThresholds.blockSignedPct).toBe(97);
+    });
+});
+
+describe('binanceTelemetry — scheduler integration (Phase A.2)', () => {
+    test('wrapFetch returns synthetic 503 when scheduler rejects', async () => {
+        // Seed pressure at 75% — P5 reject at 70%
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 4500,  // 75%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
+        expect(fetchCalled).toBe(false);
+        expect(res.status).toBe(503);
+        expect(res.ok).toBe(false);
+        const body = await res.json();
+        expect(body.code).toBe('BINANCE_SCHEDULER_BACKPRESSURE');
+        expect(body.lane).toBe('P5');
+        expect(body.retryable).toBe(true);
+        expect(body.synthetic).toBe(true);
+        expect(body.pressure).toBeCloseTo(0.75, 2);
+    });
+
+    test('wrapFetch records rejectedByScheduler flag in stats', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 4500,
+        });
+        const fakeFetch = async () => ({ status: 200 });
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
+        const snap = telemetry.getSnapshot();
+        expect(snap.bySource['marketRadar:oi'].rejectedByScheduler).toBe(1);
+    });
+
+    test('wrapFetch P0 always proceeds even at extreme pressure', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5950,  // 99.2%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'signer:POST /fapi/v1/order' });
+        expect(fetchCalled).toBe(true);  // P0 proceeds
+    });
+
+    test('wrapFetch low pressure allows normal flow', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 1000,  // 16.7%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
+        expect(fetchCalled).toBe(true);
+        expect(res.status).toBe(200);
+    });
+
+    test('getSnapshot exposes schedulerStats', () => {
+        const snap = telemetry.getSnapshot();
+        expect(snap.schedulerStats).toBeDefined();
+        expect(snap.schedulerStats.byLane).toBeDefined();
+        expect(snap.schedulerStats.totalDecisions).toBeGreaterThanOrEqual(0);
     });
 });

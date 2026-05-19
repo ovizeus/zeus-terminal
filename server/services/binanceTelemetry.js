@@ -39,6 +39,7 @@ function recordCall(entry) {
         usedWeight: typeof entry.usedWeight === 'number' ? entry.usedWeight : null,
         networkError: !!entry.networkError,
         blockedByPressure: !!entry.blockedByPressure,
+        rejectedByScheduler: !!entry.rejectedByScheduler,
     });
     _prune();
 }
@@ -97,11 +98,53 @@ async function wrapFetch(fetchFn, url, opts) {
         path = u.pathname;
     } catch (_) { /* leave defaults */ }
 
+    // [Phase A.2 2026-05-19] Scheduler — priority lanes + critical section.
+    // Sits BEFORE Phase A.1 gate so lane-based rejection fires earlier than
+    // the binary header threshold. P0 (order ops) and P1 (recon) are never
+    // rejected by the scheduler; P2-P5 follow threshold table.
+    // When scheduler explicitly marks P0/P1 as accepted, bypass A.1 entirely —
+    // P0 order ops must never be blocked even at extreme quota pressure.
+    const pressure = getQuotaPressure(host);
+    let _scheduler = null;
+    let _skipA1 = false;  // set true when scheduler explicitly accepts P0/P1
+    try { _scheduler = require('./binanceScheduler'); } catch (_) { _scheduler = null; }
+    if (_scheduler) {
+        const decision = _scheduler.canProceed({ pressure, src });
+        if (!decision.accept) {
+            recordCall({
+                host, path, source: src,
+                weight: 0,
+                status: 503,
+                latencyMs: 0,
+                usedWeight: null,
+                rejectedByScheduler: true,
+            });
+            const msg = `synthetic 503 scheduler backpressure — lane=${decision.lane} pressure=${(pressure * 100).toFixed(1)}% reason=${decision.reason}`;
+            return {
+                status: 503,
+                ok: false,
+                headers: { get: () => null },
+                json: async () => ({
+                    code: 'BINANCE_SCHEDULER_BACKPRESSURE',
+                    lane: decision.lane,
+                    pressure: decision.pressure,
+                    retryable: !!decision.retryable,
+                    synthetic: true,
+                    reason: decision.reason,
+                    msg,
+                }),
+            };
+        }
+        // P0 accepted by scheduler — skip A.1 gate (order execution is sacred,
+        // must never be blocked even at extreme quota pressure)
+        if (decision.lane === 'P0') _skipA1 = true;
+    }
+
     // [Phase A.1 2026-05-19] Preemptive gate — if Binance reported usedWeight
     // is over threshold, refuse to issue the request and synthesize a 429
     // response. Caller (signer or public poller) handles 429 via existing
     // logic (binanceSigner._setIpBan fallback 60s; public next-tick retry).
-    if (shouldBlockForPressure(host, src)) {
+    if (!_skipA1 && shouldBlockForPressure(host, src)) {
         const pressure = getQuotaPressure(host);
         const lastUsed = Math.round(pressure * QUOTA_CAP);
         recordCall({
@@ -152,13 +195,14 @@ function _aggregateBySource() {
     const out = {};
     for (const e of _ring) {
         if (!out[e.source]) {
-            out[e.source] = { calls: 0, weightSum: 0, errors2xx: 0, errors4xx: 0, errors5xx: 0, networkErrors: 0, latencySum: 0, blockedByPressure: 0 };
+            out[e.source] = { calls: 0, weightSum: 0, errors2xx: 0, errors4xx: 0, errors5xx: 0, networkErrors: 0, latencySum: 0, blockedByPressure: 0, rejectedByScheduler: 0 };
         }
         const s = out[e.source];
         s.calls++;
         s.weightSum += e.weight;
         s.latencySum += e.latencyMs;
         if (e.blockedByPressure) s.blockedByPressure++;
+        if (e.rejectedByScheduler) s.rejectedByScheduler++;
         if (e.networkError) s.networkErrors++;
         else if (e.status >= 200 && e.status < 300) {
             // Successes — but flag 200s only with non-ok-aware status (treat 2xx as success)
@@ -224,6 +268,8 @@ function getSnapshot() {
     for (const [host, v] of Object.entries(byHost)) {
         quotaPressure[host] = v.lastUsedWeight != null ? v.lastUsedWeight / QUOTA_CAP : 0;
     }
+    let schedulerStats = null;
+    try { schedulerStats = require('./binanceScheduler').getStats(); } catch (_) { /* optional */ }
     return {
         bootTs: _bootTs,
         uptimeMs: _ts() - _bootTs,
@@ -240,6 +286,7 @@ function getSnapshot() {
             blockPublicPct: BLOCK_PUBLIC_PCT,
             blockSignedPct: BLOCK_SIGNED_PCT,
         },
+        schedulerStats,
     };
 }
 
