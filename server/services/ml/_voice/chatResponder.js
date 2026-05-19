@@ -15,6 +15,16 @@ const { db } = require('../../database');
 const llmClient = require('./llmClient');
 const marketRadar = require('../../marketRadar');
 
+// [Wave 9.5] Fundamentals — CoinGecko-backed market context (rank/dominance/
+// vol/24h). Lazy require + safe getter so chat never blocks on fundamentals.
+function _safeFundamentals(symbol) {
+    try {
+        const fund = require('../../fundamentals');
+        if (!fund || typeof fund.getFundamentalsCached !== 'function') return null;
+        return fund.getFundamentalsCached(symbol);
+    } catch (_) { return null; }
+}
+
 // Lazy-resolve serverState — avoids circular require at module load time and
 // lets tests monkey-patch getSnapshotForSymbol post-require.
 function _getServerState() {
@@ -662,6 +672,59 @@ function _replyStructure(ctx, symbolHint, originalText) {
         reply: `${sym} structure: ${trendStr} (score ${score}/100).${bos}${choch}`,
         mood: trendStr.includes('up') ? 'EXCITED' : trendStr.includes('down') ? 'NERVOUS' : 'CALM',
     };
+}
+
+// ── Intent: fundamentals (CoinGecko market context) ─────────────────
+// [Wave 9.5] Closes the loop on Wave 9 data wire. User asks "BTC market cap"
+// / "cum e fundamental ETH" / "ETH dominance" → reads cached CoinGecko data
+// and replies with rank + dominance + 24h vol + 24h change. Multilang
+// RO/EN/ES/FR/DE/PT.
+function _replyFundamentals(ctx, symbolHint, originalText) {
+    const lang = _detectLanguage(originalText || '');
+    const sym = _normSymbol(symbolHint);
+    const fund = _safeFundamentals(sym);
+    if (!fund) {
+        const base = String(sym || '').replace(/USDT$/i, '');
+        const msg = {
+            RO: `nu am date fundamentale pentru ${base} (cache rece sau simbol necotat în top 200 CoinGecko).`,
+            ES: `sin datos fundamentales para ${base} (caché frío o símbolo fuera del top 200).`,
+            FR: `pas de données fondamentales pour ${base} (cache froid ou hors top 200).`,
+            DE: `keine Fundamentaldaten für ${base} (Cache leer oder außerhalb Top 200).`,
+            PT: `sem dados fundamentais para ${base} (cache frio ou fora do top 200).`,
+            EN: `no fundamentals data for ${base} (cold cache or symbol outside CoinGecko top 200).`,
+        };
+        return { reply: msg[lang] || msg.EN, mood: 'BORED' };
+    }
+    const base = String(sym || '').replace(/USDT$/i, '');
+    const rank = fund.market_cap_rank;
+    const dom = fund.dominance_pct != null ? fund.dominance_pct.toFixed(2) : null;
+    const volB = fund.vol_24h_usd != null ? (fund.vol_24h_usd / 1e9).toFixed(2) : null;
+    const chg = fund.price_change_24h_pct != null ? fund.price_change_24h_pct.toFixed(2) : null;
+    const chgSign = chg != null && Number(chg) >= 0 ? '+' : '';
+    const ageMin = fund.cache_age_ms != null ? Math.round(fund.cache_age_ms / 60000) : null;
+    const stale = ageMin != null && ageMin > 10 ? ` (date ${ageMin}min vechi)` : '';
+    const staleEN = ageMin != null && ageMin > 10 ? ` (data ${ageMin}min old)` : '';
+
+    let reply;
+    if (lang === 'RO') {
+        const domStr = dom ? ` cu dominanță ${dom}%` : '';
+        const volStr = volB ? ` și volum 24h $${volB}B` : '';
+        const chgStr = chg != null ? ` (24h ${chgSign}${chg}%)` : '';
+        reply = `${base} e #${rank} mondial${domStr}${volStr}${chgStr}${stale}.`;
+    } else if (lang === 'ES') {
+        reply = `${base} está #${rank} global${dom ? `, dominancia ${dom}%` : ''}${volB ? `, volumen 24h $${volB}B` : ''}${chg != null ? ` (${chgSign}${chg}% 24h)` : ''}${staleEN}.`;
+    } else if (lang === 'FR') {
+        reply = `${base} est #${rank} mondial${dom ? `, dominance ${dom}%` : ''}${volB ? `, volume 24h $${volB}B` : ''}${chg != null ? ` (${chgSign}${chg}% 24h)` : ''}${staleEN}.`;
+    } else if (lang === 'DE') {
+        reply = `${base} ist #${rank} weltweit${dom ? `, Dominanz ${dom}%` : ''}${volB ? `, Volumen 24h $${volB}B` : ''}${chg != null ? ` (${chgSign}${chg}% 24h)` : ''}${staleEN}.`;
+    } else if (lang === 'PT') {
+        reply = `${base} é #${rank} global${dom ? `, dominância ${dom}%` : ''}${volB ? `, volume 24h $${volB}B` : ''}${chg != null ? ` (${chgSign}${chg}% 24h)` : ''}${staleEN}.`;
+    } else {
+        reply = `${base} is #${rank} globally${dom ? `, dominance ${dom}%` : ''}${volB ? `, 24h volume $${volB}B` : ''}${chg != null ? ` (${chgSign}${chg}% 24h)` : ''}${staleEN}.`;
+    }
+    const mood = chg != null && Number(chg) > 2 ? 'EXCITED'
+        : (chg != null && Number(chg) < -2 ? 'NERVOUS' : 'FOCUSED');
+    return { reply, mood };
 }
 
 // ── Intent #2: AI predictivity (Ring5 cell surface) ──────────────────
@@ -1425,6 +1488,14 @@ async function _tryLocalIntent(ctx, text, originalText) {
         if (obMatch && symInOb) return _replyOrderBook(ctx, symInOb[1], originalText);
     }
     {
+        // [Wave 9.5] Fundamentals intent — match before structure to avoid
+        // shadowing on queries that mention both. Triggers: "market cap",
+        // "fundamental", "dominance/dominanță/dominancia", "rank", "cap pe".
+        const fundMatch = originalText.match(/(?<!\w)(market\s*cap|mcap|m\.cap|fundamental\w*|fundamentale|fondamental\w*|fundamentos|fundament|dominance|dominan[țt][ăa]|dominancia|dominância|rank|ranking|cap pe|cap on)(?!\w)/i);
+        const symInFund = originalText.match(SYMBOL_RE);
+        if (fundMatch && symInFund) return _replyFundamentals(ctx, symInFund[1], originalText);
+    }
+    {
         const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
         const symInStruct = originalText.match(SYMBOL_RE);
         if (structMatch && symInStruct) return _replyStructure(ctx, symInStruct[1], originalText);
@@ -1538,6 +1609,14 @@ async function _respondImpl(params, text) {
     }
 
     // [Day 34 #1] Structure intent — match BEFORE TA indicators (more specific).
+    {
+        // [Wave 9.5] Fundamentals intent — match before structure to avoid
+        // shadowing on queries that mention both. Triggers: "market cap",
+        // "fundamental", "dominance/dominanță/dominancia", "rank", "cap pe".
+        const fundMatch = originalText.match(/(?<!\w)(market\s*cap|mcap|m\.cap|fundamental\w*|fundamentale|fondamental\w*|fundamentos|fundament|dominance|dominan[țt][ăa]|dominancia|dominância|rank|ranking|cap pe|cap on)(?!\w)/i);
+        const symInFund = originalText.match(SYMBOL_RE);
+        if (fundMatch && symInFund) return _replyFundamentals(ctx, symInFund[1], originalText);
+    }
     {
         const structMatch = text.match(/\b(structur[ăa]\w*|structure|swing|HH HL|HL HH|BOS|CHoCH|market structure)\b/i);
         const symInStruct = originalText.match(SYMBOL_RE);
