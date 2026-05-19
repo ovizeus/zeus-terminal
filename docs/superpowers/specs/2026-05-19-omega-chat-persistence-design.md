@@ -23,7 +23,7 @@ Operator must be able to wipe their own chat history on demand (privacy control)
 - `chatResponder._loadConvoHistory(userId)` lazy hydration on first chat post-restart
 - `TalkWithMe.tsx` `useEffect` mount fetch + populate state
 - New `OmegaMemorySection.tsx` Settings UI with "Clear chat history" button + confirm dialog
-- Rate limit on DELETE (1/min/user)
+- Rate limit on DELETE (1/15s/user)
 - Audit log entry on every DELETE
 
 **Out of scope (deferred to B/C):**
