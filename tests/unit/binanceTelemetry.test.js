@@ -230,3 +230,93 @@ describe('binanceTelemetry — quota pressure (Phase A.1)', () => {
         expect(telemetry.isSignedSource(undefined)).toBe(false);
     });
 });
+
+describe('binanceTelemetry — wrapFetch preemptive gate (Phase A.1)', () => {
+    test('wrapFetch returns synthetic 429 when public pressure >= 95%', async () => {
+        // Seed pressure at 95.5%
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5730,  // 5730/6000 = 95.5%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'marketRadar:oi' });
+        expect(fetchCalled).toBe(false);
+        expect(res.status).toBe(429);
+        expect(res.ok).toBe(false);
+        const body = await res.json();
+        expect(body.code).toBe(-1003);
+        expect(body.msg).toMatch(/preemptive/i);
+    });
+
+    test('wrapFetch allows public request when pressure < 95%', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5000,  // 83.3%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => '5050' }, json: async () => ({}) }; };
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'marketRadar:oi' });
+        expect(fetchCalled).toBe(true);
+        expect(res.status).toBe(200);
+    });
+
+    test('wrapFetch signed tolerates higher pressure — blocks only at 97%', async () => {
+        // 96% pressure: public would block, signed should NOT
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5760,  // 96%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) }; };
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'signer:GET /fapi/v2/balance' });
+        expect(fetchCalled).toBe(true);  // signed gets through at 96%
+        expect(res.status).toBe(200);
+    });
+
+    test('wrapFetch signed DOES block at 97% pressure', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'signer:warmup',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5830,  // 97.2%
+        });
+        let fetchCalled = false;
+        const fakeFetch = async () => { fetchCalled = true; return { status: 200 }; };
+        const res = await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/test', { __src: 'signer:GET /fapi/v2/balance' });
+        expect(fetchCalled).toBe(false);
+        expect(res.status).toBe(429);
+    });
+
+    test('synthetic 429 records blockedByPressure counter per source', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5800,
+        });
+        const fakeFetch = async () => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) });
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/y', { __src: 'marketRadar:oi' });
+        const snap = telemetry.getSnapshot();
+        expect(snap.bySource['marketRadar:oi'].blockedByPressure).toBe(2);
+    });
+
+    test('non-blocked request does NOT increment blockedByPressure', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 1000,  // 16%
+        });
+        const fakeFetch = async () => ({ status: 200, ok: true, headers: { get: () => null }, json: async () => ({}) });
+        await telemetry.wrapFetch(fakeFetch, 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
+        const snap = telemetry.getSnapshot();
+        // Either 0 or undefined acceptable since source created mid-flight
+        const cnt = (snap.bySource['marketRadar:oi'] || {}).blockedByPressure || 0;
+        expect(cnt).toBe(0);
+    });
+
+    test('synthetic 429 response.headers.get returns last usedWeight', async () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com', path: '/seed', source: 'marketRadar',
+            weight: 1, status: 200, latencyMs: 1, usedWeight: 5800,
+        });
+        const res = await telemetry.wrapFetch(async () => ({}), 'https://fapi.binance.com/x', { __src: 'marketRadar:oi' });
+        expect(res.headers.get('x-mbx-used-weight-1m')).toBe('5800');
+    });
+});

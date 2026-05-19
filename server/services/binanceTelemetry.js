@@ -38,13 +38,14 @@ function recordCall(entry) {
         latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : 0,
         usedWeight: typeof entry.usedWeight === 'number' ? entry.usedWeight : null,
         networkError: !!entry.networkError,
+        blockedByPressure: !!entry.blockedByPressure,
     });
     _prune();
 }
 
 // [Phase A.1 2026-05-19] Quota pressure gate. Reads X-MBX-USED-WEIGHT-1M
 // (captured in byHost.lastUsedWeight) and blocks new requests when quota
-// crosses threshold. Env override: BINANCE_QUOTA_CAP/BLOCK_PUBLIC_PCT/BLOCK_SIGNED_PCT.
+// crosses threshold. Env overrides: BINANCE_QUOTA_CAP / BINANCE_QUOTA_BLOCK_PUBLIC_PCT / BINANCE_QUOTA_BLOCK_SIGNED_PCT.
 function _intEnv(name, def) {
     const v = parseInt(process.env[name], 10);
     return Number.isFinite(v) && v > 0 ? v : def;
@@ -95,6 +96,31 @@ async function wrapFetch(fetchFn, url, opts) {
         host = u.host;
         path = u.pathname;
     } catch (_) { /* leave defaults */ }
+
+    // [Phase A.1 2026-05-19] Preemptive gate — if Binance reported usedWeight
+    // is over threshold, refuse to issue the request and synthesize a 429
+    // response. Caller (signer or public poller) handles 429 via existing
+    // logic (binanceSigner._setIpBan fallback 60s; public next-tick retry).
+    if (shouldBlockForPressure(host, src)) {
+        const pressure = getQuotaPressure(host);
+        const lastUsed = Math.round(pressure * QUOTA_CAP);
+        recordCall({
+            host, path, source: src,
+            weight: 0,
+            status: 429,
+            latencyMs: 0,
+            usedWeight: lastUsed,
+            blockedByPressure: true,
+        });
+        const msg = `preemptive synthetic 429 — quota pressure ${(pressure * 100).toFixed(1)}% (lastUsedWeight=${lastUsed}/${QUOTA_CAP})`;
+        return {
+            status: 429,
+            ok: false,
+            headers: { get: (k) => k.toLowerCase() === 'x-mbx-used-weight-1m' ? String(lastUsed) : null },
+            json: async () => ({ msg, code: -1003 }),
+        };
+    }
+
     const t0 = Date.now();
     try {
         const res = await fetchFn(url, opts);
@@ -126,12 +152,13 @@ function _aggregateBySource() {
     const out = {};
     for (const e of _ring) {
         if (!out[e.source]) {
-            out[e.source] = { calls: 0, weightSum: 0, errors2xx: 0, errors4xx: 0, errors5xx: 0, networkErrors: 0, latencySum: 0 };
+            out[e.source] = { calls: 0, weightSum: 0, errors2xx: 0, errors4xx: 0, errors5xx: 0, networkErrors: 0, latencySum: 0, blockedByPressure: 0 };
         }
         const s = out[e.source];
         s.calls++;
         s.weightSum += e.weight;
         s.latencySum += e.latencyMs;
+        if (e.blockedByPressure) s.blockedByPressure++;
         if (e.networkError) s.networkErrors++;
         else if (e.status >= 200 && e.status < 300) {
             // Successes — but flag 200s only with non-ok-aware status (treat 2xx as success)
