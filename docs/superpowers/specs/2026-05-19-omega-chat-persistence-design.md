@@ -79,9 +79,11 @@ Settings → "Clear chat history" button ──→ DELETE /api/omega/chat/histor
 |---|---|---|
 | `server/routes/omega.js` | MODIFY — add 2 new route handlers | +60 lines |
 | `server/services/ml/_voice/chatResponder.js` | MODIFY — add `_loadConvoHistory` + lazy invocation in `respond()` | +35 lines |
-| `client/src/components/omega/TalkWithMe.tsx` | MODIFY — useEffect mount fetch + setState population | +15 lines |
-| `client/src/components/settings/OmegaMemorySection.tsx` | CREATE — Settings UI with Clear button + confirm dialog | +60 lines |
-| `client/src/components/settings/SettingsModal.tsx` (or equivalent) | MODIFY — mount OmegaMemorySection in Omega tab | +5 lines |
+| `client/src/stores/omegaChatStore.ts` | CREATE — Zustand store: shared `history` state + actions (loadHistory, pushChatRow, clearLocal, setError) | +80 lines |
+| `client/src/components/omega/TalkWithMe.tsx` | MODIFY — consume omegaChatStore instead of local state; useEffect calls store.loadHistory() | +20 lines |
+| `client/src/components/settings/OmegaMemorySection.tsx` | CREATE — Settings UI with Clear button + confirm dialog; on success calls store.clearLocal() | +70 lines |
+| `client/src/components/settings/SettingsModal.tsx` | MODIFY — add Omega tab + mount OmegaMemorySection | +10 lines |
+| `tests/unit/stores/omegaChatStore.test.ts` (NEW) | CREATE — TDD coverage Zustand store actions + state transitions | +90 lines |
 | `tests/unit/ml/chatResponderLoadHistory.test.js` | CREATE — TDD coverage for `_loadConvoHistory` | +90 lines |
 | `tests/unit/omegaRoutesChatHistory.test.js` | CREATE — TDD coverage for GET/DELETE endpoints | +110 lines |
 
@@ -138,21 +140,40 @@ Side effects (server-side):
 - audit_log entry: `action='OMEGA_CHAT_HISTORY_CLEARED'`, `user_id=req.user.id`, `details={deletedCount, ip:req.ip}`, `created_at=now`
 - `chatResponder._convoHistory.delete(userId)` to invalidate the in-memory cache
 
-Response 429: `{ "ok": false, "error": "Rate limit: 1 clear per minute" }`
+Response 429: `{ "ok": false, "error": "Rate limit: wait Xs before next clear" }` (X = remaining cooldown seconds, max 15)
 
 Response 401 / 500: standard shape.
 
 ## Data Flow
 
-### Flow 1 — TalkWithMe Mount Load
+### Flow 1 — TalkWithMe Mount Load (via Zustand store)
 
-1. Component mounts; `useEffect` with empty dependency array fires once
-2. Set `loading=true` state
-3. `api.get<HistoryResponse>('/api/omega/chat/history?limit=50')`
-4. Server: `_requireUser(req)` → userId; query DB DESC LIMIT 25; expand to ChatRow pairs; reverse chronological
-5. On 200: `setHistory(history)`, `setLoading(false)`, scroll to bottom on next paint
-6. On error: `setError(...)`, toast notification, `setLoading(false)`, conversation continues to work (empty state)
-7. Subsequent component re-mounts (operator opens/closes panel) re-fetch — acceptable for low-frequency UX action
+1. Component mounts; reads `useOmegaChatStore(s => s.history, s.loading)`
+2. `useEffect` checks `store.lastFetchTs` — if null or > 60s old, calls `store.loadHistory()`
+3. Store action: set `loading=true`, `api.get<HistoryResponse>('/api/omega/chat/history?limit=50')`
+4. Server: `_requireUser(req)` → userId; query DB DESC LIMIT 25; **per-row expand into ChatRow pair**:
+   - Always emit `{role:'omega', text:row.text, mood:row.mood, ts:row.created_at}` (Omega reply guaranteed present)
+   - Parse `context_json` defensively (see Row Expansion Edge Cases below); emit `{role:'you', text:<question OR placeholder>, ts:row.created_at - 1}` (ts-1 keeps user bubble immediately before omega in chronological sort)
+   - Reverse final array → chronological order (oldest first)
+5. On 200: `store.setState({history, loading:false, lastFetchTs:Date.now()})`; TalkWithMe re-renders automatically
+6. On error: `store.setState({error, loading:false})`; UI shows error toast; existing history state retained (don't blank user's view on transient API fail)
+7. **Concurrent mount safety:** if `loadHistory()` called while previous in-flight, second call awaits same Promise (dedup via `_loadInFlight` field in store)
+
+### Row Expansion Edge Cases
+
+For each `ml_voice_log` row of type `CHAT_REPLY`:
+
+| `context_json` state | User bubble rendering | Reasoning |
+|---|---|---|
+| Valid JSON, `.question` non-empty string | text = `context_json.question` | Happy path |
+| `context_json` is NULL | text = `'(?)'` placeholder | Historical row pre-context_json or logger bug; preserve chronology marker |
+| `context_json` exists but `.question` missing key | text = `'(?)'` placeholder | Schema drift from old logger versions; preserve chronology marker |
+| `context_json` malformed JSON | text = `'(?)'` placeholder + log warning server-side | Defensive — never crash on bad data |
+| `context_json.question` empty string | text = `'(?)'` placeholder | Edge case from form submission of empty input |
+
+**Decision: render placeholder `(?)` instead of skipping rows.** Skipping rows would create invisible gaps in chronology and confuse operator (e.g., "where's Omega's reply about X from yesterday?"). Placeholder marker `(?)` makes it explicit something was logged but user input is missing — debuggable, transparent, preserves Omega reply visibility.
+
+UI styling: `(?)` bubbles get a `.omega-chat-orphan` CSS class with reduced opacity (0.6) so they're visually softer than normal user bubbles.
 
 ### Flow 2 — Brain Rehydration on First Chat Post-Restart
 
@@ -167,13 +188,17 @@ Response 401 / 500: standard shape.
    - On DB error: log warning, push empty array, continue (don't block conversation)
 4. Continue with existing `respond` logic — `_getConvo(userId)` now returns hydrated history for LLM context
 
-### Flow 3 — Clear History (DELETE)
+### Flow 3 — Clear History (DELETE) — Cross-Component Sync via Zustand
 
-1. User clicks "Clear chat history" in Settings → confirm dialog ("This will permanently delete your conversation history with Omega. Continue?")
-2. On confirm: `api.del<DeleteResponse>('/api/omega/chat/history')`
-3. Server: rate-limit check (1/min/user via in-memory Map); execute DELETE; audit_log entry; invalidate cache
-4. Response with `deletedCount`
-5. Client: toast `"Cleared {deletedCount} messages"`; `setHistory([])` → empty UI; close confirm dialog
+1. User clicks "Clear chat history" in Settings → confirm dialog
+2. On confirm: `useOmegaChatStore.getState().clearLocal()` calls API + mutates store
+3. Inside `clearLocal()`:
+   - `api.del<DeleteResponse>('/api/omega/chat/history')`
+   - Server: rate-limit check (1/15s/user via in-memory Map); execute DELETE; audit_log entry; invalidate chatResponder cache
+   - On 200: `store.setState({history: [], lastFetchTs: Date.now()})` → all components consuming store re-render with empty list
+   - On 429: toast "Wait Xs before next clear"; no state mutation
+4. **Cross-component sync benefit:** if TalkWithMe is open in parallel (operator has both Settings modal and chat panel visible), the store mutation triggers React re-render on TalkWithMe automatically — no event bus, no key-remount, no race window
+5. Settings shows toast `"Cleared {deletedCount} messages"`
 
 ## Error Handling
 
@@ -193,7 +218,7 @@ Response 401 / 500: standard shape.
 - **`_requireUser` middleware:** existing helper validates JWT cookie. No request reaches handler without authenticated user.
 - **Audit log on DELETE:** persisted to `audit_log` table (existing). Includes user_id, action, deletedCount, ip, timestamp. Operator audit retention rules apply.
 - **Confirm dialog client-side:** prevents accidental clicks. NOT a security feature (server enforces rate limit + auth).
-- **Rate limit on DELETE:** 1 per user per minute, in-memory Map. Prevents abuse / accidental loops.
+- **Rate limit on DELETE:** 1 per user per 15 seconds, in-memory Map. Anti-abuse + still permits operator double-clear if needed for testing.
 - **NO admin override route in this API:** admins must use direct DB access if data needs to be removed via legal request. This keeps the public API surface minimal and per-user-scoped.
 
 ## Testing Strategy
@@ -205,13 +230,29 @@ Response 401 / 500: standard shape.
 - GET filters per user (user A query returns user A's chat, not user B's)
 - GET limit clamping (limit=500 → capped at 100 messages = 50 DB rows)
 - GET handles empty history (returns `{ok:true, history:[], total:0}`)
-- GET malformed `context_json.question` doesn't crash response
+- GET row expansion edge cases (one test per case in the Row Expansion Edge Cases table):
+  - row with NULL context_json → user bubble = `'(?)'`
+  - row with missing `.question` key → `'(?)'`
+  - row with malformed JSON context_json → `'(?)'` + warning logged
+  - row with empty string question → `'(?)'`
+  - happy path: valid question → user bubble = that text
 - DELETE returns deletedCount
 - DELETE creates audit_log entry with correct fields
 - DELETE filters per user (does NOT delete other users' chat)
 - DELETE preserves `THOUGHT` and `CRITICAL_ALERT` (operator-facing brain narration kept)
-- DELETE rate limit: second call within 60s returns 429
+- DELETE rate limit: second call within 15s returns 429 with remaining cooldown
 - 401 on missing JWT cookie
+
+**`tests/unit/stores/omegaChatStore.test.ts`** (vitest):
+- Initial state: `history=[], loading=false, error=null, lastFetchTs=null`
+- `loadHistory()` happy path: setState during fetch (loading=true), then history populated, lastFetchTs set
+- `loadHistory()` skips fetch if lastFetchTs < 60s old (dedup)
+- `loadHistory()` concurrent calls dedup via `_loadInFlight` Promise field
+- `loadHistory()` error path: error stored, loading=false, history preserved (not blanked)
+- `pushChatRow(row)` appends to history array
+- `clearLocal()` on 200 response: history=[], lastFetchTs updated
+- `clearLocal()` on 429 response: history retained, error stored
+- `clearLocal()` server failure: error stored, history retained
 
 **`tests/unit/ml/chatResponderLoadHistory.test.js`** (jest):
 - `_loadConvoHistory(userId)` populates `_convoHistory` Map from DB
@@ -234,9 +275,10 @@ Response 401 / 500: standard shape.
 ## Implementation Estimate
 
 - Backend (routes + chatResponder hook + tests): 1.5–2h
-- Frontend (TalkWithMe fetch + Settings button + CSS): 1h
+- Zustand omegaChatStore + tests: 45min
+- Frontend (TalkWithMe consume store + Settings button + CSS): 1h
 - Tests TDD + manual smoke: 30–45min
-- **Total: ~3–4h** with subagent-driven reviews per task
+- **Total: ~3.5–4.5h** with subagent-driven reviews per task
 
 ## Defense-in-depth Posture
 
@@ -255,11 +297,14 @@ Safe to ship independently; rollback is `git revert` on the feature commit + `pm
 
 ## Open Questions / Deferred Decisions
 
-None blocking. Operator confirmed:
+None blocking. Operator + Phone Claude confirmed:
 - History depth: 50 messages (last 25 exchanges) ✅
 - Clear chat history: Settings button + audit log ✅
 - Lazy load over eager preload ✅
 - Single architecture approach (Approach 1) ✅
+- Row expansion edge cases: `(?)` placeholder for missing user question (preserve chronology) ✅
+- Cross-component sync: Zustand store over event bus / forced remount ✅
+- Rate limit: 1 DELETE per 15s (not 1/min — too strict for testing) ✅
 
 ## Approval Trail
 
