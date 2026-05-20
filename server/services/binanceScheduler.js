@@ -134,7 +134,11 @@ function canProceed({ pressure, src, path }) {
     // WARM rejects CLASS_B (degradable analytics), A+C allowed.
     // Defensive — if rateState load throws (DB unreachable), fall through
     // to lane-based logic unchanged.
+    //
+    // Test-skip: _v6Disabled set by _resetForTest() so legacy scheduler/telemetry
+    // tests that don't mock the rate-state DB aren't affected by live ban rows.
     try {
+        if (_v6Disabled) throw new Error('v6_test_skip');
         const rateState = require('./binanceRateState');
         const now = _ts();
         // [V6.5 fix] Lazy state advance — if ban just expired and warm hasn't
@@ -223,6 +227,9 @@ function getStats() {
 }
 
 // ─── Test helpers ───
+// [V6 2026-05-20] Default-disabled in test runs so legacy scheduler tests
+// that don't mock rateState DB aren't affected by live ban rows.
+let _v6Disabled = false;
 function _resetForTest() {
     _stats = {
         totalDecisions: 0,
@@ -239,7 +246,11 @@ function _resetForTest() {
     _rng = Math.random;
     _criticalSections = new Map();
     _now = null;
+    // Disable V6 mode gate by default in test reset; V6 integration tests
+    // re-enable explicitly with _setV6EnabledForTest(true).
+    _v6Disabled = true;
 }
+function _setV6EnabledForTest(enabled) { _v6Disabled = !enabled; }
 function _setRngForTest(fn) { _rng = typeof fn === 'function' ? fn : Math.random; }
 function _setNowForTest(ts) { _now = ts; }
 
@@ -252,6 +263,7 @@ module.exports = {
     getActiveCriticalSections,
     isOrderOp,
     _resetForTest,
+    _setV6EnabledForTest,
     _setRngForTest,
     _setNowForTest,
 };

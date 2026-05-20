@@ -6,9 +6,14 @@
 // truth pe quota IP. Zero behavior change pe call sites — additive only.
 
 const telemetry = require('../../server/services/binanceTelemetry');
+const scheduler = require('../../server/services/binanceScheduler');
 
 beforeEach(() => {
     telemetry._resetForTest();
+    // [V6 2026-05-20] Disable V6 mode gating for legacy telemetry tests —
+    // these tests don't mock the rateState DB so live ban rows would
+    // otherwise short-circuit canProceed and break expected behavior.
+    scheduler._resetForTest();
 });
 
 describe('binanceTelemetry — core recording', () => {

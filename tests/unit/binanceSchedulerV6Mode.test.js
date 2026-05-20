@@ -45,6 +45,7 @@ beforeEach(() => {
 
   scheduler = require('../../server/services/binanceScheduler');
   scheduler._resetForTest();
+  scheduler._setV6EnabledForTest(true); // V6 mode under test
 });
 
 afterEach(() => {
