@@ -1498,6 +1498,11 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 });
 
+// ─── Omega Memory Cleanup Cron (Sub-C.1 Task 9) ─────────────────────────────
+// Daily 02:00 UTC — hard-delete tombstones, retry failed_transient,
+// recover stuck pending, auto-decay expired, compact watermarks per user.
+require('./server/cron/omegaMemoryCleanup').schedule();
+
 // ─── WebSocket Sync (real-time cross-device push) ───
 const wss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 });
 const _wsClients = new Map(); // userId -> Set<ws>
