@@ -9554,6 +9554,112 @@ migrate('380_ml_fundamentals_cache', () => {
     `);
 });
 
+// [Sub-C.1 / Task 1] Long-term chat memory system (Omega Wave 1 Foundation)
+// M1: Core memory store — one fact per (user × class × fact_key × env).
+// dual source cols (created_source_chat_id / last_source_chat_id) for lineage.
+// UNIQUE constraint prevents duplicates; updates reaffirm via upsert logic.
+migrate('381_ml_chat_memory', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_chat_memory (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id                 INTEGER NOT NULL,
+            env                     TEXT,
+            class                   TEXT NOT NULL CHECK(class IN (
+                                        'identity','personal_context','trading_strategy','temporary','style'
+                                    )),
+            fact_key                TEXT NOT NULL,
+            fact_value              TEXT NOT NULL,
+            importance              REAL NOT NULL DEFAULT 0.5,
+            created_source_chat_id  INTEGER,
+            last_source_chat_id     INTEGER,
+            reaffirm_count          INTEGER NOT NULL DEFAULT 1,
+            decay_at                INTEGER,
+            last_seen_at            INTEGER NOT NULL,
+            tombstone_at            INTEGER,
+            forgotten_by            TEXT,
+            created_at              INTEGER NOT NULL,
+            updated_at              INTEGER NOT NULL,
+            UNIQUE(user_id, class, fact_key, env)
+        );
+    `);
+});
+
+// [Sub-C.1 / Task 1] M2: Cross-cluster cache invalidation tracker.
+// One row per user; bumped on any memory write so other nodes know to
+// re-fetch rather than serve stale cache.
+migrate('382_ml_chat_memory_meta', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_chat_memory_meta (
+            user_id         INTEGER PRIMARY KEY,
+            last_modified_at INTEGER NOT NULL
+        );
+    `);
+});
+
+// [Sub-C.1 / Task 1] M3: Extraction pipeline status column on ml_voice_log.
+// CRITICAL: NO DEFAULT clause — pre-migration rows get NULL intentionally.
+// Cron retry query filters WHERE extraction_status='failed_transient',
+// so NULL legacy rows are never picked up (no backfill storm).
+migrate('383_ml_voice_log_extraction_status', () => {
+    db.exec(`ALTER TABLE ml_voice_log ADD COLUMN extraction_status TEXT`);
+});
+
+// [Sub-C.1 / Task 1] M4: Retry attempt counter for extraction pipeline.
+// DEFAULT 0 safe on existing rows (they've had 0 attempts in new system).
+migrate('384_ml_voice_log_attempts', () => {
+    db.exec(`ALTER TABLE ml_voice_log ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0`);
+});
+
+// [Sub-C.1 / Task 1] M5: Timestamp of most recent extraction attempt.
+// NULL = never attempted in new pipeline (fine for legacy rows).
+migrate('385_ml_voice_log_last_attempt_at', () => {
+    db.exec(`ALTER TABLE ml_voice_log ADD COLUMN last_attempt_at INTEGER`);
+});
+
+// [Sub-C.1 / Task 1] M6: Scheduled next retry time for failed_transient rows.
+// NULL = not scheduled / not applicable.
+migrate('386_ml_voice_log_next_retry_at', () => {
+    db.exec(`ALTER TABLE ml_voice_log ADD COLUMN next_retry_at INTEGER`);
+});
+
+// [Sub-C.1 / Task 1] M7: Primary lookup index — active memories for a user
+// filtered by class. Covers the hot read path (inject into prompt).
+migrate('387_idx_mlcm_user_active', () => {
+    db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mlcm_user_active
+            ON ml_chat_memory(user_id, tombstone_at, class);
+    `);
+});
+
+// [Sub-C.1 / Task 1] M8: Partial index for tombstone GC sweeps.
+// Only indexes rows where tombstone_at IS NOT NULL — keeps index tiny.
+migrate('388_idx_mlcm_tombstone_cleanup', () => {
+    db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mlcm_tombstone_cleanup
+            ON ml_chat_memory(tombstone_at) WHERE tombstone_at IS NOT NULL;
+    `);
+});
+
+// [Sub-C.1 / Task 1] M9: Partial index for decay scheduler cron.
+// Only live (non-tombstoned) rows with a scheduled decay_at.
+migrate('389_idx_mlcm_decay', () => {
+    db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mlcm_decay
+            ON ml_chat_memory(decay_at)
+            WHERE decay_at IS NOT NULL AND tombstone_at IS NULL;
+    `);
+});
+
+// [Sub-C.1 / Task 1] M10: Partial index for cron retry of failed_transient
+// extractions — only indexes the rows the cron actually needs to scan.
+migrate('390_idx_mlvl_extraction_recovery', () => {
+    db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_mlvl_extraction_recovery
+            ON ml_voice_log(extraction_status, next_retry_at)
+            WHERE extraction_status = 'failed_transient';
+    `);
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload
