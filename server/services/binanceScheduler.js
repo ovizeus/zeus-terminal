@@ -125,9 +125,44 @@ function _isCriticalSectionActive() {
     return _criticalSections.size > 0;
 }
 
-function canProceed({ pressure, src }) {
+function canProceed({ pressure, src, path }) {
     const lane = laneForSrc(src);
     _stats.totalDecisions++;
+
+    // [V6 2026-05-20] Mode-based gating — sits BEFORE lane logic.
+    // Honors persistent rate state: SUPPRESSED rejects everything,
+    // WARM rejects CLASS_B (degradable analytics), A+C allowed.
+    // Defensive — if rateState load throws (DB unreachable), fall through
+    // to lane-based logic unchanged.
+    try {
+        const rateState = require('./binanceRateState');
+        const state = rateState.load();
+        const now = _ts();
+        const mode = rateState.computeCurrentMode(state, now);
+
+        if (mode === 'SUPPRESSED') {
+            _stats.byLane[lane].rejected++;
+            _incReason('suppressed_banned');
+            return {
+                accept: false, lane, pressure,
+                retryable: true,
+                reason: 'suppressed_banned',
+            };
+        }
+        if (mode === 'WARM') {
+            const klass = rateState.classifyEndpoint(path || '');
+            if (!rateState.shouldAllowDuringWarm(klass)) {
+                _stats.byLane[lane].rejected++;
+                _incReason('warm_class_b');
+                return {
+                    accept: false, lane, pressure,
+                    retryable: true,
+                    reason: 'warm_class_b',
+                    endpointClass: klass,
+                };
+            }
+        }
+    } catch (_err) { /* defensive — never block scheduler on state read */ }
 
     if (lane === 'P0' || lane === 'P1') {
         _stats.byLane[lane].accepted++;

@@ -400,8 +400,16 @@ function _altStartKlinePoller(symUpper, tf) {
     };
 
     state.timer = setInterval(tick, ALT_KLINE_POLL_MS);
-    // Kick off first fetch soon
-    setTimeout(tick, 500);
+    // [V6 2026-05-20] Boot jitter — spread initial fetches across 0-25s window
+    // to avoid synchronized burst when 4 symbols × N timeframes fire at boot+500ms.
+    // Deterministic per (symbol|tf) key — same value across reloads for
+    // predictable scheduling topology in soak logs.
+    let _firstFireDelay = 500;
+    try {
+        const { bootJitter } = require('../utils/bootJitter');
+        _firstFireDelay = bootJitter(`marketFeed.altKline.${symUpper}.${tf}`);
+    } catch (_) { /* fall back to 500ms if utility missing */ }
+    setTimeout(tick, _firstFireDelay);
 }
 
 function _altStopKlinePoller(symUpper, tf) {

@@ -463,7 +463,15 @@ function start() {
         return;
     }
     _running = true;
-    setTimeout(() => { _pollOnce().catch(() => { }); }, FIRST_POLL_DELAY_MS);
+    // [V6 2026-05-20] Boot jitter — deterministic delay to spread the radar
+    // first poll away from marketFeed first poll fire. Same key produces same
+    // delay across PM2 reloads → predictable scheduling topology in soak logs.
+    let _firstDelay = FIRST_POLL_DELAY_MS;
+    try {
+        const { bootJitter } = require('../utils/bootJitter');
+        _firstDelay = bootJitter('marketRadar.scanner');
+    } catch (_) { /* keep configured default */ }
+    setTimeout(() => { _pollOnce().catch(() => { }); }, _firstDelay);
     _timer = setInterval(() => { _pollOnce().catch(() => { }); }, POLL_INTERVAL_MS);
     logger.info('RADAR', `scanner started — top ${TOP_N} (Binance USDT perps, by 24h quoteVolume), poll ${POLL_INTERVAL_MS / 1000}s, funding=${FUNDING_ENABLED ? 'ON' : 'OFF'}, OI=${OI_ENABLED ? 'ON' : 'OFF'}`);
 }
