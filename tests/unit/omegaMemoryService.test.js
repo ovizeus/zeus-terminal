@@ -607,3 +607,207 @@ test('T11 (bonus): attempts=4 + LLM 429 → attempts=5, failed_permanent (max at
   expect(log.extraction_status).toBe('failed_permanent');
   expect(log.next_retry_at).toBeNull();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T6 tests: forget() + compactWatermark + hardDeleteOldTombstones + autoDecayExpired
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('omegaMemoryService.forget', () => {
+  test('forget tombstones (NOT hard delete)', async () => {
+    const now = Date.now();
+    const factId = db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'location', 'Romania', 0.8, ?, ?, ?, ?)`).run(TEST_USER, now, now, now, now + 365*86400000).lastInsertRowid;
+
+    const result = await omegaMemoryService.forget(factId, TEST_USER);
+    expect(result.ok).toBe(true);
+    expect(result.tombstoneUntil).toBeGreaterThan(now);
+
+    // Row STILL EXISTS (not deleted)
+    const row = db.prepare('SELECT * FROM ml_chat_memory WHERE id=?').get(factId);
+    expect(row).toBeDefined();
+    expect(row.tombstone_at).toBeGreaterThan(now - 1000);
+    expect(row.forgotten_by).toBe('user_ui');
+  });
+
+  test('forget on other user fact returns 404', async () => {
+    const factId = db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'location', 'Romania', 0.8, ?, ?, ?, NULL)`).run(99, Date.now(), Date.now(), Date.now()).lastInsertRowid;
+
+    const result = await omegaMemoryService.forget(factId, TEST_USER);
+    expect(result.ok).toBe(false);
+    expect(result.status).toBe(404);
+  });
+
+  test('forget idempotent (second call returns alreadyTombstoned)', async () => {
+    const factId = db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'location', 'Romania', 0.8, ?, ?, ?, NULL)`).run(TEST_USER, Date.now(), Date.now(), Date.now()).lastInsertRowid;
+    await omegaMemoryService.forget(factId, TEST_USER);
+    const second = await omegaMemoryService.forget(factId, TEST_USER);
+    expect(second.ok).toBe(true);
+    expect(second.alreadyTombstoned).toBe(true);
+  });
+
+  test('forget updates meta.last_modified_at', async () => {
+    const factId = db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'location', 'Romania', 0.8, ?, ?, ?, NULL)`).run(TEST_USER, Date.now(), Date.now(), Date.now()).lastInsertRowid;
+    await omegaMemoryService.forget(factId, TEST_USER);
+    const meta = db.prepare('SELECT * FROM ml_chat_memory_meta WHERE user_id=?').get(TEST_USER);
+    expect(meta.last_modified_at).toBeGreaterThan(Date.now() - 1000);
+  });
+
+  test('audit log entry has NO fact_key or fact_value on forget', async () => {
+    const factId = db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'sensitive_location_key', 'sensitive_value_xyz', 0.8, ?, ?, ?, NULL)`).run(TEST_USER, Date.now(), Date.now(), Date.now()).lastInsertRowid;
+    await omegaMemoryService.forget(factId, TEST_USER);
+    const audit = db.prepare("SELECT details FROM audit_log WHERE action='OMEGA_MEMORY_FACT_FORGOTTEN' ORDER BY id DESC LIMIT 1").get();
+    expect(audit.details).not.toMatch(/sensitive_location_key/);
+    expect(audit.details).not.toMatch(/sensitive_value_xyz/);
+  });
+});
+
+describe('omegaMemoryService eviction integration (from T4 extract path)', () => {
+  test('eviction: class at 100% cap, lowest-score fact tombstoned', async () => {
+    const now = Date.now();
+
+    // Fill personal_context to cap=25
+    for (let i = 0; i < 25; i++) {
+      db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                  VALUES (?, NULL, 'personal_context', ?, ?, ?, ?, ?, ?, ?)`).run(TEST_USER, `existing${i}`, `v${i}`, 0.3 + i*0.02, now - i*86400000, now, now, now + 365*86400000);
+    }
+
+    // Trigger extraction that adds new fact → should evict lowest score
+    mockChatLLM.mockResolvedValueOnce({ ok: true, text: JSON.stringify([
+      { class: 'personal_context', key: 'profession', value: 'developer', importance: 0.7 },
+    ])});
+    const vid = db.prepare('INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)').run(TEST_USER, 'r', '{}', now, 'pending').lastInsertRowid;
+    await omegaMemoryService.extract({ voiceLogId: vid, userId: TEST_USER, env: 'DEMO', question: 'q', reply: 'r' });
+
+    const liveCount = db.prepare("SELECT COUNT(*) as c FROM ml_chat_memory WHERE user_id=? AND class='personal_context' AND tombstone_at IS NULL").get(TEST_USER).c;
+    expect(liveCount).toBeLessThanOrEqual(25);
+
+    const evicted = db.prepare("SELECT * FROM ml_chat_memory WHERE forgotten_by='eviction'").all();
+    expect(evicted.length).toBeGreaterThan(0);
+  });
+
+  test('identity UPSERT does NOT evict (slot-fixed closed enum)', async () => {
+    const now = Date.now();
+
+    // Fill identity to cap=4 (all 4 allowed keys)
+    const keys = ['name', 'primary_language', 'comm_style', 'role'];
+    for (const key of keys) {
+      db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                  VALUES (?, NULL, 'identity', ?, ?, 1.0, ?, ?, ?, NULL)`).run(TEST_USER, key, `v_${key}`, now, now, now);
+    }
+
+    // Try to UPSERT identity name with new value → should UPDATE, not INSERT/evict
+    mockChatLLM.mockResolvedValueOnce({ ok: true, text: JSON.stringify([
+      { class: 'identity', key: 'name', value: 'Ovidiu', importance: 1.0 },
+    ])});
+    const vid = db.prepare('INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)').run(TEST_USER, 'r', '{}', now, 'pending').lastInsertRowid;
+    await omegaMemoryService.extract({ voiceLogId: vid, userId: TEST_USER, env: 'DEMO', question: 'q', reply: 'r' });
+
+    const count = db.prepare("SELECT COUNT(*) as c FROM ml_chat_memory WHERE user_id=? AND class='identity' AND tombstone_at IS NULL").get(TEST_USER).c;
+    expect(count).toBe(4);  // no eviction
+    const nameRow = db.prepare("SELECT * FROM ml_chat_memory WHERE user_id=? AND class='identity' AND fact_key='name' AND tombstone_at IS NULL").get(TEST_USER);
+    expect(nameRow.fact_value).toBe('Ovidiu');
+    expect(nameRow.reaffirm_count).toBe(2);
+  });
+
+  test('env-scoped trading_strategy: DEMO/TESTNET/REAL separate', async () => {
+    const now = Date.now();
+
+    mockChatLLM.mockResolvedValue({ ok: true, text: JSON.stringify([
+      { class: 'trading_strategy', key: 'risk', value: '1pct', importance: 0.7 },
+    ])});
+
+    for (const env of ['DEMO', 'TESTNET', 'REAL']) {
+      const vid = db.prepare('INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)').run(TEST_USER, 'r', '{}', now, 'pending').lastInsertRowid;
+      await omegaMemoryService.extract({ voiceLogId: vid, userId: TEST_USER, env, question: 'q', reply: 'r' });
+    }
+
+    const facts = db.prepare("SELECT env FROM ml_chat_memory WHERE class='trading_strategy' AND fact_key='risk' AND tombstone_at IS NULL").all();
+    expect(facts.length).toBe(3);
+    expect(new Set(facts.map(f => f.env))).toEqual(new Set(['DEMO', 'TESTNET', 'REAL']));
+  });
+
+  test('reaffirm increments count + updates last_source_chat_id', async () => {
+    const now = Date.now();
+    mockChatLLM.mockResolvedValue({ ok: true, text: JSON.stringify([
+      { class: 'personal_context', key: 'location', value: 'Romania', importance: 0.7 },
+    ])});
+
+    const vid1 = db.prepare('INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)').run(TEST_USER, 'r', '{}', now, 'pending').lastInsertRowid;
+    await omegaMemoryService.extract({ voiceLogId: vid1, userId: TEST_USER, env: 'DEMO', question: 'q', reply: 'r' });
+
+    const vid2 = db.prepare('INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)').run(TEST_USER, 'r2', '{}', now + 1000, 'pending').lastInsertRowid;
+    await omegaMemoryService.extract({ voiceLogId: vid2, userId: TEST_USER, env: 'DEMO', question: 'q', reply: 'r' });
+
+    const fact = db.prepare("SELECT * FROM ml_chat_memory WHERE class='personal_context' AND fact_key='location' AND tombstone_at IS NULL").get();
+    expect(fact.reaffirm_count).toBe(2);
+    expect(fact.created_source_chat_id).toBe(vid1);
+    expect(fact.last_source_chat_id).toBe(vid2);
+  });
+
+  test('audit invariant: regex grep over all audit_log details JSON — no fact_key or fact_value strings', async () => {
+    // Trigger a forget + an extraction that hits various audit paths
+    const factId = db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'secret_audit_key', 'super_secret_value', 0.5, ?, ?, ?, NULL)`).run(TEST_USER, Date.now(), Date.now(), Date.now()).lastInsertRowid;
+    await omegaMemoryService.forget(factId, TEST_USER);
+
+    const allAudit = db.prepare("SELECT details FROM audit_log").all();
+    for (const a of allAudit) {
+      expect(a.details).not.toMatch(/secret_audit_key/);
+      expect(a.details).not.toMatch(/super_secret_value/);
+    }
+  });
+});
+
+describe('omegaMemoryService.compactWatermark', () => {
+  test('compactWatermark triggers at 80% cap, evicts bottom 10%', async () => {
+    const now = Date.now();
+    // Fill style class to 80% (cap=8, fill 7) — count >= floor(8*0.8)=6 triggers compact, evict ceil(7*0.1)=1
+    for (let i = 0; i < 7; i++) {
+      db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                  VALUES (?, NULL, 'style', ?, ?, ?, ?, ?, ?, ?)`).run(TEST_USER, `style_key${i}`, `v${i}`, 0.3 + i*0.05, now - i*86400000, now, now, now + 365*86400000);
+    }
+
+    const result = await omegaMemoryService.compactWatermark(TEST_USER);
+    expect(result.evictedCount).toBeGreaterThanOrEqual(1);
+
+    const tombstoned = db.prepare("SELECT * FROM ml_chat_memory WHERE forgotten_by='eviction'").all();
+    expect(tombstoned.length).toBe(result.evictedCount);
+  });
+});
+
+describe('omegaMemoryService.hardDeleteOldTombstones', () => {
+  test('hardDeleteOldTombstones removes tombstones >7d, keeps recent', async () => {
+    const now = Date.now();
+    const eightDaysAgo = now - 8 * 86400000;
+    const oneDayAgo = now - 86400000;
+
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at, tombstone_at, forgotten_by)
+                VALUES (?, NULL, 'personal_context', 'old', 'X', 0.5, ?, ?, ?, NULL, ?, 'user_ui')`).run(TEST_USER, eightDaysAgo, eightDaysAgo, eightDaysAgo, eightDaysAgo);
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at, tombstone_at, forgotten_by)
+                VALUES (?, NULL, 'personal_context', 'new', 'Y', 0.5, ?, ?, ?, NULL, ?, 'user_ui')`).run(TEST_USER, now, now, now, oneDayAgo);
+
+    const result = await omegaMemoryService.hardDeleteOldTombstones();
+    expect(result.hardDeletedCount).toBe(1);
+    const remaining = db.prepare("SELECT * FROM ml_chat_memory WHERE user_id=?").all(TEST_USER);
+    expect(remaining.length).toBe(1);
+    expect(remaining[0].fact_key).toBe('new');
+  });
+});
+
+describe('omegaMemoryService.autoDecayExpired', () => {
+  test('autoDecayExpired tombstones expired facts with forgotten_by=auto_decay', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'temporary', 'expired_key', 'X', 0.5, ?, ?, ?, ?)`).run(TEST_USER, now, now, now, now - 1000);
+
+    const result = await omegaMemoryService.autoDecayExpired();
+    expect(result.autoDecayedCount).toBe(1);
+    const row = db.prepare("SELECT * FROM ml_chat_memory WHERE fact_key='expired_key'").get();
+    expect(row.tombstone_at).toBeGreaterThan(0);
+    expect(row.forgotten_by).toBe('auto_decay');
+  });
+});

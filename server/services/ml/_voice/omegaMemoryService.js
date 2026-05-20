@@ -400,6 +400,176 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Public forget
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Soft-delete (tombstone) a fact by id+userId.
+ *
+ * - Idempotent: second call returns { ok: true, alreadyTombstoned: true }
+ * - Per-user isolated: cross-user attempt returns { ok: false, status: 404 }
+ * - Audit OMEGA_MEMORY_FACT_FORGOTTEN with class/reason/msg_id only (NO key/value)
+ *
+ * @param {number} factId
+ * @param {number} userId
+ * @param {string} [source='user_ui']
+ * @returns {Promise<{ ok: boolean, tombstoneUntil?: number, alreadyTombstoned?: boolean, status?: number }>}
+ */
+async function forget(factId, userId, source = 'user_ui') {
+  const { db } = require('../../database');
+  const now = Date.now();
+
+  const fact = db.prepare('SELECT * FROM ml_chat_memory WHERE id=? AND user_id=?').get(factId, userId);
+  if (!fact) {
+    return { ok: false, status: 404 };
+  }
+  if (fact.tombstone_at !== null && fact.tombstone_at !== undefined) {
+    return { ok: true, alreadyTombstoned: true };
+  }
+
+  db.prepare(
+    'UPDATE ml_chat_memory SET tombstone_at=?, forgotten_by=?, updated_at=? WHERE id=?'
+  ).run(now, source, now, factId);
+
+  _updateMeta(userId);
+  _clearCache(userId);
+
+  _writeAudit(userId, 'OMEGA_MEMORY_FACT_FORGOTTEN', {
+    class: fact.class,
+    reason: source,
+    msg_id: fact.last_source_chat_id,
+  });
+
+  return { ok: true, tombstoneUntil: now + 7 * 24 * 60 * 60 * 1000 };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public compactWatermark
+// ─────────────────────────────────────────────────────────────────────────────
+
+const COMPACT_ENVS = ['DEMO', 'TESTNET', 'REAL'];
+
+/**
+ * Watermark-based compaction for a single user.
+ *
+ * For each non-identity class:
+ *   For each env-scope (env=null for non-trading_strategy, or [DEMO/TESTNET/REAL] for trading_strategy):
+ *     - If count >= floor(cap * 0.8): evict bottom ceil(count * 0.1) facts by hybrid score
+ *
+ * Identity is skipped (closed-enum slot-fixed).
+ *
+ * @param {number} userId
+ * @returns {Promise<{ evictedCount: number }>}
+ */
+async function compactWatermark(userId) {
+  const { db } = require('../../database');
+  const now = Date.now();
+  let evictedCount = 0;
+
+  const nonIdentityClasses = Object.keys(CLASS_CAPS).filter(k => k !== 'identity');
+
+  for (const klass of nonIdentityClasses) {
+    const capInfo = CLASS_CAPS[klass];
+    const envScopes = capInfo.scope === 'user_env' ? COMPACT_ENVS : [null];
+
+    for (const env of envScopes) {
+      let facts;
+      if (env !== null) {
+        facts = db.prepare(
+          'SELECT * FROM ml_chat_memory WHERE user_id=? AND class=? AND env=? AND tombstone_at IS NULL'
+        ).all(userId, klass, env);
+      } else {
+        facts = db.prepare(
+          'SELECT * FROM ml_chat_memory WHERE user_id=? AND class=? AND tombstone_at IS NULL'
+        ).all(userId, klass);
+      }
+
+      const count = facts.length;
+      const threshold = Math.floor(capInfo.cap * 0.8);
+      if (count < threshold) continue;
+
+      const evictN = Math.ceil(count * 0.1);
+      const scored = facts.map(f => ({ ...f, _score: _hybridScore(f, now) }));
+      scored.sort((a, b) => a._score - b._score);
+
+      const victims = scored.slice(0, evictN);
+      for (const victim of victims) {
+        db.prepare(
+          'UPDATE ml_chat_memory SET tombstone_at=?, forgotten_by=?, updated_at=? WHERE id=?'
+        ).run(now, 'eviction', now, victim.id);
+
+        _writeAudit(userId, 'OMEGA_MEMORY_FACT_EVICTED', {
+          class: klass,
+          env: env ?? null,
+          reason: 'cap_evict',
+          msg_id: victim.last_source_chat_id,
+        });
+
+        evictedCount++;
+      }
+    }
+  }
+
+  if (evictedCount > 0) {
+    _updateMeta(userId);
+    _clearCache(userId);
+  }
+
+  return { evictedCount };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public hardDeleteOldTombstones
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Hard-delete tombstoned facts older than 7 days.
+ * System-level operation — audit written with user_id=NULL.
+ *
+ * @returns {Promise<{ hardDeletedCount: number }>}
+ */
+async function hardDeleteOldTombstones() {
+  const { db } = require('../../database');
+  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  const result = db.prepare(
+    'DELETE FROM ml_chat_memory WHERE tombstone_at IS NOT NULL AND tombstone_at < ?'
+  ).run(cutoff);
+
+  if (result.changes > 0) {
+    _writeAudit(null, 'OMEGA_MEMORY_HARD_DELETED', { count: result.changes });
+  }
+
+  return { hardDeletedCount: result.changes };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Public autoDecayExpired
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Tombstone all facts where decay_at < now and not already tombstoned.
+ * No per-fact audit (would be too noisy for cron operation).
+ * Clears global cache since this runs across ALL users.
+ *
+ * @returns {Promise<{ autoDecayedCount: number }>}
+ */
+async function autoDecayExpired() {
+  const { db } = require('../../database');
+  const now = Date.now();
+
+  const result = db.prepare(
+    'UPDATE ml_chat_memory SET tombstone_at=?, forgotten_by=?, updated_at=? WHERE decay_at < ? AND tombstone_at IS NULL'
+  ).run(now, 'auto_decay', now, now);
+
+  if (result.changes > 0) {
+    _clearCache();
+  }
+
+  return { autoDecayedCount: result.changes };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public retrieve
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -624,7 +794,7 @@ async function extract({ voiceLogId, userId, env, question, reply }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
-  omegaMemoryService: { extract, retrieve },
+  omegaMemoryService: { extract, retrieve, forget, compactWatermark, hardDeleteOldTombstones, autoDecayExpired },
   _internals: {
     _classifyError,
     _calcBackoff,
