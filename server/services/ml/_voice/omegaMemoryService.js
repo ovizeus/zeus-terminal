@@ -271,30 +271,6 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
     return;
   }
 
-  // Cap-check + eviction (non-identity only)
-  if (klass !== 'identity') {
-    const capInfo = CLASS_CAPS[klass];
-    let liveCount;
-    if (capInfo.scope === 'user_env') {
-      liveCount = db.prepare(
-        'SELECT COUNT(*) AS n FROM ml_chat_memory WHERE user_id=? AND class=? AND env=? AND tombstone_at IS NULL'
-      ).get(userId, klass, env ?? null).n;
-    } else {
-      liveCount = db.prepare(
-        'SELECT COUNT(*) AS n FROM ml_chat_memory WHERE user_id=? AND class=? AND tombstone_at IS NULL'
-      ).get(userId, klass).n;
-    }
-
-    // Check if this key already exists (UPSERT won't increase count)
-    const existingKey = db.prepare(
-      'SELECT id FROM ml_chat_memory WHERE user_id=? AND class=? AND fact_key=? AND env IS ? AND tombstone_at IS NULL'
-    ).get(userId, klass, key, env ?? null);
-
-    if (!existingKey && liveCount >= capInfo.cap) {
-      _evictBottomOne(userId, klass, env, voiceLogId);
-    }
-  }
-
   // Determine env scope for this class.
   // Identity is env-agnostic (spec §6.1): always env=NULL, UNIQUE key is (user_id, class, fact_key).
   // SQLite UNIQUE treats NULL as distinct so we CANNOT rely on ON CONFLICT for identity — use
@@ -304,55 +280,89 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
 
   const decayAt = _calcDecayAt(klass);
 
-  // SELECT existing row — identity: env-agnostic lookup, others: env-scoped
-  let existing;
-  if (isIdentity) {
-    existing = db.prepare(
-      'SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class=\'identity\' AND fact_key=? AND tombstone_at IS NULL'
-    ).get(userId, key);
-  } else {
-    existing = db.prepare(
-      'SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class=? AND fact_key=? AND (env IS ?) AND tombstone_at IS NULL'
-    ).get(userId, klass, key, factEnv);
-  }
+  // Wrap cap-check + eviction + UPSERT in a single transaction.
+  // better-sqlite3 transactions are synchronous and serialize writes at SQLite level,
+  // eliminating PM2 cluster race windows:
+  //   - Non-identity: both workers could pass cap check and both INSERT → cap overflow
+  //   - Identity: both workers SELECT (not found) and both INSERT → duplicate rows
+  //     (SQLite NULL-distinct UNIQUE does NOT protect identity rows)
+  const upsertTx = db.transaction(() => {
+    // Cap-check + eviction (non-identity only)
+    if (!isIdentity) {
+      const capInfo = CLASS_CAPS[klass];
+      let liveCount;
+      if (capInfo.scope === 'user_env') {
+        liveCount = db.prepare(
+          'SELECT COUNT(*) AS n FROM ml_chat_memory WHERE user_id=? AND class=? AND env=? AND tombstone_at IS NULL'
+        ).get(userId, klass, env ?? null).n;
+      } else {
+        liveCount = db.prepare(
+          'SELECT COUNT(*) AS n FROM ml_chat_memory WHERE user_id=? AND class=? AND tombstone_at IS NULL'
+        ).get(userId, klass).n;
+      }
 
-  if (existing) {
-    // UPDATE path — same for both identity and non-identity
-    db.prepare(`
-      UPDATE ml_chat_memory
-      SET fact_value=?, importance=MAX(importance, ?), last_source_chat_id=?,
-          reaffirm_count=reaffirm_count+1,
-          last_seen_at=?, decay_at=?, tombstone_at=NULL, forgotten_by=NULL, updated_at=?
-      WHERE id=?
-    `).run(value, importance, voiceLogId, now, decayAt, now, existing.id);
+      // Check if this key already exists (UPSERT won't increase count)
+      const existingKey = db.prepare(
+        'SELECT id FROM ml_chat_memory WHERE user_id=? AND class=? AND fact_key=? AND env IS ? AND tombstone_at IS NULL'
+      ).get(userId, klass, key, factEnv);
 
-    _writeAudit(userId, 'OMEGA_MEMORY_FACT_UPDATED', {
-      class: klass,
-      reason: 'reaffirm',
-      msg_id: voiceLogId,
-    });
-  } else {
-    // INSERT path — identity always env=NULL, others use factEnv
-    db.prepare(`
-      INSERT INTO ml_chat_memory
-        (user_id, env, class, fact_key, fact_value, importance,
-         created_source_chat_id, last_source_chat_id, reaffirm_count,
-         decay_at, last_seen_at, tombstone_at, forgotten_by,
-         created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL, NULL, ?, ?)
-    `).run(
-      userId, factEnv, klass, key, value, importance,
-      voiceLogId, voiceLogId,
-      decayAt, now,
-      now, now
-    );
+      if (!existingKey && liveCount >= capInfo.cap) {
+        _evictBottomOne(userId, klass, factEnv, voiceLogId);
+      }
+    }
 
-    _writeAudit(userId, 'OMEGA_MEMORY_FACT_CREATED', {
-      class: klass,
-      reason: 'first_sight',
-      msg_id: voiceLogId,
-    });
-  }
+    // SELECT existing row — identity: env-agnostic lookup, others: env-scoped
+    let existing;
+    if (isIdentity) {
+      existing = db.prepare(
+        "SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class='identity' AND fact_key=? AND tombstone_at IS NULL"
+      ).get(userId, key);
+    } else {
+      existing = db.prepare(
+        'SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class=? AND fact_key=? AND (env IS ?) AND tombstone_at IS NULL'
+      ).get(userId, klass, key, factEnv);
+    }
+
+    if (existing) {
+      // UPDATE path — same for both identity and non-identity
+      db.prepare(`
+        UPDATE ml_chat_memory
+        SET fact_value=?, importance=MAX(importance, ?), last_source_chat_id=?,
+            reaffirm_count=reaffirm_count+1,
+            last_seen_at=?, decay_at=?, tombstone_at=NULL, forgotten_by=NULL, updated_at=?
+        WHERE id=?
+      `).run(value, importance, voiceLogId, now, decayAt, now, existing.id);
+
+      _writeAudit(userId, 'OMEGA_MEMORY_FACT_UPDATED', {
+        class: klass,
+        reason: 'reaffirm',
+        msg_id: voiceLogId,
+      });
+    } else {
+      // INSERT path — identity always env=NULL, others use factEnv
+      db.prepare(`
+        INSERT INTO ml_chat_memory
+          (user_id, env, class, fact_key, fact_value, importance,
+           created_source_chat_id, last_source_chat_id, reaffirm_count,
+           decay_at, last_seen_at, tombstone_at, forgotten_by,
+           created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL, NULL, ?, ?)
+      `).run(
+        userId, factEnv, klass, key, value, importance,
+        voiceLogId, voiceLogId,
+        decayAt, now,
+        now, now
+      );
+
+      _writeAudit(userId, 'OMEGA_MEMORY_FACT_CREATED', {
+        class: klass,
+        reason: 'first_sight',
+        msg_id: voiceLogId,
+      });
+    }
+  });
+
+  upsertTx();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

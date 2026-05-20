@@ -37,7 +37,7 @@ const SCHEMA_SQL = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     env TEXT,
-    class TEXT NOT NULL,
+    class TEXT NOT NULL CHECK(class IN ('identity','personal_context','trading_strategy','temporary','style')),
     fact_key TEXT NOT NULL,
     fact_value TEXT NOT NULL,
     importance REAL NOT NULL DEFAULT 0.5,
@@ -436,6 +436,34 @@ test('T13: eviction audit includes msg_id from triggering extraction', async () 
   const details = JSON.parse(evictAudit.details);
   expect(details.msg_id).toBe(triggerVoiceLogId);
   expect(details.reason).toBe('cap_evict');
+});
+
+test('T14: concurrent _upsertFact calls near cap-1 do not exceed cap (transaction safety)', () => {
+  // Pre-seed 24 personal_context facts (cap=25, so one slot remains)
+  const now = Date.now();
+  for (let i = 0; i < 24; i++) {
+    db.prepare(
+      `INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+       VALUES (?, NULL, 'personal_context', ?, ?, ?, ?, ?, ?, ?)`
+    ).run(TEST_USER, `existing${i}`, `v${i}`, 0.5, now, now, now, now + 365 * 86400000);
+  }
+
+  // Two _upsertFact calls — better-sqlite3 is synchronous, both serialize via transaction.
+  // Final live count must be exactly cap (25), not 26.
+  // Use valid personal_context keys (allowlist: location, timezone, language, comm_style, profession, schedule, family_context, hobbies)
+  _internals._upsertFact(TEST_USER, 'DEMO', 999, { class: 'personal_context', key: 'profession', value: 'engineer', importance: 0.7 }, now);
+  _internals._upsertFact(TEST_USER, 'DEMO', 1000, { class: 'personal_context', key: 'hobbies', value: 'cycling', importance: 0.8 }, now);
+
+  const liveCount = db.prepare(
+    "SELECT COUNT(*) AS c FROM ml_chat_memory WHERE user_id=? AND class='personal_context' AND tombstone_at IS NULL"
+  ).get(TEST_USER).c;
+  expect(liveCount).toBe(25); // Exactly cap, not 26
+
+  // Eviction must have occurred (one fact tombstoned)
+  const evictedCount = db.prepare(
+    "SELECT COUNT(*) AS c FROM ml_chat_memory WHERE user_id=? AND class='personal_context' AND forgotten_by='eviction'"
+  ).get(TEST_USER).c;
+  expect(evictedCount).toBeGreaterThan(0);
 });
 
 test('T11 (bonus): attempts=4 + LLM 429 → attempts=5, failed_permanent (max attempts exhausted)', async () => {
