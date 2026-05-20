@@ -35,20 +35,47 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
         void loadHistory()
     }, [loadHistory])
 
-    // [Day 35] Auto-grow textarea up to 6 lines, then scroll. Run on every input change.
+    // Scroll the chat conversation to its bottom — used at multiple triggers
+    // (new message arrives, input focus, input grows, viewport resize).
+    function _scrollChatToBottom() {
+        const el = scrollRef.current
+        if (!el) return
+        el.scrollTop = el.scrollHeight
+    }
+
+    // [Day 35] Auto-grow textarea up to 6 lines. Run on every input change.
+    // Also re-scroll conversation to bottom so user keeps latest messages
+    // in view while typing (especially when input row grows multi-line).
     useEffect(() => {
         const el = inputRef.current
         if (!el) return
         el.style.height = 'auto'
         const newH = Math.min(el.scrollHeight, 160) // ~6 lines × ~26px
         el.style.height = newH + 'px'
+        _scrollChatToBottom()
     }, [input])
 
     useEffect(() => {
-        if (scrollRef.current) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-        }
+        _scrollChatToBottom()
     }, [history])
+
+    // [2026-05-20] When chat is expanded (user starts interaction),
+    // pin scroll to bottom so latest messages stay in view. On mobile,
+    // also re-scroll whenever the visual viewport resizes (soft keyboard
+    // show/hide). Otherwise the chat content drifts up and the user
+    // loses sight of the most recent message.
+    useEffect(() => {
+        if (!expanded) return
+        // Use rAF so the scroll runs after the expand layout settles
+        const raf = requestAnimationFrame(_scrollChatToBottom)
+        const vv = (typeof window !== 'undefined' && window.visualViewport) || null
+        const onResize = () => _scrollChatToBottom()
+        if (vv) vv.addEventListener('resize', onResize)
+        return () => {
+            cancelAnimationFrame(raf)
+            if (vv) vv.removeEventListener('resize', onResize)
+        }
+    }, [expanded])
 
     async function handleSend() {
         const text = input.trim()
@@ -178,7 +205,11 @@ export function TalkWithMe({ voiceOn, onUtteranceLogged }: Props) {
                             handleKeyDown(e);
                         }
                     }}
-                    onFocus={() => setExpanded(true)}
+                    onFocus={() => {
+                        setExpanded(true);
+                        // small delay so keyboard layout settles before scroll
+                        setTimeout(_scrollChatToBottom, 250);
+                    }}
                     disabled={sending}
                     maxLength={5000}
                     rows={1}
