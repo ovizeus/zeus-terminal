@@ -272,6 +272,16 @@ describe('binanceRateState.classifyEndpoint', () => {
     expect(rateState.classifyEndpoint('/fapi/v1/allOpenOrders')).toBe('A');
   });
 
+  test('[V6 fix 2026-05-20] algoOrder/openAlgoOrders are CLASS_A (SL/TP placement)', () => {
+    // Bug discovered in production soak: these endpoints defaulted to CLASS_B,
+    // causing SL/TP placement to be rejected during WARM resume → emergency
+    // close cascade. They are critical trading safety endpoints.
+    expect(rateState.classifyEndpoint('/fapi/v1/algoOrder')).toBe('A');
+    expect(rateState.classifyEndpoint('/fapi/v1/openAlgoOrders')).toBe('A');
+    // Also batch order endpoint used for SL+TP atomic placement
+    expect(rateState.classifyEndpoint('/fapi/v1/batchOrders')).toBe('A');
+  });
+
   test('CLASS_B — degradable (delayed/queued during warm resume)', () => {
     expect(rateState.classifyEndpoint('/fapi/v1/ticker/24hr')).toBe('B');
     expect(rateState.classifyEndpoint('/fapi/v1/klines')).toBe('B');

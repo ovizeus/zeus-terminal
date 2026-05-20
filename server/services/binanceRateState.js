@@ -226,6 +226,13 @@ const ENDPOINT_CLASS_MAP = Object.freeze({
   '/fapi/v1/openOrders': 'A',
   '/fapi/v1/leverage': 'A',
   '/fapi/v1/marginType': 'A',
+  // [V6 fix 2026-05-20] SL/TP placement endpoints — CRITICAL safety.
+  // Pre-fix bug: these defaulted to CLASS_B → rejected during WARM resume,
+  // causing _placeProtectionForExistingEntry to fail retries → emergency
+  // MARKET close cascade (~613 USD historical loss). Must be CLASS_A.
+  '/fapi/v1/algoOrder': 'A',
+  '/fapi/v1/openAlgoOrders': 'A',
+  '/fapi/v1/batchOrders': 'A',
   // CLASS_B — degradable
   '/fapi/v1/ticker/24hr': 'B',
   '/fapi/v1/klines': 'B',
