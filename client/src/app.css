@@ -7159,15 +7159,45 @@ select option {
     font-style: italic;
 }
 
-/* Mobile responsive: stack fact rows + tighten dialog */
+/* Mobile responsive: 2-row layout — line 1: key:value + trash inline; line 2: meta */
 @media (max-width: 480px) {
     .zr-omega-fact-row {
-        gap: 4px;
+        gap: 6px;
         font-size: 11px;
+        padding: 6px 8px;
+        /* Use grid for 2-row mobile layout */
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-areas:
+            "value trash"
+            "meta  meta";
+        column-gap: 8px;
+        row-gap: 2px;
+        align-items: center;
+    }
+    .zr-omega-fact-key,
+    .zr-omega-fact-value {
+        grid-area: value;
+        display: inline;
+    }
+    .zr-omega-fact-key {
+        margin-right: 4px;
     }
     .zr-omega-fact-meta {
-        flex-basis: 100%;
-        margin-top: 2px;
+        grid-area: meta;
+        margin-top: 0;
+        flex-basis: auto;
+    }
+    .zr-omega-forget-btn {
+        grid-area: trash;
+        opacity: 1;  /* always visible on touch — no hover */
+        padding: 4px 8px;
+        font-size: 14px;
+        min-width: 32px;
+        min-height: 32px;
+        background: rgba(255, 60, 60, 0.08);
+        border: 1px solid rgba(255, 60, 60, 0.25);
+        border-radius: 4px;
     }
     .zr-omega-forget-dialog {
         padding: 12px;

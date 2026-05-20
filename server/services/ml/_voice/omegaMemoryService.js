@@ -69,15 +69,50 @@ const _cache = new Map();
 // Extraction prompt
 // ─────────────────────────────────────────────────────────────────────────────
 
-const EXTRACTION_PROMPT_SYSTEM = `You extract personal facts from user conversation for long-term memory.
-OUTPUT: JSON array [{class, key, value, importance}] or [] if nothing.
+// Reserved values that LLM keeps mis-extracting as user identity
+// (these are the assistant's own self-references, not user facts).
+// Used both in extraction prompt AND post-LLM validation.
+const RESERVED_IDENTITY_VALUES = new Set([
+  'omega', 'assistant', 'ai', 'bot', 'system', 'helper',
+  'user', 'operator', 'boss', 'șef', 'șeful', 'sef', 'seful',
+  'me', 'you', 'tu', 'eu', 'noi', 'we',
+]);
+
+const EXTRACTION_PROMPT_SYSTEM = `You extract personal facts about THE OPERATOR (the human user) from a conversation between the operator and Omega (an AI trading assistant).
+
+INPUT FORMAT:
+  Question: <text the OPERATOR sent>
+  Reply: <text OMEGA the assistant sent back>
+
+CRITICAL RULES:
+- Extract facts ABOUT THE OPERATOR ONLY — not about Omega/yourself.
+- The "Question" line = operator's own statements (extract from here).
+- The "Reply" line = Omega's response (DO NOT extract Omega's self-references as operator facts).
+- Examples of WRONG extractions to AVOID:
+  • "Omega here, mood calm..." → DO NOT extract name=omega for the operator. That's Omega's own name.
+  • "salut boss, omega aici" → DO NOT set role=boss or name=omega. Those describe the assistant addressing the operator.
+  • "I am Omega, your assistant" → DO NOT extract any identity fact. That's self-description by Omega.
+- Examples of CORRECT extractions:
+  • Operator says "Eu sunt Ovi" → identity.name = "Ovi"
+  • Operator says "sunt din România" → personal_context.location = "România"
+  • Operator says "vorbesc româna" → identity.primary_language = "Romanian"
+  • Operator says "folosesc timeframe 4h" → trading_strategy.timeframe = "4h"
+
+If unsure whether a statement is from operator or Omega, prefer NOT to extract (false negatives are safer than false positives).
+
+OUTPUT: JSON array [{class, key, value, importance}] or [] if nothing extractable.
 
 ALLOWED CLASSES: identity, style, personal_context, trading_strategy, temporary
 
 ALLOWED IDENTITY KEYS: name, primary_language, comm_style, role
+  - name: operator's actual name (e.g., "Ovi", "Maria"). NEVER "omega", "assistant", "boss", "user".
+  - primary_language: full language name (e.g., "Romanian", "English"). Not language codes.
+  - comm_style: one of {direct, informal, formal, technical, friendly, terse}. Not random words.
+  - role: operator's actual role in the world (e.g., "developer", "trader", "founder"). NEVER "boss"/"șeful" — that's how Omega addresses them, not their actual role.
+
 ALLOWED STYLE KEYS: tone, format, emoji, length, depth, push_back, error_handling, jokes
 ALLOWED PERSONAL_CONTEXT KEYS: location, timezone, language, comm_style, profession, schedule, family_context, hobbies
-TRADING_STRATEGY and TEMPORARY: open vocabulary
+TRADING_STRATEGY and TEMPORARY: open vocabulary (any key allowed, validated server-side)
 
 IMPORTANCE: 0.0-1.0 scale.
 - identity: 0.9-1.0
@@ -271,6 +306,22 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
       msg_id: voiceLogId,
     });
     return;
+  }
+
+  // [Sub-C.1 post-fix 2026-05-20] Reject identity facts whose value is a reserved
+  // assistant self-reference. LLM repeatedly extracts "omega"/"șeful"/etc as the
+  // operator's name/role from Omega's own reply text ("salut boss, omega aici").
+  // Stopping it here prevents data garbage from polluting persona prompts.
+  if (klass === 'identity' && (key === 'name' || key === 'role')) {
+    const valLower = value.toLowerCase().trim();
+    if (RESERVED_IDENTITY_VALUES.has(valLower)) {
+      _writeAudit(userId, 'OMEGA_MEMORY_FACT_REJECTED', {
+        class: klass,
+        reason: 'reserved_self_reference',
+        msg_id: voiceLogId,
+      });
+      return;
+    }
   }
 
   // Validate key not blacklisted
