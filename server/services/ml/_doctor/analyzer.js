@@ -38,6 +38,17 @@ const DB_INTEGRITY_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 let _lastDbIntegrityCheckTs = 0;
 let _lastDbIntegrityFail = false;
 
+// [2026-05-20 fix] Boot grace period for heartbeat staleness check.
+// Problem: after PM2 reload, OLD serverBrain heartbeat persists in DB with
+// pre-reload timestamp. Process restart + serverBrain re-init takes 10-20s
+// before first new heartbeat fires → during this window doctor sees the
+// stale OLD timestamp (> 30s old) and flags COMPROMISED. Pre-existing
+// cold-start guard `lastHeartbeatTs != null` does NOT protect because the
+// old row IS present (just with stale ts).
+// Fix: skip staleness check during first BOOT_GRACE_MS after process start.
+const _processStartTs = Date.now();
+const BOOT_GRACE_MS = 90 * 1000; // 90s grace — covers reload + first heartbeat
+
 let _lastState = null;
 let _running = false;
 let _timer = null;
@@ -136,7 +147,21 @@ function analyze(params) {
         // Cold-start guard: ignore stale=true when lastHeartbeatTs is null
         // (no rows yet → system just booted, give it time before alarming).
         if (staleness && staleness.stale && staleness.lastHeartbeatTs != null) {
-            doctorHeartbeatStale = true;
+            // [2026-05-20 fix] Stale-from-previous-process guard.
+            // After PM2 reload, the new process inherits OLD heartbeat rows
+            // in DB from the previous process. Until serverBrain's first
+            // post-reload heartbeat fires (can take 30-180s depending on
+            // boot sequence), the stale OLD timestamp triggers false-positive
+            // COMPROMISED. Detect this: if lastHeartbeatTs < _processStartTs,
+            // the heartbeat is from a DEFUNCT process — wait for the new
+            // process to emit its first heartbeat before alarming.
+            // Combined with boot grace: skip flagging during first BOOT_GRACE_MS
+            // OR when the only known heartbeat predates this process.
+            const heartbeatPredatesProcess = staleness.lastHeartbeatTs < _processStartTs;
+            const inBootGrace = (nowTs - _processStartTs) < BOOT_GRACE_MS;
+            if (!heartbeatPredatesProcess && !inBootGrace) {
+                doctorHeartbeatStale = true;
+            }
         }
     } catch (_) { /* fall through to false */ }
 
