@@ -6499,6 +6499,67 @@ select option {
   overflow-y: auto;
 }
 
+/* [2026-05-20] Mobile keyboard stability fix.
+ * On mobile, position:sticky combined with the soft keyboard opening causes
+ * the chat to drift up and expose the underlying "The Voice" panel.
+ * When EXPANDED on mobile, switch to fixed-overlay mode anchored to the
+ * dynamic viewport (dvh) so the keyboard pushes the input but the chat
+ * fills the remaining space stably.
+ */
+@media (max-width: 768px) {
+  /* Pin the sticky container to viewport bottom while expanded */
+  .omega-page-chat-sticky:has(.omega-chat-expanded) {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    margin: 0;
+    padding: 0 12px;
+    z-index: 100;
+    background: rgba(5, 5, 16, 0.98);
+  }
+  .omega-chat-expanded {
+    /* dynamic viewport height accounts for mobile keyboard */
+    max-height: 85dvh;
+    height: 85dvh;
+  }
+  .omega-chat-expanded .omega-chat-scroll {
+    /* leave room for header (~48px) + input row (~70px) */
+    max-height: calc(85dvh - 120px);
+    /* prevent scroll chaining to parent panels */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .omega-chat-expanded .omega-chat-input-row {
+    /* keep input row anchored to bottom of chat overlay */
+    flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* Browsers without :has() support — older Safari/Chrome ≤105 fallback.
+ * Apply same fix unconditionally when expanded. Slightly less precise
+ * (will overlay even on desktop narrow viewports) but safer than drift. */
+@supports not selector(:has(*)) {
+  @media (max-width: 768px) {
+    .omega-page-chat-sticky {
+      position: relative;
+    }
+    .omega-chat.omega-chat-expanded {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 85dvh;
+      height: 85dvh;
+      z-index: 100;
+      background: rgba(5, 5, 16, 0.98);
+      padding: 0 12px;
+    }
+  }
+}
+
 .omega-chat:not(.omega-chat-expanded) .omega-chat-scroll {
   display: none;
 }
