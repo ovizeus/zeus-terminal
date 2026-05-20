@@ -363,12 +363,37 @@ describe('_internals — Luhn and BIP39 direct tests', () => {
 // ─────────────────────────────────────────────────────────
 
 describe('±50 char proximity window enforcement', () => {
-    test('does NOT redact hex64 when keyword is >50 chars away from hex', () => {
+    test('hex64 is NOT redacted when keyword is >50 chars away (hex preserved in text)', () => {
         // Keyword at position 0, hex at position 100+ (separation > 50 chars)
+        // The hex value itself should NOT be replaced, but bare keyword fallback may fire
         const padding = 'x'.repeat(80); // 80 char buffer
         const text = `the private things ${padding} a3b1c2d4e5f607890abcdef1234567890123456789abcdef0123456789abcdef`;
         const result = redactPipeline.redact(text, { mode: 'input' });
-        expect(result.redactionCount).toBe(0);
+        // Hex value is preserved (not replaced with [REDACTED:hex64_private])
+        expect(result.redactedText).toContain('a3b1c2d4e5f607890abcdef1234567890123456789abcdef0123456789abcdef');
+        expect(result.redactionTypes).not.toContain('hex64_private');
+    });
+
+    test('bare keyword fallback fires (input mode high-recall) even when hex exists out of range', () => {
+        // Spec §8.2: bare keyword is a high-recall signal in input mode — must fire
+        // even when an unrelated hex exists elsewhere in text beyond proximity range
+        const padding = 'x'.repeat(80); // 80 char buffer
+        const text = `the private things ${padding} a3b1c2d4e5f607890abcdef1234567890123456789abcdef0123456789abcdef`;
+        const result = redactPipeline.redact(text, { mode: 'input' });
+        expect(result.redactionCount).toBeGreaterThan(0);
+    });
+
+    test('reply mode does NOT fire bare keyword fallback even when hex exists out of range', () => {
+        // Reply mode = high-precision — no bare keyword catch-all, only exact hex matches.
+        // In reply mode, a naked 64-char hex IS redacted (no proximity requirement),
+        // but the bare keyword 'private' must NOT be redacted as 'proximity_keyword'.
+        const padding = 'x'.repeat(80); // 80 char buffer
+        const text = `the private things ${padding} a3b1c2d4e5f607890abcdef1234567890123456789abcdef0123456789abcdef`;
+        const result = redactPipeline.redact(text, { mode: 'reply' });
+        // Bare keyword fallback must NOT fire in reply mode
+        expect(result.redactionTypes).not.toContain('proximity_keyword');
+        // The bare word 'private' should be preserved (not replaced)
+        expect(result.redactedText).toContain('private');
     });
 
     test('redacts hex64 when keyword is within 50 chars of hex', () => {

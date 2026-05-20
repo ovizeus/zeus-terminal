@@ -530,16 +530,14 @@ function redact(text, opts = {}) {
             redactionTypesSet.add(match.type);
         }
 
-        // Bare keyword fallback: if keyword present but NO hex/addr exists anywhere in the
-        // text at all, redact the bare keyword as suspicious context.
-        // NOTE: if a hex IS in the text but out of ±50 char range, we do NOT fall back —
-        // the user has a hex but it's contextually unrelated to the keyword.
-        const anyHex64InText = RE_HEX64.test(result);
-        RE_HEX64.lastIndex = 0; // reset stateful regex after test()
-        const anyEthInText = RE_ETH_ADDR.test(result);
-        RE_ETH_ADDR.lastIndex = 0;
-        if (!hexFound && !ethFound && !anyHex64InText && !anyEthInText) {
-            // No hex in text at all — keyword alone is suspicious context
+        // Bare-keyword fallback (mode='input' high-recall only).
+        // Spec §8.2: proximity-keyword presence alone is a high-recall signal —
+        // fires regardless of whether unrelated hex exists elsewhere in text.
+        // Guard is just !hexFound && !ethFound (i.e., no hex was within proximity).
+        // If a keyword+hex IS in proximity, hexFound/ethFound are true and we
+        // already redacted via the hex matcher — no double-firing.
+        if (!hexFound && !ethFound) {
+            // No hex was within proximity of any keyword — keyword alone is suspicious context
             const lowerResult = result.toLowerCase();
             const hasAnyKw = PROXIMITY_KEYWORDS.some(kw => lowerResult.includes(kw.toLowerCase()));
             if (hasAnyKw) {
