@@ -31,10 +31,34 @@ const _IP_CB_FALLBACK_MS = 60000;  // cap on fallback ban window (Binance min ba
 const _IP_CB_JITTER_MS = 500;      // small post-deadline buffer
 let _ipBannedUntil = 0;
 let _ipBanReason = '';
+
+// [V6 Binance defense 2026-05-20] Lazy-load persistent rate state — survives PM2 reloads.
+// On first call, loads banned_until from DB so the new process inherits any
+// existing ban window rather than re-probing Binance and getting re-banned.
+let _rateStateLoaded = false;
+function _ensureRateStateLoaded() {
+  if (_rateStateLoaded) return;
+  _rateStateLoaded = true;
+  try {
+    const rateState = require('./binanceRateState');
+    const s = rateState.load();
+    if (s.banned_until > Date.now()) {
+      _ipBannedUntil = s.banned_until;
+      _ipBanReason = s.ban_reason || 'persisted ban (loaded from DB)';
+      const remainingS = Math.ceil((_ipBannedUntil - Date.now()) / 1000);
+      console.warn(`[BINANCE IP-CB] Loaded persisted ban from DB — suppressing for ~${remainingS}s. Reason: ${_ipBanReason}`);
+    }
+  } catch (_err) {
+    // DB unreachable or migration not yet applied — in-memory fallback only
+  }
+}
+
 function _isIpBanned() {
+  _ensureRateStateLoaded();
   return _ipBannedUntil > Date.now();
 }
 function _setIpBan(untilMs, reason) {
+  _ensureRateStateLoaded();
   // Never shrink an existing ban; only extend.
   const target = Math.max(_ipBannedUntil, untilMs + _IP_CB_JITTER_MS);
   if (target > _ipBannedUntil) {
@@ -42,6 +66,19 @@ function _setIpBan(untilMs, reason) {
     _ipBanReason = reason || _ipBanReason || 'IP rate-limit';
     const remainingS = Math.ceil((target - Date.now()) / 1000);
     console.warn(`[BINANCE IP-CB] Tripped — refusing all signed requests for ~${remainingS}s. Reason: ${_ipBanReason}`);
+
+    // [V6] Persist to DB so PM2 reload doesn't lose ban state.
+    try {
+      const rateState = require('./binanceRateState');
+      rateState.recordBan({ bannedUntil: target, reason: _ipBanReason, now: Date.now() });
+      rateState.appendTransitionLog({
+        from: 'NORMAL_OR_WARM',
+        to: 'SUPPRESSED',
+        reason: _ipBanReason,
+        ts: Date.now(),
+        bannedUntil: target,
+      });
+    } catch (_err) { /* defensive — never block ban path */ }
   }
 }
 // Parse `banned until 1776961979385` style timestamp from Binance error msg.

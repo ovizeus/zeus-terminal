@@ -9660,6 +9660,41 @@ migrate('390_idx_mlvl_extraction_recovery', () => {
     `);
 });
 
+// [V6 Binance defense 2026-05-20] Persistent rate-limit state.
+// Eliminates restart amnesia — PM2 reload no longer resets in-memory ban
+// counter, preventing the new process from triggering another ban probe.
+migrate('391_binance_rate_state', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS binance_rate_state (
+            scope TEXT PRIMARY KEY DEFAULT 'global',
+            banned_until INTEGER NOT NULL DEFAULT 0,
+            ban_reason TEXT,
+            warm_until INTEGER NOT NULL DEFAULT 0,
+            used_weight_1m INTEGER NOT NULL DEFAULT 0,
+            used_weight_ts INTEGER,
+            burst_calls_10s INTEGER NOT NULL DEFAULT 0,
+            burst_window_start INTEGER,
+            last_heavy_endpoint_ts INTEGER,
+            resume_generation INTEGER NOT NULL DEFAULT 1,
+            consecutive_ban_count INTEGER NOT NULL DEFAULT 0,
+            last_ban_at INTEGER,
+            updated_at INTEGER NOT NULL
+        );
+    `);
+});
+
+migrate('392_binance_rate_state_log', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS binance_rate_state_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            event_json TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bin_rate_log_ts
+            ON binance_rate_state_log(ts);
+    `);
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload
