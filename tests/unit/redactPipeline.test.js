@@ -1,12 +1,16 @@
 'use strict';
 
 /**
- * redactPipeline.test.js — 30 TDD tests for Sub-C.1 Task 2
+ * redactPipeline.test.js — 54 TDD tests for Sub-C.1 Task 2
  *
- * Groups:
- *   A: 15 base regex tests
- *   B: 10 mode divergence parametrized tests (5 FP × 2 modes + 5 LEAK × 2 modes)
- *   C: 5 helper/edge-case tests
+ * Breakdown:
+ *  - 15 base regex tests (Group A)
+ *  - 20 parametrized mode divergence tests (Group B: 10 cases × 2 modes)
+ *  - 10 helper tests (Group C: blacklist, allowlist, validation, edge cases)
+ *  - 5 _internals direct tests (Luhn + BIP39 helpers)
+ *  - 4 ±50 char proximity window enforcement tests
+ *
+ * Final count after two fix passes (032b350 → 32e0305 → aa385ae) + RE_JWT lastIndex fix.
  */
 
 const { redactPipeline, _internals } = require('../../server/services/ml/_voice/redactPipeline');
@@ -330,6 +334,14 @@ describe('Group C — Helper functions and edge cases', () => {
     test('C-10: validateFactValue allows clean value ("Romania")', () => {
         const { ok } = redactPipeline.validateFactValue('Romania', 'personal_context');
         expect(ok).toBe(true);
+    });
+
+    // C-11: RE_JWT lastIndex reset — repeated calls must all detect JWT (regression)
+    test('C-11: validateFactValue: JWT detection works on repeated calls (RE_JWT lastIndex reset)', () => {
+        const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpM';
+        expect(redactPipeline.validateFactValue(jwt, 'temporary').ok).toBe(false);
+        expect(redactPipeline.validateFactValue(jwt, 'temporary').ok).toBe(false); // would fail without lastIndex reset
+        expect(redactPipeline.validateFactValue(jwt, 'temporary').ok).toBe(false); // third call
     });
 });
 

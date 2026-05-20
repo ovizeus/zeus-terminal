@@ -292,10 +292,20 @@ const BIP39_WORDS = new Set([
  * 'parolă', 'password', 'pwd', 'wallet export', 'private key'.
  * Addition beyond spec: 'wallet' standalone — bare "wallet" near a hex/0x address
  * is high-signal suspicious context (operator-approved, Phone Claude review 2026-05-20).
+ * NOTE: 'wallet' is PROXIMITY-ONLY — it triggers _hexMatchesNearProximity when a hex/0x
+ * address is within ±50 chars. It is intentionally NOT included in the bare-keyword
+ * fallback regex (mode='input', ~line 545) because 'wallet' alone is too ambiguous
+ * (e.g., "my wallet address") without proximity context to a sensitive value.
+ * See 'wallet export' below for the multi-word variant that qualifies separately.
  */
 const PROXIMITY_KEYWORDS = [
     'private', 'seed', 'secret', 'cheia', 'mnemonic', 'parol', 'parolă',
-    'password', 'pwd', 'wallet export', 'wallet', 'private key', 'jwt',
+    'password', 'pwd', 'wallet export',
+    'wallet',  // proximity-only: triggers redact when near a hex/0x address (operator-approved
+               // addition to spec's 'wallet export'). Intentionally NOT in bare-keyword fallback
+               // regex (~line 545) — 'wallet' alone is too ambiguous (e.g., "my wallet address")
+               // without proximity context to a sensitive value.
+    'private key', 'jwt',
 ];
 
 // Fact-key blacklist — case-insensitive substring match
@@ -473,6 +483,15 @@ function redact(text, opts = {}) {
     applyRegex(RE_JWT, 'jwt');
 
     // BIP39 seed phrase — 12+ consecutive words
+    // BIP39 redact strategy (mode='input' high-recall):
+    // Outer guard _bip39Sequence() detects 12+ consecutive BIP39 words.
+    // Inner regex [a-zA-Z]+(?:\s+[a-zA-Z]+){11,} captures the surrounding alpha span
+    // for replacement. The captured span MAY include adjacent non-BIP39 alphabetic
+    // words if they happen to surround a BIP39 12-run. This over-redaction is
+    // acceptable per spec §8.2 (mode='input' = high-recall: prefer redacting
+    // surrounding context over leaking partial seed). The redacted span is then
+    // re-validated via _bip39Sequence to confirm BIP39 presence — non-BIP39 spans
+    // pass through unchanged.
     if (_bip39Sequence(result)) {
         // Find and replace the 12+ consecutive BIP39 word sequence
         // Strategy: walk tokens and replace the run
@@ -629,6 +648,7 @@ function validateFactValue(value, klass) {
     }
 
     // JWT check
+    RE_JWT.lastIndex = 0;
     if (RE_JWT.test(value)) {
         return { ok: false, reason: 'jwt_detected' };
     }
