@@ -287,6 +287,11 @@ const BIP39_WORDS = new Set([
 /**
  * Proximity keywords (English + Romanian) — within ±50 chars triggers redact
  * in mode='input'. In mode='reply' these are ignored for proximity-based redact.
+ *
+ * Spec list (§8.2): 'private', 'seed', 'secret', 'cheia', 'mnemonic', 'parol',
+ * 'parolă', 'password', 'pwd', 'wallet export', 'private key'.
+ * Addition beyond spec: 'wallet' standalone — bare "wallet" near a hex/0x address
+ * is high-signal suspicious context (operator-approved, Phone Claude review 2026-05-20).
  */
 const PROXIMITY_KEYWORDS = [
     'private', 'seed', 'secret', 'cheia', 'mnemonic', 'parol', 'parolă',
@@ -363,28 +368,34 @@ function _bip39Sequence(text) {
 }
 
 /**
- * Checks if the text contains a proximity keyword within ±50 chars of any
- * position (i.e. anywhere in the string for keyword search).
- * We scan for keyword presence in the full string.
+ * Finds all hex regex matches that have a proximity keyword within ±50 chars.
+ *
+ * Per spec §8.2: Hex64 + proximity-keyword within ±50 chars → private keys.
+ * Hex40 with 0x prefix + proximity-keyword within ±50 chars → wallet addresses.
+ *
+ * @param {string} text — original text (not lowercased)
+ * @param {RegExp} regex — must use /g flag; will be cloned fresh each call
+ * @param {string} type — redaction type label
+ * @returns {Array<{start: number, end: number, type: string}>}
  */
-function _hasProximityKeyword(text) {
-    const lower = text.toLowerCase();
-    for (const kw of PROXIMITY_KEYWORDS) {
-        if (lower.includes(kw)) return true;
-    }
-    return false;
-}
+function _hexMatchesNearProximity(text, regex, type) {
+    const matches = [];
+    const freshRe = new RegExp(regex.source, regex.flags);
+    let m;
+    while ((m = freshRe.exec(text)) !== null) {
+        const hexStart = m.index;
+        const hexEnd = hexStart + m[0].length;
 
-/**
- * Returns index of first occurrence of any proximity keyword in text (lowercase).
- * Returns -1 if none found.
- */
-function _proximityKeywordIndex(lowerText) {
-    for (const kw of PROXIMITY_KEYWORDS) {
-        const idx = lowerText.indexOf(kw);
-        if (idx !== -1) return idx;
+        // ±50 char window around the hex match boundaries
+        const ctxStart = Math.max(0, hexStart - 50);
+        const ctxEnd = Math.min(text.length, hexEnd + 50);
+        const ctx = text.slice(ctxStart, ctxEnd).toLowerCase();
+
+        if (PROXIMITY_KEYWORDS.some(kw => ctx.includes(kw.toLowerCase()))) {
+            matches.push({ start: hexStart, end: hexEnd, type });
+        }
     }
-    return -1;
+    return matches;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -495,42 +506,46 @@ function redact(text, opts = {}) {
 
     // ── Proximity-based patterns ───────────────────────────────────────────
     //
-    // mode='input': redact if proximity keyword exists ANYWHERE in text,
-    //   even without an exact secret match.
-    // mode='reply': redact ONLY on exact hex/address match (proximity alone is not enough).
+    // mode='input': redact hex64/ETH only if a proximity keyword is within ±50 chars
+    //   of the hex match (per spec §8.2). If keyword exists but no hex/addr matched,
+    //   still redact the bare keyword as suspicious context.
+    // mode='reply': redact ONLY on exact hex/address match (proximity not required).
 
     if (mode === 'input') {
-        // In input mode: proximity keyword presence alone triggers redact of the hex/address
-        // Also: proximity keyword bare (without value) triggers a "context redact"
-        const lower = result.toLowerCase();
-        const hasKw = _hasProximityKeyword(lower);
+        // Find hex64 matches that have a proximity keyword within ±50 chars
+        const hex64Matches = _hexMatchesNearProximity(result, RE_HEX64, 'hex64_private');
+        // Find ETH address matches that have a proximity keyword within ±50 chars
+        const ethMatches = _hexMatchesNearProximity(result, RE_ETH_ADDR, 'eth_addr_private');
 
-        if (hasKw) {
-            // Try to redact actual hex64 values in proximity
-            let hexFound = false;
-            applyRegex(RE_HEX64, 'hex64_private', () => {
-                hexFound = true;
-                return true;
-            });
+        const allHexMatches = [...hex64Matches, ...ethMatches]
+            .sort((a, b) => b.start - a.start); // reverse order for safe splice
 
-            // Try to redact ETH addresses in proximity
-            let ethFound = false;
-            applyRegex(RE_ETH_ADDR, 'eth_addr_private', () => {
-                ethFound = true;
-                return true;
-            });
+        let hexFound = hex64Matches.length > 0;
+        let ethFound = ethMatches.length > 0;
 
-            // If keyword present but no hex/addr found, still redact (proximity alone)
-            // — mark the keyword itself and surrounding context as redacted
-            // We redact the keyword + next non-space token after it (if any)
-            if (!hexFound && !ethFound) {
-                const freshLower = result.toLowerCase();
-                let replaced = false;
-                // Replace "keyword <word>" or just "keyword" if at end
+        // Replace matches right-to-left to preserve indices
+        for (const match of allHexMatches) {
+            result = result.slice(0, match.start) + REDACTED + result.slice(match.end);
+            redactionCount++;
+            redactionTypesSet.add(match.type);
+        }
+
+        // Bare keyword fallback: if keyword present but NO hex/addr exists anywhere in the
+        // text at all, redact the bare keyword as suspicious context.
+        // NOTE: if a hex IS in the text but out of ±50 char range, we do NOT fall back —
+        // the user has a hex but it's contextually unrelated to the keyword.
+        const anyHex64InText = RE_HEX64.test(result);
+        RE_HEX64.lastIndex = 0; // reset stateful regex after test()
+        const anyEthInText = RE_ETH_ADDR.test(result);
+        RE_ETH_ADDR.lastIndex = 0;
+        if (!hexFound && !ethFound && !anyHex64InText && !anyEthInText) {
+            // No hex in text at all — keyword alone is suspicious context
+            const lowerResult = result.toLowerCase();
+            const hasAnyKw = PROXIMITY_KEYWORDS.some(kw => lowerResult.includes(kw.toLowerCase()));
+            if (hasAnyKw) {
                 result = result.replace(
                     /(private\s+key|wallet\s+export|private|seed|secret|cheia|mnemonic|parol[aă]?|password|pwd|jwt)/gi,
                     (m) => {
-                        replaced = true;
                         redactionCount++;
                         redactionTypesSet.add('proximity_keyword');
                         return REDACTED;

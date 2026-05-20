@@ -356,3 +356,25 @@ describe('_internals — Luhn and BIP39 direct tests', () => {
         expect(_internals._bip39Sequence(text)).toBe(false);
     });
 });
+
+// ─────────────────────────────────────────────────────────
+// ±50 char proximity window enforcement (regression tests)
+// Locks in the per-match window check introduced in T2 review fix.
+// ─────────────────────────────────────────────────────────
+
+describe('±50 char proximity window enforcement', () => {
+    test('does NOT redact hex64 when keyword is >50 chars away from hex', () => {
+        // Keyword at position 0, hex at position 100+ (separation > 50 chars)
+        const padding = 'x'.repeat(80); // 80 char buffer
+        const text = `the private things ${padding} a3b1c2d4e5f607890abcdef1234567890123456789abcdef0123456789abcdef`;
+        const result = redactPipeline.redact(text, { mode: 'input' });
+        expect(result.redactionCount).toBe(0);
+    });
+
+    test('redacts hex64 when keyword is within 50 chars of hex', () => {
+        // Keyword and hex within 30 chars of each other
+        const text = 'private key here: a3b1c2d4e5f607890abcdef1234567890123456789abcdef0123456789abcdef';
+        const result = redactPipeline.redact(text, { mode: 'input' });
+        expect(result.redactionCount).toBeGreaterThan(0);
+    });
+});
