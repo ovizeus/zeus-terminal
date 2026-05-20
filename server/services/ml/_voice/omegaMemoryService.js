@@ -56,6 +56,15 @@ const BACKOFF_SCHEDULE_MS = [
 
 const MAX_TRANSIENT_ATTEMPTS = 5;
 
+const TOP_N_BUDGET = 12;
+const CACHE_TTL_MS = 30 * 1000;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Process-local cache
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _cache = new Map();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Extraction prompt
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,6 +146,31 @@ function _calcDecayAt(klass) {
   const halflife = CLASS_HALFLIFE_DAYS[klass];
   if (halflife === Infinity) return null;
   return Date.now() + 5 * halflife * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Get last_modified_at from ml_chat_memory_meta for a user.
+ * Returns 0 if no row or on error.
+ * @param {number} userId
+ * @returns {number}
+ */
+function _getMetaLastModified(userId) {
+  const { db } = require('../../database');
+  try {
+    const row = db.prepare('SELECT last_modified_at FROM ml_chat_memory_meta WHERE user_id=?').get(userId);
+    return row ? row.last_modified_at : 0;
+  } catch (_err) {
+    return 0;
+  }
+}
+
+/**
+ * Clear the process-local retrieve cache.
+ * @param {number|undefined} userId — if provided, clears only this user; otherwise clears all
+ */
+function _clearCache(userId) {
+  if (userId !== undefined) _cache.delete(userId);
+  else _cache.clear();
 }
 
 /**
@@ -366,6 +400,77 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Public retrieve
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Retrieve up to TOP_N_BUDGET facts for a user/env from memory.
+ *
+ * Returns:
+ *   - ALL identity facts (closed enum, max 4 — always included)
+ *   - Top-(TOP_N_BUDGET - identity_count) non-identity facts by hybrid score
+ *
+ * env filter: trading_strategy facts only match requested env or env=NULL.
+ * Other classes are env-agnostic.
+ *
+ * Excludes tombstoned (tombstone_at IS NOT NULL) and expired (decay_at <= now) facts.
+ *
+ * Uses a 30s process-local cache. Cache is invalidated when:
+ *   - TTL expires (now - loadedAt >= CACHE_TTL_MS), OR
+ *   - ml_chat_memory_meta.last_modified_at > cache.loadedAt (another worker wrote)
+ *
+ * On any DB error, returns [] (graceful degrade — chat flow must not crash).
+ *
+ * @param {number} userId
+ * @param {string|null} env
+ * @returns {Promise<Array>}
+ */
+async function retrieve(userId, env) {
+  const now = Date.now();
+
+  try {
+    const cached = _cache.get(userId);
+    const metaLastModified = _getMetaLastModified(userId);
+
+    // Cache fresh if: within TTL AND meta not updated since load
+    if (
+      cached &&
+      (now - cached.loadedAt) < CACHE_TTL_MS &&
+      cached.loadedAt >= metaLastModified
+    ) {
+      return cached.facts;
+    }
+
+    // Reload from DB
+    const { db } = require('../../database');
+    const allFacts = db.prepare(`
+      SELECT * FROM ml_chat_memory
+      WHERE user_id=? AND tombstone_at IS NULL
+        AND (decay_at IS NULL OR decay_at > ?)
+        AND (class != 'trading_strategy' OR env=? OR env IS NULL)
+    `).all(userId, now, env);
+
+    // Identity always included
+    const identity = allFacts.filter(f => f.class === 'identity');
+    const others = allFacts.filter(f => f.class !== 'identity');
+
+    // JS-side hybrid scoring (better-sqlite3 lacks exp/ln)
+    const scored = others.map(f => ({ fact: f, score: _hybridScore(f, now) }));
+    scored.sort((a, b) => b.score - a.score);
+
+    const remainingBudget = Math.max(0, TOP_N_BUDGET - identity.length);
+    const topOthers = scored.slice(0, remainingBudget).map(s => s.fact);
+
+    const result = [...identity, ...topOthers];
+    _cache.set(userId, { facts: result, loadedAt: now });
+    return result;
+  } catch (_err) {
+    // Graceful degrade — chat flow must not crash on memory failure
+    return [];
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Public extract
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -464,8 +569,9 @@ async function extract({ voiceLogId, userId, env, question, reply }) {
       _upsertFact(userId, env, voiceLogId, fact, extractNow);
     }
 
-    // Step 8: Update meta
+    // Step 8: Update meta + invalidate same-worker cache
     _updateMeta(userId);
+    _clearCache(userId);
 
     // Step 9: Mark done
     db.prepare(
@@ -518,7 +624,7 @@ async function extract({ voiceLogId, userId, env, question, reply }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = {
-  omegaMemoryService: { extract },
+  omegaMemoryService: { extract, retrieve },
   _internals: {
     _classifyError,
     _calcBackoff,
@@ -526,9 +632,13 @@ module.exports = {
     _calcDecayAt,
     _upsertFact,
     _evictBottomOne,
+    _clearCache,
+    _getMetaLastModified,
     CLASS_HALFLIFE_DAYS,
     CLASS_CAPS,
     MAX_TRANSIENT_ATTEMPTS,
     BACKOFF_SCHEDULE_MS,
+    TOP_N_BUDGET,
+    CACHE_TTL_MS,
   },
 };

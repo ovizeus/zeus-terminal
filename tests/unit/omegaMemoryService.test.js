@@ -466,6 +466,127 @@ test('T14: concurrent _upsertFact calls near cap-1 do not exceed cap (transactio
   expect(evictedCount).toBeGreaterThan(0);
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// T5 tests: retrieve() + cache layer
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('omegaMemoryService.retrieve', () => {
+  test('R1: returns all identity facts always (closed enum max 4)', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'identity', 'name', 'Ovi', 1.0, ?, ?, ?, NULL)`).run(TEST_USER, now, now, now);
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'identity', 'primary_language', 'Romanian', 1.0, ?, ?, ?, NULL)`).run(TEST_USER, now, now, now);
+
+    const facts = await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+    expect(facts.length).toBe(2);
+    expect(facts.find(f => f.fact_key === 'name')).toBeDefined();
+    expect(facts.find(f => f.fact_key === 'primary_language')).toBeDefined();
+  });
+
+  test('R2: hybrid score: fresher fact has higher score than stale one', () => {
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'fresh', 'F', 0.5, ?, ?, ?, ?)`).run(TEST_USER, now, now, now, now + 365 * ONE_DAY);
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'personal_context', 'stale', 'S', 0.5, ?, ?, ?, ?)`).run(TEST_USER, now - 180 * ONE_DAY, now, now, now + 365 * ONE_DAY);
+
+    const freshFact = db.prepare("SELECT * FROM ml_chat_memory WHERE fact_key='fresh'").get();
+    const staleFact = db.prepare("SELECT * FROM ml_chat_memory WHERE fact_key='stale'").get();
+
+    expect(_internals._hybridScore(freshFact, now)).toBeGreaterThan(_internals._hybridScore(staleFact, now));
+  });
+
+  test('R3: top-N budget enforced (identity + others ≤ 12)', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'identity', 'name', 'Ovi', 1.0, ?, ?, ?, NULL)`).run(TEST_USER, now, now, now);
+    // Insert 15 personal_context facts using unique env to bypass UNIQUE(user,class,key,env)
+    for (let i = 0; i < 15; i++) {
+      db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                  VALUES (?, ?, 'personal_context', ?, ?, ?, ?, ?, ?, ?)`).run(
+        TEST_USER, `bucket${i}`, `key${i}`, `v${i}`,
+        0.5 + i * 0.01, now, now, now, now + 365 * 86400000
+      );
+    }
+
+    _internals._clearCache(TEST_USER);
+    const facts = await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+    expect(facts.length).toBeLessThanOrEqual(12);
+    // Identity always present
+    expect(facts.filter(f => f.class === 'identity').length).toBe(1);
+  });
+
+  test('R4: empty cache reloads from DB on first call', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'identity', 'name', 'Ovi', 1.0, ?, ?, ?, NULL)`).run(TEST_USER, now, now, now);
+
+    _internals._clearCache(TEST_USER);
+
+    const facts = await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+    expect(facts.length).toBe(1);
+    expect(facts[0].fact_key).toBe('name');
+  });
+
+  test('R5: fresh cache (<30s, meta unchanged) does NOT reload from DB', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'identity', 'name', 'Ovi', 1.0, ?, ?, ?, NULL)`).run(TEST_USER, now, now, now);
+
+    _internals._clearCache(TEST_USER);
+    // First call — populates cache
+    await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+
+    // Delete fact directly from DB (without updating meta)
+    db.prepare('DELETE FROM ml_chat_memory WHERE user_id=?').run(TEST_USER);
+
+    // Second call within 30s — should return cached value (still 1 fact)
+    const facts = await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+    expect(facts.length).toBe(1); // cached, not reloaded
+  });
+
+  test('R6: meta last_modified_at change triggers reload', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, NULL, 'identity', 'name', 'Ovi', 1.0, ?, ?, ?, NULL)`).run(TEST_USER, now, now, now);
+
+    _internals._clearCache(TEST_USER);
+    // First call — populates cache
+    await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+
+    // Simulate another worker writing: delete fact + bump meta
+    db.prepare('DELETE FROM ml_chat_memory WHERE user_id=?').run(TEST_USER);
+    db.prepare(`INSERT INTO ml_chat_memory_meta (user_id, last_modified_at) VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET last_modified_at=excluded.last_modified_at`).run(TEST_USER, Date.now() + 1000);
+
+    // Next call sees meta > cache.loadedAt → reloads
+    const facts = await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+    expect(facts.length).toBe(0);
+  });
+
+  test('R7: env filter — trading_strategy only matches request env', async () => {
+    const now = Date.now();
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, 'DEMO', 'trading_strategy', 'risk', '1pct', 0.8, ?, ?, ?, ?)`).run(TEST_USER, now, now, now, now + 365 * 86400000);
+    db.prepare(`INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+                VALUES (?, 'REAL', 'trading_strategy', 'risk', '0.3pct', 0.9, ?, ?, ?, ?)`).run(TEST_USER, now, now, now, now + 365 * 86400000);
+
+    _internals._clearCache(TEST_USER);
+    const demoFacts = await omegaMemoryService.retrieve(TEST_USER, 'DEMO');
+    const demoRisk = demoFacts.find(f => f.class === 'trading_strategy' && f.fact_key === 'risk');
+    expect(demoRisk).toBeDefined();
+    expect(demoRisk.fact_value).toBe('1pct');
+
+    _internals._clearCache(TEST_USER);
+    const realFacts = await omegaMemoryService.retrieve(TEST_USER, 'REAL');
+    const realRisk = realFacts.find(f => f.class === 'trading_strategy' && f.fact_key === 'risk');
+    expect(realRisk).toBeDefined();
+    expect(realRisk.fact_value).toBe('0.3pct');
+  });
+});
+
 test('T11 (bonus): attempts=4 + LLM 429 → attempts=5, failed_permanent (max attempts exhausted)', async () => {
   const voiceLogId = insertLog({ attempts: 4, extraction_status: 'failed_transient' });
 
