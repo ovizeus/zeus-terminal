@@ -1045,7 +1045,6 @@ GET /api/omega/memory/health (5 tests):
 - Embedding-based semantic retrieval (if facts >100/user becomes routine)
 - Cross-user pattern learning (anonymized, opt-in)
 - Memory export / import
-- **Index optimization:** Consider rewriting `idx_mlcm_user_active` as partial index `WHERE tombstone_at IS NULL` on `(user_id, class)` if per-user fact count grows beyond caps. Current design (max 152 live facts/user via class-bounded caps) makes this a non-issue at expected scale. Noted by T1 code review 2026-05-20.
 
 ---
 
