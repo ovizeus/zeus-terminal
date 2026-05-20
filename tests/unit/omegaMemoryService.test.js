@@ -375,6 +375,69 @@ test('T10: backoff schedule — _calcBackoff returns 5min/30min/2h/12h for attem
   Date.now = origDateNow;
 });
 
+test('T12: identity UPSERT is env-agnostic (cap-of-4 per user, not per user×env)', async () => {
+  // Mock LLM to return same identity fact name='Alice'
+  mockChatLLM.mockResolvedValue({ ok: true, text: JSON.stringify([
+    { class: 'identity', key: 'name', value: 'Alice', importance: 1.0 },
+  ])});
+
+  // First extraction with env='DEMO'
+  const v1 = db.prepare(
+    'INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)'
+  ).run(TEST_USER, 'r', '{}', Date.now(), 'pending').lastInsertRowid;
+  await omegaMemoryService.extract({ voiceLogId: v1, userId: TEST_USER, env: 'DEMO', question: 'q', reply: 'r' });
+
+  // Second extraction with env='REAL' — same identity key 'name'
+  const v2 = db.prepare(
+    'INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)'
+  ).run(TEST_USER, 'r', '{}', Date.now(), 'pending').lastInsertRowid;
+  await omegaMemoryService.extract({ voiceLogId: v2, userId: TEST_USER, env: 'REAL', question: 'q', reply: 'r' });
+
+  // Should be 1 identity row, not 2 — identity is env-agnostic
+  const identityCount = db.prepare(
+    "SELECT COUNT(*) as c FROM ml_chat_memory WHERE user_id=? AND class='identity' AND fact_key='name' AND tombstone_at IS NULL"
+  ).get(TEST_USER).c;
+  expect(identityCount).toBe(1);
+
+  // The single row must have env=NULL
+  const identityRow = db.prepare(
+    "SELECT env, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class='identity' AND fact_key='name' AND tombstone_at IS NULL"
+  ).get(TEST_USER);
+  expect(identityRow.env).toBeNull();
+
+  // Second extraction should have reaffirmed (incremented reaffirm_count)
+  expect(identityRow.reaffirm_count).toBe(2);
+});
+
+test('T13: eviction audit includes msg_id from triggering extraction', async () => {
+  // Fill personal_context to cap=25
+  const now = Date.now();
+  for (let i = 0; i < 25; i++) {
+    db.prepare(
+      `INSERT INTO ml_chat_memory (user_id, env, class, fact_key, fact_value, importance, last_seen_at, created_at, updated_at, decay_at)
+       VALUES (?, NULL, 'personal_context', ?, ?, ?, ?, ?, ?, ?)`
+    ).run(TEST_USER, `key${i}`, `v${i}`, 0.3, now - i * 86400000, now, now, now + 365 * 86400000);
+  }
+
+  // Trigger extraction that should evict one
+  mockChatLLM.mockResolvedValueOnce({ ok: true, text: JSON.stringify([
+    { class: 'personal_context', key: 'profession', value: 'developer', importance: 0.8 },
+  ])});
+
+  const triggerVoiceLogId = db.prepare(
+    'INSERT INTO ml_voice_log (user_id, text, context_json, created_at, extraction_status) VALUES (?, ?, ?, ?, ?)'
+  ).run(TEST_USER, 'r', '{}', now, 'pending').lastInsertRowid;
+
+  await omegaMemoryService.extract({ voiceLogId: triggerVoiceLogId, userId: TEST_USER, env: 'DEMO', question: 'q', reply: 'r' });
+
+  // Find eviction audit
+  const evictAudit = db.prepare("SELECT details FROM audit_log WHERE action='OMEGA_MEMORY_FACT_EVICTED'").get();
+  expect(evictAudit).toBeDefined();
+  const details = JSON.parse(evictAudit.details);
+  expect(details.msg_id).toBe(triggerVoiceLogId);
+  expect(details.reason).toBe('cap_evict');
+});
+
 test('T11 (bonus): attempts=4 + LLM 429 → attempts=5, failed_permanent (max attempts exhausted)', async () => {
   const voiceLogId = insertLog({ attempts: 4, extraction_status: 'failed_transient' });
 

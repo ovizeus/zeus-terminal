@@ -174,7 +174,7 @@ function _updateMeta(userId) {
  * @param {string|null} env
  * @param {number} msgId — voice log id for audit
  */
-function _evictBottomOne(userId, klass, env) {
+function _evictBottomOne(userId, klass, env, msgId) {
   const { db } = require('../../database');
   const capInfo = CLASS_CAPS[klass];
   const now = Date.now();
@@ -205,6 +205,7 @@ function _evictBottomOne(userId, klass, env) {
     class: klass,
     env: env ?? null,
     reason: 'cap_evict',
+    msg_id: msgId,
   });
 }
 
@@ -290,22 +291,37 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
     ).get(userId, klass, key, env ?? null);
 
     if (!existingKey && liveCount >= capInfo.cap) {
-      _evictBottomOne(userId, klass, env);
+      _evictBottomOne(userId, klass, env, voiceLogId);
     }
   }
 
-  // Check if row already exists (for audit action)
-  const existing = db.prepare(
-    'SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class=? AND fact_key=? AND env IS ?'
-  ).get(userId, klass, key, env ?? null);
+  // Determine env scope for this class.
+  // Identity is env-agnostic (spec §6.1): always env=NULL, UNIQUE key is (user_id, class, fact_key).
+  // SQLite UNIQUE treats NULL as distinct so we CANNOT rely on ON CONFLICT for identity — use
+  // SELECT-then-UPDATE-or-INSERT manually to enforce true env-agnostic cap-of-4 per user.
+  const isIdentity = klass === 'identity';
+  const factEnv = isIdentity ? null : (CLASS_CAPS[klass].scope === 'user_env' ? (env ?? null) : null);
 
   const decayAt = _calcDecayAt(klass);
 
+  // SELECT existing row — identity: env-agnostic lookup, others: env-scoped
+  let existing;
+  if (isIdentity) {
+    existing = db.prepare(
+      'SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class=\'identity\' AND fact_key=? AND tombstone_at IS NULL'
+    ).get(userId, key);
+  } else {
+    existing = db.prepare(
+      'SELECT id, reaffirm_count FROM ml_chat_memory WHERE user_id=? AND class=? AND fact_key=? AND (env IS ?) AND tombstone_at IS NULL'
+    ).get(userId, klass, key, factEnv);
+  }
+
   if (existing) {
-    // Update existing fact
+    // UPDATE path — same for both identity and non-identity
     db.prepare(`
       UPDATE ml_chat_memory
-      SET fact_value=?, importance=?, last_source_chat_id=?, reaffirm_count=reaffirm_count+1,
+      SET fact_value=?, importance=MAX(importance, ?), last_source_chat_id=?,
+          reaffirm_count=reaffirm_count+1,
           last_seen_at=?, decay_at=?, tombstone_at=NULL, forgotten_by=NULL, updated_at=?
       WHERE id=?
     `).run(value, importance, voiceLogId, now, decayAt, now, existing.id);
@@ -316,7 +332,7 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
       msg_id: voiceLogId,
     });
   } else {
-    // Insert new fact
+    // INSERT path — identity always env=NULL, others use factEnv
     db.prepare(`
       INSERT INTO ml_chat_memory
         (user_id, env, class, fact_key, fact_value, importance,
@@ -324,18 +340,8 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
          decay_at, last_seen_at, tombstone_at, forgotten_by,
          created_at, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL, NULL, ?, ?)
-      ON CONFLICT(user_id, class, fact_key, env) DO UPDATE SET
-        fact_value=excluded.fact_value,
-        importance=excluded.importance,
-        last_source_chat_id=excluded.last_source_chat_id,
-        reaffirm_count=reaffirm_count+1,
-        last_seen_at=excluded.last_seen_at,
-        decay_at=excluded.decay_at,
-        tombstone_at=NULL,
-        forgotten_by=NULL,
-        updated_at=excluded.updated_at
     `).run(
-      userId, env ?? null, klass, key, value, importance,
+      userId, factEnv, klass, key, value, importance,
       voiceLogId, voiceLogId,
       decayAt, now,
       now, now
@@ -343,7 +349,7 @@ function _upsertFact(userId, env, voiceLogId, fact, now) {
 
     _writeAudit(userId, 'OMEGA_MEMORY_FACT_CREATED', {
       class: klass,
-      reason: 'new_fact',
+      reason: 'first_sight',
       msg_id: voiceLogId,
     });
   }
@@ -489,9 +495,10 @@ async function extract({ voiceLogId, userId, env, question, reply }) {
 
     _writeAudit(userId, 'OMEGA_MEMORY_EXTRACTION_FAILED', {
       reason: err.message || 'unknown',
-      classification,
-      attempts: newAttempts,
+      classification,        // operational metadata: 'failed_transient' | 'failed_permanent'
+      attempts: newAttempts, // operational metadata: retry counter
       msg_id: voiceLogId,
+      // No fact_key, no fact_value, no matched_substring (privacy invariant preserved)
     });
   }
 }
