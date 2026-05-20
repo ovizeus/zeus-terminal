@@ -72,6 +72,20 @@ jest.mock('@sentry/node', () => ({
     setContext: jest.fn(),
 }));
 
+// [Fix #3 2026-05-20] Mock credentialStore.getExchangeCreds to allow
+// registerManualPosition() to resolve creds for the live path. Pre-fix,
+// the call site passed `null` for creds which would silently fail when
+// _executeLiveEntryCore tried to sign requests.
+const _MOCK_USER_CREDS = {
+    apiKey: 'user-mock-key',
+    apiSecret: 'user-mock-secret',
+    isTestnet: true,
+    baseUrl: 'https://testnet.binancefuture.com',
+};
+jest.mock('../../server/services/credentialStore', () => ({
+    getExchangeCreds: jest.fn(() => _MOCK_USER_CREDS),
+}));
+
 // ── Import target module ──
 const serverAT = require('../../server/services/serverAT.js');
 const { sendSignedRequest } = require('../../server/services/binanceSigner.js');
@@ -339,6 +353,53 @@ describe('_executeLiveEntryCore (M1.1 Cat B — core safety machinery)', () => {
             expect(sendSignedRequest).not.toHaveBeenCalled();
             // Demo path should return early or with a non-LIVE status
             expect(result.live).toBeDefined();
+        });
+    });
+
+    describe('[Fix #3 2026-05-20] registerManualPosition resolves creds for live path', () => {
+        // M1.9 audit found: serverAT.js:3626 passes `null` for creds when
+        // registerManualPosition routes to _executeLiveEntryCore (mode='live').
+        // Latent orphan risk: any future caller passing mode:'live' would have
+        // sendSignedRequest fail silently with null creds → position opened on
+        // exchange (if main order managed to fire elsewhere) without server
+        // tracking. Fix: getExchangeCreds(userId) at the call site.
+
+        it('calls _executeLiveEntryCore with valid creds (NOT null) when mode=live', async () => {
+            // Spy on _executeLiveEntryCore to capture its arguments
+            const coreSpy = jest.spyOn(serverAT, '_executeLiveEntryCore').mockResolvedValue({
+                seq: 999,
+                userId: 1,
+                symbol: 'ETHUSDT',
+                side: 'BUY',
+                mode: 'live',
+                live: { status: 'LIVE', slOrderId: 102, tpOrderId: 104, slPlaced: true, tpPlaced: true },
+            });
+
+            await serverAT.registerManualPosition(1, {
+                symbol: 'ETHUSDT',
+                side: 'BUY',
+                qty: 0.5,
+                leverage: 10,
+                sl: 2300,
+                tp: 2400,
+                mode: 'live', // CRITICAL — exercises the unified live path
+                entryPrice: 2330,
+                source: 'manual',
+            });
+
+            // _executeLiveEntryCore must have been called with creds populated
+            // from getExchangeCreds, NOT null.
+            expect(coreSpy).toHaveBeenCalled();
+            const callArgs = coreSpy.mock.calls[0];
+            const credsArg = callArgs[2]; // 3rd argument is creds
+            expect(credsArg).not.toBeNull();
+            expect(credsArg).toBeDefined();
+            expect(credsArg).toEqual(expect.objectContaining({
+                apiKey: 'user-mock-key',
+                apiSecret: 'user-mock-secret',
+            }));
+
+            coreSpy.mockRestore();
         });
     });
 });

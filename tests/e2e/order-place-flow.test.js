@@ -57,6 +57,19 @@ jest.mock('../../server/services/binanceSigner', () => ({
     sendSignedRequest: jest.fn(),
 }));
 
+// [Fix #1 2026-05-20] Mock serverAT — getMode() needs to return 'live' for
+// user 1 to exercise the server-resolved engineMode check. Other methods
+// stubbed minimal — actual flow paths use them only post-validation gate.
+jest.mock('../../server/services/serverAT', () => ({
+    getMode: jest.fn((userId) => userId === 1 ? 'live' : 'demo'),
+    isGlobalHaltActive: jest.fn(() => false),
+    getLivePositions: jest.fn(() => []),
+    registerManualPosition: jest.fn(() => Promise.resolve({ ok: true, seq: 999 })),
+    _placeProtectionForExistingEntry: jest.fn(() => Promise.resolve({
+        slOrderId: 12345, tpOrderId: null, status: 'LIVE_NO_TP',
+    })),
+}));
+
 jest.mock('../../server/services/telegram', () => ({
     sendToUser: jest.fn(),
     alertOrderFilled: jest.fn(),
@@ -149,6 +162,75 @@ describe('POST /api/order/place E2E (M1.1 Cat D)', () => {
         // testnet real trades (more meaningful decât e2e mock chain).
         it.skip('returns 200 with slOrderId populated în response când valid live entry (DEFERRED M1.3)', async () => {
             // Stub placeholder — see comment above.
+        });
+    });
+
+    describe('[Fix #1 2026-05-20] BUG-T2c Path B regression — server-resolved engineMode', () => {
+        // Scenario: client sends NO `mode` field (historical client behavior).
+        // validateOrderBody's mode==='live' guard at middleware doesn't fire.
+        // trading.js then routes through the live path because server-side
+        // us.engineMode='live'. BUT _placeProtectionForExistingEntry gate
+        // (trading.js:399) checks req.body.sl (null) → SL placement SKIPPED →
+        // position opens on Binance with no exchange SL = BUG-T2c regression.
+        //
+        // M1.9 audit (2026-05-20) confirmed 0/48 live trades had slOrderId.
+        // Fix: server-resolved mode check rejects sl=null when actual server
+        // engineMode is live, regardless of req.body.mode.
+
+        it('rejects 400 when body has no mode + no sl but server engineMode is live', async () => {
+            const res = await request(app)
+                .post('/api/order/place')
+                .set('x-idempotency-key', 'test-fix1-no-mode-no-sl-' + Date.now())
+                .send({
+                    symbol: 'ETHUSDT',
+                    side: 'BUY',
+                    quantity: 0.5,
+                    leverage: 10,
+                    sl: null,
+                    tp: null,
+                    // NO mode field — historical client behavior
+                    entryPrice: 2330,
+                    source: 'auto',
+                });
+
+            expect(res.status).toBe(400);
+            expect(res.body.error).toMatch(/SL required.*server-resolved|fix.?1|live mode/i);
+        });
+
+        // [Fix #5 2026-05-20] Edge cases per BUG-T5 hardening pattern
+        const badSlEdgeCases = [
+            ['sl undefined (omitted)',         undefined],
+            ['sl 0 (zero)',                    0],
+            ['sl "0" (string zero)',           '0'],
+            ['sl "" (empty string)',           ''],
+            ['sl "abc" (NaN)',                 'abc'],
+            ['sl "1.2.3" (malformed)',         '1.2.3'],
+            ['sl -100 (negative)',             -100],
+            ['sl Infinity',                    Infinity],
+            ['sl {} (object)',                 {}],
+            ['sl true (boolean)',              true],
+        ];
+
+        badSlEdgeCases.forEach(([label, slValue]) => {
+            it(`rejects 400 when server engineMode=live + ${label}`, async () => {
+                const body = {
+                    symbol: 'ETHUSDT',
+                    side: 'BUY',
+                    quantity: 0.5,
+                    leverage: 10,
+                    tp: null,
+                    entryPrice: 2330,
+                    source: 'auto',
+                };
+                if (slValue !== undefined) body.sl = slValue;
+
+                const res = await request(app)
+                    .post('/api/order/place')
+                    .set('x-idempotency-key', `test-fix5-${label.replace(/\s/g, '-')}-${Date.now()}`)
+                    .send(body);
+
+                expect(res.status).toBe(400);
+            });
         });
     });
 

@@ -47,7 +47,15 @@ let _lastDbIntegrityFail = false;
 // old row IS present (just with stale ts).
 // Fix: skip staleness check during first BOOT_GRACE_MS after process start.
 const _processStartTs = Date.now();
-const BOOT_GRACE_MS = 90 * 1000; // 90s grace — covers reload + first heartbeat
+// [Fix #6 2026-05-20] Doctor self-heartbeat false-positive mitigation v2:
+//   - Increase BOOT_GRACE_MS from 90s to 180s — production observation showed
+//     serverBrain occasionally took ~130s for first heartbeat post-reload
+//     under load (IP ban + restart cascade scenarios).
+//   - Plus: require TWO consecutive stale observations before flagging
+//     (prevents transient single-tick lag from firing P0).
+const BOOT_GRACE_MS = 180 * 1000;
+const STALE_CONSECUTIVE_THRESHOLD = 2; // need N back-to-back stale obs
+let _consecutiveStaleCount = 0;
 
 let _lastState = null;
 let _running = false;
@@ -160,8 +168,17 @@ function analyze(params) {
             const heartbeatPredatesProcess = staleness.lastHeartbeatTs < _processStartTs;
             const inBootGrace = (nowTs - _processStartTs) < BOOT_GRACE_MS;
             if (!heartbeatPredatesProcess && !inBootGrace) {
-                doctorHeartbeatStale = true;
+                // [Fix #6 2026-05-20] Anti-transient guard — require
+                // consecutive stale observations before flagging.
+                _consecutiveStaleCount += 1;
+                if (_consecutiveStaleCount >= STALE_CONSECUTIVE_THRESHOLD) {
+                    doctorHeartbeatStale = true;
+                }
+            } else {
+                _consecutiveStaleCount = 0; // healthy observation resets
             }
+        } else {
+            _consecutiveStaleCount = 0; // not stale → reset counter
         }
     } catch (_) { /* fall through to false */ }
 

@@ -80,6 +80,19 @@ jest.mock('../../server/services/exchangeInfo', () => ({
     getFilters: jest.fn(() => ({ stepSize: '0.001', tickSize: '0.01', minQty: '0.001' })),
 }));
 
+// [Fix #3 2026-05-20] Mock credentialStore — registerManualPosition now
+// calls getExchangeCreds(userId) to resolve real per-user creds before
+// invoking _executeLiveEntryCore (was passing null pre-fix). Tests must
+// provide a valid stub creds object to exercise the live path.
+jest.mock('../../server/services/credentialStore', () => ({
+    getExchangeCreds: jest.fn((userId) => ({
+        apiKey: 'test-stub-key-uid-' + userId,
+        apiSecret: 'test-stub-secret-uid-' + userId,
+        isTestnet: true,
+        baseUrl: 'https://testnet.binancefuture.com',
+    })),
+}));
+
 const serverAT = require('../../server/services/serverAT.js');
 const MF = require('../../server/migrationFlags.js');
 const { sendSignedRequest } = require('../../server/services/binanceSigner.js');

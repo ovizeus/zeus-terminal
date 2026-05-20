@@ -222,6 +222,50 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       return res.status(500).json({ ok: false, error: e.message });
     }
   }
+  // [Fix #1 2026-05-20 — BUG-T2c Path B regression seal] Server-resolved
+  // engineMode check. Client may send mode=undefined or no mode field at all
+  // (historical client behavior); validateOrderBody middleware's mode==='live'
+  // SL-required guard is bypassed. trading.js then routes through the live
+  // path because server-side us.engineMode='live' (for user 1, at least),
+  // BUT _placeProtectionForExistingEntry's gate (line ~399 below) checks
+  // req.body.sl truthy — null → SL placement SKIPPED → position opens on
+  // Binance with no exchange SL = BUG-T2c regression.
+  //
+  // M1.9 audit (2026-05-20) confirmed 0/48 live trades had slOrderId for
+  // exactly this reason. Block here at the entry edge.
+  let _actualEngineMode;
+  try {
+    _actualEngineMode = _getServerAT().getMode(req.user.id) || 'demo';
+  } catch (_) {
+    _actualEngineMode = req.body.mode || 'demo';
+  }
+  if (_actualEngineMode === 'live') {
+    const _slCheck = req.body.sl;
+    if (_slCheck === undefined || _slCheck === null || _slCheck === '' ||
+        typeof _slCheck === 'object' || typeof _slCheck === 'boolean') {
+      audit.record('ORDER_BLOCKED_NO_SL_SERVER_RESOLVED', {
+        userId: req.user.id,
+        symbol: req.body.symbol,
+        side: req.body.side,
+        actualMode: _actualEngineMode,
+        bodyMode: req.body.mode,
+      }, 'FIX1_SERVER_RESOLVED', req.ip);
+      return res.status(400).json({ error: 'SL required for live mode (server-resolved engineMode; defense-in-depth Fix #1)' });
+    }
+    const _slNum = Number(String(_slCheck).trim());
+    if (!Number.isFinite(_slNum) || _slNum <= 0) {
+      audit.record('ORDER_BLOCKED_NO_SL_SERVER_RESOLVED', {
+        userId: req.user.id,
+        symbol: req.body.symbol,
+        side: req.body.side,
+        actualMode: _actualEngineMode,
+        bodyMode: req.body.mode,
+        slValue: _slCheck,
+      }, 'FIX1_SERVER_RESOLVED', req.ip);
+      return res.status(400).json({ error: 'SL required for live mode (server-resolved engineMode; defense-in-depth Fix #1)' });
+    }
+  }
+
   // Idempotency check — reject missing key or duplicate submissions
   const idem = _checkIdempotency(req);
   if (idem && idem.reject) {

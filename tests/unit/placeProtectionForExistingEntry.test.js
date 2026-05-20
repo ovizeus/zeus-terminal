@@ -203,14 +203,47 @@ describe('_placeProtectionForExistingEntry (BUG-T2c FIX — Path B safety)', () 
                 .mockRejectedValueOnce(new Error('TP fail 1'))
                 .mockRejectedValueOnce(new Error('TP fail 2'))
                 .mockRejectedValueOnce(new Error('TP fail 3'))
-                .mockResolvedValueOnce({})              // SL cancel before emergency
-                .mockResolvedValueOnce({ orderId: 999, avgPrice: '81000', status: 'FILLED' }); // emergency close
+                .mockResolvedValueOnce({ orderId: 999, avgPrice: '81000', status: 'FILLED' }) // emergency close FIRST
+                .mockResolvedValueOnce({});             // SL cancel AFTER (cleanup post-close)
 
             const entry = makeEntry({ dslParams: null });
             const result = await serverAT._placeProtectionForExistingEntry(entry, mockCreds);
 
             expect(result.status).toBe('EMERGENCY_CLOSED');
             expect(result.reason).toBe('TP_ALL_RETRIES_FAILED');
+        }, 10000);
+
+        // [Fix #2 2026-05-20] Anti-race: SL must NOT be cancelled BEFORE
+        // emergency close attempt. If emergency close fails, SL must remain
+        // active as last line of defense. M1.9 audit found: at serverAT.js
+        // line 3519, _cancelOrderSafe(slOrder) ran before sendSignedRequest
+        // emergency close. If emergency throws, position has NO SL (cancelled)
+        // AND NO TP (never placed) AND NO emergency close → unprotected.
+        it('[Fix #2] preserves SL when emergency close FAILS (does NOT cancel SL before attempt)', async () => {
+            sendSignedRequest
+                .mockResolvedValueOnce({ orderId: 101 }) // safety SL
+                .mockResolvedValueOnce({ orderId: 102 }) // real SL placed
+                .mockResolvedValueOnce({})              // safety SL cancel (after real SL)
+                .mockRejectedValueOnce(new Error('TP fail 1'))
+                .mockRejectedValueOnce(new Error('TP fail 2'))
+                .mockRejectedValueOnce(new Error('TP fail 3'))
+                .mockRejectedValueOnce(new Error('Emergency close API error')); // emergency FAILS
+
+            const entry = makeEntry({ dslParams: null });
+            const result = await serverAT._placeProtectionForExistingEntry(entry, mockCreds);
+
+            // Critical: should return SL still alive (NOT cancelled)
+            expect(result.status).toBe('LIVE_NO_TP');
+            expect(result.slOrderId).toBe(102); // real SL still tracked, NOT cancelled
+
+            // Verify _cancelOrderSafe for the real SL was NEVER called.
+            // Find all sendSignedRequest calls and check that no DELETE on
+            // slOrderId=102 was issued.
+            const cancelCallsForRealSl = sendSignedRequest.mock.calls.filter(call => {
+                const [method, path, params] = call;
+                return method === 'DELETE' && params && params.orderId === 102;
+            });
+            expect(cancelCallsForRealSl.length).toBe(0);
         }, 10000);
     });
 

@@ -3516,13 +3516,21 @@ async function _placeProtectionForExistingEntry(entry, creds) {
             logger.error('AT_LIVE_PB', `[${liveSeq}] ALL TP retries exhausted (DSL OFF) — EMERGENCY MARKET CLOSE`);
             try { Sentry.captureMessage(`PB EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_tp', symbol: entry.symbol } }); } catch (_) {}
             try { telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll TP attempts failed (DSL OFF requires TP).\nEmergency closing.`); } catch (_) {}
-            if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
+            // [Fix #2 2026-05-20] Anti-race: emergency close FIRST, SL cancel
+            // ONLY on success. Pre-fix: SL was cancelled before emergency
+            // attempt, so if emergency failed, position was unprotected (no SL,
+            // no TP, no close). Now if emergency throws, SL stays active as
+            // last line of defense — much safer than removing protection
+            // before confirming replacement.
             try {
                 const tpEmgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
                     symbol: entry.symbol, side: closeSide, type: 'MARKET',
                     quantity: fillQty, reduceOnly: true,
                     newClientOrderId: `PB_TPEMG_${liveSeq}`,
                 }, creds);
+                // Emergency close SUCCEEDED → position is closed → cancel SL
+                // as hygiene (orphan order on Binance otherwise).
+                if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
                 const _tpEmgRaw = parseFloat(tpEmgResult.avgPrice);
                 const tpEmgPrice = (Number.isFinite(_tpEmgRaw) && _tpEmgRaw > 0) ? _tpEmgRaw : avgPrice;
                 const lev = entry.leverage || 1;
@@ -3536,7 +3544,9 @@ async function _placeProtectionForExistingEntry(entry, creds) {
             } catch (tpEmgErr) {
                 logger.error('AT_LIVE_PB', `[${liveSeq}] TP EMERGENCY CLOSE FAILED: ${tpEmgErr.message}`);
                 try { Sentry.captureException(tpEmgErr, { level: 'fatal', tags: { module: 'AT', action: 'pb_tp_emergency_failed', symbol: entry.symbol } }); } catch (_) {}
-                try { telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol}\nHas SL but NO TP.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`); } catch (_) {}
+                // Emergency close failed — SL still active (not cancelled).
+                // Telegram message accurate: SL is the last line of defense.
+                try { telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol}\nSL still active as last defense. NO TP.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`); } catch (_) {}
                 return { slOrderId: slOrder.orderId, tpOrderId: null, status: 'LIVE_NO_TP', reason: 'TP_RETRIES_AND_EMERGENCY_FAILED' };
             }
         }
@@ -3613,7 +3623,20 @@ async function registerManualPosition(userId, data) {
         // + push la _positions inline pentru clean unified flow.
         if (validated.mode === 'live') {
             try {
-                const coreResult = await module.exports._executeLiveEntryCore(validated, null, null);
+                // [Fix #3 2026-05-20] Resolve exchange credentials per-user
+                // before invoking core. Pre-fix passed `null` → sendSignedRequest
+                // calls inside core would fail with no auth → silent orphan
+                // risk if any caller passes mode:'live'. M1.9 audit finding.
+                let _creds = null;
+                try {
+                    _creds = getExchangeCreds(userId);
+                } catch (credErr) {
+                    return { ok: false, error: `Cannot resolve exchange creds for user ${userId}: ${credErr.message}` };
+                }
+                if (!_creds || !_creds.apiKey) {
+                    return { ok: false, error: `No exchange credentials configured for user ${userId} (live entry blocked)` };
+                }
+                const coreResult = await module.exports._executeLiveEntryCore(validated, null, _creds);
                 // Allocate seq + push to _positions (local state tracking)
                 const us = _uState(userId);
                 const seq = ++us.seq;
