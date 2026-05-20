@@ -19,6 +19,9 @@ const { db } = require('../services/database');
 const voiceLogger = require('../services/ml/_voice/voiceLogger');
 const chatResponder = require('../services/ml/_voice/chatResponder');
 const auditTrail = require('../services/ml/_audit/auditTrail');
+// [Sub-C.1 T8] Privacy redact + long-term memory wiring
+const { redactPipeline } = require('../services/ml/_voice/redactPipeline');
+const { omegaMemoryService } = require('../services/ml/_voice/omegaMemoryService');
 const R0 = require('../services/ml/R0_substrate');
 // [OMEGA Wave 2 UI Bonus 2026-05-15] R5A measurement triad surfacing
 const attribution = require('../services/ml/R5A_learning/attributionEngine');
@@ -435,10 +438,17 @@ router.post('/chat', express.json(), async (req, res) => {
         return res.status(400).json({ ok: false, error: 'text required' });
     }
 
+    // [Sub-C.1 T8] Input redact (high-recall) BEFORE chat processing
+    const inputRedact = redactPipeline.redact(question, { mode: 'input' });
+    const safeQuestion = inputRedact.redactedText;
+    if (inputRedact.redactionCount > 0 && typeof logger !== 'undefined' && logger && logger.info) {
+        logger.info('OMEGA', `[chat] input redacted ${inputRedact.redactionCount} substrings uid=${userId}`);
+    }
+
     // [Day 26] Smart local responder + Groq LLM fallback for unscripted Qs.
     let reply, mood = 'CALM', llmFallback = false, llmModel = null;
     try {
-        const r = await chatResponder.respond({ userId, text: question });
+        const r = await chatResponder.respond({ userId, text: safeQuestion });
         reply = r.reply;
         mood = r.mood;
         llmFallback = !!r.llmFallback;
@@ -448,15 +458,46 @@ router.post('/chat', express.json(), async (req, res) => {
         mood = 'SAD';
     }
 
+    // [Sub-C.1 T8] Reply redact (high-precision) BEFORE persist + return
+    const replyRedact = redactPipeline.redact(reply, { mode: 'reply' });
+    const safeReply = replyRedact.redactedText;
+    if (replyRedact.redactionCount > 0 && typeof logger !== 'undefined' && logger && logger.info) {
+        logger.info('OMEGA', `[chat] reply redacted ${replyRedact.redactionCount} substrings uid=${userId}`);
+    }
+
+    let voiceLogId = null;
     try {
-        voiceLogger.logUtterance({
-            userId, utteranceType: 'CHAT_REPLY', mood, text: reply,
+        const logResult = voiceLogger.logUtterance({
+            userId, utteranceType: 'CHAT_REPLY', mood, text: safeReply,
             templateId: llmFallback ? 'wave1_groq_llm' : 'wave1_smart_responder',
-            contextJson: JSON.stringify({ question, llmFallback, llmModel })
+            contextJson: JSON.stringify({ question: safeQuestion, llmFallback, llmModel })
         });
+        voiceLogId = logResult.id;
+        // [Sub-C.1 T8] Set extraction_status='pending' for async extract pickup
+        db.prepare("UPDATE ml_voice_log SET extraction_status='pending' WHERE id=?").run(voiceLogId);
     } catch (_) { /* defensive — never fail chat on log error */ }
 
-    res.json({ ok: true, reply, mood });
+    res.json({ ok: true, reply: safeReply, mood });
+
+    // [Sub-C.1 T8] Async extraction fire-and-forget AFTER response sent
+    if (voiceLogId) {
+        const env = (() => {
+            try {
+                const serverAT = require('../services/serverAT');
+                return (serverAT._uState(userId).engineMode || 'demo').toUpperCase();
+            } catch (_) { return 'DEMO'; }
+        })();
+        setImmediate(() => {
+            omegaMemoryService.extract({
+                voiceLogId, userId, env,
+                question: safeQuestion, reply: safeReply
+            }).catch(err => {
+                if (typeof logger !== 'undefined' && logger && logger.warn) {
+                    logger.warn('OMEGA', `[chat] extraction failed (cron will retry): uid=${userId} voiceLogId=${voiceLogId} err=${err.message}`);
+                }
+            });
+        });
+    }
 });
 
 // ── POST /api/omega/chat-stream ─────────────────────────────────────────────
@@ -481,11 +522,26 @@ router.post('/chat-stream', express.json(), async (req, res) => {
         try { res.write('data: ' + JSON.stringify(obj) + '\n\n'); } catch (_) { /* socket dead */ }
     };
 
+    // [Sub-C.1 T8] Input redact (high-recall) BEFORE chat processing
+    const inputRedact = redactPipeline.redact(question, { mode: 'input' });
+    const safeQuestion = inputRedact.redactedText;
+    if (inputRedact.redactionCount > 0 && typeof logger !== 'undefined' && logger && logger.info) {
+        logger.info('OMEGA', `[chat-stream] input redacted ${inputRedact.redactionCount} substrings uid=${userId}`);
+    }
+
     try {
         const result = await chatResponder.respondStream({
-            userId, text: question,
+            userId, text: safeQuestion,
             onChunk: (text) => send({ type: 'chunk', text }),
         });
+
+        // [Sub-C.1 T8] Post-stream reply redact (client briefly saw raw stream — accepted trade-off per operator)
+        const replyRedact = redactPipeline.redact(result.reply, { mode: 'reply' });
+        const safeReply = replyRedact.redactedText;
+        if (replyRedact.redactionCount > 0 && typeof logger !== 'undefined' && logger && logger.info) {
+            logger.info('OMEGA', `[chat-stream] reply redacted ${replyRedact.redactionCount} substrings uid=${userId}`);
+        }
+
         send({
             type: 'done',
             mood: result.mood,
@@ -493,14 +549,38 @@ router.post('/chat-stream', express.json(), async (req, res) => {
             model: result.llmModel || null,
             llmFallback: !!result.llmFallback,
         });
+
+        let voiceLogId = null;
         try {
-            voiceLogger.logUtterance({
+            const logResult = voiceLogger.logUtterance({
                 userId, utteranceType: 'CHAT_REPLY',
-                mood: result.mood, text: result.reply,
+                mood: result.mood, text: safeReply,
                 templateId: result.streamed ? 'wave1_groq_stream' : (result.llmFallback ? 'wave1_groq_llm' : 'wave1_smart_responder'),
-                contextJson: JSON.stringify({ question, llmFallback: !!result.llmFallback, llmModel: result.llmModel || null }),
+                contextJson: JSON.stringify({ question: safeQuestion, llmFallback: !!result.llmFallback, llmModel: result.llmModel || null }),
             });
+            voiceLogId = logResult.id;
+            db.prepare("UPDATE ml_voice_log SET extraction_status='pending' WHERE id=?").run(voiceLogId);
         } catch (_) { /* never fail stream on log error */ }
+
+        // [Sub-C.1 T8] Async extraction fire-and-forget AFTER stream complete
+        if (voiceLogId) {
+            const env = (() => {
+                try {
+                    const serverAT = require('../services/serverAT');
+                    return (serverAT._uState(userId).engineMode || 'demo').toUpperCase();
+                } catch (_) { return 'DEMO'; }
+            })();
+            setImmediate(() => {
+                omegaMemoryService.extract({
+                    voiceLogId, userId, env,
+                    question: safeQuestion, reply: safeReply
+                }).catch(err => {
+                    if (typeof logger !== 'undefined' && logger && logger.warn) {
+                        logger.warn('OMEGA', `[chat-stream] extraction failed: uid=${userId} voiceLogId=${voiceLogId} err=${err.message}`);
+                    }
+                });
+            });
+        }
     } catch (err) {
         send({ type: 'error', error: err.message || String(err) });
     } finally {

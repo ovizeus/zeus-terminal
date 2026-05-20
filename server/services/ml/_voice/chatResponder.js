@@ -1203,6 +1203,15 @@ function _buildLLMContext(params) {
         traderProfile: _getTraderProfile(userId).map(p => p.text),
     };
 
+    // [Sub-C.1 T8] Append long-term memory facts to traderProfile so they
+    // appear under the existing OPERATOR PREFERENCES persona slot (~line 1396).
+    // memoryFacts are pre-loaded by respond()/respondStream() and passed via params._memoryFacts.
+    const memoryFacts = params._memoryFacts || [];
+    if (memoryFacts.length > 0) {
+        const memoryStrings = memoryFacts.map(f => `[${f.class}] ${f.fact_key}: ${f.fact_value}`);
+        ctx.traderProfile = [...ctx.traderProfile, ...memoryStrings];
+    }
+
     // Positions (best-effort — serverAT may be unavailable in some boot states)
     try {
         const at = _getAT();
@@ -1409,7 +1418,8 @@ async function _replyLLMFallback(ctx, originalText) {
     if (!llmClient.available()) {
         return _replyHelp(ctx, originalText);
     }
-    const sys = _buildSystemPrompt({ userId: ctx.userId, text: originalText });
+    // [Sub-C.1 T8] Forward memory facts from ctx so _buildLLMContext can inject them
+    const sys = _buildSystemPrompt({ userId: ctx.userId, text: originalText, _memoryFacts: ctx._memoryFacts || [] });
     const mood = _currentMood();
 
     const history = _getConvo(ctx.userId).map(m => ({ role: m.role, content: m.content }));
@@ -1458,6 +1468,21 @@ async function respondStream(params) {
         return { reply, mood: 'CALM', streamed: false };
     }
 
+    // [Sub-C.1 T8] Pre-load long-term memory facts before LLM context build.
+    // For local intents this is a no-op (facts not injected into local replies).
+    // For LLM fallback path, _memoryFacts flows into _buildSystemPrompt.
+    let _memoryFacts = [];
+    try {
+        const { omegaMemoryService } = require('./omegaMemoryService');
+        const engineMode = (() => {
+            try {
+                const at = _getAT();
+                return at && at._uState ? (at._uState(userId).engineMode || 'demo') : 'demo';
+            } catch (_) { return 'demo'; }
+        })();
+        _memoryFacts = await omegaMemoryService.retrieve(userId, engineMode.toUpperCase());
+    } catch (_) { /* graceful degrade */ }
+
     const ctx = {
         userId,
         brainHbAvgMs: _brainHbAvgMs(),
@@ -1485,7 +1510,7 @@ async function respondStream(params) {
         return { ...fallback, streamed: false };
     }
 
-    const sys = _buildSystemPrompt({ userId, text: originalText });
+    const sys = _buildSystemPrompt({ userId, text: originalText, _memoryFacts });
     const mood = _currentMood();
     const history = _getConvo(userId).map(m => ({ role: m.role, content: m.content }));
     const messages = [
@@ -1612,7 +1637,21 @@ async function respond(params) {
     // [Sub-A 2026-05-19] Lazy DB rehydration on first chat per user post-restart
     await _loadConvoHistory(userId);
 
-    const result = await _respondImpl(params, text);
+    // [Sub-C.1 T8] Pre-load long-term memory facts before LLM context build.
+    // Passed via _memoryFacts param → _respondImpl → _buildLLMContext → traderProfile.
+    let memoryFacts = [];
+    try {
+        const { omegaMemoryService } = require('./omegaMemoryService');
+        const engineMode = (() => {
+            try {
+                const at = _getAT();
+                return at && at._uState ? (at._uState(userId).engineMode || 'demo') : 'demo';
+            } catch (_) { return 'demo'; }
+        })();
+        memoryFacts = await omegaMemoryService.retrieve(userId, engineMode.toUpperCase());
+    } catch (_) { /* graceful degrade — retrieve() already returns [] on DB error */ }
+
+    const result = await _respondImpl({ ...params, _memoryFacts: memoryFacts }, text);
     // [Day 30] Track exchange in convo history for multi-turn context.
     _pushConvo(userId, 'user', params.text || '');
     _pushConvo(userId, 'assistant', result.reply || '');
@@ -1625,7 +1664,9 @@ async function _respondImpl(params, text) {
     const ctx = {
         userId,
         brainHbAvgMs: _brainHbAvgMs(),
-        nowMs: Date.now()
+        nowMs: Date.now(),
+        // [Sub-C.1 T8] Carry memory facts for LLM fallback path (_replyLLMFallback)
+        _memoryFacts: params._memoryFacts || [],
     };
 
     const originalText = params.text || '';
