@@ -113,6 +113,47 @@ describe('binanceScheduler V6 mode gating — WARM', () => {
   });
 });
 
+describe('binanceScheduler V6 — auto-advance on ban expiry (SUPPRESSED→WARM)', () => {
+  test('first request after natural ban expiry triggers WARM (not direct NORMAL)', () => {
+    // Set up: ban just expired, warm not started
+    const now = Date.now();
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, warm_until, consecutive_ban_count, last_ban_at, updated_at)
+      VALUES ('global', ?, 0, 1, ?, ?)
+    `).run(now - 1_000, now - 60_000, now);
+
+    // Request comes in — should trigger advanceState → mode=WARM → CLASS_B rejected
+    const decision = scheduler.canProceed({
+      pressure: 0,
+      src: 'marketRadar:ticker24h',
+      path: '/fapi/v1/ticker/24hr',
+    });
+
+    expect(decision.accept).toBe(false);
+    expect(decision.reason).toBe('warm_class_b');
+
+    // State must now have warm_until set
+    const row = db.prepare(`SELECT warm_until FROM binance_rate_state WHERE scope='global'`).get();
+    expect(row.warm_until).toBeGreaterThan(now);
+  });
+
+  test('CLASS_A still allowed during auto-started warm', () => {
+    const now = Date.now();
+    db.prepare(`
+      INSERT INTO binance_rate_state (scope, banned_until, warm_until, consecutive_ban_count, last_ban_at, updated_at)
+      VALUES ('global', ?, 0, 1, ?, ?)
+    `).run(now - 1_000, now - 60_000, now);
+
+    const decision = scheduler.canProceed({
+      pressure: 0,
+      src: 'signer:GET /fapi/v2/balance',
+      path: '/fapi/v2/balance',
+    });
+
+    expect(decision.accept).toBe(true);
+  });
+});
+
 describe('binanceScheduler V6 mode gating — NORMAL', () => {
   test('no row in DB → mode=NORMAL → original lane logic applies', () => {
     // P0 accepted regardless of pressure

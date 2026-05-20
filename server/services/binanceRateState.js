@@ -307,6 +307,44 @@ function abortWarmResume({ bannedUntil, reason, now }) {
   });
 }
 
+// ─── Natural ban expiry transition (SUPPRESSED → WARM) ────────────────────
+//
+// When a ban expires naturally (banned_until < now) without an explicit
+// clearBan() call, the system would otherwise jump straight from SUPPRESSED
+// to NORMAL — bypassing warm resume protection. Pollers all resume
+// simultaneously → burst → re-ban (the exact loop we're preventing).
+//
+// advanceState detects "just-expired" SUPPRESSED and auto-promotes to WARM.
+// Called by scheduler.canProceed() lazily so we don't need a separate timer.
+
+/**
+ * Advance state machine: SUPPRESSED→WARM on natural ban expiry.
+ * Returns true if a transition occurred, false otherwise.
+ *
+ * @param {object} opts — { now }
+ * @returns {boolean}
+ */
+function advanceState({ now }) {
+  const s = load();
+
+  // Need: ban was active at some point (banned_until > 0)
+  //       AND ban now expired (banned_until <= now)
+  //       AND not already in warm (warm_until <= now)
+  if (s.banned_until > 0 && s.banned_until <= now && (s.warm_until || 0) <= now) {
+    startWarmResume({ now });
+    appendTransitionLog({
+      from: 'SUPPRESSED',
+      to: 'WARM',
+      reason: 'ban_expired — auto-start warm resume',
+      ts: now,
+      consecutive_ban_count: s.consecutive_ban_count,
+    });
+    return true;
+  }
+
+  return false;
+}
+
 // ─── Anti-flap transition guard ───────────────────────────────────────────
 
 const MIN_STATE_DURATION_MS = 20_000;
@@ -376,6 +414,7 @@ module.exports = {
   clearBan,
   startWarmResume,
   abortWarmResume,
+  advanceState,
   canTransition,
   classifyEndpoint,
   shouldAllowDuringWarm,

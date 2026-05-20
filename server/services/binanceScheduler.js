@@ -136,8 +136,12 @@ function canProceed({ pressure, src, path }) {
     // to lane-based logic unchanged.
     try {
         const rateState = require('./binanceRateState');
-        const state = rateState.load();
         const now = _ts();
+        // [V6.5 fix] Lazy state advance — if ban just expired and warm hasn't
+        // started, auto-promote to WARM here. Without this, the natural
+        // expiry would skip warm and burst back to NORMAL.
+        rateState.advanceState({ now });
+        const state = rateState.load();
         const mode = rateState.computeCurrentMode(state, now);
 
         if (mode === 'SUPPRESSED') {

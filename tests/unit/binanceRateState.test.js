@@ -408,6 +408,73 @@ describe('binanceRateState.abortWarmResume', () => {
   });
 });
 
+describe('binanceRateState.advanceState — auto SUPPRESSED→WARM on natural ban expiry', () => {
+  test('ban just expired + warm not set: auto-starts warm resume + returns true', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: now - 1_000,  // just expired
+      warm_until: 0,
+      consecutive_ban_count: 1,
+      last_ban_at: now - 60_000,
+    });
+
+    const advanced = rateState.advanceState({ now });
+    expect(advanced).toBe(true);
+
+    const s = rateState.load();
+    expect(s.warm_until).toBeGreaterThan(now);
+    expect(s.warm_until).toBeLessThanOrEqual(now + 300_000); // ~5min for strike=1
+  });
+
+  test('ban still active: no transition (returns false)', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: now + 60_000,
+      warm_until: 0,
+    });
+
+    const advanced = rateState.advanceState({ now });
+    expect(advanced).toBe(false);
+    expect(rateState.load().warm_until).toBe(0);
+  });
+
+  test('already in warm: no double-start (returns false)', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: now - 60_000,
+      warm_until: now + 60_000,
+    });
+
+    const advanced = rateState.advanceState({ now });
+    expect(advanced).toBe(false);
+  });
+
+  test('never banned (cold state): no transition', () => {
+    const now = Date.now();
+    // Default state: banned_until=0, warm_until=0
+    const advanced = rateState.advanceState({ now });
+    expect(advanced).toBe(false);
+  });
+
+  test('writes SUPPRESSED→WARM transition log entry', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: now - 1_000,
+      warm_until: 0,
+      consecutive_ban_count: 0,
+    });
+
+    rateState.advanceState({ now });
+
+    const rows = db.prepare(`SELECT event_json FROM binance_rate_state_log ORDER BY id DESC LIMIT 1`).all();
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    const event = JSON.parse(rows[0].event_json);
+    expect(event.from).toBe('SUPPRESSED');
+    expect(event.to).toBe('WARM');
+    expect(event.reason).toMatch(/ban_expired/);
+  });
+});
+
 describe('binanceRateState anti-flap (MIN_STATE_DURATION_MS)', () => {
   test('canTransition true when last transition older than MIN_STATE_DURATION_MS', () => {
     const now = Date.now();
