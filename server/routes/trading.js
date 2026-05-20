@@ -685,6 +685,24 @@ router.post('/user/settings', validateSettingsBody, (req, res) => {
       };
     }
 
+    // [DIAG 2026-05-20] Log assistArmed flow to find DSL persistence bug
+    if (clean.assistArmed !== undefined || (clean.brain && (clean.brain.demo || clean.brain.live))) {
+      const beforeFlat = existing.assistArmed;
+      const afterFlat = merged.assistArmed;
+      const beforeBrain = existing.brain || {};
+      const afterBrain = merged.brain || {};
+      console.log('[DSL-DIAG] uid=' + req.user.id +
+        ' clean.assistArmed=' + clean.assistArmed +
+        ' clean.brain.demo.assistArmed=' + (clean.brain && clean.brain.demo ? clean.brain.demo.assistArmed : 'n/a') +
+        ' clean.brain.live.assistArmed=' + (clean.brain && clean.brain.live ? clean.brain.live.assistArmed : 'n/a') +
+        ' | before flat=' + beforeFlat +
+        ' before brain.demo=' + (beforeBrain.demo && beforeBrain.demo.assistArmed) +
+        ' before brain.live=' + (beforeBrain.live && beforeBrain.live.assistArmed) +
+        ' | after flat=' + afterFlat +
+        ' after brain.demo=' + (afterBrain.demo && afterBrain.demo.assistArmed) +
+        ' after brain.live=' + (afterBrain.live && afterBrain.live.assistArmed));
+    }
+
     const updatedAt = db.saveUserSettings(req.user.id, merged);
 
     // [MIGRATION-F0] Fan-out to every live session of this user so other

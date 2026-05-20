@@ -1760,6 +1760,52 @@ export function _usGetSettingsRemoteTs(): number {
 
 export function _usSave() {
   if (!_usApplyDone) { console.log('[US] skip save — _usApply not yet run'); return }
+
+  // [2026-05-20 DSL-PERSIST FIX] Boot-race guard #1 — refuse save before
+  // settingsStore has loaded from server. Without this, an early _usSave
+  // (triggered by any boot-time side-effect — store hydration, mode switch,
+  // visibilitychange) reads the default S.assistArmed=false and POSTs it,
+  // overwriting the server's persisted true. We've seen this in production
+  // logs: ARM action saves true → user refreshes → boot fires _usSave with
+  // S still default → server overwritten to false → next refresh sees false.
+  try {
+    const _ssStore = (w as any).__zeusSettingsStore;
+    if (_ssStore && typeof _ssStore.getState === 'function') {
+      const _ssLoaded = _ssStore.getState().loaded;
+      if (!_ssLoaded) {
+        console.log('[US] skip save — settingsStore not yet loaded (boot in progress)');
+        return;
+      }
+    }
+  } catch (_) { /* defensive — let save proceed if store check fails */ }
+
+  // [2026-05-20 DSL-PERSIST FIX] Boot-race guard #2 — defensive sync for assistArmed
+  // (kept as belt-and-suspenders even after guard #1).
+  // Problem: at boot, _usSave can fire (from any side-effect — input change,
+  // mode switch, settings sync) BEFORE the LS/server-hydrated value of
+  // USER_SETTINGS.brain[mode].assistArmed has been propagated to S.assistArmed
+  // via applyBrainCfgForMode. In that window, S.assistArmed reads the default
+  // (false) and _usSave would write false back to USER_SETTINGS, overwriting
+  // the persisted truth. Defensive sync: if the per-mode brain slot has
+  // assistArmed=true and S.assistArmed is still the default false, restore S
+  // before the save reads it. The user can always explicitly disarm via
+  // disarmAssist/toggleAssistArm — those mutate S.assistArmed BEFORE
+  // scheduling save, so this guard sees the new value and doesn't override.
+  try {
+    const _curMode = (typeof getATMode === 'function' ? (getATMode() || 'demo') : 'demo').toLowerCase();
+    const _modeKey: 'live' | 'demo' = _curMode === 'live' ? 'live' : 'demo';
+    const _brainSlot = USER_SETTINGS.brain && USER_SETTINGS.brain[_modeKey];
+    const _persistedAA = _brainSlot && _brainSlot.assistArmed;
+    if (_persistedAA === true && w.S && w.S.assistArmed !== true) {
+      console.warn('[DSL-PERSIST] _usSave boot-race fix: restoring S.assistArmed=true from brain.' + _modeKey + ' before save (S was ' + w.S.assistArmed + ')');
+      w.S.assistArmed = true;
+      if (w.ARM_ASSIST) {
+        w.ARM_ASSIST.armed = true;
+        w.ARM_ASSIST.ts = Date.now();
+      }
+    }
+  } catch (_) { /* never block save on guard error */ }
+
   try {
     const S = w.S
     const BM = w.BM
