@@ -659,5 +659,96 @@ router.get('/tts', async (req, res) => {
     }
 });
 
+// ── [Sub-C.1] In-memory rate limit for DELETE /memory/:id ────────────────────
+// 5 deletes per user per 15 seconds. Map<userId, number[]> of timestamps.
+const _deleteMemoryRateMap = new Map();
+
+function _checkDeleteMemoryRate(userId) {
+    const now = Date.now();
+    const arr = _deleteMemoryRateMap.get(userId) || [];
+    const recent = arr.filter(t => now - t < 15000);
+    if (recent.length >= 5) return false;
+    recent.push(now);
+    _deleteMemoryRateMap.set(userId, recent);
+    return true;
+}
+
+// Test helper — clears delete-memory rate-limit Map
+function _resetDeleteMemoryRateLimitForTest() {
+    _deleteMemoryRateMap.clear();
+}
+
+// ── GET /api/omega/memory ─────────────────────────────────────────────────────
+// [Sub-C.1] Returns all live facts for the logged-in user, grouped by class.
+// Excludes tombstoned rows (tombstone_at IS NULL only).
+router.get('/memory', async (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const facts = db.prepare(`
+            SELECT id, class, fact_key, fact_value, importance, reaffirm_count,
+                   created_source_chat_id, last_source_chat_id,
+                   created_at, last_seen_at, env
+            FROM ml_chat_memory
+            WHERE user_id=? AND tombstone_at IS NULL
+            ORDER BY class, last_seen_at DESC
+        `).all(userId);
+
+        const groupedByClass = {};
+        for (const f of facts) {
+            if (!groupedByClass[f.class]) groupedByClass[f.class] = [];
+            groupedByClass[f.class].push(f);
+        }
+
+        res.json({ facts, groupedByClass });
+    } catch (err) {
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
+// ── DELETE /api/omega/memory/:id ──────────────────────────────────────────────
+// [Sub-C.1] Soft-delete (tombstone) a fact by id. Idempotent. Per-user isolated.
+// Rate-limited: 5/15s per user. Preserves audit invariant (no key/value in log).
+router.delete('/memory/:id', async (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const factId = parseInt(req.params.id, 10);
+        if (isNaN(factId)) return res.status(400).json({ error: 'invalid_id' });
+
+        if (!_checkDeleteMemoryRate(userId)) {
+            return res.status(429).json({ error: 'rate_limit' });
+        }
+
+        const { omegaMemoryService } = require('../services/ml/_voice/omegaMemoryService');
+        const result = await omegaMemoryService.forget(factId, userId, 'user_ui');
+
+        if (!result.ok) {
+            if (result.status === 404) return res.status(404).json({ error: 'not_found' });
+            return res.status(500).json({ error: 'internal' });
+        }
+
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
+// ── GET /api/omega/memory/health ─────────────────────────────────────────────
+// [Sub-C.1] Returns 4-state health snapshot (healthy/degraded/down/idle)
+// for the logged-in user's Omega memory extraction pipeline.
+router.get('/memory/health', async (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const { omegaMemoryHealthService } = require('../services/ml/_voice/omegaMemoryHealthService');
+        const health = await omegaMemoryHealthService.getHealthStatus(userId);
+        res.json(health);
+    } catch (err) {
+        res.status(500).json({ error: 'internal' });
+    }
+});
+
 module.exports = router;
 module.exports._resetRateLimitForTest = _resetRateLimitForTest;
+module.exports._resetDeleteMemoryRateLimitForTest = _resetDeleteMemoryRateLimitForTest;
