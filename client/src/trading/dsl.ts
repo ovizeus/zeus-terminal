@@ -198,6 +198,9 @@ export function toggleAssistArm(): void {
   _syncDslAssistUI()
   brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMED — DSL will execute on signal' : _ZI.unlk + ' ASSIST disarmed — DSL in preview only')
   w.dslUpdateBanner()
+  // [2026-05-20 fix] Schedule server persist (mirrors armAssist/disarmAssist).
+  // Without this, DSL ARM toggle was UI-only and got lost on every reload.
+  if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
 
 export function _syncDslAssistUI(): void {
