@@ -6,6 +6,7 @@ import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
 import { api } from '../../services/api'
+import { OmegaMemorySection } from '../settings/OmegaMemorySection'
 
 const w = window as any
 
@@ -189,6 +190,7 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className={`mtab${tab==='telegram'?' act':''}`} onClick={()=>setTab('telegram')}>TELEGRAM</div>
         <div className={`mtab${tab==='exchange'?' act':''}`} onClick={()=>setTab('exchange')}>EXCHANGE API</div>
         <div className={`mtab${tab==='developer'?' act':''}`} onClick={()=>setTab('developer')}>DEVELOPER</div>
+        <div className={`mtab${tab==='omega'?' act':''}`} onClick={()=>setTab('omega')}>OMEGA</div>
         <div className={`mtab${tab==='security'?' act':''}`} onClick={()=>setTab('security')}><svg className="z-i" viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 016 0v2M4 7h8v7H4z" /></svg> ACCOUNT &amp; SECURITY</div>
       </div>
 
@@ -384,6 +386,11 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         </div>
         <div className="msec">BUILD INFO</div>
         <div id="hub-build-info" style={{fontSize:'7px',color:'#556677',lineHeight:'1.8'}}>ZeuS v108 — FIX: chart negru la schimb simbol/TF + _adaptClamp + PostMortem + RegimeWatch</div>
+      </div>
+
+      {/* ══ OMEGA — Sub-A chat persistence + Sub-C.1 long-term memory ══ */}
+      <div className="mbody" id="set-omega" style={{display:tab==='omega'?'block':'none', padding:'12px 16px', overflowY:'auto', flex:'1 1 auto'}}>
+        <OmegaMemorySection />
       </div>
 
       {/* ══ EXCHANGE API ══ */}
