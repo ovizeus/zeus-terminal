@@ -39,6 +39,15 @@ export function ExchangeCard({ id, label, status, account, blockedMessage, onCli
     <div
       data-testid={`exchange-card-${id}`}
       className={`multi-exchange-card multi-exchange-card-${status}`}
+      role="button"
+      tabIndex={isClickable ? 0 : -1}
+      aria-disabled={!isClickable}
+      onKeyDown={(e) => {
+        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onClick(id)
+        }
+      }}
       style={{
         background: '#13192a',
         border: `1px solid ${borderColor}${status === 'active' ? '' : '33'}`,

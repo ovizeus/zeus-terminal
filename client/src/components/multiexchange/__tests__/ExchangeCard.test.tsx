@@ -61,4 +61,13 @@ describe('ExchangeCard', () => {
     fireEvent.click(screen.getByTestId('exchange-card-bybit'))
     expect(onClick).not.toHaveBeenCalled()
   })
+
+  it('fires onClick when inactive card is clicked', () => {
+    const onClick = vi.fn()
+    render(
+      <ExchangeCard id="bybit" label="BYBIT" status="inactive" account={undefined} onClick={onClick} />
+    )
+    fireEvent.click(screen.getByTestId('exchange-card-bybit'))
+    expect(onClick).toHaveBeenCalledWith('bybit')
+  })
 })
