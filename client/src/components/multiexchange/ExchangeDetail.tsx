@@ -34,30 +34,49 @@ export function ExchangeDetail({ exchangeId, onBack }: Props) {
   async function handleSave() {
     setLoading(true)
     setMsg(null)
-    const r = await saveAccount(exchangeId, apiKey, apiSecret, mode)
-    setLoading(false)
-    if (r.ok) {
-      setMsg({ text: `✓ Connected! Balance: $${(r.balance || 0).toFixed(2)}`, ok: true })
-      setApiKey('')
-      setApiSecret('')
-    } else {
-      setMsg({ text: r.message || r.error || 'Error', ok: false })
+    try {
+      const r = await saveAccount(exchangeId, apiKey, apiSecret, mode)
+      if (r.ok) {
+        setMsg({ text: `✓ Connected! Balance: $${(r.balance || 0).toFixed(2)}`, ok: true })
+        setApiKey('')
+        setApiSecret('')
+      } else {
+        setMsg({ text: r.message || r.error || 'Error', ok: false })
+      }
+    } catch (err: any) {
+      setMsg({ text: `Network error: ${err?.message || 'try again'}`, ok: false })
+    } finally {
+      setLoading(false)
     }
   }
 
   async function handleVerify() {
-    const r = await verifyAccount(exchangeId)
-    setMsg({ text: r.ok ? `✓ Verified! Balance: $${(r.balance || 0).toFixed(2)}` : (r.message || r.error || 'Error'), ok: !!r.ok })
+    try {
+      const r = await verifyAccount(exchangeId)
+      setMsg({ text: r.ok ? `✓ Verified! Balance: $${(r.balance || 0).toFixed(2)}` : (r.message || r.error || 'Error'), ok: !!r.ok })
+    } catch (err: any) {
+      setMsg({ text: `Network error: ${err?.message || 'try again'}`, ok: false })
+    }
   }
 
   async function handleDisconnect() {
     const isReal = account?.mode === 'live'
+    const exLabel = label.replace(' FUTURES', '').replace(' DERIVATIVES', '')
     const confirmMsg = isReal
-      ? `Disconnect REAL ${label}?\n\nAny live positions remain on the exchange — Zeus stops managing them.\n\nContinue?`
-      : `Disconnect ${label} TESTNET?`
+      ? `Disconnect REAL ${exLabel}?\n\n` +
+        `• You are disconnecting a REAL exchange with live funds.\n` +
+        `• Any live positions already opened on the exchange will REMAIN on the exchange — they are not closed by Zeus.\n` +
+        `• Zeus will STOP managing those positions (no SL/TP enforcement, no autoTrade, no risk guards) once the integration is removed.\n` +
+        `• You must monitor and close them manually on ${exLabel}'s own interface until you re-add valid API credentials.\n\n` +
+        `Continue with disconnect?`
+      : `Disconnect ${exLabel} TESTNET?`
     if (!confirm(confirmMsg)) return
-    const r = await disconnectAccount(exchangeId)
-    if (!r.ok) setMsg({ text: r.error || 'Error', ok: false })
+    try {
+      const r = await disconnectAccount(exchangeId)
+      if (!r.ok) setMsg({ text: r.error || 'Error', ok: false })
+    } catch (err: any) {
+      setMsg({ text: `Network error: ${err?.message || 'try again'}`, ok: false })
+    }
   }
 
   return (
@@ -97,7 +116,7 @@ export function ExchangeDetail({ exchangeId, onBack }: Props) {
           <div style={{ fontSize: '11px', color: '#94a3b8', fontFamily: 'JetBrains Mono, monospace', lineHeight: '1.8' }}>
             <div>Balance &nbsp;<span style={{ color: '#00d97a' }}>${(account.balance || 0).toFixed(2)}</span></div>
             {account.lastVerified && (
-              <div>Last Verified &nbsp;<span style={{ color: '#94a3b8' }}>{new Date(account.lastVerified).toLocaleString('ro-RO')}</span></div>
+              <div>Last Verified &nbsp;<span style={{ color: '#94a3b8' }}>{new Date(account.lastVerified).toLocaleString()}</span></div>
             )}
           </div>
           <div style={{ display: 'flex', gap: '6px', marginTop: '12px' }}>
