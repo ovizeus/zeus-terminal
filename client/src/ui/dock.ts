@@ -27,8 +27,11 @@ export var DOCK_ITEMS: any[] = [
     svg: '<circle cx="12" cy="12" r="10" fill="currentColor" opacity=".05"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="0.8" opacity=".4"/><path d="M7 19 L9 19 L9 15 C9 12 10 9 12 9 C14 9 15 12 15 15 L15 19 L17 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="6.5" r="1.2" fill="currentColor" opacity=".7"/><circle cx="12" cy="12" r="2" fill="currentColor" opacity=".15"/>' },
 
   // [MultiExchange 2026-05-20] ₿ glyph — position 5 (after Omega, before ARES).
-  // Bitcoin symbol on a hexagonal hub backdrop. Click → MultiExchangePage with
-  // grid of all exchanges (Binance/Bybit active, others Coming Soon).
+  // Bitcoin symbol on a hexagonal hub backdrop. Click → MultiExchangePage.
+  // NOTE: This is the LEGACY initZeusDock path. Mirror entry MUST also exist
+  // in client/src/components/layout/ZeusDock.tsx (React render path used by
+  // PanelShell). Discovered 2026-05-21 — adding here alone leaves icon
+  // invisible because ZeusDock.tsx has its OWN DOCK_ITEMS constant.
   { id: 'multi-exchange', label: 'MultiExchange', group: 'trading',
     svg: '<polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="currentColor" opacity=".08"/><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 8h3.5c1.4 0 2.3.8 2.3 1.9 0 .9-.5 1.6-1.3 1.8.9.2 1.5 1 1.5 2 0 1.3-1 2.1-2.6 2.1H10V8zm1.3 3.3h1.9c.7 0 1.1-.4 1.1-1s-.4-1-1.1-1h-1.9v2zm0 3.4h2.1c.8 0 1.2-.4 1.2-1.1 0-.6-.4-1-1.2-1h-2.1v2.1z" fill="currentColor" stroke="none"/><line x1="12" y1="6.5" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="12" y1="16" x2="12" y2="17.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>' },
 
