@@ -9695,6 +9695,49 @@ migrate('392_binance_rate_state_log', () => {
     `);
 });
 
+migrate('393_bybit_exchange_columns', () => {
+    // [Bybit Phase 1A] Exchange dimension on existing tables.
+    // Additive only: ALTER TABLE ADD COLUMN with DEFAULT 'binance' covers existing rows.
+    // Idempotent: _hasColumn/_hasIndex guards (Zeus migrate() runs once per name,
+    // but guards make this safe if manually re-run).
+    const _hasColumn = (table, column) => {
+        const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+        return cols.some(c => c.name === column);
+    };
+    const _hasIndex = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
+
+    if (!_hasColumn('at_positions', 'exchange')) {
+        db.exec(`ALTER TABLE at_positions ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('at_closed', 'exchange')) {
+        db.exec(`ALTER TABLE at_closed ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('brain_decisions', 'exchange')) {
+        db.exec(`ALTER TABLE brain_decisions ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('brain_parity_log', 'exchange')) {
+        db.exec(`ALTER TABLE brain_parity_log ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('dsl_parity_log', 'exchange')) {
+        db.exec(`ALTER TABLE dsl_parity_log ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasIndex('idx_at_positions_user_exchange_status')) {
+        db.exec(`CREATE INDEX idx_at_positions_user_exchange_status ON at_positions(user_id, exchange, status)`);
+    }
+    if (!_hasIndex('idx_at_closed_user_exchange_ts')) {
+        db.exec(`CREATE INDEX idx_at_closed_user_exchange_ts ON at_closed(user_id, exchange, closed_at)`);
+    }
+    if (!_hasIndex('idx_brain_decisions_user_exchange_ts')) {
+        db.exec(`CREATE INDEX idx_brain_decisions_user_exchange_ts ON brain_decisions(user_id, exchange, ts)`);
+    }
+    // Defensive backfill (DEFAULT covers but explicit for safety)
+    db.exec(`UPDATE at_positions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+    db.exec(`UPDATE at_closed SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+    db.exec(`UPDATE brain_decisions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+    db.exec(`UPDATE brain_parity_log SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+    db.exec(`UPDATE dsl_parity_log SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload
