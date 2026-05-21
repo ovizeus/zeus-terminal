@@ -7264,3 +7264,75 @@ select option {
         width: 40%;
     }
 }
+
+/* ──────────────────────────────────────────────────────────────
+ * MultiExchange page (2026-05-20)
+ * Dark cyberpunk fintech aesthetic, mirrors .omega-page namespace
+ * ────────────────────────────────────────────────────────────── */
+
+.multi-exchange-page {
+  min-height: 100vh;
+  background: #0a0e1a;
+  color: #f0f4f8;
+}
+
+.multi-exchange-page-header {
+  border-bottom: 1px solid #1f2937;
+  padding-bottom: 14px;
+}
+
+/* Card hover lift for clickable states */
+.multi-exchange-card-active,
+.multi-exchange-card-inactive {
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.multi-exchange-card-active:hover,
+.multi-exchange-card-inactive:hover {
+  transform: translateY(-2px);
+  border-color: #00d4ff !important;
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.18) !important;
+}
+
+/* Active status dot pulse animation */
+@keyframes multi-exchange-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.multi-exchange-card-active span[style*="00d97a"] {
+  animation: multi-exchange-status-pulse 2s ease-in-out infinite;
+}
+
+/* Dock icon hover state for multi-exchange (matches omega/etc.) */
+#zeus-dock .zd-item[data-id="multi-exchange"] .zd-icon svg {
+  color: #f0c040;
+  transition: color 0.2s ease, filter 0.2s ease;
+}
+
+#zeus-dock .zd-item[data-id="multi-exchange"]:hover .zd-icon svg {
+  color: #f0c040;
+  filter: drop-shadow(0 0 8px rgba(240, 192, 64, 0.6));
+}
+
+#zeus-dock .zd-item[data-id="multi-exchange"].active .zd-icon svg {
+  color: #f0c040;
+  filter: drop-shadow(0 0 12px rgba(240, 192, 64, 0.8));
+}
+
+/* Sub-view back button hover */
+.multi-exchange-detail button[data-testid="exchange-detail-back"]:hover {
+  color: #00ffff !important;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+
+/* Page entry fade-up */
+@keyframes multi-exchange-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.multi-exchange-page,
+.multi-exchange-detail {
+  animation: multi-exchange-fade-up 0.2s ease-out;
+}
