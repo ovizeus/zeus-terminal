@@ -5,7 +5,6 @@ import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
 import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
-import { api } from '../../services/api'
 import { OmegaMemorySection } from '../settings/OmegaMemorySection'
 
 const w = window as any
@@ -39,11 +38,6 @@ function val(id: string) {
 export function SettingsHubModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('general')
   const openModal = useUiStore((s) => s.openModal)
-  type ExInfo = { connected: boolean; mode: 'live'|'testnet'; maskedKey: string; balance: number; lastVerified: string }
-  const [exAccounts, setExAccounts] = useState<Record<string, ExInfo>>({})
-  const [exModeFor, setExModeFor] = useState<Record<string, 'live'|'testnet'>>({ binance: 'testnet', bybit: 'testnet' })
-  const [exLoadingFor, setExLoadingFor] = useState<Record<string, boolean>>({})
-  const [exMsgFor, setExMsgFor] = useState<Record<string, {text: string; ok: boolean}>>({})
 
   // [BATCH3-S] When Security tab opens, sync PIN UI (show/hide Current PIN field).
   useEffect(() => {
@@ -51,63 +45,6 @@ export function SettingsHubModal({ visible, onClose }: Props) {
     const t = setTimeout(() => { _pinUpdateUI?.() }, 50)
     return () => clearTimeout(t)
   }, [tab])
-
-  useEffect(() => {
-    if (tab !== 'exchange') return
-    api.raw<any>('GET', '/api/exchange/status')
-      .then(d => {
-        if (!d.ok) return
-        const map: Record<string, ExInfo> = {}
-        for (const a of (d.accounts || [])) {
-          map[a.exchange] = { connected: true, mode: a.mode, maskedKey: a.maskedKey, balance: 0, lastVerified: a.lastVerified }
-        }
-        setExAccounts(map)
-      })
-      .catch(() => {})
-  }, [tab])
-
-  function exSetMsg(ex: string, text: string, ok: boolean) { setExMsgFor(p => ({ ...p, [ex]: { text, ok } })) }
-
-  async function exSave(ex: string) {
-    setExLoadingFor(p => ({ ...p, [ex]: true }))
-    const r = await apiFetch('/api/exchange/save', { apiKey: val(`${ex}ApiKey`), apiSecret: val(`${ex}ApiSecret`), mode: exModeFor[ex] || 'testnet', exchange: ex })
-    setExLoadingFor(p => ({ ...p, [ex]: false }))
-    // [Phase 1B] Surface server `message` first (used by 409 EXCHANGE_CONFLICT/ENV_CONFLICT), fall back to legacy `error`.
-    exSetMsg(ex, r.ok ? `✓ Connected! Balance: $${(r.balance||0).toFixed(2)}` : (r.message || r.error || 'Error'), !!r.ok)
-    if (r.ok) setExAccounts(p => ({ ...p, [ex]: { connected: true, mode: r.mode, maskedKey: r.maskedKey, balance: r.balance, lastVerified: r.lastVerified } }))
-  }
-
-  async function exVerify(ex: string) {
-    const r = await apiFetch('/api/exchange/verify', { exchange: ex })
-    // [Phase 1B] Surface server `message` first for forward-compat with future 409-shape responses.
-    exSetMsg(ex, r.ok ? `✓ Verified! Balance: $${(r.balance||0).toFixed(2)}` : (r.message || r.error || 'Error'), !!r.ok)
-    if (r.ok) setExAccounts(p => ({ ...p, [ex]: { ...p[ex], balance: r.balance, lastVerified: r.lastVerified } }))
-  }
-
-  async function exDisconnect(ex: string) {
-    // [Phase 12.A — Batch E3] Stricter confirm for REAL disconnect. Live
-    // positions opened on the exchange remain on the exchange after
-    // disconnect — Zeus just stops managing them. Testnet keeps a light
-    // confirm (zero-cost operation).
-    const info = exAccounts[ex]
-    const exLabel = ex === 'binance' ? 'Binance' : 'Bybit'
-    const isReal = info?.mode === 'live'
-    if (isReal) {
-      const _warn =
-        `Disconnect REAL ${exLabel}?\n\n` +
-        `• You are disconnecting a REAL exchange with live funds.\n` +
-        `• Any live positions already opened on the exchange will REMAIN on the exchange — they are not closed by Zeus.\n` +
-        `• Zeus will STOP managing those positions (no SL/TP enforcement, no autoTrade, no risk guards) once the integration is removed.\n` +
-        `• You must monitor and close them manually on ${exLabel}'s own interface until you re-add valid API credentials.\n\n` +
-        `Continue with disconnect?`
-      if (!confirm(_warn)) return
-    } else {
-      if (!confirm(`Disconnect ${exLabel} TESTNET?`)) return
-    }
-    const r = await apiFetch('/api/exchange/disconnect', { exchange: ex })
-    if (r.ok) setExAccounts(p => { const n = { ...p }; delete n[ex]; return n })
-    else exSetMsg(ex, r.error || 'Error', false)
-  }
 
   async function chpwRequest() {
     const r = await apiFetch('/auth/change-password/request', { currentPassword: val('chpwCurrent') })
@@ -394,102 +331,28 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       </div>
 
       {/* ══ EXCHANGE API ══ */}
-      <div id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px', overflowY:'auto', flex:'1 1 auto'}}>
-        <div style={{fontSize:'8px',color:'#ff8800',marginBottom:'10px',lineHeight:'1.6'}}>
-          Keys are encrypted server-side · Use READ + TRADE only (no withdrawal) · Restrict by IP
+      <div id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'24px 16px', overflowY:'auto', flex:'1 1 auto'}}>
+        <div style={{textAlign:'center', padding:'24px 16px', background:'#0a1018', border:'1px solid #00d4ff33', borderRadius:'6px'}}>
+          <div style={{fontFamily:'Orbitron, sans-serif', fontWeight:900, fontSize:'18px', letterSpacing:'3px', color:'#00d4ff', marginBottom:'10px'}}>
+            ₿ MULTIEXCHANGE
+          </div>
+          <div style={{fontSize:'11px', color:'#94a3b8', lineHeight:'1.6', marginBottom:'16px', fontFamily:'JetBrains Mono, monospace'}}>
+            Exchange API settings moved to the dedicated MultiExchange page.
+            <br />
+            Open from the dock icon ₿ next to Ω.
+          </div>
+          <button
+            className="hub-sbtn pri"
+            style={{fontWeight:700, padding:'8px 16px'}}
+            onClick={() => {
+              onClose()
+              const ev = new CustomEvent('zeus:dock-activate', { detail: { id: 'multi-exchange' } })
+              window.dispatchEvent(ev)
+            }}
+          >
+            OPEN MULTIEXCHANGE →
+          </button>
         </div>
-        {(() => {
-          // [Phase 4C] Derive active exchange from server-sourced exAccounts ONLY
-          // (server truth — /api/exchange/status). Policy: at most one active
-          // exchange per user (Binance XOR Bybit). If an active exchange is
-          // connected, the other card is BLOCKED with an explicit disconnect
-          // instruction — no toggles or inputs rendered, SAVE disabled, so no
-          // 409 round-trip is needed for a conflict the UI already knows about.
-          const _activeKeys = Object.keys(exAccounts).filter(k => !!exAccounts[k])
-          const _activeExchange: 'binance'|'bybit'|null =
-            _activeKeys.length > 0 ? (_activeKeys[0] as 'binance'|'bybit') : null
-          return (['binance', 'bybit'] as const).map(ex => {
-            const info = exAccounts[ex]
-            const mode = exModeFor[ex] || 'testnet'
-            const loading = exLoadingFor[ex]
-            const msg = exMsgFor[ex]
-            const accentColor = ex === 'binance' ? '#f0c040' : '#aa44ff'
-            const label = ex === 'binance' ? 'BINANCE FUTURES' : 'BYBIT DERIVATIVES'
-            const _isBlocked = !info && _activeExchange !== null && _activeExchange !== ex
-            const _activeLabel = _activeExchange === 'binance' ? 'Binance' : _activeExchange === 'bybit' ? 'Bybit' : ''
-            const _targetLabel = ex === 'binance' ? 'Binance' : 'Bybit'
-            // [Phase 12.A — Batch E2] Pre-submit EXCHANGE_CONFLICT preview.
-            // Same text shape the server returns in 409 EXCHANGE_CONFLICT — we
-            // anticipate it here so the user never wastes keys on a doomed save.
-            const _blockedMsg = `SAVE DISABLED \u2014 ${_targetLabel} is blocked because ${_activeLabel} API credentials are currently active for this account. Zeus allows only one active exchange at a time. To use ${_targetLabel}, first disconnect the active ${_activeLabel} API credentials, then return and add valid ${_targetLabel} API credentials.`
-            // [Phase 12.A — Batch E2] Pre-submit ENV_CONFLICT hint.
-            // When the same exchange is already connected (at testnet or live),
-            // the card renders in info-mode with no mode toggles visible — so
-            // there's no way to trigger ENV_CONFLICT via UI. Surface a clear
-            // explanation so the user knows WHY they can't directly switch.
-            const _modeHint = info
-              ? `Currently connected in ${info.mode.toUpperCase()} mode. To switch to ${info.mode === 'live' ? 'TESTNET' : 'LIVE'}, disconnect first, then re-add credentials with the desired mode.`
-              : ''
-            return (
-              <div key={ex} data-ex-card={ex} data-ex-blocked={_isBlocked ? '1' : '0'} style={{background:'#0a1018',border:`1px solid ${_isBlocked ? '#ff884433' : `${accentColor}33`}`,borderRadius:'6px',padding:'12px',marginBottom:'10px',opacity:_isBlocked ? 0.75 : 1}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
-                  <span style={{fontSize:'10px',fontWeight:700,color:accentColor,letterSpacing:'1px'}}>{label}</span>
-                  <span style={{fontSize:'9px',color: info ? '#00d97a' : (_isBlocked ? '#ff8844' : '#556')}}>
-                    {info ? `● CONNECTED · ${info.mode.toUpperCase()} · ${info.maskedKey}` : (_isBlocked ? '🔒 BLOCKED' : '○ disconnected')}
-                  </span>
-                </div>
-                {info ? (
-                  <>
-                    <div style={{fontSize:'9px',color:'#8899aa',marginBottom:'8px'}}>
-                      Balance: <span style={{color:'#00d97a'}}>${(info.balance||0).toFixed(2)}</span>
-                      {info.lastVerified && <span style={{color:'#445',marginLeft:'8px'}}>· {new Date(info.lastVerified).toLocaleString('ro-RO')}</span>}
-                    </div>
-                    {/* [Phase 12.A — Batch E2] Mode-switch hint on connected card. */}
-                    <div data-ex-mode-hint={ex} style={{fontSize:'8px',color:'#6688aa',lineHeight:'1.6',marginBottom:'8px',fontStyle:'italic'}}>
-                      {_modeHint}
-                    </div>
-                  </>
-                ) : _isBlocked ? (
-                  <div data-ex-blocked-msg={ex} style={{fontSize:'9px',color:'#ff8844',lineHeight:'1.6',marginBottom:'8px',background:'#1a0d08',border:'1px solid #ff884422',borderRadius:'3px',padding:'8px'}}>
-                    {_blockedMsg}
-                  </div>
-                ) : (
-                  <>
-                    <div style={{marginBottom:'6px'}}>
-                      <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>API KEY</div>
-                      <input type="password" id={`${ex}ApiKey`} placeholder="Paste API Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
-                    </div>
-                    <div style={{marginBottom:'8px'}}>
-                      <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>SECRET KEY</div>
-                      <input type="password" id={`${ex}ApiSecret`} placeholder="Paste Secret Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
-                    </div>
-                    <div style={{display:'flex',gap:'6px',marginBottom:'8px'}}>
-                      <button className="hub-sbtn" style={{flex:1,fontWeight:700,color:'#ff6655',background:mode==='live'?'#ff444433':'transparent',border:`1px solid ${mode==='live'?'#ff4444':'#ff444433'}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'live'}))}>● LIVE</button>
-                      <button className="hub-sbtn" style={{flex:1,fontWeight:700,background:mode==='testnet'?`${accentColor}22`:'transparent',border:`1px solid ${mode==='testnet'?accentColor:`${accentColor}33`}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'testnet'}))}>◎ TESTNET</button>
-                    </div>
-                  </>
-                )}
-                <div style={{display:'flex',gap:'6px'}}>
-                  {info ? (
-                    <>
-                      <button className="hub-sbtn" style={{flex:1}} onClick={() => exVerify(ex)}>RE-VERIFY</button>
-                      <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={() => exDisconnect(ex)}>DISCONNECT</button>
-                    </>
-                  ) : _isBlocked ? (
-                    <button className="hub-sbtn" data-ex-save-blocked={ex} style={{flex:1,fontWeight:700,opacity:0.55,cursor:'not-allowed'}} disabled>
-                      VERIFY &amp; SAVE (BLOCKED)
-                    </button>
-                  ) : (
-                    <button className="hub-sbtn pri" style={{flex:1,fontWeight:700}} onClick={() => exSave(ex)} disabled={!!loading}>
-                      {loading ? 'VERIFYING...' : 'VERIFY & SAVE'}
-                    </button>
-                  )}
-                </div>
-                {msg && <div style={{marginTop:'6px',fontSize:'9px',color: msg.ok ? '#00d97a' : '#ff5566',textAlign:'center'}}>{msg.text}</div>}
-              </div>
-            )
-          })
-        })()}
       </div>
 
       {/* ══ Footer ══ */}

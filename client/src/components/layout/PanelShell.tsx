@@ -148,6 +148,20 @@ export function PanelShell() {
     try { sessionStorage.removeItem('zeusDock') } catch {}
   }
 
+  // [MultiExchange 2026-05-20] Allow external triggers (e.g. SettingsHubModal
+  // redirect button) to programmatically open a dock panel by id.
+  useEffect(() => {
+    function onDockActivate(e: Event) {
+      const ce = e as CustomEvent<{ id: string }>
+      const id = ce.detail?.id
+      if (!id) return
+      setDockActive(id)
+      try { sessionStorage.setItem('zeusDock', id) } catch {}
+    }
+    window.addEventListener('zeus:dock-activate', onDockActivate)
+    return () => window.removeEventListener('zeus:dock-activate', onDockActivate)
+  }, [])
+
   // ── Call legacy panel init functions when a dock panel opens ──
   // 1:1 from openPageView() in pageview.ts — each panel has specific
   // render/refresh functions that must run to populate content.
