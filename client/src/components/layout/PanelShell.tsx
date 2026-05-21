@@ -25,6 +25,7 @@ import { AutoTradePanel } from '../dock/AutoTradePanel'
 import { ManualTradePanel } from '../dock/ManualTradePanel'
 import { DSLZonePanel } from '../dock/DSLZonePanel'
 import { OmegaPage } from '../omega/OmegaPage'
+import { MultiExchangePage } from '../multiexchange/MultiExchangePage'
 import { ARESPanel } from '../dock/ARESPanel'
 import { PostMortemPanel } from '../dock/PostMortemPanel'
 import { PnlLabPanel } from '../dock/PnlLabPanel'
@@ -477,6 +478,9 @@ export function PanelShell() {
           </div>
           <div data-panel-id="omega" className={dockActive === 'omega' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <OmegaPage />
+          </div>
+          <div data-panel-id="multi-exchange" className={dockActive === 'multi-exchange' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
+            <MultiExchangePage />
           </div>
           <div data-panel-id="ares" className={dockActive === 'ares' ? 'zpv-active-panel' : 'zpv-hidden-panel'}>
             <ARESPanel />
