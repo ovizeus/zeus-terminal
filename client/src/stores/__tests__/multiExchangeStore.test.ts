@@ -126,4 +126,13 @@ describe('useMultiExchangeStore', () => {
     const state = useMultiExchangeStore.getState()
     expect(state.accounts.binance).toBeUndefined()
   })
+
+  it('loadAccounts on fetch failure sets error and clears _loadInFlight', async () => {
+    vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('network down'))
+    await useMultiExchangeStore.getState().loadAccounts()
+    const state = useMultiExchangeStore.getState()
+    expect(state.error).toBe('network down')
+    expect(state._loadInFlight).toBeNull()
+    expect(state.loading).toBe(false)
+  })
 })

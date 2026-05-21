@@ -53,7 +53,12 @@ async function _postJson(url: string, body: any) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  return r.json()
+  // Defense: even on non-OK, attempt to parse server message; if body is non-JSON, return synthetic shape.
+  try {
+    return await r.json()
+  } catch (_parseErr) {
+    return { ok: false, error: `HTTP ${r.status}` }
+  }
 }
 
 export const useMultiExchangeStore = create<MultiExchangeState>((set, get) => ({
@@ -65,7 +70,7 @@ export const useMultiExchangeStore = create<MultiExchangeState>((set, get) => ({
 
   loadAccounts: async (force?: boolean) => {
     const { lastFetchTs, _loadInFlight } = get()
-    if (_loadInFlight) return _loadInFlight
+    if (_loadInFlight && !force) return _loadInFlight
     if (!force && lastFetchTs != null && Date.now() - lastFetchTs < _CACHE_TTL_MS) return
 
     const p = (async () => {
