@@ -83,6 +83,7 @@ const DOCK_TITLES: Record<string, string> = {
   'manual-trade': 'Manual Trade',
   'dsl': 'DSL',
   'omega': 'OMEGA',
+  'multi-exchange': 'MultiExchange',
   'ares': 'ARES',
   'postmortem': 'Post-Mortem',
   'pnllab': 'PnL Lab',
