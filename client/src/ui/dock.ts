@@ -26,6 +26,12 @@ export var DOCK_ITEMS: any[] = [
   { id: 'omega',      label: 'OMEGA',      group: 'trading',
     svg: '<circle cx="12" cy="12" r="10" fill="currentColor" opacity=".05"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="0.8" opacity=".4"/><path d="M7 19 L9 19 L9 15 C9 12 10 9 12 9 C14 9 15 12 15 15 L15 19 L17 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="6.5" r="1.2" fill="currentColor" opacity=".7"/><circle cx="12" cy="12" r="2" fill="currentColor" opacity=".15"/>' },
 
+  // [MultiExchange 2026-05-20] ₿ glyph — position 5 (after Omega, before ARES).
+  // Bitcoin symbol on a hexagonal hub backdrop. Click → MultiExchangePage with
+  // grid of all exchanges (Binance/Bybit active, others Coming Soon).
+  { id: 'multi-exchange', label: 'MultiExchange', group: 'trading',
+    svg: '<polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="currentColor" opacity=".08"/><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 8h3.5c1.4 0 2.3.8 2.3 1.9 0 .9-.5 1.6-1.3 1.8.9.2 1.5 1 1.5 2 0 1.3-1 2.1-2.6 2.1H10V8zm1.3 3.3h1.9c.7 0 1.1-.4 1.1-1s-.4-1-1.1-1h-1.9v2zm0 3.4h2.1c.8 0 1.2-.4 1.2-1.1 0-.6-.4-1-1.2-1h-2.1v2.1z" fill="currentColor" stroke="none"/><line x1="12" y1="6.5" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="12" y1="16" x2="12" y2="17.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>' },
+
   { id: 'ares',       label: 'ARES',       group: 'trading',
     svg: '<path d="M12 1.5L4.5 6.5v5.5c0 4.8 3.1 9.8 7.5 11 4.4-1.2 7.5-6.2 7.5-11V6.5L12 1.5z" fill="currentColor" opacity=".1"/><path d="M12 1.5L4.5 6.5v5.5c0 4.8 3.1 9.8 7.5 11 4.4-1.2 7.5-6.2 7.5-11V6.5L12 1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 11.5l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' },
 
@@ -76,7 +82,7 @@ export var DOCK_GROUPS: any[] = ['trading', 'review', 'intel', 'expand'];
 
 // ── ENABLED DOCK IDS (modules with page view wired) ──────────
 // Add ids here as each module gets its dedicated page view
-export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'omega', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'activity', 'aub'];
+export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'omega', 'multi-exchange', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'activity', 'aub'];
 
 // ── Z-glyph "Coming Soon" toast (UI-POLISH-1 2026-05-13) ──────
 // Operator-approved dedicated brand-aligned overlay (NU emoji).
