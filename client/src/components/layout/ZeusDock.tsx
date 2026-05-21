@@ -54,6 +54,21 @@ const DOCK_ITEMS: DockItem[] = [
         <circle cx="12" cy="12" r="2" fill="currentColor" opacity=".15" />
       </>
     ) },
+  // [MultiExchange 2026-05-21] ₿ glyph — position 5 (after Omega, before ARES).
+  // Bitcoin symbol on hexagonal hub backdrop. Click → MultiExchangePage.
+  // NOTE: This list is the React-rendered dock (ZeusDock.tsx). Mirror entry
+  // also exists in client/src/ui/dock.ts (legacy initZeusDock path). BOTH
+  // must be updated when adding/removing dock items.
+  { id: 'multi-exchange', label: 'MultiExchange', group: 'trading',
+    icon: (
+      <>
+        <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="currentColor" opacity=".08" />
+        <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+        <path d="M10 8h3.5c1.4 0 2.3.8 2.3 1.9 0 .9-.5 1.6-1.3 1.8.9.2 1.5 1 1.5 2 0 1.3-1 2.1-2.6 2.1H10V8zm1.3 3.3h1.9c.7 0 1.1-.4 1.1-1s-.4-1-1.1-1h-1.9v2zm0 3.4h2.1c.8 0 1.2-.4 1.2-1.1 0-.6-.4-1-1.2-1h-2.1v2.1z" fill="currentColor" stroke="none" />
+        <line x1="12" y1="6.5" x2="12" y2="8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <line x1="12" y1="16" x2="12" y2="17.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      </>
+    ) },
   { id: 'ares', label: 'ARES', group: 'trading',
     icon: (
       <>
