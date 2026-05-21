@@ -3799,3 +3799,264 @@ Two execution options:
 - [ ] Memory rules loaded: feedback_verify_twice_before_commit + feedback_no_chained_risky_changes + feedback_zeus_dock_dual_path + project_bybit_migration_brainstorming
 
 **Which execution mode?**
+
+---
+
+# APPENDIX: Plan Corrections (2026-05-21 23:35 UTC)
+
+**Reason:** Verify-twice rule applied during Tasks 1-2 execution found 3 plan assumption errors. These corrections supersede Tasks 3-5 as originally written. All other tasks (6-65) remain valid.
+
+## Finding 1: `feature_proposals` table does NOT exist
+
+**Plan assumed:** add `exchange` column to `at_positions`, `at_closed`, `brain_decisions`, `feature_proposals`, `brain_parity_log`.
+
+**Real DB inventory:**
+- ✅ `at_positions` (3 rows), `at_closed` (2417), `brain_decisions` (89922), `brain_parity_log` ALL exist
+- ❌ `feature_proposals` does NOT exist
+- ✅ `ml_feature_proposals` exists (ML layer — separate scope, defer to Phase 1F)
+- ✅ `dsl_parity_log` exists (also tracks decisions, was missed in original plan)
+
+**Correction:**
+- Drop `feature_proposals` from migration scope
+- Add `dsl_parity_log` to migration scope (parity with brain_parity_log — both need exchange dimension)
+- `ml_feature_proposals` remains Phase 1F (when ML brain becomes exchange-aware)
+
+## Finding 2: Migrations are INLINE in database.js, NOT separate files
+
+**Plan assumed:** Create `server/migrations/0392_bybit_exchange_columns.js`, etc.
+
+**Real Zeus pattern (verified in `server/services/database.js`):**
+
+```javascript
+migrate('NNN_name', () => {
+    db.exec(`ALTER TABLE foo ADD COLUMN bar TEXT DEFAULT 'baz'`);
+});
+```
+
+- Directory `server/migrations/` does NOT exist
+- Migrations tracked in `_migrations` table via `migrate()` helper
+- Baseline snapshot at `server/services/baseline_migrations.txt` for fresh DB seed
+- Latest applied: `392_binance_rate_state_log` (Binance rate work from 2026-05-19)
+
+**Correction:**
+- Tasks 3-5 are NOT new files. They are NEW `migrate()` blocks ADDED to existing `database.js`
+- Test file is SINGLE: `tests/unit/migrations_bybit.test.js` (tests post-init schema state, NOT isolated migration in test DB)
+- Numbers shift: 393, 394, 395 (next available after 392)
+
+## Finding 3: Migration numbering
+
+**Plan assumed:** 0392 (with leading zero, separate file)
+
+**Correction:**
+- Format matches existing convention: `393_descriptive_name` (no leading zero, snake_case)
+- Use: `393_bybit_exchange_columns`, `394_position_events_table`, `395_bybit_support_tables`
+
+---
+
+## Corrected Tasks 3-5
+
+### Task 3 (CORRECTED): Migration 393 — exchange columns inline
+
+**Files:**
+- Modify: `server/services/database.js` (add migrate() block after migration 392)
+- Test: `tests/unit/migrations_bybit.test.js` (CREATE)
+
+- [ ] **Step 1: Read context (where to insert)**
+
+```bash
+grep -n "migrate('39" /root/zeus-terminal/server/services/database.js | tail -5
+```
+
+Identify line where migration 392 ends. Insert new migrate() block immediately after.
+
+- [ ] **Step 2: Write failing test**
+
+Create `tests/unit/migrations_bybit.test.js`:
+
+```javascript
+'use strict';
+
+const Database = require('better-sqlite3');
+const fs = require('fs');
+const path = require('path');
+
+describe('Bybit migrations 393, 394, 395 — applied to live schema', () => {
+    let db;
+
+    beforeAll(() => {
+        // Use the actual DB (test runs post-app init which applies migrations).
+        // We require database.js which runs all migrate() blocks at module load.
+        db = require('../../server/services/database').db;
+    });
+
+    describe('Migration 393 — exchange columns', () => {
+        it('at_positions has exchange column with DEFAULT binance', () => {
+            const cols = db.prepare("PRAGMA table_info(at_positions)").all();
+            const col = cols.find(c => c.name === 'exchange');
+            expect(col).toBeDefined();
+            expect(col.dflt_value).toBe("'binance'");
+        });
+
+        it('at_closed has exchange column', () => {
+            const cols = db.prepare("PRAGMA table_info(at_closed)").all();
+            expect(cols.find(c => c.name === 'exchange')).toBeDefined();
+        });
+
+        it('brain_decisions has exchange column', () => {
+            const cols = db.prepare("PRAGMA table_info(brain_decisions)").all();
+            expect(cols.find(c => c.name === 'exchange')).toBeDefined();
+        });
+
+        it('brain_parity_log has exchange column', () => {
+            const cols = db.prepare("PRAGMA table_info(brain_parity_log)").all();
+            expect(cols.find(c => c.name === 'exchange')).toBeDefined();
+        });
+
+        it('dsl_parity_log has exchange column', () => {
+            const cols = db.prepare("PRAGMA table_info(dsl_parity_log)").all();
+            expect(cols.find(c => c.name === 'exchange')).toBeDefined();
+        });
+
+        it('idx_at_positions_user_exchange_status created', () => {
+            const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_at_positions_user_exchange_status'").get();
+            expect(idx).toBeDefined();
+        });
+
+        it('existing rows have exchange=binance after backfill', () => {
+            const r = db.prepare("SELECT COUNT(*) AS n FROM at_positions WHERE exchange IS NULL OR exchange=''").get();
+            expect(r.n).toBe(0);
+        });
+
+        it('migration recorded in _migrations table', () => {
+            const r = db.prepare("SELECT name FROM _migrations WHERE name='393_bybit_exchange_columns'").get();
+            expect(r).toBeDefined();
+        });
+    });
+});
+```
+
+- [ ] **Step 3: Run test — verify FAILS (migration not yet added)**
+
+```bash
+npx jest tests/unit/migrations_bybit.test.js --forceExit
+```
+
+Expected: FAIL — columns/indexes don't exist yet on live DB.
+
+- [ ] **Step 4: Add migrate() block to database.js**
+
+Find the section in `server/services/database.js` where migrations are listed (after `migrate('392_binance_rate_state_log', ...)`). Insert:
+
+```javascript
+migrate('393_bybit_exchange_columns', () => {
+    // [Bybit Phase 1A] Exchange dimension on existing tables.
+    // Additive only: ALTER TABLE ADD COLUMN with DEFAULT 'binance' covers existing rows.
+    // Idempotent: column check inside try/catch (Zeus migrate() runs once per name).
+    const _hasColumn = (table, column) => {
+        const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+        return cols.some(c => c.name === column);
+    };
+    const _hasIndex = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
+
+    if (!_hasColumn('at_positions', 'exchange')) {
+        db.exec(`ALTER TABLE at_positions ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('at_closed', 'exchange')) {
+        db.exec(`ALTER TABLE at_closed ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('brain_decisions', 'exchange')) {
+        db.exec(`ALTER TABLE brain_decisions ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('brain_parity_log', 'exchange')) {
+        db.exec(`ALTER TABLE brain_parity_log ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasColumn('dsl_parity_log', 'exchange')) {
+        db.exec(`ALTER TABLE dsl_parity_log ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+    }
+    if (!_hasIndex('idx_at_positions_user_exchange_status')) {
+        db.exec(`CREATE INDEX idx_at_positions_user_exchange_status ON at_positions(user_id, exchange, status)`);
+    }
+    if (!_hasIndex('idx_at_closed_user_exchange_ts')) {
+        db.exec(`CREATE INDEX idx_at_closed_user_exchange_ts ON at_closed(user_id, exchange, closed_at)`);
+    }
+    if (!_hasIndex('idx_brain_decisions_user_exchange_ts')) {
+        db.exec(`CREATE INDEX idx_brain_decisions_user_exchange_ts ON brain_decisions(user_id, exchange, ts)`);
+    }
+    // Defensive backfill (DEFAULT covers but explicit for safety)
+    db.exec(`UPDATE at_positions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+    db.exec(`UPDATE at_closed SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+    db.exec(`UPDATE brain_decisions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
+});
+```
+
+- [ ] **Step 5: Trigger migration on live DB**
+
+Migrations run at database.js init. Force re-require to apply:
+
+```bash
+cd /root/zeus-terminal && node -e "
+delete require.cache[require.resolve('./server/services/database')];
+require('./server/services/database');
+console.log('Migration 393 triggered');
+"
+```
+
+Expected: console message, no errors.
+
+- [ ] **Step 6: Verify on live DB**
+
+```bash
+sqlite3 /root/zeus-terminal/data/zeus.db "SELECT exchange, COUNT(*) FROM at_positions GROUP BY exchange"
+sqlite3 /root/zeus-terminal/data/zeus.db "SELECT COUNT(*) FROM at_positions"
+sqlite3 /root/zeus-terminal/data/zeus.db "SELECT name FROM _migrations WHERE name LIKE '393_%'"
+sqlite3 /root/zeus-terminal/data/zeus.db "SELECT COUNT(*) FROM at_closed WHERE exchange='binance'"
+```
+
+Expected: only `binance` group, row counts preserved (at_positions=3, at_closed=2417, brain_decisions=89922), migration recorded.
+
+- [ ] **Step 7: Run test — verify PASS**
+
+```bash
+cd /root/zeus-terminal && npx jest tests/unit/migrations_bybit.test.js --forceExit
+```
+
+Expected: PASS 8/8.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /root/zeus-terminal && git add server/services/database.js tests/unit/migrations_bybit.test.js
+git commit -m "feat(bybit): migration 393 — exchange columns inline (corrected pattern)
+
+CORRECTION applied from Plan Appendix 2026-05-21 23:35:
+- INLINE migrate() block in database.js (NOT separate file)
+- Drop feature_proposals (table doesn't exist) — defer to Phase 1F
+- Add dsl_parity_log (also tracks decisions, missed in original plan)
+- Migration number 393 (next after 392_binance_rate_state_log)
+
+Tables touched: at_positions, at_closed, brain_decisions, brain_parity_log, dsl_parity_log
+Indexes: 3 new on user_exchange composite
+Idempotent: _hasColumn/_hasIndex checks
+Additive only: DEFAULT 'binance' backfills existing rows
+Backup verified: zeus.db.pre-bybit-phase-1ab-20260521-233302 (491MB)
+8 tests pass against live DB schema."
+```
+
+### Tasks 4 & 5 (CORRECTED): Same pattern
+
+- Task 4: `migrate('394_position_events_table', () => { db.exec('CREATE TABLE position_events...'); db.exec('CREATE INDEX...'); })` — added to `database.js` after Task 3 block. Tests added to same `migrations_bybit.test.js` file.
+
+- Task 5: `migrate('395_bybit_support_tables', () => { db.exec('CREATE TABLE at_positions_orphaned...'); db.exec('CREATE TABLE emergency_close_queue...'); db.exec('CREATE TABLE bybit_rate_state...'); ... })` — same pattern, same test file.
+
+Both tasks follow Task 3 corrected pattern: inline migrate(), idempotent guards, live DB verify, single test file extended.
+
+---
+
+## Tasks 6-65: UNCHANGED
+
+All other tasks remain valid as originally written. Helpers (positionEvents, positionStateMachine, bybitRateState, canonicalErrors, decisionKey, timeSyncAssert) reference schema created by Tasks 3-5 — schema is logically identical, only the creation mechanism changed.
+
+Tests in Tasks 6-11 (helpers) mock the DB at module load — they don't depend on file-based migrations. Already use `require('better-sqlite3')` + inline `db.exec(CREATE TABLE...)` in beforeEach.
+
+Routes, exchangeOps, binanceOps, bybitOps tasks completely independent of migration pattern.
+
