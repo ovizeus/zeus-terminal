@@ -89,4 +89,97 @@ describe('bybitFeed — connection lifecycle', () => {
     it('exposes TIMEFRAMES_BYBIT map (5m→5, 1h→60, 4h→240)', () => {
         expect(bybitFeed.TIMEFRAMES_BYBIT).toEqual({ '5m': '5', '1h': '60', '4h': '240' });
     });
+
+    describe('subscribe batched on open', () => {
+        it('sends 3 subscribe messages on connection open', async () => {
+            // Note: mock ws captures `lastSend` only. To verify multiple sends,
+            // we need to instrument the mock.
+            const sends = [];
+            const WebSocketModule = require('ws');
+            const origSend = WebSocketModule.prototype.send;
+            // Patch send to collect
+            WebSocketModule.prototype.send = function(data) {
+                sends.push(data);
+                this.lastSend = data;
+            };
+
+            try {
+                bybitFeed.start();
+                await new Promise(r => setTimeout(r, 50));
+                // Should have sent at least 3 subscribe batches
+                const subscribeMsgs = sends.filter(s => {
+                    try {
+                        const parsed = JSON.parse(s);
+                        return parsed.op === 'subscribe';
+                    } catch (_) { return false; }
+                });
+                expect(subscribeMsgs.length).toBe(3);
+            } finally {
+                WebSocketModule.prototype.send = origSend;
+                bybitFeed.stop();
+            }
+        });
+
+        it('subscribe message 1 contains 12 kline topics for 4 symbols x 3 timeframes', async () => {
+            const sends = [];
+            const WebSocketModule = require('ws');
+            const origSend = WebSocketModule.prototype.send;
+            WebSocketModule.prototype.send = function(data) { sends.push(data); this.lastSend = data; };
+            try {
+                bybitFeed.start();
+                await new Promise(r => setTimeout(r, 50));
+                const subs = sends.map(s => { try { return JSON.parse(s); } catch (_) { return null; } }).filter(s => s && s.op === 'subscribe');
+                const allTopics = subs.flatMap(s => s.args || []);
+                const klineTopics = allTopics.filter(t => t.startsWith('kline.'));
+                expect(klineTopics.length).toBe(12);
+                expect(klineTopics).toContain('kline.5.BTCUSDT');
+                expect(klineTopics).toContain('kline.60.ETHUSDT');
+                expect(klineTopics).toContain('kline.240.SOLUSDT');
+                expect(klineTopics).toContain('kline.5.BNBUSDT');
+            } finally {
+                WebSocketModule.prototype.send = origSend;
+                bybitFeed.stop();
+            }
+        });
+
+        it('subscribe contains 4 publicTrade + 4 tickers + 4 orderbook.1 topics', async () => {
+            const sends = [];
+            const WebSocketModule = require('ws');
+            const origSend = WebSocketModule.prototype.send;
+            WebSocketModule.prototype.send = function(data) { sends.push(data); this.lastSend = data; };
+            try {
+                bybitFeed.start();
+                await new Promise(r => setTimeout(r, 50));
+                const subs = sends.map(s => { try { return JSON.parse(s); } catch (_) { return null; } }).filter(s => s && s.op === 'subscribe');
+                const allTopics = subs.flatMap(s => s.args || []);
+                const trade = allTopics.filter(t => t.startsWith('publicTrade.'));
+                const tickers = allTopics.filter(t => t.startsWith('tickers.'));
+                const orderbook = allTopics.filter(t => t.startsWith('orderbook.1.'));
+                expect(trade.length).toBe(4);
+                expect(tickers.length).toBe(4);
+                expect(orderbook.length).toBe(4);
+            } finally {
+                WebSocketModule.prototype.send = origSend;
+                bybitFeed.stop();
+            }
+        });
+
+        it('subscribe message includes unique req_id per batch', async () => {
+            const sends = [];
+            const WebSocketModule = require('ws');
+            const origSend = WebSocketModule.prototype.send;
+            WebSocketModule.prototype.send = function(data) { sends.push(data); this.lastSend = data; };
+            try {
+                bybitFeed.start();
+                await new Promise(r => setTimeout(r, 50));
+                const subs = sends.map(s => { try { return JSON.parse(s); } catch (_) { return null; } }).filter(s => s && s.op === 'subscribe');
+                const reqIds = subs.map(s => s.req_id);
+                expect(reqIds.length).toBe(3);
+                expect(new Set(reqIds).size).toBe(3); // all unique
+            } finally {
+                WebSocketModule.prototype.send = origSend;
+                bybitFeed.stop();
+            }
+        });
+    });
 });

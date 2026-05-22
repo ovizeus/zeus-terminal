@@ -56,6 +56,49 @@ function _scheduleReconnect() {
     if (_reconnectTimer.unref) _reconnectTimer.unref();
 }
 
+// [Task 14] Topic batches — Bybit V5 max ~10 topics per subscribe message
+function _buildTopics() {
+    const kline = [];
+    for (const sym of SYMBOLS) {
+        for (const tf of Object.values(TIMEFRAMES_BYBIT)) {
+            kline.push(`kline.${tf}.${sym}`);
+        }
+    }
+    const trade = SYMBOLS.map(s => `publicTrade.${s}`);
+    const tickers = SYMBOLS.map(s => `tickers.${s}`);
+    const orderbook = SYMBOLS.map(s => `orderbook.1.${s}`);
+    return { kline, trade, tickers, orderbook };
+}
+
+let _reqIdCounter = 0;
+function _nextReqId() {
+    return `bybit-sub-${Date.now()}-${++_reqIdCounter}`;
+}
+
+function _sendSubscribeBatches() {
+    if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
+    const t = _buildTopics();
+    // Batch 1: all 12 klines (5m+1h+4h for 4 symbols)
+    const batch1 = t.kline;
+    // Batch 2: trade (4) + tickers (4) + orderbook first 2 (BTC+ETH) = 10
+    const batch2 = [...t.trade, ...t.tickers, ...t.orderbook.slice(0, 2)];
+    // Batch 3: remaining orderbook (SOL+BNB) = 2
+    const batch3 = t.orderbook.slice(2);
+
+    for (const batch of [batch1, batch2, batch3]) {
+        if (batch.length === 0) continue;
+        try {
+            _ws.send(JSON.stringify({
+                op: 'subscribe',
+                args: batch,
+                req_id: _nextReqId(),
+            }));
+        } catch (err) {
+            try { require('./logger').error('BYBIT_FEED', `subscribe send failed: ${err.message}`); } catch (_) {}
+        }
+    }
+}
+
 function _connect() {
     if (_closing) return;
     try {
@@ -71,6 +114,10 @@ function _connect() {
         _reconnectMs = RECONNECT_MIN_MS;
         _lastMessageTs = Date.now();
         try { require('./logger').info('BYBIT_FEED', `connected to ${WS_URL}`); } catch (_) {}
+
+        // [Task 14] Subscribe batched: 3 messages × ≤10 topics each
+        _sendSubscribeBatches();
+
         _pingTimer = setInterval(() => {
             try {
                 if (_ws && _ws.readyState === WebSocket.OPEN) {
@@ -152,6 +199,7 @@ function _resetForTest() {
     _eventsEmitted = 0;
     _lastMessageTs = 0;
     _reconnectMs = RECONNECT_MIN_MS;
+    _reqIdCounter = 0;
     _closing = false;
     _emitter.removeAllListeners();
 }
@@ -163,4 +211,6 @@ module.exports = {
     SYMBOLS, TIMEFRAMES_BYBIT,
     _resetForTest,
     _dispatchMessage,
+    _sendSubscribeBatches,
+    _buildTopics,
 };
