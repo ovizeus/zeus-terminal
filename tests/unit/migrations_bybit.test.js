@@ -75,4 +75,72 @@ describe('Bybit migrations 393 — applied to live schema', () => {
             expect(bd.n).toBe(89922);
         });
     });
+
+    describe('Migration 394 — position_events table', () => {
+        it('position_events table exists', () => {
+            const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='position_events'").get();
+            expect(row).toBeDefined();
+        });
+
+        it('position_events has required columns', () => {
+            const cols = db.prepare("PRAGMA table_info(position_events)").all();
+            const names = cols.map(c => c.name);
+            expect(names).toEqual(expect.arrayContaining([
+                'id', 'position_seq', 'user_id', 'exchange', 'event_type',
+                'from_state', 'to_state', 'payload', 'cycle_no', 'ts'
+            ]));
+        });
+
+        it('position_events.id is INTEGER PRIMARY KEY', () => {
+            const cols = db.prepare("PRAGMA table_info(position_events)").all();
+            const id = cols.find(c => c.name === 'id');
+            expect(id.pk).toBe(1);
+            expect(id.type.toUpperCase()).toBe('INTEGER');
+        });
+
+        it('position_events.position_seq is NOT NULL', () => {
+            const cols = db.prepare("PRAGMA table_info(position_events)").all();
+            const col = cols.find(c => c.name === 'position_seq');
+            expect(col.notnull).toBe(1);
+        });
+
+        it('position_events.payload defaults to empty JSON', () => {
+            const cols = db.prepare("PRAGMA table_info(position_events)").all();
+            const col = cols.find(c => c.name === 'payload');
+            expect(col.dflt_value).toBe("'{}'");
+        });
+
+        it('idx_position_events_position created on (position_seq, ts)', () => {
+            const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_position_events_position'").get();
+            expect(idx).toBeDefined();
+        });
+
+        it('idx_position_events_user_ts created on (user_id, ts)', () => {
+            const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_position_events_user_ts'").get();
+            expect(idx).toBeDefined();
+        });
+
+        it('migration recorded in _migrations table', () => {
+            const r = db.prepare("SELECT name FROM _migrations WHERE name='394_position_events_table'").get();
+            expect(r).toBeDefined();
+        });
+
+        it('can insert + query a position_event row (append-only smoke)', () => {
+            const insertResult = db.prepare(`
+                INSERT INTO position_events
+                    (position_seq, user_id, exchange, event_type, from_state, to_state, payload, cycle_no, ts)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(99999, 1, 'binance', 'TEST_SMOKE', null, 'PENDING', '{"test":true}', 1, Date.now());
+            expect(insertResult.lastInsertRowid).toBeGreaterThan(0);
+
+            const row = db.prepare(`SELECT * FROM position_events WHERE position_seq = 99999`).get();
+            expect(row.user_id).toBe(1);
+            expect(row.exchange).toBe('binance');
+            expect(row.event_type).toBe('TEST_SMOKE');
+            expect(row.payload).toBe('{"test":true}');
+
+            // Cleanup test row (allowed only in test smoke — production should never DELETE from this table)
+            db.prepare(`DELETE FROM position_events WHERE position_seq = 99999`).run();
+        });
+    });
 });

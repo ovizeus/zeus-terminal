@@ -9737,6 +9737,37 @@ migrate('393_bybit_exchange_columns', () => {
     }
 });
 
+migrate('394_position_events_table', () => {
+    // [Bybit Phase 1A] position_events append-only journal.
+    // Tracks every state transition for replay + audit of incidents.
+    // Append-only: production code must NEVER UPDATE or DELETE rows here.
+    const _hasTable = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+    const _hasIndex = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
+
+    if (!_hasTable('position_events')) {
+        db.exec(`
+            CREATE TABLE position_events (
+                id INTEGER PRIMARY KEY,
+                position_seq INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                exchange TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                from_state TEXT,
+                to_state TEXT,
+                payload TEXT NOT NULL DEFAULT '{}',
+                cycle_no INTEGER,
+                ts INTEGER NOT NULL
+            )
+        `);
+    }
+    if (!_hasIndex('idx_position_events_position')) {
+        db.exec(`CREATE INDEX idx_position_events_position ON position_events(position_seq, ts)`);
+    }
+    if (!_hasIndex('idx_position_events_user_ts')) {
+        db.exec(`CREATE INDEX idx_position_events_user_ts ON position_events(user_id, ts)`);
+    }
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload
