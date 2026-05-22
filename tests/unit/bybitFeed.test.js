@@ -387,6 +387,67 @@ describe('bybitFeed — connection lifecycle', () => {
         });
     });
 
+    describe('subscribe ack handling + per-topic retry', () => {
+        afterEach(() => bybitFeed._resetForTest());
+
+        it('tracks pending subscriptions by req_id', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            const state = bybitFeed._getSubscriptionState();
+            expect(state.pendingByReqId.size).toBe(3); // 3 batches sent
+            bybitFeed.stop();
+        });
+
+        it('clears pending on success ack', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            const state = bybitFeed._getSubscriptionState();
+            const reqIds = Array.from(state.pendingByReqId.keys());
+            expect(reqIds.length).toBe(3);
+
+            // Simulate success ack for first batch
+            bybitFeed._dispatchMessage({ op: 'subscribe', success: true, req_id: reqIds[0], ret_msg: '' });
+            expect(bybitFeed._getSubscriptionState().pendingByReqId.size).toBe(2);
+            expect(bybitFeed._getSubscriptionState().subscribedTopics.size).toBeGreaterThan(0);
+
+            bybitFeed.stop();
+        });
+
+        it('marks topics as failed on ack with success=false', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            const state = bybitFeed._getSubscriptionState();
+            const reqIds = Array.from(state.pendingByReqId.keys());
+
+            bybitFeed._dispatchMessage({ op: 'subscribe', success: false, req_id: reqIds[0], ret_msg: 'fail' });
+            const failed = bybitFeed._getSubscriptionState().failedTopics;
+            expect(failed.size).toBeGreaterThan(0);
+            bybitFeed.stop();
+        });
+
+        it('_getSubscriptionState exposes shape', () => {
+            const s = bybitFeed._getSubscriptionState();
+            expect(s).toHaveProperty('pendingByReqId');
+            expect(s).toHaveProperty('subscribedTopics');
+            expect(s).toHaveProperty('failedTopics');
+        });
+
+        it('ignores ack with unknown req_id (no crash)', () => {
+            expect(() => {
+                bybitFeed._dispatchMessage({ op: 'subscribe', success: true, req_id: 'unknown-req-id', ret_msg: '' });
+            }).not.toThrow();
+        });
+
+        it('_resetForTest clears subscription state', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            expect(bybitFeed._getSubscriptionState().pendingByReqId.size).toBeGreaterThan(0);
+            bybitFeed._resetForTest();
+            expect(bybitFeed._getSubscriptionState().pendingByReqId.size).toBe(0);
+            expect(bybitFeed._getSubscriptionState().subscribedTopics.size).toBe(0);
+        });
+    });
+
     describe('event dispatch for new topics', () => {
         it('emits "trade" event on publicTrade message', async () => {
             bybitFeed.start();

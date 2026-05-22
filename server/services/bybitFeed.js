@@ -75,24 +75,31 @@ function _nextReqId() {
     return `bybit-sub-${Date.now()}-${++_reqIdCounter}`;
 }
 
+// [Task 17] Per-topic subscribe tracking
+// pendingByReqId: Map<reqId, { topics: string[], sentAt: number }>
+// subscribedTopics: Set<topic> — topics confirmed subscribed (success ack)
+// failedTopics: Map<topic, { retries: number, nextRetryAt: number }>
+const _pendingByReqId = new Map();
+const _subscribedTopics = new Set();
+const _failedTopics = new Map();
+
 function _sendSubscribeBatches() {
     if (!_ws || _ws.readyState !== WebSocket.OPEN) return;
     const t = _buildTopics();
-    // Batch 1: all 12 klines (5m+1h+4h for 4 symbols)
     const batch1 = t.kline;
-    // Batch 2: trade (4) + tickers (4) + orderbook first 2 (BTC+ETH) = 10
     const batch2 = [...t.trade, ...t.tickers, ...t.orderbook.slice(0, 2)];
-    // Batch 3: remaining orderbook (SOL+BNB) = 2
     const batch3 = t.orderbook.slice(2);
 
     for (const batch of [batch1, batch2, batch3]) {
         if (batch.length === 0) continue;
+        const reqId = _nextReqId();
         try {
             _ws.send(JSON.stringify({
                 op: 'subscribe',
                 args: batch,
-                req_id: _nextReqId(),
+                req_id: reqId,
             }));
+            _pendingByReqId.set(reqId, { topics: [...batch], sentAt: Date.now() });
         } catch (err) {
             try { require('./logger').error('BYBIT_FEED', `subscribe send failed: ${err.message}`); } catch (_) {}
         }
@@ -254,10 +261,43 @@ function _connect() {
     });
 }
 
+function _handleSubscribeAck(msg) {
+    const reqId = msg.req_id;
+    if (!reqId) return;
+    const pending = _pendingByReqId.get(reqId);
+    if (!pending) return; // unknown req_id (e.g., from previous connection)
+
+    _pendingByReqId.delete(reqId);
+
+    if (msg.success === true) {
+        // Mark all topics in this batch as subscribed
+        for (const topic of pending.topics) {
+            _subscribedTopics.add(topic);
+            _failedTopics.delete(topic); // clear any prior failure
+        }
+        try { require('./logger').info('BYBIT_FEED', `subscribe ack OK: ${pending.topics.length} topics`); } catch (_) {}
+    } else {
+        // Mark all topics in this batch as failed (Bybit doesn't always specify which)
+        for (const topic of pending.topics) {
+            const current = _failedTopics.get(topic) || { retries: 0, nextRetryAt: 0 };
+            current.retries += 1;
+            // Backoff: 1s, 5s, 30s, 5min, then 5min cooldown after 5 failures
+            const backoffs = [1000, 5000, 30000, 300000];
+            const idx = Math.min(current.retries - 1, backoffs.length - 1);
+            current.nextRetryAt = Date.now() + backoffs[idx];
+            _failedTopics.set(topic, current);
+        }
+        try { require('./logger').warn('BYBIT_FEED', `subscribe ack FAILED: ${pending.topics.length} topics, ret_msg=${msg.ret_msg || '(empty)'}`); } catch (_) {}
+    }
+}
+
 function _dispatchMessage(msg) {
     if (!msg) return;
     if (msg.op === 'pong') return;
-    if (msg.op === 'subscribe') return;
+    if (msg.op === 'subscribe') {
+        _handleSubscribeAck(msg);
+        return;
+    }
 
     if (typeof msg.topic === 'string') {
         if (msg.topic.startsWith('kline.')) {
@@ -329,6 +369,14 @@ function getConnectionState() {
 function on(event, handler) { _emitter.on(event, handler); }
 function off(event, handler) { _emitter.off(event, handler); }
 
+function _getSubscriptionState() {
+    return {
+        pendingByReqId: _pendingByReqId,
+        subscribedTopics: _subscribedTopics,
+        failedTopics: _failedTopics,
+    };
+}
+
 function _resetForTest() {
     _closing = true;
     _running = false;
@@ -339,9 +387,12 @@ function _resetForTest() {
     _eventsEmitted = 0;
     _lastMessageTs = 0;
     _reconnectMs = RECONNECT_MIN_MS;
-    _reqIdCounter = 0;
     _closing = false;
     _emitter.removeAllListeners();
+    _reqIdCounter = 0;
+    _pendingByReqId.clear();
+    _subscribedTopics.clear();
+    _failedTopics.clear();
 }
 
 module.exports = {
@@ -357,4 +408,5 @@ module.exports = {
     _normalizeTrade,
     _normalizeBookTicker,
     _normalizeMarkPrice,
+    _getSubscriptionState,
 };
