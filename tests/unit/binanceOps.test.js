@@ -11,6 +11,7 @@ mockDb.exec(`
     CREATE TABLE position_events (id INTEGER PRIMARY KEY, position_seq INTEGER NOT NULL, user_id INTEGER NOT NULL, exchange TEXT NOT NULL, event_type TEXT NOT NULL, from_state TEXT, to_state TEXT, payload TEXT NOT NULL DEFAULT '{}', cycle_no INTEGER, ts INTEGER NOT NULL);
     CREATE TABLE emergency_close_queue (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, symbol TEXT NOT NULL, exchange TEXT NOT NULL, qty TEXT NOT NULL, decision_key TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, resolved_at INTEGER, resolved_by TEXT);
     CREATE TABLE audit_log (id INTEGER PRIMARY KEY, user_id INTEGER, action TEXT, details TEXT, created_at TEXT DEFAULT (datetime('now')));
+    CREATE TABLE at_closed (seq INTEGER PRIMARY KEY, data TEXT, status TEXT DEFAULT 'CLOSED', user_id INTEGER, exchange TEXT DEFAULT 'binance', created_at TEXT DEFAULT (datetime('now')), updated_at TEXT DEFAULT (datetime('now')));
 `);
 jest.mock('../../server/services/database', () => ({ db: mockDb }));
 
@@ -179,6 +180,105 @@ describe('binanceOps.placeEntry', () => {
         orderLock.acquire.mockResolvedValueOnce(false);
 
         const r = await binanceOps.placeEntry(1, _validParams(), _validCreds);
+        expect(r.ok).toBe(false);
+        expect(r.error.code).toBe('ErrLockTimeout');
+    });
+});
+
+// Expose db for closePosition tests
+const _db = mockDb;
+
+describe('binanceOps.closePosition', () => {
+    let seq;
+
+    beforeEach(async () => {
+        mockSendSignedRequest.mockReset();
+        _db.exec('DELETE FROM at_positions; DELETE FROM position_events; DELETE FROM at_closed;');
+        // Pre-create an OPEN position
+        const r = _db.prepare(
+            `INSERT INTO at_positions (data, status, user_id, exchange, created_at, updated_at) VALUES (?, 'OPEN', ?, 'binance', datetime('now'), datetime('now'))`
+        ).run(JSON.stringify({
+            symbol: 'BTCUSDT', side: 'LONG', qty: '0.001',
+            entryOrderId: 'e1', slOrderId: 'sl1', tpOrderId: 'tp1', avgFillPrice: '50000',
+        }), 1);
+        seq = r.lastInsertRowid;
+        // Reset orderLock mock to default
+        const orderLock = require('../../server/services/orderLock');
+        orderLock.acquire.mockImplementation(async () => true);
+    });
+
+    const _validCloseParams = (overrides = {}) => ({
+        seq, symbol: 'BTCUSDT', side: 'LONG', qty: '0.001',
+        closeType: 'MARKET', decisionKey: 'close_dk_' + Date.now(),
+        source: 'manual', ...overrides,
+    });
+
+    it('happy path: cancels SL + TP then places close → state CLOSED', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce({ status: 'CANCELED', orderId: 'sl1' })  // cancel SL
+            .mockResolvedValueOnce({ status: 'CANCELED', orderId: 'tp1' })  // cancel TP
+            .mockResolvedValueOnce({ status: 'FILLED', orderId: 'close1', executedQty: '0.001', avgPrice: '51000' });
+
+        const r = await binanceOps.closePosition(1, _validCloseParams(), _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.orderId).toBe('close1');
+        expect(r.status).toBe('FILLED');
+        expect(r.rawExchange).toBe('binance');
+
+        // Position moved to at_closed
+        const open = _db.prepare('SELECT * FROM at_positions WHERE seq = ?').get(seq);
+        const closed = _db.prepare('SELECT * FROM at_closed WHERE seq = ?').get(seq);
+        // Either at_positions row deleted+at_closed row exists, OR at_positions.status='CLOSED'
+        expect(closed || (open && open.status === 'CLOSED')).toBeTruthy();
+
+        const events = _db.prepare('SELECT event_type FROM position_events WHERE position_seq = ? ORDER BY id').all(seq);
+        const types = events.map(e => e.event_type);
+        expect(types).toContain('CLOSED');
+    });
+
+    it('position already CLOSED (SL race) → returns ok:true closedBySL:true, no close order sent', async () => {
+        // Mark position closed BEFORE closePosition call (simulating SL trigger race)
+        _db.prepare("UPDATE at_positions SET status='CLOSED' WHERE seq=?").run(seq);
+
+        const r = await binanceOps.closePosition(1, _validCloseParams(), _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.closedBySL).toBe(true);
+        expect(mockSendSignedRequest).not.toHaveBeenCalled();
+    });
+
+    it('cancel SL fail → continues with close anyway (warn only)', async () => {
+        mockSendSignedRequest
+            .mockRejectedValueOnce(new Error('SL cancel fail'))
+            .mockResolvedValueOnce({ status: 'CANCELED', orderId: 'tp1' })
+            .mockResolvedValueOnce({ status: 'FILLED', orderId: 'close2', executedQty: '0.001', avgPrice: '51000' });
+
+        const r = await binanceOps.closePosition(1, _validCloseParams(), _validCreds);
+        expect(r.ok).toBe(true);  // close still succeeds
+    });
+
+    it('close rejected → state reverts CLOSING→OPEN', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce({ status: 'CANCELED', orderId: 'sl1' })
+            .mockResolvedValueOnce({ status: 'CANCELED', orderId: 'tp1' })
+            .mockResolvedValueOnce({ code: -2022, msg: 'ReduceOnly order is rejected' });
+
+        const r = await binanceOps.closePosition(1, _validCloseParams(), _validCreds);
+        expect(r.ok).toBe(false);
+        // Position should still be OPEN (state reverted)
+        const pos = _db.prepare('SELECT status FROM at_positions WHERE seq = ?').get(seq);
+        expect(pos.status).toBe('OPEN');
+    });
+
+    it('position not found → throws ErrNotFound', async () => {
+        await expect(binanceOps.closePosition(1, _validCloseParams({ seq: 99999 }), _validCreds))
+            .rejects.toMatchObject({ code: 'ErrNotFound' });
+    });
+
+    it('order lock timeout → ErrLockTimeout', async () => {
+        const orderLock = require('../../server/services/orderLock');
+        orderLock.acquire.mockResolvedValueOnce(false);
+
+        const r = await binanceOps.closePosition(1, _validCloseParams(), _validCreds);
         expect(r.ok).toBe(false);
         expect(r.error.code).toBe('ErrLockTimeout');
     });

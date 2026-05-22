@@ -262,6 +262,163 @@ async function placeEntry(uid, params, creds) {
     }
 }
 
+/**
+ * closePosition — Cancel SL/TP protection orders then send reduce-only close.
+ *
+ * Flow:
+ * 1. orderLock acquire (10s) — ErrLockTimeout on hold
+ * 2. Read at_positions row by seq → throw ErrNotFound if missing
+ * 3. Race check: if status='CLOSED' already → return ok+closedBySL (no double close)
+ * 4. State OPEN→CLOSING atomic
+ * 5. Cancel SL orderId + TP orderId in parallel (warn-only on fail)
+ * 6. POST reduce-only close order (MARKET or LIMIT GTC)
+ * 7. Close rejected → direct DB revert CLOSING→OPEN + positionEvents + return ok:false
+ * 8. Close FILLED → state CLOSING→CLOSED + move at_positions→at_closed + positionEvents
+ * 9. Return canonical CloseResult
+ */
+async function closePosition(uid, params, creds) {
+    const lockKey = `${uid}|${params.symbol}`;
+    const lockAcquired = await orderLock.acquire(lockKey, LOCK_TIMEOUT_MS);
+    if (!lockAcquired) {
+        return {
+            ok: false,
+            error: canonicalErrors.create('ErrLockTimeout', `lock held >${LOCK_TIMEOUT_MS}ms for ${lockKey}`),
+        };
+    }
+
+    try {
+        // Read position row
+        const row = db.prepare('SELECT seq, data, status, user_id, exchange FROM at_positions WHERE seq=? AND user_id=?').get(params.seq, uid);
+        if (!row) {
+            throw canonicalErrors.create('ErrNotFound', `position seq=${params.seq} not found for uid=${uid}`);
+        }
+
+        // Race check: SL may have already closed it
+        if (row.status === 'CLOSED') {
+            positionEvents.append({
+                position_seq: params.seq, user_id: uid, exchange: 'binance',
+                event_type: 'CLOSE_RACE_DETECTED',
+                payload: { source: params.source, reason: 'position already CLOSED (SL race)' },
+            });
+            return {
+                ok: true,
+                closedBySL: true,
+                rawExchange: 'binance',
+                seq: params.seq,
+                ts: Date.now(),
+            };
+        }
+
+        // Parse position data
+        let positionData;
+        try { positionData = JSON.parse(row.data); } catch (_) { positionData = {}; }
+
+        // State OPEN→CLOSING
+        positionStateMachine.transition(params.seq, 'OPEN', 'CLOSING', {
+            decisionKey: params.decisionKey,
+            source: params.source,
+        });
+
+        // Cancel SL + TP (parallel, non-blocking on failure)
+        const cancelTasks = [];
+        if (positionData.slOrderId) {
+            cancelTasks.push(
+                sendSignedRequest('DELETE', '/fapi/v1/order', {
+                    symbol: params.symbol, orderId: positionData.slOrderId, recvWindow: 5000,
+                }, creds).catch(err => {
+                    try { require('./logger').warn('BINANCE_OPS', `SL cancel failed seq=${params.seq}: ${err.message}`); } catch (_) {}
+                })
+            );
+        }
+        if (positionData.tpOrderId) {
+            cancelTasks.push(
+                sendSignedRequest('DELETE', '/fapi/v1/order', {
+                    symbol: params.symbol, orderId: positionData.tpOrderId, recvWindow: 5000,
+                }, creds).catch(err => {
+                    try { require('./logger').warn('BINANCE_OPS', `TP cancel failed seq=${params.seq}: ${err.message}`); } catch (_) {}
+                })
+            );
+        }
+        if (cancelTasks.length > 0) {
+            await Promise.all(cancelTasks);
+            positionEvents.append({
+                position_seq: params.seq, user_id: uid, exchange: 'binance',
+                event_type: 'PROTECTION_CANCELLED',
+                payload: { slOrderId: positionData.slOrderId, tpOrderId: positionData.tpOrderId },
+            });
+        }
+
+        // Place reduce-only close order
+        const closeBody = {
+            symbol: params.symbol,
+            side: _oppositeSide(params.side),
+            type: params.closeType || 'MARKET',
+            quantity: params.qty,
+            reduceOnly: 'true',
+            newClientOrderId: `close_${params.decisionKey}`.slice(0, 36),
+            recvWindow: 5000,
+        };
+        if ((params.closeType || 'MARKET') === 'LIMIT') {
+            closeBody.timeInForce = 'GTC';
+            closeBody.price = params.closePrice;
+        }
+
+        const closeResp = await sendSignedRequest('POST', '/fapi/v1/order', closeBody, creds);
+        if (!closeResp || closeResp.code) {
+            const err = canonicalErrors.translateBinance(closeResp) || canonicalErrors.create('ErrUnknown', 'close rejected');
+            // REVERT state CLOSING → OPEN (not a valid state machine edge, use direct DB update)
+            db.prepare(`UPDATE at_positions SET status='OPEN', updated_at=datetime('now') WHERE seq=?`).run(params.seq);
+            positionEvents.append({
+                position_seq: params.seq, user_id: uid, exchange: 'binance',
+                event_type: 'CLOSE_REJECTED_REVERT',
+                from_state: 'CLOSING', to_state: 'OPEN',
+                payload: { reason: 'CLOSE_REJECTED', err: { code: err.code, message: err.message } },
+            });
+            return { ok: false, error: err, seq: params.seq };
+        }
+
+        // CLOSING → CLOSED (valid state machine edge)
+        positionStateMachine.transition(params.seq, 'CLOSING', 'CLOSED', {
+            closeOrderId: closeResp.orderId,
+            closePrice: closeResp.avgPrice,
+            source: params.source,
+        });
+
+        // Move from at_positions → at_closed (preserves seq)
+        try {
+            const closedData = { ...positionData, closeOrderId: closeResp.orderId, closePrice: closeResp.avgPrice, source: params.source };
+            db.prepare(
+                `INSERT INTO at_closed (seq, data, status, user_id, exchange, created_at, updated_at) VALUES (?, ?, 'CLOSED', ?, 'binance', datetime('now'), datetime('now'))`
+            ).run(params.seq, JSON.stringify(closedData), uid);
+            db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
+        } catch (moveErr) {
+            // at_closed move non-fatal — position state already CLOSED
+            try { require('./logger').warn('BINANCE_OPS', `at_closed move failed seq=${params.seq}: ${moveErr.message}`); } catch (_) {}
+        }
+
+        positionEvents.append({
+            position_seq: params.seq, user_id: uid, exchange: 'binance',
+            event_type: 'CLOSED',
+            payload: { closeOrderId: closeResp.orderId, closePrice: closeResp.avgPrice, source: params.source },
+        });
+
+        return {
+            ok: true,
+            orderId: closeResp.orderId,
+            clientOrderId: params.decisionKey,
+            status: closeResp.status || 'FILLED',
+            filledQty: closeResp.executedQty || params.qty,
+            avgFillPrice: closeResp.avgPrice,
+            ts: Date.now(),
+            rawExchange: 'binance',
+            seq: params.seq,
+        };
+
+    } finally {
+        orderLock.release(lockKey);
+    }
+}
+
 function _notImpl(name) {
     return async () => { throw new Error(`binanceOps.${name} not yet implemented`); };
 }
@@ -269,7 +426,7 @@ function _notImpl(name) {
 module.exports = {
     placeEntry,
     _emergencyClose,
-    closePosition:     _notImpl('closePosition'),
+    closePosition,
     ensureSymbolReady: _notImpl('ensureSymbolReady'),
     getPositions:      _notImpl('getPositions'),
     getBalance:        _notImpl('getBalance'),
