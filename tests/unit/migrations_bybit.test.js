@@ -66,13 +66,18 @@ describe('Bybit migrations 393 — applied to live schema', () => {
             expect(r).toBeDefined();
         });
 
-        it('row counts preserved (at_positions=3, at_closed=2417, brain_decisions=89922)', () => {
+        it('row counts not lost (>= baseline at migration time)', () => {
+            // Baseline captured at migration 393 application (2026-05-21 23:33 UTC):
+            // at_positions=3, at_closed=2417, brain_decisions=89922.
+            // Use >= because Zeus continues to produce new rows after migration.
+            // Migration is additive only — never loses data. If counts ever drop
+            // below baseline, data loss occurred (catastrophic, must investigate).
             const ap = db.prepare("SELECT COUNT(*) AS n FROM at_positions").get();
             const ac = db.prepare("SELECT COUNT(*) AS n FROM at_closed").get();
             const bd = db.prepare("SELECT COUNT(*) AS n FROM brain_decisions").get();
-            expect(ap.n).toBe(3);
-            expect(ac.n).toBe(2417);
-            expect(bd.n).toBe(89922);
+            expect(ap.n).toBeGreaterThanOrEqual(3);
+            expect(ac.n).toBeGreaterThanOrEqual(2417);
+            expect(bd.n).toBeGreaterThanOrEqual(89922);
         });
     });
 
