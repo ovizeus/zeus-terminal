@@ -11,6 +11,10 @@ const logger = require('./logger');
 const MF = require('../migrationFlags');
 const { getExchangeCreds } = require('./credentialStore');
 const { sendSignedRequest } = require('./binanceSigner');
+// [Task 40 — Bybit Phase 1A+1B] exchangeOps router: routes entry/close/balance
+// calls to the correct exchange (Binance or Bybit) based on per-user config.
+// Replaces direct sendSignedRequest calls in _executeLiveEntry + _executeLiveEntryCore.
+const exchangeOps = require('./exchangeOps');
 const { roundOrderParams, getFilters: _getExchangeFilters } = require('./exchangeInfo');
 const { validateOrder, recordClosedPnL } = require('./riskGuard');
 const telegram = require('./telegram');
@@ -1318,10 +1322,11 @@ async function _executeLiveEntry(entry, stc) {
     }
 
     // [FULL-LIVE] Pre-trade margin check — verify available balance before entry
+    // [Task 40.1] Replaced sendSignedRequest('GET', '/fapi/v2/balance') with
+    // exchangeOps.getBalance(userId) — routes to correct exchange (Binance/Bybit).
     try {
-        const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
-        const usdtBal = balances.find(b => b.asset === 'USDT');
-        const available = usdtBal ? parseFloat(usdtBal.availableBalance || 0) : 0;
+        const balResult = await exchangeOps.getBalance(userId);
+        const available = balResult ? parseFloat(balResult.availableBalance || 0) : 0;
         const requiredMargin = entry.size; // position size = required margin (before leverage)
         if (available < requiredMargin) {
             entry.live = { status: 'INSUFFICIENT_MARGIN', available, required: requiredMargin };
@@ -1355,62 +1360,42 @@ async function _executeLiveEntry(entry, stc) {
         : crypto.randomBytes(4).toString('hex');
     const clientOrderId = `SAT_${entry.seq}_${_decTok}`;
 
-    // [SAFE-2] Force CROSSED margin type — BLOCKING: wrong margin type = wrong risk math.
-    // Zeus AT risk-management math (max-positions=5 implied pooled buffer)
-    // assumes CROSS pooling. User may have manually switched ISOLATED via
-    // Binance UI (or carry residue from a prior trade), so we ensure CROSSED
-    // here before leverage/order. Idempotent: Binance returns numeric code
-    // `-4046` "No need to change margin type" if already CROSSED — treat as
-    // success (suppressed at INFO level, entry proceeds). Any other failure
-    // mirrors the leverage failure pattern below: 1-retry then BLOCK with
-    // telegram alert + entry.live status + _pushLog + us.liveStats.blocked.
-    // Detection of -4046 uses err.code numeric (propagated by binanceSigner.js
-    // line 211 from Binance data.code) — reliable, not message-substring based.
-    for (let mtAttempt = 0; mtAttempt < 2; mtAttempt++) {
+    // [Task 40.2] Replaced manual marginType + leverage retry loops with
+    // exchangeOps.ensureSymbolReady — routes to correct exchange (Binance/Bybit),
+    // 5min cache per (uid, symbol), idempotent. Replaces marginTypeHelper.ensureCrossed
+    // + sendSignedRequest('POST', '/fapi/v1/leverage') both requiring creds.
+    // [SAFE-2] Force CROSSED margin type + correct leverage — BLOCKING:
+    // wrong margin type = wrong risk math; wrong leverage = wrong risk.
+    {
+        let readyResult;
         try {
-            // [Day 35 bugfix] Idempotent helper — verifies actual marginType via
-            // positionRisk if Binance refuses redundant set (-4144 / -4048 with
-            // existing open orders on symbol). See marginTypeHelper.js.
-            const marginHelper = require('./marginTypeHelper');
-            await marginHelper.ensureCrossed(entry.symbol, creds, sendSignedRequest);
-            logger.info('AT_LIVE', `[${entry.seq}] Margin type CROSSED verified/set`);
-            break; // success — change applied or already correct
-        } catch (mtErr) {
-            // Real failure — mirror leverage pattern (1 retry, then block)
-            if (mtAttempt === 0) {
-                logger.warn('AT_LIVE', `[${entry.seq}] Margin type set failed, retrying: ${mtErr.message}`);
-                await new Promise(r => setTimeout(r, 1000));
-            } else {
-                entry.live = { status: 'MARGIN_TYPE_FAILED', error: mtErr.message, intendedMarginType: 'CROSSED' };
-                _pushLog(userId, 'LIVE_MARGIN_TYPE_FAILED', { seq: entry.seq, marginType: 'CROSSED', error: mtErr.message });
-                logger.error('AT_LIVE', `[${entry.seq}] Margin type set failed — BLOCKING entry: ${mtErr.message}`);
-                telegram.sendToUser(userId, `⚠️ *Margin Type Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: CROSSED\nEntry skipped — deterministic margin required for risk math.\nError: ${mtErr.message}`);
-                us.liveStats.blocked++;
-                return;
-            }
+            readyResult = await exchangeOps.ensureSymbolReady(userId, {
+                symbol: entry.symbol,
+                leverage: entry.lev,
+                marginMode: 'CROSSED',
+            });
+        } catch (readyErr) {
+            readyResult = { ok: false, error: { message: readyErr.message, code: readyErr.code || 'ErrEnsureSymbolReady' } };
         }
-    }
-
-    // Set leverage — BLOCKING: wrong leverage = wrong risk
-    for (let levAttempt = 0; levAttempt < 2; levAttempt++) {
-        try {
-            await sendSignedRequest('POST', '/fapi/v1/leverage', {
-                symbol: entry.symbol, leverage: entry.lev,
-            }, creds);
-            break; // success
-        } catch (levErr) {
-            if (levAttempt === 0) {
-                logger.warn('AT_LIVE', `[${entry.seq}] Leverage set failed, retrying: ${levErr.message}`);
-                await new Promise(r => setTimeout(r, 1000));
+        if (!readyResult || !readyResult.ok) {
+            const readyErrMsg = (readyResult && readyResult.error && readyResult.error.message) || 'ensureSymbolReady failed';
+            const readyErrCode = (readyResult && readyResult.error && readyResult.error.code) || 'UNKNOWN';
+            // Distinguish margin vs leverage failure by code if available; default to LEVERAGE_FAILED
+            if (readyErrCode && String(readyErrCode).includes('MARGIN')) {
+                entry.live = { status: 'MARGIN_TYPE_FAILED', error: readyErrMsg, intendedMarginType: 'CROSSED' };
+                _pushLog(userId, 'LIVE_MARGIN_TYPE_FAILED', { seq: entry.seq, marginType: 'CROSSED', error: readyErrMsg });
+                logger.error('AT_LIVE', `[${entry.seq}] Margin type set failed — BLOCKING entry: ${readyErrMsg}`);
+                telegram.sendToUser(userId, `⚠️ *Margin Type Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: CROSSED\nEntry skipped — deterministic margin required for risk math.\nError: ${readyErrMsg}`);
             } else {
-                entry.live = { status: 'LEVERAGE_FAILED', error: levErr.message, intendedLev: entry.lev };
-                _pushLog(userId, 'LIVE_LEVERAGE_FAILED', { seq: entry.seq, leverage: entry.lev, error: levErr.message });
-                logger.error('AT_LIVE', `[${entry.seq}] Leverage set failed — BLOCKING entry: ${levErr.message}`);
-                telegram.sendToUser(userId, `⚠️ *Leverage Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: ${entry.lev}x\nEntry skipped — wrong leverage = wrong risk.\nError: ${levErr.message}`);
-                us.liveStats.blocked++;
-                return;
+                entry.live = { status: 'LEVERAGE_FAILED', error: readyErrMsg, intendedLev: entry.lev };
+                _pushLog(userId, 'LIVE_LEVERAGE_FAILED', { seq: entry.seq, leverage: entry.lev, error: readyErrMsg });
+                logger.error('AT_LIVE', `[${entry.seq}] Leverage/symbol-ready set failed — BLOCKING entry: ${readyErrMsg}`);
+                telegram.sendToUser(userId, `⚠️ *Leverage Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: ${entry.lev}x\nEntry skipped — wrong leverage = wrong risk.\nError: ${readyErrMsg}`);
             }
+            us.liveStats.blocked++;
+            return;
         }
+        logger.info('AT_LIVE', `[${entry.seq}] Symbol ready: CROSSED margin + ${entry.lev}x leverage verified/set${readyResult.cached ? ' (cached)' : ''}`);
     }
 
     // Round params
@@ -1430,316 +1415,158 @@ async function _executeLiveEntry(entry, stc) {
         return;
     }
 
-    // MARKET entry
-    let mainOrder;
+    // [Task 40.3] Replace direct sendSignedRequest entry/SL/TP/emergency-close
+    // calls with single exchangeOps.placeEntry router call. Routes to Binance
+    // or Bybit per per-user config (_getUserExchange). binanceOps.placeEntry
+    // handles: MARKET entry → safety SL (15% OTM) → real SL 3x retry →
+    // emergency close on SL exhaustion → TP (no retry, soft fail) → positionStateMachine.
+    //
+    // [OPTION B — dual DB write transitional]: binanceOps.placeEntry inserts
+    // PENDING row into at_positions. serverAT _persistPosition continues to write
+    // its own at_positions record (legacy format). Two rows per entry during
+    // transition; entry.live.opsSeq links them. Full dedup: T40-deferred-db-unification.
+    // [TODO: deprecate _persistPosition INSERT post-Bybit Phase 2]
+    let placeResult;
     try {
-        mainOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+        placeResult = await exchangeOps.placeEntry(userId, {
             symbol: entry.symbol,
-            side: entry.side === 'LONG' ? 'BUY' : 'SELL',
-            type: 'MARKET', quantity: qty,
-            newClientOrderId: clientOrderId,
-        }, creds);
-        // [Phase 2 S2.A] Persist mainOrderId + clientOrderId immediately so a
-        // crash between here and the final entry.live assignment at line ~1162
-        // cannot lose our idempotency key. The later reassignment of entry.live
-        // is a superset (adds SL/TP orderIds), so overwriting is safe.
-        entry.live = Object.assign({}, entry.live, {
-            status: 'MAIN_PLACED',
-            mainOrderId: mainOrder.orderId,
-            clientOrderId,
-            decisionId: entry.decisionId || null,
+            side: entry.side,           // LONG/SHORT — exchangeOps accepts this
+            qty: qty,
+            entryType: 'MARKET',
+            sl: (entry.sl && entry.sl > 0) ? { price: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl) } : null,
+            tp: (!entry.dslParams && entry.tp && entry.tp > 0) ? { price: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp) } : null,
+            leverage: entry.lev,
+            decisionKey: clientOrderId,  // SAT_<seq>_<8hex> — compatible with exchangeOps regex
+            source: 'serverAT',
         });
-        _persistPosition(entry);
-    } catch (err) {
-        entry.live = { status: 'ENTRY_FAILED', error: err.message };
-        _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: err.message });
-        logger.error('AT_LIVE', `[${entry.seq}] MARKET entry failed: ${err.message}`);
-        Sentry.captureException(err, { tags: { module: 'AT', action: 'live_entry', symbol: entry.symbol, side: entry.side }, user: { id: String(userId) } });
-        telegram.alertOrderFailed(entry.symbol, entry.side, err.message, userId);
-        audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: err.message }, 'SERVER_AT');
+    } catch (placeErr) {
+        // Unexpected throw (not ok:false) — treat as ENTRY_FAILED
+        placeResult = { ok: false, error: { message: placeErr.message, code: placeErr.code || 'ErrUnknown' } };
+    }
+
+    if (!placeResult || !placeResult.ok) {
+        const errMsg = (placeResult && placeResult.error && placeResult.error.message) || 'placeEntry failed';
+        const errCode = (placeResult && placeResult.error && placeResult.error.code) || 'ErrUnknown';
+        const isCatastrophic = !!(placeResult && placeResult.catastrophic);
+
+        if (isCatastrophic) {
+            // binanceOps set PANIC halt and persisted to emergency_close_queue
+            logger.error('AT_LIVE', `[${entry.seq}] CATASTROPHIC ENTRY FAILURE — halt armed, emergency_close_queue: ${errMsg}`);
+            audit.record('SAT_EMERGENCY_CLOSE', {
+                userId, seq: entry.seq, symbol: entry.symbol, side: entry.side,
+                reason: 'CATASTROPHIC_ENTRY_FAILED', error: errMsg,
+            }, 'SERVER_AT');
+            telegram.sendToUser(userId, `🚨🚨 *CATASTROPHIC ENTRY FAILURE*\n${entry.side} ${entry.symbol}\nPosition halted + queued for recovery.\nError: ${errMsg}`);
+        } else {
+            entry.live = { status: 'ENTRY_FAILED', error: errMsg };
+            _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: errMsg, code: errCode });
+            logger.error('AT_LIVE', `[${entry.seq}] placeEntry failed [${errCode}]: ${errMsg}`);
+            const syntheticErr = new Error(errMsg);
+            syntheticErr.code = errCode;
+            Sentry.captureException(syntheticErr, { tags: { module: 'AT', action: 'live_entry', symbol: entry.symbol, side: entry.side }, user: { id: String(userId) } });
+            telegram.alertOrderFailed(entry.symbol, entry.side, errMsg, userId);
+            audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: errMsg }, 'SERVER_AT');
+        }
         metrics.recordOrder('failed');
         us.liveStats.errors++;
         return;
     }
 
-    // [ZT-AUD-002] Verify fill — poll if MARKET response is incomplete
-    let verifiedOrder = mainOrder;
-    if (!mainOrder.avgPrice || parseFloat(mainOrder.avgPrice) <= 0 || mainOrder.status !== 'FILLED') {
-        logger.warn('AT_LIVE', `[${entry.seq}] MARKET response incomplete (status=${mainOrder.status}, avgPrice=${mainOrder.avgPrice}) — polling for fill...`);
-        for (let pollAttempt = 0; pollAttempt < 3; pollAttempt++) {
-            await new Promise(r => setTimeout(r, 1000));
-            try {
-                const queried = await sendSignedRequest('GET', '/fapi/v1/order', {
-                    symbol: entry.symbol, orderId: mainOrder.orderId,
-                }, creds);
-                if (queried.status === 'FILLED' && parseFloat(queried.avgPrice) > 0) {
-                    verifiedOrder = queried;
-                    logger.info('AT_LIVE', `[${entry.seq}] Fill confirmed on poll #${pollAttempt + 1}: avgPrice=${queried.avgPrice}`);
-                    break;
-                }
-            } catch (pollErr) {
-                logger.warn('AT_LIVE', `[${entry.seq}] Fill poll #${pollAttempt + 1} failed: ${pollErr.message}`);
-            }
-        }
-    }
-    if (!verifiedOrder.avgPrice || parseFloat(verifiedOrder.avgPrice) <= 0) {
-        logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: No verified fill price after polling — using MARKET response as-is`);
-        Sentry.captureMessage(`Fill unverified: ${entry.symbol} ${entry.side}`, { level: 'error', tags: { module: 'AT', action: 'fill_unverified', symbol: entry.symbol }, user: { id: String(userId) } });
-        telegram.sendToUser(userId, `⚠️ *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — avgPrice not confirmed. Monitor manually.`);
-    }
-    const avgPrice = parseFloat(verifiedOrder.avgPrice || 0);
-    const executedQty = parseFloat(verifiedOrder.executedQty || 0);
+    // [Task 40.4] Fill verification adapter — translate exchangeOps result to
+    // serverAT's expected entry.live.* fields. exchangeOps returns avgFillPrice
+    // directly from exchange response (no polling needed — it uses FILLED response).
+    // If avgFillPrice missing/zero: FILL_UNVERIFIED path (ZT-AUD-002 preserved).
+    const avgPrice = parseFloat(placeResult.avgFillPrice || 0);
+    const executedQty = parseFloat(placeResult.filledQty || 0);
     const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
-    if (!Number.isFinite(avgPrice) || avgPrice <= 0 || !Number.isFinite(executedQty) || executedQty <= 0) {
-        // [ZT-AUD-C5] Reconcile against exchange BEFORE aborting. The order may
-        // have filled after our polling window — if so, leaving it untracked
-        // means a position with no SL/TP server-side. Force-close it.
-        let exchangeQty = 0;
-        let exchangeSide = null;
-        try {
-            const posRisk = await sendSignedRequest('GET', '/fapi/v2/positionRisk', { symbol: entry.symbol }, creds);
-            const bPos = (Array.isArray(posRisk) ? posRisk : []).find(p => parseFloat(p.positionAmt) !== 0);
-            if (bPos) {
-                exchangeQty = Math.abs(parseFloat(bPos.positionAmt));
-                exchangeSide = parseFloat(bPos.positionAmt) > 0 ? 'LONG' : 'SHORT';
-            }
-        } catch (recErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED reconcile query failed: ${recErr.message}`);
-        }
+    const mainOrderId = placeResult.orderId;
 
-        if (exchangeQty > 0 && exchangeSide === entry.side) {
-            // Position exists on exchange — force market close to avoid unprotected exposure
-            logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED but exchange shows ${exchangeSide} qty=${exchangeQty} — FORCE CLOSING`);
-            Sentry.captureMessage(`FILL_UNVERIFIED force-close: ${entry.symbol} ${entry.side} qty=${exchangeQty}`, { level: 'fatal', tags: { module: 'AT', action: 'fill_unverified_force_close', symbol: entry.symbol }, user: { id: String(userId) } });
-            try {
-                const fcQty = String(roundOrderParams(entry.symbol, exchangeQty).quantity || exchangeQty);
-                await sendSignedRequest('POST', '/fapi/v1/order', {
-                    symbol: entry.symbol, side: closeSide, type: 'MARKET',
-                    quantity: fcQty, reduceOnly: true,
-                    newClientOrderId: `SAT_FCUNVER_${liveSeq}`,
-                }, creds);
-                entry.live = { status: 'FILL_UNVERIFIED_FORCE_CLOSED', error: 'No confirmed fill data; exchange position force-closed', orderId: mainOrder.orderId, exchangeQty };
-                audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, exchangeQty }, 'SERVER_AT');
-                telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED — FORCE CLOSED*\n${entry.symbol} ${entry.side} qty=${exchangeQty}\nFill data missing; closed exchange position to prevent unprotected exposure.`);
-            } catch (fcErr) {
-                logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED force-close FAILED: ${fcErr.message}`);
-                Sentry.captureException(fcErr, { level: 'fatal', tags: { module: 'AT', action: 'fill_unverified_force_close_failed' }, user: { id: String(userId) } });
-                entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill; force-close failed: ' + fcErr.message, orderId: mainOrder.orderId, exchangeQty };
-                audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSE_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, exchangeQty, error: fcErr.message }, 'SERVER_AT');
-                telegram.sendToUser(userId, `🚨🚨 *FILL UNVERIFIED — FORCE CLOSE FAILED*\n${entry.symbol} ${entry.side} qty=${exchangeQty}\n*MANUAL INTERVENTION REQUIRED*\nError: ${fcErr.message}`);
-            }
+    if (!Number.isFinite(avgPrice) || avgPrice <= 0 || !Number.isFinite(executedQty) || executedQty <= 0) {
+        // [ZT-AUD-002] No verified fill price from exchangeOps result
+        logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED — avgFillPrice=${placeResult.avgFillPrice} filledQty=${placeResult.filledQty}`);
+        Sentry.captureMessage(`Fill unverified: ${entry.symbol} ${entry.side}`, { level: 'error', tags: { module: 'AT', action: 'fill_unverified', symbol: entry.symbol }, user: { id: String(userId) } });
+
+        // [ZT-AUD-C5] Force-close FILL_UNVERIFIED with confirmed exchange position
+        const fcDecisionKey = `SAT_FCUNVER_${liveSeq}`.slice(0, 36);
+        const fcResult = await exchangeOps.closePosition(userId, {
+            seq: placeResult.seq,
+            symbol: entry.symbol,
+            side: entry.side,
+            qty: qty,
+            closeType: 'MARKET',
+            decisionKey: fcDecisionKey,
+            source: 'FILL_UNVERIFIED_FORCE_CLOSE',
+        }).catch(() => null);
+
+        if (fcResult && fcResult.ok) {
+            entry.live = { status: 'FILL_UNVERIFIED_FORCE_CLOSED', error: 'No confirmed fill data; exchange position force-closed', orderId: mainOrderId, opsSeq: placeResult.seq };
+            audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side }, 'SERVER_AT');
+            telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED — FORCE CLOSED*\n${entry.symbol} ${entry.side}\nFill data missing; closed exchange position to prevent unprotected exposure.`);
         } else {
-            // No position on exchange — order was likely rejected/expired
-            entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data; no exchange position', orderId: mainOrder.orderId };
-            logger.error('AT_LIVE', `[${entry.seq}] Entry aborted — no confirmed fill, no exchange position (avgPrice=${avgPrice}, qty=${executedQty})`);
-            audit.record('SAT_FILL_UNVERIFIED_NO_POS', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side }, 'SERVER_AT');
-            telegram.sendToUser(userId, `⚠️ *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — no fill data and no position on exchange. Order may have been rejected.`);
+            entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data; force-close also failed or not attempted', orderId: mainOrderId, opsSeq: placeResult.seq };
+            audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSE_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: 'closePosition returned !ok' }, 'SERVER_AT');
+            telegram.sendToUser(userId, `🚨🚨 *FILL UNVERIFIED — FORCE CLOSE FAILED*\n${entry.symbol} ${entry.side}\n*MANUAL INTERVENTION REQUIRED*`);
         }
         us.liveStats.errors++;
         return;
     }
 
-    // [FIX2] Re-round using ACTUAL executedQty (not original qty) for all downstream orders
+    // [FIX2] Re-round using ACTUAL executedQty for downstream references
     const fillQty = String(roundOrderParams(entry.symbol, executedQty).quantity || executedQty);
 
     // Slippage tracking — compare fill price vs expected price
     const entrySlippage = avgPrice - entry.price;
     const entrySlippagePct = entry.price > 0 ? +((entrySlippage / entry.price) * 100).toFixed(4) : 0;
-    entry.live = entry.live || {};
-    entry.live.entrySlippage = entrySlippage;
-    entry.live.entrySlippagePct = entrySlippagePct;
-    entry.live.expectedPrice = entry.price;
-    entry.live.fillPrice = avgPrice;
 
     logger.info('AT_LIVE', `[${entry.seq}] ENTRY FILLED ${entry.side} ${entry.symbol} qty=${executedQty} @ $${avgPrice} (expected $${entry.price.toFixed(2)}, slippage ${entrySlippagePct >= 0 ? '+' : ''}${entrySlippagePct}%)`);
     audit.record('SAT_ENTRY_FILLED', {
         userId, seq: entry.seq, symbol: entry.symbol, side: entry.side,
-        qty: executedQty, avgPrice, orderId: mainOrder.orderId, tier: entry.tier,
+        qty: executedQty, avgPrice, orderId: mainOrderId, tier: entry.tier,
         slippage: entrySlippagePct,
     }, 'SERVER_AT');
     metrics.recordOrder('filled');
-    telegram.alertOrderFilled(entry.symbol, entry.side, executedQty, avgPrice, mainOrder.orderId, userId);
+    telegram.alertOrderFilled(entry.symbol, entry.side, executedQty, avgPrice, mainOrderId, userId);
 
-    // [ZT-AUD-C6] Safety SL — place a far-OTM SL synchronously BEFORE the
-    // optimal-SL retry loop so the position is never naked, even during the
-    // 1-4s window of SL retries. Far-OTM = 15% from fill in adverse direction;
-    // exchange will accept it (no margin/price-already-past errors) and only
-    // hits on a flash crash. Cancelled once the real SL is placed.
-    let safetySlOrder = null;
-    try {
-        const safetyRaw = entry.side === 'LONG' ? avgPrice * 0.85 : avgPrice * 1.15;
-        const safetyRounded = roundOrderParams(entry.symbol, executedQty, safetyRaw);
-        const safetyStopPrice = String(safetyRounded.stopPrice != null ? safetyRounded.stopPrice : safetyRaw.toFixed(2));
-        safetySlOrder = await _placeConditionalOrder({
-            symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
-            quantity: fillQty, stopPrice: safetyStopPrice,
-            reduceOnly: true, newClientOrderId: `SAT_SLSAFE_${liveSeq}`,
-        }, creds);
-        logger.info('AT_LIVE', `[${entry.seq}] Safety SL placed @ $${safetyStopPrice} (15% OTM) — covers retry window`);
-    } catch (safeErr) {
-        logger.warn('AT_LIVE', `[${entry.seq}] Safety SL placement failed: ${safeErr.message} — proceeding with retry loop only`);
-        Sentry.captureException(safeErr, { level: 'warning', tags: { module: 'AT', action: 'safety_sl_failed', symbol: entry.symbol }, user: { id: String(userId) } });
+    // Log SL/TP retry warnings if applicable (for transparency; SL/TP handled inside binanceOps)
+    if (placeResult.slOrderId) {
+        logger.info('AT_LIVE', `[${entry.seq}] SL order placed: ${placeResult.slOrderId}`);
+    }
+    if (placeResult.tpOrderId) {
+        logger.info('AT_LIVE', `[${entry.seq}] TP order placed: ${placeResult.tpOrderId}`);
     }
 
-    // SL order with auto-retry + emergency close
-    let slOrder = null;
-    const SL_RETRY_DELAYS = [1000, 3000]; // [ZT-AUD-007] 1s, 3s backoff (max 4s vs old 17s)
-    for (let attempt = 0; attempt <= SL_RETRY_DELAYS.length; attempt++) {
-        try {
-            slOrder = await _placeConditionalOrder({
-                symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
-                quantity: fillQty,
-                stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl),
-                reduceOnly: true, newClientOrderId: `SAT_SL_${liveSeq}_${attempt}`,
-            }, creds);
-            if (attempt > 0) logger.info('AT_LIVE', `[${entry.seq}] SL order succeeded on retry #${attempt}`);
-            break; // success
-        } catch (slErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] SL order attempt ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed: ${slErr.message}`);
-            if (attempt < SL_RETRY_DELAYS.length) {
-                telegram.sendToUser(userId, `⚠️ SL retry ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${SL_RETRY_DELAYS[attempt] / 1000}s...`);
-                await new Promise(r => setTimeout(r, SL_RETRY_DELAYS[attempt]));
-            }
-        }
-    }
-
-    // Real SL placed → cancel the safety SL (it's no longer needed).
-    if (slOrder && safetySlOrder && safetySlOrder.orderId) {
-        await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
-        safetySlOrder = null;
-    }
-
-    // [FIX1] EMERGENCY CLOSE: if all SL retries failed, market-close + properly remove from _positions
-    if (!slOrder) {
-        logger.error('AT_LIVE', `[${entry.seq}] ALL SL retries exhausted — executing EMERGENCY MARKET CLOSE`);
-        _emitDoctor({
-            eventType: 'alert', severity: 'P0',
-            moduleId: 'serverAT.emergencyClose', ts: Date.now(),
-            payload: { seq: entry.seq, symbol: entry.symbol, side: entry.side, userId, reason: 'SL_ALL_RETRIES_FAILED' }
-        });
-        Sentry.captureMessage(`EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_sl', symbol: entry.symbol }, user: { id: String(userId) } });
-        telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing position to prevent unprotected exposure.`);
-        // [ZT-AUD-C6] Keep safety SL active during emergency close. It's reduceOnly so concurrent
-        // firing won't double-close; only cancel after the close confirms success. If close fails,
-        // the safety SL stays as last-line protection.
-        try {
-            const emgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
-                symbol: entry.symbol, side: closeSide, type: 'MARKET',
-                quantity: fillQty, reduceOnly: true,
-                newClientOrderId: `SAT_EMGCLOSE_${liveSeq}`,
-            }, creds);
-            const _emgRaw = parseFloat(emgResult.avgPrice);
-            const emgPrice = (Number.isFinite(_emgRaw) && _emgRaw > 0) ? _emgRaw : avgPrice;
-            const emgPnl = avgPrice > 0 ? (entry.side === 'LONG'
-                ? +((emgPrice - avgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)
-                : +((avgPrice - emgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)) : 0;
-            entry.live = { status: 'EMERGENCY_CLOSED', liveSeq, clientOrderId, mainOrderId: mainOrder.orderId, avgPrice, executedQty, reason: 'SL placement failed after all retries' };
-            logger.warn('AT_LIVE', `[${entry.seq}] Emergency close executed @ $${emgPrice.toFixed(2)} PnL=$${emgPnl.toFixed(2)}`);
-            telegram.sendToUser(userId, `✅ Emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${emgPrice.toFixed(2)} — PnL: $${emgPnl.toFixed(2)}`);
-            audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'SERVER_AT');
-            // [ZT-AUD-C6] Emergency close confirmed → safety SL no longer needed.
-            if (safetySlOrder && safetySlOrder.orderId) {
-                await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
-                safetySlOrder = null;
-            }
-            // [FIX1] Properly close position — remove from _positions, update stats, persist
-            const emgIdx = _positions.findIndex(p => p.seq === entry.seq);
-            if (emgIdx >= 0) {
-                _closePosition(emgIdx, entry, 'EMERGENCY_CLOSED', emgPrice, emgPnl);
-            }
-            return; // exit early — no TP needed, position is closed
-        } catch (emgErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
-            Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_failed', symbol: entry.symbol }, user: { id: String(userId) } });
-            const safetyMsg = safetySlOrder ? `\nSafety SL (15% OTM) still active as backstop.` : '';
-            telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL on Binance.${safetyMsg}\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`);
-        }
-        return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
-    }
-
-    // [DSL-SEMANTIC-FIX + DSL-OFF]
-    //   DSL ON  → no native TP (DSL pivots trail the price; PL is the only take-profit path).
-    //   DSL OFF → place native TP from RISK MANAGEMENT so the position has full exchange-side protection.
-    let tpOrder = null;
-    const TP_RETRY_DELAYS = [1000, 3000];
-    if (!entry.dslParams) {
-        for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
-            try {
-                tpOrder = await _placeConditionalOrder({
-                    symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
-                    quantity: fillQty,
-                    stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
-                    reduceOnly: true, newClientOrderId: `SAT_TP_${liveSeq}_${tpAttempt}`,
-                }, creds);
-                if (tpAttempt > 0) logger.info('AT_LIVE', `[${entry.seq}] TP order succeeded on retry #${tpAttempt}`);
-                break;
-            } catch (tpErr) {
-                logger.error('AT_LIVE', `[${entry.seq}] TP order attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
-                if (tpAttempt < TP_RETRY_DELAYS.length) {
-                    telegram.sendToUser(userId, `⚠️ TP retry ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${TP_RETRY_DELAYS[tpAttempt] / 1000}s...`);
-                    await new Promise(r => setTimeout(r, TP_RETRY_DELAYS[tpAttempt]));
-                }
-            }
-        }
-    }
-
-    if (!entry.dslParams && !tpOrder && slOrder) {
-        logger.error('AT_LIVE', `[${entry.seq}] ALL TP retries exhausted — executing EMERGENCY MARKET CLOSE`);
-        Sentry.captureMessage(`EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_tp', symbol: entry.symbol }, user: { id: String(userId) } });
-        telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${TP_RETRY_DELAYS.length + 1} TP attempts failed.\nEmergency closing — position cannot stay open without TP protection.`);
-        // Cancel SL order first (we're closing the position) — await to prevent SL fill racing with emergency close
-        if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
-        try {
-            const tpEmgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
-                symbol: entry.symbol, side: closeSide, type: 'MARKET',
-                quantity: fillQty, reduceOnly: true,
-                newClientOrderId: `SAT_TPEMG_${liveSeq}`,
-            }, creds);
-            const _tpEmgRaw = parseFloat(tpEmgResult.avgPrice);
-            const tpEmgPrice = (Number.isFinite(_tpEmgRaw) && _tpEmgRaw > 0) ? _tpEmgRaw : avgPrice;
-            const tpEmgPnl = avgPrice > 0 ? (entry.side === 'LONG'
-                ? +((tpEmgPrice - avgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)
-                : +((avgPrice - tpEmgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)) : 0;
-            entry.live = { status: 'EMERGENCY_CLOSED', liveSeq, clientOrderId, mainOrderId: mainOrder.orderId, avgPrice, executedQty, reason: 'TP placement failed after all retries' };
-            logger.warn('AT_LIVE', `[${entry.seq}] TP emergency close executed @ $${tpEmgPrice.toFixed(2)} PnL=$${tpEmgPnl.toFixed(2)}`);
-            telegram.sendToUser(userId, `✅ TP emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${tpEmgPrice.toFixed(2)} — PnL: $${tpEmgPnl.toFixed(2)}`);
-            audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice: tpEmgPrice, emgPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' }, 'SERVER_AT');
-            const tpEmgIdx = _positions.findIndex(p => p.seq === entry.seq);
-            if (tpEmgIdx >= 0) _closePosition(tpEmgIdx, entry, 'EMERGENCY_CLOSED', tpEmgPrice, tpEmgPnl);
-            return; // position closed — no further processing needed
-        } catch (tpEmgErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] TP EMERGENCY CLOSE FAILED: ${tpEmgErr.message}`);
-            Sentry.captureException(tpEmgErr, { level: 'fatal', tags: { module: 'AT', action: 'tp_emergency_failed', symbol: entry.symbol }, user: { id: String(userId) } });
-            telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition has SL but NO TP protection.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`);
-        }
-    }
-
+    // [Task 40.3 result adapter] Map exchangeOps result → entry.live.*
+    // entry.live.opsSeq: links to binanceOps-created at_positions row (dual-write bridge)
+    const slPlaced = !!placeResult.slOrderId;
     entry.live = {
-        status: (!slOrder) ? 'LIVE_NO_SL' : 'LIVE', liveSeq, clientOrderId,
-        // [Phase 2 S2.A] Carry decisionId forward so it's visible in the
-        // persisted live state (audit trail + client diagnostics).
+        status: slPlaced ? 'LIVE' : 'LIVE_NO_SL', liveSeq, clientOrderId,
+        // [Phase 2 S2.A] Carry decisionId forward — visible in persisted live state
         decisionId: entry.decisionId || null,
-        mainOrderId: mainOrder.orderId, avgPrice, executedQty,
-        slOrderId: slOrder ? slOrder.orderId : null,
-        tpOrderId: tpOrder ? tpOrder.orderId : null,
-        slPlaced: !!slOrder, tpPlaced: !!tpOrder,
+        mainOrderId,
+        avgPrice, executedQty, fillPrice: avgPrice,
+        entrySlippage, entrySlippagePct, expectedPrice: entry.price,
+        slOrderId: placeResult.slOrderId || null,
+        tpOrderId: placeResult.tpOrderId || null,
+        slPlaced, tpPlaced: !!placeResult.tpOrderId,
+        // [Task 40 dual-write bridge] opsSeq links to binanceOps at_positions row
+        opsSeq: placeResult.seq || null,
     };
     // [P5A SERVER LIVE OWNERSHIP] live.status set — confirms fill path and ownership stays AT.
     logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] live.status=${entry.live.status} seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} ts=${Date.now()}`);
 
-    // CRITICAL: If SL still failed after retries AND emergency close also failed
-    if (!slOrder) {
-        logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: Position LIVE without SL — emergency close also failed!`);
-        telegram.sendToUser(userId, `🚨 *CRITICAL: NO SL PROTECTION*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nSL retries + emergency close ALL failed.\nPosition is UNPROTECTED. Place manual SL immediately!`);
+    // CRITICAL: If SL failed (LIVE_NO_SL) — alert immediately
+    if (!slPlaced) {
+        logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: Position LIVE without SL — binanceOps SL placement exhausted`);
+        telegram.sendToUser(userId, `🚨 *CRITICAL: NO SL PROTECTION*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nSL retries exhausted inside exchange router.\nPosition is UNPROTECTED. Place manual SL immediately!`);
     }
 
     _pushLog(userId, 'LIVE_ENTRY', {
         seq: entry.seq, liveSeq, symbol: entry.symbol, side: entry.side,
-        avgPrice, executedQty, mainOrderId: mainOrder.orderId,
+        avgPrice, executedQty, mainOrderId, opsSeq: placeResult.seq,
     });
 
     us.liveStats.entries++;
-    _persistPosition(entry);
+    _persistPosition(entry); // [OPTION B: legacy at_positions write preserved — see T40-deferred-db-unification]
     _persistState(userId);
     } finally {
         entry._livePending = false; // [TL-04] Unlock — all paths covered
@@ -3221,146 +3048,83 @@ async function _executeLiveEntryCore(entryInput, stc, creds) {
     _liveEntryLocks.add(_lockKey);
 
     try {
-        // 1. marginType + leverage init (fire-and-recover — exchange may already be set)
-        try { await sendSignedRequest('POST', '/fapi/v1/marginType', { symbol: entry.symbol, marginType: 'CROSSED' }, creds); } catch (_) {}
-        try { await sendSignedRequest('POST', '/fapi/v1/leverage', { symbol: entry.symbol, leverage: entry.lev || 1 }, creds); } catch (_) {}
+        // [Task 40.5] Replaced direct sendSignedRequest calls (marginType, leverage,
+        // MARKET entry, safety SL, SL retry 3x, emergency close, TP retry, TP emergency
+        // close) with single exchangeOps.placeEntry router call. Routes to Binance or
+        // Bybit per per-user config. binanceOps.placeEntry handles all of the above
+        // atomically including positionStateMachine transitions + positionEvents.
+        //
+        // [OPTION B — dual DB write transitional]: exchangeOps.placeEntry inserts
+        // PENDING row into at_positions; caller (registerManualPosition) continues to
+        // push entry into _positions in-memory + call _persistState separately.
+        // entry.live.opsSeq links binanceOps at_positions row to in-memory tracking.
+        // [TODO: deprecate in-memory + _persistState INSERT in Bybit Phase 2]
 
-        // 2. Main entry order (MARKET)
-        const exchangeSide = entry.side === 'LONG' ? 'BUY' : 'SELL';
-        const mainOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
-            symbol: entry.symbol,
-            side: exchangeSide,
-            type: 'MARKET',
-            quantity: entry.qty,
-        }, creds);
+        const coreQty = String(entry.qty);
+        const coreSlPrice = (entry.sl && entry.sl > 0) ? String(entry.sl) : null;
+        const coreTpPrice = (!entry.dslParams && entry.tp && entry.tp > 0) ? String(entry.tp) : null;
+        // Core uses entry.decisionId if present; fall back to userId+symbol+seq uniquifier
+        const _coreTok = (entry.decisionId && /^[0-9a-f]{8}$/.test(entry.decisionId))
+            ? entry.decisionId
+            : require('crypto').randomBytes(4).toString('hex');
+        const coreDecisionKey = `SAT_${entry.seq || 0}_${_coreTok}`.slice(0, 36);
 
-        if (!mainOrder || !mainOrder.orderId) {
-            entry.live = { status: 'ENTRY_FAILED', slOrderId: null, tpOrderId: null };
+        let coreResult;
+        try {
+            coreResult = await exchangeOps.placeEntry(entry.userId, {
+                symbol: entry.symbol,
+                side: entry.side,           // LONG/SHORT — exchangeOps accepts this
+                qty: coreQty,
+                entryType: 'MARKET',
+                sl: coreSlPrice ? { price: coreSlPrice } : null,
+                tp: coreTpPrice ? { price: coreTpPrice } : null,
+                leverage: entry.lev || 1,
+                decisionKey: coreDecisionKey,
+                source: 'serverAT-core',
+            });
+        } catch (coreErr) {
+            coreResult = { ok: false, error: { message: coreErr.message, code: coreErr.code || 'ErrUnknown' } };
+        }
+
+        if (!coreResult || !coreResult.ok) {
+            const coreErrMsg = (coreResult && coreResult.error && coreResult.error.message) || 'placeEntry failed';
+            if (coreResult && coreResult.catastrophic) {
+                // CATASTROPHIC — binanceOps armed halt + persisted emergency_close_queue
+                try {
+                    telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol}\nPosition CATASTROPHIC — halt armed.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
+                } catch (_) {}
+                entry.live = { status: 'LIVE_NO_SL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false };
+            } else {
+                entry.live = { status: 'ENTRY_FAILED', slOrderId: null, tpOrderId: null, error: coreErrMsg };
+            }
             return entry;
         }
 
-        const fillPrice = parseFloat(mainOrder.avgPrice || entry.entryPrice);
-        const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
-
-        // 3. Safety SL @ 15% OTM (covers retry window) — best-effort
-        let safetySlOrder = null;
-        try {
-            const safetyDist = fillPrice * 0.15;
-            const safetyPrice = entry.side === 'LONG' ? fillPrice - safetyDist : fillPrice + safetyDist;
-            safetySlOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
-                symbol: entry.symbol,
-                side: closeSide,
-                type: 'STOP_MARKET',
-                stopPrice: safetyPrice,
-                reduceOnly: true,
-                quantity: entry.qty,
-            }, creds);
-        } catch (_) { safetySlOrder = null; }
-
-        // 4. Real SL retry 3x cu user-specified price
-        let slOrder = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-                const candidate = await sendSignedRequest('POST', '/fapi/v1/order', {
-                    symbol: entry.symbol,
-                    side: closeSide,
-                    type: 'STOP_MARKET',
-                    stopPrice: entry.sl,
-                    reduceOnly: true,
-                    quantity: entry.qty,
-                }, creds);
-                if (candidate && candidate.orderId) {
-                    slOrder = candidate;
-                    break;
-                }
-            } catch (_) { /* retry */ }
-        }
-
-        // 5. SL placement failure → EMERGENCY MARKET CLOSE (preserve safety SL as backstop if emergency fails)
-        if (!slOrder || !slOrder.orderId) {
-            try {
-                await sendSignedRequest('POST', '/fapi/v1/order', {
-                    symbol: entry.symbol,
-                    side: closeSide,
-                    type: 'MARKET',
-                    quantity: entry.qty,
-                    reduceOnly: true,
-                }, creds);
-                entry.live = {
-                    status: 'EMERGENCY_CLOSED',
-                    slOrderId: null, tpOrderId: null,
-                    slPlaced: false, tpPlaced: false,
-                };
-                return entry;
-            } catch (_emgErr) {
-                // Emergency close itself failed — keep safety SL (15% OTM) as last backstop, alert user
-                try {
-                    telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${fillPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL on Binance.\nSafety SL (15% OTM) still active as backstop.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
-                } catch (_) {}
-                entry.live = {
-                    status: 'LIVE_NO_SL',
-                    slOrderId: null, tpOrderId: null,
-                    slPlaced: false, tpPlaced: false,
-                };
-                return entry;
-            }
-        }
-
-        // 6. Real SL placed — cancel safety SL (no longer needed)
-        if (safetySlOrder && safetySlOrder.orderId) {
-            try { await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol: entry.symbol, orderId: safetySlOrder.orderId }, creds); } catch (_) {}
-        }
-
-        // 7. TP placement — skip dacă entry.dslParams (DSL manages exit pe price-tick pivots)
-        let tpOrder = null;
-        if (!entry.dslParams) {
-            for (let attempt = 0; attempt < 3; attempt++) {
-                try {
-                    const candidate = await sendSignedRequest('POST', '/fapi/v1/order', {
-                        symbol: entry.symbol,
-                        side: closeSide,
-                        type: 'TAKE_PROFIT_MARKET',
-                        stopPrice: entry.tp,
-                        reduceOnly: true,
-                        quantity: entry.qty,
-                    }, creds);
-                    if (candidate && candidate.orderId) {
-                        tpOrder = candidate;
-                        break;
-                    }
-                } catch (_) { /* retry */ }
-            }
-
-            if (!tpOrder || !tpOrder.orderId) {
-                // TP failed all retries — emergency close (no native exit available)
-                try {
-                    await sendSignedRequest('POST', '/fapi/v1/order', {
-                        symbol: entry.symbol,
-                        side: closeSide,
-                        type: 'MARKET',
-                        quantity: entry.qty,
-                        reduceOnly: true,
-                    }, creds);
-                } catch (_) {}
-                entry.live = {
-                    status: 'EMERGENCY_CLOSED',
-                    slOrderId: slOrder.orderId, tpOrderId: null,
-                    slPlaced: true, tpPlaced: false,
-                };
-                return entry;
-            }
-        }
+        // [Task 40.5 result adapter] Map exchangeOps result → entry.live.*
+        const fillPrice = parseFloat(coreResult.avgFillPrice || entry.entryPrice || 0);
+        const slPlaced = !!coreResult.slOrderId;
+        const tpPlaced = !!coreResult.tpOrderId;
 
         // 8. Success — populate entry.live cu final state
         entry.live = {
-            status: 'LIVE',
-            slOrderId: slOrder.orderId,
-            tpOrderId: tpOrder ? tpOrder.orderId : null,
-            slPlaced: true,
-            tpPlaced: !!tpOrder,
+            status: slPlaced ? 'LIVE' : 'LIVE_NO_SL',
+            slOrderId: coreResult.slOrderId || null,
+            tpOrderId: coreResult.tpOrderId || null,
+            slPlaced,
+            tpPlaced,
             avgPrice: fillPrice,
-            mainOrderId: mainOrder.orderId,
+            mainOrderId: coreResult.orderId,
+            // [Task 40 dual-write bridge] opsSeq links to binanceOps at_positions row
+            opsSeq: coreResult.seq || null,
         };
+
+        if (!slPlaced) {
+            // binanceOps exhausted SL retries — alert operator
+            try {
+                telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${fillPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL.\nSafety mechanisms exhausted inside exchange router.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
+            } catch (_) {}
+        }
+
         return entry;
     } finally {
         _liveEntryLocks.delete(_lockKey);
