@@ -96,4 +96,13 @@ describe('positionEvents', () => {
         expect(events[0].ts).toBeGreaterThanOrEqual(before);
         expect(events[0].ts).toBeLessThanOrEqual(after);
     });
+
+    it('queryByPosition defaults to {} on malformed JSON payload (defensive)', () => {
+        const { db } = require('../../server/services/database');
+        // Insert raw malformed JSON to simulate corruption
+        db.prepare(`INSERT INTO position_events (position_seq, user_id, exchange, event_type, payload, ts) VALUES (?, ?, ?, ?, ?, ?)`).run(50, 1, 'binance', 'X', '{not valid json', Date.now());
+        const events = positionEvents.queryByPosition(50);
+        expect(events.length).toBe(1);
+        expect(events[0].payload).toEqual({});
+    });
 });

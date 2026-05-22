@@ -15,6 +15,17 @@
 
 const { db } = require('./database');
 
+function _parseRow(r) {
+    let payload;
+    try { payload = JSON.parse(r.payload); }
+    catch (_) {
+        // Defensive: corrupted payload string → empty object, log warning
+        try { require('./logger').warn('POSITION_EVENTS', `corrupt payload on id=${r.id}, defaulting to {}`); } catch (__) {}
+        payload = {};
+    }
+    return { ...r, payload };
+}
+
 function _validateParams(params) {
     if (!params || typeof params !== 'object') throw new Error('positionEvents.append: params object required');
     if (typeof params.position_seq !== 'number') throw new Error('positionEvents.append: position_seq required');
@@ -38,7 +49,7 @@ function append(params) {
         params.event_type, params.from_state || null, params.to_state || null,
         payloadJson, params.cycle_no || null, ts
     );
-    return result.lastInsertRowid;
+    return Number(result.lastInsertRowid);
 }
 
 const _queryByPositionStmt = db.prepare(`
@@ -48,23 +59,24 @@ const _queryByPositionStmt = db.prepare(`
     ORDER BY ts ASC, id ASC
 `);
 
+const _queryByUserStmt = db.prepare(`
+    SELECT id, position_seq, user_id, exchange, event_type, from_state, to_state, payload, cycle_no, ts
+    FROM position_events
+    WHERE user_id = ? AND ts >= ?
+    ORDER BY ts DESC, id DESC
+    LIMIT ?
+`);
+
 function queryByPosition(position_seq) {
     const rows = _queryByPositionStmt.all(position_seq);
-    return rows.map(r => ({ ...r, payload: JSON.parse(r.payload) }));
+    return rows.map(r => _parseRow(r));
 }
 
 function queryByUser(user_id, opts) {
     const limit = (opts && opts.limit) || 100;
     const since = (opts && opts.since) || 0;
-    const stmt = db.prepare(`
-        SELECT id, position_seq, user_id, exchange, event_type, from_state, to_state, payload, cycle_no, ts
-        FROM position_events
-        WHERE user_id = ? AND ts >= ?
-        ORDER BY ts DESC, id DESC
-        LIMIT ?
-    `);
-    const rows = stmt.all(user_id, since, limit);
-    return rows.map(r => ({ ...r, payload: JSON.parse(r.payload) }));
+    const rows = _queryByUserStmt.all(user_id, since, limit);
+    return rows.map(r => _parseRow(r));
 }
 
 module.exports = { append, queryByPosition, queryByUser };
