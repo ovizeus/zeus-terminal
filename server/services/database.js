@@ -9708,18 +9708,23 @@ migrate('393_bybit_exchange_columns', () => {
 
     if (!_hasColumn('at_positions', 'exchange')) {
         db.exec(`ALTER TABLE at_positions ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+        db.exec(`UPDATE at_positions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
     }
     if (!_hasColumn('at_closed', 'exchange')) {
         db.exec(`ALTER TABLE at_closed ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+        db.exec(`UPDATE at_closed SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
     }
     if (!_hasColumn('brain_decisions', 'exchange')) {
         db.exec(`ALTER TABLE brain_decisions ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+        db.exec(`UPDATE brain_decisions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
     }
     if (!_hasColumn('brain_parity_log', 'exchange')) {
         db.exec(`ALTER TABLE brain_parity_log ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+        db.exec(`UPDATE brain_parity_log SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
     }
     if (!_hasColumn('dsl_parity_log', 'exchange')) {
         db.exec(`ALTER TABLE dsl_parity_log ADD COLUMN exchange TEXT NOT NULL DEFAULT 'binance'`);
+        db.exec(`UPDATE dsl_parity_log SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
     }
     if (!_hasIndex('idx_at_positions_user_exchange_status')) {
         db.exec(`CREATE INDEX idx_at_positions_user_exchange_status ON at_positions(user_id, exchange, status)`);
@@ -9730,12 +9735,6 @@ migrate('393_bybit_exchange_columns', () => {
     if (!_hasIndex('idx_brain_decisions_user_exchange_ts')) {
         db.exec(`CREATE INDEX idx_brain_decisions_user_exchange_ts ON brain_decisions(user_id, exchange, ts)`);
     }
-    // Defensive backfill (DEFAULT covers but explicit for safety)
-    db.exec(`UPDATE at_positions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
-    db.exec(`UPDATE at_closed SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
-    db.exec(`UPDATE brain_decisions SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
-    db.exec(`UPDATE brain_parity_log SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
-    db.exec(`UPDATE dsl_parity_log SET exchange='binance' WHERE exchange IS NULL OR exchange=''`);
 });
 
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
