@@ -9831,6 +9831,17 @@ migrate('395_bybit_support_tables', () => {
     }
 });
 
+migrate('396_emergency_close_decision_key_unique', () => {
+    // [Bybit Phase 1A+1B] Idempotency + fast-lookup on emergency_close_queue.decision_key.
+    // Issue #1 from code review of migration 395 (commit 6dd7c0f).
+    // UNIQUE INDEX: prevents duplicate decision_key inserts (idempotent recovery queue).
+    // Index also makes WHERE decision_key = ? lookup O(log n) instead of O(n).
+    const _hasIndex = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
+    if (!_hasIndex('idx_emergency_close_decision_key')) {
+        db.exec(`CREATE UNIQUE INDEX idx_emergency_close_decision_key ON emergency_close_queue(decision_key)`);
+    }
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload

@@ -237,4 +237,27 @@ describe('Bybit migrations 393 — applied to live schema', () => {
             expect(r).toBeDefined();
         });
     });
+
+    describe('Migration 396 — emergency_close_queue decision_key UNIQUE INDEX', () => {
+        it('idx_emergency_close_decision_key created as UNIQUE', () => {
+            const idx = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='index' AND name='idx_emergency_close_decision_key'").get();
+            expect(idx).toBeDefined();
+            expect(idx.sql.toUpperCase()).toContain('UNIQUE');
+        });
+
+        it('duplicate decision_key insert throws', () => {
+            const dk = `test_dup_${Date.now()}`;
+            db.prepare(`INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(1, 'BTCUSDT', 'binance', '0.001', dk, Date.now());
+            expect(() => {
+                db.prepare(`INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(2, 'ETHUSDT', 'bybit', '0.002', dk, Date.now());
+            }).toThrow(/UNIQUE/);
+            // Cleanup
+            db.prepare(`DELETE FROM emergency_close_queue WHERE decision_key = ?`).run(dk);
+        });
+
+        it('migration 396 recorded in _migrations', () => {
+            const r = db.prepare("SELECT name FROM _migrations WHERE name='396_emergency_close_decision_key_unique'").get();
+            expect(r).toBeDefined();
+        });
+    });
 });
