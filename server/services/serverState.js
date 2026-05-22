@@ -21,6 +21,59 @@ const {
 const _sdMap = new Map();       // symbol (uppercase) → SD object
 let _primarySymbol = null;      // first symbol = backward compat alias
 
+// [Bybit Phase 1A] Bi-namespaced per-exchange state.
+// Existing _sdMap = Binance namespace (backward compat — all existing call sites
+// continue to work unchanged via serverState.X(symbol)).
+// _sdMap_bybit = separate per-symbol state populated by bybitFeed events (Task 22).
+const _sdMap_binance = _sdMap; // alias the existing map (same reference)
+const _sdMap_bybit = new Map();
+
+function _getStateMapForExchange(exchange) {
+    if (exchange === 'binance') return _sdMap_binance;
+    if (exchange === 'bybit') return _sdMap_bybit;
+    throw new Error(`serverState.forExchange: unknown exchange '${exchange}'`);
+}
+
+function forExchange(exchange) {
+    const map = _getStateMapForExchange(exchange);
+    return {
+        rawExchange: exchange,
+
+        getSnapshotForSymbol(symbol) {
+            const sd = map.get(symbol ? symbol.toUpperCase() : '');
+            if (!sd) return null;
+            // Return a copy with exchange marker (don't expose internal mutation)
+            return Object.assign({}, sd, { exchange });
+        },
+
+        getBarsForSymbol(symbol, tf) {
+            const sd = map.get(symbol ? symbol.toUpperCase() : '');
+            if (!sd || !sd.bars) return null;
+            return tf ? sd.bars[tf] : sd.bars;
+        },
+
+        getReadySymbols() {
+            const ready = [];
+            for (const [sym, sd] of map.entries()) {
+                if (sd && sd.price > 0 && sd.bars && Object.keys(sd.bars).length > 0) {
+                    ready.push(sym);
+                }
+            }
+            return ready;
+        },
+
+        isDataReadyForSymbol(symbol) {
+            const sd = map.get(symbol ? symbol.toUpperCase() : '');
+            return !!(sd && sd.price > 0 && sd.bars && Object.keys(sd.bars).length > 0);
+        },
+
+        _getMap() {
+            // Internal helper for Task 22 wiring (allows feed handlers to mutate the map)
+            return map;
+        },
+    };
+}
+
 const MIN_COMPUTE_INTERVAL = 2000;  // min 2s between recomputes per symbol
 
 // ── Factory: create a fresh SD for one symbol ──
@@ -318,4 +371,5 @@ module.exports = {
     getReadySymbols,         // [MULTI-SYM]
     getConfiguredSymbols,    // [MULTI-SYM]
     getBarsForSymbol,        // [BRAIN-V2] raw kline bars for structure/liquidity analysis
+    forExchange,             // [Bybit Phase 1A Task 21]
 };
