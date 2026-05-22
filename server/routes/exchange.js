@@ -10,6 +10,11 @@ const { encrypt, decrypt, maskKey } = require('../services/encryption');
 const logger = require('../services/logger');
 const serverAT = require('../services/serverAT');
 
+// Lazy require to avoid circular import: serverBrain → routes/exchange → serverBrain
+function _getServerBrain() {
+    return require('../services/serverBrain');
+}
+
 const SUPPORTED = ['binance', 'bybit'];
 
 // ─── Binance Futures key verification ───
@@ -190,6 +195,9 @@ router.post('/save', async (req, res) => {
     db.auditLog(req.user.id, 'EXCHANGE_CONNECTED', { exchange: exName, mode: safeMode, accountId, balance: balanceInfo.balance }, req.ip);
     logger.info('EXCHANGE', `User connected ${exName}`, { userId: req.user.id, mode: safeMode });
 
+    // Invalidate exchange cache so serverBrain reads fresh exchange on next cycle
+    try { _getServerBrain()._invalidateUserExchangeCache(req.user.id); } catch (_) { /* best-effort */ }
+
     // [Phase 12.A — Batch A] Push typed exchange.changed to all live sessions
     // of this user so other tabs / devices reflect the new active exchange +
     // env immediately, without waiting for the next at_update or /status poll.
@@ -227,6 +235,9 @@ router.post('/disconnect', (req, res) => {
     db.disconnectExchangeByName(req.user.id, exName);
     db.auditLog(req.user.id, 'EXCHANGE_DISCONNECTED', { exchange: exName }, req.ip);
     logger.info('EXCHANGE', `User disconnected ${exName}`, { userId: req.user.id });
+
+    // Invalidate exchange cache so serverBrain reads fresh state on next cycle
+    try { _getServerBrain()._invalidateUserExchangeCache(req.user.id); } catch (_) { /* best-effort */ }
 
     // [Phase 12.A — Batch A] Push typed exchange.changed so other sessions
     // see the disconnect (executionEnv flips to null with blockedReason).
@@ -276,6 +287,94 @@ router.post('/verify', async (req, res) => {
         db.auditLog(req.user.id, 'EXCHANGE_VERIFY_FAILED', { exchange: exName, error: err.message }, req.ip);
         res.status(400).json({ ok: false, error: err.message || 'Re-verificare eșuată — verifică cheile' });
     }
+});
+
+// ─── POST /api/exchange/switch — switch active exchange ───
+// Spec: Phase 6 Task 36
+// Flow:
+//   1. Validate targetExchange (binance|bybit) → 400 on missing/invalid
+//   2. Read current active exchange from exchange_accounts
+//   3. No-op if target === current → 200 { noOp: true }
+//   4. Check open positions in at_positions → 409 BLOCKED
+//   5. Audit EXCHANGE_SWITCH_REQUESTED
+//   6. Call serverBrain._markPendingSwitch(uid, from, to)
+//   7. Toggle is_active flags in exchange_accounts
+//   8. Return 200 { ok: true, from, to, message }
+router.post('/switch', (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'Not authenticated' });
+
+    const { targetExchange } = req.body;
+
+    // Step 1: Validate
+    if (!targetExchange || typeof targetExchange !== 'string')
+        return res.status(400).json({ ok: false, error: 'targetExchange is required' });
+    if (!SUPPORTED.includes(targetExchange))
+        return res.status(400).json({ ok: false, error: `targetExchange must be one of: ${SUPPORTED.join(', ')}` });
+
+    const uid = req.user.id;
+    const rawDb = db.db;
+
+    // Step 2: Read current active exchange
+    const currentRow = rawDb.prepare(
+        `SELECT exchange FROM exchange_accounts WHERE user_id = ? AND is_active = 1 LIMIT 1`
+    ).get(uid);
+    const currentExchange = currentRow ? currentRow.exchange : null;
+
+    // Step 3: No-op if target === current
+    if (currentExchange === targetExchange) {
+        return res.json({ ok: true, noOp: true, exchange: targetExchange });
+    }
+
+    // Step 4: Check open positions (OPEN / OPENING / CLOSING)
+    const openPos = rawDb.prepare(
+        `SELECT seq FROM at_positions WHERE user_id = ? AND status IN ('OPEN','OPENING','CLOSING') LIMIT 1`
+    ).get(uid);
+    if (openPos) {
+        rawDb.prepare(
+            `INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, 'EXCHANGE_SWITCH_BLOCKED', ?, datetime('now'))`
+        ).run(uid, JSON.stringify({ from: currentExchange, to: targetExchange, reason: 'open_positions' }));
+        return res.status(409).json({
+            ok: false,
+            code: 'OPEN_POSITIONS',
+            error: 'Cannot switch exchange: close all open positions first',
+        });
+    }
+
+    // Step 5: Audit EXCHANGE_SWITCH_REQUESTED
+    rawDb.prepare(
+        `INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, 'EXCHANGE_SWITCH_REQUESTED', ?, datetime('now'))`
+    ).run(uid, JSON.stringify({ from: currentExchange, to: targetExchange }));
+
+    // Step 6: Invoke serverBrain._markPendingSwitch (explicit barrier per spec pillar 7)
+    try {
+        _getServerBrain()._markPendingSwitch(uid, currentExchange, targetExchange);
+    } catch (err) {
+        logger.warn('EXCHANGE', `_markPendingSwitch failed uid=${uid}: ${err && err.message}`);
+    }
+
+    // Step 7: Toggle is_active flags in exchange_accounts
+    // Deactivate current (if exists)
+    if (currentExchange) {
+        rawDb.prepare(
+            `UPDATE exchange_accounts SET is_active = 0 WHERE user_id = ? AND exchange = ?`
+        ).run(uid, currentExchange);
+    }
+    // Activate target if row exists, otherwise leave for _applyPendingSwitches
+    rawDb.prepare(
+        `UPDATE exchange_accounts SET is_active = 1 WHERE user_id = ? AND exchange = ?`
+    ).run(uid, targetExchange);
+
+    // Best-effort WS broadcast
+    try { req.app.locals.broadcastExchangeChanged(uid); } catch (_) { /* WS push best-effort */ }
+
+    logger.info('EXCHANGE', `User switched ${currentExchange} → ${targetExchange}`, { userId: uid });
+
+    return res.json({
+        ok: true,
+        from: currentExchange,
+        to: targetExchange,
+        message: 'switch will apply at next brain cycle',
+    });
 });
 
 // ─── [OPS-1] Daily API key health check cron ────────────────────────
