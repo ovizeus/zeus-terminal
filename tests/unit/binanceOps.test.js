@@ -283,3 +283,147 @@ describe('binanceOps.closePosition', () => {
         expect(r.error.code).toBe('ErrLockTimeout');
     });
 });
+
+describe('binanceOps.ensureSymbolReady', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('sets leverage + margin CROSSED → returns canonical shape', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce({ leverage: 5, symbol: 'BTCUSDT' })
+            .mockResolvedValueOnce({ code: 200, msg: 'success' });
+
+        const r = await binanceOps.ensureSymbolReady(1, { symbol: 'BTCUSDT', leverage: 5, marginMode: 'CROSSED' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.leverage).toBe(5);
+        expect(r.marginMode).toBe('CROSSED');
+        expect(r.rawExchange).toBe('binance');
+    });
+
+    it('handles -4046 idempotent margin already set', async () => {
+        mockSendSignedRequest
+            .mockResolvedValueOnce({ leverage: 5 })
+            .mockResolvedValueOnce({ code: -4046, msg: 'No need to change margin type.' });
+
+        const r = await binanceOps.ensureSymbolReady(1, { symbol: 'BTCUSDT', leverage: 5, marginMode: 'CROSSED' }, _validCreds);
+        expect(r.ok).toBe(true);
+    });
+
+    it('leverage fail → ok:false', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ code: -1121, msg: 'Invalid symbol' });
+        const r = await binanceOps.ensureSymbolReady(1, { symbol: 'BADCOIN', leverage: 5, marginMode: 'CROSSED' }, _validCreds);
+        expect(r.ok).toBe(false);
+    });
+});
+
+describe('binanceOps.getPositions', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('filters zero positions + maps to canonical shape', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([
+            { symbol: 'BTCUSDT', positionAmt: '0.001', entryPrice: '50000', markPrice: '51000', unRealizedProfit: '1', leverage: '5', marginType: 'cross' },
+            { symbol: 'ETHUSDT', positionAmt: '0', entryPrice: '0' },
+            { symbol: 'SOLUSDT', positionAmt: '-0.5', entryPrice: '100', markPrice: '95', unRealizedProfit: '2.5', leverage: '10', marginType: 'isolated' },
+        ]);
+
+        const r = await binanceOps.getPositions(1, {}, _validCreds);
+        expect(r.length).toBe(2);
+        expect(r[0].symbol).toBe('BTCUSDT');
+        expect(r[0].side).toBe('LONG');
+        expect(r[0].qty).toBe('0.001');
+        expect(r[1].side).toBe('SHORT');
+        expect(r[1].qty).toBe('0.5');
+        expect(r[0].rawExchange).toBe('binance');
+    });
+
+    it('symbol filter narrows to single', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([
+            { symbol: 'BTCUSDT', positionAmt: '0.001', entryPrice: '50000' },
+            { symbol: 'ETHUSDT', positionAmt: '1', entryPrice: '2000' },
+        ]);
+        const r = await binanceOps.getPositions(1, { symbol: 'BTCUSDT' }, _validCreds);
+        expect(r.length).toBe(1);
+        expect(r[0].symbol).toBe('BTCUSDT');
+    });
+
+    it('empty list on no positions', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([]);
+        const r = await binanceOps.getPositions(1, {}, _validCreds);
+        expect(r).toEqual([]);
+    });
+});
+
+describe('binanceOps.getBalance', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('finds USDT row + canonical shape', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([
+            { asset: 'BNB', balance: '10', availableBalance: '8' },
+            { asset: 'USDT', balance: '1000', availableBalance: '950', crossUnPnl: '5' },
+        ]);
+        const r = await binanceOps.getBalance(1, _validCreds);
+        expect(r.asset).toBe('USDT');
+        expect(r.walletBalance).toBe('1000');
+        expect(r.availableBalance).toBe('950');
+        expect(r.rawExchange).toBe('binance');
+    });
+
+    it('no USDT row → zeros', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([{ asset: 'BNB', balance: '10' }]);
+        const r = await binanceOps.getBalance(1, _validCreds);
+        expect(r.walletBalance).toBe('0');
+    });
+});
+
+describe('binanceOps.ping', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('returns ok + latencyMs', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({});
+        const r = await binanceOps.ping(1, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(typeof r.latencyMs).toBe('number');
+        expect(r.rawExchange).toBe('binance');
+    });
+});
+
+describe('binanceOps.cancelOrder', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('cancels by orderId → canonical shape', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'x', status: 'CANCELED' });
+        const r = await binanceOps.cancelOrder(1, { symbol: 'BTCUSDT', orderId: 'x' }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.status).toBe('CANCELED');
+        expect(r.rawExchange).toBe('binance');
+    });
+});
+
+describe('binanceOps.placeStopLoss', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('places STOP_MARKET closePosition → returns slOrderId', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce({ orderId: 'sl_new', status: 'NEW' });
+        const r = await binanceOps.placeStopLoss(1, {
+            symbol: 'BTCUSDT', side: 'LONG', stopPrice: '49000', decisionKey: 'resl_dk_1',
+        }, _validCreds);
+        expect(r.ok).toBe(true);
+        expect(r.slOrderId).toBe('sl_new');
+        expect(r.rawExchange).toBe('binance');
+    });
+});
+
+describe('binanceOps.getUserTrades', () => {
+    beforeEach(() => mockSendSignedRequest.mockReset());
+
+    it('returns canonical trade array', async () => {
+        mockSendSignedRequest.mockResolvedValueOnce([
+            { id: '1', symbol: 'BTCUSDT', buyer: true, price: '50000', qty: '0.001', commission: '0.05', commissionAsset: 'USDT', time: 1000, realizedPnl: '0' },
+            { id: '2', symbol: 'BTCUSDT', buyer: false, price: '51000', qty: '0.001', commission: '0.05', commissionAsset: 'USDT', time: 2000, realizedPnl: '1.0' },
+        ]);
+        const r = await binanceOps.getUserTrades(1, { symbol: 'BTCUSDT', limit: 10 }, _validCreds);
+        expect(r.length).toBe(2);
+        expect(r[0].side).toBe('BUY');
+        expect(r[1].side).toBe('SELL');
+        expect(r[0].rawExchange).toBe('binance');
+    });
+});

@@ -419,19 +419,153 @@ async function closePosition(uid, params, creds) {
     }
 }
 
-function _notImpl(name) {
-    return async () => { throw new Error(`binanceOps.${name} not yet implemented`); };
+async function ensureSymbolReady(uid, params, creds) {
+    // Set leverage
+    const levResp = await sendSignedRequest('POST', '/fapi/v1/leverage', {
+        symbol: params.symbol, leverage: params.leverage, recvWindow: 5000,
+    }, creds);
+    if (levResp && levResp.code && levResp.code < 0) {
+        return { ok: false, error: canonicalErrors.translateBinance(levResp), rawExchange: 'binance' };
+    }
+
+    // Set margin mode
+    const marginMode = params.marginMode || 'CROSSED';
+    const marginResp = await sendSignedRequest('POST', '/fapi/v1/marginType', {
+        symbol: params.symbol, marginType: marginMode, recvWindow: 5000,
+    }, creds);
+    // -4046 is idempotent success ("No need to change margin type")
+    if (marginResp && marginResp.code && marginResp.code < 0 && marginResp.code !== -4046) {
+        return { ok: false, error: canonicalErrors.translateBinance(marginResp), rawExchange: 'binance' };
+    }
+
+    return {
+        ok: true,
+        leverage: params.leverage,
+        marginMode,
+        rawExchange: 'binance',
+    };
+}
+
+async function getPositions(uid, params, creds) {
+    const resp = await sendSignedRequest('GET', '/fapi/v2/positionRisk', { recvWindow: 5000 }, creds);
+    if (!Array.isArray(resp)) return [];
+
+    return resp
+        .filter(p => Math.abs(Number(p.positionAmt)) > 0)
+        .filter(p => !params || !params.symbol || p.symbol === params.symbol)
+        .map(p => {
+            const amt = Number(p.positionAmt);
+            return {
+                symbol: p.symbol,
+                side: amt > 0 ? 'LONG' : 'SHORT',
+                qty: String(Math.abs(amt)),
+                entryPrice: p.entryPrice,
+                markPrice: p.markPrice,
+                unrealizedPnl: p.unRealizedProfit,
+                leverage: p.leverage,
+                marginMode: (p.marginType || '').toUpperCase(),
+                rawExchange: 'binance',
+            };
+        });
+}
+
+async function getBalance(uid, creds) {
+    const resp = await sendSignedRequest('GET', '/fapi/v2/balance', { recvWindow: 5000 }, creds);
+    if (!Array.isArray(resp)) {
+        return { asset: 'USDT', walletBalance: '0', availableBalance: '0', totalUnrealizedPnL: '0', rawExchange: 'binance' };
+    }
+    const usdt = resp.find(r => r.asset === 'USDT');
+    if (!usdt) {
+        return { asset: 'USDT', walletBalance: '0', availableBalance: '0', totalUnrealizedPnL: '0', rawExchange: 'binance' };
+    }
+    return {
+        asset: 'USDT',
+        walletBalance: usdt.balance || '0',
+        availableBalance: usdt.availableBalance || '0',
+        totalUnrealizedPnL: usdt.crossUnPnl || '0',
+        rawExchange: 'binance',
+    };
+}
+
+async function getUserTrades(uid, params, creds) {
+    const query = { symbol: params.symbol, limit: params.limit || 100, recvWindow: 5000 };
+    if (params.startTime) query.startTime = params.startTime;
+    if (params.endTime) query.endTime = params.endTime;
+    const resp = await sendSignedRequest('GET', '/fapi/v1/userTrades', query, creds);
+    if (!Array.isArray(resp)) return [];
+    return resp.map(t => ({
+        id: String(t.id),
+        symbol: t.symbol,
+        side: t.buyer ? 'BUY' : 'SELL',
+        price: t.price,
+        qty: t.qty,
+        fee: t.commission,
+        feeAsset: t.commissionAsset,
+        ts: t.time,
+        realizedPnl: t.realizedPnl,
+        rawExchange: 'binance',
+    }));
+}
+
+async function ping(uid, creds) {
+    const t0 = Date.now();
+    try {
+        await sendSignedRequest('GET', '/fapi/v1/ping', {}, creds);
+        return { ok: true, latencyMs: Date.now() - t0, rawExchange: 'binance' };
+    } catch (err) {
+        return { ok: false, latencyMs: Date.now() - t0, error: err.message, rawExchange: 'binance' };
+    }
+}
+
+async function cancelOrder(uid, params, creds) {
+    const query = { symbol: params.symbol, recvWindow: 5000 };
+    if (params.orderId) query.orderId = params.orderId;
+    else if (params.origClientOrderId) query.origClientOrderId = params.origClientOrderId;
+
+    const resp = await sendSignedRequest('DELETE', '/fapi/v1/order', query, creds);
+    if (!resp || resp.code) {
+        return { ok: false, error: canonicalErrors.translateBinance(resp), rawExchange: 'binance' };
+    }
+    return {
+        ok: true,
+        orderId: resp.orderId,
+        status: resp.status,
+        ts: Date.now(),
+        rawExchange: 'binance',
+    };
+}
+
+async function placeStopLoss(uid, params, creds) {
+    const resp = await sendSignedRequest('POST', '/fapi/v1/order', {
+        symbol: params.symbol,
+        side: _oppositeSide(params.side),
+        type: 'STOP_MARKET',
+        stopPrice: params.stopPrice,
+        closePosition: 'true',
+        newClientOrderId: `resl_${params.decisionKey}`.slice(0, 36),
+        recvWindow: 5000,
+    }, creds);
+    if (!resp || resp.code) {
+        return { ok: false, error: canonicalErrors.translateBinance(resp), rawExchange: 'binance' };
+    }
+    return {
+        ok: true,
+        slOrderId: resp.orderId,
+        status: resp.status,
+        ts: Date.now(),
+        rawExchange: 'binance',
+    };
 }
 
 module.exports = {
     placeEntry,
-    _emergencyClose,
     closePosition,
-    ensureSymbolReady: _notImpl('ensureSymbolReady'),
-    getPositions:      _notImpl('getPositions'),
-    getBalance:        _notImpl('getBalance'),
-    getUserTrades:     _notImpl('getUserTrades'),
-    ping:              _notImpl('ping'),
-    cancelOrder:       _notImpl('cancelOrder'),
-    placeStopLoss:     _notImpl('placeStopLoss'),
+    ensureSymbolReady,
+    getPositions,
+    getBalance,
+    getUserTrades,
+    ping,
+    cancelOrder,
+    placeStopLoss,
+    _emergencyClose,
 };
