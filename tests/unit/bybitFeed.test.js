@@ -276,4 +276,160 @@ describe('bybitFeed — connection lifecycle', () => {
             bybitFeed.stop();
         });
     });
+
+    describe('trade normalization (_normalizeTrade)', () => {
+        it('normalizes Bybit V5 publicTrade message', () => {
+            const result = bybitFeed._normalizeTrade({
+                topic: 'publicTrade.BTCUSDT',
+                data: [{ T: 1672304486865, s: 'BTCUSDT', S: 'Buy', v: '0.001', p: '16578.50' }],
+            });
+            expect(result).toEqual([{
+                symbol: 'BTCUSDT', side: 'BUY', price: 16578.50, qty: 0.001, ts: 1672304486865, rawExchange: 'bybit',
+            }]);
+        });
+
+        it('maps "Sell" → SELL', () => {
+            const result = bybitFeed._normalizeTrade({
+                topic: 'publicTrade.ETHUSDT',
+                data: [{ T: 1, s: 'ETHUSDT', S: 'Sell', v: '0.5', p: '1900' }],
+            });
+            expect(result[0].side).toBe('SELL');
+        });
+
+        it('returns [] on invalid input', () => {
+            expect(bybitFeed._normalizeTrade(null)).toEqual([]);
+            expect(bybitFeed._normalizeTrade({})).toEqual([]);
+            expect(bybitFeed._normalizeTrade({ topic: 'publicTrade.BTCUSDT', data: [] })).toEqual([]);
+            expect(bybitFeed._normalizeTrade({ topic: 'publicTrade.BTCUSDT', data: [{ T: 1, S: 'Other', v: '1', p: '1' }] })).toEqual([]);
+        });
+
+        it('skips rows with invalid numeric fields', () => {
+            const result = bybitFeed._normalizeTrade({
+                topic: 'publicTrade.BTCUSDT',
+                data: [
+                    { T: 1, s: 'BTC', S: 'Buy', v: 'abc', p: '1' },
+                    { T: 2, s: 'BTC', S: 'Buy', v: '1', p: '50000' },
+                ],
+            });
+            expect(result.length).toBe(1);
+            expect(result[0].ts).toBe(2);
+        });
+    });
+
+    describe('bookTicker normalization (_normalizeBookTicker)', () => {
+        it('normalizes orderbook.1 message to canonical bookTicker', () => {
+            const result = bybitFeed._normalizeBookTicker({
+                topic: 'orderbook.1.BTCUSDT',
+                data: { s: 'BTCUSDT', b: [['16578.50', '0.5']], a: [['16578.60', '0.6']], u: 1, seq: 1 },
+                ts: 1672304484978,
+            });
+            expect(result).toEqual({
+                symbol: 'BTCUSDT', bid: 16578.50, bidQty: 0.5, ask: 16578.60, askQty: 0.6,
+                ts: 1672304484978, rawExchange: 'bybit',
+            });
+        });
+
+        it('returns null on invalid input', () => {
+            expect(bybitFeed._normalizeBookTicker(null)).toBeNull();
+            expect(bybitFeed._normalizeBookTicker({})).toBeNull();
+            expect(bybitFeed._normalizeBookTicker({ topic: 'orderbook.1.BTC', data: { b: [], a: [] } })).toBeNull();
+            expect(bybitFeed._normalizeBookTicker({ topic: 'orderbook.1.BTC', data: { b: [['x', 'y']], a: [['z', 'w']] } })).toBeNull();
+        });
+
+        it('uses Date.now() when ts missing', () => {
+            const before = Date.now();
+            const result = bybitFeed._normalizeBookTicker({
+                topic: 'orderbook.1.BTCUSDT',
+                data: { s: 'BTCUSDT', b: [['1', '1']], a: [['2', '2']] },
+            });
+            const after = Date.now();
+            expect(result.ts).toBeGreaterThanOrEqual(before);
+            expect(result.ts).toBeLessThanOrEqual(after);
+        });
+    });
+
+    describe('markPrice normalization (_normalizeMarkPrice)', () => {
+        it('normalizes tickers message to canonical markPrice', () => {
+            const result = bybitFeed._normalizeMarkPrice({
+                topic: 'tickers.BTCUSDT',
+                data: {
+                    symbol: 'BTCUSDT',
+                    markPrice: '16574.16',
+                    indexPrice: '16573.50',
+                    fundingRate: '-0.000034',
+                    nextFundingTime: '1672387200000',
+                },
+                ts: 1672304486868,
+            });
+            expect(result).toEqual({
+                symbol: 'BTCUSDT', markPrice: 16574.16, indexPrice: 16573.50,
+                fundingRate: -0.000034, nextFundingTime: 1672387200000,
+                ts: 1672304486868, rawExchange: 'bybit',
+            });
+        });
+
+        it('returns null when markPrice missing/invalid', () => {
+            expect(bybitFeed._normalizeMarkPrice(null)).toBeNull();
+            expect(bybitFeed._normalizeMarkPrice({})).toBeNull();
+            expect(bybitFeed._normalizeMarkPrice({ topic: 'tickers.BTC', data: {} })).toBeNull();
+            expect(bybitFeed._normalizeMarkPrice({ topic: 'tickers.BTC', data: { markPrice: 'NaN' } })).toBeNull();
+        });
+
+        it('handles partial updates (only markPrice present, no funding)', () => {
+            const result = bybitFeed._normalizeMarkPrice({
+                topic: 'tickers.ETHUSDT',
+                data: { symbol: 'ETHUSDT', markPrice: '1900.5' },
+                ts: 999,
+            });
+            expect(result.markPrice).toBe(1900.5);
+            expect(result.indexPrice).toBeNull();
+            expect(result.fundingRate).toBeNull();
+        });
+    });
+
+    describe('event dispatch for new topics', () => {
+        it('emits "trade" event on publicTrade message', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            const events = [];
+            bybitFeed.on('trade', d => events.push(d));
+            bybitFeed._dispatchMessage({
+                topic: 'publicTrade.BTCUSDT',
+                data: [{ T: 1, s: 'BTC', S: 'Buy', v: '1', p: '50000' }],
+            });
+            expect(events.length).toBe(1);
+            expect(events[0].side).toBe('BUY');
+            bybitFeed.stop();
+        });
+
+        it('emits "bookTicker" event on orderbook.1 message', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            const events = [];
+            bybitFeed.on('bookTicker', d => events.push(d));
+            bybitFeed._dispatchMessage({
+                topic: 'orderbook.1.BTCUSDT',
+                data: { s: 'BTC', b: [['1', '1']], a: [['2', '2']] },
+                ts: 5,
+            });
+            expect(events.length).toBe(1);
+            expect(events[0].bid).toBe(1);
+            bybitFeed.stop();
+        });
+
+        it('emits "markPrice" event on tickers message', async () => {
+            bybitFeed.start();
+            await new Promise(r => setTimeout(r, 50));
+            const events = [];
+            bybitFeed.on('markPrice', d => events.push(d));
+            bybitFeed._dispatchMessage({
+                topic: 'tickers.BTCUSDT',
+                data: { symbol: 'BTC', markPrice: '1.5' },
+                ts: 5,
+            });
+            expect(events.length).toBe(1);
+            expect(events[0].markPrice).toBe(1.5);
+            bybitFeed.stop();
+        });
+    });
 });

@@ -135,6 +135,75 @@ function _normalizeKline(msg) {
     return out;
 }
 
+// [Task 16] Trade normalizer — Bybit publicTrade → canonical
+function _normalizeTrade(msg) {
+    if (!msg || !Array.isArray(msg.data) || msg.data.length === 0) return [];
+    if (typeof msg.topic !== 'string' || !msg.topic.startsWith('publicTrade.')) return [];
+    const symbol = msg.topic.split('.')[1];
+    if (!symbol) return [];
+    const out = [];
+    for (const t of msg.data) {
+        if (!t) continue;
+        if (t.S !== 'Buy' && t.S !== 'Sell') continue;
+        const price = parseFloat(t.p);
+        const qty = parseFloat(t.v);
+        const ts = Number(t.T);
+        if (!Number.isFinite(price) || !Number.isFinite(qty) || !Number.isFinite(ts)) continue;
+        out.push({
+            symbol,
+            side: t.S === 'Buy' ? 'BUY' : 'SELL',
+            price, qty, ts,
+            rawExchange: 'bybit',
+        });
+    }
+    return out;
+}
+
+// [Task 16] BookTicker normalizer — orderbook.1 → canonical
+function _normalizeBookTicker(msg) {
+    if (!msg || !msg.data) return null;
+    if (typeof msg.topic !== 'string' || !msg.topic.startsWith('orderbook.1.')) return null;
+    const symbol = msg.topic.split('.')[2];
+    const d = msg.data;
+    if (!Array.isArray(d.b) || !Array.isArray(d.a) || d.b.length === 0 || d.a.length === 0) return null;
+    if (!Array.isArray(d.b[0]) || !Array.isArray(d.a[0])) return null;
+    const bid = parseFloat(d.b[0][0]);
+    const bidQty = parseFloat(d.b[0][1]);
+    const ask = parseFloat(d.a[0][0]);
+    const askQty = parseFloat(d.a[0][1]);
+    if (!Number.isFinite(bid) || !Number.isFinite(ask)) return null;
+    return {
+        symbol,
+        bid, bidQty: Number.isFinite(bidQty) ? bidQty : 0,
+        ask, askQty: Number.isFinite(askQty) ? askQty : 0,
+        ts: Number.isFinite(msg.ts) ? Number(msg.ts) : Date.now(),
+        rawExchange: 'bybit',
+    };
+}
+
+// [Task 16] MarkPrice normalizer — tickers → canonical (covers markPrice + funding)
+function _normalizeMarkPrice(msg) {
+    if (!msg || !msg.data) return null;
+    if (typeof msg.topic !== 'string' || !msg.topic.startsWith('tickers.')) return null;
+    const symbol = msg.topic.split('.')[1] || msg.data.symbol;
+    const d = msg.data;
+    const markPrice = parseFloat(d.markPrice);
+    if (!Number.isFinite(markPrice)) return null;
+    const _parseOpt = (v) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) ? n : null;
+    };
+    return {
+        symbol: symbol || d.symbol,
+        markPrice,
+        indexPrice: _parseOpt(d.indexPrice),
+        fundingRate: _parseOpt(d.fundingRate),
+        nextFundingTime: _parseOpt(d.nextFundingTime),
+        ts: Number.isFinite(msg.ts) ? Number(msg.ts) : Date.now(),
+        rawExchange: 'bybit',
+    };
+}
+
 function _connect() {
     if (_closing) return;
     try {
@@ -187,12 +256,9 @@ function _connect() {
 
 function _dispatchMessage(msg) {
     if (!msg) return;
-    // Handle pong (no-op acknowledge)
     if (msg.op === 'pong') return;
-    // Handle subscribe ack (no-op for now; Task 17 wires per-topic retry)
     if (msg.op === 'subscribe') return;
 
-    // Topic-based dispatch
     if (typeof msg.topic === 'string') {
         if (msg.topic.startsWith('kline.')) {
             const normalized = _normalizeKline(msg);
@@ -202,7 +268,30 @@ function _dispatchMessage(msg) {
             }
             return;
         }
-        // trade, tickers, orderbook handled in Task 16
+        if (msg.topic.startsWith('publicTrade.')) {
+            const trades = _normalizeTrade(msg);
+            for (const t of trades) {
+                _emitter.emit('trade', t);
+                _eventsEmitted++;
+            }
+            return;
+        }
+        if (msg.topic.startsWith('orderbook.1.')) {
+            const bt = _normalizeBookTicker(msg);
+            if (bt) {
+                _emitter.emit('bookTicker', bt);
+                _eventsEmitted++;
+            }
+            return;
+        }
+        if (msg.topic.startsWith('tickers.')) {
+            const mp = _normalizeMarkPrice(msg);
+            if (mp) {
+                _emitter.emit('markPrice', mp);
+                _eventsEmitted++;
+            }
+            return;
+        }
     }
 }
 
@@ -265,4 +354,7 @@ module.exports = {
     _sendSubscribeBatches,
     _buildTopics,
     _normalizeKline,
+    _normalizeTrade,
+    _normalizeBookTicker,
+    _normalizeMarkPrice,
 };
