@@ -99,6 +99,42 @@ function _sendSubscribeBatches() {
     }
 }
 
+// [Task 15] Kline normalizer — Bybit V5 → canonical shape
+// Bybit interval values: '1','3','5','15','30','60','120','240','360','720','D','M','W'
+// We use only 5/60/240 (5m/1h/4h) per Zeus SD_TIMEFRAMES
+const _INTERVAL_TO_TF = Object.freeze({ '5': '5m', '60': '1h', '240': '4h' });
+
+function _normalizeKline(msg) {
+    if (!msg || !msg.topic || !Array.isArray(msg.data) || msg.data.length === 0) return [];
+    if (!msg.topic.startsWith('kline.')) return [];
+    // Topic format: kline.{interval}.{symbol}
+    const parts = msg.topic.split('.');
+    if (parts.length !== 3) return [];
+    const symbol = parts[2];
+    const out = [];
+    for (const k of msg.data) {
+        if (!k) continue;
+        const interval = String(k.interval != null ? k.interval : parts[1]);
+        const tf = _INTERVAL_TO_TF[interval];
+        if (!tf) continue;
+        const open = parseFloat(k.open);
+        const high = parseFloat(k.high);
+        const low = parseFloat(k.low);
+        const close = parseFloat(k.close);
+        const volume = parseFloat(k.volume);
+        const ts = Number(k.start);
+        if (!Number.isFinite(open) || !Number.isFinite(close) || !Number.isFinite(ts)) continue;
+        out.push({
+            symbol, tf,
+            open, high, low, close, volume,
+            ts,
+            confirmed: !!k.confirm,
+            rawExchange: 'bybit',
+        });
+    }
+    return out;
+}
+
 function _connect() {
     if (_closing) return;
     try {
@@ -150,9 +186,24 @@ function _connect() {
 }
 
 function _dispatchMessage(msg) {
-    // Topic dispatcher — Tasks 14-17 wire kline/trade/bookTicker/markPrice
-    // Handle pong here (no-op acknowledge)
-    if (msg && msg.op === 'pong') return;
+    if (!msg) return;
+    // Handle pong (no-op acknowledge)
+    if (msg.op === 'pong') return;
+    // Handle subscribe ack (no-op for now; Task 17 wires per-topic retry)
+    if (msg.op === 'subscribe') return;
+
+    // Topic-based dispatch
+    if (typeof msg.topic === 'string') {
+        if (msg.topic.startsWith('kline.')) {
+            const normalized = _normalizeKline(msg);
+            for (const k of normalized) {
+                _emitter.emit('kline', k);
+                _eventsEmitted++;
+            }
+            return;
+        }
+        // trade, tickers, orderbook handled in Task 16
+    }
 }
 
 function start() {
@@ -213,4 +264,5 @@ module.exports = {
     _dispatchMessage,
     _sendSubscribeBatches,
     _buildTopics,
+    _normalizeKline,
 };
