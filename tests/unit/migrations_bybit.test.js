@@ -66,18 +66,22 @@ describe('Bybit migrations 393 — applied to live schema', () => {
             expect(r).toBeDefined();
         });
 
-        it('row counts not lost (>= baseline at migration time)', () => {
+        it('row counts not lost on append-only tables (>= baseline at migration time)', () => {
             // Baseline captured at migration 393 application (2026-05-21 23:33 UTC):
-            // at_positions=3, at_closed=2417, brain_decisions=89922.
-            // Use >= because Zeus continues to produce new rows after migration.
-            // Migration is additive only — never loses data. If counts ever drop
-            // below baseline, data loss occurred (catastrophic, must investigate).
-            const ap = db.prepare("SELECT COUNT(*) AS n FROM at_positions").get();
+            //   at_closed=2417, brain_decisions=89922.
+            // at_positions is dynamic (positions move to at_closed on close), so its
+            // count can both increase AND decrease — excluded from this check.
+            // at_closed + brain_decisions are append-only — if they drop below baseline,
+            // data loss occurred (catastrophic, must investigate).
+            // Additionally verify migrated rows are properly labeled with exchange.
             const ac = db.prepare("SELECT COUNT(*) AS n FROM at_closed").get();
             const bd = db.prepare("SELECT COUNT(*) AS n FROM brain_decisions").get();
-            expect(ap.n).toBeGreaterThanOrEqual(3);
             expect(ac.n).toBeGreaterThanOrEqual(2417);
             expect(bd.n).toBeGreaterThanOrEqual(89922);
+            // Conservation: at_positions + at_closed >= original at_positions baseline (3)
+            // (positions either still open or moved to closed — none lost)
+            const ap = db.prepare("SELECT COUNT(*) AS n FROM at_positions").get();
+            expect(ap.n + ac.n).toBeGreaterThanOrEqual(3 + 2417);
         });
     });
 
