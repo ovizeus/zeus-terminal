@@ -7,6 +7,8 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config');
 const { sendSignedRequest } = require('../services/binanceSigner');
+const exchangeOps = require('../services/exchangeOps');
+const decisionKeyService = require('../services/decisionKey');
 const { validateOrder, recordClosedPnL } = require('../services/riskGuard');
 const { roundOrderParams } = require('../services/exchangeInfo');
 const { validateOrderBody, validateCancelBody, validateLeverageBody, validateSettingsBody } = require('../middleware/validate');
@@ -557,14 +559,16 @@ router.post('/order/cancel', validateCancelBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  const { symbol, orderId } = req.body;
   try {
-    const data = await sendSignedRequest('DELETE', '/fapi/v1/order', {
-      symbol: req.body.symbol,
-      orderId: req.body.orderId,
-    }, req.exchangeCreds);
-    res.json({ orderId: data.orderId, status: data.status });
+    const result = await exchangeOps.cancelOrder(req.user.id, { symbol, orderId });
+    if (!result.ok) {
+      return res.status(400).json({ ok: false, error: result.error });
+    }
+    res.json({ orderId: result.orderId, status: result.status });
   } catch (err) {
     console.error('[API] order/cancel error:', err.message);
+    logger.error('ORDER', 'cancel failed', { symbol, orderId, error: err.message });
     res.status(err.status || 500).json({ error: _safeError(err) });
   }
 });
@@ -956,6 +960,8 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
 
 // ─── POST /api/manual/protection ── Set or update SL/TP for a manual live position ───
 // Handles cancel-old + place-new atomically. Type: 'STOP_MARKET' or 'TAKE_PROFIT_MARKET'
+// Task 37: SL placement + cancel-old route through exchangeOps (exchange-aware).
+// TP placement retains direct Binance algo path (no exchangeOps.placeTakeProfit yet).
 router.post('/manual/protection', validateOrderBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
@@ -963,35 +969,49 @@ router.post('/manual/protection', validateOrderBody, async (req, res) => {
   const { symbol, side, type, quantity, stopPrice, cancelOrderId } = req.body;
   try {
     // Cancel existing protection order if provided
-    // [ALGO-FIX] Try algo cancel first (SL/TP are now algo orders), then regular
+    // Route through exchangeOps.cancelOrder so Bybit users are handled correctly.
+    // [ALGO-FIX] For Binance: binanceOps.cancelOrder tries algo cancel first, then regular.
     if (cancelOrderId) {
-      let cancelled = false;
       try {
-        await sendSignedRequest('DELETE', '/fapi/v1/algoOrder', { symbol, algoId: String(cancelOrderId) }, req.exchangeCreds);
-        cancelled = true;
-      } catch (_algoErr) {
-        const _am = _algoErr.message || '';
-        if (_am.includes('not found') || _am.includes('Unknown') || _am.includes('not active')) {
-          // Not an algo order — try regular
-        } else if (_am.includes('2011') || _am.includes('already')) {
-          cancelled = true; // already gone
+        const cancelResult = await exchangeOps.cancelOrder(req.user.id, { symbol, orderId: String(cancelOrderId) });
+        if (cancelResult.ok) {
+          logger.info('ORDER', `Cancelled old protection ${cancelOrderId} for ${symbol}`);
         }
-      }
-      if (!cancelled) {
-        try {
-          await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol, orderId: String(cancelOrderId) }, req.exchangeCreds);
-          cancelled = true;
-        } catch (cancelErr) {
-          if (cancelErr.message && (cancelErr.message.includes('Unknown order') || cancelErr.message.includes('UNKNOWN_ORDER'))) {
-            cancelled = true; // already gone
-          } else {
-            throw cancelErr;
-          }
+        // If !ok but "already gone" — tolerate silently (same behaviour as before)
+      } catch (_cancelErr) {
+        const _cm = _cancelErr.message || '';
+        if (!_cm.includes('Unknown order') && !_cm.includes('UNKNOWN_ORDER') &&
+            !_cm.includes('not found') && !_cm.includes('not active') &&
+            !_cm.includes('already')) {
+          throw _cancelErr;
         }
+        // Already gone — proceed
       }
-      if (cancelled) logger.info('ORDER', `Cancelled old protection ${cancelOrderId} for ${symbol}`);
     }
-    // [ALGO-FIX] Place new protection order via algo endpoint
+
+    // ── SL placement via exchangeOps (Task 37) ──
+    if (type === 'STOP_MARKET' || type === 'STOP_LOSS') {
+      const dk = req.body.decisionKey || decisionKeyService.generate();
+      const result = await exchangeOps.placeStopLoss(req.user.id, {
+        symbol, side, stopPrice, decisionKey: dk,
+      });
+      if (!result.ok) {
+        return res.status(400).json({ ok: false, error: result.error });
+      }
+      logger.info('ORDER', `MANUAL SL SET ${symbol} triggerPrice=${stopPrice} orderId=${result.slOrderId}`);
+      audit.record('PROTECTION_SET', { userId: req.user.id, symbol, type: 'SL', stopPrice, orderId: result.slOrderId }, 'MANUAL', req.ip);
+      return res.json({
+        orderId: result.slOrderId,
+        status: result.status || 'NEW',
+        type: type,
+        stopPrice: parseFloat(stopPrice),
+        symbol,
+        side,
+        rawExchange: result.rawExchange,
+      });
+    }
+
+    // ── TP placement — Binance algo path (no exchangeOps.placeTakeProfit yet) ──
     const _rounded = roundOrderParams(symbol, parseFloat(quantity), parseFloat(stopPrice));
     const algoParams = {
       algoType: 'CONDITIONAL',
