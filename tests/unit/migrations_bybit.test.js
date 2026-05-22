@@ -143,4 +143,98 @@ describe('Bybit migrations 393 — applied to live schema', () => {
             db.prepare(`DELETE FROM position_events WHERE position_seq = 99999`).run();
         });
     });
+
+    describe('Migration 395 — bybit support tables', () => {
+        describe('at_positions_orphaned', () => {
+            it('table exists', () => {
+                const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='at_positions_orphaned'").get();
+                expect(row).toBeDefined();
+            });
+
+            it('has required columns', () => {
+                const cols = db.prepare("PRAGMA table_info(at_positions_orphaned)").all();
+                const names = cols.map(c => c.name);
+                expect(names).toEqual(expect.arrayContaining([
+                    'seq', 'original_at_positions_seq', 'user_id', 'exchange',
+                    'data', 'disconnected_at', 'resolved_at', 'resolved_by'
+                ]));
+            });
+
+            it('idx_orphaned_user_exchange created', () => {
+                const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_orphaned_user_exchange'").get();
+                expect(idx).toBeDefined();
+            });
+        });
+
+        describe('emergency_close_queue', () => {
+            it('table exists', () => {
+                const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='emergency_close_queue'").get();
+                expect(row).toBeDefined();
+            });
+
+            it('has required columns', () => {
+                const cols = db.prepare("PRAGMA table_info(emergency_close_queue)").all();
+                const names = cols.map(c => c.name);
+                expect(names).toEqual(expect.arrayContaining([
+                    'id', 'user_id', 'symbol', 'exchange', 'qty',
+                    'decision_key', 'created_at', 'resolved_at', 'resolved_by'
+                ]));
+            });
+
+            it('idx_emergency_close_unresolved created', () => {
+                const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_emergency_close_unresolved'").get();
+                expect(idx).toBeDefined();
+            });
+
+            it('can insert + query a task row (smoke)', () => {
+                const decisionKey = `test_smoke_${Date.now()}`;
+                const insert = db.prepare(`INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(1, 'BTCUSDT', 'binance', '0.001', decisionKey, Date.now());
+                expect(insert.lastInsertRowid).toBeGreaterThan(0);
+                const row = db.prepare(`SELECT * FROM emergency_close_queue WHERE decision_key = ?`).get(decisionKey);
+                expect(row.symbol).toBe('BTCUSDT');
+                expect(row.exchange).toBe('binance');
+                // Cleanup smoke row
+                db.prepare(`DELETE FROM emergency_close_queue WHERE decision_key = ?`).run(decisionKey);
+            });
+        });
+
+        describe('bybit_rate_state', () => {
+            it('table exists', () => {
+                const row = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bybit_rate_state'").get();
+                expect(row).toBeDefined();
+            });
+
+            it('has required columns', () => {
+                const cols = db.prepare("PRAGMA table_info(bybit_rate_state)").all();
+                const names = cols.map(c => c.name);
+                expect(names).toEqual(expect.arrayContaining([
+                    'id', 'user_id', 'used_weight', 'reset_at', 'banned_until',
+                    'ban_reason', 'last_request_at'
+                ]));
+            });
+
+            it('idx_bybit_rate_state_user is UNIQUE', () => {
+                const idx = db.prepare("SELECT name, sql FROM sqlite_master WHERE type='index' AND name='idx_bybit_rate_state_user'").get();
+                expect(idx).toBeDefined();
+                expect(idx.sql.toUpperCase()).toContain('UNIQUE');
+            });
+
+            it('used_weight DEFAULT 0', () => {
+                const cols = db.prepare("PRAGMA table_info(bybit_rate_state)").all();
+                const col = cols.find(c => c.name === 'used_weight');
+                expect(String(col.dflt_value)).toBe('0');
+            });
+
+            it('banned_until DEFAULT 0', () => {
+                const cols = db.prepare("PRAGMA table_info(bybit_rate_state)").all();
+                const col = cols.find(c => c.name === 'banned_until');
+                expect(String(col.dflt_value)).toBe('0');
+            });
+        });
+
+        it('migration 395 recorded in _migrations table', () => {
+            const r = db.prepare("SELECT name FROM _migrations WHERE name='395_bybit_support_tables'").get();
+            expect(r).toBeDefined();
+        });
+    });
 });

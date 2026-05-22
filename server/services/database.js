@@ -9768,6 +9768,69 @@ migrate('394_position_events_table', () => {
     }
 });
 
+migrate('395_bybit_support_tables', () => {
+    // [Bybit Phase 1A+1B] Support tables:
+    //   - at_positions_orphaned: positions left after exchange disconnect
+    //   - emergency_close_queue: catastrophic close failure persistence (manual resolve)
+    //   - bybit_rate_state: DB-persistent rate limit tracking per user
+    const _hasTable = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(name);
+    const _hasIndex = (name) => !!db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name=?").get(name);
+
+    if (!_hasTable('at_positions_orphaned')) {
+        db.exec(`
+            CREATE TABLE at_positions_orphaned (
+                seq INTEGER PRIMARY KEY,
+                original_at_positions_seq INTEGER,
+                user_id INTEGER NOT NULL,
+                exchange TEXT NOT NULL,
+                data TEXT NOT NULL,
+                disconnected_at INTEGER NOT NULL,
+                resolved_at INTEGER,
+                resolved_by TEXT
+            )
+        `);
+    }
+    if (!_hasIndex('idx_orphaned_user_exchange')) {
+        db.exec(`CREATE INDEX idx_orphaned_user_exchange ON at_positions_orphaned(user_id, exchange, disconnected_at)`);
+    }
+
+    if (!_hasTable('emergency_close_queue')) {
+        db.exec(`
+            CREATE TABLE emergency_close_queue (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                symbol TEXT NOT NULL,
+                exchange TEXT NOT NULL,
+                qty TEXT NOT NULL,
+                decision_key TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                resolved_at INTEGER,
+                resolved_by TEXT
+            )
+        `);
+    }
+    if (!_hasIndex('idx_emergency_close_unresolved')) {
+        db.exec(`CREATE INDEX idx_emergency_close_unresolved ON emergency_close_queue(user_id, resolved_at)`);
+    }
+
+    if (!_hasTable('bybit_rate_state')) {
+        db.exec(`
+            CREATE TABLE bybit_rate_state (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                used_weight INTEGER NOT NULL DEFAULT 0,
+                reset_at INTEGER NOT NULL,
+                banned_until INTEGER NOT NULL DEFAULT 0,
+                ban_reason TEXT,
+                last_request_at INTEGER NOT NULL
+            )
+        `);
+    }
+    if (!_hasIndex('idx_bybit_rate_state_user')) {
+        db.exec(`CREATE UNIQUE INDEX idx_bybit_rate_state_user ON bybit_rate_state(user_id)`);
+    }
+});
+
 // [Wave 6] R4 Execution — DB-backed idempotency ledger for exactly-once
 // order semantics. Cross-restart guarantee: in-memory _idempotencyCache in
 // trading.js stays as fast path; this ledger backs it up so PM2 reload
