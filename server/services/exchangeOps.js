@@ -76,7 +76,10 @@ async function closePosition(uid, params) {
 }
 
 async function ensureSymbolReady(uid, params) {
-    const key = `${uid}|${params.symbol}`;
+    // Fix #9: Cache key includes exchange to prevent cross-exchange cache hits
+    // (e.g. a Binance user's BTCUSDT readiness should not satisfy a Bybit user's)
+    const { ops, creds } = _resolveOps(uid);
+    const key = `${uid}|${params.symbol}|${creds.exchange}`;
     const cached = _readyCache.get(key);
     const now = Date.now();
     const cacheHit = cached
@@ -86,7 +89,6 @@ async function ensureSymbolReady(uid, params) {
     if (cacheHit) {
         return { ok: true, leverage: params.leverage, marginMode: params.marginMode, cached: true };
     }
-    const { ops, creds } = _resolveOps(uid);
     const r = await ops.ensureSymbolReady(uid, params, creds);
     if (r && r.ok) {
         _readyCache.set(key, { leverage: r.leverage, marginMode: r.marginMode, ts: now });
@@ -95,18 +97,21 @@ async function ensureSymbolReady(uid, params) {
 }
 
 function invalidateReady(uid, symbol) {
-    _readyCache.delete(`${uid}|${symbol}`);
+    // Fix #9: Clear all exchange variants of this uid+symbol cache entry
+    const prefix = `${uid}|${symbol}|`;
+    for (const k of _readyCache.keys()) {
+        if (k.startsWith(prefix)) _readyCache.delete(k);
+    }
 }
 
 async function getPositions(uid, params) {
     if (params && params.exchangeOverride) {
-        const ops = params.exchangeOverride === 'bybit' ? require('./bybitOps') : require('./binanceOps');
-        // For override, still resolve creds (may need exchange-specific creds — credentialStore handles)
-        let creds;
-        try { creds = credentialStore.getExchangeCreds(uid, { exchangeOverride: params.exchangeOverride }); } catch (_) {
-            creds = credentialStore.getExchangeCreds(uid);
-        }
-        return ops.getPositions(uid, params, creds);
+        // Fix #11: credentialStore.getExchangeCreds doesn't accept a 2nd arg.
+        // Resolve ops directly by override exchange name, get base creds, override exchange field.
+        const exchange = params.exchangeOverride;
+        const ops = exchange === 'bybit' ? require('./bybitOps') : require('./binanceOps');
+        const creds = credentialStore.getExchangeCreds(uid);
+        return ops.getPositions(uid, params, { ...creds, exchange });
     }
     const { ops, creds } = _resolveOps(uid);
     return ops.getPositions(uid, params, creds);

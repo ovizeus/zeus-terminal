@@ -142,9 +142,11 @@ async function _reconcileUser(uid, exchange) {
             const slOrderId = dbPos.parsedData.slOrderId;
             if (!slOrderId && dbPos.status === 'OPEN') {
                 // No SL recorded — attempt to place one
-                const stopPrice = exchPos.side === 'SHORT'
-                    ? String(Number(exchPos.entryPrice) * 1.05)
-                    : String(Number(exchPos.entryPrice) * 0.95);
+                // Fix #12: Round stopPrice to 2dp to satisfy exchange tick size filter
+                const rawStop = exchPos.side === 'SHORT'
+                    ? Number(exchPos.entryPrice) * 1.05
+                    : Number(exchPos.entryPrice) * 0.95;
+                const stopPrice = String(Math.round(rawStop * 100) / 100);
 
                 try {
                     const slResult = await exchangeOps.placeStopLoss(uid, {

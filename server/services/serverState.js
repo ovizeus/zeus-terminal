@@ -250,6 +250,18 @@ function _createBybitSD(symbol) {
         markPrice: null,
         indexPrice: null,
         bars: {},   // tf → bar[]  (forExchange accessor uses sd.bars[tf])
+        // Fix #1: Brain checks `if (!snap.indicators) continue` — without this field
+        // all Bybit symbols are skipped. Initialize as null; populated by _recomputeBybitIndicators.
+        indicators: null,
+        rsi: {},
+        adx: null,
+        atr: null,
+        klines: {},          // alias for bars — _recomputeIndicators reads sd.klines[tf]
+        chartTf: '5m',
+        lastUpdate: 0,
+        lastKlineClose: {},
+        mtfIndicators: {},
+        _lastComputeTs: 0,
     };
 }
 
@@ -262,18 +274,30 @@ function _onKlineBybit(data) {
         _sdMap_bybit.set(sym, sd);
     }
     if (!sd.bars[data.tf]) sd.bars[data.tf] = [];
+    // Fix #1 cont'd: keep klines in sync with bars (klines is the alias _recomputeIndicators reads)
+    if (!sd.klines[data.tf]) sd.klines[data.tf] = sd.bars[data.tf];
     const arr = sd.bars[data.tf];
     const last = arr.length > 0 ? arr[arr.length - 1] : null;
-    if (last && last.ts === data.ts) {
+    // Fix #13: Use 'time' key (matching Binance convention) so indicator computation
+    // and brain logic see a consistent bar shape across exchanges.
+    if (last && last.time === data.ts) {
         // Update existing bar (same timestamp = live candle update)
         last.close = data.close;
         last.high = Math.max(last.high, data.high);
         last.low = Math.min(last.low, data.low);
         last.volume = data.volume;
     } else {
-        arr.push({ ts: data.ts, open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume });
+        arr.push({ time: data.ts, open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume });
         // Cap buffer at 500 candles (matches Binance 1000-candle pattern, halved for bybit)
         if (arr.length > 500) arr.shift();
+    }
+    // Fix #1 cont'd: Trigger indicator recomputation after kline update (same as Binance path).
+    // Throttled to MIN_COMPUTE_INTERVAL to avoid excessive computation.
+    if (arr.length >= 30) {
+        const now = Date.now();
+        if (now - sd._lastComputeTs > MIN_COMPUTE_INTERVAL) {
+            _recomputeIndicators(sd, data.tf);
+        }
     }
 }
 

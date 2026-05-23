@@ -646,22 +646,19 @@ function setMode(userId, mode) {
 
     _persistState(userId);
 
-    // [LIVE-PARITY] Auto-init liveBalanceRef from Binance on live mode switch (non-blocking)
+    // [LIVE-PARITY] Auto-init liveBalanceRef on live mode switch (non-blocking)
+    // [Fix #10] Use exchangeOps.getBalance (exchange-aware) instead of Binance-only sendSignedRequest
     if (mode === 'live' && us.liveBalanceRef <= 0) {
-        const creds = getExchangeCreds(userId);
-        if (creds) {
-            sendSignedRequest('GET', '/fapi/v2/balance', {}, creds).then(balances => {
-                const usdtBal = balances.find(b => b.asset === 'USDT');
-                const total = usdtBal ? parseFloat(usdtBal.balance || 0) : 0;
-                if (total > 0) {
-                    us.liveBalanceRef = total;
-                    _persistState(userId);
-                    logger.info('AT_ENGINE', `Kill switch auto-init uid=${userId}: liveBalanceRef=$${total.toFixed(2)}`);
-                }
-            }).catch(err => {
-                logger.warn('AT_ENGINE', `Kill switch auto-init failed uid=${userId}: ${err.message} — liveBalanceRef stays at $${us.liveBalanceRef}`);
-            });
-        }
+        exchangeOps.getBalance(userId).then(bal => {
+            const total = parseFloat(bal.walletBalance || 0);
+            if (total > 0) {
+                us.liveBalanceRef = total;
+                _persistState(userId);
+                logger.info('AT_ENGINE', `Kill switch auto-init uid=${userId}: liveBalanceRef=$${total.toFixed(2)}`);
+            }
+        }).catch(err => {
+            logger.warn('AT_ENGINE', `Kill switch auto-init failed uid=${userId}: ${err.message} — liveBalanceRef stays at $${us.liveBalanceRef}`);
+        });
     }
 
     logger.info('AT_ENGINE', `Mode changed uid=${userId}: ${oldMode} → ${mode}`);
@@ -1629,61 +1626,74 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     // [FIX-EXPIRY] EXPIRED handling removed — no code path produces EXPIRED anymore
     if (exitType === 'HIT_SL') {
         // SL triggered on exchange — cancel remaining TP
-        if (pos.live.tpOrderId) await _cancelOrderSafe(pos.symbol, pos.live.tpOrderId, creds, userId);
+        // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
+        if (pos.live.tpOrderId) {
+            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.tpOrderId }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
+        }
         // Query real fill price from SL order (best-effort — corrects slippage)
+        // [Fix #6] Guard by exchange: Binance-only algoOrder/order query. Bybit deferred to Phase 2.
         if (pos.live.slOrderId) {
-            try {
-                // [ALGO-FIX] Try algo order query first (SL is now algo), fallback to regular
-                let slOrder;
+            const userExchange = creds && creds.exchange;
+            if (userExchange === 'binance' || !userExchange) {
                 try {
-                    slOrder = await sendSignedRequest('GET', '/fapi/v1/algoOrder', { algoId: pos.live.slOrderId }, creds);
-                } catch (_) {
-                    slOrder = await sendSignedRequest('GET', '/fapi/v1/order', { symbol: pos.symbol, orderId: pos.live.slOrderId }, creds);
-                }
-                const realFill = parseFloat(slOrder.avgPrice || slOrder.executedPrice || 0);
-                const slStatus = slOrder.status || slOrder.algoStatus || '';
-                // [TM-5] Defensive `pos.price > 0` guard added — prevents
-                // div-by-zero NaN propagation in PnL formula below if pos.price
-                // ever fell to 0/NaN through corrupt state. realFill guard
-                // already in place; pos.price guard is defensive belt-and-braces.
-                if (Number.isFinite(realFill) && realFill > 0 && pos.price > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
-                    // Exit slippage tracking
-                    const expectedExitPrice = pos.sl;
-                    const exitSlippage = realFill - expectedExitPrice;
-                    const exitSlippagePct = expectedExitPrice > 0 ? +((exitSlippage / expectedExitPrice) * 100).toFixed(4) : 0;
-                    pos.live.exitSlippage = exitSlippage;
-                    pos.live.exitSlippagePct = exitSlippagePct;
-                    pos.live.exitFillPrice = realFill;
-                    pos.live.exitExpectedPrice = expectedExitPrice;
-
-                    // [TM-4] Apply round-trip fee deduction to terminal PnL.
-                    // Gross PnL overstated by ~0.08% (entry+exit fees on notional).
-                    const _grossPnl = pos.side === 'LONG'
-                        ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                        : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
-                    const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
-                    if (realPnl !== pos.closePnl) {
-                        const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
-                        logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
-                        pos.closePnl = realPnl;
-                        pnl = realPnl;
-                        // Correct stats with delta from slippage
-                        const _us = _uState(userId);
-                        _us.stats.pnl = +(_us.stats.pnl + pnlDelta).toFixed(2);
-                        _us.liveStats.pnl = +(_us.liveStats.pnl + pnlDelta).toFixed(2);
-                        _us.dailyPnL = +(_us.dailyPnL + pnlDelta).toFixed(2);
-                        _us.dailyPnLLive = +(_us.dailyPnLLive + pnlDelta).toFixed(2);
-                        _persistState(userId);
-                        _persistClose(pos);
+                    // [ALGO-FIX] Try algo order query first (SL is now algo), fallback to regular
+                    let slOrder;
+                    try {
+                        slOrder = await sendSignedRequest('GET', '/fapi/v1/algoOrder', { algoId: pos.live.slOrderId }, creds);
+                    } catch (_) {
+                        slOrder = await sendSignedRequest('GET', '/fapi/v1/order', { symbol: pos.symbol, orderId: pos.live.slOrderId }, creds);
                     }
+                    const realFill = parseFloat(slOrder.avgPrice || slOrder.executedPrice || 0);
+                    const slStatus = slOrder.status || slOrder.algoStatus || '';
+                    // [TM-5] Defensive `pos.price > 0` guard added — prevents
+                    // div-by-zero NaN propagation in PnL formula below if pos.price
+                    // ever fell to 0/NaN through corrupt state. realFill guard
+                    // already in place; pos.price guard is defensive belt-and-braces.
+                    if (Number.isFinite(realFill) && realFill > 0 && pos.price > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
+                        // Exit slippage tracking
+                        const expectedExitPrice = pos.sl;
+                        const exitSlippage = realFill - expectedExitPrice;
+                        const exitSlippagePct = expectedExitPrice > 0 ? +((exitSlippage / expectedExitPrice) * 100).toFixed(4) : 0;
+                        pos.live.exitSlippage = exitSlippage;
+                        pos.live.exitSlippagePct = exitSlippagePct;
+                        pos.live.exitFillPrice = realFill;
+                        pos.live.exitExpectedPrice = expectedExitPrice;
+
+                        // [TM-4] Apply round-trip fee deduction to terminal PnL.
+                        // Gross PnL overstated by ~0.08% (entry+exit fees on notional).
+                        const _grossPnl = pos.side === 'LONG'
+                            ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                            : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                        const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
+                        if (realPnl !== pos.closePnl) {
+                            const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
+                            logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
+                            pos.closePnl = realPnl;
+                            pnl = realPnl;
+                            // Correct stats with delta from slippage
+                            const _us = _uState(userId);
+                            _us.stats.pnl = +(_us.stats.pnl + pnlDelta).toFixed(2);
+                            _us.liveStats.pnl = +(_us.liveStats.pnl + pnlDelta).toFixed(2);
+                            _us.dailyPnL = +(_us.dailyPnL + pnlDelta).toFixed(2);
+                            _us.dailyPnLLive = +(_us.dailyPnLLive + pnlDelta).toFixed(2);
+                            _persistState(userId);
+                            _persistClose(pos);
+                        }
+                    }
+                } catch (slErr) {
+                    logger.warn('AT_LIVE', `[${pos.seq}] SL fill query failed: ${slErr.message}`);
                 }
-            } catch (slErr) {
-                logger.warn('AT_LIVE', `[${pos.seq}] SL fill query failed: ${slErr.message}`);
+            } else {
+                // Bybit slippage correction deferred to Phase 2
+                logger.info('AT_LIVE_EXIT', `SL fill price query skipped for ${userExchange} user=${userId} — deferred to Phase 2`);
             }
         }
     } else if (exitType === 'HIT_TP') {
         // TP triggered on exchange — cancel remaining SL
-        if (pos.live.slOrderId) await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds, userId);
+        // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
+        if (pos.live.slOrderId) {
+            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.slOrderId }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
+        }
     } else {
         // All other exit types: DSL_PL, DSL_TTP, MANUAL_CLIENT, RESET, RECON_PHANTOM, etc.
 
@@ -1752,8 +1762,11 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
             // Note: SL+TP cancel already handled inside exchangeOps.closePosition — no manual loop needed
         } else if (exitType === 'RECON_PHANTOM' || exitType === 'RECON_EXCHANGE_CLOSED') {
             // Recon exits: position already gone on exchange — cancel orphan SL+TP protection orders only
+            // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
             for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
-                if (oid) await _cancelOrderSafe(pos.symbol, oid, creds, userId);
+                if (oid) {
+                    try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: oid }); } catch (_) { /* warn only */ }
+                }
             }
         }
     }

@@ -187,7 +187,7 @@ async function placeEntry(uid, params, creds) {
                             `INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, 'binance', ?, ?, ?)`
                         ).run(uid, params.symbol, params.qty, params.decisionKey, Date.now());
                     } catch (_) {}
-                    try { require('./serverAT').setGlobalHalt(uid, true, 'EMERGENCY_CLOSE_CATASTROPHIC'); } catch (_) {}
+                    try { require('./serverAT').setGlobalHalt(true, uid, 'EMERGENCY_CLOSE_CATASTROPHIC'); } catch (_) {}
                     try { require('./telegram').alertCritical(uid, `CATASTROPHIC: ${params.symbol} position cannot close on Binance. Manual intervention NOW.`); } catch (_) {}
 
                     return {
@@ -313,11 +313,17 @@ async function closePosition(uid, params, creds) {
         let positionData;
         try { positionData = JSON.parse(row.data); } catch (_) { positionData = {}; }
 
-        // State OPEN→CLOSING
-        positionStateMachine.transition(params.seq, 'OPEN', 'CLOSING', {
-            decisionKey: params.decisionKey,
-            source: params.source,
-        });
+        // State OPEN→CLOSING (Fix #4: handle CLOSING retry — if state is already
+        // CLOSING from a prior failed attempt, skip transition and proceed with close)
+        const currentState = row.status;
+        if (currentState === 'OPEN') {
+            positionStateMachine.transition(params.seq, 'OPEN', 'CLOSING', {
+                decisionKey: params.decisionKey,
+                source: params.source,
+            });
+        } else if (currentState !== 'CLOSING') {
+            throw canonicalErrors.create('ErrNotFound', `unexpected state ${currentState} for close`);
+        }
 
         // Cancel SL + TP (parallel, non-blocking on failure)
         const cancelTasks = [];
@@ -388,7 +394,7 @@ async function closePosition(uid, params, creds) {
         try {
             const closedData = { ...positionData, closeOrderId: closeResp.orderId, closePrice: closeResp.avgPrice, source: params.source };
             db.prepare(
-                `INSERT INTO at_closed (seq, data, status, user_id, exchange, created_at, updated_at) VALUES (?, ?, 'CLOSED', ?, 'binance', datetime('now'), datetime('now'))`
+                `INSERT INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'binance')`
             ).run(params.seq, JSON.stringify(closedData), uid);
             db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
         } catch (moveErr) {
@@ -495,6 +501,7 @@ async function getUserTrades(uid, params, creds) {
     if (!Array.isArray(resp)) return [];
     return resp.map(t => ({
         id: String(t.id),
+        orderId: String(t.orderId || ''),  // Fix #14: include orderId for pnlReconCron matching
         symbol: t.symbol,
         side: t.buyer ? 'BUY' : 'SELL',
         price: t.price,

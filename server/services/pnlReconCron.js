@@ -9,7 +9,7 @@ async function reconcileUser(uid) {
     // Get recent closed positions from at_closed (last 24h)
     const oneDayAgo = Date.now() - 86400000;
     const closed = db.prepare(
-        `SELECT seq, data, user_id, exchange FROM at_closed WHERE user_id = ? AND created_at > datetime(?, 'unixepoch')`
+        `SELECT seq, data, user_id, exchange FROM at_closed WHERE user_id = ? AND closed_at > datetime(?, 'unixepoch')`
     ).all(uid, Math.floor(oneDayAgo / 1000));
 
     if (closed.length === 0) return { uid, checked: 0, mismatches: 0 };
@@ -31,8 +31,12 @@ async function reconcileUser(uid) {
             const closeOrderId = data.closeOrderId || data.exitOrderId;
             if (!closeOrderId) continue;
 
+            // Fix #14: Trade matching by orderId (canonical field from getUserTrades)
+            // plus symbol + time proximity fallback. Execution IDs (t.id) are NOT
+            // order IDs — comparing them directly causes false mismatches.
             const matchingTrade = trades.find(t =>
-                t.id === closeOrderId || t.orderId === closeOrderId
+                t.orderId === closeOrderId ||
+                (t.symbol === data.symbol && data.closeTs && Math.abs(t.ts - data.closeTs) < 60000)
             );
 
             if (!matchingTrade && trades.length > 0) {

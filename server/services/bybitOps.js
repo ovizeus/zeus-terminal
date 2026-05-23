@@ -111,7 +111,7 @@ async function placeEntry(uid, params, creds) {
     const insertResult = db.prepare(
         `INSERT INTO at_positions (data, status, user_id, exchange) VALUES (?, 'PENDING', ?, 'bybit')`
     ).run(JSON.stringify(positionData), uid);
-    const seq = insertResult.lastInsertRowid;
+    const seq = Number(insertResult.lastInsertRowid);
     positionEvents.append({
         position_seq: seq, user_id: uid, exchange: 'bybit',
         event_type: 'CREATED', to_state: 'PENDING',
@@ -190,7 +190,7 @@ async function placeEntry(uid, params, creds) {
                     try {
                         db.prepare(`INSERT INTO emergency_close_queue (user_id, symbol, exchange, qty, decision_key, created_at) VALUES (?, ?, 'bybit', ?, ?, ?)`).run(uid, params.symbol, params.qty, params.decisionKey, Date.now());
                     } catch (_) {}
-                    try { require('./serverAT').setGlobalHalt(uid, true, 'EMERGENCY_CLOSE_CATASTROPHIC'); } catch (_) {}
+                    try { require('./serverAT').setGlobalHalt(true, uid, 'EMERGENCY_CLOSE_CATASTROPHIC'); } catch (_) {}
                     try { require('./telegram').alertCritical(uid, `CATASTROPHIC Bybit ${params.symbol}: position cannot close. Manual intervention NOW.`); } catch (_) {}
                     return { ok: false, error: canonicalErrors.create('ErrSlPlacementFailed', 'SL retry exhausted, emergency close FAILED'), catastrophic: true, seq };
                 }
@@ -270,7 +270,14 @@ async function closePosition(uid, params, creds) {
         let positionData;
         try { positionData = JSON.parse(row.data); } catch (_) { positionData = {}; }
 
-        positionStateMachine.transition(params.seq, 'OPEN', 'CLOSING', { decisionKey: params.decisionKey, source: params.source });
+        // Fix #4: Handle CLOSING retry — if state is already CLOSING (retry after
+        // exchange call failure), skip transition. Only transition from OPEN.
+        const currentState = row.status;
+        if (currentState === 'OPEN') {
+            positionStateMachine.transition(params.seq, 'OPEN', 'CLOSING', { decisionKey: params.decisionKey, source: params.source });
+        } else if (currentState !== 'CLOSING') {
+            throw canonicalErrors.create('ErrNotFound', `unexpected state ${currentState} for close`);
+        }
 
         const cancelTasks = [];
         if (positionData.slOrderId) {
@@ -324,7 +331,7 @@ async function closePosition(uid, params, creds) {
 
         try {
             const closedData = { ...positionData, closeOrderId: closeResp.result.orderId, closePrice: closeResp.result.avgPrice, source: params.source };
-            db.prepare(`INSERT INTO at_closed (seq, data, status, user_id, exchange) VALUES (?, ?, 'CLOSED', ?, 'bybit')`).run(params.seq, JSON.stringify(closedData), uid);
+            db.prepare(`INSERT INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'bybit')`).run(params.seq, JSON.stringify(closedData), uid);
             db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
         } catch (_) {}
 
@@ -427,6 +434,7 @@ async function getUserTrades(uid, params, creds) {
     if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list)) return [];
     return resp.result.list.map(t => ({
         id: String(t.execId),
+        orderId: String(t.orderId || ''),  // Fix #14: include orderId for pnlReconCron matching
         symbol: t.symbol,
         side: t.side === 'Buy' ? 'BUY' : 'SELL',
         price: t.execPrice,
