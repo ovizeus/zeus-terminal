@@ -9,6 +9,8 @@ const db = require('../services/database');
 const { encrypt, decrypt, maskKey } = require('../services/encryption');
 const logger = require('../services/logger');
 const serverAT = require('../services/serverAT');
+const positionEvents = require('../services/positionEvents');
+const exchangeOps = require('../services/exchangeOps');
 
 // Lazy require to avoid circular import: serverBrain → routes/exchange → serverBrain
 function _getServerBrain() {
@@ -204,8 +206,26 @@ router.post('/save', async (req, res) => {
     // Best-effort: never blocks the response.
     try { req.app.locals.broadcastExchangeChanged(req.user.id); } catch (_) { /* WS push best-effort */ }
 
+    // [Task 50] After successful save for Bybit: fire-and-forget initial recon
+    // to detect any pre-existing open positions on the exchange.
+    if (exName === 'bybit') {
+        setImmediate(async () => {
+            try {
+                const positions = await exchangeOps.getPositions(req.user.id, {});
+                if (positions && positions.length > 0) {
+                    db.auditLog(req.user.id, 'INITIAL_RECON_POSITIONS_FOUND', {
+                        count: positions.length,
+                        positions: positions.map(p => ({ symbol: p.symbol, side: p.side, qty: p.qty })),
+                    });
+                    logger.info('EXCHANGE', `Initial recon found ${positions.length} existing positions`, { userId: req.user.id });
+                }
+            } catch (_) { /* best-effort — never block save response */ }
+        });
+    }
+
     res.json({
         ok: true,
+        verified: true,
         exchange: exName,
         mode: safeMode,
         maskedKey: maskKey(cleanKey),
@@ -216,34 +236,76 @@ router.post('/save', async (req, res) => {
 });
 
 // ─── POST /api/exchange/disconnect — disconnect a specific exchange ───
+// [Task 48] Checks DB for open positions before disconnecting → 409 if blocked.
+// [Task 49] force=true bypasses block by orphaning open positions first.
 router.post('/disconnect', (req, res) => {
     if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'Not authenticated' });
 
-    const { exchange } = req.body;
+    const { exchange, force } = req.body;
     const exName = SUPPORTED.includes(exchange) ? exchange : null;
+    const uid = req.user.id;
 
     if (!exName) return res.status(400).json({ ok: false, error: 'Exchange invalid' });
 
-    const account = db.getExchangeByName(req.user.id, exName);
+    const account = db.getExchangeByName(uid, exName);
     if (!account) return res.status(404).json({ ok: false, error: `Nicio conexiune ${exName} activă` });
 
-    // Block if open live positions backed by this exchange
-    const livePos = serverAT.getOpenPositions(req.user.id).filter(p => p.mode === 'live' && (p.exchange || 'binance') === exName);
-    if (livePos.length > 0)
-        return res.json({ ok: false, error: `Nu poți deconecta ${exName}: ${livePos.length} poziții deschise. Închide-le mai întâi.` });
+    // [Task 48] Query DB for open positions on this exchange
+    const rawDb = db.db;
+    const openPositions = rawDb.prepare(
+        `SELECT seq, data, status, user_id, exchange FROM at_positions
+         WHERE user_id = ? AND exchange = ? AND status IN ('OPEN','OPENING','CLOSING')`
+    ).all(uid, exName);
 
-    db.disconnectExchangeByName(req.user.id, exName);
-    db.auditLog(req.user.id, 'EXCHANGE_DISCONNECTED', { exchange: exName }, req.ip);
-    logger.info('EXCHANGE', `User disconnected ${exName}`, { userId: req.user.id });
+    if (openPositions.length > 0) {
+        if (force !== true) {
+            // [Task 48] Block with 409 + positions list
+            return res.status(409).json({
+                ok: false,
+                error: `Cannot disconnect with open positions`,
+                positions: openPositions,
+            });
+        }
+
+        // [Task 49] force=true: orphan all open positions, then proceed
+        for (const pos of openPositions) {
+            rawDb.prepare(
+                `INSERT INTO at_positions_orphaned
+                    (original_at_positions_seq, user_id, exchange, data, disconnected_at)
+                 VALUES (?, ?, ?, ?, ?)`
+            ).run(pos.seq, uid, exName, pos.data || '{}', Date.now());
+
+            rawDb.prepare(`DELETE FROM at_positions WHERE seq = ?`).run(pos.seq);
+
+            try {
+                positionEvents.append({
+                    position_seq: pos.seq,
+                    user_id: uid,
+                    exchange: exName,
+                    event_type: 'ORPHANED_BY_DISCONNECT',
+                    payload: { forced: true, status: pos.status },
+                });
+            } catch (_) { /* best-effort — position_events may not be in all test envs */ }
+        }
+
+        db.auditLog(uid, 'EXCHANGE_POSITIONS_ORPHANED', {
+            exchange: exName, count: openPositions.length, forced: true,
+        }, req.ip);
+        logger.info('EXCHANGE', `Orphaned ${openPositions.length} positions on forced disconnect`, { userId: uid });
+    }
+
+    db.disconnectExchangeByName(uid, exName);
+    db.auditLog(uid, 'EXCHANGE_DISCONNECTED', { exchange: exName }, req.ip);
+    logger.info('EXCHANGE', `User disconnected ${exName}`, { userId: uid });
 
     // Invalidate exchange cache so serverBrain reads fresh state on next cycle
-    try { _getServerBrain()._invalidateUserExchangeCache(req.user.id); } catch (_) { /* best-effort */ }
+    try { _getServerBrain()._invalidateUserExchangeCache(uid); } catch (_) { /* best-effort */ }
 
     // [Phase 12.A — Batch A] Push typed exchange.changed so other sessions
     // see the disconnect (executionEnv flips to null with blockedReason).
-    try { req.app.locals.broadcastExchangeChanged(req.user.id); } catch (_) { /* WS push best-effort */ }
+    try { req.app.locals.broadcastExchangeChanged(uid); } catch (_) { /* WS push best-effort */ }
 
-    res.json({ ok: true });
+    res.json({ ok: true, orphaned: openPositions.length });
 });
 
 // ─── POST /api/exchange/verify — re-verify a specific exchange ───
