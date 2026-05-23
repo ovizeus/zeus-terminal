@@ -173,8 +173,25 @@ function stopOrphanSweep() {
 
 function _unsubscribeSymbolReal(symbol) {
     const sym = String(symbol).toUpperCase();
-    // Close WS streams for this symbol (kline_*, markPrice@1s, bookTicker, trade, aggTrade)
     const symLower = sym.toLowerCase();
+
+    // Remove from combined stream — send UNSUBSCRIBE for each stream key
+    const combinedKeys = Array.from(_combinedHandlers.keys()).filter(k => k.startsWith(symLower + '@'));
+    for (const key of combinedKeys) {
+        _combinedHandlers.delete(key);
+        if (_combinedWs?.readyState === WebSocket.OPEN) {
+            _combinedWs.send(JSON.stringify({
+                method: 'UNSUBSCRIBE',
+                params: [key],
+                id: Date.now(),
+            }));
+        }
+    }
+    if (combinedKeys.length > 0) {
+        logger.info('FEED', `[combined] unsubscribed ${combinedKeys.length} streams for ${sym}`);
+    }
+
+    // Also clean up any legacy individual streams (backward compat)
     for (const key of Object.keys(_streams)) {
         if (key.startsWith(symLower + '@')) {
             const entry = _streams[key];
@@ -271,7 +288,106 @@ async function fetchOpenInterest(symbol) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// WebSocket — Stream manager with auto-reconnect
+// WebSocket — Combined stream (single TCP connection for all streams)
+// Binance best practice: wss://fstream.binance.com/stream?streams=a@trade/b@bookTicker/...
+// Reduces 8+ individual connections to 1, preventing 429 rate-limit bans.
+// ══════════════════════════════════════════════════════════════════
+const _combinedHandlers = new Map();  // streamName → onMessage handler
+let _combinedWs = null;
+let _combinedReconnects = 0;
+let _combinedTimer = null;
+let _combinedPending = [];  // streams queued before WS opens
+
+function _connectCombinedStream() {
+    if (_combinedWs?.readyState === WebSocket.OPEN || _combinedWs?.readyState === WebSocket.CONNECTING) return;
+
+    const streams = Array.from(_combinedHandlers.keys());
+    if (streams.length === 0) return;
+
+    const url = `${BINANCE_WS.replace('/ws', '')}/stream?streams=${streams.join('/')}`;
+
+    try {
+        const ws = new WebSocket(url);
+        _combinedWs = ws;
+
+        ws.on('open', () => {
+            _combinedReconnects = 0;
+            logger.info('FEED', `Combined stream connected: ${streams.length} streams in 1 connection`);
+
+            if (_combinedTimer) clearInterval(_combinedTimer);
+            _combinedTimer = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) ws.ping();
+            }, PING_INTERVAL_MS);
+
+            // Process any pending subscriptions added while connecting
+            for (const pending of _combinedPending) {
+                ws.send(JSON.stringify({ method: 'SUBSCRIBE', params: [pending], id: Date.now() }));
+                logger.info('FEED', `Stream connected: ${pending} (added to combined)`);
+            }
+            _combinedPending = [];
+        });
+
+        ws.on('message', (raw) => {
+            try {
+                const msg = JSON.parse(raw.toString());
+                // Combined stream format: { stream: "btcusdt@trade", data: {...} }
+                if (msg.stream && msg.data) {
+                    const handler = _combinedHandlers.get(msg.stream);
+                    if (handler) handler(msg.data);
+                }
+                // Some messages come unwrapped (pong, subscribe ack, etc.) — ignore
+            } catch (_) {}
+        });
+
+        ws.on('pong', () => {});
+
+        ws.on('close', () => {
+            if (_combinedTimer) { clearInterval(_combinedTimer); _combinedTimer = null; }
+            _combinedReconnects++;
+            const delay = Math.min(RECONNECT_MS * Math.pow(2, _combinedReconnects - 1), MAX_RECONNECT_MS);
+            logger.warn('FEED', `Combined stream closed, reconnecting in ${delay}ms (attempt ${_combinedReconnects}, ${_combinedHandlers.size} streams)`);
+            _combinedWs = null;
+            setTimeout(() => _connectCombinedStream(), delay);
+        });
+
+        ws.on('error', (err) => {
+            logger.error('FEED', `Combined stream error:`, err.message);
+            if (_combinedReconnects >= 3) Sentry.captureException(err, { tags: { module: 'marketFeed', stream: 'combined', reconnects: _combinedReconnects } });
+            ws.close();
+        });
+    } catch (err) {
+        logger.error('FEED', `Failed to create combined WS:`, err.message);
+        _combinedReconnects++;
+        const delay = Math.min(RECONNECT_MS * Math.pow(2, _combinedReconnects), MAX_RECONNECT_MS);
+        setTimeout(() => _connectCombinedStream(), delay);
+    }
+}
+
+function _addToCombinedStream(streamName, onMessage) {
+    _combinedHandlers.set(streamName, onMessage);
+
+    if (_combinedWs?.readyState === WebSocket.OPEN) {
+        // WS already open — subscribe dynamically via Binance runtime subscribe
+        _combinedWs.send(JSON.stringify({
+            method: 'SUBSCRIBE',
+            params: [streamName],
+            id: Date.now(),
+        }));
+        logger.info('FEED', `Stream connected: ${streamName} (added to combined)`);
+    } else if (!_combinedWs || _combinedWs.readyState === WebSocket.CLOSED) {
+        // No WS yet — will be included in URL on next connect
+        _combinedPending.push(streamName);
+        _connectCombinedStream();
+    } else {
+        // WS connecting — queue for post-open
+        _combinedPending.push(streamName);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WebSocket — Individual stream manager (kept for backward compat,
+// e.g. liquidationFeed standalone WS). New subscriptions use
+// _addToCombinedStream above.
 // ══════════════════════════════════════════════════════════════════
 function _connectStream(streamName, onMessage) {
     const key = streamName;
@@ -468,8 +584,8 @@ async function subscribe(symbol, timeframes) {
             _altStartKlinePoller(symUpper, tf);
         }
 
-        // 4a) bookTicker stream → mid price emit
-        _connectStream(`${symLower}@bookTicker`, (data) => {
+        // 4a) bookTicker stream → mid price emit (via combined WS)
+        _addToCombinedStream(`${symLower}@bookTicker`, (data) => {
             const bid = +data.b, ask = +data.a;
             if (bid > 0 && ask > 0) {
                 const mid = (bid + ask) / 2;
@@ -477,8 +593,8 @@ async function subscribe(symbol, timeframes) {
             }
         });
 
-        // 5a) raw trade stream → aggTrade-shape emit (p, q, m, T identical)
-        _connectStream(`${symLower}@trade`, (data) => {
+        // 5a) raw trade stream → aggTrade-shape emit (via combined WS)
+        _addToCombinedStream(`${symLower}@trade`, (data) => {
             _emit('aggTrade', {
                 symbol: symUpper,
                 price: +data.p,
@@ -488,9 +604,9 @@ async function subscribe(symbol, timeframes) {
             });
         });
     } else {
-        // 3) Connect kline WebSocket streams
+        // 3) Connect kline WebSocket streams (via combined WS)
         for (const tf of _timeframes) {
-            _connectStream(`${symLower}@kline_${tf}`, (data) => {
+            _addToCombinedStream(`${symLower}@kline_${tf}`, (data) => {
                 if (data.e !== 'kline' || !data.k) return;
                 const k = data.k;
                 const bar = {
@@ -508,14 +624,14 @@ async function subscribe(symbol, timeframes) {
             });
         }
 
-        // 4) Connect mark price stream (includes funding rate updates)
-        _connectStream(`${symLower}@markPrice@1s`, (data) => {
+        // 4) Connect mark price stream (via combined WS)
+        _addToCombinedStream(`${symLower}@markPrice@1s`, (data) => {
             if (data.p) _emit('price', { symbol: symUpper, price: +data.p });
             if (data.r) _emit('fundingRate', { symbol: symUpper, rate: +data.r });
         });
 
-        // 5) [BRAIN-V2] Connect aggTrade stream for order flow analysis
-        _connectStream(`${symLower}@aggTrade`, (data) => {
+        // 5) [BRAIN-V2] aggTrade stream for order flow analysis (via combined WS)
+        _addToCombinedStream(`${symLower}@aggTrade`, (data) => {
             _emit('aggTrade', {
                 symbol: symUpper,
                 price: +data.p,
@@ -551,6 +667,20 @@ async function subscribeMultiWithBootRef(symbols, timeframes) {
 // Unsubscribe — close all streams
 // ══════════════════════════════════════════════════════════════════
 function unsubscribeAll() {
+    // Close combined stream
+    if (_combinedWs) {
+        try { _combinedWs.removeAllListeners(); } catch (_) {}
+        if (_combinedWs.readyState === WebSocket.OPEN) {
+            try { _combinedWs.close(); } catch (_) {}
+        }
+        _combinedWs = null;
+    }
+    _combinedHandlers.clear();
+    _combinedPending = [];
+    if (_combinedTimer) { clearInterval(_combinedTimer); _combinedTimer = null; }
+    _combinedReconnects = 0;
+
+    // Close any legacy individual streams
     for (const key of Object.keys(_streams)) {
         const entry = _streams[key];
         if (entry.timer) clearInterval(entry.timer);
@@ -562,7 +692,7 @@ function unsubscribeAll() {
     }
     _activeSymbols.clear();  // [MULTI-SYM]
     _timeframes = [];
-    logger.info('FEED', 'All streams closed');
+    logger.info('FEED', 'All streams closed (combined + individual)');
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -583,6 +713,12 @@ function getHealth() {
         timeframes: _timeframes,
         streamCount: Object.keys(_streams).length,
         streams,
+        combinedStream: {
+            connected: _combinedWs?.readyState === WebSocket.OPEN,
+            streamCount: _combinedHandlers.size,
+            reconnects: _combinedReconnects,
+            streams: Array.from(_combinedHandlers.keys()),
+        },
     };
 }
 
@@ -607,6 +743,8 @@ function getPollerStats() {
         altKlinePollersCount: Object.keys(_altKlinePollers).length,
         altKlinePollerKeys: Object.keys(_altKlinePollers),
         wsStreamsCount: Object.keys(_streams).length,
+        combinedStreamCount: _combinedHandlers.size,
+        combinedConnected: _combinedWs?.readyState === WebSocket.OPEN,
         timeframes: _timeframes.slice(),
         symbolRefs,
         symbolRefsTotal: Object.values(symbolRefs).reduce((s, n) => s + n, 0),
