@@ -3,11 +3,9 @@
 /**
  * bybitOps — Bybit V5 unified API canonical wrap.
  *
- * BYBIT_DRY_RUN_ONLY=true throughout — uses buildSignedRequestDryRun which
- * validates creds + flag + builds the request, but does NOT send.
- * Synthetic responses (test-injected via _enqueueSynthetic) simulate what
- * Bybit would return. Production path returns synthetic OK responses too
- * (Phase 1A scope; Phase 1E spec adds real sendSignedRequestLive).
+ * Phase 1E: BYBIT_DRY_RUN_ONLY=false. Uses sendSignedRequest (real HTTP send).
+ * Tests inject synthetic responses via _enqueueSynthetic / _resetSyntheticQueue;
+ * _dispatchRequest drains the queue first so unit tests remain fully isolated.
  *
  * Mirrors binanceOps interface exactly. Returns canonical shapes with
  * rawExchange:'bybit'. All endpoints use category:'linear', positionIdx:0
@@ -38,16 +36,12 @@ function _resetSyntheticQueue() {
     _syntheticQueue.length = 0;
 }
 
-async function _dispatchDryRun(method, path, params, creds) {
-    // Validate signing + flag via buildSignedRequestDryRun
-    bybitSigner.buildSignedRequestDryRun(method, path, params, creds);
-    // Return synthetic response (test-injected or production default OK)
+async function _dispatchRequest(method, path, params, creds) {
+    // In test environment, use synthetic queue if available
     if (_syntheticQueue.length > 0) {
         return _syntheticQueue.shift();
     }
-    // Production default during Phase 1A: synthetic OK (the order would have been sent
-    // if flag were lowered; we report success but no real exchange interaction occurred)
-    return { retCode: 0, retMsg: 'OK_DRY_RUN_SYNTHETIC', result: {} };
+    return bybitSigner.sendSignedRequest(method, path, params, creds);
 }
 
 function _isOk(resp) {
@@ -65,7 +59,7 @@ async function _emergencyClose(uid, params, creds, seq) {
     const closeSide = _oppositeBybitSide(params.side);
     for (let i = 0; i < EMERGENCY_RETRIES; i++) {
         try {
-            const resp = await _dispatchDryRun('POST', '/v5/order/create', {
+            const resp = await _dispatchRequest('POST', '/v5/order/create', {
                 category: 'linear',
                 symbol: params.symbol,
                 side: closeSide,
@@ -133,7 +127,7 @@ async function placeEntry(uid, params, creds) {
             entryBody.price = params.entryPrice;
         }
 
-        const entryResp = await _dispatchDryRun('POST', '/v5/order/create', entryBody, creds);
+        const entryResp = await _dispatchRequest('POST', '/v5/order/create', entryBody, creds);
         if (!_isOk(entryResp)) {
             const err = bybitSigner.parseBybitError(entryResp) || canonicalErrors.create('ErrUnknown', 'entry rejected');
             positionStateMachine.transition(seq, 'PENDING', 'CANCELLED', { reason: 'ENTRY_REJECTED', err });
@@ -152,7 +146,7 @@ async function placeEntry(uid, params, creds) {
             for (let i = 0; i < SL_RETRIES; i++) {
                 try {
                     // For LONG: SL is Sell with triggerDirection=2 (falling). For SHORT: Buy + triggerDirection=1.
-                    const slResp = await _dispatchDryRun('POST', '/v5/order/create', {
+                    const slResp = await _dispatchRequest('POST', '/v5/order/create', {
                         category: 'linear',
                         symbol: params.symbol,
                         side: _oppositeBybitSide(params.side),
@@ -202,7 +196,7 @@ async function placeEntry(uid, params, creds) {
         let tpOrderId = null;
         if (params.tp && params.tp.price) {
             try {
-                const tpResp = await _dispatchDryRun('POST', '/v5/order/create', {
+                const tpResp = await _dispatchRequest('POST', '/v5/order/create', {
                     category: 'linear',
                     symbol: params.symbol,
                     side: _oppositeBybitSide(params.side),
@@ -282,12 +276,12 @@ async function closePosition(uid, params, creds) {
         const cancelTasks = [];
         if (positionData.slOrderId) {
             cancelTasks.push(
-                _dispatchDryRun('POST', '/v5/order/cancel', { category: 'linear', symbol: params.symbol, orderId: positionData.slOrderId }, creds).catch(() => {})
+                _dispatchRequest('POST', '/v5/order/cancel', { category: 'linear', symbol: params.symbol, orderId: positionData.slOrderId }, creds).catch(() => {})
             );
         }
         if (positionData.tpOrderId) {
             cancelTasks.push(
-                _dispatchDryRun('POST', '/v5/order/cancel', { category: 'linear', symbol: params.symbol, orderId: positionData.tpOrderId }, creds).catch(() => {})
+                _dispatchRequest('POST', '/v5/order/cancel', { category: 'linear', symbol: params.symbol, orderId: positionData.tpOrderId }, creds).catch(() => {})
             );
         }
         if (cancelTasks.length > 0) {
@@ -299,7 +293,7 @@ async function closePosition(uid, params, creds) {
             });
         }
 
-        const closeResp = await _dispatchDryRun('POST', '/v5/order/create', {
+        const closeResp = await _dispatchRequest('POST', '/v5/order/create', {
             category: 'linear',
             symbol: params.symbol,
             side: _oppositeBybitSide(params.side),
@@ -359,7 +353,7 @@ async function closePosition(uid, params, creds) {
 
 async function ensureSymbolReady(uid, params, creds) {
     // 1. Set leverage
-    const levResp = await _dispatchDryRun('POST', '/v5/position/set-leverage', {
+    const levResp = await _dispatchRequest('POST', '/v5/position/set-leverage', {
         category: 'linear', symbol: params.symbol,
         buyLeverage: String(params.leverage), sellLeverage: String(params.leverage),
     }, creds);
@@ -368,7 +362,7 @@ async function ensureSymbolReady(uid, params, creds) {
     }
 
     // 2. Switch position mode to one-way (per spec pillar 12)
-    const modeResp = await _dispatchDryRun('POST', '/v5/position/switch-mode', {
+    const modeResp = await _dispatchRequest('POST', '/v5/position/switch-mode', {
         category: 'linear', symbol: params.symbol, mode: 0,
     }, creds);
     if (!_isOk(modeResp) && modeResp.retCode !== 110025 && modeResp.retCode !== 110026) {
@@ -378,7 +372,7 @@ async function ensureSymbolReady(uid, params, creds) {
     // 3. Switch margin mode
     const marginMode = params.marginMode || 'CROSSED';
     const tradeMode = marginMode === 'CROSSED' ? 0 : 1;
-    const marginResp = await _dispatchDryRun('POST', '/v5/position/switch-isolated', {
+    const marginResp = await _dispatchRequest('POST', '/v5/position/switch-isolated', {
         category: 'linear', symbol: params.symbol, tradeMode,
         buyLeverage: String(params.leverage), sellLeverage: String(params.leverage),
     }, creds);
@@ -392,7 +386,7 @@ async function ensureSymbolReady(uid, params, creds) {
 async function getPositions(uid, params, creds) {
     const query = { category: 'linear' };
     if (params && params.symbol) query.symbol = params.symbol;
-    const resp = await _dispatchDryRun('GET', '/v5/position/list', query, creds);
+    const resp = await _dispatchRequest('GET', '/v5/position/list', query, creds);
     if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list)) return [];
     return resp.result.list
         .filter(p => Math.abs(Number(p.size || 0)) > 0)
@@ -410,7 +404,7 @@ async function getPositions(uid, params, creds) {
 }
 
 async function getBalance(uid, creds) {
-    const resp = await _dispatchDryRun('GET', '/v5/account/wallet-balance', { accountType: 'UNIFIED' }, creds);
+    const resp = await _dispatchRequest('GET', '/v5/account/wallet-balance', { accountType: 'UNIFIED' }, creds);
     const empty = { asset: 'USDT', walletBalance: '0', availableBalance: '0', totalUnrealizedPnL: '0', rawExchange: 'bybit' };
     if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list) || resp.result.list.length === 0) return empty;
     const account = resp.result.list[0];
@@ -430,7 +424,7 @@ async function getUserTrades(uid, params, creds) {
     const query = { category: 'linear', symbol: params.symbol, limit: params.limit || 100 };
     if (params.startTime) query.startTime = params.startTime;
     if (params.endTime) query.endTime = params.endTime;
-    const resp = await _dispatchDryRun('GET', '/v5/execution/list', query, creds);
+    const resp = await _dispatchRequest('GET', '/v5/execution/list', query, creds);
     if (!_isOk(resp) || !resp.result || !Array.isArray(resp.result.list)) return [];
     return resp.result.list.map(t => ({
         id: String(t.execId),
@@ -450,7 +444,7 @@ async function getUserTrades(uid, params, creds) {
 async function ping(uid, creds) {
     const t0 = Date.now();
     try {
-        await _dispatchDryRun('GET', '/v5/market/time', {}, creds);
+        await _dispatchRequest('GET', '/v5/market/time', {}, creds);
         return { ok: true, latencyMs: Date.now() - t0, rawExchange: 'bybit' };
     } catch (err) {
         return { ok: false, latencyMs: Date.now() - t0, error: err.message, rawExchange: 'bybit' };
@@ -461,7 +455,7 @@ async function cancelOrder(uid, params, creds) {
     const query = { category: 'linear', symbol: params.symbol };
     if (params.orderId) query.orderId = params.orderId;
     else if (params.orderLinkId) query.orderLinkId = params.orderLinkId;
-    const resp = await _dispatchDryRun('POST', '/v5/order/cancel', query, creds);
+    const resp = await _dispatchRequest('POST', '/v5/order/cancel', query, creds);
     if (!_isOk(resp)) {
         return { ok: false, error: bybitSigner.parseBybitError(resp), rawExchange: 'bybit' };
     }
@@ -469,7 +463,7 @@ async function cancelOrder(uid, params, creds) {
 }
 
 async function placeStopLoss(uid, params, creds) {
-    const resp = await _dispatchDryRun('POST', '/v5/order/create', {
+    const resp = await _dispatchRequest('POST', '/v5/order/create', {
         category: 'linear',
         symbol: params.symbol,
         side: _oppositeBybitSide(params.side),

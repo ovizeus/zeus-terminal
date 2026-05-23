@@ -127,14 +127,6 @@ function buildSignedRequestDryRun(method, path, params = {}, creds = {}, options
     if (!creds.baseUrl) {
         throw new Error('buildSignedRequestDryRun: creds.baseUrl required (refusing to default to production)');
     }
-    // Fail-closed dry-run gate (S4-B1.1). migrationFlags exposes per-flag
-    // property getters + getAll(); there is no MF.get(name) method, so we read
-    // the flag directly. If BYBIT_DRY_RUN_ONLY is anything other than strictly
-    // true, refuse to build a signed envelope. No fallback-open behavior.
-    if (MF.BYBIT_DRY_RUN_ONLY !== true) {
-        throw new Error('BYBIT_DRY_RUN_ONLY_REQUIRED');
-    }
-
     const M = String(method).toUpperCase();
     const timestamp = Number.isFinite(options.timestamp) ? options.timestamp : Date.now();
     const recvWindow = Number.isFinite(options.recvWindow) ? options.recvWindow : _DEFAULT_RECV_WINDOW;
@@ -175,6 +167,68 @@ function buildSignedRequestDryRun(method, path, params = {}, creds = {}, options
         recvWindow,
         dryRun: true,
     };
+}
+
+/**
+ * Build and send a signed Bybit V5 HTTP request.
+ * Reuses the same signing logic as buildSignedRequestDryRun but actually sends.
+ *
+ * @param {string} method - 'GET' | 'POST' | 'DELETE' | 'PUT'
+ * @param {string} path   - e.g. '/v5/order/create'
+ * @param {object} params - request parameters
+ * @param {object} creds  - { apiKey, apiSecret, baseUrl }
+ * @param {object} [options] - { recvWindow, timestamp, timeoutMs }
+ * @returns {Promise<{retCode:number, retMsg:string, result:*, time:number}>}
+ */
+async function sendSignedRequest(method, path, params = {}, creds = {}, options = {}) {
+    const M = String(method).toUpperCase();
+    const timestamp = Number.isFinite(options.timestamp) ? options.timestamp : Date.now();
+    const recvWindow = Number.isFinite(options.recvWindow) ? options.recvWindow : _DEFAULT_RECV_WINDOW;
+
+    if (!creds || !creds.apiKey || !creds.apiSecret) {
+        throw new Error('sendSignedRequest: creds.apiKey and creds.apiSecret required');
+    }
+    if (!creds.baseUrl) {
+        throw new Error('sendSignedRequest: creds.baseUrl required');
+    }
+
+    let query = '';
+    let body = '';
+    let signPayload = '';
+
+    if (M === 'GET' || M === 'DELETE') {
+        query = canonicalizeQuery(params);
+        signPayload = query;
+    } else {
+        body = canonicalizeBody(params);
+        signPayload = body;
+    }
+
+    const signature = signV5({
+        apiSecret: creds.apiSecret,
+        timestamp,
+        apiKey: creds.apiKey,
+        recvWindow,
+        payload: signPayload,
+    });
+    const headers = buildBybitHeaders({ apiKey: creds.apiKey, signature, timestamp, recvWindow });
+
+    const url = (M === 'GET' || M === 'DELETE') && query
+        ? `${creds.baseUrl}${path}?${query}`
+        : `${creds.baseUrl}${path}`;
+
+    const fetchOpts = {
+        method: M,
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(options.timeoutMs || 10000),
+    };
+    if (M === 'POST' || M === 'PUT') {
+        fetchOpts.body = body;
+    }
+
+    const res = await fetch(url, fetchOpts);
+    const json = await res.json();
+    return json;  // { retCode, retMsg, result, time }
 }
 
 /**
@@ -219,6 +273,7 @@ module.exports = {
     canonicalizeQuery,
     canonicalizeBody,
     buildSignedRequestDryRun,
+    sendSignedRequest,
     parseBybitError,
     getBybitCbStatus,
 };

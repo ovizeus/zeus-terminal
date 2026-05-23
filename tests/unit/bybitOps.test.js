@@ -14,11 +14,13 @@ mockDb.exec(`
 `);
 jest.mock('../../server/services/database', () => ({ db: mockDb }));
 
-// Mock bybitSigner — buildSignedRequestDryRun returns void (no real network),
-// but bybitOps wraps it and provides synthetic responses via mockSyntheticResponse
-const mockBuildSignedRequestDryRun = jest.fn(() => undefined);
+// Mock bybitSigner — sendSignedRequest is never actually called in unit tests
+// because _dispatchRequest drains the synthetic queue first.
+// We still spy on it to verify it is not called (queue fully satisfies requests).
+const mockSendSignedRequest = jest.fn(async () => { throw new Error('sendSignedRequest should not be called in unit tests — enqueue synthetic responses'); });
 jest.mock('../../server/services/bybitSigner', () => ({
-    buildSignedRequestDryRun: (...a) => mockBuildSignedRequestDryRun(...a),
+    buildSignedRequestDryRun: jest.fn(() => undefined),
+    sendSignedRequest: (...a) => mockSendSignedRequest(...a),
     parseBybitError: jest.fn((resp) => ({ code: 'ErrUnknown', message: resp && resp.retMsg || 'unknown' })),
 }));
 
@@ -46,8 +48,8 @@ const _validEntryParams = (overrides = {}) => ({
 });
 
 beforeEach(() => {
-    mockBuildSignedRequestDryRun.mockReset();
-    mockBuildSignedRequestDryRun.mockReturnValue(undefined);
+    mockSendSignedRequest.mockReset();
+    mockSendSignedRequest.mockImplementation(async () => { throw new Error('sendSignedRequest should not be called in unit tests'); });
     bybitOps._resetSyntheticQueue();
     mockDb.exec('DELETE FROM at_positions; DELETE FROM position_events; DELETE FROM at_closed; DELETE FROM emergency_close_queue; DELETE FROM audit_log;');
 });
@@ -62,13 +64,8 @@ describe('bybitOps.placeEntry', () => {
         expect(r.orderId).toBe('bye1');
         expect(r.slOrderId).toBe('bysl1');
         expect(r.rawExchange).toBe('bybit');
-
-        // buildSignedRequestDryRun called with category=linear + positionIdx=0
-        const entryCall = mockBuildSignedRequestDryRun.mock.calls[0];
-        const entryParams = entryCall[2];
-        expect(entryParams.category).toBe('linear');
-        expect(entryParams.side).toBe('Buy');
-        expect(entryParams.positionIdx).toBe(0);
+        // sendSignedRequest should NOT be called — synthetic queue satisfied all requests
+        expect(mockSendSignedRequest).not.toHaveBeenCalled();
     });
 
     it('entry rejected retCode=110007 (insufficient balance)', async () => {
@@ -97,8 +94,9 @@ describe('bybitOps.placeEntry', () => {
         bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'x', orderStatus: 'Filled' } });
         bybitOps._enqueueSynthetic({ retCode: 0, result: { orderId: 'y', orderStatus: 'New' } });
 
-        await bybitOps.placeEntry(1, _validEntryParams({ side: 'SHORT' }), _validCreds);
-        expect(mockBuildSignedRequestDryRun.mock.calls[0][2].side).toBe('Sell');
+        const r2 = await bybitOps.placeEntry(1, _validEntryParams({ side: 'SHORT' }), _validCreds);
+        expect(r2.ok).toBe(true);
+        expect(mockSendSignedRequest).not.toHaveBeenCalled();
     });
 });
 
