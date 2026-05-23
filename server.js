@@ -28,6 +28,7 @@ const serverBrain = require('./server/services/serverBrain');
 const serverAT = require('./server/services/serverAT');
 // [Bybit Phase 1A Task 43] Boot-time position reconciliation (scan exchange → reconcile DB → verify SL → lift halt)
 const recoveryBoot = require('./server/services/recoveryBoot');
+const timeSyncAssert = require('./server/services/timeSyncAssert');
 const metrics = require('./server/services/metrics');
 const { atCriticalLimit, globalApiLimit } = require('./server/middleware/rateLimit');
 
@@ -1295,6 +1296,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   recoveryBoot.run().catch(err => {
     console.error('[BOOT] recoveryBoot failed:', err.message);
   });
+
+  // [Bybit Phase 1B Task 45] Start periodic NTP drift checks (5min interval).
+  timeSyncAssert.start();
 
   // Load exchange filters at startup (non-blocking)
   refreshExchangeInfo();
