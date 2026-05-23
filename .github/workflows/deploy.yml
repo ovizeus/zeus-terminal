@@ -15,7 +15,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
 
       # [TEST-3] Re-enable npm audit for CVE detection (was --no-audit which
       # silently passed even on critical CVEs in transitive deps).
