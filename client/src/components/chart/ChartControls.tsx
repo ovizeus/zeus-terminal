@@ -3,9 +3,12 @@ import { useMarketStore, useUiStore } from '../../stores'
 import { setTF } from '../../data/marketDataFeeds'
 import { togInd as togIndFn } from '../../ui/dom2'
 import { togOvr as togOvrFn } from '../../data/marketDataOverlays'
-import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn } from '../../ui/panels'
+import { toggleSession as toggleSessionFn, toggleVWAP as toggleVWAPFn, applyVWAPRestore } from '../../ui/panels'
 import { toggleFS as toggleFSFn } from '../../data/marketDataFeeds'
 import { setSymbol } from '../../data/marketDataWS'
+import { openIndSettings } from '../../engine/indicators'
+import { CANDLE_TYPES, applyCandleType, type CandleType } from '../../ui/candleTypeSwitcher'
+import { USER_SETTINGS } from '../../core/config'
 
 const TIMEFRAMES = ['1m','3m','5m','15m','30m','1h','2h','4h','5h','6h','12h','1d','3d','1w','1M']
 
@@ -59,24 +62,37 @@ const SYMBOLS: { label: string; items: { value: string; label: string }[] }[] = 
 ]
 
 /** Indicator definitions — 1:1 from INDICATORS in config.js lines 70-88 */
-const IND_LIST: { id: string; ico: string; name: string; desc: string }[] = [
-  { id: 'ema', ico: '📈', name: 'EMA 50/200', desc: 'Exponential Moving Average' },
-  { id: 'wma', ico: '〰', name: 'WMA 20/50', desc: 'Weighted Moving Average' },
-  { id: 'st',  ico: '◆', name: 'Supertrend', desc: 'Trend + Stop Loss dinamic' },
-  { id: 'vp',  ico: '📊', name: 'Volume Profile', desc: 'Volum pe niveluri de pret' },
-  { id: 'cvd', ico: '📊', name: 'CVD', desc: 'Cumulative Volume Delta' },
-  { id: 'macd', ico: '⚡', name: 'MACD', desc: 'Moving Avg Convergence Div' },
-  { id: 'bb',  ico: '◎', name: 'Bollinger Bands', desc: 'Volatilitate si trend' },
-  { id: 'stoch', ico: '〰', name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch' },
-  { id: 'obv', ico: '📊', name: 'OBV', desc: 'On-Balance Volume' },
-  { id: 'atr', ico: '📏', name: 'ATR', desc: 'Average True Range - volat' },
-  { id: 'vwap', ico: '📊', name: 'VWAP', desc: 'Volume Weighted Avg Price' },
-  { id: 'ichimoku', ico: '☁', name: 'Ichimoku Cloud', desc: 'Sistem complet japonez' },
-  { id: 'fib', ico: '⬡', name: 'Fibonacci', desc: 'Retracement auto pe swing' },
-  { id: 'pivot', ico: '◎', name: 'Pivot Points', desc: 'Suport/Rezistenta zilnice' },
-  { id: 'rsi14', ico: '⚡', name: 'RSI 14', desc: 'Relative Strength Index' },
-  { id: 'mfi', ico: '💰', name: 'Money Flow Index', desc: 'RSI bazat pe volum' },
-  { id: 'cci', ico: '📏', name: 'CCI', desc: 'Commodity Channel Index' },
+// [batch3-A] IND_LIST extended with settingsModal/isOverlay/modalOnly flags.
+// [batch3-B] hasGenericSettings → gear opens openIndSettings(id) modal from engine/indicators.
+// settingsModal       : openModal(key) to show the gear panel for this indicator (custom UI).
+// hasGenericSettings  : gear opens the shared openIndSettings modal driven by IND_SETTINGS[id].
+// isOverlay           : toggle routes through togOvr (overlays.* store) instead of togInd.
+// modalOnly           : indicator has no on/off toggle, just a modal entry (e.g. OVI).
+type IndMeta = { id: string; ico: string; name: string; desc: string; settingsModal?: string; hasGenericSettings?: boolean; isOverlay?: boolean; modalOnly?: boolean }
+const IND_LIST: IndMeta[] = [
+  { id: 'ema',      ico: '📈', name: 'EMA 50/200',      desc: 'Exponential Moving Average',   hasGenericSettings: true },
+  { id: 'wma',      ico: '〰', name: 'WMA 20/50',       desc: 'Weighted Moving Average',      hasGenericSettings: true },
+  { id: 'st',       ico: '◆', name: 'Supertrend',      desc: 'Trend + dynamic Stop Loss',    hasGenericSettings: true },
+  { id: 'vp',       ico: '📊', name: 'Volume Profile',  desc: 'Volume by price levels',       hasGenericSettings: true },
+  { id: 'cvd',      ico: '📊', name: 'CVD',             desc: 'Cumulative Volume Delta',      hasGenericSettings: true },
+  { id: 'macd',     ico: '⚡', name: 'MACD',            desc: 'Moving Avg Convergence Div',   hasGenericSettings: true },
+  { id: 'bb',       ico: '◎', name: 'Bollinger Bands', desc: 'Volatility and trend',         hasGenericSettings: true },
+  { id: 'stoch',    ico: '〰', name: 'Stochastic RSI',  desc: 'RSI smoothed with Stoch',      hasGenericSettings: true },
+  { id: 'obv',      ico: '📊', name: 'OBV',             desc: 'On-Balance Volume',            hasGenericSettings: true },
+  { id: 'atr',      ico: '📏', name: 'ATR',             desc: 'Average True Range - volat',   hasGenericSettings: true },
+  { id: 'vwap',     ico: '📊', name: 'VWAP',            desc: 'Volume Weighted Avg Price',    hasGenericSettings: true },
+  { id: 'ichimoku', ico: '☁', name: 'Ichimoku Cloud',  desc: 'Full Japanese system',         hasGenericSettings: true },
+  { id: 'fib',      ico: '⬡', name: 'Fibonacci',       desc: 'Auto retracement on swing',    hasGenericSettings: true },
+  { id: 'pivot',    ico: '◎', name: 'Pivot Points',    desc: 'Daily Support/Resistance',     hasGenericSettings: true },
+  { id: 'rsi14',    ico: '⚡', name: 'RSI 14',          desc: 'Relative Strength Index',      hasGenericSettings: true },
+  { id: 'mfi',      ico: '💰', name: 'Money Flow Index',desc: 'Volume-weighted RSI',          hasGenericSettings: true },
+  { id: 'cci',      ico: '📏', name: 'CCI',             desc: 'Commodity Channel Index',      hasGenericSettings: true },
+  // Moved from Row 2/Row 3 — overlays + OVI (modal-only). Each keeps its own custom modal.
+  { id: 'ovi', ico: '💧', name: 'OVI LIQUID', desc: 'Liquidation pockets',      settingsModal: 'ovi',      isOverlay: true },
+  { id: 'liq', ico: '💥', name: 'LIQ Heatmap', desc: 'Liquidation levels',      settingsModal: 'liq',      isOverlay: true },
+  { id: 'zs',  ico: '👑', name: 'SUPREMUS',    desc: 'Zone Supremus S/R',       settingsModal: 'supremus', isOverlay: true },
+  { id: 'sr',  ico: '📐', name: 'S/R Levels',  desc: 'Auto support/resistance', settingsModal: 'sr',       isOverlay: true },
+  { id: 'llv', ico: '💥', name: 'LLV Volume', desc: 'Large Liquidation Vols',  settingsModal: 'llv',      isOverlay: true },
 ]
 
 export function ChartControls() {
@@ -88,35 +104,215 @@ export function ChartControls() {
   const openModal = useUiStore((s) => s.openModal)
 
   const [tfOpen, setTfOpen] = useState(false)
+  const [ctOpen, setCtOpen] = useState(false)
+  const [candleType, setCandleType] = useState<CandleType>(
+    ((USER_SETTINGS?.chart?.candleType as CandleType) || 'candles'),
+  )
+  const ctRef = useRef<HTMLDivElement>(null)
   const [indPanelOpen, setIndPanelOpen] = useState(false)
   const [fsMode, setFsMode] = useState(false)
-  const [sessions, setSessions] = useState({ asia: false, london: false, ny: false })
-  const [vwapOn, setVwapOn] = useState(false)
-  const [tsOn, setTsOn] = useState(false)
+  // [Pack D.1 + D.2] Read initial state with FOUR fallback layers because
+  // module load order isn't guaranteed: panels.ts IIFE may run BEFORE
+  // state.ts assigns `w.S = S` (panels.ts has no import-side dep on
+  // state.ts; both rely on `window.S` directly), in which case IIFE bails
+  // at `if (!w.S) return` and `w.S.sessions` stays undefined. We MUST
+  // also fall back to reading localStorage directly here, then SYNC the
+  // value into `w.S.sessions` so toggleSession on click sees the right
+  // state. Without the sync, the first click would `!S.sessions[k]` =
+  // `!undefined` = true (toggle ON looks correct), but the second click
+  // would `!true` = false (toggle OFF) — desync between React and `w.S`.
+  const _initSessions = (() => {
+    try {
+      const wAny: any = window
+      if (wAny.S && wAny.S.sessions) {
+        return { asia: !!wAny.S.sessions.asia, london: !!wAny.S.sessions.london, ny: !!wAny.S.sessions.ny }
+      }
+      // Fallback: read localStorage directly (panels.ts IIFE may have bailed)
+      const raw = localStorage.getItem('zeus_chart_sessions')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && typeof parsed === 'object') {
+          const restored = { asia: !!parsed.asia, london: !!parsed.london, ny: !!parsed.ny }
+          // Sync back into w.S.sessions so toggleSession reads the correct
+          // value on the next click. Init w.S if missing (state.ts hasn't
+          // run yet — extremely rare but possible).
+          try { if (!wAny.S) wAny.S = {}; wAny.S.sessions = { ...restored } } catch (_) { /* */ }
+          return restored
+        }
+      }
+    } catch (_) { /* */ }
+    return { asia: false, london: false, ny: false }
+  })()
+  const _initVwapOn = (() => {
+    try {
+      const wAny: any = window
+      if (wAny.S && typeof wAny.S.vwapOn !== 'undefined') return !!wAny.S.vwapOn
+      const raw = localStorage.getItem('zeus_chart_vwap_on')
+      if (raw === '1' || raw === 'true') {
+        try { if (!wAny.S) wAny.S = {}; wAny.S.vwapOn = true } catch (_) { /* */ }
+        return true
+      }
+    } catch (_) { /* */ }
+    return false
+  })()
+  const [_sessions, setSessions] = useState(_initSessions)
+  const [_vwapOn, setVwapOn] = useState(_initVwapOn)
+  // [Pack E] Read tsOn + drawingsVisible from localStorage so the button
+  // visual states (act / on classes) match the underlying restored state
+  // after refresh. The actual T&S panel content is auto-restored by the
+  // _restoreCheck loop in timeSales.ts:187 (~10s budget); this useState
+  // init only addresses the React-side button class.
+  const _initTsOn = (() => {
+    try { return localStorage.getItem('zeus_ts_open') === '1' } catch (_) { return false }
+  })()
+  const _initDrawingsVisible = (() => {
+    try { return localStorage.getItem('zeus_drawings_vis') !== '0' } catch (_) { return true }
+  })()
+  const [tsOn, setTsOn] = useState(_initTsOn)
   const [drawTool, setDrawTool] = useState<string | null>(null)
-  const [drawingsVisible, setDrawingsVisible] = useState(true)
+  const [drawingsVisible, setDrawingsVisible] = useState(_initDrawingsVisible)
   const [activeInds, setActiveInds] = useState<Record<string, boolean>>({})
   const tfRef = useRef<HTMLDivElement>(null)
 
-  // Sync activeInds from old JS S.activeInds on mount + after bridge loads
+  // Sync activeInds + overlays from legacy w.S on mount + after bridge loads.
+  // [batch3-C] overlays added so the React toggle ALWAYS mirrors the legacy store
+  // (the source of truth for render gating) — prevents ghost-ON toggles where
+  // React says true but S.overlays.* still false and nothing renders.
   useEffect(() => {
     function sync() {
       const w = window as any
       if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
+      if (w.S?.overlays) {
+        const cur = useMarketStore.getState().market.overlays
+        const legacy = w.S.overlays as Record<string, boolean>
+        const curRec = cur as unknown as Record<string, boolean>
+        const keys = new Set([...Object.keys(curRec), ...Object.keys(legacy)])
+        let diverged = false
+        for (const k of keys) { if (!!curRec[k] !== !!legacy[k]) { diverged = true; break } }
+        if (diverged) patch({ overlays: { ...curRec, ...legacy } as unknown as typeof cur })
+      }
     }
     sync()
     const id = setInterval(sync, 2000)
     return () => clearInterval(id)
-  }, [])
+  }, [patch])
 
   // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (tfRef.current && !tfRef.current.contains(e.target as Node)) setTfOpen(false)
+      if (ctRef.current && !ctRef.current.contains(e.target as Node)) setCtOpen(false)
     }
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [])
+
+  // [Pack D.1 + D.3] If any session was restored as active on mount,
+  // poll until the chart is fully ready (mainChart + cSeries + klines
+  // loaded), then call _renderSessionOverlays() to draw the boxes.
+  // Without polling, a single 200ms timeout fired BEFORE the chart had
+  // finished loading klines and `_renderSessionOverlays` early-exited at
+  // the `if (!w.mainChart || !S.klines)` guard, so boxes never appeared
+  // even though the toggle state was correctly restored. Polling ensures
+  // we hit the right moment regardless of network speed (klines REST
+  // typically returns 200-2000ms after page render). Caps at 10s of
+  // attempts to avoid infinite polling.
+  useEffect(() => {
+    if (!_initSessions.asia && !_initSessions.london && !_initSessions.ny) return
+    const wAny: any = window
+    let attempts = 0
+    const MAX_ATTEMPTS = 40 // 40 × 250ms = 10 s budget
+    const pollId = setInterval(() => {
+      attempts++
+      const chartReady = wAny.mainChart && wAny.cSeries
+        && typeof wAny.cSeries.priceToCoordinate === 'function'
+        && wAny.S && Array.isArray(wAny.S.klines) && wAny.S.klines.length > 0
+      if (chartReady && typeof wAny._renderSessionOverlays === 'function') {
+        try { wAny._renderSessionOverlays() } catch (_) { /* */ }
+        // Verify a box was actually drawn — host innerHTML non-empty
+        const host = document.getElementById('zsess-overlay')
+        if (host && host.children.length > 0) {
+          clearInterval(pollId)
+          return
+        }
+      }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
+    }, 250)
+    return () => clearInterval(pollId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // [Pack E] If VWAP was restored as ON, draw the bands once chart is
+  // ready. We can't call toggleVWAP() (would flip state); instead use
+  // applyVWAPRestore() exported from panels.ts which idempotently
+  // re-renders if S.vwapOn is true (no flip).
+  useEffect(() => {
+    if (!_initVwapOn) return
+    const wAny: any = window
+    let attempts = 0
+    const MAX_ATTEMPTS = 40 // 10s budget
+    const pollId = setInterval(() => {
+      attempts++
+      const chartReady = wAny.mainChart && wAny.cSeries
+        && typeof wAny.cSeries.priceToCoordinate === 'function'
+        && wAny.S && Array.isArray(wAny.S.klines) && wAny.S.klines.length > 0
+      if (chartReady) {
+        try { applyVWAPRestore() } catch (_) { /* */ }
+        clearInterval(pollId)
+        return
+      }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
+    }, 250)
+    return () => clearInterval(pollId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // [Pack D.4] Restore chartTf on mount. Same pattern as sessions: read
+  // `zeus_chart_tf` localStorage as the fast-path (written on every
+  // setTF call); if found and != default '5m', poll until chart is ready
+  // then re-apply via setTF() so klines are fetched for the right TF AND
+  // marketStore + dropdown UI sync up. The existing USER_SETTINGS.chart.tf
+  // → S.chartTf restore at config.ts:1868 only updates legacy state; it
+  // doesn't trigger setTF, so the chart kept showing 5m klines even
+  // though S.chartTf had been set to e.g. '1h'.
+  useEffect(() => {
+    let restoredTf: string | null = null
+    try {
+      const raw = localStorage.getItem('zeus_chart_tf')
+      if (raw && typeof raw === 'string' && raw.trim() && raw !== '5m') {
+        restoredTf = raw.trim()
+      }
+    } catch (_) { /* */ }
+    if (!restoredTf) return
+    const wAny: any = window
+    let attempts = 0
+    const MAX_ATTEMPTS = 40 // 40 × 250ms = 10 s budget
+    const pollId = setInterval(() => {
+      attempts++
+      const chartReady = wAny.mainChart && wAny.cSeries
+        && typeof wAny.cSeries.priceToCoordinate === 'function'
+      if (chartReady && restoredTf) {
+        // setTF is imported at top of file; calling it directly is safer
+        // than reaching through window because the export name might be
+        // tree-shaken away from the global scope in production bundles.
+        try { setTF(restoredTf, null) } catch (_) { /* */ }
+        // Patch marketStore so the dropdown label + active class show
+        // the restored TF (Zustand store is React's source of truth).
+        try { patch({ chartTf: restoredTf }) } catch (_) { /* */ }
+        clearInterval(pollId)
+        return
+      }
+      if (attempts >= MAX_ATTEMPTS) clearInterval(pollId)
+    }, 250)
+    return () => clearInterval(pollId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  function pickCandleType(t: CandleType) {
+    setCandleType(t)
+    setCtOpen(false)
+    try { applyCandleType(t) } catch (e) { console.warn('[candleType]', e) }
+  }
 
   function pickTf(tf: string) {
     if (typeof setTF === 'function') setTF(tf, null)
@@ -133,16 +329,28 @@ export function ChartControls() {
     if (w.S?.activeInds) setActiveInds({ ...w.S.activeInds })
     // Also update React store for the 4 React-managed indicators
     if (key in indicators) {
-      patch({ indicators: { ...indicators, [key]: !indicators[key] } })
+      const ind = indicators as unknown as Record<string, boolean>
+      patch({ indicators: { ...indicators, [key]: !ind[key] } })
     }
   }
 
   function togOvr(key: keyof typeof overlays) {
+    // [batch3-C] Trust the legacy store as source of truth — togOvrFn mutates
+    // w.S.overlays[key] and calls the overlay's render/clear. Read the NEW value
+    // back from w.S AFTER the call so React state stays in lock-step, even if
+    // togOvrFn internally coerces (e.g. ovi→oviOn mirror) or the legacy start
+    // value was already-true (persisted) and React was still false.
+    const wRef = window as any
+    let newVal: boolean | null = null
     if (typeof togOvrFn === 'function') {
       const btn = document.getElementById('b' + key)
-      try { togOvrFn(key, btn) } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
+      try {
+        togOvrFn(key, btn)
+        if (wRef.S?.overlays) newVal = !!wRef.S.overlays[key]
+      } catch (e) { console.warn('[togOvr]', key, 'error:', (e as Error).message) }
     }
-    patch({ overlays: { ...overlays, [key]: !overlays[key] } })
+    if (newVal === null) newVal = !overlays[key]
+    patch({ overlays: { ...overlays, [key]: newVal } })
   }
 
   function handleSymbolChange(val: string) {
@@ -201,6 +409,10 @@ export function ChartControls() {
   function handleDrawToggleVis() {
     const w = window as any
     if (typeof w.drawToolToggleVis === 'function') w.drawToolToggleVis()
+    // [Pack E] localStorage write is also done by drawingTools.ts inside
+    // _toggleVisibility; this is just to keep the React-side button class
+    // declarative via setDrawingsVisible (drawingTools owns the source of
+    // truth for actual line visibility).
     setDrawingsVisible(v => !v)
   }
   function handleDrawClearAll() {
@@ -236,8 +448,27 @@ export function ChartControls() {
             </div>
           </div>
           <span style={{ width: '4px' }}></span>
-          <button className="tfb ztf-sibling" id="fsbtn" title="Fullscreen" onClick={toggleFS}>{fsMode ? '\u2291' : '\u272D'}</button>
+          <button className="tfb ztf-sibling" id="fsbtn" title="Fullscreen" onClick={toggleFS}>{fsMode ? '\u2291' : '\u26F6'}</button>
           <button className="tfb ztf-sibling" title="Chart Settings" onClick={() => openModal('charts')}>&#9881;</button>
+          <div className={`ztf-wrap${ctOpen ? ' open' : ''}`} ref={ctRef} style={{ position: 'relative' }}>
+            <button className="tfb ztf-sibling" title="Chart Type" onClick={() => setCtOpen(o => !o)}>
+              {CANDLE_TYPES.find(c => c.id === candleType)?.icon || '▮'}
+            </button>
+            {ctOpen && (
+              <div className="ztf-dropdown" style={{ display: 'block', minWidth: 170, right: 'auto' }}>
+                {CANDLE_TYPES.map((c) => (
+                  <button
+                    key={c.id}
+                    className={`ztf-item${candleType === c.id ? ' act' : ''}`}
+                    style={{ textAlign: 'left', padding: '6px 10px' }}
+                    onClick={() => pickCandleType(c.id)}
+                  >
+                    <span style={{ display: 'inline-block', width: 18, color: 'var(--gold)' }}>{c.icon}</span> {c.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <button className="tfb ztf-sibling" title="Add Indicator" onClick={() => setIndPanelOpen(true)}>&#9776;</button>
           <span style={{ width: '8px' }}></span>
           <select
@@ -263,27 +494,39 @@ export function ChartControls() {
           <div id="expoInlineContent" style={{ padding: '8px 10px', fontSize: '10px', color: '#888', lineHeight: 1.7 }}></div>
         </div>
 
-        {/* Row 2: Sessions + VWAP + OVI */}
+        {/* Row 2: Sessions + VWAP — [batch3-A] OVI moved to SELECT INDICATOR panel */}
         <div className="crow">
-          <button className="sess-btn asia" id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
-          <button className="sess-btn london" id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
-          <button className="sess-btn ny" id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
-          <button className="vwap-btn" id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
-          <button className="vwap-btn" id="oviBtn" title="OVI LIQUID &#8212; Liquidation Pockets" style={{ color: '#f0c040', borderColor: '#f0c04044' }} onClick={() => openModal('ovi')}>OVI</button>
+          {/* [Pack D.1] className now declarative: React syncs the `on`
+              class from _sessions.X state so on-mount restored values
+              from w.S.sessions show as ON (gold underline) without
+              requiring a re-toggle. The imperative classList.toggle in
+              toggleSession (panels.ts) still runs, but React's next
+              render reconciles and keeps both in sync via setSessions. */}
+          <button className={`sess-btn asia${_sessions.asia ? ' on' : ''}`} id="sessAsia" title="Asia Session" onClick={(e) => handleSession('asia', e.currentTarget)}><span className="z-badge z-badge--cyan" style={{ padding: 0, border: 0, background: 'none', fontSize: 'inherit', letterSpacing: 'inherit' }}>ASI</span> ASIA</button>
+          <button className={`sess-btn london${_sessions.london ? ' on' : ''}`} id="sessLondon" title="London Session" onClick={(e) => handleSession('london', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#4488ff' }}>UK</span> LON</button>
+          <button className={`sess-btn ny${_sessions.ny ? ' on' : ''}`} id="sessNY" title="New York Session" onClick={(e) => handleSession('ny', e.currentTarget)}><span style={{ fontSize: '8px', fontWeight: 700, color: '#00d97a' }}>US</span> NY</button>
+          {/* [Pack E] VWAP button now declarative `on` class via React
+              state so restored vwapOn surfaces visually on mount.
+              toggleVWAP (panels.ts) still imperatively classList.toggles,
+              setVwapOn keeps both layers in sync. */}
+          <button className={`vwap-btn${_vwapOn ? ' on' : ''}`} id="vwapBtn" title="VWAP + Bands" onClick={(e) => handleVWAP(e.currentTarget)}>VWAP</button>
         </div>
 
-        {/* Row 3: Indicators + Overlays + Drawing Tools */}
+        {/* Row 3: Indicators + Drawing Tools — [batch3-A] LIQ/SUPREMUS/S/R/LLV moved to SELECT INDICATOR panel */}
         <div className="crow">
-          <button className={`indb${activeInds.ema ?? indicators.ema ? ' act' : ''}`} id="bema" onClick={() => togInd('ema')}>EMA</button>
-          <button className={`indb${activeInds.wma ?? indicators.wma ? ' act' : ''}`} id="bwma" onClick={() => togInd('wma')}>WMA</button>
-          <button className={`indb${activeInds.st ?? indicators.st ? ' act' : ''}`} id="bst" onClick={() => togInd('st')}>ST</button>
-          <button className={`indb${activeInds.vp ?? indicators.vp ? ' act' : ''}`} id="bvp" onClick={() => togInd('vp')}>VOLP</button>
-          <span style={{ width: '5px' }}></span>
-          <button className={`ovrb${overlays.liq ? ' act' : ''}`} id="bliq" onClick={() => togOvr('liq')}>&#128165; LIQ</button><span className="gear" onClick={() => openModal('liq')}>&#9881;&#65039;</span>
-          <button className={`ovrb${overlays.zs ? ' act' : ''}`} id="bzs" onClick={() => togOvr('zs')}>&#128081; SUPREMUS</button><span className="gear" onClick={() => openModal('supremus')}>&#9881;&#65039;</span>
-          <button className={`ovrb${overlays.sr ? ' act' : ''}`} id="bsr" onClick={() => togOvr('sr')}>&#128208; S/R</button><span className="gear" style={{ cursor: 'pointer', padding: '2px 5px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '10px' }} title="S/R Settings" onClick={() => openModal('sr')}>&#9881;&#65039;</span>
-          <button className={`ovrb${overlays.llv ? ' act' : ''}`} id="bllv" onClick={() => togOvr('llv')}>&#128165; LLV</button><span className="gear" style={{ cursor: 'pointer', padding: '2px 5px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '10px' }} title="LLV Settings" onClick={() => openModal('llv')}>&#9881;&#65039;</span>
-          <span style={{ width: '5px' }}></span>
+          {/* [M11] Operator-precedence fix — `?? : ?:` was parsed as
+              `activeInds.X ?? (indicators.X ? ' act' : '')`, so when
+              activeInds.X = true the template literal coerced to
+              "indbtrue" / "indbfalse" instead of "indb act". Adding
+              parens around `(activeInds.X ?? indicators.X)` forces
+              "is this truthy" → " act" / "" semantics on every button.
+              Also passes `e.currentTarget` to togInd so the imperative
+              class toggle in dom2.ts:235 fires (UI sync robustness). */}
+          <button className={`indb${(activeInds.ema ?? indicators.ema) ? ' act' : ''}`} id="bema" onClick={(e) => togInd('ema', e.currentTarget)}>EMA</button>
+          <button className={`indb${(activeInds.wma ?? indicators.wma) ? ' act' : ''}`} id="bwma" onClick={(e) => togInd('wma', e.currentTarget)}>WMA</button>
+          <button className={`indb${(activeInds.st ?? indicators.st) ? ' act' : ''}`} id="bst" onClick={(e) => togInd('st', e.currentTarget)}>ST</button>
+          <button className={`indb${(activeInds.vp ?? indicators.vp) ? ' act' : ''}`} id="bvp" onClick={(e) => togInd('vp', e.currentTarget)}>VOLP</button>
+          <span style={{ width: '8px' }}></span>
           <button className={`ovrb${tsOn ? ' act' : ''}`} id="ts-toggle-btn" title="Time &amp; Sales tape (T)" onClick={toggleTimeSales}>&#128200; T&amp;S</button>
           <span style={{ width: '8px' }}></span>
           <span className="dt-sep">|</span>
@@ -296,15 +539,24 @@ export function ChartControls() {
       </div>
 
       {/* ── Indicator Panel (bottom sheet) — 1:1 from indOverlay + indPanel in index.html ── */}
-      <div className={`ind-panel-overlay${indPanelOpen ? ' open' : ''}`} id="indOverlay" onClick={() => setIndPanelOpen(false)}></div>
+      {/* [BUG-UI-CMP-8] Guard: only close if click hits overlay itself, not bubbled from panel content */}
+      <div className={`ind-panel-overlay${indPanelOpen ? ' open' : ''}`} id="indOverlay" onClick={(e) => { if (e.target === e.currentTarget) setIndPanelOpen(false) }}></div>
       <div className={`ind-panel${indPanelOpen ? ' open' : ''}`} id="indPanel">
         <div className="ind-panel-hdr">
-          <span className="ind-panel-title">SELECTEAZA INDICATOR</span>
+          <span className="ind-panel-title">SELECT INDICATOR</span>
           <span style={{ cursor: 'pointer', color: 'var(--dim)', fontSize: '14px' }} onClick={() => setIndPanelOpen(false)}>✕</span>
         </div>
         <div className="ind-panel-body" id="indPanelBody">
           {IND_LIST.map((ind) => {
-            const isOn = activeInds[ind.id] ?? (indicators as Record<string, boolean>)[ind.id] ?? false
+            // [batch3-A] Route on/off state + toggle through the correct store:
+            //   isOverlay → overlays[id]   (togOvr)
+            //   modalOnly → no toggle, just a gear/OPEN button (OVI pattern)
+            //   default   → indicators[id] or activeInds[id]   (togInd)
+            const isOn = ind.modalOnly
+              ? false
+              : ind.isOverlay
+                ? ((overlays as unknown as Record<string, boolean>)[ind.id] ?? false)
+                : (activeInds[ind.id] ?? (indicators as unknown as Record<string, boolean>)[ind.id] ?? false)
             return (
               <div key={ind.id} className="ind-row">
                 <div className="ind-row-l">
@@ -315,12 +567,36 @@ export function ChartControls() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <div
-                    className={`ind-toggle${isOn ? ' on' : ''}`}
-                    onClick={() => togInd(ind.id)}
-                  >
-                    <div className="ind-toggle-dot"></div>
-                  </div>
+                  {(ind.settingsModal || ind.hasGenericSettings) && (
+                    <span
+                      className="gear"
+                      style={{ cursor: 'pointer', padding: '2px 6px', borderRadius: '4px', border: '1px solid #f0c04033', fontSize: '11px', color: '#f0c040' }}
+                      title={`${ind.name} Settings`}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (ind.settingsModal) openModal(ind.settingsModal as Parameters<typeof openModal>[0])
+                        else if (ind.hasGenericSettings) openIndSettings(ind.id)
+                      }}
+                    >&#9881;&#65039;</span>
+                  )}
+                  {ind.modalOnly ? (
+                    <button
+                      style={{ fontSize: '9px', padding: '3px 10px', borderRadius: '3px', background: '#1a1a1a', color: '#f0c040', border: '1px solid #f0c04044', cursor: 'pointer', fontWeight: 600, letterSpacing: '0.5px' }}
+                      onClick={() => openModal(ind.settingsModal as Parameters<typeof openModal>[0])}
+                    >OPEN</button>
+                  ) : (
+                    /* [BUG-UI-CMP-3] Semantic switch button (native keyboard a11y, no manual onKeyDown to avoid double-toggle) */
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isOn}
+                      className={`ind-toggle${isOn ? ' on' : ''}`}
+                      onClick={() => ind.isOverlay ? togOvr(ind.id as keyof typeof overlays) : togInd(ind.id)}
+                      style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    >
+                      <span className="ind-toggle-dot" aria-hidden="true"></span>
+                    </button>
+                  )}
                 </div>
               </div>
             )

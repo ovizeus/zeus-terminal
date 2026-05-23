@@ -1,5 +1,216 @@
-import { useRef, useEffect, memo } from 'react'
+import { useRef, useEffect, memo, useState } from 'react'
 import { resetProtectMode } from '../../engine/brain'
+import { BlockReasonText } from './BlockReasonText'
+import { useBrainStatsStore, BRAIN_NEURON_IDS } from '../../stores/brainStatsStore'
+import { _ZI } from '../../constants/icons'
+
+// [L1+L2] Radar lens controls — strictly visualization. Selecting any
+// lens turns the 12-axis renderer ON via window.BRAIN_RADAR_12X_UI_ONLY.
+// Per Zeus rules: in-memory only (no localStorage as final truth, no
+// server writes); proper per-user persistence is deferred to L4 after
+// T+7d soak. To rollback to legacy 6-axis: DevTools console
+// `window.BRAIN_RADAR_12X_UI_ONLY = false`.
+type RadarLens = 'hybrid' | 'realtime' | 'timeframe' | 'slow'
+type RadarLensTf = '5m' | '15m' | '1h' | '4h'
+const _RADAR_LENS_LABELS: Record<RadarLens, string> = {
+  hybrid: 'HYBRID', realtime: 'REAL-TIME', timeframe: 'TIMEFRAME', slow: 'SLOW',
+}
+function RadarLensBar() {
+  const [lens, setLensState] = useState<RadarLens>('hybrid')
+  const [tf, setTfState] = useState<RadarLensTf>('5m')
+  // Apply lens on mount + every change. Defensive: if MCR not yet
+  // booted, skip silently — the canvas IIFE wires up shortly after.
+  useEffect(() => {
+    const mcr = (window as any).MarketCoreReactor
+    if (mcr && typeof mcr.setLens === 'function') {
+      try { mcr.setLens(lens, tf) } catch (_) { /* */ }
+    }
+  }, [lens, tf])
+  const _btnStyle = (active: boolean, accent: string) => ({
+    padding: '3px 8px', fontSize: '9px', letterSpacing: '1px',
+    border: '1px solid ' + (active ? accent : '#1e2a3a'),
+    background: active ? accent + '22' : 'transparent',
+    color: active ? accent : '#8aa8c4',
+    borderRadius: '3px', cursor: 'pointer',
+    fontFamily: 'var(--ff)', fontWeight: 700,
+    whiteSpace: 'nowrap' as const,
+  })
+  return (
+    <div className="rdr-lens-bar" style={{
+      display: 'flex', flexWrap: 'wrap', alignItems: 'center',
+      gap: '4px', padding: '4px 8px', margin: '4px 0',
+      background: 'rgba(8,16,28,0.55)',
+      border: '1px solid #1a2a3a', borderRadius: '4px',
+      fontFamily: 'var(--ff)', fontSize: '9px', letterSpacing: '1px',
+    }}>
+      <span style={{ color: '#7a9ab8', fontSize: '9px', letterSpacing: '1.5px' }}>RADAR LENS:</span>
+      {(['hybrid', 'realtime', 'timeframe', 'slow'] as RadarLens[]).map(l => (
+        <button key={l} onClick={() => setLensState(l)} style={_btnStyle(lens === l, '#00d4ff')}>
+          {_RADAR_LENS_LABELS[l]}
+        </button>
+      ))}
+      {lens === 'timeframe' && (
+        <>
+          <span style={{ color: '#1e2a3a', margin: '0 2px' }}>|</span>
+          <span style={{ color: '#7a9ab8', fontSize: '9px', letterSpacing: '1.5px' }}>TF:</span>
+          {/* [polish] Native <select> pill — works on desktop AND mobile.
+              Native dropdown opens on tap, no z-index issues, supports
+              disabled options visibly. 30m kept visible but disabled
+              because no real 30m data exists client-side (audit
+              confirmed: fetchAllRSI lists ['5m','15m','1h','3h','4h','1d']). */}
+          <select
+            value={tf}
+            onChange={(e) => setTfState(e.target.value as RadarLensTf)}
+            style={{
+              padding: '3px 6px',
+              fontSize: '10px',
+              letterSpacing: '0.5px',
+              fontFamily: 'var(--ff)',
+              fontWeight: 700,
+              border: '1px solid #f0c040',
+              background: 'rgba(240,192,64,0.12)',
+              color: '#f0c040',
+              borderRadius: '3px',
+              cursor: 'pointer',
+              outline: 'none',
+              appearance: 'auto',
+            }}
+          >
+            <option value="5m" style={{ background: '#0d1620', color: '#cfd8e3' }}>5m</option>
+            <option value="15m" style={{ background: '#0d1620', color: '#cfd8e3' }}>15m</option>
+            <option disabled style={{ background: '#0d1620', color: '#556677' }}>30m — NO DATA</option>
+            <option value="1h" style={{ background: '#0d1620', color: '#cfd8e3' }}>1h</option>
+            <option value="4h" style={{ background: '#0d1620', color: '#cfd8e3' }}>4h</option>
+          </select>
+          <span style={{
+            color: '#7a6a3a', fontSize: '8px', marginLeft: '4px',
+            letterSpacing: '0.5px', fontWeight: 700, whiteSpace: 'nowrap' as const,
+          }}>
+            TF BETA — RSI/MOM ONLY
+          </span>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** [ZT5-C] Store-driven consumers for right-column arm/regime/receipt */
+function ArmBadge() {
+  const s = useBrainStatsStore((st) => st.snapshot.armBadge)
+  return <div className={s.cls} id="zncArmBadge">{s.text}</div>
+}
+
+function RegimeBadge2() {
+  const s = useBrainStatsStore((st) => st.snapshot.regimeBadge2)
+  return <div className={s.cls} id="brainRegimeBadge2" dangerouslySetInnerHTML={{ __html: s.innerHtml }} />
+}
+
+function RegimeDetail() {
+  const s = useBrainStatsStore((st) => st.snapshot.regimeDetail)
+  return <div className="znc-regime-detail" id="zncRegimeDetail">{s}</div>
+}
+
+const ARM_FG_ON = '#39ff14'
+const ARM_FG_OFF = '#2a4030'
+
+function ArmDetail() {
+  const s = useBrainStatsStore((st) => st.snapshot.arm)
+  return (
+    <div className="znc-arm-detail">
+      <div className="znc-ad-title">AUTO-TRADE DETAIL</div>
+      <div className="znc-ad-row">Mode: <b id="zad-mode" style={{ color: s.modeArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.mode}</b></div>
+      <div className="znc-ad-row">Profile: <b id="zad-profile">{s.profile}</b></div>
+      <div className="znc-ad-row">Score: <b id="zad-score" style={{ color: s.scoreArmed ? ARM_FG_ON : ARM_FG_OFF }}>{s.score}</b></div>
+      <div className="znc-ad-row">Trigger: <b id="zad-trigger" style={{ color: s.triggerActive ? ARM_FG_ON : ARM_FG_OFF }}>{s.trigger}</b></div>
+      <div className="znc-ad-row">TF: <b id="zad-tf">{s.tf}</b></div>
+      <div className="znc-ad-row">Cooldown: <b id="zad-cd" style={{ color: s.cooldownReady ? ARM_FG_ON : ARM_FG_OFF }}>{s.cooldown}</b></div>
+      <div className="znc-gates-summary" id="zad-gates-summary">{s.gatesSummary}</div>
+      <BlockReasonText />{/* [R30] store-driven subscriber — memo'd parent preserved */}
+    </div>
+  )
+}
+
+// [BUG-D-1 + D-2 CLOSED 2026-05-14] QForecastBlock removed 2026-05-07 (was never invoked, Pack C / L5 dead-code from 2026-04-28). brainStatsStore.forecast field + brain.ts renderQForecast IIFE + BrainForecast interface removed în D-2 fix (2026-05-14) post zero-consumer verification. Q-FORECAST surface fully eliminated.
+
+function WhyEngineBlock() {
+  const s = useBrainStatsStore((st) => st.snapshot.why)
+  const empty = s.whyList.length === 0 && s.riskList.length === 0
+  return (
+    <div id="brain-why">
+      <div className="bw-label">WHY ENGINE</div>
+      <div className={s.stateCls} id="bw-state">{s.stateText}</div>
+      <div className="bw-reasons" id="bw-reasons">
+        {empty ? (
+          <span>Scanning market...</span>
+        ) : (
+          <>
+            {s.whyList.length > 0 && <div className="bw-section-label why-label">WHY:</div>}
+            {s.whyList.map((r, i) => (
+              <span key={'w' + i} className="bw-why" dangerouslySetInnerHTML={{ __html: _ZI.ok + ' ' + r.replace(/</g, '&lt;') }} />
+            ))}
+            {s.riskList.length > 0 && <div className="bw-section-label risk-label">RISK:</div>}
+            {s.riskList.map((r, i) => (
+              <span key={'r' + i} className="bw-risk" dangerouslySetInnerHTML={{ __html: _ZI.w + ' ' + r.replace(/</g, '&lt;') }} />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OfiBar() {
+  const s = useBrainStatsStore((st) => st.snapshot.ofi)
+  const b = s.buyPct.toFixed(0)
+  const se = s.sellPct.toFixed(0)
+  return (
+    <div className="znc-ofi">
+      <div style={{ fontSize: '6px', color: '#1a3020', letterSpacing: '1px', marginBottom: '2px' }}>ORDER FLOW</div>
+      <div className="ofi-bar">
+        <div className="ofi-buy" id="ofiBuy" style={{ width: b + '%' }}></div>
+        <div className="ofi-sell" id="ofiSell" style={{ width: se + '%' }}></div>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '6px' }}>
+        <span id="ofiBuyPct" style={{ color: '#39ff1466' }}>BUY {b}%</span>
+        <span id="ofiSellPct" style={{ color: '#ff335566' }}>SELL {se}%</span>
+      </div>
+    </div>
+  )
+}
+
+function NeuronsRow() {
+  const s = useBrainStatsStore((st) => st.snapshot.neurons)
+  return (
+    <>
+      {BRAIN_NEURON_IDS.map((n) => {
+        const cell = s[n]
+        return (
+          <div key={n} id={`bn-${n}`} className={`neuron ${cell.state}`}>
+            <div className="ndot"></div><span></span><span className="nval" id={`bnv-${n}`}>{cell.val}</span>
+          </div>
+        )
+      })}
+    </>
+  )
+}
+
+function ReceiptBlock() {
+  const s = useBrainStatsStore((st) => st.snapshot.receipt)
+  return (
+    <div className="znc-receipt" id="zncReceipt">
+      <div className="znc-receipt-title">EXECUTION RECEIPT</div>
+      <div className="znc-receipt-row">Mode: <b id="rec-mode">{s.mode}</b></div>
+      <div className="znc-receipt-row">Score: <b id="rec-score">{s.score}</b></div>
+      <div className="znc-receipt-row">Trigger: <b id="rec-trigger">{s.trigger}</b></div>
+      <div className="znc-receipt-row">TF: <b id="rec-tf">{s.tf}</b></div>
+      <div className="znc-receipt-bolt">
+        <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}>
+          <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
+        </svg>
+      </div>
+    </div>
+  )
+}
 
 /**
  * 1:1 port of the ZEUS NEURAL CORE panel from public/index.html lines 1127-1570
@@ -61,11 +272,11 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <button id="prof-defensive" className="znc-pbtn" onClick={() => (window as any).setProfile?.('defensive')}>DEF</button>
         <div className="znc-sep"></div>
         <span className="znc-lbl">DSL:</span>
-        <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
-        <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
         <button id="dsl-swing" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('swing')}>SWING</button>
+        <button id="dsl-atr" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('atr')}>ATR</button>
         <button id="dsl-defensive" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('defensive')}>DEF</button>
         <button id="dsl-tp" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('tp')}>TP</button>
+        <button id="dsl-fast" className="znc-dbtn" onClick={() => (window as any).setDslMode?.('fast')}>FAST</button>
       </div>
 
       {/* PROTECT BANNER */}
@@ -98,6 +309,12 @@ export const BrainCockpit = memo(function BrainCockpit() {
             </div>
           </div>
 
+          {/* [L1+L2] Radar Lens controls — between Safety Gates and the
+              radar canvas. In-memory state only (no localStorage as final
+              truth, no server writes). Selecting any lens auto-enables the
+              12-axis renderer via window.BRAIN_RADAR_12X_UI_ONLY. */}
+          <RadarLensBar />
+
           {/* MARKET CORE REACTOR + SIGNAL RADAR — Canvas System */}
           <div id="brainViz" className="mcr-wrap">
             <div className="mcr-reactor-box">
@@ -117,43 +334,13 @@ export const BrainCockpit = memo(function BrainCockpit() {
             {['gates','score','regime','risk','auto','data'].map(n => <circle key={n} cx="0" cy="0" r="0" id={`cb-node-${n}`} opacity="0" />)}
           </svg>
 
-          {/* Hidden compat elements */}
-          <div style={{ display: 'none' }} id="nc-center"></div>
-          <div style={{ display: 'none' }} id="nc-regime"></div>
-          <div style={{ display: 'none' }} id="cbn-gates-val"></div>
-          <div style={{ display: 'none' }} id="cbn-gates-sub"></div>
-          <div style={{ display: 'none' }} id="nc-mode"></div>
-          <div style={{ display: 'none' }} id="zncScoreNum"></div>
+          {/* Hidden compat elements — [ZT5-F] dead ids removed; only ids with live engine writers kept */}
           <div style={{ display: 'none' }} id="nc-confidence"></div>
-          <div style={{ display: 'none' }} id="nc-flow-val"></div>
-          <div style={{ display: 'none' }} id="nc-vol-val"></div>
-          <div style={{ display: 'none' }} id="cbn-risk-val"></div>
-          <div style={{ display: 'none' }} id="cbn-regime-val"></div>
-          <div style={{ display: 'none' }} id="zncValProfile"></div>
-          <div style={{ display: 'none' }} id="zncValTf"></div>
-          <div style={{ display: 'none' }} id="zncValCooldown"></div>
-          <div style={{ display: 'none' }} id="cbn-auto-val"></div>
-          <div style={{ display: 'none' }} id="zncValScan"></div>
-          <div style={{ display: 'none' }} id="zncScoreLbl"></div>
-          <div style={{ display: 'none' }} id="zncStatusSub"></div>
-          <div style={{ display: 'none' }} id="cbn-regime-box"></div>
-          <div style={{ display: 'none' }} id="cbn-regime-sub"></div>
-          <div style={{ display: 'none' }} id="nc-vol-box"></div>
-          <div style={{ display: 'none' }} id="nc-volat-val"></div>
           <div style={{ display: 'none' }} id="cbn-data-box"></div>
           <div style={{ display: 'none' }} id="cbn-data-val"></div>
           <div style={{ display: 'none' }} id="cbn-data-sub"></div>
-          <div style={{ display: 'none' }} id="cbn-auto-box"></div>
-          <div style={{ display: 'none' }} id="cbn-auto-sub"></div>
-          <div style={{ display: 'none' }} id="cbn-risk-box"></div>
-          <div style={{ display: 'none' }} id="cbn-risk-sub"></div>
-          <div style={{ display: 'none' }} id="nc-risk-val"></div>
-          <div style={{ display: 'none' }} id="nc-flow-box"></div>
-          <div style={{ display: 'none' }} id="nc-struct-box"></div>
-          <div style={{ display: 'none' }} id="nc-struct-val"></div>
-          <div style={{ display: 'none' }} id="nc-liq-val"></div>
           <div style={{ display: 'none' }} id="cbn-score-box"></div>
-          <div style={{ display: 'none' }} id="nc-canvas"></div>
+          <div style={{ display: 'none' }} id="zncScoreLbl"></div>
           <div style={{ display: 'none' }} id="predator-hud">
             <span id="pred-sleep"></span><span id="pred-hunt"></span><span id="pred-kill"></span>
           </div>
@@ -218,17 +405,17 @@ export const BrainCockpit = memo(function BrainCockpit() {
             </div>
           </div>
 
-          {/* ARM STATUS */}
+          {/* ARM STATUS — store-driven */}
           <div className="znc-arm-box">
             <div className="znc-arm-lbl">AUTO-TRADE:</div>
-            <div className="znc-arm-badge scanning" id="zncArmBadge">SCANNING</div>
+            <ArmBadge />
           </div>
 
-          {/* REGIME */}
+          {/* REGIME — store-driven */}
           <div className="znc-regime-box">
             <div className="znc-regime-lbl">REGIME</div>
-            <div className="znc-regime-val unknown" id="brainRegimeBadge2">LOADING ▲</div>
-            <div className="znc-regime-detail" id="zncRegimeDetail">ADX: — | VOL: — | STRUCT: —</div>
+            <RegimeBadge2 />
+            <RegimeDetail />
           </div>
 
           {/* THREAT RADAR */}
@@ -259,45 +446,12 @@ export const BrainCockpit = memo(function BrainCockpit() {
             <div id="zncSessionBar"></div>
           </div>
 
-          {/* ARM DETAIL */}
-          <div className="znc-arm-detail">
-            <div className="znc-ad-title">AUTO-TRADE DETAIL</div>
-            <div className="znc-ad-row">Mode: <b id="zad-mode">MANUAL</b></div>
-            <div className="znc-ad-row">Profile: <b id="zad-profile">FAST</b></div>
-            <div className="znc-ad-row">Score: <b id="zad-score">—</b></div>
-            <div className="znc-ad-row">Trigger: <b id="zad-trigger">—</b></div>
-            <div className="znc-ad-row">TF: <b id="zad-tf">—</b></div>
-            <div className="znc-ad-row">Cooldown: <b id="zad-cd">READY</b></div>
-            <div className="znc-gates-summary" id="zad-gates-summary">Gates: —/— OK</div>
-            <div className="znc-block-reason wait" id="zad-block-reason">AUTO WAIT: Initializing...</div>
-          </div>
+          {/* ARM DETAIL + EXECUTION RECEIPT — store-driven */}
+          <ArmDetail />
+          <ReceiptBlock />
 
-          {/* EXECUTION RECEIPT */}
-          <div className="znc-receipt" id="zncReceipt">
-            <div className="znc-receipt-title">EXECUTION RECEIPT</div>
-            <div className="znc-receipt-row">Mode: <b id="rec-mode">—</b></div>
-            <div className="znc-receipt-row">Score: <b id="rec-score">—</b></div>
-            <div className="znc-receipt-row">Trigger: <b id="rec-trigger">—</b></div>
-            <div className="znc-receipt-row">TF: <b id="rec-tf">—</b></div>
-            <div className="znc-receipt-bolt">
-              <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}>
-                <path d="M9 1L4 9h4l-1 6 5-8H8l1-6" />
-              </svg>
-            </div>
-          </div>
-
-          {/* OFI compact */}
-          <div className="znc-ofi">
-            <div style={{ fontSize: '6px', color: '#1a3020', letterSpacing: '1px', marginBottom: '2px' }}>ORDER FLOW</div>
-            <div className="ofi-bar">
-              <div className="ofi-buy" id="ofiBuy" style={{ width: '50%' }}></div>
-              <div className="ofi-sell" id="ofiSell" style={{ width: '50%' }}></div>
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '6px' }}>
-              <span id="ofiBuyPct" style={{ color: '#39ff1466' }}>BUY 50%</span>
-              <span id="ofiSellPct" style={{ color: '#ff335566' }}>SELL 50%</span>
-            </div>
-          </div>
+          {/* OFI compact — store-driven */}
+          <OfiBar />
         </div>{/* end right */}
       </div>{/* end body */}
 
@@ -350,29 +504,13 @@ export const BrainCockpit = memo(function BrainCockpit() {
 
       </div>{/* end cockpit panel */}
 
-      {/* Q-FORECAST + WHY ENGINE row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', padding: '4px 6px 0' }}>
-
-        {/* Q-FORECAST */}
-        <div id="brain-forecast">
-          <div className="bf-label">Q-FORECAST</div>
-          <div className="bf-main neut" id="bf-main">Neutral (0)</div>
-          <div className="bf-row">Range: <b id="bf-range">—</b></div>
-          <div className="bf-row">State: <b id="bf-state">—</b></div>
-        </div>
-
-        {/* WHY ENGINE */}
-        <div id="brain-why">
-          <div className="bw-label">WHY ENGINE</div>
-          <div className="bw-state wait" id="bw-state">WAIT</div>
-          <div className="bw-reasons" id="bw-reasons"><span>—</span></div>
-        </div>
-
+      {/* [Pack C / L5] Q-FORECAST removed from render — WHY ENGINE remains, grid is single column. BUG-D-1 (2026-05-07): QForecastBlock dead function + #brain-forecast CSS cleaned. BUG-D-2 (2026-05-14): brainStatsStore.forecast field + brain.ts renderQForecast IIFE + BrainForecast type removed. Q-FORECAST surface now fully eliminated. */}
+      <div style={{ padding: '4px 6px 0' }}>
+        <WhyEngineBlock />
       </div>
 
-      {/* COMPAT: hidden IDs needed by existing JS */}
+      {/* COMPAT: hidden IDs with live engine writers — [ZT5-F] brainRegimeBadge3/brainCoreBg/zncScoreNum2 dropped (0 external writers) */}
       <div className="znc-compat">
-        <div id="brainRegimeBadge3"></div>
         <div id="entryScoreNum"></div>
         <div id="entryScoreFill"></div>
         <div id="entryScoreLabel"></div>
@@ -393,14 +531,8 @@ export const BrainCockpit = memo(function BrainCockpit() {
         <div id="dslTelemetry"></div>
         <div id="brainScoreNum"></div>
         <div id="brainScoreArc"></div>
-        <div id="brainCoreBg"></div>
-        <div id="zncScoreNum2"></div>
-        {/* neuron divs for setNeuron() */}
-        {['rsi','macd','st','vol','fr','mag','reg','ofi'].map(n => (
-          <div key={n} id={`bn-${n}`} className="neuron inactive">
-            <div className="ndot"></div><span></span><span className="nval" id={`bnv-${n}`}>—</span>
-          </div>
-        ))}
+        {/* [ZT5-F] neurons store-driven */}
+        <NeuronsRow />
       </div>
 
     </div>

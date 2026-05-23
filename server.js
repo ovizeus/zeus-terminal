@@ -26,6 +26,9 @@ const serverState = require('./server/services/serverState');
 const serverBrain = require('./server/services/serverBrain');
 // [P5] Server-side AT shadow engine
 const serverAT = require('./server/services/serverAT');
+// [Bybit Phase 1A Task 43] Boot-time position reconciliation (scan exchange → reconcile DB → verify SL → lift halt)
+const recoveryBoot = require('./server/services/recoveryBoot');
+const timeSyncAssert = require('./server/services/timeSyncAssert');
 const metrics = require('./server/services/metrics');
 const { atCriticalLimit, globalApiLimit } = require('./server/middleware/rateLimit');
 
@@ -100,11 +103,17 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
     // sendBeacon endpoints can't set custom headers — validate Origin instead [S3B1-T2]
+    // [batch2-M2] Reject absent Origin too. Modern browsers always set Origin on POST
+    // (fetch/sendBeacon/form); absent-Origin POSTs only come from non-browser or
+    // pre-2017 clients with no cookies, so they can't carry a valid session anyway.
     if (req.path === '/api/client-error' || req.path === '/api/sync/state' || req.path === '/api/sync/user-context') {
       var origin = req.headers['origin'] || '';
-      var allowed = config.allowedOrigins || ['https://' + (req.headers['host'] || '')];
-      // Accept same-origin (Origin matches host) or absent Origin (same-site navigation)
-      if (origin && !allowed.some(function (a) { return origin === a; }) && origin !== 'https://' + req.headers['host'] && origin !== 'http://' + req.headers['host']) {
+      var host = req.headers['host'] || '';
+      var allowed = config.allowedOrigins || ['https://' + host];
+      if (!origin) {
+        return res.status(403).json({ error: 'Forbidden — origin required' });
+      }
+      if (!allowed.some(function (a) { return origin === a; }) && origin !== 'https://' + host && origin !== 'http://' + host) {
         return res.status(403).json({ error: 'Forbidden — origin mismatch' });
       }
       return next();
@@ -146,9 +155,78 @@ app.use('/auth', authRoutes);
 app.use(createSessionAuth(config.jwtSecret || authRoutes.JWT_SECRET)); // [S16] prefer config source
 
 // ─── App Version endpoint ───
+// ─── [OPS-6] Prometheus /metrics endpoint ───────────────────────────
+// Text exposition format (Prometheus 0.0.4). No npm dep — formats the
+// existing metrics service output into Prom-compatible labels. Localhost-
+// only (req.ip === '127.0.0.1' OR loopback) — Prometheus scraper runs
+// on same VPS în current setup; remote scraping requires explicit IP
+// allowlist via PROMETHEUS_ALLOW_IPS env (comma-separated). Existing
+// JSON metrics at /api/health/full remain unchanged for human dashboards.
+const _PROM_ALLOW_IPS = (process.env.PROMETHEUS_ALLOW_IPS || '127.0.0.1,::1,::ffff:127.0.0.1')
+    .split(',').map(s => s.trim()).filter(Boolean);
+function _promEscape(s) {
+    return String(s).replace(/[\\\n"]/g, c => c === '\n' ? '\\n' : '\\' + c);
+}
+app.get('/metrics', (req, res) => {
+    const ip = (req.ip || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
+    if (!_PROM_ALLOW_IPS.includes(req.ip) && !_PROM_ALLOW_IPS.includes(ip)) {
+        return res.status(403).type('text/plain').send('# Forbidden — IP not în PROMETHEUS_ALLOW_IPS\n');
+    }
+    try {
+        const m = metrics.getMetrics();
+        const memMB = parseInt(String(m.memory.rss).replace(/[^\d]/g, ''), 10) || 0;
+        const heapMB = parseInt(String(m.memory.heapUsed).replace(/[^\d]/g, ''), 10) || 0;
+        const latencyLast = parseInt(String(m.latency.binanceLast).replace(/[^\d]/g, ''), 10) || 0;
+        const latencyAvg = parseInt(String(m.latency.binanceAvg).replace(/[^\d]/g, ''), 10) || 0;
+        const lines = [
+            '# HELP zeus_uptime_seconds Process uptime in seconds',
+            '# TYPE zeus_uptime_seconds gauge',
+            'zeus_uptime_seconds ' + (m.uptime || 0),
+            '# HELP zeus_memory_rss_mb Process RSS memory in MB',
+            '# TYPE zeus_memory_rss_mb gauge',
+            'zeus_memory_rss_mb ' + memMB,
+            '# HELP zeus_memory_heap_used_mb Process heap used in MB',
+            '# TYPE zeus_memory_heap_used_mb gauge',
+            'zeus_memory_heap_used_mb ' + heapMB,
+            '# HELP zeus_orders_total Total orders by status',
+            '# TYPE zeus_orders_total counter',
+            'zeus_orders_total{status="placed"} ' + (m.orders.placed || 0),
+            'zeus_orders_total{status="filled"} ' + (m.orders.filled || 0),
+            'zeus_orders_total{status="failed"} ' + (m.orders.failed || 0),
+            'zeus_orders_total{status="blocked"} ' + (m.orders.blocked || 0),
+            '# HELP zeus_binance_latency_ms Binance API latency în ms',
+            '# TYPE zeus_binance_latency_ms gauge',
+            'zeus_binance_latency_ms{kind="last"} ' + latencyLast,
+            'zeus_binance_latency_ms{kind="avg"} ' + latencyAvg,
+            '# HELP zeus_errors_total Total recorded server errors',
+            '# TYPE zeus_errors_total counter',
+            'zeus_errors_total ' + (m.errors.total || 0),
+            '# HELP zeus_reconciliation_runs_total Position reconciliation runs',
+            '# TYPE zeus_reconciliation_runs_total counter',
+            'zeus_reconciliation_runs_total ' + (m.reconciliation.runs || 0),
+            '# HELP zeus_reconciliation_mismatches_total Position reconciliation mismatches detected',
+            '# TYPE zeus_reconciliation_mismatches_total counter',
+            'zeus_reconciliation_mismatches_total ' + (m.reconciliation.mismatches || 0),
+            '# HELP zeus_ws_clients Connected WebSocket clients (current)',
+            '# TYPE zeus_ws_clients gauge',
+            'zeus_ws_clients ' + (typeof wss !== 'undefined' && wss && wss.clients ? wss.clients.size : 0),
+        ];
+        res.type('text/plain; version=0.0.4').send(lines.join('\n') + '\n');
+    } catch (err) {
+        res.status(500).type('text/plain').send('# error: ' + _promEscape(err.message) + '\n');
+    }
+});
+
 const appVersion = require('./server/version');
 app.get('/api/version', (_req, res) => {
-  res.json(Object.assign({}, appVersion, { migration: MF.getAll() }));
+  // [SEC-13] Strip verbose `changelog` from response — recon hardening.
+  // Authenticated users get version + build + date + migration flag state
+  // only. Internal file paths / architecture / deferred-work labels in
+  // `version.changelog` stay in the file for git/operator reference,
+  // never leave the box (was 30+ KB JSON exposing implementation detail
+  // to any authed user).
+  const { changelog: _changelog, ...publicVersion } = appVersion;
+  res.json(Object.assign({}, publicVersion, { migration: MF.getAll() }));
 });
 
 // [ZT-AUD-#15 / C13] Client-side error report sink. Body: {kind, reason, ...}.
@@ -156,6 +234,7 @@ app.get('/api/version', (_req, res) => {
 // even though there is no client Sentry. Throttled to avoid log flood from a
 // stuck loop (single user spamming).
 const _clientErrorLastTs = new Map();
+const _CLIENT_ERR_TTL_MS = 60 * 60 * 1000; // 1h — any user idle this long won't be throttled
 app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
   try {
     const uid = (req.user && req.user.id) || 'anon';
@@ -163,6 +242,10 @@ app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
     const last = _clientErrorLastTs.get(uid) || 0;
     if (now - last < 5000) return res.json({ ok: true, throttled: true });
     _clientErrorLastTs.set(uid, now);
+    // [batch2-L2] Opportunistic eviction — drop entries older than TTL when map grows
+    if (_clientErrorLastTs.size > 200) {
+      for (const [k, ts] of _clientErrorLastTs) if (now - ts >= _CLIENT_ERR_TTL_MS) _clientErrorLastTs.delete(k);
+    }
     const body = req.body || {};
     logger.log('WARN', 'CLIENT_ERR', String(body.reason || 'unknown').slice(0, 300), {
       uid,
@@ -176,19 +259,53 @@ app.post('/api/client-error', express.json({ limit: '8kb' }), (req, res) => {
   res.json({ ok: true });
 });
 
+// [LIQ-FEED DIAG 2026-05-14] Temporary diagnostic endpoint — exposes live
+// state of both liq feed modules (filtered Market Radar + unfiltered
+// aggregator pentru Quant Monitor). Public read-only; no auth needed for
+// diagnostic. Remove post-confirmation.
+app.get('/api/diag/liq-feed', (_req, res) => {
+  try {
+    const mr = require('./server/services/liquidationFeed').getState();
+    const ag = require('./server/services/liqFeedAggregator').getState();
+    res.json({ marketRadarFeed: mr, aggregator: ag, ts: Date.now() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// [BIN-TELEM 2026-05-19] Binance rate-limit diagnostic. Read-only snapshot
+// of per-source call counts, per-host used-weight (X-MBX-USED-WEIGHT-1M),
+// top endpoints, active pollers. Local-IP allowlist via sessionAuth.
+// Scop: investiga incident 429 din 2026-05-19 07:47 + dovedi/infirma leak
+// pe auto-subscribe în marketFeed. Remove după Phase A patch.
+app.get('/api/diag/binance-rates', (_req, res) => {
+  try {
+    const telem = require('./server/services/binanceTelemetry');
+    res.json(Object.assign({}, telem.getSnapshot(), { ts: Date.now() }));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Migration Flags (admin-only control for gradual migration) ───
 app.get('/api/migration/flags', (_req, res) => {
   res.json(MF.getAll());
 });
 app.post('/api/migration/flags', (_req, res) => {
-  const ip = _req.ip || _req.connection?.remoteAddress || '';
-  const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-  const isAdmin = _req.user && _req.user.role === 'admin';
-  if (!isLocal && !isAdmin) return res.status(403).json({ error: 'Admin only' });
+  // [SEC-12] Removed `isLocal` bypass — anyone with shell access on
+  // VPS could POST via localhost (sessionAuth localSafePaths bypass —
+  // see SEC-12-β patch in middleware/sessionAuth.js) without admin
+  // role, flipping arbitrary migration flags including SERVER_AT /
+  // SERVER_BRAIN. Privilege escalation latent pre-S10 LIVE flip.
+  // Now strict admin role check + audit_log entry on every change for
+  // forensic trail.
+  if (!_req.user || _req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
   const { key, value } = _req.body;
   try {
     const updated = MF.set(key, value);
-    logger.log('INFO', 'MIGRATION', `Flag ${key} = ${value}`, { flags: updated });
+    const userId = _req.user.id || null;
+    logger.log('INFO', 'MIGRATION', `Flag ${key} = ${value}`, { flags: updated, byUserId: userId });
+    try { db.auditLog(userId, 'MIGRATION_FLAG_CHANGE', { key, value, byUserId: userId, ip: _req.ip }, _req.ip); } catch (_) {}
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -292,8 +409,93 @@ app.get('/api/tc/current', (_req, res) => {
 // [AT] Unified AT endpoints — single source of truth (per-user)
 app.get('/api/at/state', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
-  res.json(serverAT.getFullState(_req.user.id));
+  const _st = serverAT.getFullState(_req.user.id);
+  res.json(_st);
 });
+// [Phase 2 S1.B] Canonical resume endpoint.
+// Purpose: a single REST call a client uses after reconnect / refresh / offline
+// / server-restart to rebuild per-user state from authoritative server truth.
+// Never guesses from localStorage.
+//
+// Shape (stable contract):
+//   {
+//     protocol: 1,                       // bump on breaking changes
+//     serverTime: <ms>,                  // wall-clock from server; client uses for drift
+//     version: { version, build, date }, // so client can detect stale builds
+//     userId: <int>,                     // echo — detects session mismatch
+//     at: ServerATState                  // identical to /api/at/state / at_update payload
+//   }
+//
+// Source: serverAT.getFullState() ONLY. Same path as /api/at/state and the
+// WS at_update broadcast — no new truth source, no schema change. Per-user
+// scoped strictly via req.user.id from JWT (sessionAuth middleware);
+// userId is never read from body or query, so it cannot be spoofed.
+//
+// Empty-state behavior: serverAT.getFullState() returns a fully-initialized
+// per-user state (empty positions[], default demo balance, no kill, etc.)
+// for a first-time-connecting user — no special-case branch needed here.
+//
+// Post-restart behavior: serverAT rehydrates from SQLite on module load
+// (at_positions, at_state), so a reconnect after `pm2 reload` returns the
+// same shape as a reconnect against a warm process.
+app.get('/api/at/resume', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  try {
+    const at = serverAT.getFullState(_req.user.id);
+    res.json({
+      protocol: 1,
+      serverTime: Date.now(),
+      version: { version: appVersion.version, build: appVersion.build, date: appVersion.date },
+      userId: _req.user.id,
+      at: at,
+    });
+  } catch (err) {
+    logger.error('AT_RESUME', 'Failed for uid=' + _req.user.id + ': ' + err.message);
+    res.status(500).json({ error: 'resume_failed' });
+  }
+});
+// [Phase 2 S2.B] Global PANIC halt — admin-only entry kill switch.
+// Persisted in at_state(key='global:halt'); read on every brain-driven +
+// server-AT live entry path (serverAT.processBrainDecision, _executeLiveEntry).
+// Survives restarts because the DB row is durable and serverAT reads on
+// every attempt (no stale in-memory cache).
+//
+// Contract:
+//   GET  /api/panic           → { active, by, ts, reason }   (any authed user)
+//   POST /api/panic           → body { active:boolean, reason?:string }
+//                               admin-only; userId from JWT (never body).
+//                               Response: { ok, halted, by, ts, reason }
+//
+// Safety:
+//   • userId source = req.user.id (JWT); never body/query — no spoofing.
+//   • Role check = admin; other users get 403.
+//   • No scope creep — no per-user opt-in, no global flag flip, no UI toggle.
+app.get('/api/panic', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  try {
+    res.json(serverAT.getGlobalHaltState());
+  } catch (err) {
+    logger.error('PANIC_GET', 'Failed: ' + err.message);
+    res.status(500).json({ error: 'halt_read_failed' });
+  }
+});
+app.post('/api/panic', (_req, res) => {
+  if (!_req.user) return res.status(401).json({ error: 'Auth required' });
+  if (_req.user.role !== 'admin') return res.status(403).json({ error: 'Admin only' });
+  const body = _req.body || {};
+  if (typeof body.active !== 'boolean') {
+    return res.status(400).json({ error: 'active must be boolean' });
+  }
+  const reason = typeof body.reason === 'string' && body.reason.trim() ? body.reason.trim().slice(0, 200) : null;
+  try {
+    const state = serverAT.setGlobalHalt(body.active, _req.user.id, reason);
+    res.json({ ok: true, halted: state.active, by: state.by, ts: state.ts, reason: state.reason });
+  } catch (err) {
+    logger.error('PANIC_SET', 'Failed uid=' + _req.user.id + ': ' + err.message);
+    res.status(500).json({ error: 'halt_write_failed', detail: err.message });
+  }
+});
+
 app.get('/api/at/positions', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   res.json({ positions: serverAT.getOpenPositions(_req.user.id) });
@@ -310,8 +512,19 @@ app.get('/api/at/balance', (_req, res) => {
 app.post('/api/at/mode', async (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   const mode = _req.body.mode;
-  // Pre-live checklist — validate before switching to live
+  // [BUG-SAFE-1] Server-side consent enforcement for live mode switch.
+  // Client confirm dialog is advisory only; server enforces explicit
+  // {confirm:true, env:'TESTNET'|'REAL'} in request body. Demo mode unchanged.
   if (mode === 'live') {
+    if (_req.body.confirm !== true) {
+      logger.warn('AT_MODE', `Live mode switch rejected uid=${_req.user.id}: missing confirm:true`);
+      return res.status(400).json({ ok: false, error: 'CONFIRM_REQUIRED', message: 'Live mode requires explicit server-side confirmation.' });
+    }
+    if (_req.body.env !== 'TESTNET' && _req.body.env !== 'REAL') {
+      logger.warn('AT_MODE', `Live mode switch rejected uid=${_req.user.id}: invalid env='${_req.body.env}'`);
+      return res.status(400).json({ ok: false, error: 'ENV_CONFIRM_REQUIRED', message: 'Live mode requires explicit env declaration: TESTNET or REAL.' });
+    }
+    // Pre-live checklist — validate before switching to live
     try {
       const checklist = await serverAT.preLiveChecklist(_req.user.id);
       if (!checklist.ok) {
@@ -322,17 +535,32 @@ app.post('/api/at/mode', async (_req, res) => {
     }
   }
   const result = serverAT.setMode(_req.user.id, mode);
-  if (result.ok && mode === 'live') result.preLiveChecklist = 'PASSED';
+  if (result.ok && mode === 'live') {
+    result.preLiveChecklist = 'PASSED';
+    // [BUG-SAFE-1] Audit explicit consent + declared env for forensic trail
+    try { db.auditLog(_req.user.id, 'AT_MODE_CHANGE', { newMode: 'live', consentMethod: 'EXPLICIT_CONFIRM', declaredEnv: _req.body.env, serverEnforced: true, safe1: true }, _req.ip); } catch (_) {}
+  }
   res.json(result);
 });
 // [AT-TOGGLE-FIX] Dedicated AT ON/OFF endpoint — server-authoritative
+// [BUG-T7 2026-05-13] Accept optional `mode` param ('demo'|'live'). If omitted,
+// server uses current us.engineMode (backward-compat pentru clients existenți
+// care trimit doar { active }).
 app.post('/api/at/toggle', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   const active = _req.body.active;
   if (typeof active !== 'boolean') return res.status(400).json({ ok: false, error: 'active must be boolean' });
-  const result = serverAT.toggleActive(_req.user.id, active);
+  const modeParam = (_req.body.mode === 'live' || _req.body.mode === 'demo') ? _req.body.mode : undefined;
+  const result = serverAT.toggleActive(_req.user.id, active, modeParam);
   if (!result.ok) return res.json(result);
-  res.json({ ok: true, atActive: result.atActive, state: serverAT.getFullState(_req.user.id) });
+  res.json({
+    ok: true,
+    atActive: result.atActive,
+    atActiveDemo: result.atActiveDemo,
+    atActiveLive: result.atActiveLive,
+    mode: result.mode,
+    state: serverAT.getFullState(_req.user.id)
+  });
 });
 app.post('/api/at/reset', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
@@ -375,7 +603,8 @@ app.post('/api/at/close', atCriticalLimit, (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Auth required' });
   const seq = parseInt(req.body.seq, 10);
   if (!Number.isFinite(seq)) return res.status(400).json({ error: 'Invalid seq' });
-  res.json(serverAT.closeBySeq(req.user.id, seq));
+  const result = serverAT.closeBySeq(req.user.id, seq);
+  res.json(result);
 });
 // [BUG3 FIX] Client-initiated controlMode update (Take Control / Release)
 app.post('/api/at/control', (req, res) => {
@@ -392,6 +621,15 @@ app.post('/api/at/register-manual', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Auth required' });
   const d = req.body;
   if (!d || !d.symbol || !d.side || !d.entryPrice) return res.status(400).json({ error: 'Missing fields' });
+  // [R2] Forward `source` and `clientReqId` — serverAT.registerManualPosition
+  // already consumes both (Phase 10 classification + Phase 9D1 idempotency),
+  // but this handler previously dropped them, so callers that passed
+  // source:'auto' had their position stamped as manual (autoTrade=false) and
+  // retries with the same clientReqId double-registered. Strict whitelist:
+  // `source` must be 'auto' or 'manual' (default 'manual' when absent),
+  // `clientReqId` coerced to string (or null).
+  const _src = (d.source === 'auto' || d.source === 'manual') ? d.source : 'manual';
+  const _cid = d.clientReqId ? String(d.clientReqId) : null;
   const result = serverAT.registerManualPosition(req.user.id, {
     symbol: d.symbol,
     side: d.side,
@@ -402,6 +640,8 @@ app.post('/api/at/register-manual', (req, res) => {
     tp: d.tp ? parseFloat(d.tp) : null,
     mode: d.mode || 'demo',
     dslParams: d.dslParams || null,
+    source: _src,
+    clientReqId: _cid,
   });
   res.json(result);
 });
@@ -784,8 +1024,11 @@ app.get('/api/regime-history', (_req, res) => {
   if (!_req.user) return res.status(401).json({ error: 'Auth required' });
   try {
     const symbol = _req.query.symbol;
+    const userId = _req.user.id;
     const limit = Math.min(parseInt(_req.query.limit, 10) || 100, 500);
-    const history = symbol ? db.getRegimeHistory(symbol, limit) : db.getRegimeHistoryAll(limit);
+    const history = symbol
+      ? db.getRegimeHistory(symbol, userId, limit)
+      : db.getRegimeHistoryByUser(userId, limit);
     res.json({ ok: true, history });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -878,9 +1121,36 @@ app.use('/api/sync', userContextRoutes);
 const journalRoutes = require('./server/routes/journal');
 app.use('/api/journal', journalRoutes);
 
+// ─── [Phase 2 S3] Brain Parity Harness Route ───
+// Mounts POST /api/brain/parity/client + GET /api/brain/parity/report.
+// Shadow-only. Gated by MF.PARITY_SHADOW_ENABLED inside the handlers so the
+// mount itself is inert when the flag is off (current default).
+const brainParityRoutes = require('./server/routes/brainParity');
+app.use('/api/brain/parity', brainParityRoutes);
+
+// ─── [OMEGA Wave 1 UI 2026-05-15] Read-only OMEGA UI feed ───
+// Mounts GET /api/omega/{voice,mood,health} + POST /api/omega/chat. Read
+// model only — no mutation paths. ML write-side is dormant (Wave 2+ wires
+// the actual learning). Frontend OmegaPage consumes these endpoints.
+const omegaRoutes = require('./server/routes/omega');
+app.use('/api/omega', omegaRoutes);
+
+// D-4 Doctor API routes (admin-only). State + events + modules + verdict + quota.
+const doctorRoutes = require('./server/routes/doctor');
+app.use('/api/omega/doctor', doctorRoutes);
+
+// ML Plan v3 Phase B Day 5 — Ring5 influence pipeline admin observability API.
+const ring5Routes = require('./server/routes/ring5');
+app.use('/api/ring5', ring5Routes);
+
+// ─── Health Routes (Tasks 54-56: feed / locks / recovery) ───
+const healthRoutes = require('./server/routes/health');
+app.use('/api/health', healthRoutes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
+app.use('/api/market', require('./server/routes/market'));
 
 // ─── [C7] Client Error Forwarding (+ Sentry) ───
 app.post('/api/client-error', (req, res) => {
@@ -902,6 +1172,12 @@ app.post('/api/client-error', (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── /favicon.ico → reuse SVG favicon (browsers auto-request this at root) ───
+app.get('/favicon.ico', (_req, res) => {
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.join(__dirname, 'public', 'app', 'favicon.svg'));
+});
+
 // ─── Serve sw.js dynamically with version-stamped cache ───
 app.get('/sw.js', (_req, res) => {
   const ver = require('./server/version');
@@ -921,6 +1197,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html')) {
       res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+    if (filePath.endsWith('.apk')) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="zeus-terminal.apk"');
     }
   }
 }));
@@ -960,6 +1240,48 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// ─── OMEGA Doctor D-1: boot-time module registry validation ───
+// Per docs/omega/FAILURE_ONTOLOGY.md — hot_path_critical dep cycles =
+// DEAD state → exit 42. Non-critical cycles + forbidden-dep violations
+// emit warnings only.
+try {
+  const moduleRegistry = require('./server/services/ml/_doctor/moduleRegistry');
+  const seedRegistry = require('./server/services/ml/_doctor/seedRegistry');
+  seedRegistry.runSeed();
+  const dagResult = moduleRegistry.validateDAG();
+  if (dagResult.hardFail) {
+    console.error('[OMEGA-DOCTOR] HARD FAIL: hot_path_critical dependency cycle detected at boot');
+    console.error('[OMEGA-DOCTOR] Cycles:', JSON.stringify(dagResult.cycles, null, 2));
+    console.error('[OMEGA-DOCTOR] Cognitive state per FAILURE_ONTOLOGY: DEAD → exit 42');
+    process.exit(42);
+  }
+  if (dagResult.cycles.length > 0) {
+    console.warn('[OMEGA-DOCTOR] WARNING: non-critical dependency cycles:');
+    console.warn(JSON.stringify(dagResult.cycles, null, 2));
+  }
+  if (dagResult.forbiddenViolations.length > 0) {
+    console.warn('[OMEGA-DOCTOR] WARNING: transitive forbidden-dep violations:');
+    console.warn(JSON.stringify(dagResult.forbiddenViolations, null, 2));
+  }
+  const total = moduleRegistry.listAll().length;
+  console.log(`[OMEGA-DOCTOR] D-1 registry: ${total} modules registered, DAG valid`);
+
+  // D-2: start telemetry collector + persistent log writer
+  const telemetryCollector = require('./server/services/ml/_doctor/telemetryCollector');
+  const persistentLogWriter = require('./server/services/ml/_doctor/persistentLogWriter');
+  telemetryCollector.start();
+  persistentLogWriter.start();
+  console.log('[OMEGA-DOCTOR] D-2 telemetry + log writer started');
+
+  // D-3: start analyzer (5s loop computes cognitive state per FAILURE_ONTOLOGY)
+  const analyzer = require('./server/services/ml/_doctor/analyzer');
+  analyzer.start();
+  console.log('[OMEGA-DOCTOR] D-3 analyzer started (5s tick)');
+} catch (err) {
+  console.error('[OMEGA-DOCTOR] Boot validation error:', err.message);
+  console.error('[OMEGA-DOCTOR] Server continues but registry may be incomplete');
+}
+
 // ─── Bind to 0.0.0.0 for LAN access (phone over Wi-Fi) ───
 const server = app.listen(PORT, '0.0.0.0', () => {
   // Request timeout — prevent hung connections
@@ -971,6 +1293,16 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   } catch (err) {
     console.error('[DB] Migration error:', err.message);
   }
+
+  // [Bybit Phase 1A Task 43] Boot-time position reconciliation.
+  // Runs BEFORE other boot services: scan exchange → reconcile DB → verify SL → lift halt per user.
+  // Non-fatal — server continues even if recovery fails; failed users stay halted.
+  recoveryBoot.run().catch(err => {
+    console.error('[BOOT] recoveryBoot failed:', err.message);
+  });
+
+  // [Bybit Phase 1B Task 45] Start periodic NTP drift checks (5min interval).
+  timeSyncAssert.start();
 
   // Load exchange filters at startup (non-blocking)
   refreshExchangeInfo();
@@ -994,6 +1326,20 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
   logger.info('SERVER', 'Zeus Terminal started on port ' + PORT);
   logger.info('MIGRATION', 'Feature flags: ' + JSON.stringify(MF.getAll()));
+  // [OPS-5] Persist boot event for restart-count monitoring. Daily cron
+  // în database.js counts SERVER_BOOT events în last 24h and alerts on
+  // anomaly. Best-effort — try/catch so DB write failure never blocks
+  // the boot completion logging.
+  try {
+    db.auditLog(null, 'SERVER_BOOT', {
+      pid: process.pid,
+      port: PORT,
+      nodeEnv: process.env.NODE_ENV,
+      flags: MF.getAll(),
+    }, '127.0.0.1');
+  } catch (err) {
+    console.error('[OPS-5] Failed to persist SERVER_BOOT audit:', err && err.message);
+  }
   telegram.alertServerStart();
   telegramBot.start();
   // Position reconciliation handled internally by serverAT._runReconciliation (60s + startup)
@@ -1005,8 +1351,14 @@ const server = app.listen(PORT, '0.0.0.0', () => {
         .split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     const SD_TFS = (process.env.SD_TIMEFRAMES || '5m,1h,4h').split(',');
     serverState.init(SD_SYMBOLS, SD_TFS);
-    marketFeed.subscribeMulti(SD_SYMBOLS, SD_TFS).then(() => {
+    marketFeed.subscribeMultiWithBootRef(SD_SYMBOLS, SD_TFS).then(() => {
       logger.info('SERVER', `[P2] Market feed active for [${SD_SYMBOLS.join(',')}] [${SD_TFS}]`);
+      try {
+        const dbRef = require('./server/services/database').db;
+        marketFeed.startOrphanSweep(dbRef);
+      } catch (e) {
+        logger.warn('SERVER', `[Phase B] orphan sweeper boot failed: ${e.message}`);
+      }
     }).catch(err => {
       logger.error('SERVER', '[P2] Market feed failed:', err.message);
     });
@@ -1018,18 +1370,136 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 
   // [P3] Start server brain cycle if flag enabled (requires market data)
-  if (MF.SERVER_BRAIN) {
+  // [Phase 2 S3] Also start if PARITY_SHADOW_ENABLED so serverBrain can run
+  // its _runShadowCycle writer for the parity harness. Shadow-only when
+  // SERVER_BRAIN is off — no AT execution, no Telegram, no DB decision log.
+  if (MF.SERVER_BRAIN || MF.PARITY_SHADOW_ENABLED) {
     if (!MF.SERVER_MARKET_DATA) {
-      logger.error('SERVER', '[P3] SERVER_BRAIN requires SERVER_MARKET_DATA — brain NOT started');
+      logger.error('SERVER', '[P3] SERVER_BRAIN/PARITY_SHADOW requires SERVER_MARKET_DATA — brain NOT started');
     } else {
       // Wait for data to populate before starting brain
       setTimeout(() => {
         serverBrain.start();
-        logger.info('SERVER', '[P3] Server brain active (observation mode)');
+        if (MF.SERVER_BRAIN) {
+          logger.info('SERVER', '[P3] Server brain active (observation mode)');
+        } else {
+          logger.info('SERVER', '[S3] Server brain started in shadow-only mode (parity harness)');
+        }
       }, 15000);  // 15s delay for initial candle load
     }
   } else {
-    logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false)');
+    logger.info('SERVER', '[P3] Server brain DISABLED (MF.SERVER_BRAIN=false, PARITY_SHADOW_ENABLED=false)');
+  }
+
+  // [Wave 1 R0 fix 2026-05-19] R0 substrate ring orchestrator was never
+  // initialized at boot — `_state` stuck at 'OFFLINE' permanently. UI
+  // `/api/omega/health` returned R0: OFFLINE forever. Call init() so the
+  // ring transitions to 'OK' state + heartbeat ticks.
+  try {
+    const R0 = require('./server/services/ml/R0_substrate');
+    R0.init();
+    logger.info('SERVER', '[R0] substrate ring initialized → OK');
+  } catch (err) {
+    logger.error('SERVER', `[R0] init failed: ${err.message}`);
+  }
+
+  // [RADAR] Market Radar scanner — polls Binance top-300 USDT perps once/min
+  // and broadcasts spike / volume / rank / top-300 events via wsBroadcastAll.
+  // Always on — no migration flag. Read-only, no trading side effects.
+  try {
+    const marketRadar = require('./server/services/marketRadar');
+    marketRadar.start();
+    logger.info('SERVER', '[RADAR] market radar scanner started');
+  } catch (err) {
+    logger.error('SERVER', `[RADAR] boot failed: ${err.message}`);
+  }
+
+  // [FUND Wave 9 / Canonical PDF #8] CoinGecko fundamentals refresher — warms
+  // ml_fundamentals_cache every 5min so serverBrain hot-path sync read has
+  // market_cap_rank / dominance / vol_24h / 24h_chg available without HTTP.
+  try {
+    const fundamentals = require('./server/services/fundamentals');
+    fundamentals.startBackgroundRefresh();
+    logger.info('SERVER', '[FUND] fundamentals refresher started (5min TTL)');
+  } catch (err) {
+    logger.error('SERVER', `[FUND] boot failed: ${err.message}`);
+  }
+
+  // [BIN-TELEM 2026-05-19] Register active pollers provider so diag snapshot
+  // includes marketFeed _activeSymbols + _altKlinePollers count. Catches the
+  // suspected leak (auto-subscribe adăugă pollers fără cleanup).
+  try {
+    const telem = require('./server/services/binanceTelemetry');
+    telem.registerActivePollersProvider(() => {
+      const out = { marketFeed: marketFeed.getPollerStats() };
+      try {
+        const liq = require('./server/services/serverLiquidity');
+        if (liq && typeof liq.getDepthSymbols === 'function') out.serverLiquidity = liq.getDepthSymbols();
+      } catch (_) { /* optional */ }
+      return out;
+    });
+    logger.info('SERVER', '[BIN-TELEM] telemetry pollers provider registered');
+  } catch (err) {
+    logger.error('SERVER', `[BIN-TELEM] register failed: ${err.message}`);
+  }
+
+  // [Wave 8 G] Omega greeting — written to ml_voice_log on boot for each
+  // active user so TheVoice feed shows life on startup. Best-effort.
+  try {
+    const voiceLogger = require('./server/services/ml/_voice/voiceLogger');
+    const usersList = db.listUsers ? db.listUsers() : [];
+    for (const u of usersList) {
+      try {
+        voiceLogger.logUtterance({
+          userId: u.id,
+          utteranceType: 'GREETING',
+          mood: 'CALM',
+          text: 'Ω online. let me look around.',
+          templateId: 'omega_boot_greeting',
+          contextJson: JSON.stringify({ ts: Date.now() }),
+        });
+      } catch (_) { /* per-user best-effort */ }
+    }
+  } catch (err) {
+    logger.warn('SERVER', `[OMEGA-GREETING] boot emit failed: ${err.message}`);
+  }
+
+  // [LIQ] Binance public liquidation feed — one persistent WS to
+  // !forceOrder@arr, filtered to notional ≥ $100k. Read-only public data,
+  // no trading side effects. Gated by MARKET_RADAR_LIQ_ENABLED.
+  try {
+    const liquidationFeed = require('./server/services/liquidationFeed');
+    liquidationFeed.start();
+    logger.info('SERVER', '[LIQ] liquidation feed started');
+  } catch (err) {
+    logger.error('SERVER', `[LIQ] boot failed: ${err.message}`);
+  }
+
+  // [LIQ-FEED PROXY 2026-05-14] Server-side unfiltered liq aggregator for
+  // Quant Monitor heatmap (separate from Market Radar feed above which
+  // applies $100k filter + 30s dedup). Broadcasts `liq.feed` frames; clients
+  // listen via liqFeedClient.ts when MF.LIQ_FEED_VIA_SERVER is true.
+  // Spec: LIQ_FEED_PROXY_PLAN_20260514.md
+  try {
+    const liqFeedAggregator = require('./server/services/liqFeedAggregator');
+    liqFeedAggregator.start();
+    logger.info('SERVER', '[LIQ-FEED] aggregator started (BNB + BYB + OKX, unfiltered passthrough)');
+  } catch (err) {
+    logger.error('SERVER', `[LIQ-FEED] boot failed: ${err.message}`);
+  }
+
+  // [b65] Reflection engine: start + backfill from history regardless of SERVER_BRAIN.
+  // Dashboard reads thoughts/rules/self-score directly from in-memory Maps —
+  // without this seed, every pm2 reload leaves the dashboard empty until a fresh
+  // AT close triggers reflectOnTrade. Restores rules from DB and replays the
+  // last 50 closed trades per user into the thoughts ring buffer.
+  try {
+    const serverReflection = require('./server/services/serverReflection');
+    serverReflection.start();
+    serverReflection.seedFromHistory(null, 50);
+    logger.info('SERVER', '[REFLECTION] engine started + history seeded (dashboard ready)');
+  } catch (err) {
+    logger.error('SERVER', `[REFLECTION] boot failed: ${err.message}`);
   }
 
   // [P6] Log live AT status
@@ -1045,6 +1515,11 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   }
 });
 
+// ─── Omega Memory Cleanup Cron (Sub-C.1 Task 9) ─────────────────────────────
+// Daily 02:00 UTC — hard-delete tombstones, retry failed_transient,
+// recover stuck pending, auto-decay expired, compact watermarks per user.
+require('./server/cron/omegaMemoryCleanup').schedule();
+
 // ─── WebSocket Sync (real-time cross-device push) ───
 const wss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 });
 const _wsClients = new Map(); // userId -> Set<ws>
@@ -1054,6 +1529,32 @@ server.on('upgrade', (req, socket, head) => {
   // Only accept /ws/sync path
   if (req.url !== '/ws/sync') {
     socket.write('HTTP/1.1 404 Not Found\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  // [SEC-20] Origin allowlist on WS upgrade — defense-in-depth vs cross-site
+  // WebSocket hijacking. SameSite=lax cookie already prevents browser cross-
+  // origin cookie attach (primary defense), but absent Origin or unknown
+  // Origin in upgrade request indicates non-browser or rogue context — reject.
+  // Mirrors HTTP Origin guard at line ~107 (sendBeacon paths). Tolerate
+  // missing Origin only for non-browser clients în dev sau test (no cookies
+  // anyway). Production: strict allowlist match.
+  try {
+    const origin = req.headers['origin'] || '';
+    const host = req.headers['host'] || '';
+    const allowed = config.allowedOrigins || ['https://' + host];
+    const okOrigin = origin && (
+      allowed.some(a => origin === a) ||
+      origin === 'https://' + host ||
+      origin === 'http://' + host
+    );
+    if (!okOrigin) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+  } catch (_) {
+    socket.write('HTTP/1.1 400 Bad Request\r\n\r\n');
     socket.destroy();
     return;
   }
@@ -1079,10 +1580,12 @@ wss.on('connection', (ws, req) => {
     const jwt = require('jsonwebtoken');
     user = jwt.verify(token, config.jwtSecret || authRoutes.JWT_SECRET, { algorithms: ['HS256'] });
     if (!user || !user.id) { ws.close(4001, 'unauthorized'); return; }
-    // Verify token_version (session invalidation on password change)
-    if (user.tokenVersion != null) {
+    // Verify user status + token_version (session invalidation on password change).
+    // Use ?? 0 on both sides so legacy tokens without tokenVersion claim fail against
+    // DB default (1), forcing re-login instead of silently bypassing the check.
+    {
       const fresh = db.findUserById(user.id);
-      if (!fresh || fresh.status !== 'active' || (fresh.token_version != null && user.tokenVersion !== fresh.token_version)) {
+      if (!fresh || fresh.status !== 'active' || (user.tokenVersion ?? 0) !== (fresh.token_version ?? 0)) {
         ws.close(4001, 'session expired'); return;
       }
     }
@@ -1100,6 +1603,13 @@ wss.on('connection', (ws, req) => {
   userSet.add(ws);
   logger.info('WS', 'Client connected uid=' + uid + ' total=' + userSet.size);
 
+  // [SEC-19] Pin token_version + uid on socket for heartbeat re-verify.
+  // Force-logout (DB token_version bump pe password change/banned/disabled)
+  // doesn't kick active WS connections until next reconnect — heartbeat now
+  // re-checks every 30s. If DB version > pinned version, kick socket.
+  ws._uid = uid;
+  ws._tokenVersion = user.tokenVersion ?? 0;
+
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
   ws.on('close', () => {
@@ -1107,12 +1617,62 @@ wss.on('connection', (ws, req) => {
     if (set) { set.delete(ws); if (set.size === 0) _wsClients.delete(uid); }
   });
   ws.on('error', () => { try { ws.close(); } catch (_) { } });
+
+  // [Phase 11.7] Market Radar warm-start — replay cached events so a new or
+  // reconnecting session sees the same radar state as everyone else. Safe
+  // when cache is empty (we just skip the send). Sent synchronously here so
+  // it lands before any future market.radar broadcast.
+  try {
+    const radarCache = require('./server/services/radarCache');
+    const snap = radarCache.snapshot();
+    if (snap && (snap.green.length || snap.red.length)) {
+      ws.send(JSON.stringify({ type: 'market.radar.snapshot', data: snap }));
+    }
+  } catch (_) { /* cache optional; never block WS accept */ }
+
+  // [Phase 12.A — Batch A] Exchange/env warm-start — mirrors radar snapshot.
+  // Sends one typed exchange.changed frame so a new or reconnecting tab
+  // learns the active exchange + env immediately, without waiting for the
+  // next at_update emit or for a REST roundtrip on /api/exchange/status.
+  // Sent only to THIS socket (not broadcast) — other tabs already have the
+  // current state; this is purely a per-connection warm-start.
+  try {
+    const snap = _buildExchangeSnapshot(uid);
+    if (snap) ws.send(JSON.stringify({ type: 'exchange.changed', data: snap }));
+  } catch (_) { /* never block WS accept */ }
+
+  // [Phase 2 S1.A] AT warm-start — per-socket canonical AT state snapshot.
+  // Eliminates the previous gap where a fresh tab had to wait for either the
+  // next serverAT.onChange() broadcast OR the 30s REST polling fallback
+  // before the AT panel rendered anything real. Read path is the same
+  // getFullState(uid) used by /api/at/state and the onChange broadcast, so
+  // the payload shape is identical to what applyATUpdate() already handles
+  // — no client wiring change needed. Per-socket only (not broadcast); other
+  // tabs already hold their own state.
+  try {
+    const atSnap = serverAT.getFullState(uid);
+    if (atSnap) ws.send(JSON.stringify({ type: 'at_update', data: atSnap }));
+  } catch (_) { /* never block WS accept */ }
 });
 
-// Heartbeat — drop dead connections every 30s
+// Heartbeat — drop dead connections every 30s + [SEC-19] re-verify token_version
 const _wsPing = setInterval(() => {
   wss.clients.forEach(ws => {
     if (!ws.isAlive) return ws.terminate();
+    // [SEC-19] Re-verify token_version against DB. Kick on mismatch (force-
+    // logout via password change / banned / disabled) sau on user gone.
+    // Cheap: 1 indexed DB read per active WS per 30s. Failure-safe: if DB
+    // read throws, leave socket alone (don't kick on transient DB error).
+    try {
+      if (ws._uid != null) {
+        const fresh = db.findUserById(ws._uid);
+        if (!fresh || fresh.status !== 'active' ||
+            (ws._tokenVersion ?? 0) !== (fresh.token_version ?? 0)) {
+          try { ws.close(4001, 'session expired'); } catch (_) { }
+          return;
+        }
+      }
+    } catch (_) { /* never kick on DB hiccup */ }
     ws.isAlive = false;
     ws.ping();
   });
@@ -1141,10 +1701,96 @@ app.locals.wsBroadcast = function (userId, senderWs) {
   });
 };
 
+// [MIGRATION-F0] Generic per-user push over the existing WSS. Used by
+// routes (settings / future stores) to broadcast a typed payload to every
+// live session of `userId`. Returns the count of sockets that received
+// the message. Safe to call when no sessions are connected.
+app.locals.wsBroadcastToUser = function (userId, payload) {
+  const set = _wsClients.get(userId);
+  if (!set || set.size === 0) return 0;
+  let msg;
+  try { msg = JSON.stringify(payload); } catch (_) { return 0; }
+  let sent = 0;
+  set.forEach(ws => {
+    try {
+      if (ws.readyState === WebSocket.OPEN) { ws.send(msg); sent++; }
+    } catch (_) { /* dead socket — cleaned on close */ }
+  });
+  return sent;
+};
+// Also expose on global for modules that don't have access to `app`.
+global.__zeusWsBroadcastToUser = app.locals.wsBroadcastToUser;
+
+// [Phase 12.A — Batch A] Build a typed exchange/env snapshot for the user.
+// Reads the canonical serverAT.getFullState() and plucks only the 5 fields
+// the UI needs to render exchange + env labels — no engine state, no
+// positions. Returns null if the read throws (defensive; never blocks).
+function _buildExchangeSnapshot(userId) {
+  if (!userId) return null;
+  try {
+    const s = serverAT.getFullState(userId);
+    return {
+      exchange: s.activeExchange,                 // 'binance' | 'bybit' | null
+      mode: s.exchangeMode,                       // 'live' | 'testnet' | null
+      apiConfigured: !!s.apiConfigured,
+      executionEnv: s.executionEnv,               // 'DEMO' | 'TESTNET' | 'REAL' | null
+      executionBlockedReason: s.executionBlockedReason,
+      ts: Date.now(),
+    };
+  } catch (_) { return null; }
+}
+
+// [Phase 12.A — Batch A] Push exchange.changed to every live session of
+// `userId`. Used by /api/exchange/{save,disconnect,verify} so other tabs /
+// devices learn the new active exchange + env immediately, without waiting
+// for a polling REST cycle. Best-effort: silently no-ops if the user has no
+// connected sockets or the snapshot build fails.
+app.locals.broadcastExchangeChanged = function (userId) {
+  const data = _buildExchangeSnapshot(userId);
+  if (!data) return 0;
+  return app.locals.wsBroadcastToUser(userId, { type: 'exchange.changed', data });
+};
+
+// [RADAR] Broadcast a payload to EVERY connected session across all users.
+// Used by market-wide feeds (e.g. market.radar) that are not user-scoped.
+app.locals.wsBroadcastAll = function (payload) {
+  let msg;
+  try { msg = JSON.stringify(payload); } catch (_) { return 0; }
+  let sent = 0;
+  _wsClients.forEach(set => {
+    set.forEach(ws => {
+      try {
+        if (ws.readyState === WebSocket.OPEN) { ws.send(msg); sent++; }
+      } catch (_) { /* dead socket — cleaned on close */ }
+    });
+  });
+  return sent;
+};
+global.__zeusWsBroadcastAll = app.locals.wsBroadcastAll;
+
 // ─── Graceful Shutdown ───
 function _gracefulShutdown(signal) {
   logger.warn('SERVER', 'Shutdown signal received: ' + signal);
   console.log('\n🛑 Shutting down gracefully (' + signal + ')...');
+
+  // [Wave 8 G] Omega farewell — best-effort, before sockets close
+  try {
+    const voiceLogger = require('./server/services/ml/_voice/voiceLogger');
+    const usersList = db.listUsers ? db.listUsers() : [];
+    for (const u of usersList) {
+      try {
+        voiceLogger.logUtterance({
+          userId: u.id,
+          utteranceType: 'FAREWELL',
+          mood: 'CALM',
+          text: 'Ω resting. catch you later boss.',
+          templateId: 'omega_shutdown_farewell',
+          contextJson: JSON.stringify({ signal, ts: Date.now() }),
+        });
+      } catch (_) {}
+    }
+  } catch (_) { /* best-effort during shutdown */ }
+
   telegramBot.stop();
   clearInterval(_wsPing);
   wss.clients.forEach(ws => ws.terminate());

@@ -13,6 +13,9 @@ import { renderTradeMarkers } from './marketDataOverlays'
 import { addTradeToJournal } from '../services/storage'
 import { renderDemoPositions , getSymPrice } from './marketDataPositions'
 import { _safePnl } from '../utils/guards'
+import { useATStore } from '../stores/atStore'
+import { api } from '../services/api'
+import { playExitSound } from '../ui/dom2'
 const w = window as any // kept for w.S.profile (self-ref SKIP), w.ZLOG, w.ZState, fn calls
 
 export function closeDemoPos(id: any, reason?: string): void {
@@ -28,13 +31,30 @@ export function closeDemoPos(id: any, reason?: string): void {
   pos.closed = true
   pos.status = 'closing' // [FIX H3]
 
-  // [BUG1 FIX] Server-managed position close
-  if (w._serverATEnabled && pos._serverSeq) {
+  // [BUG-B] Refresh per-symbol cooldown on close — prevents AT immediate reopen
+  if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
+  AT._cooldownBySymbol[pos.sym] = Date.now()
+
+  // [BUG1 FIX] Server-managed position close — unconditional when _serverSeq exists
+  if (pos._serverSeq) {
     if (typeof w._zeusRequestServerClose === 'function') w._zeusRequestServerClose(pos._serverSeq, pos.id)
-    fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: pos._serverSeq }) })
-      .then(function (r: any) { return r.json() })
-      .then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(pos._serverSeq) })
-      .catch(function () { })
+    const _closeSeq = pos._serverSeq
+    const _closeId = pos.id
+    const _doServerClose = function (attempt: number) {
+      api.raw<any>('POST', '/api/at/close', { seq: _closeSeq })
+        .then(function (d: any) {
+          if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(_closeSeq)
+        })
+        .catch(function (_err: any) {
+          if (attempt < 2) {
+            setTimeout(function () { _doServerClose(attempt + 1) }, 2000 * attempt)
+          } else {
+            w._zeusCloseFailedSeqs = w._zeusCloseFailedSeqs || []
+            w._zeusCloseFailedSeqs.push({ seq: _closeSeq, id: _closeId, ts: Date.now() })
+          }
+        })
+    }
+    _doServerClose(1)
   }
 
   // _bmPostClose
@@ -102,12 +122,13 @@ export function closeDemoPos(id: any, reason?: string): void {
     TP.demoPositions = (TP.demoPositions || []).filter((p: any) => !p.closed)
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     const autoPosns = TP.demoPositions.filter((p: any) => p.autoTrade)
-    if (autoPosns.length === 0) { const el = document.getElementById('atPosCount'); if (el) el.textContent = '0 pozitii' }
+    if (autoPosns.length === 0) { useATStore.getState().patchUI({ posCountText: '0 positions' }) }
     if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   }, 0)
 
-  toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
-  w.ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade', `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Inchis'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  toast(`${(reason && (reason.includes('TP') || reason.includes('TP HIT'))) ? 'WIN' : 'CLOSED'} ${reason || 'Closed'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  w.ncAdd(pnl >= 0 ? 'info' : 'warning', 'trade', `${pnl >= 0 ? 'WIN' : 'LOSS'} ${reason || 'Closed'}: ${pos.side} ${pos.sym.replace('USDT', '')} PnL ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`)
+  playExitSound(pnl >= 0)  // [BUG5.1] sound on demo close (manual/auto/TP/SL) — gated by SOUND READY
 
   w.ZState.syncNow()
 

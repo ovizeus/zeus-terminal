@@ -5,13 +5,18 @@
 import { getATR, getKlines } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
-import { BM } from '../core/config'
+import { BM, USER_SETTINGS } from '../core/config'
 import { _safeLocalStorageSet } from '../services/storage'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+import { useATStore } from '../stores/atStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { _checkAppUpdate } from './bootstrapError'
 import { _srUpdateStats, setDslStripOpen } from './config'
 import { _renderBuildInfo, setPWAVersion, _showWelcomeModal , _pinUpdateUI, _pinCheckLock, setupPWAReloadBtn } from './bootstrapMisc'
+import { startWidgetSync } from './widgetSync'
+// [MOB-5 2026-05-13] Android back button native handler (no-op pe web).
+import { initBackButtonHandler } from './backButtonHandler'
 import { registerServiceWorker as _mdRegisterSW } from '../data/marketDataWS'
 import { _waitForFeedThenStartExtras, runHealthChecks, _updatePnlLabCondensed, initZeusGroups } from './bootstrapInit'
 import { initCharts, fetchKlines } from '../data/marketDataChart'
@@ -19,7 +24,7 @@ import { _resumeLivePendingSyncIfNeeded , renderDemoPositions } from '../data/ma
 import { _renderAdaptivePanel, initAdaptiveStrip, _adaptLoad, computeMacroCortex, recalcAdaptive } from '../trading/risk'
 import { _initBrainCockpit, startZAnim, runBrainUpdate, syncBrainFromState, brainThink } from '../engine/brain'
 import { runSignalScan } from '../engine/indicators'
-import { initARES, initAriaBrain } from '../engine/aresUI'
+import { initAriaBrain } from '../engine/aresUI'
 import { initAUB } from '../engine/aub'
 import { initActBar } from '../ui/dom2'
 import { initCloudSettings, connectBNB, connectBYB } from '../data/marketDataWS'
@@ -52,11 +57,40 @@ export async function startApp(): Promise<void> {
   if (w.ZEUS_STARTED) { console.warn('[ZEUS] startApp() called twice — ignoring'); return }
   w.ZEUS_STARTED = true; w.ZEUS_BOOTED = false
 
-  // [B17b] PREBOOT: fetch AT state BEFORE localStorage restore
+  // [Phase 2 S3.1d] Preboot: hydrate window.__MF from server migration flags.
+  // Blocks before any WS connection so marketDataWS / marketDataChart /
+  // orderflow can branch on ALT_WS_FEEDS from the first tick. Falls back to
+  // empty object on failure (all flags default off → original behavior).
   try {
-    const _prebootRes = await fetch('/api/at/state', { credentials: 'same-origin' })
-    if (_prebootRes.ok) { const _prebootData = await _prebootRes.json(); if (_prebootData && typeof w.ZState !== 'undefined' && typeof w.ZState._applyPreboot === 'function') { w.ZState._applyPreboot(_prebootData); console.log('[startApp] Preboot AT state applied — _serverATEnabled:', !!w._serverATEnabled) } }
-  } catch (_) { console.log('[startApp] Preboot AT fetch skipped') }
+    const _mfRes = await fetch('/api/migration/flags', { credentials: 'same-origin' })
+    if (_mfRes && _mfRes.ok) {
+      w.__MF = await _mfRes.json()
+      console.log('[startApp] Migration flags hydrated:', w.__MF)
+    } else {
+      w.__MF = {}
+    }
+  } catch (_) { w.__MF = {}; console.log('[startApp] Migration flags fetch failed — using defaults') }
+
+  // [B17b] PREBOOT: fetch sync closedIds AND AT state in parallel.
+  // closedIds MUST be populated BEFORE _applyPreboot so _rcSet is never empty at boot.
+  try {
+    const [_prebootRes, _syncRes] = await Promise.all([
+      fetch('/api/at/state', { credentials: 'same-origin' }).catch(() => null),
+      fetch('/api/sync/state', { credentials: 'same-origin' }).catch(() => null)
+    ])
+    // Hydrate _syncClosedIds from server sync state BEFORE AT apply
+    if (_syncRes && _syncRes.ok) {
+      try {
+        const _syncData = await _syncRes.json()
+        if (_syncData && _syncData.ok && Array.isArray(_syncData.data?.closedIds) && _syncData.data.closedIds.length > 0) {
+          w._syncClosedIds = new Set(_syncData.data.closedIds.map(String))
+          console.log('[startApp] Preboot _syncClosedIds hydrated from server sync:', w._syncClosedIds.size)
+        }
+      } catch (_) { /* sync parse failed — continue without */ }
+    }
+    // Now apply AT state with _syncClosedIds already available
+    if (_prebootRes && _prebootRes.ok) { const _prebootData = await _prebootRes.json(); if (_prebootData && typeof w.ZState !== 'undefined' && typeof w.ZState._applyPreboot === 'function') { w.ZState._applyPreboot(_prebootData); console.log('[startApp] Preboot AT state applied — _serverATEnabled:', !!w._serverATEnabled) } }
+  } catch (_) { console.log('[startApp] Preboot fetch skipped') }
 
   // [DSL-OFF] Preboot: sync client DSL.enabled from server per-user flag
   try {
@@ -85,7 +119,26 @@ export async function startApp(): Promise<void> {
   initCharts()
   try { const _devRaw = localStorage.getItem('zeus_dev_enabled'); if (_devRaw === 'true') { DEV.enabled = true; const _devPanel = document.getElementById('dev-sec'); if (_devPanel) _devPanel.style.display = '' } } catch (_) { }
   initZeusGroups()
-  initAdaptiveStrip(); w.initMTFStrip(); w.loadUserSettings(); w._srLoad()
+  initAdaptiveStrip(); w.initMTFStrip()
+  try {
+    useSettingsStore.getState().loadFromServer()
+      .then(() => {
+        try { localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS)) } catch (_) { }
+        try { w.loadUserSettings() } catch (_) { }
+      })
+      .catch(() => { try { w.loadUserSettings() } catch (_) { } })
+  } catch (_) { try { w.loadUserSettings() } catch (_) { } }
+  // [Phase 8A4] ARES server-first boot: mirror the settings load above so the
+  // ARES store hydrates from server at the same boot point instead of waiting
+  // for useServerSync's 8s-delayed pull. Without this, ARES renders stale LS
+  // values during the 0–8s window. Errors swallowed — useServerSync runs a
+  // second load at t=8s as safety net.
+  try {
+    import('../stores/aresStore').then(({ useAresStore }) => {
+      useAresStore.getState().loadFromServer()
+    }).catch(() => { })
+  } catch (_) { /* defensive */ }
+  w._srLoad()
   if (typeof w._ncLoad === 'function') w._ncLoad()
   setTimeout(runHealthChecks, 700)
   setTimeout(() => { _srUpdateStats(); w._srRenderList(); w.srStripUpdateBar() }, 800)
@@ -93,7 +146,10 @@ export async function startApp(): Promise<void> {
   setTimeout(_checkAppUpdate, 2000)
   initAUB()
   if (typeof w.initARIANOVA === 'function') w.initARIANOVA()
-  initPMPanel(); initARES()
+  // [R28.2-H] initARES() removed — ARES strip owned by ARESPanel.tsx.
+  // Preserve the original first-tick cadence that initARES() scheduled.
+  initPMPanel()
+  setTimeout(function () { if (typeof w.ARES !== 'undefined') w.ARES.tick() }, 1000)
   // [FIX] _relocateFlow removed — React PanelShell controls flow-panel position
   setTimeout(initAriaBrain, 200)
   if (typeof w.initTeacher === 'function') w.initTeacher()
@@ -182,7 +238,7 @@ export async function startApp(): Promise<void> {
         if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.killTriggered === 'boolean') AT.killTriggered = serverSnap.at.killTriggered; if (typeof serverSnap.at.realizedDailyPnL === 'number') AT.realizedDailyPnL = serverSnap.at.realizedDailyPnL; if (typeof serverSnap.at.closedTradesToday === 'number') AT.closedTradesToday = serverSnap.at.closedTradesToday }
       }
       if (serverSnap.at && typeof AT !== 'undefined') { if (typeof serverSnap.at.enabled === 'boolean') AT.enabled = serverSnap.at.enabled; if (serverSnap.at.mode) { AT.mode = serverSnap.at.mode; AT._modeConfirmed = true }; if (AT.enabled) console.log('[sync] B1v2 — AT.enabled restored from server (mode: ' + AT.mode + ')') }
-      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { const _b3btn = document.getElementById('atMainBtn'); if (_b3btn) _b3btn.className = 'at-main-btn on'; try { runSignalScan() } catch (_) {}; if (typeof calcConfluenceScore === 'function') try { calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000); setTimeout(runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
+      if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered && !AT.interval) { useATStore.getState().patchUI({ btnClass: 'at-main-btn on' }); try { runSignalScan() } catch (_) {}; if (typeof calcConfluenceScore === 'function') try { calcConfluenceScore() } catch (_) {}; AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000); setTimeout(runAutoTradeCheck, 3000); if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner() }
       setTimeout(function () { if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance(); renderDemoPositions(); renderATPositions(); syncBrainFromState() }, 300)
       w.ZState.saveLocal()
       console.log('[sync] Applied — bal: $' + (TP.demoBalance || 0).toFixed(2) + ', pos: ' + (TP.demoPositions || []).length)
@@ -241,7 +297,7 @@ export async function startApp(): Promise<void> {
   setTimeout(renderDHF, 1200); w.Intervals.set('dhf', renderDHF, 60000)
   setTimeout(renderPerfTracker, 2000)
   setTimeout(() => { updateQuantumClock(); updateBrainExtension() }, 3000)
-  setTimeout(() => { brainThink('info', _ZI.brain + ' Zeus Brain initializat. Astept date live...') }, 3200)
+  setTimeout(() => { brainThink('info', _ZI.brain + ' Zeus Brain initialized. Waiting for live data...') }, 3200)
 
   setTimeout(runSignalScan, 4000); setTimeout(calcConfluenceScore, 5500)
   setTimeout(scanLiquidityMagnets, 9000); setTimeout(updateDeepDive, 11000)
@@ -308,7 +364,25 @@ export async function startApp(): Promise<void> {
       if (w.__ZT_SENTINEL_V1__) return; w.__ZT_SENTINEL_V1__ = true
       function _onVisibilityChange() { try { const hidden = document.hidden; if (typeof w._SAFETY !== 'undefined') w._SAFETY.tabHidden = hidden; if (hidden) { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('TAB_HIDDEN', 'Tab in background \u2014 AT paused', 'sentinel'); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[SENTINEL] Tab hidden \u2192 AT paused') } else { if (typeof w._SAFETY !== 'undefined') { w._SAFETY.tabHidden = false; w._SAFETY.tabRestoreTs = Date.now() }; if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[SENTINEL] Tab visible \u2192 AT va relua') }; _updateSentinelBar() } catch (_) { } }
       document.addEventListener('visibilitychange', _onVisibilityChange)
-      function _updateSentinelBar() { try { const bar = document.getElementById('zt-sentinel-bar'); if (!bar) return; const hidden = document.hidden; const sf = (typeof w._SAFETY !== 'undefined') ? w._SAFETY : {} as any; const lastTs = sf.lastPriceTs || 0; const dataAge = lastTs ? Math.round((Date.now() - lastTs) / 1000) : null; const stalled = !!sf.dataStalled; let txt: string, bg: string, col: string; if (hidden) { txt = _ZI.bellX + ' TAB HIDDEN \u2014 AT PAUSED'; bg = 'rgba(180,100,0,0.18)'; col = '#FFB000' } else if (stalled) { txt = _ZI.w + ' DATA STALLED \u2014 AT PAUSED'; bg = 'rgba(255,0,51,0.15)'; col = '#ff3355' } else if (dataAge !== null && dataAge > 8) { txt = _ZI.clock + ' DATA LAG ' + dataAge + 's'; bg = 'rgba(180,100,0,0.12)'; col = '#f0c040' } else if (dataAge !== null) { txt = _ZI.ok + ' FEED OK ' + dataAge + 's'; bg = 'rgba(0,200,100,0.10)'; col = '#00cc66' } else { txt = '\u2014 SENTINEL \u2014'; bg = 'rgba(60,80,100,0.10)'; col = '#445566' }; bar.style.display = 'block'; bar.style.background = bg; bar.style.color = col; bar.style.border = '1px solid ' + col + '44'; bar.innerHTML = txt } catch (_) { } }
+      function _updateSentinelBar() {
+        try {
+          const hidden = document.hidden
+          const sf = (typeof w._SAFETY !== 'undefined') ? w._SAFETY : {} as any
+          const lastTs = sf.lastPriceTs || 0
+          const dataAge = lastTs ? Math.round((Date.now() - lastTs) / 1000) : null
+          const stalled = !!sf.dataStalled
+          let icon: 'bellX' | 'w' | 'clock' | 'ok' | null
+          let text: string
+          let bg: string
+          let col: string
+          if (hidden) { icon = 'bellX'; text = 'TAB HIDDEN \u2014 AT PAUSED'; bg = 'rgba(180,100,0,0.18)'; col = '#FFB000' }
+          else if (stalled) { icon = 'w'; text = 'DATA STALLED \u2014 AT PAUSED'; bg = 'rgba(255,0,51,0.15)'; col = '#ff3355' }
+          else if (dataAge !== null && dataAge > 8) { icon = 'clock'; text = 'DATA LAG ' + dataAge + 's'; bg = 'rgba(180,100,0,0.12)'; col = '#f0c040' }
+          else if (dataAge !== null) { icon = 'ok'; text = 'FEED OK ' + dataAge + 's'; bg = 'rgba(0,200,100,0.10)'; col = '#00cc66' }
+          else { icon = null; text = '\u2014 SENTINEL \u2014'; bg = 'rgba(60,80,100,0.10)'; col = '#445566' }
+          useATStore.getState().patchUI({ sentinel: { visible: true, icon, text, bg, color: col, border: '1px solid ' + col + '44' } })
+        } catch (_) { }
+      }
       if (typeof w._SAFETY !== 'undefined') w._SAFETY.tabHidden = document.hidden
       if (!w.__ZT_SENTINEL_TMR__) { w.__ZT_SENTINEL_TMR__ = w.Intervals.set('sentinel', function () { try { _updateSentinelBar() } catch (_) { } }, 3000) }
       setTimeout(_updateSentinelBar, 500)
@@ -318,6 +392,10 @@ export async function startApp(): Promise<void> {
   // Mark fully booted
   setTimeout(() => { w.ZEUS_BOOTED = true; window.dispatchEvent(new CustomEvent('zeusReady')); atLog('info', '[BOOT] Zeus Terminal booted \u2014 PHASE 5 active'); _renderBuildInfo(); _pinUpdateUI() }, 15000)
   setTimeout(() => { _showWelcomeModal() }, 2500)
+  setTimeout(() => { try { startWidgetSync() } catch (_) {} }, 8000)
+  // [MOB-5 2026-05-13] Attach Android Back button handler. No-op pe web.
+  // Mobile UX: Back navighează modal → pageview → confirm-exit (NU exit instant).
+  setTimeout(() => { try { initBackButtonHandler() } catch (e: any) { console.warn('[MOB-5] init failed:', e?.message || e) } }, 1000)
   setTimeout(w._srEnsureVisible, 3000)
   setTimeout(_devEnsureVisible, 3500)
   setTimeout(() => { atLog('info', '[AT] Zeus Auto Trade Engine initializat.') }, 6000)

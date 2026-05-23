@@ -12,6 +12,7 @@ import { liveApiGetPositions } from '../trading/liveApi'
 import { PM } from './postMortem'
 import { ARES_MONITOR } from './aresMonitor'
 import { _aresRender } from './aresUI'
+import { useAresStore } from '../stores/aresStore'
 
 const w = window as any
 
@@ -54,6 +55,11 @@ const ARES_WALLET = (function () {
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aresData')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
     try { window.dispatchEvent(new CustomEvent('zeus:aresStateChanged')) } catch (_) { }
+    useAresStore.getState().patch({
+      balance: _w.balance, locked: _w.locked,
+      available: Math.max(0, _w.balance - _w.locked),
+      realizedPnL: _w.realizedPnL, fundedTotal: _w.fundedTotal,
+    })
   }
   recalc()
   if (_w.locked > 0) { _w.locked = 0; _save() }
@@ -104,6 +110,7 @@ const ARES_POSITIONS = (function () {
     if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('aresData')
     if (typeof w._userCtxPush === 'function') w._userCtxPush()
     try { window.dispatchEvent(new CustomEvent('zeus:aresStateChanged')) } catch (_) { }
+    useAresStore.getState().patch({ positions: [..._positions] })
   }
   function _makeClientId() { return 'ARES_' + Date.now() + '_' + Math.floor(Math.random() * 9999) }
   function calcUPnL(pos: any, markPrice: number) {
@@ -266,7 +273,7 @@ function _calcTrajectory(balance: number) {
   return { dailyRate: +(dailyRate * 100).toFixed(3), expectedNow: +expectedNow.toFixed(2), delta, daysLeft: +(Math.max(1, DAYS_MAX - daysPassed)).toFixed(0) }
 }
 
-function _computeState(traj: any, balance: number) {
+function _computeState(traj: any, _balance: number) {
   const { delta } = traj
   const cl = _state.consecutiveLoss, cw = _state.consecutiveWin, wr = _state.winRate10
   const timeSinceLoss = Date.now() - _state.lastLossTs
@@ -282,7 +289,8 @@ function _computeState(traj: any, balance: number) {
 
 function _computeConfidence(traj: any) {
   let score = 50
-  const regime = _regime(), es = _entryScore(), atrVal = _atr()
+  const regime = _regime(), es = _entryScore()
+  void _atr()
   if (regime === 'STRONG BULL' || regime === 'STRONG BEAR') score += 15
   else if (regime === 'BULL' || regime === 'BEAR') score += 8
   else if (regime === 'RANGE') score -= 10
@@ -294,7 +302,7 @@ function _computeConfidence(traj: any) {
   return Math.min(99, Math.max(1, score))
 }
 
-function _updateNodes(traj: any, balance: number) {
+function _updateNodes(traj: any, _balance: number) {
   const regime = _regime(), es = _entryScore(), session = _session()
   const pmStats = (typeof PM !== 'undefined') ? PM.getStats() : null
   const n_traj = _state.nodes.trajectory
@@ -369,7 +377,7 @@ function tick() {
     try {
       let markPrice = 0
       if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price
-      else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = _lk.close }
+      else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = Number(_lk.close) }
       if (markPrice > 0) ARES_POSITIONS.updatePrices(markPrice)
     } catch (_) { }
 
@@ -419,7 +427,7 @@ function tick() {
   } catch (e: any) { console.warn('[ARES] tick error:', e.message) }
 }
 
-function onTradeClosed(pnl: number, pos?: any) {
+function onTradeClosed(pnl: number, _pos?: any) {
   try {
     const isWin = pnl > 0, isNeutral = pnl === 0
     _state.tradeHistory.unshift(isWin)
@@ -456,7 +464,7 @@ export function ARES_openPosition(opts: any): any {
   if (!wallet || !positions) return null
   try { if (typeof w.AT !== 'undefined' && (w.AT.killTriggered || w.AT.killSwitch)) { console.warn('[ARES] Kill-switch active \u2014 blocking open'); return null } } catch (_) { }
   let markPrice = 0
-  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = _lk.close } } catch (_) { }
+  try { if (typeof w.S !== 'undefined' && w.S.price) markPrice = w.S.price; else { const _lk = (typeof safeLastKline === 'function') ? safeLastKline() : null; if (_lk) markPrice = Number(_lk.close) } } catch (_) { }
   if (!markPrice || markPrice <= 0) { console.warn('[ARES] No mark price \u2014 blocking open'); return null }
   const confidence = Math.min(100, Math.max(0, opts.confidence || 50))
   const bal = wallet.balance, avail = wallet.available, openCount = positions.getOpen().length

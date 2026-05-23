@@ -7,8 +7,8 @@
 import { getATObject, getBrainMetrics, getDSLObject } from '../services/stateAccessors'
 import { isValidMarketPrice } from '../utils/dom'
 import { _safeLocalStorageSet } from '../services/storage'
-import { _ZI } from '../constants/icons'
 import { _applyATToggleUI, updateATMode, updateATStats , atLog , renderATPositions } from '../trading/autotrade'
+import { useATStore } from '../stores/atStore'
 import { _dslTrimAll } from '../trading/dsl'
 import { aubBBSnapshot } from '../engine/aub'
 import { loadJournalFromStorage } from '../services/storage'
@@ -19,6 +19,8 @@ import { renderLivePositions , renderDemoPositions } from '../data/marketDataPos
 import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
+import { useBrainStore } from '../stores/brainStore'
+import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
 w.__SYNC_VERSION__ = 'v12'
@@ -30,15 +32,11 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
 ;(function _initUserScopedStorage() {
   let uid: any = null
   try {
-    const m = document.cookie.match(/zeus_token=([^;]+)/)
-    if (m) {
-      const parts = m[1].split('.')
-      if (parts.length >= 2) {
-        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
-        uid = payload.id || null
-      }
-    }
-  } catch (_e) { /* not logged in or malformed token */ }
+    // zeus_token is httpOnly; read the non-httpOnly zeus_uid companion cookie
+    // set by server alongside zeus_token (see server/routes/auth.js _setAuthCookie).
+    const m = document.cookie.match(/zeus_uid=([^;]+)/)
+    if (m) uid = parseInt(m[1], 10) || null
+  } catch (_e) { /* not logged in */ }
   w._zeusUserId = uid
 
   const _USER_KEYS: any = {
@@ -60,10 +58,7 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_mscan_syms': 1, 'zt_midstack_order': 1,
     'aub_bb': 1, 'aub_macro': 1, 'aub_sim_last': 1, 'aub_expanded': 1,
     'of_hud_v2': 1, 'of_hud_pos_v1': 1, 'of_hud_anchor_x_v1': 1,
-    'zeus_teacher_enabled': 1, 'zeus_teacher_mode': 1,
-    'zeus_teacher_sessionState': 1, 'zeus_teacher_cumulative': 1,
-    'zeus_teacher_checklistPrefs': 1, 'zeus_teacher_checklistState': 1,
-    'zeus_teacher_dismissed': 1,
+    // [ZT6] Teacher v2 (current codebase): 7 keys actively used
     'zeus_teacher_config': 1, 'zeus_teacher_sessions': 1,
     'zeus_teacher_lessons': 1, 'zeus_teacher_stats': 1,
     'zeus_teacher_memory': 1, 'zeus_teacher_v2state': 1,
@@ -72,8 +67,13 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
     'zeus_dev_enabled': 1,
     'zeus_drawings_v1': 1,
     'zeus_ts_open': 1,
-    'zeus_pin_hash': 1,
+    'zeus_pin_hash': 1, 'zeus_pin_unlocked_until': 1, // [ZT6] PIN unlock is per-user
     'zt_api_key': 1, 'zt_api_secret': 1, 'zt_api_token': 1, 'zt_api_exchange': 1
+    // [ZT6] Intentionally NOT scoped (per-browser, not per-user):
+    //   'zeus_tab_leader' — multi-tab leader election for AT executor (all
+    //     logged-in tabs across users must see the same leader).
+    //   'zeus_app_version' — PWA/update banner install-version marker tied
+    //     to the browser cache, not to the logged-in user.
   }
   const _USER_PREFIXES = ['zt_cloud_']
 
@@ -154,38 +154,92 @@ console.log('[ZEUS] state.js loaded — sync version:', w.__SYNC_VERSION__)
 })()
 
 // ── P1: TRADING CONFIG — DOM-free parameter source ───────────────
-w.TC = w.TC || {
-  lev: 5,
-  size: 200,
-  slPct: 1.5,
-  rr: 2,
-  riskPct: 1,
-  maxPos: 3,
-  cooldownMs: 60000,
-  minADX: 18,
-  hourStart: 0,
-  hourEnd: 23,
-  sigMin: 3,
-  confMin: 65,
-  dslActivatePct: 0.50,
-  dslTrailPct: 0.60,
-  dslTrailSusPct: 0.50,
-  dslExtendPct: 0.25,
+// Phase 3 C3: the 8 AT-relevant keys (lev, size, slPct, rr, maxPos, sigMin,
+// minADX, cooldownMs) are delegated to atStore.config via a Proxy.
+// Reads return atStore values; writes route through patchConfig and are
+// also mirrored on the backing object so Object.keys/enumeration still work.
+// Every other TC key (riskPct, hourStart, hourEnd, confMin, dslActivatePct,
+// dslTrailPct, dslTrailSusPct, dslExtendPct) stays as a plain property on
+// the backing object — untouched legacy behavior.
+{
+  const _tcDefaults: any = {
+    lev: 5,
+    size: 200,
+    slPct: 1.5,
+    rr: 2,
+    riskPct: 1,
+    maxPos: 3,
+    cooldownMs: 60000,
+    minADX: 18,
+    hourStart: 0,
+    hourEnd: 23,
+    sigMin: 3,
+    confMin: 65,
+    dslActivatePct: 0.50,
+    dslTrailPct: 0.60,
+    dslTrailSusPct: 0.50,
+    dslExtendPct: 0.25,
+  }
+  if (!w.TC || !w.TC.__atStoreProxy) {
+    const _tcBacking: any = w.TC ? { ..._tcDefaults, ...w.TC } : { ..._tcDefaults }
+    try {
+      // Seed atStore from backing defaults so first Proxy read matches legacy values.
+      useATStore.getState().patchConfig({
+        lev: _tcBacking.lev,
+        size: _tcBacking.size,
+        slPct: _tcBacking.slPct,
+        rr: _tcBacking.rr,
+        maxPos: _tcBacking.maxPos,
+        sigMin: _tcBacking.sigMin,
+        adxMin: _tcBacking.minADX,
+        cooldownMs: _tcBacking.cooldownMs,
+      })
+    } catch (_) { /* defensive */ }
+
+    const AT_DELEGATED = new Set(['lev', 'size', 'slPct', 'rr', 'maxPos', 'sigMin', 'minADX', 'cooldownMs'])
+    const TC_TO_CFG: Record<string, keyof ATConfig> = {
+      lev: 'lev', size: 'size', slPct: 'slPct', rr: 'rr',
+      maxPos: 'maxPos', sigMin: 'sigMin', minADX: 'adxMin', cooldownMs: 'cooldownMs',
+    }
+
+    w.TC = new Proxy(_tcBacking, {
+      get(target: any, prop: string | symbol) {
+        if (prop === '__atStoreProxy') return true
+        if (typeof prop === 'string' && AT_DELEGATED.has(prop)) {
+          try { return useATStore.getState().config[TC_TO_CFG[prop]] } catch (_) { return target[prop] }
+        }
+        return target[prop]
+      },
+      set(target: any, prop: string | symbol, value: any) {
+        if (typeof prop === 'string' && AT_DELEGATED.has(prop)) {
+          const n = Number(value)
+          if (Number.isFinite(n)) {
+            try { useATStore.getState().patchConfig({ [TC_TO_CFG[prop]]: n } as Partial<ATConfig>) } catch (_) { /* defensive */ }
+          }
+          target[prop] = value
+          return true
+        }
+        target[prop] = value
+        return true
+      },
+    })
+  }
 }
 
 export function syncDOMtoTC() {
   if (typeof document === 'undefined') return
-  const _el = function (id: string) { return document.getElementById(id) }
-  const _pi = function (id: string, def: any) { const v = parseInt((_el(id) as any)?.value); return Number.isFinite(v) ? v : def }
-  const _pf = function (id: string, def: any) { const v = parseFloat((_el(id) as any)?.value); return Number.isFinite(v) ? v : def }
+  // [R34] Typed `HTMLInputElement | null` instead of `as any` — `.value` is
+  // a structural property of input-like elements only.
+  const _el = function (id: string) { return document.getElementById(id) as HTMLInputElement | null }
+  const _pf = function (id: string, def: any) { const v = parseFloat(_el(id)?.value ?? ''); return Number.isFinite(v) ? v : def }
   const TC = w.TC
-  TC.lev = Math.max(1, Math.min(125, _pi('atLev', TC.lev)))
-  TC.size = Math.max(1, _pf('atSize', TC.size))
-  TC.slPct = Math.max(0.1, Math.min(20, _pf('atSL', TC.slPct)))
-  TC.rr = Math.max(0.1, Math.min(20, _pf('atRR', TC.rr)))
-  TC.maxPos = Math.max(1, _pi('atMaxPos', TC.maxPos))
+  // Phase 3 C5: the 6 AT keys (lev/size/slPct/rr/maxPos/sigMin) are now
+  // sourced from atStore.config (populated by AutoTradePanel on edit and by
+  // settingsStore on load/WS). Reading DOM here would route DOM values back
+  // through the TC Proxy into the store, making DOM the implicit source
+  // again — exactly what Phase 3 eliminates. DROPPED for AT keys.
+  // riskPct + dsl* remain DOM-sourced (out-of-scope for Phase 3 atStore).
   TC.riskPct = Math.max(0.1, Math.min(5, _pf('atRiskPct', TC.riskPct)))
-  TC.sigMin = Math.max(1, _pi('atSigMin', TC.sigMin))
   TC.dslActivatePct = _pf('dslActivatePct', TC.dslActivatePct)
   TC.dslTrailPct = _pf('dslTrailPct', TC.dslTrailPct)
   TC.dslTrailSusPct = _pf('dslTrailSusPct', TC.dslTrailSusPct)
@@ -247,12 +301,10 @@ export const BlockReason: any = {
   set(code: any, text: any, source?: any) {
     const br = { code, text, source: source || 'engine', ts: Date.now() }
     this._current = br
-    const el_br = document.getElementById('zad-block-reason')
-    if (el_br) {
-      el_br.textContent = text
-      el_br.className = 'znc-block-reason block'
-      el_br.style.display = 'block'
-    }
+    // [R30] DOM write removed — <BlockReasonText/> subscribes to
+    // brainStore.blockReasonDisplay, which engine/brain.ts updates every
+    // cycle. Call sites already mirror {code,text} into brainStore.blockReason
+    // via the _setBR helpers (klines.ts, autotrade.ts, etc).
     const now = Date.now()
     const _logKey = String(code) + '|' + String(text || '')
     const sameKey = (_logKey === this._lastLogKey)
@@ -272,8 +324,7 @@ export const BlockReason: any = {
     this._lastLogCode = null
     this._lastLogTs = 0
     this._lastLogKey = null
-    const el_br = document.getElementById('zad-block-reason')
-    if (el_br) { el_br.textContent = ''; el_br.style.display = 'none' }
+    // [R30] DOM write removed — see BlockReason.set above.
     if (typeof _updateWhyBlocked === 'function') _updateWhyBlocked(null, null)
   },
   get() { return this._current },
@@ -287,10 +338,14 @@ export function buildExecSnapshot(side: any, cond: any) {
   const BM = getBrainMetrics()
   const _tf = PROFILE_TF?.[S.profile || 'fast'] || { trigger: '5m', context: '15m' }
 
-  const _levRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.lev)) ? TC.lev : parseInt(document.getElementById('atLev')?.getAttribute('value') || '')
-  const _sizeRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.size)) ? TC.size : parseFloat(document.getElementById('atSize')?.getAttribute('value') || '')
-  const _slRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.slPct)) ? TC.slPct : parseFloat(document.getElementById('atSL')?.getAttribute('value') || '')
-  const _rrRaw = (typeof TC !== 'undefined' && Number.isFinite(TC.rr)) ? TC.rr : parseFloat(document.getElementById('atRR')?.getAttribute('value') || '')
+  // Phase 3 C5: read AT config from atStore (canonical source). Previous
+  // DOM fallback via document.getElementById('atLev') etc. removed — the
+  // store always has valid finite defaults (seeded in C3 at Proxy install).
+  const _atCfg = useATStore.getState().config
+  const _levRaw = _atCfg.lev
+  const _sizeRaw = _atCfg.size
+  const _slRaw = _atCfg.slPct
+  const _rrRaw = _atCfg.rr
 
   const lev = (Number.isFinite(_levRaw) && _levRaw >= 1) ? Math.min(125, Math.max(1, _levRaw)) : 5
   const size = (Number.isFinite(_sizeRaw) && _sizeRaw > 0) ? Math.min(100000, _sizeRaw) : 200
@@ -364,11 +419,13 @@ export const ZState = (() => {
           size: p.size, lev: p.lev, tp: p.tp, sl: p.sl,
           liqPrice: p.liqPrice, autoTrade: !!p.autoTrade,
           openTs: p.openTs || p.id, isLive: !!p.isLive,
+          _serverSeq: p._serverSeq || null,
           mode: p.mode || 'demo',
           controlMode: p.controlMode || null,
           sourceMode: p.sourceMode || null,
           brainModeAtOpen: p.brainModeAtOpen || null,
           dslParams: p.dslParams || null,
+          _dslUserEdited: !!p._dslUserEdited,
           dslAdaptiveState: p.dslAdaptiveState || null,
           dslHistory: Array.isArray(p.dslHistory) ? p.dslHistory.slice(-20) : [],
           dsl: (typeof DSL !== 'undefined' && DSL.positions?.[String(p.id)])
@@ -393,7 +450,11 @@ export const ZState = (() => {
       liveManualPositions: (typeof TP !== 'undefined' ? TP.livePositions || [] : [])
         .filter(function (p: any) {
           if (p.closed) return false
-          if (p.autoTrade) return false
+          // [Phase 3A] Whitelist: only whitelisted-manual positions are serialized as manual.
+          // Ambiguous positions (autoTrade undefined, sourceMode unknown) are dropped — they
+          // will rehydrate from server on reconnect if still live. Never coerce unknown → manual.
+          const _isManual = (p.autoTrade === false) || (p.sourceMode === 'manual') || (p.sourceMode === 'paper')
+          if (!_isManual) return false
           if (!p.isLive && !p.fromExchange) return false
           return true
         })
@@ -408,6 +469,7 @@ export const ZState = (() => {
           _serverSeq: p._serverSeq || null,
           _serverMode: p._serverMode || null,
           dslParams: p.dslParams || null,
+          _dslUserEdited: !!p._dslUserEdited,
           dslAdaptiveState: p.dslAdaptiveState || null,
           dslHistory: Array.isArray(p.dslHistory) ? p.dslHistory.slice(-20) : [],
           dsl: (typeof DSL !== 'undefined' && DSL.positions?.[String(p.id)])
@@ -557,7 +619,6 @@ export const ZState = (() => {
         TP.demoPositions = TP.demoPositions || []
         snap.positions.forEach(function (p: any) {
           if (p.closed || closedPosIds.has(String(p.id))) {
-            console.log('[ZState] Skip closed/journal pos:', p.id)
             return
           }
           if (!existing.has(String(p.id))) {
@@ -642,7 +703,15 @@ export const ZState = (() => {
       }
 
       // Restore block reason
-      if (snap.blockReason) BlockReason._current = snap.blockReason
+      if (snap.blockReason) {
+        BlockReason._current = snap.blockReason
+        try {
+          useBrainStore.getState().setBlockReason({
+            code: snap.blockReason.code,
+            text: snap.blockReason.text || '',
+          })
+        } catch (_e) { }
+      }
 
       console.log('[ZState] Restored:', snap.positions?.length || 0, 'positions, kill:', snap.at?.killTriggered)
       if (typeof _dslTrimAll === 'function') _dslTrimAll()
@@ -708,6 +777,9 @@ export const ZState = (() => {
   let _ws: any = null
   let _wsRetry = 0
   let _wsVisListener = false
+  // [Phase 3E] Track if we've ever been connected — first open is initial bootstrap,
+  // subsequent opens are reconnects and must trigger canonical-truth re-pull.
+  let _wsEverConnected = false
   let _lastPushTs = 0 // cooldown: ignore sync signals shortly after our own push
   w._zsSyncPushTs = function () { return _lastPushTs }
   w._zsMarkPush = function () { _lastPushTs = Date.now() }
@@ -717,7 +789,19 @@ export const ZState = (() => {
     try {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
       _ws = new WebSocket(proto + '//' + location.host + '/ws/sync')
-      _ws.onopen = function () { _wsRetry = 0; console.log('[ws] sync connected') }
+      _ws.onopen = function () {
+        _wsRetry = 0
+        console.log('[ws] sync connected')
+        // [Phase 3E] On re-open (not first connect), pull canonical AT state immediately
+        // so positions (with full ownership fields: autoTrade, sourceMode, controlMode,
+        // mode) are re-hydrated via _applyServerATState. Closes stale-window regression
+        // where Manual/AT panels could misclassify after reconnect.
+        if (_wsEverConnected) {
+          console.log('[ws] reconnected — pulling canonical AT state')
+          try { _atPollOnce() } catch (_) { /* */ }
+        }
+        _wsEverConnected = true
+      }
       _ws.onmessage = function (ev: any) {
         try {
           const msg = JSON.parse(ev.data)
@@ -745,6 +829,11 @@ export const ZState = (() => {
 
   // ── Server AT state consumer ──
   w._serverATEnabled = false
+  // [Phase 2 S6-B4] Demo-authority window mirrors. Default false at boot;
+  // overwritten on first at_update / pullState response if present.
+  // S6-B5 will wire the client AT engine gate against these flags.
+  w._serverATDemoEnabled = false
+  w._serverBrainDemoEnabled = false
   let _atPollTimer: any = null
 
   function _mapServerPos(sp: any) {
@@ -768,7 +857,12 @@ export const ZState = (() => {
         }
       }
     }
-    const srcMode = sp.mode === 'live' ? 'auto' : 'assist'
+    // [Phase 9A1] No more 'auto'/'assist' heuristic default. When the server omits
+    // ownership fields we must preserve the client's last-known tag — inventing
+    // 'auto' for live and 'assist' for demo is what caused manual positions to
+    // flicker onto the AT card after a reconnect or a minimal server snapshot.
+    // Final fallback is 'manual' (conservative) only for brand-new positions
+    // that have no existingPos and no server-side hint at all.
     return {
       // [FIX DUP] Preserve client id when matched — avoids id change in UI that confuses
       // render cycles and DSL attachment (DSL is keyed by pos.id)
@@ -777,7 +871,14 @@ export const ZState = (() => {
       sym: sp.symbol || sp.sym,
       entry: sp.price || sp.entry,
       size: sp.size || 0,
-      lev: sp.lev || 1,
+      // [Phase 9A2] When the server optimizes out `lev`, fall back to the client's
+      // last-known leverage before defaulting to 1. Without this the card briefly
+      // showed x1 for positions opened at x10/x20 whenever a snapshot omitted lev.
+      lev: (typeof sp.lev === 'number' && sp.lev > 0)
+        ? sp.lev
+        : (existingPos && typeof existingPos.lev === 'number' && existingPos.lev > 0)
+          ? existingPos.lev
+          : 1,
       tp: sp.tp || 0,
       sl: sp.sl || 0,
       liqPrice: 0,
@@ -793,19 +894,76 @@ export const ZState = (() => {
       addOnHistory: sp.addOnHistory || [],
       slPct: sp.slPct || 0,
       rr: sp.rr || 0,
-      autoTrade: (sp.autoTrade !== undefined) ? !!sp.autoTrade : true,
+      // [Phase 3A] Fallback is explicit: manual/paper sourceMode → autoTrade=false.
+      // For AT-origin (sourceMode='auto' or anything not manual/paper), AT-safe default=true.
+      // If server sends sp.autoTrade explicitly, always trust that first.
+      // [Phase 8B3] When server response omits BOTH autoTrade and sourceMode,
+      // prefer the client's last-known ownership tag over the safe-AT default.
+      // Without this, a manual position whose server snapshot drops ownership
+      // fields would be silently reclassified to AT-owned, moving it off the
+      // Manual card mid-session. Order: server field → client existingPos →
+      // sp.sourceMode heuristic → existingPos.sourceMode heuristic → default true.
+      // [Phase 9A1] autoTrade resolution, strict conservative default:
+      //   1. Server explicit wins.
+      //   2. Else preserve existingPos.autoTrade (never change owner mid-life).
+      //   3. Else derive from sp.sourceMode if present.
+      //   4. Else derive from existingPos.sourceMode.
+      //   5. Else default FALSE (conservative manual ownership).
+      //      Previously defaulted to TRUE which caused brand-new positions
+      //      without any server ownership info to land on the AT card.
+      autoTrade: (sp.autoTrade !== undefined)
+        ? !!sp.autoTrade
+        : (existingPos && typeof existingPos.autoTrade === 'boolean')
+          ? existingPos.autoTrade
+          : (sp.sourceMode === 'auto')
+            ? true
+            : (sp.sourceMode === 'manual' || sp.sourceMode === 'paper' || sp.sourceMode === 'assist')
+              ? false
+              : (existingPos && existingPos.sourceMode === 'auto')
+                ? true
+                : (existingPos && (existingPos.sourceMode === 'manual' || existingPos.sourceMode === 'paper' || existingPos.sourceMode === 'assist'))
+                  ? false
+                  : false,
       openTs: sp.ts || sp.openTs || Date.now(),
-      label: ((sp.mode === 'live') ? (w._resolvedEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : '\uD83D\uDD34 LIVE') : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
+      label: ((sp.mode === 'live') ? (w._executionEnv === 'TESTNET' ? '\uD83D\uDFE1 TESTNET' : (w._executionEnv === 'REAL' ? '\uD83D\uDD34 LIVE' : '\u26D4 LOCKED')) : '\uD83C\uDFAE DEMO') + ' ' + (sp.side || ''),
       mode: sp.mode || 'demo',
-      sourceMode: sp.sourceMode ? sp.sourceMode : (existingPos ? existingPos.sourceMode : srcMode),
-      controlMode: sp.controlMode ? sp.controlMode : (existingPos ? existingPos.controlMode : srcMode),
-      brainModeAtOpen: sp.brainModeAtOpen ? sp.brainModeAtOpen : (existingPos ? existingPos.brainModeAtOpen : srcMode),
+      // [Phase 9A1] Ownership resolution, strict order:
+      //   1. Explicit server value wins.
+      //   2. Else client's existingPos value (preserves whatever opened the pos).
+      //   3. Else derive from sp.autoTrade if present (true → auto, false → manual).
+      //   4. Else 'manual' — conservative default so an unidentified position
+      //      lands in the Manual panel instead of being falsely claimed by AT.
+      sourceMode: sp.sourceMode
+        ? sp.sourceMode
+        : (existingPos && existingPos.sourceMode)
+          ? existingPos.sourceMode
+          : (sp.autoTrade === true)
+            ? 'auto'
+            : (sp.autoTrade === false)
+              ? 'manual'
+              : 'manual',
+      controlMode: sp.controlMode
+        ? sp.controlMode
+        : (existingPos && existingPos.controlMode)
+          ? existingPos.controlMode
+          : (sp.autoTrade === true)
+            ? 'auto'
+            : 'manual',
+      brainModeAtOpen: sp.brainModeAtOpen
+        ? sp.brainModeAtOpen
+        : (existingPos && existingPos.brainModeAtOpen)
+          ? existingPos.brainModeAtOpen
+          : (sp.autoTrade === true)
+            ? 'auto'
+            : 'manual',
       dslParams: (existingPos && existingPos.dslParams && (
         existingPos.controlMode === 'user' ||
         existingPos.controlMode === 'paper' ||
+        existingPos._dslUserEdited ||
         !existingPos.autoTrade ||
         (existingPos._dslParamsPushedAt && (Date.now() - existingPos._dslParamsPushedAt) < 10000)
       )) ? existingPos.dslParams : (sp.dslParams || {}),
+      _dslUserEdited: existingPos ? !!existingPos._dslUserEdited : !!sp._dslUserEdited,
       dslAdaptiveState: (sp.dsl && sp.dsl.phase) ? sp.dsl.phase : 'calm',
       dslHistory: existingPos ? (existingPos.dslHistory || []) : [],
       closed: sp.status ? sp.status !== 'OPEN' : !!sp.closed,
@@ -825,12 +983,55 @@ export const ZState = (() => {
     delete _pendingServerCloses[seq]
   }
 
+  // [WS-2] Frame-level seq dedup. Server WS-1 helper attaches `seq` field
+  // (monotonic counter from _wsFrameSeq) on every getFullState payload. On
+  // reconnect: warm-start frame + first onChange frame may carry divergent
+  // snapshots if AT mutates în the millisecond gap between them. Tracking
+  // last-applied frame seq lets us skip stale frames last-write-wins style
+  // without trusting timestamps. Per-tab counter (resets on reload).
+  let _lastAppliedFrameSeq = 0
   function _applyServerATState(state: any) {
     if (!state) return
+    // [WS-2] dedup gate — skip if frame seq is not strictly newer than last
+    // applied (handles reconnect duplicate scenarios where warm-start +
+    // onChange race în the same RAF). Lenient: missing seq still applies
+    // (legacy server payloads pre-WS-1).
+    if (typeof state.seq === 'number' && state.seq > 0) {
+      if (state.seq <= _lastAppliedFrameSeq) return
+      _lastAppliedFrameSeq = state.seq
+    }
     const TP = w.TP
     const AT = getATObject()
     const Intervals = w.Intervals
-    w._serverATEnabled = true
+    // [LOCKOUT-FIX] Only consider server AT authoritative when server actually
+    // drives brain+AT (MF.SERVER_AT && MF.SERVER_BRAIN). Legacy clients without
+    // the serverActive field default to the old behavior (locked).
+    // [POS-FLICKER FIX R2] Only update _serverATEnabled when the field is
+    // explicitly present in the response. AT-state-only payloads from
+    // /api/at/state often omit serverActive — defaulting them to true caused
+    // the serialize filter to flip-flop, producing the pos:3 → pos:0 → pos:3
+    // flicker every ~10s.
+    if ('serverActive' in state) {
+      const _prev = !!w._serverATEnabled
+      const _next = state.serverActive !== false
+      if (_prev !== _next) {
+        // [FIX #3] Log MF.SERVER_AT flip so client lockout transitions are visible.
+        try { console.warn('[AT/SERVER-FLIP] _serverATEnabled ' + _prev + ' → ' + _next + ' — client AT engine ' + (_next ? 'LOCKED (server owns)' : 'UNLOCKED (client owns)')) } catch (_) {}
+      }
+      w._serverATEnabled = _next
+    }
+    // [Phase 2 S6-B4] Demo-authority window mirrors. Read-model only —
+    // these flags are consumed by S6-B5+ to gate the client AT engine for
+    // demo users; today (S6-B4) they are pure read state with no behavior
+    // attached. Mirror only when the field is explicitly present so legacy
+    // pre-S6-B4 server payloads (or AT-state-only payloads that omit them)
+    // do not silently flip the window flags.
+    if ('serverATDemoEnabled' in state) {
+      w._serverATDemoEnabled = !!state.serverATDemoEnabled
+    }
+    if ('serverBrainDemoEnabled' in state) {
+      w._serverBrainDemoEnabled = !!state.serverBrainDemoEnabled
+    }
     const _now = Date.now()
     Object.keys(_pendingServerCloses).forEach(function (k) {
       if (_now - _pendingServerCloses[k] > 120000) delete _pendingServerCloses[k]
@@ -843,6 +1044,9 @@ export const ZState = (() => {
       w._zeusRecentlyClosed.forEach(function (id: any) { _rcSet.add(String(id)) })
     }
     Object.keys(_pendingCloseIds).forEach(function (k) { _rcSet.add(String(k)) })
+    if (w._syncClosedIds && w._syncClosedIds.size > 0) {
+      w._syncClosedIds.forEach(function (id: string) { _rcSet.add(id) })
+    }
     function _filterOpen(arr: any[]) {
       return (arr || []).filter(function (p: any) {
         if (p.status && p.status !== 'OPEN') return false
@@ -853,20 +1057,46 @@ export const ZState = (() => {
     }
     function _excludeRecentlyClosed(mapped: any[]) {
       if (_rcSet.size === 0) return mapped
-      return mapped.filter(function (p: any) { return !_rcSet.has(String(p.id)) && !_rcSet.has(String(p._serverSeq)) })
+      const result = mapped.filter(function (p: any) {
+        const excluded = _rcSet.has(String(p.id)) || _rcSet.has(String(p._serverSeq))
+        return !excluded
+      })
+      return result
     }
     if (typeof TP !== 'undefined') {
+      // [POS-FLICKER FIX] Skip position rebuild entirely if the response carries
+      // no position keys at all (e.g. an AT-state-only payload from /api/at/state).
+      // Without this guard, the rebuild path runs with serverATDemo=[] and wipes
+      // TP.demoPositions every 10s — causing the panel to flicker until the next
+      // pullAndMerge restores them. We still rebuild when the server explicitly
+      // returns position arrays (even empty), which is the legitimate "all closed"
+      // signal.
+      const _hasPosKeys = ('demoPositions' in state) || ('livePositions' in state) || ('positions' in state)
+      if (!_hasPosKeys) {
+        // fall through to AT-state sync below; leave TP.demoPositions alone
+      } else {
       let serverATDemo: any[], serverATLive: any[]
       if (state.demoPositions && state.livePositions) {
-        serverATDemo = _excludeRecentlyClosed(_filterOpen(state.demoPositions).map(_mapServerPos))
+        const _rawFiltered = _filterOpen(state.demoPositions)
+        serverATDemo = _excludeRecentlyClosed(_rawFiltered.map(_mapServerPos))
         serverATLive = _excludeRecentlyClosed(_filterOpen(state.livePositions).map(_mapServerPos))
         w._lastServerPositions = (state.livePositions || []).concat(state.demoPositions || [])
+        // [P5A CLIENT AT UPDATE] Cache write via split arrays path.
+        try {
+          const _liveKeys = (state.livePositions || []).map((p: any) => `${p.symbol || p.sym}/${p.side}/autoTrade=${p.autoTrade}/src=${p.sourceMode || '?'}/live=${p.live ? p.live.status : 'none'}`)
+          console.log(`[P5A CLIENT AT UPDATE] split-path cache written live=${(state.livePositions||[]).length} demo=${(state.demoPositions||[]).length} liveKeys=[${_liveKeys.join(' | ')}] execEnv=${(w as any)._executionEnv || 'n/a'} atMode=${(state as any).mode} ts=${Date.now()}`)
+        } catch (_) {}
       } else {
         const serverPosns = _filterOpen(state.positions)
         const mapped = serverPosns.map(_mapServerPos)
         serverATDemo = _excludeRecentlyClosed(mapped.filter(function (p: any) { return p.mode !== 'live' }))
         serverATLive = _excludeRecentlyClosed(mapped.filter(function (p: any) { return p.mode === 'live' }))
         w._lastServerPositions = state.positions || []
+        // [P5A CLIENT AT UPDATE] Cache write via fallback positions-only path (NO split arrays — weaker signal).
+        try {
+          const _allKeys = (state.positions || []).map((p: any) => `${p.symbol || p.sym}/${p.side}/mode=${p.mode}/autoTrade=${p.autoTrade}/src=${p.sourceMode || '?'}`)
+          console.log(`[P5A CLIENT AT UPDATE] fallback-path cache written total=${(state.positions||[]).length} keys=[${_allKeys.join(' | ')}] execEnv=${(w as any)._executionEnv || 'n/a'} atMode=${(state as any).mode} ts=${Date.now()}`)
+        } catch (_) {}
       }
       const _serverDemoIds = new Set<string>()
       serverATDemo.forEach(function (p: any) { _serverDemoIds.add(String(p.id)); if (p._serverSeq) _serverDemoIds.add(String(p._serverSeq)) })
@@ -876,55 +1106,110 @@ export const ZState = (() => {
         if (p.closed) return false
         if (_rcSet.has(String(p.id))) return false
         if (!p.autoTrade && !p._serverSeq) return true
-        if (p.autoTrade && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && p._localOnly) return true
+        // [POS-FLICKER FIX R4] Keep client-originated AT positions that are not
+        // (yet) server-backed. Client AT engine can open positions faster than
+        // the server register round-trip, so these live without _serverSeq for
+        // some time. Dropping them here when server returns empty caused the
+        // panel to flicker: _applyServerATState wiped them every 10s and the
+        // pullMerge-demo from /api/sync/state restored them. Keep if either
+        // explicitly _localOnly, OR has no _serverSeq (not yet registered).
+        if (p.autoTrade && !_serverDemoIds.has(String(p.id)) && !_serverDemoIds.has(String(p._serverSeq)) && (p._localOnly || !p._serverSeq)) return true
         return false
       })
       const clientOnlyLive = (TP.livePositions || []).filter(function (p: any) {
         if (p.closed) return false
         if (_rcSet.has(String(p.id))) return false
         if (!p.autoTrade && !p._serverSeq) return true
+        // Same rationale as demo — keep client-originated AT positions not yet server-backed.
+        if (p.autoTrade && !_serverLiveIds.has(String(p.id)) && !_serverLiveIds.has(String(p._serverSeq)) && (p._localOnly || !p._serverSeq)) return true
         return false
       })
-      TP.demoPositions = serverATDemo.concat(clientOnlyDemo)
-      TP.livePositions = serverATLive.concat(clientOnlyLive)
-      if (typeof renderLivePositions === 'function') renderLivePositions()
-      if (state.demoBalance) {
-        TP.demoBalance = state.demoBalance.balance || TP.demoBalance
-        TP.demoPnL = state.demoBalance.pnl || 0
-        TP._serverStartBalance = state.demoBalance.startBalance || 10000
+      // [Phase 8B1] Atomic sync barrier — compute next demo + live arrays into
+      // locals, then assign TP.demoPositions / TP.livePositions / demo balance
+      // fields in one tight block with no intervening function calls. Previously
+      // TP.demoPositions was assigned on line 1 and TP.livePositions on line 14
+      // with function-filter bodies in between; any engine code that read both
+      // fields in that window saw mixed-era state (new demo + stale live).
+      const _seenDemoIds = new Set<string>()
+      const _seenDemoSeqs = new Set<string>()
+      const _nextDemoPositions = serverATDemo.concat(clientOnlyDemo).filter(function (p: any) {
+        const pid = String(p.id)
+        if (_seenDemoIds.has(pid)) return false
+        _seenDemoIds.add(pid)
+        if (p._serverSeq) {
+          const sk = String(p._serverSeq)
+          if (_seenDemoSeqs.has(sk)) return false
+          _seenDemoSeqs.add(sk)
+        }
+        return true
+      })
+      const _seenLiveIds = new Set<string>()
+      const _seenLiveSeqs = new Set<string>()
+      const _nextLivePositions = serverATLive.concat(clientOnlyLive).filter(function (p: any) {
+        const pid = String(p.id)
+        if (_seenLiveIds.has(pid)) return false
+        _seenLiveIds.add(pid)
+        if (p._serverSeq) {
+          const sk = String(p._serverSeq)
+          if (_seenLiveSeqs.has(sk)) return false
+          _seenLiveSeqs.add(sk)
+        }
+        return true
+      })
+      // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
+      const _prevMerging = _merging
+      _merging = true
+      try {
+        TP.demoPositions = _nextDemoPositions
+        TP.livePositions = _nextLivePositions
+        if (state.demoBalance) {
+          TP.demoBalance = state.demoBalance.balance || TP.demoBalance
+          TP.demoPnL = state.demoBalance.pnl || 0
+          TP._serverStartBalance = state.demoBalance.startBalance || 10000
+        }
+      } finally {
+        _merging = _prevMerging
       }
+      // [Phase 8B1] Render AFTER the atomic mutation block.
+      if (typeof renderLivePositions === 'function') renderLivePositions()
+      } // end _hasPosKeys block
     }
     if (typeof AT !== 'undefined') {
       AT.killTriggered = !!state.killActive
-      if (typeof state.killPct === 'number' && state.killPct > 0) {
-        const _kpEl = document.getElementById('atKillPct') as any
-        if (_kpEl) _kpEl.value = state.killPct
+      AT.killReason = state.killReason || null
+      AT.killLoss = state.killLoss || 0
+      AT.killLimit = state.killLimit || 0
+      AT.killBalRef = state.killBalRef || 0
+      AT.killModeAtTrigger = state.killModeAtTrigger || null
+      AT.killActiveAt = state.killActiveAt || 0
+      // Server is source of truth for dailyPnL — sync to window.AT to avoid stale localStorage drift
+      if (typeof state.dailyPnL === 'number') AT.dailyPnL = state.dailyPnL
+      if (!state.killActive && state.killActiveAt === 0) {
+        // Kill cleared on server — wipe local realized counter so journal recompute can't retrigger
+        AT.realizedDailyPnL = 0
       }
-      if (!AT._enabledPerMode) AT._enabledPerMode = {}
+      if (typeof state.killPct === 'number' && state.killPct > 0) {
+        // [R34] Typed `HTMLInputElement | null` — targets a number input.
+        const _kpEl = document.getElementById('atKillPct') as HTMLInputElement | null
+        if (_kpEl) _kpEl.value = String(state.killPct)
+      }
+      // [MODE-RESTORE-FIX 2026-05-14] Removed legacy `AT._enabledPerMode` cache +
+      // auto-restore via setTimeout(toggleAutoTrade, 600) on WS mode switch.
+      // Post-BUG-T7 (atActive split into atActiveDemo + atActiveLive 2026-05-13),
+      // server `state.atActive` IS already per-mode authoritative — block below
+      // (`if (typeof state.atActive === 'boolean') ...`) syncs AT.enabled from
+      // server truth and calls _applyATToggleUI. Legacy auto-restore raced with
+      // it: 600ms later toggleAutoTrade() FLIPPED state, undid server-correct
+      // value, triggered POST /api/at/toggle + _usScheduleSave 800ms later →
+      // POST /api/user/settings → 409 cascade când multi-device. Audit_log
+      // smoking gun: AT_MODE_CHANGE imediat urmat de AT_TOGGLE was=true→now=false
+      // la +1 sec, NU operator-initiated.
       const _prevMode = AT._serverMode || AT.mode || 'demo'
-      if (state.mode && state.mode !== _prevMode) {
-        AT._enabledPerMode[_prevMode] = !!AT.enabled
-        if (AT.enabled) {
-          AT.enabled = false
-          if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
-          clearInterval(AT.interval); AT.interval = null
-          const _btn = document.getElementById('atMainBtn')
-          const _dot = document.getElementById('atBtnDot')
-          const _txt = document.getElementById('atBtnTxt')
-          if (_btn) _btn.className = 'at-main-btn off'
-          if (_dot) { (_dot as any).style.background = '#aa44ff'; (_dot as any).style.boxShadow = '0 0 6px #aa44ff' }
-          if (_txt) _txt.textContent = 'AUTO TRADE OFF'
-        }
-        if (AT._enabledPerMode[state.mode]) {
-          atLog('info', '\u25B6 AT restoring — was ON in ' + state.mode.toUpperCase())
-          setTimeout(function () {
-            if (typeof w.toggleAutoTrade === 'function') w.toggleAutoTrade()
-          }, 600)
-        } else {
-          const _st2 = document.getElementById('atStatus')
-          if (_st2) _st2.textContent = '\u23F9 AT oprit — mod schimbat la ' + state.mode.toUpperCase()
-          atLog('warn', '\u23F9 AT paused — mode switched from ' + _prevMode + ' to ' + state.mode)
-        }
+      if (state.mode && state.mode !== _prevMode && AT.enabled) {
+        AT.enabled = false
+        if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
+        clearInterval(AT.interval); AT.interval = null
+        useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF' })
       }
       if (state.mode) { AT.mode = state.mode; AT._serverMode = state.mode; AT._modeConfirmed = true }
       AT._serverStats = state.stats || null
@@ -942,17 +1227,27 @@ export const ZState = (() => {
         if (typeof _applyATToggleUI === 'function') _applyATToggleUI(state.atActive)
       }
     }
+    // [BUG-T7 2026-05-17] Mirror per-mode atActive into uiStore for ModeBar
+    // opposite-mode badge. Server already split atActive into atActiveDemo +
+    // atActiveLive (BUG-T7 2026-05-13); the opposite-mode value is whichever
+    // is NOT the current engineMode. False when server omits the field.
+    try {
+      const _cur = (state.mode || AT.mode || 'demo')
+      const _opp = _cur === 'live' ? state.atActiveDemo : state.atActiveLive
+      const _oppBool = typeof _opp === 'boolean' ? _opp : false
+      const _uiState: any = require('../stores/uiStore').useUiStore.getState()
+      if (_uiState.oppositeModeAtEnabled !== _oppBool && typeof _uiState.patch === 'function') {
+        _uiState.patch({ oppositeModeAtEnabled: _oppBool })
+      }
+    } catch (_) {}
     w._apiConfigured = !!state.apiConfigured
     w._exchangeMode = state.exchangeMode || null
-    if (state.resolvedEnv) {
-      w._resolvedEnv = state.resolvedEnv
-    } else if (state.mode === 'demo') {
-      w._resolvedEnv = 'DEMO'
-    } else if (state.exchangeMode === 'testnet') {
-      w._resolvedEnv = 'TESTNET'
-    } else {
-      w._resolvedEnv = 'REAL'
-    }
+    // [Phase 3D] resolvedEnv mirror uses server canonical truth directly — no false derivation.
+    // When exec is blocked (null), mirror stays null. Legacy fallback removed.
+    w._resolvedEnv = (state.resolvedEnv !== undefined && state.resolvedEnv !== null) ? state.resolvedEnv : null
+    // Phase 2C: canonical mirrors. null is preserved (LOCKED state for non-demo).
+    w._executionEnv = (state.executionEnv !== undefined) ? state.executionEnv : null
+    w._executionBlockedReason = (state.executionBlockedReason !== undefined) ? state.executionBlockedReason : null
     w.executionReady = !!(state.apiConfigured && state.mode === 'live' && !state.killActive)
     if (state.mode) _applyGlobalModeUI(state.mode)
     if (typeof updateATMode === 'function') updateATMode()
@@ -970,10 +1265,57 @@ export const ZState = (() => {
     _atPollTimer = w.Intervals.set('atPoll', _atPollOnce, 10000)
   }
 
+  function _retryFailedCloses() {
+    if (!Array.isArray(w._zeusCloseFailedSeqs) || w._zeusCloseFailedSeqs.length === 0) return
+    const stale = w._zeusCloseFailedSeqs.splice(0, w._zeusCloseFailedSeqs.length)
+    const now = Date.now()
+    for (let i = 0; i < stale.length; i++) {
+      if (now - stale[i].ts > 300000) continue
+      const entry = stale[i]
+      fetch('/api/at/close', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: entry.seq }) })
+        .then(function (r) { return r.ok ? r.json() : null })
+        .then(function (d: any) { if (d && d.ok && typeof w._zeusConfirmServerClose === 'function') w._zeusConfirmServerClose(entry.seq) })
+        .catch(function () { w._zeusCloseFailedSeqs = w._zeusCloseFailedSeqs || []; w._zeusCloseFailedSeqs.push({ seq: entry.seq, id: entry.id, ts: entry.ts }) })
+    }
+  }
+
   function _atPollOnce() {
+    _retryFailedCloses()
     fetch('/api/at/state', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : null })
       .then(function (data: any) { if (data) _applyServerATState(data) })
+      .catch(function () { /* */ })
+    // [L1-DIAG] Poll server AT block reasons and surface in atLog feed
+    _pollServerBlocks()
+  }
+
+  // [L1-DIAG] Track last seen server block timestamp + dedup key
+  let _lastSrvBlockTs = 0
+  let _lastSrvBlockKey = ''
+  function _pollServerBlocks() {
+    const qs = _lastSrvBlockTs > 0 ? ('?since=' + _lastSrvBlockTs) : ''
+    fetch('/api/brain/recent-blocks' + qs, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null })
+      .then(function (data: any) {
+        if (!data || !data.ok || !Array.isArray(data.blocks)) return
+        for (const b of data.blocks) {
+          if (!b || !b.ts) continue
+          if (b.ts <= _lastSrvBlockTs) continue
+          _lastSrvBlockTs = b.ts
+          const sym = String(b.symbol || '?').replace('USDT', '')
+          const reasons = Array.isArray(b.reasons) ? b.reasons.join(',') : String(b.reasons || '?')
+          const key = sym + '|' + (b.stage || '') + '|' + reasons
+          if (key === _lastSrvBlockKey) continue
+          _lastSrvBlockKey = key
+          const parts = ['[SRV-BLOCK] ' + sym]
+          if (b.stage) parts.push('stage=' + b.stage)
+          if (b.score != null) parts.push('conf=' + b.score)
+          if (b.adx != null) parts.push('adx=' + (typeof b.adx === 'number' ? b.adx.toFixed(0) : b.adx))
+          if (b.confidence != null) parts.push('fconf=' + b.confidence)
+          parts.push('reasons=[' + reasons + ']')
+          atLog('info', parts.join(' '))
+        }
+      })
       .catch(function () { /* */ })
   }
 
@@ -1042,9 +1384,12 @@ export const ZState = (() => {
   function _mergePositionsInto(targetArray: any[], serverPositions: any[], closedSet: Set<string>, label: string) {
     if (!Array.isArray(targetArray) || !Array.isArray(serverPositions)) return 0
     const existingIds = new Set(targetArray.map(function (p: any) { return String(p.id) }))
+    const existingSeqs = new Set(targetArray.filter(function (p: any) { return p._serverSeq }).map(function (p: any) { return String(p._serverSeq) }))
     let added = 0
     serverPositions.forEach(function (p: any) {
       if (p.closed || closedSet.has(String(p.id)) || existingIds.has(String(p.id))) return
+      if (p.seq && existingSeqs.has(String(p.seq))) return
+      if (p._serverSeq && existingSeqs.has(String(p._serverSeq))) return
       targetArray.push(Object.assign({}, p, { _restored: true }))
       added++
     })
@@ -1071,6 +1416,11 @@ export const ZState = (() => {
       let changed = false
       const _closedSet = _buildClosedSet(serverSnap.closedIds)
 
+      if (Array.isArray(serverSnap.closedIds) && serverSnap.closedIds.length > 0) {
+        if (!w._syncClosedIds) w._syncClosedIds = new Set<string>()
+        serverSnap.closedIds.forEach(function (id: any) { w._syncClosedIds.add(String(id)) })
+      }
+
       if (w._serverATEnabled) {
         // Skip position merge — _applyServerATState handles positions
       } else {
@@ -1090,6 +1440,14 @@ export const ZState = (() => {
             const toRemove: string[] = []
             ;(arr || []).forEach(function (p: any) {
               const pid = String(p.id)
+              // [POS-FLICKER FIX R3] Server-managed AT positions (with _serverSeq)
+              // live in /api/at/state, NOT in /api/sync/state. The sync file omits
+              // them by design (serialize filter at line ~359). Without this guard
+              // _cleanArray would mistake them for "stale" and remove them every
+              // pullAndMerge tick — then _applyServerATState restores them at the
+              // next /api/at/state poll. That ping-pong is what users see as the
+              // panel positions disappearing for a few seconds and reappearing.
+              if (p && p._serverSeq && p.autoTrade) return
               if (serverClosedIds2.has(pid) || _closedSet.has(pid)) {
                 toRemove.push(pid)
               } else if (!p.closed && !serverIds.has(pid) && serverSnap.ts > (p.openTs || p.id) && (now - (p.openTs || p.id)) > 120000) {
@@ -1124,24 +1482,13 @@ export const ZState = (() => {
             setTimeout(function () {
               if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
               if (typeof w.ptUpdateBanner === 'function') w.ptUpdateBanner()
-              const btn = document.getElementById('atMainBtn')
-              const dot = document.getElementById('atBtnDot')
-              const txt = document.getElementById('atBtnTxt')
-              if (btn && dot && txt) {
-                if (AT.enabled) {
-                  btn.className = 'at-main-btn on'
-                  ;(dot as any).style.background = '#00ff88'; (dot as any).style.boxShadow = '0 0 10px #00ff88'
-                  txt.textContent = 'AUTO TRADE ON'
-                  const st = document.getElementById('atStatus'); if (st) st.innerHTML = _ZI.dGrn + ' Activ — scan la 30s'
-                  if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
-                } else {
-                  btn.className = 'at-main-btn off'
-                  ;(dot as any).style.background = '#aa44ff'; (dot as any).style.boxShadow = '0 0 6px #aa44ff'
-                  txt.textContent = 'AUTO TRADE OFF'
-                  const st = document.getElementById('atStatus'); if (st) st.textContent = 'Configureaza mai jos'
-                  if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
-                  clearInterval(AT.interval); AT.interval = null
-                }
+              if (AT.enabled) {
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: '#00ff88', dotShadow: '0 0 10px #00ff88', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Active \u2014 scan every 30s', action: null } })
+                if (!AT.interval && typeof runAutoTradeCheck === 'function') AT.interval = Intervals.set('atCheck', runAutoTradeCheck, 30000)
+              } else {
+                useATStore.getState().patchUI({ btnClass: 'at-main-btn off', dotBg: '#aa44ff', dotShadow: '0 0 6px #aa44ff', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configure below', action: null } })
+                if (typeof Intervals !== 'undefined') Intervals.clear('atCheck')
+                clearInterval(AT.interval); AT.interval = null
               }
             }, 50)
           }
@@ -1214,7 +1561,7 @@ export const S: any = {
   rsi: {}, events: [], dtTf: '1H',
   soundOn: false, chartTf: '5m',
   indicators: { ema: true, wma: true, st: true, vp: true },
-  overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false },
+  overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false, ovi: false },
   llvSettings: { bucketPct: 0.3, maxBarWidthPct: 30, opacity: 0.7, minUsd: 0, longCol: '#00d4aa', shortCol: '#ff4466', showLabels: true, labelMode: 'compact' },
   klines: [], liqMinUsd: 500, liqSym: 'BTC', wsK: null,
   symbol: 'BTCUSDT', tz: 'Europe/Bucharest',
@@ -1246,7 +1593,7 @@ export let _cciChart: any = null, _cciSeries: any = null, _cciInited = false
 
 // Indicator Settings
 export const IND_SETTINGS: any = {
-  ema: { p1: 50, p2: 200 },
+  ema: { p1: 50, p2: 200, p3: 20, p4: 100 },
   wma: { p1: 20, p2: 50 },
   st: { period: 10, mult: 3 },
   bb: { period: 20, stdDev: 2 },
@@ -1254,14 +1601,15 @@ export const IND_SETTINGS: any = {
   stoch: { kPeriod: 14, dPeriod: 3, smooth: 3 },
   macd: { fast: 12, slow: 26, signal: 9 },
   atr: { period: 14 },
-  obv: {},
+  obv: { smoothing: 0 },
   mfi: { period: 14 },
   cci: { period: 20 },
   ichimoku: { tenkan: 9, kijun: 26, senkou: 52 },
   fib: { levels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1] },
   pivot: { type: 'standard' },
-  vwap: {},
+  vwap: { stdDev: 1, stdDev2: 2 },
   vp: { rows: 70 },
+  cvd: { smoothing: 0 },
 }
 export let liqSeries: any[] = [], srSeries: any[] = []
 export let zsSeries: any[] = []
@@ -1295,7 +1643,12 @@ w._indSettingsSave = _indSettingsSave
 w._indSettingsLoad = _indSettingsLoad
 
 // Trading Positions state
-export const TP: any = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], pendingOrders: [], manualLivePending: [], liveConnected: false, liveExchange: 'binance', liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 }
+// [Phase 12.A — Batch C] liveExchange defaults to null (no connected exchange yet).
+// Server is the canonical source via useUiStore.activeExchange / TP writer in
+// indicators.ts (set on verify-success). A hardcoded 'binance' was a lie on boot
+// for Bybit users and after logout — null forces consumers to treat "no exchange"
+// as a distinct state instead of silently defaulting to Binance.
+export const TP: any = { demoOpen: false, liveOpen: false, demoSide: 'LONG', liveSide: 'LONG', demoBalance: 10000, demoPnL: 0, demoWins: 0, demoLosses: 0, demoPositions: [], livePositions: [], pendingOrders: [], manualLivePending: [], liveConnected: false, liveExchange: null, liveBalance: 0, liveAvailableBalance: 0, liveUnrealizedPnL: 0 }
 
 // OI + Watchlist + Prices
 export const oiHistory: any[] = []
@@ -1312,3 +1665,19 @@ w.TP = TP
 w.oiHistory = oiHistory
 w.wlPrices = wlPrices
 w.IND_SETTINGS = IND_SETTINGS
+
+// [Phase 3C] Engine mode single truth — useATStore.mode is canonical.
+// Legacy AT.mode / AT._serverMode are read mirrors, kept in sync by this
+// subscriber. Any code that continues to write AT.mode directly creates
+// a transient divergence until the store writes back here; avoid that
+// pattern for new code. Read render-critical code from the store.
+try {
+  useATStore.subscribe((s, prev) => {
+    if (s.mode === prev.mode && s._serverMode === prev._serverMode) return
+    const _AT = w.AT
+    if (!_AT) return
+    if (s.mode && _AT.mode !== s.mode) _AT.mode = s.mode
+    const _nextServerMode = s._serverMode || s.mode || ''
+    if (_AT._serverMode !== _nextServerMode) _AT._serverMode = _nextServerMode
+  })
+} catch (_) { /* defensive: subscribe never throws in zustand v4 but keep the net */ }

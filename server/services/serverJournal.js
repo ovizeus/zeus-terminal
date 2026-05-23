@@ -24,8 +24,10 @@ let _timer = null;
 function start() {
     if (_timer) return;
     _timer = setInterval(_recomputeAll, RECOMPUTE_INTERVAL);
-    // First compute after 30s
-    setTimeout(_recomputeAll, 30000);
+    // First compute after JOURNAL_FIRST_COMPUTE_MS (default 30s)
+    // [CFG-11 2026-05-13] Env-overridable. Default preserved.
+    const _firstComputeMs = parseInt(process.env.JOURNAL_FIRST_COMPUTE_MS, 10) || 30000;
+    setTimeout(_recomputeAll, _firstComputeMs);
     logger.info('JOURNAL', 'Trade journal learning started (hourly recompute)');
 }
 

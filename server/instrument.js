@@ -13,7 +13,8 @@ if (DSN) {
             try { const v = require('./version'); return `zeus-terminal@${v.version}-b${v.build}`; }
             catch (_) { return 'zeus-terminal@unknown'; }
         })(),
-        sendDefaultPii: true,
+        // [M20] PII off — we explicitly attach user.id/email via Sentry.setUser when needed (sessionAuth.js)
+        sendDefaultPii: false,
         tracesSampleRate: 0.2,
         beforeSend(event) {
             if (event.exception && event.exception.values) {

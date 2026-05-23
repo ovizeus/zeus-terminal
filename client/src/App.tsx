@@ -3,6 +3,8 @@ import { LoginPage } from './components/auth/LoginPage'
 import { Header } from './components/layout/Header'
 import { PanelShell } from './components/layout/PanelShell'
 import { SettingsModal } from './components/settings/SettingsModal'
+import { PinLockScreen } from './components/modals/PinLockScreen'
+import { SecurityNudgeModal } from './components/modals/SecurityNudgeModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useUiStore, useAuthStore } from './stores'
 import { useServerSync } from './hooks/useServerSync'
@@ -11,10 +13,11 @@ import { useForecastEngine } from './hooks/useForecastEngine'
 import { useLegacyBridge } from './bridge'
 import { usePositionsBridge } from './hooks/usePositionsBridge'
 import { useATBridge } from './hooks/useATBridge'
-import { useBrainBridge } from './hooks/useBrainBridge'
-import { useDSLBridge } from './hooks/useDSLBridge'
-import { useAresBridge } from './hooks/useAresBridge'
 import { wsService } from './services/ws'
+import { startSettingsRealtime, stopSettingsRealtime } from './services/settingsRealtime'
+import { startPositionsRealtime, stopPositionsRealtime } from './services/positionsRealtime'
+import { startMarketRadarRealtime, stopMarketRadarRealtime } from './services/marketRadarRealtime'
+import { start as startLiqFeedClient, stop as stopLiqFeedClient } from './services/liqFeedClient'
 import './app.css'
 
 export function App() {
@@ -38,7 +41,25 @@ export function App() {
   useEffect(() => {
     if (authenticated) {
       wsService.connect()
+      // [MIGRATION-F0] settings cross-device sync subscriber (reuses /ws/sync)
+      startSettingsRealtime()
+      // [MIGRATION-F5 commit 4] positions cross-device sync subscriber
+      // (reuses /ws/sync). No-op until server flips MF.POSITIONS_WS at C5.
+      startPositionsRealtime()
+      // [Phase 11.3] Market Radar event subscriber (reuses /ws/sync).
+      // Server emits market.radar frames via wsBroadcastAll. Silent no-op
+      // when MARKET_RADAR_ENABLED=0 on the server (no frames arrive).
+      startMarketRadarRealtime()
+      // [LIQ-FEED PROXY 2026-05-14] Server-aggregated liq feed subscriber.
+      // Listens to zeus:wsFrame, filters `liq.feed` type, re-dispatches
+      // zeus:liq / zeus:okxLiq events for Quant Monitor consumption.
+      // Active when MF.LIQ_FEED_VIA_SERVER true (default).
+      startLiqFeedClient()
       return () => {
+        stopLiqFeedClient()
+        stopMarketRadarRealtime()
+        stopPositionsRealtime()
+        stopSettingsRealtime()
         wsService.disconnect()
         const w = window as any
         if (w.Intervals?.clearAll) w.Intervals.clearAll()
@@ -69,15 +90,6 @@ export function App() {
   // ── AT BRIDGE — sync engine window.AT → atStore ──
   useATBridge()
 
-  // ── BRAIN BRIDGE — sync engine window.BM/BRAIN → brainStore ──
-  useBrainBridge()
-
-  // ── DSL BRIDGE — sync engine window.DSL → dslStore ──
-  useDSLBridge()
-
-  // ── ARES BRIDGE — sync engine ARES state → aresStore ──
-  useAresBridge()
-
   if (loading) {
     return (
       <div className="zr-loading">
@@ -96,6 +108,8 @@ export function App() {
         <Header />
         <PanelShell />
         <SettingsModal />
+        <PinLockScreen />
+        <SecurityNudgeModal />
       </div>
     </ErrorBoundary>
   )

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Position, Balance } from '../types'
+import type { Position, Balance, PositionsSnapshot } from '../types'
 
 interface PositionsStore {
   demoPositions: Position[]
@@ -10,7 +10,39 @@ interface PositionsStore {
   demoLosses: number
   liveBalance: Balance
   liveConnected: boolean
-  liveExchange: string
+  /** [Phase 12.A — Batch C] null = no connected exchange (boot or post-logout).
+   *  Server truth flows via useUiStore.activeExchange; this mirror is written by
+   *  TP writer in engine/indicators.ts on verify-success. */
+  liveExchange: 'binance' | 'bybit' | null
+
+  manualPnl: number
+  manualPnlClass: string
+  manualWr: string
+  manualTrades: number
+  setManualStats: (pnl: number, pnlClass: string, wr: string, trades: number) => void
+
+  /**
+   * [R9] Reactive pending + journal arrays that replace the imperative engine
+   * DOM writers (`renderPendingOrders`, `renderTradeJournal`). The engine
+   * still owns the source data via `w.TP.*`; mirror helpers in
+   * `marketDataPositions.ts` / `storage.ts` push a freshly-sliced copy into
+   * the store instead of `el.innerHTML = ...`.
+   */
+  pendingOrders: any[]
+  manualLivePending: any[]
+  journal: any[]
+  setPendingOrders: (orders: any[]) => void
+  setManualLivePending: (orders: any[]) => void
+  setJournal: (journal: any[]) => void
+
+  /**
+   * [MIGRATION-F5 commit 2] Last authoritative positions snapshot timestamp
+   * (ms since epoch). Used for monotonic dedup on WS broadcasts — a snapshot
+   * with `updated_at <= lastSnapshotTs` is dropped silently. 0 = no snapshot
+   * applied yet (boot state). Not read by any runtime call-site at C2; the
+   * C4 subscriber will be the first consumer.
+   */
+  lastSnapshotTs: number
 
   setDemoPositions: (positions: Position[]) => void
   setLivePositions: (positions: Position[]) => void
@@ -30,9 +62,55 @@ interface PositionsStore {
     liveBalance?: number
     source: 'server' | 'bridge'
   }) => void
+
+  /**
+   * [MIGRATION-F5 commit 2] Full-snapshot reconciliation — replaces
+   * `demoPositions` + `livePositions` with the contents of a `PositionsSnapshot`.
+   *
+   * Semantics:
+   * - Monotonic dedup on `snapshot.updated_at`: if
+   *   `snapshot.updated_at <= lastSnapshotTs` the call is a no-op and
+   *   returns `false`. Otherwise `lastSnapshotTs` is advanced to
+   *   `snapshot.updated_at` and `true` is returned.
+   * - Positions are split by `p.mode === 'live'` vs anything else; closed
+   *   positions are filtered out defensively (server contract says
+   *   "open-positions array at the emit moment" — we do not trust it blindly).
+   * - `demoBalance` / `liveBalance` are deliberately NOT touched —
+   *   `PositionsSnapshot` does not carry balance fields. Balance stays
+   *   owned by the existing `syncSnapshot` / `setDemoBalance` path.
+   * - No side effects beyond store state. No WS, no subscriber flip.
+   *
+   * Returns `true` if the snapshot was applied, `false` if dropped as stale.
+   */
+  replaceAll: (snapshot: PositionsSnapshot) => boolean
+
+  /**
+   * [MIGRATION-F5 commit 2] MVP alias for `replaceAll`.
+   *
+   * In the Phase 5 MVP design every WS `positions.changed` broadcast carries
+   * a **full** snapshot (not a true delta), so `applyDelta === replaceAll`.
+   * The name is kept separate so the C4 subscriber can call the semantic
+   * action and a future phase can upgrade this to a real delta pipeline
+   * without touching any call-site that already uses `applyDelta`.
+   *
+   * Returns the same `true`/`false` as `replaceAll`.
+   */
+  applyDelta: (snapshot: PositionsSnapshot) => boolean
+
+  /**
+   * [Phase 8B5] Reset lastSnapshotTs to 0 so the next positions.changed
+   * snapshot is accepted regardless of its updated_at. Call on WS reconnect
+   * or when server state could have diverged (restart, clock rewind, etc.);
+   * the monotonic guard continues from the new baseline after the first
+   * accepted snapshot.
+   */
+  resetSnapshotTs: () => void
+
+  /** [Phase 3B] Reset all state on logout. Wipes positions, balances, pending, journal. */
+  reset: () => void
 }
 
-export const usePositionsStore = create<PositionsStore>()((set) => ({
+export const usePositionsStore = create<PositionsStore>()((set, get) => ({
   demoPositions: [],
   livePositions: [],
   demoBalance: 10000,
@@ -41,7 +119,21 @@ export const usePositionsStore = create<PositionsStore>()((set) => ({
   demoLosses: 0,
   liveBalance: { totalBalance: 0, availableBalance: 0, unrealizedPnL: 0 },
   liveConnected: false,
-  liveExchange: 'binance',
+  liveExchange: null,
+  lastSnapshotTs: 0,
+  manualPnl: 0,
+  manualPnlClass: 'neut',
+  manualWr: '0%',
+  manualTrades: 0,
+  setManualStats: (pnl, pnlClass, wr, trades) => set({ manualPnl: pnl, manualPnlClass: pnlClass, manualWr: wr, manualTrades: trades }),
+
+  // [R9] Reactive pending + journal arrays
+  pendingOrders: [],
+  manualLivePending: [],
+  journal: [],
+  setPendingOrders: (orders) => set({ pendingOrders: orders }),
+  setManualLivePending: (orders) => set({ manualLivePending: orders }),
+  setJournal: (journal) => set({ journal }),
 
   setDemoPositions: (positions) => set({ demoPositions: positions }),
   setLivePositions: (positions) => set({ livePositions: positions }),
@@ -66,10 +158,83 @@ export const usePositionsStore = create<PositionsStore>()((set) => ({
       if (liveBalance !== undefined && Number.isFinite(liveBalance)) {
         update.liveBalance = { ...s.liveBalance, totalBalance: liveBalance }
       }
-      if (process.env.NODE_ENV !== 'production') {
+      if (import.meta.env.DEV) {
         console.log(`[positionsStore] syncSnapshot source=${source} demo=${update.demoPositions?.length ?? '—'} live=${update.livePositions?.length ?? '—'} bal=${update.demoBalance ?? '—'}`)
       }
       return { ...s, ...update }
     })
   },
+
+  replaceAll: (snapshot) => {
+    const prevTs = get().lastSnapshotTs
+    const nextTs = Number(snapshot?.updated_at)
+    if (!Number.isFinite(nextTs) || nextTs <= prevTs) return false
+
+    // [Phase 8B4] Resurrection guard — filter out positions whose id/seq was
+    // recently closed client-side. Without this, a positions.changed snapshot
+    // generated on the server before it processed the close (but delivered
+    // after with a newer updated_at) can re-introduce the closed position.
+    const w = window as unknown as {
+      _zeusRecentlyClosed?: Array<string | number>
+      _syncClosedIds?: Set<string>
+    }
+    const closedSet = new Set<string>()
+    if (Array.isArray(w._zeusRecentlyClosed)) {
+      for (const id of w._zeusRecentlyClosed) closedSet.add(String(id))
+    }
+    if (w._syncClosedIds && typeof w._syncClosedIds.forEach === 'function') {
+      w._syncClosedIds.forEach((id: string) => closedSet.add(String(id)))
+    }
+
+    const all = Array.isArray(snapshot?.positions) ? snapshot.positions : []
+    const nextDemo: Position[] = []
+    const nextLive: Position[] = []
+    for (const p of all) {
+      if (!p || (p as Position & { closed?: boolean }).closed) continue
+      if (closedSet.size > 0) {
+        const _pAny = p as Position & { id?: unknown; _serverSeq?: unknown; seq?: unknown }
+        const _pid = _pAny.id !== undefined ? String(_pAny.id) : ''
+        const _pseq = _pAny._serverSeq !== undefined ? String(_pAny._serverSeq) : (_pAny.seq !== undefined ? String(_pAny.seq) : '')
+        if ((_pid && closedSet.has(_pid)) || (_pseq && closedSet.has(_pseq))) continue
+      }
+      if ((p.mode || 'demo') === 'live') nextLive.push(p)
+      else nextDemo.push(p)
+    }
+
+    set({
+      demoPositions: nextDemo,
+      livePositions: nextLive,
+      lastSnapshotTs: nextTs,
+    })
+    return true
+  },
+
+  applyDelta: (snapshot) => get().replaceAll(snapshot),
+
+  // [Phase 8B5] Reset snapshot watermark — used on WS reconnect so the first
+  // post-reconnect snapshot is always accepted, even if the server side's
+  // updated_at clock went backwards (rare: restart, time rewind). Subsequent
+  // snapshots continue monotonic dedup from that new baseline.
+  resetSnapshotTs: () => set({ lastSnapshotTs: 0 }),
+
+  // [Phase 3B] Logout reset — clears per-user positions/balances/pending/journal to defaults.
+  reset: () => set({
+    demoPositions: [],
+    livePositions: [],
+    demoBalance: 10000,
+    demoPnL: 0,
+    demoWins: 0,
+    demoLosses: 0,
+    liveBalance: { totalBalance: 0, availableBalance: 0, unrealizedPnL: 0 },
+    liveConnected: false,
+    liveExchange: null,
+    lastSnapshotTs: 0,
+    manualPnl: 0,
+    manualPnlClass: 'neut',
+    manualWr: '0%',
+    manualTrades: 0,
+    pendingOrders: [],
+    manualLivePending: [],
+    journal: [],
+  }),
 }))

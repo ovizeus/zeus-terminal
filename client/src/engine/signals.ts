@@ -8,7 +8,7 @@ import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { runBrainUpdate , brainThink } from './brain'
 
-const w = window as any // kept for brainThink calls
+
 
 export function renderSignals(signals: any[], bullCount: number, bearCount: number): void {
   const grid = document.getElementById('sigGrid')
@@ -37,7 +37,7 @@ export function renderSignals(signals: any[], bullCount: number, bearCount: numb
   }
 
   if (!signals.length) {
-    grid.innerHTML = '<div class="sig-row" style="justify-content:center;padding:12px;color:var(--dim);font-size:12px">Niciun semnal activ momentan</div>'
+    grid.innerHTML = '<div class="sig-row" style="justify-content:center;padding:12px;color:var(--dim);font-size:12px">No active signal currently</div>'
     return
   }
 

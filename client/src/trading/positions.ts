@@ -3,6 +3,7 @@
 // Position management, open/close handlers
 
 import { escHtml, el } from '../utils/dom'
+import { useBrainStatsStore } from '../stores/brainStatsStore'
 import { fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { perfRecordTrade } from './risk'
@@ -70,10 +71,10 @@ export function onTradeExecuted(pos: any): void {
   const tf1 = PROFILE_TF?.[w.S.profile || 'fast']?.trigger || w.S.triggerTF || '5m'
   const tf2 = PROFILE_TF?.[w.S.profile || 'fast']?.context || w.S.contextTF || '15m'
   const isLive = pos.isLive
-  const isSim = w.AT.mode === 'demo'
-  var _posEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO')
+
+  var _posEnv = w._executionEnv
   const simTag = isLive
-    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`
+    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : (_posEnv === 'REAL' ? 'LIVE TRADE' : 'LOCKED')}</div>`
     : `<div class="zeus-exec-sim">SIMULATION</div>`
 
   const html = `
@@ -112,9 +113,9 @@ export function onTradeClosed(result: any): void {
   const isProfit = pnl >= 0
   const cssClass = isProfit ? 'exit-profit' : 'exit-loss'
   const isLive = result.isLive
-  var _posEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO')
+  var _posEnv = w._executionEnv
   const simTag = isLive
-    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : 'LIVE TRADE'}</div>`
+    ? `<div class="zeus-exec-sim">${_posEnv === 'TESTNET' ? 'TESTNET TRADE' : (_posEnv === 'REAL' ? 'LIVE TRADE' : 'LOCKED')}</div>`
     : `<div class="zeus-exec-sim">SIMULATION</div>`
 
   const html = `
@@ -152,7 +153,11 @@ export function triggerExecCinematic(side: any, sym: any): void {
   // Banner
   const banner = document.createElement('div')
   banner.className = 'exec-banner' + (side === 'SHORT' ? ' short' : '')
-  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${side} ${sym}`
+  // [SEC-5] Escape `side` și `sym` at injection point. _ZI.bolt is a static
+  // SVG icon constant (safe); template structure ("ZEUS EXECUTION:") is
+  // hardcoded; only `side` și `sym` are dynamic and could carry untrusted
+  // chars. Aligned cu post-SEC-1/2/3/4 codebase pattern (escHtml at boundary).
+  banner.innerHTML = _ZI.bolt + ` ZEUS EXECUTION: ${escHtml(String(side ?? ''))} ${escHtml(String(sym ?? ''))}`
   document.body.appendChild(banner)
   setTimeout(() => { try { document.body.removeChild(banner) } catch (_) { } }, 3200)
 
@@ -181,15 +186,14 @@ export function triggerExecCinematic(side: any, sym: any): void {
     setTimeout(() => { if (core2) core2.style.filter = '' }, 500)
   }
 
-  // Update receipt
+  // [ZT5-C] Receipt routed through brainStatsStore (single writer, store-driven JSX)
   const mode = w.S.mode?.toUpperCase() || 'AUTO'
   const score = w.BM.entryScore || 0
   const trig = w.BM.sweep?.type !== 'none' ? 'Sweep+Reclaim' : 'Displacement'
   const tfMap = PROFILE_TF?.[w.S.profile || 'fast']
   if (!tfMap) return
-  ;['rec-mode', 'rec-score', 'rec-trigger', 'rec-tf'].forEach((id: string, i: number) => {
-    const e = el(id)
-    if (e) e.textContent = [mode, score, trig, tfMap.trigger + '/' + tfMap.context][i]
+  useBrainStatsStore.getState().patchStats({
+    receipt: { mode, score: String(score), trigger: trig, tf: tfMap.trigger + '/' + tfMap.context },
   })
 }
 

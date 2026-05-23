@@ -1,76 +1,190 @@
-import { useState, useEffect } from 'react'
-import { useATStore, usePositionsStore, useSettingsStore } from '../../stores'
+import { useState, useEffect, useMemo } from 'react'
+import { useATStore, useSettingsStore, useUiStore } from '../../stores'
 import { api } from '../../services/api'
+import { MSCAN_SYMS } from '../../core/config'
+import { toast } from '../../data/marketDataHelpers'
+// [Phase 8D1] mscan state is server-owned — initial value comes from the
+// already-loaded settingsStore. The settingsStore._syncToWindow writes the
+// LS mirror that legacy engines (data/klines.ts::_mscanGetActive) read, so
+// the panel no longer writes LS directly. Remove the LS-as-source-of-truth
+// pathway to eliminate the double-write race against the server/WS push.
+import { resetKillSwitch } from '../../trading/autotrade'
+import { ATStatusIcon } from '../ATStatusIcon'
+import { AtWhyBlockedPill } from './AtWhyBlockedPill'
+
+/** Parse a string input to number for save; empty/invalid → fallback. */
+function toNum(s: string, fallback: number): number {
+  if (s == null || s === '') return fallback
+  const n = Number(s)
+  return Number.isFinite(n) ? n : fallback
+}
 
 /** 1:1 port of .at-sep + #atPanel from public/index.html lines 1684-2033 */
 export function AutoTradePanel() {
-  const enabled = useATStore((s) => s.enabled)
-  const mode = useATStore((s) => s.mode)
   const killTriggered = useATStore((s) => s.killTriggered)
-  const totalTrades = useATStore((s) => s.totalTrades)
-  const wins = useATStore((s) => s.wins)
-  const totalPnL = useATStore((s) => s.totalPnL)
-  const dailyPnL = useATStore((s) => s.dailyPnL)
-  const demoBalance = usePositionsStore((s) => s.demoBalance)
+  const ui = useATStore((s) => s.ui)
+  // Phase 2C: read canonical executionEnv. null = LOCKED.
+  const executionEnv = useUiStore((s) => s.executionEnv)
+  const executionBlockedReason = useUiStore((s) => s.executionBlockedReason)
+  // [Phase 12.A — Batch D1] Canonical exchange identity for dynamic labels.
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const _exchLabel = activeExchange === 'binance' ? 'Binance' : activeExchange === 'bybit' ? 'Bybit' : 'your active exchange'
   const [bextOpen, setBextOpen] = useState(false)
 
-  const winRate = totalTrades > 0 ? ((wins / totalTrades) * 100).toFixed(1) : '—'
-
-  const [confMin, setConfMin] = useState(65)
-  const [sigMin, setSigMin] = useState(3)
-  const [atSize, setAtSize] = useState(200)
-  const [atRiskPct, setAtRiskPct] = useState(1)
-  const [atMaxDay, setAtMaxDay] = useState(5)
-  const [atMaxPos, setAtMaxPos] = useState(3)
-  const [atSL, setAtSL] = useState(1.5)
-  const [atRR, setAtRR] = useState(2)
-  const [atKillPct, setAtKillPct] = useState(5)
-  const [atLossStreak, setAtLossStreak] = useState(3)
-  const [atMaxAddon, setAtMaxAddon] = useState(2)
+  // Numeric fields are held as STRINGS so the user can fully clear the input
+  // (value === "") without React forcing a leading "0" back in. We parse to
+  // number only on save / when the engines need it via _syncToWindow.
+  const [confMin, setConfMin] = useState('65')
+  const [sigMin, setSigMin] = useState('3')
+  const [atSize, setAtSize] = useState('200')
+  const [atRiskPct, setAtRiskPct] = useState('1')
+  const [atMaxDay, setAtMaxDay] = useState('5')
+  const [atMaxPos, setAtMaxPos] = useState('3')
+  const [atSL, setAtSL] = useState('1.5')
+  const [atRR, setAtRR] = useState('2')
+  const [atKillPct, setAtKillPct] = useState('5')
+  const [atLossStreak, setAtLossStreak] = useState('3')
+  const [atMaxAddon, setAtMaxAddon] = useState('2')
   const [atLev, setAtLev] = useState('5')
   const [adaptEnabled, setAdaptEnabled] = useState(false)
   const [adaptLive, setAdaptLive] = useState(false)
   const [smartExit, setSmartExit] = useState(false)
-  const [brainVisionOpen, setBrainVisionOpen] = useState(true)
-  const [brainDashOpen, setBrainDashOpen] = useState(true)
+  // [b66] Persist collapse state across refresh / app restart. User keeps both
+  // panels closed most of the time — re-opening them on every mount is noise.
+  const [brainVisionOpen, setBrainVisionOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('zeus:ui:brainVisionOpen') !== '0' } catch { return true }
+  })
+  const [brainDashOpen, setBrainDashOpen] = useState<boolean>(() => {
+    try { return localStorage.getItem('zeus:ui:brainDashOpen') !== '0' } catch { return true }
+  })
+  useEffect(() => {
+    try { localStorage.setItem('zeus:ui:brainVisionOpen', brainVisionOpen ? '1' : '0') } catch {}
+  }, [brainVisionOpen])
+  useEffect(() => {
+    try { localStorage.setItem('zeus:ui:brainDashOpen', brainDashOpen ? '1' : '0') } catch {}
+  }, [brainDashOpen])
   const [symPickerOpen, setSymPickerOpen] = useState(false)
 
-  // Init AT settings from settingsStore (loaded from server at boot)
-  useEffect(() => {
+  // Multi-symbol scan state — reactive label + picker.
+  // [Phase 8D1] Initial value comes from settingsStore (server-backed single
+  // source of truth). Falls back to the full MSCAN_SYMS list only if the
+  // store has not loaded yet — storeSettings useEffect below rehydrates on
+  // loadFromServer completion. No direct LS read here anymore.
+  const [mscanEnabled, setMscanEnabled] = useState<boolean>(() => {
     const s = useSettingsStore.getState().settings
-    if (s.confMin != null)      setConfMin(Number(s.confMin))
-    if (s.sigMin != null)       setSigMin(Number(s.sigMin))
-    if (s.size != null)         setAtSize(Number(s.size))
-    if (s.riskPct != null)      setAtRiskPct(Number(s.riskPct))
-    if (s.maxDay != null)       setAtMaxDay(Number(s.maxDay))
-    if (s.maxPos != null)       setAtMaxPos(Number(s.maxPos))
-    if (s.sl != null)           setAtSL(Number(s.sl))
-    if (s.rr != null)           setAtRR(Number(s.rr))
-    if (s.killPct != null)      setAtKillPct(Number(s.killPct))
-    if (s.lossStreak != null)   setAtLossStreak(Number(s.lossStreak))
-    if (s.maxAddon != null)     setAtMaxAddon(Number(s.maxAddon))
+    return s.mscanEnabled != null ? !!s.mscanEnabled : true
+  })
+  const [mscanSyms, setMscanSyms] = useState<string[]>(() => {
+    const s = useSettingsStore.getState().settings
+    if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) return s.mscanSyms
+    return MSCAN_SYMS.slice()
+  })
+
+  // Re-hydrate whenever the server settings load/change. The store is
+  // populated asynchronously by useServerSync — without this subscription
+  // the fields stay at their defaults after F5.
+  const storeSettings = useSettingsStore((s) => s.settings)
+  const storeLoaded = useSettingsStore((s) => s.loaded)
+  useEffect(() => {
+    if (!storeLoaded) return
+    const s = storeSettings
+    if (s.confMin != null)      setConfMin(String(s.confMin))
+    if (s.sigMin != null)       setSigMin(String(s.sigMin))
+    if (s.size != null)         setAtSize(String(s.size))
+    if (s.riskPct != null)      setAtRiskPct(String(s.riskPct))
+    if (s.maxDay != null)       setAtMaxDay(String(s.maxDay))
+    if (s.maxPos != null)       setAtMaxPos(String(s.maxPos))
+    if (s.sl != null)           setAtSL(String(s.sl))
+    if (s.rr != null)           setAtRR(String(s.rr))
+    if (s.killPct != null)      setAtKillPct(String(s.killPct))
+    if (s.lossStreak != null)   setAtLossStreak(String(s.lossStreak))
+    if (s.maxAddon != null)     setAtMaxAddon(String(s.maxAddon))
     if (s.lev != null)          setAtLev(String(s.lev))
     if (s.adaptEnabled != null) setAdaptEnabled(!!s.adaptEnabled)
     if (s.adaptLive != null)    setAdaptLive(!!s.adaptLive)
     if (s.smartExitEnabled != null) setSmartExit(!!s.smartExitEnabled)
-  }, [])
+    if (s.mscanEnabled != null) setMscanEnabled(!!s.mscanEnabled)
+    if (Array.isArray(s.mscanSyms) && s.mscanSyms.length > 0) setMscanSyms(s.mscanSyms)
+  }, [storeLoaded, storeSettings])
+
+  // [Phase 8D1] No direct LS write here. mscan selection is committed via
+  // handleSaveAT → settingsStore.patch → _syncToWindow (writes LS mirror) +
+  // saveToServer. Matches the behavior of every other AT field on this panel
+  // (size, SL, RR, etc.) — all persist only on explicit SAVE, not per keystroke.
+
+  // Phase 3 C4: push the 6 AT config fields (lev/size/slPct/rr/maxPos/sigMin)
+  // into atStore.config on every edit, so atStore (and by extension the
+  // TC Proxy installed in core/state.ts) reflects the panel value without
+  // waiting for Save. NaN (from empty/invalid input) is guarded-out by
+  // patchConfig, leaving the previous store value intact. adxMin + cooldownMs
+  // are not panel inputs and stay on their hydrated/default values.
+  useEffect(() => {
+    const _n = (s: string) => {
+      if (s == null || s === '') return NaN
+      const v = Number(s)
+      return Number.isFinite(v) ? v : NaN
+    }
+    useATStore.getState().patchConfig({
+      lev: _n(atLev),
+      size: _n(atSize),
+      slPct: _n(atSL),
+      rr: _n(atRR),
+      maxPos: _n(atMaxPos),
+      sigMin: _n(sigMin),
+    })
+  }, [atLev, atSize, atSL, atRR, atMaxPos, sigMin])
+
+  // Close the sym picker on outside click (React owns state now — legacy
+  // document-level listener in klines.ts only mutates DOM style and would
+  // desync with React state).
+  useEffect(() => {
+    if (!symPickerOpen) return
+    function onDocClick(e: MouseEvent) {
+      const target = e.target as HTMLElement | null
+      if (!target) return
+      if (target.closest('#atSymPickerDrop')) return
+      if (target.closest('#atSymPickerCard')) return
+      setSymPickerOpen(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [symPickerOpen])
+
+  const mscanLabel = useMemo(() => {
+    if (!mscanEnabled) return 'DISABLED'
+    return 'ACTIVE — ' + mscanSyms.length + ' symbols'
+  }, [mscanEnabled, mscanSyms])
+
+  function toggleSym(sym: string) {
+    setMscanSyms((prev) => prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym])
+  }
+  function pickAll(all: boolean) {
+    setMscanSyms(all ? MSCAN_SYMS.slice() : [])
+  }
 
   async function handleSaveAT() {
     const w = window as any
     try {
       const store = useSettingsStore.getState()
       store.patch({
-        sl: atSL, rr: atRR, size: atSize, riskPct: atRiskPct,
-        maxDay: atMaxDay, maxPos: atMaxPos, killPct: atKillPct,
-        lossStreak: atLossStreak, maxAddon: atMaxAddon, lev: atLev,
-        confMin, sigMin, adaptEnabled, adaptLive, smartExitEnabled: smartExit,
+        sl: toNum(atSL, 1.5), rr: toNum(atRR, 2),
+        size: toNum(atSize, 200), riskPct: toNum(atRiskPct, 1),
+        maxDay: toNum(atMaxDay, 5), maxPos: toNum(atMaxPos, 3),
+        killPct: toNum(atKillPct, 5), lossStreak: toNum(atLossStreak, 3),
+        maxAddon: toNum(atMaxAddon, 2), lev: toNum(atLev, 5),
+        confMin: toNum(confMin, 65), sigMin: toNum(sigMin, 3),
+        adaptEnabled, adaptLive, smartExitEnabled: smartExit,
+        mscanEnabled, mscanSyms,
       })
       await store.saveToServer()
       if (typeof w.saveUserSettings === 'function') w.saveUserSettings()
-      if (typeof w.toast === 'function') w.toast('AT settings saved ✓')
+      // [Phase 10.8] Fixed: w.toast (window.toast) was never assigned anywhere,
+      // so SAVE SETTINGS visibly did nothing even though the save succeeded.
+      // Use the imported toast() from marketDataHelpers directly.
+      toast('AT settings saved \u2713')
     } catch (err: any) {
       console.error('[AT] Save failed:', err)
-      if (typeof w.toast === 'function') w.toast('Save failed: ' + (err?.message || 'unknown'))
+      toast('Save failed: ' + (err?.message || 'unknown'))
     }
   }
 
@@ -147,10 +261,10 @@ export function AutoTradePanel() {
           {/* Risk Gauges */}
           <div style={{ fontSize: '6px', letterSpacing: '2px', color: '#1a0830', padding: '4px 10px 0' }}>RISK MATRIX</div>
           {[
-            { label: 'VOLATILITATE', id: 'vol' },
-            { label: 'RISC POZITII', id: 'pos' },
+            { label: 'VOLATILITY', id: 'vol' },
+            { label: 'POSITION RISK', id: 'pos' },
             { label: 'SENTIMENT', id: 'sent' },
-            { label: 'CONFLUENTA', id: 'conf' },
+            { label: 'CONFLUENCE', id: 'conf' },
           ].map((g, i) => (
             <div className="risk-gauge" key={g.id} style={i === 3 ? { borderTop: 'none', paddingBottom: '6px' } : undefined}>
               <div className="risk-label">{g.label}</div>
@@ -170,16 +284,29 @@ export function AutoTradePanel() {
           {' '}ZEUS AUTO TRADE{' '}
           <svg className="z-i z-i--brand" viewBox="0 0 16 16" style={{ color: '#f0c040' }}><path d="M9 1L4 9h4l-1 6 5-8H8l1-6" /></svg>
         </div>
-        <button className={`at-main-btn ${enabled ? 'on' : 'off'}`} id="atMainBtn" onClick={handleToggle} disabled={toggling}>
-          <span id="atBtnDot" style={{ width: '8px', height: '8px', borderRadius: '50%', background: enabled ? '#00ff88' : '#aa44ff', boxShadow: enabled ? '0 0 6px #00ff88' : '0 0 6px #aa44ff' }}></span>
-          <span id="atBtnTxt">{enabled ? 'AUTO TRADE ON' : 'AUTO TRADE OFF'}</span>
+        <button className={ui.btnClass} onClick={handleToggle} disabled={toggling}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: ui.dotBg, boxShadow: ui.dotShadow }}></span>
+          <span>{ui.btnText}</span>
         </button>
-        <div className="at-status" id="atStatus">{enabled ? 'SERVER AT ACTIVE — brain controls execution' : 'Configureaza mai jos'}</div>
-        <div id="at-why-blocked"></div>
-        {/* Sentinel Health Indicator */}
-        <div id="zt-sentinel-bar"
-          style={{ display: 'none', fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center' }}>
+        <div className="at-status">
+          <span>
+            <ATStatusIcon kind={ui.status.icon} />
+            {ui.status.icon ? ' ' : ''}{ui.status.text}
+          </span>
+          {ui.status.action === 'resetKill' && (
+            <button data-action="resetKillSwitch" onClick={() => resetKillSwitch()}
+              style={{ color: '#00ff88', background: 'none', border: '1px solid #00ff8866', borderRadius: '2px', padding: '1px 5px', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit', marginLeft: '4px' }}>
+              RESET KILL SWITCH
+            </button>
+          )}
         </div>
+        <AtWhyBlockedPill />{/* [R30] store-driven subscriber; source: brainStore.safetyPill */}
+        {ui.sentinel.visible && (
+          <div style={{ fontSize: '7px', fontFamily: 'monospace', letterSpacing: '1px', padding: '2px 6px', borderRadius: '3px', marginTop: '3px', textAlign: 'center', background: ui.sentinel.bg, color: ui.sentinel.color, border: ui.sentinel.border }}>
+            <ATStatusIcon kind={ui.sentinel.icon} />
+            {ui.sentinel.icon ? ' ' : ''}{ui.sentinel.text}
+          </div>
+        )}
       </div>
       <div className="at-line"></div>
     </div>
@@ -188,7 +315,10 @@ export function AutoTradePanel() {
     <div className="at-panel" id="atPanel">
       <div className="at-hdr">
         <span>ZEUS AI AUTO TRADE ENGINE</span>
-        <span id="atModeLabel" style={{ fontSize: '8px', color: '#aa44ff', letterSpacing: '1px' }}>{mode.toUpperCase()}</span>
+        <span style={{ fontSize: '8px', color: ui.modeLabel.color, letterSpacing: '1px' }}>
+          <ATStatusIcon kind={ui.modeLabel.icon} />
+          {ui.modeLabel.icon ? ' ' : ''}{ui.modeLabel.text}
+        </span>
       </div>
       <div className="at-body">
         <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
@@ -199,18 +329,65 @@ export function AutoTradePanel() {
         <div className="at-row">
           <div className="at-field">
             <div className="at-lbl">GLOBAL MODE</div>
-            <div id="atModeDisplay" className="at-sel" style={{ background: '#0a0a1a', border: '1px solid #aa44ff44', padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: '#aa44ff', letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}>
-              {mode.toUpperCase()} MODE
+            <div className="at-sel" style={{ background: '#0a0a1a', border: `1px solid ${ui.modeDisplay.border}`, padding: '6px 8px', borderRadius: '4px', fontSize: '10px', color: ui.modeDisplay.color, letterSpacing: '1px', textAlign: 'center', cursor: 'default' }}>
+              <ATStatusIcon kind={ui.modeDisplay.icon} />
+              {ui.modeDisplay.icon ? ' ' : ''}{ui.modeDisplay.text}
+              {ui.modeDisplay.lockSuffix && (
+                <>
+                  {' \u00b7 '}
+                  <ATStatusIcon kind="w" />
+                  {' EXEC LOCKED'}
+                </>
+              )}
             </div>
           </div>
           <div className="at-field">
             <div className="at-lbl">LEVERAGE AUTO</div>
-            <select className="at-sel" id="atLev" value={atLev} onChange={e => setAtLev(e.target.value)}>
-              <option value="2">2x</option>
-              <option value="5">5x</option>
-              <option value="10">10x</option>
-              <option value="20">20x</option>
-            </select>
+            {/* [Phase 10.8] Preset pills + free-form input. User explicitly
+                requested no upper cap ("sa nu fiu limitat"); server / Binance
+                will reject invalid values at order placement time. */}
+            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+              {['2', '5', '10', '20'].map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setAtLev(v)}
+                  style={{
+                    padding: '3px 7px',
+                    background: atLev === v ? '#f0c04022' : '#0a0a14',
+                    border: '1px solid ' + (atLev === v ? '#f0c040' : '#333'),
+                    color: atLev === v ? '#f0c040' : 'var(--dim)',
+                    borderRadius: 3,
+                    fontSize: 10,
+                    cursor: 'pointer',
+                    fontFamily: 'var(--ff)',
+                    fontWeight: 700,
+                  }}
+                >
+                  {v}x
+                </button>
+              ))}
+              <input
+                id="atLev"
+                type="number"
+                min={1}
+                step={1}
+                value={atLev}
+                onChange={e => setAtLev(e.target.value)}
+                placeholder="custom"
+                style={{
+                  flex: 1,
+                  minWidth: 50,
+                  background: '#0a0a14',
+                  border: '1px solid #333',
+                  color: '#f0c040',
+                  padding: '3px 6px',
+                  fontSize: 11,
+                  borderRadius: 3,
+                  fontFamily: 'var(--ff)',
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -223,14 +400,14 @@ export function AutoTradePanel() {
 
         {/* ENTRY CONDITIONS */}
         <div className="at-condition">
-          <div className="at-cond-title">CONDITII INTRARE (toate trebuie OK)</div>
+          <div className="at-cond-title">ENTRY CONDITIONS (all must be OK)</div>
           <div className="at-cond-row">
             <span className="at-cond-name">Confluence Score</span>
-            <span>≥ <input type="number" id="atConfMin" value={confMin} onChange={e => setConfMin(+e.target.value)} min={50} max={95} className="at-inp" style={{ width: '52px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className="at-cond-val wait" id="atCondConf">—</span></span>
+            <span>≥ <input type="number" id="atConfMin" value={confMin} onChange={e => setConfMin(e.target.value)} min={50} max={95} className="at-inp" style={{ width: '52px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condConfClass}>{ui.condConf}</span></span>
           </div>
           <div className="at-cond-row">
-            <span className="at-cond-name">Semnale aliniate</span>
-            <span>≥ <input type="number" id="atSigMin" value={sigMin} onChange={e => setSigMin(+e.target.value)} min={2} max={6} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className="at-cond-val wait" id="atCondSig">—</span></span>
+            <span className="at-cond-name">Aligned signals</span>
+            <span>≥ <input type="number" id="atSigMin" value={sigMin} onChange={e => setSigMin(e.target.value)} min={2} max={6} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> <span className={ui.condSigClass}>{ui.condSig}</span></span>
           </div>
         </div>
 
@@ -256,34 +433,68 @@ export function AutoTradePanel() {
         {/* RISK MANAGEMENT */}
         <div className="at-condition">
           <div className="at-cond-title">RISK MANAGEMENT</div>
-          <div className="at-cond-row"><span className="at-cond-name">Size per Trade</span><span><input type="number" id="atSize" value={atSize} onChange={e => setAtSize(+e.target.value)} min={10} step={10} className="at-inp" style={{ width: '65px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> USDT</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Risk % / Trade</span><span><input type="number" id="atRiskPct" value={atRiskPct} onChange={e => setAtRiskPct(+e.target.value)} min={0.1} max={5} step={0.1} className="at-inp" style={{ width: '50px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Max Trades / Day</span><span><input type="number" id="atMaxDay" value={atMaxDay} onChange={e => setAtMaxDay(+e.target.value)} min={1} max={20} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> /day</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Max Open Positions</span><span><input type="number" id="atMaxPos" value={atMaxPos} onChange={e => setAtMaxPos(+e.target.value)} min={1} max={10} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> pos</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Stop Loss</span><span><input type="number" id="atSL" value={atSL} onChange={e => setAtSL(+e.target.value)} min={0.3} max={10} step={0.1} className="at-inp" style={{ width: '55px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Take Profit (R:R)</span><span><input type="number" id="atRR" value={atRR} onChange={e => setAtRR(+e.target.value)} min={1} max={5} step={0.5} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> :1</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Drawdown % / Day</span><span><input type="number" id="atKillPct" value={atKillPct} onChange={e => setAtKillPct(+e.target.value)} min={1} max={20} step={0.5} className="at-inp" style={{ width: '45px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Loss Streak Limit</span><span><input type="number" id="atLossStreak" value={atLossStreak} onChange={e => setAtLossStreak(+e.target.value)} min={1} max={10} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> losses</span></div>
-          <div className="at-cond-row"><span className="at-cond-name">Max Add-ons</span><span><input type="number" id="atMaxAddon" value={atMaxAddon} onChange={e => setAtMaxAddon(+e.target.value)} min={0} max={5} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> add-ons</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Size per Trade</span><span><input type="number" id="atSize" value={atSize} onChange={e => setAtSize(e.target.value)} min={10} step={10} className="at-inp" style={{ width: '65px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> USDT</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Risk % / Trade</span><span><input type="number" id="atRiskPct" value={atRiskPct} onChange={e => setAtRiskPct(e.target.value)} min={0.1} max={5} step={0.1} className="at-inp" style={{ width: '50px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Max Trades / Day</span><span><input type="number" id="atMaxDay" value={atMaxDay} onChange={e => setAtMaxDay(e.target.value)} min={1} max={20} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> /day</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Max Open Positions</span><span><input type="number" id="atMaxPos" value={atMaxPos} onChange={e => setAtMaxPos(e.target.value)} min={1} max={10} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> pos</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Stop Loss</span><span><input type="number" id="atSL" value={atSL} onChange={e => setAtSL(e.target.value)} min={0.3} max={10} step={0.1} className="at-inp" style={{ width: '55px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Take Profit (R:R)</span><span><input type="number" id="atRR" value={atRR} onChange={e => setAtRR(e.target.value)} min={1} max={5} step={0.5} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> :1</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Drawdown % / Day</span><span><input type="number" id="atKillPct" value={atKillPct} onChange={e => setAtKillPct(e.target.value)} min={1} max={20} step={0.5} className="at-inp" style={{ width: '45px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> %</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Loss Streak Limit</span><span><input type="number" id="atLossStreak" value={atLossStreak} onChange={e => setAtLossStreak(e.target.value)} min={1} max={10} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> losses</span></div>
+          <div className="at-cond-row"><span className="at-cond-name">Max Add-ons</span><span><input type="number" id="atMaxAddon" value={atMaxAddon} onChange={e => setAtMaxAddon(e.target.value)} min={0} max={5} className="at-inp" style={{ width: '40px', display: 'inline', padding: '2px 4px', fontSize: '9px' }} /> add-ons</span></div>
           {/* Multi-Symbol Scan row */}
           <div className="at-cond-row" id="atMscanRow" style={{ flexWrap: 'wrap', position: 'relative' }}>
             <span className="at-cond-name">Multi-Symbol Scan</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <input type="checkbox" id="atMultiSym" defaultChecked onChange={() => (window as any).toggleMultiSymMode?.()} />
+              <input
+                type="checkbox"
+                id="atMultiSym"
+                checked={mscanEnabled}
+                onChange={(e) => setMscanEnabled(e.target.checked)}
+              />
               <div id="atSymPickerCard" onClick={() => setSymPickerOpen(!symPickerOpen)}
                 style={{ cursor: 'pointer', background: 'linear-gradient(135deg,#1a1030,#0d0a1a)', border: '1px solid #aa44ff33', borderRadius: '4px', padding: '3px 8px', display: 'flex', alignItems: 'center', gap: '5px', transition: 'border-color .2s' }}>
-                <span style={{ color: '#aa44ff', fontSize: '8px', fontWeight: 700 }} id="atMultiSymLbl">ACTIV — 8 simboluri</span>
+                <span style={{ color: '#aa44ff', fontSize: '8px', fontWeight: 700 }} id="atMultiSymLbl">{mscanLabel}</span>
                 <span style={{ color: '#aa44ff', fontSize: '7px' }}>▼</span>
               </div>
             </div>
             {symPickerOpen && (
               <div id="atSymPickerDrop"
-                style={{ position: 'absolute', right: 0, top: '100%', zIndex: 999, background: '#0d0a1a', border: '1px solid #aa44ff44', borderRadius: '6px', padding: '8px', minWidth: '180px', boxShadow: '0 8px 24px rgba(0,0,0,.6)', marginTop: '4px' }}>
-                <div style={{ fontSize: '7px', color: '#aa44ff', fontWeight: 700, marginBottom: '6px', letterSpacing: '1px' }}>SELECTEAZA SIMBOLURI</div>
-                <div id="atSymPickerList" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}></div>
+                style={{ position: 'absolute', right: 0, top: '100%', zIndex: 999, background: '#0d0a1a', border: '1px solid #aa44ff44', borderRadius: '6px', padding: '8px', minWidth: '180px', boxShadow: '0 8px 24px rgba(0,0,0,.6)', marginTop: '4px' }}
+                onClick={(e) => e.stopPropagation()}>
+                <div style={{ fontSize: '7px', color: '#aa44ff', fontWeight: 700, marginBottom: '6px', letterSpacing: '1px' }}>
+                  SELECT SYMBOLS ({mscanSyms.length}/{MSCAN_SYMS.length})
+                </div>
+                <div id="atSymPickerList" style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                  {MSCAN_SYMS.map((sym) => {
+                    const short = sym.replace('USDT', '')
+                    const checked = mscanSyms.includes(sym)
+                    return (
+                      <label key={sym}
+                        style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', padding: '3px 4px', borderRadius: '3px', fontSize: '8px', color: '#ccd' }}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSym(sym)}
+                          style={{ accentColor: '#aa44ff' }}
+                        />
+                        <span style={{ fontWeight: 700, color: '#fff', minWidth: '38px' }}>{short}</span>
+                        <span style={{ color: '#556', fontSize: '6px' }}>{sym}</span>
+                      </label>
+                    )
+                  })}
+                </div>
                 <div style={{ display: 'flex', gap: '4px', marginTop: '8px', borderTop: '1px solid #1a1030', paddingTop: '6px' }}>
-                  <button style={{ flex: 1, background: '#aa44ff22', border: '1px solid #aa44ff44', color: '#aa44ff', fontSize: '7px', padding: '2px 0', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>✓ TOATE</button>
-                  <button style={{ flex: 1, background: '#ff335511', border: '1px solid #ff335533', color: '#ff6655', fontSize: '7px', padding: '2px 0', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>✕ NICIUNA</button>
+                  <button
+                    onClick={() => pickAll(true)}
+                    style={{ flex: 1, background: '#aa44ff22', border: '1px solid #aa44ff44', color: '#aa44ff', fontSize: '7px', padding: '2px 0', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>
+                    ✓ TOATE
+                  </button>
+                  <button
+                    onClick={() => pickAll(false)}
+                    style={{ flex: 1, background: '#ff335511', border: '1px solid #ff335533', color: '#ff6655', fontSize: '7px', padding: '2px 0', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)' }}>
+                    ✕ NICIUNA
+                  </button>
                 </div>
               </div>
             )}
@@ -291,27 +502,36 @@ export function AutoTradePanel() {
         </div>
 
         {/* LIVE WARNING */}
-        {mode === 'live' && (
-          <div className="live-at-warn" id="atLiveWarn">
+        {ui.liveWarnVisible && (
+          <div className="live-at-warn">
             <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff8800' }}>
               <path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" />
-            </svg> <strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on Binance.
+            </svg> {executionEnv === 'TESTNET'
+              ? <><strong>TESTNET MODE ACTIVE:</strong> Auto trades will execute with TEST funds on {_exchLabel} Testnet.</>
+              : (executionEnv === 'REAL'
+                ? <><strong>LIVE MODE ACTIVE:</strong> Auto trades will execute with REAL funds on {_exchLabel}.</>
+                : <><strong>LIVE MODE LOCKED:</strong> {executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'}</>)}
           </div>
         )}
 
         {/* STATS */}
         <div className="at-stats">
-          <div className="at-stat"><div className="at-stat-l">BALANCE</div><div className="at-stat-v" id="atBalance" style={{ color: 'var(--whi)' }}>${demoBalance.toLocaleString()}</div></div>
-          <div className="at-stat"><div className="at-stat-l">AUTO TRADES</div><div className="at-stat-v" id="atTotalTrades" style={{ color: 'var(--whi)' }}>{totalTrades}</div></div>
-          <div className="at-stat"><div className="at-stat-l">WIN RATE</div><div className="at-stat-v" id="atWinRate" style={{ color: 'var(--dim)' }}>{winRate}%</div></div>
-          <div className="at-stat"><div className="at-stat-l">AUTO PnL</div><div className="at-stat-v" id="atTotalPnL" style={{ color: totalPnL >= 0 ? 'var(--grn)' : 'var(--red)' }}>${totalPnL.toFixed(2)}</div></div>
-          <div className="at-stat"><div className="at-stat-l" id="atDailyLabel">DAILY P&amp;L</div><div className="at-stat-v" id="atDailyLoss" style={{ color: dailyPnL >= 0 ? 'var(--grn)' : 'var(--red)' }}>${dailyPnL.toFixed(2)}</div></div>
+          <div className="at-stat"><div className="at-stat-l">BALANCE</div><div className="at-stat-v" style={{ color: ui.balanceColor }}>{ui.balanceText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">AUTO TRADES</div><div className="at-stat-v" style={{ color: 'var(--whi)' }}>{ui.totalTradesText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">WIN RATE</div><div className="at-stat-v" style={{ color: ui.winRateColor }}>{ui.winRateText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">AUTO PnL</div><div className="at-stat-v" style={{ color: ui.totalPnLColor }}>{ui.totalPnLText}</div></div>
+          <div className="at-stat"><div className="at-stat-l">{ui.dailyLabel}</div><div className="at-stat-v" style={{ color: ui.dailyLossColor }}>{ui.dailyLossText}</div></div>
         </div>
 
         {/* LOG */}
         <div style={{ fontSize: '7px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '3px' }}>ACTIVITY LOG</div>
-        <div className="at-log" id="atLog">
-          <div className="at-log-row"><span className="at-log-time">--:--</span><span className="at-log-msg info">Auto Trade Engine pornit. Astept semnal...</span></div>
+        <div className="at-log">
+          {ui.logEntries.map((entry, idx) => (
+            <div className="at-log-row" key={idx}>
+              <span className="at-log-time">{entry.time}</span>
+              <span className={`at-log-msg ${entry.type}`}>{entry.msg}</span>
+            </div>
+          ))}
         </div>
 
         {/* BRAIN VISION */}
@@ -344,20 +564,20 @@ export function AutoTradePanel() {
         </button>
 
         {/* KILL SWITCH */}
-        <button className={`at-kill${killTriggered ? ' triggered' : ''}`} id="atKillBtn" onClick={handleKill}>
+        <button className={`at-kill${killTriggered || ui.killBtnTriggered ? ' triggered' : ''}`} onClick={handleKill}>
           <svg className="z-i" viewBox="0 0 16 16" style={{ color: '#ff3355' }}>
             <path d="M8 1v2m5 2l-1.4 1.4M3 5l1.4 1.4M2 10h2m8 0h2M5 13h6M6 10a2 2 0 014 0" />
-          </svg> EMERGENCY STOP — INCHIDE TOATE POZITIILE
+          </svg> EMERGENCY STOP — CLOSE ALL POSITIONS
         </button>
 
         {/* ACTIVE AUTO POSITIONS */}
         <div style={{ borderTop: '1px solid #1a1030', paddingTop: '8px', marginTop: '2px' }}>
           <div style={{ fontSize: '7px', letterSpacing: '2px', color: '#aa44ff', marginBottom: '5px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span>POZITII ACTIVE AUTO TRADE</span>
-            <span id="atPosCount" style={{ color: 'var(--dim)' }}>0 pozitii</span>
+            <span>ACTIVE AUTO TRADE POSITIONS</span>
+            <span style={{ color: 'var(--dim)' }}>{ui.posCountText}</span>
           </div>
           <div id="atActivePosPanel" style={{ minHeight: '32px' }}>
-            <div style={{ textAlign: 'center', fontSize: '8px', color: 'var(--dim)', padding: '8px' }}>Nicio pozitie auto deschisa</div>
+            <div style={{ textAlign: 'center', fontSize: '8px', color: 'var(--dim)', padding: '8px' }}>No active auto positions</div>
           </div>
         </div>
 

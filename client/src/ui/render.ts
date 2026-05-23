@@ -160,7 +160,7 @@ export function updateQuantumClock() {
   }
 
   // Time label
-  const _roTz = getTimezone();
+  void (getTimezone());
   const ct = el('qClockTime');
   if (ct) ct.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 
@@ -191,7 +191,7 @@ export function getSessionKey(hUTC: number) {
 // [MOVED TO TOP] SESS_CFG
 
 export function updateSessionBacktest(hUTC: number) {
-  const _SESS_CFG = SESS_CFG;
+
   const box = el('sessBacktestBox'); if (!box) return;
 
   const nowTs = Date.now();
@@ -274,7 +274,7 @@ export function updateSymPulseRows() {
   const _sym = getSymbol(), _price = getPrice();
 
   // Track price history for sparklines
-  syms.forEach((sym: string, i: number) => {
+  syms.forEach((sym: string, _i: number) => {
     const p = sym === _sym ? _price : (w.wlPrices[sym]?.price || 0);
     if (!p) return;
     if (!BEXT.priceHistory[sym]) BEXT.priceHistory[sym] = [];
@@ -286,7 +286,7 @@ export function updateSymPulseRows() {
     const hist = BEXT.priceHistory[sym] || [];
     const curP = hist[hist.length - 1] || 0;
     const chg = w.wlPrices[sym]?.chg || 0;
-    const chgCls = chg > 0 ? 'up' : chg < 0 ? 'down' : 'neut';
+
     const col = chg > 0 ? 'var(--grn-bright)' : chg < 0 ? 'var(--red)' : '#555';
 
     // Sparkline bars
@@ -364,7 +364,7 @@ export function updateRiskGauges() {
 
   // Sentiment gauge (FR + LS + fear&greed combined)
   const fr = getFR();
-  const frVal = fr ? Math.abs(fr) * 10000 : 0;
+  void (fr ? Math.abs(fr) * 10000 : 0);
   const fg = getFG();
   const sentimentBull = fg > 50 ? fg : (100 - fg);
   const sentPct = Math.min(100, sentimentBull);
@@ -488,8 +488,8 @@ export function renderDHF() {
   const DHF = w.DHF;
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const { day: curDay, hour: curHour } = getTimeUTC(); // data layer: UTC (consistent cu DHF.hours indexing)
-  const roT = getRoTime();                       // UI highlight: ora RO reala
-  const curHourRO = roT.hh;                      // ora RO pentru highlight vizual
+  void getRoTime()
+
   const now = new Date();
   const utcTimeStr = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')} UTC`;
 

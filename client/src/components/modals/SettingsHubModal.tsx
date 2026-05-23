@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { useUiStore } from '../../stores'
-import { pinActivate, pinRemove } from '../../core/bootstrapMisc'
+import { pinActivate, pinRemove, _pinUpdateUI } from '../../core/bootstrapMisc'
+import { BiometricToggle } from './BiometricToggle'
 import { hubCloudSave, hubCloudLoad, hubCloudClear, hubSaveAll, hubLoadAll, hubResetDefaults, hubTgSave, hubTgTest, setUiScale, hubToggleDev, devClearLog, devExportLog } from '../../utils/dev'
 import { zeusApplyTheme } from '../../ui/theme'
+import { OmegaMemorySection } from '../settings/OmegaMemorySection'
 
 const w = window as any
 
@@ -36,49 +38,13 @@ function val(id: string) {
 export function SettingsHubModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState('general')
   const openModal = useUiStore((s) => s.openModal)
-  type ExInfo = { connected: boolean; mode: 'live'|'testnet'; maskedKey: string; balance: number; lastVerified: string }
-  const [exAccounts, setExAccounts] = useState<Record<string, ExInfo>>({})
-  const [exModeFor, setExModeFor] = useState<Record<string, 'live'|'testnet'>>({ binance: 'testnet', bybit: 'testnet' })
-  const [exLoadingFor, setExLoadingFor] = useState<Record<string, boolean>>({})
-  const [exMsgFor, setExMsgFor] = useState<Record<string, {text: string; ok: boolean}>>({})
 
+  // [BATCH3-S] When Security tab opens, sync PIN UI (show/hide Current PIN field).
   useEffect(() => {
-    if (tab !== 'exchange') return
-    fetch('/api/exchange/status', { credentials: 'same-origin' })
-      .then(r => r.json())
-      .then(d => {
-        if (!d.ok) return
-        const map: Record<string, ExInfo> = {}
-        for (const a of (d.accounts || [])) {
-          map[a.exchange] = { connected: true, mode: a.mode, maskedKey: a.maskedKey, balance: 0, lastVerified: a.lastVerified }
-        }
-        setExAccounts(map)
-      })
-      .catch(() => {})
+    if (tab !== 'security') return
+    const t = setTimeout(() => { _pinUpdateUI?.() }, 50)
+    return () => clearTimeout(t)
   }, [tab])
-
-  function exSetMsg(ex: string, text: string, ok: boolean) { setExMsgFor(p => ({ ...p, [ex]: { text, ok } })) }
-
-  async function exSave(ex: string) {
-    setExLoadingFor(p => ({ ...p, [ex]: true }))
-    const r = await apiFetch('/api/exchange/save', { apiKey: val(`${ex}ApiKey`), apiSecret: val(`${ex}ApiSecret`), mode: exModeFor[ex] || 'testnet', exchange: ex })
-    setExLoadingFor(p => ({ ...p, [ex]: false }))
-    exSetMsg(ex, r.ok ? `✓ Conectat! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Eroare'), !!r.ok)
-    if (r.ok) setExAccounts(p => ({ ...p, [ex]: { connected: true, mode: r.mode, maskedKey: r.maskedKey, balance: r.balance, lastVerified: r.lastVerified } }))
-  }
-
-  async function exVerify(ex: string) {
-    const r = await apiFetch('/api/exchange/verify', { exchange: ex })
-    exSetMsg(ex, r.ok ? `✓ Verificat! Balance: $${(r.balance||0).toFixed(2)}` : (r.error || 'Eroare'), !!r.ok)
-    if (r.ok) setExAccounts(p => ({ ...p, [ex]: { ...p[ex], balance: r.balance, lastVerified: r.lastVerified } }))
-  }
-
-  async function exDisconnect(ex: string) {
-    if (!confirm(`Deconectezi ${ex}?`)) return
-    const r = await apiFetch('/api/exchange/disconnect', { exchange: ex })
-    if (r.ok) setExAccounts(p => { const n = { ...p }; delete n[ex]; return n })
-    else exSetMsg(ex, r.error || 'Eroare', false)
-  }
 
   async function chpwRequest() {
     const r = await apiFetch('/auth/change-password/request', { currentPassword: val('chpwCurrent') })
@@ -87,7 +53,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   }
 
   async function chpwConfirm() {
-    const r = await apiFetch('/auth/change-password/confirm', { code: val('chpwCode'), newPassword: val('chpwNew') })
+    // [BUG-UI-CMP-9] Pre-POST length check — empty/short codes wasted server roundtrips.
+    const code = (val('chpwCode') || '').trim()
+    if (code.length < 6) {
+      setMsg('chpw-code-msg', 'Enter the 6-digit code from email', false)
+      return
+    }
+    const r = await apiFetch('/auth/change-password/confirm', { code, newPassword: val('chpwNew') })
     setMsg('chpw-code-msg', r.message || r.error || '', !!r.ok)
     if (r.ok) setTimeout(() => { showEl('chpw-code-form', false); showEl('chpw-form', true) }, 1500)
   }
@@ -99,7 +71,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
   }
 
   async function chemConfirm() {
-    const r = await apiFetch('/auth/change-email/confirm', { code: val('chemCode') })
+    // [BUG-UI-CMP-9] Pre-POST length check — empty/short codes wasted server roundtrips.
+    const code = (val('chemCode') || '').trim()
+    if (code.length < 6) {
+      setMsg('chem-code-msg', 'Enter the 6-digit code from email', false)
+      return
+    }
+    const r = await apiFetch('/auth/change-email/confirm', { code })
     setMsg('chem-code-msg', r.message || r.error || '', !!r.ok)
     if (r.ok) setTimeout(() => { showEl('chem-code-form', false); showEl('chem-form', true) }, 1500)
   }
@@ -120,6 +98,25 @@ export function SettingsHubModal({ visible, onClose }: Props) {
     }, 1500)
   }
 
+  // [BUG-UI-CMP-2] Hard double-click guard for irreversible DELETE ACCOUNT button.
+  // useRef provides synchronous block (React state updates may be batched/async).
+  // useState only drives UI disabled/loading visual.
+  // Reset on error so user can retry; do NOT reset on success (redirect unmounts).
+  const clacBusyRef = useRef(false)
+  const [clacBusy, setClacBusy] = useState(false)
+  const onClacConfirm = async () => {
+    if (clacBusyRef.current) return
+    clacBusyRef.current = true
+    setClacBusy(true)
+    try {
+      await clacConfirm()
+    } catch (err) {
+      clacBusyRef.current = false
+      setClacBusy(false)
+      throw err
+    }
+  }
+
   return (
     <ModalOverlay id="msettings" visible={visible} onClose={onClose} maxWidth="500px">
       <ModalHeader title="SETTINGS HUB" onClose={onClose} />
@@ -130,7 +127,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
         <div className={`mtab${tab==='telegram'?' act':''}`} onClick={()=>setTab('telegram')}>TELEGRAM</div>
         <div className={`mtab${tab==='exchange'?' act':''}`} onClick={()=>setTab('exchange')}>EXCHANGE API</div>
         <div className={`mtab${tab==='developer'?' act':''}`} onClick={()=>setTab('developer')}>DEVELOPER</div>
-        <div className={`mtab${tab==='security'?' act':''}`} onClick={()=>setTab('security')}><svg className="z-i" viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 016 0v2M4 7h8v7H4z" /></svg> CONT &amp; SECURITY</div>
+        <div className={`mtab${tab==='omega'?' act':''}`} onClick={()=>setTab('omega')}>OMEGA</div>
+        <div className={`mtab${tab==='security'?' act':''}`} onClick={()=>setTab('security')}><svg className="z-i" viewBox="0 0 16 16"><path d="M5 7V5a3 3 0 016 0v2M4 7h8v7H4z" /></svg> ACCOUNT &amp; SECURITY</div>
       </div>
 
       {/* ══ GENERAL ══ */}
@@ -173,76 +171,83 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       <div className="mbody" id="set-account" style={{display:tab==='security'?'block':'none'}}>
         <div className="msec">APP LOCK (PIN)</div>
         <div style={{fontSize:'10px',color:'#556',marginBottom:'8px',lineHeight:'1.6'}}>
-          Protejează terminalul cu un PIN local. La fiecare deschidere a aplicației, vei fi întrebat PIN-ul înainte să vezi datele.
+          Protect the terminal with a local PIN. You will be prompted for the PIN each time the app opens, before you can see your data.
         </div>
         <div className="mrow"><span className="mlbl">Status</span>
-          <span id="pinStatus" style={{fontSize:'11px',color:'#556',fontWeight:700}}>DEZACTIVAT</span>
+          <span id="pinStatus" style={{fontSize:'11px',color:'#556',fontWeight:700}}>DISABLED</span>
         </div>
         <div id="pinSetupForm">
-          <div className="mrow" style={{marginBottom:'6px'}}>
-            <span className="mlbl">PIN (4–8 cifre/litere)</span>
-            <input type="password" id="pinInput" placeholder="Introdu PIN" maxLength={8} style={pinInp} />
+          {/* [BATCH3-S] Current PIN — only shown when PIN already active. Reused for both Change and Deactivate. */}
+          <div className="mrow" id="pinCurrentRow" style={{marginBottom:'6px',display:'none'}}>
+            <span className="mlbl">Current PIN</span>
+            <input type="password" id="pinCurrent" placeholder="Current PIN" maxLength={8} style={pinInp} autoComplete="off" />
           </div>
           <div className="mrow" style={{marginBottom:'6px'}}>
-            <span className="mlbl">Confirmă PIN</span>
-            <input type="password" id="pinConfirm" placeholder="Repetă PIN" maxLength={8} style={pinInp} />
+            <span className="mlbl" id="pinInputLabel">PIN (4–8 cifre/litere)</span>
+            <input type="password" id="pinInput" placeholder="Enter PIN" maxLength={8} style={pinInp} autoComplete="off" />
+          </div>
+          <div className="mrow" style={{marginBottom:'6px'}}>
+            <span className="mlbl">Confirm PIN</span>
+            <input type="password" id="pinConfirm" placeholder="Repeat PIN" maxLength={8} style={pinInp} autoComplete="off" />
           </div>
           <div style={{display:'flex',gap:'6px',marginTop:'6px'}}>
-            <button className="hub-sbtn pri" id="pinActivateBtn" onClick={() => pinActivate?.()}>ACTIVEAZĂ PIN</button>
-            <button className="hub-sbtn" id="pinRemoveBtn" style={{display:'none',borderColor:'#ff335533',color:'#ff6655'}} onClick={() => pinRemove?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> DEZACTIVEAZĂ</button>
+            <button className="hub-sbtn pri" id="pinActivateBtn" onClick={() => pinActivate?.()}>ACTIVATE PIN</button>
+            <button className="hub-sbtn" id="pinRemoveBtn" style={{display:'none',borderColor:'#ff335533',color:'#ff6655'}} onClick={() => pinRemove?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> DEACTIVATE</button>
           </div>
           <div id="pin-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
-        <div className="msec" style={{marginTop:'16px'}}>SCHIMBĂ PAROLA</div>
+        <BiometricToggle />
+
+        <div className="msec" style={{marginTop:'16px'}}>CHANGE PASSWORD</div>
         <div id="chpw-form">
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="chpwCurrent" placeholder="Parola actuală" style={inp} /></div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola nouă</span><input type="password" id="chpwNew" placeholder="Min 12 caractere (A-z, 0-9)" style={inp} /></div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Confirmă parola</span><input type="password" id="chpwConfirm" placeholder="Repetă parola nouă" style={inp} /></div>
-          <button className="hub-sbtn pri" id="chpwRequestBtn" style={{marginTop:'6px'}} onClick={chpwRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod de verificare</button>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Current password</span><input type="password" id="chpwCurrent" placeholder="Current password" style={inp} /></div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">New password</span><input type="password" id="chpwNew" placeholder="Min 12 characters (A-z, 0-9)" style={inp} /></div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Confirm password</span><input type="password" id="chpwConfirm" placeholder="Repeat new password" style={inp} /></div>
+          <button className="hub-sbtn pri" id="chpwRequestBtn" style={{marginTop:'6px'}} onClick={chpwRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Send verification code</button>
           <div id="chpw-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="chpw-code-form" style={{display:'none',marginTop:'10px'}}>
-          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE VERIFICARE</div>
-          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>Am trimis un cod pe emailul tău. Introdu-l mai jos:</div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="chpwCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
-          <button className="hub-sbtn pri" id="chpwConfirmBtn" onClick={chpwConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
+          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> VERIFICATION CODE</div>
+          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>We sent a code to your email. Enter it below:</div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="chpwCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
+          <button className="hub-sbtn pri" id="chpwConfirmBtn" onClick={chpwConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirm change</button>
           <div id="chpw-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
-        <div className="msec" style={{marginTop:'16px'}}>SCHIMBĂ EMAIL</div>
+        <div className="msec" style={{marginTop:'16px'}}>CHANGE EMAIL</div>
         <div id="chem-form">
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Email nou</span><input type="email" id="chemNewEmail" placeholder="email@exemplu.com" style={inp} /></div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="chemPassword" placeholder="Confirmă cu parola" style={inp} /></div>
-          <button className="hub-sbtn pri" id="chemRequestBtn" style={{marginTop:'6px'}} onClick={chemRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Trimite cod pe noul email</button>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">New email</span><input type="email" id="chemNewEmail" placeholder="email@example.com" style={inp} /></div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Current password</span><input type="password" id="chemPassword" placeholder="Confirm with password" style={inp} /></div>
+          <button className="hub-sbtn pri" id="chemRequestBtn" style={{marginTop:'6px'}} onClick={chemRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M2 4h12v8H2V4zm0 0l6 4 6-4" /></svg> Send code to new email</button>
           <div id="chem-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="chem-code-form" style={{display:'none',marginTop:'10px'}}>
-          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE VERIFICARE</div>
-          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>Am trimis un cod pe noul email. Introdu-l mai jos:</div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="chemCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
-          <button className="hub-sbtn pri" id="chemConfirmBtn" onClick={chemConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirmă schimbarea</button>
+          <div className="msec"><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> VERIFICATION CODE</div>
+          <div style={{fontSize:'10px',color:'#556',marginBottom:'8px'}}>We sent a code to the new email. Enter it below:</div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="chemCode" maxLength={6} placeholder="000000" style={codeInp} /></div>
+          <button className="hub-sbtn pri" id="chemConfirmBtn" onClick={chemConfirm}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 8l4 4 6-7" /></svg> Confirm change</button>
           <div id="chem-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
 
-        <div className="msec" style={{marginTop:'16px'}}>INFORMAȚII CONT</div>
+        <div className="msec" style={{marginTop:'16px'}}>ACCOUNT INFO</div>
         <div style={{fontSize:'10px',color:'#556'}}>
           <div style={{marginBottom:'4px'}}>Email: <span style={{color:'#ccc'}} id="chpwUserEmail">—</span></div>
-          <div>Rol: <span style={{color:'#00afff'}} id="chpwUserRole">—</span></div>
+          <div>Role: <span style={{color:'#00afff'}} id="chpwUserRole">—</span></div>
         </div>
 
-        <div className="msec" style={{marginTop:'24px',color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff4444'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> ÎNCHIDE CONTUL</div>
-        <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Această acțiune este permanentă și nu poate fi anulată. Toate datele tale vor fi șterse.</div>
+        <div className="msec" style={{marginTop:'24px',color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff4444'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> CLOSE ACCOUNT</div>
+        <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>This action is permanent and cannot be undone. All your data will be deleted.</div>
         <div id="clac-form">
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Parola curentă</span><input type="password" id="clacPassword" placeholder="Confirmă cu parola" style={{...inp, borderColor:'#ff444444'}} /></div>
-          <button className="hub-sbtn" id="clacRequestBtn" style={{marginTop:'6px',background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Trimite cod de confirmare</button>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Current password</span><input type="password" id="clacPassword" placeholder="Confirm with password" style={{...inp, borderColor:'#ff444444'}} /></div>
+          <button className="hub-sbtn" id="clacRequestBtn" style={{marginTop:'6px',background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacRequest}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Send confirmation code</button>
           <div id="clac-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
         <div id="clac-code-form" style={{display:'none',marginTop:'10px'}}>
-          <div className="msec" style={{color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> COD DE CONFIRMARE ȘTERGERE</div>
-          <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Introdu codul primit pe email pentru a confirma ștergerea contului:</div>
-          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">Cod 6 cifre</span><input type="text" id="clacCode" maxLength={6} placeholder="000000" style={dangerCodeInp} /></div>
-          <button className="hub-sbtn" id="clacConfirmBtn" style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444'}} onClick={clacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> ȘTERGE CONTUL DEFINITIV</button>
+          <div className="msec" style={{color:'#ff4444'}}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> DELETION CONFIRMATION CODE</div>
+          <div style={{fontSize:'10px',color:'#664444',marginBottom:'8px'}}>Enter the code from your email to confirm account deletion:</div>
+          <div className="mrow" style={{marginBottom:'6px'}}><span className="mlbl">6-digit code</span><input type="text" id="clacCode" maxLength={6} placeholder="000000" style={dangerCodeInp} /></div>
+          <button className="hub-sbtn" id="clacConfirmBtn" disabled={clacBusy} style={{background:'#ff444422',color:'#ff6655',border:'1px solid #ff444444',opacity:clacBusy?0.5:1,cursor:clacBusy?'not-allowed':'pointer'}} onClick={onClacConfirm}><svg className="z-i" viewBox="0 0 16 16" style={{color:'#ff6655'}}><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> {clacBusy ? 'DELETING...' : 'DELETE ACCOUNT PERMANENTLY'}</button>
           <div id="clac-code-msg" style={{marginTop:'6px',fontSize:'10px',minHeight:'16px'}}></div>
         </div>
       </div>
@@ -270,8 +275,8 @@ export function SettingsHubModal({ visible, onClose }: Props) {
       <div className="mbody" id="set-telegram" style={{display:tab==='telegram'?'block':'none'}}>
         <div className="msec">TELEGRAM BOT</div>
         <div style={{fontSize:'8px',color:'#6a9080',lineHeight:'1.6',marginBottom:'8px'}}>
-          Primești alerte pe Telegram: ordine, risk blocks, kill switch, reconciliation.<br/>
-          Creează un bot cu <span style={{color:'#4fc3f7'}}>@BotFather</span> → copiază token-ul → adaugă bot-ul în grup → ia Chat ID.
+          Receive alerts via Telegram: orders, risk blocks, kill switch, reconciliation.<br/>
+          Create a bot with <span style={{color:'#4fc3f7'}}>@BotFather</span> → copy the token → add the bot to a group → get the Chat ID.
         </div>
         <div className="mrow"><span className="mlbl">Bot Token</span><input type="password" id="hubTgBotToken" placeholder="123456:ABC-DEF..." style={inp} /></div>
         <div className="mrow"><span className="mlbl">Chat ID</span><input type="text" id="hubTgChatId" placeholder="-100123456789" style={inp} /></div>
@@ -280,13 +285,13 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <button id="hubTgTest" className="hub-sbtn" onClick={() => hubTgTest?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M14 8L2 3v4l7 1-7 1v4z" /></svg> SEND TEST</button>
         </div>
         <div id="hubTgStatus" style={{marginTop:'6px',fontSize:'8px',color:'var(--dim)',minHeight:'14px'}}></div>
-        <div className="msec">CUM OBȚII</div>
+        <div className="msec">HOW TO GET IT</div>
         <div style={{fontSize:'7px',color:'#556677',lineHeight:'1.8'}}>
-          1. Deschide Telegram → caută <b>@BotFather</b> → <code>/newbot</code> → copiază token<br/>
-          2. Creează un grup sau folosește chat privat cu bot-ul<br/>
-          3. Trimite un mesaj în grup, apoi vizitează:<br/>
+          1. Open Telegram → search <b>@BotFather</b> → <code>/newbot</code> → copy the token<br/>
+          2. Create a group or use a private chat with the bot<br/>
+          3. Send a message in the group, then visit:<br/>
           <code style={{color:'#4fc3f7'}}>{'https://api.telegram.org/bot<TOKEN>/getUpdates'}</code><br/>
-          4. Caută <code>{'"chat":{"id":-100...}'}</code> — ăla e Chat ID-ul tău
+          4. Look for <code>{'"chat":{"id":-100...}'}</code> — that is your Chat ID
         </div>
       </div>
 
@@ -313,70 +318,41 @@ export function SettingsHubModal({ visible, onClose }: Props) {
           <button className="hub-sbtn" style={{borderColor:'#ff335533',color:'#ff8866'}} onClick={() => w.ZLOG?.clear?.()}><svg className="z-i" viewBox="0 0 16 16"><path d="M3 4h10M6 2h4v2M5 4v9h6V4m-4 2v5m2-5v5" /></svg> Clear ZLOG</button>
         </div>
         <div style={{marginTop:'4px',fontSize:'6px',color:'#3a4a5a',lineHeight:'1.6'}}>
-          Colectează: atLog + devLog + erori async (safeAsync).<br/>
-          Max 400 entries · dedup 2s · export fără server.
+          Collects: atLog + devLog + async errors (safeAsync).<br/>
+          Max 400 entries · dedup 2s · export without server.
         </div>
         <div className="msec">BUILD INFO</div>
         <div id="hub-build-info" style={{fontSize:'7px',color:'#556677',lineHeight:'1.8'}}>ZeuS v108 — FIX: chart negru la schimb simbol/TF + _adaptClamp + PostMortem + RegimeWatch</div>
       </div>
 
+      {/* ══ OMEGA — Sub-A chat persistence + Sub-C.1 long-term memory ══ */}
+      <div className="mbody" id="set-omega" style={{display:tab==='omega'?'block':'none', padding:'12px 16px', overflowY:'auto', flex:'1 1 auto'}}>
+        <OmegaMemorySection />
+      </div>
+
       {/* ══ EXCHANGE API ══ */}
-      <div id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'12px 16px', overflowY:'auto', flex:'1 1 auto'}}>
-        <div style={{fontSize:'8px',color:'#ff8800',marginBottom:'10px',lineHeight:'1.6'}}>
-          Cheile sunt criptate la server · Folosește READ + TRADE only (fără withdrawal) · Restricționează IP
+      <div id="set-exchange" style={{display:tab==='exchange'?'block':'none', padding:'24px 16px', overflowY:'auto', flex:'1 1 auto'}}>
+        <div style={{textAlign:'center', padding:'24px 16px', background:'#0a1018', border:'1px solid #00d4ff33', borderRadius:'6px'}}>
+          <div style={{fontFamily:'Orbitron, sans-serif', fontWeight:900, fontSize:'18px', letterSpacing:'3px', color:'#00d4ff', marginBottom:'10px'}}>
+            ₿ MULTIEXCHANGE
+          </div>
+          <div style={{fontSize:'11px', color:'#94a3b8', lineHeight:'1.6', marginBottom:'16px', fontFamily:'JetBrains Mono, monospace'}}>
+            Exchange API settings moved to the dedicated MultiExchange page.
+            <br />
+            Open from the dock icon ₿ next to Ω.
+          </div>
+          <button
+            className="hub-sbtn pri"
+            style={{fontWeight:700, padding:'8px 16px'}}
+            onClick={() => {
+              onClose()
+              const ev = new CustomEvent('zeus:dock-activate', { detail: { id: 'multi-exchange' } })
+              window.dispatchEvent(ev)
+            }}
+          >
+            OPEN MULTIEXCHANGE →
+          </button>
         </div>
-        {(['binance', 'bybit'] as const).map(ex => {
-          const info = exAccounts[ex]
-          const mode = exModeFor[ex] || 'testnet'
-          const loading = exLoadingFor[ex]
-          const msg = exMsgFor[ex]
-          const accentColor = ex === 'binance' ? '#f0c040' : '#aa44ff'
-          const label = ex === 'binance' ? 'BINANCE FUTURES' : 'BYBIT DERIVATIVES'
-          return (
-            <div key={ex} style={{background:'#0a1018',border:`1px solid ${accentColor}33`,borderRadius:'6px',padding:'12px',marginBottom:'10px'}}>
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:'8px'}}>
-                <span style={{fontSize:'10px',fontWeight:700,color:accentColor,letterSpacing:'1px'}}>{label}</span>
-                <span style={{fontSize:'9px',color: info ? '#00d97a' : '#556'}}>
-                  {info ? `● CONECTAT · ${info.mode.toUpperCase()} · ${info.maskedKey}` : '○ deconectat'}
-                </span>
-              </div>
-              {info ? (
-                <div style={{fontSize:'9px',color:'#8899aa',marginBottom:'8px'}}>
-                  Balance: <span style={{color:'#00d97a'}}>${(info.balance||0).toFixed(2)}</span>
-                  {info.lastVerified && <span style={{color:'#445',marginLeft:'8px'}}>· {new Date(info.lastVerified).toLocaleString('ro-RO')}</span>}
-                </div>
-              ) : (
-                <>
-                  <div style={{marginBottom:'6px'}}>
-                    <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>API KEY</div>
-                    <input type="password" id={`${ex}ApiKey`} placeholder="Paste API Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
-                  </div>
-                  <div style={{marginBottom:'8px'}}>
-                    <div style={{fontSize:'8px',color:'#6a9080',marginBottom:'2px'}}>SECRET KEY</div>
-                    <input type="password" id={`${ex}ApiSecret`} placeholder="Paste Secret Key" style={{width:'100%',background:'#060c14',border:'1px solid #2a3a4a',color:'var(--txt)',padding:'5px 8px',borderRadius:'3px',fontFamily:'var(--ff)',fontSize:'9px',boxSizing:'border-box'}} />
-                  </div>
-                  <div style={{display:'flex',gap:'6px',marginBottom:'8px'}}>
-                    <button className="hub-sbtn" style={{flex:1,fontWeight:700,color:'#ff6655',background:mode==='live'?'#ff444433':'transparent',border:`1px solid ${mode==='live'?'#ff4444':'#ff444433'}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'live'}))}>● LIVE</button>
-                    <button className="hub-sbtn" style={{flex:1,fontWeight:700,background:mode==='testnet'?`${accentColor}22`:'transparent',border:`1px solid ${mode==='testnet'?accentColor:`${accentColor}33`}`}} onClick={() => setExModeFor(p=>({...p,[ex]:'testnet'}))}>◎ TESTNET</button>
-                  </div>
-                </>
-              )}
-              <div style={{display:'flex',gap:'6px'}}>
-                {info ? (
-                  <>
-                    <button className="hub-sbtn" style={{flex:1}} onClick={() => exVerify(ex)}>RE-VERIFY</button>
-                    <button className="hub-sbtn" style={{flex:1,borderColor:'#ff335533',color:'#ff6655'}} onClick={() => exDisconnect(ex)}>DISCONNECT</button>
-                  </>
-                ) : (
-                  <button className="hub-sbtn pri" style={{flex:1,fontWeight:700}} onClick={() => exSave(ex)} disabled={!!loading}>
-                    {loading ? 'SE VERIFICĂ...' : 'VERIFY & SAVE'}
-                  </button>
-                )}
-              </div>
-              {msg && <div style={{marginTop:'6px',fontSize:'9px',color: msg.ok ? '#00d97a' : '#ff5566',textAlign:'center'}}>{msg.text}</div>}
-            </div>
-          )
-        })}
       </div>
 
       {/* ══ Footer ══ */}

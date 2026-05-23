@@ -4,7 +4,7 @@
 'use strict';
 
 const logger = require('./logger');
-const { teacherSwingPivots } = require('../../public/js/teacher/teacherIndicators');
+const { teacherSwingPivots } = require('../shared/teacher/teacherIndicators');
 
 // ══════════════════════════════════════════════════════════════════
 // Per-symbol structure cache

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useUiStore, useSettingsStore, useAuthStore } from '../../stores'
 import { authApi } from '../../services/api'
 import type { ThemeId } from '../../types'
+import { OmegaMemorySection } from './OmegaMemorySection'
 
 const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'native', label: 'Obsidian' },
@@ -9,15 +10,15 @@ const THEMES: { id: ThemeId; label: string }[] = [
   { id: 'light', label: 'Ivory' },
 ]
 
-type Tab = 'general' | 'trading' | 'account'
+type Tab = 'general' | 'trading' | 'account' | 'omega'
 
 export function SettingsModal() {
   const open = useUiStore((s) => s.settingsOpen)
   const toggleSettings = useUiStore((s) => s.toggleSettings)
   const theme = useUiStore((s) => s.theme)
   const setTheme = useUiStore((s) => s.setTheme)
-  const tc = useSettingsStore((s) => s.tc)
-  const setTC = useSettingsStore((s) => s.setTC)
+  const tc = useSettingsStore((s) => s.settings)
+  const setTC = useSettingsStore((s) => s.patch)
   const email = useAuthStore((s) => s.email)
   const clearAuth = useAuthStore((s) => s.clearAuth)
   const [tab, setTab] = useState<Tab>('general')
@@ -38,7 +39,7 @@ export function SettingsModal() {
         </div>
 
         <div className="zr-modal__tabs">
-          {(['general', 'trading', 'account'] as Tab[]).map((t) => (
+          {(['general', 'trading', 'account', 'omega'] as Tab[]).map((t) => (
             <button
               key={t}
               className={`zr-modal__tab ${tab === t ? 'zr-modal__tab--active' : ''}`}
@@ -97,8 +98,8 @@ export function SettingsModal() {
                   type="number"
                   min={0.1}
                   step={0.1}
-                  value={tc.slPct}
-                  onChange={(e) => setTC({ slPct: Number(e.target.value) || 0.5 })}
+                  value={tc.sl}
+                  onChange={(e) => setTC({ sl: Number(e.target.value) || 0.5 })}
                 />
               </label>
               <label className="zr-settings__label">
@@ -146,6 +147,12 @@ export function SettingsModal() {
               <button className="zr-login__btn zr-login__btn--danger" onClick={handleLogout}>
                 Logout
               </button>
+            </div>
+          )}
+
+          {tab === 'omega' && (
+            <div className="zr-settings-section">
+              <OmegaMemorySection />
             </div>
           )}
         </div>

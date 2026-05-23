@@ -20,6 +20,14 @@ data/sync_user/
 data/metrics_snapshot.json
 data/riskState.json
 data/config_overrides.json
+data/audit.jsonl
+data/user_ctx/
+
+# Pre-edit backup snapshots (local-only; never deploy artifacts)
+data/backups/
+*.bak
+*.bak.*
+*.WITH-*-PATCH-*
 
 # Android build artifacts
 android/app/build/
@@ -37,26 +45,35 @@ Desktop.ini
 *.swp
 *.swo
 
-# Test artifacts
-_*_result.txt
-_pm2_logs*.txt
-_tmt_result.txt
-_test_res.txt
-
-# Temp working files
-_diff*.txt
-_md_emoji.txt
-_check_schema.js
-_probe_creds.js
-_run_all_tests.js
-_run_test.ps1
-_run_test.sh
-_test_isolation.js
-_test_manual_trading.js
-_tmp_list.js
+# Test artifacts / scratch working files (R31 sweep — all debris prefixed with `_`)
+_*
+# Exception: vitest __tests__ directories (double-underscore convention)
+!**/__tests__/
+!**/__tests__/**
+# Exception: OMEGA ML cross-cutting concerns (required)
+!server/services/ml/_audit/
+!server/services/ml/_voice/
+!server/services/ml/_operator/
+!server/services/ml/_crosscutting/
+!server/services/ml/_meta/
+!server/services/ml/_doctor/
+!server/services/ml/_ring5/
 
 # React app build output
 public/app/
 
 # Deploy artifacts
 zeus-deploy.tar.gz
+
+# Backup debris (moved to /root/.backups-archive)
+.backups/
+**/.backups/
+*.bak
+*.bak[0-9]
+*.bak-*
+*.BAK-*
+public/app.BAK-*
+data/db_backups/
+data/zeus.db.*
+data/*_stale_*.json
+

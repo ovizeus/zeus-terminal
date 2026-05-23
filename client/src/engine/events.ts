@@ -31,7 +31,27 @@ export const AT = {
   // Server mode fields (set by bridge/server sync)
   _serverMode: '' as string,
   _serverStats: null as unknown,
+  _serverDemoStats: null as unknown,
+  _serverLiveStats: null as unknown,
   _enabledPerMode: {} as Record<string, boolean>,
+  // [R34] Diagnostics fields previously stashed via `(AT as any).x = …`.
+  // Typed here so trading/autotrade.ts decision path stays inside the
+  // structural type — no more ad-hoc widening on a trading surface.
+  enabledAt: 0,
+  killResetTs: 0,
+  _lastBlockReason: '' as string,
+  _lastBlockTs: 0,
+  _lastBlockLogKey: '' as string,
+  _lastBlockLogTs: 0,
+  killLoss: 0,
+  killLimit: 0,
+  killBalRef: 0,
+  killReason: null as string | null,
+  killModeAtTrigger: null as string | null,
+  killActiveAt: 0,
+  _modeConfirmed: false,
+  _liveExecInFlight: false,
+  _wrLogTs: 0,
 }
 
 // ── Predator state ──
@@ -110,7 +130,7 @@ export function computePredatorState(): void {
 export const _pendingClose: Record<string, { timer: ReturnType<typeof setTimeout>; btnRef: HTMLElement; callback: () => void }> = {}
 
 function _applyPendingStyle(btn: HTMLElement): void {
-  btn.innerHTML = '✓ CONFIRMĂ?'
+  btn.innerHTML = '✓ CONFIRM?'
   btn.style.background = '#1a1200'
   btn.style.borderColor = 'var(--gold)'
   btn.style.color = 'var(--gold)'
@@ -118,7 +138,7 @@ function _applyPendingStyle(btn: HTMLElement): void {
 
 function _resetCloseBtn(btn: HTMLElement): void {
   if (btn.getAttribute('data-close-id')) {
-    btn.innerHTML = '✕ INCHIDE TOT'; btn.style.background = '#2a0010'; btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'
+    btn.innerHTML = '✕ CLOSE ALL'; btn.style.background = '#2a0010'; btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'
   } else if (btn.getAttribute('data-id')) {
     btn.innerHTML = '✕ CLOSE'; btn.style.background = '#2a0010'; btn.style.borderColor = 'var(--red)'; btn.style.color = 'var(--red)'
   } else if (btn.id === 'closeAllBtn') {
@@ -143,6 +163,19 @@ export function attachConfirmClose(btn: HTMLElement, callback: () => void): void
   const posId = btn.getAttribute('data-id') || btn.getAttribute('data-live-id') ||
     btn.getAttribute('data-close-id') || btn.getAttribute('data-partial-id') || btn.id
   if (!posId) return
+
+  // [Phase 10 close-all] Prevent double-attach: closeAllBtn is targeted by two
+  // call sites (bootstrapMisc.ts timeout init + ManualTradePanel useEffect),
+  // and each call used to register its own click listener. The first click
+  // hit both listeners in sequence — listener A set _pendingClose, listener B
+  // then saw the pending entry and fired the callback. Net effect: one click
+  // closed all without confirmation. A data-flag marker short-circuits any
+  // subsequent attach for the same button, keeping the two-click confirm UX.
+  if (btn.getAttribute('data-confirm-close-attached') === '1') {
+    if (_pendingClose[posId]) _applyPendingStyle(btn)
+    return
+  }
+  btn.setAttribute('data-confirm-close-attached', '1')
 
   if (_pendingClose[posId]) {
     _applyPendingStyle(btn)

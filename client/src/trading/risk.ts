@@ -10,11 +10,44 @@ import { MACRO_MULT } from '../constants/trading'
 import { DEV , devLog } from '../utils/dev'
 import { atLog } from './autotrade'
 import { getSymPrice } from '../data/marketDataPositions'
+import { useATStore } from '../stores/atStore'
+import { useBrainStore } from '../stores/brainStore'
 
 const w = window as any
 
+// [b67] adaptive state lives on backing `w.BM.adaptive` (legacy), but the
+// React AdaptivePanel reads from brainStore. Propagate after every mutation
+// so the UI (button label/color, multipliers row, bucket table) stays in
+// sync with engine truth. Engine logic itself is untouched.
+function _syncAdaptiveToStore(): void {
+  try {
+    const a = w.BM && w.BM.adaptive
+    if (!a) return
+    useBrainStore.getState().patch({
+      adaptive: {
+        enabled: !!a.enabled,
+        lastRecalcTs: a.lastRecalcTs || 0,
+        entryMult: a.entryMult ?? 1.0,
+        sizeMult: a.sizeMult ?? 1.0,
+        exitMult: a.exitMult ?? 1.0,
+        buckets: a.buckets || {},
+      },
+    })
+  } catch (_) {}
+}
+
 // Macro cortex computation
 export function computeMacroCortex(): void {
+  // [Pack C / NC11] Defensive init — same risk class as M3 (chart sessions)
+  // and M4 (Adaptive Control). If `w.BM`, `w.BM.macro`, or `w.BM.adapt`
+  // is undefined at call time (boot race / theme reset / lazy import),
+  // the next line would throw `Cannot read properties of undefined`
+  // and the entire macro pipeline silently dies. Idempotent: re-init
+  // a missing `macro` map only if absent, never overwrites populated
+  // state.
+  if (!w.BM) w.BM = {}
+  if (!w.BM.macro) w.BM.macro = { cycleScore: 0, flowScore: 0, sentimentScore: 0, composite: 0, slope: 0, phase: 'NEUTRAL', confidence: 0, lastUpdate: 0 }
+  if (!w.BM.adapt) w.BM.adapt = { lastPhase: 'NEUTRAL' }
   try {
     var now = Date.now()
     var prev = w.BM.macro.composite || 0
@@ -45,9 +78,11 @@ export function computeMacroCortex(): void {
     // Sentiment (0..15)
     var sentScore = 7
     try {
-      var fgEl = document.getElementById('fgval')
-      var fgRaw = fgEl ? parseInt(fgEl.textContent!) : NaN
-      if (!isNaN(fgRaw) && fgRaw >= 0 && fgRaw <= 100) {
+      // [R29] Read from w.S.fearGreed (canonical, set by fetchFG in
+      // marketDataFeeds.ts). Previous DOM read from #fgval.textContent was
+      // a DOM-as-state anti-pattern.
+      var fgRaw = typeof w.S !== 'undefined' ? Number(w.S.fearGreed) : NaN
+      if (Number.isFinite(fgRaw) && fgRaw >= 0 && fgRaw <= 100) {
         sentScore = _clamp(Math.round((fgRaw / 100) * 15), 0, 15)
       }
     } catch (_) { }
@@ -85,10 +120,12 @@ export function updateMacroUI(): void {
     var m = w.BM.macro
     var ps = w.BM.positionSizing
     var ph = m.phase || 'NEUTRAL'
-    var col = ({
+    // [R34] Typed Record<string,string> replaces `{…} as any` lookup.
+    var _phaseCol: Record<string, string> = {
       ACCUMULATION: 'var(--grn)', EARLY_BULL: '#44eebb', LATE_BULL: 'var(--gold)',
       DISTRIBUTION: 'var(--orange)', TOP_RISK: 'var(--red)', NEUTRAL: 'var(--txt-dim)'
-    } as any)[ph] || 'var(--txt-dim)'
+    }
+    var col = _phaseCol[ph] || 'var(--txt-dim)'
 
     var badge = document.getElementById('macro-phase-badge')
     if (badge) {
@@ -104,9 +141,11 @@ export function updateMacroUI(): void {
       adaptSt.style.color = w.BM.adapt.enabled ? 'var(--grn)' : 'var(--dim)'
     }
 
-    var bar = document.getElementById('macro-composite-bar') as any
+    // [R34] `getElementById` returns `HTMLElement | null` which already has
+    // `.style` and `.textContent` — dropped redundant `as any` casts.
+    var bar = document.getElementById('macro-composite-bar')
     if (bar) { bar.style.width = m.composite + '%'; bar.style.background = col }
-    var compVal = document.getElementById('macro-composite-val') as any
+    var compVal = document.getElementById('macro-composite-val')
     if (compVal) { compVal.textContent = m.composite; compVal.style.color = col }
 
     var setTxt = function (id: string, val: any) { var e = document.getElementById(id); if (e) e.textContent = val }
@@ -115,7 +154,7 @@ export function updateMacroUI(): void {
     setTxt('macro-sent-val', m.sentimentScore)
     setTxt('macro-slope-val', m.slope > 0 ? '▲' + m.slope.toFixed(2) : m.slope < 0 ? '▼' + Math.abs(m.slope).toFixed(2) : '—')
 
-    var sizeMult = document.getElementById('macro-size-mult') as any
+    var sizeMult = document.getElementById('macro-size-mult')
     if (sizeMult) { sizeMult.textContent = '×' + (ps.finalMult || 1).toFixed(2); sizeMult.style.color = ps.finalMult > 1 ? 'var(--grn)' : ps.finalMult < 1 ? 'var(--orange)' : 'var(--gold)' }
     var perfMult = document.getElementById('macro-perf-mult')
     if (perfMult) perfMult.textContent = '×' + (ps.perfMult || 1).toFixed(2)
@@ -206,6 +245,7 @@ export function _adaptLoad(): void {
     if (tog) tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
     if (tog) tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
     if (tog) tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
+    _syncAdaptiveToStore()
   } catch (e: any) {
     console.warn('[_adaptLoad] Restore failed:', e.message)
     if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('ERROR', '[_adaptLoad] ' + e.message)
@@ -233,8 +273,11 @@ export function recalcAdaptive(isStartup?: any): void {
 
     if (!closedTrades.length) return
 
-    var slPct = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.slPct)) ? w.TC.slPct : (parseFloat(document.getElementById('atSL')?.value || '') || 1.5)
-    var rrRatio = (typeof w.TC !== 'undefined' && Number.isFinite(w.TC.rr)) ? w.TC.rr : (parseFloat(document.getElementById('atRR')?.value || '') || 2)
+    // Phase 3 C5: read AT config from atStore (canonical source). DOM
+    // fallback via document.getElementById('atSL'/'atRR') removed.
+    var _atCfg = useATStore.getState().config
+    var slPct = _atCfg.slPct
+
 
     var newBuckets: any = {}
     closedTrades.forEach(function (t: any) {
@@ -247,12 +290,28 @@ export function recalcAdaptive(isStartup?: any): void {
         newBuckets[key] = { trades: 0, wins: 0, totalR: 0, avgR: 0, winrate: 0, mult: 1.0 }
       }
       var b = newBuckets[key]
-      b.trades++
-      var entryPrice = t.entry || 1
-      var slAbs = entryPrice * slPct / 100
+
       var slValue = (t.size || 200) * (slPct / 100)
-      var R = slValue > 0 ? t.pnl / slValue : 0
-      if (t.pnl >= 0) b.wins++
+      // [TM-6] Skip trades cu slValue=0 entirely instead of silent fallback to
+      // R=0. Previous behavior penalized tighter-SL trades (those with slPct≈0
+      // OR size 0 edge) by counting them with R=0 — diluting bucket avgR și
+      // mult calc downward. Tighter-SL trades that exited break-even or near-be
+      // shouldn't drag the bucket score; they should be excluded from R series.
+      // Trade still increments b.trades (kept counted toward MIN_TRADES gate)
+      // but R is left out of the avgR aggregation when slValue is invalid.
+      if (slValue <= 0) {
+        b.trades++
+        // [TM-2] Canonical 3-way semantic aligned cu serverAT.js stats +
+        // liveStats (post-TM-1 closure): pnl > 0 win, pnl < 0 loss, pnl === 0
+        // NEITHER. Was `pnl >= 0` (counted zero as win) — opposite of server
+        // semantic. Now wins counter strictly excludes break-even.
+        if (t.pnl > 0) b.wins++
+        return
+      }
+      b.trades++
+      var R = t.pnl / slValue
+      // [TM-2] Same canonical 3-way semantic — strict `> 0` (was `>= 0`).
+      if (t.pnl > 0) b.wins++
       b.totalR += R
     })
 
@@ -295,6 +354,7 @@ export function recalcAdaptive(isStartup?: any): void {
 
     w.BM.adaptive.lastRecalcTs = now
     _adaptSave()
+    _syncAdaptiveToStore()
     _renderAdaptivePanel()
 
     {
@@ -329,7 +389,7 @@ export function _renderAdaptivePanel(): void {
     var tbl = document.getElementById('adaptive-bucket-table')
     if (!tbl) return
     if (!keys.length) {
-      tbl.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0">Niciun trade cu context — rulează după prime trades CLOSE.</div>'
+      tbl.innerHTML = '<div style="color:var(--dim);font-size:11px;padding:4px 0">No trade with context — run after first trades CLOSE.</div>'
       return
     }
 
@@ -356,13 +416,31 @@ export function _renderAdaptivePanel(): void {
 }
 
 export function toggleAdaptive(): void {
+  // [M4] Defensive init — `w.BM` and `w.BM.adaptive` are normally created
+  // by bootstrap, but if a render race / theme reset / lazy import ordering
+  // leaves either undefined, the next line would throw `Cannot set
+  // properties of undefined (setting 'enabled')` and the toggle would
+  // silently fail (button visually inert, console error). Same defensive
+  // pattern as M3 (chart session toggles).
+  if (!w.BM) w.BM = {}
+  if (!w.BM.adaptive) w.BM.adaptive = { enabled: false, entryMult: 1.0, sizeMult: 1.0, exitMult: 1.0 }
   w.BM.adaptive.enabled = !w.BM.adaptive.enabled
-  var tog = document.getElementById('adaptiveToggleBtn')
-  if (tog) {
-    tog.innerHTML = w.BM.adaptive.enabled ? _ZI.brain + ' ADAPTIVE ON' : _ZI.brain + ' ADAPTIVE OFF'
-    tog.style.borderColor = w.BM.adaptive.enabled ? 'var(--grn)' : '#2a3a4a'
-    tog.style.color = w.BM.adaptive.enabled ? 'var(--grn)' : 'var(--txt-dim)'
-  }
+  // [O17] Canonical UI source = brainStore (Zustand), updated below via
+  // _syncAdaptiveToStore(). AdaptivePanel.tsx subscribes and re-renders
+  // its button (text + colors + background) from `brain.adaptive.enabled`.
+  // Direct DOM mutation via getElementById/querySelectorAll on
+  // `#adaptiveToggleBtn` is REMOVED here because:
+  //   1) it raced with React reconciliation (Zustand subscription) and
+  //      could leave the visible button stale even after a successful
+  //      state flip — confirmed empirically (BM flips, store stale, UI
+  //      stuck on prior state);
+  //   2) the duplicate id=adaptiveToggleBtn (legacy AnalysisSections.tsx
+  //      mirror, kept display:none) made getElementById return the
+  //      wrong node anyway.
+  // The legacy hidden mirror in AnalysisSections.tsx remains driven by
+  // _adaptLoad's restore path (still uses getElementById there) — that
+  // is invisible (display:none) and not user-facing, so DOM-only update
+  // is acceptable.
   if (!w.BM.adaptive.enabled) {
     w.BM.adaptive.entryMult = 1.0
     w.BM.adaptive.sizeMult = 1.0
@@ -370,9 +448,15 @@ export function toggleAdaptive(): void {
     _renderAdaptivePanel()
   }
   _adaptSave()
+  _syncAdaptiveToStore()
   _updateAdaptiveBarTxt()
   atLog('info', '[ADAPT] Adaptive Control: ' + (w.BM.adaptive.enabled ? 'ON' : 'OFF'))
 }
+
+// [b68] Expose on window: legacy #adaptiveToggleBtn in AnalysisSections.tsx
+// calls `(window as any).toggleAdaptive?.()` and the optional-chain silently
+// no-ops when the binding is missing — which it was. Nothing else assigns it.
+;(window as any).toggleAdaptive = toggleAdaptive
 
 export function _updateAdaptiveBarTxt(): void {
   var el = document.getElementById('adaptive-bar-txt')

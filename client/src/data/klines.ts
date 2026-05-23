@@ -3,7 +3,7 @@
  * Kline data processing helpers
  */
 
-import { getPrice, getSymbol, getTimezone, getTCMaxPos } from '../services/stateAccessors'
+import { getPrice, getSymbol, getTimezone, getTCMaxPos, getATMode } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { BM, BRAIN as BR, DSL } from '../core/config'
@@ -17,8 +17,18 @@ import { isCurrentTimeOK } from '../ui/render'
 import { placeAutoTrade , atLog } from '../trading/autotrade'
 import { _isDegradedOnly } from '../utils/guards'
 import { MSCAN_SYMS } from '../core/config'
+import { useBrainStore } from '../stores/brainStore'
+import { api } from '../services/api'
 const w = window as any // kept for w.S.mode/profile (self-ref), w.PERF, w.BlockReason, w.MSCAN, MSCAN_SYMS, fn calls
 
+// [Phase 6] BlockReason mirror-write helpers — brainStore canonical
+// blockReason kept in sync with backing w.BlockReason facade.
+// Backing .set/.clear keeps legacy UI updates (DOM + atLog);
+// store mirror publishes the typed canonical value to React consumers.
+function _setBR(code: string, text: string, source?: string): void {
+  w.BlockReason.set(code, text, source)
+  useBrainStore.getState().setBlockReason({ code, text })
+}
 // ADX calculator
 export function calcADX(klines: any[], period = 14) {
   if (!klines || klines.length < period * 3 + 1) return null
@@ -207,10 +217,9 @@ export async function fetchSymbolKlines(sym: string, tf = '5m', limit = 100) {
 
 
 // Multi-symbol scan functions
+// [R30] Publishes {iconKind,text,className,visible} to brainStore.safetyPill;
+// <AtWhyBlockedPill/> renders it. No DOM writes.
 export function _updateWhyBlocked(code: any, text: any) {
-  const pill = document.getElementById('at-why-blocked')
-  if (!pill) return
-
   // Derive from current state if not passed
   if (code === undefined) {
     const br = w.BlockReason.get()
@@ -218,56 +227,63 @@ export function _updateWhyBlocked(code: any, text: any) {
     text = br?.text || null
   }
 
+  const setPill = useBrainStore.getState().setSafetyPill
+
   // Degraded feeds override
   if (_isDegradedOnly() && !code) {
     const feeds = [...w._SAFETY.degradedFeeds].join(',')
-    pill.innerHTML = _ZI.w + ' DEGRADED: ' + feeds
-    pill.className = 'degraded'
-    pill.style.display = 'block'
+    setPill({ iconKind: 'w', text: ' DEGRADED: ' + feeds, className: 'degraded', visible: true })
     return
   }
 
   if (!code) {
-    pill.style.display = 'none'
-    pill.className = 'ok'
+    setPill({ iconKind: null, text: '', className: 'ok', visible: false })
     return
   }
 
   // Map code → pill class + compact label
   let cls = 'blocked'
-  let label = _ZI.noent + ' ' + (text || code)
+  let iconKind: 'w' | 'noent' | 'timer' | 'clock' | 'dRed' | 'bolt' | 'sh' = 'noent'
+  let label = ' ' + (text || code)
 
   if (code === 'SAFETY_FAIL') {
-    if (text && text.includes('session')) { cls = 'session'; label = _ZI.timer + ' Session FAIL — outside hours' }
-    else if (text && text.includes('regime')) { cls = 'regime'; label = _ZI.w + ' Regime UNSTABLE' }
-    else if (text && text.includes('cooldown')) { cls = 'cooldown'; label = _ZI.clock + ' Cooldown — wait...' }
-    else { cls = 'blocked'; label = _ZI.noent + ' Safety: ' + (text || 'FAIL') }
+    if (text && text.includes('session')) { cls = 'session'; iconKind = 'timer'; label = ' Session FAIL — outside hours' }
+    else if (text && text.includes('regime')) { cls = 'regime'; iconKind = 'w'; label = ' Regime UNSTABLE' }
+    else if (text && text.includes('cooldown')) { cls = 'cooldown'; iconKind = 'clock'; label = ' Cooldown — wait...' }
+    else { cls = 'blocked'; iconKind = 'noent'; label = ' Safety: ' + (text || 'FAIL') }
   } else if (code === 'DATA_STALL') {
-    cls = 'degraded'; label = _ZI.w + ' Data stalled'
+    cls = 'degraded'; iconKind = 'w'; label = ' Data stalled'
   } else if (code === 'KILL' || code === 'KILL_SWITCH') {
-    cls = 'blocked'; label = _ZI.dRed + ' Kill switch activ'
+    cls = 'blocked'; iconKind = 'dRed'; label = ' Kill switch active'
   } else if (code === 'PROTECT' || code === 'PROTECT_MODE') {
-    cls = 'blocked'; label = _ZI.sh + ' Protect mode'
+    cls = 'blocked'; iconKind = 'sh'; label = ' Protect mode'
   } else if (code === 'TRIGGER_FAIL') {
-    cls = 'regime'; label = _ZI.bolt + ' Trigger neatins'
+    cls = 'regime'; iconKind = 'bolt'; label = ' Trigger neatins'
   } else if (code === 'FAKEOUT') {
-    cls = 'regime'; label = _ZI.noent + ' Anti-fakeout'
+    cls = 'regime'; iconKind = 'noent'; label = ' Anti-fakeout'
   }
 
   // Cooldown: add live countdown if applicable
   if (cls === 'cooldown') {
     const cdMs = Math.max(0, _getCooldownMs() - (Date.now() - (AT.lastTradeTs || 0)))
     const cdMin = Math.ceil(cdMs / 60000)
-    label = _ZI.clock + ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
+    iconKind = 'clock'
+    label = ' Cooldown: ' + (cdMin > 0 ? cdMin + 'm' : 'clearing...')
   }
 
-  pill.innerHTML = label
-  pill.className = cls
-  pill.style.display = 'block'
+  setPill({ iconKind, text: label, className: cls, visible: true })
 }
 // _updateWhyBlocked — now direct import (no window mapping needed)
 
 // ─── MAIN MULTI SYMBOL SCAN ───────────────────────────────────
+// [Phase 6B] Canonical position list by current AT mode.
+// Demo reads demoPositions; live/testnet reads livePositions.
+// Fixes multi-symbol gates that previously read demoPositions in all modes
+// (already-open, maxPos, opposite-direction, DSL-active, DSL-waiting).
+function _activePosList(): any[] {
+  return (getATMode() === 'live' ? (TP.livePositions || []) : (TP.demoPositions || [])) as any[]
+}
+
 export async function runMultiSymbolScan() {
   if (el('atMultiSym')?.checked === false) return
   if (!w.FetchLock.try('multiScan')) return
@@ -277,7 +293,7 @@ export async function runMultiSymbolScan() {
   const scanSyms = getActiveMscanSyms()
   try {
     const tbody = el('mscanBody')
-    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">${_ZI.bolt} SCANEZ ${scanSyms.length} SIMBOLURI...</td></tr>`
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:12px;color:#aa44ff;font-size:12px">${_ZI.bolt} SCANNING ${scanSyms.length} SYMBOLS...</td></tr>`
 
     let opps = 0
     const results: any[] = []
@@ -303,7 +319,42 @@ export async function runMultiSymbolScan() {
         const isOpp = score >= confMin && (dir === 'bull' || dir === 'bear')
         if (isOpp) opps++
 
-        const alreadyOpen = (TP.demoPositions || []).some((p: any) => p.sym === sym && p.autoTrade && !p.closed)
+        // [Phase 2 S3.1a] Per-symbol parity POST — shadow-only. Chart symbol is
+        // already emitted by autotrade.ts runAutoTradeCheck; here we cover the
+        // other multi-sym entries so server↔client correlation has per-symbol
+        // rows for all 4 configured symbols (previous run only covered the
+        // chart symbol → 255/259 client rows were BTCUSDT). Zero influence on
+        // trading path — server drops rows when PARITY_SHADOW_ENABLED is off.
+        //
+        // [Phase 2 S3.1b-fix] COVERAGE-ONLY emit. Multi-sym scan uses a simple
+        // 5-indicator score from calcSymbolScore; it does NOT run the full
+        // fusion pipeline (regime/MTF/structure/flow/sentiment + 10 modifiers)
+        // that server `_computeFusion` applies. Any tier claim here
+        // (SMALL/MEDIUM/LARGE) would systematically overshoot server's
+        // modifier-scaled output — as T+1h soak proved (client 98% trade-tier
+        // vs server 94% NO_TRADE → 2% agreement). Honest emit: always
+        // NO_TRADE + confidence=0 + reasons starting with 'MultiScan_coverage'
+        // so the report can cleanly separate PRIMARY agreement (chart symbol
+        // via computeFusionDecision, mirrors server pipeline) from COVERAGE
+        // agreement (per-symbol directional-only). S4 verdict uses PRIMARY.
+        if (sym !== getSymbol()) {
+          try {
+            const _isDir = dir === 'bull' || dir === 'bear'
+            const _pDir = !_isDir || score < confMin ? 'neutral'
+              : dir === 'bull' ? 'long' : 'short'
+            api.raw<any>('POST', '/api/brain/parity/client', {
+              symbol: sym,
+              dir: _pDir,
+              decision: 'NO_TRADE',
+              confidence: 0,
+              score: score,
+              reasons: ['MultiScan_coverage', signals ? String(signals).slice(0, 64) : ''],
+              ts: Date.now(),
+            }).catch(() => { /* parity harness is best-effort */ })
+          } catch (_) { /* api missing — silent */ }
+        }
+
+        const alreadyOpen = _activePosList().some((p: any) => p.sym === sym && p.autoTrade && !p.closed)
 
         results.push({ sym, price: wlPrice, chg: wlChg, rsi, macd, st, adx, score, dir, signals, isOpp, alreadyOpen })
         w.MSCAN.data[sym] = { price: wlPrice, chg: wlChg, rsi, macd, st, adx, score, dir, signals, isOpp, alreadyOpen }
@@ -395,11 +446,11 @@ export function renderMscanTable(results: any[], opps: number) {
 // ─── MANUAL ENTRY FROM SCANNER ─────────────────────────────────
 export function manualEnterFromScan(sym: string, side: string, score: number) {
   const maxPos = getTCMaxPos()
-  const openAuto = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed).length
-  if (openAuto >= maxPos) { toast('Max pozitii atinse (' + maxPos + ')'); return }
+  const openAuto = _activePosList().filter((p: any) => p.autoTrade && !p.closed).length
+  if (openAuto >= maxPos) { toast('Max positions reached (' + maxPos + ')'); return }
 
   const price = sym === getSymbol() ? getPrice() : (w.wlPrices[sym]?.price || 0)
-  if (!price) { toast('Nu am pretul pentru ' + sym); return }
+  if (!price) { toast('No price for ' + sym); return }
 
   const fakeEntry = { score, bullCount: 3, bearCount: 0, stDir: side === 'LONG' ? 'bull' : 'bear' }
   placeAutoTrade(side, fakeEntry, sym, price)
@@ -420,24 +471,24 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 
   if (_mode === 'assist') {
     if (!isArmAssistValid()) {
-      atLog('info', 'ASSIST \u2014 ne\u00eennarmat. Apas\u0103 ARM ASSIST pentru confirmare.')
+      atLog('info', 'ASSIST \u2014 unarmed. Press ARM ASSIST to confirm.')
       return
     }
   }
 
   if (_mode === 'auto') {
-    if (BM.protectMode) { w.BlockReason.set('PROTECT', BM.protectReason || 'Protect mode activ', 'autoCheck'); return }
-    if (AT.killTriggered) { w.BlockReason.set('KILL', 'Kill switch activ', 'autoCheck'); return }
+    if (BM.protectMode) { _setBR('PROTECT', BM.protectReason || 'Protect mode active', 'autoCheck'); return }
+    if (AT.killTriggered) { _setBR('KILL', 'Kill switch active', 'autoCheck'); return }
 
     const _chaos = Math.round((BR.regimeAtrPct || 0) * 15 + (BM.newsRisk === 'high' ? 40 : BM.newsRisk === 'med' ? 20 : 0))
-    const _anyDSLActive = (TP.demoPositions || []).some((p: any) => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active)
+    const _anyDSLActive = _activePosList().some((p: any) => p.autoTrade && !p.closed && DSL.positions?.[p.id]?.active)
     if (_anyDSLActive && _chaos > 60) {
-      w.BlockReason.set('CHAOS', `Chaos ${_chaos} > 60 \u2014 pia\u021B\u0103 prea volatil\u0103 cu DSL activ`, 'autoCheck')
+      _setBR('CHAOS', `Chaos ${_chaos} > 60 \u2014 market too volatile with DSL active`, 'autoCheck')
       atLog('warn', '[BLOCK] AUTO BLOCK \u2014 DSL active + chaos>60'); return
     }
 
     const _dslWaitMs = 10 * 60 * 1000
-    const _dslWaiting = (TP.demoPositions || []).some((p: any) => {
+    const _dslWaiting = _activePosList().some((p: any) => {
       const d = DSL.positions?.[p.id]
       return d && !d.active && p.autoTrade && !p.closed && (Date.now() - p.ts) > _dslWaitMs
     })
@@ -448,21 +499,21 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   void _prof
 
   const maxPos = getTCMaxPos()
-  const openAuto = (TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed)
+  const openAuto = _activePosList().filter((p: any) => p.autoTrade && !p.closed)
   if (openAuto.length >= maxPos) return
 
   const profileThresh: Record<string, number[]> = { fast: [65, 55], swing: [72, 60], defensive: [80, 65] }
   const [confMin, _confMinConfl] = profileThresh[w.S.profile || 'fast'] || [65, 55]
   const _adaptEntryMult = (BM.adaptive && BM.adaptive.enabled) ? (BM.adaptive.entryMult || 1.0) : 1.0
   const confMinAdj = Math.max(40, Math.min(95, confMin / _adaptEntryMult))
-  const _sigMin = parseInt(el('atSigMin')?.value) || 3
+  const _sigMin = parseInt(el('atSigMin')?.value || '') || 3
 
   // suppress unused
   void _confMinConfl; void _sigMin
 
   if (!isCurrentTimeOK()) {
-    atLog('warn', '[TIME] Ora curenta are WR scazut \u2014 nu intru (Day/Hour filter)')
-    brainThink('bad', _ZI.clock + ' Hour filter: WR scazut acum, astept ora mai buna')
+    atLog('warn', '[TIME] Current hour has low WR \u2014 skipping (Day/Hour filter)')
+    brainThink('bad', _ZI.clock + ' Hour filter: low WR now, waiting for better hour')
     return
   }
 
@@ -472,7 +523,7 @@ export function runMultiSymbolAutoTrade(results: any[]) {
     r.scoreAdj = adjScore
     if (adjScore < confMinAdj) return false
     if (r.adx !== null && r.adx < 18) return false
-    const alreadyInDir = (TP.demoPositions || []).some((p: any) =>
+    const alreadyInDir = _activePosList().some((p: any) =>
       p.sym === r.sym && p.autoTrade && !p.closed &&
       ((r.dir === 'bull' && p.side === 'SHORT') || (r.dir === 'bear' && p.side === 'LONG')))
     if (alreadyInDir) return false
@@ -487,11 +538,11 @@ export function runMultiSymbolAutoTrade(results: any[]) {
   toEnter.forEach((opp: any) => {
     const side = opp.dir === 'bull' ? 'LONG' : 'SHORT'
     const price = opp.sym === getSymbol() ? getPrice() : (w.wlPrices[opp.sym]?.price || 0)
-    if (!price) { atLog('warn', '[ERR] Nu am pret pentru ' + opp.sym); return }
+    if (!price) { atLog('warn', '[ERR] No price for ' + opp.sym); return }
 
     atLog(side === 'LONG' ? 'buy' : 'sell',
       `[MSCAN] ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} ADX:${opp.adx || '\u2014'} | ${opp.signals}`)
-    brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 intru!`)
+    brainThink('trade', _ZI.scope + ` ${opp.sym.replace('USDT', '')} ${side} Score:${opp.score} \u2014 entering!`)
 
     placeAutoTrade(side, { score: opp.score, bullCount: opp.dir === 'bull' ? 3 : 0, bearCount: opp.dir === 'bear' ? 3 : 0, stDir: opp.dir }, opp.sym, price)
   })
@@ -503,8 +554,8 @@ export function runMultiSymbolAutoTrade(results: any[]) {
 export function toggleMultiSymMode() {
   const on = el('atMultiSym')?.checked
   _mscanUpdateLabel()
-  if (on) atLog('info', '[MSCAN] Multi-Symbol ACTIV \u2014 ' + _mscanGetActive().length + ' simboluri')
-  else atLog('warn', 'Multi-Symbol DEZACTIVAT \u2014 doar symbol curent')
+  if (on) atLog('info', '[MSCAN] Multi-Symbol ACTIVE \u2014 ' + _mscanGetActive().length + ' symbols')
+  else atLog('warn', 'Multi-Symbol DISABLED \u2014 only current symbol')
   w._usScheduleSave()
 }
 // toggleMultiSymMode — self-ref removed (direct call)
@@ -531,9 +582,9 @@ export function _mscanUpdateLabel() {
   const lbl = el('atMultiSymLbl')
   if (!lbl) return
   const on = el('atMultiSym')?.checked
-  if (!on) { lbl.textContent = 'DEZACTIVAT'; return }
+  if (!on) { lbl.textContent = 'DISABLED'; return }
   const active = _mscanGetActive()
-  lbl.textContent = 'ACTIV \u2014 ' + active.length + ' simboluri'
+  lbl.textContent = 'ACTIVE \u2014 ' + active.length + ' symbols'
 }
 // _mscanUpdateLabel — exported, consumers import directly
 

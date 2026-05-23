@@ -1,6 +1,6 @@
 // Zeus v122 — ui/modals.ts (ported from ui/modals.js)
 // Modal dialogs & overlays
-const w = window as any;
+
 
 let _execActive = false;
 let _execQueue: any[] = [];
@@ -17,7 +17,7 @@ export function _showExecOverlay(html: any, cssClass: any, duration: any): void 
     setTimeout(() => {
       try { document.body.removeChild(div); } catch(_) {}
       _execActive = false;
-      if(_execQueue.length) { const next = _execQueue.shift(); _showExecOverlay(...next); }
+      if(_execQueue.length) { const next = _execQueue.shift() as [any, any, any]; _showExecOverlay(...next); }
     }, 350);
   }, duration || 2500);
 }

@@ -210,9 +210,15 @@ export function TradingChart() {
     })
 
     // Resize observer
+    // [BUG-T8 2026-05-13] Wrap în requestAnimationFrame pentru a sincroniza
+    // resize cu next paint frame. Without rAF, ResizeObserver fires înainte
+    // ca CSS layout să fie complet recalculated (100dvh + --app-height var),
+    // resulting în chart.resize(stale, stale) race condition pe Android.
     const ro = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect
-      chart.resize(width, height)
+      requestAnimationFrame(() => {
+        const { width, height } = entries[0].contentRect
+        chart.resize(width, height)
+      })
     })
     ro.observe(containerRef.current)
 

@@ -5,9 +5,9 @@ export function JournalPanel() {
 
   function exportCSV() {
     if (entries.length === 0) return
-    const header = 'Time,Symbol,Side,Entry,Exit,PnL,Reason,Mode\n'
+    const header = 'Time,Symbol,Side,Entry,Exit,PnL,Reason,Mode,Env,Exchange\n'
     const rows = entries.map((e) =>
-      `${new Date(e.closeTs).toISOString()},${e.symbol},${e.side},${e.entryPrice},${e.exitPrice},${e.pnl.toFixed(2)},${e.reason},${e.mode}`
+      `${new Date(e.closeTs).toISOString()},${e.symbol},${e.side},${e.entryPrice},${e.exitPrice},${e.pnl.toFixed(2)},${e.reason},${e.mode},${e.env || ''},${e.exchange || ''}`
     ).join('\n')
     const blob = new Blob([header + rows], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -33,6 +33,11 @@ export function JournalPanel() {
         <div className="zr-journal__list">
           {entries.slice(-50).reverse().map((e) => {
             const isWin = e.pnl >= 0
+            // [Phase 12.A — Batch G] Env + exchange tag — honest null when
+            // unknown (pre-Batch-G rows). Never invent "Binance".
+            const _envTag = e.env || (e.mode === 'demo' ? 'DEMO' : null)
+            const _exchTag = e.exchange === 'binance' ? 'BINANCE' : e.exchange === 'bybit' ? 'BYBIT' : null
+            const _tag = _envTag && _exchTag ? (_envTag + ' \u00B7 ' + _exchTag) : (_envTag || _exchTag || null)
             return (
               <div key={e.id} className={`zr-journal__row ${isWin ? 'zr-journal__row--win' : 'zr-journal__row--loss'}`}>
                 <span className="zr-journal__time">
@@ -49,6 +54,7 @@ export function JournalPanel() {
                   ${e.pnl.toFixed(2)}
                 </span>
                 <span className="zr-journal__reason">{e.reason}</span>
+                {_tag ? <span className="zr-journal__env" style={{ color: 'rgba(0,212,255,0.75)', fontSize: 10, letterSpacing: 0.5, marginLeft: 6 }}>{_tag}</span> : null}
               </div>
             )
           })}

@@ -5,6 +5,7 @@
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { updateModeBar } from '../ui/modebar'
+import { escHtml } from '../utils/dom'
 const w = window as any // kept for w.DLog, w._SAFETY, w._resolvedEnv, w._zeusWS, w._pvState, w.ncAdd, fn calls
 
 // ===== GLOBAL ERROR BOUNDARY =====
@@ -88,13 +89,13 @@ function _showUpdateBanner(data: any): void {
   if (document.getElementById('zeus-update-banner')) return
   const overlay = document.createElement('div'); overlay.id = 'zeus-update-banner'
   overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:999999;display:flex;align-items:center;justify-content:center;animation:fadeIn .3s ease'
-  const box = document.createElement('div'); box.style.cssText = 'background:linear-gradient(135deg,#0a1628,#132040);border:1px solid #1e3a5f;border-radius:16px;padding:28px 32px;max-width:360px;width:90vw;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)'
-  const icon = document.createElement('div'); icon.style.cssText = 'font-size:48px;margin-bottom:12px'; icon.textContent = '\u26A1'
-  const title = document.createElement('div'); title.style.cssText = 'color:#fff;font-size:18px;font-weight:700;margin-bottom:8px'; title.textContent = 'Update ' + data.version
-  const desc = document.createElement('div'); desc.style.cssText = 'color:#8899bb;font-size:13px;margin-bottom:20px;line-height:1.4'; desc.textContent = data.changelog || 'New version available'
-  const btn = document.createElement('button'); btn.style.cssText = 'background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;border:none;border-radius:10px;padding:14px 40px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:.5px;text-transform:uppercase'
+  const box = document.createElement('div'); box.style.cssText = 'background:linear-gradient(135deg,#0a1628,#132040);border:1px solid #1e3a5f;border-radius:16px;padding:20px 24px;max-width:360px;width:90vw;max-height:85vh;display:flex;flex-direction:column;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.7)'
+  const icon = document.createElement('div'); icon.style.cssText = 'font-size:40px;margin-bottom:8px;flex-shrink:0'; icon.textContent = '\u26A1'
+  const title = document.createElement('div'); title.style.cssText = 'color:#fff;font-size:17px;font-weight:700;margin-bottom:10px;flex-shrink:0'; title.textContent = 'Update ' + data.version
+  const desc = document.createElement('div'); desc.style.cssText = 'color:#8899bb;font-size:12px;margin-bottom:16px;line-height:1.5;flex:1 1 auto;overflow-y:auto;min-height:0;text-align:left;padding:0 4px'; desc.textContent = data.changelog || 'New version available'
+  const btn = document.createElement('button'); btn.style.cssText = 'background:linear-gradient(135deg,#1565c0,#0d47a1);color:#fff;border:none;border-radius:10px;padding:14px 40px;font-size:15px;font-weight:700;cursor:pointer;width:100%;letter-spacing:.5px;text-transform:uppercase;flex-shrink:0'
   btn.textContent = '\uD83D\uDD04 INSTALL'; btn.onclick = function () { btn.textContent = 'Updating...'; btn.style.opacity = '0.6'; localStorage.setItem('zeus_app_version', data.version); setTimeout(function () { location.reload() }, 500) }
-  const skip = document.createElement('div'); skip.style.cssText = 'color:#556;font-size:11px;margin-top:12px;cursor:pointer'; skip.textContent = 'Later'
+  const skip = document.createElement('div'); skip.style.cssText = 'color:#556;font-size:11px;margin-top:10px;cursor:pointer;flex-shrink:0'; skip.textContent = 'Later'
   skip.onclick = function () { overlay.remove(); _updateCheckInterval = setInterval(_pollForUpdate, 300000) }
   box.appendChild(icon); box.appendChild(title); box.appendChild(desc); box.appendChild(btn); box.appendChild(skip)
   overlay.appendChild(box); document.body.appendChild(overlay)
@@ -102,17 +103,39 @@ function _showUpdateBanner(data: any): void {
 }
 
 // ===== STATUS BAR =====
+// [R8] StatusBar is React/store-owned. This loop polls AT/TP/_SAFETY every 2s
+// and writes the derived state into useUiStore via patch(). Zero direct DOM
+// writes to zsb* nodes — React renders everything from store fields.
+import { useUiStore } from '../stores/uiStore'
 ;(function _initStatusBar() {
   function _updateStatusBar() {
     try {
-      const modeEl = document.getElementById('zsbMode')
-      if (modeEl && typeof AT !== 'undefined') { const mode = AT._serverMode || AT.mode || 'demo'; const _sbEnv = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL'); modeEl.textContent = _sbEnv === 'TESTNET' ? 'TESTNET' : mode.toUpperCase(); modeEl.className = 'zsb-item zsb-mode ' + (_sbEnv === 'TESTNET' ? 'zsb-testnet' : (mode === 'live' ? 'zsb-live' : 'zsb-demo')) }
-      const atEl = document.getElementById('zsbAT'); if (atEl && typeof AT !== 'undefined') { const on = !!AT.enabled; atEl.innerHTML = '<span class="zsb-dot ' + (on ? 'zsb-on' : 'zsb-off') + '"></span>AT ' + (on ? 'ON' : 'OFF') }
-      const wsEl = document.getElementById('zsbWS'); if (wsEl) { const wsOk = !!(w._zeusWS && w._zeusWS.readyState === 1); wsEl.innerHTML = '<span class="zsb-dot ' + (wsOk ? 'zsb-on' : 'zsb-warn') + '"></span>' + (wsOk ? 'WS' : 'WS...') }
-      const dataEl = document.getElementById('zsbData'); if (dataEl && typeof w._SAFETY !== 'undefined') { const stale = !!w._SAFETY.dataStalled; const degraded = w._SAFETY.degradedFeeds && w._SAFETY.degradedFeeds.size > 0; const cls = stale ? 'zsb-warn' : (degraded ? 'zsb-stale' : 'zsb-on'); const txt = stale ? 'STALE' : (degraded ? 'DEGRADED' : 'DATA'); dataEl.innerHTML = '<span class="zsb-dot ' + cls + '"></span>' + txt }
-      const killEl = document.getElementById('zsbKill'); const killSep = document.getElementById('zsbKillSep'); if (killEl && typeof AT !== 'undefined') { const killActive = !!AT.killTriggered; killEl.style.display = killActive ? '' : 'none'; if (killSep) killSep.style.display = killActive ? '' : 'none'; if (killActive) killEl.innerHTML = '<span class="zsb-dot zsb-warn"></span>KILL ACTIVE' }
-      const posEl = document.getElementById('zsbPos'); if (posEl && typeof TP !== 'undefined') { const demoCount = (TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length; const liveCount = (TP.livePositions || []).filter(function (p: any) { return !p.closed }).length; const total = demoCount + liveCount; posEl.textContent = total + ' pos'; posEl.style.color = total > 0 ? 'var(--cyan)' : '#555' }
-      const pnlEl = document.getElementById('zsbPnl'); if (pnlEl && typeof AT !== 'undefined') { const pnl = AT.totalPnL || AT.realizedDailyPnL || 0; pnlEl.textContent = '$' + pnl.toFixed(2); pnlEl.style.color = pnl > 0 ? 'var(--grn-bright)' : (pnl < 0 ? 'var(--red-bright)' : '#555') }
+      const patch: Record<string, any> = {}
+      if (typeof AT !== 'undefined') {
+        const mode = AT._serverMode || AT.mode || 'demo'
+        // Phase 2C: read canonical executionEnv. null (non-demo blocked) → LOCKED.
+        const _sbEnv = w._executionEnv
+        if (_sbEnv === 'TESTNET') { patch.sbMode = 'TESTNET'; patch.sbModeClass = 'zsb-testnet' }
+        else if (_sbEnv === 'REAL') { patch.sbMode = 'LIVE'; patch.sbModeClass = 'zsb-live' }
+        else if (_sbEnv === 'DEMO') { patch.sbMode = 'DEMO'; patch.sbModeClass = 'zsb-demo' }
+        else if (mode !== 'demo') { patch.sbMode = 'LOCKED'; patch.sbModeClass = 'zsb-locked' }
+        else { patch.sbMode = 'DEMO'; patch.sbModeClass = 'zsb-demo' }
+        patch.sbAtEnabled = !!AT.enabled
+        patch.sbKillActive = !!AT.killTriggered
+        patch.sbPnl = AT.totalPnL || AT.realizedDailyPnL || 0
+      }
+      patch.sbWsReady = !!(w._zeusWS && w._zeusWS.readyState === 1)
+      if (typeof w._SAFETY !== 'undefined') {
+        const stale = !!w._SAFETY.dataStalled
+        const degraded = w._SAFETY.degradedFeeds && w._SAFETY.degradedFeeds.size > 0
+        patch.sbDataState = stale ? 'stale' : degraded ? 'degraded' : 'ok'
+      }
+      if (typeof TP !== 'undefined') {
+        const demoCount = (TP.demoPositions || []).filter(function (p: any) { return !p.closed }).length
+        const liveCount = (TP.livePositions || []).filter(function (p: any) { return !p.closed }).length
+        patch.sbPosCount = demoCount + liveCount
+      }
+      useUiStore.getState().patch(patch)
       if (typeof updateModeBar === 'function') updateModeBar()
     } catch (_) { }
   }
@@ -159,16 +182,16 @@ function _renderDlogEntries(): void {
 function _dlogFormatDetail(cat: string, d: any): string {
   if (!d) return ''
   try {
-    if (cat === 'at_block') return '<span class="dlog-detail"><b>' + (d.sym || '?') + '</b> \u2014 ' + (Array.isArray(d.reasons) ? d.reasons.join(', ') : (d.reason || '?')) + (d.score != null ? ' | score=' + d.score : '') + (d.regime ? ' | regime=' + d.regime : '') + '</span>'
-    if (cat === 'at_entry') return '<span class="dlog-detail"><b>' + (d.sym || d.symbol || '?') + ' ' + (d.side || '') + '</b>' + (d.tier ? ' tier=' + d.tier : '') + (d.conf != null ? ' conf=' + d.conf + '%' : '') + (d.size ? ' $' + d.size : '') + '</span>'
-    if (cat === 'at_gate') return '<span class="dlog-detail"><b>' + (d.sym || '?') + '</b> gates: ' + (d.allOk ? '<b style="color:#00ff88">PASS</b>' : '<b style="color:#ff4444">FAIL</b>') + (Array.isArray(d.reasons) && d.reasons.length ? ' [' + d.reasons.join(', ') + ']' : '') + '</span>'
-    if (cat === 'confluence') return '<span class="dlog-detail">score=<b>' + (d.score || '?') + '</b>' + (d.regime ? ' regime=' + d.regime : '') + '</span>'
-    if (cat === 'regime') return '<span class="dlog-detail"><b>' + (d.regime || '?') + '</b> conf=' + (d.confidence || '?') + '%' + (d.trendBias ? ' bias=' + d.trendBias : '') + '</span>'
-    if (cat === 'fusion') return '<span class="dlog-detail"><b>' + (d.decision || '?') + '</b> ' + (d.dir || '') + ' conf=' + (d.confidence || '?') + '%' + '</span>'
-    if (cat === 'kill_switch') return '<span class="dlog-detail"><b style="color:#ff0000">KILL SWITCH</b> ' + (d.action || d.reason || '') + '</span>'
-    const keys = Object.keys(d).slice(0, 6); const parts = keys.map(function (k) { return k + '=' + (typeof d[k] === 'object' ? JSON.stringify(d[k]) : d[k]) })
+    if (cat === 'at_block') return '<span class="dlog-detail"><b>' + escHtml(d.sym || '?') + '</b> \u2014 ' + escHtml(Array.isArray(d.reasons) ? d.reasons.join(', ') : (d.reason || '?')) + (d.score != null ? ' | score=' + escHtml(d.score) : '') + (d.regime ? ' | regime=' + escHtml(d.regime) : '') + '</span>'
+    if (cat === 'at_entry') return '<span class="dlog-detail"><b>' + escHtml(d.sym || d.symbol || '?') + ' ' + escHtml(d.side || '') + '</b>' + (d.tier ? ' tier=' + escHtml(d.tier) : '') + (d.conf != null ? ' conf=' + escHtml(d.conf) + '%' : '') + (d.size ? ' $' + escHtml(d.size) : '') + '</span>'
+    if (cat === 'at_gate') return '<span class="dlog-detail"><b>' + escHtml(d.sym || '?') + '</b> gates: ' + (d.allOk ? '<b style="color:#00ff88">PASS</b>' : '<b style="color:#ff4444">FAIL</b>') + (Array.isArray(d.reasons) && d.reasons.length ? ' [' + escHtml(d.reasons.join(', ')) + ']' : '') + '</span>'
+    if (cat === 'confluence') return '<span class="dlog-detail">score=<b>' + escHtml(d.score || '?') + '</b>' + (d.regime ? ' regime=' + escHtml(d.regime) : '') + '</span>'
+    if (cat === 'regime') return '<span class="dlog-detail"><b>' + escHtml(d.regime || '?') + '</b> conf=' + escHtml(d.confidence || '?') + '%' + (d.trendBias ? ' bias=' + escHtml(d.trendBias) : '') + '</span>'
+    if (cat === 'fusion') return '<span class="dlog-detail"><b>' + escHtml(d.decision || '?') + '</b> ' + escHtml(d.dir || '') + ' conf=' + escHtml(d.confidence || '?') + '%' + '</span>'
+    if (cat === 'kill_switch') return '<span class="dlog-detail"><b style="color:#ff0000">KILL SWITCH</b> ' + escHtml(d.action || d.reason || '') + '</span>'
+    const keys = Object.keys(d).slice(0, 6); const parts = keys.map(function (k) { return escHtml(k) + '=' + (typeof d[k] === 'object' ? escHtml(JSON.stringify(d[k])) : escHtml(d[k])) })
     return '<span class="dlog-detail">' + parts.join(' | ') + '</span>'
-  } catch (_) { return '<span class="dlog-detail">' + JSON.stringify(d).substring(0, 120) + '</span>' }
+  } catch (_) { return '<span class="dlog-detail">' + escHtml(JSON.stringify(d).substring(0, 120)) + '</span>' }
 }
 
 // ===== ACTIVITY FEED =====

@@ -5,22 +5,46 @@
 import { _safeLocalStorageSet } from '../services/storage'
 import { escHtml } from '../utils/dom'
 import { atLog } from '../trading/autotrade'
+import { useBrainStore } from '../stores/brainStore'
 
 const w = window as any
 
 // ── PM Module (IIFE → object) ───────────────────────────────────
 const KEY = 'zeus_postmortem_v1'
 const MAX_REC = 200
+// [R20] Server rejects user-ctx sections > 64KB. Cap at 56KB to leave
+// envelope headroom; drop oldest records until under budget.
+const MAX_SIZE = 56 * 1024
+const MIN_REC_KEPT = 10
 const DECAY_48 = 0.50
 const DECAY_96 = 0.25
 
+function _trimToBudget(records: any[]): any[] {
+  let trimmed = records.slice(0, MAX_REC)
+  while (trimmed.length > MIN_REC_KEPT && JSON.stringify(trimmed).length > MAX_SIZE) {
+    trimmed = trimmed.slice(0, Math.max(MIN_REC_KEPT, Math.floor(trimmed.length * 0.9)))
+  }
+  return trimmed
+}
+
 function _load(): any[] {
-  try { const r = localStorage.getItem(KEY); return r ? JSON.parse(r) : [] }
+  try {
+    const r = localStorage.getItem(KEY)
+    const arr = r ? JSON.parse(r) : []
+    // [R20] Self-repair: if stored payload exceeds budget, trim on first load.
+    if (Array.isArray(arr) && JSON.stringify(arr).length > MAX_SIZE) {
+      const fixed = _trimToBudget(arr)
+      try { _safeLocalStorageSet(KEY, fixed) } catch (_) { }
+      return fixed
+    }
+    return arr
+  }
   catch (_) { return [] }
 }
 
 function _save(records: any[]): void {
-  try { _safeLocalStorageSet(KEY, records.slice(0, MAX_REC)) }
+  const trimmed = _trimToBudget(records)
+  try { _safeLocalStorageSet(KEY, trimmed) }
   catch (_) { }
   if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('postmortem')
   if (typeof w._userCtxPush === 'function') w._userCtxPush()
@@ -87,17 +111,17 @@ function _checkRebound(klines: any[], exitIdx: number, side: string, entryPrice:
   return false
 }
 
-function _buildInsight(pnl: number, slAtrRatio: number | null, sim15: any, sim20: any, lateEntry: any[], rebound: boolean, atr: number | null): string {
+function _buildInsight(pnl: number, slAtrRatio: number | null, sim15: any, sim20: any, lateEntry: any[], rebound: boolean, _atr: number | null): string {
   const parts: string[] = []
   if (pnl < 0) {
-    if (slAtrRatio && slAtrRatio < 1.0) parts.push('SL sub 1\u00D7ATR \u2014 posibil prea str\u00E2ns')
-    if (sim15 && !sim15.slHit && sim15.tpHit) parts.push('SL 1.5\u00D7ATR ar fi prins TP')
-    else if (sim20 && !sim20.slHit && sim20.tpHit) parts.push('SL 2\u00D7ATR ar fi prins TP')
-    if (rebound) parts.push('Pre\u021Bul a revenit \u00EEn direc\u021Bie dup\u0103 SL \u2014 probabil noise')
+    if (slAtrRatio && slAtrRatio < 1.0) parts.push('SL below 1\u00D7ATR \u2014 likely too tight')
+    if (sim15 && !sim15.slHit && sim15.tpHit) parts.push('SL 1.5\u00D7ATR would have reached TP')
+    else if (sim20 && !sim20.slHit && sim20.tpHit) parts.push('SL 2\u00D7ATR would have reached TP')
+    if (rebound) parts.push('Price reverted in direction after SL \u2014 likely noise')
   }
   const betterLate = lateEntry.find((l: any) => l && l.tpHit && !l.slHit)
-  if (betterLate) parts.push(`Intrare +${lateEntry.indexOf(betterLate) + 1} lum\u00E2n\u0103ri ar fi prins TP`)
-  return parts.length ? parts.join(' \u00B7 ') : (pnl >= 0 ? 'Execu\u021Bie conform\u0103' : '\u2014')
+  if (betterLate) parts.push(`Entry +${lateEntry.indexOf(betterLate) + 1} candles would have reached TP`)
+  return parts.length ? parts.join(' \u00B7 ') : (pnl >= 0 ? 'Compliant execution' : '\u2014')
 }
 
 function pmRun(pos: any, pnl: number, exitPrice: number): void {
@@ -198,7 +222,7 @@ export function PM_render(): void {
   const records = PM.load()
 
   if (!stats || !records.length) {
-    container.innerHTML = '<div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">Nicio tranzac\u021Bie analizat\u0103 \u00EEnc\u0103.</div>'
+    container.innerHTML = '<div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">No trade analyzed yet.</div>'
     return
   }
 
@@ -212,19 +236,19 @@ export function PM_render(): void {
   const statsHtml = `
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:6px 10px;border-bottom:1px solid #0a1520">
       <div style="text-align:center">
-        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">SL PREA STR\u00C2NS</div>
+        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">SL TOO TIGHT</div>
         <div style="font-size:11px;font-weight:700;color:${stats.slTightPct > 50 ? '#ff4466' : '#00d97a'}">${stats.slTightPct}%</div>
-        <div style="font-size:10px;color:#334455">din pierderi</div>
+        <div style="font-size:10px;color:#334455">of losses</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">REBOUND DUP\u0102 SL</div>
+        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">REBOUND AFTER SL</div>
         <div style="font-size:11px;font-weight:700;color:${stats.reboundPct > 40 ? '#ff4466' : '#778899'}">${stats.reboundPct}%</div>
-        <div style="font-size:10px;color:#334455">pierderi evitabile</div>
+        <div style="font-size:10px;color:#334455">avoidable losses</div>
       </div>
       <div style="text-align:center">
-        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">ATR OPTIM</div>
+        <div style="font-size:10px;color:#445566;letter-spacing:1px;margin-bottom:2px">OPTIMAL ATR</div>
         <div style="font-size:11px;font-weight:700;color:#00d9ff">${stats.avgSlAtrRatio ? stats.avgSlAtrRatio + '\u00D7' : '\u2014'}</div>
-        <div style="font-size:10px;color:#334455">raport SL/ATR mediu</div>
+        <div style="font-size:10px;color:#334455">average SL/ATR ratio</div>
       </div>
     </div>
     ${insightHtml}`
@@ -245,6 +269,28 @@ export function PM_render(): void {
 
   container.innerHTML = statsHtml + listHtml
 }
+
+// [R20.1] Self-repair oversized localStorage on module import.
+// R20 put a 56KB cap inside _save()/_load(), but _load() only runs when the
+// user opens the Post-Mortem panel or closes a position. Users carrying
+// pre-R20 oversized records never trigger the trim path and the server keeps
+// rejecting every push. Running the trim once at module import covers that
+// cold-start window and schedules a push of the trimmed payload.
+;(function _pmSelfRepairOnBoot() {
+  try {
+    const raw = localStorage.getItem(KEY)
+    if (!raw) return
+    const arr = JSON.parse(raw)
+    if (!Array.isArray(arr)) return
+    const before = JSON.stringify(arr).length
+    if (before <= MAX_SIZE) return
+    const fixed = _trimToBudget(arr)
+    _safeLocalStorageSet(KEY, fixed)
+    console.warn('[PM] boot self-repair:', arr.length, 'records /', before, 'B →', fixed.length, '/', JSON.stringify(fixed).length, 'B')
+    if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('postmortem')
+    if (typeof w._userCtxPush === 'function') w._userCtxPush()
+  } catch (_) { /* never break boot */ }
+})()
 
 // ── CSS injection (runs on import) ─────────────────────────────
 ;(function _pmInjectCSS() {
@@ -275,7 +321,7 @@ export function initPMPanel(): void {
   const panel = document.createElement('div')
   panel.id = 'pm-strip'
   panel.innerHTML = `
-    <div id="pm-strip-bar" onclick="this.closest('#pm-strip').classList.toggle('open');PM_render()">
+    <div id="pm-strip-bar">
       <div class="v6-accent"><div class="v6-ico"><svg viewBox="0 0 24 24"><circle cx="12" cy="10" r="6"/><line x1="12" y1="16" x2="12" y2="22"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="10" y1="8" x2="10" y2="12"/><line x1="14" y1="8" x2="14" y2="12"/></svg></div><span class="v6-lbl">POST<br>MORT</span></div>
       <div class="v6-content">
         <div id="pm-strip-title"><span>POST-MORTEM</span></div>
@@ -287,11 +333,23 @@ export function initPMPanel(): void {
     </div>
     <div id="pm-strip-panel">
       <div id="pm-panel-body">
-        <div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">Nicio tranzac\u021Bie analizat\u0103 \u00EEnc\u0103.</div>
+        <div style="padding:12px;text-align:center;font-size:12px;color:#445566;letter-spacing:1px">No trade analyzed yet.</div>
       </div>
     </div>`
 
   srStrip.insertAdjacentElement('afterend', panel)
+
+  // ZT10: replaced inline `onclick="…PM_render()"` with a real listener.
+  // PM_render was never bound to window, so the inline call silently
+  // threw a ReferenceError after the classList.toggle ran.
+  const bar = panel.querySelector<HTMLDivElement>('#pm-strip-bar')
+  if (bar) {
+    bar.style.cursor = 'pointer'
+    bar.addEventListener('click', () => {
+      panel.classList.toggle('open')
+      PM_render()
+    })
+  }
 
   const stat = document.getElementById('pm-strip-stat')
   if (stat) {
@@ -342,14 +400,20 @@ export function _pmCheckRegimeTransition(): void {
     const score = Math.round(flatPts + atrPts + divPts)
 
     if (score >= 80) {
-      if (typeof w.BlockReason !== 'undefined' && !w.BlockReason.get())
-        w.BlockReason.set('REGIME_TRANSITION', `Tranzi\u021Bie regim iminenta (scor ${score}) \u2014 intr\u0103ri blocate`)
+      if (typeof w.BlockReason !== 'undefined' && !w.BlockReason.get()) {
+        const _rtText = `Imminent regime transition (score ${score}) \u2014 entries blocked`
+        w.BlockReason.set('REGIME_TRANSITION', _rtText)
+        try { useBrainStore.getState().setBlockReason({ code: 'REGIME_TRANSITION', text: _rtText }) } catch (_e) { }
+      }
     } else if (score >= 60) {
-      atLog('warn', `[RegimeWatch] Alert\u0103 tranzi\u021Bie regim \u2014 scor ${score}`)
+      atLog('warn', `[RegimeWatch] Regime transition alert \u2014 score ${score}`)
     } else {
       if (typeof w.BlockReason !== 'undefined') {
         const br = w.BlockReason.get()
-        if (br && br.code === 'REGIME_TRANSITION') w.BlockReason.clear()
+        if (br && br.code === 'REGIME_TRANSITION') {
+          w.BlockReason.clear()
+          try { useBrainStore.getState().setBlockReason(null) } catch (_e) { }
+        }
       }
     }
   } catch (e: any) { console.warn('[RegimeWatch]', e.message) }

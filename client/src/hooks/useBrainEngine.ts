@@ -22,7 +22,7 @@ export function useBrainEngine(authenticated: boolean) {
     if (!authenticated) return
 
     // Subscribe to market store changes
-    const unsub = useMarketStore.subscribe((state) => {
+    const unsub = useMarketStore.subscribe((_state) => {
       const now = Date.now()
       if (now - lastRunRef.current < THROTTLE_MS) {
         // Schedule a delayed run if not already scheduled
@@ -53,6 +53,7 @@ function runBrain() {
   const at = useATStore.getState()
   const pos = usePositionsStore.getState()
   const brain = useBrainStore.getState()
+  const profile = brain.brain?.profile ?? 'fast'
 
   // Need klines to compute
   const klines = market.klines || []
@@ -69,16 +70,16 @@ function runBrain() {
     openPositionCount: pos.demoPositions.length + pos.livePositions.length,
     lastTradeSide: at.lastTradeSide ?? null,
     lastTradeTs: at.lastTradeTs,
-    lossStreak: brain.lossStreak ?? 0,
-    dailyTrades: brain.dailyTrades ?? 0,
-    profile: 'fast', // TODO: read from settings
+    lossStreak: brain.brain.lossStreak ?? 0,
+    dailyTrades: brain.brain.dailyTrades ?? 0,
+    profile,
   }
 
   const result = computeBrain(inputs)
 
   // Map results to brainStore shape
   useBrainStore.getState().patch({
-    mode: brain.mode || 'assist',
+    mode: brain.brain.mode || 'assist',
     confluenceScore: result.entryScore, // confluence ~ entry score
     danger: result.danger,
     entryScore: result.entryScore,
@@ -144,7 +145,7 @@ function runBrain() {
 
     // Liq cycle from sweep data
     liqCycle: {
-      ...brain.liqCycle,
+      ...brain.brain.liqCycle,
       currentSweep: result.sweep.type,
       sweepDisplacement: result.sweep.displacement,
       magnetBias: result.dir === 'long' ? 'up' : 'down',

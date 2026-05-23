@@ -14,7 +14,7 @@ export function SupremusModal({ visible, onClose }: Props) {
   const [tab, setTab] = useState<typeof tabs[number]>('MAIN')
 
   return (
-    <ModalOverlay id="mzs" visible={visible} onClose={onClose}>
+    <ModalOverlay id="mzs" visible={visible} onClose={onClose} zIndex={9500}>
       <ModalHeader title="ZEUS SUPREMUS SETTINGS" onClose={onClose} />
 
       <div style={{ padding: '12px 16px', overflowY: 'auto', maxHeight: '75vh' }}>

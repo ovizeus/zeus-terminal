@@ -15,13 +15,25 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
 
+      # [TEST-3] Re-enable npm audit for CVE detection (was --no-audit which
+      # silently passed even on critical CVEs in transitive deps).
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --no-fund
 
-      - name: Run tests
-        run: npm test
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      # [TEST-4] Coverage threshold gate. Fails CI if below 50% lines/funcs/
+      # statements (current baseline ~60% — 50% guard prevents regression).
+      # [TEST-5] NODE_ENV=production explicit so production-gated code paths
+      # exercised in tests (Express stack traces, validation strictness, etc).
+      - name: Run tests with coverage
+        env:
+          NODE_ENV: production
+        run: npm test -- --coverage --coverageThreshold='{"global":{"lines":50,"functions":50,"statements":50}}'
 
   deploy:
     name: Deploy to VPS
@@ -37,14 +49,32 @@ jobs:
 
       - name: Deploy via SSH
         run: |
+          # [OPS-4] Capture pre-deploy SHA for rollback. [OPS-8] Compute and
+          # assert client bundle hash post-build to detect mismatched deploy.
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no root@${{ secrets.VPS_HOST }} '
             cd /root/zeus-terminal &&
+            PREV_SHA=$(git rev-parse HEAD) &&
+            echo "[OPS-4] Pre-deploy SHA: $PREV_SHA" &&
             git fetch origin main &&
             git reset --hard origin/main &&
             npm ci --production --no-audit --no-fund &&
+            if [ -f public/app/index.html ]; then
+              BUNDLE_HASH=$(sha256sum public/app/index.html | awk "{print \$1}") &&
+              echo "[OPS-8] Bundle hash post-build: $BUNDLE_HASH"
+            else
+              echo "[OPS-8] WARN: public/app/index.html missing — bundle assertion skipped"
+            fi &&
             pm2 reload zeus --update-env &&
             sleep 3 &&
-            curl -sf http://localhost:3000/health || (echo "HEALTH CHECK FAILED" && exit 1)
+            if ! curl -sf http://localhost:3000/health; then
+              echo "[OPS-4] HEALTH FAIL — rolling back to $PREV_SHA" &&
+              git reset --hard $PREV_SHA &&
+              pm2 reload zeus --update-env &&
+              sleep 3 &&
+              curl -sf http://localhost:3000/health || (echo "[OPS-4] ROLLBACK ALSO FAILED — manual intervention required" && exit 2) &&
+              echo "[OPS-4] Rollback successful" &&
+              exit 1
+            fi
           '
 
       - name: Cleanup

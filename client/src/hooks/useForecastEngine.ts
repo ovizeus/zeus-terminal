@@ -27,7 +27,7 @@ export function useForecastEngine(authenticated: boolean) {
     if (!authenticated) return
 
     // Subscribe to brain store changes (structure updates = new regime data)
-    const unsub = useBrainStore.subscribe((state) => {
+    const unsub = useBrainStore.subscribe((_state) => {
       const now = Date.now()
       if (now - lastRunRef.current < THROTTLE_MS) {
         if (!timerRef.current) {
@@ -63,7 +63,7 @@ export function useForecastEngine(authenticated: boolean) {
 
     // Determine position direction from open positions
     const allPositions = [...pos.demoPositions, ...pos.livePositions]
-    const openPos = allPositions.find(p => !p.closed)
+    const openPos = allPositions.find(p => p.status === 'OPEN')
     const posDir: 'LONG' | 'SHORT' = openPos?.side === 'SHORT' ? 'SHORT' : 'LONG'
     const hasOpenPosition = !!openPos
 

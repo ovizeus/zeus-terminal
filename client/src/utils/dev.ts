@@ -14,6 +14,8 @@ import { triggerKillSwitch , atLog } from '../trading/autotrade'
 import { zeusGetTheme } from '../ui/theme'
 import { _enterRecoveryMode } from './guards'
 import { updateDeepDive } from '../engine/indicators'
+import { useSettingsStore } from '../stores/settingsStore'
+import { telegramApi } from '../services/api'
 const w = window as Record<string, any> // kept for w.S (writes), w.USER_SETTINGS (writes), fn calls
 
 export const DEV: Record<string, any> = {
@@ -372,7 +374,7 @@ export function devTriggerKillSwitch(): void {
   if (!_devModuleOk('killSwitch')) return
   try {
     if (typeof triggerKillSwitch === 'function') {
-      triggerKillSwitch('manual')
+      triggerKillSwitch('manual', 0, 0, 0, 0)
       devLog('Triggered kill switch (manual)', 'warning')
     } else {
       devLog('triggerKillSwitch not available', 'warning')
@@ -527,7 +529,7 @@ export function _devEnsureVisible(): void {
           } else {
             mi.appendChild(devSec)
           }
-          console.log('[DEV] Fallback: dev-sec repositionat dupa deepdive-sec')
+          console.log('[DEV] Fallback: dev-sec repositioned after deepdive-sec')
         }
       }
     }
@@ -625,10 +627,9 @@ export function hubPopulate(): void {
     _setV('hubLiqMin', al.liqMinBtc !== undefined ? al.liqMinBtc : 1)
 
     // ── Auto Trade (populate AT panel toggles) ──────────────────
-    const at = (typeof w.USER_SETTINGS !== 'undefined' && w.USER_SETTINGS.autoTrade)
-      ? w.USER_SETTINGS.autoTrade : {}
+    const ss = useSettingsStore.getState()
     const atSeEl = document.getElementById('atSmartExit') as HTMLInputElement | null
-    if (atSeEl) atSeEl.checked = at.smartExitEnabled === true
+    if (atSeEl) atSeEl.checked = ss.settings.smartExitEnabled === true
     const atAdaptEl = document.getElementById('atAdaptEnabled') as HTMLInputElement | null
     const BM = getBrainMetrics()
     if (atAdaptEl) atAdaptEl.checked = BM?.adapt && BM.adapt.enabled === true
@@ -708,18 +709,13 @@ export function hubTgSave(): void {
   const token = tokenEl ? tokenEl.value.trim() : ''
   const chatId = chatEl ? chatEl.value.trim() : ''
   if (!token || !chatId) {
-    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Completeaza ambele campuri</span>'
+    if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Fill in both fields</span>'
     return
   }
   // Token saved server-side only (encrypted) — never store in localStorage
-  // Push to server runtime config
-  fetch('/api/user/telegram', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ botToken: token, chatId: chatId })
-  }).then(function (r) { return r.json() }).then(function (d: any) {
+  telegramApi.save(token, chatId).then(function (d) {
     if (d.ok) {
-      if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Salvat + trimis la server</span>'
+      if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Saved + sent to server</span>'
       toast('Telegram saved', 0, _ZI?.ok)
     } else {
       if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Server: ' + (d.error || 'error') + '</span>'
@@ -736,14 +732,11 @@ export function hubTgTest(): void {
   hubTgSave()
   setTimeout(function () {
     if (statusEl) statusEl.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.mail + ' Sending test...</span>'
-    fetch('/api/user/telegram/test', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    }).then(function (r) { return r.json() }).then(function (d: any) {
+    telegramApi.test().then(function (d) {
       if (d.ok) {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Test trimis — verifica Telegram!</span>'
+        if (statusEl) statusEl.innerHTML = '<span style="color:#00d97a">' + _ZI?.ok + ' Test sent — check Telegram!</span>'
       } else {
-        if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Mesajul nu s-a trimis — verifica token/chat ID</span>'
+        if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' Message failed to send — check token/chat ID</span>'
       }
     }).catch(function (e: any) {
       if (statusEl) statusEl.innerHTML = '<span style="color:#ff6655">' + _ZI?.w + ' ' + e.message + '</span>'
@@ -756,13 +749,13 @@ export function hubTgPopulate(): void {
   const tokenEl = document.getElementById('hubTgBotToken') as HTMLInputElement | null
   const chatEl = document.getElementById('hubTgChatId') as HTMLInputElement | null
   // Fetch server-side config (token stored encrypted server-side, never in browser)
-  fetch('/api/user/telegram').then(function (r) { return r.json() }).then(function (d: any) {
+  telegramApi.fetchConfig().then(function (d) {
     if (d.configured) {
       if (chatEl) chatEl.value = d.chatId || ''
       if (tokenEl) tokenEl.placeholder = '(saved on server)'
     }
     const statusElInner = document.getElementById('hubTgStatus')
-    if (statusElInner && d.configured) statusElInner.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.inf + ' Telegram configurat (chat: ' + d.chatId + ')</span>'
+    if (statusElInner && d.configured) statusElInner.innerHTML = '<span style="color:#4fc3f7">' + _ZI?.inf + ' Telegram configured (chat: ' + d.chatId + ')</span>'
   }).catch(function () { /* */ })
 }
 // hubTgPopulate — exported, consumers import directly

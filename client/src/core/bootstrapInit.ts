@@ -13,7 +13,9 @@ import { openPageView } from '../ui/pageview'
 import { initZeusDock } from '../ui/dock'
 import { DEV } from '../utils/dev'
 import { runAutoTradeCheck , atLog } from '../trading/autotrade'
+import { useATStore } from '../stores/atStore'
 import { liveApiSyncState } from '../trading/liveApi'
+import { wsService } from '../services/ws'
 const w = window as any // kept for w.S (bnbOk/bybOk/uiHealth SKIP), w.Intervals, atLog, fn calls
 
 // ===== INIT ZEUS GROUPS (DOM structure) =====
@@ -26,11 +28,12 @@ export function initZeusGroups(): void {
   function _markPending(el: any) { if (el) el.classList.add('zg-pending-move') }
   function _recoverElement(el: any) { if (!el) return; el.classList.remove('zg-pending-move'); el.classList.add('zg-recovery-mode'); _failedElements.push(el.id || el.className || '(anon)') }
   function _showRecoveryBanner() { let banner: any = document.getElementById('zg-recovery-banner'); if (!banner) { banner = document.createElement('div'); banner.id = 'zg-recovery-banner'; document.body.insertAdjacentElement('afterbegin', banner) }; banner.innerHTML = '\u26A0\uFE0F Some panels could not load correctly. <strong>Click here to retry.</strong>'; banner.style.display = 'block'; banner.onclick = function () { w.UI_BUILT = false; document.querySelectorAll('.zg-recovery-mode').forEach((el: any) => el.classList.remove('zg-recovery-mode')); banner.style.display = 'none'; initZeusGroups() } }
-  function mv(id: string, target: any) { const el = document.getElementById(id); if (!el) return; _markPending(el); if (!target) { _recoverElement(el); return }; if (el.parentElement === target) { el.classList.remove('zg-pending-move'); return }; target.appendChild(el); el.classList.remove('zg-pending-move') }
-  function mvSec(childSel: string, target: any) { try { const child = document.querySelector(childSel); if (!child) return; let node: any = child; while (node && node !== document.body) { if (node.classList && (node.classList.contains('sec') || node.classList.contains('znc') || node.classList.contains('bext') || node.classList.contains('dsl-zone') || node.classList.contains('at-panel') || node.classList.contains('trade-panel') || node.classList.contains('trade-sep') || node.classList.contains('at-sep'))) { _markPending(node); if (!target) { _recoverElement(node); return }; if (node.parentElement === target) { node.classList.remove('zg-pending-move'); return }; target.appendChild(node); node.classList.remove('zg-pending-move'); return }; node = node.parentElement } } catch (_) { } }
+  function mv(id: string, target: any) { const el = document.getElementById(id); if (!el) return; _markPending(el); if (!target) { _recoverElement(el); return }; if (el.parentElement === target) { el.classList.remove('zg-pending-move'); return }; if (target.contains && target !== el && target.contains(el)) { el.classList.remove('zg-pending-move'); return }; target.appendChild(el); el.classList.remove('zg-pending-move') }
+  function mvSec(childSel: string, target: any) { try { const child = document.querySelector(childSel); if (!child) return; let node: any = child; while (node && node !== document.body) { if (node.classList && (node.classList.contains('sec') || node.classList.contains('znc') || node.classList.contains('bext') || node.classList.contains('dsl-zone') || node.classList.contains('at-panel') || node.classList.contains('trade-panel') || node.classList.contains('trade-sep') || node.classList.contains('at-sep'))) { _markPending(node); if (!target) { _recoverElement(node); return }; if (node.parentElement === target) { node.classList.remove('zg-pending-move'); return }; if (target.contains && target !== node && target.contains(node)) { node.classList.remove('zg-pending-move'); return }; target.appendChild(node); node.classList.remove('zg-pending-move'); return }; node = node.parentElement } } catch (_) { } }
 
-  mv('zeus-mode-bar', mi); if (typeof initModeBar === 'function') initModeBar()
-  mv('aub', mi); mv('sr-strip', mi); mv('csec', mi); mv('zeus-dock', mi)
+  // Phase 11.1.1: zeus-mode-bar / csec / zeus-dock are React-owned (PanelShell.tsx) — React positions them canonically; legacy mv() into #zeus-groups reordered them and forced ModeBar above chart.
+  if (typeof initModeBar === 'function') initModeBar()
+  mv('aub', mi); mv('sr-strip', mi)
   if (typeof w.initPageView === 'function') w.initPageView()
   initZeusDock()
   mv('aria-strip', mi); mv('teacher-strip', mi); mv('pnl-lab-strip', mi)
@@ -46,7 +49,7 @@ export function initZeusGroups(): void {
   const _atPanel = document.getElementById('at-strip-panel')
   if (_atPanel) { mv('atPanel', _atPanel); mvSec('.at-sep', _atPanel) }
   const _ptPanel = document.getElementById('pt-strip-panel')
-  if (_ptPanel) { mvSec('.trade-sep', _ptPanel); mv('panelDemo', _ptPanel); mv('panelLive', _ptPanel) }
+  if (_ptPanel) { mvSec('.trade-sep', _ptPanel); mv('panelDemo', _ptPanel) }
   const _dslPanel = document.getElementById('dsl-strip-panel')
   if (_dslPanel) mv('dslZone', _dslPanel)
   mv('perfSec', mi); mv('btSec', mi)
@@ -66,9 +69,10 @@ export function _waitForFeedThenStartExtras(): void {
       w.Intervals.clear('feedWait')
       if (!feedOk) atLog('warn', '[WARN] Extras started without confirmed feed (timeout)')
       else atLog('info', '[OK] Feed confirmed — starting DSL + scanner extras')
-      _startExtras()
+      // [MIGRATION-F0] Boot order: _userCtxPull → _startExtras (DoD #3)
       if (typeof w._ctxLoad === 'function') w._ctxLoad()
       if (typeof w._userCtxPull === 'function') w._userCtxPull()
+      _startExtras()
       if (typeof w._ucRetryPendingBeacon === 'function') w._ucRetryPendingBeacon()
       try { const _sd = sessionStorage.getItem('zeusDock'); if (_sd) openPageView(_sd) } catch (_) { }
       const _sp = document.getElementById('_dockSplash'); if (_sp) _sp.remove()
@@ -83,13 +87,17 @@ export function _startExtras(): void {
   w.Intervals.set('multiscan', () => { if (AT.enabled && el('atMultiSym')?.checked !== false) w.runMultiSymbolScan() }, 60000)
   w.Intervals.set('bbSave', () => { if (typeof w._aubSaveBB === 'function') w._aubSaveBB() }, 30000)
   atLog('info', '[INIT] Extras module online')
-  w.Intervals.set('livePosSync', function () { if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 30000)
+  // [MIGRATION-F5 C6] Polling retired from main path.
+  // Previously 30s always-on. Now 120s fallback, skipped while /ws/sync
+  // is OPEN — server's `positions.changed` broadcast + positionsRealtime
+  // subscriber + positionsStore.applyDelta handle reconciliation on the
+  // happy path. This interval only performs work when the socket is
+  // down (after intentional disconnect or while the reconnect backoff
+  // in wsService hasn't recovered yet).
+  w.Intervals.set('livePosSync', function () { if (wsService.isConnected()) return; if (typeof TP !== 'undefined' && TP.liveConnected && typeof liveApiSyncState === 'function') liveApiSyncState() }, 120000)
   if (typeof AT !== 'undefined' && AT.enabled && !AT.killTriggered) {
     console.log('[startApp] AT was enabled before reload — resuming')
-    const _btn = el('atMainBtn'); if (_btn) _btn.className = 'at-main-btn on'
-    const _dot = el('atBtnDot'); if (_dot) { _dot.style.background = 'var(--grn-bright)'; _dot.style.boxShadow = '0 0 10px var(--grn-bright)' }
-    const _txt = el('atBtnTxt'); if (_txt) _txt.textContent = 'AUTO TRADE ON'
-    const _st = el('atStatus'); if (_st) _st.innerHTML = _ZI.dGrn + ' Active — scanning every 30s'
+    useATStore.getState().patchUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Active \u2014 scanning every 30s', action: null } })
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     setTimeout(runAutoTradeCheck, 3000)
     if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
@@ -105,7 +113,7 @@ export function runHealthChecks(): any {
   checks.mi = _check('zeus-groups', '.sec')
   checks.dsl = _check('dsl-strip-panel', '#dslZone')
   checks.at = _check('at-strip-panel', '#atPanel')
-  checks.pt = _check('pt-strip-panel', '#panelDemo') && _check('pt-strip-panel', '#panelLive')
+  checks.pt = _check('pt-strip-panel', '#panelDemo')
   console.log('[HEALTH] MI mounted:', checks.mi ? 'OK' : 'FAIL')
   console.log('[HEALTH] DSL mounted:', checks.dsl ? 'OK' : 'FAIL')
   console.log('[HEALTH] AT mounted:', checks.at ? 'OK' : 'FAIL')

@@ -9,39 +9,193 @@ import { fmt, fP } from '../utils/format'
 import { escHtml, el } from '../utils/dom'
 import { toast } from './marketDataHelpers'
 import { _ZI } from '../constants/icons'
+import { useATStore } from '../stores/atStore'
+import { useUiStore } from '../stores/uiStore'
 import { _startLivePendingSync , renderDemoPositions } from './marketDataPositions'
 import { runDSLBrain, toggleDSL } from '../trading/dsl'
 import { manualLivePlaceOrder, manualLiveSetSL, manualLiveSetTP } from '../trading/liveApi'
-import { calcDslTargetPrice } from '../engine/brain'
+
+import { api } from '../services/api'
 import { updateModeBar } from '../ui/modebar'
 import { renderTradeMarkers } from './marketDataOverlays'
 import { onPositionOpened } from '../trading/positions'
 import { renderLivePositions } from './marketDataPositions'
 import { liveApiSyncState } from '../trading/liveApi'
+import { usePositionsStore } from '../stores/positionsStore'
 const w = window as any // kept for w.S.mode (self-ref SKIP), w.ZState, fn calls
 
 // ═══════════════════════════════════════════════════════
 // GLOBAL MODE SWITCH
 // ═══════════════════════════════════════════════════════
+
+/**
+ * [BUG-T3 FIX 2026-05-14] Count open positions in the opposite engine mode.
+ *
+ * Pure helper used by:
+ *   - `_buildModeSwitchMessage` to inject count into confirm-dialog message
+ *   - `ManualTradePanel` for the persistent opposite-mode hidden-positions banner
+ *
+ * Defensive against null/undefined/non-array inputs (real usage reads from
+ * Zustand store + window globals — both can be transiently absent at boot).
+ * Treats positions without `mode` field as demo (legacy back-compat).
+ */
+export function _countOppositeModeOpenPositions(
+    currentMode: 'demo' | 'live',
+    demoPositions: any[] | null | undefined,
+    livePositions: any[] | null | undefined,
+): number {
+    const target = currentMode === 'live' ? demoPositions : livePositions
+    if (!Array.isArray(target)) return 0
+    if (currentMode === 'live') {
+        // Counting demo positions visible from live mode
+        return target.filter(p => p && !p.closed && (p.mode || 'demo') !== 'live').length
+    }
+    // Counting live positions visible from demo mode
+    return target.filter(p => p && !p.closed && (p.mode || 'demo') === 'live').length
+}
+
+/**
+ * [BUG-T3 FIX 2026-05-14] Build mode-switch confirm dialog title + message.
+ *
+ * Replaces the previous static message that did not surface count of
+ * opposite-mode positions. After switch, those positions remain active on
+ * Binance but hidden from UI — user must know how many before confirming.
+ *
+ * Returns object directly consumable by `_showConfirmDialog(title, message,
+ * cancelText, confirmText, onConfirm)`.
+ */
+export function _buildModeSwitchMessage(
+    targetMode: 'demo' | 'live',
+    oppositeCount: number,
+    isTestnet: boolean,
+): { title: string; message: string; cancelText: string; confirmText: string } {
+    const cancelText = 'Cancel'
+    if (targetMode === 'demo') {
+        const title = 'Activate Demo Mode?'
+        const confirmText = 'Activate Demo'
+        const baseLines: string[] = [
+            'You are about to switch the entire system to DEMO mode.',
+            '',
+            'All new manual and auto trades will run in simulated mode.',
+            'No real Binance orders will be executed.',
+            'Live mode will be turned off.',
+        ]
+        if (oppositeCount > 0) {
+            const plural = oppositeCount === 1 ? 'position' : 'positions'
+            baseLines.push('')
+            baseLines.push(`⚠️ You have ${oppositeCount} LIVE ${plural} currently open on Binance.`)
+            baseLines.push('They will remain active on the exchange but hidden from this UI.')
+            baseLines.push('Switch back to LIVE mode to view or close them.')
+        } else {
+            baseLines.push('')
+            baseLines.push('Existing live positions (if any) will remain live and continue independently.')
+        }
+        return { title, message: baseLines.join('\n'), cancelText, confirmText }
+    }
+
+    // targetMode === 'live'
+    const title = isTestnet ? 'Activate Testnet Mode?' : 'Activate Real Trading Mode?'
+    const confirmText = isTestnet ? 'Activate Testnet' : 'Activate Live'
+    const baseLines: string[] = isTestnet ? [
+        'You are about to switch to exchange-backed TESTNET mode.',
+        '',
+        'All new trades will execute on Binance TESTNET with TEST funds.',
+        'No real money is involved.',
+        'Demo mode will be turned off.',
+    ] : [
+        'You are about to switch the entire system to LIVE mode.',
+        '',
+        'All new manual and auto trades may use REAL funds.',
+        'Real Binance execution requires valid API keys configured in Settings.',
+        'Demo mode will be turned off.',
+    ]
+    if (oppositeCount > 0) {
+        const plural = oppositeCount === 1 ? 'position' : 'positions'
+        baseLines.push('')
+        baseLines.push(`⚠️ You have ${oppositeCount} DEMO ${plural} currently open.`)
+        baseLines.push('They will remain tracked in demo mode but hidden from this UI.')
+        baseLines.push('Switch back to DEMO mode to view or close them.')
+    } else {
+        baseLines.push('')
+        baseLines.push('Existing demo positions (if any) will remain demo and continue independently.')
+    }
+    if (!isTestnet) {
+        baseLines.push('')
+        baseLines.push('Only continue if you understand the risks of real-money trading.')
+    }
+    return { title, message: baseLines.join('\n'), cancelText, confirmText }
+}
+
 export function switchGlobalMode(mode: any): void {
   const currentMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
+  console.log('[BRAIN-SPLIT] switchGlobalMode(' + mode + ') currentMode=' + currentMode)
   if (currentMode === mode) { _toggleManualPanel(); return }
-  if (mode === 'demo') {
-    _showConfirmDialog('Activate Demo Mode?', 'You are about to switch the entire system to DEMO mode.\n\nAll new manual and auto trades will run in simulated mode.\nNo real Binance orders will be executed.\nLive mode will be turned off.\n\nExisting live positions will remain live and continue independently.', 'Cancel', 'Activate Demo', function () { _executeGlobalModeSwitch('demo') })
-  } else {
-    const _switchEnv = w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'
-    const _switchIsTestnet = _switchEnv === 'TESTNET'
-    _showConfirmDialog(_switchIsTestnet ? 'Activate Testnet Mode?' : 'Activate Real Trading Mode?', _switchIsTestnet ? 'You are about to switch to exchange-backed TESTNET mode.\n\nAll new trades will execute on Binance TESTNET with TEST funds.\nNo real money is involved.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.' : 'You are about to switch the entire system to LIVE mode.\n\nAll new manual and auto trades may use REAL funds.\nReal Binance execution requires valid API keys configured in Settings.\nDemo mode will be turned off.\n\nExisting demo positions will remain demo and continue independently.\n\nOnly continue if you understand the risks of real-money trading.', 'Cancel', _switchIsTestnet ? 'Activate Testnet' : 'Activate Live', function () { _executeGlobalModeSwitch('live') })
+  // [BUG-T3 FIX 2026-05-14] Inject opposite-mode positions count into confirm
+  // message. Reads from positionsStore (canonical store-truth) with window.TP
+  // fallback (boot window). Empty arrays → "no count phrase" path.
+  let _demoPos: any[] = []
+  let _livePos: any[] = []
+  try {
+    const _ps = usePositionsStore.getState()
+    _demoPos = Array.isArray(_ps.demoPositions) ? _ps.demoPositions : []
+    _livePos = Array.isArray(_ps.livePositions) ? _ps.livePositions : []
+  } catch (_) {
+    // store transiently unavailable — fall back to window.TP mirror
+    _demoPos = Array.isArray(w.TP?.demoPositions) ? w.TP.demoPositions : []
+    _livePos = Array.isArray(w.TP?.livePositions) ? w.TP.livePositions : []
   }
+  const _oppositeCount = _countOppositeModeOpenPositions(currentMode, _demoPos, _livePos)
+  const _switchIsTestnet = mode === 'live' && w._exchangeMode === 'testnet'
+  const built = _buildModeSwitchMessage(mode, _oppositeCount, _switchIsTestnet)
+  _showConfirmDialog(built.title, built.message, built.cancelText, built.confirmText, function () { _executeGlobalModeSwitch(mode) })
 }
 
 function _executeGlobalModeSwitch(mode: string): void {
-  fetch('/api/at/mode', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ mode }) }).then(function (r) { return r.json() }).then(function (data: any) {
+  console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') POSTing...')
+  // [R5] Flush pending _usSave BEFORE the POST, not in the .then callback.
+  // The server broadcasts a WS at_update as soon as it flips the mode, which
+  // races the HTTP response: _applyServerATState (state.ts) and applyATUpdate
+  // (useServerSync.ts) both flip AT.mode + useATStore.mode on that frame. If
+  // the flush ran in .then, _currentATModeKey() read the already-flipped NEW
+  // mode and _usSave wrote the outgoing mode's pending flat values (profile,
+  // DSL mode) into the WRONG brain slot (the new mode). Flushing pre-POST
+  // locks in the correct OLD-mode slot before any WS frame can arrive.
+  try { if (typeof w._usFlush === 'function') w._usFlush() } catch (_) {}
+  // [BUG-SAFE-1] Server-side consent: live mode requires explicit confirm:true + env declaration (TESTNET|REAL).
+  // Resolved env comes from w._executionEnv (already populated by exchange-creds resolver). Fallback to TESTNET on null/unknown for safety.
+  const _safe1Env = (w._executionEnv === 'REAL') ? 'REAL' : 'TESTNET'
+  const _safe1Body = mode === 'live' ? { mode, confirm: true, env: _safe1Env } : { mode }
+  api.raw<any>('POST', '/api/at/mode', _safe1Body).then(function (data: any) {
+    console.log('[BRAIN-SPLIT] _executeGlobalModeSwitch(' + mode + ') response ok=' + data.ok)
     if (data.ok) {
-      if (typeof AT !== 'undefined') AT._serverMode = mode
+      const _prevMode = (typeof AT !== 'undefined' && (AT as any).mode) ? (AT as any).mode : 'demo'
+      const _usBefore = (window as any).USER_SETTINGS || {}
+      console.log('[BRAIN-SPLIT] switch: ' + _prevMode + ' → ' + mode + ' | prev flat=' + _usBefore.profile + '/' + _usBefore.bmMode + ' | brain=' + JSON.stringify(_usBefore.brain || {}))
+      // [BRAIN-MODE-SPLIT b74 hotfix] Flip BOTH AT.mode and atStore.mode synchronously,
+      // not only AT._serverMode. getATMode() reads useATStore.mode, so without this the
+      // badge, _currentATModeKey (for _usSave) and any getATMode consumer stayed on the
+      // OLD mode until the async atPollOnce → updateATMode → useATBridge chain caught
+      // up (~500ms+). Any save during that window landed in the wrong brain namespace.
+      if (typeof AT !== 'undefined') { AT._serverMode = mode; (AT as any).mode = mode }
+      // [BUG-T7 FOLLOWUP-2 2026-05-13] Patch BOTH mode AND enabled din response server.
+      // Pre-fix: doar mode era patched optimistic → atStore.enabled rămânea STALE
+      // until WS frame arrival (~50-200ms). Race window: dacă user clicked toggle în
+      // acest interval, UI button reflected stale state → click sent unintended toggle
+      // (e.g. „turn OFF" când user wanted „turn ON"). Operator-reported 2026-05-13.
+      // Fix: server setMode now returns enriched response cu atActive computed pentru
+      // new engineMode; client patches enabled imediat → zero race window.
+      try {
+        const _atActive = typeof data.atActive === 'boolean' ? data.atActive : useATStore.getState().enabled;
+        useATStore.getState().patch({ mode: mode as 'demo' | 'live', enabled: _atActive });
+      } catch (_) {}
+      console.log('[BRAIN-SPLIT] after flip: AT.mode=' + (AT as any).mode + ' store.mode=' + useATStore.getState().mode)
+      // [BRAIN-MODE-SPLIT b74] Apply the new mode's brain namespace now, so S,
+      // BM and the brainStore reflect the per-mode profile + bmMode the user
+      // set for this mode previously (or the migration seed on first run).
+      try { if (typeof w.applyBrainCfgForMode === 'function') w.applyBrainCfgForMode(mode) } catch (_) {}
       _applyGlobalModeUI(mode)
       if (mode === 'demo') { toast('Demo Mode Activated', 3000, _ZI.ok) }
-      else { const _toastEnv = w._resolvedEnv || (w._exchangeMode === 'testnet' ? 'TESTNET' : 'REAL'); if (!w._apiConfigured) toast('Live Mode Locked \u2014 Execution unavailable until API keys are configured', 3000, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else toast('Real Trading Mode Activated', 3000, _ZI.ok) }
+      else { const _toastEnv = w._executionEnv; if (_toastEnv === null) toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.w); else if (_toastEnv === 'TESTNET') toast('Testnet Trading Mode Activated', 3000, _ZI.ok); else if (_toastEnv === 'REAL') toast('Real Trading Mode Activated', 3000, _ZI.ok); else toast('Live Trading Mode Activated', 3000, _ZI.ok) }
       _showManualPanel()
       if (typeof runDSLBrain === 'function') runDSLBrain()
       if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500)
@@ -55,18 +209,36 @@ export function _applyGlobalModeUI(mode: string): void {
   const btnD = el('btnDemo'), btnL = el('btnLive')
   if (mode === 'live') { if (btnD) btnD.classList.remove('active'); if (btnL) btnL.classList.add('active') }
   else { if (btnD) btnD.classList.add('active'); if (btnL) btnL.classList.remove('active') }
-  const _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
-  const atModeDisp = el('atModeDisplay'), atModeLbl = el('atModeLabel'), atWarn = el('atLiveWarn')
-  const execLocked = mode === 'live' && !w._apiConfigured
+  const _env = w._executionEnv
+  const execLocked = mode === 'live' && (_env === null || !w._apiConfigured)
   if (mode === 'live') {
-    const _atIsTestnet = _env === 'TESTNET'; const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : 'LIVE MODE'; const _atEnvShort = _atIsTestnet ? 'TESTNET' : 'LIVE'; const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'; const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'; const _atEnvIcon = _atIsTestnet ? _ZI.dYlw : _ZI.dRed
-    if (atModeDisp) { atModeDisp.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvLabel + ' &middot; ' + _ZI.w + ' EXEC LOCKED' : _atEnvIcon + ' ' + _atEnvLabel; atModeDisp.style.color = execLocked ? 'var(--orange)' : _atEnvColor; atModeDisp.style.borderColor = execLocked ? '#ff880044' : _atEnvColorDim }
-    if (atModeLbl) { atModeLbl.innerHTML = execLocked ? _atEnvIcon + ' ' + _atEnvShort + ' ' + _ZI.w : _atEnvIcon + ' ' + _atEnvShort; atModeLbl.style.color = execLocked ? 'var(--orange)' : _atEnvColor }
-    if (atWarn) { atWarn.style.display = 'block'; atWarn.textContent = execLocked ? 'EXECUTION LOCKED \u2014 Exchange not configured.' : (_atIsTestnet ? 'TESTNET MODE ACTIVE: Auto trades will execute on Binance TESTNET' : 'LIVE MODE ACTIVE: Auto trades will execute with REAL funds'); atWarn.style.color = execLocked ? 'var(--orange)' : '' }
+    const _atIsTestnet = _env === 'TESTNET'
+    const _atEnvLabel = _atIsTestnet ? 'TESTNET MODE' : (_env === 'REAL' ? 'LIVE MODE' : 'LIVE MODE LOCKED')
+    const _atEnvShort = _atIsTestnet ? 'TESTNET' : (_env === 'REAL' ? 'LIVE' : 'LOCKED')
+    const _atEnvColor = _atIsTestnet ? 'var(--gold)' : 'var(--red-bright)'
+    const _atEnvColorDim = _atIsTestnet ? '#f0c04044' : '#ff444444'
+    const _icoKind: 'dYlw' | 'dRed' = _atIsTestnet ? 'dYlw' : 'dRed'
+    useATStore.getState().patchUI({
+      modeDisplay: {
+        icon: _icoKind,
+        text: _atEnvLabel,
+        lockSuffix: execLocked,
+        color: execLocked ? 'var(--orange)' : _atEnvColor,
+        border: execLocked ? '#ff880044' : _atEnvColorDim,
+      },
+      modeLabel: {
+        icon: _icoKind,
+        text: execLocked ? _atEnvShort + ' LOCKED' : _atEnvShort,
+        color: execLocked ? 'var(--orange)' : _atEnvColor,
+      },
+      liveWarnVisible: true,
+    })
   } else {
-    if (atModeDisp) { atModeDisp.innerHTML = _ZI.pad + ' DEMO MODE'; atModeDisp.style.color = 'var(--pur)'; atModeDisp.style.borderColor = '#aa44ff44' }
-    if (atModeLbl) { atModeLbl.innerHTML = _ZI.pad + ' DEMO'; atModeLbl.style.color = 'var(--pur)' }
-    if (atWarn) { atWarn.style.display = 'none'; atWarn.style.color = '' }
+    useATStore.getState().patchUI({
+      modeDisplay: { icon: 'pad', text: 'DEMO MODE', lockSuffix: false, color: 'var(--pur)', border: '#aa44ff44' },
+      modeLabel: { icon: 'pad', text: 'DEMO', color: 'var(--pur)' },
+      liveWarnVisible: false,
+    })
   }
   const af = el('btnAddFunds'), rd = el('btnResetDemo')
   if (af) af.style.display = mode === 'demo' ? '' : 'none'
@@ -82,6 +254,21 @@ export function _applyGlobalModeUI(mode: string): void {
   }
   if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
   if (typeof updateModeBar === 'function') updateModeBar()
+  // [batch3-W-hotfix2] When engine enters live mode with API configured, make
+  // sure the live balance + positions are fetched from Binance. Prior to this
+  // the only trigger was the user clicking CONNECT in Settings → Exchange API
+  // (connectLiveAPI). After the ModeBar/Manual React migration, users switch
+  // demo→live via ModeBar without going through Settings, so TP.liveBalance
+  // stayed 0 and the Manual panel showed BAL: $0 and rejected orders with
+  // "Insufficient live balance". Idempotent: only the first transition fires
+  // the sync; periodic 120s sync keeps it fresh from then on.
+  if (mode === 'live' && w._apiConfigured) {
+    const _wasConnected = !!w.TP.liveConnected
+    w.TP.liveConnected = true
+    if (!_wasConnected && typeof liveApiSyncState === 'function') {
+      liveApiSyncState()
+    }
+  }
 }
 
 function _toggleManualPanel(): void { TP.demoOpen = !TP.demoOpen; const p = el('panelDemo'); if (p) p.style.display = TP.demoOpen ? 'block' : 'none'; if (TP.demoOpen && getPrice()) { const ei = el('demoEntry'); if (ei) ei.placeholder = '$' + fP(getPrice()) } }
@@ -140,12 +327,12 @@ export function _showConfirmDialog3(
 export function promptAddFunds(): void {
   const amount = prompt('Enter amount to add to demo balance (USD):', '5000'); if (!amount) return
   const num = parseFloat(amount); if (!num || num <= 0 || num > 1000000) { toast('Invalid amount', 3000, _ZI.w); return }
-  fetch('/api/at/demo/add-funds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ amount: num }) }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
+  api.raw<any>('POST', '/api/at/demo/add-funds', { amount: num }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; w.updateDemoBalance(); toast('Added $' + num.toLocaleString() + ' to demo balance'); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
 }
 
 export function promptResetDemo(): void {
   _showConfirmDialog('Reset Demo Balance?', 'This will reset your demo balance to $10,000 and clear all trading statistics.\n\nOpen positions will NOT be closed.\n\nThis action cannot be undone.', 'Cancel', 'Reset Demo', function () {
-    fetch('/api/at/demo/reset-balance', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin' }).then(function (r) { return r.json() }).then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0; if (typeof AT !== 'undefined') { AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0 }; w.updateDemoBalance(); toast('Demo balance reset to $10,000', 3000, _ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Reset failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
+    api.raw<any>('POST', '/api/at/demo/reset-balance').then(function (data: any) { if (data.ok) { TP.demoBalance = data.balance; TP._serverStartBalance = data.startBalance; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0; if (typeof AT !== 'undefined') { AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0 }; w.updateDemoBalance(); toast('Demo balance reset to $10,000', 3000, _ZI.ok); if (typeof w._atPollOnce === 'function') setTimeout(w._atPollOnce, 500) } else { toast((data.error || 'Reset failed'), 3000, _ZI.x) } }).catch(function () { toast('Network error', 3000, _ZI.x) })
   })
 }
 
@@ -163,8 +350,8 @@ export function onDemoOrdTypeChange(): void {
 }
 
 // ===== LEVERAGE =====
-export function getDemoLev(): number { const sel = el('demoLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('demoCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
-export function getLiveLev(): number { const sel = el('liveLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('liveCustomLev')?.value) || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
+export function getDemoLev(): number { const sel = el('demoLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('demoCustomLev')?.value ?? '') || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
+export function getLiveLev(): number { const sel = el('liveLev'); if (!sel) return 1; if (sel.value === 'custom') { const c = +(el('liveCustomLev')?.value ?? '') || 20; return Math.min(150, Math.max(1, c)) }; return parseInt(sel.value) || 1 }
 export function onDemoLevChange(): void { const sel = el('demoLev'); const row = el('demoCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateDemoLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function onLiveLevChange(): void { const sel = el('liveLev'); const row = el('liveCustomLevRow'); if (sel && row) row.style.display = sel.value === 'custom' ? 'flex' : 'none'; updateLiveLiqPrice(); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 
@@ -174,32 +361,56 @@ export function calcLiqPrice(entry: any, lev: any, side: string): number | null 
   if (!e || !l || l <= 0) return null; const mm = 0.025 // Binance baseline maintenance margin 2.5%
   if (side === 'LONG') return e * (1 - 1 / l + mm); else return e * (1 + 1 / l - mm)
 }
-export function updateDemoLiqPrice(): void { const entry = parseFloat(el('demoEntry')?.value) || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
-export function updateLiveLiqPrice(): void { const entry = parseFloat(el('liveEntry')?.value) || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
+export function updateDemoLiqPrice(): void { const entry = parseFloat(el('demoEntry')?.value || '') || getPrice(); const lev = getDemoLev(); const liq = calcLiqPrice(entry, lev, TP.demoSide); const e = el('demoLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
+export function updateLiveLiqPrice(): void { const entry = parseFloat(el('liveEntry')?.value || '') || getPrice(); const lev = getLiveLev(); const liq = calcLiqPrice(entry, lev, TP.liveSide); const e = el('liveLiqPrice'); if (e) e.textContent = liq ? '$' + fP(liq) : '\u2014' }
 
 export function setDemoPct(pct: number): void { const e = el('demoSize'); if (e) e.value = (TP.demoBalance * pct / 100).toFixed(0) }
 export function setLivePct(pct: number): void { const e = el('liveSize'); if (e) e.value = ((TP.liveBalance || 100) * pct / 100).toFixed(0) }
 export function updateDemoBalance(): void {
-  const e = el('demoBalance'); if (!e) return
-  const _gm = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  if (_gm === 'live') { if (w._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) { const _balPrefix = (w._resolvedEnv === 'TESTNET') ? 'BAL (TESTNET): $' : 'BAL: $'; e.textContent = _balPrefix + TP.liveBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) } else { e.textContent = 'BAL: Exchange not configured' } }
-  else { e.textContent = 'BAL: $' + TP.demoBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
+  // React owns #demoBalance rendering (ManualTradePanel.tsx).
+  // Propagate TP.demoBalance → positionsStore so React re-renders reactively.
+  if (typeof TP !== 'undefined' && Number.isFinite(TP.demoBalance)) {
+    usePositionsStore.getState().setDemoBalance(TP.demoBalance)
+  }
 }
 
 // ===== PLACE ORDER =====
 export function placeDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  const _curEnv = w._resolvedEnv || (_curMode === 'demo' ? 'DEMO' : 'REAL')
-  if (_curMode === 'live' && !w._apiConfigured) { toast('Cannot place order \u2014 exchange not configured', 3000, _ZI.lock); return }
+  const _curEnv = w._executionEnv
+  if (_curMode === 'live' && (_curEnv === null || !w._apiConfigured)) { const _r = w._executionBlockedReason; toast('Cannot place order \u2014 ' + (_r === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.lock); return }
 
   // [DSL-OFF] Pre-open guard: if DSL engine is OFF, prompt user before placing any manual order
+  // [Phase 12.A — Batch F] REAL manual order confirm. TESTNET skips confirm (flow remains
+  //   identical to DEMO). REAL branch reads live order parameters (side/symbol/size/leverage
+  //   /entry type / price / TP / SL) and exchange label from useUiStore.activeExchange —
+  //   no more hardcoded "Binance" lies. DEMO and LOCKED also skip this confirm.
   const _continueToLiveOrPlace = function () {
-    if (_curMode === 'live' && w._apiConfigured) {
-      const _isTestnet = _curEnv === 'TESTNET'
+    if (_curMode === 'live' && w._apiConfigured && _curEnv === 'REAL') {
+      const _side = TP.demoSide === 'LONG' ? 'LONG' : 'SHORT'
+      const _sym = getSymbol()
+      const _ordTypeSel = el('demoOrdType')
+      const _ordType = (_ordTypeSel && _ordTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
+      const _size = parseFloat(el('demoSize')?.value || '0')
+      const _lev = getDemoLev()
+      const _tp = parseFloat(el('demoTP')?.value || '') || null
+      const _sl = parseFloat(el('demoSL')?.value || '') || null
+      const _entryPrice = _ordType === 'MARKET' ? getPrice() : (parseFloat(el('demoEntry')?.value || '') || 0)
+      const _activeExch = useUiStore.getState().activeExchange
+      const _exchLabel = _activeExch === 'binance' ? 'BINANCE' : _activeExch === 'bybit' ? 'BYBIT' : 'ACTIVE EXCHANGE'
+      const _entryTxt = _entryPrice > 0 ? ('$' + _entryPrice.toFixed(2)) : '—'
+      const _lines: string[] = []
+      _lines.push(_side + ' ' + _sym + ' \u2014 ' + _ordType + ' @ ' + _entryTxt)
+      _lines.push('Size: $' + (Number.isFinite(_size) ? _size.toFixed(2) : '—') + '  \u00B7  Leverage: ' + _lev + 'x')
+      _lines.push('Exchange: ' + _exchLabel + '  \u00B7  Env: REAL')
+      if (_tp) _lines.push('TP: $' + _tp.toFixed(2))
+      if (_sl) _lines.push('SL: $' + _sl.toFixed(2))
+      _lines.push('')
+      _lines.push('This order will execute with REAL funds. This action cannot be undone.')
       _showConfirmDialog(
-        _isTestnet ? 'Place Testnet Order?' : 'Place Real Order?',
-        _isTestnet ? 'You are about to place an order on Binance TESTNET with TEST funds.' : 'You are about to place a REAL order on Binance with REAL funds.\n\nThis action cannot be undone.',
-        'Cancel', _isTestnet ? 'Place Testnet Order' : 'Place Real Order',
+        'Place REAL order on ' + _exchLabel + '?',
+        _lines.join('\n'),
+        'Cancel', 'Place REAL Order',
         function () { _executePlaceDemoOrder() }
       )
       return
@@ -224,9 +435,9 @@ function _executePlaceDemoOrder(): void {
   const _curMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
   const orderTypeSel = el('demoOrdType'); const orderType = (orderTypeSel && orderTypeSel.value === 'limit') ? 'LIMIT' : 'MARKET'
   const size = parseFloat(el('demoSize')?.value || '100'); const lev = getDemoLev()
-  const tp = parseFloat(el('demoTP')?.value) || null; const sl = parseFloat(el('demoSL')?.value) || null
+  const tp = parseFloat(el('demoTP')?.value || '') || null; const sl = parseFloat(el('demoSL')?.value || '') || null
   let entry: number
-  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(el('demoEntry')?.value); if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return } }
+  if (orderType === 'MARKET') { entry = getPrice() } else { entry = parseFloat(el('demoEntry')?.value || ''); if (!entry || entry <= 0) { toast('Limit price is required', 3000, _ZI.w); return } }
   if (!entry || !size) { toast('Entry price and size required', 3000, _ZI.w); return }
   if (size <= 0) { toast('Size must be positive', 3000, _ZI.w); return }
   if (entry <= 0) { toast('Entry price must be positive', 3000, _ZI.w); return }
@@ -239,64 +450,175 @@ function _executePlaceDemoOrder(): void {
 
 function _registerManualOnServer(pos: any): void {
   if (!pos || pos._serverSeq) return
-  const payload = { symbol: pos.sym, side: pos.side, entryPrice: pos.entry, qty: pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0), leverage: pos.lev || 1, sl: pos.sl || null, tp: pos.tp || null, mode: pos.mode || 'demo', dslParams: pos.dslParams || null }
-  fetch('/api/at/register-manual', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, body: JSON.stringify(payload) }).then(function (r) { return r.json() }).then(function (d: any) { if (d.ok && d.seq) { pos._serverSeq = d.seq; if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save() } }).catch(function (err: any) { console.warn('[registerManualOnServer]', err.message || err) })
+  // [Phase 9D1] clientReqId: idempotency token for the server dedup window.
+  // Two rapid clicks that somehow slip past the client-side lock would hit
+  // register-manual with distinct client ids but can share a reqId only if
+  // the caller reuses it — so we generate a fresh one per registration.
+  // The server stamps it onto the registered position so a second register
+  // attempt for the same logical order (retry after transient network fail)
+  // can be folded onto the existing seq.
+  if (!pos._clientReqId) pos._clientReqId = pos.id + '-' + Math.random().toString(36).slice(2, 8)
+  const payload = { symbol: pos.sym, side: pos.side, entryPrice: pos.entry, qty: pos.qty || (pos.size && pos.entry && pos.lev ? +(pos.size / pos.entry * pos.lev).toFixed(6) : 0), leverage: pos.lev || 1, sl: pos.sl || null, tp: pos.tp || null, mode: pos.mode || 'demo', dslParams: pos.dslParams || null, clientReqId: pos._clientReqId }
+  api.raw<any>('POST', '/api/at/register-manual', payload).then(function (d: any) { if (d.ok && d.seq) { pos._serverSeq = d.seq; if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save() } }).catch(function (err: any) { console.warn('[registerManualOnServer]', err.message || err) })
 }
 
+// [Phase 9D1] Demo manual-open click-lock — mirrors the live pattern.
+//   _demoOrderInFlight: synchronous re-entry guard, held for the full sync
+//     body of _executeDemoManualOrder. Prevents two handler invocations
+//     (back-to-back React event loop turns) from both pushing a pos into
+//     TP.demoPositions before the cooldown ts updates.
+//   _DEMO_ORDER_COOLDOWN_MS: post-complete cooldown. 1000ms is conservative
+//     for user intent; manual orders are not high-frequency.
+let _lastDemoOrderTs = 0
+let _demoOrderInFlight = false
+const _DEMO_ORDER_COOLDOWN_MS = 1000
 function _executeDemoManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
-  if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, _ZI.x); return }
-  if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { toast('Max 20 demo positions', 3000, _ZI?.x); return }
-  if (orderType === 'MARKET') {
-    const fillPrice = getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
-    const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
-    if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
-    TP.demoPositions.push(pos); TP.demoBalance -= size
-    w.updateDemoBalance(); renderDemoPositions()
-    if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
-    w.ZState.save(); _registerManualOnServer(pos)
-    try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
-    if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
-    toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
-  } else {
-    const pending = { id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
-    TP.pendingOrders.push(pending); TP.demoBalance -= size
-    w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
-    toast(' LIMIT ' + pending.side + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
+  // [Phase 9D1] Click-lock + cooldown gates — block before any work.
+  if (_demoOrderInFlight) { toast('Order already in progress', 2000, _ZI?.lock); return }
+  const now = Date.now()
+  if (now - _lastDemoOrderTs < _DEMO_ORDER_COOLDOWN_MS) { toast('Order too fast — wait a moment', 2000, _ZI?.lock); return }
+  _demoOrderInFlight = true
+  _lastDemoOrderTs = now
+  try {
+    if (size > TP.demoBalance) { toast('Insufficient demo balance', 3000, _ZI.x); return }
+    if ((TP.demoPositions || []).filter((p: any) => !p.closed).length >= 20) { toast('Max 20 demo positions', 3000, _ZI?.x); return }
+    if (orderType === 'MARKET') {
+      const fillPrice = getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
+      const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'demo', orderType)
+      if (TP.demoPositions.some((p: any) => p.id === pos.id)) return
+      TP.demoPositions.push(pos); TP.demoBalance -= size
+      usePositionsStore.getState().syncSnapshot({ demoPositions: TP.demoPositions, demoBalance: TP.demoBalance, source: 'bridge' })
+      w.updateDemoBalance(); renderDemoPositions()
+      if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_demo')
+      w.ZState.save(); _registerManualOnServer(pos)
+      try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
+      if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
+      toast(pos.side + ' ' + pos.sym.replace('USDT', '') + ' $' + fmt(size) + ' @$' + fP(fillPrice) + ' ' + lev + 'x MARKET')
+    } else {
+      const pending = { id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), limitPrice: entry, size, lev, tp, sl, mode: 'demo', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
+      TP.pendingOrders.push(pending); TP.demoBalance -= size
+      w.updateDemoBalance(); w.renderPendingOrders(); w.ZState.save()
+      toast(' LIMIT ' + pending.side + ' @$' + fP(entry) + ' $' + fmt(size) + ' ' + lev + 'x \u2014 waiting')
+    }
+  } finally {
+    _demoOrderInFlight = false
   }
 }
 
+// [Bug#3 STEP 1] Module-level synchronous re-entry + cooldown guard for live manual order.
+// React's useUiStore.setIsPlacingLive is async; button's disabled= and handler's guard
+// both read stale state during a rapid double-click → 2 POSTs fire → 2 exchange orders.
+// These two flags run sync, in the same tick, so re-entry is blocked BEFORE any await.
+let _liveOrderInFlight = false
+let _lastLiveOrderCompleteTs = 0
+const _LIVE_ORDER_COOLDOWN_MS = 750
+
 function _executeLiveManualOrder(orderType: string, size: number, entry: number, lev: number, tp: any, sl: any): void {
+  // [Bug#3 STEP 1] Re-entry + cooldown gates — block before any async work.
+  if (_liveOrderInFlight) { toast('Order already in progress', 2000, _ZI?.lock); return }
+  if (Date.now() - _lastLiveOrderCompleteTs < _LIVE_ORDER_COOLDOWN_MS) { toast('Order too fast — wait a moment', 2000, _ZI?.lock); return }
   if (typeof manualLivePlaceOrder !== 'function') { toast('Live API not available', 3000, _ZI.lock); return }
   if (!TP.liveBalance || size > TP.liveBalance) { toast('Insufficient live balance', 3000, _ZI?.x); return }
   if (lev < 1 || lev > 125) { toast('Leverage must be 1-125x', 3000, _ZI?.x); return }
   const refPrice = (orderType === 'MARKET') ? getPrice() : entry; if (!refPrice || refPrice <= 0) { toast('Price unavailable — cannot place order', 3000, _ZI.x); return }; const qty = (size * lev) / refPrice; const binanceSide = (TP.demoSide === 'LONG') ? 'BUY' : 'SELL'
-  const execBtn = el('demoExec'); if (execBtn) { execBtn.disabled = true; execBtn.textContent = 'Placing...' }
-  manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice() }).then(function (result: any) {
-    if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }
+  // [batch3-W+] Button text/disabled is React-owned via uiStore.isPlacingLive.
+  // Legacy DOM mutation (textContent='Placing...') is removed — React would
+  // skip the DOM update on re-render since the VDOM text hadn't changed,
+  // leaving the button stuck on "Placing...".
+  _liveOrderInFlight = true  // [Bug#3 STEP 1] committed — released in finally
+  useUiStore.getState().setIsPlacingLive(true)
+  // [Phase 7 — Manual Parity GAP-1] Pre-compute DSL preset from the same DOM inputs used by
+  // _buildManualPosition (manual DEMO flow). Forward through manualLivePlaceOrder so the server's
+  // registerManualPosition gets the user's preset instead of falling back to DSL_DEFAULTS.
+  // null = DSL engine OFF → server skips DSL attach (parity with demo at _registerManualOnServer call).
+  const _liveDslParams: any = (function () {
+    if (!getDSLEnabled()) return null
+    // [Phase 9F1] Prefer the persisted TC (Trading Config) store values over
+    // the hidden DOM inputs — settingsStore/config.ts already persists TC
+    // across sessions, so reloading the page no longer resets DSL params to
+    // the input `defaultValue`. Falls back to DOM for legacy paths.
+    const TC = (w as any).TC || {}
+    const _openDsl = (Number.isFinite(TC.dslActivatePct) && TC.dslActivatePct > 0) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value || '') || 0.50)
+    const _pl = (Number.isFinite(TC.dslTrailPct) && TC.dslTrailPct > 0) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value || '') || 0.60)
+    const _pr = (Number.isFinite(TC.dslTrailSusPct) && TC.dslTrailSusPct > 0) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value || '') || 0.50)
+    const _iv = (Number.isFinite(TC.dslExtendPct) && TC.dslExtendPct > 0) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value || '') || 0.25)
+    return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv }
+  })()
+  manualLivePlaceOrder({ symbol: getSymbol(), side: binanceSide, type: orderType, quantity: qty.toFixed(8), price: (orderType === 'LIMIT') ? String(entry) : undefined, leverage: lev, referencePrice: getPrice(), dslParams: _liveDslParams }).then(function (result: any) {
+    useUiStore.getState().setIsPlacingLive(false)
     if (orderType === 'MARKET') {
       const fillPrice = parseFloat(result.avgPrice) || getPrice(); const liqPrice = calcLiqPrice(fillPrice, lev, TP.demoSide)
-      const pos = _buildManualPosition(fillPrice, size, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = parseFloat(result.executedQty) || qty
+      // [Bug#2] Reconcile size to actual fill — exchange stepSize rounds qty DOWN, so user-intent drifts (e.g. $100 → $90).
+      const _execQty = parseFloat(result.executedQty) || qty
+      const _actualSize = (lev > 0) ? (_execQty * fillPrice) / lev : (_execQty * fillPrice)
+      const pos = _buildManualPosition(fillPrice, _actualSize, lev, tp, sl, liqPrice, 'live', 'MARKET'); pos.isLive = true; pos.fromExchange = true; pos.qty = _execQty
       TP.livePositions.push(pos); renderLivePositions()
+      // [batch3-W] Notify React store — legacy TP.livePositions mutation doesn't
+      // reach PositionsStore, so without this the live position never renders
+      // in the React UI (PositionTable / AT panel / ZeusDock).
+      usePositionsStore.getState().syncSnapshot({ livePositions: TP.livePositions.slice(), source: 'bridge' })
       if (typeof onPositionOpened === 'function') onPositionOpened(pos, 'manual_live')
       if (typeof w.ZState !== 'undefined' && w.ZState.save) w.ZState.save()
       try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
       if (typeof renderTradeMarkers === 'function') renderTradeMarkers()
-      toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice))
-      if (sl) { manualLiveSetSL({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: sl }).catch(function (e: any) { toast('SL failed: ' + (e.message || e)) }) }
-      if (tp) { manualLiveSetTP({ symbol: getSymbol(), side: TP.demoSide, quantity: qty.toFixed(8), stopPrice: tp }).catch(function (e: any) { toast('TP failed: ' + (e.message || e)) }) }
+      toast('LIVE MARKET ' + binanceSide + ' filled @$' + fP(fillPrice) + ' ($' + fmt(_actualSize) + ')')
+      // [Phase 8C4] Parity with AT LIVE (autotrade.ts ~L1135–1162): 3x retry
+      // per SL and per TP with 1s backoff; on exhaustion mark pos._unprotected
+      // and raise a critical alert. Previously manual LIVE fired a single
+      // attempt and only toasted on failure — leaving a real position on the
+      // exchange without protection and no visible flag.
+      const _slTpSym = getSymbol()
+      const _slTpSide = TP.demoSide
+      const _slTpQty = _execQty.toFixed(8)
+      ;(async () => {
+        let _slOk = !sl, _tpOk = !tp
+        if (sl) {
+          for (let _r = 0; _r < 3 && !_slOk; _r++) {
+            try {
+              await manualLiveSetSL({ symbol: _slTpSym, side: _slTpSide, quantity: _slTpQty, stopPrice: sl })
+              _slOk = true
+            } catch (e: any) {
+              if (_r < 2) await new Promise(res => setTimeout(res, 1000))
+              else toast('SL failed after 3 retries: ' + (e.message || e))
+            }
+          }
+        }
+        if (tp) {
+          for (let _r = 0; _r < 3 && !_tpOk; _r++) {
+            try {
+              await manualLiveSetTP({ symbol: _slTpSym, side: _slTpSide, quantity: _slTpQty, stopPrice: tp })
+              _tpOk = true
+            } catch (e: any) {
+              if (_r < 2) await new Promise(res => setTimeout(res, 1000))
+              else toast('TP failed after 3 retries: ' + (e.message || e))
+            }
+          }
+        }
+        if (!_slOk || !_tpOk) {
+          pos._unprotected = true
+          pos._unprotectedReason = (!_slOk && !_tpOk) ? 'SL+TP failed' : !_slOk ? 'SL failed' : 'TP failed'
+          try { w.ncAdd && w.ncAdd('critical', 'alert', 'UNPROTECTED LIVE (manual): ' + _slTpSym + ' ' + _slTpSide + ' — ' + pos._unprotectedReason + '. Check exchange manually!') } catch (_) {}
+          toast(_slTpSym + ' MANUAL UNPROTECTED — ' + pos._unprotectedReason, 0, _ZI.siren)
+          try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
+        }
+      })()
       if (typeof liveApiSyncState === 'function') setTimeout(liveApiSyncState, 1000)
     } else {
       const pendingLive = { id: result.orderId || Date.now(), exchangeOrderId: result.orderId, side: TP.demoSide, binanceSide, sym: getSymbol(), limitPrice: entry, size, qty, lev, tp, sl, mode: 'live', orderType: 'LIMIT', status: 'WAITING', createdAt: Date.now() }
       TP.manualLivePending.push(pendingLive); w.renderPendingOrders(); w.ZState.save()
       toast('LIVE LIMIT placed orderId=' + (result.orderId || '')); _startLivePendingSync()
     }
-  }).catch(function (err: any) { if (execBtn) { execBtn.disabled = false; setDemoSide(TP.demoSide) }; toast('LIVE order failed: ' + (err.message || err)) })
+  }).catch(function (err: any) { useUiStore.getState().setIsPlacingLive(false); toast('LIVE order failed: ' + (err.message || err)) })
+    .finally(function () { _liveOrderInFlight = false; _lastLiveOrderCompleteTs = Date.now() })
 }
 
 function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: any, sl: any, liqPrice: any, mode: string, orderType: string): any {
   return {
     id: Date.now() + Math.floor(Math.random() * 1000), side: TP.demoSide, sym: getSymbol(), entry: fillPrice, size, lev, tp, sl, liqPrice, pnl: 0,
-    mode, orderType, sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
+    mode, orderType,
+    // [Phase 3A] Explicit ownership — never leave autoTrade as undefined (Manual filter depends on it).
+    autoTrade: false,
+    sourceMode: (mode === 'live') ? 'manual' : 'paper', controlMode: (mode === 'live') ? 'user' : 'paper',
     brainModeAtOpen: (w.S.mode || 'assist'),
     dslParams: (() => {
       // [DSL-OFF] If DSL engine is OFF, do NOT attach DSL. Server will treat null as "skip DSL" and
@@ -304,10 +626,14 @@ function _buildManualPosition(fillPrice: number, size: number, lev: number, tp: 
       if (!getDSLEnabled()) return null
       // [MANUAL DSL] Manual positions use user-set DSL inputs directly — no Brain.
       // Brain-driven AT positions get params via serverDSL.getPreset() on server.
-      const _openDsl = parseFloat(el('dslActivatePct')?.value) || 0.50
-      const _pl = parseFloat(el('dslTrailPct')?.value) || 0.60
-      const _pr = parseFloat(el('dslTrailSusPct')?.value) || 0.50
-      const _iv = parseFloat(el('dslExtendPct')?.value) || 0.25
+      // [Phase 9F1] Prefer persisted TC store values over DOM inputs so params
+      // survive reload (DSLZonePanel config row is display:none, so DOM holds
+      // only the defaultValue after a fresh mount until TC hydrates).
+      const TC = (w as any).TC || {}
+      const _openDsl = (Number.isFinite(TC.dslActivatePct) && TC.dslActivatePct > 0) ? TC.dslActivatePct : (parseFloat(el('dslActivatePct')?.value || '') || 0.50)
+      const _pl = (Number.isFinite(TC.dslTrailPct) && TC.dslTrailPct > 0) ? TC.dslTrailPct : (parseFloat(el('dslTrailPct')?.value || '') || 0.60)
+      const _pr = (Number.isFinite(TC.dslTrailSusPct) && TC.dslTrailSusPct > 0) ? TC.dslTrailSusPct : (parseFloat(el('dslTrailSusPct')?.value || '') || 0.50)
+      const _iv = (Number.isFinite(TC.dslExtendPct) && TC.dslExtendPct > 0) ? TC.dslExtendPct : (parseFloat(el('dslExtendPct')?.value || '') || 0.25)
       const _tgt = TP.demoSide === 'LONG' ? fillPrice * (1 + _openDsl / 100) : fillPrice * (1 - _openDsl / 100)
       return { openDslPct: _openDsl, pivotLeftPct: _pl, pivotRightPct: _pr, impulseVPct: _iv, dslTargetPrice: _tgt }
     })(),

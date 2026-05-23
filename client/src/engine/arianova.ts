@@ -3,6 +3,7 @@ import { _ZI } from '../constants/icons'
 import { _AN_KEY_A, _AN_KEY_N, _dslStripOpen, setDslStripOpen } from '../core/config'
 import { atLog } from '../trading/autotrade'
 import { _safePnl } from '../utils/guards'
+import { useBrainStore } from '../stores/brainStore'
 // Zeus — engine/arianova.ts
 // Ported 1:1 from public/js/brain/arianova.js (Phase 6D)
 // ARIA pattern recognition + NOVA forecasting + patches
@@ -25,13 +26,19 @@ if (!w._ARIA_NOVA_LOADED) {
       const a = JSON.parse(localStorage.getItem(_AN_KEY_A) || '{}')
       w.ARIA_STATE.expanded = !!a.expanded
       if (a.pattern) w.ARIA_STATE.pattern = a.pattern
-    } catch (_) { }
+    } catch (e: any) {
+      // [BUG-UI-FE-2] Surface corrupt localStorage parse — was silent swallow.
+      console.warn('[ARIA/NOVA] localStorage parse failed for key:', _AN_KEY_A, e && e.message)
+    }
     try {
       const n = JSON.parse(localStorage.getItem(_AN_KEY_N) || '{}')
       w.NOVA_STATE.expanded = !!n.expanded
       if (Array.isArray(n.log)) w.NOVA_STATE.log = n.log.slice(-8)
       w.NOVA_STATE.lastMsg = n.lastMsg || null
-    } catch (_) { }
+    } catch (e: any) {
+      // [BUG-UI-FE-2] Surface corrupt localStorage parse — was silent swallow.
+      console.warn('[ARIA/NOVA] localStorage parse failed for key:', _AN_KEY_N, e && e.message)
+    }
   }
 
   function _anSave() {
@@ -94,22 +101,22 @@ if (!w._ARIA_NOVA_LOADED) {
       el_s.textContent = 'DSL OFFLINE'
       el_s.className = 'dsls-off'
     } else if (mode === 'auto' && atOn) {
-      el_s.innerHTML = _ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIV'
+      el_s.innerHTML = _ZI.robot + ' AUTO TRADE · DSL BRAIN ACTIVE'
       el_s.className = 'dsls-auto'
     } else if (mode === 'auto') {
-      el_s.innerHTML = _ZI.robot + ' AUTO MODE · AT OPRIT'
+      el_s.innerHTML = _ZI.robot + ' AUTO MODE · AT OFF'
       el_s.className = 'dsls-auto'
     } else if (mode === 'assist' && armed) {
-      el_s.innerHTML = _ZI.dYlw + ' ASSIST ARMAT · DSL EXECUTĂ'
+      el_s.innerHTML = _ZI.dYlw + ' ASSIST ARMED · DSL EXECUTES'
       el_s.className = 'dsls-assist-armed'
     } else if (mode === 'assist') {
-      el_s.innerHTML = _ZI.lock + ' ASSIST MANUAL · DEZARMAT'
+      el_s.innerHTML = _ZI.lock + ' ASSIST MANUAL · DISARMED'
       el_s.className = 'dsls-assist'
     } else {
       el_s.innerHTML = _ZI.hand + ' MANUAL · DSL MONITOR'
       el_s.className = 'dsls-manual'
     }
-    if (el_c) el_c.textContent = nPos > 0 ? nPos + ' poz·' : ''
+    if (el_c) el_c.textContent = nPos > 0 ? nPos + ' pos·' : ''
   }
 
   // ── AT STRIP TOGGLE ──────────────────────────────────────────────
@@ -126,7 +133,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const el_info = document.getElementById('at-bar-info')
     const el_pnl = document.getElementById('at-bar-pnl')
     const el_strip = document.getElementById('at-strip')
-    if (!el_state) return
+    if (!el_state || !el_info) return
 
     const atOn = typeof w.AT !== 'undefined' && (w.AT.enabled || w._serverATEnabled)
     const killed = typeof w.AT !== 'undefined' && w.AT.killTriggered
@@ -158,24 +165,27 @@ if (!w._ARIA_NOVA_LOADED) {
     // State badge
     el_state.className = ''
     if (killed) {
-      el_state.innerHTML = _ZI.skull + ' KILL SWITCH'
+      var _kLoss = (typeof w.AT !== 'undefined' && w.AT.killLoss) ? +w.AT.killLoss : 0
+      var _kLim = (typeof w.AT !== 'undefined' && w.AT.killLimit) ? +w.AT.killLimit : 0
+      var _kTag = (_kLoss && _kLim) ? ' (-$' + _kLoss.toFixed(2) + '/$' + _kLim.toFixed(2) + ')' : ''
+      el_state.innerHTML = _ZI.skull + ' KILL SWITCH' + _kTag
       el_state.className = 'atbs-kill'
     } else if (atOn) {
       if (nPos === 0) el_state.className = 'atbs-on-neutral'
       else if (livePnl > 0) el_state.className = 'atbs-on-profit'
       else el_state.className = 'atbs-on-loss'
-      var _arEnv: any = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE')
-      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
+      var _arEnv: any = w._executionEnv
+      el_state.innerHTML = _ZI.dGrn + ' AT ON · ' + (_arEnv === 'TESTNET' ? 'TESTNET' : (_arEnv === 'REAL' ? 'LIVE' : (mode === 'live' ? 'LOCKED' : 'DEMO')))
     } else {
-      var _arEnv2: any = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'LIVE')
-      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (mode === 'live' ? 'LIVE' : 'DEMO'))
+      var _arEnv2: any = w._executionEnv
+      el_state.innerHTML = _ZI.dRed + ' AT OFF · ' + (_arEnv2 === 'TESTNET' ? 'TESTNET' : (_arEnv2 === 'REAL' ? 'LIVE' : (mode === 'live' ? 'LOCKED' : 'DEMO')))
       el_state.className = 'atbs-off'
     }
 
     // Info
     const modeTag = brMode === 'auto' ? 'AUTO' : brMode === 'assist' ? 'ASSIST' : 'MANUAL'
     const execLocked = mode === 'live' && !w._apiConfigured
-    el_info.innerHTML = modeTag + (execLocked ? ' · ' + _ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții')
+    el_info.innerHTML = modeTag + (execLocked ? ' · ' + _ZI.w + ' EXEC LOCKED' : '') + (nPos > 0 ? ' · ' + nPos + ' active pos' : ' · no positions')
 
     // PnL
     if (el_pnl) {
@@ -201,7 +211,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const el_info = document.getElementById('pt-bar-info')
     const el_pnl = document.getElementById('pt-bar-pnl')
     const el_strip = document.getElementById('pt-strip')
-    if (!el_state) return
+    if (!el_state || !el_info) return
 
     // All positions matching current globalMode
     var globalMode: any = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
@@ -217,7 +227,7 @@ if (!w._ARIA_NOVA_LOADED) {
     const bal = isLiveMode ? liveBal : demobal
     const startBal = isLiveMode ? liveBal : ((typeof w.TP !== 'undefined' && w.TP._serverStartBalance) ? w.TP._serverStartBalance : 10000)
     const balPnl = isLiveMode ? 0 : (demobal - startBal)
-    const balPct = (startBal > 0 ? (balPnl / startBal * 100) : 0).toFixed(2)
+    void ((startBal > 0 ? (balPnl / startBal * 100) : 0).toFixed(2))
 
     // Live unrealized PnL across all open positions
     let livePnl = 0
@@ -237,8 +247,10 @@ if (!w._ARIA_NOVA_LOADED) {
 
     // State badge — reflects global mode
     var globalMode: any = (typeof w.AT !== 'undefined' && w.AT._serverMode) ? w.AT._serverMode : 'demo'
-    var _ptEnv: any = w._resolvedEnv || (globalMode === 'demo' ? 'DEMO' : 'REAL')
-    var modeLabel: any = globalMode === 'demo' ? 'DEMO MODE' : (_ptEnv === 'TESTNET' ? 'TESTNET MODE' : 'LIVE MODE')
+    var _ptEnv: any = w._executionEnv
+    var modeLabel: any = globalMode === 'demo'
+      ? 'DEMO MODE'
+      : (_ptEnv === 'TESTNET' ? 'TESTNET MODE' : (_ptEnv === 'REAL' ? 'LIVE MODE' : 'LIVE MODE LOCKED'))
     el_state.className = ''
     if (nPos === 0) {
       el_state.innerHTML = _ZI.fold + ' ' + modeLabel; el_state.className = 'ptbs-empty'
@@ -252,12 +264,12 @@ if (!w._ARIA_NOVA_LOADED) {
 
     // Info: balance + positions
     if (isLiveMode && bal <= 0 && !w._apiConfigured) {
-      el_info.textContent = 'Balance unavailable · Exchange not configured' + (nPos > 0 ? ' · ' + nPos + ' poz active' : '')
+      el_info.textContent = 'Balance unavailable · Exchange not configured' + (nPos > 0 ? ' · ' + nPos + ' active pos' : '')
     } else if (isLiveMode) {
-      el_info.textContent = 'BAL $' + bal.toFixed(0) + (nPos > 0 ? ' · ' + nPos + ' poz active' : ' · fără poziții')
+      el_info.textContent = 'BAL $' + bal.toFixed(0) + (nPos > 0 ? ' · ' + nPos + ' active pos' : ' · no positions')
     } else {
       const balStr = balPnl >= 0 ? '+$' + balPnl.toFixed(2) : '-$' + Math.abs(balPnl).toFixed(2)
-      el_info.textContent = 'BAL $' + bal.toFixed(0) + ' (' + balStr + ') · ' + (nPos > 0 ? nPos + ' poz active' : 'fără poziții')
+      el_info.textContent = 'BAL $' + bal.toFixed(0) + ' (' + balStr + ') · ' + (nPos > 0 ? nPos + ' active pos' : 'no positions')
     }
 
     // Live PnL unrealized
@@ -740,7 +752,7 @@ if (!w._ARIA_NOVA_LOADED) {
 
     // Liquidity Sweep
     if (pk.length >= 2 && vl.length >= 2) {
-      const lastC = r[r.length - 1], prevC = r[r.length - 2]
+      const lastC = r[r.length - 1]
       const recentHigh = Math.max(...pk.slice(-3).map((p: any) => p.v))
       const recentLow = Math.min(...vl.slice(-3).map((v: any) => v.v))
       if (lastC.high > recentHigh && lastC.close < recentHigh && lastC.close < lastC.open)
@@ -1701,13 +1713,17 @@ if (!w._ARIA_NOVA_LOADED) {
         try { core = updateCoreState(); out = evaluateDecision(core) } catch (_) { return orig.apply(this, arguments) }
         if (out && out.decision === "BLOCK") {
           throttledLog({ blocked: true, reason: out.reason })
-          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_BLOCK', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2') } catch (_e) { }
+          const _wveBlockText = 'WVE: ' + ((out.reason || []).join(', '))
+          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_BLOCK', _wveBlockText, 'WVE_v2') } catch (_e) { }
+          try { useBrainStore.getState().setBlockReason({ code: 'WVE_BLOCK', text: _wveBlockText }) } catch (_e) { }
           try { atLog('warn', '[WVE] BLOCK: ' + ((out.reason || []).join(', '))) } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "BLOCK" }
         }
         if (out && out.decision === "NO_TRADE") {
           throttledLog({ blocked: true, reason: out.reason })
-          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_NO_TRADE', 'WVE: ' + ((out.reason || []).join(', ')), 'WVE_v2') } catch (_e) { }
+          const _wveNoTradeText = 'WVE: ' + ((out.reason || []).join(', '))
+          try { if (typeof w.BlockReason !== 'undefined') w.BlockReason.set('WVE_NO_TRADE', _wveNoTradeText, 'WVE_v2') } catch (_e) { }
+          try { useBrainStore.getState().setBlockReason({ code: 'WVE_NO_TRADE', text: _wveNoTradeText }) } catch (_e) { }
           try { atLog('warn', '[WVE] NO_TRADE: ' + ((out.reason || []).join(', '))) } catch (_e) { }
           return { ok: false, blocked: true, reason: out.reason, source: 'WVE', decision: "NO_TRADE" }
         }

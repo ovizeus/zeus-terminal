@@ -17,6 +17,11 @@ const w = window as any // kept for w.S (producer), w.mainChart, w.cvdChart, fn 
 // ===== TIMEFRAME =====
 export function setTF(tf: any, btn: any): void {
   w.S.chartTf = tf
+  // [Pack D.4] Persist TF directly to localStorage so a refresh-before-
+  // _usScheduleSave-fires (800ms debounce) still has the value. The
+  // existing USER_SETTINGS path stays as the cross-device source of
+  // truth, but localStorage is the fast-path for same-device refresh.
+  try { localStorage.setItem('zeus_chart_tf', String(tf)) } catch (_) { /* */ }
   document.querySelectorAll('.tfb').forEach((b: any) => b.classList.remove('act'))
   if (btn) btn.classList.add('act')
   const _ztfLbl = document.getElementById('ztfLabel')
@@ -73,7 +78,7 @@ export function toggleFS(): void {
   const sec = el('csec'); const btn = el('fsbtn') || el('fsBtn')
   if (!sec) return
   const isFull = sec.classList.toggle('fsm')
-  if (btn) btn.textContent = isFull ? '\u2291' : '\u229E'
+  if (btn) btn.textContent = isFull ? '\u2291' : '\u26F6'
   const cc = el('cc')
   if (isFull) {
     const h = window.innerHeight - 100
@@ -145,7 +150,7 @@ export async function fetchRSI(tf: string): Promise<void> {
     const map: any = { '5m': '5m', '15m': '15m', '1h': '1h', '3h': '4h', '4h': '4h', '1d': '1d' }
     const itf = map[tf] || tf
     const d = await safeFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${itf}&limit=50`)
-    if (!Array.isArray(d)) throw new Error('R\u0103spuns invalid RSI')
+    if (!Array.isArray(d)) throw new Error('Invalid RSI response')
     const closes = d.map((k: any) => +k[4])
     const rsi = calcRSI(closes)
     w.S.rsi[tf] = rsi
@@ -169,12 +174,15 @@ export async function fetchFG(): Promise<void> {
     const val = +d.data[0].value, cls = d.data[0].value_classification
     const colors: any = { 'Fear': '#ff8800', 'Extreme Fear': '#ff3355', 'Greed': '#00cc77', 'Extreme Greed': '#00ff99', 'Neutral': '#7a9ab8' }
     const col = colors[cls] || '#7a9ab8'
-    const ev = el('fgval'); if (ev) { ev.textContent = val; ev.style.color = col }
+    // [R29] Expose on w.S so downstream engines (risk.ts macro cortex) can
+    // read from canonical state instead of DOM textContent.
+    w.S.fearGreed = val
+    const ev = el('fgval'); if (ev) { ev.textContent = String(val); ev.style.color = col }
     const el2 = el('fglbl'); if (el2) { el2.textContent = cls.toUpperCase(); el2.style.color = col }
     const efg = el('fgf'); if (efg) { efg.style.width = val + '%'; efg.style.background = col }
     const ech = el('fgch'); if (ech) ech.textContent = 'Yesterday: ' + (d.data[1] ? +d.data[1].value : '\u2014') + ' | Week: \u2014'
     const arc = el('fgarc')
-    if (arc) { const circ = 175.93; const offset = circ - (val / 100) * circ; arc.style.strokeDashoffset = offset; arc.style.stroke = col }
+    if (arc) { const circ = 175.93; const offset = circ - (val / 100) * circ; arc.style.strokeDashoffset = String(offset); arc.style.stroke = col }
   } catch (e: any) { console.warn('[fetchFG]', e.message) }
 }
 
@@ -297,7 +305,7 @@ export function calcSRTable(): void {
 function checkRSIAlerts(rsi: number, tf: string): void {
   if (!w.S.alerts.rsiAlerts) return
   const key = 'rsi_' + tf
-  if (!checkRSIAlerts._last) checkRSIAlerts._last = {} as any
+  if (!(checkRSIAlerts as any)._last) (checkRSIAlerts as any)._last = {}
   if ((checkRSIAlerts as any)._last[key] && Date.now() - (checkRSIAlerts as any)._last[key] < 300000) return
   if (rsi > 70) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERBOUGHT', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }
   if (rsi < 30) { (checkRSIAlerts as any)._last[key] = Date.now(); if (typeof sendAlert === 'function') sendAlert('RSI OVERSOLD', `${tf} RSI: ${rsi.toFixed(1)}`, 'rsi') }

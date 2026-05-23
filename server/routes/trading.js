@@ -7,9 +7,11 @@ const express = require('express');
 const router = express.Router();
 const config = require('../config');
 const { sendSignedRequest } = require('../services/binanceSigner');
+const exchangeOps = require('../services/exchangeOps');
+const decisionKeyService = require('../services/decisionKey');
 const { validateOrder, recordClosedPnL } = require('../services/riskGuard');
 const { roundOrderParams } = require('../services/exchangeInfo');
-const { validateOrderBody, validateCancelBody, validateLeverageBody } = require('../middleware/validate');
+const { validateOrderBody, validateCancelBody, validateLeverageBody, validateSettingsBody } = require('../middleware/validate');
 const resolveExchange = require('../middleware/resolveExchange');
 const telegram = require('../services/telegram');
 const logger = require('../services/logger');
@@ -40,9 +42,61 @@ function _checkIdempotency(req) {
   }
   const fullKey = `${req.user.id}:${key}`;
   if (_idempotencyCache.has(fullKey)) return { duplicate: true, key: fullKey };
+
+  // [Wave 6] Cross-restart guarantee — consult DB ledger when in-memory
+  // cache misses (typical after PM2 reload). If ledger has the key with
+  // an unexpired record, treat as duplicate + return cached result.
+  try {
+    const ledger = require('../services/ml/R4_execution/exactlyOnceLedger');
+    const seen = ledger.seen(fullKey);
+    if (seen) {
+      _idempotencyCache.set(fullKey, Date.now());  // warm in-memory cache
+      return { duplicate: true, key: fullKey, cachedResult: seen.result };
+    }
+  } catch (_) { /* ledger unavailable — fall through to mark fresh */ }
+
   _idempotencyCache.set(fullKey, Date.now());
   return null;
 }
+
+// [Wave 6] Record successful order placement in DB ledger for cross-restart
+// dedup. Called after Binance accepts the order. Errors swallowed — order
+// already placed, dedup is best-effort.
+function _recordIdempotencySuccess(req, payload, result) {
+  try {
+    const key = req.headers['x-idempotency-key'];
+    if (!key) return;
+    const fullKey = `${req.user.id}:${key}`;
+    const ledger = require('../services/ml/R4_execution/exactlyOnceLedger');
+    ledger.record(fullKey, payload, result);
+  } catch (_) { /* never block order response */ }
+}
+
+// [Bug#3 STEP 2] In-memory per-user+exchange+symbol+side OPEN-order barrier.
+// Closes the TOCTOU hole between the sync duplicate-guard check and the async
+// Binance await: two parallel opens with different idempotency keys used to
+// both pass the guard (neither had committed a registration yet) and both hit
+// Binance, producing merged exchange qty + phantom seq. With this lock, the
+// second caller sees 409 before the guard even runs. Does not touch
+// close/reduceOnly orders — those legitimately reduce exposure and must pass.
+const _orderLocks = new Map();
+function _acquireOrderLock(userId, symbol, side, exchangeLabel) {
+  const key = `${userId}:${exchangeLabel || 'default'}:${symbol}:${side}`;
+  if (_orderLocks.has(key)) return null;
+  _orderLocks.set(key, Date.now());
+  return key;
+}
+function _releaseOrderLock(key) {
+  if (key) _orderLocks.delete(key);
+}
+// Safety sweep — release any lock older than 30s (guards against a path that
+// forgot finally on throw; no deadlock even in worst case).
+setInterval(() => {
+  const cutoff = Date.now() - 30000;
+  for (const [k, ts] of _orderLocks) {
+    if (ts < cutoff) _orderLocks.delete(k);
+  }
+}, 15000);
 
 // Sanitize error messages — pass Binance errors (have .status), hide internal errors
 function _safeError(err) {
@@ -147,16 +201,97 @@ router.get('/positions', async (req, res) => {
 
 // ─── POST /api/order/place ───
 router.post('/order/place', validateOrderBody, async (req, res) => {
+  // [M1.2 Cat D 2026-05-14] Demo mode bypass — demo entries NU touch Binance.
+  // Route through registerManualPosition (unified path) pentru consistent
+  // entry shape + local state tracking. Returns 200 + ok=true direct fără
+  // marginType/leverage/order Binance round-trips.
+  if (req.body.mode === 'demo') {
+    try {
+      const regResult = await _getServerAT().registerManualPosition(req.user.id, {
+        symbol: req.body.symbol,
+        side: req.body.side,
+        entryPrice: parseFloat(req.body.entryPrice) || parseFloat(req.body.price) || 0,
+        qty: parseFloat(req.body.quantity) || 0,
+        leverage: parseInt(req.body.leverage, 10) || 1,
+        sl: req.body.sl ? parseFloat(req.body.sl) : null,
+        tp: req.body.tp ? parseFloat(req.body.tp) : null,
+        mode: 'demo',
+        source: req.body.source,
+        dslParams: req.body.dslParams,
+      });
+      return res.status(regResult.ok ? 200 : 400).json(regResult);
+    } catch (e) {
+      return res.status(500).json({ ok: false, error: e.message });
+    }
+  }
+  // [Fix #1 2026-05-20 — BUG-T2c Path B regression seal] Server-resolved
+  // engineMode check. Client may send mode=undefined or no mode field at all
+  // (historical client behavior); validateOrderBody middleware's mode==='live'
+  // SL-required guard is bypassed. trading.js then routes through the live
+  // path because server-side us.engineMode='live' (for user 1, at least),
+  // BUT _placeProtectionForExistingEntry's gate (line ~399 below) checks
+  // req.body.sl truthy — null → SL placement SKIPPED → position opens on
+  // Binance with no exchange SL = BUG-T2c regression.
+  //
+  // M1.9 audit (2026-05-20) confirmed 0/48 live trades had slOrderId for
+  // exactly this reason. Block here at the entry edge.
+  let _actualEngineMode;
+  try {
+    _actualEngineMode = _getServerAT().getMode(req.user.id) || 'demo';
+  } catch (_) {
+    _actualEngineMode = req.body.mode || 'demo';
+  }
+  if (_actualEngineMode === 'live') {
+    const _slCheck = req.body.sl;
+    if (_slCheck === undefined || _slCheck === null || _slCheck === '' ||
+        typeof _slCheck === 'object' || typeof _slCheck === 'boolean') {
+      audit.record('ORDER_BLOCKED_NO_SL_SERVER_RESOLVED', {
+        userId: req.user.id,
+        symbol: req.body.symbol,
+        side: req.body.side,
+        actualMode: _actualEngineMode,
+        bodyMode: req.body.mode,
+      }, 'FIX1_SERVER_RESOLVED', req.ip);
+      return res.status(400).json({ error: 'SL required for live mode (server-resolved engineMode; defense-in-depth Fix #1)' });
+    }
+    const _slNum = Number(String(_slCheck).trim());
+    if (!Number.isFinite(_slNum) || _slNum <= 0) {
+      audit.record('ORDER_BLOCKED_NO_SL_SERVER_RESOLVED', {
+        userId: req.user.id,
+        symbol: req.body.symbol,
+        side: req.body.side,
+        actualMode: _actualEngineMode,
+        bodyMode: req.body.mode,
+        slValue: _slCheck,
+      }, 'FIX1_SERVER_RESOLVED', req.ip);
+      return res.status(400).json({ error: 'SL required for live mode (server-resolved engineMode; defense-in-depth Fix #1)' });
+    }
+  }
+
   // Idempotency check — reject missing key or duplicate submissions
   const idem = _checkIdempotency(req);
   if (idem && idem.reject) {
     return res.status(400).json({ error: idem.reason });
   }
   if (idem && idem.duplicate) {
+    // [Wave 6] If we have a cached result from DB ledger (cross-restart hit),
+    // return it (200) instead of 409. This preserves exactly-once semantics
+    // across PM2 reloads. If only in-memory duplicate (no cached result),
+    // keep legacy 409 behavior — caller likely retrying a still-processing
+    // submission.
+    if (idem.cachedResult) {
+      return res.status(200).json({ ...idem.cachedResult, _idempotent: 'replayed_from_ledger' });
+    }
     return res.status(409).json({ error: 'Duplicate order — already processing (key: ' + req.headers['x-idempotency-key'] + ')' });
   }
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
+  }
+  // [S2.C C1] Global PANIC halt — block any new live exposure via direct manual order
+  if (_getServerAT().isGlobalHaltActive()) {
+    logger.warn('ORDER', `Order blocked — GLOBAL_HALT active uid=${req.user && req.user.id}`);
+    try { audit.record('ORDER_BLOCKED_GLOBAL_HALT', { userId: req.user && req.user.id, symbol: req.body.symbol, side: req.body.side }, 'MANUAL', req.ip); } catch (_) { /* best-effort */ }
+    return res.status(423).json({ error: 'GLOBAL_HALT active — new live orders blocked' });
   }
   // [BE-01] Compute idempotency key for cleanup on confirmed-failure paths
   const _idemKey = req.user && req.headers['x-idempotency-key'] ? `${req.user.id}:${req.headers['x-idempotency-key']}` : null;
@@ -174,19 +309,57 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     return res.status(403).json({ error: risk.reason });
   }
 
-  // Duplicate position guard — prevent accidental double-open on same symbol+side
-  // Override with allowDuplicate:true in body for intentional hedging/scaling
-  if (!req.body.allowDuplicate && !closePosition) {
-    const _existingLive = require('../services/serverAT').getLivePositions(req.user.id);
-    const _dup = _existingLive.find(p => p.symbol === symbol && p.side === side);
-    if (_dup) {
-      logger.warn('ORDER', `Duplicate guard: ${side} ${symbol} already open (seq=${_dup.seq}) uid=${req.user.id}`);
-      if (_idemKey) _idempotencyCache.delete(_idemKey);
-      return res.status(409).json({ error: `Position already open: ${side} ${symbol} (seq=${_dup.seq}). Send allowDuplicate:true to override.` });
-    }
+  // [Bug#3 STEP 2] Acquire per-user+exchange+symbol+side lock BEFORE the duplicate
+  // guard. Parallel opens that arrive in the same tick used to both pass the guard
+  // (TOCTOU: sync check + async Binance await) — now the second caller short-circuits
+  // at 409 before ever reaching Binance. Close/reduceOnly orders skip the lock.
+  const _isOpening = !closePosition && !req.body.reduceOnly;
+  const _exLabel = req.exchangeMode || (req.exchangeCreds && req.exchangeCreds.baseUrl) || 'default';
+  const _orderLockKey = _isOpening ? _acquireOrderLock(req.user.id, symbol, side, _exLabel) : null;
+  if (_isOpening && !_orderLockKey) {
+    logger.warn('ORDER', `Order lock busy: ${side} ${symbol} uid=${req.user.id} ex=${_exLabel} — parallel submit rejected`);
+    if (_idemKey) _idempotencyCache.delete(_idemKey);
+    return res.status(409).json({ error: `Order in progress for ${side} ${symbol} — try again in a moment` });
   }
 
   try {
+    // Duplicate position guard — prevent accidental double-open on same symbol+side
+    // Override with allowDuplicate:true in body for intentional hedging/scaling
+    if (!req.body.allowDuplicate && !closePosition) {
+      const _existingLive = require('../services/serverAT').getLivePositions(req.user.id);
+      const _dup = _existingLive.find(p => p.symbol === symbol && p.side === side);
+      if (_dup) {
+        logger.warn('ORDER', `Duplicate guard: ${side} ${symbol} already open (seq=${_dup.seq}) uid=${req.user.id}`);
+        if (_idemKey) _idempotencyCache.delete(_idemKey);
+        return res.status(409).json({ error: `Position already open: ${side} ${symbol} (seq=${_dup.seq}). Send allowDuplicate:true to override.` });
+      }
+    }
+
+    // [SAFE-2] Force CROSSED margin type before leverage/order — Zeus AT risk
+    // math assumes CROSS pooling. Same rationale as serverAT.js
+    // _executeLiveEntry SAFE-2 patch (now both CLIENT_AT path
+    // /api/order/place + future SERVER_AT path are covered). Skip on
+    // close/reduceOnly orders (no new exposure). Idempotent: Binance
+    // returns numeric err.code -4046 if already CROSSED — treat as success
+    // and proceed silently. Real failure blocks order before placement,
+    // mirrors existing leverage failure style: console.error + _idemKey
+    // cleanup + 500 response with _safeError. Detection of -4046 uses
+    // err.code numeric (propagated by binanceSigner.js:211 from
+    // Binance data.code), not message-substring.
+    if (_isOpening) {
+      // [Day 35 bugfix] Idempotent — Binance refuses redundant set when symbol
+      // has open orders (-4144 / -4048); helper verifies actual marginType via
+      // positionRisk and treats refusal as silent if state already CROSSED.
+      try {
+        const marginHelper = require('../services/marginTypeHelper');
+        await marginHelper.ensureCrossed(symbol, req.exchangeCreds, sendSignedRequest);
+      } catch (mtErr) {
+        console.error('[API] marginType set failed:', mtErr.message);
+        if (_idemKey) _idempotencyCache.delete(_idemKey); // [BE-01] order never reached exchange
+        return res.status(500).json({ error: 'Failed to set margin type: ' + _safeError(mtErr) });
+      }
+    }
+
     // Set leverage first if provided
     if (leverage) {
       try {
@@ -245,29 +418,112 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     logger.info('ORDER', `${side} ${quantity} ${symbol} @ ${type}`, { orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty });
     audit.record(fillStatus === 'FILLED' ? 'ORDER_FILLED' : 'ORDER_PLACED', { userId: req.user.id, symbol, side, type, quantity, orderId: data.orderId, status: fillStatus, avgPrice: data.avgPrice, executedQty: data.executedQty }, owner, req.ip);
     metrics.recordOrder(fillStatus === 'FILLED' ? 'filled' : 'placed');
+    // [batch3-W] Binance Futures testnet frequently returns status=NEW on MARKET
+    // orders (fill happens async microseconds later). Treat NEW and FILLED as
+    // "accepted by exchange" for position registration — skip only on rejected/
+    // CANCELED/EXPIRED statuses. Defer a single getOrder fetch to patch
+    // avgPrice/executedQty once the fill materializes.
+    const _acceptedForRegistration = (fillStatus === 'FILLED' || fillStatus === 'NEW' || fillStatus === 'PARTIALLY_FILLED');
     if (fillStatus === 'FILLED') {
       telegram.alertOrderFilled(symbol, side, data.executedQty || quantity, data.avgPrice || 0, data.orderId, req.user.id);
-      // [PHASE1] Register manual LIVE/TESTNET position as server-tracked Zeus object
-      // Only for non-close, non-reduceOnly MARKET fills (new exposure, not closing)
-      if (!closePosition && !req.body.reduceOnly && type === 'MARKET') {
-        try {
-          const regResult = _getServerAT().registerManualPosition(req.user.id, {
-            symbol,
-            side,
-            entryPrice: parseFloat(data.avgPrice) || parseFloat(data.price) || 0,
-            qty: parseFloat(data.executedQty) || parseFloat(quantity) || 0,
-            leverage: parseInt(leverage, 10) || 1,
-            orderId: data.orderId,
-            sl: req.body.sl ? parseFloat(req.body.sl) : null,
-            tp: req.body.tp ? parseFloat(req.body.tp) : null,
-          });
-          if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side}`);
-        } catch (regErr) {
-          logger.warn('ORDER', `Manual position registration failed: ${regErr.message}`);
+    }
+    if (_acceptedForRegistration && !closePosition && !req.body.reduceOnly && type === 'MARKET') {
+      try {
+        const _entryPriceFallback = parseFloat(data.avgPrice) || parseFloat(data.price) || parseFloat(req.body.referencePrice) || 0;
+        const _qtyFallback = parseFloat(data.executedQty) || parseFloat(quantity) || 0;
+        // [BUG-T2c FIX 2026-05-14] Place SL on Binance after main order success.
+        // Pre-M1, Path B (trading.js → registerManualPosition) NEVER placed SL on
+        // exchange — only memorized locally. M1 unified path expected mode='live'
+        // but trading.js never passed it, so fell through to legacy (silent
+        // sl=null accept). 1678/1720 (97.6%) live testnet positions had no
+        // Binance SL → BUG-T2c. Fix: place SL (HARD) + TP (conditional on
+        // !dslParams) BEFORE registerManualPosition, pass orderIds explicitly.
+        // DSL rule: DSL ON → no native TP (trail SL exits via PL hit).
+        const _sl = req.body.sl ? parseFloat(req.body.sl) : null;
+        const _tp = req.body.tp ? parseFloat(req.body.tp) : null;
+        let _protection = { slOrderId: null, tpOrderId: null, status: 'LIVE_NO_SL' };
+        if (_sl && _sl > 0 && req.body.mode !== 'demo') {
+          try {
+            _protection = await _getServerAT()._placeProtectionForExistingEntry({
+              userId: req.user.id,
+              symbol, side,
+              sl: _sl, tp: _tp,
+              executedQty: _qtyFallback,
+              avgPrice: _entryPriceFallback,
+              dslParams: req.body.dslParams,
+              leverage: parseInt(leverage, 10) || 1,
+              seq: data.orderId,
+            }, req.exchangeCreds);
+          } catch (protErr) {
+            logger.error('ORDER', `Path B protection failed: ${protErr.message}`, { symbol, side, orderId: data.orderId });
+            audit.record('PB_PROTECTION_FAILED', { userId: req.user.id, symbol, side, orderId: data.orderId, error: protErr.message }, 'PATH_B', req.ip);
+            try { telegram.sendToUser(req.user.id, `🚨 *PATH B SL FAILED*\n${side} ${symbol}\nMain order ${data.orderId} placed but SL helper threw.\nPosition may be UNPROTECTED — verify on Binance.\nError: ${protErr.message}`); } catch (_) {}
+          }
         }
+        // [M1.2 Cat C 2026-05-14] registerManualPosition acum async — await pentru
+        // a obține regResult sincron. Caller route handler e async, await safe.
+        const regResult = await _getServerAT().registerManualPosition(req.user.id, {
+          symbol,
+          side,
+          entryPrice: _entryPriceFallback,
+          qty: _qtyFallback,
+          leverage: parseInt(leverage, 10) || 1,
+          orderId: data.orderId,
+          sl: _sl,
+          tp: _tp,
+          // [BUG-T2c FIX 2026-05-14] Real exchange orderIds from protection helper.
+          // legacy _registerManualPositionLegacy reads these into entry.live.{slOrderId,tpOrderId}.
+          // NOTE: mode NU propagat intentionally — wrapper defaults to 'demo' and routes
+          // to legacy fallback (us.engineMode='live'). This avoids unified path triggering
+          // _executeLiveEntryCore which would attempt to place ANOTHER main order
+          // (trading.js already placed it above). Path B = main order pe trading.js +
+          // SL/TP pe _placeProtectionForExistingEntry; registration only stores state.
+          slOrderId: _protection.slOrderId,
+          tpOrderId: _protection.tpOrderId,
+          // [Phase 7 — Manual Parity GAP-1] Forward client-computed DSL preset so manual LIVE
+          // registers with the user's params (same as manual DEMO via /api/at/register-manual).
+          // undefined → serverAT falls back to DSL_DEFAULTS (legacy clients); null → DSL OFF.
+          dslParams: req.body.dslParams,
+          // [Phase 10 classification] Client marks auto vs manual origin explicitly.
+          // Without this, every /order/place fill was registered as manual even
+          // when client AT fired it, so AT positions appeared in the Manual panel.
+          source: req.body.source,
+        });
+        if (regResult.ok) logger.info('ORDER', `Manual position registered: seq=${regResult.seq} ${symbol} ${side} status=${fillStatus}`);
+        // [batch3-W] If fill wasn't immediate (status=NEW), fetch the order a
+        // moment later to patch the real avgPrice/executedQty onto the
+        // already-registered position so the UI reflects actual fill price.
+        if (fillStatus !== 'FILLED' && regResult.ok && regResult.seq) {
+          setTimeout(() => {
+            sendSignedRequest('GET', '/fapi/v1/order', { symbol, orderId: data.orderId }, req.exchangeCreds).then(fresh => {
+              if (!fresh || fresh.status !== 'FILLED') return;
+              const _px = parseFloat(fresh.avgPrice) || parseFloat(fresh.price) || 0;
+              const _qty = parseFloat(fresh.executedQty) || 0;
+              if (_px > 0 && _qty > 0) {
+                const patched = _getServerAT().patchPositionFill(req.user.id, regResult.seq, { entryPrice: _px, qty: _qty });
+                if (patched && patched.ok) {
+                  telegram.alertOrderFilled(symbol, side, _qty, _px, data.orderId, req.user.id);
+                  logger.info('ORDER', `Manual position fill patched: seq=${regResult.seq} ${symbol} ${side} @ ${_px} qty=${_qty}`);
+                }
+              }
+            }).catch(e => logger.warn('ORDER', `Fill-patch fetch failed seq=${regResult.seq}: ${e.message}`));
+          }, 1500);
+        }
+      } catch (regErr) {
+        logger.warn('ORDER', `Manual position registration failed: ${regErr.message}`);
+        // [BUG-T4 2026-05-13] Orphan position risk defense-in-depth: main
+        // order succeeded pe Binance dar registerManualPosition threw →
+        // position există fizic, Zeus zero tracking. Fire 3 alerts
+        // best-effort: audit_log + Telegram + Sentry. Operator decides
+        // next action (manual close on exchange or accept risk).
+        try {
+          require('../services/orphanAlert').alertOrphanRisk(regErr, {
+            req, symbol, side, type, quantity, data, owner,
+          });
+        } catch (_) { /* best-effort isolation — outer wrapper safety */ }
       }
     }
-    res.json({
+    const _placeResult = {
       orderId: data.orderId,
       status: data.status,
       avgPrice: parseFloat(data.avgPrice || 0),
@@ -275,7 +531,10 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
       symbol: data.symbol,
       side: data.side,
       type: data.type,
-    });
+    };
+    // [Wave 6] Record success in DB ledger for cross-restart dedup
+    _recordIdempotencySuccess(req, { symbol, side, type, quantity, leverage }, _placeResult);
+    res.json(_placeResult);
   } catch (err) {
     // [BE-01] Release idempotency key only if order confirmed NOT executed (4xx = Binance rejected)
     // Do NOT release on 5xx/timeout — order status is ambiguous, keeping key prevents duplicate
@@ -289,6 +548,9 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     metrics.recordError(err.message);
     telegram.alertOrderFailed(symbol, side, err.message, req.user.id);
     res.status(err.status || 500).json({ error: _safeError(err) });
+  } finally {
+    // [Bug#3 STEP 2] Release the per-user+exchange+symbol+side lock in all paths.
+    if (_orderLockKey) _releaseOrderLock(_orderLockKey);
   }
 });
 
@@ -297,14 +559,16 @@ router.post('/order/cancel', validateCancelBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  const { symbol, orderId } = req.body;
   try {
-    const data = await sendSignedRequest('DELETE', '/fapi/v1/order', {
-      symbol: req.body.symbol,
-      orderId: req.body.orderId,
-    }, req.exchangeCreds);
-    res.json({ orderId: data.orderId, status: data.status });
+    const result = await exchangeOps.cancelOrder(req.user.id, { symbol, orderId });
+    if (!result.ok) {
+      return res.status(400).json({ ok: false, error: result.error });
+    }
+    res.json({ orderId: result.orderId, status: result.status });
   } catch (err) {
     console.error('[API] order/cancel error:', err.message);
+    logger.error('ORDER', 'cancel failed', { symbol, orderId, error: err.message });
     res.status(err.status || 500).json({ error: _safeError(err) });
   }
 });
@@ -381,35 +645,68 @@ router.get('/user/telegram', (req, res) => {
 router.get('/user/settings', (req, res) => {
   try {
     const db = require('../services/database');
-    const data = db.getUserSettings(req.user.id);
-    res.json({ ok: true, settings: data || {} });
+    const { data, updatedAt } = db.getUserSettingsWithTs(req.user.id);
+    res.json({ ok: true, settings: data || {}, updated_at: updatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Failed to load settings' });
   }
 });
 
 // ─── POST /api/user/settings ─── Save per-user settings (whitelist + UPSERT) ───
+// [MIGRATION-F0] Whitelist extended to cover every settings key produced by
+// client `_usSave` so the legacy user_ctx FS path can be retired. Additions:
+// profile/bmMode/assistArmed (brain mode), manualLive (live trade defaults),
+// ptLevDemo/ptLevLive/ptMarginMode (leverage per account), chartTz,
+// dslSettings (DSL presets overrides).
 const SETTINGS_WHITELIST = new Set([
   // AT
   'confMin', 'sigMin', 'size', 'riskPct', 'maxDay', 'maxPos', 'sl', 'rr',
   'killPct', 'lossStreak', 'maxAddon', 'lev', 'adaptEnabled', 'adaptLive', 'smartExitEnabled',
+  // Multi-Symbol scan
+  'mscanEnabled', 'mscanSyms',
   // UI
   'theme', 'uiScale', 'soundEnabled',
   // Chart
-  'chartTf', 'chartType', 'candleColors', 'heatmapSettings', 'timezoneOffset',
+  'chartTf', 'chartTz', 'chartType', 'candleColors', 'heatmapSettings', 'timezoneOffset',
   // Indicators
   'indSettings',
   // Liq / LLV / Supremus / S-R
   'liqSettings', 'llvSettings', 'zsSettings', 'srSettings',
   // Alerts
   'alertSettings',
+  // Brain / profile
+  'profile', 'bmMode', 'assistArmed',
+  // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace ({live:{profile,bmMode},demo:{...}})
+  'brain',
+  // Manual live defaults + per-account leverage
+  'manualLive', 'ptLevDemo', 'ptLevLive', 'ptMarginMode',
+  // DSL
+  'dslSettings',
 ]);
 
-router.post('/user/settings', (req, res) => {
+router.post('/user/settings', validateSettingsBody, (req, res) => {
   try {
     const db = require('../services/database');
     const raw = req.body.settings;
     if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing settings object' });
+
+    // [Phase 8D2] Optimistic concurrency guard for multi-tab safety.
+    // Client may pass `if_updated_at` (epoch ms of the version the UI
+    // reflects). If the DB already holds a newer version, reject with 409
+    // and return the current snapshot so the stale tab can refresh instead
+    // of overwriting the fresher change from another tab / device.
+    const ifTs = Number(req.body.if_updated_at) || 0;
+    if (ifTs > 0) {
+      const current = db.getUserSettingsWithTs(req.user.id);
+      if (current && current.updatedAt > 0 && current.updatedAt > ifTs) {
+        return res.status(409).json({
+          ok: false,
+          error: 'stale',
+          current_updated_at: current.updatedAt,
+          current_settings: current.data || {},
+        });
+      }
+    }
 
     // Whitelist: only allowed keys pass through
     const clean = {};
@@ -421,8 +718,59 @@ router.post('/user/settings', (req, res) => {
     const existing = db.getUserSettings(req.user.id) || {};
     const merged = { ...existing, ...clean };
 
-    db.saveUserSettings(req.user.id, merged);
-    res.json({ ok: true });
+    // [R5] Deep-merge per-mode brain namespace. Top-level spread replaces the
+    // whole `brain` object, so a client POST carrying only `{brain:{demo:{...}}}`
+    // would silently wipe `brain.live` (and vice-versa). Preserve both slots by
+    // merging each namespace shallowly against the existing snapshot. An empty
+    // slot in the payload (`{live:{...},demo:{}}`) is still merged defensively
+    // so nothing is clobbered.
+    if (clean.brain && typeof clean.brain === 'object' && !Array.isArray(clean.brain)) {
+      const existingBrain = (existing.brain && typeof existing.brain === 'object' && !Array.isArray(existing.brain))
+        ? existing.brain : { live: {}, demo: {} };
+      merged.brain = {
+        live: { ...(existingBrain.live || {}), ...(clean.brain.live || {}) },
+        demo: { ...(existingBrain.demo || {}), ...(clean.brain.demo || {}) },
+      };
+    }
+
+    // [DIAG 2026-05-20] Log assistArmed flow to find DSL persistence bug
+    if (clean.assistArmed !== undefined || (clean.brain && (clean.brain.demo || clean.brain.live))) {
+      const beforeFlat = existing.assistArmed;
+      const afterFlat = merged.assistArmed;
+      const beforeBrain = existing.brain || {};
+      const afterBrain = merged.brain || {};
+      console.log('[DSL-DIAG] uid=' + req.user.id +
+        ' clean.assistArmed=' + clean.assistArmed +
+        ' clean.brain.demo.assistArmed=' + (clean.brain && clean.brain.demo ? clean.brain.demo.assistArmed : 'n/a') +
+        ' clean.brain.live.assistArmed=' + (clean.brain && clean.brain.live ? clean.brain.live.assistArmed : 'n/a') +
+        ' | before flat=' + beforeFlat +
+        ' before brain.demo=' + (beforeBrain.demo && beforeBrain.demo.assistArmed) +
+        ' before brain.live=' + (beforeBrain.live && beforeBrain.live.assistArmed) +
+        ' | after flat=' + afterFlat +
+        ' after brain.demo=' + (afterBrain.demo && afterBrain.demo.assistArmed) +
+        ' after brain.live=' + (afterBrain.live && afterBrain.live.assistArmed));
+    }
+
+    const updatedAt = db.saveUserSettings(req.user.id, merged);
+
+    // [MIGRATION-F0] Fan-out to every live session of this user so other
+    // devices can refetch without polling. Uses the existing `/ws/sync`
+    // WSS (no parallel socket). Helper is wired on `app.locals` by
+    // server.js; also exposed on `global.__zeusWsBroadcastToUser` for
+    // modules without access to `req.app`. Best-effort — missing helper
+    // (e.g. during tests) must not break the save.
+    try {
+      const broadcast = (req.app && req.app.locals && req.app.locals.wsBroadcastToUser) || global.__zeusWsBroadcastToUser;
+      if (typeof broadcast === 'function') {
+        broadcast(req.user.id, {
+          type: 'settings.changed',
+          updated_at: updatedAt,
+          keys: Object.keys(clean),
+        });
+      }
+    } catch (_) { /* broadcast is best-effort */ }
+
+    res.json({ ok: true, updated_at: updatedAt });
   } catch (e) {
     res.status(500).json({ ok: false, error: 'Failed to save settings' });
   }
@@ -439,15 +787,39 @@ router.get('/user/ares', (req, res) => {
   }
 });
 
+// [SEC-7] Strip prototype-pollution-prone keys from user-controlled payload
+// before merge. Express body parser keeps `__proto__`/`constructor`/`prototype`
+// as regular own properties post-JSON.parse — they don't auto-trigger
+// pollution via spread, BUT persist via JSON.stringify and can manifest
+// downstream when ARES state is read back și iterated. /api/user/settings
+// (line 560) already has SETTINGS_WHITELIST defense; ARES has dynamic-keys
+// schema cu no whitelist, so apply explicit strip helper la boundary.
+// Top-level shallow strip is sufficient because spread is shallow — pollution
+// at nested __proto__ doesn't auto-pollute Object.prototype unless code does
+// `obj[someKey] = value` cu `someKey === '__proto__'`, which spread doesn't.
+function _stripDangerousKeys(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return obj;
+  const out = {};
+  for (const k of Object.keys(obj)) {
+    if (k === '__proto__' || k === 'constructor' || k === 'prototype') continue;
+    out[k] = obj[k];
+  }
+  return out;
+}
+
 // ─── POST /api/user/ares ─── Save per-user ARES state (UPSERT) ───
 router.post('/user/ares', (req, res) => {
   try {
     const db = require('../services/database');
     const raw = req.body.ares;
     if (!raw || typeof raw !== 'object') return res.status(400).json({ ok: false, error: 'Missing ares object' });
-    // Merge with existing
-    const existing = db.getAresState(req.user.id) || {};
-    const merged = { ...existing, ...raw };
+    // [SEC-7] Strip dangerous keys before merge so prototype-pollution
+    // attempts în request body don't persist into DB ARES state.
+    const cleanRaw = _stripDangerousKeys(raw);
+    // Merge with existing (also clean existing pe read în case prior writes
+    // pre-patch persisted polluted state — defense-in-depth cleanup over time).
+    const existing = _stripDangerousKeys(db.getAresState(req.user.id) || {});
+    const merged = { ...existing, ...cleanRaw };
     db.saveAresState(req.user.id, merged);
     res.json({ ok: true });
   } catch (e) {
@@ -535,6 +907,12 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  // [S2.C C3] Global PANIC halt — cancel+replace POSTs a new LIMIT, counts as new exposure
+  if (_getServerAT().isGlobalHaltActive()) {
+    logger.warn('ORDER', `Order modify blocked — GLOBAL_HALT active uid=${req.user && req.user.id}`);
+    try { audit.record('ORDER_MODIFY_BLOCKED_GLOBAL_HALT', { userId: req.user && req.user.id, symbol: req.body.symbol, orderId: req.body.orderId }, 'MANUAL', req.ip); } catch (_) { /* best-effort */ }
+    return res.status(423).json({ error: 'GLOBAL_HALT active — order modify blocked' });
+  }
   const { symbol, orderId, newPrice, newQuantity } = req.body;
   const np = parseFloat(newPrice);
   if (!newPrice || isNaN(np) || np <= 0) {
@@ -582,6 +960,8 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
 
 // ─── POST /api/manual/protection ── Set or update SL/TP for a manual live position ───
 // Handles cancel-old + place-new atomically. Type: 'STOP_MARKET' or 'TAKE_PROFIT_MARKET'
+// Task 37: SL placement + cancel-old route through exchangeOps (exchange-aware).
+// TP placement retains direct Binance algo path (no exchangeOps.placeTakeProfit yet).
 router.post('/manual/protection', validateOrderBody, async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
@@ -589,35 +969,49 @@ router.post('/manual/protection', validateOrderBody, async (req, res) => {
   const { symbol, side, type, quantity, stopPrice, cancelOrderId } = req.body;
   try {
     // Cancel existing protection order if provided
-    // [ALGO-FIX] Try algo cancel first (SL/TP are now algo orders), then regular
+    // Route through exchangeOps.cancelOrder so Bybit users are handled correctly.
+    // [ALGO-FIX] For Binance: binanceOps.cancelOrder tries algo cancel first, then regular.
     if (cancelOrderId) {
-      let cancelled = false;
       try {
-        await sendSignedRequest('DELETE', '/fapi/v1/algoOrder', { symbol, algoId: String(cancelOrderId) }, req.exchangeCreds);
-        cancelled = true;
-      } catch (_algoErr) {
-        const _am = _algoErr.message || '';
-        if (_am.includes('not found') || _am.includes('Unknown') || _am.includes('not active')) {
-          // Not an algo order — try regular
-        } else if (_am.includes('2011') || _am.includes('already')) {
-          cancelled = true; // already gone
+        const cancelResult = await exchangeOps.cancelOrder(req.user.id, { symbol, orderId: String(cancelOrderId) });
+        if (cancelResult.ok) {
+          logger.info('ORDER', `Cancelled old protection ${cancelOrderId} for ${symbol}`);
         }
-      }
-      if (!cancelled) {
-        try {
-          await sendSignedRequest('DELETE', '/fapi/v1/order', { symbol, orderId: String(cancelOrderId) }, req.exchangeCreds);
-          cancelled = true;
-        } catch (cancelErr) {
-          if (cancelErr.message && (cancelErr.message.includes('Unknown order') || cancelErr.message.includes('UNKNOWN_ORDER'))) {
-            cancelled = true; // already gone
-          } else {
-            throw cancelErr;
-          }
+        // If !ok but "already gone" — tolerate silently (same behaviour as before)
+      } catch (_cancelErr) {
+        const _cm = _cancelErr.message || '';
+        if (!_cm.includes('Unknown order') && !_cm.includes('UNKNOWN_ORDER') &&
+            !_cm.includes('not found') && !_cm.includes('not active') &&
+            !_cm.includes('already')) {
+          throw _cancelErr;
         }
+        // Already gone — proceed
       }
-      if (cancelled) logger.info('ORDER', `Cancelled old protection ${cancelOrderId} for ${symbol}`);
     }
-    // [ALGO-FIX] Place new protection order via algo endpoint
+
+    // ── SL placement via exchangeOps (Task 37) ──
+    if (type === 'STOP_MARKET' || type === 'STOP_LOSS') {
+      const dk = req.body.decisionKey || decisionKeyService.generate();
+      const result = await exchangeOps.placeStopLoss(req.user.id, {
+        symbol, side, stopPrice, decisionKey: dk,
+      });
+      if (!result.ok) {
+        return res.status(400).json({ ok: false, error: result.error });
+      }
+      logger.info('ORDER', `MANUAL SL SET ${symbol} triggerPrice=${stopPrice} orderId=${result.slOrderId}`);
+      audit.record('PROTECTION_SET', { userId: req.user.id, symbol, type: 'SL', stopPrice, orderId: result.slOrderId }, 'MANUAL', req.ip);
+      return res.json({
+        orderId: result.slOrderId,
+        status: result.status || 'NEW',
+        type: type,
+        stopPrice: parseFloat(stopPrice),
+        symbol,
+        side,
+        rawExchange: result.rawExchange,
+      });
+    }
+
+    // ── TP placement — Binance algo path (no exchangeOps.placeTakeProfit yet) ──
     const _rounded = roundOrderParams(symbol, parseFloat(quantity), parseFloat(stopPrice));
     const algoParams = {
       algoType: 'CONDITIONAL',
@@ -653,13 +1047,27 @@ router.post('/manual/protection', validateOrderBody, async (req, res) => {
 router.post('/addon', async (req, res) => {
   try {
     const userId = req.user.id;
-    const { seq, maxAddon } = req.body;
+    const { seq, maxAddon, addOnSize, currentPrice } = req.body;
     if (!seq || !Number.isFinite(Number(seq))) {
       return res.status(400).json({ error: 'Missing or invalid seq' });
     }
     const serverAT = require('../services/serverAT');
+    // [S2.C C4] Global PANIC halt — add-on adds size/margin/risk, is new exposure
+    if (serverAT.isGlobalHaltActive()) {
+      logger.warn('ORDER', `Add-on blocked — GLOBAL_HALT active uid=${userId} seq=${seq}`);
+      try { audit.record('ADDON_BLOCKED_GLOBAL_HALT', { userId, seq }, 'MANUAL', req.ip); } catch (_) { /* best-effort */ }
+      return res.status(423).json({ error: 'GLOBAL_HALT active — add-on blocked' });
+    }
     const opts = {};
     if (maxAddon && Number.isFinite(Number(maxAddon))) opts.maxAddon = Number(maxAddon);
+    // [Phase 10.7] Forward user-chosen add-on amount from AddOnModal
+    if (addOnSize && Number.isFinite(Number(addOnSize)) && Number(addOnSize) > 0) {
+      opts.addOnSize = Number(addOnSize);
+    }
+    // [Phase 10.7] Forward current price for server in-profit re-check
+    if (currentPrice && Number.isFinite(Number(currentPrice)) && Number(currentPrice) > 0) {
+      opts.currentPrice = Number(currentPrice);
+    }
     const result = await serverAT.addOnPosition(userId, Number(seq), opts);
     if (!result.ok) {
       return res.status(400).json({ error: result.error });
@@ -692,6 +1100,18 @@ router.get('/brain/dashboard', (req, res) => {
   } catch (err) {
     console.error('[API] brain/dashboard error:', err.message);
     res.status(500).json({ error: 'Brain dashboard unavailable' });
+  }
+});
+
+// ─── [L1-DIAG] Recent AT block reasons for client feed ───
+router.get('/brain/recent-blocks', (req, res) => {
+  try {
+    const serverBrain = require('../services/serverBrain');
+    const since = parseInt(req.query.since, 10) || 0;
+    const blocks = serverBrain.getRecentBlocks(req.user.id, since);
+    res.json({ ok: true, ts: Date.now(), blocks });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: 'recent-blocks unavailable' });
   }
 });
 

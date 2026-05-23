@@ -2,7 +2,7 @@ import { toast } from '../data/marketDataHelpers'
 import { el } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { applyIndVisibility, renderActBar, getMacdChart } from '../engine/indicators'
-import { sendAlert, closeM } from '../data/marketDataWS'
+import { closeM } from '../data/marketDataWS'
 import { _usSave, _userCtxPush, _userCtxPushNow, INDICATORS } from '../core/config'
 import { renderChart } from '../data/marketDataChart'
 // Zeus v122 — ui/dom2.ts (ported from ui/dom.js)
@@ -12,6 +12,11 @@ const w = window as any; // kept for w.S (self-ref writes), chart objects (cSeri
 // Audio init & alerts
 let _audioCtx: any = null;
 let _audioReady = false;
+// [BUG5] Persistent mute flag — user can silence all app tones.
+// Default OFF (sound enabled) on first boot; survives reload.
+let _soundMuted = (() => {
+  try { return localStorage.getItem('zt:sound_muted') === '1' } catch (_) { return false }
+})();
 
 export function _initAudio(): void {
   try {
@@ -34,9 +39,29 @@ export function _initAudio(): void {
 export function _updateAudioBadge(): void {
   const b = el('soundBadge');
   if (b) {
-    b.innerHTML = _audioReady ? _ZI.vol + ' SOUND READY' : _ZI.mute + ' SOUND';
-    b.style.color = _audioReady ? 'var(--lime)' : 'var(--orange)';
-    b.style.cursor = _audioReady ? 'default' : 'pointer';
+    if (!_audioReady) {
+      b.innerHTML = _ZI.mute + ' SOUND';
+      b.style.color = 'var(--orange)';
+      b.title = 'Click to enable sound';
+    } else if (_soundMuted) {
+      b.innerHTML = _ZI.mute + ' SOUND MUTED';
+      b.style.color = 'var(--dim)';
+      b.title = 'Click to unmute';
+    } else {
+      b.innerHTML = _ZI.vol + ' SOUND READY';
+      b.style.color = 'var(--lime)';
+      b.title = 'Click to mute';
+    }
+    b.style.cursor = 'pointer';
+  }
+  // [BUG7.1] Mirror state onto the AlertsModal #snd button so both UI
+  // surfaces stay in sync regardless of which one triggered the toggle.
+  const s = el('snd');
+  if (s) {
+    s.innerHTML = _soundMuted || !_audioReady ? _ZI.bellX : _ZI.bell;
+    s.title = !_audioReady
+      ? 'Sound not initialized — click to enable'
+      : (_soundMuted ? 'Sound muted — click to unmute' : 'Sound on — click to mute');
   }
 }
 
@@ -45,8 +70,30 @@ export function _updateAudioBadge(): void {
   document.addEventListener(ev, _initAudio as EventListener, { once: true, passive: true });
 });
 
+// [BUG5] Smart click handler for #soundBadge:
+//   1st click (not-ready): init AudioContext + enable + play chime.
+//   Subsequent clicks: toggle mute ↔ unmute, persist, chime on unmute.
+export function _soundBadgeClick(): void {
+  if (!_audioReady) {
+    _initAudio();
+    // _initAudio may resume asynchronously; schedule chime after a short tick.
+    setTimeout(() => {
+      if (_audioReady && !_soundMuted) _playReadyChime();
+      _updateAudioBadge();
+    }, 60);
+    return;
+  }
+  _soundMuted = !_soundMuted;
+  try { localStorage.setItem('zt:sound_muted', _soundMuted ? '1' : '0') } catch (_) { }
+  _updateAudioBadge();
+  if (!_soundMuted) _playReadyChime();
+}
+
+export function isSoundMuted(): boolean { return _soundMuted }
+
 export async function _safePlayTone(freqs: any, dur: any): Promise<void> {
   try {
+    if (_soundMuted) return;
     if (!_audioCtx) return;
     if (_audioCtx.state === 'suspended') await _audioCtx.resume().catch(() => { });
     if (_audioCtx.state !== 'running') return;
@@ -62,12 +109,41 @@ export async function _safePlayTone(freqs: any, dur: any): Promise<void> {
   } catch (_) { }
 }
 
+// [BUG5] Premium confirmation chime — triangle-wave major-triad arpeggio
+// (E5 → G5 → C6) with soft attack/decay. Plays on SOUND-READY activation
+// and on unmute. Respects mute but not the usual _safePlayTone gate
+// because the chime is itself the audio-enable confirmation.
+export function _playReadyChime(): void {
+  try {
+    if (!_audioCtx || _audioCtx.state !== 'running') return;
+    const notes: Array<[number, number, number]> = [
+      // [freq, startOffset, dur]
+      [659.25, 0.00, 0.18],
+      [783.99, 0.08, 0.22],
+      [1046.50, 0.18, 0.38],
+    ];
+    const now = _audioCtx.currentTime;
+    notes.forEach(([freq, start, dur]) => {
+      const osc = _audioCtx.createOscillator();
+      const gain = _audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + start);
+      gain.gain.setValueAtTime(0.0001, now + start);
+      gain.gain.exponentialRampToValueAtTime(0.22, now + start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0005, now + start + dur);
+      osc.connect(gain); gain.connect(_audioCtx.destination);
+      osc.start(now + start);
+      osc.stop(now + start + dur + 0.02);
+    });
+  } catch (_) { }
+}
+
 export function playAlertSound(): void { _safePlayTone([880, 1100, 880], 0.5); }
 export function playEntrySound(): void { _safePlayTone([440, 660, 880], 0.4); }
 export function playExitSound(win: any): void { _safePlayTone(win ? [880, 1100] : [440, 330], 0.4); }
 
 // ===== ALERT SOUND ON NOTIFICATIONS =====
-const _origSendAlert = typeof sendAlert !== 'undefined' ? sendAlert : null;
+
 
 // ===== FIX: Toggle alert button visual =====
 export function toggleAlerts(en: any): void {
@@ -98,7 +174,7 @@ export function toggleAlerts(en: any): void {
 // Added to chart settings modal via applyChartColors
 
 // Override applyChartColors to also handle price scale colors
-const _origApplyCC = typeof w.applyChartColors === 'undefined' ? null : w.applyChartColors;
+
 
 export function applyChartColors(): void {
   const bull = el('ccBull')?.value || '#00d97a';
@@ -131,7 +207,7 @@ export function initActBar(): void {
 }
 
 // Store chart bars for signal analysis
-const _origSetData = typeof w.cSeries !== 'undefined' ? null : null;
+
 
 
 // ===== PRICE AXIS WIDTH =====
@@ -147,7 +223,7 @@ export function applyPriceAxisWidth(px: any, btn: any): void {
 }
 
 // Store RSI data from fetch
-const _origFetchRSI = w.fetchAllRSI;
+
 
 // backwards compat aliases
 export function togInd(id: any, btn: any): void {

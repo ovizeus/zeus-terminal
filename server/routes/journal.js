@@ -44,6 +44,10 @@ router.get('/', (req, res) => {
                     closedAt: r.closed_at,
                     isLive: !!(d.live && d.live.status && d.live.status !== 'ERROR'),
                     liveAvgPrice: d.live ? d.live.avgPrice : null,
+                    // [Phase 12.A — Batch G] Exchange + env snapshot captured at open.
+                    // Null on legacy rows (pre-Batch-G) — callers must handle.
+                    exchange: d.exchange || null,
+                    env: d.env || null,
                 };
             } catch (_) { return null; }
         }).filter(Boolean);
@@ -228,6 +232,10 @@ router.post('/report', (req, res) => {
             confluence: Number(t.alignmentScore) || null,
             tier: t.tier || null,
             status: 'CLOSED',
+            // [Phase 12.A — Batch G] Preserve exchange + env snapshot when client
+            // reports (demo/live manual). Strict whitelist — no fake defaults.
+            exchange: (t.exchange === 'binance' || t.exchange === 'bybit') ? t.exchange : null,
+            env: (t.env === 'DEMO' || t.env === 'TESTNET' || t.env === 'REAL') ? t.env : null,
         };
 
         db.atInsertClosed(seq, JSON.stringify(data), userId);

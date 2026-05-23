@@ -12,6 +12,9 @@ let _listeners: Set<WsListener> = new Set()
 let _reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let _reconnectDelay = 1000
 let _intentionalClose = false
+// [Phase 3E] Track whether we've ever been connected. First open is NOT a "reconnect" —
+// only subsequent opens (after a prior close) should trigger canonical-truth re-pull.
+let _everConnected = false
 
 function getWsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -22,23 +25,48 @@ function _onMessage(ev: MessageEvent) {
   try {
     const msg = JSON.parse(ev.data) as WsMessage
     _listeners.forEach((fn) => fn(msg))
+    // [LIQ-FEED PROXY 2026-05-14] Mirror parsed frame to global CustomEvent
+    // so module subscribers (e.g. liqFeedClient) can react without joining
+    // the typed _listeners pipeline. Cheap fire-and-forget — no impact on
+    // existing listeners. Frame shape: { type: '...', data: ... }.
+    try { window.dispatchEvent(new CustomEvent('zeus:wsFrame', { detail: msg })) } catch (_) { /* defensive */ }
   } catch {
     // ignore malformed messages
   }
 }
 
 function _onClose() {
-  _ws = null
-  if (!_intentionalClose) {
-    _reconnectTimer = setTimeout(() => {
-      _reconnectDelay = Math.min(_reconnectDelay * 1.5, 15000)
-      connect()
-    }, _reconnectDelay)
+  // [WS-6] Defensive try/catch — _onClose runs as a WebSocket event
+  // handler, so any throw inside (setTimeout queue full, connect() chain
+  // failing, _reconnectDelay arithmetic on corrupt module state) becomes
+  // an unhandled rejection that bubbles up through the browser without
+  // a stack trace pointing to this file. Catch + console.warn keeps the
+  // reconnect path resilient — at worst we lose one reconnect cycle.
+  try {
+    _ws = null
+    if (!_intentionalClose) {
+      _reconnectTimer = setTimeout(() => {
+        _reconnectDelay = Math.min(_reconnectDelay * 1.5, 15000)
+        connect()
+      }, _reconnectDelay)
+    }
+  } catch (e: any) {
+    console.warn('[WS] _onClose handler threw:', e && e.message)
   }
 }
 
 function _onOpen() {
   _reconnectDelay = 1000
+  // [Phase 3E] Only signal 'reconnect' on re-open (not first connect). Subscribers
+  // use this to trigger canonical-truth refresh so ownership/env state doesn't stay
+  // stale until the next server-initiated push or 30s polling tick.
+  if (_everConnected) {
+    const ev: WsMessage = { type: 'reconnect' }
+    _listeners.forEach((fn) => {
+      try { fn(ev) } catch { /* ignore subscriber errors */ }
+    })
+  }
+  _everConnected = true
 }
 
 export function connect() {

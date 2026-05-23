@@ -7,6 +7,7 @@ import { updateLiveBalance, renderLivePositions , getSymPrice } from '../data/ma
 import { onPositionOpened } from './positions'
 import { addTradeToJournal } from '../services/storage'
 import { atLog } from './autotrade'
+import { usePositionsStore } from '../stores/positionsStore'
 
 const w = window as any
 
@@ -61,8 +62,8 @@ export async function _liveApiParse(res: Response, context: string): Promise<any
   if (!res.ok) {
     let reason = data.error || res.statusText || 'Unknown error'
     if (res.status === 403) reason = reason
-    if (res.status === 429) reason = 'Rate limit — asteapta 1 minut'
-    if (res.status === 400) reason = 'Validare: ' + reason
+    if (res.status === 429) reason = 'Rate limit — wait 1 minute'
+    if (res.status === 400) reason = 'Validation: ' + reason
     const err: any = new Error(reason)
     err.status = res.status
     _liveApiError(err, context)
@@ -162,6 +163,11 @@ export async function liveApiSyncState(): Promise<any> {
     w.TP.liveBalance = bal.totalBalance || 0
     w.TP.liveAvailableBalance = bal.availableBalance || 0
     w.TP.liveUnrealizedPnL = bal.unrealizedPnL || 0
+    usePositionsStore.getState().setLiveBalance({
+      totalBalance: bal.totalBalance || 0,
+      availableBalance: bal.availableBalance || 0,
+      unrealizedPnL: bal.unrealizedPnL || 0,
+    })
     // [P0-B6] Merge exchange data into existing positions to preserve runtime DSL state
     var _existingById: any = {}
     if (Array.isArray(w.TP.livePositions)) {
@@ -213,29 +219,54 @@ export async function liveApiSyncState(): Promise<any> {
         openTs: p.updateTime || Date.now(),
       }
       if (existing) {
-        // [FIX R7] If ID changed, re-attach DSL state
+        // [FIX R7] If ID changed, re-attach DSL state.
+        // [Phase 8C2] Delegate to the shared _dslReassignId helper so all id-
+        // change sites stay consistent. Falls back to the inline implementation
+        // if the helper global isn't present yet (boot-order safety net).
         if (String(existing.id) !== String(fresh.id) && typeof w.DSL !== 'undefined') {
-          if (w.DSL.positions && w.DSL.positions[String(existing.id)]) {
-            w.DSL.positions[String(fresh.id)] = w.DSL.positions[String(existing.id)]
-            delete w.DSL.positions[String(existing.id)]
-          }
-          if (w.DSL._attachedIds) {
-            w.DSL._attachedIds.delete(String(existing.id))
-            w.DSL._attachedIds.add(String(fresh.id))
+          if (typeof w._dslReassignId === 'function') {
+            w._dslReassignId(existing.id, fresh.id)
+          } else {
+            if (w.DSL.positions && w.DSL.positions[String(existing.id)]) {
+              w.DSL.positions[String(fresh.id)] = w.DSL.positions[String(existing.id)]
+              delete w.DSL.positions[String(existing.id)]
+            }
+            if (w.DSL._attachedIds) {
+              w.DSL._attachedIds.delete(String(existing.id))
+              w.DSL._attachedIds.add(String(fresh.id))
+            }
           }
         }
         // Preserve runtime state from prior sync/open
         var _reclassified = false
+        // [Phase 8C1] Upward reclassify (manual → AT) must come from an
+        // UNAMBIGUOUS server signal. Previously "autoTrade !== false" matched
+        // positions whose autoTrade was undefined OR null, so a transient
+        // snapshot missing the field could bump a legitimate manual position
+        // onto the AT card for one tick and back. Require the strict form:
+        //   sp.autoTrade === true  AND  sourceMode in {auto, undefined}.
+        // Also require existing.openTs to be at least 3s old so a just-opened
+        // manual position isn't flipped before server classification settles.
         if (!existing.autoTrade && Array.isArray(w._lastServerPositions)) {
-          var _nowServerAT = w._lastServerPositions.some(function(sp: any) {
-            return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false
-          })
-          if (_nowServerAT) _reclassified = true
+          var _ageMs = existing.openTs ? (Date.now() - Number(existing.openTs)) : Infinity
+          if (_ageMs >= 3000) {
+            var _nowServerAT = w._lastServerPositions.some(function(sp: any) {
+              if (sp.symbol !== p.symbol || sp.side !== p.side) return false
+              if (sp.autoTrade !== true) return false
+              var _sm = sp.sourceMode
+              return _sm === 'auto' || _sm === undefined || _sm === null
+            })
+            if (_nowServerAT) _reclassified = true
+          }
         }
         fresh.autoTrade = _reclassified ? true : existing.autoTrade
         fresh.controlMode = _reclassified ? 'auto' : (existing.controlMode || 'auto')
         fresh.brainModeAtOpen = _reclassified ? 'auto' : (existing.brainModeAtOpen || 'auto')
         fresh.sourceMode = _reclassified ? 'auto' : (existing.sourceMode || (existing.autoTrade ? 'auto' : 'paper'))
+        // [P5A CLIENT LIVEAPI CLASSIFY] Existing-match tracepoint — log only on upward reclassify to reduce noise.
+        if (_reclassified) {
+          try { console.log(`[P5A CLIENT LIVEAPI CLASSIFY] RECLASSIFY-UP sym=${p.symbol} side=${p.side} wasAutoTrade=${existing.autoTrade} → autoTrade=true sourceMode=auto ts=${Date.now()}`) } catch (_) {}
+        }
         fresh.sl = existing.sl || null
         fresh.tp = existing.tp || null
         fresh.tpPnl = existing.tpPnl || 0
@@ -263,21 +294,31 @@ export async function liveApiSyncState(): Promise<any> {
       } else {
         // New position from exchange
         var _isServerAT = false
+        var _cacheLen = Array.isArray(w._lastServerPositions) ? w._lastServerPositions.length : -1
         if (Array.isArray(w._lastServerPositions)) {
           _isServerAT = w._lastServerPositions.some(function(sp: any) {
             return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false
           })
         }
+        var _tpMatchFound = false
         if (!_isServerAT && Array.isArray(w.TP.livePositions)) {
           var _tpMatch = w.TP.livePositions.find(function(tp: any) {
             return tp.sym === p.symbol && tp.side === p.side && !tp.closed
           })
-          if (_tpMatch && _tpMatch.autoTrade) _isServerAT = true
+          if (_tpMatch && _tpMatch.autoTrade) { _isServerAT = true; _tpMatchFound = true }
         }
-        fresh.autoTrade = _isServerAT
-        fresh.controlMode = _isServerAT ? 'auto' : 'user'
-        fresh.brainModeAtOpen = _isServerAT ? 'auto' : 'user'
-        fresh.sourceMode = _isServerAT ? 'auto' : 'paper'
+        // [Phase 5C] Safe-unknown — when no server AT evidence AND no TP match, do NOT default to manual/paper.
+        // Prior behavior (autoTrade=false, sourceMode='paper') caused AT-owned positions to leak to Manual
+        // panel during the race window before _lastServerPositions arrived. Unknown is excluded from BOTH
+        // panels (Manual filter requires autoTrade===false || sourceMode==='manual'|'paper'; AT filter
+        // requires truthy autoTrade) — upward reclassification happens once server snapshot arrives.
+        fresh.autoTrade = _isServerAT ? true : null
+        fresh.controlMode = _isServerAT ? 'auto' : 'unknown'
+        fresh.brainModeAtOpen = _isServerAT ? 'auto' : 'unknown'
+        fresh.sourceMode = _isServerAT ? 'auto' : 'unknown'
+        try {
+          console.log(`[P5C CLIENT LIVEAPI CLASSIFY] NEW sym=${p.symbol} side=${p.side} cacheLen=${_cacheLen} isServerAT=${_isServerAT} tpMatchFound=${_tpMatchFound} → autoTrade=${fresh.autoTrade} sourceMode=${fresh.sourceMode} ts=${Date.now()}`)
+        } catch (_) {}
         fresh.sl = null
         fresh.tp = null
         fresh.tpPnl = 0
@@ -308,6 +349,12 @@ export async function liveApiSyncState(): Promise<any> {
     // Update UI
     if (typeof updateLiveBalance === 'function') updateLiveBalance()
     if (typeof renderLivePositions === 'function') renderLivePositions()
+    // [batch3-W] Sync full live-positions snapshot into React store so
+    // PositionTable/AT/ZeusDock reflect exchange truth (was only updating
+    // legacy TP.livePositions; React reads livePositions from positionsStore).
+    try {
+      usePositionsStore.getState().syncSnapshot({ livePositions: w.TP.livePositions.slice(), source: 'bridge' })
+    } catch (_) {}
     // [9A-5] Notify React after live positions full rebuild
     try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
     // [PATCH P2-7] Only log on state change
@@ -335,10 +382,12 @@ function _aresClientOrderId(): string {
 }
 
 // [FIX BUG8] AT-specific clientOrderId with AT_ prefix (separate from ARES)
+// [FIX #11] 6-digit random suffix so simultaneous AT + ARES/manual calls within the same ms
+// cannot collide on Binance dedup (previous 2-digit random = 1-in-100 collision within one ms).
 var _atOrderSeq = 0
 function _atClientOrderId(): string {
   _atOrderSeq = (_atOrderSeq + 1) % 10000
-  return 'AT_' + Date.now() + '_' + _atOrderSeq + String(Math.floor(Math.random() * 99)).padStart(2, '0')
+  return 'AT_' + Date.now() + '_' + _atOrderSeq + '_' + String(Math.floor(Math.random() * 999999)).padStart(6, '0')
 }
 
 /**
@@ -491,6 +540,13 @@ export async function manualLivePlaceOrder(params: any): Promise<any> {
     body.price = params.price
   }
   if (params.referencePrice) body.referencePrice = params.referencePrice
+  // [Phase 7] Forward user-computed DSL preset so server registers manual LIVE with same params as manual DEMO.
+  // null = DSL engine OFF; object = user preset; omitted = server falls back to DSL_DEFAULTS (legacy).
+  if (params.dslParams !== undefined) body.dslParams = params.dslParams
+  // [Phase 10 classification] Explicit ownership marker so /order/place can
+  // stamp the registered position with autoTrade=false, sourceMode='manual'
+  // on the server side. Complements the 'auto' marker sent by autotrade.ts.
+  body.source = 'manual'
   var res = await _liveApiFetch(_LIVE_API_BASE + '/api/order/place', {
     method: 'POST',
     headers: _liveApiHeaders({ 'x-idempotency-key': _idempotencyKey() }),

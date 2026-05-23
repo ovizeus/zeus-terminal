@@ -5,7 +5,40 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zeus Terminal — AI Trading Analytics Platform</title>
-    <script>!function () { var _f = window.fetch; window.fetch = function (u, o) { o = o || {}; if (!o.headers) o.headers = {}; if (typeof o.headers.set === 'function') o.headers.set('X-Zeus-Request', '1'); else o.headers['X-Zeus-Request'] = '1'; return _f.call(this, u, o) } }()</script>
+    <script>
+!function () {
+    var _fetch = window.fetch;
+
+    window.fetch = function (input, init) {
+        var shouldTag = false;
+
+        try {
+            var rawUrl = (typeof input === 'string')
+                ? input
+                : (input && input.url ? input.url : '');
+
+            var url = new URL(rawUrl || window.location.href, window.location.href);
+            shouldTag = url.origin === window.location.origin;
+        } catch (_) {
+            shouldTag = true;
+        }
+
+        if (!shouldTag) {
+            return _fetch.call(this, input, init);
+        }
+
+        var opts = init ? Object.assign({}, init) : {};
+        var headers = new Headers(
+            opts.headers || (input && input.headers ? input.headers : undefined)
+        );
+
+        headers.set('X-Zeus-Request', '1');
+        opts.headers = headers;
+
+        return _fetch.call(this, input, opts);
+    };
+}();
+</script>
     <link rel="manifest" href="/manifest.json">
     <link rel="icon" type="image/png" sizes="192x192" href="/assets/icon-192.png">
     <meta name="theme-color" content="#0a0f16">
@@ -283,6 +316,44 @@
         .link-line { font-size: .82rem; color: #4a5d73; margin-top: 12px }
         .link-line a { color: #00ffc8; text-decoration: none; cursor: pointer }
         .footer-note { font-size: .58rem; letter-spacing: 2px; text-transform: uppercase; color: #2a3a4a; margin-top: 16px }
+
+        /* ── Consent checkbox row ── */
+        .consent-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: .72rem;
+            color: #7a8ea0;
+            line-height: 1.4;
+            margin: 8px 0 4px;
+            text-align: left;
+            width: 100%
+        }
+        .consent-row input[type="checkbox"] {
+            flex-shrink: 0;
+            width: 14px;
+            height: 14px;
+            accent-color: #00ffc8;
+            cursor: pointer
+        }
+        .consent-row label {
+            cursor: pointer;
+            user-select: none
+        }
+        .consent-row a { color: #00ffc8; text-decoration: none }
+        .consent-row a:hover { text-decoration: underline }
+        .main-btn:disabled {
+            opacity: .35;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+            filter: grayscale(.6)
+        }
+        .main-btn:disabled:hover {
+            background: linear-gradient(135deg, #00ffc8, #00d4ff);
+            box-shadow: none;
+            transform: none
+        }
 
         /* ── SIGN IN visible on left ── */
         .sign-in { left: 0; z-index: 2 }
@@ -619,8 +690,52 @@
 
         /* ─── Responsive ─── */
         @media(max-width:860px) {
-            .container { width: 95vw; min-height: 480px }
-            .form-container form { padding: 0 22px }
+            .container { width: 95vw; min-height: 580px }
+            .form-container form {
+                padding: 22px 14px;
+                justify-content: flex-start;
+                gap: 2px
+            }
+            .form-container h1 {
+                font-size: 1rem;
+                letter-spacing: 1.5px;
+                margin-bottom: 2px
+            }
+            .form-container .subtitle {
+                font-size: .72rem;
+                margin-bottom: 14px
+            }
+            .form-container label {
+                font-size: .65rem;
+                letter-spacing: .5px;
+                margin-top: 8px
+            }
+            .form-container input {
+                font-size: .82rem;
+                padding: 10px 12px;
+                letter-spacing: .2px
+            }
+            .pw-wrap input { padding-right: 36px }
+            .pw-eye { right: 8px }
+            .pw-eye svg { width: 17px; height: 17px }
+            .main-btn {
+                padding: 12px 20px;
+                font-size: .78rem;
+                letter-spacing: 1.5px;
+                margin-top: 14px
+            }
+            .consent-row {
+                font-size: .66rem;
+                margin: 8px 0 2px;
+                line-height: 1.35
+            }
+            .link-line { font-size: .72rem; margin-top: 8px }
+            .footer-note {
+                font-size: .5rem;
+                letter-spacing: .8px;
+                margin-top: 10px;
+                line-height: 1.3
+            }
             .toggle-panel { padding: 0 18px }
             .toggle-panel .logo-img { width: 95px; height: 95px }
             .toggle-panel .brand { font-size: 1.3rem; letter-spacing: 4px }
@@ -887,7 +1002,7 @@
                         <input type="email" id="regEmail" placeholder="you@example.com" required autocomplete="email">
                         <label>Password</label>
                         <div class="pw-wrap">
-                            <input type="password" id="regPassword" placeholder="Min 12 chars, A-z + digit" required autocomplete="new-password">
+                            <input type="password" id="regPassword" placeholder="Min 12, A-z + digit" required autocomplete="new-password">
                             <button type="button" class="pw-eye" onclick="togglePwVis(this)" tabindex="-1" aria-label="Show password"></button>
                         </div>
                         <label>Confirm Password</label>
@@ -895,7 +1010,16 @@
                             <input type="password" id="confirmPassword" placeholder="Repeat password" autocomplete="new-password">
                             <button type="button" class="pw-eye" onclick="togglePwVis(this)" tabindex="-1" aria-label="Show password"></button>
                         </div>
-                        <button type="submit" class="main-btn" id="registerBtn">Request an Invite</button>
+                        <div class="consent-row">
+                            <input type="checkbox" id="termsConsent" required>
+                            <label for="termsConsent">
+                                I am 18+ and accept the
+                                <a href="/terms.html" target="_blank" rel="noopener">Terms</a>,
+                                <a href="/privacy.html" target="_blank" rel="noopener">Privacy</a> and
+                                <a href="/cookies.html" target="_blank" rel="noopener">Cookies</a>.
+                            </label>
+                        </div>
+                        <button type="submit" class="main-btn" id="registerBtn" disabled>Request an Invite</button>
                         <div class="link-line">Already have an account? <a id="backToLogin2" href="#">Sign in</a></div>
                         <div class="footer-note">Access requests are manually reviewed</div>
                     </form>
@@ -1126,18 +1250,19 @@
             }
         })();
 
-        /* ─── Live Market Tickers ─── */
+        /* ─── Live Market Tickers (Binance REST primary, CoinGecko fallback) ─── */
         const PAIRS = [
-            { sym: 'btcusdt', id: 'BTC', dec: 1 },
-            { sym: 'ethusdt', id: 'ETH', dec: 2 },
-            { sym: 'solusdt', id: 'SOL', dec: 2 },
-            { sym: 'bnbusdt', id: 'BNB', dec: 2 }
+            { id: 'BTC', sym: 'BTCUSDT', cg: 'bitcoin',     dec: 1 },
+            { id: 'ETH', sym: 'ETHUSDT', cg: 'ethereum',    dec: 2 },
+            { id: 'SOL', sym: 'SOLUSDT', cg: 'solana',      dec: 2 },
+            { id: 'BNB', sym: 'BNBUSDT', cg: 'binancecoin', dec: 2 }
         ];
         const sparkData = { BTC: [], ETH: [], SOL: [], BNB: [] };
 
         function renderSpark(id, data) {
             const el = document.getElementById('spark' + id);
             if (!el) return;
+            if (data.length === 0) return;
             const max = Math.max(...data), min = Math.min(...data), range = max - min || 1;
             el.innerHTML = data.slice(-15).map(v => {
                 const h = 4 + ((v - min) / range) * 16;
@@ -1146,41 +1271,75 @@
             }).join('');
         }
 
-        let tickerRetries = 0;
-        function connectTickers() {
-            const streams = PAIRS.map(p => p.sym + '@ticker').join('/');
-            const ws = new WebSocket('wss://fstream.binance.com/stream?streams=' + streams);
-            ws.onopen = function () { tickerRetries = 0; };
-            ws.onmessage = function (e) {
-                try {
-                    const msg = JSON.parse(e.data);
-                    const d = msg.data;
-                    if (!d || !d.s) return;
-                    const pair = PAIRS.find(p => p.sym === d.s.toLowerCase());
-                    if (!pair) return;
-                    const price = parseFloat(d.c);
-                    const change = parseFloat(d.P);
-                    const pEl = document.getElementById('p' + pair.id);
-                    const cEl = document.getElementById('c' + pair.id);
-                    if (pEl) pEl.textContent = price.toLocaleString('en-US', { minimumFractionDigits: pair.dec, maximumFractionDigits: pair.dec });
-                    if (cEl) { cEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%'; cEl.className = 'tick-change ' + (change >= 0 ? 'up' : 'down'); }
-                    sparkData[pair.id].push(price);
-                    if (sparkData[pair.id].length > 30) sparkData[pair.id].shift();
-                    renderSpark(pair.id, sparkData[pair.id]);
-                } catch (_) { }
-            };
-            ws.onclose = function () {
-                tickerRetries++;
-                if (tickerRetries >= 5) {
-                    const strip = document.getElementById('tickerStrip');
-                    if (strip) strip.style.display = 'none';
-                    return;
-                }
-                setTimeout(connectTickers, 3000);
-            };
-            ws.onerror = function () { ws.close(); };
+        function applyTick(pair, price, change) {
+            const pEl = document.getElementById('p' + pair.id);
+            const cEl = document.getElementById('c' + pair.id);
+            if (pEl) pEl.textContent = price.toLocaleString('en-US', { minimumFractionDigits: pair.dec, maximumFractionDigits: pair.dec });
+            if (cEl) {
+                cEl.textContent = (change >= 0 ? '+' : '') + change.toFixed(2) + '%';
+                cEl.className = 'tick-change ' + (change >= 0 ? 'up' : 'down');
+            }
+            sparkData[pair.id].push(price);
+            if (sparkData[pair.id].length > 30) sparkData[pair.id].shift();
+            renderSpark(pair.id, sparkData[pair.id]);
         }
-        connectTickers();
+
+        const _BINANCE_URL = 'https://api.binance.com/api/v3/ticker/24hr?symbols='
+            + encodeURIComponent(JSON.stringify(PAIRS.map(p => p.sym)));
+        const _CG_URL = 'https://api.coingecko.com/api/v3/simple/price?ids='
+            + PAIRS.map(p => p.cg).join(',')
+            + '&vs_currencies=usd&include_24hr_change=true';
+
+        async function _tickBinance() {
+            const res = await fetch(_BINANCE_URL, { cache: 'no-store' });
+            if (!res.ok) throw new Error('binance ' + res.status);
+            const arr = await res.json();
+            if (!Array.isArray(arr) || arr.length === 0) throw new Error('binance empty');
+            const bySym = {};
+            for (const row of arr) bySym[row.symbol] = row;
+            for (const pair of PAIRS) {
+                const row = bySym[pair.sym];
+                if (!row) continue;
+                const price = parseFloat(row.lastPrice);
+                const change = parseFloat(row.priceChangePercent);
+                if (Number.isFinite(price)) applyTick(pair, price, Number.isFinite(change) ? change : 0);
+            }
+        }
+
+        async function _tickCoingecko() {
+            const res = await fetch(_CG_URL, { cache: 'no-store' });
+            if (!res.ok) throw new Error('cg ' + res.status);
+            const data = await res.json();
+            for (const pair of PAIRS) {
+                const row = data[pair.cg];
+                if (!row || typeof row.usd !== 'number') continue;
+                const change = (typeof row.usd_24h_change === 'number') ? row.usd_24h_change : 0;
+                applyTick(pair, row.usd, change);
+            }
+        }
+
+        let _binanceFails = 0;
+        let _useBinance = true;
+
+        async function _tickOnce() {
+            if (_useBinance) {
+                try {
+                    await _tickBinance();
+                    _binanceFails = 0;
+                    return;
+                } catch (_) {
+                    _binanceFails++;
+                    if (_binanceFails >= 3) _useBinance = false;
+                }
+            }
+            try { await _tickCoingecko(); } catch (_) { /* keep last values, never hide strip */ }
+        }
+
+        // Continuous loop. Strip is NEVER hidden. Last values persist on transient errors.
+        (function startTickerLoop(){
+            _tickOnce();
+            setInterval(_tickOnce, 4000);
+        })();
 
         /* ─── Feature Bar Animations ─── */
         function animBars(id, count, colors) {
@@ -1418,26 +1577,45 @@
             finally { btn.disabled = false; btn.textContent = 'SIGN IN'; }
         });
 
+        /* ── Consent checkbox gate ── */
+        const TERMS_VERSION = '2026-04-30-v1.1';
+        (function initConsentGate(){
+            const cb = document.getElementById('termsConsent');
+            const btn = document.getElementById('registerBtn');
+            if (!cb || !btn) return;
+            const sync = () => { btn.disabled = !cb.checked; };
+            cb.addEventListener('change', sync);
+            sync();
+        })();
+
         /* ── Register form submit ── */
         document.getElementById('registerForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('regEmail').value.trim();
             const password = document.getElementById('regPassword').value;
             const confirm = document.getElementById('confirmPassword').value;
+            const consentEl = document.getElementById('termsConsent');
             const btn = document.getElementById('registerBtn');
 
+            if (!consentEl || !consentEl.checked) {
+                showRegisterError('You must accept the Terms, Privacy and Cookie policies to continue');
+                return;
+            }
             if (password !== confirm) { showRegisterError('Passwords do not match'); return; }
             if (password.length < 12) { showRegisterError('Password must be at least 12 characters'); return; }
             if (!/[a-z]/.test(password)) { showRegisterError('Must contain at least one lowercase letter'); return; }
             if (!/[A-Z]/.test(password)) { showRegisterError('Must contain at least one uppercase letter'); return; }
             if (!/\d/.test(password)) { showRegisterError('Password must contain at least one digit'); return; }
 
+            const termsAcceptedAt = new Date().toISOString();
+            const termsVersion = TERMS_VERSION;
+
             btn.disabled = true; btn.textContent = '...';
             try {
                 const res = await fetch('/auth/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ email, password, termsAcceptedAt, termsVersion })
                 });
                 const data = await res.json();
                 if (res.ok) {
@@ -1447,7 +1625,10 @@
                     } else { window.location.href = '/'; }
                 } else { showRegisterError(data.error || 'Unknown error'); }
             } catch (err) { showRegisterError('Connection error'); }
-            finally { btn.disabled = false; btn.textContent = 'REQUEST AN INVITE'; }
+            finally {
+                btn.textContent = 'REQUEST AN INVITE';
+                btn.disabled = !(consentEl && consentEl.checked);
+            }
         });
 
         /* ─── Admin Panel ─── */

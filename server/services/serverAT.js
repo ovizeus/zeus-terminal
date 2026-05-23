@@ -5,18 +5,68 @@
 // Per-user isolation: each userId has independent state, positions, balance.
 'use strict';
 
+const crypto = require('crypto');
 const Sentry = require('@sentry/node');
 const logger = require('./logger');
 const MF = require('../migrationFlags');
 const { getExchangeCreds } = require('./credentialStore');
 const { sendSignedRequest } = require('./binanceSigner');
-const { roundOrderParams } = require('./exchangeInfo');
+// [Task 40 — Bybit Phase 1A+1B] exchangeOps router: routes entry/close/balance
+// calls to the correct exchange (Binance or Bybit) based on per-user config.
+// Replaces direct sendSignedRequest calls in _executeLiveEntry + _executeLiveEntryCore.
+const exchangeOps = require('./exchangeOps');
+const { roundOrderParams, getFilters: _getExchangeFilters } = require('./exchangeInfo');
 const { validateOrder, recordClosedPnL } = require('./riskGuard');
 const telegram = require('./telegram');
 const audit = require('./audit');
+// [BUG-T2a + T2b 2026-05-13] Pure-function recon helpers extracted pentru
+// testability. T2a: hedge-aware Binance held map. T2b: strict userTrades filter.
+const { buildBinanceHeldMap, findExitTrade } = require('./reconHelpers');
 const metrics = require('./metrics');
 const serverDSL = require('./serverDSL');
 const db = require('./database');
+const marketFeed = require('./marketFeed');
+
+// [ML Phase B Day 8] Ring5 outcome telemetry — recordContribution on close
+// feeds bandit posteriors with real win/loss observations. Lazy-required to
+// avoid circular dep risk through ring5LearningService -> database -> serverAT.
+let _ring5LearningService = null;
+function _getRing5() {
+    if (_ring5LearningService === null) {
+        try { _ring5LearningService = require('./ml/ring5LearningService'); }
+        catch (_) { _ring5LearningService = false; }
+    }
+    return _ring5LearningService || null;
+}
+
+// [Day 28 2026-05-18] R5A attribution telemetry — recordAttribution on close
+// feeds ml_attribution_events for §16 measurement triad (attribution + hit_rate
+// + per-symbol+regime). Lazy require to avoid circular deps.
+let _r5aAttribution = null;
+function _getR5AAttribution() {
+    if (_r5aAttribution === null) {
+        try { _r5aAttribution = require('./ml/R5A_learning/attributionEngine'); }
+        catch (_) { _r5aAttribution = false; }
+    }
+    return _r5aAttribution || null;
+}
+
+// [Day 17 2026-05-18] Doctor telemetry — emit alerts on safety paths.
+// Lazy require + try/catch swallow: telemetry never affects AT flow.
+let _doctorEventBus = null;
+function _getDoctorBus() {
+    if (_doctorEventBus === null) {
+        try { _doctorEventBus = require('./ml/_doctor/eventBus'); }
+        catch (_) { _doctorEventBus = false; }
+    }
+    return _doctorEventBus || null;
+}
+function _emitDoctor(event) {
+    try {
+        const bus = _getDoctorBus();
+        if (bus && typeof bus.emit === 'function') bus.emit(event);
+    } catch (_) { /* never block AT flow */ }
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Per-User Position Tracker
@@ -28,10 +78,57 @@ const _positions = [];          // flat array — each pos carries .userId
 const _userState = new Map();   // userId → per-user engine state
 const _liveEntryLocks = new Set(); // 'userId:symbol' — prevents concurrent live entries
 const _pendingLiveCloses = new Map(); // [LIVE-PARITY] seq → { pos, exitType, ts } — failed closes for reconciliation
-const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → closeTs — prevents immediate re-entry after close
+// [RE-ENTRY + S5] Close-cooldown map. Value semantics changed from closeTs
+// (legacy) to deadlineMs (S5+). Persisted per-user in at_state under key
+// 'serverAT:closeCooldowns:{uid}' as { 'uid:symbol': deadlineMs }. Restored
+// lazily on first isCloseCooldownActive() call per user (no module-load
+// boot hook in this file — the cost of restoring is paid at decision time).
+const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → deadlineMs
 const CLOSE_COOLDOWN_MS = 600000;   // [RE-ENTRY] 10 min cooldown after any close
+const _closeCooldownsRestoredFor = new Set();  // uids whose rows have been lazy-restored
+
+// [Phase 2 S6-B3] Per-user decisionId dedup TTL. Sized to one full brain
+// cycle (CYCLE_INTERVAL_MS in serverBrain = 30s) so a single decision
+// arriving at most once per cycle interval cannot be double-accepted
+// during the S6-B6+ transition window. Persisted in at_state under the
+// per-user key 'serverAT:lastDecisionId:<uid>'.
+const DECISION_DEDUP_TTL_MS = 30000;
 
 const DEFAULT_DEMO_BALANCE = 10000;
+
+// [BUG-TM-8] LOT_SIZE-aware qty alignment helper — money-path safe.
+// Returns { qty, size, aligned: true } if exchangeInfo cache has stepSize for symbol AND
+// roundOrderParams produces a valid stepSize-aligned positive quantity AND derived size >= MIN_TRADE_USD.
+// Returns null if any condition fails — caller MUST block entry/registration (no silent fallback to toFixed(6),
+// which would recreate the TM-8 bug for money-path entries).
+//
+// @param {string} symbol — e.g. 'BTCUSDT'
+// @param {number} rawQty — pre-rounded float qty (e.g. (sizeUsd * lev) / price)
+// @param {number} price — entry price
+// @param {number} lev — leverage
+// @param {string} _context — 'MAIN_ENTRY' | 'MANUAL_REGISTER' | 'DEMO_ADDON' (for log clarity, optional)
+// @returns {{qty:number, size:number, aligned:true} | null}
+function _alignQtyToLotSize(symbol, rawQty, price, lev, _context) {
+    const MIN_TRADE_USD = 10;
+    if (!Number.isFinite(rawQty) || rawQty <= 0) return null;
+    if (!Number.isFinite(price) || price <= 0) return null;
+    if (!Number.isFinite(lev) || lev <= 0) return null;
+    // Hard rule: cache MUST have stepSize for this symbol — block otherwise (prove cache hit explicitly).
+    let filters;
+    try { filters = _getExchangeFilters(symbol); } catch (_) { filters = null; }
+    if (!filters || !filters.stepSize) return null;
+    let qty;
+    try {
+        const _r = roundOrderParams(symbol, rawQty);
+        if (!_r || !Number.isFinite(_r.quantity) || _r.quantity <= 0) return null;
+        qty = _r.quantity;
+    } catch (_) { return null; }
+    if (!Number.isFinite(qty) || qty <= 0) return null;
+    const size = +(qty * price / lev).toFixed(2);
+    if (!Number.isFinite(size) || size < MIN_TRADE_USD) return null;
+    return { qty, size, aligned: true };
+}
+
 function _defaultUserState() {
     return {
         log: [],
@@ -51,7 +148,9 @@ function _defaultUserState() {
         dailyPnLDemo: 0,
         dailyPnLLive: 0,
         lastResetDay: -1,
-        atActive: true, // [F1] Per-user AT on/off — default ON for backward compat
+        atActive: false, // [BUG-O5] LEGACY field — kept synced cu current engineMode via toggleActive (BUG-T7 2026-05-13)
+        atActiveDemo: false, // [BUG-T7 2026-05-13] Per-mode AT toggle — DEMO independent
+        atActiveLive: false, // [BUG-T7 2026-05-13] Per-mode AT toggle — LIVE independent
         dslEnabled: true, // [DSL-OFF] Per-user DSL engine on/off — default ON
     };
 }
@@ -77,6 +176,82 @@ function _uState(userId) {
     return _userState.get(userId);
 }
 
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S2.A] Decision Idempotency
+// ══════════════════════════════════════════════════════════════════
+// Stable 8-char hex token generated once per brain decision event and
+// stamped on the position entry (entry.decisionId). Combined with
+// entry.seq it builds the `newClientOrderId` passed to Binance, which
+// gives exchange-level dedupe: a retried POST /fapi/v1/order with the
+// same clientOrderId returns the original order instead of creating a
+// duplicate. 32 bits of entropy × per-user seq = no realistic collision.
+// decisionId survives restarts because it's persisted inside the
+// at_positions.data JSON blob (no schema change).
+function _newDecisionId() {
+    return crypto.randomBytes(4).toString('hex');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S2.B] Global PANIC Halt — cross-user entry kill switch
+// ══════════════════════════════════════════════════════════════════
+// Persisted in at_state under key 'global:halt' (TEXT PRIMARY KEY ⇒
+// single canonical row). user_id records which admin toggled it
+// (schema requires NOT NULL). Read on every brain-driven + live entry
+// path; write only via admin-gated POST /api/panic. Survives restarts
+// because at_state is SQLite-persisted. No schema migration needed.
+function isGlobalHaltActive() {
+    try {
+        const val = db.atGetState('global:halt');
+        return !!(val && val.active);
+    } catch (e) {
+        // Read-failure must not silently pass entries — treat as halted so
+        // a broken DB doesn't let orders through. Matches Hard Rule #4
+        // (fail fast, no silent coerce).
+        logger.error('AT_ENGINE', 'isGlobalHaltActive read failed — defaulting to HALTED for safety: ' + e.message);
+        return true;
+    }
+}
+
+function getGlobalHaltState() {
+    try {
+        const val = db.atGetState('global:halt');
+        if (!val) return { active: false, by: null, ts: null, reason: null };
+        return {
+            active: !!val.active,
+            by: val.by != null ? val.by : null,
+            ts: val.ts != null ? val.ts : null,
+            reason: val.reason || null,
+        };
+    } catch (e) {
+        return { active: true, by: null, ts: null, reason: null, error: e.message };
+    }
+}
+
+function setGlobalHalt(active, byUserId, reason) {
+    if (!byUserId) throw new Error('setGlobalHalt requires byUserId (admin)');
+    const payload = {
+        active: !!active,
+        by: byUserId,
+        ts: Date.now(),
+        reason: reason || null,
+    };
+    db.atSetState('global:halt', payload, byUserId);
+    logger.warn('AT_ENGINE', `GLOBAL_HALT ${active ? 'ARMED' : 'DISARMED'} by uid=${byUserId}` + (reason ? ' — ' + reason : ''));
+    try { audit.record('GLOBAL_HALT_TOGGLE', { active: !!active, by: byUserId, reason: reason || null }, 'SERVER_AT'); } catch (_) { /* best-effort */ }
+    // [Day 20] Doctor P0 alert pe GLOBAL HALT toggle (operator panic = critical event).
+    _emitDoctor({
+        eventType: 'alert', severity: 'P0',
+        moduleId: 'serverAT.globalHalt', ts: Date.now(),
+        payload: { active: !!active, by: byUserId, reason: reason || null }
+    });
+    try {
+        telegram.sendToUser(byUserId, active
+            ? `🛑 *GLOBAL HALT ARMED*${reason ? '\nReason: ' + reason : ''}\nAll new entries blocked server-wide.`
+            : '✅ *GLOBAL HALT DISARMED*\nEntries re-enabled.');
+    } catch (_) { /* best-effort */ }
+    return payload;
+}
+
 // ── Kill Switch config (per-user, persisted in _uState) ──
 // KILL_PCT and KILL_BASE removed — now per-user killPct + real balance reference
 
@@ -85,10 +260,84 @@ const TIER_MULT = { LARGE: 1.75, MEDIUM: 1.35, SMALL: 1.0 };
 
 // ── Change listeners (WebSocket push) ──
 let _onChangeCallback = null;
+// [WS-1] Monotonic frame sequence counter for getFullState — see usage at the
+// `seq: ++_wsFrameSeq` field at the bottom of getFullState. Helps clients
+// disambiguate two same-ms at_update frames during warm-start + onChange races.
+let _wsFrameSeq = 0;
+// [BUG-S7] Map serverDSL state → phase string for parity comparison.
+// Mirrors client phase derivation (NONE/ACTIVE/IMPULSE) for like-vs-like.
+function _dslPhaseString(s) {
+    if (!s || !s.active) return 'NONE';
+    if (s.phase === 'IMPULSE') return 'IMPULSE';
+    return 'ACTIVE';
+}
+// [TM-4] Round-trip fee rate for Binance Futures. 0.04% per side (taker default,
+// most market exits are taker because instant). Round-trip = 0.08% on notional.
+// Applied at terminal PnL sites (closePnl set) to correct gross-PnL overstatement
+// by ~0.08%. If maker fee promo, actual cost lower — this is conservative max.
+const _ROUND_TRIP_FEE_RATE = 0.0008;
+function _applyRoundTripFee(grossPnl, size, lev) {
+    const notional = (size || 0) * (lev || 0);
+    if (!Number.isFinite(notional) || notional <= 0) return grossPnl;
+    const fee = notional * _ROUND_TRIP_FEE_RATE;
+    return +(grossPnl - fee).toFixed(2);
+}
 
 // ══════════════════════════════════════════════════════════════════
 // Persistence — save/restore from SQLite
 // ══════════════════════════════════════════════════════════════════
+
+// [MIGRATION-F5 commit 3] Emit `positions.changed` over /ws/sync after a
+// successful DB commit on a position mutation. Gated by MF.POSITIONS_WS —
+// when OFF (default), this function returns immediately and no socket
+// traffic is produced. Broadcaster is attached on `global` by server.js;
+// missing broadcaster or zero connected clients must not throw.
+// Shape matches `WsPositionsChanged` from client/src/types/sync.ts:
+//   { type, updated_at, snapshot: { updated_at, positions } }
+// Top-level `updated_at` is IDENTICAL to `snapshot.updated_at` by design
+// (client dedup is authoritative on the top-level field).
+function _broadcastPositions(userId) {
+    if (!MF.POSITIONS_WS) return;
+    if (!userId) return;
+    const broadcast = (typeof global !== 'undefined' && global.__zeusWsBroadcastToUser) || null;
+    if (typeof broadcast !== 'function') return;
+    try {
+        // [MIGRATION-F5 C5-preflip] Snapshot source is DB, not in-memory `_positions`.
+        // Why: `_persistClose` emits this broadcast AFTER `db.atArchiveClosed` (DELETE
+        // in a transaction) but BEFORE the caller's `_positions.splice(idx, 1)`. If we
+        // read from `_positions`, the snapshot would include a transient "zombie" row
+        // for the position that was just closed — exactly the scenario the client
+        // would then reconcile as "still open". DB is authoritative at this point:
+        // the archive transaction has already removed the closed row, and every
+        // open-path mutation goes through `db.atSavePosition` before broadcast, so
+        // the DB is fully consistent with `_positions` at broadcast time minus the
+        // zombie window. DSL runtime state is re-attached here (mirrors the
+        // enrichment done by `getOpenPositions`, which is otherwise a pure
+        // `_positions` read + DSL overlay).
+        const now = Date.now();
+        // [R1] Use the same ownership normalization helper as getOpenPositions /
+        // getDemoPositions / getLivePositions — otherwise positions.changed
+        // shipped raw DB rows, and legacy rows with missing autoTrade/sourceMode
+        // landed in the client positionsStore without ownership hints, then
+        // ManualTradePanel's `_isManualOwned = p.autoTrade !== true` matched
+        // them as manual (AT positions reclassified as manual on broadcast).
+        const positions = db.atLoadOpenPositions(userId).map(_normalizePositionRow);
+        broadcast(userId, {
+            type: 'positions.changed',
+            updated_at: now,
+            snapshot: {
+                updated_at: now,
+                positions,
+            },
+        });
+    } catch (e) {
+        // [S6-A] Replace previous silent catch with observable warn so a
+        // broken broadcast does not vanish from the operator's view. Best-
+        // effort guard: never let warn-itself throw inside this hot path.
+        try { logger.warn('AT_WS', 'broadcastPositions failed uid=' + userId + ': ' + (e && e.message)); } catch (_) {}
+    }
+}
+
 function _persistPosition(pos) {
     // Snapshot DSL progress so it survives server restart
     const dslState = serverDSL.getState(pos.seq);
@@ -106,18 +355,28 @@ function _persistPosition(pos) {
             phaseChanges: dslState.phaseChanges,
         };
     }
-    try { db.atSavePosition(pos); } catch (e) {
+    try {
+        db.atSavePosition(pos);
+    } catch (e) {
         logger.error('AT_DB', 'Save position failed: ' + e.message);
         _alertPersistFailure(pos.userId, 'Save position [' + pos.seq + ']', e.message);
+        return; // Persist failed — do not broadcast a phantom state.
     }
+    // [MIGRATION-F5 commit 3] Post-commit broadcast. No-op when flag OFF.
+    _broadcastPositions(pos.userId);
 }
 
 function _persistClose(pos) {
-    try { db.atArchiveClosed(pos); return true; } catch (e) {
+    try {
+        db.atArchiveClosed(pos);
+    } catch (e) {
         logger.error('AT_DB', 'Archive closed failed: ' + e.message);
         _alertPersistFailure(pos.userId, 'Archive closed [' + pos.seq + ']', e.message);
         return false;
     }
+    // [MIGRATION-F5 commit 3] Post-commit broadcast. No-op when flag OFF.
+    _broadcastPositions(pos.userId);
+    return true;
 }
 
 const _persistAlertTs = new Map(); // per-user throttle
@@ -146,10 +405,18 @@ function _persistState(userId) {
             dailyPnLLive: us.dailyPnLLive,
             killActive: us.killActive,
             killPct: us.killPct,
+            killActiveAt: us.killActiveAt || 0,
+            killReason: us.killReason || null,
+            killLoss: us.killLoss || 0,
+            killLimit: us.killLimit || 0,
+            killBalRef: us.killBalRef || 0,
+            killModeAtTrigger: us.killModeAtTrigger || null,
             pnlAtReset: us.pnlAtReset,
             liveBalanceRef: us.liveBalanceRef,
             lastResetDay: us.lastResetDay,
-            atActive: us.atActive, // [F1]
+            atActive: us.atActive, // [F1] LEGACY synced cu current mode flag
+            atActiveDemo: us.atActiveDemo, // [BUG-T7 2026-05-13] per-mode persistent
+            atActiveLive: us.atActiveLive, // [BUG-T7 2026-05-13] per-mode persistent
         }, userId);
     } catch (e) {
         logger.error('AT_DB', 'Save state failed: ' + e.message);
@@ -185,11 +452,22 @@ function _applyStateBlob(userId, saved) {
     us.dailyPnLLive = saved.dailyPnLLive || 0;
     us.killActive = !!saved.killActive;
     us.killPct = (typeof saved.killPct === 'number' && saved.killPct > 0) ? saved.killPct : 5;
+    us.killActiveAt = saved.killActiveAt || 0;
+    us.killReason = saved.killReason || null;
+    us.killLoss = saved.killLoss || 0;
+    us.killLimit = saved.killLimit || 0;
+    us.killBalRef = saved.killBalRef || 0;
+    us.killModeAtTrigger = saved.killModeAtTrigger || null;
     us.pnlAtReset = saved.pnlAtReset || 0;
     us.liveBalanceRef = saved.liveBalanceRef || 0;
     us.lastResetDay = saved.lastResetDay || -1;
-    us.atActive = saved.atActive !== false; // [F1] Default true for existing users
-    logger.info('AT_DB', `State restored uid=${userId}: mode=${us.engineMode} seq=${us.seq} balance=$${us.demoBalance.toFixed(2)} atActive=${us.atActive}`);
+    us.atActive = saved.atActive !== false; // [F1] LEGACY — default true for existing users
+    // [BUG-T7 2026-05-13] Backfill new per-mode fields from legacy atActive
+    // pentru users care au state-uri persisted pre-T7. Atribuie ambele cu
+    // valoarea atActive existentă pentru a păstra current behavior post-deploy.
+    us.atActiveDemo = saved.atActiveDemo !== undefined ? !!saved.atActiveDemo : us.atActive;
+    us.atActiveLive = saved.atActiveLive !== undefined ? !!saved.atActiveLive : us.atActive;
+    logger.info('AT_DB', `State restored uid=${userId}: mode=${us.engineMode} seq=${us.seq} balance=$${us.demoBalance.toFixed(2)} atActive=${us.atActive} atDemo=${us.atActiveDemo} atLive=${us.atActiveLive}`);
 }
 
 function _restoreFromDb() {
@@ -299,22 +577,18 @@ function setMode(userId, mode) {
     const us = _uState(userId);
     const oldMode = us.engineMode;
 
-    // [ZT-AUD-#13 / C11] Reject cross-switch only if user has positions in
-    // *either* mode. Old code counted all positions but never inspected the
-    // mode field, allowing a stale demo position to be monitored under live
-    // logic after a successful switch (and vice versa). Now we count both
-    // sides explicitly so a switch attempt with mixed positions is rejected
-    // with a precise reason.
-    if (mode !== oldMode) {
-        const userPos = _positions.filter(p => p.userId === userId);
-        const oldModeCount = userPos.filter(p => (p.mode || 'demo') === oldMode).length;
-        const newModeCount = userPos.filter(p => (p.mode || 'demo') === mode).length;
-        if (oldModeCount > 0 || newModeCount > 0) {
-            const detail = `${oldModeCount} ${oldMode} + ${newModeCount} ${mode}`;
-            logger.warn('AT_ENGINE', `Mode switch rejected uid=${userId}: ${oldMode} → ${mode} — open positions (${detail})`);
-            return { ok: false, error: `Cannot switch mode — open positions (${detail}). Close them first.` };
-        }
-    }
+    // [batch3-W] Per-position `mode` field is authoritative — demo positions
+    // run under demo logic, live positions under live logic, regardless of
+    // engine-mode flips. Switching engine mode is a UI-routing concern, not a
+    // retagging operation, so no cross-mode position gate is needed. Existing
+    // positions in the OPPOSITE mode continue independently in backend tracking.
+    //
+    // [BUG-T3 FIX 2026-05-14] Client-side surfaces this hide explicitly via:
+    //   - Enriched confirm dialog at switch (`_buildModeSwitchMessage` injects
+    //     opposite-count into the message body)
+    //   - Persistent banner in ManualTradePanel when opposite-mode count > 0
+    // Prior to BUG-T3 fix this comment claimed the confirm dialog warned the
+    // user — it did NOT (message was static, no count). Fix lands on client.
 
     // [V3.1] Guard: live mode requires valid exchange credentials
     if (mode === 'live') {
@@ -329,6 +603,15 @@ function setMode(userId, mode) {
     }
 
     us.engineMode = mode;
+
+    // [Wave 7b] Mode flip → audit chain (tamper-evident)
+    try {
+        const chain = require('./ml/_audit/chainedTrail');
+        chain.append({
+            kind: 'MODE_CHANGE',
+            payload: { userId, oldMode: oldMode || null, newMode: mode, ts: Date.now() },
+        });
+    } catch (_) { /* never block mode change */ }
 
     // [ZT-AUD-#14 / C12] On live→demo switch, refresh demoStartBalance to the
     // current demoBalance so kill-switch drawdown calculations restart from
@@ -352,24 +635,30 @@ function setMode(userId, mode) {
         us.killActive = false;
     }
 
+    // [BUG-T7 FOLLOWUP 2026-05-13] Sync legacy `atActive` cu new engineMode
+    // flag. Without this, UI (useServerSync.ts:62 reads data.atActive) shows
+    // STALE value din ultimul toggle când user switches between modes:
+    //   demo toggle ON → atActiveDemo=true, atActive=true (sync demo)
+    //   switch to live → engineMode=live BUT atActive stays true (stale)
+    //   UI display: shows ON pe live deși atActiveLive=false (real state)
+    // Fix: resync atActive cu mode-specific flag pe fiecare setMode call.
+    us.atActive = !!us[us.engineMode === 'live' ? 'atActiveLive' : 'atActiveDemo'];
+
     _persistState(userId);
 
-    // [LIVE-PARITY] Auto-init liveBalanceRef from Binance on live mode switch (non-blocking)
+    // [LIVE-PARITY] Auto-init liveBalanceRef on live mode switch (non-blocking)
+    // [Fix #10] Use exchangeOps.getBalance (exchange-aware) instead of Binance-only sendSignedRequest
     if (mode === 'live' && us.liveBalanceRef <= 0) {
-        const creds = getExchangeCreds(userId);
-        if (creds) {
-            sendSignedRequest('GET', '/fapi/v2/balance', {}, creds).then(balances => {
-                const usdtBal = balances.find(b => b.asset === 'USDT');
-                const total = usdtBal ? parseFloat(usdtBal.balance || 0) : 0;
-                if (total > 0) {
-                    us.liveBalanceRef = total;
-                    _persistState(userId);
-                    logger.info('AT_ENGINE', `Kill switch auto-init uid=${userId}: liveBalanceRef=$${total.toFixed(2)}`);
-                }
-            }).catch(err => {
-                logger.warn('AT_ENGINE', `Kill switch auto-init failed uid=${userId}: ${err.message} — liveBalanceRef stays at $${us.liveBalanceRef}`);
-            });
-        }
+        exchangeOps.getBalance(userId).then(bal => {
+            const total = parseFloat(bal.walletBalance || 0);
+            if (total > 0) {
+                us.liveBalanceRef = total;
+                _persistState(userId);
+                logger.info('AT_ENGINE', `Kill switch auto-init uid=${userId}: liveBalanceRef=$${total.toFixed(2)}`);
+            }
+        }).catch(err => {
+            logger.warn('AT_ENGINE', `Kill switch auto-init failed uid=${userId}: ${err.message} — liveBalanceRef stays at $${us.liveBalanceRef}`);
+        });
     }
 
     logger.info('AT_ENGINE', `Mode changed uid=${userId}: ${oldMode} → ${mode}`);
@@ -379,11 +668,38 @@ function setMode(userId, mode) {
         `🔄 *AT Mode Changed*\n${oldMode.toUpperCase()} → ${mode.toUpperCase()}`
     );
     _notifyChange(userId);
-    return { ok: true, mode: us.engineMode };
+    // [BUG-T7 FOLLOWUP-2 2026-05-13] Return enriched response cu per-mode flags +
+    // computed atActive pentru new engineMode. Client (_executeGlobalModeSwitch) va
+    // patcha atStore.enabled imediat din response, eliminând race window între
+    // optimistic mode patch (immediate) și WS frame arrival (~50-200ms).
+    return {
+        ok: true,
+        mode: us.engineMode,
+        oldMode,
+        atActive: !!us.atActive, // synced cu new engineMode în resync de mai sus
+        atActiveDemo: us.atActiveDemo,
+        atActiveLive: us.atActiveLive,
+    };
 }
 
 function getMode(userId) { return _uState(userId).engineMode; }
-function isATActive(userId) { return _uState(userId).atActive; }
+// [BUG-T7 2026-05-13] Per-mode AT-active check helper. mode='live'|'demo'.
+// Defensive: returns false on missing us or invalid mode (default demo).
+function _isATActiveForMode(us, mode) {
+    if (!us) return false;
+    return mode === 'live' ? !!us.atActiveLive : !!us.atActiveDemo;
+}
+
+// [BUG-T7 2026-05-13] isATActive accept optional mode param. Without mode,
+// defaults la current us.engineMode pentru backward-compat callers (e.g.
+// serverBrain.js:545 main loop). Pass explicit mode pentru cross-mode checks.
+function isATActive(userId, mode) {
+    const us = _uState(userId);
+    if (mode === 'live' || mode === 'demo') {
+        return _isATActiveForMode(us, mode);
+    }
+    return _isATActiveForMode(us, us.engineMode || 'demo');
+}
 
 /**
  * Pre-live checklist — validates readiness before switching to live mode.
@@ -393,10 +709,14 @@ async function preLiveChecklist(userId) {
     const checks = [];
     let allOk = true;
 
+    // [Phase 2B] Canonical execution env gates non-demo. Stable `code` field
+    // surfaces the reason without changing existing name/ok/detail contract.
+    const execEnv = _resolveExecutionEnv(userId);
+
     // 1. Exchange credentials exist
     const creds = getExchangeCreds(userId);
     if (!creds) {
-        checks.push({ name: 'API_KEYS', ok: false, detail: 'No exchange credentials configured' });
+        checks.push({ name: 'API_KEYS', ok: false, detail: 'No exchange credentials configured', code: execEnv.blockedReason });
         allOk = false;
     } else {
         checks.push({ name: 'API_KEYS', ok: true, detail: 'Credentials found' });
@@ -420,10 +740,14 @@ async function preLiveChecklist(userId) {
         }
     }
 
-    // 3. No open positions (already checked by setMode, but include for completeness)
-    const openCount = _positions.filter(p => p.userId === userId).length;
-    checks.push({ name: 'NO_OPEN_POSITIONS', ok: openCount === 0, detail: openCount === 0 ? 'No open positions' : `${openCount} position(s) still open` });
-    if (openCount > 0) allOk = false;
+    // [Hotfix mode-switch] Removed legacy NO_LIVE_POSITIONS gate. Per the
+    // batch3-W per-position routing design (see setMode comments), engine-mode
+    // flips are a UI-routing concern, not a retag operation: existing live
+    // positions continue under live logic regardless of engine mode. Blocking
+    // re-entry to live when live positions exist is logically inverted — it
+    // locks the user out of managing their own open positions when they
+    // temporarily flip to demo and back. Env-compatibility gating, when
+    // needed, belongs at the credential-active layer, not here.
 
     // 4. Kill switch not active
     const us = _uState(userId);
@@ -436,21 +760,41 @@ async function preLiveChecklist(userId) {
     return { ok: allOk, checks, failedChecks };
 }
 
-// [F1] Per-user AT on/off toggle — independent of mode (demo/live)
-function toggleActive(userId, active) {
+// [BUG-T7 2026-05-13] Per-user AT on/off toggle — PER-MODE split.
+// Optional mode param ('demo'|'live') — if omitted, defaults la current
+// us.engineMode. Operator-flagged grav 2026-05-10: toggle anterior era
+// GLOBAL per-user (atActive single field) — turning off în demo blocked
+// live too (silent mental model break + safety risc combinat cu BUG-T3).
+// Fix: atActive split → atActiveDemo + atActiveLive independente.
+// Legacy atActive kept synced cu current engineMode flag pentru backward
+// compat telemetry (getFullState response, WebSocket frames).
+function toggleActive(userId, active, mode) {
     if (typeof active !== 'boolean') return { ok: false, error: 'active must be boolean' };
     if (!userId) return { ok: false, error: 'Missing userId' };
     const us = _uState(userId);
-    const was = us.atActive;
-    us.atActive = active;
+    const targetMode = (mode === 'live' || mode === 'demo') ? mode : (us.engineMode || 'demo');
+    const fieldName = targetMode === 'live' ? 'atActiveLive' : 'atActiveDemo';
+    const was = !!us[fieldName];
+    us[fieldName] = active;
+    // Sync legacy atActive cu current engineMode flag (NOT cu targetMode —
+    // operator may toggle off-mode while viewing the other mode; legacy must
+    // reflect what's true for *current* engineMode pentru UI consistency).
+    us.atActive = !!us[us.engineMode === 'live' ? 'atActiveLive' : 'atActiveDemo'];
     _persistState(userId);
-    logger.info('AT_ENGINE', `AT toggled uid=${userId}: ${was} → ${active}`);
-    audit.record('AT_TOGGLE', { userId, was, now: active }, 'user');
+    logger.info('AT_ENGINE', `AT toggled uid=${userId} mode=${targetMode}: ${was} → ${active}`);
+    audit.record('AT_TOGGLE', { userId, mode: targetMode, was, now: active }, 'user');
     telegram.sendToUser(userId, active
-        ? '🟢 *AT Activated* — brain entries enabled'
-        : '🔴 *AT Deactivated* — brain entries blocked');
+        ? `🟢 *AT Activated (${targetMode.toUpperCase()})* — brain entries enabled`
+        : `🔴 *AT Deactivated (${targetMode.toUpperCase()})* — brain entries blocked`);
     _notifyChange(userId);
-    return { ok: true, atActive: active, was };
+    return {
+        ok: true,
+        atActive: us.atActive,
+        atActiveDemo: us.atActiveDemo,
+        atActiveLive: us.atActiveLive,
+        mode: targetMode,
+        was,
+    };
 }
 
 // ── Missed trade recorder ──
@@ -467,17 +811,78 @@ function _recordMissedTrade(userId, decision, reason) {
 // ══════════════════════════════════════════════════════════════════
 // Process a brain decision (called by serverBrain)
 // ══════════════════════════════════════════════════════════════════
-function processBrainDecision(decision, stc, userId) {
+function processBrainDecision(decision, stc, userId, userIntent) {
     if (!decision || !decision.fusion || !stc) return null;
     // [MULTI-USER] Hard guard — reject decisions without userId
     if (!userId) { logger.error('AT_ENGINE', 'processBrainDecision called without userId — skipping'); return null; }
 
+    // [Phase 2 S2.B] Global panic halt — hard block before any per-user gate.
+    // Must come before _uState() to stay cheap when halted.
+    if (isGlobalHaltActive()) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — GLOBAL_HALT active`);
+        _recordMissedTrade(userId, decision, 'GLOBAL_HALT');
+        return null;
+    }
+
     const us = _uState(userId);
 
-    // [F1] Per-user AT on/off gate — if user disabled AT, block ALL entries
-    if (!us.atActive) {
-        logger.info('AT_ENGINE', `Entry blocked uid=${userId} — AT disabled by user`);
+    // [Phase 2 S6-B2] LIVE-MODE AUTHORIZATION GATE — refuse to dispatch when
+    // the user is in any non-demo mode (today: 'live'; future: 'testnet'/'real')
+    // unless the FULL SERVER_AT flag is on. SERVER_AT_DEMO alone is a
+    // demo-only carve-out (per S6-B1) and is NOT sufficient. Unknown /
+    // missing engineMode is treated as live for fail-safety. The demo
+    // branch (engineMode === 'demo') passes through to the existing
+    // demo paper-fill path below, untouched.
+    if (us.engineMode !== 'demo' && MF.SERVER_AT !== true) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — SERVER_AT_REQUIRED_FOR_LIVE (mode=${us.engineMode || 'unknown'})`);
+        _recordMissedTrade(userId, decision, 'SERVER_AT_REQUIRED_FOR_LIVE');
+        return null;
+    }
+
+    // [BUG-T7 2026-05-13] Per-mode AT-active gate. Pre-T7 used global atActive
+    // which blocked BOTH modes when toggled off în either. Now checks mode-specific
+    // flag based pe us.engineMode (decision context).
+    if (!_isATActiveForMode(us, us.engineMode)) {
+        logger.info('AT_ENGINE', `Entry blocked uid=${userId} mode=${us.engineMode} — AT disabled for this mode`);
         _recordMissedTrade(userId, decision, 'AT_DISABLED');
+        return null;
+    }
+
+    // [Phase 2 S6-B3] Per-user decisionId dedup. Prevents client+server
+    // double-open during the S6-B6+ transition window. Uses existing
+    // at_state schema (no DB migration). The dedup key is per-user only;
+    // cross-user same dedup id is allowed by construction.
+    //
+    // Dedup id derivation (no caller-side change required):
+    //   - ALWAYS include symbol so two parallel decisions for different
+    //     symbols (same user, same brain cycle) do NOT collide
+    //   - When decision.cycle is provided (server brain stamps this),
+    //     use it as the per-cycle disambiguator; otherwise fall back to
+    //     dir:priceTs which is stable per identical intent within ms
+    //
+    // Two parallel calls describing the SAME intent (same user, same
+    // symbol, same cycle/dir/priceTs) collapse to the same id and the
+    // second is rejected. Different symbols → different ids → both
+    // allowed (probe-s2 T2 "Collision safety" non-regression).
+    //
+    // Source defaults to 'server' (the only documented dispatcher today is
+    // serverBrain._runCycle); a future REST-driven path can override via
+    // decision._source. With current production flags, processBrainDecision
+    // is unreachable (S6-B1 dispatch gate keeps the main cycle dormant)
+    // so this dedup is INERT until S6-B6 flips the demo flags.
+    const _dedupSymbol = decision.symbol || '?';
+    const _dedupTail = (typeof decision.cycle === 'string' && decision.cycle)
+        ? decision.cycle
+        : (((decision.fusion && decision.fusion.dir) || '?') + ':' +
+           (Number.isFinite(decision.priceTs) ? decision.priceTs : 0));
+    const _dedupId = _dedupSymbol + ':' + _dedupTail;
+    const _dedupSource = (typeof decision._source === 'string' && decision._source)
+        ? decision._source
+        : 'server';
+    const _dedupResult = _checkAndStoreDecisionId(userId, _dedupId, _dedupSource, Date.now());
+    if (_dedupResult.ok === false && _dedupResult.reason === 'DUPLICATE_DECISION_ID') {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} — DUPLICATE_DECISION_ID id=${_dedupId} (prev source=${_dedupResult.previous && _dedupResult.previous.source || 'unknown'})`);
+        _recordMissedTrade(userId, decision, 'DUPLICATE_DECISION_ID');
         return null;
     }
 
@@ -513,6 +918,65 @@ function processBrainDecision(decision, stc, userId) {
     const existing = _positions.find(p => p.userId === userId && p.symbol === decision.symbol && p.side === side);
     if (existing) return null;
 
+    // [2026-05-19 same-mode directional bias guard] Operator-mandated: within
+    // a single mode, all positions must share direction (no mixed LONG+SHORT
+    // book). Extended 2026-05-19 from same-symbol-only to ANY symbol same
+    // mode — "lapte acru murat" if brain opens LONG ETH + SHORT BTC pe live.
+    // Cross-mode opposite ALLOWED per Wave 8 reversal (demo & live = independent
+    // sandboxes). Voice thought emitted in both block + cross-mode-info cases.
+    const oppositeSide = side === 'LONG' ? 'SHORT' : 'LONG';
+    const decMode = us.engineMode || 'demo';
+    const sameModeOpposite = _positions.find(p =>
+        p.userId === userId && p.side === oppositeSide &&
+        (p.mode || 'demo') === decMode
+    );
+    if (sameModeOpposite) {
+        const sameSymbol = sameModeOpposite.symbol === decision.symbol;
+        const reasonTag = sameSymbol ? 'OPPOSITE_SIDE_SAME_MODE' : 'MIXED_DIRECTION_SAME_MODE';
+        const thoughtText = sameSymbol
+            ? `skipping ${side} ${decision.symbol} — already ${oppositeSide} same mode (${decMode}).`
+            : `skipping ${side} ${decision.symbol} on ${decMode} — book already has ${oppositeSide} ${sameModeOpposite.symbol}. no mixed bias.`;
+        logger.warn('AT_ENGINE',
+            `Entry blocked uid=${userId} ${decision.symbol} ${side} ${decMode} — ${reasonTag} (existing ${sameModeOpposite.symbol}/${oppositeSide}/seq=${sameModeOpposite.seq})`);
+        _recordMissedTrade(userId, decision, reasonTag);
+        try {
+            const vl = require('./ml/_voice/voiceLogger');
+            vl.logUtterance({
+                userId, utteranceType: 'THOUGHT', mood: 'FOCUSED',
+                text: thoughtText,
+                templateId: sameSymbol ? 'opposite_side_skip' : 'mixed_bias_skip',
+                contextJson: JSON.stringify({
+                    symbol: decision.symbol, attemptedSide: side,
+                    existingSymbol: sameModeOpposite.symbol,
+                    existingSide: oppositeSide, mode: decMode,
+                }),
+            });
+        } catch (_) {}
+        return null;
+    }
+    // Cross-mode opposite — informational only, allow per Wave 8 sandbox model
+    const crossModeOpposite = _positions.find(p =>
+        p.userId === userId && p.symbol === decision.symbol && p.side === oppositeSide &&
+        (p.mode || 'demo') !== decMode
+    );
+    if (crossModeOpposite) {
+        logger.info('AT_ENGINE',
+            `Cross-mode opposite OK uid=${userId} ${decision.symbol} ${side}/${decMode}: ${crossModeOpposite.mode}/${oppositeSide} exists`);
+        try {
+            const vl = require('./ml/_voice/voiceLogger');
+            vl.logUtterance({
+                userId, utteranceType: 'THOUGHT', mood: 'CALM',
+                text: `${side} ${decision.symbol} on ${decMode} — ${crossModeOpposite.mode} side has ${oppositeSide}. independent sandbox.`,
+                templateId: 'cross_mode_opposite_aware',
+                contextJson: JSON.stringify({
+                    symbol: decision.symbol, side, mode: decMode,
+                    crossSide: oppositeSide, crossMode: crossModeOpposite.mode,
+                }),
+            });
+        } catch (_) {}
+        // NO return — entry proceeds
+    }
+
     // ── Max positions gate (per-user) ──
     const userPosCount = _positions.filter(p => p.userId === userId).length;
     if (userPosCount >= stc.maxPos) { _recordMissedTrade(userId, decision, 'MAX_POSITIONS'); return null; }
@@ -523,8 +987,20 @@ function processBrainDecision(decision, stc, userId) {
     const slPct = stc.slPct;
     const rr = stc.rr;
 
+    // [BUG-O7 S2] TC.size is max margin cap per trade (per autotrade.ts:921,928,933 canonical semantic).
+    // Adaptive sizing (vol + Kelly + DD + tier) may reduce; final size must NEVER exceed userIntent.
+    // Below MIN_TRADE_USD blocks entry (does NOT force above cap).
+    const MIN_TRADE_USD = 10;
     const rawSize = Math.round(baseSize * mult);
-    const finalSize = Math.max(Math.round(baseSize * 0.5), Math.min(Math.round(baseSize * 1.6), rawSize));
+    const cap = Number(userIntent);
+    const safeCap = (Number.isFinite(cap) && cap > 0) ? Math.round(cap) : Math.round(baseSize);
+    const cappedSize = Math.min(safeCap, rawSize);
+    if (!Number.isFinite(cappedSize) || cappedSize < MIN_TRADE_USD) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} — size below floor raw=${rawSize} cap=${safeCap}`);
+        _recordMissedTrade(userId, decision, 'SIZE_TOO_SMALL');
+        return null;
+    }
+    const finalSize = Math.round(cappedSize);
 
     // ── Demo balance gate (per-user) ──
     if (us.engineMode === 'demo' && us.demoBalance < finalSize) {
@@ -541,26 +1017,70 @@ function processBrainDecision(decision, stc, userId) {
     else { sl = price + slDist; tp = price - tpDist; }
 
     const qty = (finalSize * lev) / price;
-    const tpPnl = (tpDist / price) * finalSize * lev;
-    const slPnl = -(slDist / price) * finalSize * lev;
+    // [BUG-TM-8] Align qty + size to LOT_SIZE BEFORE entry creation — never store unsafe toFixed(6).
+    const _tm8 = _alignQtyToLotSize(decision.symbol, qty, price, lev, 'MAIN_ENTRY');
+    if (!_tm8) {
+        logger.warn('AT_ENGINE', `Entry blocked uid=${userId} ${decision.symbol} — LOT_SIZE align rejected (qty=${qty}, price=${price}, lev=${lev})`);
+        _recordMissedTrade(userId, decision, 'LOT_SIZE_ALIGN_REJECTED');
+        return null;
+    }
+    const _alignedQty = _tm8.qty;
+    const _alignedSize = _tm8.size;
+    // [TM-7] Align tp/sl la PRICE_FILTER tick size of the symbol (was raw
+    // toFixed(2) which silently floors precision below tick or above tick.
+    // BTC tick=0.10 USD; toFixed(2) "1.23" isn't valid tick. SOL/ETH have
+    // smaller tick. roundOrderParams handles tick alignment via
+    // PRICE_FILTER cached at boot — falls back gracefully if symbol filters
+    // unavailable (returns input). Cu fallback, defense `+sl.toFixed(2)`
+    // remains semantically equivalent at boundary.
+    const _slRounded = roundOrderParams(decision.symbol, _alignedQty, sl);
+    const _tpRounded = roundOrderParams(decision.symbol, _alignedQty, tp);
+    const _slAligned = (_slRounded && Number.isFinite(_slRounded.stopPrice) && _slRounded.stopPrice > 0)
+        ? _slRounded.stopPrice
+        : +sl.toFixed(2);
+    const _tpAligned = (_tpRounded && Number.isFinite(_tpRounded.stopPrice) && _tpRounded.stopPrice > 0)
+        ? _tpRounded.stopPrice
+        : +tp.toFixed(2);
+    // [TM-9] Apply expected round-trip cost (fees 0.08% + slippage estimate
+    // 0.06%) la display tpPnl/slPnl. Pre-fix: user saw expected $1000 dar
+    // real fill ~$997 (eroded încredere). Post-fix: displayed values match
+    // post-cost reality. _applyRoundTripFee already covers 0.08% fees;
+    // slippage adds ~0.03% × 2 sides = 0.06% on notional. Combined cost
+    // = ~0.14% on (size × lev) = notional. tpPnl reduces, slPnl becomes
+    // larger negative (loss + slippage cost stack).
+    const _expectedSlippageCost = (_alignedSize * lev) * 0.0006;
+    const _grossTpPnl = (tpDist / price) * _alignedSize * lev;
+    const _grossSlPnl = -(slDist / price) * _alignedSize * lev;
+    const tpPnl = _applyRoundTripFee(_grossTpPnl, _alignedSize, lev) - _expectedSlippageCost;
+    const slPnl = _applyRoundTripFee(_grossSlPnl, _alignedSize, lev) - _expectedSlippageCost;
 
     // ── Build position entry ──
+    // [Phase 12.A — Batch G] Stamp exchange + env at open so history snapshots
+    // reflect truth-at-entry (immutable through close, survives creds changes).
+    // Demo: exchange=null, env='DEMO'. Live: exchange from creds, env=TESTNET|REAL.
+    const _entryExecEnv = _resolveExecutionEnv(userId);
+    const _entryCreds = _entryExecEnv.env === 'DEMO' ? null : getExchangeCreds(userId);
     const entry = {
         seq: ++us.seq,
         userId: userId,
         ts: Date.now(),
+        // [Phase 2 S2.A] Stable decision id — feeds newClientOrderId on exchange
+        // so retries/restarts yield the same order identity (Binance dedups).
+        decisionId: _newDecisionId(),
         cycle: decision.cycle,
         symbol: decision.symbol,
         side: side,
         tier: tier,
         mode: us.engineMode,        // 'demo' or 'live' — set at entry time
+        exchange: _entryCreds ? (_entryCreds.exchange || null) : null,
+        env: _entryExecEnv.env,     // 'DEMO' | 'TESTNET' | 'REAL' | null
         price: price,
-        size: finalSize,
-        margin: finalSize,        // margin locked
+        size: _alignedSize,        // [BUG-TM-8] margin = qty * price / lev (matches actual exchange exposure)
+        margin: _alignedSize,      // margin locked, LOT_SIZE-aligned
         lev: lev,
-        qty: +qty.toFixed(6),
-        sl: +sl.toFixed(2),
-        tp: +tp.toFixed(2),
+        qty: _alignedQty,          // [BUG-TM-8] LOT_SIZE-aligned (no toFixed(6))
+        sl: _slAligned,           // [TM-7] tick-aligned via roundOrderParams
+        tp: _tpAligned,           // [TM-7] tick-aligned via roundOrderParams
         slPct: slPct,
         rr: rr,
         fusionMult: mult,
@@ -576,10 +1096,11 @@ function processBrainDecision(decision, stc, userId) {
         // [DSL-OFF] Per-user DSL engine flag: when OFF, skip DSL params so attach + native TP suppression
         // are bypassed and the position runs purely on exchange TP/SL.
         dslParams: us.dslEnabled === false ? null : serverDSL.getPreset(stc.dslMode),
+        dslModeAtOpen: us.dslEnabled === false ? null : (stc.dslMode || null),
         // ── Add-on tracking (Faza 2 Batch A) ──
         originalEntry: price,
-        originalSize: finalSize,
-        originalQty: +qty.toFixed(6),
+        originalSize: _alignedSize,    // [BUG-TM-8] LOT_SIZE-adjusted
+        originalQty: _alignedQty,      // [BUG-TM-8] LOT_SIZE-aligned
         addOnCount: 0,
         addOnHistory: [],
         controlMode: 'auto', // [TL-03] Initialize controlMode so user-override check works
@@ -595,13 +1116,20 @@ function processBrainDecision(decision, stc, userId) {
 
     // ── Demo: deduct margin ──
     if (us.engineMode === 'demo') {
-        us.demoBalance = +(us.demoBalance - finalSize).toFixed(2);
+        us.demoBalance = +(us.demoBalance - _alignedSize).toFixed(2); // [BUG-TM-8] match LOT_SIZE-adjusted exposure
     }
 
     // ── Add to THE positions array ──
     _positions.push(entry);
     us.stats.entries++;
     if (entry.mode !== 'live') us.demoStats.entries++;
+
+    // [P5A SERVER LIVE OWNERSHIP] Push tracepoint — captures ownership + live state at insert moment.
+    // Used to confirm race hypothesis #1/#2: position is in _positions but not yet in getLivePositions
+    // result until _livePending=true (set sync in _executeLiveEntry) or entry.live.status hits LIVE/LIVE_NO_SL.
+    if (entry.mode === 'live') {
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] PUSH seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} side=${entry.side} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} _livePending=${entry._livePending} live=${entry.live ? entry.live.status : 'undefined'} ts=${Date.now()}`);
+    }
 
     // ── Attach DSL (skipped when DSL engine is OFF for this user) ──
     if (entry.dslParams) {
@@ -690,7 +1218,25 @@ async function _placeConditionalOrder(params, creds) {
 // Live Execution — Binance API calls (only for live-mode positions)
 // ══════════════════════════════════════════════════════════════════
 async function _executeLiveEntry(entry, stc) {
+    // [Phase 2 S6-B2] PARANOID LIVE EXECUTION GATE — fires as the FIRST
+    // executable statement, before any state mutation (no _livePending
+    // flag set), before any in-flight lock acquisition, before any
+    // _persistPosition / _persistClose write, and before any signed
+    // exchange request. _executeLiveEntry must NEVER fire unless the
+    // FULL SERVER_AT flag is on; SERVER_AT_DEMO is a demo-only carve-out
+    // (per S6-B1) and must not reach Binance/Bybit/any real exchange.
+    // This guard is independent of engineMode (defense in depth) — even
+    // a misrouted demo entry that somehow lands here cannot escape.
+    if (MF.SERVER_AT !== true) {
+        try { logger.error('AT_LIVE', `[${entry && entry.seq}] LIVE_ENTRY_REQUIRES_FULL_SERVER_AT — refusing live entry uid=${entry && entry.userId} sym=${entry && entry.symbol}`); } catch (_) {}
+        const err = new Error('LIVE_ENTRY_REQUIRES_FULL_SERVER_AT');
+        err.code = 'LIVE_ENTRY_REQUIRES_FULL_SERVER_AT';
+        throw err;
+    }
     entry._livePending = true; // [TL-04] Lock position from onPriceUpdate exits
+    // [P5A SERVER LIVE OWNERSHIP] _livePending true transition — this is what getLivePositions() relies on
+    // to keep the position visible BEFORE entry.live.status is set at line ~1146.
+    logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] _livePending=true seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} live=${entry.live ? entry.live.status : 'undefined'} ts=${Date.now()}`);
     const _lockKey = entry.userId + ':' + entry.symbol;
     if (_liveEntryLocks.has(_lockKey)) {
         logger.warn('AT_LIVE', `[${entry.seq}] Live entry SKIPPED uid=${entry.userId} ${entry.symbol} — another entry in-flight`);
@@ -717,9 +1263,10 @@ async function _executeLiveEntry(entry, stc) {
     const userId = entry.userId;
     const us = _uState(userId);
 
-    // [RE-ENTRY] Re-check atActive — user may have disabled AT between decision and execution
-    if (!us.atActive) {
-        logger.info('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} — AT disabled after decision`);
+    // [BUG-T7 2026-05-13] RE-ENTRY: per-mode AT-active re-check (user may have
+    // disabled AT for current mode between decision and execution).
+    if (!_isATActiveForMode(us, us.engineMode)) {
+        logger.info('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} mode=${us.engineMode} — AT disabled for this mode after decision`);
         const abortIdx = _positions.indexOf(entry);
         if (abortIdx >= 0) {
             entry.closeReason = 'AT_DISABLED_INFLIGHT';
@@ -727,6 +1274,24 @@ async function _executeLiveEntry(entry, stc) {
             entry.closeTs = Date.now();
             if (_persistClose(entry)) { _positions.splice(abortIdx, 1); _persistState(userId); }
         }
+        return;
+    }
+
+    // [Phase 2 S2.B] Global panic halt — re-check before touching the exchange.
+    // Admin may have armed halt between processBrainDecision and the live task
+    // picking up from the event loop. No exchange call must go out while halted.
+    if (isGlobalHaltActive()) {
+        logger.warn('AT_LIVE', `[${entry.seq}] Live entry ABORTED uid=${userId} — GLOBAL_HALT active`);
+        entry.live = { status: 'GLOBAL_HALT' };
+        _pushLog(userId, 'LIVE_GLOBAL_HALT', { seq: entry.seq });
+        const abortIdx = _positions.indexOf(entry);
+        if (abortIdx >= 0) {
+            entry.closeReason = 'GLOBAL_HALT_INFLIGHT';
+            entry.closePnl = 0;
+            entry.closeTs = Date.now();
+            if (_persistClose(entry)) { _positions.splice(abortIdx, 1); _persistState(userId); }
+        }
+        us.liveStats.blocked++;
         return;
     }
 
@@ -754,10 +1319,11 @@ async function _executeLiveEntry(entry, stc) {
     }
 
     // [FULL-LIVE] Pre-trade margin check — verify available balance before entry
+    // [Task 40.1] Replaced sendSignedRequest('GET', '/fapi/v2/balance') with
+    // exchangeOps.getBalance(userId) — routes to correct exchange (Binance/Bybit).
     try {
-        const balances = await sendSignedRequest('GET', '/fapi/v2/balance', {}, creds);
-        const usdtBal = balances.find(b => b.asset === 'USDT');
-        const available = usdtBal ? parseFloat(usdtBal.availableBalance || 0) : 0;
+        const balResult = await exchangeOps.getBalance(userId);
+        const available = balResult ? parseFloat(balResult.availableBalance || 0) : 0;
         const requiredMargin = entry.size; // position size = required margin (before leverage)
         if (available < requiredMargin) {
             entry.live = { status: 'INSUFFICIENT_MARGIN', available, required: requiredMargin };
@@ -779,28 +1345,54 @@ async function _executeLiveEntry(entry, stc) {
     }
 
     const liveSeq = ++us.liveSeq;
-    const clientOrderId = `SAT_${liveSeq}_${Date.now()}`;
+    // [Phase 2 S2.A] Stable newClientOrderId derived from entry.seq + decisionId
+    // instead of Date.now(). Retries (in-process or cross-restart) produce the
+    // SAME token, so Binance dedups at the exchange (returns the original order
+    // on resend rather than creating a duplicate). Format: SAT_<seq>_<8hex>
+    // — always ≤ 36 chars (Binance limit). Falls back to Date.now() only if a
+    // legacy position somehow lacks decisionId (pre-S2 positions rehydrated
+    // after deploy; such positions never retry this path).
+    const _decTok = (entry.decisionId && /^[0-9a-f]{8}$/.test(entry.decisionId))
+        ? entry.decisionId
+        : crypto.randomBytes(4).toString('hex');
+    const clientOrderId = `SAT_${entry.seq}_${_decTok}`;
 
-    // Set leverage — BLOCKING: wrong leverage = wrong risk
-    for (let levAttempt = 0; levAttempt < 2; levAttempt++) {
+    // [Task 40.2] Replaced manual marginType + leverage retry loops with
+    // exchangeOps.ensureSymbolReady — routes to correct exchange (Binance/Bybit),
+    // 5min cache per (uid, symbol), idempotent. Replaces marginTypeHelper.ensureCrossed
+    // + sendSignedRequest('POST', '/fapi/v1/leverage') both requiring creds.
+    // [SAFE-2] Force CROSSED margin type + correct leverage — BLOCKING:
+    // wrong margin type = wrong risk math; wrong leverage = wrong risk.
+    {
+        let readyResult;
         try {
-            await sendSignedRequest('POST', '/fapi/v1/leverage', {
-                symbol: entry.symbol, leverage: entry.lev,
-            }, creds);
-            break; // success
-        } catch (levErr) {
-            if (levAttempt === 0) {
-                logger.warn('AT_LIVE', `[${entry.seq}] Leverage set failed, retrying: ${levErr.message}`);
-                await new Promise(r => setTimeout(r, 1000));
-            } else {
-                entry.live = { status: 'LEVERAGE_FAILED', error: levErr.message, intendedLev: entry.lev };
-                _pushLog(userId, 'LIVE_LEVERAGE_FAILED', { seq: entry.seq, leverage: entry.lev, error: levErr.message });
-                logger.error('AT_LIVE', `[${entry.seq}] Leverage set failed — BLOCKING entry: ${levErr.message}`);
-                telegram.sendToUser(userId, `⚠️ *Leverage Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: ${entry.lev}x\nEntry skipped — wrong leverage = wrong risk.\nError: ${levErr.message}`);
-                us.liveStats.blocked++;
-                return;
-            }
+            readyResult = await exchangeOps.ensureSymbolReady(userId, {
+                symbol: entry.symbol,
+                leverage: entry.lev,
+                marginMode: 'CROSSED',
+            });
+        } catch (readyErr) {
+            readyResult = { ok: false, error: { message: readyErr.message, code: readyErr.code || 'ErrEnsureSymbolReady' } };
         }
+        if (!readyResult || !readyResult.ok) {
+            const readyErrMsg = (readyResult && readyResult.error && readyResult.error.message) || 'ensureSymbolReady failed';
+            const readyErrCode = (readyResult && readyResult.error && readyResult.error.code) || 'UNKNOWN';
+            // Distinguish margin vs leverage failure by code if available; default to LEVERAGE_FAILED
+            if (readyErrCode && String(readyErrCode).includes('MARGIN')) {
+                entry.live = { status: 'MARGIN_TYPE_FAILED', error: readyErrMsg, intendedMarginType: 'CROSSED' };
+                _pushLog(userId, 'LIVE_MARGIN_TYPE_FAILED', { seq: entry.seq, marginType: 'CROSSED', error: readyErrMsg });
+                logger.error('AT_LIVE', `[${entry.seq}] Margin type set failed — BLOCKING entry: ${readyErrMsg}`);
+                telegram.sendToUser(userId, `⚠️ *Margin Type Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: CROSSED\nEntry skipped — deterministic margin required for risk math.\nError: ${readyErrMsg}`);
+            } else {
+                entry.live = { status: 'LEVERAGE_FAILED', error: readyErrMsg, intendedLev: entry.lev };
+                _pushLog(userId, 'LIVE_LEVERAGE_FAILED', { seq: entry.seq, leverage: entry.lev, error: readyErrMsg });
+                logger.error('AT_LIVE', `[${entry.seq}] Leverage/symbol-ready set failed — BLOCKING entry: ${readyErrMsg}`);
+                telegram.sendToUser(userId, `⚠️ *Leverage Set Failed — Entry Blocked*\n${entry.side} ${entry.symbol}\nIntended: ${entry.lev}x\nEntry skipped — wrong leverage = wrong risk.\nError: ${readyErrMsg}`);
+            }
+            us.liveStats.blocked++;
+            return;
+        }
+        logger.info('AT_LIVE', `[${entry.seq}] Symbol ready: CROSSED margin + ${entry.lev}x leverage verified/set${readyResult.cached ? ' (cached)' : ''}`);
     }
 
     // Round params
@@ -808,298 +1400,175 @@ async function _executeLiveEntry(entry, stc) {
     const roundedTp = roundOrderParams(entry.symbol, entry.qty, entry.tp);
     const qty = String(rounded.quantity || entry.qty);
 
-    // MARKET entry
-    let mainOrder;
+    // [Phase 2 S2.A] Idempotency short-circuit — if this entry was persisted
+    // with mainOrderId already set (server died between MAIN success and SL
+    // and we rehydrated from DB, or _executeLiveEntry was somehow re-invoked
+    // for the same entry), skip the POST. The exchange already has the order
+    // under our stable clientOrderId; re-POSTing would either be deduped by
+    // Binance or, worst case, risk a duplicate. Persisted state wins.
+    if (entry.live && entry.live.mainOrderId) {
+        logger.warn('AT_LIVE', `[${entry.seq}] MAIN order already recorded (${entry.live.mainOrderId}) — idempotency skip`);
+        audit.record('SAT_ENTRY_DEDUP_SKIP', { userId, seq: entry.seq, symbol: entry.symbol, existingOrderId: entry.live.mainOrderId, clientOrderId }, 'SERVER_AT');
+        return;
+    }
+
+    // [Task 40.3] Replace direct sendSignedRequest entry/SL/TP/emergency-close
+    // calls with single exchangeOps.placeEntry router call. Routes to Binance
+    // or Bybit per per-user config (_getUserExchange). binanceOps.placeEntry
+    // handles: MARKET entry → safety SL (15% OTM) → real SL 3x retry →
+    // emergency close on SL exhaustion → TP (no retry, soft fail) → positionStateMachine.
+    //
+    // [OPTION B — dual DB write transitional]: binanceOps.placeEntry inserts
+    // PENDING row into at_positions. serverAT _persistPosition continues to write
+    // its own at_positions record (legacy format). Two rows per entry during
+    // transition; entry.live.opsSeq links them. Full dedup: T40-deferred-db-unification.
+    // [TODO: deprecate _persistPosition INSERT post-Bybit Phase 2]
+    let placeResult;
     try {
-        mainOrder = await sendSignedRequest('POST', '/fapi/v1/order', {
+        placeResult = await exchangeOps.placeEntry(userId, {
             symbol: entry.symbol,
-            side: entry.side === 'LONG' ? 'BUY' : 'SELL',
-            type: 'MARKET', quantity: qty,
-            newClientOrderId: clientOrderId,
-        }, creds);
-    } catch (err) {
-        entry.live = { status: 'ENTRY_FAILED', error: err.message };
-        _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: err.message });
-        logger.error('AT_LIVE', `[${entry.seq}] MARKET entry failed: ${err.message}`);
-        Sentry.captureException(err, { tags: { module: 'AT', action: 'live_entry', symbol: entry.symbol, side: entry.side }, user: { id: String(userId) } });
-        telegram.alertOrderFailed(entry.symbol, entry.side, err.message, userId);
-        audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: err.message }, 'SERVER_AT');
+            side: entry.side,           // LONG/SHORT — exchangeOps accepts this
+            qty: qty,
+            entryType: 'MARKET',
+            sl: (entry.sl && entry.sl > 0) ? { price: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl) } : null,
+            tp: (!entry.dslParams && entry.tp && entry.tp > 0) ? { price: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp) } : null,
+            leverage: entry.lev,
+            decisionKey: clientOrderId,  // SAT_<seq>_<8hex> — compatible with exchangeOps regex
+            source: 'serverAT',
+        });
+    } catch (placeErr) {
+        // Unexpected throw (not ok:false) — treat as ENTRY_FAILED
+        placeResult = { ok: false, error: { message: placeErr.message, code: placeErr.code || 'ErrUnknown' } };
+    }
+
+    if (!placeResult || !placeResult.ok) {
+        const errMsg = (placeResult && placeResult.error && placeResult.error.message) || 'placeEntry failed';
+        const errCode = (placeResult && placeResult.error && placeResult.error.code) || 'ErrUnknown';
+        const isCatastrophic = !!(placeResult && placeResult.catastrophic);
+
+        if (isCatastrophic) {
+            // binanceOps set PANIC halt and persisted to emergency_close_queue
+            logger.error('AT_LIVE', `[${entry.seq}] CATASTROPHIC ENTRY FAILURE — halt armed, emergency_close_queue: ${errMsg}`);
+            audit.record('SAT_EMERGENCY_CLOSE', {
+                userId, seq: entry.seq, symbol: entry.symbol, side: entry.side,
+                reason: 'CATASTROPHIC_ENTRY_FAILED', error: errMsg,
+            }, 'SERVER_AT');
+            telegram.sendToUser(userId, `🚨🚨 *CATASTROPHIC ENTRY FAILURE*\n${entry.side} ${entry.symbol}\nPosition halted + queued for recovery.\nError: ${errMsg}`);
+        } else {
+            entry.live = { status: 'ENTRY_FAILED', error: errMsg };
+            _pushLog(userId, 'LIVE_ENTRY_FAILED', { seq: entry.seq, error: errMsg, code: errCode });
+            logger.error('AT_LIVE', `[${entry.seq}] placeEntry failed [${errCode}]: ${errMsg}`);
+            const syntheticErr = new Error(errMsg);
+            syntheticErr.code = errCode;
+            Sentry.captureException(syntheticErr, { tags: { module: 'AT', action: 'live_entry', symbol: entry.symbol, side: entry.side }, user: { id: String(userId) } });
+            telegram.alertOrderFailed(entry.symbol, entry.side, errMsg, userId);
+            audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: errMsg }, 'SERVER_AT');
+        }
         metrics.recordOrder('failed');
         us.liveStats.errors++;
         return;
     }
 
-    // [ZT-AUD-002] Verify fill — poll if MARKET response is incomplete
-    let verifiedOrder = mainOrder;
-    if (!mainOrder.avgPrice || parseFloat(mainOrder.avgPrice) <= 0 || mainOrder.status !== 'FILLED') {
-        logger.warn('AT_LIVE', `[${entry.seq}] MARKET response incomplete (status=${mainOrder.status}, avgPrice=${mainOrder.avgPrice}) — polling for fill...`);
-        for (let pollAttempt = 0; pollAttempt < 3; pollAttempt++) {
-            await new Promise(r => setTimeout(r, 1000));
-            try {
-                const queried = await sendSignedRequest('GET', '/fapi/v1/order', {
-                    symbol: entry.symbol, orderId: mainOrder.orderId,
-                }, creds);
-                if (queried.status === 'FILLED' && parseFloat(queried.avgPrice) > 0) {
-                    verifiedOrder = queried;
-                    logger.info('AT_LIVE', `[${entry.seq}] Fill confirmed on poll #${pollAttempt + 1}: avgPrice=${queried.avgPrice}`);
-                    break;
-                }
-            } catch (pollErr) {
-                logger.warn('AT_LIVE', `[${entry.seq}] Fill poll #${pollAttempt + 1} failed: ${pollErr.message}`);
-            }
-        }
-    }
-    if (!verifiedOrder.avgPrice || parseFloat(verifiedOrder.avgPrice) <= 0) {
-        logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: No verified fill price after polling — using MARKET response as-is`);
-        Sentry.captureMessage(`Fill unverified: ${entry.symbol} ${entry.side}`, { level: 'error', tags: { module: 'AT', action: 'fill_unverified', symbol: entry.symbol }, user: { id: String(userId) } });
-        telegram.sendToUser(userId, `⚠️ *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — avgPrice not confirmed. Monitor manually.`);
-    }
-    const avgPrice = parseFloat(verifiedOrder.avgPrice || 0);
-    const executedQty = parseFloat(verifiedOrder.executedQty || 0);
+    // [Task 40.4] Fill verification adapter — translate exchangeOps result to
+    // serverAT's expected entry.live.* fields. exchangeOps returns avgFillPrice
+    // directly from exchange response (no polling needed — it uses FILLED response).
+    // If avgFillPrice missing/zero: FILL_UNVERIFIED path (ZT-AUD-002 preserved).
+    const avgPrice = parseFloat(placeResult.avgFillPrice || 0);
+    const executedQty = parseFloat(placeResult.filledQty || 0);
     const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
-    if (!Number.isFinite(avgPrice) || avgPrice <= 0 || !Number.isFinite(executedQty) || executedQty <= 0) {
-        // [ZT-AUD-C5] Reconcile against exchange BEFORE aborting. The order may
-        // have filled after our polling window — if so, leaving it untracked
-        // means a position with no SL/TP server-side. Force-close it.
-        let exchangeQty = 0;
-        let exchangeSide = null;
-        try {
-            const posRisk = await sendSignedRequest('GET', '/fapi/v2/positionRisk', { symbol: entry.symbol }, creds);
-            const bPos = (Array.isArray(posRisk) ? posRisk : []).find(p => parseFloat(p.positionAmt) !== 0);
-            if (bPos) {
-                exchangeQty = Math.abs(parseFloat(bPos.positionAmt));
-                exchangeSide = parseFloat(bPos.positionAmt) > 0 ? 'LONG' : 'SHORT';
-            }
-        } catch (recErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED reconcile query failed: ${recErr.message}`);
-        }
+    const mainOrderId = placeResult.orderId;
 
-        if (exchangeQty > 0 && exchangeSide === entry.side) {
-            // Position exists on exchange — force market close to avoid unprotected exposure
-            logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED but exchange shows ${exchangeSide} qty=${exchangeQty} — FORCE CLOSING`);
-            Sentry.captureMessage(`FILL_UNVERIFIED force-close: ${entry.symbol} ${entry.side} qty=${exchangeQty}`, { level: 'fatal', tags: { module: 'AT', action: 'fill_unverified_force_close', symbol: entry.symbol }, user: { id: String(userId) } });
-            try {
-                const fcQty = String(roundOrderParams(entry.symbol, exchangeQty).quantity || exchangeQty);
-                await sendSignedRequest('POST', '/fapi/v1/order', {
-                    symbol: entry.symbol, side: closeSide, type: 'MARKET',
-                    quantity: fcQty, reduceOnly: true,
-                    newClientOrderId: `SAT_FCUNVER_${liveSeq}`,
-                }, creds);
-                entry.live = { status: 'FILL_UNVERIFIED_FORCE_CLOSED', error: 'No confirmed fill data; exchange position force-closed', orderId: mainOrder.orderId, exchangeQty };
-                audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, exchangeQty }, 'SERVER_AT');
-                telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED — FORCE CLOSED*\n${entry.symbol} ${entry.side} qty=${exchangeQty}\nFill data missing; closed exchange position to prevent unprotected exposure.`);
-            } catch (fcErr) {
-                logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED force-close FAILED: ${fcErr.message}`);
-                Sentry.captureException(fcErr, { level: 'fatal', tags: { module: 'AT', action: 'fill_unverified_force_close_failed' }, user: { id: String(userId) } });
-                entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill; force-close failed: ' + fcErr.message, orderId: mainOrder.orderId, exchangeQty };
-                audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSE_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, exchangeQty, error: fcErr.message }, 'SERVER_AT');
-                telegram.sendToUser(userId, `🚨🚨 *FILL UNVERIFIED — FORCE CLOSE FAILED*\n${entry.symbol} ${entry.side} qty=${exchangeQty}\n*MANUAL INTERVENTION REQUIRED*\nError: ${fcErr.message}`);
-            }
+    if (!Number.isFinite(avgPrice) || avgPrice <= 0 || !Number.isFinite(executedQty) || executedQty <= 0) {
+        // [ZT-AUD-002] No verified fill price from exchangeOps result
+        logger.error('AT_LIVE', `[${entry.seq}] FILL_UNVERIFIED — avgFillPrice=${placeResult.avgFillPrice} filledQty=${placeResult.filledQty}`);
+        Sentry.captureMessage(`Fill unverified: ${entry.symbol} ${entry.side}`, { level: 'error', tags: { module: 'AT', action: 'fill_unverified', symbol: entry.symbol }, user: { id: String(userId) } });
+
+        // [ZT-AUD-C5] Force-close FILL_UNVERIFIED with confirmed exchange position
+        const fcDecisionKey = `SAT_FCUNVER_${liveSeq}`.slice(0, 36);
+        const fcResult = await exchangeOps.closePosition(userId, {
+            seq: placeResult.seq,
+            symbol: entry.symbol,
+            side: entry.side,
+            qty: qty,
+            closeType: 'MARKET',
+            decisionKey: fcDecisionKey,
+            source: 'FILL_UNVERIFIED_FORCE_CLOSE',
+        }).catch(() => null);
+
+        if (fcResult && fcResult.ok) {
+            entry.live = { status: 'FILL_UNVERIFIED_FORCE_CLOSED', error: 'No confirmed fill data; exchange position force-closed', orderId: mainOrderId, opsSeq: placeResult.seq };
+            audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side }, 'SERVER_AT');
+            telegram.sendToUser(userId, `🚨 *FILL UNVERIFIED — FORCE CLOSED*\n${entry.symbol} ${entry.side}\nFill data missing; closed exchange position to prevent unprotected exposure.`);
         } else {
-            // No position on exchange — order was likely rejected/expired
-            entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data; no exchange position', orderId: mainOrder.orderId };
-            logger.error('AT_LIVE', `[${entry.seq}] Entry aborted — no confirmed fill, no exchange position (avgPrice=${avgPrice}, qty=${executedQty})`);
-            audit.record('SAT_FILL_UNVERIFIED_NO_POS', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side }, 'SERVER_AT');
-            telegram.sendToUser(userId, `⚠️ *FILL UNVERIFIED*\n${entry.symbol} ${entry.side} — no fill data and no position on exchange. Order may have been rejected.`);
+            entry.live = { status: 'FILL_UNVERIFIED', error: 'No confirmed fill data; force-close also failed or not attempted', orderId: mainOrderId, opsSeq: placeResult.seq };
+            audit.record('SAT_FILL_UNVERIFIED_FORCE_CLOSE_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: 'closePosition returned !ok' }, 'SERVER_AT');
+            telegram.sendToUser(userId, `🚨🚨 *FILL UNVERIFIED — FORCE CLOSE FAILED*\n${entry.symbol} ${entry.side}\n*MANUAL INTERVENTION REQUIRED*`);
         }
         us.liveStats.errors++;
         return;
     }
 
-    // [FIX2] Re-round using ACTUAL executedQty (not original qty) for all downstream orders
+    // [FIX2] Re-round using ACTUAL executedQty for downstream references
     const fillQty = String(roundOrderParams(entry.symbol, executedQty).quantity || executedQty);
 
     // Slippage tracking — compare fill price vs expected price
     const entrySlippage = avgPrice - entry.price;
     const entrySlippagePct = entry.price > 0 ? +((entrySlippage / entry.price) * 100).toFixed(4) : 0;
-    entry.live = entry.live || {};
-    entry.live.entrySlippage = entrySlippage;
-    entry.live.entrySlippagePct = entrySlippagePct;
-    entry.live.expectedPrice = entry.price;
-    entry.live.fillPrice = avgPrice;
 
     logger.info('AT_LIVE', `[${entry.seq}] ENTRY FILLED ${entry.side} ${entry.symbol} qty=${executedQty} @ $${avgPrice} (expected $${entry.price.toFixed(2)}, slippage ${entrySlippagePct >= 0 ? '+' : ''}${entrySlippagePct}%)`);
     audit.record('SAT_ENTRY_FILLED', {
         userId, seq: entry.seq, symbol: entry.symbol, side: entry.side,
-        qty: executedQty, avgPrice, orderId: mainOrder.orderId, tier: entry.tier,
+        qty: executedQty, avgPrice, orderId: mainOrderId, tier: entry.tier,
         slippage: entrySlippagePct,
     }, 'SERVER_AT');
     metrics.recordOrder('filled');
-    telegram.alertOrderFilled(entry.symbol, entry.side, executedQty, avgPrice, mainOrder.orderId, userId);
+    telegram.alertOrderFilled(entry.symbol, entry.side, executedQty, avgPrice, mainOrderId, userId);
 
-    // [ZT-AUD-C6] Safety SL — place a far-OTM SL synchronously BEFORE the
-    // optimal-SL retry loop so the position is never naked, even during the
-    // 1-4s window of SL retries. Far-OTM = 15% from fill in adverse direction;
-    // exchange will accept it (no margin/price-already-past errors) and only
-    // hits on a flash crash. Cancelled once the real SL is placed.
-    let safetySlOrder = null;
-    try {
-        const safetyRaw = entry.side === 'LONG' ? avgPrice * 0.85 : avgPrice * 1.15;
-        const safetyRounded = roundOrderParams(entry.symbol, executedQty, safetyRaw);
-        const safetyStopPrice = String(safetyRounded.stopPrice != null ? safetyRounded.stopPrice : safetyRaw.toFixed(2));
-        safetySlOrder = await _placeConditionalOrder({
-            symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
-            quantity: fillQty, stopPrice: safetyStopPrice,
-            reduceOnly: true, newClientOrderId: `SAT_SLSAFE_${liveSeq}`,
-        }, creds);
-        logger.info('AT_LIVE', `[${entry.seq}] Safety SL placed @ $${safetyStopPrice} (15% OTM) — covers retry window`);
-    } catch (safeErr) {
-        logger.warn('AT_LIVE', `[${entry.seq}] Safety SL placement failed: ${safeErr.message} — proceeding with retry loop only`);
-        Sentry.captureException(safeErr, { level: 'warning', tags: { module: 'AT', action: 'safety_sl_failed', symbol: entry.symbol }, user: { id: String(userId) } });
+    // Log SL/TP retry warnings if applicable (for transparency; SL/TP handled inside binanceOps)
+    if (placeResult.slOrderId) {
+        logger.info('AT_LIVE', `[${entry.seq}] SL order placed: ${placeResult.slOrderId}`);
+    }
+    if (placeResult.tpOrderId) {
+        logger.info('AT_LIVE', `[${entry.seq}] TP order placed: ${placeResult.tpOrderId}`);
     }
 
-    // SL order with auto-retry + emergency close
-    let slOrder = null;
-    const SL_RETRY_DELAYS = [1000, 3000]; // [ZT-AUD-007] 1s, 3s backoff (max 4s vs old 17s)
-    for (let attempt = 0; attempt <= SL_RETRY_DELAYS.length; attempt++) {
-        try {
-            slOrder = await _placeConditionalOrder({
-                symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
-                quantity: fillQty,
-                stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl),
-                reduceOnly: true, newClientOrderId: `SAT_SL_${liveSeq}_${attempt}`,
-            }, creds);
-            if (attempt > 0) logger.info('AT_LIVE', `[${entry.seq}] SL order succeeded on retry #${attempt}`);
-            break; // success
-        } catch (slErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] SL order attempt ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed: ${slErr.message}`);
-            if (attempt < SL_RETRY_DELAYS.length) {
-                telegram.sendToUser(userId, `⚠️ SL retry ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${SL_RETRY_DELAYS[attempt] / 1000}s...`);
-                await new Promise(r => setTimeout(r, SL_RETRY_DELAYS[attempt]));
-            }
-        }
-    }
-
-    // Real SL placed → cancel the safety SL (it's no longer needed).
-    if (slOrder && safetySlOrder && safetySlOrder.orderId) {
-        await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
-        safetySlOrder = null;
-    }
-
-    // [FIX1] EMERGENCY CLOSE: if all SL retries failed, market-close + properly remove from _positions
-    if (!slOrder) {
-        logger.error('AT_LIVE', `[${entry.seq}] ALL SL retries exhausted — executing EMERGENCY MARKET CLOSE`);
-        Sentry.captureMessage(`EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_sl', symbol: entry.symbol }, user: { id: String(userId) } });
-        telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing position to prevent unprotected exposure.`);
-        // [ZT-AUD-C6] Keep safety SL active during emergency close. It's reduceOnly so concurrent
-        // firing won't double-close; only cancel after the close confirms success. If close fails,
-        // the safety SL stays as last-line protection.
-        try {
-            const emgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
-                symbol: entry.symbol, side: closeSide, type: 'MARKET',
-                quantity: fillQty, reduceOnly: true,
-                newClientOrderId: `SAT_EMGCLOSE_${liveSeq}`,
-            }, creds);
-            const _emgRaw = parseFloat(emgResult.avgPrice);
-            const emgPrice = (Number.isFinite(_emgRaw) && _emgRaw > 0) ? _emgRaw : avgPrice;
-            const emgPnl = avgPrice > 0 ? (entry.side === 'LONG'
-                ? +((emgPrice - avgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)
-                : +((avgPrice - emgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)) : 0;
-            entry.live = { status: 'EMERGENCY_CLOSED', liveSeq, clientOrderId, mainOrderId: mainOrder.orderId, avgPrice, executedQty, reason: 'SL placement failed after all retries' };
-            logger.warn('AT_LIVE', `[${entry.seq}] Emergency close executed @ $${emgPrice.toFixed(2)} PnL=$${emgPnl.toFixed(2)}`);
-            telegram.sendToUser(userId, `✅ Emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${emgPrice.toFixed(2)} — PnL: $${emgPnl.toFixed(2)}`);
-            audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'SERVER_AT');
-            // [ZT-AUD-C6] Emergency close confirmed → safety SL no longer needed.
-            if (safetySlOrder && safetySlOrder.orderId) {
-                await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
-                safetySlOrder = null;
-            }
-            // [FIX1] Properly close position — remove from _positions, update stats, persist
-            const emgIdx = _positions.findIndex(p => p.seq === entry.seq);
-            if (emgIdx >= 0) {
-                _closePosition(emgIdx, entry, 'EMERGENCY_CLOSED', emgPrice, emgPnl);
-            }
-            return; // exit early — no TP needed, position is closed
-        } catch (emgErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
-            Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_failed', symbol: entry.symbol }, user: { id: String(userId) } });
-            const safetyMsg = safetySlOrder ? `\nSafety SL (15% OTM) still active as backstop.` : '';
-            telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL on Binance.${safetyMsg}\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`);
-        }
-        return; // [TL-02] Don't place TP if emergency close failed — position already alerted as UNPROTECTED
-    }
-
-    // [DSL-SEMANTIC-FIX + DSL-OFF]
-    //   DSL ON  → no native TP (DSL pivots trail the price; PL is the only take-profit path).
-    //   DSL OFF → place native TP from RISK MANAGEMENT so the position has full exchange-side protection.
-    let tpOrder = null;
-    const TP_RETRY_DELAYS = [1000, 3000];
-    if (!entry.dslParams) {
-        for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
-            try {
-                tpOrder = await _placeConditionalOrder({
-                    symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
-                    quantity: fillQty,
-                    stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
-                    reduceOnly: true, newClientOrderId: `SAT_TP_${liveSeq}_${tpAttempt}`,
-                }, creds);
-                if (tpAttempt > 0) logger.info('AT_LIVE', `[${entry.seq}] TP order succeeded on retry #${tpAttempt}`);
-                break;
-            } catch (tpErr) {
-                logger.error('AT_LIVE', `[${entry.seq}] TP order attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
-                if (tpAttempt < TP_RETRY_DELAYS.length) {
-                    telegram.sendToUser(userId, `⚠️ TP retry ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${TP_RETRY_DELAYS[tpAttempt] / 1000}s...`);
-                    await new Promise(r => setTimeout(r, TP_RETRY_DELAYS[tpAttempt]));
-                }
-            }
-        }
-    }
-
-    if (!entry.dslParams && !tpOrder && slOrder) {
-        logger.error('AT_LIVE', `[${entry.seq}] ALL TP retries exhausted — executing EMERGENCY MARKET CLOSE`);
-        Sentry.captureMessage(`EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'emergency_close_tp', symbol: entry.symbol }, user: { id: String(userId) } });
-        telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${TP_RETRY_DELAYS.length + 1} TP attempts failed.\nEmergency closing — position cannot stay open without TP protection.`);
-        // Cancel SL order first (we're closing the position) — await to prevent SL fill racing with emergency close
-        if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
-        try {
-            const tpEmgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
-                symbol: entry.symbol, side: closeSide, type: 'MARKET',
-                quantity: fillQty, reduceOnly: true,
-                newClientOrderId: `SAT_TPEMG_${liveSeq}`,
-            }, creds);
-            const _tpEmgRaw = parseFloat(tpEmgResult.avgPrice);
-            const tpEmgPrice = (Number.isFinite(_tpEmgRaw) && _tpEmgRaw > 0) ? _tpEmgRaw : avgPrice;
-            const tpEmgPnl = avgPrice > 0 ? (entry.side === 'LONG'
-                ? +((tpEmgPrice - avgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)
-                : +((avgPrice - tpEmgPrice) / avgPrice * entry.size * entry.lev).toFixed(2)) : 0;
-            entry.live = { status: 'EMERGENCY_CLOSED', liveSeq, clientOrderId, mainOrderId: mainOrder.orderId, avgPrice, executedQty, reason: 'TP placement failed after all retries' };
-            logger.warn('AT_LIVE', `[${entry.seq}] TP emergency close executed @ $${tpEmgPrice.toFixed(2)} PnL=$${tpEmgPnl.toFixed(2)}`);
-            telegram.sendToUser(userId, `✅ TP emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${tpEmgPrice.toFixed(2)} — PnL: $${tpEmgPnl.toFixed(2)}`);
-            audit.record('SAT_EMERGENCY_CLOSE', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, emgPrice: tpEmgPrice, emgPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' }, 'SERVER_AT');
-            const tpEmgIdx = _positions.findIndex(p => p.seq === entry.seq);
-            if (tpEmgIdx >= 0) _closePosition(tpEmgIdx, entry, 'EMERGENCY_CLOSED', tpEmgPrice, tpEmgPnl);
-            return; // position closed — no further processing needed
-        } catch (tpEmgErr) {
-            logger.error('AT_LIVE', `[${entry.seq}] TP EMERGENCY CLOSE FAILED: ${tpEmgErr.message}`);
-            Sentry.captureException(tpEmgErr, { level: 'fatal', tags: { module: 'AT', action: 'tp_emergency_failed', symbol: entry.symbol }, user: { id: String(userId) } });
-            telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nPosition has SL but NO TP protection.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`);
-        }
-    }
-
+    // [Task 40.3 result adapter] Map exchangeOps result → entry.live.*
+    // entry.live.opsSeq: links to binanceOps-created at_positions row (dual-write bridge)
+    const slPlaced = !!placeResult.slOrderId;
     entry.live = {
-        status: (!slOrder) ? 'LIVE_NO_SL' : 'LIVE', liveSeq, clientOrderId,
-        mainOrderId: mainOrder.orderId, avgPrice, executedQty,
-        slOrderId: slOrder ? slOrder.orderId : null,
-        tpOrderId: tpOrder ? tpOrder.orderId : null,
-        slPlaced: !!slOrder, tpPlaced: !!tpOrder,
+        status: slPlaced ? 'LIVE' : 'LIVE_NO_SL', liveSeq, clientOrderId,
+        // [Phase 2 S2.A] Carry decisionId forward — visible in persisted live state
+        decisionId: entry.decisionId || null,
+        mainOrderId,
+        avgPrice, executedQty, fillPrice: avgPrice,
+        entrySlippage, entrySlippagePct, expectedPrice: entry.price,
+        slOrderId: placeResult.slOrderId || null,
+        tpOrderId: placeResult.tpOrderId || null,
+        slPlaced, tpPlaced: !!placeResult.tpOrderId,
+        // [Task 40 dual-write bridge] opsSeq links to binanceOps at_positions row
+        opsSeq: placeResult.seq || null,
     };
+    // [P5A SERVER LIVE OWNERSHIP] live.status set — confirms fill path and ownership stays AT.
+    logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] live.status=${entry.live.status} seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} ts=${Date.now()}`);
 
-    // CRITICAL: If SL still failed after retries AND emergency close also failed
-    if (!slOrder) {
-        logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: Position LIVE without SL — emergency close also failed!`);
-        telegram.sendToUser(userId, `🚨 *CRITICAL: NO SL PROTECTION*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nSL retries + emergency close ALL failed.\nPosition is UNPROTECTED. Place manual SL immediately!`);
+    // CRITICAL: If SL failed (LIVE_NO_SL) — alert immediately
+    if (!slPlaced) {
+        logger.error('AT_LIVE', `[${entry.seq}] CRITICAL: Position LIVE without SL — binanceOps SL placement exhausted`);
+        telegram.sendToUser(userId, `🚨 *CRITICAL: NO SL PROTECTION*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nSL retries exhausted inside exchange router.\nPosition is UNPROTECTED. Place manual SL immediately!`);
     }
 
     _pushLog(userId, 'LIVE_ENTRY', {
         seq: entry.seq, liveSeq, symbol: entry.symbol, side: entry.side,
-        avgPrice, executedQty, mainOrderId: mainOrder.orderId,
+        avgPrice, executedQty, mainOrderId, opsSeq: placeResult.seq,
     });
 
     us.liveStats.entries++;
-    _persistPosition(entry);
+    _persistPosition(entry); // [OPTION B: legacy at_positions write preserved — see T40-deferred-db-unification]
     _persistState(userId);
     } finally {
         entry._livePending = false; // [TL-04] Unlock — all paths covered
+        // [P5A SERVER LIVE OWNERSHIP] _livePending false transition — final state after exchange roundtrip.
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] _livePending=false seq=${entry.seq} uid=${entry.userId} sym=${entry.symbol} live=${entry.live ? entry.live.status : 'undefined'} autoTrade=${entry.autoTrade} sourceMode=${entry.sourceMode} ts=${Date.now()}`);
         _liveEntryLocks.delete(_lockKey); // Release per-symbol lock
 
         // [B18] FILL_UNVERIFIED: keep tracked — order may be filled on Binance
@@ -1157,107 +1626,148 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     // [FIX-EXPIRY] EXPIRED handling removed — no code path produces EXPIRED anymore
     if (exitType === 'HIT_SL') {
         // SL triggered on exchange — cancel remaining TP
-        if (pos.live.tpOrderId) await _cancelOrderSafe(pos.symbol, pos.live.tpOrderId, creds, userId);
+        // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
+        if (pos.live.tpOrderId) {
+            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.tpOrderId }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
+        }
         // Query real fill price from SL order (best-effort — corrects slippage)
+        // [Fix #6] Guard by exchange: Binance-only algoOrder/order query. Bybit deferred to Phase 2.
         if (pos.live.slOrderId) {
-            try {
-                // [ALGO-FIX] Try algo order query first (SL is now algo), fallback to regular
-                let slOrder;
+            const userExchange = creds && creds.exchange;
+            if (userExchange === 'binance' || !userExchange) {
                 try {
-                    slOrder = await sendSignedRequest('GET', '/fapi/v1/algoOrder', { algoId: pos.live.slOrderId }, creds);
-                } catch (_) {
-                    slOrder = await sendSignedRequest('GET', '/fapi/v1/order', { symbol: pos.symbol, orderId: pos.live.slOrderId }, creds);
-                }
-                const realFill = parseFloat(slOrder.avgPrice || slOrder.executedPrice || 0);
-                const slStatus = slOrder.status || slOrder.algoStatus || '';
-                if (Number.isFinite(realFill) && realFill > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
-                    // Exit slippage tracking
-                    const expectedExitPrice = pos.sl;
-                    const exitSlippage = realFill - expectedExitPrice;
-                    const exitSlippagePct = expectedExitPrice > 0 ? +((exitSlippage / expectedExitPrice) * 100).toFixed(4) : 0;
-                    pos.live.exitSlippage = exitSlippage;
-                    pos.live.exitSlippagePct = exitSlippagePct;
-                    pos.live.exitFillPrice = realFill;
-                    pos.live.exitExpectedPrice = expectedExitPrice;
-
-                    const realPnl = pos.side === 'LONG'
-                        ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                        : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
-                    if (realPnl !== pos.closePnl) {
-                        const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
-                        logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
-                        pos.closePnl = realPnl;
-                        pnl = realPnl;
-                        // Correct stats with delta from slippage
-                        const _us = _uState(userId);
-                        _us.stats.pnl = +(_us.stats.pnl + pnlDelta).toFixed(2);
-                        _us.liveStats.pnl = +(_us.liveStats.pnl + pnlDelta).toFixed(2);
-                        _us.dailyPnL = +(_us.dailyPnL + pnlDelta).toFixed(2);
-                        _us.dailyPnLLive = +(_us.dailyPnLLive + pnlDelta).toFixed(2);
-                        _persistState(userId);
-                        _persistClose(pos);
+                    // [ALGO-FIX] Try algo order query first (SL is now algo), fallback to regular
+                    let slOrder;
+                    try {
+                        slOrder = await sendSignedRequest('GET', '/fapi/v1/algoOrder', { algoId: pos.live.slOrderId }, creds);
+                    } catch (_) {
+                        slOrder = await sendSignedRequest('GET', '/fapi/v1/order', { symbol: pos.symbol, orderId: pos.live.slOrderId }, creds);
                     }
+                    const realFill = parseFloat(slOrder.avgPrice || slOrder.executedPrice || 0);
+                    const slStatus = slOrder.status || slOrder.algoStatus || '';
+                    // [TM-5] Defensive `pos.price > 0` guard added — prevents
+                    // div-by-zero NaN propagation in PnL formula below if pos.price
+                    // ever fell to 0/NaN through corrupt state. realFill guard
+                    // already in place; pos.price guard is defensive belt-and-braces.
+                    if (Number.isFinite(realFill) && realFill > 0 && pos.price > 0 && (slStatus === 'FILLED' || slStatus === 'FINISHED')) {
+                        // Exit slippage tracking
+                        const expectedExitPrice = pos.sl;
+                        const exitSlippage = realFill - expectedExitPrice;
+                        const exitSlippagePct = expectedExitPrice > 0 ? +((exitSlippage / expectedExitPrice) * 100).toFixed(4) : 0;
+                        pos.live.exitSlippage = exitSlippage;
+                        pos.live.exitSlippagePct = exitSlippagePct;
+                        pos.live.exitFillPrice = realFill;
+                        pos.live.exitExpectedPrice = expectedExitPrice;
+
+                        // [TM-4] Apply round-trip fee deduction to terminal PnL.
+                        // Gross PnL overstated by ~0.08% (entry+exit fees on notional).
+                        const _grossPnl = pos.side === 'LONG'
+                            ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                            : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                        const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
+                        if (realPnl !== pos.closePnl) {
+                            const pnlDelta = +(realPnl - pos.closePnl).toFixed(2);
+                            logger.info('AT_LIVE', `[${pos.seq}] SL fill price correction: $${exitPrice.toFixed(2)} → $${realFill.toFixed(2)} | PnL: $${pos.closePnl} → $${realPnl} | slippage: ${exitSlippagePct >= 0 ? '+' : ''}${exitSlippagePct}%`);
+                            pos.closePnl = realPnl;
+                            pnl = realPnl;
+                            // Correct stats with delta from slippage
+                            const _us = _uState(userId);
+                            _us.stats.pnl = +(_us.stats.pnl + pnlDelta).toFixed(2);
+                            _us.liveStats.pnl = +(_us.liveStats.pnl + pnlDelta).toFixed(2);
+                            _us.dailyPnL = +(_us.dailyPnL + pnlDelta).toFixed(2);
+                            _us.dailyPnLLive = +(_us.dailyPnLLive + pnlDelta).toFixed(2);
+                            _persistState(userId);
+                            _persistClose(pos);
+                        }
+                    }
+                } catch (slErr) {
+                    logger.warn('AT_LIVE', `[${pos.seq}] SL fill query failed: ${slErr.message}`);
                 }
-            } catch (slErr) {
-                logger.warn('AT_LIVE', `[${pos.seq}] SL fill query failed: ${slErr.message}`);
+            } else {
+                // Bybit slippage correction deferred to Phase 2
+                logger.info('AT_LIVE_EXIT', `SL fill price query skipped for ${userExchange} user=${userId} — deferred to Phase 2`);
             }
         }
     } else if (exitType === 'HIT_TP') {
         // TP triggered on exchange — cancel remaining SL
-        if (pos.live.slOrderId) await _cancelOrderSafe(pos.symbol, pos.live.slOrderId, creds, userId);
+        // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
+        if (pos.live.slOrderId) {
+            try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: pos.live.slOrderId }); } catch (_) { /* warn only — cancel fail is non-fatal */ }
+        }
     } else {
         // All other exit types: DSL_PL, DSL_TTP, MANUAL_CLIENT, RESET, RECON_PHANTOM, etc.
 
-        // [V5.1] Server-side exits need a MARKET close on Binance (position is still open on exchange)
-        // Exception: RECON_PHANTOM / RECON_EXCHANGE_CLOSED — Binance already doesn't have the position
+        // [V5.1] Server-side exits need a MARKET close (position is still open on exchange)
+        // Exception: RECON_PHANTOM / RECON_EXCHANGE_CLOSED — exchange already doesn't have the position
+        // [Task 41] Direct sendSignedRequest replaced with exchangeOps.closePosition router.
+        // binanceOps.closePosition has NO internal retry — serverAT retry wrapper PRESERVED.
+        // binanceOps.closePosition cancels SL+TP internally — manual cancel loop REMOVED.
         if (exitType !== 'RECON_PHANTOM' && exitType !== 'RECON_EXCHANGE_CLOSED' && pos.live.executedQty) {
-            const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
             const rounded = roundOrderParams(pos.symbol, pos.live.executedQty);
-            // [LIVE-PARITY] Retry loop for market close (was single attempt)
+            // [LIVE-PARITY] Retry loop for market close — PRESERVED (exchangeOps has no retry)
             const CLOSE_RETRIES = [1000, 3000, 5000];
             let closeResult = null;
+            // [Task 41] opsSeq links to binanceOps at_positions row (Task 40 dual-write bridge)
+            const closeSeq = (pos.live && pos.live.opsSeq) ? pos.live.opsSeq : pos.seq;
             for (let attempt = 0; attempt <= CLOSE_RETRIES.length; attempt++) {
                 try {
-                    closeResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    // [Task 41] Route through exchangeOps router (Binance or Bybit per user setting)
+                    // exchangeOps.closePosition: cancels SL+TP + sends reduce-only MARKET + DB transition
+                    const closeDecisionKey = require('./decisionKey').generate();
+                    closeResult = await exchangeOps.closePosition(userId, {
+                        seq: closeSeq,
                         symbol: pos.symbol,
-                        side: closeSide,
-                        type: 'MARKET',
-                        quantity: String(rounded.quantity || pos.live.executedQty),
-                        reduceOnly: true,
-                        newClientOrderId: `SAT_EXIT_${pos.live.liveSeq}_${Date.now()}`,
-                    }, creds);
-                    break; // success
+                        side: pos.side,          // LONG/SHORT — exchangeOps converts to BUY/SELL internally
+                        qty: String(rounded.quantity || pos.live.executedQty),
+                        closeType: 'MARKET',
+                        decisionKey: closeDecisionKey,
+                        source: exitType,         // audit trail: DSL_PL, MANUAL_CLIENT, RESET, etc.
+                    });
+                    if (closeResult && closeResult.ok) break; // success
+                    // ok:false (e.g. lock timeout, close rejected) — treat as retriable error
+                    const errMsg = (closeResult && closeResult.error) ? (closeResult.error.message || closeResult.error.code || 'unknown') : 'ok:false';
+                    logger.error('AT_LIVE', `[${pos.seq}] ${exitType} market close attempt ${attempt + 1}/${CLOSE_RETRIES.length + 1} returned !ok: ${errMsg}`);
+                    closeResult = null; // clear so failure path triggers below
                 } catch (closeErr) {
                     logger.error('AT_LIVE', `[${pos.seq}] ${exitType} market close attempt ${attempt + 1}/${CLOSE_RETRIES.length + 1} failed: ${closeErr.message}`);
-                    if (attempt < CLOSE_RETRIES.length) {
-                        await new Promise(r => setTimeout(r, CLOSE_RETRIES[attempt]));
-                    } else {
-                        // All retries exhausted — queue for reconciliation
-                        _pendingLiveCloses.set(pos.seq, { pos, exitType, exitPrice, pnl, ts: Date.now() });
-                        logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — queued for reconciliation`);
-                        telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on Binance — reconciliation will retry.*`);
-                    }
+                }
+                if (attempt < CLOSE_RETRIES.length) {
+                    await new Promise(r => setTimeout(r, CLOSE_RETRIES[attempt]));
+                } else {
+                    // All retries exhausted — queue for reconciliation
+                    _pendingLiveCloses.set(pos.seq, { pos, exitType, exitPrice, pnl, ts: Date.now() });
+                    logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — queued for reconciliation`);
+                    telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on exchange — reconciliation will retry.*`);
                 }
             }
-            if (closeResult) {
-                const _clRaw = parseFloat(closeResult.avgPrice);
+            if (closeResult && closeResult.ok) {
+                // [Task 41] Adapter: exchangeOps returns avgFillPrice (not avgPrice)
+                const _clRaw = parseFloat(closeResult.avgFillPrice);
                 const realFill = (Number.isFinite(_clRaw) && _clRaw > 0) ? _clRaw : exitPrice;
                 if (realFill > 0 && pos.price > 0) {
-                    const realPnl = pos.side === 'LONG'
+                    // [TM-4] Apply round-trip fee deduction (market close path).
+                    const _grossPnl = pos.side === 'LONG'
                         ? +((realFill - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
                         : +((pos.price - realFill) / pos.price * pos.size * pos.lev).toFixed(2);
+                    const realPnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
                     pos.live.exitFillPrice = realFill;
                     pos.live.exitExpectedPrice = exitPrice;
                     pos.closePnl = realPnl;
                     pnl = realPnl;
                 }
-                logger.info('AT_LIVE', `[${pos.seq}] ${exitType} market close filled @ $${(closeResult.avgPrice || exitPrice)} PnL=$${pnl.toFixed(2)}`);
+                // [Task 41] Carry orderId for downstream legacy callers (e.g. audit)
+                pos.live.exitOrderId = closeResult.orderId || null;
+                logger.info('AT_LIVE', `[${pos.seq}] ${exitType} market close filled @ $${(closeResult.avgFillPrice || exitPrice)} PnL=$${pnl.toFixed(2)}`);
             }
-        }
-
-        // Cancel BOTH remaining SL and TP orders to avoid orphans on Binance
-        for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
-            if (oid) await _cancelOrderSafe(pos.symbol, oid, creds, userId);
+            // Note: SL+TP cancel already handled inside exchangeOps.closePosition — no manual loop needed
+        } else if (exitType === 'RECON_PHANTOM' || exitType === 'RECON_EXCHANGE_CLOSED') {
+            // Recon exits: position already gone on exchange — cancel orphan SL+TP protection orders only
+            // [Fix #5] Use exchangeOps.cancelOrder for exchange-aware cancel (Bybit + Binance)
+            for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
+                if (oid) {
+                    try { await exchangeOps.cancelOrder(userId, { symbol: pos.symbol, orderId: oid }); } catch (_) { /* warn only */ }
+                }
+            }
         }
     }
 
@@ -1344,6 +1854,115 @@ function _closePosition(idx, pos, exitType, price, pnl) {
             pos.closeRegimeConf = snap.indicators.regimeConf || null;
         }
     } catch (_) { /* serverState not ready */ }
+
+    // [ML Phase B Day 8] Ring5 loop closure — outcome feeds bandit posteriors.
+    // Binary mapping: win (pnl > 0) → +0.5, loss (pnl < 0) → -0.5, flat → 0.
+    // recordContribution internally writes ml_bandit_evidence + updates L4
+    // posterior + invalidates LRU cache. Telemetry-only mode: errors swallowed
+    // so close flow never affected. RESET exit excluded (admin reset, not real trade).
+    if (exitType !== 'RESET') {
+        try {
+            const ring5 = _getRing5();
+            if (ring5 && pos.env && pos.symbol && pos.regime) {
+                const contribution = pnl > 0 ? 0.5 : pnl < 0 ? -0.5 : 0;
+                ring5.recordContribution({
+                    userId,
+                    resolvedEnv: pos.env,
+                    symbol: pos.symbol,
+                    moduleId: 'ring5_outcome',
+                    contribution,
+                    confidence: Math.max(0, Math.min(1, (pos.confidence || 0) / 100)),
+                    ts: Date.now(),
+                    regime: pos.regime
+                });
+            }
+        } catch (_ring5Err) { /* never block close flow */ }
+    }
+
+    // [Day 28] R5A attribution recording — feeds §16 measurement triad
+    // (ml_attribution_events). Normal closes only — exclude RESET (admin) +
+    // EMERGENCY_CLOSED (anomaly) + RECON_PHANTOM (external sync). Skip env
+    // missing or pos.size invalid (can't compute pnl%).
+    const _attribSkipExits = new Set(['RESET', 'EMERGENCY_CLOSED', 'RECON_PHANTOM', 'RECON_EXCHANGE_CLOSED', 'RECON_PHANTOM_MERGED_DUP']);
+    if (!_attribSkipExits.has(exitType) && pos.env && pos.size > 0) {
+        try {
+            const attrib = _getR5AAttribution();
+            if (attrib && attrib.recordAttribution) {
+                const pnlPct = (pnl / pos.size) * 100;
+                attrib.recordAttribution({
+                    userId,
+                    resolvedEnv: pos.env,
+                    trade: {
+                        symbol: pos.symbol,
+                        pos_id: String(pos.seq || ''),
+                        side: pos.side,
+                        closed_by: exitType === 'MANUAL_CLIENT' ? 'manual'
+                                  : exitType === 'HIT_TP' ? 'tp'
+                                  : exitType === 'HIT_SL' ? 'sl'
+                                  : exitType.toLowerCase(),
+                        pnl_pct: pnlPct,
+                        r_multiple: pos.rr && pnl !== 0 ? (pnl > 0 ? Math.abs(pnlPct / pos.slPct || 1) : -1) : null,
+                        regime: pos.regime,
+                        score_at_entry: pos.confluenceScore || null
+                    },
+                    snapshot: {
+                        regime: pos.regime,
+                        mfe: pos.quality ? pos.quality.mfe : null,
+                        mae: pos.quality ? pos.quality.mae : null
+                    }
+                });
+            }
+        } catch (_attErr) { /* never block close flow */ }
+    }
+
+    // [Day 31] Write REACTION utterance to TheVoice feed on every normal close.
+    // Mood + tone scaled by pnl magnitude. Skip RESET/EMERGENCY/RECON (anomaly).
+    if (!_attribSkipExits.has(exitType)) {
+        try {
+            const vl = require('./ml/_voice/voiceLogger');
+            const pnlPct = pos.size > 0 ? (pnl / pos.size) * 100 : 0;
+            const absPct = Math.abs(pnlPct);
+            let mood, suffix;
+            if (pnl > 0 && absPct >= 1.5) { mood = 'EXCITED'; suffix = 'felt right.'; }
+            else if (pnl > 0)             { mood = 'FOCUSED'; suffix = 'small win, taking it.'; }
+            else if (pnl < 0 && absPct >= 1.5) { mood = 'SAD';     suffix = 'taking the L.'; }
+            else if (pnl < 0)             { mood = 'CALM';    suffix = 'minor bleed.'; }
+            else                           { mood = 'BORED';   suffix = 'washed out, flat.'; }
+            const exitWord = exitType === 'HIT_TP' ? 'TP hit'
+                          : exitType === 'HIT_SL' ? 'SL hit'
+                          : exitType === 'MANUAL_CLIENT' ? 'manual close'
+                          : exitType === 'DSL_PL' ? 'DSL profit lock'
+                          : exitType === 'DSL_TTP' ? 'DSL trailing TP'
+                          : exitType.toLowerCase();
+            const sign = pnl >= 0 ? '+' : '';
+            const text = `${pos.side} ${pos.symbol} closed (${exitWord}) ${sign}$${pnl.toFixed(2)} — ${suffix}`;
+            vl.logUtterance({
+                userId, utteranceType: 'REACTION', mood, text,
+                templateId: 'trade_close',
+                contextJson: JSON.stringify({
+                    seq: pos.seq, symbol: pos.symbol, side: pos.side,
+                    exitType, pnl: +pnl.toFixed(2), pnlPct: +pnlPct.toFixed(2)
+                })
+            });
+        } catch (_) { /* never block close flow */ }
+    }
+
+    // [Wave 7b] Tamper-evident audit — every position close appended to
+    // chained hash trail. Operator can verify entire chain via
+    // /api/omega/audit/chain/verify; any tampering breaks subsequent links.
+    try {
+        const chain = require('./ml/_audit/chainedTrail');
+        chain.append({
+            kind: 'POSITION_CLOSE',
+            payload: {
+                userId, seq: pos.seq, symbol: pos.symbol, side: pos.side,
+                entry: pos.price, exit: price, pnl: +pnl.toFixed(2),
+                exitType, mode: pos.mode || 'demo', lev: pos.lev,
+                openTs: pos.openTs, closeTs: Date.now(),
+            },
+        });
+    } catch (_) { /* never block close flow */ }
+
     // Entry/Exit quality scoring (MAE/MFE)
     if (pos.price > 0 && price > 0) {
         const minP = pos._minPrice || pos.price;
@@ -1371,14 +1990,60 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     }
     us.stats.exits++;
     us.stats.pnl = +(us.stats.pnl + pnl).toFixed(2);
+    // [TM-1] Zero-PnL break-even trade was previously counted as loss via
+    // catch-all `else`. Compare line 1684-1685 (liveStats) which already used
+    // `else if (pnl < 0)` correctly. Now `stats` and `demoStats` mirror that
+    // semantic — break-even (pnl===0) is NEITHER win NOR loss. Existing
+    // exits counter still increments so total trade count is preserved.
     if (pnl > 0) us.stats.wins++;
-    else us.stats.losses++;
+    else if (pnl < 0) us.stats.losses++;
     if (pos.mode !== 'live') {
         us.demoStats.exits++;
         us.demoStats.pnl = +(us.demoStats.pnl + pnl).toFixed(2);
         if (pnl > 0) us.demoStats.wins++;
-        else us.demoStats.losses++;
+        else if (pnl < 0) us.demoStats.losses++;
     }
+
+    // [Wave 8 E] Easter eggs — detect milestone moments + emit special TheVoice
+    // utterance. Best-effort isolation; never blocks close flow.
+    try {
+        const _totalExits = us.stats.exits || (us.stats.wins + us.stats.losses);
+        const _totalWins = us.stats.wins;
+        const _milestoneText = (() => {
+            // Win milestones
+            if (pnl > 0) {
+                if (_totalWins === 100) return '🎉 boss, 100 wins. that\'s the click of a habit becoming a craft.';
+                if (_totalWins === 500) return '🎉 500 wins logged. you\'re not gambling anymore, you\'re running an edge.';
+                if (_totalWins === 1000) return '🎉 1000 wins. four-digit territory. taking screenshots in the matrix.';
+            }
+            // Trade count milestones
+            if (_totalExits === 50) return '⚡ 50 trades closed. starting to look like a track record.';
+            if (_totalExits === 250) return '⚡ 250 trades closed. discipline is showing through the noise.';
+            if (_totalExits === 1000) return '⚡ 1000 trades closed. you\'ve out-traded most retail accounts on this planet.';
+            // First profit day detection (today wins exceed losses, first time)
+            // Coarse: check if dailyPnL just crossed positive after being negative
+            const _firstProfitDayKey = '_firstProfitDayShown';
+            if (pnl > 0 && (us.dailyPnL || 0) > 0 && !us[_firstProfitDayKey]) {
+                // Check that today's gross dailyPnL minus this trade was <= 0 (just flipped green)
+                if ((us.dailyPnL - pnl) <= 0) {
+                    us[_firstProfitDayKey] = new Date().toISOString().slice(0, 10);
+                    return '☀️ first green day this session. flipping the script.';
+                }
+            }
+            return null;
+        })();
+        if (_milestoneText) {
+            const vl = require('./ml/_voice/voiceLogger');
+            vl.logUtterance({
+                userId, utteranceType: 'MILESTONE', mood: 'EXCITED',
+                text: _milestoneText,
+                templateId: 'omega_easter_egg',
+                contextJson: JSON.stringify({
+                    totalExits: _totalExits, totalWins: _totalWins, pnl: +pnl.toFixed(2),
+                }),
+            });
+        }
+    } catch (_) { /* never block close flow */ }
 
     // ── Demo: refund margin + apply PnL ──
     if (pos.mode === 'demo') {
@@ -1432,8 +2097,9 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     else { us.dailyPnLDemo = +(us.dailyPnLDemo + pnl).toFixed(2); }
     _checkKillSwitch(userId);
 
-    // [RE-ENTRY] Set close cooldown so brain won't re-enter this symbol immediately
-    _closeCooldowns.set(userId + ':' + pos.symbol, Date.now());
+    // [RE-ENTRY + S5] Set close cooldown DEADLINE (now + CLOSE_COOLDOWN_MS) and
+    // persist it per-user so PM2 reload does not weaken the [RE-ENTRY] gate.
+    _setCloseCooldownDeadline(userId, pos.symbol);
 
     // ── Persist close + remove from active ──
     // [B4] Splice only if persist succeeds — prevents ghost positions on DB failure
@@ -1478,6 +2144,22 @@ function _closePosition(idx, pos, exitType, price, pnl) {
         logger.warn('AT_ENGINE', `Reflection hook failed: ${reflErr.message}`);
     }
     _notifyChange(userId);
+
+    // [Phase B 2026-05-19] Release marketFeed ref so pollers can be torn down
+    // when last position on this symbol closes. Sticky boot symbols are
+    // unaffected (their boot|system ref persists). Safe-guard: only release
+    // for live positions — demo positions never subscribed via ref-count.
+    if (pos.mode === 'live' && pos.userId && pos.env && pos.seq) {
+        try {
+            const refKey = `${pos.userId}|${pos.env}|${pos.seq}`;
+            const released = marketFeed.releaseRef(refKey);
+            if (released.length > 0) {
+                logger.info('AT_ENGINE', `[Phase B] released marketFeed refs: ${released.join(',')} (refKey=${refKey})`);
+            }
+        } catch (e) {
+            logger.warn('AT_ENGINE', `[Phase B] releaseRef failed seq=${pos.seq}: ${e.message}`);
+        }
+    }
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1554,7 +2236,8 @@ function _checkDailyReset(userId) {
     const us = _uState(userId);
     const utcDay = Math.floor(Date.now() / 86400000);
     if (utcDay !== us.lastResetDay) {
-        if (us.killActive) {
+        const wasKillActive = us.killActive;
+        if (wasKillActive) {
             logger.info('AT_ENGINE', `Kill switch reset uid=${userId} — new UTC day`);
             telegram.sendToUser(userId, '🟢 *Kill Switch Reset*\nNew UTC day — entries re-enabled');
         }
@@ -1565,6 +2248,8 @@ function _checkDailyReset(userId) {
         us.killActive = false;
         us.lastResetDay = utcDay;
         _persistState(userId);
+        // [M2] Push state change to clients via WS so UI unlocks immediately after midnight
+        if (wasKillActive) _notifyChange(userId);
     }
 }
 
@@ -1583,6 +2268,12 @@ function _checkKillSwitch(userId) {
     const lossSinceReset = us.dailyPnL - (us.pnlAtReset || 0);
     if (lossSinceReset <= -lossLimit && lossLimit > 0) {
         us.killActive = true;
+        us.killActiveAt = Date.now();
+        us.killReason = 'daily_loss';
+        us.killLoss = +lossSinceReset.toFixed(2);
+        us.killLimit = +lossLimit.toFixed(2);
+        us.killBalRef = +balRef.toFixed(2);
+        us.killModeAtTrigger = us.engineMode;
         audit.record('KILL_SWITCH_TRIGGERED', { userId, loss: lossSinceReset, limit: lossLimit, pct, balRef, mode: us.engineMode }, 'SERVER_AT');
         logger.warn('AT_ENGINE', `KILL SWITCH uid=${userId} — loss $${lossSinceReset.toFixed(2)} <= -$${lossLimit.toFixed(2)} (${pct}% of $${balRef.toFixed(0)})`);
         telegram.sendToUser(userId,
@@ -1604,6 +2295,12 @@ function activateKillSwitch(userId) {
     try { require('./serverPendingEntry').cancelAllForUser(userId); } catch (_) {}
     audit.record('KILL_SWITCH_MANUAL', { userId, action: 'activate' }, 'user');
     logger.warn('AT_ENGINE', `Kill switch manually activated uid=${userId}`);
+    // [Day 20] Doctor P0 alert pe kill switch activation (operator panic = critical event).
+    _emitDoctor({
+        eventType: 'alert', severity: 'P0',
+        moduleId: 'serverAT.killSwitch', ts: Date.now(),
+        payload: { userId, action: 'activate' }
+    });
     telegram.sendToUser(userId, '🛑 *Kill Switch MANUALLY Activated*\nAll new entries BLOCKED until manual reset or UTC day change');
     _notifyChange(userId);
     return { ok: true, killActive: true };
@@ -1646,10 +2343,18 @@ function setKillPct(userId, pct) {
 function setLiveBalanceRef(userId, balance) {
     const us = _uState(userId);
     const bal = parseFloat(balance);
-    if (Number.isFinite(bal) && bal > 0) {
-        us.liveBalanceRef = bal;
-        _persistState(userId);
+    // [SRV-1] Surface invalid balance instead of silent ok:true on no-op.
+    // Previously rejected balances (NaN, <=0) returned `{ ok: true,
+    // liveBalanceRef: <unchanged> }` — caller couldn't tell if the value
+    // was applied or rejected. Now: failure path logs warn + returns
+    // `{ ok: false, error, input, parsed }` cu the unchanged ref so caller
+    // has actionable diagnostic. Successful path unchanged.
+    if (!Number.isFinite(bal) || bal <= 0) {
+        logger.warn('AT_BALANCE', `setLiveBalanceRef rejected uid=${userId}: invalid balance "${balance}" (parsed=${bal})`);
+        return { ok: false, error: 'INVALID_BALANCE', input: balance, parsed: bal, liveBalanceRef: us.liveBalanceRef };
     }
+    us.liveBalanceRef = bal;
+    _persistState(userId);
     return { ok: true, liveBalanceRef: us.liveBalanceRef };
 }
 
@@ -1722,6 +2427,31 @@ function onPriceUpdate(symbol, price) {
             if (pos.userId) dslChangedUsers.add(pos.userId);
         }
 
+        // [BUG-S7] Shadow parity log — gated by DSL_PARITY_SHADOW_ENABLED.
+        // 1s per-pos throttle (mirrors client 5s, 5x denser pentru pair window
+        // 2s la match sparse client emits). Pre-throttle every-tick rate
+        // ~6376 rows/min observed la 5-50Hz price feed × multi-pos. Throttle
+        // brings sustainable rate ~480 rows/min total.
+        if (MF.DSL_PARITY_SHADOW_ENABLED) {
+            const _nowParity = Date.now();
+            const _lastEmitServer = pos._dslParityLastEmitServer || 0;
+            if (_nowParity - _lastEmitServer >= 1000) {
+                pos._dslParityLastEmitServer = _nowParity;
+                const dslState = serverDSL.getState(pos.seq);
+                if (dslState) {
+                    db.logDslParityRow(pos.userId, pos.seq, pos.symbol, 'server', {
+                        phase: _dslPhaseString(dslState),
+                        currentSL: dslState.currentSL,
+                        pivotLeft: dslState.pivotLeft,
+                        pivotRight: dslState.pivotRight,
+                        impulseVal: dslState.impulseVal,
+                        entry: pos.price,
+                        price: price,
+                    });
+                }
+            }
+        }
+
         // ── Classic SL/TP check ──
         let closed = false;
         let pnl = 0;
@@ -1733,7 +2463,7 @@ function onPriceUpdate(symbol, price) {
                     : pos.slPnl;
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
-            } else if (price >= pos.tp) {
+            } else if (pos.tp && price >= pos.tp) {
                 const tpPnlReal = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_TP', price, tpPnlReal);
                 closed = true;
@@ -1745,7 +2475,7 @@ function onPriceUpdate(symbol, price) {
                     : pos.slPnl;
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
-            } else if (price <= pos.tp) {
+            } else if (pos.tp && price <= pos.tp) {
                 const tpPnlRealS = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_TP', price, tpPnlRealS);
                 closed = true;
@@ -1785,26 +2515,150 @@ function _notifyChange(userId) {
 // ══════════════════════════════════════════════════════════════════
 // Getters — single source of truth (per-user)
 // ══════════════════════════════════════════════════════════════════
+
+// [Phase 2 S2.C-follow-up R1] Single normalization helper — guarantees every
+// snapshot row ships sourceMode / autoTrade / controlMode / lev consistently,
+// whether it comes from in-memory `_positions` (live state) or from
+// `db.atLoadOpenPositions` (broadcast snapshot after DB commit). Legacy rows
+// persisted before Phase 3A ownership stamping may have undefined ownership
+// fields; without this, client's _mapServerPos would default autoTrade=false
+// and AT-owned positions would misclassify as MANUAL in panels that read
+// from split-array getters or the positions.changed WS stream.
+function _normalizePositionRow(p) {
+    const copy = Object.assign({}, p);
+    copy.dsl = serverDSL.getState(p.seq) || null;
+    if (typeof copy.lev !== 'number' || !(copy.lev > 0)) copy.lev = 1;
+    if (typeof copy.autoTrade !== 'boolean') {
+        copy.autoTrade = (copy.sourceMode === 'auto');
+    }
+    if (!copy.sourceMode) {
+        copy.sourceMode = copy.autoTrade === true ? 'auto' : 'manual';
+    }
+    if (!copy.controlMode) {
+        copy.controlMode = copy.autoTrade === true ? 'auto' : 'user';
+    }
+    return copy;
+}
+
 function getOpenPositions(userId) {
-    return _positions.filter(p => p.userId === userId).map(p => {
-        const copy = Object.assign({}, p);
-        copy.dsl = serverDSL.getState(p.seq) || null;
-        return copy;
-    });
+    return _positions.filter(p => p.userId === userId).map(_normalizePositionRow);
 }
 
 function getOpenCount(userId) { return _positions.filter(p => p.userId === userId).length; }
 
-// [RE-ENTRY] Check if symbol was recently closed (prevents immediate re-entry)
+// [S5] Persist this user's close-cooldown rows. Shape: { 'uid:symbol': deadlineMs }.
+// Called after every set so the live PM2 process and any restart are coherent.
+function _persistCloseCooldownsForUser(userId) {
+    try {
+        const obj = {};
+        const prefix = userId + ':';
+        for (const [k, v] of _closeCooldowns) {
+            if (k.indexOf(prefix) === 0) obj[k] = v;
+        }
+        db.atSetState('serverAT:closeCooldowns:' + userId, obj, userId);
+    } catch (e) {
+        try { logger.warn('AT_RE-ENTRY', '_persistCloseCooldownsForUser failed: ' + (e && e.message)); } catch (_) {}
+    }
+}
+
+// [S5] Lazy restore: pulled in on the first close-cooldown read per user. The
+// brain calls isCloseCooldownActive on every gate evaluation, so restoration
+// happens at decision time without needing a module-load boot hook (this file
+// has no dedicated start() function). Backward compatible with legacy bare
+// closeTs values: legacy → effective deadline = closeTs + CLOSE_COOLDOWN_MS.
+function _restoreCloseCooldownsForUser(userId) {
+    if (_closeCooldownsRestoredFor.has(userId)) return;
+    _closeCooldownsRestoredFor.add(userId);
+    try {
+        const saved = db.atGetState('serverAT:closeCooldowns:' + userId);
+        if (!saved || typeof saved !== 'object') return;
+        const now = Date.now();
+        const prefix = userId + ':';
+        let restored = 0;
+        for (const [k, v] of Object.entries(saved)) {
+            if (k.indexOf(prefix) !== 0) continue;
+            if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+            const deadline = v <= now ? v + CLOSE_COOLDOWN_MS : v;
+            if (deadline > now && !_closeCooldowns.has(k)) {
+                _closeCooldowns.set(k, deadline);
+                restored++;
+            }
+        }
+        if (restored > 0) {
+            try { logger.info('AT_RE-ENTRY', `[S5] uid=${userId} restored ${restored} close-cooldown(s)`); } catch (_) {}
+        }
+    } catch (e) {
+        try { logger.warn('AT_RE-ENTRY', '_restoreCloseCooldownsForUser failed: ' + (e && e.message)); } catch (_) {}
+    }
+}
+
+// [S5] Set + persist close-cooldown deadline for (userId, symbol).
+function _setCloseCooldownDeadline(userId, symbol) {
+    const deadline = Date.now() + CLOSE_COOLDOWN_MS;
+    _closeCooldowns.set(userId + ':' + symbol, deadline);
+    _persistCloseCooldownsForUser(userId);
+}
+
+// [RE-ENTRY + S5] Check if symbol was recently closed (prevents immediate
+// re-entry). Uses absolute-deadline semantics — gate is active when a deadline
+// exists AND the deadline is in the future. Lazily restores any persisted
+// rows for this user on first call.
 function isCloseCooldownActive(userId, symbol) {
+    _restoreCloseCooldownsForUser(userId);
     const key = userId + ':' + symbol;
-    const ts = _closeCooldowns.get(key);
-    if (!ts) return false;
-    if ((Date.now() - ts) > CLOSE_COOLDOWN_MS) {
+    const deadline = _closeCooldowns.get(key);
+    if (!deadline) return false;
+    if (Date.now() >= deadline) {
         _closeCooldowns.delete(key); // expired, clean up
         return false;
     }
     return true;
+}
+
+// [Phase 2 S6-B3] ── Per-user decisionId dedup ──────────────────────────────
+// Stable per-user key in at_state. Cross-user same decisionId is ALWAYS
+// allowed because the key includes uid.
+function _decisionDedupKey(userId) {
+    return 'serverAT:lastDecisionId:' + userId;
+}
+
+// _checkAndStoreDecisionId(userId, decisionId, source, nowMs)
+//   Returns { ok: true } when accepted (stored).
+//   Returns { ok: false, reason: 'DUPLICATE_DECISION_ID', previous } when
+//     the same decisionId for the same user appeared within DECISION_DEDUP_TTL_MS.
+//   Returns { ok: false, reason: 'NO_USER_ID' } when userId is missing —
+//     fail-safe: the caller must always pass a real uid.
+//   Returns { ok: true, reason: 'NO_DECISION_ID' } when no decisionId is
+//     supplied — backward compatible with paths that have not yet adopted
+//     the dedup key. Documented in S6-B3 report.
+//
+// Persistence is best-effort: a malformed at_state row, a missing row, or
+// a write failure must NEVER throw or block the runtime path. The dedup
+// is an additive safety layer, not a critical gate.
+function _checkAndStoreDecisionId(userId, decisionId, source, nowMs) {
+    if (userId === undefined || userId === null || userId === '') {
+        return { ok: false, reason: 'NO_USER_ID' };
+    }
+    if (decisionId === undefined || decisionId === null || decisionId === '') {
+        return { ok: true, reason: 'NO_DECISION_ID' };
+    }
+    const _id = String(decisionId);
+    const _now = Number.isFinite(nowMs) ? nowMs : Date.now();
+    const _src = (typeof source === 'string' && source.length > 0) ? source : 'unknown';
+    let prev = null;
+    try { prev = db.atGetState(_decisionDedupKey(userId)); } catch (_) {}
+    // Defensive: malformed prev → treat as no record.
+    const _prevValid = prev && typeof prev === 'object' &&
+        typeof prev.id === 'string' && Number.isFinite(prev.ts);
+    if (_prevValid && prev.id === _id && (_now - prev.ts) < DECISION_DEDUP_TTL_MS) {
+        return { ok: false, reason: 'DUPLICATE_DECISION_ID', previous: prev };
+    }
+    // Store new record (best-effort; never throw).
+    try {
+        db.atSetState(_decisionDedupKey(userId),
+            { id: _id, ts: _now, source: _src }, userId);
+    } catch (_) {}
+    return { ok: true };
 }
 
 function getLog(userId, limit) {
@@ -1856,15 +2710,37 @@ function getLiveStats(userId) {
     };
 }
 
+// Terminal states — position is done, exchange side cleaned up. Safe to hide from client panels
+// (still persisted in _positions briefly until zombie-cleanup runs). Matches the implicit demo-parity
+// rule: demo closed positions are spliced from _positions immediately, so getDemoPositions never
+// sees them; for live we can't always splice immediately (reconciliation windows, FILL_UNVERIFIED),
+// so we filter by status instead.
+const _LIVE_TERMINAL_STATUSES = new Set([
+    'CLOSED', 'EMERGENCY_CLOSED', 'ERROR', 'LOCK_BLOCKED',
+]);
+
 function getLivePositions(userId) {
-    // [DSL-FIX2] Include LIVE_NO_SL positions (so user can see them) + attach DSL state
-    // [AT-PANEL] Also include _livePending positions so client sees them before exchange fill
-    return _positions
-        .filter(p => p.userId === userId && p.mode === 'live' && (
-            (p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL')) ||
-            p._livePending === true
-        ))
-        .map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
+    // [Phase 5B] Demo-parity filter — include every live position for the user EXCEPT terminal-state
+    // zombies. Previous filter (LIVE/LIVE_NO_SL/_livePending) hid AT positions in the exchange-roundtrip
+    // window, so client _lastServerPositions cache didn't see them and liveApi classified them as
+    // MANUAL (default sourceMode='paper'). Demo had no such window because demo is synchronous.
+    //
+    // Including FILL_UNVERIFIED and undefined-status positions keeps the client cache hydrated with
+    // ownership truth even before exchange confirmation. Re-pulls eventually correct stale cases.
+    const allLiveForUser = _positions.filter(p => p.userId === userId && p.mode === 'live');
+    const visible = allLiveForUser.filter(p => !(p.live && _LIVE_TERMINAL_STATUSES.has(p.live.status)));
+    // [P5A SERVER LIVE OWNERSHIP] Post-fix tracepoint — logs only when the demo-parity filter still
+    // hides something (terminal zombies). If this fires with autoTrade=true for a non-terminal state,
+    // the fix missed a case and the filter needs widening.
+    if (allLiveForUser.length !== visible.length) {
+        const hidden = allLiveForUser.filter(p => (p.live && _LIVE_TERMINAL_STATUSES.has(p.live.status)))
+            .map(p => `seq=${p.seq}/${p.symbol}/${p.side}/autoTrade=${p.autoTrade}/live=${p.live.status}`);
+        logger.info('P5A', `[P5A SERVER LIVE OWNERSHIP] getLivePositions uid=${userId} visible=${visible.length}/${allLiveForUser.length} hidden-terminal=[${hidden.join(' | ')}] ts=${Date.now()}`);
+    }
+    // [R1] Same ownership normalization as getOpenPositions — split-array
+    // readers (client's state.ts _applyServerATState split path) otherwise
+    // saw raw rows with undefined autoTrade/sourceMode/controlMode.
+    return visible.map(_normalizePositionRow);
 }
 
 function getDemoBalance(userId) {
@@ -1884,25 +2760,88 @@ function getDemoStats(userId) {
 }
 
 function getDemoPositions(userId) {
+    // [R1] Same ownership normalization as getOpenPositions — split-array
+    // readers (client's state.ts _applyServerATState split path) otherwise
+    // saw raw rows with undefined autoTrade/sourceMode/controlMode.
     return _positions
         .filter(p => p.userId === userId && p.mode !== 'live')
-        .map(p => { const c = Object.assign({}, p); c.dsl = serverDSL.getState(p.seq) || null; return c; });
+        .map(_normalizePositionRow);
+}
+
+// [Phase 2B] Canonical server-side execution env resolver.
+// Single source of truth — never assumes REAL when truth is uncertain.
+//   demo               → { env: 'DEMO',    blockedReason: null }
+//   non-demo + valid creds (testnet)  → { env: 'TESTNET', blockedReason: null }
+//   non-demo + valid creds (live)     → { env: 'REAL',    blockedReason: null }
+//   non-demo + no row                 → { env: null, blockedReason: 'NO_ACTIVE_API_CREDENTIALS' }
+//   non-demo + row exists but invalid → { env: null, blockedReason: 'INVALID_ACTIVE_API_CONFIGURATION' }
+function _resolveExecutionEnv(userId) {
+    const us = _uState(userId);
+    if (us.engineMode === 'demo') {
+        return { env: 'DEMO', blockedReason: null };
+    }
+    const creds = getExchangeCreds(userId);
+    if (creds) {
+        // creds.mode is strictly 'testnet' or 'live' (enforced by credentialStore hotfix).
+        return { env: creds.mode === 'testnet' ? 'TESTNET' : 'REAL', blockedReason: null };
+    }
+    // No valid creds. Distinguish "no row" vs "row present but invalid".
+    let reason = 'NO_ACTIVE_API_CREDENTIALS';
+    try {
+        const account = db.getExchangeAccount(userId);
+        if (account) reason = 'INVALID_ACTIVE_API_CONFIGURATION';
+    } catch (_) { /* db read failure → keep NO_ACTIVE_API_CREDENTIALS (safe default) */ }
+    return { env: null, blockedReason: reason };
 }
 
 /** Full state snapshot for API/WebSocket consumers (per-user) */
 function getFullState(userId) {
+    // [M2] Lazy UTC day rollover — ensures kill switch reset propagates to clients
+    // even when no entry is attempted after midnight. Client polls every 30s.
+    _checkDailyReset(userId);
     const us = _uState(userId);
     const creds = getExchangeCreds(userId);
     const exchangeMode = creds ? (creds.mode || 'live') : null;
-    const resolvedEnv = us.engineMode === 'demo' ? 'DEMO'
-        : (exchangeMode === 'testnet' ? 'TESTNET' : 'REAL');
+    // [Phase 2A] Canonical active exchange — additive field. null when no creds.
+    const activeExchange = creds ? (creds.exchange || null) : null;
+    // [Phase 2B] Canonical execution env (server truth) + stable blocked reason.
+    const execEnv = _resolveExecutionEnv(userId);
+    // [Phase 3D] resolvedEnv now aligns to canonical execEnv.env (null when blocked).
+    // Legacy false-positive REAL derivation removed — no more fake truth on missing creds.
+    const resolvedEnv = execEnv.env;
+    // [LOCKOUT-FIX] Report whether server actually drives AT decisions (brain+AT flags).
+    // Client uses this to decide if it should lock out its own AT engine.
+    const serverDrivesAT = !!(MF && MF.SERVER_AT && MF.SERVER_BRAIN);
+    // [Phase 2 S6-B4] Demo-authority flags — true ONLY if the corresponding
+    // demo carve-out flag is on AND this user is in demo mode. Live/testnet/
+    // real users always receive false even when the demo flags are true.
+    // Unknown / missing engineMode → false (fail-safe). Client mirrors these
+    // as window read-model flags only; the actual AT-engine gate (S6-B5+)
+    // will live behind these signals. With current production flags both
+    // remain false for every user.
+    const _isDemoUser = us.engineMode === 'demo';
+    const serverATDemoEnabled = !!(MF && MF.SERVER_AT_DEMO) && _isDemoUser;
+    const serverBrainDemoEnabled = !!(MF && MF.SERVER_BRAIN_DEMO) && _isDemoUser;
     return {
         mode: us.engineMode,
-        enabled: us.atActive, // [F1] Reflect actual per-user AT state
-        atActive: us.atActive, // [F1] Explicit field for frontend
+        // [BUG-T7 FOLLOWUP 2026-05-13] enabled + atActive computed DYNAMIC pe baza
+        // engineMode + atActive[Demo|Live] flags. Defensive — chiar dacă in-memory
+        // us.atActive ar fi stale, getFullState garantează UI primește valoarea
+        // corectă pentru current engineMode (no stale flash on mode switch).
+        enabled: _isATActiveForMode(us, us.engineMode), // [F1] LEGACY — computed dynamic
+        atActive: _isATActiveForMode(us, us.engineMode), // [F1] LEGACY — computed dynamic
+        atActiveDemo: us.atActiveDemo, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
+        atActiveLive: us.atActiveLive, // [BUG-T7 2026-05-13] per-mode flag pentru frontend
+        serverActive: serverDrivesAT, // [LOCKOUT-FIX] True only when server runs brain+AT
+        // [Phase 2 S6-B4] Demo-only authority signals — see derivation above.
+        serverATDemoEnabled,
+        serverBrainDemoEnabled,
         apiConfigured: !!creds,
         exchangeMode: exchangeMode,       // 'testnet' | 'live' | null
-        resolvedEnv: resolvedEnv,          // 'DEMO' | 'TESTNET' | 'REAL'
+        resolvedEnv: resolvedEnv,          // [Phase 3D] 'DEMO' | 'TESTNET' | 'REAL' | null — aligned with executionEnv (canonical truth)
+        activeExchange: activeExchange,    // [Phase 2A] 'binance' | 'bybit' | null
+        executionEnv: execEnv.env,         // [Phase 2B] 'DEMO' | 'TESTNET' | 'REAL' | null  (canonical server truth)
+        executionBlockedReason: execEnv.blockedReason, // [Phase 2B] 'NO_ACTIVE_API_CREDENTIALS' | 'INVALID_ACTIVE_API_CONFIGURATION' | null
         positions: getOpenPositions(userId),
         demoPositions: getDemoPositions(userId),
         livePositions: getLivePositions(userId),
@@ -1912,11 +2851,26 @@ function getFullState(userId) {
         demoBalance: getDemoBalance(userId),
         killActive: us.killActive,
         killPct: us.killPct || 5,
+        killActiveAt: us.killActiveAt || 0,
+        killReason: us.killReason || null,
+        killLoss: us.killLoss || 0,
+        killLimit: us.killLimit || 0,
+        killBalRef: us.killBalRef || 0,
+        killModeAtTrigger: us.killModeAtTrigger || null,
         dailyPnL: us.dailyPnL || 0,
         dailyPnLDemo: us.dailyPnLDemo || 0,
         dailyPnLLive: us.dailyPnLLive || 0,
         pnlAtReset: us.pnlAtReset || 0,
         ts: Date.now(),
+        // [WS-1] Monotonic per-server-process frame sequence number. `ts` alone
+        // can collide when two getFullState calls happen în same ms (warm-start
+        // + onChange near-concurrent path) — clients have no way to order them.
+        // `seq` increments on every getFullState invocation regardless of ts;
+        // client-side ordering can use `seq` cu strict-greater-than fallback
+        // when ts ties. Resets on PM2 reload (single-process bigint counter
+        // would also work but plain Number is sufficient — at 1k frames/sec
+        // sustained it takes 285+ years to hit Number.MAX_SAFE_INTEGER).
+        seq: ++_wsFrameSeq,
     };
 }
 
@@ -1987,34 +2941,580 @@ setInterval(() => {
 }, 60000);
 
 // ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat A 2026-05-14] _buildEntryFromOrderPlace
+// Pure transform: /api/order/place reqBody → canonical entry object.
+//
+// Consumed by `_executeLiveEntryCore` (Cat B, extracted din _executeLiveEntry)
+// + post-M1.2 refactored `registerManualPosition` (delegates to core).
+//
+// Hard safety assertion (ADR-001 §3.2): mode='live' + sl=null → throws
+// SafetyAssertionError pre-fill, before any state mutation. Demo allows null
+// (no exchange safety burden per ADR-001 §3.1).
+//
+// Pure function — no I/O, no side effects. Easy to test (Cat A 10 tests).
+//
+// Refs: ADR-001 §3.2 + §3.3; TEST_SCAFFOLDING_M1 §3.
+// ══════════════════════════════════════════════════════════════════
+function _buildEntryFromOrderPlace(reqBody, userId) {
+    if (!reqBody || typeof reqBody !== 'object') {
+        throw new Error('_buildEntryFromOrderPlace: missing required fields (reqBody must be object)');
+    }
+    if (!reqBody.symbol || !reqBody.side || reqBody.quantity == null || reqBody.entryPrice == null) {
+        throw new Error('_buildEntryFromOrderPlace: missing required fields (symbol, side, quantity, entryPrice required)');
+    }
+    const qty = parseFloat(reqBody.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+        throw new Error('_buildEntryFromOrderPlace: invalid quantity (must be positive number, got ' + reqBody.quantity + ')');
+    }
+    const mode = reqBody.mode || 'demo';
+    const sl = (reqBody.sl != null) ? parseFloat(reqBody.sl) : null;
+
+    // [ADR-001 §3.2] Hard safety assertion — live entry MUST have SL pre-fill.
+    // Demo allowed null (no exchange safety burden). This gate fires BEFORE
+    // any state mutation, before _placeConditionalOrder is even imaginable.
+    if (mode === 'live' && (sl == null || sl === 0)) {
+        const err = new Error('SafetyAssertionError: Live entry requires sl (mode=live, sl=null rejected per ADR-001 §3.2)');
+        err.name = 'SafetyAssertionError';
+        err.code = 'LIVE_ENTRY_SL_REQUIRED';
+        throw err;
+    }
+
+    const side = reqBody.side === 'BUY' ? 'LONG' : (reqBody.side === 'SELL' ? 'SHORT' : reqBody.side);
+    const lev = (reqBody.leverage !== undefined && reqBody.leverage !== null)
+        ? (parseInt(reqBody.leverage, 10) || 1)
+        : 1;
+    const tp = (reqBody.tp != null) ? parseFloat(reqBody.tp) : null;
+    const source = reqBody.source || 'manual';
+    const autoTrade = source === 'auto';
+    const entryPrice = parseFloat(reqBody.entryPrice);
+    const size = (lev > 0) ? (qty * entryPrice / lev) : (qty * entryPrice);
+
+    return {
+        userId: userId,
+        symbol: reqBody.symbol,
+        side: side,
+        mode: mode,
+        entryPrice: entryPrice,
+        qty: qty,
+        lev: lev,
+        sl: sl,
+        tp: tp,
+        size: size,
+        autoTrade: autoTrade,
+        // dslParams: undefined → defaults null (DSL OFF); explicit null preserved; object preserved
+        dslParams: (reqBody.dslParams !== undefined) ? reqBody.dslParams : null,
+        // clientReqId pentru idempotency (replays din client transient network fail)
+        clientReqId: reqBody.clientReqId || null,
+        // seq: temporary timestamp-based; properly allocated post-M1.2 via _uState(userId).seq
+        seq: Date.now(),
+        ts: Date.now(),
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat B 2026-05-14] _executeLiveEntryCore
+// Core safety machinery — atomic entry + SL/TP placement + emergency close.
+// Extracted din _executeLiveEntry pattern per ADR-001 §3.3 migration architecture.
+//
+// Designed pentru BOTH paths post-M1:
+//   - Brain dispatch (processBrainDecision → _executeLiveEntry → core)
+//   - Client-side AT (registerManualPosition post-M1 refactor → core)
+//
+// Signature: `_executeLiveEntryCore(entry, stc, creds) → entry (cu .live populated)`
+//
+// Safety contract (ADR-001 §3.2):
+//   1. Pre-fill hard assertion: mode=live + sl=null → throw SafetyAssertionError
+//   2. Demo bypass: mode=demo returns early fără exchange calls
+//   3. Global halt check: aborts dacă isGlobalHaltActive() true
+//   4. Lock guard: rejects concurrent on same userId:symbol cu LOCK_BLOCKED
+//   5. Atomic SL placement: safety SL @ 15% OTM → real SL retry 3x → emergency close fallback
+//   6. TP placement (only if !entry.dslParams): retry 3x → emergency close on exhaustion
+//   7. Status invariants: LIVE | EMERGENCY_CLOSED | LIVE_NO_SL | DEMO | GLOBAL_HALT | LOCK_BLOCKED
+//
+// Refs: ADR-001 §3.2 + §3.3; TEST_SCAFFOLDING_M1 §4.
+// ══════════════════════════════════════════════════════════════════
+async function _executeLiveEntryCore(entryInput, stc, creds) {
+    if (!entryInput || typeof entryInput !== 'object') {
+        const err = new Error('_executeLiveEntryCore: entry object required');
+        err.name = 'SafetyAssertionError';
+        throw err;
+    }
+    if (!entryInput.symbol) {
+        throw new Error('_executeLiveEntryCore: entry.symbol missing');
+    }
+
+    // [ADR-001 §3.2] Hard safety assertion — live entry MUST have SL pre-fill.
+    if (entryInput.mode === 'live' && (entryInput.sl == null || entryInput.sl === 0)) {
+        const err = new Error('SafetyAssertionError: Live entry requires sl (mode=live, sl=null rejected per ADR-001 §3.2)');
+        err.name = 'SafetyAssertionError';
+        err.code = 'LIVE_ENTRY_SL_REQUIRED';
+        throw err;
+    }
+
+    // [M1.2 Cat B] Operate on shallow clone — prevents shared-reference last-write-wins
+    // bug când caller passes same entry pe concurrent invocations (idempotency LOCK_BLOCKED
+    // test scenario). entryInput preserved as read-only contract; result is fresh.
+    const entry = { ...entryInput };
+
+    // Demo bypass — no exchange interaction (per ADR-001 §3.1)
+    if (entry.mode === 'demo') {
+        entry.live = { status: 'DEMO', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false };
+        return entry;
+    }
+
+    // Global halt pre-execution gate (Phase 2 S2.B parity)
+    if (isGlobalHaltActive()) {
+        entry.live = { status: 'GLOBAL_HALT', slOrderId: null, tpOrderId: null };
+        return entry;
+    }
+
+    // Lock guard pentru concurrent same-userId+symbol prevenire
+    const _lockKey = entry.userId + ':' + entry.symbol;
+    if (_liveEntryLocks.has(_lockKey)) {
+        entry.live = { status: 'LOCK_BLOCKED', slOrderId: null, tpOrderId: null };
+        return entry;
+    }
+    _liveEntryLocks.add(_lockKey);
+
+    try {
+        // [Task 40.5] Replaced direct sendSignedRequest calls (marginType, leverage,
+        // MARKET entry, safety SL, SL retry 3x, emergency close, TP retry, TP emergency
+        // close) with single exchangeOps.placeEntry router call. Routes to Binance or
+        // Bybit per per-user config. binanceOps.placeEntry handles all of the above
+        // atomically including positionStateMachine transitions + positionEvents.
+        //
+        // [OPTION B — dual DB write transitional]: exchangeOps.placeEntry inserts
+        // PENDING row into at_positions; caller (registerManualPosition) continues to
+        // push entry into _positions in-memory + call _persistState separately.
+        // entry.live.opsSeq links binanceOps at_positions row to in-memory tracking.
+        // [TODO: deprecate in-memory + _persistState INSERT in Bybit Phase 2]
+
+        const coreQty = String(entry.qty);
+        const coreSlPrice = (entry.sl && entry.sl > 0) ? String(entry.sl) : null;
+        const coreTpPrice = (!entry.dslParams && entry.tp && entry.tp > 0) ? String(entry.tp) : null;
+        // Core uses entry.decisionId if present; fall back to userId+symbol+seq uniquifier
+        const _coreTok = (entry.decisionId && /^[0-9a-f]{8}$/.test(entry.decisionId))
+            ? entry.decisionId
+            : require('crypto').randomBytes(4).toString('hex');
+        const coreDecisionKey = `SAT_${entry.seq || 0}_${_coreTok}`.slice(0, 36);
+
+        let coreResult;
+        try {
+            coreResult = await exchangeOps.placeEntry(entry.userId, {
+                symbol: entry.symbol,
+                side: entry.side,           // LONG/SHORT — exchangeOps accepts this
+                qty: coreQty,
+                entryType: 'MARKET',
+                sl: coreSlPrice ? { price: coreSlPrice } : null,
+                tp: coreTpPrice ? { price: coreTpPrice } : null,
+                leverage: entry.lev || 1,
+                decisionKey: coreDecisionKey,
+                source: 'serverAT-core',
+            });
+        } catch (coreErr) {
+            coreResult = { ok: false, error: { message: coreErr.message, code: coreErr.code || 'ErrUnknown' } };
+        }
+
+        if (!coreResult || !coreResult.ok) {
+            const coreErrMsg = (coreResult && coreResult.error && coreResult.error.message) || 'placeEntry failed';
+            if (coreResult && coreResult.catastrophic) {
+                // CATASTROPHIC — binanceOps armed halt + persisted emergency_close_queue
+                try {
+                    telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol}\nPosition CATASTROPHIC — halt armed.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
+                } catch (_) {}
+                entry.live = { status: 'LIVE_NO_SL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false };
+            } else {
+                entry.live = { status: 'ENTRY_FAILED', slOrderId: null, tpOrderId: null, error: coreErrMsg };
+            }
+            return entry;
+        }
+
+        // [Task 40.5 result adapter] Map exchangeOps result → entry.live.*
+        const fillPrice = parseFloat(coreResult.avgFillPrice || entry.entryPrice || 0);
+        const slPlaced = !!coreResult.slOrderId;
+        const tpPlaced = !!coreResult.tpOrderId;
+
+        // 8. Success — populate entry.live cu final state
+        entry.live = {
+            status: slPlaced ? 'LIVE' : 'LIVE_NO_SL',
+            slOrderId: coreResult.slOrderId || null,
+            tpOrderId: coreResult.tpOrderId || null,
+            slPlaced,
+            tpPlaced,
+            avgPrice: fillPrice,
+            mainOrderId: coreResult.orderId,
+            // [Task 40 dual-write bridge] opsSeq links to binanceOps at_positions row
+            opsSeq: coreResult.seq || null,
+        };
+
+        if (!slPlaced) {
+            // binanceOps exhausted SL retries — alert operator
+            try {
+                telegram.sendToUser(entry.userId, `🚨🚨 *EMERGENCY CLOSE FAILED*\n${entry.side} ${entry.symbol} @ $${fillPrice.toFixed(2)}\nPosition is UNPROTECTED by optimal SL.\nSafety mechanisms exhausted inside exchange router.\n*IMMEDIATE MANUAL INTERVENTION REQUIRED!*`);
+            } catch (_) {}
+        }
+
+        return entry;
+    } finally {
+        _liveEntryLocks.delete(_lockKey);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [BUG-T2c FIX 2026-05-14] _placeProtectionForExistingEntry
+//
+// Path B safety net for /api/order/place (trading.js manual + client AT entries).
+// Trading.js places main MARKET order on Binance, then calls THIS helper with
+// the filled order data; helper places SL (HARD) + TP (conditional on !dslParams)
+// per DSL rule. Returns {slOrderId, tpOrderId, status} for caller to pass into
+// registerManualPosition so live.slOrderId / live.tpOrderId reflect real
+// exchange orderIds (not null).
+//
+// DSL rule (serverAT.js:1537-1541):
+//   DSL ON  → no native TP (DSL trail SL handles exit via PL hit).
+//   DSL OFF → place native TP from RISK MANAGEMENT.
+//
+// Failure semantics — mirrors _executeLiveEntry / _executeLiveEntryCore:
+//   • Safety SL 15% OTM placed first (covers retry window)
+//   • Real SL retries 3x (1s, 3s backoff)
+//   • All SL retries fail → EMERGENCY MARKET close (return status='EMERGENCY_CLOSED')
+//   • TP (DSL OFF only) retries 3x; all-fail → EMERGENCY MARKET close
+//   • TP emergency close failed → status='LIVE_NO_TP' (rare; alerted via Telegram)
+//   • Returns { slOrderId, tpOrderId, status, emergencyClosed?, emergencyPrice?, emergencyPnl? }
+//
+// status values: 'LIVE' | 'LIVE_NO_SL' | 'EMERGENCY_CLOSED' | 'LIVE_NO_TP'
+//
+// Refs: BUG-T2c, OPEN_BUGS_PRIORITY_RANKING, M1 closure handbook.
+// ══════════════════════════════════════════════════════════════════
+async function _placeProtectionForExistingEntry(entry, creds) {
+    if (!entry || typeof entry !== 'object') throw new Error('Missing entry');
+    if (!creds) throw new Error('Missing exchange creds');
+    if (!entry.symbol || !entry.side) throw new Error('Missing entry.symbol/side');
+    if (!entry.sl || !(entry.sl > 0)) throw new Error('Missing entry.sl (live entry requires SL)');
+    if (!(entry.avgPrice > 0)) throw new Error('Missing entry.avgPrice');
+    if (!(entry.executedQty > 0)) throw new Error('Missing entry.executedQty');
+
+    const userId = entry.userId;
+    const liveSeq = entry.seq || Date.now();
+    const closeSide = entry.side === 'LONG' ? 'SELL' : 'BUY';
+    const avgPrice = entry.avgPrice;
+    const executedQty = entry.executedQty;
+    const fillQty = String(roundOrderParams(entry.symbol, executedQty).quantity || executedQty);
+    const rounded = roundOrderParams(entry.symbol, executedQty, entry.sl);
+    const roundedTp = entry.tp ? roundOrderParams(entry.symbol, executedQty, entry.tp) : null;
+
+    // Safety SL — far-OTM 15% backstop covering retry window
+    let safetySlOrder = null;
+    try {
+        const safetyRaw = entry.side === 'LONG' ? avgPrice * 0.85 : avgPrice * 1.15;
+        const safetyRounded = roundOrderParams(entry.symbol, executedQty, safetyRaw);
+        const safetyStopPrice = String(safetyRounded.stopPrice != null ? safetyRounded.stopPrice : safetyRaw.toFixed(2));
+        safetySlOrder = await _placeConditionalOrder({
+            symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
+            quantity: fillQty, stopPrice: safetyStopPrice,
+            reduceOnly: true, newClientOrderId: `PB_SLSAFE_${liveSeq}`,
+        }, creds);
+        logger.info('AT_LIVE_PB', `[${liveSeq}] Safety SL placed @ $${safetyStopPrice} (15% OTM)`);
+    } catch (safeErr) {
+        logger.warn('AT_LIVE_PB', `[${liveSeq}] Safety SL placement failed: ${safeErr.message}`);
+        try { Sentry.captureException(safeErr, { level: 'warning', tags: { module: 'AT', action: 'pb_safety_sl_failed', symbol: entry.symbol } }); } catch (_) {}
+    }
+
+    // Real SL with retry 3x
+    let slOrder = null;
+    const SL_RETRY_DELAYS = [1000, 3000];
+    for (let attempt = 0; attempt <= SL_RETRY_DELAYS.length; attempt++) {
+        try {
+            slOrder = await _placeConditionalOrder({
+                symbol: entry.symbol, side: closeSide, type: 'STOP_MARKET',
+                quantity: fillQty,
+                stopPrice: String(rounded.stopPrice != null ? rounded.stopPrice : entry.sl),
+                reduceOnly: true, newClientOrderId: `PB_SL_${liveSeq}_${attempt}`,
+            }, creds);
+            if (attempt > 0) logger.info('AT_LIVE_PB', `[${liveSeq}] SL succeeded on retry #${attempt}`);
+            break;
+        } catch (slErr) {
+            logger.error('AT_LIVE_PB', `[${liveSeq}] SL attempt ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed: ${slErr.message}`);
+            if (attempt < SL_RETRY_DELAYS.length) {
+                try { telegram.sendToUser(userId, `⚠️ SL retry ${attempt + 1}/${SL_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${SL_RETRY_DELAYS[attempt] / 1000}s...`); } catch (_) {}
+                await new Promise(r => setTimeout(r, SL_RETRY_DELAYS[attempt]));
+            }
+        }
+    }
+
+    // Cancel safety SL if real SL placed
+    if (slOrder && safetySlOrder && safetySlOrder.orderId) {
+        await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
+        safetySlOrder = null;
+    }
+
+    // SL retries exhausted → EMERGENCY MARKET CLOSE
+    if (!slOrder) {
+        logger.error('AT_LIVE_PB', `[${liveSeq}] ALL SL retries exhausted — EMERGENCY MARKET CLOSE`);
+        try { Sentry.captureMessage(`PB EMERGENCY CLOSE: SL failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_sl', symbol: entry.symbol } }); } catch (_) {}
+        try { telegram.sendToUser(userId, `🚨 *EMERGENCY CLOSE (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll ${SL_RETRY_DELAYS.length + 1} SL attempts failed.\nEmergency market-closing.`); } catch (_) {}
+        try {
+            const emgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                symbol: entry.symbol, side: closeSide, type: 'MARKET',
+                quantity: fillQty, reduceOnly: true,
+                newClientOrderId: `PB_EMGCLOSE_${liveSeq}`,
+            }, creds);
+            const _emgRaw = parseFloat(emgResult.avgPrice);
+            const emgPrice = (Number.isFinite(_emgRaw) && _emgRaw > 0) ? _emgRaw : avgPrice;
+            const lev = entry.leverage || 1;
+            const size = entry.size || (avgPrice * executedQty / lev);
+            const emgPnl = avgPrice > 0 ? (entry.side === 'LONG'
+                ? +((emgPrice - avgPrice) / avgPrice * size * lev).toFixed(2)
+                : +((avgPrice - emgPrice) / avgPrice * size * lev).toFixed(2)) : 0;
+            try { telegram.sendToUser(userId, `✅ Emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${emgPrice.toFixed(2)} — PnL: $${emgPnl.toFixed(2)}`); } catch (_) {}
+            try { audit.record('PB_EMERGENCY_CLOSE', { userId, seq: liveSeq, symbol: entry.symbol, side: entry.side, emgPrice, emgPnl, reason: 'SL_ALL_RETRIES_FAILED' }, 'PATH_B'); } catch (_) {}
+            if (safetySlOrder && safetySlOrder.orderId) {
+                await _cancelOrderSafe(entry.symbol, safetySlOrder.orderId, creds, userId);
+            }
+            return { slOrderId: null, tpOrderId: null, status: 'EMERGENCY_CLOSED', emergencyClosed: true, emergencyPrice: emgPrice, emergencyPnl: emgPnl, reason: 'SL_ALL_RETRIES_FAILED' };
+        } catch (emgErr) {
+            logger.error('AT_LIVE_PB', `[${liveSeq}] EMERGENCY CLOSE FAILED: ${emgErr.message}`);
+            try { Sentry.captureException(emgErr, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_failed', symbol: entry.symbol } }); } catch (_) {}
+            const safetyMsg = safetySlOrder ? `\nSafety SL (15% OTM) still active.` : '';
+            try { telegram.sendToUser(userId, `🚨🚨 *EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nUNPROTECTED on Binance.${safetyMsg}\n*MANUAL INTERVENTION REQUIRED!*\nError: ${emgErr.message}`); } catch (_) {}
+            return { slOrderId: safetySlOrder ? safetySlOrder.orderId : null, tpOrderId: null, status: 'LIVE_NO_SL', reason: 'SL_RETRIES_AND_EMERGENCY_FAILED' };
+        }
+    }
+
+    // TP placement — DOAR dacă DSL OFF (regulă: DSL ON = trail SL handles exit)
+    let tpOrder = null;
+    const TP_RETRY_DELAYS = [1000, 3000];
+    if (!entry.dslParams && entry.tp && entry.tp > 0 && roundedTp) {
+        for (let tpAttempt = 0; tpAttempt <= TP_RETRY_DELAYS.length; tpAttempt++) {
+            try {
+                tpOrder = await _placeConditionalOrder({
+                    symbol: entry.symbol, side: closeSide, type: 'TAKE_PROFIT_MARKET',
+                    quantity: fillQty,
+                    stopPrice: String(roundedTp.stopPrice != null ? roundedTp.stopPrice : entry.tp),
+                    reduceOnly: true, newClientOrderId: `PB_TP_${liveSeq}_${tpAttempt}`,
+                }, creds);
+                if (tpAttempt > 0) logger.info('AT_LIVE_PB', `[${liveSeq}] TP succeeded on retry #${tpAttempt}`);
+                break;
+            } catch (tpErr) {
+                logger.error('AT_LIVE_PB', `[${liveSeq}] TP attempt ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed: ${tpErr.message}`);
+                if (tpAttempt < TP_RETRY_DELAYS.length) {
+                    try { telegram.sendToUser(userId, `⚠️ TP retry ${tpAttempt + 1}/${TP_RETRY_DELAYS.length + 1} failed for ${entry.symbol} ${entry.side} — retrying in ${TP_RETRY_DELAYS[tpAttempt] / 1000}s...`); } catch (_) {}
+                    await new Promise(r => setTimeout(r, TP_RETRY_DELAYS[tpAttempt]));
+                }
+            }
+        }
+
+        // TP retries exhausted (DSL OFF only) → EMERGENCY MARKET CLOSE
+        if (!tpOrder) {
+            logger.error('AT_LIVE_PB', `[${liveSeq}] ALL TP retries exhausted (DSL OFF) — EMERGENCY MARKET CLOSE`);
+            try { Sentry.captureMessage(`PB EMERGENCY CLOSE: TP failed ${entry.symbol} ${entry.side}`, { level: 'fatal', tags: { module: 'AT', action: 'pb_emergency_close_tp', symbol: entry.symbol } }); } catch (_) {}
+            try { telegram.sendToUser(userId, `🚨 *TP EMERGENCY CLOSE (Path B)*\n${entry.side} ${entry.symbol} @ $${avgPrice.toFixed(2)}\nAll TP attempts failed (DSL OFF requires TP).\nEmergency closing.`); } catch (_) {}
+            // [Fix #2 2026-05-20] Anti-race: emergency close FIRST, SL cancel
+            // ONLY on success. Pre-fix: SL was cancelled before emergency
+            // attempt, so if emergency failed, position was unprotected (no SL,
+            // no TP, no close). Now if emergency throws, SL stays active as
+            // last line of defense — much safer than removing protection
+            // before confirming replacement.
+            try {
+                const tpEmgResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    symbol: entry.symbol, side: closeSide, type: 'MARKET',
+                    quantity: fillQty, reduceOnly: true,
+                    newClientOrderId: `PB_TPEMG_${liveSeq}`,
+                }, creds);
+                // Emergency close SUCCEEDED → position is closed → cancel SL
+                // as hygiene (orphan order on Binance otherwise).
+                if (slOrder && slOrder.orderId) await _cancelOrderSafe(entry.symbol, slOrder.orderId, creds, userId);
+                const _tpEmgRaw = parseFloat(tpEmgResult.avgPrice);
+                const tpEmgPrice = (Number.isFinite(_tpEmgRaw) && _tpEmgRaw > 0) ? _tpEmgRaw : avgPrice;
+                const lev = entry.leverage || 1;
+                const size = entry.size || (avgPrice * executedQty / lev);
+                const tpEmgPnl = avgPrice > 0 ? (entry.side === 'LONG'
+                    ? +((tpEmgPrice - avgPrice) / avgPrice * size * lev).toFixed(2)
+                    : +((avgPrice - tpEmgPrice) / avgPrice * size * lev).toFixed(2)) : 0;
+                try { telegram.sendToUser(userId, `✅ TP emergency close EXECUTED for ${entry.symbol} ${entry.side} @ $${tpEmgPrice.toFixed(2)} — PnL: $${tpEmgPnl.toFixed(2)}`); } catch (_) {}
+                try { audit.record('PB_EMERGENCY_CLOSE', { userId, seq: liveSeq, symbol: entry.symbol, side: entry.side, emgPrice: tpEmgPrice, emgPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' }, 'PATH_B'); } catch (_) {}
+                return { slOrderId: null, tpOrderId: null, status: 'EMERGENCY_CLOSED', emergencyClosed: true, emergencyPrice: tpEmgPrice, emergencyPnl: tpEmgPnl, reason: 'TP_ALL_RETRIES_FAILED' };
+            } catch (tpEmgErr) {
+                logger.error('AT_LIVE_PB', `[${liveSeq}] TP EMERGENCY CLOSE FAILED: ${tpEmgErr.message}`);
+                try { Sentry.captureException(tpEmgErr, { level: 'fatal', tags: { module: 'AT', action: 'pb_tp_emergency_failed', symbol: entry.symbol } }); } catch (_) {}
+                // Emergency close failed — SL still active (not cancelled).
+                // Telegram message accurate: SL is the last line of defense.
+                try { telegram.sendToUser(userId, `🚨🚨 *TP EMERGENCY CLOSE FAILED (Path B)*\n${entry.side} ${entry.symbol}\nSL still active as last defense. NO TP.\n*PLACE MANUAL TP IMMEDIATELY!*\nError: ${tpEmgErr.message}`); } catch (_) {}
+                return { slOrderId: slOrder.orderId, tpOrderId: null, status: 'LIVE_NO_TP', reason: 'TP_RETRIES_AND_EMERGENCY_FAILED' };
+            }
+        }
+    }
+
+    // Success — SL placed (+ TP if DSL OFF)
+    try { audit.record('PB_SL_PLACED', { userId, seq: liveSeq, symbol: entry.symbol, side: entry.side, slOrderId: slOrder.orderId, tpOrderId: tpOrder ? tpOrder.orderId : null, dslOn: !!entry.dslParams }, 'PATH_B'); } catch (_) {}
+    return {
+        slOrderId: slOrder.orderId,
+        tpOrderId: tpOrder ? tpOrder.orderId : null,
+        status: 'LIVE',
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat C 2026-05-14] registerManualPosition — async unified wrapper
+//
+// Per ADR-001 Decision 3.1: thin wrapper that flag-gated routes între:
+//   - MF.LIVE_ENTRY_UNIFIED=true (default): unified path — validate via
+//     _buildEntryFromOrderPlace (catches sl=null+live cu SafetyAssertionError),
+//     delegate la _executeLiveEntryCore pentru atomic SL/TP placement,
+//     merge live state into legacy return shape (ok, seq, live, position).
+//   - MF.LIVE_ENTRY_UNIFIED=false: legacy Path B (silent sl=null accept,
+//     no exchange SL — for emergency rollback only).
+//
+// Calls module.exports.X (not local X) pentru jest.spyOn interceptability —
+// test scaffolding relies pe spy verification of _buildEntryFromOrderPlace
+// and _executeLiveEntryCore invocations.
+//
+// Returns Promise<result> (async API). Callers must await.
+// trading.js:330 caller updated cu await.
+//
+// Refs: ADR-001 §3.1 + §3.3; TEST_SCAFFOLDING_M1 §5; MILESTONES_M1-M8 §M1.2/M1.6.
+// ══════════════════════════════════════════════════════════════════
+async function registerManualPosition(userId, data) {
+    if (!userId) return { ok: false, error: 'Missing userId' };
+    if (!data || typeof data !== 'object') return { ok: false, error: 'Missing data object' };
+
+    // Flag-gated routing: unified safe path (default) vs legacy rollback
+    if (MF.LIVE_ENTRY_UNIFIED) {
+        // Pre-fill validation via _buildEntryFromOrderPlace (calls cu module.exports.X
+        // pentru jest.spyOn interceptability). Catches:
+        // - Missing required fields (symbol, side, quantity, entryPrice)
+        // - Invalid quantity (zero/negative)
+        // - mode='live' + sl=null → SafetyAssertionError per ADR-001 §3.2
+        const reqBody = {
+            symbol: data.symbol,
+            side: data.side, // Accepts both 'BUY'/'SELL' și 'LONG'/'SHORT'
+            quantity: data.qty,
+            leverage: data.leverage,
+            sl: data.sl,
+            tp: data.tp,
+            mode: data.mode || 'demo',
+            source: data.source,
+            dslParams: data.dslParams,
+            entryPrice: data.entryPrice,
+            clientReqId: data.clientReqId,
+        };
+        // Translate LONG/SHORT to BUY/SELL pentru _buildEntryFromOrderPlace
+        // (which expects exchange-side convention)
+        if (reqBody.side === 'LONG') reqBody.side = 'BUY';
+        else if (reqBody.side === 'SHORT') reqBody.side = 'SELL';
+
+        let validated;
+        try {
+            validated = module.exports._buildEntryFromOrderPlace(reqBody, userId);
+        } catch (e) {
+            return { ok: false, error: e.message };
+        }
+
+        // For live mode, delegate la _executeLiveEntryCore pentru atomic SL/TP placement.
+        // SKIP legacy _registerManualPositionLegacy entirely — unified path doesn't
+        // need legacy _alignQtyToLotSize (core handles aligned qty); allocate seq
+        // + push la _positions inline pentru clean unified flow.
+        if (validated.mode === 'live') {
+            try {
+                // [Fix #3 2026-05-20] Resolve exchange credentials per-user
+                // before invoking core. Pre-fix passed `null` → sendSignedRequest
+                // calls inside core would fail with no auth → silent orphan
+                // risk if any caller passes mode:'live'. M1.9 audit finding.
+                let _creds = null;
+                try {
+                    _creds = getExchangeCreds(userId);
+                } catch (credErr) {
+                    return { ok: false, error: `Cannot resolve exchange creds for user ${userId}: ${credErr.message}` };
+                }
+                if (!_creds || !_creds.apiKey) {
+                    return { ok: false, error: `No exchange credentials configured for user ${userId} (live entry blocked)` };
+                }
+                const coreResult = await module.exports._executeLiveEntryCore(validated, null, _creds);
+                // Allocate seq + push to _positions (local state tracking)
+                const us = _uState(userId);
+                const seq = ++us.seq;
+                coreResult.seq = seq;
+                _positions.push(coreResult);
+                try { _persistState(userId); } catch (_) { /* defensive */ }
+                return {
+                    ok: true,
+                    seq,
+                    live: coreResult.live,
+                    position: coreResult,
+                };
+            } catch (e) {
+                return { ok: false, error: e.message };
+            }
+        }
+
+        // Demo mode — _buildEntryFromOrderPlace called for validation
+        // (test 4 verifies spy called for demo too); then route through legacy
+        // pentru existing demo behavior (no exchange interaction).
+        return _registerManualPositionLegacy(userId, data);
+    }
+
+    // Flag OFF (MF.LIVE_ENTRY_UNIFIED=false) — legacy Path B unchanged
+    return _registerManualPositionLegacy(userId, data);
+}
+
+// ══════════════════════════════════════════════════════════════════
 // Register manual LIVE/TESTNET position as server-tracked Zeus object
 // Called after successful exchange fill for PT/manual orders
+//
+// [M1.2 Cat C 2026-05-14] Renamed la `_registerManualPositionLegacy` —
+// preserved pentru flag-OFF rollback path + delegated-to under new async wrapper.
 // ══════════════════════════════════════════════════════════════════
-function registerManualPosition(userId, data) {
+function _registerManualPositionLegacy(userId, data) {
     if (!userId) return { ok: false, error: 'Missing userId' };
     if (!data || !data.symbol || !data.side || !data.entryPrice || !data.qty) {
         return { ok: false, error: 'Missing required fields (symbol, side, entryPrice, qty)' };
     }
     const us = _uState(userId);
-    const seq = ++us.seq;
     const price = parseFloat(data.entryPrice);
     const qty = parseFloat(data.qty);
     const lev = parseInt(data.leverage, 10) || 1;
     const size = (lev > 0) ? (qty * price / lev) : (qty * price);
     const side = data.side === 'BUY' ? 'LONG' : (data.side === 'SELL' ? 'SHORT' : data.side);
 
+    // [BUG-TM-8] Align qty + size to LOT_SIZE before storage. Defense-in-depth: caller (live) typically pre-rounds via trading.js, but enforce server-side.
+    const _tm8reg = _alignQtyToLotSize(data.symbol, qty, price, lev, 'MANUAL_REGISTER');
+    if (!_tm8reg) {
+        return { ok: false, error: 'LOT_SIZE_ALIGN_REJECTED', detail: `qty=${qty} price=${price} lev=${lev} symbol=${data.symbol}` };
+    }
+    const _regAlignedQty = _tm8reg.qty;
+    const _regAlignedSize = _tm8reg.size;
+
+    // [Phase 9D1] Idempotency: if the client retries registration with the
+    // same clientReqId (e.g. transient network fail), fold onto the existing
+    // position instead of double-registering. Scoped per-user.
+    if (data.clientReqId) {
+        const prior = _positions.find(p => p.userId === userId && p._clientReqId === data.clientReqId);
+        if (prior) {
+            logger.info('AT_ENGINE', `[${prior.seq}] idempotent register hit clientReqId=${data.clientReqId} — returning existing seq`);
+            return { ok: true, seq: prior.seq, alreadyTracked: true };
+        }
+    }
+
     // Duplicate guard: only for LIVE (exchange merges same-side positions into one).
     // DEMO allows multiple independent manual positions on same (symbol, side) —
     // each gets its own seq, DSL state, and lifecycle. Dedup would collapse them
     // on the client via _mapServerPos and cause positions to disappear.
     const mode = data.mode || us.engineMode;
+    // [S2.C C2] Global PANIC halt — block NEW live exposure via manual registration.
+    // DEMO path intentionally unaffected (no real risk).
+    if (mode === 'live' && isGlobalHaltActive()) {
+        logger.warn('AT_ENGINE', `registerManualPosition blocked uid=${userId} sym=${data.symbol} side=${side} — GLOBAL_HALT active`);
+        return { ok: false, error: 'GLOBAL_HALT active — new live exposure blocked' };
+    }
     if (mode === 'live') {
         const existing = _positions.find(p => p.userId === userId && p.symbol === data.symbol && p.side === side && p.mode === 'live');
         if (existing) {
-            logger.info('AT_ENGINE', `[${seq}] LIVE manual position already tracked as seq=${existing.seq} — skipping`);
+            logger.info('AT_ENGINE', `[${existing.seq}] LIVE manual position already tracked — skipping`);
             return { ok: true, seq: existing.seq, alreadyTracked: true };
         }
     }
+
+    const seq = ++us.seq;
 
     const sl = data.sl ? parseFloat(data.sl) : null;
     const tp = data.tp ? parseFloat(data.tp) : null;
@@ -2028,6 +3528,14 @@ function registerManualPosition(userId, data) {
     // [DSL-OFF] Client sends dslParams === null when DSL engine is disabled.
     // In that case skip DSL attach entirely — position runs purely on exchange TP/SL (or demo tick-exits).
     const _dslOff = (data.dslParams === null);
+    // [Phase 10 classification] Honor explicit source marker from /order/place.
+    // Without this, ANY MARKET fill was stamped manual even when client AT
+    // fired it, so AT positions leaked into the Manual panel on the client.
+    const _srcAuto = (data.source === 'auto');
+    // [Phase 12.A — Batch G] Stamp exchange + env at open (same rationale as the
+    // AT-engine entry path). Honest null when demo or when creds missing.
+    const _manualExecEnv = _resolveExecutionEnv(userId);
+    const _manualCreds = _manualExecEnv.env === 'DEMO' ? null : getExchangeCreds(userId);
     const entry = {
         seq,
         userId,
@@ -2035,23 +3543,28 @@ function registerManualPosition(userId, data) {
         symbol: data.symbol,
         side,
         mode: data.mode || us.engineMode,
+        exchange: _manualCreds ? (_manualCreds.exchange || null) : null,
+        env: _manualExecEnv.env,     // 'DEMO' | 'TESTNET' | 'REAL' | null
         price,
-        size,
-        margin: size,
+        size: _regAlignedSize,        // [BUG-TM-8] LOT_SIZE-adjusted
+        margin: _regAlignedSize,      // [BUG-TM-8] LOT_SIZE-adjusted
         lev,
-        qty: +qty.toFixed(6),
+        qty: _regAlignedQty,          // [BUG-TM-8] LOT_SIZE-aligned
         sl, tp, slPct, rr, tpPnl, slPnl,
         status: 'OPEN',
         closeTs: null, closePnl: null, closeReason: null,
-        // Manual-specific metadata
-        autoTrade: false,
-        sourceMode: 'manual',
-        controlMode: 'user',
+        // Ownership metadata — derived from explicit source marker.
+        autoTrade: _srcAuto,
+        sourceMode: _srcAuto ? 'auto' : 'manual',
+        controlMode: _srcAuto ? 'auto' : 'user',
+        // [Phase 9D1] Stamp idempotency token so a retry with the same token
+        // folds onto this entry instead of creating a duplicate.
+        _clientReqId: data.clientReqId || null,
         // DSL params: null = engine OFF (no DSL), object = user-provided, undefined = use defaults
         dslParams: _dslOff ? null : ((data.dslParams && typeof data.dslParams === 'object') ? data.dslParams : serverDSL.DSL_DEFAULTS),
         originalEntry: price,
-        originalSize: size,
-        originalQty: +qty.toFixed(6),
+        originalSize: _regAlignedSize,   // [BUG-TM-8]
+        originalQty: _regAlignedQty,     // [BUG-TM-8]
         addOnCount: 0,
         addOnHistory: [],
         // Live exchange metadata
@@ -2070,15 +3583,107 @@ function registerManualPosition(userId, data) {
     if (!_dslOff) {
         serverDSL.attach(entry, entry.dslParams);
     } else {
-        logger.info('AT_ENGINE', `[${seq}] uid=${userId} MANUAL registered with DSL OFF — no DSL attach`);
+        logger.info('AT_ENGINE', `[${seq}] uid=${userId} ${_srcAuto ? 'AUTO' : 'MANUAL'} registered with DSL OFF — no DSL attach`);
     }
     _persistState(userId);
     _persistPosition(entry);
     _notifyChange(userId);
 
-    logger.info('AT_ENGINE', `[${seq}] uid=${userId} MANUAL ${side} ${data.symbol} @ $${price.toFixed(2)} | Size=$${size.toFixed(0)} Lev=${lev}x | Registered as server-tracked`);
+    logger.info('AT_ENGINE', `[${seq}] uid=${userId} ${_srcAuto ? 'AUTO' : 'MANUAL'} ${side} ${data.symbol} @ $${price.toFixed(2)} | Size=$${size.toFixed(0)} Lev=${lev}x | Registered as server-tracked`);
 
     return { ok: true, seq, position: entry };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [M1.2 Cat C 2026-05-14] _syncExternalPosition
+// Register externally-discovered Binance position (recon found poziție pe care
+// Zeus NU a deschis-o — e.g., operator a deschis manual pe Binance UI direct).
+//
+// Distinct from registerManualPosition:
+//   - source='external' marker pentru audit trail
+//   - NO SL placement (position is PRE-EXISTING pe exchange — Zeus didn't open it,
+//     so Zeus shouldn't presume SL responsibility)
+//   - Returns warning string în result pentru caller logging visibility
+//   - Logs WARN level audit trail despre external position lacking exchange SL
+//
+// Critical pentru BUG-T2c — distinguish "external sync needed" de "orphan
+// detected". Pre-M1: recon flagged ALL un-tracked positions ca PHANTOM, including
+// fresh externals (false-positive root cause).
+//
+// Refs: ADR-001 §3.1 + §3.3; TEST_SCAFFOLDING_M1 §5; BUG-T2c root cause.
+// ══════════════════════════════════════════════════════════════════
+function _syncExternalPosition(data) {
+    if (!data || typeof data !== 'object') {
+        return { ok: false, error: 'Missing data object' };
+    }
+    if (!data.userId || !data.symbol || !data.side || !data.entryPrice || !data.qty) {
+        return { ok: false, error: 'Missing required fields (userId, symbol, side, entryPrice, qty)' };
+    }
+    const userId = data.userId;
+    const us = _uState(userId);
+    const seq = ++us.seq;
+    const entry = {
+        seq,
+        userId,
+        symbol: data.symbol,
+        side: data.side,
+        entry: parseFloat(data.entryPrice),
+        qty: parseFloat(data.qty),
+        mode: 'live',
+        source: 'external',
+        // External position has NO SL placement responsibility — pre-existing on exchange
+        live: { status: 'EXTERNAL', slOrderId: null, tpOrderId: null, slPlaced: false, tpPlaced: false },
+        ts: Date.now(),
+        externalSync: true,
+    };
+    _positions.push(entry);
+    try { _persistState(userId); } catch (_) {}
+    logger.warn('AT_RECON', `External position synced uid=${userId} sym=${data.symbol} side=${data.side} qty=${data.qty} — no SL placement (pre-existing pe exchange, source=external)`);
+    return {
+        ok: true,
+        seq,
+        warning: 'External position registered without SL placement on exchange (pre-existing position, source=external)',
+    };
+}
+
+// [batch3-W] Patch a registered position's entry price + qty after an async
+// Binance fill materializes (registerManualPosition is called on status=NEW
+// with a fallback reference price — this updates the real fill data).
+function patchPositionFill(userId, seq, patch) {
+    if (!userId || !seq || !patch) return { ok: false, error: 'Missing args' };
+    const pos = _positions.find(p => p.userId === userId && p.seq === seq && p.status === 'OPEN');
+    if (!pos) return { ok: false, error: 'Position not found' };
+    const newPrice = parseFloat(patch.entryPrice);
+    const newQty = parseFloat(patch.qty);
+    if (!(newPrice > 0) || !(newQty > 0)) return { ok: false, error: 'Invalid patch values' };
+    const newSize = (pos.lev > 0) ? (newQty * newPrice / pos.lev) : (newQty * newPrice);
+    pos.price = newPrice;
+    pos.qty = +newQty.toFixed(6);
+    pos.size = newSize;
+    pos.margin = newSize;
+    pos.originalEntry = newPrice;
+    pos.originalSize = newSize;
+    pos.originalQty = +newQty.toFixed(6);
+    if (pos.sl) {
+        const slDist = Math.abs(newPrice - pos.sl);
+        pos.slPct = newPrice > 0 && slDist > 0 ? +(slDist / newPrice * 100).toFixed(2) : 0;
+        pos.slPnl = +(-slDist / newPrice * newSize * pos.lev).toFixed(2);
+    }
+    if (pos.tp) {
+        const tpDist = Math.abs(newPrice - pos.tp);
+        pos.tpPnl = +(tpDist / newPrice * newSize * pos.lev).toFixed(2);
+        if (pos.sl) {
+            const slDist = Math.abs(newPrice - pos.sl);
+            pos.rr = slDist > 0 ? +(tpDist / slDist).toFixed(2) : 0;
+        }
+    }
+    if (pos.live) {
+        pos.live.avgPrice = newPrice;
+        pos.live.executedQty = newQty;
+    }
+    _persistPosition(pos);
+    _notifyChange(userId);
+    return { ok: true, seq, position: pos };
 }
 
 function closeBySeq(userId, seq) {
@@ -2095,9 +3700,11 @@ function closeBySeq(userId, seq) {
         const pos = _positions[idx];
         // Use last known price for PnL calculation (best effort)
         const exitPrice = pos._lastPrice || pos.price;
-        const pnl = pos.side === 'LONG'
+        // [TM-4] Apply round-trip fee deduction (manual client close).
+        const _grossPnl = pos.side === 'LONG'
             ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
             : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2);
+        const pnl = _applyRoundTripFee(_grossPnl, pos.size, pos.lev);
         _closePosition(idx, pos, 'MANUAL_CLIENT', exitPrice, pnl);
         success = true;
         return { ok: true, seq, pnl };
@@ -2130,9 +3737,10 @@ const ADDON_TP_RETRIES = [1000, 3000];
 async function addOnPosition(userId, seq, options = {}) {
     if (!userId) return { ok: false, error: 'Missing userId' };
     if (!seq) return { ok: false, error: 'Missing seq' };
-    // [M1] Block add-ons when AT is OFF — no exposure growth while disabled
+    // [BUG-T7 2026-05-13] Block add-ons when AT is OFF for current mode —
+    // no exposure growth while disabled. Per-mode aware (M1 add-on path).
     const us = _uState(userId);
-    if (!us.atActive) return { ok: false, error: 'Cannot add on: AT is OFF' };
+    if (!_isATActiveForMode(us, us.engineMode)) return { ok: false, error: `Cannot add on: AT is OFF for mode=${us.engineMode}` };
 
     // ── Lock: prevent double trigger on same position ──
     const gk = `${userId}:${seq}`;
@@ -2173,9 +3781,17 @@ async function addOnPosition(userId, seq, options = {}) {
             return { ok: false, error: 'Position is not in profit — add-on denied' };
         }
 
-        // ── Addon size = 50% of original margin ──
+        // ── Addon size: prefer client-provided amount (modal input), else default to 50% of original ──
+        // [Phase 10.7] Client AddOnModal sends user-chosen amount via options.addOnSize.
+        // Fallback to legacy 50%-of-original when omitted (keeps backward compat with
+        // any non-modal callers).
         const origSize = pos.originalSize || pos.size;
-        const addOnSize = Math.round(origSize * 0.5);
+        let addOnSize;
+        if (Number.isFinite(Number(options.addOnSize)) && Number(options.addOnSize) > 0) {
+            addOnSize = Math.round(Number(options.addOnSize));
+        } else {
+            addOnSize = Math.round(origSize * 0.5);
+        }
         if (addOnSize <= 0) return { ok: false, error: 'Add-on size too small' };
 
         // ── Demo balance check ──
@@ -2443,7 +4059,14 @@ async function addOnPosition(userId, seq, options = {}) {
         pos.price = +newEntry.toFixed(6);
         pos.size = newTotalSize;
         pos.margin = newTotalSize;
-        pos.qty = +((newTotalSize * pos.lev) / pos.price).toFixed(6);
+        // [BUG-TM-8] DEMO addon: align computed qty to LOT_SIZE for parity with live + future SERVER_AT.
+        // If alignment fails (cache miss), block addon (consistent with main entry policy — no silent fallback).
+        const _tm8addon = _alignQtyToLotSize(pos.symbol, (newTotalSize * pos.lev) / pos.price, pos.price, pos.lev, 'DEMO_ADDON');
+        if (!_tm8addon) {
+            logger.warn('AT_ADDON', `[${seq}] DEMO addon LOT_SIZE align rejected — symbol=${pos.symbol} newTotalSize=${newTotalSize}`);
+            return { ok: false, error: 'LOT_SIZE_ALIGN_REJECTED', detail: 'DEMO addon qty cannot be aligned to LOT_SIZE' };
+        }
+        pos.qty = _tm8addon.qty;
         pos.addOnCount = (pos.addOnCount || 0) + 1;
         if (!pos.addOnHistory) pos.addOnHistory = [];
         pos.addOnHistory.push(historyEntry);
@@ -2566,11 +4189,27 @@ const RECON_INTERVAL_MS = 60000; // 60s
 let _reconTimer = null;
 let _reconRunning = false;
 // [AUDIT] Per-user recon alert deduplication — prevents Telegram spam for recurring issues
+// [batch2-M1] Maps with 24h TTL, not Sets — previously alerts for the same key were
+// suppressed forever, so a repeating SL failure on an unprotected position went silent
+// after the first alert. TTL lets genuinely persistent failures re-page after 24h.
+const _RECON_ALERT_TTL_MS = 24 * 60 * 60 * 1000;
 const _reconAlerted = {
-    orphans: new Set(),    // "userId:symbol:side" — alerted once per orphan
-    slFails: new Set(),    // "userId:seq" — alerted once per SL re-fail
-    tpFails: new Set(),    // "userId:seq" — alerted once per TP re-fail
+    orphans: new Map(),    // "userId:symbol:side" → last alert ts
+    slFails: new Map(),    // "userId:seq" → last alert ts
+    tpFails: new Map(),    // "userId:seq" → last alert ts
 };
+function _reconAlertedShouldFire(cat, key) {
+    const map = _reconAlerted[cat];
+    if (!map) return true;
+    const now = Date.now();
+    const last = map.get(key) || 0;
+    if (now - last < _RECON_ALERT_TTL_MS) return false;
+    map.set(key, now);
+    if (map.size > 500) {
+        for (const [k, ts] of map) if (now - ts >= _RECON_ALERT_TTL_MS) map.delete(k);
+    }
+    return true;
+}
 // [V5.4] Orphan pending map — tracks first detection for 2-cycle confirmation
 const _orphanPending = new Map(); // "userId:symbol:side" → { firstSeen, bpos, userId, symbol }
 
@@ -2579,6 +4218,13 @@ async function _runReconciliation(isStartup) {
     _reconRunning = true;
     const label = isStartup ? 'STARTUP_RECON' : 'RECON';
     try {
+        // [batch2-L1] Evict stale _orphanPending entries: if first-detection is
+        // older than 3 recon cycles without a confirming re-detection, the orphan
+        // disappeared (user closed it manually on Binance), so drop the entry.
+        const _pendingStale = Date.now() - 3 * RECON_INTERVAL_MS;
+        for (const [k, v] of _orphanPending) {
+            if (v.firstSeen < _pendingStale) _orphanPending.delete(k);
+        }
         const livePositions = _positions.filter(p => p.mode === 'live' && p.live && (p.live.status === 'LIVE' || p.live.status === 'LIVE_NO_SL'));
         if (livePositions.length === 0) return; // [B6] finally will reset _reconRunning
 
@@ -2596,35 +4242,129 @@ async function _runReconciliation(isStartup) {
             const creds = getExchangeCreds(userId);
             if (!creds) continue;
 
+            // [RECON-SUBSCRIBE 2026-05-14] Auto-subscribe market feed for symbols
+            // cu poziții deschise dar fără feed activ. Pre-fix: AT could open
+            // positions on symbols outside boot subscription set (BTC/ETH/SOL/BNB)
+            // — ZECUSDT exemplu real 2026-05-14 — feed nu trăgea preț live → DSL
+            // trailing SL miscalculated + close button silent fail (partial mitigation
+            // în BUG-CLOSE-AT via fallback chain; THIS hook restores live price flow).
+            try {
+                const activeSyms = marketFeed.getActiveSymbols();
+                const seenInThisCycle = new Set();
+                for (const _p of userLivePositions) {
+                    if (!_p.symbol || seenInThisCycle.has(_p.symbol)) continue;
+                    seenInThisCycle.add(_p.symbol);
+                    if (!activeSyms.has(_p.symbol)) {
+                        // [Phase B 2026-05-19] ref-counted subscribe — released
+                        // when position closes (see _closePosition in Task 5).
+                        // Sticky boot symbols (BTC/ETH/SOL/BNB) keep their own
+                        // boot|system ref regardless of position lifecycle.
+                        const refKey = `${userId}|${_p.env || 'TESTNET'}|${_p.seq}`;
+                        marketFeed.subscribeForRef(_p.symbol, refKey).then(added => {
+                            if (added && !activeSyms.has(_p.symbol)) {
+                                logger.info(label, `Auto-subscribed ${_p.symbol} uid=${userId} seq=${_p.seq} refKey=${refKey}`);
+                            }
+                        }).catch(subErr => {
+                            logger.warn(label, `Auto-subscribe failed for ${_p.symbol}: ${subErr.message}`);
+                        });
+                    }
+                }
+            } catch (subErr) {
+                logger.warn(label, `Auto-subscribe block failed: ${subErr.message}`);
+            }
+
             // 1. Query Binance position risk
             let binancePositions;
             try {
-                binancePositions = await sendSignedRequest('GET', '/fapi/v2/positionRisk', {}, creds);
+                binancePositions = await sendSignedRequest('GET', '/fapi/v2/positionRisk', {}, Object.assign({}, creds, { __src: 'serverAT:recon-positionRisk' }));
             } catch (err) {
                 logger.warn(label, `Binance positionRisk query failed uid=${userId}: ${err.message}`);
                 continue;
             }
 
-            // Build set of actively-held Binance symbols (non-zero positionAmt)
-            const binanceHeld = new Map();
-            for (const bp of binancePositions) {
-                const amt = parseFloat(bp.positionAmt || 0);
-                if (amt !== 0) {
-                    binanceHeld.set(bp.symbol, {
-                        amt, side: amt > 0 ? 'LONG' : 'SHORT',
-                        entryPrice: parseFloat(bp.entryPrice || 0),
-                        markPrice: parseFloat(bp.markPrice || 0),
-                        unrealizedProfit: parseFloat(bp.unRealizedProfit || 0),
-                    });
+            // [BUG-T2a 2026-05-13] Hedge-aware Binance held map — keyed by
+            // `symbol_side` tuple pentru a păstra LONG + SHORT same symbol
+            // independente în HEDGE mode. Pre-T2a: keyed by symbol only,
+            // collapsed both → recon detection lookup mismatch on side.
+            // Logic extracted la reconHelpers.buildBinanceHeldMap pentru testability.
+            const binanceHeld = buildBinanceHeldMap(binancePositions);
+
+            // [Bug#3 STEP 3] Multi-seq collision reconciliation — if multiple OPEN
+            // server seqs claim the same (symbol, side), Binance (ONE-WAY mode) holds
+            // only ONE merged position. Without this pass, the per-seq check below
+            // sees bpos matching for all seqs, leaves them all OPEN; the extra seqs
+            // become phantoms that re-appear in Manual after the primary seq closes
+            // (exact symptom of Bug#3). Consolidate: keep earliest seq, close the
+            // rest with reason='RECON_PHANTOM_MERGED_DUP' at entry price, pnl=0.
+            const _bySymSide = new Map();
+            for (const _p of userLivePositions) {
+                const _k = _p.symbol + '_' + _p.side;
+                if (!_bySymSide.has(_k)) _bySymSide.set(_k, []);
+                _bySymSide.get(_k).push(_p);
+            }
+            const _keepSeqs = new Set();
+            // [Phase 8C3] Minimum age before a position can be closed as a
+            // PHANTOM-MERGED-DUP. Registration races can briefly produce two
+            // server seqs for the same (symbol, side) within ms; closing one
+            // before the other has settled risks killing the wrong record.
+            // Skip dup-close this cycle if ANY position in the group is
+            // younger than this threshold — wait for the next recon tick.
+            const _DUP_MIN_AGE_MS = 10000;
+            for (const [, group] of _bySymSide) {
+                if (group.length === 1) { _keepSeqs.add(group[0].seq); continue; }
+                group.sort((a, b) => a.seq - b.seq);
+                const _now = Date.now();
+                const _tooFresh = group.some((pp) => {
+                    const _ts = Number(pp.openTs || pp.ts || 0);
+                    return _ts > 0 && (_now - _ts) < _DUP_MIN_AGE_MS;
+                });
+                if (_tooFresh) {
+                    // Defer: keep ALL seqs in the group this cycle. They re-enter the
+                    // per-seq phantom check below, which handles legitimate phantoms
+                    // on its own timeline. Without this guard a just-registered seq
+                    // could be clobbered before the exchange fill confirms.
+                    for (const pp of group) _keepSeqs.add(pp.seq);
+                    logger.info(label, `[RECON] PHANTOM-MERGED-DUP deferred uid=${userId} ${group[0].symbol}/${group[0].side} (${group.length} seqs, youngest < ${_DUP_MIN_AGE_MS}ms)`);
+                    continue;
+                }
+                _keepSeqs.add(group[0].seq);
+                for (let j = 1; j < group.length; j++) {
+                    const dup = group[j];
+                    const dupIdx = _positions.findIndex(pp => pp.seq === dup.seq && pp.userId === userId);
+                    if (dupIdx < 0) continue;
+                    const _gk = `${userId}:${dup.seq}`;
+                    if (_closingGuard.has(_gk)) continue;
+                    _closingGuard.set(_gk, Date.now());
+                    try {
+                        logger.warn(label, `[${dup.seq}] PHANTOM-MERGED-DUP uid=${userId}: ${dup.side} ${dup.symbol} (keeping seq=${group[0].seq})`);
+                        _closePosition(dupIdx, dup, 'RECON_PHANTOM_MERGED_DUP', dup.price, 0);
+                        telegram.sendToUser(userId, `🔧 *RECON: Phantom Duplicate Closed*\n${dup.side} ${dup.symbol} seq=${dup.seq}\nDuplicate server record for a single exchange position — kept seq=${group[0].seq}.`);
+                        audit.record('SAT_RECON_PHANTOM_MERGED_DUP', { seq: dup.seq, keepSeq: group[0].seq, symbol: dup.symbol, side: dup.side, userId }, 'SERVER_AT');
+                    } finally {
+                        setTimeout(() => _closingGuard.delete(_gk), 5000);
+                    }
                 }
             }
+            // Drop consolidated duplicates from the per-seq list so the phantom check
+            // below does not revisit positions we already closed in this cycle.
+            for (let i = userLivePositions.length - 1; i >= 0; i--) {
+                if (!_keepSeqs.has(userLivePositions[i].seq)) userLivePositions.splice(i, 1);
+            }
+            if (_bySymSide.size !== userLivePositions.length) _notifyChange(userId);
 
             // 2. Check each server live position against Binance
             for (let i = userLivePositions.length - 1; i >= 0; i--) {
                 const pos = userLivePositions[i];
-                const bpos = binanceHeld.get(pos.symbol);
+                // [BUG-T2a 2026-05-13] Lookup hedge-aware: symbol_side tuple key.
+                // Pre-T2a: `binanceHeld.get(pos.symbol)` returned same entry pentru
+                // ambele LONG + SHORT positions în HEDGE mode (last-write-wins
+                // collapse). Acum cheia include side → fiecare position găsește
+                // corespondentul corect (sau lipsa).
+                const bpos = binanceHeld.get(pos.symbol + '_' + pos.side);
 
                 // PHANTOM: server says position exists, Binance says no
+                // Note: side check redundant post-T2a (key includes side) dar
+                // kept as belt-and-suspenders pentru defensive coding.
                 if (!bpos || bpos.side !== pos.side) {
                     logger.warn(label, `[${pos.seq}] PHANTOM DETECTED uid=${userId}: ${pos.side} ${pos.symbol} not found on Binance — closing locally`);
 
@@ -2635,16 +4375,16 @@ async function _runReconciliation(isStartup) {
                         const trades = await sendSignedRequest('GET', '/fapi/v1/userTrades', {
                             symbol: pos.symbol, limit: 10,
                         }, creds);
-                        if (Array.isArray(trades) && trades.length > 0) {
-                            // Find the most recent trade matching our side (reduce-only = exit)
-                            const exitTrade = trades.reverse().find(t =>
-                                t.symbol === pos.symbol && t.realizedPnl && parseFloat(t.realizedPnl) !== 0
-                            );
-                            if (exitTrade) {
-                                realExitPrice = parseFloat(exitTrade.price);
-                                realPnl = parseFloat(exitTrade.realizedPnl);
-                                logger.info(label, `[${pos.seq}] PHANTOM real fill: price=$${realExitPrice} pnl=$${realPnl} (from userTrades)`);
-                            }
+                        // [BUG-T2b 2026-05-13] Strict exit trade filter via reconHelpers.
+                        // Pre-T2b: `realizedPnl !== 0` matched ANY trade — could
+                        // fortuitously pick UNRELATED old trade pentru same symbol.
+                        // Post-T2b: must be AFTER pos.openTs, side opposite la pos.side
+                        // (LONG exits SELL, SHORT exits BUY), qty ≥95% pos qty.
+                        const exitTrade = findExitTrade(trades, pos);
+                        if (exitTrade) {
+                            realExitPrice = parseFloat(exitTrade.price);
+                            realPnl = parseFloat(exitTrade.realizedPnl);
+                            logger.info(label, `[${pos.seq}] PHANTOM real fill: price=$${realExitPrice} pnl=$${realPnl} (from userTrades, strict-filtered)`);
                         }
                     } catch (tradeErr) {
                         logger.warn(label, `[${pos.seq}] userTrades query failed: ${tradeErr.message} — using markPrice fallback`);
@@ -2654,14 +4394,61 @@ async function _runReconciliation(isStartup) {
                         `🔍 *RECON: Phantom Position Removed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nPosition not found on Binance — likely closed externally (SL/TP hit, liquidation, or manual close).\nRemoving from server tracker.`
                     );
                     const idx = _positions.findIndex(p => p.seq === pos.seq && p.userId === userId);
+                    let estimatedClose = false;
                     if (idx >= 0) {
-                        const exitPrice = realExitPrice || (bpos ? bpos.markPrice : (pos._lastPrice || pos.price));
-                        const pnl = realPnl != null ? realPnl : (pos.side === 'LONG'
-                            ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                            : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2));
-                        _closePosition(idx, pos, 'RECON_PHANTOM', exitPrice, pnl);
+                        // [M5] Skip if user-initiated close already in flight — avoids double-close race.
+                        const _gk = `${userId}:${pos.seq}`;
+                        if (_closingGuard.has(_gk)) {
+                            logger.info(label, `[${pos.seq}] PHANTOM close skipped — user close in progress (closingGuard set)`);
+                            continue;
+                        }
+                        _closingGuard.set(_gk, Date.now());
+                        try {
+                            // Pick exit price in priority order:
+                            //   1. realExitPrice from userTrades (authoritative)
+                            //   2. bpos.markPrice if Binance still shows the symbol (side-flip case)
+                            //   3. pos.price as last resort — PnL forced to 0, flag manual reconcile
+                            // Never use pos._lastPrice: it fabricates a PnL from a stale tick.
+                            let exitPrice;
+                            if (realExitPrice != null && realExitPrice > 0) {
+                                exitPrice = realExitPrice;
+                            } else if (bpos && bpos.markPrice > 0) {
+                                exitPrice = bpos.markPrice;
+                            } else {
+                                exitPrice = pos.price;
+                                estimatedClose = true;
+                            }
+                            // [TM-4] When realPnl from userTrades API is available, it's already
+                            // post-fees (exchange-authoritative). Fallback local calc needs fee
+                            // deduction. estimatedClose path is forced to 0 (intentional —
+                            // operator manually reconciles).
+                            const pnl = realPnl != null
+                                ? realPnl
+                                : (estimatedClose ? 0 : _applyRoundTripFee(
+                                    pos.side === 'LONG'
+                                        ? +((exitPrice - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
+                                        : +((pos.price - exitPrice) / pos.price * pos.size * pos.lev).toFixed(2),
+                                    pos.size, pos.lev
+                                ));
+                            if (estimatedClose) {
+                                logger.warn(label, `[${pos.seq}] PHANTOM closed at entry price (PnL=0) — userTrades unavailable; manual reconciliation required`);
+                                telegram.sendToUser(userId,
+                                    `⚠️ *RECON: Manual Reconciliation Needed*\n${pos.side} ${pos.symbol} seq=${pos.seq}\nReal exit fill could not be retrieved from Binance userTrades API.\nClosed locally with PnL=$0. Please verify actual fill on Binance and adjust balance manually if needed.`
+                                );
+                            }
+                            _closePosition(idx, pos, 'RECON_PHANTOM', exitPrice, pnl);
+                        } finally {
+                            setTimeout(() => _closingGuard.delete(_gk), 5000);
+                        }
                     }
-                    audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl }, 'SERVER_AT');
+                    audit.record('SAT_RECON_PHANTOM', { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId, realExitPrice, realPnl, estimatedClose }, 'SERVER_AT');
+                    // [Day 19] Doctor P1 alert — phantom position detected (Zeus tracked, Binance gone).
+                    _emitDoctor({
+                        eventType: 'alert', severity: 'P1',
+                        moduleId: 'serverAT.recon.phantom', ts: Date.now(),
+                        payload: { seq: pos.seq, symbol: pos.symbol, side: pos.side, userId,
+                                   realExitPrice, realPnl, estimatedClose }
+                    });
                     continue;
                 }
 
@@ -2671,10 +4458,16 @@ async function _runReconciliation(isStartup) {
 
             // 3. Check for ORPHAN positions (Binance has, server doesn't track)
             // [V5.4] 2-cycle confirmation + SAT_ prefix check before auto-close
-            for (const [symbol, bpos] of binanceHeld) {
+            // [BUG-RECON-SYMBOL FIX 2026-05-14] Iterate cu destructure `[heldKey,
+            // bpos]` — map key is composite SYMBOL_SIDE (BUG-T2a hedge-aware).
+            // Use bpos.symbol (pure) pentru downstream Binance API calls; pre-fix
+            // sent composite key as `symbol` param → "Invalid symbol" errors +
+            // orphan auto-close + cancel calls silently broken.
+            for (const [heldKey, bpos] of binanceHeld) {
+                const symbol = bpos.symbol;
                 const tracked = userLivePositions.find(p => p.symbol === symbol && p.side === bpos.side);
                 if (!tracked) {
-                    const _orphanKey = `${userId}:${symbol}:${bpos.side}`;
+                    const _orphanKey = `${userId}:${heldKey}`;
 
                     if (!_orphanPending.has(_orphanKey)) {
                         // First detection — mark pending, alert, wait for next cycle
@@ -2760,8 +4553,7 @@ async function _runReconciliation(isStartup) {
                             }
                         } else {
                             // Not Zeus-created — alert only
-                            if (!_reconAlerted.orphans.has(_orphanKey)) {
-                                _reconAlerted.orphans.add(_orphanKey);
+                            if (_reconAlertedShouldFire('orphans', _orphanKey)) {
                                 telegram.sendToUser(userId,
                                     `⚠️ *RECON: External Orphan*\n${bpos.side} ${symbol} | Qty: ${bpos.amt}\nThis position was NOT created by Zeus (no SAT_ orders).\nManual review required.`
                                 );
@@ -2771,7 +4563,9 @@ async function _runReconciliation(isStartup) {
                     }
                 } else {
                     // Position is tracked — clean up any stale pending entry
-                    const _orphanKey = `${userId}:${symbol}:${bpos.side}`;
+                    // [BUG-RECON-SYMBOL FIX 2026-05-14] _orphanKey must match the
+                    // format set at orphan-detection branch above ({userId}:{heldKey}).
+                    const _orphanKey = `${userId}:${heldKey}`;
                     if (_orphanPending.has(_orphanKey)) {
                         _orphanPending.delete(_orphanKey);
                         logger.info(label, `Orphan false alarm cleared: ${bpos.side} ${symbol} uid=${userId}`);
@@ -2782,9 +4576,12 @@ async function _runReconciliation(isStartup) {
             // [LIVE-PARITY] Check pending live closes — resolve or escalate
             for (const [seq, pending] of _pendingLiveCloses) {
                 if (pending.pos.userId !== userId) continue;
+                // [BUG-RECON-SYMBOL FIX 2026-05-14] Lookup using composite key
+                // (BUG-T2a map keys SYMBOL_SIDE); previous pure-symbol lookup
+                // never matched → stillOnExchange always false → valid live
+                // positions silently dropped from pending close queue.
                 const key = `${pending.pos.symbol}_${pending.pos.side}`;
-                const stillOnExchange = binanceHeld.has(pending.pos.symbol) &&
-                    binanceHeld.get(pending.pos.symbol).side === pending.pos.side;
+                const stillOnExchange = binanceHeld.has(key);
                 if (!stillOnExchange) {
                     // Position closed on exchange (by SL/TP/liquidation) — remove from queue
                     _pendingLiveCloses.delete(seq);
@@ -2875,8 +4672,7 @@ async function _checkOrderHealth(pos, creds, label) {
             logger.error(label, `[${pos.seq}] SL re-placement FAILED: ${err.message}`);
             // [AUDIT] Per-user dedupe — alert once per position, not every recon cycle
             const _slFailKey = `${userId}:${pos.seq}`;
-            if (!_reconAlerted.slFails.has(_slFailKey)) {
-                _reconAlerted.slFails.add(_slFailKey);
+            if (_reconAlertedShouldFire('slFails', _slFailKey)) {
                 telegram.sendToUser(userId, `🚨 *SL Re-placement FAILED*\n${pos.side} ${pos.symbol}\nSL was missing and could not be re-placed.\nPosition is *UNPROTECTED*. Manual SL required!\nError: ${err.message}`);
             }
         }
@@ -3005,8 +4801,31 @@ module.exports = {
     reset,
     addDemoFunds,
     resetDemoBalance,
+    // [Phase 2 S2.B] Global panic halt
+    isGlobalHaltActive,
+    getGlobalHaltState,
+    setGlobalHalt,
     // Client actions
     registerManualPosition,
+    // [M1.2 Cat A] Pure transform helper: /api/order/place reqBody → canonical entry.
+    // Used by _executeLiveEntryCore + post-M1 refactored registerManualPosition.
+    _buildEntryFromOrderPlace,
+    // [M1.2 Cat B] Core safety machinery: atomic entry + SL/TP placement + emergency close.
+    // Extracted din _executeLiveEntry pattern; reusable pentru BOTH Path A (Brain dispatch)
+    // AND Path B (registerManualPosition post-M1 unification) per ADR-001 Decision 3.1.
+    _executeLiveEntryCore,
+    // [M1.2 Cat C] Sync external Binance position (recon-discovered, NU PHANTOM).
+    // source='external' marker, NO SL placement responsibility, warning log.
+    _syncExternalPosition,
+    // [BUG-T2c FIX 2026-05-14] Path B SL placement helper (trading.js).
+    // Called from /api/order/place after main MARKET order success. Places SL HARD
+    // + TP conditional on !dslParams (DSL ON skip per regulă). Returns
+    // { slOrderId, tpOrderId, status } for caller to pass to registerManualPosition.
+    _placeProtectionForExistingEntry,
+    // [ML Phase B Day 7] Canonical execution-env resolver exposed for Ring5
+    // facade wiring in serverBrain. Returns { env: 'DEMO'|'TESTNET'|'REAL'|null, blockedReason }.
+    _resolveExecutionEnv,
+    patchPositionFill,
     closeBySeq,
     addOnPosition,
     updateControlMode,
@@ -3017,4 +4836,45 @@ module.exports = {
     _runReconciliation,
     // Watchdog (for manual trigger / testing)
     _watchdogLiveNoSL,
+    // [S5] Test-only hooks. Exposed via require but never called by any
+    // runtime path. Used by tests/probe-s5.js to exercise close-cooldown
+    // persistence + lazy restore + deadline cleanup.
+    _s5TestHooks: Object.freeze({
+        closeCooldowns: _closeCooldowns,
+        closeCooldownsRestoredFor: _closeCooldownsRestoredFor,
+        setCloseCooldownDeadline: _setCloseCooldownDeadline,
+        persistCloseCooldownsForUser: _persistCloseCooldownsForUser,
+        restoreCloseCooldownsForUser: _restoreCloseCooldownsForUser,
+        CLOSE_COOLDOWN_MS,
+    }),
+    // [S6-A] Test-only hooks for the positions.changed contract probe.
+    // Exposed via require but never called by any runtime path. Used by
+    // tests/probe-s6.js to drive _broadcastPositions against a stubbed
+    // global.__zeusWsBroadcastToUser, inspect the snapshot frame, and
+    // verify per-user isolation + DB-authoritative shape.
+    _s6TestHooks: Object.freeze({
+        broadcastPositions: _broadcastPositions,
+        normalizePositionRow: _normalizePositionRow,
+        positions: _positions,
+    }),
+    // [Phase 2 S6-B2] Test-only hooks for the paranoid live execution gate
+    // probe. Two pure flag readers + the actual _executeLiveEntry function
+    // exposed so tests/probe-s6b2.js can verify that calling it with
+    // MF.SERVER_AT=false throws LIVE_ENTRY_REQUIRES_FULL_SERVER_AT before
+    // any state mutation. Runtime never references these exports.
+    _s6b2TestHooks: Object.freeze({
+        executeLiveEntry: _executeLiveEntry,
+        canExecuteLiveEntryUnderCurrentFlags: () => MF.SERVER_AT === true,
+        isLiveModeAuthorizedUnderCurrentFlags: (engineMode) =>
+            engineMode === 'demo' ? true : (MF.SERVER_AT === true),
+    }),
+    // [Phase 2 S6-B3] Test-only hooks for the per-user decisionId dedup
+    // probe. Pure helper exposed via require but never called by any
+    // runtime path — processBrainDecision references the local symbol
+    // _checkAndStoreDecisionId, not this export.
+    _s6b3TestHooks: Object.freeze({
+        DECISION_DEDUP_TTL_MS,
+        decisionDedupKey: _decisionDedupKey,
+        checkAndStoreDecisionId: _checkAndStoreDecisionId,
+    }),
 };

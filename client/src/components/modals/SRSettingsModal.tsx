@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { ModalOverlay, ModalHeader } from './ModalOverlay'
 import { applySR } from '../../data/marketDataWS'
 
-const w = window as any
 interface Props { visible: boolean; onClose: () => void }
 
 const inputStyle: React.CSSProperties = { background:'#0a121a', border:'1px solid #2a3a4a', color:'var(--txt)', padding:'4px 8px', borderRadius:'2px', fontFamily:'var(--ff)', fontSize:'9px', width:'100%' }
@@ -14,7 +13,7 @@ export function SRSettingsModal({ visible, onClose }: Props) {
   const [period, setPeriod] = useState('Session')
 
   return (
-    <ModalOverlay id="msr" visible={visible} onClose={onClose}>
+    <ModalOverlay id="msr" visible={visible} onClose={onClose} zIndex={9500}>
       <ModalHeader title="ZEUS S/R SETTINGS" onClose={onClose} />
 
       <div className="mtabs">

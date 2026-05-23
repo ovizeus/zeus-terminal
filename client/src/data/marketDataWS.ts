@@ -5,6 +5,7 @@
 
 import { getTPObject } from '../services/stateAccessors'
 import { BM, BRAIN as BR } from '../core/config'
+import { useBrainStore } from '../stores/brainStore'
 import { fmtTime, toast } from './marketDataHelpers'
 import { fmt, fP } from '../utils/format'
 import { el } from '../utils/dom'
@@ -18,7 +19,7 @@ import { RegimeEngine } from '../engine/regime'
 import { _enterDegradedMode, _exitDegradedMode, _isDegradedOnly, _enterRecoveryMode, _exitRecoveryMode } from '../utils/guards'
 import { fetchATR, updatePriceDisplay } from './marketDataFeeds'
 import { renderATPositions } from '../trading/autotrade'
-import { _initAudio } from '../ui/dom2'
+import { _soundBadgeClick, _updateAudioBadge } from '../ui/dom2'
 const w = window as any // kept for w.S (producer), w.WS, w.Intervals, w.Timeouts, w.__wsGen, w.ZLOG, w.CORE_STATE, fn calls
 
 // ===== WS RECONNECT BACKOFF =====
@@ -32,25 +33,56 @@ function _nextBackoff(key: string, base: number, cap: number): number {
 function _resetBackoff(key: string): void { _wsBackoff[key] = 0 }
 
 // ===== CONNECT BINANCE WS =====
+// [WS-DIAG 2026-05-14] Centralized WebSocket state tracker exposed via
+// `w.S._wsDiag.{bnb,byb,okx}` for QuantMonitor render layer. Captures state
+// transition history (CONNECTING → OPEN → CLOSED), last error label, event
+// count, and last event timestamp. Operator-driven diagnostic post-DNS
+// failure investigation (ERR_NAME_NOT_RESOLVED in browser console on
+// fstream.binance.com).
+function _setWsDiag(name: string, patch: any) {
+  if (!w.S) return
+  w.S._wsDiag = w.S._wsDiag || { bnb: {}, byb: {}, okx: {} }
+  w.S._wsDiag[name] = Object.assign({}, w.S._wsDiag[name] || {}, patch, { ts: Date.now() })
+}
+
 export function connectBNB(): void {
   const sym = (w.S.symbol || 'BTCUSDT').toLowerCase()
-  const url = `wss://fstream.binance.com/stream?streams=${sym}@markPrice@1s/${sym}@depth20@500ms/!forceOrder@arr`
+  // [Phase 2 S3.1d] ALT_WS_FEEDS workaround — when markPrice@1s is silently
+  // throttled by Binance, route price updates through bookTicker (mid of
+  // best bid/ask). depth20 + forceOrder still work on the normal lane.
+  const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
+  const _priceStream = _altFeeds ? `${sym}@bookTicker` : `${sym}@markPrice@1s`
+  const url = `wss://fstream.binance.com/stream?streams=${_priceStream}/${sym}@depth20@500ms/!forceOrder@arr`
   const _bnbGen = w.__wsGen
-  console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen}`)
+  console.log(`[connectBNB] attempt | sym=${sym} | gen=${_bnbGen} | altFeeds=${_altFeeds}`)
+  _setWsDiag('bnb', { state: 'CONNECTING', url: 'fstream.binance.com', err: '' })
   w.WS.open('bnb', url, {
-    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); updConn() },
-    onclose: () => { console.log(`[connectBNB] onclose`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); updConn(); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
-    onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; updConn() },
+    onopen: () => { console.log(`[connectBNB] onopen | gen=${w.__wsGen} (my gen=${_bnbGen})`); w.S.bnbOk = true; _resetBackoff('bnb'); _exitRecoveryMode(); updConn(); _setWsDiag('bnb', { state: 'OPEN', err: '' }) },
+    onclose: (e: any) => { console.log(`[connectBNB] onclose code=${e?.code} reason=${e?.reason}`); w.S.bnbOk = false; _enterRecoveryMode('BNB'); updConn(); _setWsDiag('bnb', { state: 'CLOSED', err: (e && e.code ? `code=${e.code}${e.reason ? ' '+e.reason : ''}` : 'unknown') }); w.Timeouts.set('bnbReconnect', () => { if (w.__wsGen !== _bnbGen) return; _exitRecoveryMode(); connectBNB() }, _nextBackoff('bnb', 3000, 30000)) },
+    onerror: (e: any) => { console.error(`[connectBNB] onerror`, e); if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BNB] onerror'); w.S.bnbOk = false; updConn(); _setWsDiag('bnb', { state: 'ERROR', err: 'onerror_event' }) },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bnbGen) return
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
       if (j.stream) {
         const d = j.data; const st = j.stream
         if (st.includes('markPrice')) {
+          // Primary-lane path: markPrice delivers mark price + funding rate
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
             updatePriceDisplay(); updateMainMetrics()
             if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
+          }
+        } else if (st.includes('bookTicker')) {
+          // [ALT_WS_FEEDS] bookTicker path — mid of best bid/ask stands in
+          // for mark price. Funding rate is not live here; stays cached
+          // until REST or markPrice lane recovers.
+          const _bid = +d.b, _ask = +d.a
+          if (_bid > 0 && _ask > 0) {
+            const _mid = ((_bid + _ask) / 2).toString()
+            if (w.ingestPrice(_mid, 'BNB')) {
+              updatePriceDisplay(); updateMainMetrics()
+              if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
+            }
           }
         } else if (st.includes('depth20')) {
           w.S.bids = (d.b || []).map(([p, q]: any) => ({ p: +p, q: +q }))
@@ -74,6 +106,7 @@ export function connectBYB(): void {
   const sym = w.S.symbol || 'BTCUSDT'
   const _bybGen = w.__wsGen
   console.log(`[connectBYB] attempt | sym=${sym} | gen=${_bybGen}`)
+  _setWsDiag('byb', { state: 'CONNECTING', url: 'stream.bybit.com', err: '' })
   w.WS.open('byb', 'wss://stream.bybit.com/v5/public/linear', {
     onopen: () => {
       console.log(`[connectBYB] onopen`); w.S.bybOk = true; _resetBackoff('byb'); _exitDegradedMode('BYB'); updConn()
@@ -81,9 +114,10 @@ export function connectBYB(): void {
       const wsi = w.WS.get('byb'); if (wsi) wsi.send(JSON.stringify({ op: 'subscribe', args: [`liquidation.${sym}`] }))
       _stopBybPing()
       _bybPingTimer = setInterval(() => { try { const ws = w.WS.get('byb'); if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ op: 'ping' })) } catch (_) { } }, 20000)
+      _setWsDiag('byb', { state: 'OPEN', err: '' })
     },
-    onclose: () => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); updConn(); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
-    onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror') },
+    onclose: (e: any) => { _stopBybPing(); w.S.bybOk = false; w.S.liqMetrics.byb.connected = false; w.S.liqMetrics.byb.reconnects++; _enterDegradedMode('BYB'); updConn(); _setWsDiag('byb', { state: 'CLOSED', err: (e && e.code ? `code=${e.code}${e.reason ? ' '+e.reason : ''}` : 'unknown') }); w.Timeouts.set('bybReconnect', () => { if (w.__wsGen !== _bybGen) return; connectBYB() }, _nextBackoff('byb', 5000, 30000)) },
+    onerror: () => { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[WS BYB] onerror'); _setWsDiag('byb', { state: 'ERROR', err: 'onerror_event' }) },
     onmessage: (e: any) => {
       if (w.__wsGen !== _bybGen) return
       let j: any; try { j = JSON.parse(e.data) } catch (_) { return }
@@ -109,12 +143,44 @@ export function updConn(): void {
 }
 
 // ===== PROCESS LIQUIDATION =====
-export function procLiq(o: any, src?: string): void {
+// Module-private: the two WebSocket handlers above (lines ~61/62/93)
+// are the only callers. The `w.procLiq` bridge binding was removed in
+// ZT8 after audit confirmed zero external readers.
+function procLiq(o: any, src?: string): void {
   if (!o || !o.q || !o.p) return
   src = src || 'bnb'
   const qty = +o.q, price = +o.p
   const sym = (o.s || '').replace('USDT', '').substring(0, 3)
   const usd = qty * price
+  // [WS-DIAG 2026-05-14] Increment event counter per exchange even pentru
+  // simboluri non-BTC (full feed visibility). Operator can see if Binance
+  // forceOrder firehose delivers anything indifferent de symbol.
+  try {
+    if (w.S) {
+      w.S._wsDiag = w.S._wsDiag || { bnb: {}, byb: {}, okx: {} }
+      const k = src === 'byb' ? 'byb' : 'bnb'
+      w.S._wsDiag[k].ev = (w.S._wsDiag[k].ev || 0) + 1
+      w.S._wsDiag[k].lastEv = Date.now()
+    }
+  } catch (_) { /* defensive */ }
+  // [BUG5.5.2] Feed QM liquidation map unfiltered so the map does not starve
+  // below liqMinUsd. Dispatch BEFORE the classic-feed threshold filter.
+  // [LIQ-FEED PROXY 2026-05-14] Skip when server-side aggregator handles
+  // broadcast (MF.LIQ_FEED_VIA_SERVER true). liqFeedClient.ts subscribes la
+  // `liq.feed` frames and dispatches same zeus:liq CustomEvent shape pentru
+  // QM consumption parity. Eliminates client direct WS dependency.
+  if (sym === 'BTC' && usd > 0 && Number.isFinite(usd)) {
+    const _viaServer = w.__MF && w.__MF.LIQ_FEED_VIA_SERVER === true
+    if (!_viaServer) {
+      const _isLongQ = o.S === 'SELL'
+      try {
+        window.dispatchEvent(new CustomEvent('zeus:liq', { detail: {
+          exchange: src === 'byb' ? 'bybit' : 'binance',
+          p: price, vol: usd, side: o.S, isLong: _isLongQ, time: Date.now()
+        }}))
+      } catch (_) { /* noop */ }
+    }
+  }
   if (usd < w.S.liqMinUsd) return
   const isLong = o.S === 'SELL'
   const m = w.S.liqMetrics[src] || w.S.liqMetrics.bnb
@@ -261,6 +327,18 @@ export function setSymbol(sym: string): void {
     if (typeof resetForecast === 'function') resetForecast()
     if (typeof BM !== 'undefined') { BM.regimeEngine = { regime: 'RANGE', confidence: 0, trendBias: 'neutral', volatilityState: 'normal', trapRisk: 0, notes: ['switching symbol'] }; BM.phaseFilter = { allow: false, phase: 'RANGE', reason: 'switching symbol', riskMode: 'reduced', sizeMultiplier: 0.5, allowedSetups: [], blockedSetups: [] }; BM.confluenceScore = 50; BM.probScore = 0; BM.probBreakdown = { regime: 0, liquidity: 0, signals: 0, flow: 0 }; BM.entryScore = 0; BM.entryReady = false; BM.gates = {}; BM.sweep = { type: 'none', reclaim: false, displacement: false }; BM.flow = { cvd: 'neut', delta: 0, ofi: 'neut' }; BM.mtf = { '15m': 'neut', '1h': 'neut', '4h': 'neut' }; BM.atmosphere = { category: 'neutral', allowEntry: true, cautionLevel: 'medium', confidence: 0, reasons: ['switching symbol'], sizeMultiplier: 1.0 }; BM.qexit = { risk: 0, signals: { divergence: { type: null, conf: 0 }, climax: { dir: null, mult: 0 }, regimeFlip: { from: null, to: null, conf: 0 }, liquidity: { nearestAboveDistPct: null, nearestBelowDistPct: null, bias: 'neutral' } }, action: 'HOLD', lastTs: 0, lastReason: '', shadowStop: null, confirm: { div: 0, climax: 0 } }; BM.danger = 0; BM.dangerBreakdown = { volatility: 0, spread: 0, liquidations: 0, volume: 0, funding: 0 }; BM.conviction = 0; BM.convictionMult = 1.0; BM.structure = { regime: 'unknown', adx: 0, atrPct: 0, squeeze: false, volMode: '\u2014', structureLabel: '\u2014', mtfAlign: { '15m': 'neut', '1h': 'neut', '4h': 'neut' }, score: 0, lastUpdate: 0 } }
     if (typeof BR !== 'undefined') { BR.state = 'scanning'; BR.regime = 'unknown'; BR.regimeConfidence = 0; BR.score = 0; BR.thoughts = []; BR.neurons = {}; BR.ofi = { buy: 0, sell: 0, blendBuy: 50, tape: [] } }
+    // [Phase 6 C6] Mirror canonical reset to brainStore (mode/profile/adaptParams
+    // untouched here — this is a symbol switch, not a full brain reset).
+    {
+      const brainSt = useBrainStore.getState()
+      brainSt.setEntry({ ready: false, score: 0 })
+      brainSt.setGates({})
+      brainSt.setSweep({ type: 'none', reclaim: false, displacement: false })
+      brainSt.setFlow({ cvd: 'neut', delta: 0, ofi: 'neut' })
+      brainSt.setMtf({ '15m': 'neut', '1h': 'neut', '4h': 'neut' })
+      brainSt.setEngineState('scanning')
+      brainSt.setThoughts([])
+    }
     if (typeof w.CORE_STATE !== 'undefined') { w.CORE_STATE.score = 50; w.CORE_STATE.lastUpdate = Date.now() }
     // [9A-2] Notify React brainStore — BM/BR fully reset on symbol switch
     try { window.dispatchEvent(new CustomEvent('zeus:brainStateChanged')) } catch (_) {}
@@ -273,21 +351,42 @@ export function setSymbol(sym: string): void {
 w.setSymbol = setSymbol
 
 // ===== SOUND =====
+// [BUG7] Aligned with BUG5 master mute system. The legacy w.S.soundOn flag
+// was dead — no audio code respected it, so flipping the AlertsModal "Sound
+// Notifications" button had zero effect on actual tones. Now delegates to
+// _soundBadgeClick (init + toggle + chime + persist). Both UI surfaces
+// (#soundBadge in Brain cockpit + #snd in AlertsModal) are painted by
+// _updateAudioBadge from the canonical _soundMuted flag — so flipping one
+// keeps the other honest.
 export function toggleSnd(): void {
-  w.S.soundOn = !w.S.soundOn
-  _initAudio()
-  const e = el('snd'); if (e) e.innerHTML = w.S.soundOn ? _ZI.bell : _ZI.bellX
+  _soundBadgeClick()
+}
+export function _syncSndIcon(): void {
+  _updateAudioBadge()
 }
 
 // ===== MODAL =====
 export function openM(id: string): void { const e = el(id); if (e) e.style.display = 'flex' }
-export function closeM(id: string): void { const e = el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal'); if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
+export function closeM(id: string): void { const e = el(id); if (e) { e.style.display = 'none'; const m = e.querySelector('.modal') as HTMLElement | null; if (m) { m.style.transform = ''; m.style.left = ''; m.style.top = ''; m.style.position = '' } } }
 
 // ===== MODAL DRAG =====
+// [PERF-4] WeakSet of `.mhdr` elements we've already attached drag handlers to.
+// Without this, _initModalDrag() called more than once (e.g. DOMContentLoaded race
+// + module bootstrap, or React re-mount that re-renders modal nodes) attaches
+// duplicate `mousedown` to header AND duplicate `mousemove` + `mouseup` to
+// `document` per modal. With 5 modals × N init calls, document gets N×5 mousemove
+// listeners firing on every cursor move. WeakSet keys auto-GC when DOM nodes are
+// removed, zero memory bookkeeping.
+const _modalDragAttached: WeakSet<Element> = new WeakSet()
+
 export function _initModalDrag(): void {
   document.querySelectorAll('.mover').forEach(function (ov: any) {
     const modal = ov.querySelector('.modal'); const hdr = ov.querySelector('.mhdr')
-    if (!modal || !hdr) return; hdr.style.cursor = 'grab'
+    if (!modal || !hdr) return
+    // [PERF-4] Skip if drag handlers already attached to this header
+    if (_modalDragAttached.has(hdr)) return
+    _modalDragAttached.add(hdr)
+    hdr.style.cursor = 'grab'
     let ox = 0, oy = 0, mx = 0, my = 0, dragging = false
     function onDown(e: any) { if (e.target.closest('.mclose')) return; dragging = true; const r = modal.getBoundingClientRect(); ox = r.left; oy = r.top; mx = e.clientX; my = e.clientY; modal.style.position = 'fixed'; modal.style.left = ox + 'px'; modal.style.top = oy + 'px'; modal.style.margin = '0'; hdr.style.cursor = 'grabbing'; e.preventDefault() }
     function onMove(e: any) { if (!dragging) return; let nx = ox + (e.clientX - mx), ny = oy + (e.clientY - my); const mw = modal.offsetWidth, mh = modal.offsetHeight; const vw = window.innerWidth, vh = window.innerHeight; nx = Math.max(0, Math.min(nx, vw - mw)); ny = Math.max(0, Math.min(ny, vh - mh)); modal.style.left = nx + 'px'; modal.style.top = ny + 'px'; modal.style.transform = 'none' }
@@ -322,11 +421,14 @@ export function updateMainMetrics(): void {
 }
 
 // ===== CHART SETTINGS =====
-export function showTab(tab: string, btn: any): void { document.querySelectorAll('.ctab-pane').forEach((p: any) => p.classList.remove('act')); document.querySelectorAll('.ctab-btn').forEach((b: any) => b.classList.remove('act')); const pane = el('ct-' + tab); if (pane) pane.classList.add('act'); if (btn) btn.classList.add('act') }
+// ZT11: `showTab` removed — zero readers across client/src (TS/React)
+// and the /legacy/ bundle has its own local showTab() in
+// public/legacy/js/data/marketData.js. The `w.showTab` bridge binding
+// was removed in ZT8.
 export function applyChartColors(): void { const uc = el('ccBull')?.value || '#00d97a'; const dc = el('ccBear')?.value || '#ff3355'; const uw = el('ccBullW')?.value || '#00d97a77'; const dw = el('ccBearW')?.value || '#ff335577'; if (w.cSeries) w.cSeries.applyOptions({ upColor: uc, downColor: dc, borderUpColor: uc, borderDownColor: dc, wickUpColor: uw, wickDownColor: dw }); toast('Colors applied'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 export function setCandleStyle(style: string, btn: any): void { document.querySelectorAll('#ct-candles .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); toast('Style: ' + style) }
 export function setTZ(tz: string, btn: any): void { w.S.tz = tz; document.querySelectorAll('#cst .qb').forEach((b: any) => b.classList.remove('act')); if (btn) btn.classList.add('act'); const n: any = { 'Europe/Bucharest': 'RO', 'UTC': 'UTC', 'America/New_York': 'NY', 'Asia/Tokyo': 'TK', 'Europe/London': 'LN' }; const lbl = el('chartTZLbl'); if (lbl) lbl.textContent = n[tz] || tz; toast('Timezone: ' + tz); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
-export function applyHeatmapSettings(): void { const hs = w.S.heatmapSettings; const gv = (id: string) => +(el(id)?.value) || 0; hs.lookback = gv('hmLookback') || 400; hs.pivotWidth = gv('hmPivotW') || 1; hs.atrLen = gv('hmAtrLen') || 121; hs.atrBandPct = gv('hmAtrBand') || 0.05; hs.extendUnhit = gv('hmExtend') || 30; hs.heatContrast = gv('hmContrast') || 0.3; hs.minWeight = 0; hs.keepTouched = el('hmKeepTouched')?.checked !== false; hs.longCol = el('hmLongCol')?.value || '#01c4fe'; hs.shortCol = el('hmShortCol')?.value || '#ffe400'; if (w.S.overlays.liq) renderHeatmapOverlay(); closeM('mcharts'); toast('Heatmap updated'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+export function applyHeatmapSettings(): void { const hs = w.S.heatmapSettings; const gv = (id: string) => +(el(id)?.value ?? '') || 0; hs.lookback = gv('hmLookback') || 400; hs.pivotWidth = gv('hmPivotW') || 1; hs.atrLen = gv('hmAtrLen') || 121; hs.atrBandPct = gv('hmAtrBand') || 0.05; hs.extendUnhit = gv('hmExtend') || 30; hs.heatContrast = gv('hmContrast') || 0.3; hs.minWeight = 0; hs.keepTouched = el('hmKeepTouched')?.checked !== false; hs.longCol = el('hmLongCol')?.value || '#01c4fe'; hs.shortCol = el('hmShortCol')?.value || '#ffe400'; if (w.S.overlays.liq) renderHeatmapOverlay(); closeM('mcharts'); toast('Heatmap updated'); if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
 
 // ===== ALERTS =====
 export function sendAlert(title: string, body: string, tag = 'zt'): void {

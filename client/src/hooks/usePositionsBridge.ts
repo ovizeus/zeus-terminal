@@ -13,6 +13,7 @@
  */
 import { useEffect } from 'react'
 import { usePositionsStore } from '../stores'
+import { wsService } from '../services/ws'
 
 export function usePositionsBridge() {
   useEffect(() => {
@@ -20,6 +21,7 @@ export function usePositionsBridge() {
 
     function readSnapshotFromWindow() {
       if (!w.TP) return
+      if (wsService.isConnected()) return
       usePositionsStore.getState().syncSnapshot({
         demoPositions: [...(w.TP.demoPositions || [])],
         livePositions: [...(w.TP.livePositions || [])],

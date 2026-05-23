@@ -25,7 +25,9 @@ describe('ATPanel', () => {
   it('shows kill banner when kill switch is active', () => {
     useATStore.setState({ killTriggered: true })
     render(<ATPanel />)
-    expect(screen.getByText('KILL SWITCH ACTIVE')).toBeInTheDocument()
+    // [FIX1] Banner renders "KILL SWITCH ACTIVE — <reasonLabel>" on one
+    // element, so exact-text lookup fails. Match the stable prefix.
+    expect(screen.getByText(/KILL SWITCH ACTIVE/)).toBeInTheDocument()
   })
 
   it('shows win rate stats', () => {

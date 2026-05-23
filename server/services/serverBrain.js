@@ -28,7 +28,164 @@ const serverSessionProfile = require('./serverSessionProfile');
 const serverDrawdownGuard = require('./serverDrawdownGuard');
 const serverMultiEntry = require('./serverMultiEntry');
 const serverVolatilityEngine = require('./serverVolatilityEngine');
+
+// [Wave 7a] R7 Meta — instrumented variants of the 3 most-called ring
+// boundary functions. Pure observability — same return semantics as
+// originals. Loaded lazily to avoid circular-require issues at boot.
+let _tracedReflection = null;
+let _tracedCorrGuard = null;
+let _tracedDDGuard = null;
+function _r7QuestionEntry(...args) {
+    if (!_tracedReflection) {
+        try {
+            const tracer = require('./ml/R7_meta/interRingTracer');
+            _tracedReflection = tracer.wrap('serverBrain', 'serverReflection', 'questionEntry', serverReflection.questionEntry);
+        } catch (_) { _tracedReflection = serverReflection.questionEntry; }
+    }
+    return _tracedReflection(...args);
+}
+function _r7CheckEntry(...args) {
+    if (!_tracedCorrGuard) {
+        try {
+            const tracer = require('./ml/R7_meta/interRingTracer');
+            _tracedCorrGuard = tracer.wrap('serverBrain', 'serverCorrelationGuard', 'checkEntry', serverCorrelationGuard.checkEntry);
+        } catch (_) { _tracedCorrGuard = serverCorrelationGuard.checkEntry; }
+    }
+    return _tracedCorrGuard(...args);
+}
+function _r7AssessDD(...args) {
+    if (!_tracedDDGuard) {
+        try {
+            const tracer = require('./ml/R7_meta/interRingTracer');
+            _tracedDDGuard = tracer.wrap('serverBrain', 'serverDrawdownGuard', 'assessDrawdown', serverDrawdownGuard.assessDrawdown);
+        } catch (_) { _tracedDDGuard = serverDrawdownGuard.assessDrawdown; }
+    }
+    return _tracedDDGuard(...args);
+}
 const brainLogger = require('./brainLogger');
+const MF = require('../migrationFlags');
+
+// [ML Phase B Day 7] Ring5 influence-mode telemetry — wraps fusion decision so
+// audit / eligibility / posteriors get populated from real brain flow. Day 7
+// is observation-only: wrap output is logged + audited but NOT used downstream.
+const ring5LearningService = require('./ml/ring5LearningService');
+
+// [Wave 9 / Canonical PDF #8] Fundamentals — CoinGecko-backed market context
+// (market_cap_rank, dominance_pct, vol_24h, price_change_24h). Sync hot-path
+// read only; background refresher warms cache at boot. Lazy require + try
+// for safety — fundamentals failure must never block brain.
+let _fundamentals = null;
+function _getFundamentals() {
+    if (_fundamentals === null) {
+        try { _fundamentals = require('./fundamentals'); }
+        catch (_) { _fundamentals = false; }
+    }
+    return _fundamentals || null;
+}
+function _safeFundamentals(symbol) {
+    try {
+        const f = _getFundamentals();
+        if (!f || typeof f.getFundamentalsCached !== 'function') return null;
+        return f.getFundamentalsCached(symbol);
+    } catch (_) { return null; }
+}
+
+// [Day 17 2026-05-18] Doctor telemetry — emit heartbeat per brain cycle + alerts
+// on safety-relevant events. Lazy require to avoid circular dep risk.
+let _doctorEventBus = null;
+let _doctorTelemetry = null;
+function _getDoctorBus() {
+    if (_doctorEventBus === null) {
+        try { _doctorEventBus = require('./ml/_doctor/eventBus'); }
+        catch (_) { _doctorEventBus = false; }
+    }
+    return _doctorEventBus || null;
+}
+function _getDoctorTelemetry() {
+    if (_doctorTelemetry === null) {
+        try { _doctorTelemetry = require('./ml/_doctor/telemetryCollector'); }
+        catch (_) { _doctorTelemetry = false; }
+    }
+    return _doctorTelemetry || null;
+}
+function _emitDoctor(event) {
+    try {
+        const bus = _getDoctorBus();
+        if (bus && typeof bus.emit === 'function') bus.emit(event);
+    } catch (_) { /* never block brain flow */ }
+}
+
+// [Day 35 fix] Dedup repeat alerts — operator-reported "P2 spam from
+// serverBrain.correlationGuard 25× in 24h same (sym, dir, reason)".
+// Brain cycle fires every 30s; correlationGuard block fires every cycle
+// while operator has correlated positions open. Without dedup, Doctor log
+// fills with identical entries. Suppress same key within 5 min.
+const _doctorEmitThrottle = new Map();  // `${moduleId}|${key}` → lastEmitTs
+const _DOCTOR_DEDUP_MS = 5 * 60 * 1000;
+
+function _emitDoctorThrottled(event, dedupKey) {
+    if (!dedupKey) { _emitDoctor(event); return; }
+    const mapKey = `${event.moduleId}|${dedupKey}`;
+    const now = Date.now();
+    const last = _doctorEmitThrottle.get(mapKey) || 0;
+    if (now - last < _DOCTOR_DEDUP_MS) return;  // suppress duplicate
+    _doctorEmitThrottle.set(mapKey, now);
+    _emitDoctor(event);
+}
+// [Day 18] Per-invocation telemetry — accumulates in-memory, flushed to
+// ml_module_heartbeats every 1s by telemetryCollector start() (called at boot).
+function _recordInvocation(moduleId, latencyMs, ranOk) {
+    try {
+        const t = _getDoctorTelemetry();
+        if (t && typeof t.recordInvocation === 'function') {
+            t.recordInvocation({ moduleId, latencyMs, ranOk, ts: Date.now() });
+        }
+    } catch (_) { /* never block brain flow */ }
+}
+
+// [Day 29] Voice thought stream — write THOUGHT utterances when brain has
+// something noteworthy (confidence high, regime shift, etc.) so TheVoice UI
+// shows real ML cognition. Throttled per user×symbol to avoid spam.
+let _voiceLogger = null;
+function _getVoiceLogger() {
+    if (_voiceLogger === null) {
+        try { _voiceLogger = require('./ml/_voice/voiceLogger'); }
+        catch (_) { _voiceLogger = false; }
+    }
+    return _voiceLogger || null;
+}
+const _lastThoughtTs = new Map(); // key="userId:symbol:kind" → lastMs
+const _lastRegime = new Map();    // key="userId:symbol" → last regime
+const THOUGHT_THROTTLE_MS = 60 * 1000; // default 1/min per (user, symbol, kind)
+const THOUGHT_THROTTLE_NEUTRAL_MS = 3 * 60 * 1000; // 3min for neutral filler
+function _writeThought(params) {
+    try {
+        const vl = _getVoiceLogger();
+        if (!vl || !params.userId) return;
+        const key = `${params.userId}:${params.symbol || '_'}:${params.kind || 'gen'}`;
+        const now = Date.now();
+        const last = _lastThoughtTs.get(key) || 0;
+        const throttle = params.kind === 'neutral_watch'
+            ? THOUGHT_THROTTLE_NEUTRAL_MS : THOUGHT_THROTTLE_MS;
+        if (now - last < throttle) return;
+        _lastThoughtTs.set(key, now);
+        vl.logUtterance({
+            userId: params.userId,
+            utteranceType: 'THOUGHT',
+            mood: params.mood || 'FOCUSED',
+            text: params.text,
+            templateId: params.kind || 'brain_thought',
+            contextJson: params.contextJson || null
+        });
+    } catch (_) { /* never block brain flow */ }
+}
+
+// [ML Phase B Day 13] R5A-driven mlBrainProInputs builder. Maps per-module
+// modifiers (structure/liquidity/journal/knn/etc.) — the actual signed deltas
+// applied during _computeFusion — to contributions for the influence proposer.
+// Replaces Day 10 inline score-component-only mapping with semantically
+// richer R5A attribution.
+const mlInputsBuilder = require('./ml/_ring5/mlInputsBuilder');
 
 // ══════════════════════════════════════════════════════════════════
 // Configuration
@@ -52,50 +209,212 @@ const DEFAULT_STC = {
     symbols: null,      // [MULTI-SYM] null = trade all configured symbols, or array of specific symbols
 };
 const _stcMap = new Map(); // userId → STC config
+// [SRV-2] Track last activity timestamp per user for unbounded-growth defense.
+// Updated on every _stcMap.set() and _stcMap.get() access via the helper
+// pair below. Hourly cleanup (line ~85) drops stale entries older than
+// _STC_INACTIVITY_MS to prevent unbounded growth across user churn (test
+// accounts, deleted users, multi-env reuse).
+const _stcLastSeen = new Map();          // userId → ms timestamp
+const _STC_INACTIVITY_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+function _touchStc(userId) {
+    if (userId == null) return;
+    _stcLastSeen.set(userId, Date.now());
+}
 
 // _getSTC removed — unused (brain uses _stcMap directly)
 
 // ── Brain state ──
 let _timer = null;
+let _shadowTimer = null;  // [Phase 2 S3] separate timer for parity harness shadow cycle
 let _running = false;
+let _shadowRunning = false;  // [Phase 2 S3] re-entry guard for shadow cycle
 let _cycleCount = 0;
 let _lastDecision = null;
-const _prevRegimes = new Map();  // [MULTI-SYM] symbol → last regime
-const _cooldowns = new Map();   // 'userId:symbol' → lastEntryTs
+const _prevRegimes = new Map();  // [MULTI-SYM] `${symbol}|${exchange}` → last regime (composite key, Task 23)
+// [S5] _cooldowns value semantics changed from lastEntryTs → deadlineMs.
+// Gate is `now < deadlineMs`; cleanup drops entries with deadline <= now.
+// Persisted per-user in at_state under key 'brain:cooldowns:{uid}'.
+const _cooldowns = new Map();   // 'userId:symbol' → deadlineMs
 // [AUDIT] Per-user regime change Telegram throttle (max 1 per 15min per user)
 const _regimeTgLastTs = new Map();  // userId → timestamp
 const REGIME_TG_COOLDOWN_MS = 15 * 60 * 1000; // 15 minutes
 
-// [RT-03] Hourly cleanup of stale cooldowns and TG throttle entries
+// [Bybit Phase 1A Task 23] Per-user exchange routing + pending switch barrier.
+// Cache is lazily populated from exchange_accounts on first cycle access.
+// Invalidated by _invalidateUserExchangeCache() on exchange save/disconnect.
+const _userExchangeCache = new Map(); // uid → 'binance' | 'bybit'
+const _pendingSwitch = new Map();     // uid → { from, to, requestedAt }
+
+function _getUserExchange(uid) {
+    if (!_userExchangeCache.has(uid)) {
+        try {
+            const { db: _xdb } = require('./database');
+            const row = _xdb.prepare(`SELECT exchange FROM exchange_accounts WHERE user_id=? AND is_active=1`).get(uid);
+            _userExchangeCache.set(uid, (row && row.exchange) || 'binance');
+        } catch (_) {
+            _userExchangeCache.set(uid, 'binance');
+        }
+    }
+    return _userExchangeCache.get(uid);
+}
+
+function _markPendingSwitch(uid, from, to) {
+    _pendingSwitch.set(uid, { from: from || null, to, requestedAt: Date.now() });
+}
+
+function _applyPendingSwitches() {
+    if (_pendingSwitch.size === 0) return;
+    let _feedManager;
+    try { _feedManager = require('./feedManager'); } catch (_) { _feedManager = null; }
+    let _xdb;
+    try { _xdb = require('./database').db; } catch (_) { _xdb = null; }
+    for (const [uid, info] of _pendingSwitch.entries()) {
+        _userExchangeCache.set(uid, info.to);
+        try {
+            if (_feedManager) {
+                if (info.from) _feedManager.deactivateForUser(uid, info.from);
+                _feedManager.activateForUser(uid, info.to);
+            }
+        } catch (_) { /* feedManager errors don't block switch apply */ }
+        try {
+            if (_xdb) {
+                _xdb.prepare(
+                    `INSERT INTO audit_log (user_id, action, details, created_at) VALUES (?, ?, ?, datetime('now'))`
+                ).run(
+                    uid, 'EXCHANGE_SWITCH_APPLIED',
+                    JSON.stringify({ from: info.from, to: info.to, requestedAt: info.requestedAt, appliedAt: Date.now(), cycleNo: _cycleCount })
+                );
+            }
+        } catch (_) {}
+    }
+    _pendingSwitch.clear();
+}
+
+// Called by routes/exchange.js on save/disconnect to force fresh DB lookup next cycle.
+function _invalidateUserExchangeCache(uid) {
+    _userExchangeCache.delete(uid);
+}
+
+// [RT-03 + S5] Hourly cleanup. Cooldowns are deadline-based now: drop only if
+// deadline already past. TG throttle is timestamp-based: drop entries older
+// than the throttle window so we never leak memory.
 setInterval(() => {
     const now = Date.now();
-    for (const [k, ts] of _cooldowns) { if (now - ts > 3600000) _cooldowns.delete(k); }
-    for (const [k, ts] of _regimeTgLastTs) { if (now - ts > 3600000) _regimeTgLastTs.delete(k); }
+    for (const [k, deadline] of _cooldowns) { if (deadline <= now) _cooldowns.delete(k); }
+    for (const [k, ts] of _regimeTgLastTs) { if (now - ts > REGIME_TG_COOLDOWN_MS) _regimeTgLastTs.delete(k); }
+    // [SRV-2] Cleanup stale _stcMap entries — drop users inactive >30 days.
+    for (const [uid, lastTs] of _stcLastSeen) {
+        if ((now - lastTs) > _STC_INACTIVITY_MS) {
+            _stcMap.delete(uid);
+            _stcLastSeen.delete(uid);
+        }
+    }
 }, 3600000);
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S6-B1] DEMO server-authority dispatch helpers — INERT.
+// Both helpers are pure flag readers; current production state has
+// SERVER_BRAIN=false, SERVER_BRAIN_DEMO=false, SERVER_AT=false,
+// SERVER_AT_DEMO=false, so _shouldRunMainCycle() returns false today
+// (start() falls through to the existing PARITY_SHADOW_ENABLED branch)
+// and _isServerAuthoritativeForUser() returns false for every user
+// (per-user dispatch loop continues past every user). When S6-B6
+// flips SERVER_BRAIN_DEMO + SERVER_AT_DEMO to true, these helpers
+// become live: main cycle starts and demo-mode users get dispatched
+// to serverAT.processBrainDecision; live-mode users still skip
+// because their gate condition requires the FULL SERVER_AT flag.
+// ══════════════════════════════════════════════════════════════════
+
+function _shouldRunMainCycle() {
+    return MF.SERVER_BRAIN === true || MF.SERVER_BRAIN_DEMO === true;
+}
+
+// [BUG-T1 2026-05-13 FIX path B] Per-user gate now reads engineMode din `us`
+// (serverAT.getMode) — single source of truth pentru mode. Pre-T1: gate read
+// `stc.engineMode` care era ghost field (absent din DEFAULT_STC schema +
+// at_state.stc:N JSON) → gate returned false pentru toți useri → server-side
+// AT demo dispatch + brainLogger.logDecision unreachable (9 call sites inert).
+// Now: gate accepts userId, reads engineMode via serverAT.getMode(userId).
+// Backward-compat NU breakable — DEFAULT_STC nu mai are engineMode (per design;
+// mode trăiește în engine state, NOT în trading config).
+function _isServerAuthoritativeForUser(userId) {
+    if (MF.SERVER_AT === true) return true;
+    if (MF.SERVER_AT_DEMO === true) {
+        const userMode = serverAT.getMode(userId);
+        if (userMode === 'demo') return true;
+    }
+    return false;
+}
 
 // ── Decision log (ring buffer) ──
 const DECISION_LOG_MAX = 200;
 const _decisionLog = [];
 
+// [L1-DIAG] Per-user recent blocks ring buffer for client diagnostic surfacing
+const BLOCKS_MAX_PER_USER = 60;
+const _recentBlocks = new Map(); // userId -> [{ ts, symbol, reasons, score, adx, stage }]
+function _pushBlock(userId, symbol, reasons, stage, extra) {
+    if (!userId || !reasons || !reasons.length) return;
+    let buf = _recentBlocks.get(userId);
+    if (!buf) { buf = []; _recentBlocks.set(userId, buf); }
+    buf.push({
+        ts: Date.now(),
+        symbol: symbol || '?',
+        reasons: Array.isArray(reasons) ? reasons.slice() : [String(reasons)],
+        stage: stage || 'gates',
+        score: extra && extra.score != null ? extra.score : null,
+        adx: extra && extra.adx != null ? extra.adx : null,
+        confidence: extra && extra.confidence != null ? extra.confidence : null,
+    });
+    if (buf.length > BLOCKS_MAX_PER_USER) buf.splice(0, buf.length - BLOCKS_MAX_PER_USER);
+}
+function getRecentBlocks(userId, sinceTs) {
+    const buf = _recentBlocks.get(userId);
+    if (!buf) return [];
+    const since = Number(sinceTs) || 0;
+    return since > 0 ? buf.filter(e => e.ts > since) : buf.slice();
+}
+
 // ══════════════════════════════════════════════════════════════════
 // Start / Stop
 // ══════════════════════════════════════════════════════════════════
 function start() {
-    if (_timer) return;
+    if (_timer || _shadowTimer) return;
     // ── Restore persisted state from SQLite ──
     _restoreStcFromDb();
     _restoreCooldowns();
-    logger.info('BRAIN', 'Server brain starting (observation mode, 30s cycle)');
-    // [BRAIN-V2] Start liquidity depth polling + order flow tracking
+    // [S5] Restore regime baseline + per-user TG throttle so a restart does
+    // not silently swallow the next regime change and does not bypass the
+    // 15-min Telegram dedup.
+    _restoreRegimeBaseline();
+    _restoreRegimeTgThrottle();
+    // [BRAIN-V2] Start liquidity depth polling + order flow tracking —
+    // required inputs for both the main cycle and the parity shadow cycle.
     serverLiquidity.startDepthPolling(serverState.getConfiguredSymbols());
     serverOrderflow.init();
     serverJournal.start();
     serverSentiment.start(serverState.getConfiguredSymbols());
     serverKNN.start();
     serverReflection.start();
-    _timer = setInterval(_runCycle, CYCLE_INTERVAL_MS);
-    // Run first cycle after short delay to let data settle
-    setTimeout(_runCycle, 5000);
+    if (_shouldRunMainCycle()) {
+        // [Phase 2 S6-B1] Boot main cycle when EITHER full SERVER_BRAIN is on
+        // OR the demo carve-out SERVER_BRAIN_DEMO is on. Per-user dispatch
+        // inside _runCycle further filters via _isServerAuthoritativeForUser
+        // so a demo-only carve-out cannot route a live user's decision to
+        // server execution.
+        const _mode = MF.SERVER_BRAIN ? 'full' : 'demo-only';
+        logger.info('BRAIN', `Server brain starting (${_mode}, observation mode, 30s cycle)`);
+        _timer = setInterval(_runCycle, CYCLE_INTERVAL_MS);
+        // Run first cycle after short delay to let data settle
+        setTimeout(_runCycle, 5000);
+    } else if (MF.PARITY_SHADOW_ENABLED) {
+        // [Phase 2 S3] Shadow-only mode: compute fusion per user/symbol and
+        // write parity rows; NEVER touch serverAT, Telegram, regime history,
+        // reflection, or any other live side-effect path.
+        logger.info('BRAIN', '[S3] Server brain starting in shadow-only mode (parity harness, 30s cycle)');
+        _shadowTimer = setInterval(_runShadowCycle, CYCLE_INTERVAL_MS);
+        setTimeout(_runShadowCycle, 5000);
+    }
     // [ML] Daily prune of old decision snapshots
     setInterval(() => { try { brainLogger.prune(); } catch (_) {} }, 86400000);
 }
@@ -113,6 +432,7 @@ function _restoreStcFromDb() {
                 const cfg = JSON.parse(row.value);
                 if (cfg && typeof cfg === 'object') {
                     _stcMap.set(userId, Object.assign({}, DEFAULT_STC, cfg));
+                    _touchStc(userId);              // [SRV-2] mark active
                     restored++;
                 }
             } catch (_) { /* skip corrupt row */ }
@@ -125,33 +445,147 @@ function _restoreStcFromDb() {
     }
 }
 
+// [S5] Persist cooldowns as { 'uid:symbol': deadlineMs } per-user. The shape
+// of each persisted row stays { 'uid:symbol': number } — only the SEMANTICS
+// of that number changes from lastEntryTs (legacy) to deadlineMs (S5+).
 function _persistCooldowns() {
     try {
-        const obj = {};
-        for (const [k, v] of _cooldowns) obj[k] = v;
-        db.atSetState('brain:cooldowns', obj, null);
+        const byUser = new Map();
+        for (const [k, v] of _cooldowns) {
+            const m = /^(\d+):/.exec(k);
+            if (!m) continue;
+            const uid = parseInt(m[1], 10);
+            if (!byUser.has(uid)) byUser.set(uid, {});
+            byUser.get(uid)[k] = v;
+        }
+        for (const [uid, obj] of byUser) {
+            db.atSetState('brain:cooldowns:' + uid, obj, uid);
+        }
     } catch (e) {
         logger.warn('BRAIN', '_persistCooldowns failed: ' + (e && e.message));
     }
 }
 
+// [S5] Restore using absolute-deadline semantics. Backward compatible with
+// pre-S5 rows (bare lastEntryTs): treat any value below LEGACY_TS_THRESHOLD
+// as a pre-S5 lastEntryTs and apply the old 10-min restore window — i.e.
+// effective deadline = oldTs + 600000 ms. Drop any entry whose effective
+// deadline is already in the past.
 function _restoreCooldowns() {
     try {
-        const saved = db.atGetState('brain:cooldowns');
-        if (saved && typeof saved === 'object') {
-            const now = Date.now();
-            let restored = 0;
+        const users = db.listUsers ? db.listUsers() : [];
+        const now = Date.now();
+        // Pre-S5 cooldowns were stored as Date.now() at the moment of the
+        // entry, so values fall in the 1.7e12 range. Post-S5 deadlines also
+        // fall in that range (now + cooldownMs). The DISTINGUISHING property
+        // is that legacy lastEntryTs cannot be larger than (now + ~5min)
+        // grace, while S5 deadlines are typically (now + cooldownMs).
+        // Conservative legacy heuristic: if value <= now, it is either an
+        // expired deadline OR a legacy lastEntryTs that has already been
+        // consumed. Either way we apply legacy +10min compatibility window
+        // to bare values <= now-old; new deadlines are always > now.
+        let restored = 0, legacyApplied = 0, dropped = 0;
+        for (const u of users) {
+            const saved = db.atGetState('brain:cooldowns:' + u.id);
+            if (!saved || typeof saved !== 'object') continue;
             for (const [k, v] of Object.entries(saved)) {
-                // Only restore cooldowns less than 10min old
-                if (typeof v === 'number' && (now - v) < 600000) {
-                    _cooldowns.set(k, v);
+                if (typeof v !== 'number' || !Number.isFinite(v)) { dropped++; continue; }
+                let deadline = v;
+                if (v <= now) {
+                    // Treat as legacy lastEntryTs: effective deadline = v + 10min.
+                    deadline = v + 600000;
+                    legacyApplied++;
+                }
+                if (deadline > now) {
+                    _cooldowns.set(k, deadline);
                     restored++;
+                } else {
+                    dropped++;
                 }
             }
-            if (restored > 0) logger.info('BRAIN', `Restored ${restored} cooldown(s) from DB`);
+        }
+        if (restored > 0 || legacyApplied > 0 || dropped > 0) {
+            logger.info('BRAIN', `[S5] Restored ${restored} cooldown(s) from DB (${legacyApplied} legacy-converted, ${dropped} dropped/expired)`);
         }
     } catch (e) {
         logger.warn('BRAIN', '_restoreCooldowns failed: ' + (e && e.message));
+    }
+}
+
+// [S5] Set a deadline-based cooldown and persist immediately. Centralizes
+// the (set + persist) pattern so call sites cannot accidentally write a
+// timestamp that was never persisted.
+function _setCooldownDeadline(userId, symbol, cooldownMs) {
+    if (!Number.isFinite(cooldownMs) || cooldownMs <= 0) return;
+    const deadline = Date.now() + cooldownMs;
+    _cooldowns.set(userId + ':' + symbol, deadline);
+    _persistCooldowns();
+}
+
+// [S5] Persist the global per-symbol regime baseline. Regime is global market
+// state, but at_state requires a non-NULL user_id (FK CASCADE since migration
+// 023). Mirror the existing per-user pattern used by db.saveRegimeChange:
+// write one row per active brain user (= keys of _stcMap), each carrying the
+// SAME map. On restore, the union across all rows is the baseline (entries
+// agree by construction).
+function _persistRegimeBaseline() {
+    try {
+        const obj = {};
+        for (const [sym, regime] of _prevRegimes) obj[sym] = regime;
+        for (const _uid of _stcMap.keys()) {
+            try { db.atSetState('brain:prevRegimes:' + _uid, obj, _uid); } catch (_) {}
+        }
+    } catch (e) {
+        logger.warn('BRAIN', '_persistRegimeBaseline failed: ' + (e && e.message));
+    }
+}
+
+function _restoreRegimeBaseline() {
+    try {
+        const users = db.listUsers ? db.listUsers() : [];
+        let restored = 0;
+        for (const u of users) {
+            const saved = db.atGetState('brain:prevRegimes:' + u.id);
+            if (!saved || typeof saved !== 'object') continue;
+            for (const [sym, regime] of Object.entries(saved)) {
+                if (typeof regime === 'string' && regime.length > 0 && !_prevRegimes.has(sym)) {
+                    _prevRegimes.set(sym, regime);
+                    restored++;
+                }
+            }
+        }
+        if (restored > 0) logger.info('BRAIN', `[S5] Restored regime baseline for ${restored} symbol(s)`);
+    } catch (e) {
+        logger.warn('BRAIN', '_restoreRegimeBaseline failed: ' + (e && e.message));
+    }
+}
+
+// [S5] Persist + restore per-user regime-change Telegram throttle so the
+// 15-min dedup survives a PM2 reload.
+function _persistRegimeTgThrottle() {
+    try {
+        for (const [uid, ts] of _regimeTgLastTs) {
+            if (Number.isFinite(ts)) db.atSetState('brain:regimeTg:' + uid, { ts }, uid);
+        }
+    } catch (e) {
+        logger.warn('BRAIN', '_persistRegimeTgThrottle failed: ' + (e && e.message));
+    }
+}
+
+function _restoreRegimeTgThrottle() {
+    try {
+        const users = db.listUsers ? db.listUsers() : [];
+        let restored = 0;
+        for (const u of users) {
+            const saved = db.atGetState('brain:regimeTg:' + u.id);
+            if (saved && typeof saved === 'object' && Number.isFinite(saved.ts)) {
+                _regimeTgLastTs.set(u.id, saved.ts);
+                restored++;
+            }
+        }
+        if (restored > 0) logger.info('BRAIN', `[S5] Restored regime TG throttle for ${restored} user(s)`);
+    } catch (e) {
+        logger.warn('BRAIN', '_restoreRegimeTgThrottle failed: ' + (e && e.message));
     }
 }
 
@@ -160,7 +594,12 @@ function stop() {
         clearInterval(_timer);
         _timer = null;
     }
+    if (_shadowTimer) {
+        clearInterval(_shadowTimer);
+        _shadowTimer = null;
+    }
     _running = false;
+    _shadowRunning = false;
     logger.info('BRAIN', 'Server brain stopped');
 }
 
@@ -223,6 +662,17 @@ function _buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fu
             s.modTrapRisk = fusion._intermediates.modifiers.trapRisk;
             s.modRegimeDanger = fusion._intermediates.modifiers.regimeDanger;
         }
+        // Fundamentals (Wave 9 / Canonical PDF #8) — additive sync read
+        // from cache. fusion math untouched per ARCH-4. Available downstream
+        // for voice/chat/future ring decisions.
+        const fund = _safeFundamentals(symbol);
+        if (fund) {
+            s.fundMcapRank = fund.market_cap_rank != null ? fund.market_cap_rank : null;
+            s.fundDominancePct = fund.dominance_pct != null ? fund.dominance_pct : null;
+            s.fundVol24hUsd = fund.vol_24h_usd != null ? fund.vol_24h_usd : null;
+            s.fundChg24hPct = fund.price_change_24h_pct != null ? fund.price_change_24h_pct : null;
+            s.fundCacheAgeMs = fund.cache_age_ms != null ? fund.cache_age_ms : null;
+        }
         // Extra fields from caller
         if (extra) Object.assign(s, extra);
         return s;
@@ -244,13 +694,14 @@ function _runCycle() {
     _running = true;
     _cycleCount++;
 
+    // [Day 18] Per-cycle invocation telemetry — measured latency + success.
+    const _cycleStartTs = Date.now();
+    let _cycleRanOk = 1;
+
     try {
-        // ── [MULTI-SYM] Get all symbols with sufficient data ──
-        const readySymbols = serverState.getReadySymbols();
-        if (readySymbols.length === 0) {
-            _logDecision('SKIP', 'DATA_NOT_READY', null, { reason: 'No symbols have sufficient data' });
-            return;
-        }
+        // [Bybit Phase 1A Task 23] Explicit barrier: apply any pending exchange switches
+        // BEFORE iterating users so cache is coherent for the entire cycle.
+        _applyPendingSwitches();
 
         if (_stcMap.size === 0) {
             _logDecision('SKIP', 'NO_USERS', null, { reason: 'No user TC configs — skipping cycle' });
@@ -259,63 +710,130 @@ function _runCycle() {
         const users = _stcMap;
         let loggedDecision = null;
 
-        // ── Iterate each ready symbol independently ──
-        for (const symbol of readySymbols) {
-            const snap = serverState.getSnapshotForSymbol(symbol);
-            if (!snap || !snap.indicators) continue;
+        // ── [Task 23 LOOP SWAP] Outer = user, Inner = symbol ──
+        // Each user resolves their own exchange → userState → readySymbols.
+        // Per-user-once computations (isATActive, authoritative, sessionBlock,
+        // getUserState, dailyPnL, ddAssess, openPositions, recentCloses) are
+        // hoisted above the symbol loop per audit §Performance Considerations.
+        for (const [userId, stc] of users) {
+            // [HOIST-1] Skip users who have AT disabled — no point computing gates/fusion
+            if (!serverAT.isATActive(userId)) continue;
+            // [HOIST-2] Server-authoritative dispatch gate (see original comment below).
+            // [BUG-T1 2026-05-13] Pass userId not stc — gate reads mode from serverAT.getMode(userId).
+            if (!_isServerAuthoritativeForUser(userId)) continue;
 
-            // Data staleness check (per-symbol)
-            if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
-
-            // [REFLECTION] Track price + regime for calibration/transition detection
-            serverCalibration.trackPrice(symbol, snap.price);
-            serverCalibration.trackRegime(symbol, snap.indicators.regime || 'RANGE', snap.indicators.adx, snap.indicators.volatilityState);
-            // [REFLECTION] Evaluate previously skipped trades (per-user)
-            for (const [_uid] of users) {
-                serverReflection.evaluateSkipped(symbol, snap.price, _uid);
+            // [Task 23] Resolve exchange for this user; get exchange-scoped state.
+            const userExchange = _getUserExchange(userId);
+            const userState = serverState.forExchange(userExchange);
+            const readySymbols = userState.getReadySymbols();
+            if (readySymbols.length === 0) {
+                _logDecision('SKIP', 'DATA_NOT_READY', null, { reason: `No symbols have sufficient data for uid=${userId} (${userExchange})` });
+                continue;
             }
 
-            const ind = snap.indicators;
+            // [HOIST-3] Session block check — applies to ALL symbols for this user.
+            const sessionBlock = serverSessionProfile.checkSessionBlock(userId);
 
-            // ── Confluence score ──
-            const confluence = _calcConfluence(snap, ind);
+            // [HOIST-4] User state + drawdown assessment — symbol-independent.
+            const us = serverAT.getUserState ? serverAT.getUserState(userId) : null;
+            const dailyPnL = us ? (us.dailyPnL || 0) : 0;
+            const refBalance = us ? (us.demoBalance || us.liveBalanceRef || 10000) : 10000;
+            const ddAssess = _r7AssessDD(dailyPnL, refBalance);
 
-            // ── Regime ──
-            const regime = {
-                regime: ind.regime || 'RANGE',
-                confidence: ind.regimeConf || 0,
-                trendBias: ind.trendBias || 'neutral',
-                volatilityState: ind.volatilityState || 'normal',
-                trapRisk: ind.trapRisk || 0,
-            };
+            // [HOIST-5] Open positions — used in scale-in + correlation checks.
+            const _hoistedOpenPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [];
 
-            // Log regime changes (per-symbol)
-            const prevRegimeForSym = _prevRegimes.get(symbol);
-            if (prevRegimeForSym !== undefined && prevRegimeForSym !== regime.regime) {
-                logger.info('BRAIN', `[${symbol}] Regime change: ${prevRegimeForSym} → ${regime.regime} (conf=${regime.confidence}%)`);
-                // Persist regime change to SQLite
-                try { db.saveRegimeChange(symbol, regime.regime, prevRegimeForSym, regime.confidence, snap.price || 0); } catch (_) {}
-                const _regimeMsg = '🌐 *Regime Change* `' + symbol.replace('USDT', '') + '`\n' +
-                    '`' + prevRegimeForSym + '` → *' + regime.regime + '*\n' +
-                    'Confidence: `' + regime.confidence + '%`\n' +
-                    'Bias: `' + regime.trendBias + '` | Vol: `' + regime.volatilityState + '`\n' +
-                    'Price: `$' + (snap.price ? snap.price.toFixed(snap.price >= 100 ? 0 : 2) : '?') + '`';
-                const _now = Date.now();
-                // Only notify users who have active TC config (= brain/AT participants)
-                for (const _uid of _stcMap.keys()) {
-                    const _lastTs = _regimeTgLastTs.get(_uid) || 0;
+            // [HOIST-6] Recent closes DB query — previously fired once per (user × symbol);
+            // hoisted above symbol loop per audit §Line 1163: DB query in inner loop.
+            let _hoistedRecentCloses = [];
+            try {
+                const rows = db.prepare(
+                    `SELECT data, closed_at FROM at_closed WHERE user_id = ? ORDER BY closed_at DESC LIMIT 3`
+                ).all(userId);
+                _hoistedRecentCloses = rows.map(r => {
+                    try {
+                        const t = JSON.parse(r.data);
+                        return { closePnl: t.closePnl, closedAt: new Date(r.closed_at).getTime() };
+                    } catch (_) { return null; }
+                }).filter(Boolean);
+            } catch (_) {}
+
+            // ── Inner loop: iterate each ready symbol for this user's exchange ──
+            for (const symbol of readySymbols) {
+                // [Task 23] Use exchange-scoped snapshot (was serverState.getSnapshotForSymbol)
+                const snap = userState.getSnapshotForSymbol(symbol);
+                if (!snap || !snap.indicators) continue;
+
+                // Data staleness check (per-symbol)
+                if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
+
+                // [REFLECTION] Track price + regime for calibration/transition detection
+                // (global calibration — exchange-agnostic approximation per audit §Decision Point 3)
+                serverCalibration.trackPrice(symbol, snap.price);
+                serverCalibration.trackRegime(symbol, snap.indicators.regime || 'RANGE', snap.indicators.adx, snap.indicators.volatilityState);
+                // [REFLECTION] Evaluate previously skipped trades for this user
+                serverReflection.evaluateSkipped(symbol, snap.price, userId);
+
+                const ind = snap.indicators;
+
+                // ── Confluence score ──
+                const confluence = _calcConfluence(snap, ind);
+
+                // ── Regime ──
+                const regime = {
+                    regime: ind.regime || 'RANGE',
+                    confidence: ind.regimeConf || 0,
+                    trendBias: ind.trendBias || 'neutral',
+                    volatilityState: ind.volatilityState || 'normal',
+                    trapRisk: ind.trapRisk || 0,
+                };
+
+                // [Task 23] Log regime changes — keyed by composite `${symbol}|${exchange}`
+                // per audit §Regime Broadcast + spec pillar 3-cerința B (cross-exchange isolation).
+                // Inner _stcMap.keys() iterations DROPPED — operate on current userId only.
+                const _regimeKey = `${symbol}|${userExchange}`;
+                const prevRegimeForSym = _prevRegimes.get(_regimeKey);
+                if (prevRegimeForSym !== undefined && prevRegimeForSym !== regime.regime) {
+                    logger.info('BRAIN', `[${symbol}|${userExchange}] Regime change: ${prevRegimeForSym} → ${regime.regime} (conf=${regime.confidence}%)`);
+                    // Persist for current user (was: all _stcMap.keys() — dropped per audit §Lines 695/708)
+                    try {
+                        db.saveRegimeChange(symbol, regime.regime, prevRegimeForSym, regime.confidence, snap.price || 0, userId);
+                    } catch (_) {}
+                    const _regimeMsg = '🌐 *Regime Change* `' + symbol.replace('USDT', '') + '`\n' +
+                        '`' + prevRegimeForSym + '` → *' + regime.regime + '*\n' +
+                        'Confidence: `' + regime.confidence + '%`\n' +
+                        'Bias: `' + regime.trendBias + '` | Vol: `' + regime.volatilityState + '`\n' +
+                        'Price: `$' + (snap.price ? snap.price.toFixed(snap.price >= 100 ? 0 : 2) : '?') + '`';
+                    const _now = Date.now();
+                    const _lastTs = _regimeTgLastTs.get(userId) || 0;
                     if (_now - _lastTs >= REGIME_TG_COOLDOWN_MS) {
-                        _regimeTgLastTs.set(_uid, _now);
-                        telegram.sendToUser(_uid, _regimeMsg);
+                        _regimeTgLastTs.set(userId, _now);
+                        telegram.sendToUser(userId, _regimeMsg);
+                        _persistRegimeTgThrottle();
                     }
                 }
-            }
-            _prevRegimes.set(symbol, regime.regime);
+                _prevRegimes.set(_regimeKey, regime.regime);
+                // [S5] Persist regime baseline whenever it changes so a restart
+                // does not silently swallow the next real regime change.
+                _persistRegimeBaseline();
 
-            // ── Per-user gate check + fusion + AT execution ──
-            for (const [userId, stc] of users) {
-                // Skip users who have AT disabled — no point computing gates/fusion
-                if (!serverAT.isATActive(userId)) continue;
+                // ── Per-user gate check + fusion + AT execution ──
+                // [Day 29.6] Write a global "watching" thought for this user
+                // before per-user AT gate. Throttled per symbol — 1 every
+                // 3min — uses uid=1 (admin) as default carrier for now.
+                try {
+                    _writeThought({
+                        userId: 1, symbol: symbol, kind: 'neutral_watch', mood: 'CALM',
+                        text: `scanning ${symbol} — regime ${regime.regime}, confluence ${(confluence.score || 0).toFixed(0)}.`,
+                        contextJson: JSON.stringify({ regime: regime.regime, score: confluence.score || 0 })
+                    });
+                } catch (_) { /* */ }
+
+                // [Phase 2 S6-B1] Server-authoritative dispatch gate comment (moved from inner):
+                //   (A) MF.SERVER_AT === true (full server-AT enabled — covers both demo and live), OR
+                //   (B) MF.SERVER_AT_DEMO === true AND stc.engineMode === 'demo'
+                // Hoisted above symbol loop; already checked before entering this loop.
+
                 // [MULTI-SYM] Skip if user has symbol selection and this symbol is not in it
                 if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
 
@@ -325,7 +843,9 @@ function _runCycle() {
                     if (pendingResult.action === 'FILL' || pendingResult.action === 'MOMENTUM') {
                         // Execute the pending entry via AT (use stored stc from pending)
                         const pendStc = pendingResult.pending.stc || serverRegimeParams.getAdaptedParams(regime.regime, stc);
-                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId);
+                        // [BUG-O7 S2] Cap pending-entry execution by raw TC.size as max per-trade cap (parity with main + scale-in paths).
+                        const _userIntentPending = Number((_stcMap.get(userId) || DEFAULT_STC).size);
+                        const entry = serverAT.processBrainDecision(pendingResult.pending.decision, pendStc, userId, _userIntentPending);
                         if (entry) {
                             // [ML] Link pending snapshot to the created position
                             const _pendSnapId = pendingResult.pending._snapId;
@@ -349,8 +869,7 @@ function _runCycle() {
 
                 // [V3] Multi-entry / pyramiding check for existing winning positions
                 if (!pendingResult) {
-                    const existingPos = (serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [])
-                        .find(p => p.symbol === symbol);
+                    const existingPos = _hoistedOpenPos.find(p => p.symbol === symbol);
                     if (existingPos && existingPos.pnlPct > 0) {
                         const scaleCheck = serverMultiEntry.checkScaleIn(existingPos, confluence.score, regime.regime);
                         if (scaleCheck.shouldScale) {
@@ -360,7 +879,9 @@ function _runCycle() {
                                 ts: Date.now(), cycle: _cycleCount, symbol, price: snap.price, priceTs: snap.priceTs,
                                 fusion: { dir: existingPos.side, decision: 'SMALL', confidence: confluence.score, score: confluence.score, reasons: ['scale_in'] },
                             };
-                            const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId);
+                            // [BUG-O7 S2] Cap scale-in entry size by raw TC.size (max per-trade cap). Total-position cap NOT addressed in this batch — separate ticket.
+                            const _userIntentSI = Number((_stcMap.get(userId) || DEFAULT_STC).size);
+                            const scaleEntry = serverAT.processBrainDecision(scaleDec, scaleStc, userId, _userIntentSI);
                             if (scaleEntry) {
                                 serverMultiEntry.recordScaleIn(userId, symbol, snap.price, scaleStc.size);
                                 try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
@@ -368,6 +889,7 @@ function _runCycle() {
                                     finalConfidence: confluence.score, finalDir: existingPos.side,
                                     finalTier: 'SMALL', linkedSeq: scaleEntry.seq || null,
                                     scaleLevel: scaleCheck.level, scaleSizeMult: scaleCheck.sizeMultiplier,
+                                    exchange: userExchange,
                                 })); } catch (_) {}
                                 logger.info('BRAIN', `[V3] Scale-in L${scaleCheck.level} ${symbol} uid=${userId}`);
                             }
@@ -375,28 +897,34 @@ function _runCycle() {
                     }
                 }
 
-                // [V3] Session block check
-                const sessionBlock = serverSessionProfile.checkSessionBlock(userId);
+                // [V3] Session block check (result hoisted above symbol loop)
                 if (sessionBlock.blocked) {
                     _logDecision('BLOCKED', 'session', null, { reason: sessionBlock.reason });
+                    _pushBlock(userId, symbol, ['session_block:' + (sessionBlock.reason || 'na')], 'session', { score: confluence.score, adx: ind.adx });
                     try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
                         sourcePath: 'no_trade', finalAction: 'blocked_session', finalTier: 'NO_TRADE', finalDir: 'neutral', finalConfidence: 0,
                         sessionBlocked: true, sessionBlockReason: sessionBlock.reason,
+                        exchange: userExchange,
                     })); } catch (_) {}
                     continue;
                 }
 
-                // [V3] Drawdown assessment
-                const us = serverAT.getUserState ? serverAT.getUserState(userId) : null;
-                const dailyPnL = us ? (us.dailyPnL || 0) : 0;
-                const refBalance = us ? (us.demoBalance || us.liveBalanceRef || 10000) : 10000;
-                const ddAssess = serverDrawdownGuard.assessDrawdown(dailyPnL, refBalance);
+                // [V3] Drawdown assessment (result hoisted above symbol loop)
                 if (ddAssess.locked) {
+                    // [Day 20] Doctor P1 alert pe drawdown lockout — user portfolio circuit-breaker fired.
+                    _emitDoctorThrottled({
+                        eventType: 'alert', severity: 'P1',
+                        moduleId: 'serverBrain.drawdownGuard', ts: Date.now(),
+                        payload: { userId, symbol, drawdownPct: ddAssess.drawdownPct,
+                                   tier: ddAssess.tier ? ddAssess.tier.label : 'LOCKOUT' }
+                    }, `${userId}:${symbol}`);
                     _logDecision('BLOCKED', 'drawdown_lockout', null, { drawdownPct: ddAssess.drawdownPct });
+                    _pushBlock(userId, symbol, ['drawdown_lockout:' + (ddAssess.drawdownPct != null ? ddAssess.drawdownPct.toFixed(1) + '%' : 'na')], 'drawdown', { score: confluence.score, adx: ind.adx });
                     try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, null, null, {
                         sourcePath: 'no_trade', finalAction: 'blocked_drawdown', finalTier: 'NO_TRADE', finalDir: 'neutral', finalConfidence: 0,
                         ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
                         ddTier: ddAssess.tier ? ddAssess.tier.label : 'LOCKOUT', ddLocked: true,
+                        exchange: userExchange,
                     })); } catch (_) {}
                     continue;
                 }
@@ -405,7 +933,8 @@ function _runCycle() {
                 const adaptedStc = serverRegimeParams.getAdaptedParams(regime.regime, stc);
 
                 // [V3] Volatility-adjusted params
-                const bars = serverState.getBarsForSymbol(symbol);
+                // [Task 23] userState.getBarsForSymbol (was serverState.getBarsForSymbol) — audit §Line 855
+                const bars = userState.getBarsForSymbol(symbol);
                 const volProfile = serverVolatilityEngine.assessVolatility(snap, bars);
                 const volAdjustedStc = serverVolatilityEngine.adjustParams(adaptedStc, volProfile);
 
@@ -416,6 +945,36 @@ function _runCycle() {
 
                 const gates = _checkGates(snap, ind, confluence, volAdjustedStc, userId);
                 const fusion = _computeFusion(snap, ind, confluence, regime, gates, bars, userId);
+
+                // [Wave 4] R3B Safety — additive observability (NOT blocking).
+                // cp = prediction interval validity for fusion.confidence; ood =
+                // distribution rarity. Attached to fusion._r3b for downstream
+                // audit consumers. observeOutcome feeds histograms organically.
+                try {
+                    const r3b = require('./ml/R3B_safety');
+                    const r3bFeatures = {
+                        rsi: ind.rsi, adx: ind.adx, atr: ind.atr,
+                        score: confluence.score, confidence: fusion.confidence,
+                    };
+                    fusion._r3b = r3b.evaluate({
+                        regime: regime.regime,
+                        confidence: fusion.confidence,
+                        predicted: (fusion.confidence || 0) / 100,
+                        features: r3bFeatures,
+                    });
+                    // Feed OOD histograms every cycle so distribution stays current.
+                    // CP outcome recorded post-trade close (see Day 8 recordContribution
+                    // wire — future enhancement); for now use confidence as proxy
+                    // outcome so the buffer warms.
+                    r3b.observeOutcome({
+                        regime: regime.regime,
+                        confidence: fusion.confidence,
+                        predicted: (fusion.confidence || 0) / 100,
+                        actual: (fusion.confidence || 0) / 100,
+                        features: r3bFeatures,
+                    });
+                } catch (_) { /* never block brain flow */ }
+
                 const decision = {
                     ts: Date.now(),
                     cycle: _cycleCount,
@@ -429,19 +988,134 @@ function _runCycle() {
                 };
                 if (!loggedDecision) loggedDecision = decision;
 
+                // [Day 29.4] Brain thoughts → TheVoice feed (throttled 1/min/cell).
+                // Lowered confidence threshold to 50 — more frequent thoughts
+                // showing what brain is genuinely considering. Different
+                // mood/wording for each confidence band.
+                // [Day 29.5] Also write neutral/flat thoughts (throttled longer)
+                // so feed isn't dead during sideways markets.
+                if (fusion.dir === 'neut') {
+                    _writeThought({
+                        userId, symbol: snap.symbol, kind: 'neutral_watch', mood: 'CALM',
+                        text: `watching ${snap.symbol} (${regime.regime}) — flat signal, no edge yet.`,
+                        contextJson: JSON.stringify({ regime: regime.regime, confidence: fusion.confidence })
+                    });
+                }
+                if (fusion.dir !== 'neut') {
+                    const sideWord = fusion.dir === 'bull' ? 'LONG' : 'SHORT';
+                    let kind, moodTh, text;
+                    if (fusion.confidence >= 83) {
+                        kind = 'conf_very_high'; moodTh = 'EXCITED';
+                        text = `strong ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, tier ${fusion.decision}.`;
+                    } else if (fusion.confidence >= 70) {
+                        kind = 'conf_high'; moodTh = 'FOCUSED';
+                        text = `confident ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, tier ${fusion.decision}.`;
+                    } else if (fusion.confidence >= 50) {
+                        kind = 'conf_mid'; moodTh = 'FOCUSED';
+                        text = `leaning ${sideWord} ${snap.symbol} — regime ${regime.regime}, confluence ${fusion.confidence.toFixed(0)}, not enough edge yet.`;
+                    } else if (fusion.confidence >= 30) {
+                        kind = 'conf_low'; moodTh = 'CALM';
+                        text = `watching ${snap.symbol} (${regime.regime}) — weak signal, conf ${fusion.confidence.toFixed(0)}.`;
+                    } else {
+                        kind = null; // skip very-low signal
+                    }
+                    if (kind) {
+                        _writeThought({
+                            userId, symbol: snap.symbol, kind, mood: moodTh, text,
+                            contextJson: JSON.stringify({
+                                confidence: fusion.confidence, dir: fusion.dir,
+                                regime: regime.regime, tier: fusion.decision
+                            })
+                        });
+                    }
+                }
+
+                // Regime shift detected on this symbol for this user.
+                // [Task 23] Key includes exchange for per-exchange regime shift isolation (audit §line 952)
+                const _regKey = `${userId}:${snap.symbol}:${userExchange}`;
+                const _lastReg = _lastRegime.get(_regKey);
+                if (_lastReg && _lastReg !== regime.regime) {
+                    _writeThought({
+                        userId, symbol: snap.symbol, kind: 'regime_shift', mood: 'FOCUSED',
+                        text: `regime shift on ${snap.symbol}: ${_lastReg} → ${regime.regime}. recalibrating.`,
+                        contextJson: JSON.stringify({ from: _lastReg, to: regime.regime })
+                    });
+                }
+                _lastRegime.set(_regKey, regime.regime);
+
+                // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
+                // applied downstream when layeredBy='ring5-influence-applied' (i.e.
+                // eligibility passed AND proposer fired AND reflectionGate accepted).
+                // Otherwise wrap returns the original phase2 decision — no change.
+                //
+                // Mutation strategy: confidence + reasons mutated in place; dir/score
+                // never touched (Phase 4 proposer is confidence-only per spec).
+                // Cut → re-evaluate tier (downgrade to SMALL or NO_TRADE). Boost →
+                // tier stays at Phase 2's authoritative level (no sizing-up risk).
+                //
+                // Day 7+8 invariants preserved: try/catch isolation, error swallow.
+                const _ring5MarketCtx = _buildMarketContext(snap, bars, userId);
+                try {
+                    const _execEnv = serverAT._resolveExecutionEnv(userId);
+                    if (_execEnv && _execEnv.env) {
+                        const _ring5Wrap = ring5LearningService.wrap({
+                            userId,
+                            resolvedEnv: _execEnv.env,
+                            symbol: snap.symbol,
+                            phase2Decision: fusion,
+                            // [Day 13] R5A modifiers + fusion score components.
+                            // Proposer requires sumContribution >= 0.10 (boost) or
+                            // <= -0.10 (cut), AND bandit sample to confirm.
+                            mlBrainProInputs: mlInputsBuilder.build(fusion),
+                            mode: 'influence',
+                            regime: regime.regime,
+                            marketContext: _ring5MarketCtx,
+                            nowTs: Date.now()
+                        });
+                        if (_ring5Wrap && _ring5Wrap.layeredBy === 'ring5-influence-applied') {
+                            fusion.confidence = _ring5Wrap.confidence;
+                            if (Array.isArray(_ring5Wrap.reasons)) fusion.reasons = _ring5Wrap.reasons;
+                            fusion.layeredBy = 'ring5-influence-applied';
+                            // Tier re-eval on cut. Boost never upgrades tier (sizing
+                            // stays at Phase 2 authoritative level for safety).
+                            if (fusion.confidence < 62 && fusion.decision !== 'NO_TRADE') {
+                                fusion.decision = 'NO_TRADE';
+                            } else if (fusion.confidence < 72 &&
+                                       (fusion.decision === 'MEDIUM' || fusion.decision === 'LARGE')) {
+                                fusion.decision = 'SMALL';
+                            }
+                        }
+                    }
+                } catch (_ring5Err) {
+                    // Ring5 influence must NEVER affect brain flow — swallow any error.
+                }
+
                 if (fusion.decision !== 'NO_TRADE') {
                     // [REFLECTION] Pre-trade questioning — brain asks itself "am I sure?"
-                    const marketCtx = _buildMarketContext(snap, bars, userId);
-                    const questioning = serverReflection.questionEntry(
+                    const marketCtx = _ring5MarketCtx;
+                    const questioning = _r7QuestionEntry(
                         snap.symbol, fusion.dir, fusion.confidence, regime.regime, marketCtx, userId
                     );
 
                     if (!questioning.proceed) {
                         // Brain blocked its own entry
+                        _emitDoctorThrottled({
+                            eventType: 'alert', severity: 'P2',
+                            moduleId: 'serverBrain.reflection', ts: Date.now(),
+                            payload: { symbol: snap.symbol, dir: fusion.dir, conf: fusion.confidence,
+                                       concerns: questioning.concerns.map(c => c.type), userId }
+                        }, `${userId}:${snap.symbol}:${fusion.dir}`);
+                        // [Day 29.4] Voice: brain self-doubts.
+                        _writeThought({
+                            userId, symbol: snap.symbol, kind: 'reflection_block', mood: 'NERVOUS',
+                            text: `second-guessed ${fusion.dir === 'bull' ? 'LONG' : 'SHORT'} ${snap.symbol} — ${questioning.concerns.map(c => c.type).join(', ')} flagged.`,
+                            contextJson: JSON.stringify({ concerns: questioning.concerns.map(c => c.type) })
+                        });
                         serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
                         _logDecision('BLOCKED', 'reflection', decision, {
                             concerns: questioning.concerns.map(c => c.type),
                         });
+                        _pushBlock(userId, symbol, ['reflection:' + questioning.concerns.map(c => c.type).join(',')], 'reflection', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
                         try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                             sourcePath: 'no_trade', finalAction: 'blocked_reflection',
                             reflProceed: false, reflConcernCount: questioning.concerns.length,
@@ -459,6 +1133,7 @@ function _runCycle() {
                         if (decision.fusion.confidence < 62) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('reflection_penalty');
+                            _pushBlock(userId, symbol, ['reflection_penalty:conf=' + decision.fusion.confidence], 'reflection_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
                             serverReflection.trackSkippedTrade(snap.symbol, fusion.dir, fusion.confidence, snap.price, userId);
                             try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                                 sourcePath: 'no_trade', finalAction: 'blocked_reflection_penalty',
@@ -485,10 +1160,25 @@ function _runCycle() {
                     };
 
                     // [V3] Correlation guard — block if too much correlated exposure
-                    const openPos = serverAT.getOpenPositions ? serverAT.getOpenPositions(userId) : [];
-                    const corrCheck = serverCorrelationGuard.checkEntry(snap.symbol, fusion.dir, openPos);
+                    // [Task 23] Use hoisted open positions (was per-symbol serverAT.getOpenPositions call)
+                    const openPos = _hoistedOpenPos;
+                    const corrCheck = _r7CheckEntry(snap.symbol, fusion.dir, openPos);
                     if (!corrCheck.allowed) {
+                        _emitDoctorThrottled({
+                            eventType: 'alert', severity: 'P2',
+                            moduleId: 'serverBrain.correlationGuard', ts: Date.now(),
+                            payload: { symbol: snap.symbol, dir: fusion.dir, reason: corrCheck.reason,
+                                       correlatedWith: corrCheck.correlatedWith || [], userId }
+                        }, `${userId}:${snap.symbol}:${fusion.dir}`);
+                        // [Day 29.4] Voice: correlation guard fires.
+                        const corrWith = (corrCheck.correlatedWith || []).slice(0, 2).join(', ') || 'open positions';
+                        _writeThought({
+                            userId, symbol: snap.symbol, kind: 'corr_block', mood: 'FOCUSED',
+                            text: `skipping ${snap.symbol} — too correlated with ${corrWith}.`,
+                            contextJson: JSON.stringify({ correlatedWith: corrCheck.correlatedWith || [], reason: corrCheck.reason })
+                        });
                         _logDecision('BLOCKED', 'correlation', decision, { reason: corrCheck.reason });
+                        _pushBlock(userId, symbol, ['correlation:' + (corrCheck.reason || 'na')], 'correlation', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
                         try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                             sourcePath: 'no_trade', finalAction: 'blocked_correlation',
                             corrAllowed: false, corrReason: corrCheck.reason,
@@ -504,6 +1194,7 @@ function _runCycle() {
                         if (decision.fusion.confidence < 62) {
                             decision.fusion.decision = 'NO_TRADE';
                             decision.fusion.reasons.push('correlation_penalty');
+                            _pushBlock(userId, symbol, ['correlation_penalty:conf=' + decision.fusion.confidence], 'correlation_penalty', { score: confluence.score, adx: ind.adx, confidence: decision.fusion.confidence });
                             try { brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion, {
                                 sourcePath: 'no_trade', finalAction: 'blocked_correlation_penalty',
                                 finalConfidence: decision.fusion.confidence, finalTier: 'NO_TRADE',
@@ -537,14 +1228,68 @@ function _runCycle() {
                         ddSizeScale: ddSizeScale, ddConfBoost: ddAssess.confBoost || 0,
                         volLevel: volProfile.level, volScore: volProfile.score,
                         volSlMult: volProfile.slMultiplier,
+                        // [Task 23] Populate exchange column in brain_decisions per audit §brain_decisions INSERT
+                        exchange: userExchange,
                         sessionName: sessionBlock.session || null,
                     };
+
+                    // [Wave 5] R1 Constitution — advisory mode: log violations to
+                    // ml_r1_violations without blocking. Existing per-feature guards
+                    // (correlationGuard, reflection, drawdownGuard, etc.) continue to
+                    // enforce; R1 is centralized observability + defense-in-depth audit.
+                    // Operator can flip to enforcement_mode='blocking' later via env flag.
+                    try {
+                        const r1 = require('./ml/R1_constitution/enforcementEngine');
+                        const _r1Balance = us
+                            ? (us.engineMode === 'live' ? (us.liveBalanceRef || 0) : (us.demoBalance || 10000))
+                            : 10000;
+                        // [Task 23] Use hoisted open positions + recent closes (was per-symbol DB query)
+                        const _r1Result = r1.evaluate({
+                            userId,
+                            decision: {
+                                symbol: snap.symbol,
+                                side: fusion.dir === 'bull' ? 'LONG' : 'SHORT',
+                                size: sizingStc.size,
+                                balance: _r1Balance,
+                                leverage: sizingStc.lev,
+                                sl: null,  // SL computed downstream; live-without-SL caught at order/place layer
+                                mode: us ? us.engineMode : 'demo',
+                                reflection: { proceed: questioning.proceed, concerns: (questioning.concerns || []).map(c => c.type) },
+                                openPositions: _hoistedOpenPos.map(p => ({ symbol: p.symbol, side: p.side, size: p.size, mode: p.mode || 'demo' })),
+                                recentCloses: _hoistedRecentCloses,
+                                correlatedExposure: { totalPct: 0 },  // serverCorrelationGuard already enforces; pass-through 0
+                            },
+                        });
+                        // [Wave 7b post-validation fix] Mobile Claude flagged: hardcoded
+                        // sl=null at this layer would false-positive NO_LIVE_WITHOUT_SL on
+                        // every live entry. The principle IS enforced downstream (
+                        // validateOrderBody middleware + M1.2 Cat C _executeLiveEntryCore
+                        // safety SL + Path B _placeProtectionForExistingEntry), so skip
+                        // the principle at this layer to avoid noise. Defense in depth
+                        // remains via downstream enforcement.
+                        const _r1Filtered = _r1Result.violations.filter(v => v.id !== 'NO_LIVE_WITHOUT_SL');
+                        if (_r1Filtered.length > 0) {
+                            r1.logViolations({
+                                userId,
+                                decision: {
+                                    symbol: snap.symbol,
+                                    side: fusion.dir === 'bull' ? 'LONG' : 'SHORT',
+                                    size: sizingStc.size, leverage: sizingStc.lev,
+                                    mode: us ? us.engineMode : 'demo',
+                                },
+                                violations: _r1Filtered,
+                                enforcementMode: 'advisory',
+                            });
+                        }
+                    } catch (_) { /* never block brain flow */ }
 
                     // [2G] Pending Entry System — wait for pullback instead of instant entry
                     const pending = serverPendingEntry.createPending(decision, sizingStc, userId, marketCtx);
                     if (pending) {
-                        _cooldowns.set(userId + ':' + decision.symbol, Date.now());
-                        _persistCooldowns();
+                        // [S5] Use the SAME cooldownMs that the gate at line ~1050 will read
+                        // (volAdjustedStc.cooldownMs ⇒ stc.cooldownMs at gate time). Persist
+                        // immediately so a crash/reload can not drop the deadline.
+                        _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
                         const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
                             Object.assign({}, _mlExtra, { sourcePath: 'pending_created', finalAction: 'pending_created' })
                         ));
@@ -555,15 +1300,21 @@ function _runCycle() {
                         const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
                             Object.assign({}, _mlExtra, { sourcePath: 'direct', finalAction: 'entry' })
                         ));
-                        const entry = serverAT.processBrainDecision(decision, sizingStc, userId);
+                        // [BUG-O7 S2] Pass raw TC.size as userIntent so serverAT enforces max-cap (TC.size = absolute margin ceiling per autotrade.ts canonical semantic). Use raw _stcMap value, NOT volAdjustedStc/sizingStc which are already pipeline-modified.
+                        const _userIntent = Number((_stcMap.get(userId) || DEFAULT_STC).size);
+                        const entry = serverAT.processBrainDecision(decision, sizingStc, userId, _userIntent);
                         if (entry) {
-                            _cooldowns.set(userId + ':' + decision.symbol, Date.now());
-                            _persistCooldowns();
+                            // [S5] Same deadline-based cooldown set as the pending branch.
+                            _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
                             if (_snapId && entry.seq) brainLogger.linkSeq(_snapId, entry.seq);
                             logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);
                         }
                     }
                 } else {
+                    // [L1-DIAG] Surface gate blocks to client diagnostic feed
+                    if (!gates.allOk && gates.reasons && gates.reasons.length) {
+                        _pushBlock(userId, symbol, gates.reasons, 'gates', { score: confluence.score, adx: ind.adx, confidence: fusion.confidence });
+                    }
                     // Track NO_TRADE for regret analysis
                     if (fusion.confidence > 50) {
                         serverReflection.trackSkippedTrade(snap.symbol, confluence.isBull ? 'LONG' : 'SHORT', fusion.confidence, snap.price, userId);
@@ -572,19 +1323,21 @@ function _runCycle() {
                         sourcePath: 'no_trade', finalAction: gates.allOk ? 'no_trade' : 'blocked_gates',
                         ddDailyPnL: dailyPnL, ddRefBalance: refBalance, ddPct: ddAssess.drawdownPct,
                         ddTier: ddAssess.tier ? ddAssess.tier.label : 'GREEN',
+                        exchange: userExchange,
                     })); } catch (_) {}
                 }
-            }
 
-            // ── Log summary per symbol (every 10 cycles or on trade signal) ──
-            if (_cycleCount % 10 === 0) {
-                logger.info('BRAIN',
-                    `[C${_cycleCount}] ${symbol} $${snap.price} | ` +
-                    `Conf=${confluence.score} | Regime=${regime.regime}(${regime.confidence}%) | ` +
-                    `ADX=${ind.adx != null ? ind.adx.toFixed(1) : '—'} RSI=${snap.rsi['5m'] != null ? snap.rsi['5m'].toFixed(1) : '—'} | ` +
-                    `MTF=${Object.entries(snap.mtfIndicators || {}).map(([t, v]) => t + ':' + (v.stDir || '?')).join(',')} | ` +
-                    `Struct=${serverStructure.getStructure(symbol, serverState.getBarsForSymbol(symbol)).trend}`
-                );
+                // ── Log summary per symbol (every 10 cycles or on trade signal) ──
+                // [Task 23] Moved inside user loop; uses already-computed `bars` (audit §line 1263)
+                if (_cycleCount % 10 === 0) {
+                    logger.info('BRAIN',
+                        `[C${_cycleCount}] ${symbol}@${userExchange} $${snap.price} | ` +
+                        `Conf=${confluence.score} | Regime=${regime.regime}(${regime.confidence}%) | ` +
+                        `ADX=${ind.adx != null ? ind.adx.toFixed(1) : '—'} RSI=${snap.rsi['5m'] != null ? snap.rsi['5m'].toFixed(1) : '—'} | ` +
+                        `MTF=${Object.entries(snap.mtfIndicators || {}).map(([t, v]) => t + ':' + (v.stDir || '?')).join(',')} | ` +
+                        `Struct=${serverStructure.getStructure(symbol, bars || []).trend}`
+                    );
+                }
             }
         }
 
@@ -601,13 +1354,298 @@ function _runCycle() {
         }
 
     } catch (err) {
+        _cycleRanOk = 0;
         logger.error('BRAIN', 'Brain cycle error: ' + String(err) + ' | ' + (err && err.stack ? err.stack : 'no stack'));
         Sentry.captureException(err, { tags: { module: 'brain', cycle: _cycleCount } });
         _logDecision('ERROR', 'EXCEPTION', null, { error: err.message });
+        // [Day 18] P0 alert on brain cycle crash.
+        _emitDoctor({
+            eventType: 'alert', severity: 'P0',
+            moduleId: 'serverBrain', ts: Date.now(),
+            payload: { cycle: _cycleCount, error: err.message }
+        });
     } finally {
+        // [Day 18] Record cycle invocation (latency + ranOk) → flushed to
+        // ml_module_heartbeats every 1s by telemetryCollector.
+        _recordInvocation('serverBrain', Date.now() - _cycleStartTs, _cycleRanOk);
         _running = false;
         brainLock.release('brainCycle');
     }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3] Parity Harness — Shadow Cycle
+// ══════════════════════════════════════════════════════════════════
+// Runs the minimum required to produce a server-side fusion decision per
+// configured user/symbol: confluence → regime → (pure) gates → fusion.
+// Writes a source='server' row to brain_parity_log and returns. Intentionally
+// DOES NOT: call serverAT.processBrainDecision, send Telegram, persist regime
+// changes, track reflection, call serverMultiEntry, correlation guard,
+// adaptive sizing, or any other live side-effect. Never rethrows — shadow
+// failures must not contaminate the runtime.
+function _runShadowCycle() {
+    if (_shadowRunning) return;
+    // Skip if flag flipped off mid-run or any main-cycle flag took over.
+    // [S6-B1] Use _shouldRunMainCycle() instead of bare MF.SERVER_BRAIN so the
+    // shadow cycle is also suppressed when SERVER_BRAIN_DEMO=true and the main
+    // cycle is the active path. Defense in depth: start() never starts both
+    // cycles, but if a future drift caused both timers to fire, this gate keeps
+    // parity log writes clean.
+    if (!MF.PARITY_SHADOW_ENABLED || _shouldRunMainCycle()) return;
+    _shadowRunning = true;
+    try {
+        const readySymbols = serverState.getReadySymbols();
+        if (!readySymbols || readySymbols.length === 0) return;
+        if (_stcMap.size === 0) return;
+
+        for (const symbol of readySymbols) {
+            const snap = serverState.getSnapshotForSymbol(symbol);
+            if (!snap || !snap.indicators) continue;
+            if (snap.stale || (Date.now() - snap.priceTs) > STALE_DATA_MS) continue;
+
+            const ind = snap.indicators;
+            let confluence, regime, bars;
+            try {
+                // [Phase 2 S3.1c] Use client-mirror confluence for shadow rows
+                // so parity agreement is computed on matching formula +
+                // matching indicator set (RSI/ST/LS/FR/OI, not MACD).
+                confluence = _calcConfluenceParity(snap, ind);
+                regime = {
+                    regime: ind.regime || 'RANGE',
+                    confidence: ind.regimeConf || 0,
+                    trendBias: ind.trendBias || 'neutral',
+                    volatilityState: ind.volatilityState || 'normal',
+                    trapRisk: ind.trapRisk || 0,
+                };
+                bars = serverState.getBarsForSymbol(symbol);
+            } catch (_e) { continue; }
+
+            for (const [userId, stc] of _stcMap) {
+                if (Array.isArray(stc.symbols) && !stc.symbols.includes(symbol)) continue;
+                try {
+                    // [Phase 2 S3.1e] Shadow-pure fusion — mirrors client
+                    // computeFusionDecision exactly, with NO per-user
+                    // modifiers and NO gates. Live _computeFusion stays
+                    // untouched (still drives SERVER_BRAIN live path when
+                    // that flag is on). This removes the journal/KNN/
+                    // session/drawdown modifier-induced divergence that
+                    // was producing 25/27 BTCUSDT mismatches on the admin
+                    // user during S3.1 re-soak.
+                    const fusion = _computeFusionParity(snap, ind, confluence, regime, bars);
+                    if (!fusion) continue;
+                    db.logParityRow(userId, symbol, 'server', {
+                        dir: fusion.dir,
+                        decision: fusion.decision,
+                        confidence: fusion.confidence,
+                        score: fusion.score,
+                        reasons: fusion.reasons,
+                    }, _cycleCount);
+                } catch (_userErr) { /* per-user shadow failure is non-fatal */ }
+            }
+        }
+    } catch (err) {
+        // Top-level guard: log once per N minutes if needed, but never throw.
+        logger.warn('BRAIN', '[S3] Shadow cycle error: ' + (err && err.message));
+    } finally {
+        _shadowRunning = false;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3.1c] Parity Confluence — mirrors client calcConfluenceScore
+// Used ONLY by _runShadowCycle for parity rows; the live _calcConfluence
+// below stays untouched so server's live brain (if ever flipped) keeps
+// its [SHORT-FIX] direction-agnostic scoring. S3.1c aligns the shadow
+// formula to the client's in client/src/engine/confluence.ts so the
+// ≥95% agreement gate is computed on the same indicator set + same
+// score shape. Residual gap: client uses LongShort ratio (getLS()),
+// server has no LS feed yet → lsDir defaults to 'neut' here, mirroring
+// client's neutral-LS behavior; a follow-up batch should add
+// /futures/data/topLongShortPositionRatio polling to serverState.
+// ══════════════════════════════════════════════════════════════════
+function _calcConfluenceParity(snap, ind) {
+    // rsi direction — identical to client (50 split, binary)
+    const rsiV = (snap.rsi && snap.rsi['5m']) || 50;
+    const rsiDir = rsiV > 50 ? 'bull' : 'bear';
+
+    // Supertrend — client forces binary bull|bear (defaults bear if no bull
+    // signal found). Server's ind.stDir can be 'neut'; fold neut → bear to
+    // match client's fallback semantics.
+    const stDir = ind.stDir === 'bull' ? 'bull' : 'bear';
+
+    // LongShort ratio — server has no LS feed; default to 'neut' (same as
+    // client when getLS() returns null).
+    const lsDir = 'neut';
+
+    // Funding rate — identical to client
+    const fr = snap.fr;
+    const frDir = (fr != null) ? (fr < 0 ? 'bull' : 'bear') : 'neut';
+
+    // Open interest — identical to client (stale/missing → neut)
+    const oi = snap.oi;
+    const oiPrev = snap.oiPrev;
+    const oiDir = (oi == null || oiPrev == null) ? 'neut' : (oi > oiPrev ? 'bull' : 'bear');
+
+    // Client's dirs set: [rsi, st, ls, fr, oi] — NO macd.
+    const dirs = [rsiDir, stDir, lsDir, frDir, oiDir];
+    const bullDirs = dirs.filter(d => d === 'bull').length;
+    const bearDirs = dirs.filter(d => d === 'bear').length;
+
+    // Client formula: linear bull-bias (bullDirs / 5), not absolute alignment.
+    const dirFactor = bullDirs / dirs.length;
+    const baseScore = dirFactor * 100;
+
+    // Signal boost: client uses sd.signals count (external). Server has no
+    // equivalent, proxy with total non-neut dirs. Closest honest mapping.
+    const total = bullDirs + bearDirs;
+    const signalBoost = total >= 4 ? 20 : total >= 2 ? 10 : 0;
+
+    // Client finalScore: direction-specific sign on the boost (add when bull
+    // majority, subtract when bear majority, base otherwise). NOT the server
+    // live path's [SHORT-FIX] direction-agnostic add-only.
+    const finalScore = Math.round(Math.max(0, Math.min(100,
+        bullDirs > bearDirs ? baseScore + signalBoost :
+        bullDirs < bearDirs ? baseScore - signalBoost :
+        baseScore
+    )));
+
+    return {
+        score: finalScore,
+        bullDirs,
+        bearDirs,
+        rsiDir,
+        stDir,
+        macdDir: ind.macdDir || 'neut',  // not used by client formula; kept for _computeFusion contract
+        frDir,
+        oiDir,
+        isBull: bullDirs > bearDirs,
+        isBear: bearDirs > bullDirs,
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Phase 2 S3.1e] Fusion Parity — mirrors client computeFusionDecision
+// EXACTLY, with NO per-user modifiers and NO gates. Used ONLY by
+// _runShadowCycle for parity rows. Live _computeFusion below stays
+// untouched.
+//
+// Why this exists: the live _computeFusion applies per-user modifiers
+// (serverJournal, serverKNN, serverSessionProfile, serverDrawdownGuard,
+// serverStructure, serverLiquidity, serverVolatility) which are NOT
+// present in client's computeFusionDecision. For users with rich
+// history (e.g. uid=1 admin) those modifiers can shift confidence
+// across tier thresholds and produce SMALL/MEDIUM where client emits
+// NO_TRADE — a per-user-history-induced divergence the parity gate
+// must not see. S3.1e isolates parity rows from those modifiers.
+//
+// Inputs available on server side mirror the client's brain context:
+//   confluence.score   ↔ BM.confluenceScore
+//   serverOrderflow    ↔ BM.ofi (buy/sell volumes → OFI ratio)
+//   serverLiquidity.liquidityGrabRisk ↔ MAGNETS.nearPct/100 (analog,
+//                                       not exact)
+//   regime.regime      ↔ brain.regime (case folded)
+// Server has no equivalent of:
+//   - computeProbScore (Scenario)  → defaults to 0.5 (matches client
+//                                    null-prob default)
+//   - LAST_SCAN.sigDir (multi-sym scan direction bonus) → 0
+//   - LongShort feed → handled in _calcConfluenceParity already
+//
+// Risk: zero on live decisions. This function is called only when
+// PARITY_SHADOW_ENABLED && !SERVER_BRAIN. It does not write to
+// serverAT, telegram, db (other than via the caller's logParityRow),
+// reflection, multi-entry, or any modifier service.
+// ══════════════════════════════════════════════════════════════════
+function _computeFusionParity(snap, ind, confluence, regime, bars) {
+    // Confluence value (0-100) — mirrors client BM.confluenceScore
+    const conf = Number.isFinite(confluence && confluence.score) ? confluence.score : 50;
+    const confN = Math.max(0, Math.min(1, (conf - 50) / 50));
+
+    // 4) OFI from server orderflow — mirrors client BM.ofi.{buy,sell}
+    let ofi = 0;
+    let totalVol = 0;
+    try {
+        const flow = serverOrderflow.getFlow(snap.symbol);
+        const buy = (flow && Number.isFinite(flow.buyVol)) ? flow.buyVol : 0;
+        const sell = (flow && Number.isFinite(flow.sellVol)) ? flow.sellVol : 0;
+        totalVol = buy + sell;
+        if (totalVol > 0) ofi = (buy - sell) / totalVol;
+    } catch (_) { /* OFI=0 on failure, matches client neutral */ }
+    const ofiN = (ofi + 1) / 2;
+
+    // 2) Scenario / probScore — server has no computeProbScore equivalent.
+    // Client defaults probN=0.5 when prob is null; mirror that here.
+    const probN = 0.5;
+
+    // 3) Regime mapping — mirrors client substring match (case-insensitive
+    // because server uses 'TREND_UP'/'RANGE'/'CHAOS' uppercase).
+    const rRaw = String((regime && regime.regime) || 'unknown');
+    const r = rRaw.toLowerCase();
+    let regimeN = 0.5;
+    if (r.indexOf('trend') >= 0) regimeN = 0.75;
+    else if (r.indexOf('range') >= 0) regimeN = 0.55;
+    else if (r.indexOf('chop') >= 0 || r.indexOf('unstable') >= 0) regimeN = 0.35;
+
+    // 5) Liquidity danger — server analog of client MAGNETS.nearPct/100.
+    // Client default is 0.2 when nearPct is null; mirror that.
+    let liqDangerN = 0.2;
+    let liqDangerSet = false;
+    try {
+        const liq = serverLiquidity.getLiquidity(snap.symbol, bars || [], snap.price);
+        if (liq && Number.isFinite(liq.liquidityGrabRisk)) {
+            liqDangerN = Math.max(0, Math.min(1, liq.liquidityGrabRisk));
+            liqDangerSet = true;
+        }
+    } catch (_) { /* keep default 0.2, matches client */ }
+
+    // 7) Direction score — mirrors client formula exactly.
+    // Server has no LAST_SCAN.sigDir equivalent → bonus is 0.
+    let dirScore = 0;
+    dirScore += ofi * 0.55;
+    dirScore += ((conf - 50) / 50) * 0.30;
+    dirScore = Math.max(-1, Math.min(1, dirScore));
+
+    const dir = dirScore > 0.15 ? 'long' : dirScore < -0.15 ? 'short' : 'neutral';
+
+    // 8) Confidence fusion — mirrors client formula exactly (no modifiers).
+    const alignN = dir === 'neutral' ? 0 : (dir === 'long' ? ofiN : (1 - ofiN));
+    let confF = (confN * 0.35) + (probN * 0.25) + (regimeN * 0.20) + (alignN * 0.20);
+    confF *= (1 - (liqDangerN * 0.55));
+    confF = Math.max(0, Math.min(1, confF));
+    const confidence = Math.round(confF * 100);
+
+    // 9) Entry tier — mirrors client thresholds exactly.
+    let decision;
+    if (dir === 'neutral') {
+        decision = 'NO_TRADE';
+    } else if (confidence >= 82 && conf >= 75 && regimeN >= 0.55) {
+        decision = 'LARGE';
+    } else if (confidence >= 72 && conf >= 68) {
+        decision = 'MEDIUM';
+    } else if (confidence >= 62 && conf >= 60) {
+        decision = 'SMALL';
+    } else {
+        decision = 'NO_TRADE';
+    }
+
+    // Reasons payload — informational, mirrors client format. Parity
+    // matching uses dir+decision only; reasons help debugging.
+    const reasons = [
+        'Confluence:' + Math.round(conf),
+        'Regime:' + r,
+    ];
+    if (totalVol > 0) reasons.push('OFI:' + Math.round(ofi * 100) + '%');
+    if (liqDangerSet) reasons.push('LiqDanger:' + Math.round(liqDangerN * 100) + '%');
+    reasons.push('DirScore:' + Math.round(dirScore * 100) + '%');
+    reasons.push('Decision:' + decision + '(' + confidence + '%)');
+
+    return {
+        ts: Date.now(),
+        dir,
+        decision,
+        confidence,
+        score: Math.round(dirScore * confidence),
+        reasons,
+    };
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -708,10 +1746,12 @@ function _checkGates(snap, ind, confluence, stc, userId) {
     gates.posOk = openCount < stc.maxPos;
     if (!gates.posOk) gates.reasons.push('max_pos');
 
-    // 7. Cooldown gate (per-user + per-symbol)
+    // 7. Cooldown gate (per-user + per-symbol). [S5] deadline semantics:
+    // value is the absolute deadlineMs at which the cooldown expires.
+    // OK when no deadline OR deadline already past.
     const cdKey = userId + ':' + snap.symbol;
-    const lastEntry = _cooldowns.get(cdKey);
-    gates.coolOk = !lastEntry || (Date.now() - lastEntry) > stc.cooldownMs;
+    const cdDeadline = _cooldowns.get(cdKey);
+    gates.coolOk = !cdDeadline || Date.now() >= cdDeadline;
     if (!gates.coolOk) gates.reasons.push('cooldown');
 
     // 8. [RE-ENTRY] Close cooldown — prevent re-entry after recent close (10 min)
@@ -1017,6 +2057,7 @@ function updateConfig(userId, cfg) {
         stc = Object.assign({}, DEFAULT_STC);
         _stcMap.set(userId, stc);
     }
+    _touchStc(userId);                              // [SRV-2] mark active on any config update
     for (const k of Object.keys(DEFAULT_STC)) {
         if (k === 'dslMode') continue; // handled separately below
         if (k in cfg && typeof cfg[k] === 'number' && isFinite(cfg[k])) {
@@ -1050,7 +2091,11 @@ function updateConfig(userId, cfg) {
 }
 
 function getSTC(userId) {
-    return _stcMap.has(userId) ? Object.assign({}, _stcMap.get(userId)) : Object.assign({}, DEFAULT_STC);
+    if (_stcMap.has(userId)) {
+        _touchStc(userId);                          // [SRV-2] read = activity
+        return Object.assign({}, _stcMap.get(userId));
+    }
+    return Object.assign({}, DEFAULT_STC);
 }
 
 // ══════════════════════════════════════════════════════════════════
@@ -1189,8 +2234,40 @@ module.exports = {
     stop,
     getStatus,
     getDecisionLog,
+    getRecentBlocks,
     updateConfig,
     getSTC,
     getBrainVision,
     get STC() { return Object.assign({}, DEFAULT_STC); },
+    // [S5] Test-only hooks. Exposed via require but never called by any
+    // runtime path (start/_runCycle/_runShadowCycle do not reference them).
+    // Used by tests/probe-s5.js to exercise persistence + restore + cleanup
+    // without booting the brain cycle.
+    _s5TestHooks: Object.freeze({
+        cooldowns: _cooldowns,
+        prevRegimes: _prevRegimes,
+        regimeTgLastTs: _regimeTgLastTs,
+        persistCooldowns: _persistCooldowns,
+        restoreCooldowns: _restoreCooldowns,
+        setCooldownDeadline: _setCooldownDeadline,
+        persistRegimeBaseline: _persistRegimeBaseline,
+        restoreRegimeBaseline: _restoreRegimeBaseline,
+        persistRegimeTgThrottle: _persistRegimeTgThrottle,
+        restoreRegimeTgThrottle: _restoreRegimeTgThrottle,
+        REGIME_TG_COOLDOWN_MS,
+    }),
+    // [Phase 2 S6-B1] Test-only hooks for the demo dispatch gate. Pure flag
+    // readers exposed via require but never called by any runtime path
+    // (start() and _runCycle reference the local function symbols, not these
+    // exports). Used by tests/probe-s6b1.js to exercise the helpers against
+    // synthetic flag combinations without mutating live state.
+    _s6b1TestHooks: Object.freeze({
+        shouldRunMainCycle: _shouldRunMainCycle,
+        isServerAuthoritativeForUser: _isServerAuthoritativeForUser,
+    }),
+    // [Bybit Phase 1A Task 23] Exchange routing + pending switch barrier (exported for tests + routes).
+    _getUserExchange,
+    _markPendingSwitch,
+    _applyPendingSwitches,
+    _invalidateUserExchangeCache,
 };

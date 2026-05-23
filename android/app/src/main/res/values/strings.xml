@@ -4,4 +4,6 @@
     <string name="title_activity_main">Zeus Terminal</string>
     <string name="package_name">com.zeus.terminal</string>
     <string name="custom_url_scheme">com.zeus.terminal</string>
+    <string name="zeus_widget_label">Zeus Terminal</string>
+    <string name="zeus_widget_description">Live BTC/ETH + your Zeus portfolio (balance, PnL today, positions, AT, Brain). Resize to reveal more.</string>
 </resources>

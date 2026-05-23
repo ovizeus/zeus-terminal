@@ -29,10 +29,21 @@
 
 | # | Check | Status |
 |---|-------|--------|
-| 15 | Custom header X-Zeus-Request on all state-changing requests | ✅ |
-| 16 | CSRF middleware blocks POST/PUT/DELETE/PATCH without header | ✅ |
-| 17 | sendBeacon endpoints exempt but with Origin validation | ✅ |
-| 18 | Both index.html and login.html inject CSRF header | ✅ |
+| 15 | Custom header `X-Zeus-Request` set by client on state-changing requests | ✅ |
+| 16 | ~~CSRF middleware blocks POST/PUT/DELETE/PATCH without header~~ | ❌ |
+| 17 | ~~sendBeacon endpoints exempt but with Origin validation~~ | ❌ |
+| 18 | Both index.html and login.html inject the header client-side | ✅ |
+| 18b | Session cookie `zeus_token` is `SameSite=Lax` (actual CSRF defense) | ✅ |
+
+> **R22 truth check (2026-04-17):** `X-Zeus-Request` is set by the client but
+> the server does **not** enforce it — there is no CSRF middleware, no Origin
+> check, no Referer check. The only CSRF defense in place is the
+> `SameSite=Lax` attribute on `zeus_token` (and the R21 `zeus_uid` companion),
+> which blocks browsers from attaching the session cookie on classic
+> cross-site POST form submissions. Treat the header as a diagnostic marker,
+> not a security boundary. README has been corrected; this checklist was
+> previously overstating coverage (items 16, 17, 40). See `server/routes/`
+> (no CSRF middleware) and `server/routes/auth.js:155` (`sameSite: 'lax'`).
 
 ## Security Headers (Helmet)
 
@@ -69,7 +80,7 @@
 | 37 | crossorigin="anonymous" on CDN scripts | ✅ |
 | 38 | Idempotency key: crypto.randomUUID → getRandomValues → Math.random | ✅ |
 | 39 | No eval() or new Function() in client code | ✅ |
-| 40 | fetch wrapper auto-injects CSRF header | ✅ |
+| 40 | fetch wrapper auto-injects `X-Zeus-Request` header (not a CSRF token — see §CSRF) | ✅ |
 
 ## Database Security
 

@@ -14,10 +14,49 @@ import { connectWatchlist } from '../services/symbols'
 import { getChartH, getChartW } from '../data/marketDataChart'
 import { closeAllDemoPos } from '../trading/autotrade'
 import { attachConfirmClose } from '../engine/events'
+import { useBrainStore } from '../stores/brainStore'
+import { usePinLockStore } from '../stores/pinLockStore'
 const w = window as any // kept for w.PERF (write-only SKIP), w.BlockReason, w.Intervals, w.WS, w.BUILD, fn calls, w.mainChart, w.cvdChart
 
 // ===== PIN LOCK =====
 let _pinSetCache: boolean | null = null
+
+// [BATCH3-Q] PIN unlock persists in sessionStorage — survives reload/refresh
+// within the same tab or Capacitor WebView session, but is wiped on full tab
+// close / Android app kill (OS tears down the WebView process → sessionStorage
+// dies with it). Matches user requirement: "only prompt on full exit, not on
+// refresh". Legacy TTL-in-localStorage (batch3-P-pre and earlier) is wiped on
+// module load so upgraded clients can't carry a stale multi-hour unlock.
+const _PIN_SS_KEY = 'zeus_pin_unlocked'
+
+function _pinIsUnlocked(): boolean {
+  try { return sessionStorage.getItem(_PIN_SS_KEY) === '1' } catch (_) { return false }
+}
+
+function _pinMarkUnlocked(): void {
+  try { sessionStorage.setItem(_PIN_SS_KEY, '1') } catch (_) {}
+}
+
+// [BATCH3-R] Public bridge so the biometric-unlock path on <PinLockScreen />
+// can mark the session unlocked and trigger the welcome modal without
+// duplicating sessionStorage + UI-hide logic here.
+export function pinMarkUnlockedFromBiometric(): void {
+  _pinMarkUnlocked()
+  usePinLockStore.getState().setMessage('')
+  usePinLockStore.getState().setVisible(false)
+  if (typeof _showWelcomeModal === 'function') setTimeout(_showWelcomeModal, 50)
+}
+
+export function pinIsUnlocked(): boolean { return _pinIsUnlocked() }
+
+function _pinClearUnlocked(): void {
+  try { sessionStorage.removeItem(_PIN_SS_KEY) } catch (_) {}
+  try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}
+}
+
+// Wipe legacy TTL key from older clients so the upgrade can never inherit
+// a multi-hour persisted unlock.
+try { localStorage.removeItem('zeus_pin_unlocked_until') } catch (_) {}
 
 export async function _pinIsSet(): Promise<boolean> {
   if (_pinSetCache !== null) return _pinSetCache
@@ -26,47 +65,112 @@ export async function _pinIsSet(): Promise<boolean> {
 
 export async function _pinCheckLock(): Promise<void> {
   const isSet = await _pinIsSet(); if (!isSet) return
-  if (sessionStorage.getItem('zeus_pin_unlocked')) return
-  const ls = document.getElementById('pinLockScreen')
-  if (ls) { ls.style.display = 'flex'; setTimeout(function () { const inp = document.getElementById('pinLockInput') as HTMLInputElement | null; if (inp) inp.focus() }, 100); const inp = document.getElementById('pinLockInput'); if (inp) { inp.addEventListener('keydown', function (e: any) { if (e.key === 'Enter') pinUnlock() }) } }
+  if (_pinIsUnlocked()) return
+  // [BATCH3-Q] Show the React-rendered lock screen via Zustand store.
+  // The legacy #pinLockScreen div was never in the React tree, so the old
+  // document.getElementById(...) path was a no-op. Focus is handled by
+  // <PinLockScreen /> via its inputRef.
+  usePinLockStore.getState().setMessage('')
+  usePinLockStore.getState().setVisible(true)
 }
 
 export async function pinUnlock(): Promise<void> {
-  const inp = document.getElementById('pinLockInput') as HTMLInputElement | null; const msg = document.getElementById('pinLockMsg')
-  if (!inp) return; const val = inp.value.trim(); if (!val) { if (msg) msg.textContent = 'Introdu PIN-ul'; return }
+  const inp = document.getElementById('pinLockInput') as HTMLInputElement | null
+  const setMsg = usePinLockStore.getState().setMessage
+  const setVis = usePinLockStore.getState().setVisible
+  const setShake = usePinLockStore.getState().setShaking
+  if (!inp) return
+  const val = inp.value.trim()
+  if (!val) { setMsg('Enter PIN'); return }
   try {
     const r = await fetch('/auth/pin/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
     const d = await r.json()
-    if (d.ok === true) { sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls = document.getElementById('pinLockScreen'); if (ls) { ls.style.transition = 'opacity .3s'; ls.style.opacity = '0'; setTimeout(function () { ls.style.display = 'none'; if (typeof _showWelcomeModal === 'function') _showWelcomeModal() }, 300) } }
-    else if (d.error === 'pin_not_set') { if (msg) msg.textContent = 'PIN nu este configurat'; sessionStorage.setItem('zeus_pin_unlocked', '1'); const ls2 = document.getElementById('pinLockScreen'); if (ls2) ls2.style.display = 'none' }
-    else if (d.error === 'session_invalid') { if (msg) msg.textContent = 'Sesiune expirat\u0103 \u2014 re-autentific\u0103-te' }
-    else { if (msg) msg.textContent = 'PIN incorect!'; inp.value = ''; inp.focus(); inp.classList.add('pin-lock-shake'); setTimeout(function () { inp.classList.remove('pin-lock-shake') }, 500) }
-  } catch (err) { if (msg) msg.textContent = 'Eroare de re\u021Bea' }
+    if (d.ok === true) {
+      _pinMarkUnlocked(); setMsg(''); setVis(false)
+      if (typeof _showWelcomeModal === 'function') setTimeout(_showWelcomeModal, 50)
+    } else if (d.error === 'pin_not_set') {
+      setMsg('PIN not configured'); _pinMarkUnlocked(); setVis(false)
+    } else if (d.error === 'session_invalid') {
+      setMsg('Session expired \u2014 re-authenticate')
+    } else {
+      setMsg('Incorrect PIN!'); inp.value = ''; inp.focus()
+      setShake(true); setTimeout(() => setShake(false), 500)
+    }
+  } catch (err) { setMsg('Network error') }
 }
 
 export async function pinActivate(): Promise<void> {
-  const inp = document.getElementById('pinInput') as HTMLInputElement | null; const conf = document.getElementById('pinConfirm') as HTMLInputElement | null; const msg = document.getElementById('pin-msg')
-  if (!inp || !conf) return; const val = inp.value.trim(); const val2 = conf.value.trim()
-  if (!val || val.length < 4) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN-ul trebuie s\u0103 aib\u0103 minim 4 caractere' }; return }
-  if (val !== val2) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN-urile nu coincid' }; return }
+  const inp = document.getElementById('pinInput') as HTMLInputElement | null
+  const conf = document.getElementById('pinConfirm') as HTMLInputElement | null
+  const curEl = document.getElementById('pinCurrent') as HTMLInputElement | null
+  const msg = document.getElementById('pin-msg')
+  if (!inp || !conf) return
+  const val = inp.value.trim(); const val2 = conf.value.trim()
+  const curVal = curEl ? curEl.value.trim() : ''
+  if (!val || val.length < 4) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN must be at least 4 characters' }; return }
+  if (val !== val2) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PINs do not match' }; return }
+  // [BATCH3-S] If PIN already set, user must provide current PIN to overwrite.
+  const alreadySet = await _pinIsSet()
+  if (alreadySet && !curVal) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Enter current PIN to change it' }; return }
   try {
-    const r = await fetch('/auth/pin/set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: val }) })
+    const body: any = { pin: val }
+    if (alreadySet) body.currentPin = curVal
+    const r = await fetch('/auth/pin/set', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify(body) })
     const d = await r.json()
-    if (d.ok) { inp.value = ''; conf.value = ''; _pinSetCache = true; if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + ' PIN activat!' }; _pinUpdateUI(); sessionStorage.setItem('zeus_pin_unlocked', '1') }
-    else if (d.error === 'session_invalid') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Sesiune expirat\u0103' } }
-    else { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Eroare la setarea PIN-ului' } }
-  } catch (err) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Eroare de re\u021Bea' } }
+    if (d.ok) {
+      inp.value = ''; conf.value = ''; if (curEl) curEl.value = ''
+      _pinSetCache = true
+      if (msg) { msg.style.color = 'var(--grn-bright)'; msg.innerHTML = _ZI.ok + (alreadySet ? ' PIN changed!' : ' PIN activated!') }
+      _pinUpdateUI(); _pinMarkUnlocked()
+    }
+    else if (d.error === 'session_invalid') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Session expired' } }
+    else if (d.error === 'current_pin_required') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Current PIN required' } }
+    else if (d.error === 'invalid_current_pin') { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Current PIN is incorrect' } }
+    else { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Error setting PIN' } }
+  } catch (err) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Network error' } }
 }
 
 export async function pinRemove(): Promise<void> {
-  try { const r = await fetch('/auth/pin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin' }); const d = await r.json(); if (d.ok) { _pinSetCache = false; sessionStorage.removeItem('zeus_pin_unlocked'); try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }; const msg = document.getElementById('pin-msg'); if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN dezactivat.' }; _pinUpdateUI() } } catch (_) { }
+  const curEl = document.getElementById('pinCurrent') as HTMLInputElement | null
+  const msg = document.getElementById('pin-msg')
+  const curVal = curEl ? curEl.value.trim() : ''
+  // [BATCH3-S] Require current PIN re-entry before disabling — matches banking-app UX.
+  if (!curVal) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Enter current PIN to deactivate' }; if (curEl) curEl.focus(); return }
+  try {
+    const r = await fetch('/auth/pin/remove', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Zeus-Request': '1' }, credentials: 'same-origin', body: JSON.stringify({ pin: curVal }) })
+    const d = await r.json()
+    if (d.ok) {
+      _pinSetCache = false; _pinClearUnlocked()
+      try { localStorage.removeItem('zeus_pin_hash') } catch (_) { }
+      if (curEl) curEl.value = ''
+      if (msg) { msg.style.color = 'var(--blu)'; msg.textContent = 'PIN disabled.' }
+      _pinUpdateUI()
+    } else if (d.error === 'invalid_pin') {
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Incorrect PIN' }
+      if (curEl) { curEl.value = ''; curEl.focus() }
+    } else if (d.error === 'pin_required') {
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'PIN required' }
+    } else if (d.error === 'session_invalid') {
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Session expired' }
+    } else {
+      if (msg) { msg.style.color = 'var(--red)'; msg.textContent = d.error || 'Error removing PIN' }
+    }
+  } catch (_) { if (msg) { msg.style.color = 'var(--red)'; msg.textContent = 'Network error' } }
 }
 
 export async function _pinUpdateUI(): Promise<void> {
-  const isSet = await _pinIsSet(); const status = document.getElementById('pinStatus'); const actBtn = document.getElementById('pinActivateBtn'); const remBtn = document.getElementById('pinRemoveBtn')
-  if (status) { status.innerHTML = isSet ? 'ACTIVAT ' + _ZI.ok : 'DEZACTIVAT'; status.style.color = isSet ? 'var(--grn-bright)' : '#556' }
-  if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' SCHIMB\u0102 PIN' : _ZI.lock + ' ACTIVEAZ\u0102 PIN'
+  const isSet = await _pinIsSet()
+  const status = document.getElementById('pinStatus')
+  const actBtn = document.getElementById('pinActivateBtn')
+  const remBtn = document.getElementById('pinRemoveBtn')
+  const curRow = document.getElementById('pinCurrentRow')
+  const inpLbl = document.getElementById('pinInputLabel')
+  if (status) { status.innerHTML = isSet ? 'ACTIVE ' + _ZI.ok : 'DISABLED'; status.style.color = isSet ? 'var(--grn-bright)' : '#556' }
+  if (actBtn) actBtn.innerHTML = isSet ? _ZI.rfsh + ' CHANGE PIN' : _ZI.lock + ' ACTIVATE PIN'
   if (remBtn) (remBtn as HTMLElement).style.display = isSet ? '' : 'none'
+  // [BATCH3-S] Current PIN field is visible only when a PIN is already set.
+  if (curRow) (curRow as HTMLElement).style.display = isSet ? '' : 'none'
+  if (inpLbl) inpLbl.textContent = isSet ? 'New PIN (4–8 cifre/litere)' : 'PIN (4–8 cifre/litere)'
 }
 
 // ===== BUILD INFO =====
@@ -76,13 +180,25 @@ export function _renderBuildInfo(): void {
 
 // ===== WELCOME MODAL =====
 let _wlcShown = false
-export function _showWelcomeModal(): void {
+export async function _showWelcomeModal(): Promise<void> {
   try {
-    if (_wlcShown) return; if (_pinIsSet() && !sessionStorage.getItem('zeus_pin_unlocked')) return; _wlcShown = true
+    if (_wlcShown) return; if ((await _pinIsSet()) && !_pinIsUnlocked()) return
+    try {
+      const _snoozeUntil = Number(localStorage.getItem('zeus_wlc_snoozeUntil') || 0)
+      if (_snoozeUntil > Date.now()) { _wlcShown = true; return }
+    } catch (_) {}
+    _wlcShown = true
     const m = document.getElementById('mwelcome'); if (!m) return; m.style.display = 'flex'
-    const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._resolvedEnv || (isLive ? 'REAL' : 'DEMO'); const modeLabel = _wlcEnv === 'TESTNET' ? 'TESTNET' : (isLive ? 'LIVE' : 'DEMO')
+    const isLive = (typeof AT !== 'undefined' && AT.mode === 'live'); const _wlcEnv = w._executionEnv; const _wlcReason = w._executionBlockedReason
+    let modeLabel: string, badgeClass: string
+    if (_wlcEnv === 'TESTNET') { modeLabel = 'TESTNET'; badgeClass = 'wlc-testnet' }
+    else if (_wlcEnv === 'REAL') { modeLabel = 'LIVE'; badgeClass = 'wlc-live' }
+    else if (_wlcEnv === 'DEMO') { modeLabel = 'DEMO'; badgeClass = 'wlc-demo' }
+    else if (isLive) { modeLabel = 'LOCKED'; badgeClass = 'wlc-locked' }
+    else { modeLabel = 'DEMO'; badgeClass = 'wlc-demo' }
+    void _wlcReason
     const greetEl = document.getElementById('wlcGreeting'); if (greetEl) greetEl.textContent = 'Welcome back, Commander'
-    const badgeEl = document.getElementById('wlcModeBadge'); if (badgeEl) { badgeEl.textContent = modeLabel; badgeEl.className = 'wlc-mode-badge ' + (_wlcEnv === 'TESTNET' ? 'wlc-testnet' : (isLive ? 'wlc-live' : 'wlc-demo')) }
+    const badgeEl = document.getElementById('wlcModeBadge'); if (badgeEl) { badgeEl.textContent = modeLabel; badgeEl.className = 'wlc-mode-badge ' + badgeClass }
     const verEl = document.getElementById('wlcVersion'); const b = w.BUILD || {}; if (verEl) verEl.textContent = 'ZEUS TERMINAL ' + (b.version || '').toUpperCase()
     const balEl = document.getElementById('wlcBalance'); if (balEl) { let bal = 0; if (typeof TP !== 'undefined') bal = isLive ? (TP.liveBalance || 0) : (TP.demoBalance || 0); balEl.textContent = '$' + bal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
     let todayTrades = 0, todayWins = 0, todayPnl = 0
@@ -112,7 +228,7 @@ export function setupPWAReloadBtn(): void { const btn = document.getElementById(
 
 // ===== MASTER RESET =====
 export function masterReset(): void {
-  if (!window.confirm('MASTER RESET\n\u0218terge TOATE datele \u0219i reporne\u0219te Zeus Terminal?')) return
+  if (!window.confirm('MASTER RESET\nDelete ALL data and restart Zeus Terminal?')) return
   try { localStorage.clear() } catch (e) { }
   if (typeof TP !== 'undefined') { TP.demoPositions = []; TP.livePositions = []; TP.demoBalance = 10000; TP.demoPnL = 0; TP.demoWins = 0; TP.demoLosses = 0 }
   if (typeof AT !== 'undefined') { AT.enabled = false; AT.killTriggered = false; AT.totalTrades = 0; AT.wins = 0; AT.losses = 0; AT.totalPnL = 0; AT.dailyPnL = 0; AT.realizedDailyPnL = 0; AT.closedTradesToday = 0; AT.lastTradeTs = 0; AT.lastTradeSide = null }
@@ -120,10 +236,13 @@ export function masterReset(): void {
   if (typeof w.PERF !== 'undefined') { Object.keys(w.PERF).forEach((k: string) => { w.PERF[k].wins = 0; w.PERF[k].losses = 0; w.PERF[k].weight = 1.0 }) }
   if (typeof w.DHF !== 'undefined') { ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d: string) => { if (w.DHF.days[d]) { w.DHF.days[d].wins = w.DHF.days[d].losses = w.DHF.days[d].trades = 0; w.DHF.days[d].wr = 60 } }); Object.keys(w.DHF.hours || {}).forEach((h: string) => { w.DHF.hours[h].wins = w.DHF.hours[h].losses = w.DHF.hours[h].trades = 0; w.DHF.hours[h].wr = 60 }) }
   if (typeof BM !== 'undefined') { BM.protectMode = false; BM.protectReason = '' }
-  if (typeof w.BlockReason !== 'undefined') w.BlockReason.clear()
+  if (typeof w.BlockReason !== 'undefined') {
+    w.BlockReason.clear()
+    try { useBrainStore.getState().setBlockReason(null) } catch (_e) { }
+  }
   if (typeof w.Intervals !== 'undefined') w.Intervals.clearAll()
   if (typeof w.WS !== 'undefined') w.WS.closeAll()
-  toast('Master Reset complet \u2014 re\u00EEnc\u0103rcare...')
+  toast('Master Reset complete \u2014 reloading...')
   setTimeout(() => location.reload(), 800)
 }
 
@@ -160,6 +279,23 @@ if (!w._closeAllBtnInited) {
     const width = getChartW(); const h = getChartH()
     try { w.mainChart.applyOptions({ width, height: h }); if (typeof w.cvdChart !== 'undefined' && w.cvdChart) w.cvdChart.applyOptions({ width, height: 60 }); try { if (w.cvdChart) w.cvdChart.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { }; try { const _mc = getMacdChart(); if (_mc) _mc.timeScale().applyOptions({ rightOffset: 12 }) } catch (_) { } } catch (e) { }
   }
-  window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(_resizeCharts, 120) })
+  // [BUG-T8 2026-05-13] Mobile viewport desync fix.
+  // Android Chrome browser-bar collapse/expand changes visualViewport.height
+  // BEFORE CSS layout recalc → app reads stale window.innerHeight → chart
+  // resize(stale) → black gap. Operator-reported intermitent + refresh-fixes.
+  // Fix: track visualViewport + orientationchange + write --app-height CSS
+  // var that viewport-aware CSS uses as final fallback (after 100dvh).
+  function _updateAppHeight() {
+    const vv = (window as any).visualViewport
+    const h = (vv && typeof vv.height === 'number') ? vv.height : window.innerHeight
+    document.documentElement.style.setProperty('--app-height', h + 'px')
+  }
+  window.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(function () { _updateAppHeight(); _resizeCharts() }, 120) })
+  window.addEventListener('orientationchange', function () { setTimeout(function () { _updateAppHeight(); _resizeCharts() }, 200) })
+  if ((window as any).visualViewport) {
+    (window as any).visualViewport.addEventListener('resize', function () { clearTimeout(_rzTimer); _rzTimer = setTimeout(function () { _updateAppHeight(); _resizeCharts() }, 120) })
+  }
+  // Initial set on load (before any resize event fires)
+  _updateAppHeight()
   window.addEventListener('zeusReady', function () { setTimeout(_resizeCharts, 500) })
 })()

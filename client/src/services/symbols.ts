@@ -29,10 +29,49 @@ export const ZStore = {
   dispatch(action: string, payload?: unknown) { this.emit(action, payload) },
 }
 
+// [Phase 2 S3.1d] Watchlist 24hr-change cache, refreshed via REST poll every
+// 30s when ALT_WS_FEEDS is ON (miniTicker stream is throttled). bookTicker
+// delivers live price; % change comes from /fapi/v1/ticker/24hr.
+const _wlChgCache: Record<string, number> = {}
+let _wlChgPollTimer: any = null
+
+async function _pollWatchlist24hr(): Promise<void> {
+  try {
+    const syms: string[] = (w.WL_SYMS || []).map((s: string) => s.toUpperCase())
+    if (syms.length === 0) return
+    const q = encodeURIComponent(JSON.stringify(syms))
+    const r = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbols=${q}`, { signal: AbortSignal.timeout(8000) })
+    if (!r.ok) return
+    const arr = await r.json()
+    if (!Array.isArray(arr)) return
+    for (const t of arr) {
+      if (!t || !t.symbol) continue
+      const pct = parseFloat(t.priceChangePercent)
+      if (Number.isFinite(pct)) _wlChgCache[t.symbol] = pct
+    }
+  } catch (_) { /* quiet */ }
+}
+
 export function connectWatchlist(): void {
-  const streams = w.WL_SYMS.map((s: string) => s.toLowerCase() + '@miniTicker').join('/')
+  const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
+  // [Phase 2 S3.1d] ALT_WS_FEEDS — swap @miniTicker (throttled) for
+  // @bookTicker (alive) and derive price from mid(bid,ask). % change comes
+  // from REST /fapi/v1/ticker/24hr polled every 30s.
+  const _streamType = _altFeeds ? '@bookTicker' : '@miniTicker'
+  const streams = w.WL_SYMS.map((s: string) => s.toLowerCase() + _streamType).join('/')
   const _wlGen = w.__wsGen
-  console.log(`[connectWatchlist] attempt | gen=${_wlGen} | streams count=${w.WL_SYMS.length}`)
+  console.log(`[connectWatchlist] attempt | gen=${_wlGen} | streams count=${w.WL_SYMS.length} | altFeeds=${_altFeeds}`)
+
+  // Start/refresh REST poll for 24hr change when ALT mode is ON
+  if (_altFeeds) {
+    if (_wlChgPollTimer) { try { clearInterval(_wlChgPollTimer) } catch (_) {} }
+    _pollWatchlist24hr()
+    _wlChgPollTimer = setInterval(_pollWatchlist24hr, 30000)
+  } else if (_wlChgPollTimer) {
+    try { clearInterval(_wlChgPollTimer) } catch (_) {}
+    _wlChgPollTimer = null
+  }
+
   w.WS.open('watchlist', `wss://fstream.binance.com/stream?streams=${streams}`, {
     onopen: () => {
       console.log(`[connectWatchlist] onopen | gen=${w.__wsGen} (my gen=${_wlGen})`)
@@ -44,8 +83,19 @@ export function connectWatchlist(): void {
       const j = JSON.parse(e.data); if (!j.data) return
       const d = j.data
       const sym = d.s as string
-      const price = +d.c; const open = +d.o
-      const chg = ((price - open) / open * 100)
+      let price: number, chg: number
+      if (_altFeeds) {
+        // bookTicker: mid of best bid/ask. % change from REST cache.
+        const bid = +d.b, ask = +d.a
+        if (!(bid > 0 && ask > 0)) return
+        price = (bid + ask) / 2
+        chg = _wlChgCache[sym] != null ? _wlChgCache[sym] : 0
+      } else {
+        // miniTicker: c=last, o=open
+        price = +d.c
+        const open = +d.o
+        chg = ((price - open) / open * 100)
+      }
       w.wlPrices[sym] = { price, chg, ts: Date.now() }
       w.allPrices[sym] = price
       if (typeof onNeuronScanUpdate === 'function') onNeuronScanUpdate(sym)

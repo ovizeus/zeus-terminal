@@ -1,20 +1,89 @@
-import { useUiStore, useMarketStore, useAuthStore } from '../../stores'
+import { useUiStore, useMarketStore, useAuthStore, useATStore, usePositionsStore } from '../../stores'
 
 export function Header() {
   const connected = useUiStore((s) => s.connected)
-  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
   const openModal = useUiStore((s) => s.openModal)
   const price = useMarketStore((s) => s.market.price)
   const prevPrice = useMarketStore((s) => s.market.prevPrice)
   const email = useAuthStore((s) => s.email)
   const role = useAuthStore((s) => s.role)
   const clearAuth = useAuthStore((s) => s.clearAuth)
+  // [Phase 12.A — Batch E1] Global exchange+env badge derived from server truth.
+  //   DEMO                 → single pill "DEMO"
+  //   TESTNET + binance    → "TESTNET · BINANCE"
+  //   TESTNET + bybit      → "TESTNET · BYBIT"
+  //   TESTNET + null       → "TESTNET · ACTIVE EXCHANGE" (honest fallback)
+  //   REAL    + binance    → "REAL · BINANCE"
+  //   REAL    + bybit      → "REAL · BYBIT"
+  //   REAL    + null       → "REAL · ACTIVE EXCHANGE"
+  //   executionEnv === null → "LOCKED" (no creds / blocked)
+  //   Click opens Settings modal so the user can jump straight to Exchange API.
+  const executionEnv = useUiStore((s) => s.executionEnv)
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const engineMode = useATStore((s) => s.mode) || 'demo'
+  const _badge = (() => {
+    if (engineMode === 'demo' || executionEnv === 'DEMO') {
+      return { text: 'DEMO', cls: 'zhb-demo' }
+    }
+    if (executionEnv === null) {
+      return { text: 'LOCKED', cls: 'zhb-locked' }
+    }
+    const exch = activeExchange === 'binance' ? 'BINANCE' : activeExchange === 'bybit' ? 'BYBIT' : 'ACTIVE EXCHANGE'
+    if (executionEnv === 'TESTNET') return { text: `TESTNET \u00B7 ${exch}`, cls: 'zhb-testnet' }
+    return { text: `REAL \u00B7 ${exch}`, cls: 'zhb-real' }
+  })()
 
   function handleLogout() {
-    if (!confirm('Sigur vrei să te deloghezi?')) return
+    if (!confirm('Are you sure you want to log out?')) return
     const wipeAndGo = () => {
       clearAuth()
-      // [ZT-AUD-C4] Wipe per-user client state so the next user on this
+      // [Phase 3B] Explicitly reset per-user client stores so any render cycle
+      // between clearAuth and navigation cannot show stale data from the
+      // previous user. Window mirrors cleared too — some legacy code reads
+      // w._executionEnv / w._resolvedEnv directly.
+      try { useUiStore.getState().reset() } catch {}
+      try { useATStore.getState().reset() } catch {}
+      try { usePositionsStore.getState().reset() } catch {}
+      try {
+        const w = window as any
+        w._executionEnv = null
+        w._executionBlockedReason = null
+        w._resolvedEnv = null
+        w._exchangeMode = null
+        w._apiConfigured = false
+        w._activeExchange = null
+        // AT engine flags — reset to safe defaults so stale state doesn't render briefly.
+        if (w.AT) {
+          w.AT.mode = 'demo'
+          w.AT._serverMode = ''
+          w.AT.enabled = false
+        }
+        if (w.S) w.S.mode = 'assist'
+        // [Phase 8A3] Reset legacy window.TP fields in-place. Imported references
+        // (state.ts exports TP; many modules hold the same object) stay valid but
+        // contents no longer show the previous user's balance/positions during
+        // any render cycle that fires before the navigation to /login.html.
+        if (w.TP) {
+          w.TP.demoOpen = false
+          w.TP.liveOpen = false
+          w.TP.demoSide = 'LONG'
+          w.TP.liveSide = 'LONG'
+          w.TP.demoBalance = 10000
+          w.TP.demoPnL = 0
+          w.TP.demoWins = 0
+          w.TP.demoLosses = 0
+          w.TP.demoPositions = []
+          w.TP.livePositions = []
+          w.TP.pendingOrders = []
+          w.TP.manualLivePending = []
+          w.TP.liveConnected = false
+          w.TP.liveExchange = null
+          w.TP.liveBalance = 0
+          w.TP.liveAvailableBalance = 0
+          w.TP.liveUnrealizedPnL = 0
+        }
+      } catch {}
+      // [ZT-AUD-C4] Wipe per-user client storage so the next user on this
       // browser cannot see cached settings, ARES state, positions, or skip
       // the PIN gate (sessionStorage survives window.location.href).
       try { localStorage.clear() } catch {}
@@ -66,24 +135,18 @@ export function Header() {
         </div>
         <div className="hdr-r">
           <div className="hdr-btns">
+            {/* [BUG6] Bell removed — Notifications reachable via Alerts modal and Alt+N.
+                Search moved into the bell's old slot (right of Decision Log). */}
+            <button className="sbtn" title="Decision Log" id="dlogBtn" onClick={() => openModal('decisionlog')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></button>
             <button className="sbtn" title="Search (Ctrl+K)" id="cmdPaletteBtn" onClick={() => openModal('cmdpalette')}><svg width="16" height="16"
               viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
               strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg></button>
-            <button className="sbtn" title="Decision Log" id="dlogBtn" onClick={() => openModal('decisionlog')}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></button>
-            {/* NC bell wrap — badge shown/hidden by _ncUpdateBadge() in old JS */}
-            <button className="sbtn" id="nc-bell-wrap" title="Notifications" onClick={() => openModal('notifications')}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              </svg>
-              <span id="nc-badge">0</span>
-            </button>
             <button className="sbtn" onClick={() => openModal('settings')} title="Settings Hub"><svg width="16"
-              height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="3" />
-              <path
-                d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg></button>
             <button className="sbtn" id="adminBtn" title="Admin Panel"
               style={{ display: role === 'admin' ? undefined : 'none' }} onClick={() => openModal('adminPage')}><svg width="16" height="16"
@@ -100,6 +163,35 @@ export function Header() {
             </svg></button>
           </div>
           <div className="hdr-price">
+            {/* [Phase 12.A — Batch E1] Exchange+env identity badge. Inline styles
+                (no global CSS touch) keep this additive and isolated. */}
+            <button
+              type="button"
+              id="hdrExchBadge"
+              title="Exchange + execution env. Click to open Settings."
+              onClick={() => openModal('settings')}
+              style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                letterSpacing: '1.5px',
+                padding: '3px 7px',
+                marginBottom: '2px',
+                borderRadius: '3px',
+                cursor: 'pointer',
+                fontFamily: 'var(--ff)',
+                border: '1px solid',
+                background: 'transparent',
+                color: _badge.cls === 'zhb-demo' ? '#aa44ff'
+                  : _badge.cls === 'zhb-testnet' ? '#f0c040'
+                  : _badge.cls === 'zhb-real' ? '#ff4466'
+                  : /* locked */ '#ff8844',
+                borderColor: _badge.cls === 'zhb-demo' ? '#aa44ff66'
+                  : _badge.cls === 'zhb-testnet' ? '#f0c04066'
+                  : _badge.cls === 'zhb-real' ? '#ff446666'
+                  : '#ff884466',
+                whiteSpace: 'nowrap',
+              }}
+            >{_badge.text}</button>
             <span id="userEmail" style={{ fontSize: '8px', color: '#556', letterSpacing: '0.5px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email}</span>
           </div>
         </div>

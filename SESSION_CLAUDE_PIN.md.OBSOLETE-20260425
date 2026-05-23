@@ -1,0 +1,121 @@
+# SESSION_CLAUDE_PIN — Zeus Terminal
+
+**Created UTC:** 2026-04-25 14:56
+**Repo:** /root/zeus-terminal
+**Branch:** post-v2/real-finish
+
+This file is a STATIC pointer to the current good Claude Code session for Zeus
+work. It is NOT runtime code, NOT in build, NOT referenced by anything in the
+app. Pure recovery note.
+
+---
+
+## CURRENT GOOD SESSION ID
+
+```
+8416db34-72fd-4493-9689-3fcebece26cc
+```
+
+**Verified facts at file creation time:**
+- Active jsonl: `~/.claude/projects/-root/8416db34-72fd-4493-9689-3fcebece26cc.jsonl`
+- File size: ~628 KB and growing (writes on every turn)
+- Span: 2026-04-25 14:10:15 UTC → still writing
+- User messages so far: 53
+- Recorded `cwd`: `/root` (NOT `/root/zeus-terminal` — important for `--continue`)
+- All other sessions in `~/.claude/projects/-root/` are older (most recent
+  alternative is `4e3dff34-…` last touched 14:16, which is the crashed one).
+
+---
+
+## EXACT COMMAND TO RESUME THIS SESSION
+
+```bash
+cd /root
+claude --resume 8416db34-72fd-4493-9689-3fcebece26cc
+```
+
+This is **GUARANTEED** to land in this session — `--resume <uuid>` is explicit
+and ignores mtime ordering.
+
+The `cd /root` matters: every existing Claude session in this machine has
+`cwd=/root`, and `--resume` looks up sessions under `~/.claude/projects/<encoded-cwd>/`.
+Running from `/root/zeus-terminal` will look in a different folder
+(`-root-zeus-terminal`) which has zero sessions and `--resume` will fail to find
+the UUID.
+
+---
+
+## FALLBACK (if you don't have the UUID handy)
+
+```bash
+cd /root
+claude --resume
+```
+
+This opens an interactive picker showing all sessions sorted by recency. Pick
+the one named `zeus-active` (if I named it via `-n`) OR the one with the most
+recent timestamp + `cwd=/root`.
+
+---
+
+## WARNING — `claude --continue` IS NOT GUARANTEED
+
+`claude --continue` (or `-c`) opens "the most recent conversation in the
+current directory". The "most recent" is decided by mtime of the jsonl file in
+`~/.claude/projects/<encoded-cwd>/`.
+
+Why this is dangerous in your situation:
+1. You have 13+ sessions in `~/.claude/projects/-root/`. Several were touched
+   today (today 2026-04-25): `8416db34` (14:55), `4b7fa8f7` (14:22),
+   `4e3dff34` (14:16), `200929f4` (13:32). Mtime can be touched even by
+   passive reads or by other Claude tooling.
+2. If you accidentally start a NEW empty session (any `claude` command
+   without `-r/-c`), it gets a brand-new UUID, becomes "most recent", and
+   `--continue` after that lands you in the empty new one instead of here.
+3. If you launch any other automated Claude task on this machine, that
+   session also competes for "most recent" status.
+
+**Do not rely on `--continue`. Always use `--resume <uuid>` from this file.**
+
+---
+
+## CONTEXT FOR THE NEW SESSION (paste this if needed)
+
+If you somehow open a NEW Claude session and want it to act with the same
+context as the current one, paste this prompt:
+
+```
+Read /root/zeus-terminal/SESSION_RECOVERY_CURRENT.md and continue from there.
+Do not implement anything. First report S3.1 status, S4 blocked, A1-B7 status,
+and current git diff. After that, wait for instructions.
+```
+
+That recovery file exists in the same folder and contains the full S-roadmap,
+flag state, S3.1 numbers, A1-B7 audit pointers, ML timing rules, pending bugs,
+and hard rules. The new Claude must re-verify everything against the live
+repo/DB before acting.
+
+---
+
+## SESSIONS YOU MIGHT ACCIDENTALLY OPEN (DO NOT CONFUSE)
+
+These are the four sessions touched today (2026-04-25). Only `8416db34` is the
+good one. The others are old or broken.
+
+| UUID | mtime | user_msgs | size | What it is |
+|---|---|---|---|---|
+| **8416db34**-72fd-4493-9689-3fcebece26cc | **14:55** | 53 (live) | 628 KB | **CURRENT GOOD ZEUS SESSION** |
+| 4b7fa8f7-0784-4036-8c14-336f22af32dc | 14:22 | 14 | 114 KB | Abandoned at 13:39 ("salut", "ce sa intamplat cu chatul") |
+| 4e3dff34-929f-4770-99e5-ed05505f3503 | 14:16 | 57 | 516 KB | **CRASHED at 14:03** — the one you don't want |
+| 200929f4-5767-66f3-877b-292853428c2d | 13:32 | 16,491 | 140 MB | Old long-running session — Phase 2 master audit done here on 2026-04-21 |
+
+Older sessions exist (back to 2026-03-27) — none are the active Zeus one.
+
+---
+
+## RULES THIS FILE ENFORCES
+
+- This file does NOT delete any session.
+- This file does NOT modify any Claude config.
+- This file does NOT touch Zeus runtime.
+- This file is safe to delete or update at will — it carries no runtime weight.

@@ -19,7 +19,7 @@ import { closeM } from '../data/marketDataWS'
 import { connectLiveAPI } from '../engine/indicators'
 import { toggleAssistArm } from '../trading/dsl'
 import { setBrainMode, setProfile, setDslMode } from '../engine/brain'
-import { _initAudio } from '../ui/dom2'
+import { _soundBadgeClick } from '../ui/dom2'
 import { aubToggleSFX, aubToggle } from '../engine/aub'
 import { toggleAdaptive } from '../trading/risk'
 import { srStripToggle } from '../core/config'
@@ -113,7 +113,7 @@ function reattachOnclickHandlers(): void {
     'dsl-swing': () => setDslMode('swing'),
     'dsl-defensive': () => setDslMode('defensive'),
     'dsl-tp': () => setDslMode('tp'),
-    'soundBadge': () => _initAudio(),
+    'soundBadge': () => _soundBadgeClick(),
     'aub-sfx-btn': () => { event?.stopPropagation(); aubToggleSFX() },
     'aub-toggle-btn': () => { event?.stopPropagation(); aubToggle() },
     'teacher-v2-teach-btn': () => w.teacherStart?.(),  // IIFE-registered in teacherAutopilot

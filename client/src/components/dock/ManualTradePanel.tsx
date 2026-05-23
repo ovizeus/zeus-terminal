@@ -1,18 +1,28 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { useUiStore, usePositionsStore, useMarketStore } from '../../stores'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useUiStore, usePositionsStore, useMarketStore, useATStore } from '../../stores'
 import { exportJournalCSV } from '../../services/storage'
 import { closeAllDemoPos } from '../../trading/autotrade'
-import { onDemoLevChange, placeDemoOrder, setLiveSide, onDemoOrdTypeChange, setLivePct, onLiveLevChange, promptResetDemo, promptAddFunds } from '../../data/marketDataTrading'
+import { onDemoLevChange, placeDemoOrder, onDemoOrdTypeChange, promptResetDemo, promptAddFunds, _countOppositeModeOpenPositions } from '../../data/marketDataTrading'
 import { attachConfirmClose } from '../../engine/events'
+import { DemoPositionRow, LivePositionRow, PendingOrderRow, JournalRow } from './PositionRows'
 
 const w = window as any
 
 /** 1:1 port of #panelDemo from public/index.html lines 2050-2204
  *  Syncs bidirectionally with w.TP for trading functions in marketDataTrading.ts */
 export function ManualTradePanel() {
-  const resolvedEnv = useUiStore((s) => s.resolvedEnv)
-  const apiConfigured = useUiStore((s) => s.apiConfigured)
-  const exchangeMode = useUiStore((s) => s.exchangeMode)
+  // Phase 2C: read canonical executionEnv. null = LOCKED (non-demo blocked).
+  const executionEnv = useUiStore((s) => s.executionEnv)
+  // [Phase 12.A — Batch D3] Canonical exchange identity for header+balance labels.
+  const activeExchange = useUiStore((s) => s.activeExchange)
+  const isPlacingLive = useUiStore((s) => s.isPlacingLive)
+  // [batch3-W+] Engine mode (demo/live) is the authoritative toggle for what
+  // the Manual panel shows. `exchangeMode` ('testnet'/'live'/null) only
+  // decorates labels (TESTNET vs REAL). Previously the panel used
+  // exchangeMode as engine mode, which broke everything when testnet API was
+  // configured while engine was in demo mode (gMode would be 'testnet' and
+  // match neither demo nor live positions).
+  const engineMode = useATStore((s) => s.mode) || 'demo'
   const [side, setSideLocal] = useState<'LONG' | 'SHORT'>(() => w.TP?.demoSide || 'LONG')
   const [ordType, setOrdType] = useState('market')
   const [marginMode, setMarginMode] = useState('cross')
@@ -22,7 +32,50 @@ export function ManualTradePanel() {
   const [size, setSize] = useState('100')
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
-  const balance = usePositionsStore((s) => s.demoBalance)
+  const demoBalance = usePositionsStore((s) => s.demoBalance)
+  const liveBalanceTotal = usePositionsStore((s) => s.liveBalance.totalBalance)
+  const manualPnl = usePositionsStore((s) => s.manualPnl)
+  const manualPnlClass = usePositionsStore((s) => s.manualPnlClass)
+  const manualWr = usePositionsStore((s) => s.manualWr)
+  const manualTrades = usePositionsStore((s) => s.manualTrades)
+  // [R9] Reactive arrays that replace the old `dangerouslySetInnerHTML` divs
+  const demoPositions = usePositionsStore((s) => s.demoPositions)
+  const livePositions = usePositionsStore((s) => s.livePositions)
+  const pendingOrders = usePositionsStore((s) => s.pendingOrders)
+  const manualLivePending = usePositionsStore((s) => s.manualLivePending)
+  const journal = usePositionsStore((s) => s.journal)
+
+  // [Phase 9B1] Manual panel = strict complement of AT panel.
+  //   A position belongs to Manual iff autoTrade !== true.
+  //   AT panel filters on autoTrade === true, so these two predicates are
+  //   mutually exclusive and jointly exhaustive — every live position is
+  //   rendered in exactly ONE panel. No more flicker between AT and Manual
+  //   when the server ships a minimal snapshot that drops ownership fields
+  //   (Phase 9A1 preserves existingPos; this guarantees the render follows).
+  const _isManualOwned = (p: any) => p.autoTrade !== true
+  const manualDemoPositions = demoPositions.filter((p: any) => !p.closed && _isManualOwned(p) && (p.mode || 'demo') === engineMode)
+  const pendingRender = (engineMode === 'live' ? manualLivePending : pendingOrders).filter((o: any) => o.status === 'WAITING')
+  const liveRender = livePositions.filter((p: any) => !p.closed && p.status !== 'closing' && _isManualOwned(p))
+  const isLiveMode = engineMode === 'live'
+  // [BUG-T3 FIX 2026-05-14] Count opposite-mode open positions. Surfaces hidden
+  // positions to user via the banner below — prevents forgotten unprotected
+  // exposure scenario where user switches mode and forgets active positions on
+  // the opposite side. Pure read from positionsStore + canonical helper.
+  const oppositeCount = _countOppositeModeOpenPositions(engineMode as 'demo' | 'live', demoPositions, livePositions)
+  const oppositeModeLabel = isLiveMode ? 'DEMO' : 'LIVE'
+  // null → LOCKED, REAL/TESTNET → as-is, DEMO label not rendered in live mode (engineMode guards)
+  const envLabel: 'TESTNET' | 'REAL' | 'LOCKED' = executionEnv === 'TESTNET' ? 'TESTNET' : (executionEnv === 'REAL' ? 'REAL' : 'LOCKED')
+  // [Phase 12.A — Batch D3] Exchange suffix for live-mode header + balance prefix.
+  //   'binance' → '· BINANCE', 'bybit' → '· BYBIT', null → '· ACTIVE EXCHANGE' (honest fallback).
+  const _exchSuffix = activeExchange === 'binance' ? ' \u00B7 BINANCE' : activeExchange === 'bybit' ? ' \u00B7 BYBIT' : ' \u00B7 ACTIVE EXCHANGE'
+  // [PERF-6] useMemo so the slice+sort runs only when `journal` reference
+  // changes, not on every ManualTradePanel re-render (which fires on each
+  // useUiStore / useATStore / useMarketStore selector tick — many times
+  // per second during live updates).
+  const journalSorted = useMemo(
+    () => journal.slice().sort((a: any, b: any) => (+(b.closedAt || b.openTs || 0)) - (+(a.closedAt || a.openTs || 0))),
+    [journal]
+  )
   // Sync side to w.TP.demoSide — do NOT call w.setDemoSide() because it does
   // innerHTML on #demoExec which conflicts with React's DOM ownership → removeChild crash
   const setSide = useCallback((s: 'LONG' | 'SHORT') => {
@@ -74,13 +127,21 @@ export function ManualTradePanel() {
   }
 
   function setPct(pct: number) {
-    const bal = balance // from positionsStore (reactive)
+    const bal = isLiveMode ? liveBalanceTotal : demoBalance
     setSize((bal * pct / 100).toFixed(0))
   }
 
   // Attach confirm-close pattern on CLOSE ALL button
   const closeAllRef = useRef<HTMLButtonElement>(null)
   const closeAllAttached = useRef(false)
+  // [UI-CMP-6] Synchronous double-click guard for PLACE ORDER button —
+  // useRef immune to React state batching. Pre-existing `disabled={isPlacingLive}`
+  // + `if (isPlacingLive) return` în onClick is a dual guard, but on browsers
+  // where click can fire on a button as it transitions to disabled (Android
+  // Chrome rapid-tap, mobile touch race), the FIRST click can pass before
+  // setIsPlacingLive(true) has propagated through React's render. Same pattern
+  // as UI-CMP-7 (welcome snooze).
+  const placeBusyRef = useRef(false)
   useEffect(() => {
     if (closeAllRef.current && !closeAllAttached.current && typeof attachConfirmClose === 'function') {
       attachConfirmClose(closeAllRef.current, closeAllDemoPos)
@@ -104,10 +165,19 @@ export function ManualTradePanel() {
       <div className="trade-line" />
     </div>
     <div className="trade-panel" id="panelDemo">
-      <div className="tp-hdr demo-hdr" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
-        <span>MANUAL TRADE</span>
+      <div className={`tp-hdr ${isLiveMode ? (envLabel === 'LOCKED' ? 'locked-hdr' : 'live-hdr') : 'demo-hdr'}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+        <span>{isLiveMode
+          ? (envLabel === 'TESTNET' ? `\u25CF MANUAL TRADE (TESTNET${_exchSuffix})` : (envLabel === 'REAL' ? `\u25CF MANUAL TRADE (REAL${_exchSuffix})` : '\u26D4 MANUAL TRADE (LOCKED)'))
+          : 'MANUAL TRADE'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span id="demoBalance" className="tp-bal">{`BAL: $${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</span>
+          <span id="demoBalance" className="tp-bal">{(() => {
+            if (isLiveMode) {
+              if (envLabel === 'LOCKED') return 'BAL: Exchange locked \u2014 not configured'
+              const prefix = envLabel === 'TESTNET' ? `BAL (TESTNET${_exchSuffix}): $` : `BAL (REAL${_exchSuffix}): $`
+              return prefix + liveBalanceTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            }
+            return `BAL: $${demoBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+          })()}</span>
           <button id="btnAddFunds" style={{ fontSize: '7px', padding: '2px 6px', background: '#001a33', border: '1px solid #00aaff66', color: '#00d4ff', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Add funds to demo balance" onClick={() => promptAddFunds()}>+ ADD</button>
           <button id="btnResetDemo" style={{ fontSize: '7px', padding: '2px 6px', background: '#1a0a00', border: '1px solid #ff880066', color: '#ff8800', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px' }} title="Reset demo balance to $10,000" onClick={() => promptResetDemo()}>↻ RESET</button>
         </span>
@@ -203,12 +273,25 @@ export function ManualTradePanel() {
         </div>
 
         {/* PLACE ORDER */}
-        <button id="demoExec" className="tp-exec demo-exec" onClick={() => { if (typeof placeDemoOrder === 'function') placeDemoOrder() }}>
+        <button id="demoExec" className={`tp-exec ${isLiveMode && envLabel === 'LOCKED' ? 'tp-exec-locked' : 'demo-exec'}`} disabled={isPlacingLive} onClick={() => {
+          // [UI-CMP-6] Sync useRef guard FIRST (immune to React state batch
+          // delay) — then keep the existing isPlacingLive belt-and-braces.
+          if (placeBusyRef.current) return
+          if (isPlacingLive) return
+          placeBusyRef.current = true
+          try {
+            if (typeof placeDemoOrder === 'function') placeDemoOrder()
+          } finally {
+            // Release on next frame so any synchronous onClick re-fire from
+            // the same touch event still sees busy=true. placeDemoOrder sets
+            // isPlacingLive itself for the longer async window.
+            setTimeout(() => { placeBusyRef.current = false }, 0)
+          }
+        }}>
           {(() => {
-            const mode = exchangeMode || 'demo'
-            const env = resolvedEnv || 'DEMO'
-            if (mode === 'live' && !apiConfigured) return '\uD83D\uDD12 PLACE ORDER (EXEC LOCKED)'
-            if (mode === 'live') { const tag = env === 'TESTNET' ? 'TESTNET' : 'LIVE'; return side === 'LONG' ? `\u25B2 OPEN LONG (${tag})` : `\u25BC OPEN SHORT (${tag})` }
+            if (isPlacingLive) return '\u23F3 PLACING\u2026'
+            if (isLiveMode && envLabel === 'LOCKED') return '\uD83D\uDD12 PLACE ORDER (LIVE MODE LOCKED)'
+            if (isLiveMode) { const tag = envLabel; return side === 'LONG' ? `\u25B2 OPEN LONG (${tag})` : `\u25BC OPEN SHORT (${tag})` }
             return side === 'LONG' ? '\u25B2 OPEN LONG' : '\u25BC OPEN SHORT'
           })()}
         </button>
@@ -218,28 +301,62 @@ export function ManualTradePanel() {
           <span><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h8v3L9 8l3 3v3H4v-3l3-3-3-3V2" /></svg> PENDING ORDERS</span>
           <span style={{ fontSize: '9px', color: 'var(--dim)' }}>0</span>
         </div>
-        {/* TS renderPendingOrders() owns this div via innerHTML — no React children allowed */}
-        <div id="pendingOrdersTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:4px">No pending orders</div>' }} />
+        {/* [R9] React-owned pending orders list — reads positionsStore.pendingOrders */}
+        <div id="pendingOrdersTable">
+          {pendingRender.length === 0
+            ? <div style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: 4 }}>No pending orders</div>
+            : pendingRender.map((ord: any) => <PendingOrderRow key={ord.id} ord={ord} />)}
+        </div>
 
         {/* OPEN POSITIONS */}
         <div className="tp-pos-hdr" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span>OPEN POSITIONS</span>
           <button ref={closeAllRef} id="closeAllBtn" data-close-id="closeAllBtn" style={{ fontSize: '7px', padding: '3px 10px', background: '#2a0010', border: '1px solid #ff4466', color: '#ff4466', borderRadius: '3px', cursor: 'pointer', fontFamily: 'var(--ff)', letterSpacing: '1px', userSelect: 'none' }}>✕ CLOSE ALL</button>
         </div>
-        {/* TS renderDemoPositions() owns this div via innerHTML — no React children allowed */}
-        <div id="demoPosTable" dangerouslySetInnerHTML={{ __html: '<div style="font-size:9px;color:var(--dim);text-align:center;padding:8px">No open positions</div>' }} />
-
-        {/* P&L STATS */}
-        <div className="tp-pnl-row">
-          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div id="demoPnL" className="tp-pnl-val neut">$0.00</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div id="demoWR" className="tp-pnl-val">0%</div></div>
-          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div id="demoTrades" className="tp-pnl-val">0</div></div>
+        {/* [BUG-T3 FIX 2026-05-14] Opposite-mode hidden positions banner.
+            Visible only when there ARE positions in the opposite mode (count > 0).
+            Surfaces the otherwise-silent UI hide so user knows there are active
+            positions on Binance / in demo tracking that aren't shown here. */}
+        {oppositeCount > 0 && (
+          <div
+            data-testid="bug-t3-opposite-mode-banner"
+            style={{
+              fontSize: 9,
+              padding: '6px 8px',
+              margin: '4px 0',
+              background: oppositeModeLabel === 'LIVE' ? '#2a0a0a' : '#2a1a00',
+              border: `1px solid ${oppositeModeLabel === 'LIVE' ? '#ff4466' : '#f0c040'}`,
+              borderRadius: 3,
+              color: oppositeModeLabel === 'LIVE' ? '#ff8899' : '#f0d080',
+              letterSpacing: '0.5px',
+              lineHeight: 1.5,
+            }}
+          >
+            ⚠️ {oppositeCount} {oppositeModeLabel} {oppositeCount === 1 ? 'position' : 'positions'} hidden — switch to {oppositeModeLabel} mode to view
+          </div>
+        )}
+        {/* [R9] React-owned demo/live-mode manual positions — reads positionsStore.demoPositions */}
+        <div id="demoPosTable">
+          {manualDemoPositions.length === 0
+            ? <div style={{ fontSize: 9, color: 'var(--dim)', textAlign: 'center', padding: 8 }}>No open positions</div>
+            : manualDemoPositions.map((pos: any) => <DemoPositionRow key={pos.id} pos={pos} />)}
         </div>
 
-        {/* LIVE/TESTNET OPEN POSITIONS (shown when mode=live, hidden in demo) */}
-        <div id="livePositionsInDemo" style={{ display: 'none', borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
+        {/* P&L STATS — React-owned via positionsStore (D9) */}
+        <div className="tp-pnl-row">
+          <div className="tp-pnl-cell"><div className="tp-lbl">TOTAL P&amp;L</div><div className={`tp-pnl-val ${manualPnlClass}`}>${manualPnl.toFixed(2)}</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">WIN RATE</div><div className="tp-pnl-val">{manualWr}</div></div>
+          <div className="tp-pnl-cell"><div className="tp-lbl">TRADES</div><div className="tp-pnl-val">{manualTrades}</div></div>
+        </div>
+
+        {/* [R9] LIVE/TESTNET OPEN POSITIONS — reactive on exchangeMode */}
+        <div id="livePositionsInDemo" style={{ display: isLiveMode ? 'block' : 'none', borderTop: '1px solid var(--brd)', paddingTop: '8px', marginTop: '4px' }}>
           <div style={{ fontSize: '8px', letterSpacing: '2px', color: 'var(--dim)', marginBottom: '6px' }}>EXCHANGE POSITIONS</div>
-          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
+          <div id="livePositionsDemo" style={{ fontSize: '9px', color: 'var(--dim)', textAlign: isLiveMode && liveRender.length ? 'left' : 'center' }}>
+            {liveRender.length === 0
+              ? <span>No exchange positions</span>
+              : liveRender.map((pos: any) => <LivePositionRow key={pos.id} pos={pos} />)}
+          </div>
         </div>
 
         {/* TRADE JOURNAL */}
@@ -251,82 +368,12 @@ export function ManualTradePanel() {
           <div className="jl-hdr">
             <span>TIME</span><span>SIDE</span><span>ENTRY→EXIT</span><span>PnL</span><span>REASON</span>
           </div>
-          {/* TS renderTradeJournal() owns this div via innerHTML — no React children allowed */}
-          <div className="journal-wrap" id="journalBody" dangerouslySetInnerHTML={{ __html: '<div style="padding:10px;text-align:center;font-size:8px;color:var(--dim)">No trades yet</div>' }} />
-        </div>
-      </div>
-    </div>
-    {/* LIVE TRADING PANEL — old JS populates via positions.js + liveApi.js */}
-    <div className="trade-panel" id="panelLive" style={{ display: 'none' }}>
-      <div className="tp-hdr live-hdr">
-        <span><span className="z-dot z-dot--red" /> LIVE TRADING — REAL FUNDS</span>
-        <span style={{ fontSize: '8px', color: '#ff8800' }}>
-          <svg className="z-i" viewBox="0 0 16 16"><path d="M8 2L1 14h14L8 2zM8 6v4m0 2h.01" /></svg> USE WITH CAUTION
-        </span>
-      </div>
-      <div className="tp-body">
-        <div className="api-section" id="apiSection">
-          <div id="apiStatus" style={{ padding: '12px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)', lineHeight: 1.8 }}>
-            Checking exchange connection...
+          {/* [R9] React-owned journal — reads positionsStore.journal */}
+          <div className="journal-wrap" id="journalBody">
+            {journalSorted.length === 0
+              ? <div style={{ padding: 10, textAlign: 'center', fontSize: 8, color: 'var(--dim)' }}>No trades yet</div>
+              : journalSorted.map((t: any) => <JournalRow key={(t.id || t.openTs || t.time) + ':' + (t.closedAt || '')} trade={t} />)}
           </div>
-          <button className="tp-exec live-exec" id="btnConnectExchange">CHECK CONNECTION</button>
-        </div>
-        <div id="liveOrderForm" style={{ display: 'none' }}>
-          <div className="tp-sides">
-            <button className="tp-side-btn long-btn act" id="liveLongBtn" onClick={() => setLiveSide?.('LONG')}>LONG ▲</button>
-            <button className="tp-side-btn short-btn" id="liveShortBtn" onClick={() => setLiveSide?.('SHORT')}>SHORT ▼</button>
-          </div>
-          <div className="tp-row">
-            <div className="tp-field">
-              <div className="tp-lbl">TYPE</div>
-              <select id="liveOrdType" className="tp-sel" defaultValue="market">
-                <option value="market">MARKET</option>
-                <option value="limit">LIMIT</option>
-              </select>
-            </div>
-            <div className="tp-field">
-              <div className="tp-lbl">LEVERAGE</div>
-              <select id="liveLev" className="tp-sel" defaultValue="20" onChange={() => onLiveLevChange()}>
-                <option value="1">1x</option><option value="2">2x</option><option value="5">5x</option>
-                <option value="10">10x</option><option value="20">20x</option><option value="50">50x</option>
-                <option value="100">100x</option><option value="custom">✏ Custom</option>
-              </select>
-            </div>
-          </div>
-          <div className="tp-row" id="liveCustomLevRow" style={{ display: 'none' }}>
-            <div className="tp-field" style={{ width: '100%' }}>
-              <div className="tp-lbl">LEVIER CUSTOM (1 — 150x)</div>
-              <input type="number" id="liveCustomLev" className="tp-inp" defaultValue={20} min={1} max={150} step={1} style={{ width: '100%' }} />
-            </div>
-          </div>
-          <div className="tp-row">
-            <div className="tp-field">
-              <div className="tp-lbl">SIZE (USDT)</div>
-              <input type="number" id="liveSize" className="tp-inp" defaultValue={50} step={10} />
-            </div>
-            <div className="tp-field">
-              <div className="tp-lbl">ENTRY</div>
-              <input type="number" id="liveEntry" className="tp-inp" placeholder="Market" step={0.1} />
-            </div>
-          </div>
-          <div style={{ background: '#1a0a0a', border: '1px solid #ff335533', borderRadius: '4px', padding: '7px 10px', margin: '4px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '8px', color: 'var(--dim)', letterSpacing: '1px' }}>
-              <svg className="z-i" viewBox="0 0 16 16"><path d="M5 6h.01M11 6h.01M4 3a5 5 0 018 0c1 2 1 4-1 6H5c-2-2-2-4-1-6M6 12v2m4-2v2" /></svg> LIQ PRICE
-            </span>
-            <span id="liveLiqPrice" style={{ fontSize: '13px', fontWeight: 700, color: '#ff5577', fontFamily: "'Cinzel',serif" }}>—</span>
-          </div>
-          <div className="tp-row">
-            <div className="tp-field"><div className="tp-lbl">TP</div><input type="number" id="liveTP" className="tp-inp" placeholder="—" step={0.1} /></div>
-            <div className="tp-field"><div className="tp-lbl">SL</div><input type="number" id="liveSL" className="tp-inp" placeholder="—" step={0.1} /></div>
-          </div>
-          <div className="tp-pcts">
-            <button className="tp-pct" onClick={() => setLivePct(25)}>25%</button>
-            <button className="tp-pct" onClick={() => setLivePct(50)}>50%</button>
-            <button className="tp-pct" onClick={() => setLivePct(75)}>75%</button>
-            <button className="tp-pct" onClick={() => setLivePct(100)}>100%</button>
-          </div>
-          <button className="tp-exec live-exec" onClick={() => placeDemoOrder?.()}><span className="z-dot z-dot--red" /> PLACE LIVE ORDER</button>
-          <div id="livePositions" style={{ fontSize: '9px', color: 'var(--dim)', marginTop: '8px', textAlign: 'center' }} dangerouslySetInnerHTML={{ __html: '&mdash;' }} />
         </div>
       </div>
     </div>

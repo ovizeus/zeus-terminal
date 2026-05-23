@@ -52,7 +52,7 @@ export function SignalRegistryPanel() {
             </button>
           </div>
           <div id="sr-list">
-            <div className="sr-empty">Niciun semnal înregistrat încă</div>
+            <div className="sr-empty">No signal registered yet</div>
           </div>
         </div>
       </div>

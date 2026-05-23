@@ -4,9 +4,9 @@
  * Phase 7E — HIGH RISK foundation file
  */
 
-import { getATObject, getTimezone, getKlines, getPrice } from '../services/stateAccessors'
+import { getATObject, getTimezone, getKlines, getPrice, getATMode } from '../services/stateAccessors'
 import { _safeLocalStorageSet } from '../services/storage'
-import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced, setProfile } from '../engine/brain'
+import { updateMTFAlignment, detectSweepDisplacement, computeMarketAtmosphere, detectRegimeEnhanced } from '../engine/brain'
 import { getLiveLev } from '../data/marketDataTrading'
 import { PhaseFilter } from '../engine/phaseFilter'
 import { RegimeEngine } from '../engine/regime'
@@ -17,8 +17,17 @@ import { loadPerfFromStorage } from '../engine/perfStore'
 import { loadDailyPnl } from '../engine/dailyPnl'
 import { renderATLog } from '../trading/autotrade'
 import { _aresRender } from '../engine/aresUI'
+import { syncMTFStore } from '../engine/mtfSync'
 import { escHtml } from '../utils/dom'
 import { _ZI } from '../constants/icons'
+
+import { useDslStore } from '../stores/dslStore'
+import { useBrainStore } from '../stores/brainStore'
+import { useAresStore } from '../stores/aresStore'
+import type { BrainMode } from '../types'
+// [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` cu POST response în
+// _usApplyPostResponse — filtrează own-echo WS push (no spurious GET refresh).
+import { setLastKnownSettingsTs } from '../services/settingsRealtime'
 const w = window as any // this file CREATES w.BM, w.BRAIN, w.DSL, w.PERF, w.DHF, w.USER_SETTINGS + 20 more — circular reads remain on w
 
 // ── MOVED-TO-TOP state objects ──────────────────────────────────
@@ -90,20 +99,20 @@ export let _ptStripOpen = false
 export const INDICATORS: any[] = [
   { id: 'ema', ico: _ZI.tup, name: 'EMA 50/200', desc: 'Exponential Moving Average', cat: 'trend', def: true },
   { id: 'wma', ico: _ZI.wave, name: 'WMA 20/50', desc: 'Weighted Moving Average', cat: 'trend', def: true },
-  { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + Stop Loss dinamic', cat: 'trend', def: true },
-  { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volum pe niveluri de pret', cat: 'volume', def: true },
+  { id: 'st', ico: _ZI.dia, name: 'Supertrend', desc: 'Trend + dynamic Stop Loss', cat: 'trend', def: true },
+  { id: 'vp', ico: _ZI.chart, name: 'Volume Profile', desc: 'Volume at price levels', cat: 'volume', def: true },
   { id: 'cvd', ico: _ZI.chart, name: 'CVD', desc: 'Cumulative Volume Delta', cat: 'volume', def: false },
   { id: 'macd', ico: _ZI.bolt, name: 'MACD', desc: 'Moving Avg Convergence Div', cat: 'momentum', def: false },
-  { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatilitate si trend', cat: 'vol', def: false },
-  { id: 'stoch', ico: _ZI.wave, name: 'Stochastic RSI', desc: 'RSI imbunatatit cu Stoch', cat: 'momentum', def: false },
+  { id: 'bb', ico: _ZI.tgt, name: 'Bollinger Bands', desc: 'Volatility and trend', cat: 'vol', def: false },
+  { id: 'stoch', ico: _ZI.wave, name: 'Stochastic RSI', desc: 'RSI enhanced with Stoch', cat: 'momentum', def: false },
   { id: 'obv', ico: _ZI.chart, name: 'OBV', desc: 'On-Balance Volume', cat: 'volume', def: false },
-  { id: 'atr', ico: _ZI.ruler, name: 'ATR', desc: 'Average True Range - volat', cat: 'vol', def: false },
+  { id: 'atr', ico: _ZI.ruler, name: 'ATR', desc: 'Average True Range - volatility', cat: 'vol', def: false },
   { id: 'vwap', ico: _ZI.chart, name: 'VWAP', desc: 'Volume Weighted Avg Price', cat: 'trend', def: false },
-  { id: 'ichimoku', ico: _ZI.cloud, name: 'Ichimoku Cloud', desc: 'Sistem complet japonez', cat: 'trend', def: false },
-  { id: 'fib', ico: _ZI.hex, name: 'Fibonacci', desc: 'Retracement auto pe swing', cat: 'support', def: false },
-  { id: 'pivot', ico: _ZI.tgt, name: 'Pivot Points', desc: 'Suport/Rezistenta zilnice', cat: 'support', def: false },
+  { id: 'ichimoku', ico: _ZI.cloud, name: 'Ichimoku Cloud', desc: 'Full Japanese system', cat: 'trend', def: false },
+  { id: 'fib', ico: _ZI.hex, name: 'Fibonacci', desc: 'Auto swing retracement', cat: 'support', def: false },
+  { id: 'pivot', ico: _ZI.tgt, name: 'Pivot Points', desc: 'Daily Support/Resistance', cat: 'support', def: false },
   { id: 'rsi14', ico: _ZI.bolt, name: 'RSI 14', desc: 'Relative Strength Index', cat: 'momentum', def: false },
-  { id: 'mfi', ico: _ZI.money, name: 'Money Flow Index', desc: 'RSI bazat pe volum', cat: 'volume', def: false },
+  { id: 'mfi', ico: _ZI.money, name: 'Money Flow Index', desc: 'Volume-based RSI', cat: 'volume', def: false },
   { id: 'cci', ico: _ZI.ruler, name: 'CCI', desc: 'Commodity Channel Index', cat: 'momentum', def: false },
 ]
 export let _macdChart: any = null, _macdLineSeries: any = null, _macdSigSeries: any = null, _macdHistSeries: any = null
@@ -212,7 +221,7 @@ export function _srRenderList() {
   if (!el_l) return
   const items = SIGNAL_REGISTRY.signals.slice(0, 30)
   if (!items.length) {
-    el_l.innerHTML = '<div class="sr-empty">Niciun semnal \u00EEnregistrat \u00EEnc\u0103</div>'
+    el_l.innerHTML = '<div class="sr-empty">No signal registered yet</div>'
     return
   }
   el_l.innerHTML = items.map((s: any) => {
@@ -266,30 +275,35 @@ export function _srEnsureVisible() {
     srSec.style.removeProperty('display')
     srSec.style.removeProperty('max-height')
     srSec.style.removeProperty('overflow')
-    const alreadyIn = srSec.closest('#zeus-groups') !== null
-    if (!alreadyIn) {
-      const aub = mi.querySelector('#aub')
-      if (aub && aub.nextSibling) {
-        mi.insertBefore(srSec, aub.nextSibling)
-      } else if (aub) {
-        mi.appendChild(srSec)
+    // [FIX] React now owns sr-strip via data-panel-id="sigreg" wrapper inside #zeus-groups.
+    // If sr-strip's parent has data-panel-id, leave it alone — re-parenting would empty the wrapper.
+    const parentHasPanelId = srSec.parentElement && srSec.parentElement.hasAttribute('data-panel-id')
+    if (!parentHasPanelId) {
+      const alreadyIn = srSec.closest('#zeus-groups') !== null
+      if (!alreadyIn) {
+        const aub = mi.querySelector('#aub')
+        if (aub && aub.nextSibling) {
+          mi.insertBefore(srSec, aub.nextSibling)
+        } else if (aub) {
+          mi.appendChild(srSec)
+        } else {
+          mi.insertBefore(srSec, mi.firstChild)
+        }
+        console.log('[SR] Fallback: sr-sec fortat in zeus-groups')
       } else {
-        mi.insertBefore(srSec, mi.firstChild)
-      }
-      console.log('[SR] Fallback: sr-sec fortat in zeus-groups')
-    } else {
-      const aub = mi.querySelector('#aub')
-      if (aub) {
-        const nodes = Array.from(mi.children)
-        const aubIdx = nodes.indexOf(aub)
-        const srIdx = nodes.indexOf(srSec)
-        if (srIdx !== aubIdx + 1) {
-          if (aub.nextSibling) {
-            mi.insertBefore(srSec, aub.nextSibling)
-          } else {
-            mi.appendChild(srSec)
+        const aub = mi.querySelector('#aub')
+        if (aub) {
+          const nodes = Array.from(mi.children)
+          const aubIdx = nodes.indexOf(aub)
+          const srIdx = nodes.indexOf(srSec)
+          if (srIdx !== aubIdx + 1) {
+            if (aub.nextSibling) {
+              mi.insertBefore(srSec, aub.nextSibling)
+            } else {
+              mi.appendChild(srSec)
+            }
+            console.log('[SR] Fallback: sr-sec repositioned after AUB')
           }
-          console.log('[SR] Fallback: sr-sec repositionat dupa AUB')
         }
       }
     }
@@ -347,8 +361,8 @@ export function _ncRenderList() {
   )
 
   if (!items.length) {
-    list.innerHTML = '<div class="nc-empty">Nicio notificare' +
-      (f !== 'all' ? ' pentru filtrul selectat' : '') + '</div>'
+    list.innerHTML = '<div class="nc-empty">No notifications' +
+      (f !== 'all' ? ' for selected filter' : '') + '</div>'
     return
   }
 
@@ -467,10 +481,11 @@ let _ucPushTimer: any = null
 let _ucPulling = false
 const _ucVersion = 4
 let _ucPushPending = false
+let _ucLastPushTs = 0
 // [ZT-AUD-#11] Throttle _ucPushBeacon: collapse rapid bursts into 1 trailing
 // push every UC_BEACON_MIN_MS, preventing 5-50 push/min spam loops triggered
 // by ws sync → pullAndMerge → _userCtxPull → re-push when local newer.
-const UC_BEACON_MIN_MS = 1500
+const UC_BEACON_MIN_MS = 5000
 let _ucBeaconLastTs = 0
 let _ucBeaconTrailingTimer: any = null
 
@@ -490,21 +505,45 @@ export function _ucMarkDirty(section: string) {
 }
 w._ucMarkDirty = _ucMarkDirty
 
+// [R20.1] Section envelope ceiling. Server rejects at 64KB/section.
+// We trim at 58KB to leave headroom for the { ts, data } wrapper.
+const _SECTION_TRIM_TARGET = 58 * 1024
+function _trimRecordArrayToBudget(arr: any[], min: number): any[] {
+  if (!Array.isArray(arr)) return arr
+  let trimmed = arr
+  while (trimmed.length > min && JSON.stringify(trimmed).length > _SECTION_TRIM_TARGET) {
+    trimmed = trimmed.slice(0, Math.max(min, Math.floor(trimmed.length * 0.9)))
+  }
+  return trimmed
+}
+function _guardedArraySection(lsKey: string, parsed: any[] | null, min: number): any[] | null {
+  if (!Array.isArray(parsed)) return parsed
+  if (JSON.stringify(parsed).length <= _SECTION_TRIM_TARGET) return parsed
+  const trimmed = _trimRecordArrayToBudget(parsed, min)
+  try { localStorage.setItem(lsKey, JSON.stringify(trimmed)) } catch (_) { /* */ }
+  console.warn('[UC] guarded section', lsKey, '— trimmed', parsed.length, '→', trimmed.length)
+  return trimmed
+}
+
 function _buildAllSections(): any {
   const _t = function (s: string) { return _ucDirtyTs[s] || 0 }
   const _g = function (k: string) { try { return localStorage.getItem(k) } catch (_) { return null } }
   const _j = function (k: string) { try { return JSON.parse(_g(k) || 'null') } catch (_) { return null } }
+  // [BATCH3-U] DSL mode is per-user — prefer the scoped key, fall back to the
+  // global one only when no user id is present (pre-login push paths).
+  const _uid = (w as any)._zeusUserId
+  const _dslMode = _uid ? (_g('zeus_dsl_mode:' + _uid) || _g('zeus_dsl_mode')) : _g('zeus_dsl_mode')
   return {
     settings: { ts: _t('settings'), data: _j('zeus_user_settings') },
     uiContext: { ts: _t('uiContext'), data: _j('zeus_ui_context') },
-    panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _g('zeus_dsl_mode'), adaptStrip: _g('zeus_adaptive_strip_open') } },
+    panels: { ts: _t('panels'), data: { groups: _j('zeus_groups'), dslStrip: _g('zeus_dsl_strip_open'), atStrip: _g('zeus_at_strip_open'), ptStrip: _g('zeus_pt_strip_open'), mtfOpen: _g('zeus_mtf_open'), dslMode: _dslMode, adaptStrip: _g('zeus_adaptive_strip_open') } },
     indSettings: { ts: _t('indSettings'), data: _j('zeus_ind_settings') },
     llvSettings: { ts: _t('llvSettings'), data: _j('zeus_llv_settings') },
     uiScale: { ts: _t('uiScale'), data: _g('zeus_ui_scale') },
     signalRegistry: { ts: _t('signalRegistry'), data: _j('zeus_signal_registry') },
     perfStats: { ts: _t('perfStats'), data: _j('zeus_perf_v1') },
     dailyPnl: { ts: _t('dailyPnl'), data: _j('zeus_daily_pnl_v1') },
-    postmortem: { ts: _t('postmortem'), data: _j('zeus_postmortem_v1') },
+    postmortem: { ts: _t('postmortem'), data: _guardedArraySection('zeus_postmortem_v1', _j('zeus_postmortem_v1'), 10) },
     adaptive: { ts: _t('adaptive'), data: _j('zeus_adaptive_v1') },
     notifications: { ts: _t('notifications'), data: _j('zeus_notifications') },
     scannerSyms: { ts: _t('scannerSyms'), data: _j('zeus_mscan_syms') },
@@ -514,6 +553,19 @@ function _buildAllSections(): any {
     teacherData: { ts: _t('teacherData'), data: { config: _j('zeus_teacher_config'), sessions: _j('zeus_teacher_sessions'), lessons: _j('zeus_teacher_lessons'), stats: _j('zeus_teacher_stats'), memory: _j('zeus_teacher_memory'), v2state: _j('zeus_teacher_v2state'), panelOpen: _g('zeus_teacher_panel_open') } },
     ariaNovaHud: { ts: _t('ariaNovaHud'), data: { aria: _j('aria_v1'), nova: _j('nova_v1') } },
     aresData: { ts: _t('aresData'), data: { wallet: _j('ARES_MISSION_STATE_V1_vw2'), positions: _j('ARES_POSITIONS_V1'), state: _j('ARES_STATE_V1'), init: _j('ares_init_v1'), lastTradeTs: _g('ARES_LAST_TRADE_TS'), journal: _j('ARES_JOURNAL_V1') } },
+    // [Pack D] chart-level toggle state that previously did not persist
+    // across refresh (sessions, vwapOn, heatmap, zsSettings, overlays).
+    // Read both from localStorage (toggleSession + cloudSave write here)
+    // AND from `w.S` directly so the push contains the freshest in-memory
+    // value even if the operator hasn't triggered a save-to-cloud since
+    // toggling. The pull restore (config.ts ~755+) writes back to S + LS.
+    chartExtras: { ts: _t('chartExtras'), data: {
+      sessions:        _j('zeus_chart_sessions') || ((w as any).S && (w as any).S.sessions) || null,
+      vwapOn:          ((w as any).S && (w as any).S.vwapOn) ? '1' : '0',
+      heatmapSettings: ((w as any).S && (w as any).S.heatmapSettings) || null,
+      zsSettings:      ((w as any).S && (w as any).S.zsSettings) || null,
+      overlays:        ((w as any).S && (w as any).S.overlays) || null,
+    } },
   }
 }
 
@@ -524,50 +576,15 @@ export function _userCtxPushNow() {
 w._userCtxPushNow = _userCtxPushNow
 
 export function _userCtxPush() {
+  // [R2] Unify onto _ucPushBeacon — single throttled path, avoids duplicate POST spam
+  // (prev bug: parallel fetch here + beacon path produced 20+ POSTs/min per user).
+  // Callers get the same debounce shape: setTimeout 5s trailing, then beacon throttle.
   if (_ucPushTimer) clearTimeout(_ucPushTimer)
   _ucPushTimer = setTimeout(function _ucPushExec() {
-    try {
-      if (typeof w._zsMarkPush === 'function') w._zsMarkPush()
-      const payload = { _v: _ucVersion, ts: Date.now(), sections: _buildAllSections() }
-      fetch('/api/sync/user-context', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-        credentials: 'same-origin'
-      }).then(function (r) {
-        if (!r.ok) { console.warn('[UC] push failed:', r.status); _ucPushPending = true; return null }
-        return r.json()
-      }).then(function (json: any) {
-        if (!json) return
-        console.log('[UC] \u2705 pushed'); _ucPushPending = false
-        if (json.storedSettings && json.storedSettings.data) {
-          try {
-            const sent = payload.sections.settings ? payload.sections.settings.data : null
-            const stored = json.storedSettings.data
-            if (sent && stored) {
-              const sentAT = typeof sent === 'string' ? JSON.parse(sent) : sent
-              const storedAT = typeof stored === 'string' ? JSON.parse(stored) : stored
-              if (sentAT.autoTrade && storedAT.autoTrade) {
-                const keys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin']
-                const mismatches: string[] = []
-                keys.forEach(function (k) {
-                  if (sentAT.autoTrade[k] !== storedAT.autoTrade[k]) {
-                    mismatches.push(k + ':sent=' + sentAT.autoTrade[k] + '/stored=' + storedAT.autoTrade[k])
-                  }
-                })
-                if (mismatches.length > 0) {
-                  console.error('[UC] \u26a0\ufe0f SETTINGS MISMATCH:', mismatches.join(', '))
-                  if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('WARN', '[UC] settings mismatch after push', { mismatches: mismatches })
-                } else {
-                  console.log('[UC] \u2705 settings validated \u2014 server matches client')
-                }
-              }
-            }
-          } catch (_) { /* */ }
-        }
-      }).catch(function (e: any) { console.warn('[UC] push err:', e.message); _ucPushPending = true })
-    } catch (_) { /* */ }
-  }, 1000)
+    _ucPushTimer = null
+    if (typeof w._zsMarkPush === 'function') w._zsMarkPush()
+    _ucPushBeacon()
+  }, 5000)
 }
 
 export function _userCtxPull() {
@@ -589,7 +606,7 @@ export function _userCtxPull() {
       let localUS: any = JSON.parse(localStorage.getItem('zeus_user_settings') || 'null')
       let localTs = (localUS && localUS._syncTs) ? localUS._syncTs : 0
       const serverSettingsTs = (sec.settings && sec.settings.ts) ? sec.settings.ts : 0
-      if (localTs > serverSettingsTs + 5000 && localTs > 0) {
+      if (localTs > serverSettingsTs + 5000 && localTs > 0 && (Date.now() - _ucLastPushTs > 10000)) {
         console.log('[UC] local significantly newer than server (' + localTs + ' > ' + serverSettingsTs + ') — re-pushing')
         _ucPushBeacon()
       }
@@ -638,7 +655,20 @@ export function _userCtxPull() {
           if (pd.atStrip != null) localStorage.setItem('zeus_at_strip_open', pd.atStrip)
           if (pd.ptStrip != null) localStorage.setItem('zeus_pt_strip_open', pd.ptStrip)
           if (pd.mtfOpen != null) localStorage.setItem('zeus_mtf_open', pd.mtfOpen)
-          if (pd.dslMode != null) localStorage.setItem('zeus_dsl_mode', pd.dslMode)
+          // [BATCH3-U] Persist server-pulled DSL mode under the per-user key and
+          // hydrate the canonical store so UI reflects the value without a full
+          // reload. Pre-fix: wrote to the shared "zeus_dsl_mode" which leaked
+          // between accounts, and never touched useDslStore — so the UI kept
+          // showing whatever the store had (null → fallback "atr").
+          if (pd.dslMode != null) {
+            const _uid = (w as any)._zeusUserId
+            const _key = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+            try { localStorage.setItem(_key, pd.dslMode) } catch (_) { }
+            const _valid = ['atr', 'fast', 'swing', 'defensive', 'tp']
+            if (_valid.includes(pd.dslMode)) {
+              try { useDslStore.getState().setMode(pd.dslMode) } catch (_) { }
+            }
+          }
           if (pd.adaptStrip != null) localStorage.setItem('zeus_adaptive_strip_open', pd.adaptStrip)
           _ucDirtyTs.panels = sec.panels.ts; _dirty = true
           console.log('[UC] \u2705 panels merged from server')
@@ -752,6 +782,37 @@ export function _userCtxPull() {
           if (ad2.journal != null) localStorage.setItem('ARES_JOURNAL_V1', JSON.stringify(ad2.journal))
           _ucDirtyTs['aresData'] = sec.aresData.ts; _dirty = true
           console.log('[UC] \u2705 aresData merged from server')
+        }
+      }
+      // [Pack D] Restore chart-extras (sessions, vwapOn, heatmap, zsSettings,
+      // overlays). Writes both into S.* (so the next render picks them up
+      // immediately) and into localStorage (so a fast refresh before the
+      // next pull still has them). If the server section is older than
+      // local edits (`_ucDirtyTs['chartExtras']` higher), skip \u2014 local wins.
+      if (sec.chartExtras && sec.chartExtras.data) {
+        const ceLocalDirty = _ucDirtyTs['chartExtras'] || 0
+        if (sec.chartExtras.ts > ceLocalDirty) {
+          const ce = sec.chartExtras.data
+          if (ce.sessions != null) {
+            try { localStorage.setItem('zeus_chart_sessions', JSON.stringify(ce.sessions)) } catch (_) { /* */ }
+            if ((w as any).S) { (w as any).S.sessions = { asia: !!ce.sessions.asia, london: !!ce.sessions.london, ny: !!ce.sessions.ny } }
+            // Re-render overlays after merge so the boxes appear without a manual toggle.
+            try { if (typeof (w as any)._renderSessionOverlays === 'function') (w as any)._renderSessionOverlays() } catch (_) { /* */ }
+          }
+          if (ce.vwapOn != null && (w as any).S) {
+            (w as any).S.vwapOn = ce.vwapOn === '1' || ce.vwapOn === true
+          }
+          if (ce.heatmapSettings != null && (w as any).S) {
+            (w as any).S.heatmapSettings = ce.heatmapSettings
+          }
+          if (ce.zsSettings != null && (w as any).S) {
+            (w as any).S.zsSettings = ce.zsSettings
+          }
+          if (ce.overlays != null && (w as any).S) {
+            (w as any).S.overlays = ce.overlays
+          }
+          _ucDirtyTs['chartExtras'] = sec.chartExtras.ts; _dirty = true
+          console.log('[UC] \u2705 chartExtras merged from server')
         }
       }
       if (_dirty) { try { localStorage.setItem('zeus_uc_dirty_ts', JSON.stringify(_ucDirtyTs)) } catch (_) { /* */ } }
@@ -1028,7 +1089,8 @@ export function updateLiqCycle() {
     lc.sweepsTotal = sweepsCount
     lc.trapsTotal = trapsCount
     lc.trapRate = sweepsCount > 0 ? Math.round((trapsCount / sweepsCount) * 100) / 100 : null
-    const magnets = (typeof S !== 'undefined' && S.magnets) ? S.magnets : { above: [], below: [] }
+    const S = (window as any).S
+    const magnets = (typeof S !== 'undefined' && S?.magnets) ? S.magnets : { above: [], below: [] }
     const nearAbove = magnets.above?.[0]
     const nearBelow = magnets.below?.[0]
     lc.magnetAboveDist = (nearAbove && curPrice)
@@ -1052,149 +1114,21 @@ export function updateLiqCycle() {
   }
 }
 
+// [ZT3-C] renderMTFPanel() trimmed to strip-bar only. MTFPanel rows + RE/PF
+// blocks are now fed by mtfStore (see engine/mtfSync.ts + MTFPanel.tsx).
+// This function writes only the condensed strip-bar elements that still live
+// in legacy DOM (injected by initMTFStrip via innerHTML): #mtf-strip-score,
+// #mtf-bar-re, #mtf-bar-regime, #mtf-bar-score, #mtf-bar-vol, #mtf-bar-squeeze.
+// Bar→React migration is out of scope for ZT3; tracked as ZT4.
 export function renderMTFPanel() {
   try {
     const BM = w.BM
-    const st = BM.structure
-    const _el = (id: string) => document.getElementById(id)
-    const _cls = (el: any, cls: string) => { if (el) { el.className = 'mtf-val'; if (cls) el.classList.add(cls) } }
-    const rEl = _el('mtf-regime')
-    if (rEl) {
-      const rMap: any = { trend: 'good', breakout: 'good', squeeze: 'warn', range: 'warn', panic: 'bad', volatile: 'bad', unknown: '', 'insufficient data': '' }
-      rEl.textContent = (st.regime || '\u2014').toUpperCase()
-      _cls(rEl, rMap[st.regime] || '')
-    }
-    const sEl = _el('mtf-structure')
-    if (sEl) {
-      sEl.textContent = st.structureLabel || '\u2014'
-      _cls(sEl, st.structureLabel === 'HH/HL' ? 'good' : st.structureLabel === 'LH/LL' ? 'bad' : 'warn')
-    }
-    const aEl = _el('mtf-atr')
-    if (aEl) {
-      aEl.textContent = st.atrPct ? st.atrPct.toFixed(2) + '%' : '\u2014'
-      _cls(aEl, st.atrPct > 2 ? 'bad' : st.atrPct > 1 ? 'warn' : 'good')
-    }
-    const vEl = _el('mtf-vol')
-    if (vEl) {
-      vEl.textContent = (st.volMode || '\u2014').toUpperCase()
-      _cls(vEl, st.volMode === 'expansion' ? 'good' : st.volMode === 'contraction' ? 'warn' : '')
-    }
-    const sqEl = _el('mtf-squeeze')
-    if (sqEl) {
-      sqEl.innerHTML = st.squeeze ? _ZI.bolt + ' ACTIV' : 'OFF'
-      _cls(sqEl, st.squeeze ? 'warn' : '')
-    }
-    const adxEl = _el('mtf-adx')
-    if (adxEl) {
-      adxEl.textContent = st.adx || '\u2014'
-      _cls(adxEl, st.adx > 30 ? 'good' : st.adx > 15 ? 'warn' : 'bad')
-    }
-    const vrEl = _el('mtf-vol-regime')
-    if (vrEl) {
-      vrEl.textContent = BM.volRegime || '\u2014'
-      const vrMap: any = { 'EXTREME': 'bad', 'HIGH': 'warn', 'MED': '', 'LOW': 'good' }
-      _cls(vrEl, vrMap[BM.volRegime] || '')
-    }
-    const vpEl = _el('mtf-vol-pct')
-    if (vpEl) {
-      vpEl.textContent = BM.volPct != null ? BM.volPct + 'th percentila' : '\u2014 (acumulez date)'
-      _cls(vpEl, BM.volPct != null ? (BM.volPct >= 85 ? 'bad' : BM.volPct >= 60 ? 'warn' : BM.volPct < 30 ? 'good' : '') : '')
-    }
-    const lc = BM.liqCycle
-    const swEl = _el('mtf-sweep')
-    if (swEl) {
-      const sw = lc.sweepSimple
-      if (sw && sw.dir !== '\u2014') {
-        swEl.textContent = sw.dir + (sw.strength > 0 ? ' ' + sw.strength + '%' : '')
-        _cls(swEl, sw.dir === 'BULL' ? 'good' : 'warn')
-      } else {
-        const swMap: any = { 'above': '\u2B06 ABOVE', 'below': '\u2B07 BELOW', 'none': '\u2014' }
-        swEl.textContent = swMap[lc.currentSweep] || '\u2014'
-        _cls(swEl, lc.currentSweep !== 'none' ? (lc.sweepDisplacement ? 'good' : 'warn') : '')
-      }
-    }
-    const trEl = _el('mtf-trap-rate')
-    if (trEl) {
-      if (lc.trapRate != null) {
-        const trPct = Math.round(lc.trapRate * 100)
-        trEl.textContent = trPct + '% (' + lc.trapsTotal + '/' + lc.sweepsTotal + ')'
-        _cls(trEl, trPct >= 70 ? 'bad' : trPct >= 40 ? 'warn' : 'good')
-      } else {
-        trEl.textContent = '\u2014 (date insuficiente)'
-        _cls(trEl, '')
-      }
-    }
-    const maEl = _el('mtf-mag-above')
-    if (maEl) {
-      maEl.textContent = lc.magnetAboveDist != null ? '+' + lc.magnetAboveDist + '%' : '\u2014'
-      _cls(maEl, lc.magnetAboveDist != null ? (lc.magnetAboveDist < 0.5 ? 'warn' : '') : '')
-    }
-    const mbEl = _el('mtf-mag-below')
-    if (mbEl) {
-      mbEl.textContent = lc.magnetBelowDist != null ? '-' + lc.magnetBelowDist + '%' : '\u2014'
-      _cls(mbEl, lc.magnetBelowDist != null ? (lc.magnetBelowDist < 0.5 ? 'warn' : '') : '')
-    }
-    const mbsEl = _el('mtf-mag-bias')
-    if (mbsEl) {
-      const biasMap: any = { 'above': '\u2B06 ABOVE', 'below': '\u2B07 BELOW', '\u2014': '\u2014' }
-      mbsEl.textContent = biasMap[lc.magnetBias] || '\u2014'
-      _cls(mbsEl, lc.magnetBias === 'above' ? 'good' : lc.magnetBias === 'below' ? 'warn' : '')
-    }
-    ;['15m', '1h', '4h'].forEach((tf: string) => {
-      const b = _el('mtf-' + tf)
-      if (b) {
-        const dir = st.mtfAlign[tf] || 'neut'
-        b.className = 'mtf-tf-badge ' + dir
-        b.textContent = tf + ' ' + (dir === 'bull' ? '\u25B2' : dir === 'bear' ? '\u25BC' : '\u2014')
-      }
-    })
-    const sc = st.score || 0
-    const scTxt = _el('mtf-score-txt')
-    const scFill = _el('mtf-score-fill')
-    const scBar = _el('mtf-strip-score')
-    if (scTxt) scTxt.textContent = sc + ' / 100'
-    if (scFill) (scFill as any).style.width = sc + '%'
-    if (scBar) scBar.textContent = sc + ' / 100'
-    const tsEl = _el('mtf-ts')
-    if (tsEl && st.lastUpdate) {
-      const d = new Date(st.lastUpdate)
-      tsEl.textContent = 'actualizat ' + d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    }
-    // Regime Engine rows
+    const st = BM.structure || {}
     const re = BM.regimeEngine || {}
-    const reEl = _el('re-regime')
-    if (reEl) {
-      const reMap: any = { 'TREND_UP': 'good', 'TREND_DOWN': 'bad', 'EXPANSION': 'good', 'SQUEEZE': 'warn', 'RANGE': '', 'CHAOS': 'bad', 'LIQUIDATION_EVENT': 'bad' }
-      reEl.textContent = (re.regime || '\u2014')
-      _cls(reEl, reMap[re.regime] || '')
-    }
-    const reTrap = _el('re-trap')
-    if (reTrap) {
-      reTrap.textContent = (re.trapRisk != null ? re.trapRisk + '%' : '\u2014')
-      _cls(reTrap, re.trapRisk >= 60 ? 'bad' : re.trapRisk >= 30 ? 'warn' : 'good')
-    }
-    const reConf = _el('re-conf')
-    if (reConf) {
-      reConf.textContent = (re.confidence != null ? re.confidence + '%' : '\u2014')
-      _cls(reConf, re.confidence >= 70 ? 'good' : re.confidence >= 40 ? 'warn' : 'bad')
-    }
-    const pf = BM.phaseFilter || {}
-    const pfPhase = _el('pf-phase')
-    if (pfPhase) {
-      pfPhase.textContent = (pf.phase || '\u2014') + (pf.allow ? '' : ' \u2718')
-      const pfMap: any = { 'TREND': 'good', 'EXPANSION': 'good', 'RANGE': '', 'SQUEEZE': 'warn', 'CHAOS': 'bad', 'LIQ_EVENT': 'bad' }
-      _cls(pfPhase, pfMap[pf.phase] || '')
-    }
-    const pfRisk = _el('pf-risk')
-    if (pfRisk) {
-      pfRisk.textContent = (pf.riskMode || '\u2014')
-      _cls(pfRisk, pf.riskMode === 'normal' ? 'good' : pf.riskMode === 'reduced' ? 'warn' : 'bad')
-    }
-    const pfSize = _el('pf-size')
-    if (pfSize) {
-      pfSize.textContent = (pf.sizeMultiplier != null ? '\u00D7' + pf.sizeMultiplier : '\u2014')
-      _cls(pfSize, pf.sizeMultiplier >= 1 ? 'good' : pf.sizeMultiplier >= 0.6 ? 'warn' : 'bad')
-    }
+    const _el = (id: string) => document.getElementById(id)
+    const sc = st.score || 0
+    const scBar = _el('mtf-strip-score')
+    if (scBar) scBar.textContent = sc + ' / 100'
     const reBarPill = _el('mtf-bar-re')
     if (reBarPill) {
       reBarPill.textContent = (re.regime || '\u2014')
@@ -1234,7 +1168,10 @@ export function _coreTickMI() {
     refreshLiqCycleLight()
     refreshSweepLight()
     renderMTFPanel()
-    if (typeof w.ARES !== 'undefined' && document.getElementById('ares-strip')?.classList.contains('open')) {
+    // [ZT3-A] Mirror snapshot to mtfStore — React MTFPanel consumes store.
+    syncMTFStore()
+    // [R28.2-H] stripOpen read from store (replaces document.getElementById+classList.contains)
+    if (typeof w.ARES !== 'undefined' && useAresStore.getState().ui.stripOpen) {
       _aresRender()
     }
   } catch (e: any) {
@@ -1428,6 +1365,11 @@ export function initMTFStrip() {
 }
 
 // User Settings
+// [BRAIN-MODE-SPLIT b74] USER_SETTINGS.brain is per-AT-mode (live / demo) so
+// profile+bmMode are remembered independently for each trading mode. The flat
+// `profile`/`bmMode` top-level keys are kept as the *active mode snapshot*
+// (wire-compat + seed for first-run migration); the authoritative per-mode
+// store is USER_SETTINGS.brain[mode].
 export const USER_SETTINGS: any = {
   _version: 1,
   chart: { tf: '5m', tz: 'Europe/Bucharest', heatmap: null, colors: null },
@@ -1435,11 +1377,216 @@ export const USER_SETTINGS: any = {
   alerts: null,
   profile: 'fast',
   bmMode: null,
+  brain: {
+    live: { profile: 'fast', bmMode: null },
+    demo: { profile: 'fast', bmMode: null },
+  },
   assistArmed: false,
   autoTrade: {
     lev: 5, sl: 1.5, rr: 2, size: 200, maxPos: 4, killPct: 5,
     confMin: 65, sigMin: 3, multiSym: true, smartExitEnabled: false,
   },
+}
+
+// [BRAIN-MODE-SPLIT b74] Resolve active trading mode ('live' | 'demo').
+// Uses getATMode() which reads useATStore then falls back to window.AT.
+function _currentATModeKey(): 'live' | 'demo' {
+  try {
+    const m = (getATMode() || 'demo').toLowerCase()
+    return m === 'live' ? 'live' : 'demo'
+  } catch (_) {
+    return 'demo'
+  }
+}
+
+// [BRAIN-MODE-SPLIT b74] Ensure USER_SETTINGS.brain exists with both namespaces.
+function _ensureBrainNamespace(): void {
+  if (!USER_SETTINGS.brain || typeof USER_SETTINGS.brain !== 'object') {
+    USER_SETTINGS.brain = { live: {}, demo: {} }
+  }
+  if (!USER_SETTINGS.brain.live || typeof USER_SETTINGS.brain.live !== 'object') USER_SETTINGS.brain.live = {}
+  if (!USER_SETTINGS.brain.demo || typeof USER_SETTINGS.brain.demo !== 'object') USER_SETTINGS.brain.demo = {}
+}
+
+// [BRAIN-MODE-SPLIT b78] First-run migration: if brain.live/demo namespace keys
+// are missing but the flat top-level equivalents exist, seed both modes from
+// the flat values so the user doesn't lose pre-split settings. Covers profile,
+// bmMode, assistArmed, autoTrade (all AT risk params), dslSettings.
+function _seedBrainFromFlat(): void {
+  _ensureBrainNamespace()
+  const bL = USER_SETTINGS.brain.live
+  const bD = USER_SETTINGS.brain.demo
+  // profile + bmMode (b74 heritage)
+  if (bL.profile == null && USER_SETTINGS.profile) bL.profile = USER_SETTINGS.profile
+  if (bD.profile == null && USER_SETTINGS.profile) bD.profile = USER_SETTINGS.profile
+  if (bL.bmMode == null && USER_SETTINGS.bmMode) bL.bmMode = USER_SETTINGS.bmMode
+  if (bD.bmMode == null && USER_SETTINGS.bmMode) bD.bmMode = USER_SETTINGS.bmMode
+  // assistArmed (b78)
+  if (bL.assistArmed == null && typeof USER_SETTINGS.assistArmed === 'boolean') bL.assistArmed = USER_SETTINGS.assistArmed
+  if (bD.assistArmed == null && typeof USER_SETTINGS.assistArmed === 'boolean') bD.assistArmed = USER_SETTINGS.assistArmed
+  // autoTrade full block (b78) — seed only if brain slot has no autoTrade yet
+  if (!bL.autoTrade && USER_SETTINGS.autoTrade && typeof USER_SETTINGS.autoTrade === 'object') {
+    bL.autoTrade = Object.assign({}, USER_SETTINGS.autoTrade)
+  }
+  if (!bD.autoTrade && USER_SETTINGS.autoTrade && typeof USER_SETTINGS.autoTrade === 'object') {
+    bD.autoTrade = Object.assign({}, USER_SETTINGS.autoTrade)
+  }
+  // dslSettings per-mode snapshot (b79) — DSL canonical state is useDslStore.
+  // On first boot after b79, if brain slot lacks dslSettings, seed from the
+  // current store snapshot so both modes start with the user's current DSL
+  // picks and diverge from there.
+  try {
+    const _dsl = useDslStore.getState()
+    const _snap = {
+      mode: _dsl.mode || null,
+      enabled: !!_dsl.enabled,
+      magnetEnabled: !!_dsl.magnetEnabled,
+      magnetMode: _dsl.magnetMode || 'soft',
+    }
+    if (bL.dslSettings == null) bL.dslSettings = Object.assign({}, _snap)
+    if (bD.dslSettings == null) bD.dslSettings = Object.assign({}, _snap)
+  } catch (_) { }
+}
+
+/**
+ * [BRAIN-MODE-SPLIT b74] Apply the Brain configuration of a given mode
+ * (profile + bmMode) into window.S, window.BM and the canonical Zustand
+ * brain store. Called:
+ *   - on boot by `_usApply` (for the active mode)
+ *   - on mode switch by `_applyGlobalModeUI` (for the new mode)
+ * so the Brain always reflects the per-mode namespace.
+ */
+export function applyBrainCfgForMode(mode: 'live' | 'demo'): void {
+  try {
+    _seedBrainFromFlat()
+    const cfg = USER_SETTINGS.brain[mode] || {}
+    console.log('[BRAIN-SPLIT] applyBrainCfgForMode(' + mode + ') cfg=' + JSON.stringify(cfg))
+    const S = w.S || {}
+    const BM = w.BM
+    const ARM_ASSIST = w.ARM_ASSIST
+    if (cfg.profile) {
+      S.profile = cfg.profile
+      const _profBtn = document.getElementById('prof-' + S.profile) as HTMLElement | null
+      if (_profBtn) {
+        document.querySelectorAll('.znc-pbtn').forEach((b: any) => b.className = 'znc-pbtn')
+        _profBtn.classList.add('act-' + S.profile)
+      }
+      try { useBrainStore.getState().setProfile(S.profile) } catch (_) { }
+    }
+    if (cfg.bmMode && (cfg.bmMode === 'assist' || cfg.bmMode === 'auto')) {
+      S.mode = cfg.bmMode
+      if (typeof BM !== 'undefined' && BM) BM.mode = cfg.bmMode
+      try { useBrainStore.getState().setMode(cfg.bmMode as BrainMode) } catch (_) { }
+      const _modeBtn = document.getElementById('bmode-' + S.mode) as HTMLElement | null
+      if (_modeBtn) {
+        document.querySelectorAll('.znc-mbtn').forEach((b: any) => b.className = 'znc-mbtn')
+        _modeBtn.classList.add('act-' + S.mode)
+      }
+    }
+    // [BRAIN-MODE-SPLIT b78] assistArmed per-mode
+    if (typeof cfg.assistArmed === 'boolean') {
+      S.assistArmed = cfg.assistArmed
+      if (typeof ARM_ASSIST !== 'undefined' && ARM_ASSIST) {
+        ARM_ASSIST.armed = cfg.assistArmed
+        if (cfg.assistArmed) ARM_ASSIST.ts = Date.now()
+      }
+    }
+    // [BRAIN-MODE-SPLIT b78] autoTrade per-mode: push to flat USER_SETTINGS.autoTrade,
+    // DOM inputs, BM.confMin, BM.adapt.*, then project through settingsStore so
+    // atStore + window.TC + legacy TC Proxy all pick up the new mode's values.
+    if (cfg.autoTrade && typeof cfg.autoTrade === 'object') {
+      USER_SETTINGS.autoTrade = USER_SETTINGS.autoTrade || {}
+      Object.assign(USER_SETTINGS.autoTrade, cfg.autoTrade)
+      const _setInp = (id: string, val: any) => {
+        if (val == null) return
+        const el = document.getElementById(id) as any
+        if (el) el.value = val
+      }
+      const _setChk = (id: string, val: any) => {
+        if (val == null) return
+        const el = document.getElementById(id) as any
+        if (el) el.checked = !!val
+      }
+      _setInp('atLev', cfg.autoTrade.lev)
+      _setInp('atSL', cfg.autoTrade.sl)
+      _setInp('atRR', cfg.autoTrade.rr)
+      _setInp('atSize', cfg.autoTrade.size)
+      _setInp('atMaxPos', cfg.autoTrade.maxPos)
+      _setInp('atKillPct', cfg.autoTrade.killPct)
+      _setInp('atRiskPct', cfg.autoTrade.riskPct)
+      _setInp('atMaxDay', cfg.autoTrade.maxDay)
+      _setInp('atLossStreak', cfg.autoTrade.lossStreak)
+      _setInp('atMaxAddon', cfg.autoTrade.maxAddon)
+      _setInp('atConfMin', cfg.autoTrade.confMin)
+      _setInp('atSigMin', cfg.autoTrade.sigMin)
+      _setChk('atMultiSym', cfg.autoTrade.multiSym)
+      _setChk('atSmartExit', cfg.autoTrade.smartExitEnabled)
+      _setChk('atAdaptEnabled', cfg.autoTrade.adaptEnabled)
+      _setChk('atAdaptLive', cfg.autoTrade.adaptLive)
+      if (typeof BM !== 'undefined' && BM) {
+        if (cfg.autoTrade.confMin != null) BM.confMin = Number(cfg.autoTrade.confMin) || BM.confMin
+        if (BM.adapt) {
+          if (typeof cfg.autoTrade.adaptEnabled === 'boolean') BM.adapt.enabled = cfg.autoTrade.adaptEnabled
+          if (typeof cfg.autoTrade.adaptLive === 'boolean') BM.adapt.allowLiveAdjust = cfg.autoTrade.adaptLive
+        }
+      }
+      // Re-project flat → store → atStore/TC so engine state tracks new mode.
+      try {
+        const _ssStore = (w as any).__zeusSettingsStore
+        if (_ssStore && typeof _ssStore.getState === 'function') {
+          _ssStore.getState().loadFromLegacy()
+        }
+      } catch (_) { }
+    }
+    // [BRAIN-MODE-SPLIT b79] dslSettings per-mode — canonical state lives in
+    // useDslStore (mode/magnetEnabled/magnetMode/enabled), NOT in the legacy
+    // USER_SETTINGS.dslSettings blob. Apply to the store + mirror to LS key
+    // (`zeus_dsl_mode:<uid>`) + window.DSL proxy + DOM radios, so the UI,
+    // engine and persistence layer all agree on the new mode's values.
+    if (cfg.dslSettings && typeof cfg.dslSettings === 'object') {
+      const dsl = cfg.dslSettings as any
+      try {
+        const dslState = useDslStore.getState()
+        if (typeof dsl.enabled === 'boolean') dslState.setEnabled(dsl.enabled)
+        if (typeof dsl.mode === 'string' && dsl.mode) dslState.setMode(dsl.mode)
+        if (typeof dsl.magnetEnabled === 'boolean' || typeof dsl.magnetMode === 'string') {
+          dslState.setMagnet(!!dsl.magnetEnabled, typeof dsl.magnetMode === 'string' ? dsl.magnetMode : undefined)
+        }
+      } catch (_) { }
+      try {
+        const _uid = (w as any)._zeusUserId
+        const _dslKey = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+        if (typeof dsl.mode === 'string' && dsl.mode) localStorage.setItem(_dslKey, dsl.mode)
+      } catch (_) { }
+      try {
+        const _winDsl: any = (w as any).DSL
+        if (_winDsl) {
+          if (typeof dsl.mode === 'string' && dsl.mode) _winDsl.mode = dsl.mode
+          if (typeof dsl.enabled === 'boolean') _winDsl.enabled = dsl.enabled
+        }
+      } catch (_) { }
+      try {
+        if (typeof dsl.mode === 'string' && dsl.mode) {
+          const _ids = ['dsl-atr', 'dsl-fast', 'dsl-swing', 'dsl-defensive', 'dsl-tp']
+          _ids.forEach(function (id) {
+            const e = document.getElementById(id) as any
+            if (!e) return
+            e.className = 'znc-dbtn'
+          })
+          const _btn = document.getElementById('dsl-' + dsl.mode) as any
+          if (_btn) _btn.classList.add('act-dsl-' + dsl.mode)
+        }
+      } catch (_) { }
+      try { window.dispatchEvent(new CustomEvent('zeus:dslSettingsChanged', { detail: { source: 'modeSwitch', mode } })) } catch (_) { }
+    }
+    // Keep the flat (active-mode snapshot) keys in sync so wire-format writes
+    // reflect the mode the user is currently on.
+    USER_SETTINGS.profile = cfg.profile || USER_SETTINGS.profile
+    USER_SETTINGS.bmMode = cfg.bmMode || USER_SETTINGS.bmMode
+    if (typeof cfg.assistArmed === 'boolean') USER_SETTINGS.assistArmed = cfg.assistArmed
+  } catch (e: any) {
+    console.warn('[BRAIN-MODE-SPLIT] applyBrainCfgForMode failed:', e?.message || e)
+  }
 }
 
 let _usSettingsTimer: any = null
@@ -1455,7 +1602,7 @@ export function _usFlush() {
 const _UC_BEACON_PENDING_KEY = 'zeus_uc_beacon_pending'
 function _ucPushBeaconNow() {
   try {
-    _ucBeaconLastTs = Date.now()
+    _ucBeaconLastTs = Date.now(); _ucLastPushTs = Date.now()
     const payload = JSON.stringify({
       _v: _ucVersion,
       ts: Date.now(),
@@ -1519,8 +1666,146 @@ w._usFlush = _usFlush
 
 let _usApplyDone = false
 
+// [MIGRATION-F0] Epoch-ms timestamp returned by the server on GET/POST
+// /api/user/settings. Used later (phase 0 commits 4–6) for conflict
+// resolution between boot hydrate and live WS pushes. Zero = never
+// seen a server value.
+let _usSettingsRemoteTs = 0
+
+// [MIGRATION-F0] Flatten the nested USER_SETTINGS shape into the flat
+// whitelist the server accepts. Keys must match SETTINGS_WHITELIST in
+// server/routes/trading.js. Only non-undefined values are included so
+// partial saves don't overwrite unrelated keys after merge on server.
+// the store and the helper removed from both call-sites together.
+// Until then: shared compat helper, one source of truth for wire shape.
+
+// [MIGRATION-F0] Un-flatten the server response back into the nested
+// USER_SETTINGS shape that `_usApply` reads. Only overwrites keys the
+// server sent; locally-set fields that weren't persisted remain intact.
+function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
+  if (!flat || typeof flat !== 'object') return
+  USER_SETTINGS.chart = USER_SETTINGS.chart || {}
+  if (flat.chartTf !== undefined) USER_SETTINGS.chart.tf = flat.chartTf
+  if (flat.chartTz !== undefined) USER_SETTINGS.chart.tz = flat.chartTz
+  if (flat.heatmapSettings !== undefined) USER_SETTINGS.chart.heatmap = flat.heatmapSettings
+  if (flat.candleColors !== undefined) USER_SETTINGS.chart.colors = flat.candleColors
+  if (flat.indSettings !== undefined) USER_SETTINGS.indicators = flat.indSettings
+  if (flat.alertSettings !== undefined) USER_SETTINGS.alerts = flat.alertSettings
+  if (flat.profile !== undefined) USER_SETTINGS.profile = flat.profile
+  if (flat.bmMode !== undefined) USER_SETTINGS.bmMode = flat.bmMode
+  // [BRAIN-MODE-SPLIT b74] per-mode brain namespace
+  if (flat.brain !== undefined && flat.brain && typeof flat.brain === 'object') {
+    _ensureBrainNamespace()
+    if (flat.brain.live && typeof flat.brain.live === 'object') Object.assign(USER_SETTINGS.brain.live, flat.brain.live)
+    if (flat.brain.demo && typeof flat.brain.demo === 'object') Object.assign(USER_SETTINGS.brain.demo, flat.brain.demo)
+  }
+  if (flat.assistArmed !== undefined) USER_SETTINGS.assistArmed = flat.assistArmed
+  USER_SETTINGS.autoTrade = USER_SETTINGS.autoTrade || {}
+  const atKeys = ['lev', 'sl', 'rr', 'size', 'maxPos', 'killPct', 'confMin', 'sigMin',
+    'riskPct', 'maxDay', 'lossStreak', 'maxAddon', 'adaptEnabled', 'adaptLive', 'smartExitEnabled']
+  for (const k of atKeys) if (flat[k] !== undefined) USER_SETTINGS.autoTrade[k] = flat[k]
+  if (flat.manualLive !== undefined) USER_SETTINGS.manualLive = flat.manualLive
+  if (flat.ptLevDemo !== undefined) USER_SETTINGS.ptLevDemo = flat.ptLevDemo
+  if (flat.ptLevLive !== undefined) USER_SETTINGS.ptLevLive = flat.ptLevLive
+  if (flat.ptMarginMode !== undefined) USER_SETTINGS.ptMarginMode = flat.ptMarginMode
+}
+
+// [MIGRATION-F4 commit 2] Shared side-effects helper for GET /api/user/settings.
+// Hydrates USER_SETTINGS in-place, updates _usSettingsRemoteTs, and logs
+// the canonical "[US] fetched remote settings" line. Exported so that
+// settingsStore.loadFromServer() can reuse the exact same side effects
+// when it issues its own direct GET via userSettingsApi.fetch() — both
+// paths converge on this helper so there is one hydration surface.
+export function _usApplyServerResponse(data: { settings?: Record<string, any>; updated_at?: number } | null | undefined): number {
+  if (!data) return 0
+  const flat = data.settings || {}
+  _usApplyFlatToUserSettings(flat)
+  _usSettingsRemoteTs = Number(data.updated_at) || 0
+  // [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` cu GET response ts.
+  // Mirror behavior din `_usApplyPostResponse` — keeps the two tracking
+  // variables aligned to prevent divergence-driven 409 cascades.
+  try { setLastKnownSettingsTs(_usSettingsRemoteTs) } catch (_) { /* defensive */ }
+  console.log('[US] fetched remote settings (updated_at=' + _usSettingsRemoteTs + ', keys=' + Object.keys(flat).length + ')')
+  return _usSettingsRemoteTs
+}
+
+
+// [MIGRATION-F4 commit 3] Shared side-effects helper for POST /api/user/settings.
+// Updates _usSettingsRemoteTs from the server response so the next WS push
+// (settings.changed) can be deduped against our own save. Exported so that
+// settingsStore.saveToServer() can reuse the exact same post-save hook when
+// it issues its own direct POST via userSettingsApi.save() — both paths
+// converge on this helper, keeping one source of WS-dedup truth.
+export function _usApplyPostResponse(data: { ok?: boolean; updated_at?: number } | null | undefined): void {
+  if (data && data.ok && data.updated_at) {
+    const newTs = Number(data.updated_at) || _usSettingsRemoteTs
+    _usSettingsRemoteTs = newTs
+    // [SETTINGS-SYNC-1 2026-05-13] Sync `_lastKnownTs` din settingsRealtime
+    // cu POST response ts. Eliminează own-echo loop: WS `settings.changed`
+    // arriving back at originator cu același ts e filtrat de existing
+    // `remoteTs <= _lastKnownTs` guard în WS handler → NU mai trigger GET inutil.
+    try { setLastKnownSettingsTs(newTs) } catch (_) { /* defensive */ }
+  }
+}
+
+// [Phase 8D2] Read-only getter for the currently tracked remote ts.
+// settingsStore.saveToServer passes this as `if_updated_at` so the server
+// can reject writes that would overwrite a newer version from another tab.
+// Exposed as a function (not a bare let export) so callers always see the
+// latest value after _usApplyServerResponse / _usApplyPostResponse mutate it.
+export function _usGetSettingsRemoteTs(): number {
+  return _usSettingsRemoteTs
+}
+
+
 export function _usSave() {
   if (!_usApplyDone) { console.log('[US] skip save — _usApply not yet run'); return }
+
+  // [2026-05-20 DSL-PERSIST FIX] Boot-race guard #1 — refuse save before
+  // settingsStore has loaded from server. Without this, an early _usSave
+  // (triggered by any boot-time side-effect — store hydration, mode switch,
+  // visibilitychange) reads the default S.assistArmed=false and POSTs it,
+  // overwriting the server's persisted true. We've seen this in production
+  // logs: ARM action saves true → user refreshes → boot fires _usSave with
+  // S still default → server overwritten to false → next refresh sees false.
+  try {
+    const _ssStore = (w as any).__zeusSettingsStore;
+    if (_ssStore && typeof _ssStore.getState === 'function') {
+      const _ssLoaded = _ssStore.getState().loaded;
+      if (!_ssLoaded) {
+        console.log('[US] skip save — settingsStore not yet loaded (boot in progress)');
+        return;
+      }
+    }
+  } catch (_) { /* defensive — let save proceed if store check fails */ }
+
+  // [2026-05-20 DSL-PERSIST FIX] Boot-race guard #2 — defensive sync for assistArmed
+  // (kept as belt-and-suspenders even after guard #1).
+  // Problem: at boot, _usSave can fire (from any side-effect — input change,
+  // mode switch, settings sync) BEFORE the LS/server-hydrated value of
+  // USER_SETTINGS.brain[mode].assistArmed has been propagated to S.assistArmed
+  // via applyBrainCfgForMode. In that window, S.assistArmed reads the default
+  // (false) and _usSave would write false back to USER_SETTINGS, overwriting
+  // the persisted truth. Defensive sync: if the per-mode brain slot has
+  // assistArmed=true and S.assistArmed is still the default false, restore S
+  // before the save reads it. The user can always explicitly disarm via
+  // disarmAssist/toggleAssistArm — those mutate S.assistArmed BEFORE
+  // scheduling save, so this guard sees the new value and doesn't override.
+  try {
+    const _curMode = (typeof getATMode === 'function' ? (getATMode() || 'demo') : 'demo').toLowerCase();
+    const _modeKey: 'live' | 'demo' = _curMode === 'live' ? 'live' : 'demo';
+    const _brainSlot = USER_SETTINGS.brain && USER_SETTINGS.brain[_modeKey];
+    const _persistedAA = _brainSlot && _brainSlot.assistArmed;
+    if (_persistedAA === true && w.S && w.S.assistArmed !== true) {
+      console.warn('[DSL-PERSIST] _usSave boot-race fix: restoring S.assistArmed=true from brain.' + _modeKey + ' before save (S was ' + w.S.assistArmed + ')');
+      w.S.assistArmed = true;
+      if (w.ARM_ASSIST) {
+        w.ARM_ASSIST.armed = true;
+        w.ARM_ASSIST.ts = Date.now();
+      }
+    }
+  } catch (_) { /* never block save on guard error */ }
+
   try {
     const S = w.S
     const BM = w.BM
@@ -1535,6 +1820,14 @@ export function _usSave() {
       bearW: _cv('ccBearW', '#ff3355'),
       priceText: _cv('ccPriceText', '#7a9ab8'),
       priceBg: _cv('ccPriceBg', '#0a0f16'),
+      gridH: _cv('ccGridH', '#1a2530'),
+      gridV: _cv('ccGridV', '#1a2530'),
+    }
+    if (typeof USER_SETTINGS.chart.axisWidth !== 'number') {
+      USER_SETTINGS.chart.axisWidth = 60
+    }
+    if (typeof USER_SETTINGS.chart.candleType !== 'string') {
+      USER_SETTINGS.chart.candleType = 'candles'
     }
     USER_SETTINGS.indicators = Object.assign({}, S.activeInds)
     USER_SETTINGS.alerts = Object.assign({}, S.alerts)
@@ -1545,19 +1838,26 @@ export function _usSave() {
       const el = document.getElementById(id) as any
       return el ? (parseFloat(el.value) || def) : def
     }
+    // [batch3-X b42] Read React-controlled inputs via property `.value` (same
+    // path as _iv helper). Previously these 6 fields used `getAttribute('value')`
+    // which returns the initial HTML attribute — React selects/inputs do not
+    // sync that attribute with state, so the read returned null and these
+    // fields silently reset to default on every _usSave (every UI action that
+    // schedules a save). Using _iv reads the live property — parseFloat is
+    // safe for integer values these inputs emit ("10" → 10).
     USER_SETTINGS.autoTrade = {
-      lev: parseInt(document.getElementById('atLev')?.getAttribute('value') || '') || 5,
+      lev: _iv('atLev', 5),
       sl: _iv('atSL', 1.5),
       rr: _iv('atRR', 2),
       size: _iv('atSize', 200),
-      maxPos: parseInt(document.getElementById('atMaxPos')?.getAttribute('value') || '') || 4,
+      maxPos: _iv('atMaxPos', 4),
       killPct: _iv('atKillPct', 5),
       riskPct: _iv('atRiskPct', 1),
-      maxDay: parseInt(document.getElementById('atMaxDay')?.getAttribute('value') || '') || 5,
-      lossStreak: parseInt(document.getElementById('atLossStreak')?.getAttribute('value') || '') || 3,
-      maxAddon: parseInt(document.getElementById('atMaxAddon')?.getAttribute('value') || '') || 2,
+      maxDay: _iv('atMaxDay', 5),
+      lossStreak: _iv('atLossStreak', 3),
+      maxAddon: _iv('atMaxAddon', 2),
       confMin: _iv('atConfMin', 65),
-      sigMin: parseInt(document.getElementById('atSigMin')?.getAttribute('value') || '') || 3,
+      sigMin: _iv('atSigMin', 3),
       multiSym: (document.getElementById('atMultiSym') as any)?.checked !== false,
       smartExitEnabled: (document.getElementById('atSmartExit') as any)?.checked === true,
       adaptEnabled: (typeof BM !== 'undefined' && BM.adapt) ? !!BM.adapt.enabled : false,
@@ -1572,9 +1872,45 @@ export function _usSave() {
     USER_SETTINGS.ptLevLive = getLiveLev()
     const _dmm = document.getElementById('demoMarginMode') as any
     if (_dmm) USER_SETTINGS.ptMarginMode = _dmm.value
+    // [BRAIN-MODE-SPLIT b78] Persist full per-mode namespace under brain[curMode]:
+    // profile, bmMode, assistArmed, autoTrade (full AT risk block), dslSettings.
+    // Runs AFTER USER_SETTINGS.autoTrade + .dslSettings + .assistArmed are
+    // populated so the brain slot is written with fresh values.
+    try {
+      _ensureBrainNamespace()
+      const _curMode = _currentATModeKey()
+      USER_SETTINGS.brain[_curMode] = USER_SETTINGS.brain[_curMode] || {}
+      const slot: any = USER_SETTINGS.brain[_curMode]
+      slot.profile = USER_SETTINGS.profile
+      slot.bmMode = USER_SETTINGS.bmMode
+      slot.assistArmed = !!USER_SETTINGS.assistArmed
+      slot.autoTrade = USER_SETTINGS.autoTrade ? Object.assign({}, USER_SETTINGS.autoTrade) : null
+      // [BRAIN-MODE-SPLIT b79] DSL canonical state is useDslStore — snapshot
+      // mode/magnet/enabled from the store (NOT from the legacy USER_SETTINGS.dslSettings
+      // blob, which nothing else writes to).
+      try {
+        const _dsl = useDslStore.getState()
+        slot.dslSettings = {
+          mode: _dsl.mode || null,
+          enabled: !!_dsl.enabled,
+          magnetEnabled: !!_dsl.magnetEnabled,
+          magnetMode: _dsl.magnetMode || 'soft',
+        }
+      } catch (_) {
+        slot.dslSettings = slot.dslSettings || null
+      }
+      console.log('[BRAIN-SPLIT] _usSave writing to brain.' + _curMode + ' keys=' + Object.keys(slot).join(',') + ' dsl=' + JSON.stringify(slot.dslSettings))
+    } catch (_) { }
     USER_SETTINGS._syncTs = Date.now()
     localStorage.setItem('zeus_user_settings', JSON.stringify(USER_SETTINGS))
-    _ucMarkDirty('settings')
+    // [MIGRATION-F0] Push directly to SQLite via POST /api/user/settings.
+    // Fire-and-forget; server will broadcast settings.changed on the
+    // existing /ws/sync WSS to every other session of this user.
+    const _ssStore = (w as any).__zeusSettingsStore
+    if (_ssStore && typeof _ssStore.getState === 'function') {
+      _ssStore.getState().loadFromLegacy()
+      _ssStore.getState().saveToServer()
+    }
     console.log('[US] Settings saved')
   } catch (e: any) {
     console.warn('[US] Save failed:', e.message)
@@ -1609,26 +1945,36 @@ export function _usApply() {
       _si('ccBearW', c.bearW)
       _si('ccPriceText', c.priceText)
       _si('ccPriceBg', c.priceBg)
+      _si('ccGridH', c.gridH)
+      _si('ccGridV', c.gridV)
       S._savedChartColors = c
       if (typeof w.cSeries !== 'undefined' && w.cSeries) {
         w.cSeries.applyOptions({ upColor: c.bull, downColor: c.bear, borderUpColor: c.bull, borderDownColor: c.bear, wickUpColor: (c.bullW || c.bull) + '77', wickDownColor: (c.bearW || c.bear) + '77' })
       }
       if (typeof w.mainChart !== 'undefined' && w.mainChart) {
-        w.mainChart.applyOptions({ layout: { background: { color: c.priceBg || '#0a0f16' }, textColor: c.priceText || '#7a9ab8' }, rightPriceScale: { textColor: c.priceText || '#7a9ab8' } })
+        const _axW = (typeof USER_SETTINGS.chart.axisWidth === 'number' ? USER_SETTINGS.chart.axisWidth : 60)
+        w.mainChart.applyOptions({
+          layout: { background: { color: c.priceBg || '#0a0f16' }, textColor: c.priceText || '#7a9ab8' },
+          grid: { horzLines: { color: c.gridH || '#1a2530' }, vertLines: { color: c.gridV || '#1a2530' } },
+          rightPriceScale: { textColor: c.priceText || '#7a9ab8', minimumWidth: _axW },
+        })
+      }
+      if (typeof w.cvdChart !== 'undefined' && w.cvdChart) {
+        const _axW2 = (typeof USER_SETTINGS.chart.axisWidth === 'number' ? USER_SETTINGS.chart.axisWidth : 60)
+        try { w.cvdChart.applyOptions({ rightPriceScale: { minimumWidth: _axW2 } }) } catch (_) { }
       }
     }
     if (USER_SETTINGS.indicators) {
       Object.assign(S.activeInds, USER_SETTINGS.indicators)
       Object.assign(S.indicators, USER_SETTINGS.indicators)
     }
-    if (USER_SETTINGS.profile) {
-      S.profile = USER_SETTINGS.profile
-      const _profBtn = document.getElementById('prof-' + S.profile)
-      if (_profBtn) {
-        document.querySelectorAll('.znc-pbtn').forEach((b: any) => b.className = 'znc-pbtn')
-        _profBtn.classList.add('act-' + S.profile)
-      }
-    }
+    // [BRAIN-MODE-SPLIT b74] Seed per-mode namespace from the flat top-level
+    // profile/bmMode on first boot after the split ships, then apply the
+    // namespace for the currently-active AT mode. Both demo and live end up
+    // initialised to the user's pre-split settings — the user can then set
+    // them divergently and each mode will remember its own values.
+    _seedBrainFromFlat()
+    applyBrainCfgForMode(_currentATModeKey())
     if (USER_SETTINGS.alerts) Object.assign(S.alerts, USER_SETTINGS.alerts)
     if (USER_SETTINGS.assistArmed) {
       S.assistArmed = true
@@ -1662,7 +2008,7 @@ export function _usApply() {
       if (typeof _mscanUpdateLabel === 'function') _mscanUpdateLabel()
       else {
         const lbl = document.getElementById('atMultiSymLbl')
-        if (lbl) lbl.textContent = at.multiSym ? 'ACTIV' : 'DEZACTIVAT'
+        if (lbl) lbl.textContent = at.multiSym ? 'ACTIVE' : 'DISABLED'
       }
     }
     if (typeof BM !== 'undefined' && BM.adapt) {
@@ -1680,6 +2026,12 @@ export function _usApply() {
       if (ml.size != null) _setInp('liveSize', ml.size)
       if (ml.sl != null) _setInp('liveSL', ml.sl)
       if (ml.tp != null) _setInp('liveTP', ml.tp)
+    }
+    if (USER_SETTINGS.chart && USER_SETTINGS.chart.candleType && USER_SETTINGS.chart.candleType !== 'candles') {
+      const _cType = USER_SETTINGS.chart.candleType
+      setTimeout(() => {
+        try { if (typeof w.applyCandleType === 'function') w.applyCandleType(_cType, { persist: false }) } catch (_) { }
+      }, 1200)
     }
     console.log('[US] Settings applied')
   } catch (e: any) {
@@ -1718,6 +2070,12 @@ export function loadUserSettings() {
     if (parsed.autoTrade) Object.assign(USER_SETTINGS.autoTrade, parsed.autoTrade)
     if (parsed.profile) USER_SETTINGS.profile = parsed.profile
     if (parsed.bmMode) USER_SETTINGS.bmMode = parsed.bmMode
+    // [BRAIN-MODE-SPLIT b74] hydrate per-mode brain namespace from localStorage
+    if (parsed.brain && typeof parsed.brain === 'object') {
+      _ensureBrainNamespace()
+      if (parsed.brain.live && typeof parsed.brain.live === 'object') Object.assign(USER_SETTINGS.brain.live, parsed.brain.live)
+      if (parsed.brain.demo && typeof parsed.brain.demo === 'object') Object.assign(USER_SETTINGS.brain.demo, parsed.brain.demo)
+    }
     if (typeof parsed.assistArmed === 'boolean') USER_SETTINGS.assistArmed = parsed.assistArmed
     if (parsed.ptMarginMode) {
       const _mmSel = document.getElementById('demoMarginMode') as any
@@ -1932,6 +2290,17 @@ export const PROFILE_TF: any = {
   swing: { trigger: '15m', context: '30m', bias: '1h', htf: '4h', cooldown: 4 },
   defensive: { trigger: '30m', context: '1h', bias: '4h', htf: '4h', cooldown: 6 }
 }
+
+// Canonical Brain DSL mode presets — authoritative source of truth (mirrors server/services/serverDSL.js).
+// Applied ONLY to Brain/AT positions at open time. Manual positions continue to use TC globals.
+// IV = delta from PR (not from entry).
+export const DSL_PRESETS: any = {
+  fast:      { openDslPct: 0.35, pivotLeftPct: 0.50, pivotRightPct: 0.40, impulseVPct: 0.20 },
+  tp:        { openDslPct: 0.40, pivotLeftPct: 0.55, pivotRightPct: 0.45, impulseVPct: 0.25 },
+  defensive: { openDslPct: 0.60, pivotLeftPct: 0.80, pivotRightPct: 0.70, impulseVPct: 0.30 },
+  atr:       { openDslPct: 0.80, pivotLeftPct: 1.10, pivotRightPct: 0.90, impulseVPct: 0.35 },
+  swing:     { openDslPct: 1.00, pivotLeftPct: 1.30, pivotRightPct: 1.10, impulseVPct: 0.40 },
+}
 BM.performance = BM.performance || {}
 BM.performance.byRegime = BM.performance.byRegime || {
   ACCUMULATION: { trades: 0, wins: 0, avgR: 0, mult: 1.00 },
@@ -1970,7 +2339,62 @@ w.NOTIFICATION_CENTER = NOTIFICATION_CENTER
 w.USER_SETTINGS = USER_SETTINGS
 w.BT = BT
 w.BT_INDICATORS = BT_INDICATORS
-w.DSL = DSL
+// [Phase 6 C3] window.DSL = read-side compat Proxy.
+// - GET on canonical keys (enabled/mode/magnetEnabled/magnetMode/positions)
+//   reads from useDslStore (the canonical surface).
+// - GET on runtime keys (_attachedIds, checkInterval, visualInterval,
+//   history, anything else) passes through to the backing object.
+// - SET on canonical keys is no-op + console.warn in dev. Engine writes
+//   must go through useDslStore mutators (via dsl.ts helpers); legacy
+//   external write attempts are intentionally not write-through.
+// - SET on runtime keys passes through to backing (so legacy paths can
+//   still hold _attachedIds Set, interval handles, etc.).
+//
+// Note: `checkIntervalActive` (boolean derived from checkInterval) lives
+// in useDslStore but is intentionally NOT in the Proxy canonical surface.
+// Audit C3 confirmed zero external readers — consumers (engine,
+// DSLZonePanel) read `DSL.checkInterval` (the interval handle) via
+// runtime pass-through. Adding it would create a duplicate surface
+// without callers.
+{
+  const CANONICAL_DSL_KEYS = new Set([
+    'enabled', 'mode', 'magnetEnabled', 'magnetMode', 'positions',
+  ])
+  w.DSL = new Proxy(DSL, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && CANONICAL_DSL_KEYS.has(prop)) {
+        const s = useDslStore.getState()
+        switch (prop) {
+          case 'enabled': return s.enabled
+          case 'mode': return s.mode
+          case 'magnetEnabled': return s.magnetEnabled
+          case 'magnetMode': return s.magnetMode
+          case 'positions': return s.positions
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+    set(target, prop, value, receiver) {
+      if (typeof prop === 'string' && CANONICAL_DSL_KEYS.has(prop)) {
+        // [BATCH3-U] Write-through to canonical store. Previously this was a
+        // silent no-op, which broke Brain's _applyDslMode (writes window.DSL.mode
+        // and expected the store to reflect it). Result: DSL toggles appeared
+        // dead, getDSLMode() returned stale values, AT opened positions with
+        // the wrong mode preset (user-reported: ATR mode → positions got 5% SL).
+        const store = useDslStore.getState()
+        switch (prop) {
+          case 'enabled': store.setEnabled(!!value); break
+          case 'mode': store.setMode(value == null ? null : String(value)); break
+          case 'magnetEnabled': store.setMagnet(!!value, store.magnetMode); break
+          case 'magnetMode': store.setMagnet(store.magnetEnabled, String(value || 'soft')); break
+          case 'positions': store.replacePositions(value || {}); break
+        }
+        return true
+      }
+      return Reflect.set(target, prop, value, receiver)
+    },
+  })
+}
 w.MSCAN_SYMS = MSCAN_SYMS
 w.MSCAN = MSCAN
 w.DHF = DHF
@@ -1979,7 +2403,57 @@ w.DAILY_STATS = DAILY_STATS
 w.BEXT = BEXT
 w.SESS_CFG = SESS_CFG
 w.BRAIN = BRAIN
-w.BM = BM
+// [Phase 6 C6] window.BM = read-side compat Proxy.
+// - GET on canonical keys (mode/profile/entryReady/entryScore/flow/mtf/
+//   sweep/gates) reads from useBrainStore (the canonical surface owned
+//   by the store as of C5 mutators + C6 engine write-inversion).
+// - GET on runtime / non-inverted keys (confluenceScore, confMin,
+//   structure, volRegime, liqCycle, regimeEngine, phaseFilter, macro,
+//   adapt, adaptive, performance, dailyTrades, dailyPnL, lossStreak,
+//   protectMode, protectReason, newsRisk, qexit, probScore, danger,
+//   _entryFailedGates, core, etc.) passes through to the backing BM.
+//   These fields remain backing-only (not inverted to store).
+// - SET on canonical keys is no-op + console.warn in dev. Engine writes
+//   must go through brainStore mutators (via brain.ts helpers); legacy
+//   external write attempts are intentionally not write-through.
+// - SET on runtime / non-inverted keys passes through to backing (so
+//   legacy paths keep updating BM.structure, BM.dailyTrades, etc.).
+//
+// Engine writes go directly through brainStore mutators (Phase 6 C5–C7).
+{
+  const CANONICAL_BM_KEYS = new Set([
+    'mode', 'profile', 'entryReady', 'entryScore',
+    'flow', 'mtf', 'sweep', 'gates',
+  ])
+  const isDev = !!(import.meta as any)?.env?.DEV
+  w.BM = new Proxy(BM, {
+    get(target, prop, receiver) {
+      if (typeof prop === 'string' && CANONICAL_BM_KEYS.has(prop)) {
+        const brain = useBrainStore.getState().brain
+        switch (prop) {
+          case 'mode': return brain.mode
+          case 'profile': return brain.profile
+          case 'entryReady': return brain.entryReady
+          case 'entryScore': return brain.entryScore
+          case 'flow': return brain.flow
+          case 'mtf': return brain.mtf
+          case 'sweep': return brain.sweep
+          case 'gates': return brain.gates
+        }
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+    set(target, prop, value, receiver) {
+      if (typeof prop === 'string' && CANONICAL_BM_KEYS.has(prop)) {
+        if (isDev) {
+          console.warn(`[BM Proxy] no-op write to canonical key "${String(prop)}" — call useBrainStore mutators instead`)
+        }
+        return true
+      }
+      return Reflect.set(target, prop, value, receiver)
+    },
+  })
+}
 w.ARM_ASSIST = ARM_ASSIST
 // NEWS — no window mapping needed (defined in this file)
 w.ZANIM = ZANIM
@@ -2021,6 +2495,9 @@ w.initMTFStrip = initMTFStrip
 w._usScheduleSave = _usScheduleSave
 w._usSave = _usSave
 w._usApply = _usApply
+// [BRAIN-MODE-SPLIT b74] expose so mode switcher (data/marketDataTrading.ts)
+// can re-apply the correct namespace after the AT mode flips.
+w.applyBrainCfgForMode = applyBrainCfgForMode
 w.loadUserSettings = loadUserSettings
 w._ucPushBeacon = _ucPushBeacon
 w._ucRetryPendingBeacon = _ucRetryPendingBeacon

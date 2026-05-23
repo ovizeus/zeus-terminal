@@ -221,4 +221,69 @@ export interface BrainState {
     mtfOn: boolean
     ticks: number
   }
+
+  // [Phase 6 C1 additive] engine-surface fields that the canonical store
+  // will own in C6 (Brain engine inversion). Currently live on
+  // window.BRAIN / window.S / window.BlockReason and are tracked by
+  // brainStore extended. Optional so existing defaultBrain construction
+  // (brainStore.ts:11) does not need changes in this commit.
+  engineState?: BrainEngineState
+  thoughts?: BrainThought[]
+  adaptParams?: BrainAdaptParams | null
+  blockReason?: BrainBlockReason | null
+}
+
+/** Brain engine lifecycle state (SCANNING/ANALYZING/READY/TRADING/BLOCKED) */
+export type BrainEngineState =
+  | 'scanning'
+  | 'analyzing'
+  | 'ready'
+  | 'trading'
+  | 'blocked'
+  | string
+
+/** Single brain thought entry (log stream) */
+export interface BrainThought {
+  ts: number
+  kind?: string
+  msg?: string
+  [k: string]: unknown
+}
+
+/** Brain adapt params blob (shape owned by engine; opaque at type level) */
+export interface BrainAdaptParams {
+  [k: string]: unknown
+}
+
+/** Block reason surfaced by BlockReason facade */
+export interface BrainBlockReason {
+  code: string
+  text: string
+}
+
+/** Icon kind rendered inside the AutoTrade safety pill (subset of ATIconKind). */
+export type SafetyPillIconKind =
+  | 'w' | 'noent' | 'timer' | 'clock' | 'dRed' | 'bolt' | 'sh' | null
+
+/**
+ * Safety pill surface (#at-why-blocked). Rendered by <AtWhyBlockedPill/>.
+ * Produced by data/klines.ts `_updateWhyBlocked` based on BlockReason state
+ * and degraded-feeds snapshot.
+ */
+export interface BrainSafetyPill {
+  iconKind: SafetyPillIconKind
+  text: string
+  className: string
+  visible: boolean
+}
+
+/**
+ * Block-reason display surface (#zad-block-reason). Rendered by
+ * <BlockReasonText/> in BrainCockpit. Produced by engine/brain.ts top-reason
+ * logic; represents the single-line "why not entering" for the auto-trade
+ * detail card.
+ */
+export interface BrainBlockReasonDisplay {
+  text: string
+  className: string
 }

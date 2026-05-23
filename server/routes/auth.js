@@ -9,7 +9,7 @@ const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 const db = require('../services/database');
 const logger = require('../services/logger');
-const { getActiveSessions } = require('../middleware/sessionAuth');
+const { getActiveSessions, resetActivity } = require('../middleware/sessionAuth');
 function _mask(email) { if (!email) return '?'; const [u, d] = email.split('@'); return u[0] + '***@' + (d || '?'); }
 
 const router = express.Router();
@@ -18,8 +18,10 @@ if (!process.env.JWT_SECRET) {
     process.exit(1);
 }
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRY_DAYS = Math.max(1, Math.min(30, parseInt(process.env.JWT_EXPIRY_DAYS, 10) || 7)); // [SC-02] default 7d, env-configurable
-const JWT_EXPIRY = JWT_EXPIRY_DAYS + 'd'; // [SC-02] reduced from 30d
+// [M8] Default 1d (24h). Inactivity timeout (sessionAuth) handles long-lived sessions safely.
+// Env-configurable up to 30d for users who want it.
+const JWT_EXPIRY_DAYS = Math.max(1, Math.min(30, parseInt(process.env.JWT_EXPIRY_DAYS, 10) || 1));
+const JWT_EXPIRY = JWT_EXPIRY_DAYS + 'd';
 const BCRYPT_ROUNDS = 10;
 
 // ─── 2FA Code Store (in-memory, codes expire after 5 min) ───
@@ -27,8 +29,7 @@ const pendingCodes = new Map(); // email → { code, role, userId, attempts, exp
 const CODE_TTL = 5 * 60 * 1000; // 5 minutes
 const MAX_ATTEMPTS = 5;
 
-// ─── Login Rate Limit (per-IP) ───
-const loginAttempts = new Map(); // ip → { count, resetAt }
+// ─── Login Rate Limit (per-IP) — [SEC-1] SQLite-backed, survives pm2 reload ───
 const LOGIN_WINDOW = 15 * 60 * 1000; // 15 minutes
 const LOGIN_MAX = 10; // max attempts per window
 
@@ -38,22 +39,35 @@ const VERIFY_WINDOW = 15 * 60 * 1000;
 const VERIFY_MAX = 3; // Reduced from 10 — 6-digit code + 3 attempts is sufficient
 
 // ─── PIN Rate Limit (per-user) ───
-const pinAttempts = new Map(); // userId → { count, resetAt }
+// [M9] Exponential backoff: after each PIN_MAX failures, the next window doubles
+// (15min → 1h → 4h → 24h). Resets on successful PIN unlock or after 24h idle.
+const pinAttempts = new Map(); // userId → { count, resetAt, lockoutLevel }
 const PIN_WINDOW = 15 * 60 * 1000;
 const PIN_MAX = 5;
+const PIN_LOCKOUT_LEVELS = [15 * 60 * 1000, 60 * 60 * 1000, 4 * 60 * 60 * 1000, 24 * 60 * 60 * 1000]; // 15m,1h,4h,24h
 
-// ─── Login Rate Limit (per-email) ───
-const loginAttemptsEmail = new Map(); // email → { count, resetAt }
+// ─── Login Rate Limit (per-email) — [SEC-1] SQLite-backed ───
 const LOGIN_EMAIL_MAX = 5;
+
+// [AUTH-1] 2FA email-send rate limiter — prevents email bombing via repeated
+// /login submits cu correct password (each one would otherwise queue another
+// 2FA email). Tracks send count per email în a rolling window. SEPARATE from
+// the SEC-1 SQLite per-email login attempts (which counts FAILED logins);
+// this counts SUCCESSFUL pendingCodes.set + _sendCode dispatches.
+const _2faSendTracker = new Map(); // email → { count, windowStart }
+const _2FA_WINDOW_MS = 10 * 60 * 1000; // 10 minutes rolling window
+const _2FA_MAX_SENDS = 3; // max 3 codes per email per 10 minutes
 
 // Periodic cleanup of expired codes and stale rate-limit entries (every 5 min)
 setInterval(() => {
     const now = Date.now();
     for (const [k, v] of pendingCodes) { if (now > v.expiresAt) pendingCodes.delete(k); }
-    for (const [k, v] of loginAttempts) { if (now > v.resetAt) loginAttempts.delete(k); }
-    for (const [k, v] of loginAttemptsEmail) { if (now > v.resetAt) loginAttemptsEmail.delete(k); }
     for (const [k, v] of verifyAttempts) { if (now > v.resetAt) verifyAttempts.delete(k); }
     for (const [k, v] of pinAttempts) { if (now > v.resetAt) pinAttempts.delete(k); }
+    // [SEC-1] Prune expired login-attempt rows from SQLite
+    try { db.loginAttemptPruneExpired(now); } catch (_) { }
+    // [AUTH-1] Prune expired 2FA send-tracker entries
+    for (const [k, v] of _2faSendTracker) { if (now - v.windowStart > _2FA_WINDOW_MS) _2faSendTracker.delete(k); }
 }, 5 * 60 * 1000);
 
 // ─── Email Transporter ───
@@ -121,29 +135,29 @@ async function _sendCode(email, code) {
 
 // ─── Helpers ───
 
-function _checkLoginRate(ip) {
+// [SEC-1] Counters live in SQLite (table login_attempts) so a pm2 reload can't
+// reset an attacker's window. Kind is 'ip' or 'email'; max is LOGIN_MAX vs LOGIN_EMAIL_MAX.
+function _bumpLoginAttempt(kind, key, max) {
     const now = Date.now();
-    const entry = loginAttempts.get(ip);
-    if (!entry || now > entry.resetAt) {
-        loginAttempts.set(ip, { count: 1, resetAt: now + LOGIN_WINDOW });
+    const row = db.loginAttemptGet(kind, key);
+    if (!row || now > row.reset_at) {
+        db.loginAttemptUpsert(kind, key, 1, now + LOGIN_WINDOW);
         return true;
     }
-    entry.count++;
-    return entry.count <= LOGIN_MAX;
+    const nextCount = row.count + 1;
+    db.loginAttemptUpsert(kind, key, nextCount, row.reset_at);
+    return nextCount <= max;
+}
+
+function _checkLoginRate(ip) {
+    return _bumpLoginAttempt('ip', ip, LOGIN_MAX);
 }
 
 function _checkLoginRateEmail(email) {
-    const now = Date.now();
-    const entry = loginAttemptsEmail.get(email);
-    if (!entry || now > entry.resetAt) {
-        loginAttemptsEmail.set(email, { count: 1, resetAt: now + LOGIN_WINDOW });
-        return true;
-    }
-    entry.count++;
-    return entry.count <= LOGIN_EMAIL_MAX;
+    return _bumpLoginAttempt('email', email, LOGIN_EMAIL_MAX);
 }
 
-function _setAuthCookie(res, token) {
+function _setAuthCookie(res, token, userId) {
     res.cookie('zeus_token', token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production', // HTTPS only in prod (Cloudflare handles this)
@@ -151,15 +165,32 @@ function _setAuthCookie(res, token) {
         maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000, // [SC-02] matches JWT_EXPIRY
         path: '/'
     });
+    // [R21] Companion non-httpOnly cookie so client-side can read userId for
+    // per-user localStorage scoping. User id is not secret (session token
+    // stays httpOnly); this only exposes the id, not auth.
+    if (userId != null) {
+        res.cookie('zeus_uid', String(userId), {
+            httpOnly: false,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+            path: '/'
+        });
+    }
 }
 
 // ─── POST /auth/register ───
 router.post('/register', async (req, res) => {
     if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
     try {
-        const { email, password } = req.body;
+        const { email, password, termsAcceptedAt, termsVersion } = req.body;
         if (!email || !password) {
             return res.status(400).json({ error: 'Email și parola sunt obligatorii' });
+        }
+
+        // [LEGAL-1] Require explicit acceptance of Terms / Privacy / Cookie policies (GDPR Art. 7)
+        if (!termsAcceptedAt || typeof termsAcceptedAt !== 'string' || !termsVersion || typeof termsVersion !== 'string') {
+            return res.status(400).json({ error: 'You must accept the Terms, Privacy and Cookie policies to register.' });
         }
 
         const normalEmail = email.toLowerCase().trim();
@@ -194,12 +225,16 @@ router.post('/register', async (req, res) => {
         const userId = db.createUser(normalEmail, hash, role, isFirst);
         db.addPasswordHistory(userId, hash);
 
-        db.auditLog(userId, 'USER_REGISTERED', { role, autoApproved: isFirst }, req.ip);
+        // [LEGAL-1] Persist consent record (GDPR Art. 7 — demonstrability)
+        try { db.setUserTermsConsent(userId, termsAcceptedAt, termsVersion); } catch (_) { /* best-effort */ }
+
+        db.auditLog(userId, 'USER_REGISTERED', { role, autoApproved: isFirst, termsVersion, termsAcceptedAt }, req.ip);
 
         if (isFirst) {
             // Admin auto-login (JWT includes id + tokenVersion for session invalidation)
             const token = jwt.sign({ id: userId, email: normalEmail, role: 'admin', tokenVersion: 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-            _setAuthCookie(res, token);
+            _setAuthCookie(res, token, userId);
+            resetActivity(userId, Date.now());
             logger.info('AUTH', 'Admin registered', { email: _mask(normalEmail) });
             return res.json({ ok: true, email: normalEmail, role: 'admin' });
         }
@@ -230,6 +265,17 @@ router.post('/login', async (req, res) => {
         const user = db.findUserByEmail(normalEmail);
 
         if (!user) {
+            // [SEC-2] IP-tagged log for fail2ban (unknown email = probing)
+            logger.warn('AUTH', 'LOGIN_FAILED unknown_email ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
+            // [AUTH-2] Constant-time defense: spend ~bcrypt.compare time even
+            // on unknown email so timing differential doesn't leak email
+            // validity to attackers. Without this, valid email + wrong password
+            // takes ~100ms (bcrypt.compare on 12-round hash) while unknown email
+            // returns instantly — timing distinguishes valid/invalid emails.
+            // Compare against a known-bad hash; result always false (never
+            // authenticates). Per-email rate bucket isn't hit on this path
+            // (intentional — see SEC-2/AUTH-2 reasoning în bug book).
+            try { await bcrypt.compare(password || '', '$2a$12$0000000000000000000000.0000000000000000000000000000000'); } catch (_) {}
             return res.status(401).json({ error: 'Email sau parolă incorectă' });
         }
 
@@ -257,12 +303,15 @@ router.post('/login', async (req, res) => {
         const valid = await bcrypt.compare(password, user.password_hash);
         if (!valid) {
             db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'wrong_password' }, req.ip);
+            // [SEC-2] IP-tagged log so fail2ban can ban brute-forcers
+            logger.warn('AUTH', 'LOGIN_FAILED wrong_password ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
             return res.status(401).json({ error: 'Email sau parolă incorectă' });
         }
 
         // Reject expired temporary password (set by admin reset)
         if (user.pwd_temp_expires_at && new Date(user.pwd_temp_expires_at) < new Date()) {
             db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'temp_password_expired' }, req.ip);
+            logger.warn('AUTH', 'LOGIN_FAILED temp_password_expired ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
             return res.status(401).json({ error: 'Parola temporară a expirat. Cere admin-ului una nouă.' });
         }
 
@@ -271,14 +320,46 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({ error: 'Contul tău nu a fost încă aprobat de administrator.' });
         }
 
-        // Generate and send 2FA code
-        const code = _generateCode();
+        // [AUTH-1] 2FA email-bombing rate limit — gate before pendingCodes.set
+        // + _sendCode dispatch. Without this, attacker (or buggy client cu
+        // automatic retry) flooding /login cu correct credentials triggers
+        // unlimited 2FA emails, abusing SMTP and degrading mailbox UX.
+        // Window: 10 min, max 3 sends per email. Returns 429 when exceeded.
+        // Uses in-memory Map (not SQLite) — restart resets bucket which is
+        // acceptable risk; rate-limit is a soft defense, not auth gate.
+        {
+            const _now = Date.now();
+            const _track = _2faSendTracker.get(normalEmail) || { count: 0, windowStart: _now };
+            if (_now - _track.windowStart > _2FA_WINDOW_MS) {
+                // Window expired — reset counter
+                _track.count = 0;
+                _track.windowStart = _now;
+            }
+            if (_track.count >= _2FA_MAX_SENDS) {
+                logger.warn('AUTH', `2FA send rate limit hit uid=${user.id} email=${_mask(normalEmail)} ip=${req.ip} count=${_track.count}/${_2FA_MAX_SENDS}`);
+                return res.status(429).json({ error: 'Prea multe coduri 2FA trimise — încearcă din nou în câteva minute.' });
+            }
+            _track.count++;
+            _2faSendTracker.set(normalEmail, _track);
+        }
+
+        // Generate and send 2FA code.
+        // [AUTH-4] On /login retry within active window, REUSE existing
+        // pending code instead of overwriting. Previously: new code orphaned
+        // the first one — user mistypes-then-retries got mismatched codes.
+        // Now: same code re-emailed (identical to first send), attempts
+        // counter preserved, expiry preserved. Fresh code only when no
+        // pending entry exists or previous expired.
+        const _now = Date.now();
+        const _existing = pendingCodes.get(normalEmail);
+        const _hasValidPending = _existing && _existing.expiresAt > _now;
+        const code = _hasValidPending ? _existing.code : _generateCode();
         pendingCodes.set(normalEmail, {
             code,
             role: user.role || 'user',
             userId: user.id,
-            attempts: 0,
-            expiresAt: Date.now() + CODE_TTL
+            attempts: _hasValidPending ? _existing.attempts : 0,
+            expiresAt: _hasValidPending ? _existing.expiresAt : _now + CODE_TTL,
         });
 
         // [ZT-AUD-C3] 2FA is mandatory. If SMTP isn't available we never
@@ -363,7 +444,10 @@ router.post('/verify-code', (req, res) => {
         pendingCodes.delete(normalEmail);
         const freshUser = db.findUserById(pending.userId);
         const token = jwt.sign({ id: pending.userId, email: normalEmail, role: pending.role, tokenVersion: freshUser ? freshUser.token_version : 1 }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-        _setAuthCookie(res, token);
+        _setAuthCookie(res, token, pending.userId);
+        // Reset inactivity tracking so this fresh session isn't immediately
+        // tripped by the previous session's stale last_active_at.
+        resetActivity(pending.userId, Date.now());
 
         db.auditLog(pending.userId, 'LOGIN_SUCCESS', {}, req.ip);
         logger.info('AUTH', 'Login verified', { email: _mask(normalEmail), role: pending.role });
@@ -377,6 +461,7 @@ router.post('/verify-code', (req, res) => {
 // ─── POST /auth/logout ───
 router.post('/logout', (req, res) => {
     res.clearCookie('zeus_token', { path: '/' });
+    res.clearCookie('zeus_uid', { path: '/' });
     res.json({ ok: true });
 });
 
@@ -395,9 +480,24 @@ router.get('/me', (req, res) => {
             userId = u ? u.id : null;
         }
 
+        // [R21] Refresh companion zeus_uid cookie on every /auth/me. This
+        // covers sessions that predate the R21 deploy (they have zeus_token
+        // but no zeus_uid) — /auth/me is the first server call on every
+        // boot, so uid is restored before any localStorage work.
+        if (userId != null) {
+            res.cookie('zeus_uid', String(userId), {
+                httpOnly: false,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax',
+                maxAge: JWT_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+                path: '/'
+            });
+        }
+
         res.json({ ok: true, id: userId, email: decoded.email, role: decoded.role || 'user' });
     } catch (err) {
         res.clearCookie('zeus_token', { path: '/' });
+        res.clearCookie('zeus_uid', { path: '/' });
         res.status(401).json({ error: 'Token invalid' });
     }
 });
@@ -413,7 +513,7 @@ router.get('/admin/users', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
             return res.status(403).json({ error: 'Admin only' });
         }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) {
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
             return res.status(401).json({ error: 'Session expired' });
         }
 
@@ -465,7 +565,7 @@ router.post('/admin/approve', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
             return res.status(403).json({ error: 'Admin only' });
         }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) {
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
             return res.status(401).json({ error: 'Session expired' });
         }
 
@@ -496,7 +596,7 @@ router.post('/admin/delete', (req, res) => {
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') {
             return res.status(403).json({ error: 'Admin only' });
         }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) {
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) {
             return res.status(401).json({ error: 'Session expired' });
         }
 
@@ -531,7 +631,7 @@ router.post('/admin/reject', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
         const { email } = req.body;
         if (!email) return res.status(400).json({ error: 'Email required' });
         const normalEmail = email.toLowerCase().trim();
@@ -553,7 +653,7 @@ router.post('/admin/block', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
         const { email, block } = req.body; // block: true/false
         if (!email) return res.status(400).json({ error: 'Email required' });
         const normalEmail = email.toLowerCase().trim();
@@ -577,7 +677,7 @@ router.post('/admin/ban', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
         const { email, duration } = req.body; // duration: '1h','24h','7d','30d','permanent'
         if (!email || !duration) return res.status(400).json({ error: 'Email and duration required' });
         const normalEmail = email.toLowerCase().trim();
@@ -608,11 +708,13 @@ router.get('/admin/audit', (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') return res.status(403).json({ error: 'Admin only' });
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) return res.status(401).json({ error: 'Session expired' });
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) return res.status(401).json({ error: 'Session expired' });
 
-        const limit = Math.min(parseInt(req.query.limit, 10) || 50, 200);
-        const rows = db.listAuditLog(limit);
-        res.json({ ok: true, entries: rows });
+        // [M10] True pagination — limit + offset, with total count
+        const limit = parseInt(req.query.limit, 10) || 50;
+        const offset = parseInt(req.query.offset, 10) || 0;
+        const page = db.listAuditLog(limit, offset);
+        res.json({ ok: true, entries: page.rows, total: page.total, limit: page.limit, offset: page.offset });
     } catch (err) { res.status(401).json({ error: 'Token invalid' }); }
 });
 
@@ -624,7 +726,7 @@ function _adminGuard(req, res) {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const caller = db.findUserByEmail(decoded.email);
         if (!caller || caller.role !== 'admin' || caller.status !== 'active') { res.status(403).json({ error: 'Admin only' }); return null; }
-        if (decoded.tokenVersion !== undefined && caller.token_version !== decoded.tokenVersion) { res.status(401).json({ error: 'Session expired' }); return null; }
+        if ((decoded.tokenVersion ?? 0) !== (caller.token_version ?? 0)) { res.status(401).json({ error: 'Session expired' }); return null; }
         return { caller, decoded };
     } catch (_) { res.status(401).json({ error: 'Token invalid' }); return null; }
 }
@@ -689,7 +791,7 @@ router.get('/admin/users/:id/audit', (req, res) => {
     const u = db.findUserById(id);
     if (!u) return res.status(404).json({ error: 'User not found' });
     // Include both actions performed by user AND targeting them (email match in details)
-    const byActor = db.listAuditLogByUser(id, limit);
+    const byActor = db.listAuditLogByUser(id, limit, 0).rows; // [M10] new shape
     const byTarget = db.listAuditLogByTarget(u.email, limit);
     const seen = new Set();
     const merged = [...byActor, ...byTarget]
@@ -752,7 +854,7 @@ router.get('/admin/sessions', (req, res) => {
 router.get('/admin/audit/export', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
     const limit = Math.min(parseInt(req.query.limit, 10) || 1000, 5000);
-    const rows = db.listAuditLog(limit);
+    const rows = db.listAuditLog(limit, 0).rows; // [M10] new shape
     const headers = ['id', 'created_at', 'user_id', 'action', 'ip', 'details'];
     const esc = (v) => {
         if (v == null) return '';
@@ -800,12 +902,28 @@ router.post('/admin/reset-password', async (req, res) => {
     res.json({ ok: true, tempPassword, expiresAt, note: 'Temp password expires in 1 hour. Communicate via secure channel; user must change on first login.' });
 });
 
+// [M7] Per-admin rate limit on bulk endpoint — limits damage from compromised admin
+const _bulkRate = new Map(); // adminId → { count, resetAt }
+const BULK_WINDOW = 60 * 1000; // 1 min
+const BULK_MAX_CALLS = 3;      // 3 calls/min/admin
+const BULK_MAX_IDS = 50;       // worst case: 150 actions/min/admin
+setInterval(() => { const now = Date.now(); for (const [k, v] of _bulkRate) if (now > v.resetAt) _bulkRate.delete(k); }, 5 * 60 * 1000);
+
 // ─── ADMIN: POST /auth/admin/bulk — bulk ops (force-logout / approve / block) ───
 router.post('/admin/bulk', (req, res) => {
     const guard = _adminGuard(req, res); if (!guard) return;
+    // [M7] Per-admin throttle
+    const now = Date.now();
+    let br = _bulkRate.get(guard.caller.id);
+    if (!br || now > br.resetAt) { br = { count: 0, resetAt: now + BULK_WINDOW }; _bulkRate.set(guard.caller.id, br); }
+    br.count++;
+    if (br.count > BULK_MAX_CALLS) {
+        db.auditLog(guard.caller.id, 'ADMIN_BULK_RATE_LIMITED', { count: br.count }, req.ip);
+        return res.status(429).json({ error: 'Bulk rate limit: max ' + BULK_MAX_CALLS + ' calls/min' });
+    }
     const { action, ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids[] required' });
-    if (ids.length > 100) return res.status(400).json({ error: 'Max 100 ids per request' });
+    if (ids.length > BULK_MAX_IDS) return res.status(400).json({ error: 'Max ' + BULK_MAX_IDS + ' ids per request' });
     const allowed = ['force-logout', 'approve', 'block', 'unblock'];
     if (!allowed.includes(action)) return res.status(400).json({ error: 'Unknown action' });
     const results = { ok: 0, skipped: 0, errors: [] };
@@ -844,7 +962,7 @@ router.get('/admin/modules', (req, res) => {
         { key: 'audit',     name: 'Audit Log',   location: 'server', state: 'ok' },
     ];
     try {
-        const audit = db.listAuditLog(1);
+        const audit = db.listAuditLog(1, 0).rows; // [M10] new shape
         modules.find(m => m.key === 'audit').lastEvent = audit[0]?.created_at || null;
     } catch (_) {}
     res.json({ ok: true, modules, uptime: process.uptime(), checkedAt: new Date().toISOString() });
@@ -980,7 +1098,7 @@ router.post('/change-password/confirm', async (req, res) => {
             { id: user.id, email: decoded.email, role: decoded.role, tokenVersion: freshUser.token_version },
             JWT_SECRET, { expiresIn: JWT_EXPIRY }
         );
-        _setAuthCookie(res, newToken);
+        _setAuthCookie(res, newToken, user.id);
 
         db.auditLog(user.id, 'CHANGE_PASSWORD_SUCCESS', {}, req.ip);
         logger.info('AUTH', 'Password changed', { email: _mask(decoded.email) });
@@ -1282,6 +1400,7 @@ router.post('/close-account/confirm', async (req, res) => {
 
         // Clear auth cookie
         res.clearCookie('zeus_token', { path: '/' });
+        res.clearCookie('zeus_uid', { path: '/' });
 
         db.auditLog(user.id, 'CLOSE_ACCOUNT_SUCCESS', { email: decoded.email }, req.ip);
         logger.info('AUTH', 'Account closed', { email: _mask(decoded.email) });
@@ -1304,14 +1423,26 @@ router.post('/pin/set', async (req, res) => {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const user = db.findUserById(decoded.id);
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
-        const { pin } = req.body;
+        const { pin, currentPin } = req.body;
         if (!pin || typeof pin !== 'string' || pin.length < 4 || pin.length > 8) {
             return res.status(400).json({ error: 'PIN trebuie să aibă 4–8 caractere' });
         }
+        // [BATCH3-S] If PIN already set, require currentPin re-entry before overwrite.
+        const existingHash = db.getUserPin(user.id);
+        if (existingHash) {
+            if (!currentPin || typeof currentPin !== 'string') {
+                return res.status(400).json({ error: 'current_pin_required' });
+            }
+            const validCurrent = await bcrypt.compare(currentPin, existingHash);
+            if (!validCurrent) {
+                db.auditLog(user.id, 'PIN_CHANGE_FAILED', { reason: 'wrong_current_pin' }, req.ip);
+                return res.status(401).json({ error: 'invalid_current_pin' });
+            }
+        }
         const hash = await bcrypt.hash(pin, BCRYPT_ROUNDS);
         db.setUserPin(user.id, hash);
-        db.auditLog(user.id, 'PIN_SET', {}, req.ip);
-        logger.info('AUTH', 'PIN set', { email: _mask(user.email) });
+        db.auditLog(user.id, existingHash ? 'PIN_CHANGED' : 'PIN_SET', {}, req.ip);
+        logger.info('AUTH', existingHash ? 'PIN changed' : 'PIN set', { email: _mask(user.email) });
         res.json({ ok: true });
     } catch (err) { res.status(401).json({ error: 'session_invalid' }); }
 });
@@ -1325,11 +1456,12 @@ router.post('/pin/verify', async (req, res) => {
         const user = db.findUserById(decoded.id);
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
 
-        // PIN rate limit per user
+        // [M9] PIN rate limit per user — exponential backoff
         const now = Date.now();
         let pa = pinAttempts.get(user.id);
         if (pa && now < pa.resetAt && pa.count >= PIN_MAX) {
-            return res.status(429).json({ error: 'pin_rate_limited' });
+            const remainMs = pa.resetAt - now;
+            return res.status(429).json({ error: 'pin_rate_limited', retryAfterMs: remainMs });
         }
 
         const storedHash = db.getUserPin(user.id);
@@ -1341,22 +1473,42 @@ router.post('/pin/verify', async (req, res) => {
             pinAttempts.delete(user.id);
             res.json({ ok: true });
         } else {
-            if (!pa || now > pa.resetAt) { pa = { count: 0, resetAt: now + PIN_WINDOW }; pinAttempts.set(user.id, pa); }
+            // [M9] Exponential backoff — bump lockout level each time PIN_MAX is reached.
+            if (!pa || now > pa.resetAt) {
+                const prevLvl = (pa && pa.lockoutLevel != null) ? pa.lockoutLevel : -1;
+                const lvl = Math.min(prevLvl + 1, PIN_LOCKOUT_LEVELS.length - 1);
+                pa = { count: 0, resetAt: now + PIN_LOCKOUT_LEVELS[lvl], lockoutLevel: lvl };
+                pinAttempts.set(user.id, pa);
+            }
             pa.count++;
-            db.auditLog(user.id, 'PIN_VERIFY_FAILED', { attempts: pa.count }, req.ip);
+            db.auditLog(user.id, 'PIN_VERIFY_FAILED', { attempts: pa.count, lockoutLevel: pa.lockoutLevel }, req.ip);
             res.status(401).json({ ok: false, error: 'invalid_pin' }); // [SC-09]
         }
     } catch (err) { res.status(401).json({ error: 'session_invalid' }); }
 });
 
 // REMOVE PIN
-router.post('/pin/remove', (req, res) => {
+router.post('/pin/remove', async (req, res) => {
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'session_invalid' });
     try {
         const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
         const user = db.findUserById(decoded.id);
         if (!user || user.status !== 'active') return res.status(401).json({ error: 'session_invalid' });
+        const storedHash = db.getUserPin(user.id);
+        // Idempotent: if no PIN is set, consider it already removed.
+        if (!storedHash) return res.json({ ok: true });
+        // [BATCH3-S] Require current PIN re-entry before removal —
+        // prevents shoulder-surfed sessions from disabling app lock silently.
+        const { pin } = req.body || {};
+        if (!pin || typeof pin !== 'string') {
+            return res.status(400).json({ error: 'pin_required' });
+        }
+        const valid = await bcrypt.compare(pin, storedHash);
+        if (!valid) {
+            db.auditLog(user.id, 'PIN_REMOVE_FAILED', { reason: 'wrong_pin' }, req.ip);
+            return res.status(401).json({ error: 'invalid_pin' });
+        }
         db.clearUserPin(user.id);
         db.auditLog(user.id, 'PIN_REMOVED', {}, req.ip);
         logger.info('AUTH', 'PIN removed', { email: _mask(user.email) });

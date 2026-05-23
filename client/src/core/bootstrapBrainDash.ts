@@ -2,6 +2,9 @@
 // Ported 1:1 from public/js/core/bootstrap.js lines 2804-3191 (Chunk F)
 // Brain Vision (V2) + Brain Dashboard (Reflection Engine) — both IIFEs with polling
 
+import { useBrainStore } from '../stores/brainStore'
+import { useATStore } from '../stores/atStore'
+
 // ===== BRAIN VISION V2 — LOCAL REAL-TIME (reads from brainStore/atStore, fallback window.*) =====
 ;(function () {
   const w = window as any
@@ -19,8 +22,7 @@
     // Read from Zustand stores (single source of truth in React)
     let BM: any, _brainState: string, _thoughts: any[], _adaptParams: any, _blockReason: any, _atEnabled: boolean, _atKill: boolean, _atTrades: number, _atWins: number
     try {
-      const { useBrainStore } = require('../stores/brainStore')
-      const { useATStore } = require('../stores/atStore')
+      /* stores imported statically above */
       const bs = useBrainStore.getState()
       const as2 = useATStore.getState()
       BM = bs.brain; _brainState = bs.brainState

@@ -11,7 +11,7 @@ const logger = require('../services/logger');
 
 const CTX_DIR = path.join(__dirname, '..', '..', 'data', 'user_ctx');
 const MAX_SIZE = 256 * 1024; // 256KB ceiling per user — extended sections included
-const MAX_BACKUPS = 5; // rotative backups per user
+// [Phase 8.1] MAX_BACKUPS removed — backup rotation eliminated, SQLite is primary
 
 // Ensure directory exists
 if (!fs.existsSync(CTX_DIR)) fs.mkdirSync(CTX_DIR, { recursive: true });
@@ -26,6 +26,11 @@ const ALLOWED_SECTIONS = new Set([
     'teacherData', 'ariaNovaHud',
     // ARES
     'aresData',
+    // [SEC-29] chart toggle persistence (Pack D, sessions/vwap/heatmap/zsSettings/overlays).
+    // Was emitted by client core/config.ts:559-565 _buildAllSections but missing from
+    // whitelist → 7,175 silent rejections during S6-B7 soak. FS-only persistence
+    // (small <1KB toggle state); NOT added to SQLITE_SECTIONS below.
+    'chartExtras',
 ]);
 
 // [BE-02] Per-user write lock — prevents concurrent POST from overwriting each other
@@ -47,35 +52,104 @@ function _userFile(userId) {
 }
 
 function _atomicWrite(filePath, data) {
-    // Backup rotation before overwrite
-    if (fs.existsSync(filePath)) {
-        try {
-            for (let i = MAX_BACKUPS - 1; i >= 1; i--) {
-                const src = filePath + '.bak' + i;
-                const dst = filePath + '.bak' + (i + 1);
-                if (fs.existsSync(src)) fs.renameSync(src, dst);
-            }
-            fs.copyFileSync(filePath, filePath + '.bak1');
-            // Remove oldest if over limit
-            const oldest = filePath + '.bak' + (MAX_BACKUPS + 1);
-            if (fs.existsSync(oldest)) fs.unlinkSync(oldest);
-        } catch (_) { /* backup is best-effort */ }
-    }
+    // [R12 / Phase 8.1] FS prune complete: backup rotation removed, SQLite is
+    // the sole source of truth for the 14 SQLITE_SECTIONS below, FS holds ONLY
+    // the 5 fs-only sections (uiContext, panels, uiScale, settings, aresData).
     const tmp = filePath + '.tmp';
     fs.writeFileSync(tmp, JSON.stringify(data), 'utf8');
     fs.renameSync(tmp, filePath);
 }
 
+// [Phase 8] 14 sections served exclusively from SQLite (user_ctx_data table).
+// [R12] After Phase 8.1 prune, FS files MUST NOT contain any of these keys;
+//       the boot-time prune below enforces that invariant once per server start.
+const SQLITE_SECTIONS = new Set([
+    'indSettings', 'llvSettings', 'signalRegistry', 'perfStats',
+    'dailyPnl', 'postmortem', 'adaptive', 'notifications',
+    'scannerSyms', 'midstackOrder', 'aubData', 'ofHud',
+    'teacherData', 'ariaNovaHud',
+]);
+
+// [R12] Phase 8.1 FS prune — runs once at startup. Strips any stale
+// SQLITE_SECTIONS copies from FS files (pre-C5 data) and deletes leftover
+// `.bakN` rotation files from the abandoned backup scheme. Idempotent —
+// subsequent runs find nothing to prune and log 0/0.
+function _phase81FsPrune() {
+    try {
+        if (!fs.existsSync(CTX_DIR)) return;
+        const files = fs.readdirSync(CTX_DIR);
+        let fsStripped = 0;
+        let bakDeleted = 0;
+        for (const f of files) {
+            const fp = path.join(CTX_DIR, f);
+            // Delete stale rotation backups (.bak1..N)
+            if (/\.bak\d+$/.test(f)) {
+                try { fs.unlinkSync(fp); bakDeleted++; } catch (_) {}
+                continue;
+            }
+            // Only operate on .json user-context files (not .tmp, not other debris)
+            if (!/^\d+\.json$/.test(f)) continue;
+            let data;
+            try { data = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { continue; }
+            if (!data || typeof data !== 'object' || !data.sections) continue;
+            let pruned = 0;
+            for (const key of SQLITE_SECTIONS) {
+                if (Object.prototype.hasOwnProperty.call(data.sections, key)) {
+                    delete data.sections[key];
+                    pruned++;
+                }
+            }
+            if (pruned > 0) {
+                _atomicWrite(fp, data);
+                fsStripped += pruned;
+            }
+        }
+        if (fsStripped > 0 || bakDeleted > 0) {
+            logger.info('USER_CTX', `[R12] Phase 8.1 prune — stripped ${fsStripped} stale SQLite section(s), deleted ${bakDeleted} .bakN file(s)`);
+        }
+    } catch (e) {
+        logger.error('USER_CTX', '[R12] Phase 8.1 prune failed: ' + e.message);
+    }
+}
+_phase81FsPrune();
+
 // ── GET /api/sync/user-context — pull user preferences ──────────
+// [R12] SQLite is sole truth for 14 sections; FS is sole truth for 5 fs-only
+//       sections. No fallback cross-store — a missing SQLite section is a
+//       missing section, not a cue to read from FS.
 router.get('/user-context', (req, res) => {
     try {
         if (!req.user || !req.user.id) return res.status(401).json({ ok: false, error: 'unauthorized' });
-        const fp = _userFile(req.user.id);
+        const userId = req.user.id;
+        const fp = _userFile(userId);
         if (!fp) return res.status(400).json({ ok: false, error: 'bad user id' });
-        if (!fs.existsSync(fp)) return res.json({ ok: true, data: null });
-        const raw = fs.readFileSync(fp, 'utf8');
-        const data = JSON.parse(raw);
-        return res.json({ ok: true, data });
+
+        // 1. Read FS envelope (contains only fs-only sections after R12 prune)
+        let fsData = null;
+        if (fs.existsSync(fp)) {
+            try { fsData = JSON.parse(fs.readFileSync(fp, 'utf8')); } catch (_) { fsData = null; }
+        }
+        if (!fsData) return res.json({ ok: true, data: null });
+
+        // 2. Strip anything FS still has in SQLITE_SECTIONS keyspace — defensive
+        //    in case a client bug or external write sneaks one back in.
+        const merged = fsData.sections || {};
+        for (const key of SQLITE_SECTIONS) {
+            if (Object.prototype.hasOwnProperty.call(merged, key)) delete merged[key];
+        }
+
+        // 3. Layer SQLite sections on top. These are authoritative.
+        const sqliteSections = db.getCtxAll(userId);
+        let sqliteHits = 0;
+        for (const key of SQLITE_SECTIONS) {
+            if (sqliteSections[key] !== undefined && sqliteSections[key] !== null) {
+                merged[key] = sqliteSections[key];
+                sqliteHits++;
+            }
+        }
+
+        fsData.sections = merged;
+        return res.json({ ok: true, data: fsData, _src: { sqlite: sqliteHits, fs: Object.keys(merged).length - sqliteHits } });
     } catch (e) {
         console.error('[user-ctx] GET error:', e.message);
         return res.status(500).json({ ok: false, error: 'read failed' });
@@ -137,10 +211,29 @@ router.post('/user-context', async (req, res) => { // [S11] async to properly aw
         }
         if (rejected > 0) console.warn('[user-ctx] Rejected', rejected, 'section(s) from user', req.user.id);
 
-        const final = { userId: req.user.id, ts: body.ts, sections: merged };
+        // [R12] SQLite is the sole writer for the 14 SQLITE_SECTIONS.
+        const sqliteBatch = {};
+        for (const key of SQLITE_SECTIONS) {
+            if (merged[key] !== undefined && merged[key] !== null) {
+                sqliteBatch[key] = merged[key];
+            }
+        }
+        if (Object.keys(sqliteBatch).length > 0) {
+            db.saveCtxBulk(req.user.id, sqliteBatch);
+        }
+
+        // [R12] FS holds only the 5 fs-only sections (uiContext, panels,
+        // uiScale, settings, aresData). Anything else is pruned on write.
+        const fsSections = {};
+        for (const [key, val] of Object.entries(merged)) {
+            if (!SQLITE_SECTIONS.has(key)) {
+                fsSections[key] = val;
+            }
+        }
+        const final = { userId: req.user.id, ts: body.ts, sections: fsSections };
         _atomicWrite(fp, final);
 
-        console.log('[user-ctx] POST user', req.user.id, '— sections:', Object.keys(merged).join(','));
+        console.log('[user-ctx] POST user', req.user.id, '— sqlite:', Object.keys(sqliteBatch).length, 'fs:', Object.keys(fsSections).length);
         // Broadcast to other devices via WebSocket for instant sync
         if (req.app.locals.wsBroadcast) req.app.locals.wsBroadcast(req.user.id, null);
         // [C3] Echo stored settings section for client-side validation

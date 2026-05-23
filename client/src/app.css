@@ -63,6 +63,39 @@
   /* Shadows */
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow-md: 0 4px 12px rgba(0,0,0,0.5);
+
+  /* [UI-R1] Mobile header offset variables.
+     --zt-safe-top   — safe-area inset (notch / Dynamic Island /
+                       camera cutout); 0 in browsers / on devices
+                       without insets. Activated by viewport-fit=cover
+                       in client/index.html.
+     --zt-content-top — base padding-top for the main app content
+                        wrapper (.zr-panels), tuned per breakpoint
+                        below.
+     --zt-page-top    — base padding-top for the legacy .page
+                        wrapper (used by some module/secondary pages).
+     All consumers add var(--zt-safe-top) so they push down under
+     the notch on PWA without affecting plain-browser users. */
+  --zt-safe-top: env(safe-area-inset-top, 0px);
+  --zt-content-top: 120px; /* desktop ≈ 94px header + 26px in-content StatusBar */
+  --zt-page-top:    60px;  /* desktop pages without StatusBar */
+}
+@media (max-width: 900px) {
+  :root {
+    /* [UI-R1.1] Operator: 110 was ~1cm too low — StatusBar floated
+       below the header instead of being glued to it. Mobile header
+       (.hdr at @max-width:900) is ~76 px tall (logo 42 + padding
+       12×2 + brand text overflow ~28). 80 px places StatusBar right
+       at the header bottom edge with a 4 px breathing buffer. */
+    --zt-content-top: 80px;
+  }
+}
+@media (max-width: 768px) {
+  :root {
+    /* Module / secondary pages on small screens — no StatusBar,
+       just need to clear the ~80px mobile header. */
+    --zt-page-top: 90px;
+  }
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -72,7 +105,15 @@ body {
   font-family: var(--ff);
   background: var(--bg);
   color: var(--txt);
+  /* M2: progressive fallback — 100vh for older browsers, 100dvh for
+     dynamic-viewport-aware mobile browsers (iOS Safari address-bar
+     collapse no longer leaves background gap).
+     [BUG-T8 2026-05-13] --app-height var written by bootstrapMisc.ts pe
+     visualViewport.resize + orientationchange — final fallback pentru
+     Android Chrome browser-bar dynamic collapse/expand. */
   min-height: 100vh;
+  min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
 }
 
 /* ── Fixed top wrapper (header + status bar) ── */
@@ -464,6 +505,29 @@ body {
   outline: 1px solid var(--gold);
 }
 
+/* L6: native <select> dropdown popup styling. Most desktop browsers
+   (Firefox all platforms, Chrome on Linux/Windows) honour these rules
+   on <option>/<optgroup>; macOS Safari + iOS Safari use the OS-native
+   widget and ignore this — those platforms keep the existing white
+   popup until a custom dropdown component is introduced in a later
+   batch. Best-effort coverage estimated ~70% of users. */
+#symSel option,
+select.tfb option,
+select.zr-symbol-select option,
+select.zac-select option {
+  background: var(--bg);
+  color: var(--whi);
+}
+#symSel optgroup,
+select.tfb optgroup,
+select.zr-symbol-select optgroup,
+select.zac-select optgroup {
+  background: var(--bg2);
+  color: var(--gold);
+  font-style: normal;
+  font-weight: 700;
+}
+
 /* Indicator & overlay active states */
 .indb.act {
   background: #00b8d422;
@@ -606,8 +670,16 @@ body {
   flex-direction: column;
   gap: 0;
   padding: 0;
-  padding-top: 100px; /* ~68px header + ~6px breathing room (status bar now in content) */
+  /* [UI-R1] Use the shared --zt-content-top variable (120 desktop,
+     110 @≤900px) plus --zt-safe-top so iPhone-PWA users with the
+     notch don't get the StatusBar pushed under the now-shifted
+     fixed header. */
+  padding-top: calc(var(--zt-content-top) + var(--zt-safe-top));
+  /* M2: progressive fallback — see comment in body{} above.
+     [BUG-T8 2026-05-13] --app-height fallback */
   min-height: 100vh;
+  min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
 }
 .zr-panel {
   background: var(--bg);
@@ -711,7 +783,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* M2: progressive fallback — see comment in body{} above.
+     [BUG-T8 2026-05-13] --app-height fallback */
   height: 100vh;
+  height: 100dvh;
+  height: var(--app-height, 100dvh);
   background: var(--bg);
 }
 .zr-loading__text {
@@ -731,7 +807,11 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* M2: progressive fallback — see comment in body{} above.
+     [BUG-T8 2026-05-13] --app-height fallback */
   min-height: 100vh;
+  min-height: 100dvh;
+  min-height: var(--app-height, 100dvh);
   background: var(--bg);
   padding: 16px;
 }
@@ -1388,7 +1468,8 @@ body {
     border-radius: 5px;
   }
   .sbtn svg { width: 13px; height: 13px; }
-  .zr-panels { padding-top: 78px; }
+  /* [UI-R1] Replaced fixed 78px (too small — header ~80px + StatusBar
+     ~26px overlapped) with the shared variable system at :root. */
 }
 @media (max-width: 600px) {
   .zr-panel__body { padding: 6px; font-size: 11px; }
@@ -2414,6 +2495,7 @@ body {
   background: rgba(0, 184, 212, 0.10);
 }
 #zeus-dock .zd-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2425,6 +2507,49 @@ body {
   box-shadow: 0 2px 6px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
   transition: border-color .2s, box-shadow .2s, background .2s;
 }
+
+/* [BATCH3-N] Link dots — pulsing indicator that AT/Manual are bonded to DSL
+   via currently open positions. Shared animation start across items gives the
+   eye a synchronized-heartbeat reading of "these two are linked". */
+.zd-link-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: zdLinkPulse 1.6s ease-in-out infinite;
+  animation-delay: 0s;
+  z-index: 2;
+}
+.zd-link-dot--at {
+  background: #22e27a;
+  box-shadow: 0 0 6px #22e27a, 0 0 2px #22e27a inset;
+}
+.zd-link-dot--manual {
+  background: #f0c040;
+  box-shadow: 0 0 6px #f0c040, 0 0 2px #f0c040 inset;
+}
+.zd-link-dot--dsl-at {
+  top: 3px;
+  right: 3px;
+}
+.zd-link-dot--dsl-manual {
+  top: auto;
+  bottom: 3px;
+  right: 3px;
+}
+@keyframes zdLinkPulse {
+  0%   { transform: scale(0.85); opacity: 0.55; }
+  50%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(0.85); opacity: 0.55; }
+}
+/* [BATCH3-P] prefers-reduced-motion intentionally NOT honored here — these
+   dots are a vital-info signal (position bonded to DSL). On Android devices
+   with system-wide "Remove animations" enabled, the CSS would freeze them
+   solid and the user loses the visual cue. Dots are 7px, the motion budget
+   is minimal, so overriding the accessibility preference is acceptable. */
 #zeus-dock .zd-icon svg {
   width: 24px;
   height: 24px;
@@ -2503,7 +2628,7 @@ body {
 /* ── Keyframes ── */
 @keyframes zBlink { 0%,100%{opacity:1} 49%{opacity:1} 50%{opacity:0} 99%{opacity:0} }
 @keyframes zFlicker { 0%{opacity:1} 92%{opacity:1} 93%{opacity:0} 94%{opacity:1} 96%{opacity:0} 97%{opacity:1} }
-@keyframes zScan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100vh)} }
+@keyframes zScan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100dvh)} }
 @keyframes zTicker { 0%{transform:translateX(100%)} 100%{transform:translateX(-100%)} }
 @keyframes zGlow { 0%,100%{box-shadow:0 0 4px currentColor} 50%{box-shadow:0 0 14px currentColor, 0 0 28px currentColor} }
 @keyframes zArmPulse { 0%,100%{text-shadow:0 0 8px currentColor} 50%{text-shadow:0 0 22px currentColor, 0 0 44px currentColor} }
@@ -3040,27 +3165,7 @@ body {
 .znc-dsl-body { font-size:12px; color:#2a5040; line-height:1.6 }
 .znc-dsl-body b { color:#00ffcc77 }
 
-/* ─── Q-FORECAST ─── */
-#brain-forecast {
-  background: #060e08;
-  border: 1px solid #1a3020;
-  border-radius: 4px;
-  padding: 6px 8px;
-  font-family: var(--ff);
-  font-size: 12px;
-  line-height: 1.8;
-  letter-spacing: .5px;
-  height: 253px;
-}
-#brain-forecast .bf-label { color:#39ff1466; font-size:11px; letter-spacing:2px; margin-bottom:2px; text-transform:uppercase }
-#brain-forecast .bf-main { font-size:13px; font-weight:700 }
-#brain-forecast .bf-main.bull { color:var(--lime) }
-#brain-forecast .bf-main.bear { color:var(--red) }
-#brain-forecast .bf-main.neut { color:#556655 }
-#brain-forecast .bf-main.glow { text-shadow:0 0 8px currentColor }
-#brain-forecast .bf-main.dim { opacity:.45 }
-#brain-forecast .bf-row { color:#2a5040; font-size:12px }
-#brain-forecast .bf-row b { color:#3a7050 }
+/* [BUG-D-1] Q-FORECAST CSS section removed 2026-05-07 — orphan after BrainCockpit QForecastBlock dead-code cleanup. Selectors #brain-forecast + .bf-* had zero active DOM consumers. */
 
 /* ─── WHY ENGINE ─── */
 #brain-why {
@@ -3187,6 +3292,9 @@ body {
 .tp-hdr { display:flex; align-items:center; justify-content:space-between; padding:9px 14px; font-size:15px; font-weight:700; letter-spacing:1.5px }
 .demo-hdr { background:linear-gradient(90deg,#001a2e,#002244); color:#00d4ff; border-bottom:1px solid #00aaff33 }
 .live-hdr { background:linear-gradient(90deg,#1a0000,#2a0000); color:#ff6666; border-bottom:1px solid #ff444433 }
+/* [Phase 3G] LOCKED header — orange palette signals non-demo blocked state. Distinct from
+ * live-hdr (red = active live) so user sees at a glance that the panel is not executing. */
+.locked-hdr { background:linear-gradient(90deg,#1a0f00,#2a1a00); color:#ffaa44; border-bottom:1px solid #ff880044 }
 .tp-body { padding:10px 12px; display:flex; flex-direction:column; gap:8px }
 .tp-sides { display:flex; gap:0; border-radius:4px; overflow:hidden }
 .tp-side-btn { flex:1; padding:10px; border:none; cursor:pointer; font-family:var(--ff); font-size:15px; font-weight:700; letter-spacing:1px; transition:.2s; opacity:.5 }
@@ -3205,6 +3313,10 @@ body {
 .tp-exec { width:100%; padding:11px; border:none; border-radius:4px; font-family:var(--ff); font-size:15px; font-weight:700; letter-spacing:2px; cursor:pointer; transition:.2s }
 .demo-exec { background:linear-gradient(90deg,#004488,#0066cc); color:#00ffff; box-shadow:0 0 10px #0066cc44 }
 .demo-exec:hover { background:linear-gradient(90deg,#0055aa,#0088ff); box-shadow:0 0 20px #0088ff66 }
+/* [Phase 3G] LOCKED PLACE button — orange, not-allowed cursor, dimmed. Same semantics as
+ * locked-hdr / zmb-btn-locked. Click still routed to placeDemoOrder which guards LOCKED. */
+.tp-exec-locked { background:linear-gradient(90deg,#2a1500,#4a2800); color:#ffaa44; box-shadow:0 0 8px #ff880044; cursor:not-allowed; opacity:0.75 }
+.tp-exec-locked:hover { background:linear-gradient(90deg,#2a1500,#4a2800); box-shadow:0 0 8px #ff880044 }
 .tp-pos-hdr { font-size:13px; letter-spacing:2px; color:var(--dim); border-top:1px solid var(--brd); padding-top:8px; margin-top:2px }
 .tp-pnl-row { display:flex; gap:0; border-top:1px solid var(--brd); padding-top:8px; margin-top:2px }
 .tp-pnl-cell { flex:1; text-align:center }
@@ -3366,7 +3478,13 @@ body {
   /* Shown as fullscreen overlay content below PageView header */
   display: block !important;
   position: fixed;
-  top: 72px; /* below .zpv-header */
+  /* [UI-R1] Was hardcoded 72px. .zpv-header has
+     padding-top: calc(env(safe-area-inset-top, 0px) + 12px) plus its
+     own min-height (48px), so its real bottom is
+     ~48px + safe-area. Add the safe-area inset here too so the
+     active panel stays below the dynamically-sized header on
+     iPhone-PWA / notched devices. */
+  top: calc(72px + env(safe-area-inset-top, 0px));
   left: 0;
   right: 0;
   bottom: 0;
@@ -4621,7 +4739,7 @@ body {
 .bt-result-grid { display: flex; flex-direction: column }
 .bt-ind-row { padding: 8px 12px; border-bottom: 1px solid #0d1a24; display: grid; grid-template-columns: 90px 1fr 58px 55px 55px; align-items: center; gap: 4px; font-size: 13px }
 .bt-ind-row:last-child { border-bottom: none }
-.bt-ind-row.hdr { font-size: 12px; letter-spacing: 1px; color: var(--dim); padding: 5px 12px; background: #080c12; border-bottom: 1px solid var(--brd) }
+.bt-ind-row.bt-hdr { font-size: 12px; letter-spacing: 1px; color: var(--dim); padding: 5px 12px; background: #080c12; border-bottom: 1px solid var(--brd) }
 .bt-ind-name { display: flex; align-items: center; gap: 5px; font-size: 14px; color: var(--whi); font-weight: 600 }
 .bt-wr-bar { height: 5px; background: #1a2530; border-radius: 3px; overflow: hidden; margin-top: 2px }
 .bt-wr-fill { height: 100%; border-radius: 3px; transition: width 1s }
@@ -4814,25 +4932,165 @@ body {
 .zmb-locked .zmb-mode { color: var(--orange) }
 .zmb-btn { font-family: var(--ff); font-size: 10px; font-weight: 600; letter-spacing: 0.8px; padding: 6px 14px; border-radius: 6px; border: 1px solid; cursor: pointer; transition: background var(--trans), border-color var(--trans), transform var(--trans); -webkit-tap-highlight-color: transparent; white-space: nowrap }
 .zmb-btn:active { transform: scale(0.96) }
-.zmb-btn-demo { background: rgba(170,68,255,0.08); border-color: rgba(170,68,255,0.3); color: var(--pur) }
-.zmb-btn-demo:active { background: rgba(170,68,255,0.18) }
-.zmb-btn-exit { background: rgba(90,110,130,0.08); border-color: rgba(90,110,130,0.3); color: var(--txt) }
-.zmb-btn-exit:active { background: rgba(90,110,130,0.18) }
+/* [2026-05-18 polish v2] EXIT DEMO / ACTIVATE DEMO buttons — operator wants
+ * FULL magenta presence (text + border + glow), not just hint. Same accent
+ * as OMEGA VOICE ON (#ff00d4). Border thicker + always-on glow + bold text.
+ * Standout from dock visually so the mode-switch action is immediately
+ * findable. LOCKED variant kept orange (no creds = distinct).
+ */
+.zmb-btn-demo, .zmb-btn-exit {
+  background: rgba(255,0,212,0.14);
+  border: 1.5px solid #ff00d4;
+  color: #ff00d4;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  box-shadow: 0 0 8px rgba(255,0,212,0.35), inset 0 0 6px rgba(255,0,212,0.12);
+  text-shadow: 0 0 4px rgba(255,0,212,0.5);
+}
+.zmb-btn-demo:active, .zmb-btn-exit:active {
+  background: rgba(255,0,212,0.28);
+  transform: scale(0.96);
+}
+/* [Phase 3G] LOCKED state — orange tint matches .zmb-locked / .zmb-ind-locked chain. Signals
+ * "non-demo blocked" (executionEnv === null) clearly: distinct from demo-purple and real-red. */
+.zmb-btn-locked { background: rgba(255,136,0,0.08); border-color: rgba(255,136,0,0.4); color: var(--orange) }
+.zmb-btn-locked:active { background: rgba(255,136,0,0.18) }
 @media (hover: hover) {
-  .zmb-btn-demo:hover { background: rgba(170,68,255,0.15); border-color: rgba(170,68,255,0.5) }
-  .zmb-btn-exit:hover { background: rgba(90,110,130,0.15); border-color: rgba(90,110,130,0.5) }
+  .zmb-btn-demo:hover, .zmb-btn-exit:hover {
+    background: rgba(255,0,212,0.22);
+    border-color: #ff00d4;
+    box-shadow: 0 0 14px rgba(255,0,212,0.55), inset 0 0 10px rgba(255,0,212,0.2);
+    color: #fff;
+    filter: brightness(1.1);
+  }
+  .zmb-btn-locked:hover { background: rgba(255,136,0,0.18); border-color: rgba(255,136,0,0.6) }
 }
 @media (max-width: 360px) {
   .zeus-mode-bar { padding: 6px 10px }
   .zmb-mode { font-size: 11px }
   .zmb-btn { font-size: 9px; padding: 5px 10px }
 }
+/* [BUG-T3 2026-05-17] Hard-disabled mode switch button — opposite-mode open
+ * positions block the switch until they're closed. Distinct from "LOCKED"
+ * (no creds) — same visual concept but red-ish to signal "positions risk". */
+.zmb-btn-disabled-locked {
+  background: rgba(255,90,50,0.06) !important;
+  border-color: rgba(255,90,50,0.35) !important;
+  color: rgba(255,150,120,0.6) !important;
+  cursor: not-allowed !important;
+  opacity: 0.7;
+}
+.zmb-btn-disabled-locked:hover,
+.zmb-btn-disabled-locked:active {
+  background: rgba(255,90,50,0.06) !important;
+  transform: none !important;
+}
+/* [BUG-T7 2026-05-17] Opposite-mode AT-active badge inside zeus-mode-bar.
+ * Shows when the OTHER engine mode has AT enabled — operator visibility
+ * across mode boundaries. Yellow warning treatment, sits between status
+ * cluster and the action button. */
+.zmb-opp-at-badge {
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  padding: 2px 6px; margin: 0;
+  border: 1px solid rgba(255,200,0,0.45);
+  background: rgba(255,200,0,0.10);
+  color: #ffc800;
+  border-radius: 4px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-shadow: 0 0 4px rgba(255,200,0,0.4);
+  animation: zmb-opp-pulse 2.5s ease-in-out infinite;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* [Phase A.1 stack 2026-05-19] Vertical stack for the two info badges
+ * (AT ON + QUOTA) — operator request: stivuite una sub alta sa incapa
+ * mai bine in mode bar pe testnet/real. Both badges share width inside. */
+.zmb-badge-stack {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: stretch;
+  margin: 0 6px;
+  flex-shrink: 0;
+}
+@keyframes zmb-opp-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(255,200,0,0.2) }
+  50%      { box-shadow: 0 0 10px rgba(255,200,0,0.6) }
+}
+
+/* [Phase A.1 Operator Visibility 2026-05-19] Quota pressure indicator —
+ * shows Binance IP X-MBX-USED-WEIGHT-1M consumption with color-coded badge.
+ * Color logic in QuotaIndicator.tsx; CSS provides 4 visual states. */
+.zmb-quota-indicator {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  padding: 2px 6px; margin: 0;
+  border-radius: 4px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
+  cursor: help;
+  user-select: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.zmb-quota-indicator .zmb-quota-dot {
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+}
+.zmb-quota-indicator .zmb-quota-label {
+  opacity: 0.85;
+}
+.zmb-quota-indicator .zmb-quota-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+.zmb-quota-indicator .zmb-quota-crit {
+  margin-left: 4px;
+  font-size: 11px;
+  filter: drop-shadow(0 0 3px rgba(0,255,200,0.7));
+  animation: zmb-crit-pulse 1.4s ease-in-out infinite;
+}
+@keyframes zmb-crit-pulse {
+  0%, 100% { opacity: 0.7 }
+  50%      { opacity: 1.0 }
+}
+.zmb-quota-green {
+  border: 1px solid rgba(0, 255, 120, 0.35);
+  background: rgba(0, 255, 120, 0.06);
+  color: #00ff78;
+}
+.zmb-quota-green .zmb-quota-dot { background: #00ff78; box-shadow: 0 0 4px rgba(0,255,120,0.5) }
+.zmb-quota-amber {
+  border: 1px solid rgba(255, 200, 0, 0.45);
+  background: rgba(255, 200, 0, 0.10);
+  color: #ffc800;
+}
+.zmb-quota-amber .zmb-quota-dot { background: #ffc800; box-shadow: 0 0 6px rgba(255,200,0,0.6) }
+.zmb-quota-red {
+  border: 1px solid rgba(255, 80, 80, 0.55);
+  background: rgba(255, 80, 80, 0.12);
+  color: #ff5050;
+  animation: zmb-quota-pulse 2s ease-in-out infinite;
+}
+.zmb-quota-red .zmb-quota-dot { background: #ff5050; box-shadow: 0 0 8px rgba(255,80,80,0.7) }
+.zmb-quota-block {
+  border: 1px solid rgba(255, 0, 60, 0.75);
+  background: rgba(255, 0, 60, 0.18);
+  color: #ff0040;
+  font-weight: 900;
+  animation: zmb-quota-pulse 0.8s ease-in-out infinite;
+}
+.zmb-quota-block .zmb-quota-dot { background: #ff0040; box-shadow: 0 0 12px rgba(255,0,60,0.9) }
+@keyframes zmb-quota-pulse {
+  0%, 100% { box-shadow: 0 0 4px rgba(255,80,80,0.2) }
+  50%      { box-shadow: 0 0 14px rgba(255,80,80,0.7) }
+}
 
 /* ══════════════════════════════════════════════════════════════════
    MODAL SYSTEM — .mover + .modal + shared controls
    ══════════════════════════════════════════════════════════════════ */
-.mover { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000000cc; z-index: 1000; display: flex; align-items: center; justify-content: center }
-.modal { background: #111318; border: 1px solid var(--gold-a20); border-radius: 12px; width: 100%; max-width: 480px; max-height: 85vh; display: flex; flex-direction: column; padding-bottom: 0 }
+.mover { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: #000000cc; z-index: 9000; display: flex; align-items: center; justify-content: center }
+.modal { background: #111318; border: 1px solid var(--gold-a20); border-radius: 12px; width: 100%; max-width: 480px; max-height: 85vh; display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden }
 .modal > .mhdr { flex-shrink: 0 }
 .modal > .mhdr ~ * { flex: 1; overflow-y: auto; padding-bottom: 24px }
 .mhdr { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px 10px; border-bottom: 1px solid var(--brd); position: sticky; top: 0; background: #111318; z-index: 1 }
@@ -5144,6 +5402,17 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .wlc-value.wlc-gold { color: var(--gold) }
 .wlc-enter { display: block; width: calc(100% - 40px); margin: 8px 20px 20px; padding: 14px; background: linear-gradient(135deg, var(--gold), #e0a820); color: #0a0f18; border: none; border-radius: 10px; font-family: 'Cinzel', serif; font-size: 14px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: all .2s; box-shadow: 0 4px 20px var(--gold-a20) }
 .wlc-enter:hover { transform: translateY(-1px); box-shadow: 0 6px 28px var(--gold-a33); background: linear-gradient(135deg, #f5cc55, var(--gold)) }
+.wlc-snooze-wrap { text-align: center; padding: 0 20px 14px; min-height: 24px }
+.wlc-snooze-link { background: none; border: none; color: #556; font-size: 10px; letter-spacing: 1px; cursor: pointer; padding: 4px 8px; font-family: var(--ff); text-transform: uppercase; transition: color .2s }
+.wlc-snooze-link:hover { color: #889 }
+.wlc-snooze-opts { display: flex; gap: 6px; justify-content: center; align-items: center; animation: wlcSlideIn .2s ease-out }
+.wlc-snooze-pill { background: #0b1120; border: 1px solid #1a2a3a; color: #aab; font-size: 10px; letter-spacing: 1px; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-family: var(--ff); transition: all .15s }
+.wlc-snooze-pill:hover:not(:disabled) { border-color: var(--gold-a40); color: var(--gold); background: #0d1520 }
+.wlc-snooze-pill:disabled { opacity: .35; cursor: default }
+.wlc-snooze-pill.wlc-snooze-active, .wlc-snooze-pill.wlc-snooze-active:disabled { opacity: 1; background: linear-gradient(135deg, var(--gold), #e0a820); border-color: var(--gold); color: #0a0f18; font-weight: 700; box-shadow: 0 0 12px var(--gold-a40); animation: wlcPillPulse .65s ease-out }
+@keyframes wlcPillPulse { 0% { transform: scale(1); box-shadow: 0 0 0 var(--gold-a40) } 40% { transform: scale(1.08); box-shadow: 0 0 18px var(--gold-a40) } 100% { transform: scale(1); box-shadow: 0 0 12px var(--gold-a40) } }
+.wlc-snooze-cancel { background: none; border: none; color: #445; font-size: 10px; cursor: pointer; padding: 5px 6px; font-family: var(--ff); margin-left: 4px }
+.wlc-snooze-cancel:hover { color: #778 }
 
 /* ═══════════════════════════════════════════════════════════════
    PIN LOCK SCREEN — 1:1 from main.css lines 11271-11390
@@ -5160,6 +5429,20 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 .pin-lock-msg { min-height: 20px; font-size: 11px; color: #ff4455; margin-bottom: 8px }
 .pin-lock-hint { font-size: 9px; color: #333; letter-spacing: 1px }
 .pin-lock-shake { animation: pinShake .4s ease-in-out }
+.pin-lock-bio-btn { display: block; width: 200px; margin: 0 auto 10px; padding: 10px; background: transparent; color: var(--gold); border: 1px solid var(--gold-a40); border-radius: 10px; font-family: 'Cinzel', serif; font-size: 11px; font-weight: 600; letter-spacing: 2px; cursor: pointer; transition: all .2s }
+.pin-lock-bio-btn:hover { background: var(--gold-a20); border-color: var(--gold) }
+.zsn-backdrop { position: fixed; inset: 0; background: rgba(4,8,14,0.78); backdrop-filter: blur(4px); z-index: 99998; display: flex; align-items: center; justify-content: center; animation: zsnFade .25s ease-out }
+.zsn-card { width: min(340px, 90vw); background: linear-gradient(165deg, #0a1018 0%, #0c1420 100%); border: 1px solid var(--gold-a40); border-radius: 14px; padding: 24px 22px; text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,0.6), 0 0 40px rgba(240,192,64,0.08); animation: zsnRise .3s ease-out }
+.zsn-icon { margin-bottom: 12px; filter: drop-shadow(0 0 14px rgba(240,192,64,0.25)) }
+.zsn-title { font-family: 'Cinzel', serif; font-size: 15px; color: var(--gold); letter-spacing: 3px; margin-bottom: 10px }
+.zsn-body { font-size: 12px; color: #aab8c8; line-height: 1.55; margin-bottom: 18px }
+.zsn-btn { display: block; width: 100%; padding: 11px; margin-bottom: 8px; border: none; border-radius: 9px; font-family: 'Cinzel', serif; font-size: 11px; font-weight: 700; letter-spacing: 2px; cursor: pointer; transition: all .2s }
+.zsn-btn-pri { background: linear-gradient(135deg, var(--gold), #e0a820); color: #0a0f18; box-shadow: 0 4px 16px var(--gold-a20) }
+.zsn-btn-pri:hover { transform: translateY(-1px); box-shadow: 0 6px 22px var(--gold-a33) }
+.zsn-btn-sec { background: transparent; color: #8899aa; border: 1px solid #2a3a4a }
+.zsn-btn-sec:hover { color: #aab8c8; border-color: #3a4a5a }
+@keyframes zsnFade { from { opacity: 0 } to { opacity: 1 } }
+@keyframes zsnRise { from { opacity: 0; transform: translateY(14px) scale(.97) } to { opacity: 1; transform: translateY(0) scale(1) } }
 @keyframes pinShake { 0%, 100% { transform: translateX(0) } 20%, 60% { transform: translateX(-8px) } 40%, 80% { transform: translateX(8px) } }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -5358,6 +5641,18 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 @media (max-width: 768px) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important }
   .mover, .modal, #aub { transition-duration: 0.2s !important }
+
+  /* [DSL-MOBILE-FREEZE] Re-enable DSL decorative rain/bubble animations on mobile only.
+     Keep global mobile perf kill for everything else. */
+  .dsl-bubble {
+    animation-duration: 6s !important;
+    animation-iteration-count: infinite !important;
+  }
+
+  .dsl-drop {
+    animation-duration: 0.85s !important;
+    animation-iteration-count: infinite !important;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important }
@@ -5442,7 +5737,11 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* ── Prevent horizontal scroll (global safety) ── */
 @media (max-width: 768px) {
   html, body { overflow-x: hidden !important; max-width: 100vw !important; width: 100% !important }
-  .page { overflow-x: clip; max-width: 100vw !important; width: 100% !important; padding-top: 60px }
+  /* [UI-R1] padding-top was hardcoded 60px which is smaller than
+     the ~80px mobile Zeus header — module / secondary pages that
+     used .page slid under the header. Use the shared variable +
+     safe-area inset so PWA-with-notch also stays clear. */
+  .page { overflow-x: clip; max-width: 100vw !important; width: 100% !important; padding-top: calc(var(--zt-page-top) + var(--zt-safe-top)) }
   .page > * { max-width: 100vw; overflow-x: clip; box-sizing: border-box }
   .wl-bar { overflow-x: auto !important; -webkit-overflow-scrolling: touch }
 }
@@ -5574,27 +5873,60 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 /* ── Pull-to-refresh slot — sits between fixed header and content ──
    position: fixed at header bottom. Invisible until content slides down.
    Content translateY reveals this slot in the gap. Header never moves. */
-#ptr-indicator {
-  position: fixed; top: 68px; left: 0; right: 0; height: 50px;
-  display: none; align-items: center; justify-content: center; gap: 10px;
+/* [UI-R1.2] All #ptr-indicator rules use the `body #ptr-indicator`
+   prefix to outscore the legacy /css/main.css rule (loaded after
+   the React bundle by legacyLoader.ts). The legacy rule styles the
+   indicator as a 36×36 px gold-bordered ball anchored at
+   top: env(safe-area-inset-top, 0px) with transform: translateY(-50px)
+   — half off-screen at the very top of the viewport, regardless of
+   our header. Specificity (0,1,1) beats the legacy (0,1,0), so our
+   layout below now actually wins without resorting to !important. */
+body #ptr-indicator {
+  position: fixed;
+  /* [UI-R1.1] PTR sits at the header bottom edge so the slot
+     revealed by the content's translateY-on-pull lines up with the
+     gap right under the header. Add the safe-area inset so PWA-with-
+     notch keeps the same alignment after the header shifts down.
+     Desktop 94 px header → 94 px top. */
+  top: calc(94px + env(safe-area-inset-top, 0px));
+  left: 0; right: 0;
+  /* [UI-R1.2] Reset the legacy ball geometry so the React label
+     ("ZEUS"/"REFRESHING") gets a full-width strip slot to render in. */
+  transform: none;
+  width: auto;
+  height: 54px;
+  border-radius: 0;
+  border: none;
+  display: none; align-items: center; justify-content: center;
   background: #060a10;
-  z-index: 150; /* above content, below header (200) */
+  /* [Phase 10.3] Bumped above .zpv (900) so the indicator is visible when a
+     dock panel overlay is open. Panel-open repositioning handled below. */
+  z-index: 951;
   opacity: 0; pointer-events: none; transition: opacity .15s ease;
 }
-@media (max-width: 900px) { #ptr-indicator { top: 56px; } }
+@media (max-width: 900px) {
+  /* [UI-R1.1] Mobile header ~76 px → 80 px (matches --zt-content-top). */
+  body #ptr-indicator { top: calc(80px + env(safe-area-inset-top, 0px)); }
+}
+/* [Phase 10.3] When a dock panel overlay (.zpv) is mounted, #ptr-indicator is
+   rendered as its sibling in PanelShell. Anchor below the panel's own header
+   (.zpv-header min-height 48px) instead of the dashboard header. */
+body .zpv ~ #ptr-indicator { top: calc(48px + env(safe-area-inset-top, 0px)); }
 #ptr-indicator.visible { display: flex; opacity: 1; }
-#ptr-indicator .ptr-spinner {
-  width: 16px; height: 16px; flex-shrink: 0;
-  border: 2.5px solid #f0c04030; border-top-color: #f0c040; border-radius: 50%;
-}
-#ptr-indicator.armed .ptr-spinner { border-top-color: #00ff88; }
-#ptr-indicator.refreshing .ptr-spinner { animation: ptr-spin .55s linear infinite; border-top-color: #f0c040; }
+/* [Phase 10.5] Stacked two-line label — "ZEUS" centered above "REFRESHING".
+   Flex column centers both lines on the same vertical axis regardless of
+   per-line length. Always green, bold, Orbitron-weighted. */
 #ptr-indicator .ptr-label {
-  font-family: var(--ff); font-size: 11px; letter-spacing: 1.5px;
-  color: #f0c040; text-transform: uppercase;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  line-height: 1.05;
+  font-family: var(--ff);
+  color: #00ff88; text-transform: uppercase; font-weight: 700;
 }
-#ptr-indicator.armed .ptr-label { color: #00ff88; }
-@keyframes ptr-spin { to { transform: rotate(360deg); } }
+#ptr-indicator .ptr-line { display: block; text-align: center; }
+#ptr-indicator .ptr-line-top { font-size: 11px; letter-spacing: 3px; }
+#ptr-indicator .ptr-line-bot { font-size: 11px; letter-spacing: 2px; margin-top: 2px; }
+#ptr-indicator.refreshing .ptr-label { animation: ptr-pulse 1s ease-in-out infinite; }
+@keyframes ptr-pulse { 50% { opacity: 0.4; } }
 
 /* ── Liq Source Metrics Panel ── */
 .liq-src-panel { margin-top: 8px; padding: 6px 8px; background: #0d1117; border: 1px solid #1a2530; border-radius: 4px }
@@ -5644,3 +5976,1363 @@ svg.z-i.z-spin { animation: z-spin .7s linear infinite; transform-origin: center
 #qm-screen .a3  { color: #8a1515 }
 #qm-screen .a4  { color: #cc2222 }
 #qm-screen .a5  { color: #ff3344; text-shadow: 0 0 3px #ff334455 }
+
+/* [BUG-F] Native <select> dark theme — fixes white dropdowns across app (25 instances în 12 files: ChartControls, SymbolSelector, UsersSection, AuditSection, AnalysisSections, SettingsModal, SettingsHubModal, SupremusModal, AlertsModal, LLVSettingsModal, ManualTradePanel, BrainCockpit). Pure visual fix, no JSX edits. */
+select {
+  background: var(--card, #0b1120);
+  color: var(--text, #d0d8e0);
+  border: 1px solid var(--border, #12253a);
+}
+select option {
+  background: var(--card, #0b1120);
+  color: var(--text, #d0d8e0);
+}
+
+/* ── Z-glyph Coming Soon toast (UI-POLISH-1 2026-05-13) ──────
+   Operator-approved brand-aligned overlay pentru More icon click.
+   Z rune sharp angular cyan + Orbitron 900 + glow pulse 1.5s loop. */
+.z-coming-soon {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 28px;
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid #00d4ff44;
+  border-radius: 6px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 10000;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+  filter: drop-shadow(0 0 12px #00d4ff99);
+  animation: z-glow-pulse 1.5s ease-in-out infinite alternate;
+}
+.z-coming-soon .z-cs-glyph {
+  flex-shrink: 0;
+  display: block;
+}
+.z-coming-soon .z-cs-text {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 2.5px;
+  color: #00d4ff;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px #00d4ff99;
+}
+@keyframes z-glow-pulse {
+  0%   { filter: drop-shadow(0 0 8px  #00d4ff66); }
+  100% { filter: drop-shadow(0 0 18px #00d4ffcc); }
+}
+
+/* ── ModeBar NEON PULSE redesign (2026-05-14) ────────────────────────
+   3-layer background: gradient mode-tint + CRT scan lines + shimmer sweep.
+   Mode text 18-19px Orbitron BLACK with adaptive glow + risk-level pulse.
+   Spec: _review/audit/MODEBAR_REDESIGN_20260514.md
+   Backup: app.css.bak.pre-modebar-redesign-20260514
+   ──────────────────────────────────────────────────────────────────── */
+
+#zeus-mode-bar {
+  position: relative;
+  overflow: hidden;
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(255, 255, 255, 0.03) 2px,
+    rgba(255, 255, 255, 0.03) 3px
+  );
+}
+
+#zeus-mode-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: zmb-shimmer 4s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+#zeus-mode-bar .zmb-status,
+#zeus-mode-bar .zmb-btn {
+  position: relative;
+  z-index: 2;
+}
+
+#zeus-mode-bar .zmb-label {
+  font-size: 10px !important;
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+#zeus-mode-bar .zmb-mode {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 18px !important;
+  font-weight: 800;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+}
+
+@keyframes zmb-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(280%); }
+}
+
+/* ─── DEMO (cyan, calm) ─── */
+#zeus-mode-bar[data-zmb-mode="demo"] {
+  background-color: rgba(0, 212, 255, 0.04);
+  background-image:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.10), rgba(0, 212, 255, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="demo"] .zmb-mode {
+  color: #00d4ff;
+  animation: zmb-pulse-demo 2s ease-in-out infinite alternate;
+}
+#zeus-mode-bar[data-zmb-mode="demo"] .zmb-indicator {
+  filter: drop-shadow(0 0 4px #00d4ffaa);
+  animation: zmb-dot-pulse-demo 2s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-demo {
+  0%   { text-shadow: 0 0 4px #00d4ff66, 0 0 8px #00d4ff44; }
+  100% { text-shadow: 0 0 8px #00d4ffcc, 0 0 16px #00d4ff66; }
+}
+@keyframes zmb-dot-pulse-demo {
+  0%   { filter: drop-shadow(0 0 2px #00d4ff66); }
+  100% { filter: drop-shadow(0 0 10px #00d4ffcc); }
+}
+
+/* ─── TESTNET (electric orange, caution — NU gold) ─── */
+#zeus-mode-bar[data-zmb-mode="testnet"] {
+  background-color: rgba(255, 102, 0, 0.05);
+  background-image:
+    linear-gradient(135deg, rgba(255, 102, 0, 0.12), rgba(255, 102, 0, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="testnet"] .zmb-mode {
+  color: #ff6600;
+  animation: zmb-pulse-testnet 1.5s ease-in-out infinite alternate;
+}
+#zeus-mode-bar[data-zmb-mode="testnet"] .zmb-indicator {
+  filter: drop-shadow(0 0 6px #ff6600bb);
+  animation: zmb-dot-pulse-testnet 1.5s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-testnet {
+  0%   { text-shadow: 0 0 6px #ff660066, 0 0 12px #ff660044; }
+  100% { text-shadow: 0 0 12px #ff6600dd, 0 0 22px #ff660088; }
+}
+@keyframes zmb-dot-pulse-testnet {
+  0%   { filter: drop-shadow(0 0 3px #ff660066); }
+  100% { filter: drop-shadow(0 0 14px #ff6600dd); }
+}
+
+/* ─── LOCKED (hot magenta) ─── */
+#zeus-mode-bar[data-zmb-mode="locked"] {
+  background-color: rgba(255, 0, 170, 0.05);
+  background-image:
+    linear-gradient(135deg, rgba(255, 0, 170, 0.12), rgba(255, 0, 170, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.03) 2px, rgba(255, 255, 255, 0.03) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="locked"] .zmb-mode {
+  color: #ff00aa;
+  animation: zmb-pulse-locked 1.5s ease-in-out infinite alternate;
+}
+#zeus-mode-bar[data-zmb-mode="locked"] .zmb-indicator {
+  filter: drop-shadow(0 0 8px #ff00aabb);
+  animation: zmb-dot-pulse-locked 1.5s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-locked {
+  0%   { text-shadow: 0 0 6px #ff00aa66, 0 0 12px #ff00aa44; }
+  100% { text-shadow: 0 0 14px #ff00aadd, 0 0 24px #ff00aa88; }
+}
+@keyframes zmb-dot-pulse-locked {
+  0%   { filter: drop-shadow(0 0 4px #ff00aa66); }
+  100% { filter: drop-shadow(0 0 16px #ff00aadd); }
+}
+
+/* ─── REAL (neon red crimson, danger urgent) ─── */
+#zeus-mode-bar[data-zmb-mode="real"] {
+  background-color: rgba(255, 0, 51, 0.06);
+  background-image:
+    linear-gradient(135deg, rgba(255, 0, 51, 0.14), rgba(255, 0, 51, 0.02)),
+    repeating-linear-gradient(0deg, transparent 0px, transparent 2px, rgba(255, 255, 255, 0.04) 2px, rgba(255, 255, 255, 0.04) 3px);
+}
+#zeus-mode-bar[data-zmb-mode="real"] .zmb-mode {
+  font-size: 19px !important;
+  font-weight: 900;
+  letter-spacing: 3px;
+  color: #ff0033;
+  animation:
+    zmb-pulse-real 0.8s ease-in-out infinite alternate,
+    zmb-flicker-real 8s linear infinite;
+}
+#zeus-mode-bar[data-zmb-mode="real"] .zmb-indicator {
+  filter: drop-shadow(0 0 10px #ff0033cc);
+  animation: zmb-dot-pulse-real 0.8s ease-in-out infinite alternate;
+}
+@keyframes zmb-pulse-real {
+  0%   { text-shadow: 0 0 8px #ff003388, 0 0 16px #ff003366, 0 0 24px #ff003333; }
+  100% { text-shadow: 0 0 16px #ff0033ee, 0 0 32px #ff0033bb, 0 0 48px #ff003366; }
+}
+@keyframes zmb-dot-pulse-real {
+  0%   { filter: drop-shadow(0 0 4px #ff003388); }
+  100% { filter: drop-shadow(0 0 20px #ff0033ee); }
+}
+@keyframes zmb-flicker-real {
+  0%, 90%, 100% { opacity: 1; }
+  92%           { opacity: 0.55; }
+  93%           { opacity: 1; }
+  95%           { opacity: 0.6; }
+  96%           { opacity: 1; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   OMEGA UI — Wave 1 read-only (2026-05-15)
+   ════════════════════════════════════════════════════════════════════
+   Dock icon, dedicated page (Orb + Voice + Chat), mood-tinted theme.
+   Palette: cyan #00d4ff / magenta #ff00d4 / purple #6a4f8a / black space.
+   NO GOLD anywhere per Zeus ops palette rules.
+   Typography: Orbitron / Audiowide for headings + glyphs; system mono
+   for timestamps; system sans for body. */
+
+/* ── Dock icon highlight when active ───────────────────────────── */
+.zd-item[data-dock="omega"]              { color: #00d4ff; }
+.zd-item[data-dock="omega"]:hover        { color: #ff00d4; filter: drop-shadow(0 0 6px #ff00d4); }
+.zd-item[data-dock="omega"].active       { color: #ffffff; filter: drop-shadow(0 0 10px #00d4ff) drop-shadow(0 0 18px #ff00d4); }
+
+/* ── Page root ─────────────────────────────────────────────────── */
+.omega-page {
+  display: flex; flex-direction: column;
+  width: 100%; height: 100%;
+  background: radial-gradient(ellipse at 50% 0%, #0a1830 0%, #050510 50%, #000005 100%);
+  color: #d6e8ff;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  /* [Chat-pushed-down fix 2026-05-15] was: overflow: hidden. On short
+     viewports (mobile, split keyboard), strict 280+280+180 grid + header +
+     R5AStats exceeded available height → chat clipped off-screen. Now the
+     page can scroll vertically when total content exceeds viewport while
+     short viewports still show chat (user scrolls down to reveal). */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+}
+.omega-page::before {
+  /* subtle scanline overlay */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(180deg, transparent 0, transparent 3px, rgba(0,212,255,0.012) 3px, rgba(0,212,255,0.012) 4px);
+  z-index: 1;
+}
+
+/* ── Page header ───────────────────────────────────────────────── */
+.omega-page-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(0,212,255,0.2);
+  background: linear-gradient(180deg, rgba(0,212,255,0.05) 0%, transparent 100%);
+  position: relative; z-index: 2;
+  flex-wrap: wrap; gap: 8px; min-width: 0;
+}
+.omega-page-title {
+  display: flex; align-items: baseline; gap: 12px;
+  margin: 0; padding: 0;
+  font-family: 'Orbitron', 'Audiowide', sans-serif;
+  font-weight: 900; font-size: 22px; letter-spacing: 0.15em;
+}
+.omega-title-glyph {
+  font-size: 32px; color: #00d4ff;
+  text-shadow: 0 0 12px #00d4ff, 0 0 24px rgba(0,212,255,0.6);
+  animation: omega-glyph-pulse 3s ease-in-out infinite;
+}
+@keyframes omega-glyph-pulse {
+  0%,100% { text-shadow: 0 0 12px #00d4ff, 0 0 24px rgba(0,212,255,0.6); }
+  50%     { text-shadow: 0 0 18px #ff00d4, 0 0 32px rgba(255,0,212,0.5); }
+}
+.omega-title-name { color: #ffffff; }
+.omega-title-tag {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 400;
+  letter-spacing: 0.2em; color: #6a4f8a; padding-left: 8px; opacity: 0.8;
+}
+.omega-page-meta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.omega-meta-item { display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.omega-meta-label { font-size: 9px; color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase; white-space: nowrap; }
+.omega-meta-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #00d4ff; font-weight: 600; white-space: nowrap; }
+
+/* Compact mobile / narrow-screen layout ─────────────────────────── */
+@media (max-width: 720px) {
+  .omega-page-header { padding: 8px 10px; gap: 6px; }
+  .omega-title-tag { display: none; }
+  .omega-page-title { font-size: 18px; gap: 8px; }
+  .omega-title-glyph { font-size: 24px; }
+  .omega-page-meta { gap: 8px; }
+  .omega-meta-label { font-size: 8px; letter-spacing: 0.1em; }
+  .omega-meta-val { font-size: 10.5px; }
+  .omega-voice-toggle { padding: 4px 8px; font-size: 9.5px; letter-spacing: 0.06em; }
+}
+@media (max-width: 460px) {
+  .omega-page-header { flex-direction: column; align-items: stretch; padding: 6px 10px; gap: 4px; }
+  .omega-page-title { justify-content: flex-start; font-size: 16px; }
+  .omega-title-glyph { font-size: 20px; }
+  .omega-page-meta { justify-content: space-between; width: 100%; gap: 4px; }
+  .omega-meta-item { flex-direction: row; gap: 4px; align-items: center; }
+  .omega-voice-toggle { margin-left: auto; }
+}
+.omega-state-ok { color: #00d4ff; }
+.omega-state-degraded { color: #ff8800; }
+.omega-state-offline { color: #ff1744; }
+.omega-state-initializing { color: #b3f0ff; }
+
+.omega-voice-toggle {
+  background: transparent; border: 1px solid rgba(0,212,255,0.4);
+  color: #6a4f8a; padding: 6px 12px; border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  letter-spacing: 0.1em; cursor: pointer; transition: all 0.2s;
+}
+.omega-voice-toggle:hover { border-color: #00d4ff; color: #00d4ff; }
+.omega-voice-toggle.on { border-color: #ff00d4; color: #ff00d4; box-shadow: 0 0 8px rgba(255,0,212,0.3); }
+
+/* ── Grid layout ───────────────────────────────────────────────── */
+.omega-page-grid {
+  flex: 1; display: grid;
+  /* [Chat-pushed-down fix 2026-05-15] Voice min was 280 — combined with
+     orb 280 + chat 180 + header + R5AStats it exceeded short viewports
+     and clipped chat. Relaxed voice min to 220 (still readable). Page
+     overflow-y:auto allows scroll when total exceeds viewport. */
+  grid-template-rows: 280px minmax(220px, 1fr) 180px;
+  gap: 8px; padding: 12px;
+  min-height: 0; position: relative; z-index: 2;
+}
+@media (max-width: 720px) {
+  .omega-page-grid {
+    /* Tablet: voice min 200 — gentler still */
+    grid-template-rows: 220px minmax(200px, 1fr) 170px;
+    padding: 8px; gap: 6px;
+  }
+  .omega-page-title { font-size: 18px; }
+  .omega-title-glyph { font-size: 26px; }
+}
+@media (max-width: 460px) {
+  .omega-page-grid {
+    /* Mobile narrow: voice min 180 — most aggressive, chat still visible */
+    grid-template-rows: 180px minmax(180px, 1fr) 160px;
+    padding: 6px; gap: 5px;
+  }
+}
+
+.omega-page-orb-zone,
+.omega-page-voice-zone,
+.omega-page-chat-zone {
+  min-height: 0; position: relative;
+  border: 1px solid rgba(0,212,255,0.18);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(0,212,255,0.025) 0%, transparent 100%);
+  overflow: hidden;
+}
+
+/* ── DOCTOR ZONE (D-4 admin-only) ─────────────────────────────── */
+.omega-page-doctor-zone {
+  margin-top: 16px;
+  border: 1px solid rgba(255, 90, 50, 0.25);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 60, 20, 0.04) 0%, transparent 100%);
+  padding: 14px 16px;
+  position: relative;
+  z-index: 2;
+  background-color: #050510;
+}
+.omega-doctor-header-button { background: transparent; border: 0; padding: 4px 0; color: inherit; cursor: pointer; text-align: left; width: 100%; font: inherit; font-family: 'Orbitron', sans-serif; }
+.omega-doctor-header-button:hover { color: rgba(255, 90, 50, 0.9); }
+.omega-doctor-header-button.expanded { color: rgba(255, 90, 50, 0.9); }
+.omega-doctor-chevron { display: inline-block; width: 14px; font-size: 10px; opacity: 0.7; margin-right: 4px; }
+.omega-doctor-panel { display: flex; flex-direction: column; gap: 10px; }
+.omega-doctor-header {
+  display: flex; align-items: center; gap: 12px;
+  font-family: 'Orbitron', sans-serif;
+}
+.omega-doctor-title {
+  font-size: 14px; font-weight: 900; letter-spacing: 0.2em;
+  color: #ff5a32; text-shadow: 0 0 8px rgba(255, 90, 50, 0.5);
+}
+.omega-doctor-tag {
+  font-size: 10px; opacity: 0.6; letter-spacing: 0.15em;
+}
+.omega-doctor-state-badge {
+  margin-left: auto;
+  padding: 4px 12px; border-radius: 4px;
+  font-size: 12px; font-weight: 900; letter-spacing: 0.15em;
+}
+.omega-doctor-state-healthy { background: rgba(0,255,128,0.15); color: #00ff80; }
+.omega-doctor-state-degraded { background: rgba(255,200,0,0.15); color: #ffc800; }
+.omega-doctor-state-compromised { background: rgba(255,90,50,0.20); color: #ff5a32; }
+.omega-doctor-state-safemode { background: rgba(220,30,30,0.25); color: #ff3030; }
+.omega-doctor-state-dead { background: rgba(180,0,0,0.40); color: #ffffff; }
+.omega-doctor-reason {
+  font-size: 12px; opacity: 0.8; font-style: italic;
+}
+.omega-doctor-error {
+  color: #ff5a32; font-size: 13px; padding: 8px;
+}
+.omega-doctor-loading {
+  color: rgba(255,255,255,0.5); font-size: 13px; padding: 8px;
+}
+.omega-doctor-stats {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.omega-doctor-stat { display: flex; flex-direction: column; gap: 2px; }
+.omega-doctor-stat-label {
+  font-size: 10px; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.omega-doctor-stat-val {
+  font-size: 18px; font-weight: 800; font-family: 'Orbitron', sans-serif;
+}
+.omega-doctor-quotas {
+  display: flex; gap: 12px; flex-wrap: wrap;
+  font-size: 11px; opacity: 0.85;
+}
+.omega-doctor-quota { padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.04); }
+.omega-doctor-quota-flood { background: rgba(255,30,30,0.25); color: #ff5050; font-weight: 700; }
+.omega-doctor-section { margin-top: 4px; }
+.omega-doctor-section-title {
+  font-size: 11px; opacity: 0.6; letter-spacing: 0.1em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.omega-doctor-list { margin: 0; padding-left: 18px; font-size: 12px; }
+.omega-doctor-list li { padding: 2px 0; }
+.omega-doctor-events { display: flex; flex-direction: column; gap: 2px; max-height: 320px; overflow-y: auto; }
+.omega-doctor-empty { font-size: 11px; opacity: 0.4; padding: 6px; }
+.omega-doctor-event {
+  display: grid;
+  grid-template-columns: 90px 70px 1fr 1fr auto;
+  gap: 8px; align-items: center;
+  padding: 4px 6px; border-radius: 3px;
+  font-family: 'Courier New', monospace; font-size: 11px;
+  background: rgba(255,255,255,0.02);
+}
+.omega-doctor-event-p0 { border-left: 3px solid #ff3030; }
+.omega-doctor-event-p1 { border-left: 3px solid #ff5a32; }
+.omega-doctor-event-p2 { border-left: 3px solid #ffc800; }
+.omega-doctor-event-p3 { border-left: 3px solid rgba(255,255,255,0.2); }
+.omega-doctor-event-p0flood { border-left: 3px solid #ff00ff; background: rgba(255,0,255,0.05); }
+.omega-doctor-event-fresh { animation: omega-doctor-event-flash 1.5s ease-in-out 2; }
+@keyframes omega-doctor-event-flash {
+  0%,100% { background: transparent; }
+  50%     { background: rgba(255,90,50,0.18); }
+}
+.omega-doctor-stat-alert-p0 { background: rgba(255,48,48,0.18); border: 1px solid rgba(255,48,48,0.45); animation: omega-doctor-alert-pulse 1.5s ease-in-out infinite alternate; }
+.omega-doctor-stat-alert-p1 { background: rgba(255,90,50,0.14); border: 1px solid rgba(255,90,50,0.4); }
+.omega-doctor-audio-toggle { background: transparent; border: 1px solid rgba(255,90,50,0.3); color: rgba(255,255,255,0.6); padding: 3px 10px; font-family: 'Orbitron', sans-serif; font-size: 11px; cursor: pointer; border-radius: 4px; margin-left: auto; }
+.omega-doctor-audio-toggle:hover { color: #ff5a32; border-color: rgba(255,90,50,0.6); }
+.omega-doctor-audio-toggle.on { color: #ff3030; border-color: rgba(255,48,48,0.7); background: rgba(255,48,48,0.08); }
+
+/* OMEGA mode badge (DEMO/TESTNET/REAL/LOCKED) — reflects execution env in header */
+.omega-mode-badge {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 3px 9px;
+  margin-left: 8px;
+  border-radius: 4px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+.omega-mode-demo    { color: #00d4ff; background: rgba(0, 212, 255, 0.10); }
+.omega-mode-testnet { color: #ffc800; background: rgba(255, 200, 0, 0.10); }
+.omega-mode-real    { color: #ff3030; background: rgba(255, 48, 48, 0.12); box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); animation: omega-real-pulse 2s ease-in-out infinite alternate; }
+.omega-mode-locked  { color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.05); border-color: rgba(255, 255, 255, 0.3); }
+
+/* [Day 29] Chat sticky bottom — WhatsApp-style minimize/expand.
+   Default: small bar with header + input. Expand on focus to overlay
+   with full scroll history visible. */
+.omega-page-grid-no-chat { grid-template-rows: 280px minmax(260px, 1fr) !important; }
+@media (max-width: 720px) {
+  .omega-page-grid-no-chat { grid-template-rows: 220px minmax(220px, 1fr) !important; }
+}
+@media (max-width: 460px) {
+  .omega-page-grid-no-chat { grid-template-rows: 180px minmax(200px, 1fr) !important; }
+}
+
+.omega-page-chat-sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 50;
+  background: rgba(5, 5, 16, 0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(0, 212, 255, 0.18);
+  margin: 12px -12px 0 -12px;
+  padding: 0 12px;
+}
+
+/* Collapsed state — only header + input row visible, scroll hidden. */
+.omega-chat {
+  transition: max-height 0.3s ease-in-out;
+  max-height: 110px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Expanded state — overlay with 70% viewport height. */
+.omega-chat-expanded {
+  max-height: 70vh;
+}
+
+.omega-chat-expanded .omega-chat-scroll {
+  max-height: calc(70vh - 110px);
+  overflow-y: auto;
+}
+
+/* [2026-05-20] Mobile keyboard stability fix.
+ * On mobile, position:sticky combined with the soft keyboard opening causes
+ * the chat to drift up and expose the underlying "The Voice" panel.
+ * When EXPANDED on mobile, switch to fixed-overlay mode anchored to the
+ * dynamic viewport (dvh) so the keyboard pushes the input but the chat
+ * fills the remaining space stably.
+ */
+@media (max-width: 768px) {
+  /* Pin the sticky container to viewport bottom while expanded */
+  .omega-page-chat-sticky:has(.omega-chat-expanded) {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    margin: 0;
+    padding: 0 12px;
+    z-index: 100;
+    background: rgba(5, 5, 16, 0.98);
+  }
+  .omega-chat-expanded {
+    /* dynamic viewport height accounts for mobile keyboard */
+    max-height: 85dvh;
+    height: 85dvh;
+  }
+  .omega-chat-expanded .omega-chat-scroll {
+    /* leave room for header (~48px) + input row (~70px) */
+    max-height: calc(85dvh - 120px);
+    /* prevent scroll chaining to parent panels */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .omega-chat-expanded .omega-chat-input-row {
+    /* keep input row anchored to bottom of chat overlay */
+    flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+}
+
+/* Browsers without :has() support — older Safari/Chrome ≤105 fallback.
+ * Apply same fix unconditionally when expanded. Slightly less precise
+ * (will overlay even on desktop narrow viewports) but safer than drift. */
+@supports not selector(:has(*)) {
+  @media (max-width: 768px) {
+    .omega-page-chat-sticky {
+      position: relative;
+    }
+    .omega-chat.omega-chat-expanded {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      max-height: 85dvh;
+      height: 85dvh;
+      z-index: 100;
+      background: rgba(5, 5, 16, 0.98);
+      padding: 0 12px;
+    }
+  }
+}
+
+.omega-chat:not(.omega-chat-expanded) .omega-chat-scroll {
+  display: none;
+}
+
+.omega-chat-header { cursor: pointer; user-select: none; padding: 8px 12px; }
+.omega-chat-header:hover { color: #00d4ff; }
+@keyframes omega-real-pulse {
+  0%   { box-shadow: 0 0 8px rgba(255, 48, 48, 0.4); }
+  100% { box-shadow: 0 0 16px rgba(255, 48, 48, 0.7); }
+}
+@keyframes omega-doctor-alert-pulse {
+  0%   { box-shadow: 0 0 6px rgba(255,48,48,0.4); }
+  100% { box-shadow: 0 0 14px rgba(255,48,48,0.7); }
+}
+.omega-doctor-event-ts { opacity: 0.6; }
+.omega-doctor-event-sev { font-weight: 700; }
+.omega-doctor-event-mod { color: #00d4ff; }
+.omega-doctor-event-type { opacity: 0.7; }
+.omega-doctor-verdict-select {
+  background: rgba(0,0,0,0.4); color: #ffffff;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 3px; font-size: 10px; padding: 2px 4px;
+}
+
+/* ── THE ORB ───────────────────────────────────────────────────── */
+.omega-orb-wrap { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; }
+.omega-orb-canvas { width: 100%; height: 100%; display: block; }
+.omega-orb-mood {
+  position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 14px; letter-spacing: 0.3em; color: #ffffff;
+  text-shadow: 0 0 6px currentColor;
+}
+.omega-orb-mood-bar {
+  width: 80px; height: 3px; background: rgba(255,255,255,0.1);
+  border-radius: 2px; overflow: hidden;
+}
+.omega-orb-mood-fill {
+  display: block; height: 100%; transition: width 0.4s ease, background 0.4s ease;
+}
+
+/* ── THE VOICE ─────────────────────────────────────────────────── */
+.omega-voice { width: 100%; height: 100%; display: flex; flex-direction: column; }
+.omega-voice-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,212,255,0.15);
+  background: rgba(0,212,255,0.03);
+}
+.omega-voice-title {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 11px; letter-spacing: 0.3em; color: #00d4ff;
+}
+.omega-voice-count {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #6a4f8a;
+}
+.omega-voice-feed {
+  flex: 1; overflow-y: auto; padding: 10px 14px;
+  scrollbar-width: thin; scrollbar-color: #6a4f8a transparent;
+  min-height: 0;
+}
+.omega-voice-feed::-webkit-scrollbar { width: 6px; }
+.omega-voice-feed::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
+.omega-voice-empty {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px;
+  color: #6a4f8a;
+}
+.omega-voice-empty-glyph { font-size: 48px; color: #00d4ff; opacity: 0.4; animation: omega-empty-pulse 4s ease-in-out infinite; }
+@keyframes omega-empty-pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 0.7; } }
+.omega-voice-empty-text {
+  max-width: 420px; text-align: center; font-size: 13px;
+  font-family: 'JetBrains Mono', monospace; line-height: 1.6; letter-spacing: 0.04em;
+}
+
+.omega-utter {
+  border-left: 3px solid #00d4ff;
+  padding: 8px 12px; margin-bottom: 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 0 5px 5px 0;
+  animation: omega-utter-in 0.3s ease;
+  line-height: 1.5;
+}
+@keyframes omega-utter-in { 0% { opacity: 0; transform: translateX(-8px); } 100% { opacity: 1; transform: translateX(0); } }
+.omega-utter-head {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #6a4f8a; margin-bottom: 4px;
+}
+.omega-utter-glyph { font-size: 14px; font-weight: bold; }
+.omega-utter-time { letter-spacing: 0.05em; }
+.omega-utter-type { letter-spacing: 0.15em; font-size: 9px; opacity: 0.7; }
+/* [Wave 8 C] Confidence chip + regime tag inline cu utterance header */
+.omega-utter-conf {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  letter-spacing: 0.05em;
+}
+.omega-utter-regime {
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  opacity: 0.55;
+  padding: 1px 4px;
+  border-radius: 2px;
+  background: rgba(0,212,255,0.08);
+  color: #6ad6ff;
+}
+/* [Wave 8 H] History/replay slider bar pe TheVoice */
+.omega-voice-history-bar {
+  display: flex;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(0,212,255,0.12);
+  background: rgba(0,0,0,0.25);
+}
+.omega-voice-history-btn {
+  flex: 1;
+  padding: 4px 6px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(0,212,255,0.18);
+  color: #6a7c8e;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.omega-voice-history-btn:hover { background: rgba(0,212,255,0.08); color: #00d4ff; }
+.omega-voice-history-btn.active {
+  background: linear-gradient(135deg, #00d4ff22, #ff00d422);
+  border-color: #00d4ff;
+  color: #d6e8ff;
+}
+.omega-utter-text {
+  font-size: 15px; line-height: 1.55; color: #d6e8ff;
+  font-family: 'Inter', sans-serif; letter-spacing: 0.01em;
+  word-break: break-word;
+}
+.omega-utter-critical_alert { background: rgba(255,23,68,0.08); animation: omega-utter-in 0.3s ease, omega-critical-pulse 1.2s ease-in-out infinite; }
+@keyframes omega-critical-pulse { 0%,100% { box-shadow: inset 0 0 0 rgba(255,23,68,0); } 50% { box-shadow: inset 0 0 20px rgba(255,23,68,0.15); } }
+
+/* ── TALK WITH ME ──────────────────────────────────────────────── */
+.omega-chat { width: 100%; height: 100%; display: flex; flex-direction: column; }
+.omega-chat-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-bottom: 1px solid rgba(0,212,255,0.15);
+  background: rgba(255,0,212,0.04);
+}
+.omega-chat-title {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 11px; letter-spacing: 0.3em; color: #ff00d4;
+}
+.omega-chat-hint {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #6a4f8a;
+}
+.omega-chat-scroll {
+  flex: 1; overflow-y: auto; padding: 8px 12px;
+  scrollbar-width: thin; scrollbar-color: #6a4f8a transparent;
+}
+.omega-chat-scroll::-webkit-scrollbar { width: 6px; }
+.omega-chat-scroll::-webkit-scrollbar-thumb { background: #6a4f8a; border-radius: 3px; }
+.omega-chat-empty {
+  height: 100%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px;
+}
+.omega-chat-empty-glyph {
+  font-family: 'Orbitron', sans-serif; font-size: 36px; font-weight: 900;
+  color: #ff00d4; text-shadow: 0 0 12px #ff00d4;
+  animation: omega-glyph-pulse 3s ease-in-out infinite;
+}
+.omega-chat-empty-text {
+  color: #6a4f8a; font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; letter-spacing: 0.05em;
+}
+.omega-chat-row { margin-bottom: 6px; display: flex; }
+.omega-chat-you { justify-content: flex-end; }
+.omega-chat-omega { justify-content: flex-start; }
+.omega-chat-bubble {
+  max-width: 80%; padding: 6px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(0,212,255,0.18);
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.omega-chat-you .omega-chat-bubble { background: rgba(0,212,255,0.08); border-color: rgba(0,212,255,0.35); }
+.omega-chat-omega .omega-chat-bubble { background: rgba(255,0,212,0.04); border-color: rgba(255,0,212,0.3); }
+.omega-chat-prefix {
+  font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 900;
+  letter-spacing: 0.2em; color: #6a4f8a; flex-shrink: 0;
+}
+.omega-chat-you .omega-chat-prefix { color: #00d4ff; }
+.omega-chat-omega .omega-chat-prefix { color: #ff00d4; }
+.omega-chat-text { font-size: 13px; line-height: 1.4; color: #d6e8ff; }
+.omega-chat-error {
+  font-size: 11px; color: #ff1744; padding: 4px 12px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.omega-chat-input-row {
+  display: flex; gap: 8px; padding: 8px 12px;
+  border-top: 1px solid rgba(0,212,255,0.15);
+  background: rgba(0,0,0,0.3);
+  align-items: flex-end;
+}
+/* [Day 35] Textarea variant — multi-line, auto-grow up to ~6 lines.
+   Height is controlled inline via React (auto-grow useEffect). */
+.omega-chat-input {
+  flex: 1;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(0,212,255,0.25);
+  border-radius: 4px;
+  color: #d6e8ff;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  line-height: 1.45;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  resize: none;            /* React handles height */
+  overflow-y: auto;
+  min-height: 36px;
+  max-height: 160px;       /* ~6 lines; scroll past */
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+}
+.omega-chat-input:focus { border-color: #00d4ff; box-shadow: 0 0 10px rgba(0,212,255,0.25); }
+.omega-chat-input::placeholder { color: #6a4f8a; }
+.omega-chat-input:disabled { opacity: 0.5; }
+.omega-chat-send {
+  padding: 8px 14px; background: linear-gradient(135deg, #00d4ff 0%, #ff00d4 100%);
+  border: none; border-radius: 4px; cursor: pointer;
+  color: #050510; font-family: 'Orbitron', sans-serif; font-weight: 900;
+  font-size: 14px; transition: all 0.2s;
+  align-self: flex-end;
+  height: 36px;
+}
+.omega-chat-send:hover:not(:disabled) { filter: brightness(1.15); transform: translateY(-1px); }
+.omega-chat-send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ════════════════════════════════════════════════════════════════════
+   OMEGA R5A Stats (Wave 2 UI Bonus 2026-05-15)
+   ════════════════════════════════════════════════════════════════════
+   Compact strip surfacing R5A measurement triad below page header. */
+
+.omega-r5a {
+  position: relative; z-index: 2;
+  padding: 8px 16px;
+  border-bottom: 1px solid rgba(0,212,255,0.12);
+  background: linear-gradient(180deg, rgba(0,212,255,0.025) 0%, transparent 100%);
+}
+.omega-r5a-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 6px;
+}
+.omega-r5a-title {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 10px; letter-spacing: 0.3em; color: #6a4f8a;
+}
+.omega-r5a-env {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: #00d4ff; letter-spacing: 0.1em;
+}
+.omega-r5a-loading,
+.omega-r5a-error {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: #6a4f8a; padding: 4px 0;
+}
+.omega-r5a-error { color: #ff1744; }
+
+.omega-r5a-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
+}
+@media (max-width: 720px) {
+  .omega-r5a { padding: 6px 10px; }
+  .omega-r5a-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+.omega-r5a-card {
+  padding: 6px 10px; border-radius: 5px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(0,212,255,0.18);
+  display: flex; flex-direction: column; gap: 2px;
+  transition: border-color 0.3s;
+}
+.omega-r5a-card-label {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: #6a4f8a; letter-spacing: 0.15em; text-transform: uppercase;
+}
+.omega-r5a-card-value {
+  font-family: 'Orbitron', sans-serif; font-weight: 700;
+  font-size: 16px; color: #d6e8ff;
+}
+.omega-r5a-card-value.pos { color: #00d4ff; }
+.omega-r5a-card-value.neg { color: #ff8800; }
+.omega-r5a-card-sub {
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: #6a4f8a; letter-spacing: 0.05em;
+}
+
+/* Drift card mood-tint */
+.omega-r5a-drift-stable    { border-color: rgba(0,212,255,0.18); }
+.omega-r5a-drift-stable .omega-r5a-card-value    { color: #00d4ff; }
+.omega-r5a-drift-moderate  { border-color: rgba(255,136,0,0.35);
+                              box-shadow: inset 0 0 8px rgba(255,136,0,0.08); }
+.omega-r5a-drift-moderate .omega-r5a-card-value  { color: #ff8800; }
+.omega-r5a-drift-unstable  { border-color: rgba(255,23,68,0.5);
+                              box-shadow: inset 0 0 12px rgba(255,23,68,0.12);
+                              animation: omega-r5a-drift-pulse 1.8s ease-in-out infinite; }
+.omega-r5a-drift-unstable .omega-r5a-card-value  { color: #ff1744; }
+@keyframes omega-r5a-drift-pulse {
+  0%,100% { box-shadow: inset 0 0 12px rgba(255,23,68,0.12); }
+  50%     { box-shadow: inset 0 0 20px rgba(255,23,68,0.25); }
+}
+
+/* ── Header nav buttons (Ring5 / Doctor) admin-only ──────────────── */
+.omega-nav-button {
+  background: rgba(0, 212, 255, 0.10);
+  border: 1px solid rgba(0, 212, 255, 0.35);
+  color: #b8e8ff;
+  padding: 4px 10px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+.omega-nav-button:hover {
+  background: rgba(0, 212, 255, 0.25);
+  color: #ffffff;
+}
+.omega-back-button {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #d6e8ff;
+  padding: 4px 10px;
+  font-family: 'Orbitron', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  border-radius: 4px;
+  margin-right: 12px;
+}
+.omega-back-button:hover {
+  background: rgba(255,255,255,0.08);
+  color: #00d4ff;
+  border-color: rgba(0, 212, 255, 0.5);
+}
+
+/* ── Dedicated single-panel page (when navigated from header buttons) ── */
+.omega-page-dedicated .omega-page-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  position: relative; z-index: 2;
+}
+.omega-page-dedicated-body {
+  flex: 1; padding: 16px;
+  overflow-y: auto;
+  position: relative; z-index: 2;
+}
+
+/* [Wave 8 P] Report card aggregate dashboard */
+.omega-reportcard { display: flex; flex-direction: column; gap: 12px; }
+.omega-rc-loading { padding: 32px; text-align: center; color: #6a4f8a; font-family: 'Orbitron', sans-serif; letter-spacing: 0.2em; font-size: 11px; }
+.omega-rc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.omega-rc-card {
+  background: linear-gradient(135deg, rgba(0,212,255,0.04), rgba(255,0,212,0.03));
+  border: 1px solid rgba(0,212,255,0.18);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+.omega-rc-card-title {
+  font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 0.2em;
+  color: #6a4f8a; margin-bottom: 8px;
+}
+.omega-rc-big {
+  font-family: 'Orbitron', sans-serif; font-size: 22px; font-weight: 900;
+  color: #d6e8ff; line-height: 1.1; letter-spacing: 0.02em;
+}
+.omega-rc-dd-green { color: #00d97a; }
+.omega-rc-dd-yellow { color: #f0c040; }
+.omega-rc-dd-red { color: #ff4444; }
+.omega-rc-ok { color: #00d97a; }
+.omega-rc-bad { color: #ff4444; }
+.omega-rc-sub {
+  font-size: 10px; color: #6a7c8e; margin-top: 4px; line-height: 1.4;
+}
+.omega-rc-locked { color: #ff4444; font-weight: 700; }
+.omega-rc-empty { color: #4a4a4a; font-size: 11px; padding: 8px 0; }
+.omega-rc-row {
+  display: flex; justify-content: space-between;
+  font-size: 10px; padding: 3px 0;
+  border-top: 1px solid rgba(255,255,255,0.04);
+  margin-top: 4px;
+}
+.omega-rc-row-label { color: #6ad6ff; font-family: 'Inter', sans-serif; }
+.omega-rc-row-val { color: #d6e8ff; font-weight: 700; }
+.omega-rc-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 4px; border-top: 1px solid rgba(0,212,255,0.1);
+}
+.omega-rc-refresh {
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #00d4ff22, #ff00d422);
+  border: 1px solid #00d4ff; color: #d6e8ff;
+  font-family: 'Orbitron', sans-serif; font-size: 10px; letter-spacing: 0.15em;
+  border-radius: 3px; cursor: pointer; transition: all 0.15s;
+}
+.omega-rc-refresh:hover { filter: brightness(1.2); }
+.omega-rc-hint { font-size: 9px; color: #4a4a4a; letter-spacing: 0.1em; }
+
+/* ── Ring5 zone wrapper (mirrors .omega-page-doctor-zone shape, cyan accent) ── */
+.omega-page-ring5-zone {
+  margin-top: 16px;
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.04) 0%, transparent 100%);
+  padding: 14px 16px;
+  position: relative;
+  z-index: 2;
+  /* Opaque solid background prevents the omega-page-grid (flex:1, z-index:2)
+     from bleeding visually through the cyan-tinted gradient. */
+  background-color: #050510;
+}
+
+/* ── Ring5 panel (Day 6 Phase B observability) ───────────────────── */
+.omega-ring5-panel { display: flex; flex-direction: column; gap: 12px; padding: 0; border: 0; background: transparent; }
+.omega-ring5-header { display: flex; align-items: center; gap: 8px; }
+.omega-ring5-header-button { background: transparent; border: 0; padding: 4px 0; color: inherit; cursor: pointer; text-align: left; width: 100%; font: inherit; }
+.omega-ring5-header-button:hover { color: #00d4ff; }
+.omega-ring5-header-button.expanded { color: #00d4ff; }
+.omega-ring5-chevron { display: inline-block; width: 14px; font-size: 10px; opacity: 0.7; }
+.omega-ring5-title { font-weight: 700; letter-spacing: 0.5px; }
+.omega-ring5-tag { font-size: 11px; opacity: 0.6; padding: 2px 6px; border-radius: 3px; background: rgba(255,255,255,0.08); }
+.omega-ring5-section { display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 1px dashed rgba(255,255,255,0.08); }
+.omega-ring5-section-title { font-size: 12px; margin: 0; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; }
+.omega-ring5-loading, .omega-ring5-empty, .omega-ring5-error { font-size: 12px; padding: 6px; opacity: 0.7; }
+.omega-ring5-error { color: #ff6b6b; opacity: 1; }
+.omega-ring5-form { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.omega-ring5-form input { background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); color: inherit; padding: 3px 6px; min-width: 90px; }
+.omega-ring5-form button { background: #00d4ff; color: #000; border: 0; padding: 3px 12px; cursor: pointer; }
+.omega-ring5-form button:hover { background: #00b8e0; }
+.omega-ring5-result { font-size: 12px; line-height: 1.6; padding-top: 4px; }
+.omega-ring5-result code { background: rgba(255,255,255,0.08); padding: 1px 4px; border-radius: 2px; }
+.omega-ring5-audit-table, .omega-ring5-post-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+.omega-ring5-audit-table th, .omega-ring5-audit-table td,
+.omega-ring5-post-table th, .omega-ring5-post-table td { padding: 4px 6px; text-align: left; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.omega-ring5-audit-table th, .omega-ring5-post-table th { opacity: 0.7; font-weight: 600; }
+.omega-ring5-status-accepted { color: #4caf50; font-weight: 600; }
+.omega-ring5-status-rejected { color: #ff6b6b; font-weight: 600; }
+.omega-ring5-status-skipped { color: #ffa726; font-weight: 600; }
+.omega-ring5-post-effective { background: rgba(0,212,255,0.08); font-weight: 600; }
+.omega-ring5-sparkline-wrap { display: flex; align-items: center; gap: 10px; font-size: 11px; padding: 6px 0; opacity: 0.85; }
+.omega-ring5-sparkline-label { color: rgba(0,212,255,0.7); }
+.omega-ring5-sparkline { vertical-align: middle; }
+.omega-ring5-sparkline-meta { opacity: 0.55; }
+
+/* [Sub-A omega chat 2026-05-19] Orphan user bubble — rows from DB with
+ * missing/malformed context_json.question. Visually softer than normal. */
+.omega-chat-bubble.omega-chat-orphan {
+    opacity: 0.6;
+    font-style: italic;
+}
+
+/* [Sub-A omega chat] Settings Omega section danger button + confirm block */
+.zr-btn-danger {
+    background: rgba(255, 60, 60, 0.15);
+    border-color: rgba(255, 60, 60, 0.5);
+    color: #ff8080;
+}
+.zr-btn-danger:hover:not(:disabled) {
+    background: rgba(255, 60, 60, 0.25);
+}
+.zr-confirm-block {
+    border: 1px solid rgba(255, 60, 60, 0.4);
+    background: rgba(255, 60, 60, 0.05);
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.zr-settings-subsection h4 {
+    margin: 0 0 6px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+}
+.zr-settings-desc, .zr-settings-meta {
+    font-size: 11px;
+    color: var(--text-dim, #888);
+    margin: 4px 0;
+}
+
+/* [Sub-C.1 omega long-term memory 2026-05-20] Health badge, facts list, forget dialog */
+
+.zr-omega-health-badge {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    margin: 8px 0;
+    border: 1px solid transparent;
+}
+.zr-omega-health-healthy {
+    background: rgba(76, 175, 80, 0.10);
+    border-color: rgba(76, 175, 80, 0.35);
+    color: #7adb7a;
+}
+.zr-omega-health-degraded {
+    background: rgba(255, 167, 38, 0.10);
+    border-color: rgba(255, 167, 38, 0.40);
+    color: #ffb74d;
+}
+.zr-omega-health-down {
+    background: rgba(255, 107, 107, 0.12);
+    border-color: rgba(255, 60, 60, 0.45);
+    color: #ff9090;
+}
+.zr-omega-health-idle {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: var(--text-dim, #888);
+}
+
+.zr-omega-facts-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 10px 0;
+}
+.zr-omega-facts-class {
+    border: 1px solid rgba(0, 212, 255, 0.18);
+    background: rgba(0, 212, 255, 0.03);
+    border-radius: 6px;
+    padding: 8px 10px;
+}
+.zr-omega-facts-class-header {
+    margin: 0 0 6px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: rgba(0, 212, 255, 0.85);
+    text-transform: uppercase;
+}
+.zr-omega-facts-items {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+.zr-omega-fact-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    flex-wrap: wrap;
+}
+.zr-omega-fact-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+.zr-omega-fact-key {
+    color: var(--text-dim, #888);
+    font-weight: 500;
+    flex-shrink: 0;
+}
+.zr-omega-fact-value {
+    color: var(--text, #ddd);
+    flex: 1 1 auto;
+    word-break: break-word;
+    min-width: 0;
+}
+.zr-omega-fact-meta {
+    font-size: 10px;
+    color: var(--text-dim, #888);
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+.zr-btn-icon {
+    padding: 2px 6px;
+    font-size: 12px;
+    line-height: 1;
+    min-width: 0;
+}
+.zr-omega-forget-btn {
+    opacity: 0.5;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+}
+.zr-omega-fact-row:hover .zr-omega-forget-btn,
+.zr-omega-forget-btn:focus {
+    opacity: 1;
+}
+
+.zr-omega-forget-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+.zr-omega-forget-dialog {
+    background: var(--bg-card, #14181f);
+    border: 1px solid rgba(255, 60, 60, 0.45);
+    border-radius: 8px;
+    padding: 16px 18px;
+    max-width: 420px;
+    width: 100%;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+.zr-omega-forget-dialog h5 {
+    margin: 0 0 10px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    color: #ff9090;
+}
+.zr-omega-forget-meta {
+    width: 100%;
+    margin: 8px 0;
+    font-size: 12px;
+    border-collapse: collapse;
+}
+.zr-omega-forget-meta td {
+    padding: 3px 6px;
+    vertical-align: top;
+}
+.zr-omega-forget-meta td:first-child {
+    color: var(--text-dim, #888);
+    font-weight: 500;
+    width: 30%;
+    text-align: right;
+}
+.zr-omega-forget-note {
+    font-size: 11px;
+    color: var(--text-dim, #888);
+    margin: 8px 0;
+    font-style: italic;
+}
+
+/* Mobile responsive: flex flow — line 1: key value 🗑 inline; line 2: meta */
+@media (max-width: 480px) {
+    .zr-omega-fact-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px 6px;
+        padding: 6px 8px;
+        font-size: 11px;
+    }
+    .zr-omega-fact-key {
+        flex: 0 0 auto;
+        margin-right: 2px;
+    }
+    .zr-omega-fact-value {
+        flex: 1 1 auto;
+        min-width: 0;
+        word-break: break-word;
+    }
+    .zr-omega-forget-btn {
+        flex: 0 0 auto;
+        order: 3;
+        opacity: 1;  /* always visible on touch — no hover */
+        padding: 4px 10px;
+        font-size: 14px;
+        min-width: 32px;
+        min-height: 28px;
+        background: rgba(255, 60, 60, 0.08);
+        border: 1px solid rgba(255, 60, 60, 0.25);
+        border-radius: 4px;
+    }
+    .zr-omega-fact-meta {
+        flex-basis: 100%;
+        order: 4;
+        margin-top: 2px;
+        font-size: 10px;
+    }
+    .zr-omega-forget-dialog {
+        padding: 12px;
+    }
+    .zr-omega-forget-meta td:first-child {
+        width: 40%;
+    }
+}
+
+/* ──────────────────────────────────────────────────────────────
+ * MultiExchange page (2026-05-20)
+ * Dark cyberpunk fintech aesthetic, mirrors .omega-page namespace
+ * ────────────────────────────────────────────────────────────── */
+
+.multi-exchange-page {
+  min-height: 100vh;
+  background: #0a0e1a;
+  color: #f0f4f8;
+}
+
+.multi-exchange-page-header {
+  border-bottom: 1px solid #1f2937;
+  padding-bottom: 14px;
+}
+
+/* Card hover lift for clickable states */
+.multi-exchange-card-active,
+.multi-exchange-card-inactive {
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.multi-exchange-card-active:hover,
+.multi-exchange-card-inactive:hover {
+  transform: translateY(-2px);
+  border-color: #00d4ff !important;
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.18) !important;
+}
+
+/* Active status dot pulse animation */
+@keyframes multi-exchange-status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.multi-exchange-card-active span[style*="00d97a"] {
+  animation: multi-exchange-status-pulse 2s ease-in-out infinite;
+}
+
+/* Dock icon hover state for multi-exchange (matches omega/etc.) */
+#zeus-dock .zd-item[data-id="multi-exchange"] .zd-icon svg {
+  color: #f0c040;
+  transition: color 0.2s ease, filter 0.2s ease;
+}
+
+#zeus-dock .zd-item[data-id="multi-exchange"]:hover .zd-icon svg {
+  color: #f0c040;
+  filter: drop-shadow(0 0 8px rgba(240, 192, 64, 0.6));
+}
+
+#zeus-dock .zd-item[data-id="multi-exchange"].active .zd-icon svg {
+  color: #f0c040;
+  filter: drop-shadow(0 0 12px rgba(240, 192, 64, 0.8));
+}
+
+/* Sub-view back button hover */
+.multi-exchange-detail button[data-testid="exchange-detail-back"]:hover {
+  color: #00ffff !important;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.5);
+}
+
+/* Page entry fade-up */
+@keyframes multi-exchange-fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.multi-exchange-page,
+.multi-exchange-detail {
+  animation: multi-exchange-fade-up 0.2s ease-out;
+}

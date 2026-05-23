@@ -186,8 +186,8 @@ export function renderMagnets() {
 
   if (cpEl) cpEl.textContent = '$' + fP(p);
   if (updEl) updEl.textContent = 'UPD ' + new Date().toLocaleTimeString('ro-RO', { timeZone: S.tz || 'Europe/Bucharest', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  if (aboveCntEl) aboveCntEl.textContent = above.length + ' magneti';
-  if (belowCntEl) belowCntEl.textContent = below.length + ' magneti';
+  if (aboveCntEl) aboveCntEl.textContent = above.length + ' magnets';
+  if (belowCntEl) belowCntEl.textContent = below.length + ' magnets';
 
   // Nearest magnets summary
   const nearAbove = above[0];
@@ -208,9 +208,9 @@ export function renderMagnets() {
     const scoreA = nearAbove.strength / (distA + 0.1);
     const scoreB = nearBelow.strength / (distB + 0.1);
     let biasDir: any, biasClass: any, biasLabel: any;
-    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = _ZI.dGrn + ' BULL \u2014 Magnet jos atrage'; }
-    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = _ZI.dRed + ' BEAR \u2014 Magnet sus atrage'; }
-    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = _ZI.bolt + ' NEUTRU'; }
+    if (scoreB > scoreA * 1.3) { biasDir = 'bull'; biasClass = 'bull'; biasLabel = _ZI.dGrn + ' BULL \u2014 Lower magnet pulls'; }
+    else if (scoreA > scoreB * 1.3) { biasDir = 'bear'; biasClass = 'bear'; biasLabel = _ZI.dRed + ' BEAR \u2014 Upper magnet pulls'; }
+    else { biasDir = 'neut'; biasClass = 'neut'; biasLabel = _ZI.bolt + ' NEUTRAL'; }
     biasEl.innerHTML = biasLabel;
     biasEl.className = 'mag-bias ' + biasClass;
     S.magnets.bias = biasDir;
@@ -219,8 +219,8 @@ export function renderMagnets() {
   // Render lists
   const renderList = (list: any[], containerId: string, isAbove: boolean) => {
     const c = el(containerId); if (!c) return;
-    if (!list.length) { c.innerHTML = `<div style="padding:8px;text-align:center;font-size:13px;color:var(--dim)">Niciun magnet detectat</div>`; return; }
-    c.innerHTML = list.map((m: any, i: number) => {
+    if (!list.length) { c.innerHTML = `<div style="padding:8px;text-align:center;font-size:13px;color:var(--dim)">No magnet detected</div>`; return; }
+    c.innerHTML = list.map((m: any, _i: number) => {
       const dist = isAbove ? ((m.price - p) / p * 100) : (p - m.price) / p * 100 * -1;
       const distStr = (dist >= 0 ? '+' : '') + dist.toFixed(2) + '%';
       const cls = isAbove ? (m.strength > 70 ? 'strong-above' : 'above') : (m.strength > 70 ? 'strong-below' : 'below');
@@ -281,18 +281,24 @@ export async function runBacktest() {
   const BT = w.BT;
   const BT_INDICATORS = w.BT_INDICATORS;
   if (BT.running) return;
-  if (!S.klines || S.klines.length < 60) { toast('Niciun date historice. Asteapta chart-ul sa se incarce.'); return; }
+  if (!S.klines || S.klines.length < 60) { toast('No historical data. Wait for the chart to load.'); return; }
 
   BT.running = true;
+  // [M6] try/finally so BT.running ALWAYS resets, even on thrown errors
+  // or early returns inside the long body. Without this guard, a single
+  // mid-cycle exception left BT.running=true forever — every subsequent
+  // click silently bailed at the gate above (line 283), making the button
+  // appear "dead" until a full page refresh.
+  try {
   const runBtn = el('btRunBtn');
   if (runBtn) runBtn.className = 'bt-btn bt-btn-run running';
-  el('btProgress')?.style && (el('btProgress').style.display = 'block');
+  { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'block'; }
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'none'; }
   { const _oe = el('btEmpty'); if (_oe) _oe.style.display = 'none'; }
 
-  const lookback = parseInt(el('btLookback')?.value) || 500;
-  const fwdBars = parseInt(el('btFwdBars')?.value) || 5;
-  const minMovePct = parseFloat(el('btMinMove')?.value) || 0.5;
+  const lookback = parseInt(el('btLookback')?.value || '') || 500;
+  const fwdBars = parseInt(el('btFwdBars')?.value || '') || 5;
+  const minMovePct = parseFloat(el('btMinMove')?.value || '') || 0.5;
 
   const bars = S.klines.slice(-lookback);
   const results: any = {};
@@ -393,7 +399,7 @@ export async function runBacktest() {
     // Progress update every 50 bars
     if (i % 50 === 0) {
       const pct = Math.round((i - 30) / totalSteps * 100);
-      { const _oe = el('btProgressPct'); if (_oe) _oe.textContent = pct; }
+      { const _oe = el('btProgressPct'); if (_oe) _oe.textContent = String(pct); }
       { const _oe = el('btProgressFill'); if (_oe) _oe.style.width = pct + '%'; }
       await new Promise(r => setTimeout(r, 0)); // yield to UI
     }
@@ -466,18 +472,26 @@ export async function runBacktest() {
     });
   }
 
-  BT.running = false;
   BT.results = results;
   BT.equityCurve = equityCurve;
 
   renderBacktestResults(results, equityCurve, fwdBars, lookback, minMovePct);
-  { const _oe = el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
-  el('btProgress')?.style && (el('btProgress').style.display = 'none');
   { const _oe = el('btResults'); if (_oe) _oe.style.display = 'block'; }
   { const _oe = el('btLastRun'); if (_oe) _oe.textContent = `${lookback} bare | +${fwdBars} | \u2265${minMovePct}% | ${fmtNow()}`; }
+  } catch (e: any) {
+    // [M6] surface the failure to the user instead of swallowing into ZLOG
+    try { toast('Backtest failed: ' + (e && e.message ? e.message : 'unknown error')); } catch (_) {}
+    try { console.warn('[Backtest] error', e); } catch (_) {}
+  } finally {
+    // [M6] idempotent DOM + state reset \u2014 runs on success, error, AND
+    // any early return path inside the try block.
+    BT.running = false;
+    { const _oe = el('btRunBtn'); if (_oe) _oe.className = 'bt-btn bt-btn-run'; }
+    { const _bp = el('btProgress'); if (_bp) _bp.style.display = 'none'; }
+  }
 }
 
-export function renderBacktestResults(results: any, equityCurve: any, fwdBars: any, lookback: any, minMovePct: any) {
+export function renderBacktestResults(results: any, equityCurve: any, _fwdBars: any, lookback: any, _minMovePct: any) {
   const BT_INDICATORS = w.BT_INDICATORS;
   const rows: any[] = [];
   let totalWins = 0, totalTrades = 0, bestWR = 0, bestName = '\u2014';
@@ -506,7 +520,7 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
   { const _oe = el('btBestInd'); if (_oe) _oe.textContent = bestName + ' (' + bestWR + '%)'; }
   { const _oe = el('btAvgWR'); if (_oe) _oe.textContent = avgWR + '%'; }
   { const _oe = el('btAvgWR'); if (_oe) _oe.style.color = avgWR >= 55 ? 'var(--grn)' : avgWR >= 45 ? 'var(--ylw)' : 'var(--red)'; }
-  { const _oe = el('btTotalSig'); if (_oe) _oe.textContent = totalTrades; }
+  { const _oe = el('btTotalSig'); if (_oe) _oe.textContent = String(totalTrades); }
   { const _oe = el('btConfWR'); if (_oe) _oe.textContent = confWR ? confWR + '%' : '\u2014'; }
   { const _oe = el('btConfWR'); if (_oe) _oe.style.color = confWR >= 60 ? 'var(--grn)' : confWR >= 50 ? 'var(--ylw)' : 'var(--red)'; }
 
@@ -555,11 +569,12 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
 
   // Detail note update
   const bestRow = rows[0];
-  if (bestRow && el('btDetailNote')) {
-    el('btDetailNote').innerHTML = `
-      ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 cel mai bun indicator pe ultimele ${lookback} bare cu <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} semnale, R:R ${bestRow.rr}:1).<br>
-      ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combina toti indicatorii pentru precizie maxima.<br>
-      ${_ZI.w} Backtestul e pe date istorice \u2014 performanta trecuta nu garanteaza rezultate viitoare.
+  const _detailNote = el('btDetailNote');
+  if (bestRow && _detailNote) {
+    _detailNote.innerHTML = `
+      ${_ZI.ok} <strong style="color:${bestRow.ind.color}">${bestRow.ind.name}</strong> \u2014 best indicator over the last ${lookback} bars with <strong style="color:var(--grn)">${bestRow.wr}% win rate</strong> (${bestRow.tot} signals, R:R ${bestRow.rr}:1).<br>
+      ${_ZI.lbulb} Confluence Score: <strong style="color:var(--pur)">${confWR}% win rate</strong> \u2014 combine all indicators for maximum precision.<br>
+      ${_ZI.w} Backtest is on historical data \u2014 past performance does not guarantee future results.
     `;
   }
 }
@@ -579,7 +594,12 @@ export function renderBacktestResults(results: any, equityCurve: any, fwdBars: a
 // [MOVED TO TOP] vwapSeries
 (function () {
   if (!w.S) return;
-  w.S.vwapOn = false;
+  // [Pack E] Restore VWAP toggle state from localStorage (written by
+  // toggleVWAP). Falls through to false if missing or if `w.S` isn't
+  // ready at IIFE time (handled by the ChartControls fallback).
+  let _restored = false;
+  try { _restored = localStorage.getItem('zeus_chart_vwap_on') === '1'; } catch (_) { _restored = false; }
+  w.S.vwapOn = _restored;
 })();
 
 export function calcVWAPBands(klines: any) {
@@ -592,17 +612,20 @@ export function calcVWAPBands(klines: any) {
   let cumTPV = 0, cumV = 0;
   const vwapData: any[] = []; const upper1: any[] = []; const lower1: any[] = []; const upper2: any[] = []; const lower2: any[] = [];
   let cumVar = 0;
-  dayBars.forEach((k: any, i: number) => {
+  const vcfg = (w as any).IND_SETTINGS?.vwap || {};
+  const sd1 = vcfg.stdDev  > 0 ? vcfg.stdDev  : 1;
+  const sd2 = vcfg.stdDev2 > 0 ? vcfg.stdDev2 : 2;
+  dayBars.forEach((k: any, _i: number) => {
     const tp = (k.high + k.low + k.close) / 3;
     cumTPV += tp * k.volume; cumV += k.volume;
     const vwap = cumV > 0 ? cumTPV / cumV : tp;
     cumVar += k.volume * Math.pow(tp - vwap, 2);
     const std = cumV > 0 ? Math.sqrt(cumVar / cumV) : 0;
     vwapData.push({ time: k.time, value: vwap });
-    upper1.push({ time: k.time, value: vwap + std });
-    lower1.push({ time: k.time, value: vwap - std });
-    upper2.push({ time: k.time, value: vwap + 2 * std });
-    lower2.push({ time: k.time, value: vwap - 2 * std });
+    upper1.push({ time: k.time, value: vwap + sd1 * std });
+    lower1.push({ time: k.time, value: vwap - sd1 * std });
+    upper2.push({ time: k.time, value: vwap + sd2 * std });
+    lower2.push({ time: k.time, value: vwap - sd2 * std });
   });
   return { vwap: vwapData, upper1, lower1, upper2, lower2 };
 }
@@ -633,9 +656,22 @@ export function toggleVWAP(btn: any) {
   const S = w.S;
   S.vwapOn = !S.vwapOn;
   if (btn) btn.classList.toggle('on', S.vwapOn);
+  // [Pack E] Persist VWAP toggle to localStorage + mark chartExtras
+  // dirty for the next user-context push (cross-device sync).
+  try { localStorage.setItem('zeus_chart_vwap_on', S.vwapOn ? '1' : '0'); } catch (_) { /* */ }
+  try { if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('chartExtras'); } catch (_) { /* */ }
   if (S.vwapOn) renderVWAP();
   else { vwapSeries.forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } }); vwapSeries = []; }
   toast(S.vwapOn ? 'VWAP + Bands ON' : 'VWAP OFF');
+}
+
+// [Pack E] Public re-render hook for VWAP — used by ChartControls after
+// restore so the bands draw on chart without flipping the toggle state.
+// Idempotent: if S.vwapOn is false, no-op. If already rendered, redraws.
+export function applyVWAPRestore() {
+  const S = w.S;
+  if (!S || !S.vwapOn) return;
+  try { renderVWAP(); } catch (_) { /* */ }
 }
 
 // =================================================================
@@ -670,17 +706,17 @@ export function toggleVWAP(btn: any) {
 export function oviReadSettings() {
   const S = w.S;
   const c = S.oviCfg;
-  c.lookback = parseInt(el('oviLookback')?.value) || 400;
-  c.pivotW = parseInt(el('oviPivotW')?.value) || 1;
-  c.secW = parseInt(el('oviSecW')?.value) || 1;
-  c.atrLen = parseInt(el('oviAtrLen')?.value) || 121;
-  c.atrBandPct = parseFloat(el('oviAtrBand')?.value) || 1.0;
-  c.extend = parseInt(el('oviExtend')?.value) || 25;
-  c.minWeight = parseFloat(el('oviMinW')?.value) || 0;
-  c.heatContrast = parseFloat(el('oviContrast')?.value) || 0.7;
+  c.lookback = parseInt(el('oviLookback')?.value || '') || 400;
+  c.pivotW = parseInt(el('oviPivotW')?.value || '') || 1;
+  c.secW = parseInt(el('oviSecW')?.value || '') || 1;
+  c.atrLen = parseInt(el('oviAtrLen')?.value || '') || 121;
+  c.atrBandPct = parseFloat(el('oviAtrBand')?.value || '') || 1.0;
+  c.extend = parseInt(el('oviExtend')?.value || '') || 25;
+  c.minWeight = parseFloat(el('oviMinW')?.value || '') || 0;
+  c.heatContrast = parseFloat(el('oviContrast')?.value || '') || 0.7;
   c.longCol = el('oviLongCol')?.value || '#01c4fe';
   c.shortCol = el('oviShortCol')?.value || '#ffe400';
-  c.touchTransp = parseInt(el('oviTouchT')?.value) || 8;
+  c.touchTransp = parseInt(el('oviTouchT')?.value || '') || 8;
   c.showScale = el('oviShowScale')?.checked !== false;
   c.keepTouched = el('oviKeepTouched')?.checked !== false;
   const wm = document.querySelector('input[name="oviWeightMode"]:checked') as any;
@@ -953,7 +989,7 @@ export function oviRenderScale(gMin: any, gMax: any) {
   try {
     const kl = S.klines; if (!kl.length) return;
     const last = kl[kl.length - 1];
-    const c = S.oviCfg;
+
     const scaleS = w.mainChart.addLineSeries({
       color: 'rgba(240,192,64,0.01)',
       priceLineVisible: true,
@@ -1032,7 +1068,7 @@ export function renderPnlLab() {
       html += '<div class="pnl-lab-section" style="text-align:center;padding:16px 10px">';
       html += '<div style="font-size:28px;margin-bottom:6px">\ud83d\udcca</div>';
       html += '<div style="color:#00d9ff;font-size:13px;font-weight:700;margin-bottom:4px">PnL Lab \u2014 No Data Yet</div>';
-      html += '<div style="color:#3a5068;font-size:11px;line-height:1.5">PnL Lab se va popula automat dup\u0103 ce \u00eenchizi primul trade.<br>Drawdown, Expectancy, Daily stats \u2014 totul apare aici.</div>';
+      html += '<div style="color:#3a5068;font-size:11px;line-height:1.5">PnL Lab will populate automatically after you close the first trade.<br>Drawdown, Expectancy, Daily stats \u2014 everything appears here.</div>';
       html += '</div>';
       body.innerHTML = html;
       return;
@@ -1157,9 +1193,25 @@ export const _origRenderChart_ovi = w.renderChart;
 
 
 // ===== SESSION OVERLAYS =====
+// [Pack D] zeus_chart_sessions persists ASIA/LON/NY toggle state across
+// refresh. Read at module init (with localStorage fallback) AND
+// re-restored after the user-context pull arrives (in config.ts pull
+// handler). The IIFE used to leave S.sessions = {asia:false,...} on
+// every boot — operator had to re-toggle every session manually after
+// each refresh.
 (function () {
   if (!w.S) return;
-  w.S.sessions = w.S.sessions || { asia: false, london: false, ny: false };
+  let _restored: any = null;
+  try { _restored = JSON.parse(localStorage.getItem('zeus_chart_sessions') || 'null'); } catch (_) { _restored = null; }
+  if (_restored && typeof _restored === 'object') {
+    w.S.sessions = {
+      asia:   !!_restored.asia,
+      london: !!_restored.london,
+      ny:     !!_restored.ny,
+    };
+  } else {
+    w.S.sessions = w.S.sessions || { asia: false, london: false, ny: false };
+  }
 })();
 const sessionSeries: any = {};
 
@@ -1171,14 +1223,189 @@ const SESSIONS: any = {
 };
 
 export function toggleSession(sess: string, btn: any) {
+  // [M3] Defensive init — the IIFE at module load (line 1163-1167) returns
+  // early if `w.S` was undefined at that exact moment, which can happen
+  // when toggleSession is imported before w.S is created. Without this
+  // guard, the next line would throw `Cannot read properties of undefined
+  // (reading '<sess>')`. Same pattern as M4 (Adaptive Control toggle).
   const S = w.S;
+  if (!S) return;
+  S.sessions = S.sessions || { asia: false, london: false, ny: false };
   S.sessions[sess] = !S.sessions[sess];
   if (btn) btn.classList.toggle('on', S.sessions[sess]);
-  renderSessionOverlay(sess, S.sessions[sess]);
+  // [Pack D] Persist the new state immediately to localStorage so a
+  // refresh restores it even before the user-context pull completes.
+  // Then mark the chartExtras section dirty for the next UC push so
+  // the state syncs cross-device per-user.
+  try { localStorage.setItem('zeus_chart_sessions', JSON.stringify(S.sessions)); } catch (_) { /* */ }
+  try { if (typeof w._ucMarkDirty === 'function') w._ucMarkDirty('chartExtras'); } catch (_) { /* */ }
+  // [Pack B+1] Install the timeScale + ResizeObserver listeners so the
+  // session overlay re-renders on every chart pan/zoom — without this
+  // the boxes stayed locked to their initial pixel position when the
+  // chart moved. Idempotent (guarded by `_sessOverlayListenersInstalled`).
+  _ensureSessionOverlayListeners();
+  _renderSessionOverlays();
   toast(`${SESSIONS[sess].label} session ${S.sessions[sess] ? 'ON' : 'OFF'}`);
 }
 
-// [FIX v85 BUG10] Functie de curatare completa a tuturor seriilor de sesiune (apelata la schimb simbol)
+function _ensureSessionOverlayHost(): HTMLElement | null {
+  const mc = document.getElementById('mc');
+  if (!mc) return null;
+  let host = document.getElementById('zsess-overlay') as HTMLElement | null;
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'zsess-overlay';
+    host.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:3';
+    if (getComputedStyle(mc).position === 'static') mc.style.position = 'relative';
+    mc.appendChild(host);
+  }
+  return host;
+}
+
+function _sessionBlocks(sess: string, klines: any[], cfg: any): { start: number; end: number; high: number; low: number }[] {
+  // [Pack B+1] Each block now also carries the price-range (high/low)
+  // observed across the candles inside that session window. The render
+  // step uses this to size the box vertically (priceToCoordinate(high)
+  // → top, priceToCoordinate(low) → bottom) instead of spanning the full
+  // chart height. For the active in-progress block, high/low naturally
+  // expand as new candles arrive (next render call recomputes).
+  const blocks: { start: number; end: number; high: number; low: number }[] = [];
+  if (!klines || !klines.length) return blocks;
+  let inBlock = false;
+  let bStart = 0;
+  let bHigh = -Infinity;
+  let bLow = Infinity;
+  let lastT = 0;
+  for (let i = 0; i < klines.length; i++) {
+    const k = klines[i];
+    const h = new Date(k.time * 1000).getUTCHours();
+    const inSess = cfg.start < cfg.end ? (h >= cfg.start && h < cfg.end) : (h >= cfg.start || h < cfg.end);
+    if (inSess) {
+      if (!inBlock) { inBlock = true; bStart = k.time; bHigh = -Infinity; bLow = Infinity; }
+      const kHi = +k.high; const kLo = +k.low;
+      if (Number.isFinite(kHi) && kHi > bHigh) bHigh = kHi;
+      if (Number.isFinite(kLo) && kLo < bLow) bLow = kLo;
+    }
+    if (!inSess && inBlock) {
+      inBlock = false;
+      blocks.push({ start: bStart, end: lastT, high: bHigh, low: bLow });
+    }
+    lastT = k.time;
+  }
+  if (inBlock) blocks.push({ start: bStart, end: lastT, high: bHigh, low: bLow });
+  return blocks;
+}
+
+function _renderSessionOverlays() {
+  const S = w.S;
+  const host = _ensureSessionOverlayHost();
+  if (!host || !w.mainChart || !S || !S.klines) {
+    if (host) host.innerHTML = '';
+    return;
+  }
+  host.innerHTML = '';
+  const activeSess: string[] = ['asia', 'london', 'ny'].filter(s => S.sessions && S.sessions[s]);
+  if (!activeSess.length) return;
+  const ts = w.mainChart.timeScale();
+  const rect = host.getBoundingClientRect();
+  const width = rect.width;
+  if (!width) return;
+
+  // [Pack B+1] Use the candle series (w.cSeries) for price→pixel Y
+  // conversion so the overlay box height matches the actual high-low
+  // range of the session, not the full chart height. Falls back to
+  // full-height (top:0;bottom:0) only when the price scale isn't
+  // available (e.g., during chart re-init).
+  const cSeries = (w.cSeries && typeof w.cSeries.priceToCoordinate === 'function') ? w.cSeries : null;
+  const chartHeight = rect.height;
+
+  activeSess.forEach((sess, idx) => {
+    const cfg = SESSIONS[sess];
+    const blocks = _sessionBlocks(sess, S.klines, cfg);
+    blocks.forEach(bl => {
+      try {
+        const x1 = ts.timeToCoordinate(bl.start as any);
+        const x2 = ts.timeToCoordinate(bl.end as any);
+        if (x1 == null || x2 == null) return;
+        const left = Math.max(0, Math.min(x1, x2));
+        const right = Math.min(width, Math.max(x1, x2));
+        const w0 = Math.max(1, right - left);
+        if (right < 0 || left > width) return;
+
+        // [Pack B+1] Compute Y bounds from session high/low. Add small
+        // breathing-room padding (4px) so the box border doesn't sit
+        // exactly on a wick tip. If priceToCoordinate fails for either
+        // bound, fall back to full chart height.
+        let topY = 0;
+        let heightPx = chartHeight;
+        if (cSeries && Number.isFinite(bl.high) && Number.isFinite(bl.low) && bl.high > 0 && bl.low > 0) {
+          const yHigh = cSeries.priceToCoordinate(bl.high);
+          const yLow = cSeries.priceToCoordinate(bl.low);
+          if (yHigh != null && yLow != null && Number.isFinite(yHigh) && Number.isFinite(yLow)) {
+            const PAD = 4;
+            const yTop = Math.min(yHigh, yLow) - PAD;
+            const yBot = Math.max(yHigh, yLow) + PAD;
+            topY = Math.max(0, yTop);
+            heightPx = Math.max(2, Math.min(chartHeight - topY, yBot - topY));
+          }
+        }
+
+        const col = cfg.borderColor.replace(/[0-9a-fA-F]{2}$/, '');
+        const div = document.createElement('div');
+        div.className = 'zsess-box zsess-' + sess;
+        div.style.cssText = `position:absolute;top:${topY}px;height:${heightPx}px;left:${left}px;width:${w0}px;background:linear-gradient(180deg, ${col}22, ${col}0c 60%, ${col}18);border:1px solid ${col}88;border-radius:1px;box-shadow:inset 0 2px 0 0 ${col}aa, inset 0 -2px 0 0 ${col}66;pointer-events:none;`;
+        const lbl = document.createElement('div');
+        const offsetY = 2 + idx * 12;
+        lbl.style.cssText = `position:absolute;top:${offsetY}px;left:4px;font-size:9px;font-weight:700;letter-spacing:1px;color:${col};text-shadow:0 0 6px ${col}88;font-family:inherit;pointer-events:none;opacity:0.85`;
+        lbl.textContent = cfg.label;
+        div.appendChild(lbl);
+        host.appendChild(div);
+      } catch (_) { }
+    });
+  });
+}
+
+function _ensureSessionOverlayListeners() {
+  if (w._sessOverlayListenersInstalled) return;
+  if (!w.mainChart) return;
+  w._sessOverlayListenersInstalled = true;
+  try {
+    w.mainChart.timeScale().subscribeVisibleTimeRangeChange(() => {
+      if (w._sessRafPending) return;
+      w._sessRafPending = true;
+      requestAnimationFrame(() => { w._sessRafPending = false; _renderSessionOverlays(); });
+    });
+  } catch (_) { }
+  try {
+    const mc = document.getElementById('mc');
+    if (mc) {
+      const ro = new ResizeObserver(() => {
+        if (w._sessRafPending2) return;
+        w._sessRafPending2 = true;
+        requestAnimationFrame(() => { w._sessRafPending2 = false; _renderSessionOverlays(); });
+      });
+      ro.observe(mc);
+    }
+  } catch (_) { }
+  // [Pack B+1] Low-cadence refresh (2 s) so the active session box grows
+  // visibly when new candles arrive (extends `bl.end` to the latest kline,
+  // and may re-expand `bl.high` / `bl.low` when a new wick prints).
+  // RAF-debounced so no work happens off-screen. Cleared if listeners
+  // ever need re-install (current code does not unsubscribe — single
+  // chart instance per session by design).
+  if (!w._sessRefreshTimer) {
+    w._sessRefreshTimer = setInterval(() => {
+      if (w._sessRafPending3) return;
+      const S = w.S;
+      if (!S || !S.sessions) return;
+      const anyActive = ['asia', 'london', 'ny'].some(s => S.sessions[s]);
+      if (!anyActive) return;
+      w._sessRafPending3 = true;
+      requestAnimationFrame(() => { w._sessRafPending3 = false; _renderSessionOverlays(); });
+    }, 2000);
+  }
+}
+
 export function clearAllSessionOverlays() {
   Object.keys(sessionSeries).forEach((sess: string) => {
     if (sessionSeries[sess] && sessionSeries[sess].length) {
@@ -1188,49 +1415,15 @@ export function clearAllSessionOverlays() {
       sessionSeries[sess] = [];
     }
   });
+  const host = document.getElementById('zsess-overlay');
+  if (host) host.innerHTML = '';
 }
 
-export function renderSessionOverlay(sess: string, on: boolean) {
-  const S = w.S;
-  if (!w.mainChart) return; // [FIX v85 BUG10] Guard: chart poate sa nu existe
-  // Remove existing
-  if (sessionSeries[sess]) {
-    sessionSeries[sess].forEach((s: any) => { try { w.mainChart.removeSeries(s); } catch (_) { } });
-    sessionSeries[sess] = [];
-  }
-  if (!on || !S.klines.length) return;
-  const cfg = SESSIONS[sess];
-  const bars: any[] = [];
-  S.klines.forEach((k: any) => {
-    const d = new Date(k.time * 1000);
-    const h = d.getUTCHours();
-    const inSess = cfg.start < cfg.end ? (h >= cfg.start && h < cfg.end) : (h >= cfg.start || h < cfg.end);
-    if (inSess) bars.push(k);
-  });
-  if (!bars.length) return;
-  // Group into consecutive blocks
-  const blocks: any[] = []; let cur: any = null;
-  bars.forEach((b: any) => {
-    if (!cur) { cur = { start: b.time, end: b.time }; return; }
-    if (b.time - cur.end <= 600) cur.end = b.time;
-    else { blocks.push({ ...cur }); cur = { start: b.time, end: b.time }; }
-  });
-  if (cur) blocks.push(cur);
-  sessionSeries[sess] = [];
-  // Draw thin line for session start
-  blocks.forEach((bl: any) => {
-    try {
-      const startLine = w.mainChart.addLineSeries({ color: cfg.borderColor, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, lineStyle: 1 });
-      // Draw vertical-ish indicator at session boundaries
-      const blBars = S.klines.filter((k: any) => k.time >= bl.start && k.time <= bl.end);
-      if (blBars.length < 1) return;
-      const maxP = Math.max(...blBars.map((k: any) => k.high));
-      const minP = Math.min(...blBars.map((k: any) => k.low));
-      startLine.setData(blBars.map((k: any) => ({ time: k.time, value: (maxP + minP) / 2 })));
-      startLine.applyOptions({ title: cfg.label });
-      sessionSeries[sess].push(startLine);
-    } catch (_) { }
-  });
+export function renderSessionOverlay(_sess: string, _on: boolean) {
+  _ensureSessionOverlayListeners();
+  _renderSessionOverlays();
 }
+
+w._renderSessionOverlays = _renderSessionOverlays;
 
 // ===== CONFLUENCE SCORE =====

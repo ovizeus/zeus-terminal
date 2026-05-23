@@ -19,6 +19,22 @@ export var DOCK_ITEMS: any[] = [
   { id: 'dsl',        label: 'DSL',        group: 'trading',
     svg: '<path d="M3 17l4-4 4 4 4-8 6 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="21" cy="15" r="2" fill="currentColor" opacity=".5"/><circle cx="3" cy="17" r="1.5" fill="currentColor" opacity=".35"/><path d="M3 20h18" stroke="currentColor" stroke-width="1" opacity=".2" stroke-linecap="round"/>' },
 
+  // [OMEGA Wave 1 UI 2026-05-15] Ω rune — position 4 (after DSL, before ARES).
+  // Geometric capital omega: vertical legs + arching crown + horizontal base.
+  // Inner subtle glow + outer halo dot evoke "alien intelligence" presence.
+  // Personality-tinted via CSS hover/active states in app.css (.zd-item[data-id=omega]).
+  { id: 'omega',      label: 'OMEGA',      group: 'trading',
+    svg: '<circle cx="12" cy="12" r="10" fill="currentColor" opacity=".05"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="0.8" opacity=".4"/><path d="M7 19 L9 19 L9 15 C9 12 10 9 12 9 C14 9 15 12 15 15 L15 19 L17 19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="6.5" r="1.2" fill="currentColor" opacity=".7"/><circle cx="12" cy="12" r="2" fill="currentColor" opacity=".15"/>' },
+
+  // [MultiExchange 2026-05-20] ₿ glyph — position 5 (after Omega, before ARES).
+  // Bitcoin symbol on a hexagonal hub backdrop. Click → MultiExchangePage.
+  // NOTE: This is the LEGACY initZeusDock path. Mirror entry MUST also exist
+  // in client/src/components/layout/ZeusDock.tsx (React render path used by
+  // PanelShell). Discovered 2026-05-21 — adding here alone leaves icon
+  // invisible because ZeusDock.tsx has its OWN DOCK_ITEMS constant.
+  { id: 'multi-exchange', label: 'MultiExchange', group: 'trading',
+    svg: '<polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="currentColor" opacity=".08"/><polygon points="12,2 21,7 21,17 12,22 3,17 3,7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M10 8h3.5c1.4 0 2.3.8 2.3 1.9 0 .9-.5 1.6-1.3 1.8.9.2 1.5 1 1.5 2 0 1.3-1 2.1-2.6 2.1H10V8zm1.3 3.3h1.9c.7 0 1.1-.4 1.1-1s-.4-1-1.1-1h-1.9v2zm0 3.4h2.1c.8 0 1.2-.4 1.2-1.1 0-.6-.4-1-1.2-1h-2.1v2.1z" fill="currentColor" stroke="none"/><line x1="12" y1="6.5" x2="12" y2="8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><line x1="12" y1="16" x2="12" y2="17.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>' },
+
   { id: 'ares',       label: 'ARES',       group: 'trading',
     svg: '<path d="M12 1.5L4.5 6.5v5.5c0 4.8 3.1 9.8 7.5 11 4.4-1.2 7.5-6.2 7.5-11V6.5L12 1.5z" fill="currentColor" opacity=".1"/><path d="M12 1.5L4.5 6.5v5.5c0 4.8 3.1 9.8 7.5 11 4.4-1.2 7.5-6.2 7.5-11V6.5L12 1.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 11.5l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>' },
 
@@ -69,7 +85,36 @@ export var DOCK_GROUPS: any[] = ['trading', 'review', 'intel', 'expand'];
 
 // ── ENABLED DOCK IDS (modules with page view wired) ──────────
 // Add ids here as each module gets its dedicated page view
-export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'activity', 'aub'];
+export var DOCK_ENABLED: any[] = ['autotrade', 'manual-trade', 'dsl', 'omega', 'multi-exchange', 'ares', 'postmortem', 'pnllab', 'aria', 'nova', 'adaptive', 'flow', 'mtf', 'teacher', 'sigreg', 'activity', 'aub'];
+
+// ── Z-glyph "Coming Soon" toast (UI-POLISH-1 2026-05-13) ──────
+// Operator-approved dedicated brand-aligned overlay (NU emoji).
+// Z rune SVG sharp angular, cyan brand, Orbitron 900, glow pulse.
+// [UI-POLISH-1 REACT-FIX 2026-05-14] Exported pentru React PanelShell
+// handleDockClick — previously `if (id==='more') return` silently
+// exited, never showed overlay în React UI. Legacy initZeusDock
+// branch still uses local reference at line 136 (no behavior change).
+export function _zComingSoon(): void {
+  let t = document.getElementById('z-coming-soon-toast') as any;
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'z-coming-soon-toast';
+    t.className = 'z-coming-soon';
+    t.innerHTML =
+      '<svg class="z-cs-glyph" viewBox="0 0 32 32" width="28" height="28">' +
+        '<path d="M6 6 L26 6 L8 26 L26 26" fill="none" stroke="#00d4ff" stroke-width="2.4" stroke-linecap="square" stroke-linejoin="miter"/>' +
+      '</svg>' +
+      '<span class="z-cs-text">COMING SOON</span>';
+    document.body.appendChild(t);
+  }
+  t.style.display = 'flex';
+  t.style.opacity = '1';
+  clearTimeout(t._zcsT);
+  t._zcsT = setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => { t.style.display = 'none'; }, 300);
+  }, 3000);
+}
 
 // ── RENDER ─────────────────────────────────────────────────────
 export function initZeusDock(): void {
@@ -106,9 +151,9 @@ export function initZeusDock(): void {
 
     var dockId = item.getAttribute('data-dock');
 
-    // Disabled icons -> toast
+    // Disabled icons -> dedicated Z-glyph Coming Soon toast (UI-POLISH-1)
     if (item.classList.contains('zd-disabled')) {
-      toast('Coming soon', 1500);
+      _zComingSoon();
       return;
     }
 

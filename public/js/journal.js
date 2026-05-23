@@ -71,6 +71,15 @@ function applyFilters() {
         return true;
     });
 
+    // Sort by open time DESC (newest opened first) — matches "Date" column display.
+    // closeTs as tie-breaker (mass-close events have identical or near-identical closeTs).
+    _filtered.sort(function (a, b) {
+        var aO = +a.openTs || 0;
+        var bO = +b.openTs || 0;
+        if (aO !== bO) return bO - aO;
+        return (+b.closeTs || 0) - (+a.closeTs || 0);
+    });
+
     _page = 0;
     renderTable(_filtered);
     renderLocalStats(_filtered);

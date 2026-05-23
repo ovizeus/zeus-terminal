@@ -3,6 +3,7 @@
 // Live API stubs, PWA, Indicator panel, Overlay/Oscillator indicators,
 // Signal scanner, Deep Dive narrative generator
 
+import { api } from '../services/api'
 import { fmtTime, fmtDate, fmtNow, toast, _calcATRSeries } from '../data/marketDataHelpers'
 import { sendAlert } from '../data/marketDataWS'
 import { liveApiSyncState } from '../trading/liveApi'
@@ -27,20 +28,25 @@ export function getMacdChart(): any { return _macdChart }
 
 export function connectLiveAPI(): void {
   const st = el('apiStatus')
-  if (st) { st.innerHTML = _ZI.timer + ' Se verific\u0103 conexiunea exchange...'; st.style.color = 'var(--yel)' }
-  fetch('/api/exchange/status', { credentials: 'same-origin' }).then(function (r: Response) { return r.json() }).then(function (data: any) {
+  if (st) { st.innerHTML = _ZI.timer + ' Checking exchange connection...'; st.style.color = 'var(--yel)' }
+  api.raw<any>('GET', '/api/exchange/status').then(function (data: any) {
     if (!data.ok || !data.connected) {
       if (st) {
-        st.innerHTML = _ZI.w + ' Nicio conexiune exchange configurat\u0103.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configureaz\u0103 \u00EEn Settings \u2192 Exchange API</span>'
+        st.innerHTML = _ZI.w + ' No exchange connection configured.<br><span style="color:#00afff;cursor:pointer" onclick="openM(\'msettings\');swtab(\'msettings\',\'set-exchange\',document.querySelector(\'[data-extab]\'))">' + _ZI.bolt + ' Configure in Settings \u2192 Exchange API</span>'
         st.style.color = '#f0c040'
       }
       return
     }
-    const exchange = data.exchange || 'binance'
+    // [Phase 12.A — Batch H cleanup] No more hardcoded "binance" default.
+    // Whitelist server truth; null when unknown, never faked. Display label
+    // falls back to neutral "ACTIVE EXCHANGE" instead of inventing a brand.
+    const _rawExch = data.exchange
+    const exchange: 'binance' | 'bybit' | null = (_rawExch === 'binance' || _rawExch === 'bybit') ? _rawExch : null
     const mode = data.mode || 'live'
     w.TP.liveConnected = true; w.TP.liveExchange = exchange
+    const _exchDisplay = exchange ? exchange.toUpperCase() : 'ACTIVE EXCHANGE'
     if (st) {
-      st.innerHTML = _ZI.ok + ' <b>' + exchange.toUpperCase() + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
+      st.innerHTML = _ZI.ok + ' <b>' + _exchDisplay + '</b> \u2014 ' + mode.toUpperCase() + '<br><span style="font-size:8px;color:#556">API: ' + (data.maskedKey || '***') + ' \u00B7 Last verified: ' + (data.lastVerified || 'N/A') + '</span>'
       st.style.color = 'var(--grn)'
     }
     const form = el('liveOrderForm'); if (form) form.style.display = 'block'
@@ -57,7 +63,7 @@ export function placeLiveOrder(): void {
 }
 
 export function connectLiveExchange(): void {
-  toast('LIVE TRADING DEZACTIVAT \u2014 backend necesar.', 0, _ZI.dRed)
+  toast('LIVE TRADING DISABLED \u2014 backend required.', 0, _ZI.dRed)
 }
 
 export function loadSavedAPI(): void {
@@ -71,7 +77,7 @@ export function loadSavedAPI(): void {
 export function installPWA(): void {
   const prompt = w._dip || w._deferredPrompt
   if (prompt) { prompt.prompt(); prompt.userChoice.then(() => { const b = el('installBtn'); if (b) b.style.display = 'none'; w._dip = null; w._deferredPrompt = null }) }
-  else toast('Deschide in Chrome/Brave \u2192 meniu \u2192 Instaleaza aplicatia')
+  else toast('Open in Chrome/Brave \u2192 menu \u2192 Install app')
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -131,8 +137,8 @@ export function openIndPanel(): void {
       if (!target) return
       const action = target.dataset.action
       const id = target.dataset.id
-      if (action === 'openIndSettings') { e.stopPropagation(); openIndSettings(id) }
-      else if (action === 'toggleInd') toggleInd(id, target)
+      if (action === 'openIndSettings') { e.stopPropagation(); openIndSettings(id || '') }
+      else if (action === 'toggleInd') toggleInd(id || '', target)
     })
   }
 
@@ -164,6 +170,8 @@ export function applyIndVisibility(id: string, visible: boolean): void {
     case 'ema':
       if (w.ema50S) w.ema50S.applyOptions({ visible: show })
       if (w.ema200S) w.ema200S.applyOptions({ visible: show })
+      if (w.ema3S) w.ema3S.applyOptions({ visible: show })
+      if (w.ema4S) w.ema4S.applyOptions({ visible: show })
       break
     case 'wma':
       if (w.wma20S) w.wma20S.applyOptions({ visible: show })
@@ -236,18 +244,35 @@ export function applyIndVisibility(id: string, visible: boolean): void {
 
 export function openIndSettings(id: string): void {
   const cfg = w.IND_SETTINGS[id]
-  if (!cfg || Object.keys(cfg).length === 0) { toast('No settings for ' + id.toUpperCase()); return }
+  if (!cfg) { toast('No settings for ' + id.toUpperCase()); return }
   const ind = w.INDICATORS.find((i: any) => i.id === id)
   const labels: Record<string, string> = {
-    p1: 'Period 1', p2: 'Period 2', period: 'Period', mult: 'Multiplier',
-    stdDev: 'Std Deviation', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
+    p1: 'Period 1', p2: 'Period 2', p3: 'Period 3', p4: 'Period 4', period: 'Period', mult: 'Multiplier',
+    stdDev: 'Inner Band σ', stdDev2: 'Outer Band σ', kPeriod: 'K Period', dPeriod: 'D Period', smooth: 'Smoothing',
     fast: 'Fast', slow: 'Slow', signal: 'Signal', tenkan: 'Tenkan', kijun: 'Kijun',
-    senkou: 'Senkou Span B', rows: 'Rows', type: 'Type'
+    senkou: 'Senkou Span B', rows: 'Rows', type: 'Type', smoothing: 'Smoothing (SMA)',
+    levels: 'Levels (CSV)'
+  }
+  // [batch3-B] pivot.type dropdown options
+  const typeOpts: Record<string, string[]> = {
+    pivot: ['standard', 'fibonacci', 'camarilla', 'woodie', 'demark']
   }
   let html = `<div class="ind-set-title">${ind ? ind.ico : _ZI.bolt} ${ind ? ind.name : id.toUpperCase()} Settings</div>`
-  for (const [key, val] of Object.entries(cfg)) {
-    if (key === 'levels' || key === 'type') continue
-    html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="1" max="500" step="any" class="ind-set-input"></div>`
+  const entries = Object.entries(cfg)
+  if (!entries.length) {
+    html += `<div class="ind-set-row" style="color:#888;font-size:11px">No configurable parameters.</div>`
+  }
+  for (const [key, val] of entries) {
+    if (key === 'type') {
+      const opts = typeOpts[id] || [String(val)]
+      const sel = opts.map((o: string) => `<option value="${o}"${o === val ? ' selected' : ''}>${o}</option>`).join('')
+      html += `<div class="ind-set-row"><label>${labels[key] || key}</label><select id="indset-${id}-${key}" class="ind-set-input">${sel}</select></div>`
+    } else if (key === 'levels' && Array.isArray(val)) {
+      const csv = (val as any[]).join(',')
+      html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="text" id="indset-${id}-${key}" value="${csv}" placeholder="0, 0.236, 0.382, 0.5, 0.618, 0.786, 1" class="ind-set-input"></div>`
+    } else {
+      html += `<div class="ind-set-row"><label>${labels[key] || key}</label><input type="number" id="indset-${id}-${key}" value="${val}" min="0" max="500" step="any" class="ind-set-input"></div>`
+    }
   }
   html += `<div style="display:flex;gap:8px;margin-top:10px"><button class="ind-set-btn" data-action="applyIndSettings" data-id="${id}">Apply</button><button class="ind-set-btn cancel" data-action="closeIndSettings">Cancel</button></div>`
   let modal = document.getElementById('indSettingsModal')
@@ -265,7 +290,7 @@ export function openIndSettings(id: string): void {
     modal.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
       if (!btn) return
-      if (btn.dataset.action === 'applyIndSettings') applyIndSettings(btn.dataset.id)
+      if (btn.dataset.action === 'applyIndSettings') applyIndSettings(btn.dataset.id || '')
       else if (btn.dataset.action === 'closeIndSettings') closeIndSettings()
     })
   }
@@ -280,9 +305,19 @@ export function applyIndSettings(id: string): void {
   const cfg = w.IND_SETTINGS[id]
   if (!cfg) return
   for (const key of Object.keys(cfg)) {
-    if (key === 'levels' || key === 'type') continue
-    const inp = document.getElementById('indset-' + id + '-' + key) as HTMLInputElement | null
-    if (inp) { const v = parseFloat(inp.value); if (isFinite(v) && v > 0) cfg[key] = v }
+    const inp = document.getElementById('indset-' + id + '-' + key) as HTMLInputElement | HTMLSelectElement | null
+    if (!inp) continue
+    if (key === 'type') {
+      const val = (inp as HTMLSelectElement).value
+      if (val) cfg[key] = val
+    } else if (key === 'levels') {
+      const parsed = (inp as HTMLInputElement).value.split(',').map((s: string) => parseFloat(s.trim())).filter((n: number) => isFinite(n))
+      if (parsed.length) cfg[key] = parsed
+    } else {
+      const v = parseFloat((inp as HTMLInputElement).value)
+      // smoothing allows 0 (= disabled); other numeric keys require > 0
+      if (isFinite(v) && (v > 0 || key === 'smoothing')) cfg[key] = v
+    }
   }
   closeIndSettings()
   if (typeof w._indSettingsSave === 'function') w._indSettingsSave()
@@ -492,10 +527,10 @@ export function _syncSubChartsToMain(): void {
 // ═══════════════════════════════════════════════════════════════
 
 export function initRSIChart(): void {
-  if (w._rsiInited && _rsiChart) { updateRSI(); return }
-  _rsiChart = _createSubChart('rsiChart', 60)
-  if (!_rsiChart) return
-  w._rsiSeries = _rsiChart.addLineSeries({ color: '#f5c842', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'RSI' })
+  if (w._rsiInited && w._rsiChart) { updateRSI(); return }
+  w._rsiChart = _createSubChart('rsiChart', 60)
+  if (!w._rsiChart) return
+  w._rsiSeries = w._rsiChart.addLineSeries({ color: '#f5c842', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'RSI' })
   w._rsiInited = true
   updateRSI()
 }
@@ -585,10 +620,10 @@ export function updateATRInd(): void {
 }
 
 export function initOBVChart(): void {
-  if (w._obvInited && _obvChart) { updateOBV(); return }
-  _obvChart = _createSubChart('obvChart', 60)
-  if (!_obvChart) return
-  w._obvSeries = _obvChart.addLineSeries({ color: '#00b8d4', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'OBV' })
+  if (w._obvInited && w._obvChart) { updateOBV(); return }
+  w._obvChart = _createSubChart('obvChart', 60)
+  if (!w._obvChart) return
+  w._obvSeries = w._obvChart.addLineSeries({ color: '#00b8d4', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true, title: 'OBV' })
   w._obvInited = true
   updateOBV()
 }
@@ -596,10 +631,16 @@ export function initOBVChart(): void {
 export function updateOBV(): void {
   if (!w._obvInited || !w._obvSeries || !w.S.klines.length) return
   const k = w.S.klines; let obv = 0
-  const data = k.map((b: any, i: number) => {
+  const raw = k.map((b: any, i: number) => {
     if (i > 0) { if (b.close > k[i - 1].close) obv += b.volume; else if (b.close < k[i - 1].close) obv -= b.volume }
     return { time: b.time, value: obv }
   })
+  const sm = Math.round(w.IND_SETTINGS?.obv?.smoothing || 0)
+  const data = sm > 1 ? raw.map((d: any, i: number) => {
+    if (i < sm - 1) return d
+    let s = 0; for (let j = 0; j < sm; j++) s += raw[i - j].value
+    return { time: d.time, value: s / sm }
+  }) : raw
   try { w._obvSeries.setData(data); _syncSubChartsToMain() } catch (_) { }
 }
 
@@ -686,7 +727,7 @@ export function renderActBar(): void {
     bar.dataset.delegated = '1'
     bar.addEventListener('click', (e) => {
       const pill = (e.target as HTMLElement).closest('[data-action="deactivateInd"]') as HTMLElement
-      if (pill) deactivateInd(pill.dataset.id)
+      if (pill) deactivateInd(pill.dataset.id || '')
     })
   }
 }
@@ -761,9 +802,12 @@ export function initMACDChart(): void {
 function _updateMACDChart(): void {
   if (!w._macdInited || !_macdChart || !w._macdLineSeries) return
   const klines = w.S.klines
-  if (!klines || klines.length < 35) return
+  const cfg = w.IND_SETTINGS?.macd || {}
+  const fast = Math.max(1, Math.round(cfg.fast || 12))
+  const slow = Math.max(fast + 1, Math.round(cfg.slow || 26))
+  const signal = Math.max(1, Math.round(cfg.signal || 9))
+  if (!klines || klines.length < slow + signal) return
   const closes = klines.map((k: any) => k.close)
-  const fast = 12, slow = 26, signal = 9
   const emaFn = (arr: number[], p: number) => {
     const k = 2 / (p + 1); let v = arr[0]
     return arr.map((x: number, i: number) => i === 0 ? v : (v = x * k + v * (1 - k)))
@@ -834,7 +878,9 @@ export function runSignalScan(): void {
   const bars = w.S.chartBars || []
   if (bars.length < 30) return
   const closes = bars.map((b: any) => b.close)
-  const rsiNow = w.S.rsiData?.['5m'] || parseFloat(document.getElementById('rn')?.textContent || '50') || 50
+  // [R29] Drop DOM fallback — w.S.rsiData is the canonical source (populated
+  // by fetchRSI in marketDataFeeds.ts). If absent, default to neutral 50.
+  const rsiNow = w.S.rsiData?.['5m'] || 50
   const rsi1h = w.S.rsiData?.['1h'] || 60
   const rsi4h = w.S.rsiData?.['4h'] || 60
   const price = w.S.price || 0
@@ -851,25 +897,25 @@ export function runSignalScan(): void {
     const dcross = macdRes.macd < macdRes.signal && macdRes.prevMacd >= macdRes.prevSignal
     if (cross) { signals.push({ name: 'MACD Crossover', det: `MACD: ${macdRes.macd.toFixed(2)} | Signal: ${macdRes.signal.toFixed(2)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
     if (dcross) { signals.push({ name: 'MACD Crossunder', det: `MACD: ${macdRes.macd.toFixed(2)} | Signal: ${macdRes.signal.toFixed(2)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
-    if (macdRes.hist > 0 && macdRes.prevHist < macdRes.hist) { signals.push({ name: 'MACD Histogram +', det: `Histograma: +${macdRes.hist.toFixed(2)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-    if (macdRes.hist < 0 && macdRes.prevHist > macdRes.hist) { signals.push({ name: 'MACD Histogram \u2212', det: `Histograma: ${macdRes.hist.toFixed(2)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+    if (macdRes.hist > 0 && macdRes.prevHist < macdRes.hist) { signals.push({ name: 'MACD Histogram +', det: `Histogram: +${macdRes.hist.toFixed(2)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+    if (macdRes.hist < 0 && macdRes.prevHist > macdRes.hist) { signals.push({ name: 'MACD Histogram \u2212', det: `Histogram: ${macdRes.hist.toFixed(2)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
   }
 
-  if (rsiNow < 30) { signals.push({ name: 'RSI Supravanzut (5m)', det: `RSI: ${rsiNow.toFixed(1)} < 30`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
-  if (rsiNow > 70) { signals.push({ name: 'RSI Supracumparat (5m)', det: `RSI: ${rsiNow.toFixed(1)} > 70`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
-  if (rsiDiv === 'bull_div') { signals.push({ name: 'RSI Divergenta Bullish', det: `Pret jos + RSI mai sus`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-  if (rsiDiv === 'bear_div') { signals.push({ name: 'RSI Divergenta Bearish', det: `Pret sus + RSI mai jos`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+  if (rsiNow < 30) { signals.push({ name: 'RSI Oversold (5m)', det: `RSI: ${rsiNow.toFixed(1)} < 30`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
+  if (rsiNow > 70) { signals.push({ name: 'RSI Overbought (5m)', det: `RSI: ${rsiNow.toFixed(1)} > 70`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
+  if (rsiDiv === 'bull_div') { signals.push({ name: 'RSI Bullish Divergence', det: `Price lower + RSI higher`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+  if (rsiDiv === 'bear_div') { signals.push({ name: 'RSI Bearish Divergence', det: `Price higher + RSI lower`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
-  if (stFlip === 'bull') { signals.push({ name: 'Supertrend Flip \u2191', det: `Schimbare de trend BULLISH`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
-  if (stFlip === 'bear') { signals.push({ name: 'Supertrend Flip \u2193', det: `Schimbare de trend BEARISH`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
+  if (stFlip === 'bull') { signals.push({ name: 'Supertrend Flip \u2191', det: `Trend change BULLISH`, dir: 'bull', str: 'STRONG BULL' }); bullCount += 2 }
+  if (stFlip === 'bear') { signals.push({ name: 'Supertrend Flip \u2193', det: `Trend change BEARISH`, dir: 'bear', str: 'STRONG BEAR' }); bearCount += 2 }
 
-  if (rsiNow > 55 && rsi1h > 55 && rsi4h > 55) { signals.push({ name: 'RSI Aliniat Bullish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-  if (rsiNow < 45 && rsi1h < 45 && rsi4h < 45) { signals.push({ name: 'RSI Aliniat Bearish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+  if (rsiNow > 55 && rsi1h > 55 && rsi4h > 55) { signals.push({ name: 'RSI Aligned Bullish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+  if (rsiNow < 45 && rsi1h < 45 && rsi4h < 45) { signals.push({ name: 'RSI Aligned Bearish MTF', det: `5m:${rsiNow.toFixed(0)} 1h:${rsi1h.toFixed(0)} 4h:${rsi4h.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
   const sma20 = closes.slice(-20).reduce((a: number, b: number) => a + b, 0) / 20
   const sma50 = closes.slice(-50).reduce((a: number, b: number) => a + b, 0) / 50
-  if (price > sma20 && sma20 > sma50) { signals.push({ name: 'Trend Bullish (SMA)', det: `Pret>${sma20.toFixed(0)} > SMA50:${sma50.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
-  if (price < sma20 && sma20 < sma50) { signals.push({ name: 'Trend Bearish (SMA)', det: `Pret<${sma20.toFixed(0)} < SMA50:${sma50.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
+  if (price > sma20 && sma20 > sma50) { signals.push({ name: 'Bullish Trend (SMA)', det: `Price>${sma20.toFixed(0)} > SMA50:${sma50.toFixed(0)}`, dir: 'bull', str: 'BULLISH' }); bullCount++ }
+  if (price < sma20 && sma20 < sma50) { signals.push({ name: 'Bearish Trend (SMA)', det: `Price<${sma20.toFixed(0)} < SMA50:${sma50.toFixed(0)}`, dir: 'bear', str: 'BEARISH' }); bearCount++ }
 
   w.S.signalData = { signals, bullCount, bearCount }
   if (typeof renderSignals === 'function') renderSignals(signals, bullCount, bearCount)
@@ -877,8 +923,8 @@ export function runSignalScan(): void {
 
   if ((bullCount >= 3 || bearCount >= 3) && w.S.alerts?.enabled) {
     if (typeof playAlertSound === 'function') playAlertSound()
-    if (bullCount >= 3 && typeof sendAlert === 'function') sendAlert('SEMNAL STRONG BULL', '3+ indicatori aliniati bullish', 'scan')
-    if (bearCount >= 3 && typeof sendAlert === 'function') sendAlert('SEMNAL STRONG BEAR', '3+ indicatori aliniati bearish', 'scan')
+    if (bullCount >= 3 && typeof sendAlert === 'function') sendAlert('STRONG BULL SIGNAL', '3+ indicators aligned bullish', 'scan')
+    if (bearCount >= 3 && typeof sendAlert === 'function') sendAlert('STRONG BEAR SIGNAL', '3+ indicators aligned bearish', 'scan')
   }
 
   signals.filter((s: any) => s.str.includes('STRONG')).forEach((s: any) => {

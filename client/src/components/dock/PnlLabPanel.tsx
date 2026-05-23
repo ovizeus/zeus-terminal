@@ -39,8 +39,8 @@ export function PnlLabPanel() {
             <div style={{ fontSize: '28px', marginBottom: '6px' }}>📊</div>
             <div style={{ color: '#00d9ff', fontSize: '13px', fontWeight: 700, marginBottom: '4px' }}>PnL Lab — No Data Yet</div>
             <div style={{ color: '#3a5068', fontSize: '11px', lineHeight: 1.5 }}>
-              PnL Lab se va popula automat după ce închizi primul trade.<br />
-              Drawdown, Expectancy, Daily stats — totul apare aici.
+              PnL Lab will populate automatically after your first closed trade.<br />
+              Drawdown, Expectancy, Daily stats — everything appears here.
             </div>
           </div>
         </div>

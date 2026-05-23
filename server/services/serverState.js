@@ -7,19 +7,72 @@
 
 const logger = require('./logger');
 const marketFeed = require('./marketFeed');
-const { TEACHER_IND_DEFAULTS } = require('../../public/js/teacher/teacherConfig');
+const { TEACHER_IND_DEFAULTS } = require('../shared/teacher/teacherConfig');
 const {
     teacherComputeIndicators,
     teacherCalcRSI,
     teacherCalcADX,
     teacherCalcATR,
-} = require('../../public/js/teacher/teacherIndicators');
+} = require('../shared/teacher/teacherIndicators');
 
 // ══════════════════════════════════════════════════════════════════
 // [MULTI-SYM] Per-symbol state map
 // ══════════════════════════════════════════════════════════════════
 const _sdMap = new Map();       // symbol (uppercase) → SD object
 let _primarySymbol = null;      // first symbol = backward compat alias
+
+// [Bybit Phase 1A] Bi-namespaced per-exchange state.
+// Existing _sdMap = Binance namespace (backward compat — all existing call sites
+// continue to work unchanged via serverState.X(symbol)).
+// _sdMap_bybit = separate per-symbol state populated by bybitFeed events (Task 22).
+const _sdMap_binance = _sdMap; // alias the existing map (same reference)
+const _sdMap_bybit = new Map();
+
+function _getStateMapForExchange(exchange) {
+    if (exchange === 'binance') return _sdMap_binance;
+    if (exchange === 'bybit') return _sdMap_bybit;
+    throw new Error(`serverState.forExchange: unknown exchange '${exchange}'`);
+}
+
+function forExchange(exchange) {
+    const map = _getStateMapForExchange(exchange);
+    return {
+        rawExchange: exchange,
+
+        getSnapshotForSymbol(symbol) {
+            const sd = map.get(symbol ? symbol.toUpperCase() : '');
+            if (!sd) return null;
+            // Return a copy with exchange marker (don't expose internal mutation)
+            return Object.assign({}, sd, { exchange });
+        },
+
+        getBarsForSymbol(symbol, tf) {
+            const sd = map.get(symbol ? symbol.toUpperCase() : '');
+            if (!sd || !sd.bars) return null;
+            return tf ? sd.bars[tf] : sd.bars;
+        },
+
+        getReadySymbols() {
+            const ready = [];
+            for (const [sym, sd] of map.entries()) {
+                if (sd && sd.price > 0 && sd.bars && Object.keys(sd.bars).length > 0) {
+                    ready.push(sym);
+                }
+            }
+            return ready;
+        },
+
+        isDataReadyForSymbol(symbol) {
+            const sd = map.get(symbol ? symbol.toUpperCase() : '');
+            return !!(sd && sd.price > 0 && sd.bars && Object.keys(sd.bars).length > 0);
+        },
+
+        _getMap() {
+            // Internal helper for Task 22 wiring (allows feed handlers to mutate the map)
+            return map;
+        },
+    };
+}
 
 const MIN_COMPUTE_INTERVAL = 2000;  // min 2s between recomputes per symbol
 
@@ -86,6 +139,9 @@ function init(symbols, timeframes) {
         marketFeed.on('fundingRate', _onFundingRate);
         marketFeed.on('openInterest', _onOpenInterest);
     }
+
+    // [Bybit Phase 1A Task 22] Wire bybit feed listeners (idempotent via flag)
+    _wireBybitListeners();
 
     logger.info('SD', `Server state initialized for [${symArr.join(',')}] [${(timeframes || ['5m']).join(',')}]`);
 }
@@ -174,6 +230,136 @@ function _onOpenInterest(data) {
     sd.oiPrev = sd.oi;
     sd.oi = data.value;
     if (sd.symbol === _primarySymbol) { SD.oiPrev = SD.oi; SD.oi = data.value; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// [Bybit Phase 1A Task 22] Bybit event handlers — populate _sdMap_bybit namespace.
+// Mirror existing Binance handlers but write to the bybit-scoped Map.
+// Snapshot shape uses `bars[tf]` (matches forExchange accessor in Task 21).
+// Brain logic (Task 23) reads via serverState.forExchange('bybit').
+// ══════════════════════════════════════════════════════════════════
+
+function _createBybitSD(symbol) {
+    return {
+        symbol: symbol,
+        price: 0,
+        priceTs: 0,
+        bid: null,
+        ask: null,
+        fr: null,
+        markPrice: null,
+        indexPrice: null,
+        bars: {},   // tf → bar[]  (forExchange accessor uses sd.bars[tf])
+        // Fix #1: Brain checks `if (!snap.indicators) continue` — without this field
+        // all Bybit symbols are skipped. Initialize as null; populated by _recomputeBybitIndicators.
+        indicators: null,
+        rsi: {},
+        adx: null,
+        atr: null,
+        klines: {},          // alias for bars — _recomputeIndicators reads sd.klines[tf]
+        chartTf: '5m',
+        lastUpdate: 0,
+        lastKlineClose: {},
+        mtfIndicators: {},
+        _lastComputeTs: 0,
+    };
+}
+
+function _onKlineBybit(data) {
+    if (!data || !data.symbol || !data.tf) return;
+    const sym = data.symbol.toUpperCase();
+    let sd = _sdMap_bybit.get(sym);
+    if (!sd) {
+        sd = _createBybitSD(sym);
+        _sdMap_bybit.set(sym, sd);
+    }
+    if (!sd.bars[data.tf]) sd.bars[data.tf] = [];
+    // Fix #1 cont'd: keep klines in sync with bars (klines is the alias _recomputeIndicators reads)
+    if (!sd.klines[data.tf]) sd.klines[data.tf] = sd.bars[data.tf];
+    const arr = sd.bars[data.tf];
+    const last = arr.length > 0 ? arr[arr.length - 1] : null;
+    // Fix #13: Use 'time' key (matching Binance convention) so indicator computation
+    // and brain logic see a consistent bar shape across exchanges.
+    if (last && last.time === data.ts) {
+        // Update existing bar (same timestamp = live candle update)
+        last.close = data.close;
+        last.high = Math.max(last.high, data.high);
+        last.low = Math.min(last.low, data.low);
+        last.volume = data.volume;
+    } else {
+        arr.push({ time: data.ts, open: data.open, high: data.high, low: data.low, close: data.close, volume: data.volume });
+        // Cap buffer at 500 candles (matches Binance 1000-candle pattern, halved for bybit)
+        if (arr.length > 500) arr.shift();
+    }
+    // Fix #1 cont'd: Trigger indicator recomputation after kline update (same as Binance path).
+    // Throttled to MIN_COMPUTE_INTERVAL to avoid excessive computation.
+    if (arr.length >= 30) {
+        const now = Date.now();
+        if (now - sd._lastComputeTs > MIN_COMPUTE_INTERVAL) {
+            _recomputeIndicators(sd, data.tf);
+        }
+    }
+}
+
+function _onTradeBybit(data) {
+    if (!data || !data.symbol) return;
+    const sym = data.symbol.toUpperCase();
+    let sd = _sdMap_bybit.get(sym);
+    if (!sd) {
+        sd = _createBybitSD(sym);
+        _sdMap_bybit.set(sym, sd);
+    }
+    if (data.price > 0) {
+        sd.price = data.price;
+        sd.priceTs = Date.now();
+    }
+}
+
+function _onBookTickerBybit(data) {
+    if (!data || !data.symbol) return;
+    const sym = data.symbol.toUpperCase();
+    let sd = _sdMap_bybit.get(sym);
+    if (!sd) {
+        sd = _createBybitSD(sym);
+        _sdMap_bybit.set(sym, sd);
+    }
+    if (data.bid > 0 && data.ask > 0) {
+        sd.bid = data.bid;
+        sd.ask = data.ask;
+        sd.price = (data.bid + data.ask) / 2;
+        sd.priceTs = Date.now();
+    }
+}
+
+function _onMarkPriceBybit(data) {
+    if (!data || !data.symbol) return;
+    const sym = data.symbol.toUpperCase();
+    let sd = _sdMap_bybit.get(sym);
+    if (!sd) {
+        // markPrice can arrive before kline/trade — create empty entry
+        sd = _createBybitSD(sym);
+        _sdMap_bybit.set(sym, sd);
+    }
+    if (data.markPrice != null) sd.markPrice = data.markPrice;
+    if (data.fundingRate != null) sd.fr = data.fundingRate;
+    if (data.indexPrice != null) sd.indexPrice = data.indexPrice;
+}
+
+// [Bybit Phase 1A Task 22] Wire bybit listeners — idempotent.
+let _bybitFeedWired = false;
+function _wireBybitListeners() {
+    if (_bybitFeedWired) return;
+    _bybitFeedWired = true;
+    try {
+        const bybitFeed = require('./bybitFeed');
+        bybitFeed.on('kline', _onKlineBybit);
+        bybitFeed.on('trade', _onTradeBybit);
+        bybitFeed.on('bookTicker', _onBookTickerBybit);
+        bybitFeed.on('markPrice', _onMarkPriceBybit);
+    } catch (err) {
+        try { logger.error('SERVER_STATE', `bybit wire failed: ${err.message}`); } catch (_) {}
+        _bybitFeedWired = false;  // allow retry on next init() call
+    }
 }
 
 // ── Sync SD alias (backward compat for code reading SD directly) ──
@@ -318,4 +504,6 @@ module.exports = {
     getReadySymbols,         // [MULTI-SYM]
     getConfiguredSymbols,    // [MULTI-SYM]
     getBarsForSymbol,        // [BRAIN-V2] raw kline bars for structure/liquidity analysis
+    forExchange,             // [Bybit Phase 1A Task 21]
+    _wireBybitListeners,     // [Bybit Phase 1A Task 22] exposed for test setup / re-wire
 };

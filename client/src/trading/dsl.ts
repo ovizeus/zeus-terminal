@@ -5,7 +5,9 @@
 
 import { getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getBrainMetrics, getBrainObject, getATMode, getPrice, getSymbol, getMagnets, getDemoPositions, getLivePositions } from '../services/stateAccessors'
 import { DSL } from '../core/config'
-import { el } from '../utils/dom'
+import { useDslStore } from '../stores/dslStore'
+import type { DSLUI } from '../stores/dslStore'
+import { el, escHtml } from '../utils/dom'
 import { fP } from '../utils/format'
 import { toast } from '../data/marketDataHelpers'
 import { _ZI } from '../constants/icons'
@@ -15,8 +17,58 @@ import { manualLiveSetSL } from './liveApi'
 import { brainThink } from '../engine/brain'
 import { _safePnl } from '../utils/guards'
 import { closeDemoPos } from '../data/marketDataClose'
+import { attachConfirmClose } from '../engine/events'
 
 const w = window as any // kept for w.S self-ref (mode/assistArmed/dsl), w.AT writes, function calls
+function _dslUI(p: Partial<DSLUI>) { useDslStore.getState().patchUI(p) }
+
+// [Phase 6 C3] Engine write inversion. Backing DSL stays as the engine's
+// per-tick scratch space; canonical state lives in useDslStore. Helpers
+// mirror engine writes to BOTH backing (for legacy direct importers and
+// in-tick reads) and store (canonical surface for React + window.DSL Proxy).
+// _attachedIds, visualInterval, history are intentionally backing-only.
+function _pushDslEnabled(next: boolean): void {
+  DSL.enabled = next
+  useDslStore.getState().setEnabled(next)
+}
+function _pushDslCheckInterval(handle: number | null): void {
+  DSL.checkInterval = handle
+  useDslStore.getState().setCheckIntervalActive(!!handle)
+}
+function _pushDslPosition(posId: string): void {
+  const snap = DSL.positions[posId]
+  if (snap) useDslStore.getState().upsertPosition(posId, { ...snap })
+}
+function _removeDslPosition(posId: string): void {
+  delete DSL.positions[posId]
+  useDslStore.getState().removePosition(posId)
+}
+
+/**
+ * [Phase 8C2] DSL reattach helper — moves the DSL state and _attachedIds
+ * membership from oldId to newId. Idempotent: a no-op if oldId has no
+ * state, or if newId already owns equivalent state.
+ *
+ * Why: multiple sites (exchange sync in liveApi.ts, manual→server
+ * registration in marketDataTrading.ts, future reassignment paths) need
+ * to preserve the user's DSL preset + adaptive phase + history when the
+ * position's canonical id changes. Inlining the move in each place
+ * drifted over time; this helper keeps them consistent.
+ */
+export function _dslReassignId(oldId: string | number, newId: string | number): void {
+  const _old = String(oldId)
+  const _new = String(newId)
+  if (_old === _new) return
+  if (DSL.positions && DSL.positions[_old]) {
+    DSL.positions[_new] = DSL.positions[_old]
+    delete DSL.positions[_old]
+  }
+  if (DSL._attachedIds) {
+    if (DSL._attachedIds.has(_old)) DSL._attachedIds.delete(_old)
+    DSL._attachedIds.add(_new)
+  }
+}
+;(window as any)._dslReassignId = _dslReassignId
 
 // Sync DSL SL to exchange for live positions (client-side AT only)
 function _syncLiveSL(pos: any, newSL: number): void {
@@ -45,7 +97,7 @@ export function dslToggleMagnet(posId: any): void {
 // ══════════════════════════════════════════════════════
 // [DSL MAGNET] Pure helper — computes snap candidate
 // ══════════════════════════════════════════════════════
-export function _computeDslMagnetSnap(basePrice: any, pos: any, side: any, kind: any, ctx: any): any {
+export function _computeDslMagnetSnap(basePrice: any, _pos: any, side: any, kind: any, ctx: any): any {
   const out = { applied: false, snappedPrice: basePrice, source: '', confidence: 0, reason: '' }
   try {
     const isLong = side === 'LONG'
@@ -103,21 +155,23 @@ export function toggleDSL(): void {
   try {
     const _mode = (w.S?.mode || 'assist').toLowerCase()
     if (_mode === 'auto') {
-      toast('AUTO: DSL e controlat de AI', 0, _ZI?.robot)
+      toast('AUTO: DSL is controlled by AI', 0, _ZI?.robot)
       return
     }
     if (typeof DSL === 'undefined') return
-    DSL.enabled = !DSL.enabled
+    _pushDslEnabled(!DSL.enabled)
     if (!w.S.dsl) w.S.dsl = {}
     w.S.dsl.active = DSL.enabled
     if (!DSL.enabled && typeof stopDSLIntervals === 'function') { stopDSLIntervals() }
     if (DSL.enabled && typeof startDSLIntervals === 'function' && !DSL.checkInterval) { startDSLIntervals() }
-    const btn = el('dslToggleBtn')
-    const dot = el('dslStatusDot')
-    if (btn) { btn.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; btn.className = 'dsl-toggle' + (DSL.enabled ? '' : ' off') }
-    if (dot) { dot.style.color = DSL.enabled ? 'var(--grn-bright)' : '#333'; dot.style.background = DSL.enabled ? 'var(--grn-bright)' : '#333' }
-    atLog('info', DSL.enabled ? '[DSL] Dynamic SL ACTIV' : '[WARN] Dynamic SL OPRIT')
-    brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL activat' : 'DSL oprit')
+    _dslUI({
+      toggleBtnText: DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF',
+      toggleBtnClass: 'dsl-toggle' + (DSL.enabled ? '' : ' off'),
+      statusDotColor: DSL.enabled ? 'var(--grn-bright)' : '#333',
+      statusDotBg: DSL.enabled ? 'var(--grn-bright)' : '#333',
+    })
+    atLog('info', DSL.enabled ? '[DSL] Dynamic SL ON' : '[WARN] Dynamic SL OFF')
+    brainThink(DSL.enabled ? 'ok' : 'bad', DSL.enabled ? (_ZI?.tgt || '') + ' DSL enabled' : 'DSL disabled')
     if (typeof w.dslUpdateBanner === 'function') w.dslUpdateBanner()
     // [DSL-OFF] Propagate DSL on/off to server so new AT + manual positions respect it.
     try {
@@ -135,55 +189,43 @@ export function toggleDSL(): void {
 // ── ASSIST ARM TOGGLE ────────────────────────────────────────
 export function toggleAssistArm(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
-  if (_m !== 'assist') { toast('ARM disponibil doar în ASSIST mode'); return }
+  if (_m !== 'assist') { toast('ARM available only in ASSIST mode'); return }
   w.S.assistArmed = !w.S.assistArmed
   if (typeof w.ARM_ASSIST !== 'undefined') {
     w.ARM_ASSIST.armed = w.S.assistArmed
     w.ARM_ASSIST.ts = w.S.assistArmed ? Date.now() : 0
   }
   _syncDslAssistUI()
-  brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT — DSL va executa la semnal' : _ZI.unlk + ' ASSIST dezarmat — DSL în preview only')
+  brainThink(w.S.assistArmed ? 'ok' : 'info', w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMED — DSL will execute on signal' : _ZI.unlk + ' ASSIST disarmed — DSL in preview only')
   w.dslUpdateBanner()
+  // [2026-05-20 fix] Schedule server persist (mirrors armAssist/disarmAssist).
+  // Without this, DSL ARM toggle was UI-only and got lost on every reload.
+  if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
 }
 
 export function _syncDslAssistUI(): void {
   const _m = (w.S.mode || 'assist').toLowerCase()
-  const overlay = el('dslLockOverlay')
-  const assistBar = el('dslAssistBar')
-  const armBtn = el('dslAssistArmBtn')
-  const armStatus = el('dslAssistStatus')
   const dslConf = document.querySelectorAll('.dsl-config input, .dsl-config select')
+  dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
+  // [R10] pointerEvents reset on #dslZone removed — React owns the node and no
+  // codepath sets `pointerEvents = 'none'` on it anymore, so the reset was a
+  // no-op write on a React-owned element.
 
-  if (overlay) overlay.classList.remove('show')
+  const _btnText = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'
+  _dslUI({ lockOverlayVisible: false, toggleBtnDisabled: false, toggleBtnText: _btnText })
 
   if (_m === 'auto') {
-    if (assistBar) assistBar.classList.remove('show')
-    const dz = el('dslZone')
-    if (dz) dz.style.pointerEvents = ''
-    dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = 'Global DSL defaults for new positions' }
+    _dslUI({ assistBarVisible: false, toggleBtnTitle: 'Global DSL defaults for new positions' })
   } else if (_m === 'assist') {
-    if (assistBar) assistBar.classList.add('show')
-    const dz = el('dslZone')
-    if (dz) dz.style.pointerEvents = ''
-    dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
-    if (armBtn) {
-      armBtn.innerHTML = w.S.assistArmed ? _ZI.dYlw + ' ASSIST ARMAT' : _ZI.lock + ' ARM ASSIST'
-      armBtn.className = 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : '')
-    }
-    if (armStatus) {
-      armStatus.textContent = w.S.assistArmed ? 'ASSIST ARMAT — DSL va executa la semnal' : 'Dezarmat — DSL în preview only (fără execuție)'
-    }
+    _dslUI({
+      assistBarVisible: true, toggleBtnTitle: '',
+      assistArmIcon: w.S.assistArmed ? 'dYlw' : 'lock',
+      assistArmText: w.S.assistArmed ? 'ASSIST ARMED' : 'ARM ASSIST',
+      assistArmClass: 'dsl-assist-arm' + (w.S.assistArmed ? ' armed' : ''),
+      assistStatusText: w.S.assistArmed ? 'ASSIST ARMED \u2014 DSL will execute on signal' : 'Disarmed \u2014 DSL in preview only (no execution)',
+    })
   } else {
-    if (assistBar) assistBar.classList.remove('show')
-    const dz = el('dslZone')
-    if (dz) dz.style.pointerEvents = ''
-    dslConf.forEach((i: any) => { i.disabled = false; i.style.pointerEvents = '' })
-    const dslBtn2 = el('dslToggleBtn')
-    if (dslBtn2) { dslBtn2.disabled = false; dslBtn2.textContent = DSL.enabled ? 'DSL ENGINE ON' : 'DSL ENGINE OFF'; dslBtn2.title = '' }
+    _dslUI({ assistBarVisible: false, toggleBtnTitle: '' })
   }
 }
 
@@ -193,21 +235,24 @@ export function initDSLBubbles(): void {
   const cascade = el('dslCascade')
   if (!bg || !cascade) return
 
-  bg.innerHTML = Array.from({ length: 12 }, (_: any, i: number) => {
+  // [BUG-SEC-4] Defensive escape on inline-style template values. Today: values are local Math.random + literal hex constants (safe). Future-proof: escHtml prevents pattern drift if values become server-derived.
+  bg.innerHTML = Array.from({ length: 12 }, (_: any, _i: number) => {
     const size = 4 + Math.random() * 8
     const left = 5 + Math.random() * 90
     const dur = 3 + Math.random() * 5
     const delay = Math.random() * 4
     const col = Math.random() > .5 ? '#00ffcc' : '#0066ff'
-    return `<div class="dsl-bubble" style="width:${size}px;height:${size}px;left:${left}%;background:${col};opacity:.15;animation-duration:${dur}s;animation-delay:${delay}s;box-shadow:0 0 ${size}px ${col}44"></div>`
+    const _safeCol = escHtml(col)
+    return `<div class="dsl-bubble" style="width:${size}px;height:${size}px;left:${left}%;background:${_safeCol};opacity:.15;animation-duration:${dur}s;animation-delay:${delay}s;box-shadow:0 0 ${size}px ${_safeCol}44"></div>`
   }).join('')
 
-  cascade.innerHTML = Array.from({ length: 20 }, (_: any, i: number) => {
+  cascade.innerHTML = Array.from({ length: 20 }, (_: any, _i: number) => {
     const h = 4 + Math.random() * 10
     const dur = 0.4 + Math.random() * 0.6
     const del = Math.random() * 1.5
     const col = Math.random() > .4 ? '#00ffcc' : '#0088ff'
-    return `<div class="dsl-drop" style="height:${h}px;background:${col};animation-duration:${dur}s;animation-delay:${del}s;opacity:.7"></div>`
+    const _safeCol = escHtml(col)
+    return `<div class="dsl-drop" style="height:${h}px;background:${_safeCol};animation-duration:${dur}s;animation-delay:${del}s;opacity:.7"></div>`
   }).join('')
 }
 
@@ -247,16 +292,11 @@ export function _dslSanitizeParams(raw: any, posId: any): any {
     if (v > c.max) { fixes.push(`${key}: ${v}→${c.max} (above max)`); v = c.max; corrected = true }
     out[key] = v
   }
-  if (out.impulseVPct <= out.pivotRightPct) {
-    const safe = Math.round((out.pivotRightPct + 0.01) * 100) / 100
-    out.impulseVPct = Math.min(safe, CLAMPS.impulseVPct.max)
-    if (out.impulseVPct <= out.pivotRightPct) {
-      out.pivotRightPct = Math.round((out.impulseVPct - 0.01) * 100) / 100
-      fixes.push(`pivotRightPct: →${out.pivotRightPct} (reduced for IV>PR)`)
-    }
-    fixes.push(`impulseVPct: ${out.impulseVPct} (must exceed PR%)`)
-    corrected = true
-  }
+  // [DSL-SEMANTIC-FIX] impulseVPct is independent of pivotRightPct —
+  // all presets intentionally have IV < PR (e.g. FAST PR=0.40 / IV=0.20).
+  // The old IV>PR cross-field clamp was silently overwriting every user
+  // IV edit on the next DSL tick. Server-side sanitizer (serverDSL.js)
+  // already dropped this constraint; client is now aligned.
   if (corrected) {
     const msg = `DSL SANITIZE [${posId}]: ` + fixes.join(' | ')
     console.warn(msg)
@@ -317,11 +357,12 @@ export function runDSLBrain(): void {
         dsl.log.push({ ts: Date.now(), msg: serverDsl.lastLog })
         if (dsl.log.length > 20) dsl.log = dsl.log.slice(-20)
       }
+      _pushDslPosition(_dslKey)
     })
 
     // Cleanup DSL states for closed positions
     Object.keys(DSL.positions).forEach((id: string) => {
-      if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) delete DSL.positions[id]
+      if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) _removeDslPosition(id)
     })
 
     if (!_manualPositions.length || !Number.isFinite(getPrice()) || getPrice() <= 0
@@ -349,7 +390,7 @@ export function runDSLBrain(): void {
 
   Object.keys(DSL.positions).forEach((id: string) => {
     if (!allOpenPosns.find((p: any) => String(p.id) === String(id))) {
-      delete DSL.positions[id]
+      _removeDslPosition(id)
       if (DSL._attachedIds) DSL._attachedIds.delete(String(id))
     }
   })
@@ -493,12 +534,19 @@ export function _runClientDSLOnPositions(positions: any[]): void {
       dsl.currentSL = dsl.pivotLeft
       _syncLiveSL(pos, dsl.currentSL)
 
-      dsl.log.push({ ts: Date.now(), msg: `DSL activat @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` })
+      dsl.log.push({ ts: Date.now(), msg: `DSL activated @$${fP(cur)} | PL=$${fP(dsl.pivotLeft)} | PR=$${fP(dsl.pivotRight)} | IV=$${fP(dsl.impulseVal)}` })
       if (!Array.isArray(pos.dslHistory)) pos.dslHistory = []
       pos.dslHistory.push({ ts: Date.now(), msg: `[DSL] activated @$${fP(cur)} — SL→$${fP(dsl.pivotLeft)}` })
       if (typeof w.DLog !== 'undefined') w.DLog.record('dsl_move', { event: 'activate', sym: pos.sym, side: pos.side, price: cur, pivotLeft: dsl.pivotLeft, pivotRight: dsl.pivotRight, impulseVal: dsl.impulseVal })
-      atLog('buy', `[DSL] ACTIVAT: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
-      brainThink('ok', _ZI.tgt + ` DSL activat pe ${pos.sym.replace('USDT', '')} — Pivot Left preia SL la $${fP(dsl.pivotLeft)}`)
+      if (_wasRestored) {
+        // [DSL-RESUME] Position was restored from snapshot with in-memory DSL state missing.
+        // Price is already past target, so activation fires immediately. Don't spam atLog —
+        // silently mark active; user already saw the original activation in prior session.
+        dsl.log.push({ ts: Date.now(), msg: `[RESUME] DSL state rehydrated @$${fP(cur)}` })
+      } else {
+        atLog('buy', `[DSL] ACTIVATED: ${pos.sym.replace('USDT', '')} @$${fP(cur)} | Pivot Left(SL)=$${fP(dsl.pivotLeft)} | Impulse=$${fP(dsl.impulseVal)}`)
+        brainThink('ok', _ZI.tgt + ` DSL activated on ${pos.sym.replace('USDT', '')} — Pivot Left takes over SL at $${fP(dsl.pivotLeft)}`)
+      }
     }
 
     // ══════════════════════════════════════════════════════
@@ -654,6 +702,42 @@ export function _runClientDSLOnPositions(positions: any[]): void {
         }
       }
     }
+
+    // [BUG-S7] Shadow parity emit — gated by localStorage flag.
+    // Fire-and-forget; never blocks render or DSL math. Throttled per pos.
+    try {
+      const _shadowOn = (typeof localStorage !== 'undefined' && localStorage.getItem('zeus_dsl_parity_shadow') === 'true')
+      if (_shadowOn) {
+        const _now = Date.now()
+        const _lastEmit = pos._dslParityLastEmit || 0
+        if (_now - _lastEmit >= 5000) {  // 5s throttle per pos
+          pos._dslParityLastEmit = _now
+          // Mirrors server _dslPhaseString() (serverAT.js:212): NONE if !active, IMPULSE if impulseTriggered, else ACTIVE.
+          const _phase = !dsl.active ? 'NONE'
+            : dsl.impulseTriggered ? 'IMPULSE'
+            : 'ACTIVE'
+          fetch('/api/brain/parity/dsl/client', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
+            body: JSON.stringify({
+              posId: String(pos.id),
+              symbol: pos.sym,
+              phase: _phase,
+              currentSL: dsl.currentSL,
+              pivotLeft: dsl.pivotLeft,
+              pivotRight: dsl.pivotRight,
+              impulseVal: dsl.impulseVal,
+              entry: pos.entry,
+              price: cur,
+              ts: _now,
+            }),
+          }).catch(() => { /* never disturb DSL */ })
+        }
+      }
+    } catch (_) { /* never disturb DSL */ }
+
+    _pushDslPosition(_dslKey)
   })
 }
 
@@ -665,7 +749,7 @@ export function dslTakeControl(posId: any): void {
   const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
-  if (_cm !== 'auto' && _cm !== 'assist') { toast('Take Control: doar pentru AUTO/ASSIST'); return }
+  if (_cm !== 'auto' && _cm !== 'assist') { toast('Take Control: AUTO/ASSIST only'); return }
   if (!pos.sourceMode) pos.sourceMode = _cm
   pos.controlMode = 'user'
   if (w._serverATEnabled && pos._serverSeq) {
@@ -676,6 +760,14 @@ export function dslTakeControl(posId: any): void {
   brainThink('info', _ZI.hand + ` User took control of ${pos.sym.replace('USDT', '')} ${pos.side}`)
   toast(`Control taken: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
+  // [TAKE-CTRL] Immediate re-render so the 4 editable DSL inputs appear right
+  // away — without this, user has to wait for the next DSL tick (every few
+  // seconds) before the UI switches from the TAKE CONTROL button to the
+  // MANUAL CONTROL ACTIVE panel with DSL/PL/PR/IV inputs.
+  try {
+    const _allOpen = [...(getDemoPositions()), ...(getLivePositions())].filter(function (p: any) { return !p.closed })
+    renderDSLWidget(_allOpen)
+  } catch (_) { /* best-effort */ }
 }
 
 // ── Let AI Control handler ───────────
@@ -683,7 +775,7 @@ export function dslReleaseControl(posId: any): void {
   posId = String(posId)
   const pos = [...(getDemoPositions()), ...(getLivePositions())].find((p: any) => String(p.id) === posId)
   if (!pos) return
-  if ((pos.controlMode || 'paper') !== 'user') { toast('Această poziție nu e în MANUAL'); return }
+  if ((pos.controlMode || 'paper') !== 'user') { toast('This position is not in MANUAL'); return }
   const _origSource = (pos.sourceMode || pos.brainModeAtOpen || 'assist').toLowerCase()
   pos.controlMode = _origSource
   if (w._serverATEnabled && pos._serverSeq) {
@@ -703,6 +795,12 @@ export function dslReleaseControl(posId: any): void {
   brainThink('ok', _ZI.robot + ` AI resumed control of ${pos.sym.replace('USDT', '')} ${pos.side} — from current state`)
   toast(`AI control resumed: ${pos.sym.replace('USDT', '')} ${pos.side}`)
   if (typeof w.ZState !== 'undefined') w.ZState.save()
+  // [LET-AI] Immediate re-render so the MANUAL panel collapses back to the
+  // TAKE CONTROL button without waiting for the next DSL tick.
+  try {
+    const _allOpen = [...(getDemoPositions()), ...(getLivePositions())].filter(function (p: any) { return !p.closed })
+    renderDSLWidget(_allOpen)
+  } catch (_) { /* best-effort */ }
 }
 
 // ── Manual DSL param update ───
@@ -716,13 +814,9 @@ export function dslManualParam(posId: any, param: any, value: any): void {
   if (!isFinite(v) || v <= 0) return
   if (!pos.dslParams) pos.dslParams = {}
   pos.dslParams[param] = v
-  if (param === 'impulseVPct' || param === 'pivotRightPct') {
-    const _pr = pos.dslParams.pivotRightPct ?? 1.0
-    const _iv = pos.dslParams.impulseVPct ?? 20
-    if (_iv <= _pr) {
-      pos.dslParams.impulseVPct = Math.round((_pr + 0.01) * 100) / 100
-    }
-  }
+  // [USER-EDIT] Mark position as user-edited so server-sync merge logic
+  // preserves these manual values across ticks/reloads (see state.ts merge).
+  pos._dslUserEdited = true
   if (param === 'openDslPct') {
     const _dslCheck = DSL.positions[posId]
     if (!_dslCheck?.active) {
@@ -768,6 +862,7 @@ export function dslManualParam(posId: any, param: any, value: any): void {
       if (!_ivReached) _dsl.impulseTriggered = false
       _dsl.log.push({ ts: Date.now(), msg: `[EDIT] LIVE recalc: PL=$${fP(_dsl.pivotLeft)} PR=$${fP(_dsl.pivotRight)} IV=$${fP(_dsl.impulseVal)}` })
     }
+    _pushDslPosition(_dslKey)
   }
 
   if (typeof w.ZState !== 'undefined') w.ZState.save()
@@ -861,7 +956,6 @@ export function _dslPushParamsDebounced(seq: any, dslParams: any): void {
 
 export function renderDSLWidget(positions: any[]): void {
   const container = el('dslPositionCards')
-  const countEl = el('dslActiveCount')
   if (!container) return
 
   const _activeMode = getATMode() || 'demo'
@@ -870,18 +964,16 @@ export function renderDSLWidget(positions: any[]): void {
     return posMode === _activeMode
   })
 
-  // [DSL-OFF] Panel shows only DSL-attached positions. Positions opened while DSL was OFF
-  // have no DSL state and must NOT appear here — they live only in the positions panel.
   const dslAttached = modeFiltered.filter((p: any) => DSL.positions[String(p.id)])
 
   if (container.contains(document.activeElement) && document.activeElement!.tagName === 'INPUT') {
-    if (countEl) countEl.textContent = dslAttached.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active'
+    _dslUI({ activeCountText: dslAttached.filter((p: any) => DSL.positions[String(p.id)]?.active).length + ' active' })
     return
   }
 
   const allDisplayPosns = dslAttached
   const activeCount = allDisplayPosns.filter((p: any) => DSL.positions[String(p.id)]?.active).length
-  if (countEl) countEl.textContent = activeCount + ' active'
+  _dslUI({ activeCountText: activeCount + ' active' })
 
   if (!allDisplayPosns.length) {
     // [DSL-OFF] Distinct waiting text when engine is off vs. scanning for activation
@@ -919,7 +1011,7 @@ export function renderDSLWidget(positions: any[]): void {
   // [DSL-OFF] Warning banner when engine is off but DSL-attached positions are still tracked
   if (!DSL.enabled) {
     html += `<div style="background:linear-gradient(90deg,#2a1400,#1a0a00);border:1px solid #f0c04066;border-radius:4px;padding:8px 12px;margin-bottom:8px;font-size:11px;color:#f0c040;letter-spacing:1px;text-align:center">
-      DSL ENGINE OFF — următoarele poziții nu vor trece în DSL
+      DSL ENGINE OFF — new positions will not attach DSL
     </div>`
   }
 
@@ -935,10 +1027,27 @@ export function renderDSLWidget(positions: any[]): void {
 
   container.innerHTML = html
 
+  // [BATCH3-O] Close buttons use attachConfirmClose (two-click confirm pattern
+  // from PositionRows). innerHTML regenerates every DSL tick, so reattach
+  // per-button each render — _pendingClose state in events.ts survives
+  // re-render and re-applies pending style when the same posId re-attaches.
+  container.querySelectorAll('[data-action="dslClosePosition"]').forEach((btn) => {
+    const posId = (btn as HTMLElement).dataset.id
+    if (!posId) return
+    attachConfirmClose(btn as HTMLElement, () => {
+      const all = [...getLivePositions(), ...getDemoPositions()]
+      const target = all.find((p: any) => String(p.id) === String(posId))
+      if (!target) return
+      if (target.isLive || target.mode === 'live') closeLivePos(posId, 'MANUAL')
+      else closeDemoPos(posId, 'MANUAL')
+    })
+  })
+
   // Event delegation for DSL card buttons + inputs
   if (!container.dataset.dslDelegated) {
     container.dataset.dslDelegated = '1'
     // Click delegation: dslToggleMagnet, dslTakeControl, dslReleaseControl
+    // (dslClosePosition is handled by attachConfirmClose above — not here.)
     container.addEventListener('click', (e: Event) => {
       const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
       if (!btn) return
@@ -962,25 +1071,31 @@ export function renderDSLWidget(positions: any[]): void {
 export function _renderDslCard(pos: any): string {
   const dsl = DSL.positions[String(pos.id)]
   const cur = pos.sym === getSymbol() ? getPrice() : (w.allPrices[pos.sym] || w.wlPrices[pos.sym]?.price || pos.entry)
-  const symBase = pos.sym.replace('USDT', '')
+  // [BUG-SEC-1+SEC-2] Escape server-controlled string fields before HTML interpolation (innerHTML at renderDSL line ~987).
+  // pos.side and pos.sym originate from server WS payload — must not enter innerHTML unescaped.
+  const _safeSide = escHtml(String(pos.side ?? ''))
+  const symBase = escHtml(String(pos.sym ?? '').replace('USDT', ''))
   const isActive = dsl?.active || false
   const isLong = pos.side === 'LONG'
   const progress = dsl?.progress || 0
   const cardCls = isLong ? 'long' : 'short'
 
   const _pp = pos.dslParams || {}
-  const openDSLpct = _pp.openDslPct ?? (getTCDslActivatePct())
-  const pivotLeftPct = _pp.pivotLeftPct ?? (getTCDslTrailPct())
-  const pivotRightPct = _pp.pivotRightPct ?? (getTCDslTrailSusPct())
-  const impulseValPct = _pp.impulseVPct ?? (getTCDslExtendPct())
+  // Round to 2 decimals to absorb any lingering float garbage (e.g. 0.8999999
+  // from older positions persisted before the round-at-source fix in brain.ts).
+  const _r2 = (n: number) => Math.round(n * 100) / 100
+  const openDSLpct = _r2(_pp.openDslPct ?? (getTCDslActivatePct()))
+  const pivotLeftPct = _r2(_pp.pivotLeftPct ?? (getTCDslTrailPct()))
+  const pivotRightPct = _r2(_pp.pivotRightPct ?? (getTCDslTrailSusPct()))
+  const impulseValPct = _r2(_pp.impulseVPct ?? (getTCDslExtendPct()))
 
   const _cm = (pos.controlMode || (pos.autoTrade ? (pos.sourceMode || 'auto') : 'paper')).toLowerCase()
   const _isManual = _cm === 'user'
   const _isAT = !!pos.autoTrade
 
-  var _dslEnv = w._resolvedEnv || (pos.isLive ? 'REAL' : 'DEMO')
-  var _paperLiveLabel = _dslEnv === 'TESTNET' ? 'PAPER TESTNET' : 'PAPER LIVE'
-  var _atEnvLabel = _dslEnv === 'TESTNET' ? 'TESTNET' : (pos.isLive ? 'REAL' : 'DEMO')
+  var _dslEnv = w._executionEnv
+  var _paperLiveLabel = _dslEnv === 'TESTNET' ? 'PAPER TESTNET' : (_dslEnv === 'REAL' ? 'PAPER LIVE' : 'PAPER LOCKED')
+  var _atEnvLabel = _dslEnv === 'TESTNET' ? 'TESTNET' : (_dslEnv === 'REAL' ? 'REAL' : (pos.isLive ? 'LOCKED' : 'DEMO'))
   const _srcLabel = _isAT
     ? ('AT ' + _atEnvLabel)
     : (pos.isLive ? _paperLiveLabel : 'PAPER DEMO')
@@ -988,9 +1103,11 @@ export function _renderDslCard(pos: any): string {
     'AT DEMO': { color: '#aa44ff', bg: '#aa44ff18', border: '#aa44ff44', icon: '' },
     'AT TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },
     'AT REAL': { color: '#ff4466', bg: '#ff446618', border: '#ff446644', icon: '' },
+    'AT LOCKED': { color: '#ff8800', bg: '#ff880018', border: '#ff880044', icon: '' },
     'PAPER DEMO': { color: '#ffffff66', bg: '#ffffff08', border: '#ffffff22', icon: '' },
     'PAPER LIVE': { color: '#ff4466', bg: '#ff446618', border: '#ff446644', icon: '' },
     'PAPER TESTNET': { color: '#f0c040', bg: '#f0c04018', border: '#f0c04044', icon: '' },
+    'PAPER LOCKED': { color: '#ff8800', bg: '#ff880018', border: '#ff880044', icon: '' },
   }
   const _sb = _srcMap[_srcLabel] || _srcMap['PAPER DEMO']
 
@@ -1008,13 +1125,13 @@ export function _renderDslCard(pos: any): string {
   }
   const _as = _adaptMap[_adaptState] || _adaptMap.calm
 
-  const posLabel = ''
+
 
   const origSL = dsl?.originalSL || pos.sl
   const origTP = dsl?.originalTP || pos.tp
   const currentSL = dsl?.currentSL || pos.sl
 
-  const yellowLine = isActive ? cur : null
+
   const pivotLeft = isActive ? (dsl.pivotLeft || 0) : null
   const pivotRight = isActive ? cur * (isLong ? 1 + pivotRightPct / 100 : 1 - pivotRightPct / 100) : null
   const impulseVal = isActive ? (dsl.impulseVal || 0) : null
@@ -1046,7 +1163,7 @@ export function _renderDslCard(pos: any): string {
   const _posHist = pos.dslHistory || []
   const _dslLog = dsl?.log || []
   const _allHistory = [..._posHist, ..._dslLog].sort((a: any, b: any) => (b.ts || 0) - (a.ts || 0)).slice(0, 3)
-  const lastLog = _allHistory[0]?.msg || 'Awaiting activation...'
+
 
   const _showTakeControl = _isAT && (_cm === 'auto' || _cm === 'assist')
   const _showReleaseControl = _isAT && _cm === 'user'
@@ -1083,7 +1200,7 @@ export function _renderDslCard(pos: any): string {
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_sb.bg};border:1px solid ${_sb.border};color:${_sb.color};font-weight:700;letter-spacing:0.5px">${_sb.icon}${_sb.icon ? ' ' : ''}${_srcLabel}</span>
       ${_isAT ? `<span style="font-size:12px;padding:2px 8px;border-radius:3px;background:${_ctrlBg};border:1px solid ${_ctrlBorder};color:${_ctrlColor};font-weight:700;letter-spacing:0.5px">${_ctrlIcon}${_ctrlIcon ? ' ' : ''}${_ctrlLabel}</span>` : ''}
-      <span style="color:${isActive ? '#00ffcc' : isLong ? '#00ff88' : '#ff4466'};font-weight:700;font-size:16px">${pos.side} ${symBase}</span>
+      <span style="color:${isLong ? (isActive ? '#00ffcc' : '#00ff88') : (isActive ? '#ff66aa' : '#ff4466')};font-weight:700;font-size:16px">${_safeSide} ${symBase}</span>
       <span class="dsl-badge ${isActive ? 'active' : 'waiting'}">${isActive ? 'DSL ON' : 'WAITING'}</span>
       <button data-action="dslToggleMagnet" data-id="${pos.id}" style="font-size:11px;padding:2px 8px;border-radius:3px;cursor:pointer;font-family:inherit;letter-spacing:0.5px;border:1px solid ${_magnetOn ? '#00ccffaa' : '#ffffff22'};background:${_magnetOn ? '#00ccff18' : 'transparent'};color:${_magnetOn ? '#00ccff' : '#ffffff44'}">${_magnetOn ? 'MAG ON' : 'MAG'}</button>
       ${_isAT ? `<span style="font-size:11px;padding:2px 6px;border-radius:3px;background:${_as.color}15;color:${_as.color};border:1px solid ${_as.color}33">${_as.icon}${_as.icon ? ' ' : ''}${_as.label}</span>` : ''}
@@ -1097,6 +1214,7 @@ export function _renderDslCard(pos: any): string {
   <!-- ROW 2: Entry / SL / TP / DSL Pivot / Loss@SL / Profit@TP / LIQ -->
   <div style="display:flex;justify-content:space-between;font-size:12px;color:#ffffff55;margin-bottom:4px;flex-wrap:wrap;gap:4px">
     <span>Entry: <b style="color:#ffffffaa">$${fP(pos.entry)}</b></span>
+    ${pos.margin ? `<span>Margin: <b style="color:#aab8c8">$${Number(pos.margin).toFixed(2)}${pos.lev ? ' · ' + pos.lev + 'x' : ''}</b></span>` : ''}
     ${pos.sl ? `<span>SL: <b style="color:#ff4466">$${fP(pos.sl)}</b></span>` : ''}
     ${pos.tp ? `<span>TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>` : ''}
     ${isActive && pivotLeft ? `<span>DSL PL: <b style="color:#39ff14">$${fP(pivotLeft)}</b></span>` : ''}
@@ -1138,7 +1256,7 @@ export function _renderDslCard(pos: any): string {
     </div>
     ${isActive && prPos !== null ? `<div style="position:absolute;left:${prPos}%;top:-1px;width:2px;height:calc(100%+2px);background:#39ff14;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 8px #39ff14cc;transition:left 0.3s ease">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff14;white-space:nowrap">PR +${pivotRightPct}%</div>
-      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff1499;white-space:nowrap">$${fP(pivotRight)}</div>
+      <div style="position:absolute;bottom:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#39ff1499;white-space:nowrap">$${fP(pivotRight ?? 0)}</div>
     </div>` : ''}
     ${isActive && ivPos !== null ? `<div style="position:absolute;left:${ivPos}%;top:-1px;width:2px;height:calc(100%+2px);background:#ff4466;border-radius:1px;transform:translateX(-50%);box-shadow:0 0 6px #ff4466aa">
       <div style="position:absolute;top:-15px;left:50%;transform:translateX(-50%);font-size:13px;color:#ff4466;white-space:nowrap;font-weight:700">IV +${impulseValPct}%</div>
@@ -1151,7 +1269,7 @@ export function _renderDslCard(pos: any): string {
     ${isActive
       ? `<span style="color:#39ff14">PL: <b>$${fP(pivotLeft)}</b></span>
         <span style="color:#f0c040;font-weight:700">ODSL $${fP(cur)}</span>
-        <span style="color:#39ff14">PR: $${fP(pivotRight)}</span>
+        <span style="color:#39ff14">PR: $${fP(pivotRight ?? 0)}</span>
         <span style="color:#ff4466bb">IV: $${fP(impulseVal)}</span>
         <span style="color:#00ff8855">TP: <b style="color:#00ff88">$${fP(pos.tp)}</b></span>`
       : `<span style="color:#ff4466aa">SL: <b style="color:#ff4466">$${fP(currentSL)}</b></span>
@@ -1166,21 +1284,24 @@ export function _renderDslCard(pos: any): string {
     ${_magnetPreviewTxt && !_canMoveSL_render ? `<div style="font-size:10px;color:#00ccff44;font-style:italic;line-height:1.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_magnetPreviewTxt}</div>` : ''}
   </div>
 
-  <!-- ROW 7: Take Control / Let AI Control + manual DSL inputs -->
-  ${_showTakeControl ? `<div style="margin-top:6px;text-align:right"><button data-action="dslTakeControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#f0c04012;border:1px solid #f0c04033;color:#f0c040;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">TAKE CONTROL</button></div>` : ''}
+  <!-- ROW 7: Take Control / Let AI Control + Close Position + manual DSL inputs -->
+  ${_showTakeControl ? `<div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px">
+    <button data-action="dslClosePosition" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#2a0010;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">\u2715 CLOSE</button>
+    <button data-action="dslTakeControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#f0c04012;border:1px solid #f0c04033;color:#f0c040;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">TAKE CONTROL</button>
+  </div>` : ''}
   ${_showReleaseControl ? `<div style="margin-top:6px;border-top:1px solid #f0c04022;padding-top:6px">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <span style="font-size:12px;color:#f0c040;letter-spacing:0.5px">MANUAL CONTROL ACTIVE</span>
-      <button data-action="dslReleaseControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
+      <div style="display:flex;gap:6px">
+        <button data-action="dslClosePosition" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#2a0010;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">\u2715 CLOSE</button>
+        <button data-action="dslReleaseControl" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#00ff8812;border:1px solid #00ff8833;color:#00ff88;border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">LET AI CONTROL</button>
+      </div>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${isActive ? `<div style="display:flex;flex-direction:column;gap:1px">
-        <label style="font-size:11px;color:#ffffff22;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" disabled style="width:62px;background:#0a0e14;border:1px solid #ffffff11;color:#ffffff33;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit;cursor:not-allowed"></label>
-        <span class="dsl-price-sub" style="font-size:9px;color:#f0c04044;letter-spacing:0.3px">ACTIVATED</span>
-      </div>` : `<div style="display:flex;flex-direction:column;gap:1px">
+      <div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="openDslPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
-        <span class="dsl-price-sub" style="font-size:9px;color:#f0c04088;letter-spacing:0.3px">${_dslPriceSub}</span>
-      </div>`}
+        <span class="dsl-price-sub" style="font-size:9px;color:#f0c04088;letter-spacing:0.3px">${isActive ? 'ACTIVATED' : _dslPriceSub}</span>
+      </div>
       <div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff44;display:flex;align-items:center;gap:4px">PL%<input type="number" value="${pivotLeftPct}" min="0.01" max="100" step="0.01" data-action="dslManualParam" data-id="${pos.id}" data-param="pivotLeftPct" style="width:62px;background:#0d1520;border:1px solid #ffffff22;color:#fff;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit"></label>
         <span class="dsl-price-sub" style="font-size:9px;color:#39ff1488;letter-spacing:0.3px">${_plPriceSub}</span>
@@ -1196,7 +1317,10 @@ export function _renderDslCard(pos: any): string {
     </div>
   </div>` : ''}
   ${_showPaperControls ? `<div style="margin-top:6px;border-top:1px solid #ffffff11;padding-top:6px">
-    <div style="font-size:11px;color:#ffffff33;letter-spacing:0.5px;margin-bottom:4px">DSL PARAMS</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+      <div style="font-size:11px;color:#ffffff33;letter-spacing:0.5px">DSL PARAMS</div>
+      <button data-action="dslClosePosition" data-id="${pos.id}" style="font-size:12px;padding:4px 12px;background:#2a0010;border:1px solid var(--red);color:var(--red);border-radius:4px;cursor:pointer;font-family:inherit;letter-spacing:0.5px">\u2715 CLOSE</button>
+    </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${isActive ? `<div style="display:flex;flex-direction:column;gap:1px">
         <label style="font-size:11px;color:#ffffff22;display:flex;align-items:center;gap:4px">DSL%<input type="number" value="${openDSLpct}" disabled style="width:62px;background:#0a0e14;border:1px solid #ffffff11;color:#ffffff33;font-size:12px;padding:2px 4px;border-radius:3px;font-family:inherit;cursor:not-allowed"></label>
@@ -1226,14 +1350,14 @@ export function _renderDslCard(pos: any): string {
 function _emitDSLChanged() { try { window.dispatchEvent(new CustomEvent('zeus:dslStateChanged')) } catch (_) {} }
 
 export function stopDSLIntervals(): void {
-  if (DSL.checkInterval) { w.Intervals.clear('dsl'); DSL.checkInterval = null }
+  if (DSL.checkInterval) { w.Intervals.clear('dsl'); _pushDslCheckInterval(null) }
   if (DSL.visualInterval) { w.Intervals.clear('dslVis'); DSL.visualInterval = null }
   _emitDSLChanged()
 }
 export function startDSLIntervals(): void {
   if (DSL.checkInterval) return
   _emitDSLChanged()
-  DSL.checkInterval = w.Intervals.set('dsl', runDSLBrain, 3000)
+  _pushDslCheckInterval(w.Intervals.set('dsl', runDSLBrain, 3000))
   DSL.visualInterval = w.Intervals.set('dslVis', () => {
     if (document.hidden) return
     const posns = [
@@ -1253,6 +1377,7 @@ export function _dslTrimLogs(posId: any): void {
   const pos = DSL.positions[posId]
   if (Array.isArray(pos.log) && pos.log.length > 20) {
     pos.log = pos.log.slice(-20)
+    _pushDslPosition(String(posId))
   }
 }
 
@@ -1270,7 +1395,7 @@ export function _dslTrimAll(): void {
   })
   const _openIds = new Set(_allPos.filter(function (p: any) { return !p.closed }).map(function (p: any) { return String(p.id) }))
   Object.keys(DSL.positions).forEach(function (id: string) {
-    if (!_openIds.has(id)) delete DSL.positions[id]
+    if (!_openIds.has(id)) _removeDslPosition(id)
   })
 }
 

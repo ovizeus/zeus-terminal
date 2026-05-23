@@ -4,7 +4,7 @@
 'use strict';
 
 const logger = require('./logger');
-const { teacherSwingPivots } = require('../../public/js/teacher/teacherIndicators');
+const { teacherSwingPivots } = require('../shared/teacher/teacherIndicators');
 
 // ══════════════════════════════════════════════════════════════════
 // Configuration
@@ -121,10 +121,20 @@ async function _pollAllDepth() {
     }
 }
 
+// [BIN-TELEM 2026-05-19] lazy-require telemetry wrapper
+let _telem = null;
+function _getTelem() {
+    if (_telem === null) {
+        try { _telem = require('./binanceTelemetry'); } catch (_) { _telem = false; }
+    }
+    return _telem || null;
+}
+
 async function _pollDepth(symbol) {
     // Use public endpoint — no auth needed
     const url = `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=${DEPTH_LIMIT}`;
-    const res = await fetch(url);
+    const t = _getTelem();
+    const res = t ? await t.wrapFetch(fetch, url, { __src: 'serverLiquidity:depth', __weight: 2 }) : await fetch(url);
     if (!res.ok) return;
 
     const data = await res.json();
@@ -342,10 +352,43 @@ function stopDepthPolling() {
     if (_depthTimer) { clearInterval(_depthTimer); _depthTimer = null; }
 }
 
+// [Day 35 #3] Public accessors for chat layer. Returns null if no depth
+// has been polled yet for the symbol (e.g. not in _depthSymbols list).
+function getOrderBook(symbol) {
+    if (!symbol) return null;
+    const cached = _depthCache.get(symbol.toUpperCase());
+    if (!cached) return null;
+    return {
+        bids: cached.bids.slice(),
+        asks: cached.asks.slice(),
+        ts: cached.ts,
+        ageMs: Date.now() - cached.ts,
+    };
+}
+
+function getWalls(symbol) {
+    if (!symbol) return [];
+    return _findWalls(symbol.toUpperCase());
+}
+
+// Test-only ingestion — bypass live polling for unit tests
+function _ingestDepthForTest(symbol, bids, asks) {
+    _depthCache.set(symbol.toUpperCase(), {
+        bids: bids.map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) })),
+        asks: asks.map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) })),
+        ts: Date.now(),
+    });
+}
+function _resetDepthForTest() {
+    _depthCache.clear();
+}
+
 module.exports = {
     getLiquidity,
     getLiquidityModifier,
     getAnticipation,
     startDepthPolling,
     stopDepthPolling,
+    getOrderBook, getWalls,
+    _ingestDepthForTest, _resetDepthForTest,
 };

@@ -1,11 +1,86 @@
 import { create } from 'zustand'
-import type { BrainState } from '../types'
+import type {
+  BrainState,
+  BrainMode,
+  TradingProfile,
+  BrainEngineState,
+  BrainThought,
+  BrainAdaptParams,
+  BrainBlockReason,
+  BrainSafetyPill,
+  BrainBlockReasonDisplay,
+  MtfAlignment,
+} from '../types'
 
-interface BrainStore {
+/**
+ * Brain canonical store.
+ *
+ * Phase 6 C7: store is the single source of truth for the Brain surface.
+ * The legacy engine (engine/brain.ts) writes directly through the typed
+ * mutators below; `window.BM` is a Proxy that routes canonical reads to
+ * this store and runtime-only keys back to the backing object (installed
+ * in C6). `BlockReason` write-paths are mirrored canonically across all
+ * known sites (autotrade.ts, klines.ts, arianova.ts, postMortem.ts,
+ * bootstrapMisc.ts, state.ts hydration). `useBrainBridge` and
+ * `syncFromEngine` were removed in C7 — there is no engine→store sync hop.
+ *
+ * Mutators cover the canonical Brain surface:
+ *   - mode / profile
+ *   - engineState (store-level `brainState`)
+ *   - entryReady / entryScore
+ *   - flow / mtf / sweep / gates
+ *   - blockReason
+ *   - thoughts (atomic replacement; engine uses `unshift` + bounded
+ *     capacity on the backing array, then replaces via `setThoughts`)
+ *   - adaptParams
+ */
+interface BrainStoreState {
   /** Brain state — mirrors window.BM */
   brain: BrainState
+  /** Brain engine lifecycle state (SCANNING/ANALYZING/READY/TRADING/BLOCKED) */
+  brainState: BrainEngineState
+  /** Brain mode (assist/auto) */
+  brainMode: BrainMode
+  /** Brain thoughts log */
+  thoughts: BrainThought[]
+  /** Brain adapt params */
+  adaptParams: BrainAdaptParams | null
+  /** Block reason */
+  blockReason: BrainBlockReason | null
+  /** Safety pill (#at-why-blocked) — produced by data/klines.ts `_updateWhyBlocked`. */
+  safetyPill: BrainSafetyPill | null
+  /** Block-reason display (#zad-block-reason) — produced by engine/brain.ts top-reason logic. */
+  blockReasonDisplay: BrainBlockReasonDisplay | null
+
   /** Merge partial brain state */
   patch: (partial: Partial<BrainState>) => void
+
+  /** Set operating mode (updates both `brain.mode` and top-level `brainMode`) */
+  setMode: (mode: BrainMode) => void
+  /** Set trading profile (fast/swing/defensive) */
+  setProfile: (profile: TradingProfile) => void
+  /** Set engine lifecycle state */
+  setEngineState: (state: BrainEngineState) => void
+  /** Set entry readiness + score together */
+  setEntry: (partial: { ready?: boolean; score?: number }) => void
+  /** Set flow snapshot (CVD / delta / OFI) */
+  setFlow: (flow: BrainState['flow']) => void
+  /** Set multi-timeframe alignment */
+  setMtf: (mtf: MtfAlignment) => void
+  /** Set sweep snapshot */
+  setSweep: (sweep: BrainState['sweep']) => void
+  /** Replace gates map */
+  setGates: (gates: Record<string, unknown>) => void
+  /** Set block reason (null clears) */
+  setBlockReason: (reason: BrainBlockReason | null) => void
+  /** Set safety pill (#at-why-blocked). Short-circuits when unchanged. */
+  setSafetyPill: (pill: BrainSafetyPill | null) => void
+  /** Set block-reason display (#zad-block-reason). Short-circuits when unchanged. */
+  setBlockReasonDisplay: (disp: BrainBlockReasonDisplay | null) => void
+  /** Replace thoughts log atomically */
+  setThoughts: (thoughts: BrainThought[]) => void
+  /** Set adapt params (null clears) */
+  setAdaptParams: (params: BrainAdaptParams | null) => void
 }
 
 const defaultBrain: BrainState = {
@@ -123,77 +198,52 @@ const defaultBrain: BrainState = {
   core: { lastLiqTs: 0, mtfOn: false, ticks: 0 },
 }
 
-interface BrainStoreExtended extends BrainStore {
-  /** Brain engine state (SCANNING/ANALYZING/READY/TRADING/BLOCKED) */
-  brainState: string
-  /** Brain mode (assist/auto) */
-  brainMode: string
-  /** Brain thoughts log */
-  thoughts: any[]
-  /** Brain adapt params */
-  adaptParams: any
-  /** Block reason */
-  blockReason: { code: string; text: string } | null
-  /** Atomic snapshot sync from engine — one single set() call */
-  syncFromEngine: () => void
-}
-
-export const useBrainStore = create<BrainStoreExtended>()((set) => ({
+export const useBrainStore = create<BrainStoreState>()((set) => ({
   brain: defaultBrain,
   brainState: 'scanning',
   brainMode: 'assist',
   thoughts: [],
   adaptParams: null,
   blockReason: null,
+  safetyPill: null,
+  blockReasonDisplay: null,
+
   patch: (partial) => set((s) => ({ brain: { ...s.brain, ...partial } })),
 
-  syncFromEngine: () => {
-    const w = window as any
-    const BM = w.BM; const BR = w.BRAIN; const S = w.S
-    if (!BM) return
-
-    // Single atomic set() — complete snapshot from window.BM + window.BRAIN
-    set({
+  setMode: (mode) =>
+    set((s) => ({ brain: { ...s.brain, mode }, brainMode: mode })),
+  setProfile: (profile) =>
+    set((s) => ({ brain: { ...s.brain, profile } })),
+  setEngineState: (state) => set({ brainState: state }),
+  setEntry: ({ ready, score }) =>
+    set((s) => ({
       brain: {
-        ...defaultBrain,
-        mode: S?.mode || 'assist',
-        profile: BM.profile || 'fast',
-        confluenceScore: BM.confluenceScore || 50,
-        confMin: BM.confMin || 65,
-        protectMode: !!BM.protectMode,
-        protectReason: BM.protectReason || '',
-        dailyTrades: BM.dailyTrades || 0,
-        dailyPnL: BM.dailyPnL || 0,
-        lossStreak: BM.lossStreak || 0,
-        newsRisk: BM.newsRisk || 'low',
-        gates: BM.gates || {},
-        entryScore: BM.entryScore || 0,
-        entryReady: !!BM.entryReady,
-        mtf: BM.mtf || { '15m': 'neut', '1h': 'neut', '4h': 'neut' },
-        sweep: BM.sweep || { type: 'none', reclaim: false, displacement: false },
-        flow: BM.flow || { cvd: 'neut', delta: 0, ofi: 'neut' },
-        regimeEngine: BM.regimeEngine || defaultBrain.regimeEngine,
-        phaseFilter: BM.phaseFilter || defaultBrain.phaseFilter,
-        atmosphere: BM.atmosphere || defaultBrain.atmosphere,
-        structure: BM.structure || defaultBrain.structure,
-        liqCycle: BM.liqCycle || defaultBrain.liqCycle,
-        volRegime: BM.volRegime || '—',
-        volPct: BM.volPct ?? null,
-        danger: BM.danger || 0,
-        dangerBreakdown: BM.dangerBreakdown || defaultBrain.dangerBreakdown,
-        conviction: BM.conviction || 0,
-        convictionMult: BM.convictionMult ?? 1.0,
-        positionSizing: BM.positionSizing || defaultBrain.positionSizing,
-        probScore: BM.probScore || 0,
-        probBreakdown: BM.probBreakdown || defaultBrain.probBreakdown,
+        ...s.brain,
+        entryReady: ready !== undefined ? ready : s.brain.entryReady,
+        entryScore: score !== undefined ? score : s.brain.entryScore,
       },
-      brainState: BR?.state || 'scanning',
-      brainMode: S?.mode || 'assist',
-      thoughts: BR?.thoughts ? [...BR.thoughts] : [],
-      adaptParams: BR?.adaptParams || null,
-      blockReason: (typeof w.BlockReason !== 'undefined' && w.BlockReason.get()?.code)
-        ? { code: w.BlockReason.get().code, text: w.BlockReason.get().text || '' }
-        : null,
-    })
-  },
+    })),
+  setFlow: (flow) => set((s) => ({ brain: { ...s.brain, flow } })),
+  setMtf: (mtf) => set((s) => ({ brain: { ...s.brain, mtf } })),
+  setSweep: (sweep) => set((s) => ({ brain: { ...s.brain, sweep } })),
+  setGates: (gates) => set((s) => ({ brain: { ...s.brain, gates } })),
+  setBlockReason: (reason) => set({ blockReason: reason }),
+  setSafetyPill: (pill) => set((s) => {
+    const cur = s.safetyPill
+    if (cur === pill) return s
+    if (cur && pill &&
+      cur.iconKind === pill.iconKind &&
+      cur.text === pill.text &&
+      cur.className === pill.className &&
+      cur.visible === pill.visible) return s
+    return { safetyPill: pill }
+  }),
+  setBlockReasonDisplay: (disp) => set((s) => {
+    const cur = s.blockReasonDisplay
+    if (cur === disp) return s
+    if (cur && disp && cur.text === disp.text && cur.className === disp.className) return s
+    return { blockReasonDisplay: disp }
+  }),
+  setThoughts: (thoughts) => set({ thoughts }),
+  setAdaptParams: (params) => set({ adaptParams: params }),
 }))

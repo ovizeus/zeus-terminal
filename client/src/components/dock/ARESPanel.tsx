@@ -1,9 +1,25 @@
 /** ARES dock page view — 1:1 from initARES() + initAriaBrain() in deepdive.js
  *  Entire panel is JS-generated in original. This is the visual shell
  *  including the strip bar, neural brain SVG, and all sections. */
-import { useEffect, useRef, useState } from 'react'
-import { useAresStore } from '../../stores'
-import { _aresRender } from '../../engine/aresUI'
+import { useCallback, useEffect, useRef } from 'react'
+import { useAresStore } from '../../stores/aresStore'
+import { StripBadge } from './ares/StripBadge'
+import { StripConf } from './ares/StripConf'
+import { ImmSpan } from './ares/ImmSpan'
+import { EmotionSpan } from './ares/EmotionSpan'
+import { CognitiveBar } from './ares/CognitiveBar'
+import { StatsRow } from './ares/StatsRow'
+import { StageCol } from './ares/StageCol'
+import { WalletCol } from './ares/WalletCol'
+import { ObjectivesCol } from './ares/ObjectivesCol'
+import { PositionsList } from './ares/PositionsList'
+import { BrainDots } from './ares/BrainDots'
+import { MissionArc } from './ares/MissionArc'
+import { WoundLine } from './ares/WoundLine'
+import { DecisionLine } from './ares/DecisionLine'
+import { ThoughtStream } from './ares/ThoughtStream'
+import { LessonText } from './ares/LessonText'
+import { HistoryBar } from './ares/HistoryBar'
 
 // ── 136 brain nodes from deepdive.js initAriaBrain() line 3181 ──
 const BRAIN_NODES: [number, number][] = [
@@ -26,25 +42,15 @@ const BRAIN_NODES: [number, number][] = [
 const HOT_IDX = new Set([0,5,9,22,23,29,31,34,55,63,72,82,91,92,101,108,111,112,124,125])
 
 const ZONES = [
-  { name: 'Lobul frontal', sub: 'Decizie · Planificare', cx: 85, cy: 110, r: 52, col: '#2962FF', pinX: 87, pinY: 80 },
-  { name: 'Lobul parietal', sub: 'Mișcare · Senzații', cx: 190, cy: 95, r: 55, col: '#00E5FF', pinX: 155, pinY: 30 },
-  { name: 'Lobul temporal', sub: 'Memorie · Auz', cx: 100, cy: 175, r: 45, col: '#2962FF', pinX: 87, pinY: 178 },
-  { name: 'Lobul occipital', sub: 'Vizual · Chart', cx: 240, cy: 145, r: 48, col: '#00E5FF', pinX: 253, pinY: 125 },
-  { name: 'Cerebelul', sub: 'Echilibru · SL/TP', cx: 195, cy: 215, r: 42, col: '#FFB000', pinX: 218, pinY: 248 },
-  { name: 'Trunchi cerebral', sub: 'AutoTrade · Kill-switch', cx: 140, cy: 215, r: 35, col: '#C1121F', pinX: 127, pinY: 232 },
+  { name: 'Frontal lobe', sub: 'Decision · Planning', cx: 85, cy: 110, r: 52, col: '#2962FF', pinX: 87, pinY: 80 },
+  { name: 'Parietal lobe', sub: 'Motion · Senses', cx: 190, cy: 95, r: 55, col: '#00E5FF', pinX: 155, pinY: 30 },
+  { name: 'Temporal lobe', sub: 'Memory · Hearing', cx: 100, cy: 175, r: 45, col: '#2962FF', pinX: 87, pinY: 178 },
+  { name: 'Occipital lobe', sub: 'Visual · Chart', cx: 240, cy: 145, r: 48, col: '#00E5FF', pinX: 253, pinY: 125 },
+  { name: 'Cerebellum', sub: 'Balance · SL/TP', cx: 195, cy: 215, r: 42, col: '#FFB000', pinX: 218, pinY: 248 },
+  { name: 'Brain stem', sub: 'AutoTrade · Kill-switch', cx: 140, cy: 215, r: 35, col: '#C1121F', pinX: 127, pinY: 232 },
 ]
 
 const ACCENT_COLS = ['#00E5FF','#2962FF','#FFB000','#C1121F','#B0BEC5']
-
-const LOB_DOTS: [number, number, string, string, string][] = [
-  [0, 14, 'ldot-frontal', 'POLICY: BALANCED', 'ok'],
-  [1, 14, 'ldot-parietal', '', 'ok'],
-  [2, 14, 'ldot-temporal', 'MEMORY: OK', 'ok'],
-  [3, 14, 'ldot-occipital', 'VISION: CLEAR', 'ok'],
-  [4, 14, 'ldot-cerebel', 'EXEC: —', 'warn'],
-  [5, 14, 'ldot-trunchi', 'SURVIVAL: STABLE', 'ok'],
-]
-const DOT_COLORS: Record<string, string> = { ok: '#00ff88', bad: '#ff3355', warn: '#f0c040' }
 
 function buildEdges(nodes: [number, number][], maxDist = 50, maxPer = 3): [number, number][] {
   const edges: [number, number][] = []
@@ -192,54 +198,46 @@ function generateBrainSVG(svgEl: SVGSVGElement) {
     font-family="monospace" font-size="5" fill="${z.col}" opacity="0.62">${z.sub}</text>`
   })
 
-  // Lobe status dots
-  LOB_DOTS.forEach(([zi, offY, dotId, txt, lvl]) => {
-    const z = ZONES[zi]
-    const isB = z.pinY > 250
-    const isL = z.pinX < 130
-    const ta = isL ? 'end' : isB ? 'middle' : 'start'
-    const baseY = isB ? z.pinY + 21 : z.pinY + 2
-    const dotY = baseY + offY
-    const col = DOT_COLORS[lvl] || DOT_COLORS.warn
-
-    if (zi === 1) {
-      // Parietal: CONSCIOUSNESS cu 3 dots
-      svg += `
-  <circle id="ldot-c0" cx="${z.pinX + (isL ? -6 : 6)}" cy="${dotY - 1}" r="2.2" fill="#00ff88" opacity="0.85"
-    style="filter:drop-shadow(0 0 3px #00ff88)"/>
-  <text id="ldot-parietal-seed" x="${z.pinX + (isL ? -11 : 11)}" y="${dotY + 1}" text-anchor="${ta}"
-    font-family="monospace" font-size="5" fill="#00ff88" opacity="0.82">SEED</text>
-  <circle id="ldot-c1" cx="${z.pinX + (isL ? -6 : 6)}" cy="${dotY + 8}" r="2.2" fill="#555577" opacity="0.6"/>
-  <text id="ldot-parietal-ascent" x="${z.pinX + (isL ? -11 : 11)}" y="${dotY + 10}" text-anchor="${ta}"
-    font-family="monospace" font-size="5" fill="#7788aa" opacity="0.55">ASCENT</text>
-  <circle id="ldot-c2" cx="${z.pinX + (isL ? -6 : 6)}" cy="${dotY + 16}" r="2.2" fill="#555577" opacity="0.6"/>
-  <text id="ldot-parietal-sovereign" x="${z.pinX + (isL ? -11 : 11)}" y="${dotY + 18}" text-anchor="${ta}"
-    font-family="monospace" font-size="5" fill="#7788aa" opacity="0.55">SOVEREIGN</text>`
-    } else {
-      svg += `
-  <circle id="${dotId}-c" cx="${z.pinX + (isL ? -6 : 6)}" cy="${dotY - 1}" r="2.2" fill="${col}" opacity="0.85"
-    style="filter:drop-shadow(0 0 3px ${col})"/>
-  <text id="${dotId}" x="${z.pinX + (isL ? -11 : 11)}" y="${dotY + 1}" text-anchor="${ta}"
-    font-family="monospace" font-size="5" fill="${col}" opacity="0.75">${txt}</text>`
-    }
-  })
+  // [R28.2-F] Lob status dots (6 lobs) + consciousness dots (parietal) are
+  // React-owned and rendered by <BrainDots /> as a sibling SVG overlay. They
+  // are not emitted here so `_aresRender` no longer needs to setAttribute
+  // them each tick.
 
   svgEl.innerHTML = svg
 }
 
+/**
+ * ARESPanel scaffold.
+ *
+ * [R28.2] Migration in progress. Narrow subtrees are progressively
+ * moved to store-subscribing memo'd children (StripBadge, StripConf,
+ * ImmSpan, EmotionSpan, CognitiveBar, StatsRow, ...). The parent
+ * itself does NOT subscribe — only mounted children re-render on
+ * their own slices of `useAresStore((s) => s.ui.…)`. The sync
+ * adapter `engine/aresStoreSync.ts` populates those slices on every
+ * aresUI render tick.
+ *
+ * The strip open/close toggle still uses a ref + `classList.toggle`
+ * and will move to the store in R28.2-H.
+ */
 export function ARESPanel() {
-  const [isOpen, setIsOpen] = useState(true)
   const coreSvgRef = useRef<SVGSVGElement>(null)
+  const stripOpen = useAresStore((s) => s.ui.stripOpen)
+  const setStripOpen = useAresStore((s) => s.setStripOpen)
 
   // Generate brain SVG on mount — 1:1 from initAriaBrain() in deepdive.js
   useEffect(() => {
     if (coreSvgRef.current) generateBrainSVG(coreSvgRef.current)
   }, [])
 
+  const toggleOpen = useCallback(() => {
+    setStripOpen(!useAresStore.getState().ui.stripOpen)
+  }, [setStripOpen])
+
   return (
-    <div id="ares-strip" className={isOpen ? 'open' : ''}>
+    <div id="ares-strip" className={stripOpen ? 'open' : ''}>
       {/* ── Strip Bar (collapsible header) — 1:1 from deepdive.js line 3579 ── */}
-      <div id="ares-strip-bar" onClick={() => setIsOpen(o => !o)}>
+      <div id="ares-strip-bar" onClick={toggleOpen}>
         <div className="v6-accent">
           <div className="v6-ico">
             <svg viewBox="0 0 24 24">
@@ -259,159 +257,62 @@ export function ARESPanel() {
             <span style={{ fontSize: 11, color: '#00d9ff44', letterSpacing: 1 }}>NEURAL COMMAND</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span id="ares-strip-badge" style={{ color: '#00d9ff', borderColor: '#00d9ff88' }}>⚡ DETERMINED</span>
-            <span id="ares-strip-conf" style={{ fontSize: 11, color: '#00d9ff66' }}>CONF —%</span>
-            <span id="ares-imm-span"> · IMM —%</span>
-            <span id="ares-emotion-span"></span>
+            <StripBadge />
+            <StripConf />
+            <ImmSpan />
+            <EmotionSpan />
             <span id="ares-strip-chev">▼</span>
           </div>
         </div>
       </div>
 
-      {/* Wound line + Decision line — from template lines 3593-3594 */}
-      <div id="ares-wound-line">⚠ —</div>
-      <div id="ares-decision-line" style={{ display: 'none', fontSize: 12, padding: '2px 8px', fontFamily: 'monospace' }}></div>
+      {/* Wound line + Decision line (R28.2-G store-driven) */}
+      <WoundLine />
+      <DecisionLine />
 
       <div id="ares-strip-panel">
         <div id="ares-panel">
 
-      {/* ── META ROW: Stage + Wallet + Objectives ── */}
+      {/* ── META ROW: Stage + Wallet + Objectives (R28.2-D store-driven) ── */}
       <div id="ares-meta-row">
-        {/* Stage Progress */}
-        <div id="ares-stage-col">
-          <div className="ares-meta-title">STAGE PROGRESS</div>
-          <div className="ares-stage-name" id="ares-stage-name">SEED</div>
-          <div className="ares-prog-bar" id="ares-prog-bar">██░░░░░░░░ 0%</div>
-          <div className="ares-prog-next" id="ares-prog-next">Next: 1,000</div>
-        </div>
-
-        {/* Wallet */}
-        <div id="ares-wallet-col" style={{
-          flex: '0 0 auto', minWidth: '110px', textAlign: 'center',
-          borderLeft: '1px solid rgba(0,150,255,0.12)',
-          borderRight: '1px solid rgba(0,150,255,0.12)',
-          padding: '0 8px',
-        }}>
-          <div className="ares-meta-title" style={{ textAlign: 'center' }}>WALLET</div>
-          <div id="ares-wallet-balance" style={{ fontFamily: 'monospace', fontSize: '11px', fontWeight: 700, color: '#00ff88', letterSpacing: '1px' }}>$0.00</div>
-          <div id="ares-wallet-avail" style={{ fontFamily: 'monospace', fontSize: '11px', color: '#6a9a7a', marginTop: '1px' }}>
-            Avail: <span id="ares-wallet-avail-val">$0</span> · Rest To Trade: <span id="ares-wallet-lock-val">$0</span>
-          </div>
-          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', flexWrap: 'wrap' }}>
-            <button id="ares-wallet-add-btn" onClick={() => {
-              const w = window as any; const amt = prompt('Add funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.fund(Number(amt)); setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200) }
-            }} style={{
-              background: 'rgba(0,255,136,0.1)', border: '1px solid rgba(0,255,136,0.35)',
-              color: '#00ff88', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
-              cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-            }}>[+] ADD</button>
-            <button id="ares-wallet-withdraw-btn" onClick={() => {
-              const w = window as any; const amt = prompt('Withdraw funds ($):')
-              if (amt && !isNaN(Number(amt)) && typeof w.ARES !== 'undefined' && w.ARES.wallet) { w.ARES.wallet.withdraw(Number(amt)); setTimeout(() => { _aresRender(); useAresStore.getState().saveToServer() }, 200) }
-            }} style={{
-              background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.3)',
-              color: 'rgba(255,110,110,0.8)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 8px',
-              cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-            }}>[-] WITHDRAW</button>
-          </div>
-          <div id="ares-wallet-withdraw-tip" style={{
-            display: 'none', fontFamily: 'monospace', fontSize: '10px', color: '#ff555566', marginTop: '2px',
-          }}>withdraw disabled while positions active</div>
-          <span id="ares-wallet-fail" style={{
-            display: 'none', background: 'rgba(255,40,40,0.18)', border: '1px solid rgba(255,50,50,0.45)',
-            color: '#ff5555', fontFamily: 'monospace', fontSize: '11px', padding: '1px 5px',
-            borderRadius: '2px', letterSpacing: '1px', marginTop: '3px',
-          }}>NO FUNDS</span>
-        </div>
-
-        {/* Objectives */}
-        <div id="ares-obj-col">
-          <div className="ares-meta-title" id="ares-obj-title" style={{ textAlign: 'right' }}>OBJECTIVES</div>
-          <div className="ares-obj-item" id="aobj-0">100 → 1,000</div>
-          <div className="ares-obj-bar" id="aobj-0b" style={{ textAlign: 'right' }}></div>
-          <div className="ares-obj-item" id="aobj-1">1,000 → 10,000</div>
-          <div className="ares-obj-bar" id="aobj-1b" style={{ textAlign: 'right' }}></div>
-          <div className="ares-obj-item" id="aobj-2">10,000 → 1M</div>
-          <div className="ares-obj-bar" id="aobj-2b" style={{ textAlign: 'right' }}></div>
-        </div>
+        <StageCol />
+        <WalletCol />
+        <ObjectivesCol />
       </div>
 
-      {/* ── POSITIONS ── */}
-      <div id="ares-positions-wrap" style={{ margin: '4px 12px 0', padding: '4px 0 2px', borderTop: '1px solid rgba(0,150,255,0.12)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-          <div className="ares-meta-title" style={{ margin: 0 }}>POSITIONS</div>
-          <button id="ares-close-all-btn" onClick={() => {
-            const w = window as any
-            if (typeof w.ARES !== 'undefined' && w.ARES.positions) { w.ARES.positions.closeAll(); setTimeout(() => _aresRender(), 100) }
-          }} style={{
-            display: 'none', background: 'rgba(255,50,50,0.15)', border: '1px solid rgba(255,50,50,0.4)',
-            color: 'rgba(255,100,100,0.85)', fontFamily: 'monospace', fontSize: '11px', padding: '2px 7px',
-            cursor: 'pointer', borderRadius: '2px', letterSpacing: '1px',
-          }}>CLOSE ALL</button>
-        </div>
-        <div id="ares-positions-list" style={{ maxHeight: '220px', overflowY: 'auto' }}>
-          <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', fontFamily: 'monospace', padding: '2px 0' }}>— none —</div>
-        </div>
-      </div>
+      {/* ── POSITIONS (R28.2-E store-driven) ── */}
+      <PositionsList />
 
-      {/* ── ARC SVG ── */}
+      {/* ── ARC SVG (R28.2-F store-driven) ── */}
       <div id="ares-arc-wrap">
-        <svg id="ares-arc-svg" viewBox="0 0 260 56" preserveAspectRatio="xMidYMid meet"></svg>
+        <MissionArc />
       </div>
 
-      {/* ── CORE NEURAL BRAIN SVG — generated by initAriaBrain() ── */}
-      <div id="ares-core-wrap">
+      {/* ── CORE NEURAL BRAIN SVG ── static anatomy mount-once via generateBrainSVG;
+          lob dots + consciousness dots are React-owned overlay <BrainDots /> (R28.2-F). */}
+      <div id="ares-core-wrap" style={{ position: 'relative' }}>
         <svg ref={coreSvgRef} id="ares-core-svg" viewBox="0 0 336 280" preserveAspectRatio="xMidYMid meet">
           <text x="160" y="155" textAnchor="middle" fontFamily="monospace" fontSize="8" fill="#0080ff44">INITIALIZING NEURAL BRAIN...</text>
         </svg>
+        <BrainDots />
       </div>
 
-      {/* ── COGNITIVE CLARITY BAR ── */}
-      <div id="ares-cog-bar">
-        <span id="ares-cog-label">CLARITATE COGNITIVĂ</span>
-        <div id="ares-cog-track"><div id="ares-cog-fill" style={{ width: '0%' }}></div></div>
-        <span id="ares-cog-pct">—</span>
-      </div>
+      {/* ── COGNITIVE CLARITY BAR (R28.2-C store-driven) ── */}
+      <CognitiveBar />
 
-      {/* ── STATS ROW ── */}
-      <div id="ares-stats-row">
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">TRAJECTORY Δ</div>
-          <div className="ares-stat-val" id="ares-stat-delta" style={{ color: '#00d9ff' }}>—</div>
-          <div className="ares-stat-sub">vs curve</div>
-        </div>
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">MISSION DAY</div>
-          <div className="ares-stat-val" id="ares-stat-day" style={{ color: '#00d9ff' }}>— / 365</div>
-          <div className="ares-stat-sub">elapsed</div>
-        </div>
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">WIN RATE</div>
-          <div className="ares-stat-val" id="ares-stat-wr" style={{ color: '#00d9ff' }}>—%</div>
-          <div className="ares-stat-sub">last 10</div>
-        </div>
-        <div className="ares-stat-cell">
-          <div className="ares-stat-label">PRED ACC</div>
-          <div className="ares-stat-val" id="ares-stat-pred" style={{ color: '#0080ff' }}>—</div>
-          <div className="ares-stat-sub">5min pred</div>
-        </div>
-      </div>
+      {/* ── STATS ROW (R28.2-C store-driven) ── */}
+      <StatsRow />
 
-      {/* ── THOUGHT LOG ── */}
+      {/* ── THOUGHT LOG (R28.2-G store-driven) ── */}
       <div id="ares-thought-wrap">
-        <div id="ares-thought-inner">
-          <div className="ares-thought-line new">› ARES 1.0 — Neural Command Center online</div>
-          <div className="ares-thought-line">› AUTONOMOUS mode — managing positions independently</div>
-          <div className="ares-thought-line">› Awaiting market data...</div>
-        </div>
+        <ThoughtStream />
       </div>
 
-      {/* ── LESSON FROM MEMORY ── */}
+      {/* ── LESSON FROM MEMORY (R28.2-G store-driven) ── */}
       <div id="ares-lesson-wrap">
         <div id="ares-lesson-label">◈ LAST LESSON FROM MEMORY</div>
-        <div id="ares-lesson-text">Awaiting first trade analysis...</div>
-        <div id="ares-history-bar"></div>
+        <LessonText />
+        <HistoryBar />
       </div>
 
         </div>

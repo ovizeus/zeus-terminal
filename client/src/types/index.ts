@@ -45,12 +45,20 @@ export type {
   PositionSizing,
   AdaptiveState,
   BrainState,
+  BrainEngineState,
+  BrainThought,
+  BrainAdaptParams,
+  BrainBlockReason,
+  BrainSafetyPill,
+  BrainBlockReasonDisplay,
+  SafetyPillIconKind,
 } from './brain'
 
 export type {
   PredatorState,
   TradingConfig,
   ATState,
+  ATConfig,
   ATStats,
   ATLogEntry,
   DslState,
@@ -64,6 +72,12 @@ export type {
   WsMessage,
   WsAtUpdate,
   WsSyncSignal,
+  WsSettingsChanged,
+  WsPositionsChanged,
+  WsMarketRadar,
+  RadarCategory,
+  RadarEvent,
+  PositionsSnapshot,
   ServerATState,
   ServerDemoBalance,
   ServerATStats,
@@ -72,6 +86,13 @@ export type {
   SyncStateResponse,
   SyncStatePush,
 } from './sync'
+
+export type {
+  SettingsPayload,
+  SettingsGetResponse,
+  SettingsPostRequest,
+  SettingsPostResponse,
+} from './settings-contracts'
 
 export type {
   ChartColors,

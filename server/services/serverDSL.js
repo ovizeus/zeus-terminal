@@ -6,7 +6,9 @@
 const logger = require('./logger');
 const audit = require('./audit');
 
-const DSL_MAX_LOG = 200; // [H2] cap per-position log to prevent unbounded growth
+// [M15] Reduced from 200 → 80 per-position. With 100 active positions worst-case
+// we cap at 8K entries (was 20K). Each entry ~200B → ~1.6MB worst case.
+const DSL_MAX_LOG = 80;
 
 // ══════════════════════════════════════════════════════════════════
 // DSL Configuration Defaults (mirrors client TC/global defaults)
@@ -368,6 +370,14 @@ setInterval(() => {
     for (const [id, s] of _states) {
         if (s.lastTickTs && s.lastTickTs < cutoff) {
             logger.info('DSL', `[S${id}] Orphan cleanup — no tick for 2h`);
+            // [Day 19] Doctor P3 alert — DSL state went stale (2h no tick).
+            try {
+                require('./ml/_doctor/eventBus').emit({
+                    eventType: 'alert', severity: 'P3',
+                    moduleId: 'serverDSL.orphanCleanup', ts: Date.now(),
+                    payload: { stateId: id, symbol: s.symbol, side: s.side, lastTickTs: s.lastTickTs }
+                });
+            } catch (_) { /* telemetry never blocks */ }
             _states.delete(id);
         }
     }

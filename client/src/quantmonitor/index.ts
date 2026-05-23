@@ -13,12 +13,20 @@ import { fetchWeeklyKlines, fetchDailyKlines, calcS2F, calcLogRegression, calcMa
 import { connectOKXLiq, disconnectOKXLiq } from '../data/okxLiqWS'
 import { renderFrame } from './render/frame'
 import { initParticles, destroyParticles } from './particles/canvas'
+import { loadLiqSnapshot, startLiqPersist, stopLiqPersist, saveLiqSnapshot } from './persistence/liqPersist'
 
 const w = window as any
 const intervals: ReturnType<typeof setInterval>[] = []
 let renderRaf = 0
 let renderIv: ReturnType<typeof setInterval> | null = null
 let _destroyed = false
+// [PERF-2] Module-level refs to liquidation handlers so destroy() can
+// removeEventListener. Without these, every init() call (each panel toggle)
+// leaks one zeus:liq + one zeus:okxLiq listener — after ~5 toggles, addLiq
+// fires 5× per liquidation event. Anonymous arrow în prior code prevented
+// removal entirely; both handlers now refs.
+let _liqHandler: ((e: CustomEvent) => void) | null = null
+let _okxLiqHandler: ((e: CustomEvent) => void) | null = null
 
 function runAllEngines(): void {
   if (!w.S || !w.S.price) return
@@ -75,19 +83,26 @@ export async function init(screenId: string, canvasId: string): Promise<void> {
     qmLog('SYS', 'Waiting for Zeus data feed...')
   }
 
+  // [BUG5.5.3] Restore 24h liq snapshot from localStorage before WS connects
+  // so the map is immediately populated with what was there last session.
+  const { restored } = loadLiqSnapshot()
+  if (restored > 0) qmLog('SYS', `Restored ${restored} liq events from last session`)
+
   // Connect OKX liquidation WS
   connectOKXLiq()
 
   // Subscribe to existing Zeus liquidation events
-  const liqHandler = (e: CustomEvent) => {
+  // [PERF-2] Both handlers stored in module refs so destroy() can remove them.
+  _liqHandler = (e: CustomEvent) => {
     if (_destroyed) return
     addLiq(e.detail.exchange || 'binance', e.detail)
   }
-  window.addEventListener('zeus:liq', liqHandler as EventListener)
-  window.addEventListener('zeus:okxLiq', ((e: CustomEvent) => {
+  _okxLiqHandler = (e: CustomEvent) => {
     if (_destroyed) return
     addLiq('okx', e.detail)
-  }) as EventListener)
+  }
+  window.addEventListener('zeus:liq', _liqHandler as EventListener)
+  window.addEventListener('zeus:okxLiq', _okxLiqHandler as EventListener)
 
   // Fetch new data sources
   await Promise.all([
@@ -121,16 +136,33 @@ export async function init(screenId: string, canvasId: string): Promise<void> {
 
   // Start particles
   initParticles(canvasId)
+
+  // [BUG5.5.3] Throttled save every 10s + flush on beforeunload/pagehide
+  startLiqPersist()
 }
 
 export function destroy(): void {
   _destroyed = true
+  // [BUG5.5.3] Final flush of liq snapshot before teardown so closing the panel
+  // (or switching away) does not lose the 24h rolling buffer.
+  saveLiqSnapshot(true)
+  stopLiqPersist()
   intervals.forEach(iv => clearInterval(iv))
   intervals.length = 0
   if (renderIv) { clearInterval(renderIv); renderIv = null }
   if (renderRaf) { cancelAnimationFrame(renderRaf); renderRaf = 0 }
   disconnectOKXLiq()
   destroyParticles()
+  // [PERF-2] Remove zeus:liq + zeus:okxLiq listeners to prevent zombie
+  // accumulation across init/destroy cycles
+  if (_liqHandler) {
+    window.removeEventListener('zeus:liq', _liqHandler as EventListener)
+    _liqHandler = null
+  }
+  if (_okxLiqHandler) {
+    window.removeEventListener('zeus:okxLiq', _okxLiqHandler as EventListener)
+    _okxLiqHandler = null
+  }
   // Clean QM state from w.S
   if (w.S) {
     Object.keys(w.S).filter((k: string) => k.startsWith('_qm')).forEach((k: string) => delete w.S[k])

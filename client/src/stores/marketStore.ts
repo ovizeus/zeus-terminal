@@ -57,7 +57,7 @@ const defaultMarket: MarketState = {
   magnetBias: 'neut',
   cloudEmail: '',
   indicators: { ema: true, wma: true, st: true, vp: true },
-  overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false },
+  overlays: { liq: false, zs: false, sr: false, llv: false, oflow: false, ovi: false },
   llvSettings: {
     bucketPct: 0.3,
     maxBarWidthPct: 30,

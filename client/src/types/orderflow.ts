@@ -94,4 +94,8 @@ export interface JournalEntry {
   openTs: number
   closeTs: number
   mode: 'demo' | 'live'
+  // [Phase 12.A — Batch G] Exchange + env snapshot captured at open.
+  // null on legacy rows (pre-Batch-G) OR demo (exchange) — never fake.
+  exchange: 'binance' | 'bybit' | null
+  env: 'DEMO' | 'TESTNET' | 'REAL' | null
 }

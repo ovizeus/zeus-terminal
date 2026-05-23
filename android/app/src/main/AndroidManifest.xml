@@ -35,6 +35,19 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <receiver
+            android:name="com.zeus.terminal.widget.ZeusWidgetProvider"
+            android:exported="true"
+            android:label="@string/zeus_widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="com.zeus.terminal.widget.REFRESH" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/zeus_widget_info" />
+        </receiver>
     </application>
 
     <!-- Permissions -->

@@ -63,6 +63,7 @@ function createSessionAuth(jwtSecret) {
             '/robots.txt',
             '/auth/',
             '/sw.js',
+            '/favicon.ico',
             '/manifest.json',
             '/assets/',
             '/app/assets/',
@@ -71,19 +72,29 @@ function createSessionAuth(jwtSecret) {
             '/app/zeus-logo.png',
             '/css/',
             '/js/',
+            '/download/',
             // [ZT-AUD-#15] Allow unauthenticated client error reports (so a
             // crash on the login page itself can still be logged).
-            '/api/client-error'
+            '/api/client-error',
+            // [OPS-6] Prometheus scrape endpoint — IP-allowlisted at handler
+            // level (PROMETHEUS_ALLOW_IPS env, default localhost only).
+            '/metrics'
         ];
 
         const isPublic = publicPaths.some(p => req.path.startsWith(p));
         if (isPublic) return next();
 
         // Allow internal server requests (reconciliation, etc.) from localhost — limited paths only
+        // [SEC-12-β] Restricted to GET method. Previous unrestricted bypass let any
+        // process with shell access on VPS POST to /api/migration/flags from
+        // localhost without JWT, flipping migration flags as a privilege-escalation
+        // path (paired with SEC-12-α tightening admin role check in server.js POST
+        // handler). GET-only bypass preserves operator deploy.ps1 health check
+        // (curl GET) and any internal monitoring poll, while closing the write path.
         const ip = req.ip || req.connection.remoteAddress || '';
         const isLocal = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-        const localSafePaths = ['/api/status', '/api/metrics', '/api/health', '/api/migration/flags', '/api/dashboard', '/api/sd/health'];
-        if (isLocal && localSafePaths.some(p => req.path === p)) return next();
+        const localSafePaths = ['/api/status', '/api/metrics', '/api/health', '/api/migration/flags', '/api/dashboard', '/api/sd/health', '/api/diag/liq-feed', '/api/diag/binance-rates'];
+        if (isLocal && req.method === 'GET' && localSafePaths.some(p => req.path === p)) return next();
 
         // Check JWT cookie
         const token = req.cookies && req.cookies.zeus_token;
@@ -119,8 +130,10 @@ function createSessionAuth(jwtSecret) {
                         if (req.path.startsWith('/api/')) return res.status(403).json({ error: 'Account suspended' });
                         return res.redirect('/login.html');
                     }
-                    // Reject tokens issued before password change
-                    if (decoded.tokenVersion != null && fresh.token_version != null && decoded.tokenVersion !== fresh.token_version) {
+                    // Reject tokens issued before password change.
+                    // Use ?? 0 so legacy tokens without tokenVersion claim fail against
+                    // DB default (1), forcing re-login instead of silently bypassing.
+                    if ((decoded.tokenVersion ?? 0) !== (fresh.token_version ?? 0)) {
                         res.clearCookie('zeus_token', { path: '/' });
                         if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Session expired. Please log in again.' });
                         return res.redirect('/login.html');
@@ -176,4 +189,19 @@ function getActiveSessions() {
     return out;
 }
 
-module.exports = { createSessionAuth, cookieParser, getActiveSessions };
+// Reset inactivity tracking for a user (called from /auth/verify-code success).
+// Without this, a fresh login is judged against the previous session's stale
+// last_active_at — any >4h gap triggers an immediate INACTIVITY_TIMEOUT and
+// kicks the user straight back to /login.html.
+function resetActivity(userId, ts) {
+    if (!userId) return;
+    const now = ts || Date.now();
+    _activity.set(userId, now);
+    _lastPersistedTs.set(userId, now);
+    try {
+        const db = require('../services/database');
+        db.setLastActiveAt(userId, now);
+    } catch (_) { /* DB not ready */ }
+}
+
+module.exports = { createSessionAuth, cookieParser, getActiveSessions, resetActivity };

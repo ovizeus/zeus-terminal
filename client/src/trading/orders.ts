@@ -9,6 +9,20 @@ let _execActive = false
 const _execQueue: any[] = []
 
 // Exec overlay
+// [SEC-6] TRUST CONTRACT: `html` parameter is treated as already-sanitized
+// markup. Callers MUST pre-escape any user-derived sau server-derived dynamic
+// values via `escHtml()` from `utils/dom` before constructing the template.
+// Verified caller paths (audit 2026-05-08): positions.ts:91 + 131
+// `_queueExecOverlay(html, ...)` — both build `html` cu escHtml-interpolated
+// template literals (lines 82, 84-88, 123, 126-127 use escHtml on every
+// dynamic field: dir/sym/mode/score/tf/dur/reason). Internal queue-recursion
+// from line 23 + 31 of this file is plumbing only (passes through pre-built
+// html). Adding any new caller? You MUST escape dynamic interpolations cu
+// escHtml — this function does NOT perform automatic sanitization to
+// preserve intentional template structure (CSS classes, icon SVG markup
+// from `_ZI.*` constants). Equivalent pattern la AnalysisSections.tsx
+// `dangerouslySetInnerHTML` (SEC-10 closure) — trust chain delegated la
+// producer.
 export function _showExecOverlay(html: any, cssClass: any, duration: any): void {
   const div = document.createElement('div')
   div.className = 'zeus-exec-overlay ' + cssClass
@@ -25,6 +39,8 @@ export function _showExecOverlay(html: any, cssClass: any, duration: any): void 
   }, duration || 2500)
 }
 
+// [SEC-6] Same trust contract as _showExecOverlay — `html` MUST be
+// pre-escaped at producer site via escHtml() for any dynamic values.
 export function _queueExecOverlay(html: any, cssClass: any, duration: any): void {
   if (_execActive) { _execQueue.push([html, cssClass, duration]); return }
   _execActive = true
@@ -50,7 +66,7 @@ export function _bmResetDailyIfNeeded(): void {
     // reset protect automat la schimbare zi
     w.BM.protectMode = false
     w.BM.protectReason = ''
-    atLog('info', `[DAY] Zi nouă (${k}) — dailyTrades/lossStreak/protect resetate automat`)
+    atLog('info', `[DAY] New day (${k}) — dailyTrades/lossStreak/protect auto-reset`)
   }
 }
 

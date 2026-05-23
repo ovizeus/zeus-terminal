@@ -40,7 +40,7 @@ export function PostMortemPanel() {
             color: '#445566',
             letterSpacing: '1px',
           }}>
-            Nicio tranzacție analizată încă.
+            No trade analyzed yet.
           </div>
         </div>
       </div>

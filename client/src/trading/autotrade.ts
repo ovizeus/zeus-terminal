@@ -3,16 +3,82 @@
 // AutoTrade engine: conditions, execution, monitoring, kill switch
 // [8C-4A1] AT/TC/DSL/BRAIN reads migrated to accessors. AT writes remain.
 
-import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSL, getTCSize, getTCSignalMin, getTCDslActivatePct, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
+/**
+ * [BUG-CLOSE-AT FIX 2026-05-14] Resolve a usable price for closing a position
+ * via explicit fallback chain. Eliminates silent-return bug în closeAutoPos
+ * that broke ZECUSDT (and any non-mainstream symbol) close button.
+ *
+ * Prior code: `const cur = getSymPrice(pos); if (cur == null) return;` — silent
+ * exit when symbol not în market feed (only BTC/ETH/SOL/BNB subscribed). User
+ * clicked Close, nothing happened, no toast, no log, no network request.
+ *
+ * Fallback chain (first valid > 0 wins):
+ *   1. Live market price via getSymPrice (handles allPrices/wlPrices/klines)
+ *   2. pos.live.avgPrice — Binance fill price stored at entry
+ *   3. pos.entry — original entry price (last-resort approximation)
+ *   4. 0 — caller must show error toast (never silent)
+ *
+ * Numeric validation: rejects NaN, negative, zero values at each layer.
+ */
+export function _resolveClosePrice(pos: any): number {
+    if (!pos || typeof pos !== 'object') return 0
+    // Layer 1: live market price
+    try {
+        const live = getSymPrice(pos)
+        if (Number.isFinite(live) && live > 0) return live as number
+    } catch (_) { /* defensive */ }
+    // Layer 2: pos.live.avgPrice (Binance fill at entry)
+    const liveAvg = pos.live && Number(pos.live.avgPrice)
+    if (Number.isFinite(liveAvg) && liveAvg > 0) return liveAvg
+    // Layer 3: pos.entry (original entry approximation)
+    const entry = Number(pos.entry)
+    if (Number.isFinite(entry) && entry > 0) return entry
+    // Layer 4: no usable price
+    return 0
+}
+
+/**
+ * [BUG-T2d FIX 2026-05-14] Derive position quantity from Binance MARKET fill,
+ * with leverage-aware fallback for status=NEW (executedQty="0.000").
+ *
+ * Main MARKET order is placed with `quantity = (adaptFinalSize * lev) / entry`
+ * (autotrade.ts line ~1134). When Binance returns NEW (fill not yet confirmed),
+ * `executedQty` is "0.000" — parseFloat → 0 → falsy. Prior fallback was
+ * `adaptFinalSize / fillPrice`, MISSING the leverage multiplier — so SL/TP
+ * orders placed downstream covered only 1/lev of the actual position.
+ *
+ * Real incident 2026-05-14 ZECUSDT SHORT lev=10: position qty=18.343,
+ * SL on Binance qty=1.834 → 90% unprotected exposure.
+ *
+ * Fix: fallback must mirror main-order qty exactly: (size * lev) / fillPrice.
+ */
+export function _computeFillQtyFallback(
+    executedQtyStr: string | null | undefined,
+    adaptFinalSize: number,
+    lev: number,
+    fillPrice: number,
+): number {
+    const parsed = parseFloat(executedQtyStr as any)
+    if (Number.isFinite(parsed) && parsed > 0) return parsed
+    return (adaptFinalSize * lev) / fillPrice
+}
+
+import { getATEnabled, getATMode, getATKillTriggered, getATLastTradeTs, getATClosedToday, getATDailyPnL, getTCMaxPos, getTCSignalMin, getTCDslTrailPct, getTCDslTrailSusPct, getTCDslExtendPct, getDSLEnabled, getDSLPositions, getDSLMode, getDSLObject, getBrainObject, getPrice, getSymbol, getSignalData, getMagnetBias, getTimezone } from '../services/stateAccessors'
 import { AT } from '../engine/events'
 import { TP } from '../core/state'
 import { BM } from '../core/config'
+import { useBrainStore } from '../stores/brainStore'
+import { useATStore } from '../stores/atStore'
+import { usePositionsStore } from '../stores/positionsStore'
+import { useUiStore } from '../stores/uiStore'
+import type { ATUI } from '../stores/atStore'
 import { isValidMarketPrice, escHtml, el } from '../utils/dom'
 import { fmtNow, toast } from '../data/marketDataHelpers'
-import { fP } from '../utils/format'
+import { fmt, fP } from '../utils/format'
 import { _ZI } from '../constants/icons'
 import { STALL_GRACE_MS } from '../constants/trading'
 import { TabLeader } from '../services/tabLeader'
+import { api } from '../services/api'
 import { atSetStopLoss, atSetTakeProfit, liveApiPlaceOrder, liveApiSetLeverage } from '../trading/liveApi'
 import { getTimeUTC, getCurrentADX, isCurrentTimeOK, renderDHF } from '../ui/render'
 import { runPostMortem } from '../engine/postMortem'
@@ -29,25 +95,54 @@ import { runSignalScan } from '../engine/indicators'
 import { calcConfluenceScore } from '../engine/confluence'
 import { renderTradeMarkers } from '../data/marketDataOverlays'
 import { attachConfirmClose } from '../engine/events'
-import { closeLivePos, renderLivePositions , renderDemoPositions , getSymPrice } from '../data/marketDataPositions'
+import { closeLivePos, renderLivePositions , renderDemoPositions , getSymPrice, savePosSLTP } from '../data/marketDataPositions'
 import { onPositionOpened } from '../trading/positions'
 import { sendAlert } from '../data/marketDataWS'
 import { addTradeToJournal } from '../services/storage'
 import { liveApiSyncState } from '../trading/liveApi'
 import { closeDemoPos } from '../data/marketDataClose'
+import { playEntrySound } from '../ui/dom2'
 
 const w = window as any // kept for w.S self-ref (mode/profile/alerts), fn calls
+function _atUI(p: Partial<ATUI>) { useATStore.getState().patchUI(p) }
+
+// [Phase 6] BlockReason mirror-write helpers — brainStore canonical
+// blockReason kept in sync with backing w.BlockReason facade.
+// Backing .set/.clear keeps legacy UI updates (DOM + atLog);
+// store mirror publishes the typed canonical value to React consumers.
+function _setBR(code: string, text: string, source?: string): void {
+  w.BlockReason.set(code, text, source)
+  useBrainStore.getState().setBlockReason({ code, text })
+}
+function _clearBR(): void {
+  w.BlockReason.clear()
+  useBrainStore.getState().setBlockReason(null)
+}
 function _emitATChanged() { try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {} }
+
+// [S6-B5] Demo server-authority gate.
+// Blocks the client AT engine ONLY when the server has demo authority active
+// AND the user is currently in demo mode. Live/testnet/real are never gated
+// here — those remain client-driven until later roadmap gates (S8/S10/S11).
+// Inert today because the server-side demo authority flag is false by
+// default (and on disk), so window._serverATDemoEnabled stays false.
+function _isServerDemoATActive(): boolean {
+  try {
+    if (w._serverATDemoEnabled !== true) return false
+    const _mode = String(getATMode() || '').toLowerCase()
+    return _mode === 'demo'
+  } catch (_) {
+    return false
+  }
+}
 
 // AT UI helpers
 export function toggleAutoTrade(): void {
   if (getATKillTriggered()) {
-    toast('Kill switch activ — apasa butonul RESET din status sau asteapta', 0, _ZI.noent)
-    // Afiseaza butonul de reset daca nu e deja afisat
-    const st = el('atStatus')
-    if (st && !st.innerHTML.includes('data-action')) {
-      st.innerHTML = _ZI.siren + ` KILL ACTIV — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`
-      st.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch())
+    toast('Kill switch active — press RESET in status bar or wait', 0, _ZI.noent)
+    if (useATStore.getState().ui.status.action !== 'resetKill') {
+      var _lossExtra = (AT.killLoss && AT.killLimit) ? ` (loss $${(+AT.killLoss).toFixed(2)} / limit $${(+AT.killLimit).toFixed(2)})` : ''
+      _atUI({ status: { icon: 'siren', text: `KILL ACTIVE${_lossExtra}`, action: 'resetKill' } })
     }
     return
   }
@@ -79,18 +174,27 @@ function _continueAutoTradeEnable(): void {
     // Block without API keys
     if (!w._apiConfigured) {
       toast('Cannot enable AT in LIVE mode — API keys not configured. Go to Settings → Exchange API.', 0, _ZI.w)
-      const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.lock + ' EXEC LOCKED — Exchange not configured'
+      _atUI({ status: { icon: 'lock', text: 'EXEC LOCKED — Exchange not configured', action: null } })
       return
     }
     // [MODE-P4] Require explicit confirmation — wording matches resolved environment
     if (typeof _showConfirmDialog === 'function') {
-      var _atEnv = w._resolvedEnv || 'REAL'
+      var _atEnv = w._executionEnv
+      if (_atEnv === null) {
+        toast('LIVE MODE LOCKED: ' + (w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION' ? 'Invalid active API configuration' : 'No valid API credentials configured'), 3500, _ZI.lock)
+        return
+      }
       var _atTest = _atEnv === 'TESTNET'
+      // [Phase 12.A — Batch H cleanup] No more hardcoded "Binance" in AT
+      // enable confirm. Exchange label derived from useUiStore.activeExchange;
+      // null → neutral "your active exchange" fallback (honest, no lies).
+      var _atExch = useUiStore.getState().activeExchange
+      var _atExchLabel = _atExch === 'binance' ? 'BINANCE' : _atExch === 'bybit' ? 'BYBIT' : 'your active exchange'
       _showConfirmDialog(
         _atTest ? 'Enable AutoTrade in TESTNET Mode?' : 'Enable AutoTrade in LIVE Mode?',
         _atTest
-          ? 'You are about to enable AutoTrade on Binance TESTNET.\n\nThe system will automatically execute orders with TEST funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings are configured before proceeding.'
-          : 'You are about to enable AutoTrade while in LIVE mode.\n\nThe system will automatically execute REAL orders on Binance using REAL funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings, leverage, and position size are correctly configured before proceeding.',
+          ? 'You are about to enable AutoTrade on ' + _atExchLabel + ' TESTNET.\n\nThe system will automatically execute orders with TEST funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings are configured before proceeding.'
+          : 'You are about to enable AutoTrade while in LIVE mode.\n\nThe system will automatically execute REAL orders on ' + _atExchLabel + ' using REAL funds.\nStop-Loss and Take-Profit orders will be placed automatically.\n\nMake sure your risk settings, leverage, and position size are correctly configured before proceeding.',
         'Cancel', _atTest ? 'Enable Testnet AT' : 'Enable Live AT',
         function () { _doEnableAT() }
       )
@@ -103,12 +207,7 @@ function _continueAutoTradeEnable(): void {
 export function _doEnableAT(): void {
   var _newState = !getATEnabled()
   // [AT-TOGGLE-FIX] Server-authoritative toggle — call dedicated endpoint
-  fetch('/api/at/toggle', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ active: _newState })
-  }).then(function(r: any) { return r.json() }).then(function(data: any) {
+  api.raw<any>('POST', '/api/at/toggle', { active: _newState }).then(function(data: any) {
     if (!data.ok) {
       toast('AT toggle failed: ' + (data.error || 'Unknown error'), 3000, _ZI.x)
       return
@@ -123,12 +222,7 @@ export function _doEnableAT(): void {
 }
 
 export function _applyATToggleUI(enabled: any): void {
-  const btn = el('atMainBtn')
-  const dot = el('atBtnDot')
-  const txt = el('atBtnTxt')
-  const panel = el('atPanel')
   if (enabled) {
-    const _atGlobalMode = (typeof AT !== 'undefined' && getATMode()) ? getATMode() : 'demo'
     // FIX v118: reset zi dacă s-a schimbat data
     _bmResetDailyIfNeeded()
     // ── INIT: Recalculate daily counters from journal (no stale state) ──
@@ -137,23 +231,26 @@ export function _applyATToggleUI(enabled: any): void {
       try { return new Date(j.time || 0).toLocaleDateString('ro-RO', { timeZone: getTimezone() || 'Europe/Bucharest' }) === _todayRO } catch (_) { return false }
     })
     // FIX v118: numără DOAR trade-urile AutoTrade (nu Paper) pentru dailyTrades / closedTradesToday
-    const _jTodayAT = _jToday.filter((j: any) => j.autoTrade === true)
+    // [KILL-LOOP FIX] Skip entries closed BEFORE last kill reset — server zeros pnlAtReset, we mirror via killResetTs
+    const _resetAfter = +(AT.killResetTs || 0)
+    const _jTodayAT = _jToday.filter((j: any) => j.autoTrade === true && (!_resetAfter || (+(j.closedAt || 0) > _resetAfter)))
     AT.realizedDailyPnL = _jTodayAT.reduce((acc: any, j: any) => acc + (Number.isFinite(+j.pnl) ? +j.pnl : 0), 0)
     AT.closedTradesToday = _jTodayAT.length
     BM.dailyTrades = getATClosedToday()
     AT.dailyStart = new Date().toISOString().slice(0, 10)
+    // [KILL-LOOP FIX R5] Snapshot AT-enable timestamp. Positions opened before
+    // this point (e.g. old server-side AT positions from previous sessions)
+    // will NOT count toward the current session's kill unrealized PnL.
+    AT.enabledAt = Date.now()
     // [C3] Kill switch auto-clear REMOVED — require explicit user reset
     // Kill switch is cleared ONLY by: 1) resetKillSwitch() user action, 2) UTC day change (server-side)
     if (getATKillTriggered()) {
       AT.enabled = false
-      toast('Kill switch activ — apasă RESET sau așteaptă ziua următoare', 0, _ZI.noent)
+      toast('Kill switch active — press RESET or wait for next day', 0, _ZI.noent)
       return
     }
-    btn.className = 'at-main-btn on'
-    dot.style.background = 'var(--grn-bright)'; dot.style.boxShadow = '0 0 10px var(--grn-bright)'
-    txt.textContent = 'AUTO TRADE ON'
-    { const _oe = el('atStatus'); if (_oe) _oe.innerHTML = _ZI.dGrn + ' Activ — scan la 30s' }
-    atLog('info', `[AT] Auto Trade PORNIT. RealPnL azi: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
+    _atUI({ btnClass: 'at-main-btn on', dotBg: 'var(--grn-bright)', dotShadow: '0 0 10px var(--grn-bright)', btnText: 'AUTO TRADE ON', status: { icon: 'dGrn', text: 'Active — scan every 30s', action: null } })
+    atLog('info', `[AT] Auto Trade STARTED. RealPnL today: $${getATDailyPnL().toFixed(2)} | Trades: ${getATClosedToday()}`)
     if (!AT.interval) AT.interval = w.Intervals.set('atCheck', runAutoTradeCheck, 30000)
     // Recalculate signals + confluence BEFORE first AT check (avoids stale score=50)
     try { runSignalScan() } catch (_) {}
@@ -165,58 +262,68 @@ export function _applyATToggleUI(enabled: any): void {
         if (TP.liveBalance <= 0) {
           atLog('warn', '[WARN] LIVE balance = $0 after sync — AT blocked until balance confirmed')
           AT.enabled = false
-          const _oe2 = el('atStatus'); if (_oe2) _oe2.innerHTML = _ZI.x + ' Live balance = 0 — verifică API'
-          w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+          _atUI({ status: { icon: 'x', text: 'Live balance = 0 — check API', action: null } })
+          w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
         } else {
           atLog('info', '[BAL] LIVE balance synced: $' + TP.liveBalance.toFixed(2))
         }
       }).catch(function () {
         atLog('warn', '[WARN] Live balance sync failed at AT start — AT blocked')
         AT.enabled = false
-        const _oe3 = el('atStatus'); if (_oe3) _oe3.innerHTML = _ZI.x + ' Balance sync failed — AT blocked'
-        w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+        _atUI({ status: { icon: 'x', text: 'Balance sync failed — AT blocked', action: null } })
+        w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
       })
     }
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = true + push to server for cross-device sync
-    if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
+    // [MODE-RESTORE-FIX 2026-05-14] REMOVED `w._usScheduleSave()` — AT toggle
+    // state is NOT in SETTINGS_WHITELIST (server/routes/trading.js:512). AT
+    // enabled/atActive go via /api/at/toggle endpoint (server-authoritative,
+    // broadcast as at_update WS). user_settings is for trading CONFIG (lev,
+    // sl, rr, size, etc) which don't change on a toggle. Calling _usScheduleSave
+    // here triggered redundant POST /api/user/settings 800ms after every WS
+    // at_update reception (state.ts:1227 calls _applyATToggleUI as server-sync)
+    // → 409 cascade on multi-device. Comment "also push AT state via user-
+    // context" was misleading: user-context (/api/sync/user-context) is a
+    // different endpoint entirely.
     _emitATChanged()
   } else {
-    btn.className = 'at-main-btn off'
-    dot.style.background = 'var(--pur)'; dot.style.boxShadow = '0 0 6px var(--pur)'
-    txt.textContent = 'AUTO TRADE OFF'
-    { const _oe = el('atStatus'); if (_oe) _oe.textContent = 'Configureaza mai jos' }
-    atLog('warn', '[AT] Auto Trade OPRIT.')
-    w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+    _atUI({ btnClass: 'at-main-btn off', dotBg: 'var(--pur)', dotShadow: '0 0 6px var(--pur)', btnText: 'AUTO TRADE OFF', status: { icon: null, text: 'Configure below', action: null } })
+    atLog('warn', '[AT] Auto Trade STOPPED.')
+    w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
     w.atUpdateBanner(); w.ptUpdateBanner()
     w.ZState.save()  // persist AT.enabled = false + push to server for cross-device sync
-    if (typeof w._usScheduleSave === 'function') w._usScheduleSave() // also push AT state via user-context
+    // [MODE-RESTORE-FIX 2026-05-14] REMOVED `w._usScheduleSave()` — see comment
+    // în the `if (enabled)` branch above. Same rationale: AT state is not in
+    // SETTINGS_WHITELIST; toggle doesn't change settings config; redundant POST
+    // triggered 409 cascade pe WS-driven sync path.
     _emitATChanged()
   }
 }
 
 export function updateATMode(): void {
-  // [MODE-P4] AT mode UI — uses resolved environment
   const mode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  AT.mode = mode
-  const lbl = el('atModeLabel')
-  const warn = el('atLiveWarn')
-  const disp = el('atModeDisplay')
-  var _env = w._resolvedEnv || (mode === 'demo' ? 'DEMO' : 'REAL')
+  AT.mode = mode as 'demo' | 'live'
+  var _env = w._executionEnv
   if (mode === 'live') {
     var _isTest = _env === 'TESTNET'
-    var _col = _isTest ? 'var(--gold)' : 'var(--red-bright)'
-    var _colDim = _isTest ? '#f0c04044' : '#ff444444'
-    var _ico = _isTest ? _ZI.dYlw : _ZI.dRed
-    var _short = _isTest ? 'TESTNET' : 'LIVE'
-    var _long = _isTest ? 'TESTNET MODE' : 'LIVE MODE'
-    if (lbl) { lbl.innerHTML = _ico + ' ' + _short; lbl.style.color = _col }
-    if (warn) warn.style.display = 'block'
-    if (disp) { disp.innerHTML = _ico + ' ' + _long; disp.style.color = _col; disp.style.borderColor = _colDim }
+    var _isLocked = _env === null
+    var _col = _isTest ? 'var(--gold)' : (_isLocked ? 'var(--orange)' : 'var(--red-bright)')
+    var _colDim = _isTest ? '#f0c04044' : (_isLocked ? '#ff880044' : '#ff444444')
+    var _short = _isTest ? 'TESTNET' : (_isLocked ? 'LOCKED' : 'LIVE')
+    var _long = _isTest ? 'TESTNET MODE' : (_isLocked ? 'LIVE MODE LOCKED' : 'LIVE MODE')
+    var _icoKind: 'dYlw' | 'dRed' = _isTest ? 'dYlw' : 'dRed'
+    _atUI({
+      modeLabel: { icon: _icoKind, text: _short, color: _col },
+      modeDisplay: { icon: _icoKind, text: _long, lockSuffix: false, color: _col, border: _colDim },
+      liveWarnVisible: true,
+    })
   } else {
-    if (lbl) { lbl.innerHTML = _ZI.pad + ' DEMO'; lbl.style.color = 'var(--pur)' }
-    if (warn) warn.style.display = 'none'
-    if (disp) { disp.innerHTML = _ZI.pad + ' DEMO MODE'; disp.style.color = 'var(--pur)'; disp.style.borderColor = '#aa44ff44' }
+    _atUI({
+      modeLabel: { icon: 'pad', text: 'DEMO', color: 'var(--pur)' },
+      modeDisplay: { icon: 'pad', text: 'DEMO MODE', lockSuffix: false, color: 'var(--pur)', border: '#aa44ff44' },
+      liveWarnVisible: false,
+    })
   }
 }
 
@@ -235,16 +342,7 @@ export function atLog(type: any, msg: any): void {
 }
 
 export function renderATLog(): void {
-  const c = el('atLog'); if (!c) return
-  c.innerHTML = AT.log.map((l: any) => {
-    const _time = escHtml(l.time)
-    const _msg = escHtml(l.msg)
-    const _type = escHtml(l.type)
-    return `<div class="at-log-row">
-    <span class="at-log-time">${_time}</span>
-    <span class="at-log-msg ${_type}">${_msg}</span>
-  </div>`
-  }).join('')
+  _atUI({ logEntries: AT.log.map((l: any) => ({ time: String(l.time), type: String(l.type), msg: String(l.msg) })) })
 }
 
 export function updateATStats(): void {
@@ -265,36 +363,30 @@ export function updateATStats(): void {
   const dailyPnl = ss ? (ss.dailyPnL || 0) : AT.dailyPnL
   const trades = ss ? (ss.entries || 0) : AT.totalTrades
 
-  const pnlEl = el('atTotalPnL')
-  const wrEl = el('atWinRate')
-  const dlEl = el('atDailyLoss')
-  const trEl = el('atTotalTrades')
-  const balEl = el('atBalance')
-  if (trEl) trEl.textContent = trades
-  if (wrEl) { wrEl.textContent = tot ? wr + '%' : '—'; wrEl.style.color = wr >= 55 ? 'var(--grn)' : wr >= 40 ? 'var(--ylw)' : 'var(--red)' }
-  if (pnlEl) { pnlEl.textContent = (totalPnL >= 0 ? '+' : '') + '$' + totalPnL.toFixed(0); pnlEl.style.color = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)' }
-  if (dlEl) {
-    dlEl.textContent = (dailyPnl >= 0 ? '+' : '-') + '$' + Math.abs(dailyPnl).toFixed(0)
-    dlEl.style.color = dailyPnl < 0 ? 'var(--red)' : 'var(--grn)'
-    var _dlLabel = el('atDailyLabel')
-    if (_dlLabel) _dlLabel.textContent = dailyPnl >= 0 ? 'DAILY WIN' : 'DAILY LOSS'
+  const uiPatch: Partial<ATUI> = {
+    totalTradesText: String(trades),
+    winRateText: tot ? wr + '%' : '\u2014',
+    winRateColor: wr >= 55 ? 'var(--grn)' : wr >= 40 ? 'var(--ylw)' : 'var(--red)',
+    totalPnLText: (totalPnL >= 0 ? '+' : '') + '$' + totalPnL.toFixed(0),
+    totalPnLColor: totalPnL >= 0 ? 'var(--grn)' : 'var(--red)',
+    dailyLossText: (dailyPnl >= 0 ? '+' : '-') + '$' + Math.abs(dailyPnl).toFixed(0),
+    dailyLossColor: dailyPnl < 0 ? 'var(--red)' : 'var(--grn)',
+    dailyLabel: dailyPnl >= 0 ? 'DAILY WIN' : 'DAILY LOSS',
   }
-  // [v3] Mode-aware balance display
-  if (balEl) {
-    if (_gm === 'live') {
-      if (w._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) {
-        balEl.textContent = '$' + TP.liveBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })
-        balEl.style.color = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)'
-      } else {
-        balEl.textContent = 'Exchange not configured'
-        balEl.style.color = 'var(--dim)'
-      }
+  if (_gm === 'live') {
+    if (w._apiConfigured && typeof TP !== 'undefined' && TP.liveBalance > 0) {
+      uiPatch.balanceText = '$' + TP.liveBalance.toLocaleString('en-US', { maximumFractionDigits: 0 })
+      uiPatch.balanceColor = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)'
     } else {
-      var balance = (typeof TP !== 'undefined') ? (TP.demoBalance || 10000) : 10000
-      balEl.textContent = '$' + balance.toLocaleString('en-US', { maximumFractionDigits: 0 })
-      balEl.style.color = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)'
+      uiPatch.balanceText = 'Exchange not configured'
+      uiPatch.balanceColor = 'var(--dim)'
     }
+  } else {
+    var balance = (typeof TP !== 'undefined') ? (TP.demoBalance || 10000) : 10000
+    uiPatch.balanceText = '$' + balance.toLocaleString('en-US', { maximumFractionDigits: 0 })
+    uiPatch.balanceColor = totalPnL >= 0 ? 'var(--grn)' : 'var(--red)'
   }
+  _atUI(uiPatch)
 }
 
 // ─── CONDITION CHECKER ─────────────────────────────────────────
@@ -306,7 +398,15 @@ export function checkATConditions(): any {
   const sigMin = getTCSignalMin() // TC.sigMin bridge — no dedicated getter yet
 
   // 1. Confluence Score — read from canonical BM state, not DOM
-  const score = (typeof BM !== 'undefined' && Number.isFinite(BM.confluenceScore)) ? BM.confluenceScore : 50
+  const _bmScoreReady = typeof BM !== 'undefined' && Number.isFinite(BM.confluenceScore)
+  const score = _bmScoreReady ? BM.confluenceScore : 50
+  if (!_bmScoreReady) {
+    const _bmWarnTs = (AT as any)._bmFallbackWarnTs || 0
+    if (Date.now() - _bmWarnTs > 60000) {
+      ;(AT as any)._bmFallbackWarnTs = Date.now()
+      try { console.warn('[AT/BM] confluenceScore not ready — using neutral fallback 50') } catch (_) {}
+    }
+  }
   const isBull = score >= confMin
   const isBear = score <= (100 - confMin)
   setCondUI('atCondConf', isBull || isBear, isBull ? 'BULL ' + score : isBear ? 'BEAR ' + score : score + ' (neutru)')
@@ -341,11 +441,10 @@ export function checkATConditions(): any {
     : (TP.livePositions || []).filter((p: any) => p.autoTrade)
   const dir = isBull ? 'LONG' : 'SHORT'
   const hasOpposite = autoPositions.some((p: any) => (dir === 'LONG' && p.side === 'SHORT') || (dir === 'SHORT' && p.side === 'LONG'))
-  setCondUI('atCondOpp', !hasOpposite, hasOpposite ? 'Pozitie opusa activa' : 'OK')
+  setCondUI('atCondOpp', !hasOpposite, hasOpposite ? 'Opposite position active' : 'OK')
 
   // 7. Magnet alignment bonus
-  const magnetBias = getMagnetBias() || 'neut'
-  const magnetOk = (isBull && magnetBias === 'bull') || (isBear && magnetBias === 'bear') || magnetBias === 'neut'
+  void getMagnetBias()
   // Not a hard block, but logged
 
   // Max positions check — read from TC.maxPos (source: atMaxPos)
@@ -362,12 +461,37 @@ export function checkATConditions(): any {
 
   const allOk = (isBull || isBear) && sigOk && stOk && adxOk && hourOk && !hasOpposite && posOk && coolOk
 
+  // [AUDIT-L1] Diagnostic: build list of gates that blocked this tick (no behavior change)
+  const _blockReasons: string[] = []
+  if (!(isBull || isBear)) _blockReasons.push(`conf=${score}(need ${confMin}+ or ${100 - confMin}-)`)
+  if (!sigOk) _blockReasons.push(`sig=${Math.max(bullCount, bearCount)}/${sigMin}`)
+  if (!stOk) _blockReasons.push('st=no-flip')
+  if (!adxOk) _blockReasons.push(`adx=${adxVal}<18`)
+  if (!hourOk) _blockReasons.push(`hour=${String(curHour2).padStart(2, '0')}UTC WR${hourWR2}%`)
+  if (hasOpposite) _blockReasons.push('opp=open')
+  if (!posOk) _blockReasons.push(symAlreadyOpen ? 'pos=sym-already-open' : `pos=${openAuto}/${maxPos}`)
+  if (!coolOk) _blockReasons.push(`cool=${Math.max(0, Math.round((AT.cooldownMs - (nowTs - Math.max(getATLastTradeTs(), _symCd))) / 1000))}s`)
+  AT._lastBlockReason = _blockReasons.join(' | ')
+  AT._lastBlockTs = nowTs
+  // Throttled log: emit only if AT enabled, blocked, and reasons changed OR 60s since last log
+  if (!allOk && getATEnabled()) {
+    const _rk = _blockReasons.join('|')
+    const _lastLogged = AT._lastBlockLogKey
+    const _lastLoggedTs = AT._lastBlockLogTs || 0
+    if (_rk !== _lastLogged || (nowTs - _lastLoggedTs) > 60000) {
+      atLog('info', `[AT-BLOCK] ${_blockReasons.join(' | ')}`)
+      AT._lastBlockLogKey = _rk
+      AT._lastBlockLogTs = nowTs
+    }
+  }
+
   const _atResult = {
     allOk,
     isBull: isBull && sigDir === 'bull',
     isBear: isBear && sigDir === 'bear',
     score, bullCount, bearCount,
-    stDir, posOk, coolOk, adxOk, hourOk
+    stDir, posOk, coolOk, adxOk, hourOk,
+    blockReasons: _blockReasons
   }
   // [P0.4] Decision log — AT gate check
   if (typeof w.DLog !== 'undefined') w.DLog.record('at_gate', _atResult)
@@ -375,9 +499,10 @@ export function checkATConditions(): any {
 }
 
 export function setCondUI(id: any, ok: any, txt: any): void {
-  const e = el(id); if (!e) return
-  e.textContent = txt
-  e.className = 'at-cond-val ' + (ok ? 'ok' : 'fail')
+  const cls = 'at-cond-val ' + (ok ? 'ok' : 'fail')
+  if (id === 'atCondConf') _atUI({ condConf: txt, condConfClass: cls })
+  else if (id === 'atCondSig') _atUI({ condSig: txt, condSigClass: cls })
+  else { const e = el(id); if (e) { e.textContent = txt; e.className = cls } }
 }
 
 
@@ -428,7 +553,7 @@ export function computeFusionDecision(): any {
   let prob: any = null
   try {
     if (typeof computeProbScore === 'function') {
-      const r = computeProbScore()
+      const r: any = (computeProbScore as any)()
       if (Number.isFinite(+r)) prob = +r
       else if (r && Number.isFinite(+r.score)) prob = +r.score
       else if (r && Number.isFinite(+r.confidence)) prob = +r.confidence
@@ -521,19 +646,38 @@ export function computeFusionDecision(): any {
 
 // Main AT check loop
 export function runAutoTradeCheck(): void {
+  // [FIX #7] Invariant check — detect legacy w.AT.enabled vs useATStore drift.
+  // Reconcile silently (store is canonical) and log when we see it.
+  try {
+    const _legacyEnabled = !!AT.enabled
+    const _storeEnabled = !!useATStore.getState().enabled
+    if (_legacyEnabled !== _storeEnabled) {
+      const _driftTs = (AT as any)._enabledDriftWarnTs || 0
+      if (Date.now() - _driftTs > 60000) {
+        ;(AT as any)._enabledDriftWarnTs = Date.now()
+        try { console.warn('[AT/STORE-DRIFT] legacy=' + _legacyEnabled + ' store=' + _storeEnabled + ' — forcing re-sync event') } catch (_) {}
+        try { window.dispatchEvent(new CustomEvent('zeus:atStateChanged')) } catch (_) {}
+      }
+    }
+  } catch (_) {}
   // [AT-UNIFY] Server is source of truth — skip client AT engine
   if (w._serverATEnabled) {
     // Update AT conditions UI from server state so panel doesn't appear frozen
     try {
-      var _se = function(id: any, ok: any) { var e = el(id); if (e) { e.textContent = ok ? 'OK' : '—'; e.className = ok ? 'atcond-ok' : 'atcond-fail' } }
-      _se('atCondConf', true) // Server handles gates — show as delegated
-      _se('atCondSig', true)
+      var _se = function(id: any, ok: any) { var e = el(id); if (e) { e.textContent = ok ? 'OK' : '\u2014'; e.className = ok ? 'atcond-ok' : 'atcond-fail' } }
+      _atUI({ condConf: 'OK', condConfClass: 'at-cond-val ok', condSig: 'OK', condSigClass: 'at-cond-val ok' })
       _se('atCondST', true)
       _se('atCondADX', true)
       _se('atCondHour', true)
       _se('atCondOpp', true)
-      var _oe = el('atStatus')
-      if (_oe && getATEnabled()) _oe.innerHTML = '<span style="color:#00d4ff">SERVER AT ACTIVE</span> — brain controls execution'
+      if (getATEnabled()) _atUI({ status: { icon: null, text: 'SERVER AT ACTIVE — brain controls execution', action: null } })
+    } catch (_) {}
+    return
+  }
+  // [S6-B5] Server has demo authority for this user — skip client AT engine in demo
+  if (_isServerDemoATActive()) {
+    try {
+      if (getATEnabled()) _atUI({ status: { icon: null, text: 'SERVER AT ACTIVE (demo) — brain controls execution', action: null } })
     } catch (_) {}
     return
   }
@@ -547,18 +691,71 @@ export function runAutoTradeCheck(): void {
   if (!getATEnabled() || getATKillTriggered()) return
   AT.running = true
   try {
+    // [Phase 2 S3.1g] FUSION_CACHE + PRIMARY parity POST — moved ABOVE all
+    // execution-safety gates (EXEC_LOCKED / DATA_STALL / _isExecAllowed /
+    // KILL switch). Parity harness is shadow-only diagnostic that never
+    // touches order paths; gating it on production execution-safety made
+    // PRIMARY emit collapse to ~0 whenever a tab lost focus (browser
+    // throttle → WS stall → DATA_STALL gate → runAutoTradeCheck early-return),
+    // even though server brain emits unconditionally — biasing the parity
+    // sample. Server-side accepts only when MF.PARITY_SHADOW_ENABLED so this
+    // remains zero-impact in production. Original location: after KILL
+    // switch (around former line 664).
+    try {
+      if (typeof computeFusionDecision === 'function') {
+        const _fcRaw = computeFusionDecision()
+        w.FUSION_CACHE = {
+          ts: Date.now(),
+          dir: _fcRaw.dir || 'neutral',
+          decision: _fcRaw.decision || 'NO_TRADE',
+          confidence: _fcRaw.confidence || 0,
+          score: _fcRaw.score || 0,
+        }
+        try {
+          const _sym = getSymbol()
+          if (_sym) {
+            api.raw<any>('POST', '/api/brain/parity/client', {
+              symbol: _sym,
+              dir: _fcRaw.dir || 'neutral',
+              decision: _fcRaw.decision || 'NO_TRADE',
+              confidence: _fcRaw.confidence != null ? _fcRaw.confidence : 0,
+              score: _fcRaw.score != null ? _fcRaw.score : 0,
+              reasons: Array.isArray(_fcRaw.reasons) ? _fcRaw.reasons.slice(0, 8) : [],
+              ts: Date.now(),
+            }).catch(() => { /* parity harness is best-effort */ })
+          }
+        } catch (_) { /* api missing — silent */ }
+      }
+    } catch (_fcErr: any) { try { console.warn('[AT/FUSION_CACHE]', _fcErr?.message || _fcErr) } catch (_) {} /* non-blocking */ }
+
+    // [Phase 6C] Per-tick live execution-env gate.
+    // Toggle-time gate (L96–121) prevents enabling AT without valid creds, but
+    // if env becomes invalid mid-session (creds revoked, mode flipped to live
+    // after a lock, exchangeMode change), runAutoTradeCheck would keep firing
+    // live orders until Binance rejects them. Close that window here.
+    if (getATMode() === 'live' && (w._executionEnv === null || !w._apiConfigured)) {
+      const _reason = w._executionBlockedReason === 'INVALID_ACTIVE_API_CONFIGURATION'
+        ? 'Invalid active API configuration'
+        : (!w._apiConfigured ? 'API keys not configured' : 'Execution env locked')
+      _setBR('EXEC_LOCKED', 'AT paused — ' + _reason, 'autoCheck')
+      const _lastTs = (AT as any)._execLockLogTs || 0
+      if (Date.now() - _lastTs > 30000) {
+        ;(AT as any)._execLockLogTs = Date.now()
+        atLog('warn', '[EXEC_LOCKED] Live AT tick aborted — ' + _reason)
+      }
+      _atUI({ status: { icon: 'lock', text: 'AT paused — ' + _reason, action: null } })
+      return
+    }
     // B: Data stall grace period check BEFORE exec lock
     if (!isDataOkForAutoTrade()) {
-      w.BlockReason.set('DATA_STALL', 'Data stalled > 10s — AT paused', 'autoCheck')
+      _setBR('DATA_STALL', 'Data stalled > 10s — AT paused', 'autoCheck')
       return
     }
     // Safety engine check
     const [_execOk, _execReason] = _isExecAllowed()
     if (!_execOk) { atLog('wait', `[WAIT] AT wait: ${_execReason}`); return }
 
-    // Reset daily P&L if new day
-    const today = new Date().toISOString().slice(0, 10)
-    // Use server day if synced, else local
+    // Reset daily P&L if new day — use server day if synced, else local
     const _serverDay = w._SAFETY.storedDayId ? w._SAFETY.storedDayId : 0
     const _localDay = new Date().toISOString().slice(0, 10)
     if (AT.dailyStart !== _localDay || (_serverDay && _serverDay !== w._SAFETY._prevServerDay)) {
@@ -569,7 +766,7 @@ export function runAutoTradeCheck(): void {
     }
 
     // ── KILL SWITCH — realized + unrealized loss ──
-    const killPct = parseFloat(el('atKillPct')?.value) || 5
+    const killPct = parseFloat(el('atKillPct')?.value || '') || 5
     // [FIX BUG2] No phantom $10k fallback — skip kill check if balance unknown (consistent with checkKillThreshold)
     const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
     if (bal <= 0) { /* skip inline kill check — checkKillThreshold handles it when balance loads */ }
@@ -581,7 +778,7 @@ export function runAutoTradeCheck(): void {
       const _p = _openList2[i]
       if (_p.closed || _p.status === 'closing') continue
       const _cur = getSymPrice(_p)
-      if (_cur > 0 && _p.entry > 0) {
+      if (_cur != null && _cur > 0 && _p.entry > 0) {
         // [PATCH P1-6] Use _safePnl for consistency
         const _diff2 = _cur - _p.entry
         _unrealPnL2 += _safePnl(_p.side, _diff2, _p.entry, _p.size || 0, _p.lev || 1, true)
@@ -595,6 +792,10 @@ export function runAutoTradeCheck(): void {
       triggerKillSwitch('daily_loss', _totalDayPnL2, _closedToday, killPct, bal)
       return
     }
+
+    // [v119-p7 / S3.1g] FUSION_CACHE + PRIMARY parity POST — moved earlier in
+    // runAutoTradeCheck (above EXEC_LOCKED / DATA_STALL / _isExecAllowed /
+    // KILL gates). See the [Phase 2 S3.1g] block right after `try {` above.
 
     // Multi-symbol mode: scan all symbols
     const multiOn = el('atMultiSym')?.checked !== false
@@ -611,21 +812,6 @@ export function runAutoTradeCheck(): void {
       const _dir2 = cond.isBull ? 'bull' : cond.isBear ? 'bear' : 'neut'
       atLog('info', 'AT_SCAN ' + (getSymbol() || '').replace('USDT', '') + ' score=' + cond.score + ' dir=' + _dir2)
     }
-
-    // [v119-p7] FUSION_CACHE — actualizat la FIECARE tick, citit de ML vizual (read-only)
-    // Separat de FUSION_LAST (care se scrie doar pe semnal). Nu afectează sizing/trade/DSL.
-    try {
-      if (typeof computeFusionDecision === 'function') {
-        const _fcRaw = computeFusionDecision()
-        w.FUSION_CACHE = {
-          ts: Date.now(),
-          dir: _fcRaw.dir || 'neutral',
-          decision: _fcRaw.decision || 'NO_TRADE',
-          confidence: _fcRaw.confidence || 0,
-          score: _fcRaw.score || 0,
-        }
-      }
-    } catch (_) { /* silent — nu blochează AT */ }
 
     if (!cond.allOk) {
       // [PATCH B3] AT_BLOCK log with context
@@ -645,28 +831,30 @@ export function runAutoTradeCheck(): void {
       }
       // Update status
       const reasons: any[] = []
-      if (!cond.posOk) reasons.push('max pozitii atins')
+      if (!cond.posOk) reasons.push('max positions reached')
       if (!cond.coolOk) reasons.push('cooldown')
-      { const _oe2 = el('atStatus'); if (_oe2) _oe2.innerHTML = reasons.length ? _ZI.timer + ' Wait: ' + escHtml(reasons.join(', ')) : _ZI.mag + ' Scan... conditii neatinse' }
+      _atUI({ status: reasons.length
+        ? { icon: 'timer', text: 'Wait: ' + reasons.join(', '), action: null }
+        : { icon: 'mag', text: 'Scan... conditions not met', action: null } })
       return
     }
 
     // All conditions met — clear any stale block reason
-    w.BlockReason.clear()
+    _clearBR()
     w.ZState.scheduleSave()
 
     // AT gates execution — if AT OFF, scan still shows signals but no trade
     if (!getATEnabled()) {
       const _sigDir = cond.isBull ? 'LONG' : 'SHORT'
       atLog('info', `[SCAN] Signal ${_sigDir} (score:${cond.score}) but AT OFF — no execution`)
-      { const _oe3 = el('atStatus'); if (_oe3) _oe3.innerHTML = _ZI.mag + ' Signal found — AT OFF' }
+      _atUI({ status: { icon: 'mag', text: 'Signal found \u2014 AT OFF', action: null } })
       return
     }
 
     // [FIX BUG1] Guard: confluence/signal direction disagree → no clear direction, skip
     if (!cond.isBull && !cond.isBear) {
       atLog('info', 'AT_SKIP ' + (getSymbol() || '').replace('USDT', '') + ' confluence/signal disagree — no clear direction')
-      { const _oe4 = el('atStatus'); if (_oe4) _oe4.innerHTML = _ZI.mag + ' Confluence/semnale conflict — skip' }
+      _atUI({ status: { icon: 'mag', text: 'Confluence/signals conflict \u2014 skip', action: null } })
       return
     }
 
@@ -680,7 +868,7 @@ export function runAutoTradeCheck(): void {
       if (typeof w.DLog !== 'undefined') w.DLog.record('at_signal', { sym: getSymbol(), side: side, conf: _sConf, score: cond.score, phase: _sPh })
     }
     atLog(side === 'LONG' ? 'buy' : 'sell',
-      `[SIGNAL] SEMNAL ${side} confirmat! Score:${cond.score} | ${Math.max(cond.bullCount, cond.bearCount)} semnale | ST:${cond.stDir} | Magnet:${getMagnetBias() || 'neut'}`)
+      `[SIGNAL] SIGNAL ${side} confirmed! Score:${cond.score} | ${Math.max(cond.bullCount, cond.bearCount)} signals | ST:${cond.stDir} | Magnet:${getMagnetBias() || 'neut'}`)
 
     // ── FUSION BRAIN v1 — final arbiter before exec ──────────────
     try {
@@ -699,12 +887,12 @@ export function runAutoTradeCheck(): void {
         }
         if (_fd.decision === 'NO_TRADE') {
           w._FUSION_VETO = true
-          w.BlockReason.set('FUSION', 'Fusion Brain: NO_TRADE (' + _fd.confidence + '%) — ' + (_fd.reasons || []).slice(0, 2).join(', '), 'fusionBrain')
+          _setBR('FUSION', 'Fusion Brain: NO_TRADE (' + _fd.confidence + '%) — ' + (_fd.reasons || []).slice(0, 2).join(', '), 'fusionBrain')
           return
         }
         w._FUSION_VETO = false
       }
-    } catch (_fb_err) { /* fusion non-blocking */ }
+    } catch (_fb_err: any) { try { console.warn('[AT/FUSION_LAST]', _fb_err?.message || _fb_err) } catch (_) {} /* fusion non-blocking */ }
     // ─────────────────────────────────────────────────────────────
 
     placeAutoTrade(side, cond)
@@ -717,9 +905,11 @@ export function runAutoTradeCheck(): void {
 export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): void {
   // [AT-UNIFY] Server handles all trade placement
   if (w._serverATEnabled) { atLog('info', '[LOCKED] Server AT active — client trade blocked'); return }
+  // [S6-B5] Server has demo authority for this user — refuse client demo placement
+  if (_isServerDemoATActive()) { atLog('info', '[LOCKED] Server demo AT active — client demo trade blocked'); return }
   // ── KILL SWITCH: check before exec (2. kill timing) ──────────
   if (getATKillTriggered()) {
-    w.BlockReason.set('KILL_SWITCH', 'Kill switch activ — AT blocat', 'placeAutoTrade')
+    _setBR('KILL_SWITCH', 'Kill switch active — AT blocked', 'placeAutoTrade')
     return
   }
   // [FIX C5] Prevent re-entrant live execution
@@ -728,15 +918,22 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     return
   }
   if (BM?.protectMode) {
-    w.BlockReason.set('PROTECT_MODE', BM.protectReason || 'Protect mode activ', 'placeAutoTrade')
+    _setBR('PROTECT_MODE', BM.protectReason || 'Protect mode active', 'placeAutoTrade')
     return
   }
 
   // [DSL MODE GUARD] Auto-fallback to 'atr' if not set (prevents silent permanent block)
   if (!getDSLMode()) {
     w.DSL.mode = 'atr'
-    atLog('info', '[INFO] DSL mode auto-set to ATR (default)')
-    try { localStorage.setItem('zeus_dsl_mode', 'atr') } catch (_) { }
+    atLog('warn', '[DSL] Mode was unset — auto-fell back to ATR (default). Set DSL mode explicitly in panel to avoid surprise.')
+    try { console.warn('[AT/DSL] Mode auto-fallback to ATR — user had no mode set') } catch (_) { }
+    // [BATCH3-U] Scoped to the active user — previously wrote the global key,
+    // which cross-contaminated sessions on shared browsers.
+    try {
+      const _uid = (w as any)._zeusUserId
+      const _key = _uid ? 'zeus_dsl_mode:' + _uid : 'zeus_dsl_mode'
+      localStorage.setItem(_key, 'atr')
+    } catch (_) { }
   }
 
   // [p19 PREDATOR VETO]
@@ -744,7 +941,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Block trades when NOT in KILL (clear) state
   if (typeof PREDATOR !== 'undefined' && PREDATOR.state !== 'KILL') {
     var _pr = 'PREDATOR ' + PREDATOR.state + ' [' + PREDATOR.reason + ']'
-    w.BlockReason.set('PREDATOR', _pr, 'placeAutoTrade')
+    _setBR('PREDATOR', _pr, 'placeAutoTrade')
     atLog('warn', '[PREDATOR] VETO: ' + PREDATOR.state + ' / ' + PREDATOR.reason)
     return
   }
@@ -760,7 +957,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       const _utcHour = getTimeUTC().hour                    // lookup UTC — consistent cu DHF
       const _wrVal = w.DHF.hours?.[_utcHour]?.wr
       if (typeof _wrVal === 'number' && _wrVal < _wrCfg.minWR) {
-        w.BlockReason.set('WR_FILTER', 'WR ' + _wrVal + '% < ' + _wrCfg.minWR + '% @ UTC' + String(_utcHour).padStart(2, '0') + 'h', 'placeAutoTrade')
+        _setBR('WR_FILTER', 'WR ' + _wrVal + '% < ' + _wrCfg.minWR + '% @ UTC' + String(_utcHour).padStart(2, '0') + 'h', 'placeAutoTrade')
         if (!AT._wrLogTs || (Date.now() - AT._wrLogTs) > _wrCfg.warnEveryMs) {
           AT._wrLogTs = Date.now()
           const _roH = typeof w.getRoTime === 'function' ? w.getRoTime().hh : _utcHour
@@ -769,20 +966,20 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         return
       }
     }
-  } catch (_wrE) { /* non-blocking — nu oprim execuția dacă filtrul crapă */ }
+  } catch (_wrE: any) { try { console.warn('[AT/WR_FILTER]', _wrE?.message || _wrE) } catch (_) {} /* non-blocking — nu oprim execuția dacă filtrul crapă */ }
   // === /WR FILTER ===
   const _snap = typeof w.buildExecSnapshot === 'function' ? w.buildExecSnapshot(side, cond) : null
   // [PATCH1 B1] buildExecSnapshot returns null if price invalid — reject early
   if (!_snap) {
-    w.BlockReason.set('INVALID_PRICE', 'Snapshot rejected — preț invalid', 'placeAutoTrade')
+    _setBR('INVALID_PRICE', 'Snapshot rejected — invalid price', 'placeAutoTrade')
     atLog('warn', '[FAIL] buildExecSnapshot rejected (price invalid)'); return
   }
   // Use snapshot values exclusively — never re-read global state
   const sym = _sym || _snap.symbol
   const entry = _price || _snap.price
   if (!isValidMarketPrice(entry)) {
-    w.BlockReason.set('INVALID_PRICE', 'Preț invalid la exec', 'placeAutoTrade')
-    atLog('warn', '[FAIL] Nu am pret curent la exec'); return
+    _setBR('INVALID_PRICE', 'Invalid price at exec', 'placeAutoTrade')
+    atLog('warn', '[FAIL] No current price at exec'); return
   }
   // [FIX H2] Dedup: reject if same symbol already has open AT position
   const _existingPos = (getATMode() === 'demo' ? (TP.demoPositions || []) : (TP.livePositions || []))
@@ -812,8 +1009,36 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Conviction × Danger sizing multiplier (Adaptive Shield)
   const _convDangerMult = (typeof BM !== 'undefined' && Number.isFinite(BM.convictionMult)) ? BM.convictionMult : 1.0
   if (_convDangerMult <= 0) {
-    w.BlockReason.set('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
+    _setBR('CONVICTION_LOW', 'Conviction ' + (BM.conviction || 0) + '% / Danger ' + (BM.danger || 0) + ' — trade skipped', 'placeAutoTrade')
     atLog('warn', '[SHIELD] conviction=' + (BM.conviction || 0) + '% danger=' + (BM.danger || 0) + ' mult=0 → SKIP')
+    // [L1-SHIELD-DIAG] Throttled breakdown: show WHY conviction is low (60s dedup by signature)
+    // [R34] Dropped redundant `(w as any)` / `(BM as any)` casts — both are
+    // already typed `any` at import time (core/config.ts:BM, line 43 above:w).
+    try {
+      const _bd: any = BM._convictionBreakdown || null
+      const _fg: any[] = BM._entryFailedGates || []
+      if (_bd) {
+        const _sig = 'es=' + _bd.entryScore + '|atm=' + _bd.atmPart + '|mtf=' + _bd.mtfPart + '|ofi=' + _bd.ofiPart + '|sig=' + _bd.sigPart + '|fg=' + _fg.join(',')
+        const _lastSig = w._lastShieldDiagSig
+        const _lastTs = w._lastShieldDiagTs || 0
+        const _now = Date.now()
+        if (_sig !== _lastSig || (_now - _lastTs) > 60000) {
+          w._lastShieldDiagSig = _sig
+          w._lastShieldDiagTs = _now
+          const parts = [
+            '[SHIELD-DIAG] dir=' + _bd.dir,
+            'entryScore=' + _bd.entryScore + '(→' + _bd.entryPart + '/40)',
+            'atm=' + _bd.atmConf + '(→' + _bd.atmPart + '/15)',
+            'mtf1h=' + _bd.mtf1h + '/4h=' + _bd.mtf4h + '(→' + _bd.mtfPart + '/15)',
+            'ofi=' + _bd.ofi + '(→' + _bd.ofiPart + ')',
+            'sig=' + _bd.sigBull + 'b/' + _bd.sigBear + 's(→' + _bd.sigPart + '/5)',
+            'danger=' + _bd.danger,
+          ]
+          if (_fg.length) parts.push('failed_gates=[' + _fg.join(',') + ']')
+          atLog('info', parts.join(' | '))
+        }
+      }
+    } catch (_) { /* diag never throws */ }
     return
   }
   const _sizeMult = ((BM.adapt && BM.adapt.enabled) ? (BM.positionSizing && BM.positionSizing.finalMult ? BM.positionSizing.finalMult : 1) : 1) * _fusionMult * _convDangerMult
@@ -848,10 +1073,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
   // Check entry price sanity (slippage guard)
   // [v105 FIX Bug4] slipPct din _snap — consistent cu restul valorilor atomice
   // [v119-p15] eliminat DOM fallback (|| el('atSL')) — _snap.slPct e mereu >= 0.1 (clamped în buildExecSnapshot)
-  const slipPct = _snap.slPct
   // [FIX P14] totalTrades++ AFTER all early validation returns (including price check)
   if (!entry || entry <= 0) {
-    atLog('warn', '[BLOCK] EXEC FAIL-SAFE: preț invalid → PROTECT activat')
+    atLog('warn', '[BLOCK] EXEC FAIL-SAFE: invalid price → PROTECT activated')
     BM.protectMode = true; BM.protectReason = 'BLOCKED: ExecutionRisk (invalid price)'
     if (getATEnabled() && (w.S.mode || 'assist') === 'auto') AT.enabled = false
     const pb = el('protectBanner'); if (pb) pb.className = 'znc-protect show'
@@ -882,10 +1106,16 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       riskPct: riskPct, riskSizeRaw: _riskSizeRaw, riskSizeCapped: _riskSizeCapped,
       // [Etapa 5] adaptive sizing debug
       adaptSizeMult: _adaptSizeMult,
-      // Per-position control mode metadata
-      sourceMode: (w.S.mode || 'assist').toLowerCase(), // [PATCH1] immutable — original source
-      controlMode: (w.S.mode || 'assist').toLowerCase(), // mutable — AI or MANUAL
+      // [Phase 3A] Ownership fields — 'auto' is authoritative for AT origin.
+      // brainModeAtOpen preserves the brain/AI mode at trade time for post-trade analysis.
+      sourceMode: 'auto',
+      controlMode: 'auto',
       brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
+      // [DSL MODE] Snapshot the selected Brain DSL mode at open time so the
+      // UI and journal can show WHICH preset (SWING/ATR/DEF/TP/FAST) owned the
+      // position — independent of later mode changes (those only apply to new
+      // positions, per setDslMode contract).
+      dslModeAtOpen: (typeof getDSLMode === 'function' ? getDSLMode() : 'atr'),
       dslParams: Object.assign({
         pivotLeftPct: getTCDslTrailPct(),
         pivotRightPct: getTCDslTrailSusPct(),
@@ -899,7 +1129,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
     // [FIX P3] Margin check — reject if insufficient balance (check matches deduction)
     if (TP.demoBalance < adaptFinalSize) {
       AT.totalTrades--
-      w.BlockReason.set('MARGIN', 'Margin insuficient: need $' + adaptFinalSize.toFixed(2) + ' have $' + TP.demoBalance.toFixed(2), 'placeAutoTrade')
+      _setBR('MARGIN', 'Margin insuficient: need $' + adaptFinalSize.toFixed(2) + ' have $' + TP.demoBalance.toFixed(2), 'placeAutoTrade')
       atLog('warn', '[BLOCK] MARGIN REJECT: need $' + adaptFinalSize.toFixed(2) + ' but demoBalance=$' + TP.demoBalance.toFixed(2))
       return
     }
@@ -929,17 +1159,18 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
       volRegime: BM.volRegime || '—',
       profile: w.S.profile || 'fast',
     })
-    { const _oe5 = el('atStatus'); if (_oe5) _oe5.innerHTML = _ZI.ok + ' ' + escHtml(side) + ' deschis @$' + fP(entry) }
-    toast(`AUTO ${side} ${sym.replace('USDT', '')} deschis! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
+    _atUI({ status: { icon: 'ok', text: String(side) + ' opened @$' + fP(entry), action: null } })
+    toast(`AUTO ${side} ${sym.replace('USDT', '')} opened! SL:$${fP(sl)} TP:$${fP(tp)}`, 0, _ZI.robot)
     w.ncAdd('info', 'trade', `AUTO ${side} ${sym.replace('USDT', '')} @$${fP(entry)} | SL:$${fP(sl)} TP:$${fP(tp)}`)  // [NC]
+    playEntrySound()  // [BUG5.1] sound on AT/manual demo entry (gated by SOUND READY)
     if (typeof onTradeExecuted === 'function') onTradeExecuted({ ...pos, score: cond?.score || BM?.entryScore || 0 })
     scheduleAutoClose(pos)
     w.ZState.scheduleSave()  // persist new position
     if (typeof renderTradeMarkers === 'function') renderTradeMarkers()  // [CHART MARKERS]
   } else {
     if (!TP.liveConnected) {
-      atLog('warn', '[FAIL] LIVE: API neconectat! Conectati in panoul LIVE TRADING.')
-      toast('API neconectat — Auto trade anulat', 0, _ZI.x)
+      atLog('warn', '[FAIL] LIVE: API disconnected! Connect it in the LIVE TRADING panel.')
+      toast('API disconnected — auto-trade cancelled', 0, _ZI.x)
       AT.totalTrades--
       return
     }
@@ -961,7 +1192,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           side: side === 'LONG' ? 'BUY' : 'SELL',
           type: 'MARKET',
           quantity: String((adaptFinalSize * lev) / entry),
+          leverage: lev,
           referencePrice: entry,
+          source: 'auto',
         })
         // Build position from exchange response
         const fillPrice = parseFloat(result.avgPrice) || entry
@@ -983,7 +1216,13 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           sl: _liveSL,
           liqPrice: _liveLiq,
           pnl: 0,
-          qty: parseFloat(result.executedQty) || (adaptFinalSize / fillPrice),
+          // [BUG-T2d FIX 2026-05-14] Use leverage-aware fallback when Binance
+          // returns status=NEW + executedQty="0.000" (async fill). Prior
+          // `adaptFinalSize / fillPrice` produced 1/lev of correct qty →
+          // SL/TP placed downstream covered only 10% of position (lev=10).
+          // See _computeFillQtyFallback() at top of file + ZECUSDT incident
+          // 2026-05-14 (audit_log seq=1776859652888).
+          qty: _computeFillQtyFallback(result.executedQty, adaptFinalSize, lev, fillPrice),
           margin: adaptFinalSize, // [FIX BUG3] Consistent with demo — margin = notional size (not divided by lev)
           tpPnl: (_liveTpDist / fillPrice) * adaptFinalSize * lev,
           slPnl: -(_liveSlDist / fillPrice) * adaptFinalSize * lev,
@@ -992,10 +1231,13 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           mode: 'live',
           status: 'open', // [PATCH2 B3] explicit lifecycle status
           label: 'LIVE AUTO ' + side,
-          // Per-position control mode metadata
-          sourceMode: (w.S.mode || 'assist').toLowerCase(), // [PATCH1] immutable — original source
-          controlMode: (w.S.mode || 'assist').toLowerCase(), // mutable — AI or MANUAL
+          // [Phase 3A] Ownership fields — 'auto' is authoritative for AT origin.
+          // brainModeAtOpen preserves the brain/AI mode at trade time for post-trade analysis.
+          sourceMode: 'auto',
+          controlMode: 'auto',
           brainModeAtOpen: (w.S.mode || 'assist').toLowerCase(),
+          // [DSL MODE] See demo branch above — snapshot selected DSL mode.
+          dslModeAtOpen: (typeof getDSLMode === 'function' ? getDSLMode() : 'atr'),
           dslParams: Object.assign({
             pivotLeftPct: getTCDslTrailPct(),
             pivotRightPct: getTCDslTrailSusPct(),
@@ -1011,6 +1253,9 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
         _livePosPushed = true // [PATCH2 B2] mark: position now in array
         TP.liveBalance -= adaptFinalSize // [FIX BUG2] Optimistic balance deduction prevents duplicate trades
+        // [Phase 3F] Mirror optimistic deduction to React store so UI reflects change
+        // immediately. Server truth still reconciles via liveApiSyncState() at line ~1144.
+        { const _sPos = usePositionsStore.getState(); _sPos.setLiveBalance({ ..._sPos.liveBalance, totalBalance: TP.liveBalance }) }
         AT.lastTradeSide = side
         AT.lastTradeTs = Date.now()
         if (!AT._cooldownBySymbol) AT._cooldownBySymbol = {}
@@ -1019,6 +1264,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
         atLog('buy', '[LIVE] LIVE ORDER FILLED: ' + side + ' ' + sym + ' @$' + fP(fillPrice) + ' qty:' + pos.qty + ' orderId:' + pos.orderId)
         toast('LIVE ' + side + ' ' + sym.replace('USDT', '') + ' FILLED @$' + fP(fillPrice), 0, _ZI.dRed)
         w.ncAdd('info', 'trade', 'LIVE ' + side + ' ' + sym.replace('USDT', '') + ' @$' + fP(fillPrice) + ' | SL:$' + fP(_liveSL) + ' TP:$' + fP(_liveTP))
+        playEntrySound()  // [BUG5.1] sound on AT/manual live entry (gated by SOUND READY)
         scheduleAutoClose(pos)
         // [FIX QA-H2 + R4] Place exchange-level SL/TP with retry logic
         // If both SL and TP fail after retries, mark position as UNPROTECTED
@@ -1070,6 +1316,15 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
           renderLivePositions()
         }
         atLog('warn', '[FAIL] LIVE ORDER FAILED: ' + (err.message || err))
+        // [Phase 3F] Reconcile balance + positions from server authority. Optimistic
+        // deduction at the entry path may or may not reflect exchange truth depending
+        // on where the error occurred. liveApiSyncState() pulls from server (single
+        // source of truth) and updates both TP.liveBalance and usePositionsStore —
+        // avoids up-to-120s stale window (normal livePosSync interval).
+        if (_livePosPushed && typeof liveApiSyncState === 'function') {
+          try { await liveApiSyncState() }
+          catch (_syncErr: any) { atLog('warn', '[WARN] Post-fail balance sync failed: ' + (_syncErr.message || _syncErr)) }
+        }
       } finally {
         AT._liveExecInFlight = false // [FIX C5] release guard
       }
@@ -1083,7 +1338,7 @@ export function placeAutoTrade(side: any, cond: any, _sym?: any, _price?: any): 
 export function canAddOn(pos: any): any {
   if (!pos || pos.closed || !pos.autoTrade) return false
   // [Batch B] Removed demo-only gate — server decides mode eligibility
-  const maxAddon = parseInt(el('atMaxAddon')?.value) || 3
+  const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
   if ((pos.addOnCount || 0) >= maxAddon) return false
   // Must be in profit to add on (UI hint — server re-validates)
   const curPrice = (true) ? getSymPrice(pos) : getPrice()
@@ -1095,35 +1350,87 @@ export function canAddOn(pos: any): any {
   return true
 }
 
-// openAddOn(posId) — [Batch B] RPC to server POST /api/addon
-export function openAddOn(posId: any): any {
+// openAddOn(posId) — [Phase 10.7] Opens AddOnModal so user picks the add-on
+// amount; modal calls execAddOn() on confirm. The legacy "single-tap → server
+// auto-adds 50% of original" path was never reachable (button never received a
+// listener due to events.ts lookup mismatch on data-addon-id), so the new
+// modal-driven UX is now the canonical flow.
+export function openAddOn(posId: any): void {
+  const existing = document.getElementById('addOnModal')
+  if (existing) existing.remove()
+
+  const posList = ([] as any[]).concat(TP.demoPositions || [], TP.livePositions || [])
+  const pos = posList.find((p: any) => p.id === posId)
+  if (!pos) {
+    atLog('warn', '[ADD-ON] Position not found: ' + posId)
+    return
+  }
+  if (!canAddOn(pos)) {
+    atLog('warn', '[ADD-ON] Cannot add-on to position ' + posId)
+    toast('Add-on not available — position not in profit or limit reached', 0, '\u26A0\uFE0F')
+    return
+  }
+
+  const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
+    : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
+  const diff = symPrice - pos.entry
+  const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+  const origSize = Number(pos.originalSize || pos.size) || 0
+  const curSize = Number(pos.size) || 0
+  const addOnCount = Number(pos.addOnCount || 0)
+  const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
+
+  const container = document.createElement('div')
+  container.id = 'addOnModal'
+  document.body.appendChild(container)
+
+  Promise.all([
+    import('react'),
+    import('react-dom/client'),
+    import('../components/modals/AddOnModal'),
+  ]).then(([ReactMod, { createRoot }, { default: AddOnModal }]) => {
+    const root = createRoot(container)
+    root.render(ReactMod.createElement(AddOnModal, {
+      posId, side: pos.side, sym: pos.sym, origSize, curSize, addOnCount, maxAddon, curPrice: symPrice, pnl,
+      onConfirm: (id: any, addOnSize: number) => { root.unmount(); container.remove(); execAddOn(id, addOnSize, symPrice) },
+      onCancel: () => { root.unmount(); container.remove() },
+    }))
+  }).catch((e: any) => {
+    container.remove()
+    try { (toast as any)('Add-on modal unavailable — asset missing') } catch (_) { }
+    console.warn('[AddOnModal] chunk load failed:', e)
+  })
+}
+
+// execAddOn(posId, addOnSize, currentPrice) — POST /api/addon with user-chosen amount + price
+// [Phase 10.7 diag] Server needs currentPrice for its in-profit re-check; pos._lastPrice
+// is set only on the server tick loop and can be undefined immediately after open.
+export function execAddOn(posId: any, addOnSize: number, currentPrice?: number): Promise<boolean> {
   const posList = ([] as any[]).concat(TP.demoPositions || [], TP.livePositions || [])
   const pos = posList.find((p: any) => p.id === posId)
   if (!pos) {
     atLog('warn', '[ADD-ON] Position not found: ' + posId)
     return Promise.resolve(false)
   }
-  if (!canAddOn(pos)) {
-    atLog('warn', '[ADD-ON] Cannot add-on to position ' + posId)
+  if (!Number.isFinite(addOnSize) || addOnSize <= 0) {
+    atLog('warn', '[ADD-ON] Invalid amount: ' + addOnSize)
+    toast('Invalid add-on amount', 0, '\u26A0\uFE0F')
     return Promise.resolve(false)
   }
   const seq = pos._serverSeq || pos.id
-  const maxAddon = parseInt(el('atMaxAddon')?.value) || 3
-  atLog('info', '[ADD-ON] Requesting server add-on for seq=' + seq + '...')
-  return fetch('/api/addon', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ seq: seq, maxAddon: maxAddon })
-  })
-    .then(function (r: any) { return r.json() })
+  const maxAddon = parseInt(el('atMaxAddon')?.value || '') || 3
+  // Fallback: recompute currentPrice from available sources if modal didn't provide it
+  const priceFallback = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
+    : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
+  const curPrice = (currentPrice && Number.isFinite(currentPrice) && currentPrice > 0) ? currentPrice : priceFallback
+  atLog('info', '[ADD-ON] Requesting server add-on for seq=' + seq + ' size=$' + addOnSize + ' price=$' + curPrice + '...')
+  return api.raw<any>('POST', '/api/addon', { seq: seq, maxAddon: maxAddon, addOnSize: addOnSize, currentPrice: curPrice })
     .then(function (j: any) {
       if (j.ok) {
         atLog('buy', '[ADD-ON #' + j.addOnCount + '] ' + (pos.side || '') + ' ' + (pos.sym || '') +
           ' +$' + (j.addOnSize || 0) + ' @$' + (j.price || 0).toFixed(2) +
           ' | New entry:$' + (j.newEntry || 0).toFixed(2) + ' | Total:$' + (j.newSize || 0))
-        // Server broadcasts via WS → _applyServerATState updates client state
-        // Force re-render in case WS is slightly delayed
+        toast('+ Add-on $' + (j.addOnSize || 0) + ' done', 0, '\u2705')
         setTimeout(function () {
           renderATPositions()
           if (typeof w.updateDemoBalance === 'function') w.updateDemoBalance()
@@ -1131,17 +1438,16 @@ export function openAddOn(posId: any): any {
         return true
       } else {
         atLog('warn', '[ADD-ON] Server rejected: ' + (j.error || 'unknown'))
-        toast('Add-on rejected: ' + (j.error || 'unknown'), 0, '⚠️')
+        toast('Add-on rejected: ' + (j.error || 'unknown'), 0, '\u26A0\uFE0F')
         return false
       }
     })
     .catch(function (err: any) {
       atLog('warn', '[ADD-ON] Network error: ' + (err.message || err))
-      toast('Add-on failed: network error', 0, '⚠️')
+      toast('Add-on failed: network error', 0, '\u26A0\uFE0F')
       return false
     })
 }
-// openAddOn — self-ref removed (direct call)
 
 // ─── AUTO-CLOSE MONITOR ────────────────────────────────────────
 
@@ -1149,6 +1455,8 @@ export function openAddOn(posId: any): any {
 export function scheduleAutoClose(pos: any): void {
   // [AT-UNIFY] Server monitors SL/TP/DSL exits
   if (w._serverATEnabled) return
+  // [S6-B5] Server has demo authority — server brain monitors SL/TP/DSL exits in demo
+  if (_isServerDemoATActive()) return
   function getPosPrice(): any {
     // BUG2 FIX: use allPrices (works for any symbol, live or demo)
     if (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) return w.allPrices[pos.sym]
@@ -1183,10 +1491,21 @@ export function scheduleAutoClose(pos: any): void {
   }, (w.WVE_CONFIG && w.WVE_CONFIG.ttp) || {})
 
   const _posKey = 'posCheck_' + pos.id
-  const checkId = w.Intervals.set(_posKey, () => {
+  w.Intervals.set(_posKey, () => {
     if (pos.closed) { w.Intervals.clear(_posKey); return }
     const cur = getPosPrice()
     if (!cur) { return }
+
+    // [FIX #9] 7-day stale-position warn (not auto-close — BUG-08 intentionally removed 24h auto-close).
+    // Surface long-lived positions so user can review. Logged once per position.
+    try {
+      const _openTs = +(pos.openTs || pos.id || 0)
+      if (_openTs > 0 && !(pos as any)._staleWarned && (Date.now() - _openTs) > 604800000) {
+        ;(pos as any)._staleWarned = true
+        atLog('warn', '[STALE] ' + pos.side + ' ' + pos.sym + ' open for 7+ days — review manually')
+        try { console.warn('[AT/STALE] pos.' + pos.id + ' ' + pos.side + ' ' + pos.sym + ' age=' + Math.round((Date.now() - _openTs) / 86400000) + 'd') } catch (_) {}
+      }
+    } catch (_) {}
 
     const effectiveSL = (getDSLEnabled() && getDSLPositions()[String(pos.id)]?.active)
       ? getDSLPositions()[String(pos.id)].currentSL : pos.sl
@@ -1339,7 +1658,13 @@ export function scheduleAutoClose(pos: any): void {
         closeDemoPos(pos.id, 'AUTO ' + reason)
 
         // [FIX BUG4] Use closeDemoPos PnL if available (prevents price-race drift)
+        // [FIX #8] Log when fallback is hit so stats-drift is detectable — the fallback
+        // pnl2 was computed before closeDemoPos ran, so it may differ from the authoritative
+        // price at close.
         const _finalPnl2 = Number.isFinite(pos._closePnl) ? pos._closePnl : pnl2
+        if (!Number.isFinite(pos._closePnl)) {
+          try { console.warn('[AT/POST-CLOSE] pos.' + pos.id + ' closeDemoPos did not set _closePnl — using pre-close estimate $' + pnl2.toFixed(2)) } catch (_) {}
+        }
         // [PATCH P0-2] Removed duplicate AT stat accounting — closeDemoPos is single source of truth
         // Only keep AT.totalPnL and AT.dailyPnL (NOT tracked by closeDemoPos)
         AT.totalPnL += _finalPnl2; AT.dailyPnL += _finalPnl2
@@ -1374,18 +1699,37 @@ export function scheduleAutoClose(pos: any): void {
 // Kill switch
 export function checkKillThreshold(): void {
   if (getATKillTriggered()) return
-  const killPct = parseFloat(el('atKillPct')?.value) || 5
+  // [KILL-LOOP FIX R4] Defer kill check until server confirms AT state.
+  // Prevents firing on boot while TP.demoPositions still has zombie AT positions
+  // from localStorage that haven't been reconciled with server's open-position list.
+  if (!AT._modeConfirmed) return
+  const killPct = parseFloat(el('atKillPct')?.value || '') || 5
   const bal = +(getATMode() === 'demo' ? TP.demoBalance : TP.liveBalance) || 0
   if (bal <= 0) return // [FIX BUG4] Skip kill check if balance unknown — prevents $10k fallback distortion
   const _realPnL = +(getATDailyPnL()) || 0
   // [PATCH3 R2] Include unrealized PnL from open positions in daily loss check
+  // [KILL-LOOP FIX] Only AT positions count toward AT kill — manual/zombie positions
+  // from stale localStorage must not trigger AT kill switch
   let _unrealPnL = 0
   const _openList = getATMode() === 'demo' ? (TP.demoPositions || []) : (TP.livePositions || [])
   for (let i = 0; i < _openList.length; i++) {
     const _p = _openList[i]
     if (_p.closed || _p.status === 'closing') continue
+    if (!_p.autoTrade) continue
+    // [KILL-LOOP FIX R4] Only server-confirmed AT positions count toward kill.
+    // Unconfirmed positions may be localStorage zombies still pending prune.
+    if (!_p._serverSeq) continue
+    // [KILL-LOOP FIX R6] Daily kill = loss from positions opened TODAY only.
+    // Old open positions (from previous days/sessions) have their unrealized PnL
+    // tracked elsewhere (Total PnL banner) but they are NOT today's loss — they
+    // would retrigger kill infinitely right after user resets. Cutoff is the
+    // later of: start-of-day (UTC), last kill reset, and explicit AT.enabledAt.
+    const _openTs = +(_p.ts || _p.openTs || 0)
+    const _dayStart = new Date(); _dayStart.setUTCHours(0, 0, 0, 0)
+    const _cutoff = Math.max(_dayStart.getTime(), +(AT.killResetTs || 0), +(AT.enabledAt || 0))
+    if (_openTs > 0 && _openTs < _cutoff) continue
     const _cur = getSymPrice(_p)
-    if (_cur > 0 && _p.entry > 0) {
+    if (_cur != null && _cur > 0 && _p.entry > 0) {
       // [PATCH P1-6] Use _safePnl for consistency with closeDemoPos/triggerKillSwitch
       const _diff = _cur - _p.entry
       _unrealPnL += _safePnl(_p.side, _diff, _p.entry, _p.size || 0, _p.lev || 1, true)
@@ -1400,20 +1744,24 @@ export function checkKillThreshold(): void {
 }
 
 export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, killPct2: any, bal2: any): void {
-  // [FIX v85 BUG8] Guard complet: dacă deja triggered, nu mai facem nimic (previne race condition)
-  if (getATKillTriggered()) return
+  // [FIX v85 BUG8 + FIX #2] Guard complet: dacă deja triggered, nu mai facem nimic (previne race condition).
+  // Check the SYNCHRONOUS legacy AT.killTriggered — reading getATKillTriggered() goes
+  // through the Zustand store which is updated on the async 'zeus:atStateChanged' event,
+  // leaving a window where two concurrent ticks could both see "not triggered yet".
+  // AT.killTriggered is set below synchronously, so the next caller sees it immediately.
+  if (AT.killTriggered) return
   AT.killTriggered = true // setăm imediat, înainte de orice operațiune async
   AT._killTriggeredTs = Date.now() // [P3-5] timestamp for reset cooldown
   // [P0.4] Decision log — kill switch
   if (typeof w.DLog !== 'undefined') w.DLog.record('kill_switch', { reason: reason, pnl: realPnL, trades: closedCount2, killPct: killPct2, bal: bal2 })
   // Log exact values for kill switch
   if (reason === 'daily_loss') {
-    atLog('kill', `[KILL] KILL SWITCH: Pierdere zilnica ${(+(realPnL) || 0).toFixed(2)}$ >= ${(+(killPct2) || 5).toFixed(1)}% din $${(+(bal2) || 10000).toFixed(0)} | ${+(closedCount2) || 0} trades`)
+    atLog('kill', `[KILL] KILL SWITCH: Daily loss ${(+(realPnL) || 0).toFixed(2)}$ >= ${(+(killPct2) || 5).toFixed(1)}% of $${(+(bal2) || 10000).toFixed(0)} | ${+(closedCount2) || 0} trades`)
   }
 
   AT.enabled = false
   AT.killTriggered = true
-  w.Intervals.clear('atCheck'); clearInterval(AT.interval); AT.interval = null
+  w.Intervals.clear('atCheck'); clearInterval(AT.interval ?? undefined); AT.interval = null
 
   // Inchidem toate pozitiile auto cu PnL corect
   let closedCount = 0
@@ -1423,6 +1771,7 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
     if (p.closed) return false
     p.closed = true
     const closePrice = getSymPrice(p)
+    if (closePrice == null) return false
     const diff = closePrice - p.entry
     const pnl = _safePnl(p.side, diff, p.entry, p.size, p.lev, true)
     totalEmergencyPnL += pnl
@@ -1467,18 +1816,13 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   setTimeout(() => { w.updateDemoBalance(); renderDemoPositions(); renderATPositions(); updateATStats() }, 0)
   w.ZState.save()  // immediate save on kill switch (not debounced)
 
-  // Update UI
-  const btn = el('atMainBtn')
-  if (btn) { btn.className = 'at-main-btn off'; el('atBtnTxt').textContent = 'AUTO TRADE OFF' }
-  const killBtn = el('atKillBtn')
-  if (killBtn) killBtn.classList.add('triggered')
-
-  const reasonMap: any = { manual: 'Stop manual', daily_loss: 'Pierdere zilnica atinsa!' }
+  const reasonMap: any = { manual: 'Manual stop', daily_loss: 'Daily loss limit reached' }
   const msg = reasonMap[reason] || reason
   const pnlStr = (totalEmergencyPnL >= 0 ? '+' : '') + '$' + totalEmergencyPnL.toFixed(2)
-  { const _oe6 = el('atStatus'); if (_oe6) { _oe6.innerHTML = _ZI.siren + ` KILL ACTIV — <button data-action="resetKillSwitch" style="color:#00ff88;background:none;border:1px solid #00ff8866;border-radius:2px;padding:1px 5px;font-size:11px;cursor:pointer;font-family:inherit">` + _ZI.ok + ` RESET & REPORNESTE AT</button>`; _oe6.querySelector('[data-action="resetKillSwitch"]')?.addEventListener('click', () => resetKillSwitch()) } }
-  atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} pozitii inchise | PnL: ${pnlStr}`)
-  toast(closedCount + ' pozitii inchise | PnL: ' + pnlStr, 0, _ZI.siren)
+  const _lossStr = (reason === 'daily_loss' && Number.isFinite(+realPnL)) ? ` (loss $${(+realPnL).toFixed(2)} / ${(+(killPct2) || 5).toFixed(1)}% of $${(+(bal2) || 0).toFixed(0)})` : ''
+  _atUI({ btnClass: 'at-main-btn off', btnText: 'AUTO TRADE OFF', killBtnTriggered: true, status: { icon: 'siren', text: `KILL ACTIVE${_lossStr}`, action: 'resetKill' } })
+  atLog('kill', `[KILL] KILL SWITCH: ${msg} — ${closedCount} positions closed | PnL: ${pnlStr}`)
+  toast(closedCount + ' positions closed | PnL: ' + pnlStr, 0, _ZI.siren)
   if (w.S.alerts?.enabled) sendAlert('Zeus Kill Switch', msg, 'kill')
   // [FIX UI] Update banners immediately after kill trigger
   if (typeof w.atUpdateBanner === 'function') w.atUpdateBanner()
@@ -1488,47 +1832,41 @@ export function triggerKillSwitch(reason: any, realPnL: any, closedCount2: any, 
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
 }
 
-// Reset manual imediat - fara asteptare de 30s
+// Reset kill switch — server is authoritative (5min cooldown enforced there)
 export function resetKillSwitch(): void {
-  // [P3-5] Minimum 30s cooldown after kill was triggered
-  if (AT._killTriggeredTs && (Date.now() - AT._killTriggeredTs) < 30000) {
-    var _remaining = Math.ceil((30000 - (Date.now() - AT._killTriggeredTs)) / 1000)
-    toast('Kill switch reset blocat — asteapta ' + _remaining + 's', 0, _ZI.timer)
-    return
-  }
-  // Reset server-side (authoritative source of truth)
   var _bal = +(getATMode() === 'demo' ? TP.demoBalance : (TP.liveBalance || TP.demoBalance)) || 0
-  fetch('/api/at/kill/reset', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ balanceRef: _bal })
-  }).then(function (r: any) { return r.json() })
+  _atUI({ status: { icon: 'timer', text: 'Resetting kill switch...', action: null } })
+  api.raw<any>('POST', '/api/at/kill/reset', { balanceRef: _bal })
     .then(function (j: any) {
-      if (j.ok) {
-        atLog('info', '[OK] Server kill switch reset confirmed — re-armed at ' + (j.killPct || 5) + '%')
+      if (j && j.ok) {
+        AT.killTriggered = false
+        AT._killTriggeredTs = 0
+        AT.killResetTs = Date.now()
+        AT.realizedDailyPnL = 0
+        AT.closedTradesToday = 0
+        AT.dailyPnL = 0
+        AT.enabled = false
+        // [KILL-LOOP FIX R5] Reset enabledAt — old positions won't count after next enable.
+        AT.enabledAt = Date.now()
+        var _killPct = j.killPct || parseFloat((document.getElementById('atKillPct') as HTMLInputElement)?.value) || 5
+        _atUI({ killBtnTriggered: false, status: { icon: 'bolt', text: 'Kill switch reset \u2014 re-armed at ' + _killPct + '% loss threshold', action: null } })
+        atLog('info', '[OK] Kill switch reset — re-armed at ' + _killPct + '%')
+        toast('Kill switch reset — re-armed at ' + _killPct + '%', 0, _ZI.ok)
+        if (typeof w.ZState !== 'undefined') w.ZState.save()
+        w.atUpdateBanner(); w.ptUpdateBanner()
+        _emitATChanged()
       } else {
-        atLog('warn', '[WARN] Server kill reset failed: ' + (j.error || 'unknown'))
+        var _err = (j && j.error) || 'unknown error'
+        atLog('warn', '[WARN] Server rejected reset: ' + _err)
+        toast('Cannot reset: ' + _err, 0, _ZI.timer)
+        w.atUpdateBanner()
       }
     })
-    .catch(function () { atLog('warn', '[WARN] Server kill reset network error') })
-  // Optimistic local update (server poll will confirm within 10s)
-  AT.killTriggered = false
-  AT._killTriggeredTs = 0
-  AT.realizedDailyPnL = 0
-  AT.closedTradesToday = 0
-  AT.dailyPnL = 0
-  AT.enabled = false // [FIX H5] Ensure AT stays off after reset — user must explicitly re-enable
-  const kb = el('atKillBtn')
-  if (kb) kb.classList.remove('triggered')
-  var _killPct = parseFloat(el('atKillPct')?.value) || 5
-  { const _oe7 = el('atStatus'); if (_oe7) _oe7.innerHTML = _ZI.bolt + ' Resetat — re-armed la ' + _killPct + '% loss threshold' }
-  atLog('info', '[OK] Kill switch resetat manual — re-armed la ' + _killPct + '% threshold')
-  toast('Kill switch resetat — re-armed la ' + _killPct + '%', 0, _ZI.ok)
-  // Persist reset immediately so it survives reload and syncs to server
-  if (typeof w.ZState !== 'undefined') w.ZState.save()
-  w.atUpdateBanner(); w.ptUpdateBanner()
-  _emitATChanged() // [9A-4] Notify React after kill reset
+    .catch(function () {
+      atLog('warn', '[WARN] Server kill reset network error')
+      toast('Reset failed — network error', 0, _ZI.timer)
+      w.atUpdateBanner()
+    })
 }
 
 
@@ -1539,95 +1877,113 @@ export function renderATPositions(): void {
   if (_now - _lastRenderAT < 500) { if (!_pendingRenderAT) _pendingRenderAT = setTimeout(renderATPositions, 500 - (_now - _lastRenderAT)); return }
   _lastRenderAT = _now; _pendingRenderAT = 0
   const panel = el('atActivePosPanel')
-  const cnt = el('atPosCount')
   if (!panel) return
-  // [FIX A2] Include AT positions filtered by globalMode
-  const _globalMode = (typeof AT !== 'undefined' && AT._serverMode) ? AT._serverMode : 'demo'
-  const autoPosns = [
-    ...(TP.demoPositions || []).filter((p: any) => p.autoTrade && !p.closed),
-    ...(TP.livePositions || []).filter((p: any) => p.autoTrade && !p.closed && p.status !== 'closing'),
-  ].filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
-   .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
-  if (cnt) cnt.textContent = autoPosns.length + ' pozit' + (autoPosns.length === 1 ? 'ie' : 'ii')
+  // [Phase 3C] Render filter reads store truth (single source), not AT._serverMode mirror.
+  // AT._serverMode is kept in sync via a useATStore subscriber (state.ts boot).
+  // [Phase 9B1] Strict === true check — truthy fallback previously matched any
+  // non-boolean truthy value and failed to exclude undefined symmetrically.
+  // Pair this with ManualTradePanel _isManualOwned (autoTrade !== true) to
+  // guarantee every position shows in exactly one panel.
+  const _globalMode = (useATStore.getState().mode || 'demo')
+  const _atStep1Demo = (TP.demoPositions || []).filter((p: any) => p.autoTrade === true && !p.closed)
+  const _atStep1Live = (TP.livePositions || []).filter((p: any) => p.autoTrade === true && !p.closed && p.status !== 'closing')
+  const autoPosns = [..._atStep1Demo, ..._atStep1Live]
+    .filter((p: any) => (p.mode || p._serverMode || 'demo') === _globalMode)
+    .sort((a: any, b: any) => (a.seq || 0) - (b.seq || 0))
+  // [P5A AT RENDER FILTER] Gate on window.P5A_RENDER — this runs at 2/s, default-off avoids spam.
+  // Flip via devtools: window.P5A_RENDER = true
+  if ((w as any).P5A_RENDER === true) {
+    try {
+      const _tpLive = (TP.livePositions || [])
+      const _liveAutoTrue = _tpLive.filter((p: any) => !!p.autoTrade).length
+      const _liveClosing = _tpLive.filter((p: any) => p.status === 'closing').length
+      const _liveModeMismatch = _tpLive.filter((p: any) => !!p.autoTrade && !p.closed && p.status !== 'closing' && (p.mode || p._serverMode || 'demo') !== _globalMode).length
+      const _liveKeys = _tpLive.map((p: any) => `${p.sym}/${p.side}/aT=${p.autoTrade}/src=${p.sourceMode || '?'}/mode=${p.mode || '?'}/st=${p.status || '?'}`)
+      console.log(`[P5A AT RENDER FILTER] globalMode=${_globalMode} tpLive=${_tpLive.length} liveAutoTrue=${_liveAutoTrue} liveClosing=${_liveClosing} modeMismatch=${_liveModeMismatch} rendered=${autoPosns.length} keys=[${_liveKeys.join(' | ')}] ts=${Date.now()}`)
+    } catch (_) {}
+  }
+  _atUI({ posCountText: autoPosns.length + ' position' + (autoPosns.length === 1 ? '' : 's') })
   if (!autoPosns.length) {
-    panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">Nicio pozitie auto deschisa</div>'
+    panel.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--dim);padding:8px">No auto position open</div>'
     return
   }
-  // Build HTML
+  // [Phase 9E1] AT card markup unified with DemoPositionRow / LivePositionRow.
+  // Body structure (pos-row class + header / entry-now-pnl / margin-notional /
+  // SL-TP inputs / LIQ) is identical to the Manual panel — the only delta is
+  // the extra action row below SAVE that carries AT-specific PARTIAL + ADD-ON
+  // buttons (Manual doesn't expose these because manual positions don't have
+  // add-on state). The user asked for "cards copy-paste identical with demo"
+  // — this keeps AT's richer actions while the visual body matches 1:1.
   panel.innerHTML = autoPosns.map((pos: any) => {
-    // [FIX A5] Use allPrices (consistent with getPosPrice/engine)
     const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
       : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
     const diff = symPrice - pos.entry
-    const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
-    const pnlStr = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2)
+    // [2026-05-18 PnL parity fix] For LIVE positions, prefer Binance-fetched
+    // unrealizedPnL when available (pos.pnl, set by liveApiSyncState from
+    // /fapi/v2/positionRisk = mark-price-based). Local last-price calc
+    // differs from Binance UI by $4-20 on volatile assets (mark vs last).
+    // Operator-reported -44 (Zeus local) vs -26 (Binance mark) on ETHUSDT.
+    // Falls back to local computation when pnl missing/NaN (e.g., during
+    // first 60s before liveApiSyncState polls).
+    const _localPnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
+    const pnl = ((pos.mode === 'live' || pos.fromExchange) && Number.isFinite(pos.pnl))
+      ? pos.pnl
+      : _localPnl
     const pnlPct = (w._safe.num(pos.size, null, 1) > 0 ? (pnl / w._safe.num(pos.size, null, 1) * 100).toFixed(2) : '0.00')
-    const col = pos.side === 'LONG' ? '#00ff88' : '#ff4466'
-    const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))  // [v105 FIX Bug6] escHtml
-    const safeSide = escHtml(pos.side)                           // [v105 FIX Bug6] escHtml
+    const symBase = escHtml((pos.sym || 'BTC').replace('USDT', ''))
+    const safeSide = escHtml(pos.side)
     const posMode = (pos.mode || pos._serverMode || 'demo')
-    var _atPosEnv = w._resolvedEnv || (posMode === 'demo' ? 'DEMO' : 'REAL')
-    const modeBadge = posMode === 'live'
-      ? (_atPosEnv === 'TESTNET'
-        ? '<span style="background:#f0c04022;color:#f0c040;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">TESTNET</span>'
-        : '<span style="background:#ff444422;color:#ff4444;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">LIVE</span>')
-      : '<span style="background:#aa44ff22;color:#aa44ff;padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">DEMO</span>'
-
-    // TP/SL expected P&L
-    const tpPnl2 = pos.tpPnl || (pos.tp ? Math.abs(pos.tp - pos.entry) / pos.entry * pos.size * pos.lev : 0)
-    const slPnl2 = pos.slPnl || (pos.sl ? -Math.abs(pos.sl - pos.entry) / pos.entry * pos.size * pos.lev : 0)
-    const distToTP = pos.tp ? ((Math.abs(symPrice - pos.tp) / symPrice) * 100).toFixed(2) : null
-    const distToSL = pos.sl ? ((Math.abs(symPrice - pos.sl) / symPrice) * 100).toFixed(2) : null
-
-    // QTY and Margin
-    const qty2 = pos.qty || (pos.size / pos.entry)
-    const margin2 = pos.margin || (pos.size / pos.lev)
-
-    return `<div style="background:#0a0518;border:1px solid ${col}33;border-left:3px solid ${col};border-radius:4px;padding:8px 10px;margin-bottom:6px;font-size:12px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-        <span style="color:${col};font-weight:700;font-size:14px">${_ZI.robot} ${safeSide} ${symBase}${modeBadge}</span>
-        <span style="color:${pnl >= 0 ? '#00ff88' : '#ff4466'};font-size:16px;font-weight:700">${pnlStr} <span style="font-size:12px;opacity:.8">(${pnlPct}%)</span></span>
+    const _atPosEnv = w._executionEnv
+    const badgeLabel = posMode === 'live'
+      ? (_atPosEnv === 'TESTNET' ? 'TESTNET' : _atPosEnv === 'REAL' ? 'LIVE' : 'LOCKED')
+      : 'DEMO'
+    const badgeBg = posMode === 'live'
+      ? (_atPosEnv === 'TESTNET' ? '#f0c04022' : _atPosEnv === 'REAL' ? '#ff444422' : '#ff880022')
+      : '#aa44ff22'
+    const badgeFg = posMode === 'live'
+      ? (_atPosEnv === 'TESTNET' ? '#f0c040' : _atPosEnv === 'REAL' ? '#ff4444' : '#ff8800')
+      : '#aa44ff'
+    const margin = Number(pos.size) || 0
+    const lev = Number(pos.lev) || 1
+    const notional = margin * lev
+    const feeRate = (w.S?.feeRate ?? 0.0004) as number
+    const estFees = notional * feeRate * 2
+    const roe = margin > 0 ? (pnl / margin * 100).toFixed(2) : '0.00'
+    const dsl = (w.DSL && w.DSL.positions) ? w.DSL.positions[String(pos.id)] : null
+    const dslActive = dsl && dsl.active
+    const slVal = dslActive && dsl.currentSL > 0 ? dsl.currentSL : pos.sl
+    const slLabel = dslActive ? 'DSL' : 'SL'
+    const slColor = dslActive ? '#39ff14' : '#ff6644'
+    const posCls = pos.side === 'LONG' ? 'pos-long' : 'pos-short'
+    const pnlColor = pnl >= 0 ? 'var(--grn)' : 'var(--red)'
+    const liqColor = pos.side === 'LONG' ? '#ff3355' : '#00d97a'
+    const slInput = (pos.sl ? String(pos.sl) : '')
+    const tpInput = (pos.tp ? String(pos.tp) : '')
+    const canDoAddOn = canAddOn(pos)
+    return `<div class="pos-row ${posCls}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:700">${_ZI.robot} ${safeSide} ${symBase} ${pos.lev}x<span style="background:${badgeBg};color:${badgeFg};padding:1px 5px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px">${badgeLabel}</span></span>
+        <button data-close-id="${pos.id}" style="padding:10px 14px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:10px;cursor:pointer;min-height:52px;font-weight:700">\u2715 CLOSE</button>
       </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px">
-        <div style="color:var(--dim);font-size:11px">${(pos.addOnCount || 0) > 0 ? 'Avg Entry' : 'Entry'}<br><span style="color:var(--whi);font-size:13px;font-weight:700">$${fP(pos.entry)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Now (${symBase})<br><span style="color:${col};font-size:13px;font-weight:700">$${fP(symPrice)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Leverage<br><span style="color:#f0c040;font-size:13px;font-weight:700">${pos.lev}x</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:3px">
+        <span style="color:var(--dim)">Entry: $${fP(pos.entry)} | Now: $${fP(symPrice)}</span>
+        <span style="color:${pnlColor}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct}%)</span>
       </div>
-            ${(pos.addOnCount || 0) > 0 ? `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-bottom:5px;padding:4px 6px;background:#0d0a1a;border-radius:3px;border:1px solid #2a1a40">
-        <div style="color:var(--dim);font-size:11px">Orig Entry<br><span style="color:#f0c040;font-size:12px;font-weight:700">$${fP(pos.originalEntry || pos.entry)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Add-Ons<br><span style="color:#00b8d4;font-size:12px;font-weight:700">${pos.addOnCount}x</span></div>
-        <div style="color:var(--dim);font-size:11px">Orig Size<br><span style="color:#aa44ff;font-size:12px;font-weight:700">$${(pos.originalSize || pos.size).toFixed(0)}</span></div>
-      </div>` : ''}
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px;padding:4px 6px;background:#060212;border-radius:3px;border:1px solid #1a0a30">
-        <div style="color:var(--dim);font-size:11px">QTY (${symBase})<br><span style="color:#00b8d4;font-size:13px;font-weight:700">${qty2 > 1 ? qty2.toFixed(4) : qty2.toFixed(6)}</span></div>
-        <div style="color:var(--dim);font-size:11px">Margin (USDT)<br><span style="color:#aa44ff;font-size:13px;font-weight:700">$${margin2.toFixed(2)}</span></div>
+      <div style="font-size:12px;color:var(--dim);margin-top:1px">
+        Margin: $${fmt(margin)} | Notional: $${fmt(notional)} | Fees\u2248$${fmt(estFees)} | ROE: ${roe}%
       </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:5px">
-        <div style="padding:3px 5px;background:#00d97a0a;border:1px solid #00d97a22;border-radius:3px">
-          <div style="font-size:10px;color:#00d97a55;letter-spacing:1px">TP PROFIT</div>
-          <div style="font-size:13px;color:#00d97a;font-weight:700">+$${tpPnl2.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--dim)">@$${fP(pos.tp)} ${distToTP ? '(' + distToTP + '%)' : ''}</div>
-        </div>
-        <div style="padding:3px 5px;background:#ff446608;border:1px solid #ff446622;border-radius:3px">
-          <div style="font-size:10px;color:#ff446655;letter-spacing:1px">SL RISC</div>
-          <div style="font-size:13px;color:#ff4466;font-weight:700">$${slPnl2.toFixed(2)}</div>
-          <div style="font-size:11px;color:var(--dim)">@$${fP(pos.sl)} ${distToSL ? '(' + distToSL + '%)' : ''}</div>
-        </div>
+      ${dslActive ? `<div style="font-size:12px;color:${slColor};margin-top:1px">${slLabel}: $${fP(slVal)}${pos.tp ? ` | TP: $${fP(pos.tp)}` : ''}</div>` : ''}
+      <div style="display:flex;gap:4px;margin-top:3px;align-items:center">
+        <span style="font-size:10px;color:#ff6644;width:22px">SL:</span>
+        <input id="slEdit_${pos.id}" type="number" step="0.1" value="${slInput}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#ff6644;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"/>
+        <span style="font-size:10px;color:#00ff88;width:22px">TP:</span>
+        <input id="tpEdit_${pos.id}" type="number" step="0.1" value="${tpInput}" placeholder="\u2014" style="flex:1;background:#0a0a14;border:1px solid #333;color:#00ff88;padding:3px 5px;border-radius:3px;font-size:11px;font-family:var(--ff);width:60px"/>
+        <button data-save-sltp-id="${pos.id}" data-save-mode="${posMode === 'live' ? 'live' : 'demo'}" style="padding:3px 8px;background:#001a22;border:1px solid #00aaff;color:#00d4ff;border-radius:3px;font-size:9px;cursor:pointer;font-weight:700;min-height:24px">SAVE</button>
       </div>
-            ${pos.liqPrice ? `<div style="font-size:11px;color:#ff8800;margin-bottom:5px">${_ZI.skull} LIQ: $${fP(pos.liqPrice)}</div>` : ''}
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px">
-        <button data-close-id="${pos.id}"
-          style="padding:10px 6px;background:#2a0010;border:2px solid #ff4466;color:#ff4466;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;">
-          \u2715 CLOSE
-        </button>
-        <button data-partial-id="${pos.id}"
-          style="padding:10px 6px;background:#0d0020;border:2px solid #aa44ff;color:#aa44ff;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;">
-          \u25D1 PARTIAL
-        </button>
-        <button data-addon-id="${pos.id}" ${canAddOn(pos) ? '' : 'disabled'}
-          style="padding:10px 6px;background:${canAddOn(pos) ? '#001a10' : '#111'};border:2px solid ${canAddOn(pos) ? '#00ff88' : '#333'};color:${canAddOn(pos) ? '#00ff88' : '#555'};border-radius:4px;font-size:12px;font-weight:700;cursor:${canAddOn(pos) ? 'pointer' : 'not-allowed'};font-family:var(--ff);touch-action:manipulation;min-height:48px;width:100%;display:block;letter-spacing:.5px;user-select:none;opacity:${canAddOn(pos) ? '1' : '.5'}">
-          \u2795 ADD-ON
-        </button>
+      ${pos.liqPrice ? `<div style="font-size:12px;color:${liqColor};margin-top:1px">LIQ: $${fP(pos.liqPrice)}</div>` : ''}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:4px">
+        <button data-partial-id="${pos.id}" style="padding:8px 6px;background:#0d0020;border:2px solid #aa44ff;color:#aa44ff;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;min-height:40px">\u25D1 PARTIAL</button>
+        <button data-addon-id="${pos.id}" ${canDoAddOn ? '' : 'disabled'} style="padding:8px 6px;background:${canDoAddOn ? '#001a10' : '#111'};border:2px solid ${canDoAddOn ? '#00ff88' : '#333'};color:${canDoAddOn ? '#00ff88' : '#555'};border-radius:4px;font-size:11px;font-weight:700;cursor:${canDoAddOn ? 'pointer' : 'not-allowed'};min-height:40px;opacity:${canDoAddOn ? '1' : '.5'}">\u2795 ADD-ON</button>
       </div>
     </div>`
   }).join('')
@@ -1640,65 +1996,69 @@ export function renderATPositions(): void {
     const id = parseInt(btn.getAttribute('data-partial-id'), 10)
     attachConfirmClose(btn, function () { openPartialClose(id) })
   })
-  // [Batch B] Add-on button — single tap with server RPC
+  // [Phase 10.7] Add-on button — single tap opens AddOnModal (modal IS the
+  // confirmation, so no two-tap attachConfirmClose). The previous wiring went
+  // through attachConfirmClose, which silently dropped the listener because
+  // events.ts:163 lookup chain didn't include data-addon-id — that's why the
+  // button never reacted to taps. Now we bind click directly and ignore the
+  // confirm flow on the button itself.
   panel.querySelectorAll('button[data-addon-id]').forEach(function (btn: any) {
     if (btn.disabled) return
+    if (btn.getAttribute('data-addon-attached') === '1') return
+    btn.setAttribute('data-addon-attached', '1')
     const id = parseInt(btn.getAttribute('data-addon-id'), 10)
-    attachConfirmClose(btn, function () { openAddOn(id) })
+    btn.addEventListener('click', function (e: Event) { e.preventDefault(); openAddOn(id) })
+  })
+  // [Phase 9E1] SAVE SL/TP — same contract as Manual/Demo panel: reads input
+  // values by id slEdit_<id> / tpEdit_<id> via savePosSLTP().
+  panel.querySelectorAll('button[data-save-sltp-id]').forEach(function (btn: any) {
+    const id = parseInt(btn.getAttribute('data-save-sltp-id'), 10)
+    const mode = btn.getAttribute('data-save-mode') || 'demo'
+    btn.addEventListener('click', function () {
+      try { savePosSLTP(id, mode) } catch (e: any) { console.warn('[AT SAVE SL/TP]', e.message || e) }
+    })
   })
 }
 
 // Partial close modal
 export function openPartialClose(posId: any): void {
-  // REQ 2: remove existing modal if already open (prevents duplicate overlay)
   const existing = document.getElementById('partialCloseModal')
   if (existing) existing.remove()
 
-  // [FIX A8] Search both demo and live positions
   const pos = (TP.demoPositions || []).find((p: any) => p.id === posId) || (TP.livePositions || []).find((p: any) => p.id === posId)
   if (!pos) return
-  const symBase = pos.sym.replace('USDT', '')
   const symPrice = (w.allPrices[pos.sym] && w.allPrices[pos.sym] > 0) ? w.allPrices[pos.sym]
     : (pos.sym === getSymbol() ? getPrice() : (w.wlPrices[pos.sym]?.price || pos.entry))
   const pnl = pos.entry > 0 ? (pos.side === 'LONG' ? symPrice - pos.entry : pos.entry - symPrice) / pos.entry * pos.size * pos.lev : 0
 
-  // Simple modal overlay
-  const overlay = document.createElement('div')
-  overlay.id = 'partialCloseModal'
-  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center'
-  overlay.innerHTML = `
-    <div style="background:#06080e;border:1px solid #aa44ff55;border-radius:6px;padding:20px;width:280px;font-family:var(--ff)">
-      <div style="font-size:13px;letter-spacing:2px;color:#aa44ff;margin-bottom:12px">\u25D1 INCHIDE PARTIAL — ${pos.side} ${symBase}</div>
-      <div style="font-size:12px;color:var(--dim);margin-bottom:4px">Size total: <span style="color:var(--whi)">$${pos.size.toFixed(0)} USDT</span></div>
-      <div style="font-size:12px;color:var(--dim);margin-bottom:12px">PnL curent: <span style="color:${pnl >= 0 ? '#00ff88' : '#ff4466'}">${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}</span></div>
-      <div style="font-size:12px;color:var(--dim);margin-bottom:6px">Procent de inchis:</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
-        ${[25, 50, 75].map((p: any) => `<button data-action="partialClose" data-pct="${p}" style="padding:6px;background:#0d1520;border:1px solid #aa44ff33;color:#aa44ff;border-radius:3px;font-size:13px;cursor:pointer;font-family:var(--ff)">${p}%</button>`).join('')}
-      </div>
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
-        <input type="number" id="partialPct" value="50" min="1" max="99" style="flex:1;background:#0a0518;border:1px solid #aa44ff33;color:#cc88ff;padding:5px 8px;font-size:13px;border-radius:3px;font-family:var(--ff)">
-        <span style="color:var(--dim);font-size:12px">%</span>
-        <button data-action="partialCloseCustom"
-          style="padding:5px 10px;background:#aa44ff22;border:1px solid #aa44ff44;color:#aa44ff;border-radius:3px;font-size:12px;cursor:pointer;font-family:var(--ff)">OK</button>
-      </div>
-      <button data-action="closeModal"
-        style="width:100%;padding:5px;background:#1a0008;border:1px solid #ff335533;color:#ff4466;border-radius:3px;font-size:12px;cursor:pointer;font-family:var(--ff)">ANULEAZA</button>
-    </div>`
-  // Event delegation on overlay — replaces onclick="execPartialClose(...)" and close
-  overlay.addEventListener('click', (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
-    if (!btn) return
-    const action = btn.dataset.action
-    if (action === 'partialClose') execPartialClose(posId, parseInt(btn.dataset.pct || '50'))
-    else if (action === 'partialCloseCustom') { const input = document.getElementById('partialPct') as HTMLInputElement; execPartialClose(posId, parseInt(input?.value || '50')) }
-    else if (action === 'closeModal') overlay.remove()
+  const container = document.createElement('div')
+  container.id = 'partialCloseModal'
+  document.body.appendChild(container)
+
+  Promise.all([
+    import('react'),
+    import('react-dom/client'),
+    import('../components/modals/PartialCloseModal'),
+  ]).then(([ReactMod, { createRoot }, { default: PartialCloseModal }]) => {
+    const root = createRoot(container)
+    root.render(ReactMod.createElement(PartialCloseModal, {
+      posId, side: pos.side, sym: pos.sym, size: pos.size, pnl,
+      onClose: (id: any, pct: number) => { root.unmount(); container.remove(); execPartialClose(id, pct) },
+      onCancel: () => { root.unmount(); container.remove() },
+    }))
+  }).catch((e: any) => {
+    // [BUG5.2] Defensive: if PartialCloseModal chunk fails to load
+    // (partial deploy), remove the placeholder and toast instead of
+    // surfacing an unhandled rejection.
+    container.remove()
+    try { (toast as any)('Partial close unavailable — asset missing') } catch (_) { }
+    console.warn('[PartialCloseModal] chunk load failed:', e)
   })
-  document.body.appendChild(overlay)
 }
 
 export function execPartialClose(posId: any, pct: any): void {
   document.getElementById('partialCloseModal')?.remove()
-  if (!pct || pct <= 0 || pct >= 100) { toast('Procent invalid'); return }
+  if (!pct || pct <= 0 || pct >= 100) { toast('Invalid percent'); return }
   // [FIX A3] Search both demo and live positions
   let idx = (TP.demoPositions || []).findIndex((p: any) => p.id === posId)
   let _isLivePartial = false
@@ -1738,7 +2098,7 @@ export function execPartialClose(posId: any, pct: any): void {
   })
 
   atLog('info', `\u25D1 Partial close ${pct}% — ${pos.sym.replace('USDT', '')} PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
-  toast(`\u25D1 ${pct}% inchis — PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
+  toast(`\u25D1 ${pct}% closed — PnL: ${partialPnl >= 0 ? '+' : ''}$${partialPnl.toFixed(2)}`)
   w.updateDemoBalance(); renderDemoPositions(); renderATPositions(); updateATStats()
   // [9A-5] Notify React — partial close updated balance + position size
   try { window.dispatchEvent(new CustomEvent('zeus:positionsChanged')) } catch (_) {}
@@ -1750,10 +2110,20 @@ export function closeAutoPos(id: any): void {
   // ─── Check live positions first ───
   const livePos = TP.livePositions.find((p: any) => (p.id === numId || p.id === id) && !p.closed)
   if (livePos) {
-    const cur = getSymPrice(livePos)
+    // [BUG-CLOSE-AT FIX 2026-05-14] Use _resolveClosePrice fallback chain.
+    // Prior `getSymPrice(livePos); if (cur == null) return;` silently exited
+    // pe simbolurile fără feed (ZECUSDT etc.) — operator click ✕ CLOSE,
+    // nothing happened, no toast. Now falls back to live.avgPrice or
+    // pos.entry; only emits toast (NEVER silent) when no price anywhere.
+    const cur = _resolveClosePrice(livePos)
+    if (!cur || cur <= 0) {
+      toast('Cannot close: no price available for ' + (livePos.sym || 'symbol'), 3000, _ZI.w)
+      renderATPositions()
+      return
+    }
     const diff = cur - livePos.entry
     const pnl = _safePnl(livePos.side, diff, livePos.entry, livePos.size, livePos.lev, true)
-    closeLivePos(numId, 'Manual inchis')
+    closeLivePos(numId, 'Manual close')
     AT.totalPnL += pnl; AT.dailyPnL += pnl
     if (pnl >= 0) AT.wins++; else AT.losses++
     atLog(pnl >= 0 ? 'buy' : 'sell', '[LIVE] MANUAL CLOSE: ' + livePos.sym.replace('USDT', '') + ' PnL: ' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2))
@@ -1765,7 +2135,13 @@ export function closeAutoPos(id: any): void {
   const pos = TP.demoPositions.find((p: any) => (p.id === numId || p.id === id) && !p.closed)
   if (!pos) { renderATPositions(); return }
 
-  const cur = getSymPrice(pos)
+  // [BUG-CLOSE-AT FIX 2026-05-14] Same fallback chain as live branch above.
+  const cur = _resolveClosePrice(pos)
+  if (!cur || cur <= 0) {
+    toast('Cannot close: no price available for ' + (pos.sym || 'symbol'), 3000, _ZI.w)
+    renderATPositions()
+    return
+  }
   const diff = cur - pos.entry
   const pnl = _safePnl(pos.side, diff, pos.entry, pos.size, pos.lev, true)
 
@@ -1774,7 +2150,7 @@ export function closeAutoPos(id: any): void {
   pos._manualATClose = true
 
   // closeDemoPos sterge din array + updateaza AMBELE panouri
-  closeDemoPos(numId, 'Manual inchis')
+  closeDemoPos(numId, 'Manual close')
 
   // [FIX BUG4] Use closeDemoPos PnL if available (prevents price-race drift)
   const _finalPnl = Number.isFinite(pos._closePnl) ? pos._closePnl : pnl
@@ -1801,12 +2177,12 @@ export function closeAllDemoPos(): void {
     ? [...TP.demoPositions].filter((p: any) => !p.closed && !p.autoTrade)
     : []
   const totalClosed = livePosns.length + posns.length
-  if (!totalClosed) { toast('Nu exista pozitii manuale deschise', 0, _ZI.clip); return }
+  if (!totalClosed) { toast('No manual positions open', 0, _ZI.clip); return }
   posns.forEach((p: any) => {
     closeDemoPos(p.id, 'Close All Manual')
   })
   setTimeout(() => { renderATPositions(); updateATStats(); renderDemoPositions() }, 100)
-  toast('Inchis ' + totalClosed + ' pozitii manuale', 0, _ZI.ok)
+  toast('Closed ' + totalClosed + ' manual positions', 0, _ZI.ok)
 }
 
 // Inchide TOATE pozitiile AT (apelat din panoul AT / Emergency Stop)
@@ -1836,10 +2212,10 @@ export function closeAllATPos(): void {
     if (pnl >= 0) AT.wins++; else AT.losses++
   })
   const totalClosed = livePosns.length + posns.length
-  if (!totalClosed) { toast('Nu exista pozitii AT deschise', 0, _ZI.clip); return }
+  if (!totalClosed) { toast('No AT positions open', 0, _ZI.clip); return }
   if (livePosns.length > 0) checkKillThreshold()
   setTimeout(() => { renderATPositions(); updateATStats() }, 100)
-  toast('Inchis ' + totalClosed + ' pozitii AT', 0, _ZI.ok)
+  toast('Closed ' + totalClosed + ' AT positions', 0, _ZI.ok)
 }
 
 // ===================================================================

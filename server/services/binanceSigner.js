@@ -6,10 +6,93 @@
 const crypto = require('crypto');
 const metrics = require('./metrics');
 
+// [BIN-TELEM 2026-05-19] lazy-require telemetry — never block signing path
+let _telem = null;
+function _getTelem() {
+    if (_telem === null) {
+        try { _telem = require('./binanceTelemetry'); } catch (_) { _telem = false; }
+    }
+    return _telem || null;
+}
+
 // ─── Circuit Breaker — per-user isolation [BE-04] ───
 const _CB_THRESHOLD = 5;        // consecutive failures to trip
 const _CB_RESET_MS = 30000;     // 30s cooldown before retrying
 const _cbMap = new Map();       // [BE-04] userId|apiKey → { failures, lastFailure, state }
+
+// ─── IP-level Circuit Breaker — Fix 2 (post 2026-04-23 16:19 ban incident) ───
+// Binance enforces 418 (IP banned) and 429 (rate-limited) per IP, NOT per API key.
+// Per-user CB above does not protect us: when user A trips a 418, every subsequent
+// request from any user on the same IP extends the ban. This breaker is a process-
+// global gate: parse `banned until <epoch_ms>` from Binance's error message, refuse
+// all signed requests until that deadline + small jitter. If the message lacks a
+// timestamp (defensive fallback), use _IP_CB_FALLBACK_MS.
+const _IP_CB_FALLBACK_MS = 60000;  // cap on fallback ban window (Binance min ban is usually ~2min, but be lenient)
+const _IP_CB_JITTER_MS = 500;      // small post-deadline buffer
+let _ipBannedUntil = 0;
+let _ipBanReason = '';
+
+// [V6 Binance defense 2026-05-20] Lazy-load persistent rate state — survives PM2 reloads.
+// On first call, loads banned_until from DB so the new process inherits any
+// existing ban window rather than re-probing Binance and getting re-banned.
+let _rateStateLoaded = false;
+function _ensureRateStateLoaded() {
+  if (_rateStateLoaded) return;
+  _rateStateLoaded = true;
+  try {
+    const rateState = require('./binanceRateState');
+    const s = rateState.load();
+    if (s.banned_until > Date.now()) {
+      _ipBannedUntil = s.banned_until;
+      _ipBanReason = s.ban_reason || 'persisted ban (loaded from DB)';
+      const remainingS = Math.ceil((_ipBannedUntil - Date.now()) / 1000);
+      console.warn(`[BINANCE IP-CB] Loaded persisted ban from DB — suppressing for ~${remainingS}s. Reason: ${_ipBanReason}`);
+    }
+  } catch (_err) {
+    // DB unreachable or migration not yet applied — in-memory fallback only
+  }
+}
+
+function _isIpBanned() {
+  _ensureRateStateLoaded();
+  return _ipBannedUntil > Date.now();
+}
+function _setIpBan(untilMs, reason) {
+  _ensureRateStateLoaded();
+  // Never shrink an existing ban; only extend.
+  const target = Math.max(_ipBannedUntil, untilMs + _IP_CB_JITTER_MS);
+  if (target > _ipBannedUntil) {
+    _ipBannedUntil = target;
+    _ipBanReason = reason || _ipBanReason || 'IP rate-limit';
+    const remainingS = Math.ceil((target - Date.now()) / 1000);
+    console.warn(`[BINANCE IP-CB] Tripped — refusing all signed requests for ~${remainingS}s. Reason: ${_ipBanReason}`);
+
+    // [V6] Persist to DB so PM2 reload doesn't lose ban state.
+    try {
+      const rateState = require('./binanceRateState');
+      rateState.recordBan({ bannedUntil: target, reason: _ipBanReason, now: Date.now() });
+      rateState.appendTransitionLog({
+        from: 'NORMAL_OR_WARM',
+        to: 'SUPPRESSED',
+        reason: _ipBanReason,
+        ts: Date.now(),
+        bannedUntil: target,
+      });
+    } catch (_err) { /* defensive — never block ban path */ }
+  }
+}
+// Parse `banned until 1776961979385` style timestamp from Binance error msg.
+function _parseBanUntil(msg) {
+  if (!msg || typeof msg !== 'string') return null;
+  const m = msg.match(/banned until\s+(\d{10,16})/i);
+  if (!m) return null;
+  const ts = parseInt(m[1], 10);
+  if (!Number.isFinite(ts) || ts <= Date.now()) return null;
+  return ts;
+}
+function getIpCbStatus() {
+  return { banned: _isIpBanned(), bannedUntil: _ipBannedUntil, reason: _ipBanReason };
+}
 
 function _getCb(key) {
   if (!_cbMap.has(key)) _cbMap.set(key, { failures: 0, lastFailure: 0, state: 'CLOSED' });
@@ -79,6 +162,15 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   // [BE-04] Per-user circuit breaker key — userId preferred, fallback to apiKey
   const _cbKey = creds.userId ? String(creds.userId) : creds.apiKey;
 
+  // [Fix 2] IP-level gate — refuse instantly during active ban so we don't extend it.
+  if (_isIpBanned()) {
+    const remainingS = Math.ceil((_ipBannedUntil - Date.now()) / 1000);
+    const err = new Error(`Binance IP rate-limit — paused for ~${remainingS}s (${_ipBanReason})`);
+    err.status = 503;
+    err.code = 'IP_BANNED';
+    throw err;
+  }
+
   // Circuit breaker check
   if (!_cbCanProceed(_cbKey)) {
     const err = new Error('Binance API temporarily unavailable — circuit breaker open');
@@ -95,6 +187,19 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
   const MAX_RETRIES = 2;
   const RETRY_DELAY_MS = 300;
 
+  // [Phase A.2 2026-05-19] Auto critical section for order ops — begin before
+  // retry loop, end in finally so lane-based degradation pauses for the entire
+  // order pipeline (place + algoOrder for SL/TP + retries).
+  let _criticalOpId = null;
+  try {
+    const _scheduler = require('./binanceScheduler');
+    if (_scheduler.isOrderOp(method, path)) {
+      _criticalOpId = `signer:${creds.userId || creds.apiKey}:${method}:${path}:${Date.now()}:${Math.random().toString(36).slice(2, 6)}`;
+      _scheduler.beginCriticalSection(_criticalOpId);
+    }
+  } catch (_) { _criticalOpId = null; }
+
+  try {
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     // Re-sign on each attempt so timestamp stays fresh within recvWindow
     const signed = signParams(params, creds.apiSecret);
@@ -122,7 +227,10 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     const _t0 = Date.now();
     let res;
     try {
-      res = await fetch(url, options);
+      // [BIN-TELEM 2026-05-19] Tag source from creds.__src (caller-supplied) or default
+      const _src = (creds && creds.__src) || ('signer:' + method + ' ' + path);
+      const _t = _getTelem();
+      res = _t ? await _t.wrapFetch(fetch, url, Object.assign({}, options, { __src: _src, __weight: 5 })) : await fetch(url, options);
     } catch (fetchErr) {
       if (attempt < MAX_RETRIES) {
         await new Promise(r => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
@@ -152,6 +260,14 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     }
 
     if (!res.ok) {
+      // [Fix 2] Detect IP-level rate-limit / ban (418/429) and trip global gate.
+      // Binance puts the unban deadline in the message: "...banned until <ts>...".
+      // If parsing fails, fall back to a fixed window so we still pause requests.
+      if (res.status === 418 || res.status === 429) {
+        const parsedTs = _parseBanUntil(data.msg);
+        const untilMs = parsedTs != null ? parsedTs : Date.now() + _IP_CB_FALLBACK_MS;
+        _setIpBan(untilMs, `HTTP ${res.status}: ${data.msg || res.statusText}`);
+      }
       _cbRecordFailure(_cbKey);
       const err = new Error(`Binance API error: ${data.msg || res.statusText}`);
       err.code = data.code;
@@ -162,6 +278,11 @@ async function sendSignedRequest(method, path, params = {}, creds = {}) {
     _cbRecordSuccess(_cbKey);
     return data;
   }
+  } finally {
+    if (_criticalOpId) {
+      try { require('./binanceScheduler').endCriticalSection(_criticalOpId); } catch (_) {}
+    }
+  }
 }
 
-module.exports = { signParams, sendSignedRequest };
+module.exports = { signParams, sendSignedRequest, getIpCbStatus };

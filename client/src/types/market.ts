@@ -85,6 +85,7 @@ export interface OverlayToggles {
   sr: boolean
   llv: boolean
   oflow: boolean
+  ovi: boolean
 }
 
 /**

@@ -1,33 +1,32 @@
-import { useEffect } from 'react'
 import { devInjectSignal, devInjectLiquidation, devInjectWhale, devFeedDisconnect, devFeedRecover, devTriggerKillSwitch, devResetProtect, devReplayStart, devReplayStop, devClearLog, devExportLog } from '../../utils/dev'
+import { useQexitRiskStore } from '../../stores/qexitRiskStore'
+
+function QexitRiskStrip() {
+  const snap = useQexitRiskStore((s) => s.snapshot)
+  return (
+    <div className="qexit-bar-wrap" id="qexit-risk-strip" style={{ display: snap.visible ? 'block' : 'none' }}>
+      <div className="qexit-bar-row">
+        <span className="qexit-bar-label">EXIT RISK</span>
+        <div className="qexit-bar-track">
+          <div className="qexit-bar-fill" id="qexit-bar-fill" style={{ width: snap.risk + '%', background: snap.fillColor }}></div>
+        </div>
+        <span className="qexit-risk-val" id="qexit-risk-val" style={{ color: snap.valueColor }}>{snap.risk}</span>
+        <span className={'qexit-action ' + snap.action} id="qexit-action-badge">{snap.action}</span>
+      </div>
+      <div className="qexit-sigs" id="qexit-sigs-detail">
+        {snap.signals.map((sig, i) => (
+          <div key={i} className="qexit-sig-row">
+            <span className="qexit-sig-name">{sig.name}</span>{' '}
+            <span dangerouslySetInnerHTML={{ __html: sig.valueHtml }} />
+          </div>
+        ))}
+      </div>
+      <div className="qexit-advisory" id="qexit-advisory" style={{ color: snap.advisoryColor }} dangerouslySetInnerHTML={{ __html: snap.advisoryHtml }} />
+    </div>
+  )
+}
 
 export function AnalysisSections() {
-  // Attach delegation for dev tool buttons (dangerouslySetInnerHTML can't use onClick)
-  useEffect(() => {
-    const cont = document.getElementById('dev-content')
-    if (!cont || (cont as any).dataset.devDelegated) return
-    ;(cont as any).dataset.devDelegated = '1'
-    const actions: Record<string, Function> = {
-      devInjectSignalLONG: () => devInjectSignal('LONG'),
-      devInjectSignalSHORT: () => devInjectSignal('SHORT'),
-      devInjectLiquidationLONG: () => devInjectLiquidation('LONG'),
-      devInjectLiquidationSHORT: () => devInjectLiquidation('SHORT'),
-      devInjectWhale: () => devInjectWhale(),
-      devFeedDisconnect: () => devFeedDisconnect(),
-      devFeedRecover: () => devFeedRecover(),
-      devTriggerKillSwitch: () => devTriggerKillSwitch(),
-      devResetProtect: () => devResetProtect(),
-      devReplayStart: () => devReplayStart(),
-      devReplayStop: () => devReplayStop(),
-      devClearLog: () => devClearLog(),
-      devExportLog: () => devExportLog(),
-    }
-    cont.addEventListener('click', (e) => {
-      const btn = (e.target as HTMLElement).closest('[data-action]') as HTMLElement
-      if (btn) { const fn = actions[btn.dataset.action || '']; if (fn) fn() }
-    })
-  }, [])
-
   return (
     <>
       {/* ===== RSI MULTI-TIMEFRAME ===== */}
@@ -159,7 +158,7 @@ export function AnalysisSections() {
       {/* ===== LIQUIDITY MAGNET SCANNER ===== */}
       <div className="sec" id="magSec">
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>MAGNET DE LICHIDITATE &mdash; RADAR</span>
+          <span>LIQUIDITY MAGNET &mdash; RADAR</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
             <span id="magUpdTime" style={{ fontSize: '7px', color: 'var(--dim)' }}>&mdash;</span>
             <button
@@ -175,7 +174,7 @@ export function AnalysisSections() {
         {/* Magnet summary */}
         <div className="mag-summary" id="magSummary">
           <div className="mag-sum-item">
-            <div className="mag-sum-lbl">MAGNET SUS</div>
+            <div className="mag-sum-lbl">MAGNET UP</div>
             <div className="mag-sum-val" id="magNearAbove" style={{ color: 'var(--red)' }}>&mdash;</div>
           </div>
           <div className="mag-sum-item">
@@ -183,7 +182,7 @@ export function AnalysisSections() {
             <div className="mag-bias neut" id="magBias">NEUTRAL</div>
           </div>
           <div className="mag-sum-item">
-            <div className="mag-sum-lbl">MAGNET JOS</div>
+            <div className="mag-sum-lbl">MAGNET DOWN</div>
             <div className="mag-sum-val" id="magNearBelow" style={{ color: 'var(--grn)' }}>&mdash;</div>
           </div>
         </div>
@@ -191,11 +190,11 @@ export function AnalysisSections() {
         <div className="mag-wrap">
           {/* Above price */}
           <div className="mag-title">
-            <span><span className="z-dot z-dot--red"></span> REZISTENTA / MAGNETI SUS</span>
+            <span><span className="z-dot z-dot--red"></span> RESISTANCE / UPPER MAGNETS</span>
             <span id="magAboveCnt" style={{ color: 'var(--red)' }}>&mdash;</span>
           </div>
           <div className="mag-arrow" id="magAboveList">
-            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>Se incarca...</div>
+            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>Loading...</div>
           </div>
 
           {/* Separator = current price */}
@@ -207,11 +206,11 @@ export function AnalysisSections() {
 
           {/* Below price */}
           <div className="mag-title">
-            <span><span className="z-dot z-dot--grn"></span> SUPORT / MAGNETI JOS</span>
+            <span><span className="z-dot z-dot--grn"></span> SUPPORT / LOWER MAGNETS</span>
             <span id="magBelowCnt" style={{ color: 'var(--grn)' }}>&mdash;</span>
           </div>
           <div className="mag-arrow" id="magBelowList">
-            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>Se incarca...</div>
+            <div style={{ padding: '10px', textAlign: 'center', fontSize: '8px', color: 'var(--dim)' }}>Loading...</div>
           </div>
         </div>
       </div>
@@ -252,7 +251,7 @@ export function AnalysisSections() {
             <tbody id="mscanBody">
               <tr>
                 <td colSpan={10} style={{ textAlign: 'center', padding: '16px', color: 'var(--dim)', fontSize: '8px' }}>
-                  Apasa SCAN sau asteapta Auto Trade sa porneasca...
+                  Press SCAN or wait for Auto Trade to start...
                 </td>
               </tr>
             </tbody>
@@ -263,12 +262,12 @@ export function AnalysisSections() {
       {/* ===== SIGNAL SCANNER SECTION ===== */}
       <div className="sec sig-scan" id="sigScanSec">
         <div className="sig-hdr">
-          <span>SCANNER DE SEMNALE</span>
+          <span>SIGNAL SCANNER</span>
           <span id="sigScanTime" style={{ fontSize: '7px', color: 'var(--dim)' }}></span>
         </div>
         <div id="megaSigBox"></div>
         <div className="sig-grid" id="sigGrid">
-          <div className="sig-row" style={{ justifyContent: 'center', padding: '14px', color: 'var(--dim)', fontSize: '8px' }}>Se calculeaza semnale...</div>
+          <div className="sig-row" style={{ justifyContent: 'center', padding: '14px', color: 'var(--dim)', fontSize: '8px' }}>Calculating signals...</div>
         </div>
       </div>
 
@@ -280,26 +279,26 @@ export function AnalysisSections() {
             <span id="dhfCurrentSlot" style={{ fontSize: '8px', color: '#00ff88' }}>&mdash;</span>
             <label style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '7px', cursor: 'pointer' }}>
               <input type="checkbox" id="dhfEnabled" defaultChecked onChange={() => (window as any).renderDHF?.()} />
-              <span style={{ color: '#aa44ff' }}>Filtru activ</span>
+              <span style={{ color: '#aa44ff' }}>Filter active</span>
             </label>
           </div>
         </div>
         <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
-          ZILE SAPTAMANA &mdash; WR mediu pe simboluri
+          WEEKDAYS &mdash; avg WR across symbols
         </div>
         <div className="dhf-grid" id="dhfDayGrid">
           {/* filled by JS */}
         </div>
         <div style={{ fontSize: '7px', letterSpacing: '1px', color: 'var(--dim)', padding: '4px 10px' }}>
-          ORE ROMANIA (UTC+2/+3) &mdash; Evita orele rosii
+          HOURS ROMANIA (UTC+2/+3) &mdash; Avoid red hours
         </div>
         <div className="dhf-hours" id="dhfHourGrid">
           {/* filled by JS */}
         </div>
         <div style={{ padding: '4px 10px 8px', fontSize: '7px', color: 'var(--dim)' }}>
-          <span style={{ color: '#00d97a' }}>&#9632;</span> WR&ge;60% &mdash; Tranzactioneaza &nbsp;
+          <span style={{ color: '#00d97a' }}>&#9632;</span> WR&ge;60% &mdash; Trade &nbsp;
           <span style={{ color: '#f0c040' }}>&#9632;</span> WR 45-60% &mdash; Caution &nbsp;
-          <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Evita
+          <span style={{ color: '#ff4466' }}>&#9632;</span> WR&lt;45% &mdash; Avoid
         </div>
       </div>
 
@@ -307,43 +306,43 @@ export function AnalysisSections() {
       <div className="sec" id="perfSec">
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
           <span>PERFORMANCE TRACKER &mdash; PER INDICATOR</span>
-          <span id="perfUpdTime" style={{ fontSize: '9px', color: 'var(--dim)' }}>Live din trades</span>
+          <span id="perfUpdTime" style={{ fontSize: '9px', color: 'var(--dim)' }}>Live from trades</span>
         </div>
         <div style={{ padding: '4px 10px 4px', fontSize: '9px', color: 'var(--dim)', display: 'flex', justifyContent: 'space-between' }}>
           <span>INDICATOR</span><span>WIN RATE | TRADES | WEIGHT AI</span>
         </div>
         <div id="perfTrackerBody">
           <div style={{ padding: '16px', textAlign: 'center', fontSize: '10px', color: 'var(--dim)' }}>
-            Se colecteaza date din Auto Trade...
+            Collecting data from Auto Trade...
           </div>
         </div>
         <div style={{ padding: '6px 10px', fontSize: '9px', color: 'var(--dim)', borderTop: '1px solid #0d1520', lineHeight: 1.8 }}>
-          Zeus Brain pondereaza automat Confluence Score bazat pe performanta reala a fiecarui indicator.<br />
-          Indicatorii cu WR mare primesc greutate mai mare in decizia de intrare.
+          Zeus Brain auto-weights the Confluence Score based on each indicator's real performance.<br />
+          Indicators with higher WR get more weight in entry decisions.
         </div>
       </div>
 
       {/* ===== BACKTEST ENGINE ===== */}
       <div className="sec" id="btSec">
         <div className="slbl" style={{ justifyContent: 'space-between' }}>
-          <span>BACKTEST ENGINE &mdash; PRECIZIE INDICATORI</span>
-          <span id="btLastRun" style={{ fontSize: '9px', color: 'var(--dim)' }}>Nerulatat</span>
+          <span>BACKTEST ENGINE &mdash; INDICATOR PRECISION</span>
+          <span id="btLastRun" style={{ fontSize: '9px', color: 'var(--dim)' }}>Not run yet</span>
         </div>
         <div className="bt-wrap">
           {/* Controls */}
           <div className="bt-controls">
             <button className="bt-btn bt-btn-run" id="btRunBtn" onClick={() => (window as any).runBacktest?.()}>&#9654; RUN BACKTEST</button>
             <select className="bt-sel" id="btLookback" defaultValue="500" onChange={() => {}}>
-              <option value="100">100 bare</option>
-              <option value="200">200 bare</option>
-              <option value="500">500 bare</option>
-              <option value="1000">1000 bare (max)</option>
+              <option value="100">100 bars</option>
+              <option value="200">200 bars</option>
+              <option value="500">500 bars</option>
+              <option value="1000">1000 bars (max)</option>
             </select>
             <select className="bt-sel" id="btFwdBars" defaultValue="5" onChange={() => {}}>
-              <option value="3">+3 bare</option>
-              <option value="5">+5 bare</option>
-              <option value="10">+10 bare</option>
-              <option value="20">+20 bare</option>
+              <option value="3">+3 bars</option>
+              <option value="5">+5 bars</option>
+              <option value="10">+10 bars</option>
+              <option value="20">+20 bars</option>
             </select>
             <select className="bt-sel" id="btMinMove" defaultValue="0.5" onChange={() => {}}>
               <option value="0.2">&ge;0.2% move</option>
@@ -354,7 +353,7 @@ export function AnalysisSections() {
 
           {/* Progress */}
           <div className="bt-progress" id="btProgress" style={{ display: 'none' }}>
-            <div>Se calculeaza... <span id="btProgressPct">0</span>%</div>
+            <div>Calculating... <span id="btProgressPct">0</span>%</div>
             <div className="bt-progress-bar">
               <div className="bt-progress-fill" id="btProgressFill" style={{ width: '0%' }}></div>
             </div>
@@ -369,11 +368,11 @@ export function AnalysisSections() {
                 <div className="bt-sum-val" id="btBestInd" style={{ color: 'var(--gold)', fontSize: '11px' }}>&mdash;</div>
               </div>
               <div className="bt-sum-cell">
-                <div className="bt-sum-lbl">MEDIE WIN RATE</div>
+                <div className="bt-sum-lbl">AVG WIN RATE</div>
                 <div className="bt-sum-val" id="btAvgWR" style={{ color: 'var(--whi)' }}>&mdash;</div>
               </div>
               <div className="bt-sum-cell">
-                <div className="bt-sum-lbl">TOTAL SEMNALE</div>
+                <div className="bt-sum-lbl">TOTAL SIGNALS</div>
                 <div className="bt-sum-val" id="btTotalSig" style={{ color: 'var(--blu)' }}>&mdash;</div>
               </div>
               <div className="bt-sum-cell">
@@ -383,12 +382,12 @@ export function AnalysisSections() {
             </div>
 
             {/* Table header */}
-            <div className="bt-ind-row hdr">
+            <div className="bt-ind-row bt-hdr">
               <span>INDICATOR</span>
               <span>WIN RATE</span>
-              <span style={{ textAlign: 'center' }}>SEMNALE</span>
+              <span style={{ textAlign: 'center' }}>SIGNALS</span>
               <span style={{ textAlign: 'right' }}>R:R</span>
-              <span style={{ textAlign: 'center' }}>GRAD</span>
+              <span style={{ textAlign: 'center' }}>GRADE</span>
             </div>
 
             {/* Results rows */}
@@ -396,7 +395,7 @@ export function AnalysisSections() {
 
             {/* Equity curve */}
             <div className="bt-equity">
-              <div className="bt-equity-lbl">CURBA ECHITATE &mdash; CONFLUENTA (simulat $1000)</div>
+              <div className="bt-equity-lbl">EQUITY CURVE &mdash; CONFLUENCE (simulated $1000)</div>
               <div className="bt-equity-chart">
                 <svg className="bt-eq-svg" id="btEquitySvg" viewBox="0 0 400 50" preserveAspectRatio="none"></svg>
               </div>
@@ -407,17 +406,17 @@ export function AnalysisSections() {
               <svg className="z-i" viewBox="0 0 16 16">
                 <circle cx="8" cy="4" r="1" fill="currentColor" stroke="none" />
                 <path d="M7 7h2v6H7z" fill="currentColor" stroke="none" />
-              </svg> Backtestul verifica daca, dupa fiecare semnal detectat in istoric, pretul a confirmat directia in
-              urmatoarele bare.
-              Win Rate &gt; 55% = semnal util. Win Rate &gt; 65% = semnal excelent. Rezultatele sunt pe datele istorice
-              disponibile.
+              </svg> Backtest verifies whether, after every signal detected in history, the price confirmed the direction in
+              the following bars.
+              Win Rate &gt; 55% = useful signal. Win Rate &gt; 65% = excellent signal. Results are on the historical data
+              available.
             </div>
           </div>
 
           {/* Empty state */}
           <div id="btEmpty" style={{ padding: '16px', textAlign: 'center', fontSize: '9px', color: 'var(--dim)' }}>
-            Apasa <strong style={{ color: 'var(--gold)' }}>&#9654; RUN BACKTEST</strong> pentru a analiza precizia indicatorilor pe
-            datele istorice curente.
+            Press <strong style={{ color: 'var(--gold)' }}>&#9654; RUN BACKTEST</strong> to analyze indicator precision on the
+            current historical data.
           </div>
         </div>
       </div>
@@ -751,18 +750,7 @@ export function AnalysisSections() {
           <span>SCENARIO ENGINE</span>
           <span id="scenario-upd" style={{ fontSize: '9px', color: 'var(--dim)' }}></span>
         </div>
-        <div className="qexit-bar-wrap" id="qexit-risk-strip" style={{ display: 'none' }}>
-          <div className="qexit-bar-row">
-            <span className="qexit-bar-label">EXIT RISK</span>
-            <div className="qexit-bar-track">
-              <div className="qexit-bar-fill" id="qexit-bar-fill" style={{ width: '0%', background: '#556677' }}></div>
-            </div>
-            <span className="qexit-risk-val" id="qexit-risk-val" style={{ color: '#556677' }}>0</span>
-            <span className="qexit-action HOLD" id="qexit-action-badge">HOLD</span>
-          </div>
-          <div className="qexit-sigs" id="qexit-sigs-detail"></div>
-          <div className="qexit-advisory" id="qexit-advisory">Advisory mode &mdash; auto-exec disabled.</div>
-        </div>
+        <QexitRiskStrip />
         <div className="scenario-content" id="scenario-content">
           <div style={{ textAlign: 'center', padding: '14px', color: 'var(--dim)', fontSize: '10px', letterSpacing: '1px' }}>
             Waiting for market data...
@@ -821,8 +809,8 @@ export function AnalysisSections() {
               ADAPTIVE OFF
             </button>
             <div style={{ fontSize: '8px', color: 'var(--dim)', marginTop: '4px', lineHeight: 1.6 }}>
-              OFF = toți multiplieri &times;1.00, engine nu citește nimic.<br />
-              Min 30 trades/bucket pentru a activa multiplicatorii.
+              OFF = all multipliers &times;1.00, engine reads nothing.<br />
+              Min 30 trades/bucket to activate multipliers.
             </div>
           </div>
           <div id="adaptive-mults-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: '3px', fontSize: '9px', background: '#0a1520', border: '1px solid #1a2a3a', borderRadius: '3px', padding: '6px 10px', marginBottom: '8px' }}>
@@ -835,7 +823,7 @@ export function AnalysisSections() {
             <span>BUCKET</span><span>TRADES</span><span>WR</span><span>MULT</span>
           </div>
           <div id="adaptive-bucket-table" style={{ maxHeight: '120px', overflowY: 'auto', fontSize: '8px', color: '#6a8090' }}>
-            <div style={{ color: 'var(--dim)', padding: '4px 0' }}>Niciun trade cu context încă.</div>
+            <div style={{ color: 'var(--dim)', padding: '4px 0' }}>No trade with context yet.</div>
           </div>
         </div>
       </div>
@@ -845,33 +833,45 @@ export function AnalysisSections() {
           <span>DEVELOPER MODE — TEST HARNESS</span>
           <span id="dev-upd" style={{ fontSize: '7px', color: '#aa88ff' }}></span>
         </div>
-        <div className="dev-content" id="dev-content" dangerouslySetInnerHTML={{ __html:
-          '<div class="dev-section"><div class="dev-title">INJECT EVENTS</div><div class="dev-buttons">'
-          + '<button class="dev-btn" data-action="devInjectSignalLONG">LONG SIGNAL</button>'
-          + '<button class="dev-btn" data-action="devInjectSignalSHORT">SHORT SIGNAL</button>'
-          + '<button class="dev-btn" data-action="devInjectLiquidationLONG">LIQ LONG</button>'
-          + '<button class="dev-btn" data-action="devInjectLiquidationSHORT">LIQ SHORT</button>'
-          + '<button class="dev-btn" data-action="devInjectWhale">FAKE WHALE</button>'
-          + '<button class="dev-btn" data-action="devFeedDisconnect">FEED DISCONNECT</button>'
-          + '<button class="dev-btn" data-action="devFeedRecover">FEED RECOVER</button>'
-          + '<button class="dev-btn" data-action="devTriggerKillSwitch">KILL SWITCH</button>'
-          + '<button class="dev-btn" data-action="devResetProtect">RESET PROTECT</button>'
-          + '</div></div>'
-          + '<div class="dev-section"><div class="dev-title">EVENT LOG (last 50)</div>'
-          + '<div class="dev-log" id="dev-log"><div class="dev-log-empty">No events yet. Use buttons above to simulate.</div></div>'
-          + '<div style="display:flex;gap:4px;margin-top:4px">'
-          + '<button class="dev-btn small" data-action="devClearLog">CLEAR LOG</button>'
-          + '<button class="dev-btn small" data-action="devExportLog">EXPORT CSV</button>'
-          + '</div></div>'
-          + '<div class="dev-section"><div class="dev-title">REPLAY MODE (log-only viewer)</div>'
-          + '<div style="display:flex;gap:4px;align-items:center">'
-          + '<button class="dev-btn small" data-action="devReplayStart">▶ START</button>'
-          + '<button class="dev-btn small" data-action="devReplayStop">■ STOP</button>'
-          + '<span style="color:var(--dim);font-size:7px" id="dev-replay-status">Idle</span></div>'
-          + '<div style="margin-top:4px;font-size:7px;color:var(--dim)">'
-          + '<input type="number" id="dev-replay-speed" value="1" min="0.1" max="10" step="0.1" style="width:50px;background:#0a121a;border:1px solid #2a3a4a;color:#aaccff;padding:2px 4px;border-radius:2px;font-family:var(--ff)">× speed</div>'
-          + '</div>'
-        }} />
+        <div className="dev-content" id="dev-content">
+          <div className="dev-section">
+            <div className="dev-title">INJECT EVENTS</div>
+            <div className="dev-buttons">
+              <button className="dev-btn" onClick={() => devInjectSignal('LONG')}>LONG SIGNAL</button>
+              <button className="dev-btn" onClick={() => devInjectSignal('SHORT')}>SHORT SIGNAL</button>
+              <button className="dev-btn" onClick={() => devInjectLiquidation('LONG')}>LIQ LONG</button>
+              <button className="dev-btn" onClick={() => devInjectLiquidation('SHORT')}>LIQ SHORT</button>
+              <button className="dev-btn" onClick={() => devInjectWhale()}>FAKE WHALE</button>
+              <button className="dev-btn" onClick={() => devFeedDisconnect()}>FEED DISCONNECT</button>
+              <button className="dev-btn" onClick={() => devFeedRecover()}>FEED RECOVER</button>
+              <button className="dev-btn" onClick={() => devTriggerKillSwitch()}>KILL SWITCH</button>
+              <button className="dev-btn" onClick={() => devResetProtect()}>RESET PROTECT</button>
+            </div>
+          </div>
+          <div className="dev-section">
+            <div className="dev-title">EVENT LOG (last 50)</div>
+            <div className="dev-log" id="dev-log">
+              <div className="dev-log-empty">No events yet. Use buttons above to simulate.</div>
+            </div>
+            <div style={{ display: 'flex', gap: '4px', marginTop: '4px' }}>
+              <button className="dev-btn small" onClick={() => devClearLog()}>CLEAR LOG</button>
+              <button className="dev-btn small" onClick={() => devExportLog()}>EXPORT CSV</button>
+            </div>
+          </div>
+          <div className="dev-section">
+            <div className="dev-title">REPLAY MODE (log-only viewer)</div>
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              <button className="dev-btn small" onClick={() => devReplayStart()}>▶ START</button>
+              <button className="dev-btn small" onClick={() => devReplayStop()}>■ STOP</button>
+              <span style={{ color: 'var(--dim)', fontSize: '7px' }} id="dev-replay-status">Idle</span>
+            </div>
+            <div style={{ marginTop: '4px', fontSize: '7px', color: 'var(--dim)' }}>
+              <input type="number" id="dev-replay-speed" defaultValue={1} min={0.1} max={10} step={0.1}
+                style={{ width: '50px', background: '#0a121a', border: '1px solid #2a3a4a', color: '#aaccff', padding: '2px 4px', borderRadius: '2px', fontFamily: 'var(--ff)' }} />
+              × speed
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="tickw">

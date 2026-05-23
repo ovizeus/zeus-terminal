@@ -12,6 +12,10 @@ let _canvas: HTMLCanvasElement | null = null
 let _ctx: CanvasRenderingContext2D | null = null
 let _raf = 0
 let _destroyed = false
+// [PERF-1] Hold ref to resize handler so destroyParticles() can removeEventListener.
+// Without this, every initParticles() call (each panel toggle) leaks one window
+// resize listener — after ~10 toggles 10+ handlers fire on every resize event.
+let _resizeHandler: (() => void) | null = null
 
 function calcDir(): void {
   const c = w.S; if (!c || !c.price || !c._qmLiqBuckets) return
@@ -103,13 +107,20 @@ export function initParticles(canvasId: string): void {
     if (parent) { _canvas.width = parent.clientWidth; _canvas.height = parent.clientHeight }
   }
   resize()
-  window.addEventListener('resize', resize)
+  // [PERF-1] Store ref so destroy can remove
+  _resizeHandler = resize
+  window.addEventListener('resize', _resizeHandler)
   _raf = requestAnimationFrame(frame)
 }
 
 export function destroyParticles(): void {
   _destroyed = true
   if (_raf) { cancelAnimationFrame(_raf); _raf = 0 }
+  // [PERF-1] Remove resize listener to prevent leak across panel toggle cycles
+  if (_resizeHandler) {
+    window.removeEventListener('resize', _resizeHandler)
+    _resizeHandler = null
+  }
   PARTS.length = 0
   _canvas = null; _ctx = null
 }

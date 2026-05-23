@@ -36,6 +36,12 @@ export interface ATState {
   mode: PositionMode
   running: boolean
   killTriggered: boolean
+  killReason: string | null
+  killLoss: number
+  killLimit: number
+  killBalRef: number
+  killModeAtTrigger: string | null
+  killActiveAt: number
   interval: number | null
 
   // Stats
@@ -54,15 +60,34 @@ export interface ATState {
   cooldownMs: number
   _cooldownBySymbol: Record<string, number>
   _killTriggeredTs: number
+  enabledAt: number
   _modeConfirmed: boolean
   _enabledPerMode: Record<string, boolean>
   _serverMode: string
-  _serverStats: ATStats | null
-  _serverDemoStats: ATStats | null
-  _serverLiveStats: ATStats | null
+  _serverStats: ATStats | Record<string, unknown> | null
+  _serverDemoStats: ATStats | Record<string, unknown> | null
+  _serverLiveStats: ATStats | Record<string, unknown> | null
 
   // Log
   log: ATLogEntry[]
+}
+
+/**
+ * AutoTrade config — canonical parameters consumed by the AT decision engine.
+ * Phase 3 contract: mirror of the subset of `window.TC` that AT actually
+ * reads (lev/size/slPct/rr/maxPos/sigMin/adxMin/cooldownMs). Wire mapping
+ * to `SettingsPayload`: sl→slPct, others 1:1; adxMin and cooldownMs are
+ * NOT in the flat wire and are hydrated from nested blobs / defaults.
+ */
+export interface ATConfig {
+  lev: number
+  size: number
+  slPct: number
+  rr: number
+  maxPos: number
+  sigMin: number
+  adxMin: number
+  cooldownMs: number
 }
 
 /** AT stats subset from server */
@@ -76,13 +101,18 @@ export interface ATStats {
   closedTradesToday: number
 }
 
-/** AT log entry */
+/** AT log entry — engine action fields and legacy display fields coexist
+ * until the UI panel migrates off the display-shaped rows produced by
+ * atLog() / atStore.ui.logEntries. */
 export interface ATLogEntry {
-  ts: number
-  action: string
+  ts?: number
+  action?: string
   symbol?: string
   side?: string
   reason?: string
+  time?: string
+  type?: string
+  msg?: string
 }
 
 /**
@@ -95,6 +125,11 @@ export interface DslState {
   magnetMode: string
   positions: Record<string, DslPositionState>
   checkInterval: number | null
+
+  // [Phase 6 C1 additive] engine-internal bookkeeping — present on window.DSL
+  // at runtime (config.ts:1979) but not previously in the type. Optional so
+  // no existing construction site breaks.
+  _attachedIds?: Set<string>
 }
 
 /** Per-position DSL tracking */
@@ -113,6 +148,18 @@ export interface DslPositionState {
   attachedTs: number
   impulseTriggered: boolean
   log: unknown[]
+
+  // [Phase 6 C1 additive] runtime-only fields produced by the DSL engine and
+  // server DSL bridge (trading/dsl.ts:280-314). Made optional so the
+  // canonical store can hold engine output directly without casting.
+  progress?: number
+  _activationPrice?: number
+  ttpArmed?: boolean
+  ttpPeak?: number
+  _barGreenPct?: number
+  _barYellowPct?: number
+  _stale?: boolean
+  _staleLogged?: boolean
 }
 
 /** Predator engine state */

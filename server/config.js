@@ -8,6 +8,18 @@ const path = require('path');
 
 const OVERRIDES_FILE = path.join(__dirname, '..', 'data', 'config_overrides.json');
 
+// [SEC-24] Fail-fast if NODE_ENV missing on production-like host. Defensive
+// fallback `'development'` previously masked silent prod-as-dev boots
+// (stack traces exposed, permissive validation, NODE_ENV-gated production
+// code paths skipped). Heuristic: __dirname starts with `/root/` (Zeus VPS
+// canonical path) → require explicit NODE_ENV. Local dev (other paths)
+// keeps soft default.
+if (!process.env.NODE_ENV && __dirname.startsWith('/root/')) {
+  console.error('[CONFIG] FATAL: NODE_ENV missing on production-like host (' + __dirname + '). Set NODE_ENV=production în .env or ecosystem.config.js.');
+  process.exit(1);
+}
+console.log('[CONFIG] Boot environment: NODE_ENV=' + (process.env.NODE_ENV || 'development') + ' (path=' + __dirname + ')');
+
 const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwtSecret: process.env.JWT_SECRET,
@@ -61,6 +73,32 @@ for (const v of _required) {
   if (!process.env[v]) {
     console.error(`[CONFIG] FATAL: Missing required env var ${v} — server cannot start safely`);
     process.exit(1);
+  }
+}
+
+// [CFG-4] Telegram bot token warn — if chatId is configured but botToken
+// is empty, every alert send will silently fail. Surface this at boot
+// rather than at first runtime alert (which might be hours later or
+// during a real incident). Soft warn — telegram is optional, server can
+// still run, but ops needs to know if alerts won't fire.
+if (config.telegram.chatId && !config.telegram.botToken) {
+  console.warn('[CONFIG] WARN: TELEGRAM_CHAT_ID is set but TELEGRAM_BOT_TOKEN is empty — Telegram alerts will silently fail. Set both or unset both.');
+}
+
+// [CFG-5] Optional-but-important config defaults soft-warn at boot. JWT_SECRET
+// and ENCRYPTION_KEY are hard-required above; remaining env vars have empty-
+// string fallbacks that surface only at runtime. Boot-time warn makes deploy
+// surface the gap immediately rather than discover it on first feature use.
+const _softOptional = [
+  { key: 'TRADING_TOKEN', desc: 'manual trading auth token (POST /api/order/place + admin trading endpoints)' },
+  // [CFG-9] SENTRY_DSN — error reporting transport. Empty-string fallback
+  // means runtime errors în production go to console.log only (no remote
+  // visibility). Boot warn makes the gap surface at deploy time.
+  { key: 'SENTRY_DSN', desc: 'remote error reporting (errors will only log locally without it)' },
+];
+for (const opt of _softOptional) {
+  if (!process.env[opt.key]) {
+    console.warn(`[CONFIG] WARN: Optional env var ${opt.key} is empty — ${opt.desc} will use empty-string default.`);
   }
 }
 

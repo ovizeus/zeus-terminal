@@ -1,7 +1,10 @@
-const CACHE_VERSION = 'zt-v160-b24';
+const CACHE_VERSION = 'zt-v175-b84-legal';
+// SW_BUILD_TAG: 2026-04-30T22-00-login-network-only
+// Bump this comment whenever sw.js logic changes — forces byte-level diff
+// so browsers detect the update and reinstall (skipWaiting + clients.claim).
 const CACHE_NAME = `zt-cache-${CACHE_VERSION}`;
+// /login.html is intentionally NOT in this list — it must always come fresh from network.
 const ASSETS = [
-    '/login.html',
     '/css/main.css',
     '/css/components.css',
     '/css/themes.css',
@@ -9,6 +12,13 @@ const ASSETS = [
     '/assets/icon-192.png',
     '/assets/icon-512.png',
 ];
+
+function _isLoginHtml(urlStr) {
+    try {
+        const u = new URL(urlStr);
+        return u.pathname === '/login.html' || u.pathname === '/' || u.pathname === '';
+    } catch (_) { return false; }
+}
 
 self.addEventListener('install', event => {
     self.skipWaiting();
@@ -18,23 +28,47 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('activate', event => {
-    event.waitUntil(
-        caches.keys().then(keys => Promise.all(
-            keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
-        ))
-    );
-    self.clients.claim();
+    event.waitUntil((async () => {
+        // Drop any other (older) caches.
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)));
+        // Defensive: even within the current cache, purge any /login.html entry
+        // left over from previous SW versions that DID precache it.
+        try {
+            const cache = await caches.open(CACHE_NAME);
+            const reqs = await cache.keys();
+            await Promise.all(reqs.filter(r => _isLoginHtml(r.url)).map(r => cache.delete(r)));
+        } catch (_) {}
+        await self.clients.claim();
+    })());
 });
 
 self.addEventListener('fetch', event => {
+    // Cache API only supports GET — let the browser handle non-GET natively
+    if (event.request.method !== 'GET') return;
     const url = event.request.url;
-    const isApi = url.includes('/api/') || url.includes('binance.com') || url.includes('bybit.com') || url.includes('alternative.me');
+
+    // /login.html — strict network-only, NEVER cache, NEVER serve stale.
+    // This guarantees ticker code and any future login.html change reach every user
+    // on the next page load with no manual cache clear required.
+    if (_isLoginHtml(url)) {
+        event.respondWith(
+            fetch(event.request, { cache: 'no-store' }).catch(() =>
+                new Response('<html><body style="background:#0a0f16;color:#fff;font-family:sans-serif;text-align:center;padding-top:40px;font-size:18px">Zeus Terminal is offline — reconnecting</body></html>', {
+                    headers: { 'Content-Type': 'text/html' }
+                })
+            )
+        );
+        return;
+    }
+
+    const isApi = url.includes('/api/') || url.includes('binance.com') || url.includes('bybit.com') || url.includes('alternative.me') || url.includes('coingecko.com');
     const isExternal = url.includes('fonts.googleapis.com') || url.includes('fonts.gstatic.com') || url.includes('cdn.jsdelivr.net') || url.includes('unpkg.com') || url.includes('cdnjs.cloudflare.com');
     if (isApi || isExternal) {
         // Network only — do NOT call respondWith so browser handles it natively
         return;
     }
-    // Navigation requests (HTML pages) — network first with offline fallback
+    // Navigation requests (other HTML pages) — network first with offline fallback
     if (event.request.mode === 'navigate') {
         event.respondWith(
             fetch(event.request).then(resp => {
