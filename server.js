@@ -26,6 +26,8 @@ const serverState = require('./server/services/serverState');
 const serverBrain = require('./server/services/serverBrain');
 // [P5] Server-side AT shadow engine
 const serverAT = require('./server/services/serverAT');
+// [Bybit Phase 1A Task 43] Boot-time position reconciliation (scan exchange → reconcile DB → verify SL → lift halt)
+const recoveryBoot = require('./server/services/recoveryBoot');
 const metrics = require('./server/services/metrics');
 const { atCriticalLimit, globalApiLimit } = require('./server/middleware/rateLimit');
 
@@ -1286,6 +1288,13 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   } catch (err) {
     console.error('[DB] Migration error:', err.message);
   }
+
+  // [Bybit Phase 1A Task 43] Boot-time position reconciliation.
+  // Runs BEFORE other boot services: scan exchange → reconcile DB → verify SL → lift halt per user.
+  // Non-fatal — server continues even if recovery fails; failed users stay halted.
+  recoveryBoot.run().catch(err => {
+    console.error('[BOOT] recoveryBoot failed:', err.message);
+  });
 
   // Load exchange filters at startup (non-blocking)
   refreshExchangeInfo();
