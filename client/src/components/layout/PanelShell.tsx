@@ -110,6 +110,18 @@ export function PanelShell() {
 
   const openModal = useUiStore((s) => s.openModal)
 
+  // Lock body scroll when a dock panel is open — prevents background scroll
+  // behind the fixed overlay (.zpv). Without this, touch events on the panel
+  // can propagate to body, displacing main page scroll position. On close,
+  // the page appears "half black" because it scrolled past content.
+  useEffect(() => {
+    if (dockActive) {
+      const prev = document.body.style.overflow
+      document.body.style.overflow = 'hidden'
+      return () => { document.body.style.overflow = prev }
+    }
+  }, [dockActive])
+
   // ── Listen for legacy JS requesting modal open/close ──
   useEffect(() => {
     const handleClose = () => closeModal()
@@ -147,6 +159,7 @@ export function PanelShell() {
 
     setDockActive(null)
     try { sessionStorage.removeItem('zeusDock') } catch {}
+    window.scrollTo(0, 0)
   }
 
   // [MultiExchange 2026-05-20] Allow external triggers (e.g. SettingsHubModal
