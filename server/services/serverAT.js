@@ -1687,39 +1687,52 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
     } else {
         // All other exit types: DSL_PL, DSL_TTP, MANUAL_CLIENT, RESET, RECON_PHANTOM, etc.
 
-        // [V5.1] Server-side exits need a MARKET close on Binance (position is still open on exchange)
-        // Exception: RECON_PHANTOM / RECON_EXCHANGE_CLOSED — Binance already doesn't have the position
+        // [V5.1] Server-side exits need a MARKET close (position is still open on exchange)
+        // Exception: RECON_PHANTOM / RECON_EXCHANGE_CLOSED — exchange already doesn't have the position
+        // [Task 41] Direct sendSignedRequest replaced with exchangeOps.closePosition router.
+        // binanceOps.closePosition has NO internal retry — serverAT retry wrapper PRESERVED.
+        // binanceOps.closePosition cancels SL+TP internally — manual cancel loop REMOVED.
         if (exitType !== 'RECON_PHANTOM' && exitType !== 'RECON_EXCHANGE_CLOSED' && pos.live.executedQty) {
-            const closeSide = pos.side === 'LONG' ? 'SELL' : 'BUY';
             const rounded = roundOrderParams(pos.symbol, pos.live.executedQty);
-            // [LIVE-PARITY] Retry loop for market close (was single attempt)
+            // [LIVE-PARITY] Retry loop for market close — PRESERVED (exchangeOps has no retry)
             const CLOSE_RETRIES = [1000, 3000, 5000];
             let closeResult = null;
+            // [Task 41] opsSeq links to binanceOps at_positions row (Task 40 dual-write bridge)
+            const closeSeq = (pos.live && pos.live.opsSeq) ? pos.live.opsSeq : pos.seq;
             for (let attempt = 0; attempt <= CLOSE_RETRIES.length; attempt++) {
                 try {
-                    closeResult = await sendSignedRequest('POST', '/fapi/v1/order', {
+                    // [Task 41] Route through exchangeOps router (Binance or Bybit per user setting)
+                    // exchangeOps.closePosition: cancels SL+TP + sends reduce-only MARKET + DB transition
+                    const closeDecisionKey = require('./decisionKey').generate();
+                    closeResult = await exchangeOps.closePosition(userId, {
+                        seq: closeSeq,
                         symbol: pos.symbol,
-                        side: closeSide,
-                        type: 'MARKET',
-                        quantity: String(rounded.quantity || pos.live.executedQty),
-                        reduceOnly: true,
-                        newClientOrderId: `SAT_EXIT_${pos.live.liveSeq}_${Date.now()}`,
-                    }, creds);
-                    break; // success
+                        side: pos.side,          // LONG/SHORT — exchangeOps converts to BUY/SELL internally
+                        qty: String(rounded.quantity || pos.live.executedQty),
+                        closeType: 'MARKET',
+                        decisionKey: closeDecisionKey,
+                        source: exitType,         // audit trail: DSL_PL, MANUAL_CLIENT, RESET, etc.
+                    });
+                    if (closeResult && closeResult.ok) break; // success
+                    // ok:false (e.g. lock timeout, close rejected) — treat as retriable error
+                    const errMsg = (closeResult && closeResult.error) ? (closeResult.error.message || closeResult.error.code || 'unknown') : 'ok:false';
+                    logger.error('AT_LIVE', `[${pos.seq}] ${exitType} market close attempt ${attempt + 1}/${CLOSE_RETRIES.length + 1} returned !ok: ${errMsg}`);
+                    closeResult = null; // clear so failure path triggers below
                 } catch (closeErr) {
                     logger.error('AT_LIVE', `[${pos.seq}] ${exitType} market close attempt ${attempt + 1}/${CLOSE_RETRIES.length + 1} failed: ${closeErr.message}`);
-                    if (attempt < CLOSE_RETRIES.length) {
-                        await new Promise(r => setTimeout(r, CLOSE_RETRIES[attempt]));
-                    } else {
-                        // All retries exhausted — queue for reconciliation
-                        _pendingLiveCloses.set(pos.seq, { pos, exitType, exitPrice, pnl, ts: Date.now() });
-                        logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — queued for reconciliation`);
-                        telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on Binance — reconciliation will retry.*`);
-                    }
+                }
+                if (attempt < CLOSE_RETRIES.length) {
+                    await new Promise(r => setTimeout(r, CLOSE_RETRIES[attempt]));
+                } else {
+                    // All retries exhausted — queue for reconciliation
+                    _pendingLiveCloses.set(pos.seq, { pos, exitType, exitPrice, pnl, ts: Date.now() });
+                    logger.error('AT_LIVE', `[${pos.seq}] ALL close retries failed — queued for reconciliation`);
+                    telegram.sendToUser(userId, `🚨 *MARKET CLOSE FAILED*\n${exitType} exit for ${pos.side} ${pos.symbol}\nAll ${CLOSE_RETRIES.length + 1} attempts failed.\n*Position may still be open on exchange — reconciliation will retry.*`);
                 }
             }
-            if (closeResult) {
-                const _clRaw = parseFloat(closeResult.avgPrice);
+            if (closeResult && closeResult.ok) {
+                // [Task 41] Adapter: exchangeOps returns avgFillPrice (not avgPrice)
+                const _clRaw = parseFloat(closeResult.avgFillPrice);
                 const realFill = (Number.isFinite(_clRaw) && _clRaw > 0) ? _clRaw : exitPrice;
                 if (realFill > 0 && pos.price > 0) {
                     // [TM-4] Apply round-trip fee deduction (market close path).
@@ -1732,13 +1745,16 @@ async function _handleLiveExit(pos, exitType, exitPrice, pnl) {
                     pos.closePnl = realPnl;
                     pnl = realPnl;
                 }
-                logger.info('AT_LIVE', `[${pos.seq}] ${exitType} market close filled @ $${(closeResult.avgPrice || exitPrice)} PnL=$${pnl.toFixed(2)}`);
+                // [Task 41] Carry orderId for downstream legacy callers (e.g. audit)
+                pos.live.exitOrderId = closeResult.orderId || null;
+                logger.info('AT_LIVE', `[${pos.seq}] ${exitType} market close filled @ $${(closeResult.avgFillPrice || exitPrice)} PnL=$${pnl.toFixed(2)}`);
             }
-        }
-
-        // Cancel BOTH remaining SL and TP orders to avoid orphans on Binance
-        for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
-            if (oid) await _cancelOrderSafe(pos.symbol, oid, creds, userId);
+            // Note: SL+TP cancel already handled inside exchangeOps.closePosition — no manual loop needed
+        } else if (exitType === 'RECON_PHANTOM' || exitType === 'RECON_EXCHANGE_CLOSED') {
+            // Recon exits: position already gone on exchange — cancel orphan SL+TP protection orders only
+            for (const oid of [pos.live.slOrderId, pos.live.tpOrderId]) {
+                if (oid) await _cancelOrderSafe(pos.symbol, oid, creds, userId);
+            }
         }
     }
 
