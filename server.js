@@ -1143,6 +1143,10 @@ app.use('/api/omega/doctor', doctorRoutes);
 const ring5Routes = require('./server/routes/ring5');
 app.use('/api/ring5', ring5Routes);
 
+// ─── Health Routes (Tasks 54-56: feed / locks / recovery) ───
+const healthRoutes = require('./server/routes/health');
+app.use('/api/health', healthRoutes);
+
 // ─── API Routes (trading + exchange) ───
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);

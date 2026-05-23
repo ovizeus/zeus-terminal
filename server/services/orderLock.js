@@ -11,16 +11,16 @@
  * For multi-process, replace with DB-based advisory locks.
  */
 
-const _locks = new Map(); // key → expiresAt (ms)
+const _locks = new Map(); // key → { expiresAt, acquiredAt } (ms)
 
 async function acquire(key, timeoutMs = 10_000) {
     const now = Date.now();
     const existing = _locks.get(key);
-    if (existing && existing > now) {
+    if (existing && existing.expiresAt > now) {
         // Already held and not expired
         return false;
     }
-    _locks.set(key, now + timeoutMs);
+    _locks.set(key, { expiresAt: now + timeoutMs, acquiredAt: now });
     return true;
 }
 
@@ -28,4 +28,16 @@ function release(key) {
     _locks.delete(key);
 }
 
-module.exports = { acquire, release };
+function getActiveLocks() {
+    const now = Date.now();
+    const result = [];
+    for (const [key, info] of _locks.entries()) {
+        // Only include non-expired locks
+        if (info.expiresAt > now) {
+            result.push({ key, heldMs: now - info.acquiredAt, acquired: true });
+        }
+    }
+    return result;
+}
+
+module.exports = { acquire, release, getActiveLocks };
