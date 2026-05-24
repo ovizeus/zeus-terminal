@@ -13,15 +13,16 @@ import { useMarketStore } from '../../stores'
 import { registerChart, unregisterChart } from '../../bridge/chartBridge'
 
 /** Chart colors — 1:1 match with original marketData.js */
+const _sc = (window as any).S?._savedChartColors || (window as any).USER_SETTINGS?.chart?.colors || {}
 const COLORS = {
-  bg: '#0a0f16',
-  text: '#7a9ab8',
-  grid: '#1a2530',
+  bg: _sc.priceBg || '#0a0f16',
+  text: _sc.priceText || '#7a9ab8',
+  grid: _sc.gridH || '#1a2530',
   border: '#1e2530',
-  bullCandle: '#00d97a',
-  bearCandle: '#ff3355',
-  bullWick: '#00d97a77',
-  bearWick: '#ff335577',
+  bullCandle: _sc.bull || '#00d97a',
+  bearCandle: _sc.bear || '#ff3355',
+  bullWick: (_sc.bullW || _sc.bull || '#00d97a') + '77',
+  bearWick: (_sc.bearW || _sc.bear || '#ff3355') + '77',
   ema50: '#f0c040',
   ema200: '#00b8d4',
   wma20: '#aa44ff',
