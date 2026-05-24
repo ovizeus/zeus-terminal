@@ -16,6 +16,8 @@ const COLD_MODULES = [
     { id: 'autoResumeDD', path: '../services/ml/R5B_governance/autoResumeDD' },
     { id: 'competenceMap', path: '../services/ml/R5B_governance/competenceMap' },
     { id: 'counterfactualPortfolio', path: '../services/ml/R5A_learning/counterfactualPortfolio' },
+    { id: 'abTesting', path: '../services/ml/R6_shadowMeta/abTesting' },
+    { id: 'rlPositionManager', path: '../services/ml/R6_shadowMeta/rlPositionManager' },
 ];
 
 function _tick() {
@@ -62,6 +64,16 @@ function _tick() {
             VALUES (?, ?, ?, ?, ?, ?, ?)`).run(
             startedAt, finishedAt, decisionsProcessed, modulesRun, modulesFailed, totalInsights, finishedAt - startedAt
         );
+    } catch (_) {}
+
+    // [Wave 7] R7 event bus — publish cold path completion event.
+    try {
+        const _eb = require('../services/ml/R7_communication/eventBus');
+        if (typeof _eb.publish === 'function') {
+            _eb.publish('cold_path_complete', {
+                startedAt, finishedAt: Date.now(), decisionsProcessed, modulesRun, modulesFailed, totalInsights,
+            });
+        }
     } catch (_) {}
 
     _lastRunTs = startedAt;
