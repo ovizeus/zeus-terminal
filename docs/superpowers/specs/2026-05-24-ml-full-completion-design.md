@@ -57,6 +57,32 @@ Every ML module wired end-to-end in the brain cycle, producing real data, zero s
 - Stop and report on any bug/error found
 - Zero mistakes, professional execution
 
+## 3-Tier Module Classification
+
+### HOT PATH (brain cycle 30s, real-time trading)
+Wire modules with direct impact on decisions:
+- R2 detectors: regime, liquidity, smart money, confidence decay
+- R3A safety gates: blackSwan, lossStreak, dataFreshness, circuitBreaker
+- R4 execution: smartPostOnly, fundingAwareExit, rateLimitPriority, latency
+- R5B governance: tieredPromotion trigger, autoQuarantine check
+- R0 substrate: deadMansSwitch heartbeat, pointInTimeStore snapshots
+
+### COLD PATH (reflection cron, 5-10 min interval)
+Philosophical/meta modules analyze PAST decisions retrospectively:
+- R2: agencyAttributionLedger, narrativeCoherence, causalDiscoveryEngine, competingHypothesesEngine, epistemicCurrencyExchange, temporalPatterns
+- R5A: counterfactualPortfolio, policyRegret, driftOrchestration
+- R6: internalDebate, scenarioTreePlanner
+- Writes to `ml_reflection_*` tables
+- Insights surface in OMEGA Voice feed
+
+### DORMANT (no wiring, foundation libraries)
+Too abstract for current utility:
+- cosmicLocalityCheck, pluralSelfChamber, curiosityEngine, modalStabilityTest, epistemicMetabolismEngine, etc.
+- Kept as code, not wired. Optional future promotion COLD→HOT if proven useful.
+
+### Promotion Rule
+Cold path module → HOT path only after operator reviews data and approves.
+
 ## Out of Scope
 
 - Intermediate soak between waves (only final soak)
