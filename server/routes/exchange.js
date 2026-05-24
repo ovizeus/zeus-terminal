@@ -387,6 +387,18 @@ router.post('/switch', (req, res) => {
         return res.json({ ok: true, noOp: true, exchange: targetExchange });
     }
 
+    // Step 3.5: Verify target exchange has saved credentials
+    const targetAccount = rawDb.prepare(
+        `SELECT id FROM exchange_accounts WHERE user_id = ? AND exchange = ? LIMIT 1`
+    ).get(uid, targetExchange);
+    if (!targetAccount) {
+        return res.status(400).json({
+            ok: false,
+            code: 'NO_TARGET_CREDENTIALS',
+            error: `Cannot switch to ${targetExchange}: no saved API credentials. Add ${targetExchange} credentials first.`,
+        });
+    }
+
     // Step 4: Check open positions (OPEN / OPENING / CLOSING)
     const openPos = rawDb.prepare(
         `SELECT seq FROM at_positions WHERE user_id = ? AND status IN ('OPEN','OPENING','CLOSING') LIMIT 1`
