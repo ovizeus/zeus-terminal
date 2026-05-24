@@ -410,17 +410,17 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       crosshairMarkerVisible: false
     });
     // Set data points + forward projection so line extends beyond last candle
-    var tMin = Math.min(p1.time, p2.time);
-    var tMax = Math.max(p1.time, p2.time);
-    var vMin = (p1.time <= p2.time) ? p1.price : p2.price;
-    var vMax = (p1.time <= p2.time) ? p2.price : p1.price;
-    var dt = tMax - tMin || 1;
-    var slope = (vMax - vMin) / dt;
-    var ext = dt * 3;
+    // Use p1→p2 order as drawn (not sorted), extend 20 candles forward from p2
+    var tA = p1.time, vA = p1.price, tB = p2.time, vB = p2.price;
+    if (tA > tB) { tA = p2.time; vA = p2.price; tB = p1.time; vB = p1.price; }
+    var dt = tB - tA || 1;
+    var slope = (vB - vA) / dt;
+    var candleSec = (window as any).S && (window as any).S.chartTf === '1h' ? 3600 : (window as any).S && (window as any).S.chartTf === '4h' ? 14400 : (window as any).S && (window as any).S.chartTf === '15m' ? 900 : 300;
+    var extTime = candleSec * 20;
     var data = [
-      { time: tMin, value: vMin },
-      { time: tMax, value: vMax },
-      { time: tMax + ext, value: vMax + slope * ext }
+      { time: tA, value: vA },
+      { time: tB, value: vB },
+      { time: tB + extTime, value: vB + slope * extTime }
     ];
     lineSeries.setData(data as any);
 
@@ -446,8 +446,9 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     if (t1 === t2) t2 = t1 + 1;
     var dt = t2 - t1;
     var slope = (v2 - v1) / dt;
-    var ext = dt * 3;
-    try { line.lwcSeries.setData([{ time:t1, value:v1 }, { time:t2, value:v2 }, { time:t2 + ext, value:v2 + slope * ext }] as any); } catch(_) {}
+    var candleSec = (window as any).S && (window as any).S.chartTf === '1h' ? 3600 : (window as any).S && (window as any).S.chartTf === '4h' ? 14400 : (window as any).S && (window as any).S.chartTf === '15m' ? 900 : 300;
+    var extTime = candleSec * 20;
+    try { line.lwcSeries.setData([{ time:t1, value:v1 }, { time:t2, value:v2 }, { time:t2 + extTime, value:v2 + slope * extTime }] as any); } catch(_) {}
   }
 
   // ── Remove ──
