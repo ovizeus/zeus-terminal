@@ -95,7 +95,8 @@ function logDecision(fields) {
             fields.finalDir || 'neutral',
             finalAction,
             fields.linkedSeq || null,
-            fields  // full snapshot as JSON blob
+            fields,  // full snapshot as JSON blob
+            fields.resolvedEnv || 'DEMO'
         );
 
         // ── ML Ingest: write to ml_decision_snapshots + ml_decision_light ──

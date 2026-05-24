@@ -10072,6 +10072,12 @@ migrate('399_ml_charter_system_env', () => {
     } catch (_) {}
 });
 
+migrate('400_brain_decisions_resolved_env', () => {
+    try {
+        db.exec("ALTER TABLE brain_decisions ADD COLUMN resolved_env TEXT DEFAULT 'DEMO'");
+    } catch (_) {}
+});
+
 // ─── User methods ───
 
 const _stmts = {
@@ -10177,7 +10183,7 @@ const _stmts = {
     ctxDelete: db.prepare('DELETE FROM user_ctx_data WHERE user_id = ? AND section = ?'),
     ctxDeleteAll: db.prepare('DELETE FROM user_ctx_data WHERE user_id = ?'),
     // Brain decisions (ML data layer)
-    bdInsert: db.prepare('INSERT INTO brain_decisions (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, linked_seq, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
+    bdInsert: db.prepare('INSERT INTO brain_decisions (snap_id, user_id, symbol, ts, cycle, source_path, final_tier, final_conf, final_dir, final_action, linked_seq, data, resolved_env) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'),
     bdLinkSeq: db.prepare('UPDATE brain_decisions SET linked_seq = ? WHERE snap_id = ?'),
     bdUpdateData: db.prepare('UPDATE brain_decisions SET data = ? WHERE snap_id = ?'),
     bdUpdateAction: db.prepare('UPDATE brain_decisions SET final_action = ? WHERE snap_id = ?'),
@@ -11310,8 +11316,8 @@ module.exports = {
         return _stmts.regimeByUser.all(userId, limit || 100);
     },
     // Brain decisions (ML data layer)
-    bdInsert: (snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, data) => {
-        _stmts.bdInsert.run(snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, JSON.stringify(data));
+    bdInsert: (snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, data, resolvedEnv) => {
+        _stmts.bdInsert.run(snapId, userId, symbol, ts, cycle, sourcePath, finalTier, finalConf, finalDir, finalAction, linkedSeq, JSON.stringify(data), resolvedEnv || 'DEMO');
     },
     bdLinkSeq: (snapId, seq) => _stmts.bdLinkSeq.run(seq, snapId),
     bdUpdateData: (snapId, data) => _stmts.bdUpdateData.run(JSON.stringify(data), snapId),
