@@ -2141,12 +2141,13 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     _setCloseCooldownDeadline(userId, pos.symbol);
 
     // ── Persist close + remove from active ──
-    // [B4] Splice only if persist succeeds — prevents ghost positions on DB failure
-    if (_persistClose(pos)) {
-        _positions.splice(idx, 1);
-    } else {
-        // DB failed — keep in memory to retry on next close attempt, don't lose the position
-        logger.error('AT_DB', `[${pos.seq}] Position kept in memory — archive failed, will retry`);
+    // [B2-FIX] Always splice from _positions to prevent zombie memory leak.
+    // If DB archive fails, position data is already in pos object (logged below).
+    // Recon cycle will detect the orphan and reconcile.
+    const _archiveOk = _persistClose(pos);
+    _positions.splice(idx, 1);
+    if (!_archiveOk) {
+        logger.error('AT_DB', `[${pos.seq}] Archive failed — position spliced from memory, recon will reconcile. data=${JSON.stringify({ seq: pos.seq, symbol: pos.symbol, pnl: pos.closePnl })}`);
     }
     _persistState(userId);
 
@@ -2495,11 +2496,12 @@ function onPriceUpdate(symbol, price) {
         let closed = false;
         let pnl = 0;
 
+        // [B7-FIX] Always compute actual PnL from real exit price, not preset slPnl.
+        // Old code used pos.slPnl (estimated at entry) during DSL WAITING phase —
+        // inaccurate when price gaps past SL level.
         if (pos.side === 'LONG') {
             if (price <= effectiveSL) {
-                pnl = dsl.phase !== 'WAITING'
-                    ? +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2)
-                    : pos.slPnl;
+                pnl = +((price - pos.price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
             } else if (pos.tp && price >= pos.tp) {
@@ -2509,9 +2511,7 @@ function onPriceUpdate(symbol, price) {
             }
         } else {
             if (price >= effectiveSL) {
-                pnl = dsl.phase !== 'WAITING'
-                    ? +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2)
-                    : pos.slPnl;
+                pnl = +((pos.price - price) / pos.price * pos.size * pos.lev).toFixed(2);
                 _closePosition(i, pos, 'HIT_SL', price, pnl);
                 closed = true;
             } else if (pos.tp && price <= pos.tp) {
