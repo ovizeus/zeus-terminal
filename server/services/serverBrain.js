@@ -1372,6 +1372,14 @@ function _runCycle() {
         // [Day 18] Record cycle invocation (latency + ranOk) → flushed to
         // ml_module_heartbeats every 1s by telemetryCollector.
         _recordInvocation('serverBrain', Date.now() - _cycleStartTs, _cycleRanOk);
+        // [Wave 1] R0 dead man's switch — heartbeat per brain cycle.
+        try {
+            const _dms = require('./ml/R0_substrate/deadMansSwitch');
+            const _activeUserIds = [..._stcMap.keys()];
+            for (const _uid of _activeUserIds) {
+                _dms.emitHeartbeat({ userId: _uid, resolvedEnv: (serverAT.getMode(_uid) || 'demo').toUpperCase() });
+            }
+        } catch (_) { /* never block brain cycle on telemetry */ }
         _running = false;
         brainLock.release('brainCycle');
     }
