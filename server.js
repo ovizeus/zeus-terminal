@@ -1520,6 +1520,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
 // recover stuck pending, auto-decay expired, compact watermarks per user.
 require('./server/cron/omegaMemoryCleanup').schedule();
 
+// [Wave 1] R0 substrate cron — DR heartbeat every 60s
+try { require('./server/cron/r0SubstrateCron').schedule(); } catch (_) {}
+
 // ─── WebSocket Sync (real-time cross-device push) ───
 const wss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 });
 const _wsClients = new Map(); // userId -> Set<ws>
