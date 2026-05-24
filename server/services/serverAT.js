@@ -84,7 +84,7 @@ const _pendingLiveCloses = new Map(); // [LIVE-PARITY] seq → { pos, exitType, 
 // lazily on first isCloseCooldownActive() call per user (no module-load
 // boot hook in this file — the cost of restoring is paid at decision time).
 const _closeCooldowns = new Map();  // [RE-ENTRY] 'userId:symbol' → deadlineMs
-const CLOSE_COOLDOWN_MS = 600000;   // [RE-ENTRY] 10 min cooldown after any close
+const CLOSE_COOLDOWN_MS = 180000;   // [RE-ENTRY] 3 min cooldown after any close (was 10min — reduced for faster DEMO cycling + bandit learning)
 const _closeCooldownsRestoredFor = new Set();  // uids whose rows have been lazy-restored
 
 // [Phase 2 S6-B3] Per-user decisionId dedup TTL. Sized to one full brain
@@ -1870,10 +1870,19 @@ function _closePosition(idx, pos, exitType, price, pnl) {
     // recordContribution internally writes ml_bandit_evidence + updates L4
     // posterior + invalidates LRU cache. Telemetry-only mode: errors swallowed
     // so close flow never affected. RESET exit excluded (admin reset, not real trade).
+    // [BUG-AUDIT] Regime fallback: if pos.regime null (non-brain entry), pull from serverState.
     if (exitType !== 'RESET') {
         try {
             const ring5 = _getRing5();
-            if (ring5 && pos.env && pos.symbol && pos.regime) {
+            let _posRegime = pos.regime;
+            if (!_posRegime && pos.symbol) {
+                try {
+                    const _ss = require('./serverState');
+                    const _snap = _ss.getSnapshotForSymbol(pos.symbol);
+                    _posRegime = _snap && _snap.indicators ? _snap.indicators.regime : null;
+                } catch (_) {}
+            }
+            if (ring5 && pos.env && pos.symbol && _posRegime) {
                 const contribution = pnl > 0 ? 0.5 : pnl < 0 ? -0.5 : 0;
                 ring5.recordContribution({
                     userId,
@@ -1883,7 +1892,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                     contribution,
                     confidence: Math.max(0, Math.min(1, (pos.confidence || 0) / 100)),
                     ts: Date.now(),
-                    regime: pos.regime
+                    regime: _posRegime
                 });
             }
         } catch (_ring5Err) { /* never block close flow */ }
