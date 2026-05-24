@@ -183,3 +183,131 @@ test('ML_INGEST_ENABLED=true + snapshot table error → brain_decisions still wr
     // snapId is returned (brain_decisions succeeded)
     expect(snapId).not.toBeNull();
 });
+
+// ══════════════════════════════════════════════════════════════════
+// influenceEligibility flag-gate tests (Task 2)
+// ══════════════════════════════════════════════════════════════════
+
+// Isolated mock setup for influenceEligibility — separate describe block
+// so it does not interfere with brainLogger mocks above.
+describe('influenceEligibility flag gates', () => {
+    let mockShadowFlag;
+    let mockDemoInfluenceFlag;
+    let mockTestnetInfluenceFlag;
+    let mockLiveInfluenceFlag;
+
+    jest.mock('../../server/services/ml/_ring5/banditPosteriors', () => ({
+        getPosterior: jest.fn(() => null),
+    }));
+
+    jest.mock('../../server/services/ml/R5B_governance/versionRegistry', () => ({
+        getActive: jest.fn(() => null),
+    }));
+
+    jest.mock('../../server/services/ml/R5B_governance/preRegistration', () => ({
+        getRegistrationsForVersion: jest.fn(() => []),
+    }));
+
+    // Override the migrationFlags mock (already registered above) with getters
+    // that reference our local let variables so each test can control them.
+    // Note: jest.mock is hoisted; we use jest.doMock inside beforeAll is not
+    // possible here — instead we mutate the existing mock module at runtime
+    // via module registry manipulation. Simpler: require after setting module
+    // property via jest.resetModules approach. Since brainLogger tests already
+    // require migrationFlags via the top-level mock, we use a fresh registry
+    // for this describe block.
+
+    let checkEligibility;
+
+    beforeAll(() => {
+        jest.resetModules();
+        mockShadowFlag = false;
+        mockDemoInfluenceFlag = false;
+        mockTestnetInfluenceFlag = false;
+        mockLiveInfluenceFlag = false;
+
+        jest.doMock('../../server/migrationFlags', () => ({
+            get ML_PIPELINE_SHADOW() { return mockShadowFlag; },
+            get ML_DEMO_INFLUENCE_ENABLED() { return mockDemoInfluenceFlag; },
+            get ML_TESTNET_INFLUENCE_ENABLED() { return mockTestnetInfluenceFlag; },
+            get ML_LIVE_INFLUENCE_ENABLED() { return mockLiveInfluenceFlag; },
+            get ML_INGEST_ENABLED() { return false; },
+            get SERVER_BRAIN_DEMO() { return false; },
+            get SERVER_AT_DEMO() { return false; },
+            get PARITY_SHADOW_ENABLED() { return false; },
+            get ALT_WS_FEEDS() { return false; },
+            get SERVER_MARKET_DATA() { return false; },
+            get SERVER_BRAIN() { return false; },
+            get SERVER_AT() { return false; },
+            get CLIENT_BRAIN() { return true; },
+            get CLIENT_AT() { return true; },
+            get POSITIONS_WS() { return false; },
+            get BYBIT_TESTNET_ENABLED() { return false; },
+            get BYBIT_LIVE_ENABLED() { return false; },
+        }));
+
+        jest.doMock('../../server/services/ml/_ring5/banditPosteriors', () => ({
+            getPosterior: jest.fn(() => null),
+        }));
+
+        jest.doMock('../../server/services/ml/R5B_governance/versionRegistry', () => ({
+            getActive: jest.fn(() => null),
+        }));
+
+        jest.doMock('../../server/services/ml/R5B_governance/preRegistration', () => ({
+            getRegistrationsForVersion: jest.fn(() => []),
+        }));
+
+        const mod = require('../../server/services/ml/_ring5/influenceEligibility');
+        checkEligibility = mod.checkEligibility;
+    });
+
+    afterAll(() => {
+        jest.resetModules();
+    });
+
+    const BASE_PARAMS = {
+        userId: 1,
+        env: 'DEMO',
+        symbol: 'BTCUSDT',
+        regime: 'trend',
+        nowTs: Date.now(),
+    };
+
+    // ── Test 4: ML_PIPELINE_SHADOW=false → ml_pipeline_shadow_disabled ──
+    test('ML_PIPELINE_SHADOW=false → returns ml_pipeline_shadow_disabled', () => {
+        mockShadowFlag = false;
+        mockDemoInfluenceFlag = true;
+
+        const result = checkEligibility(BASE_PARAMS);
+
+        expect(result.eligible).toBe(false);
+        expect(result.reason).toBe('ml_pipeline_shadow_disabled');
+        expect(result.observationCount).toBe(0);
+    });
+
+    // ── Test 5: shadow=true + DEMO + ML_DEMO_INFLUENCE_ENABLED=false → influence_disabled_for_env ──
+    test('ML_PIPELINE_SHADOW=true + env DEMO + ML_DEMO_INFLUENCE_ENABLED=false → returns influence_disabled_for_env', () => {
+        mockShadowFlag = true;
+        mockDemoInfluenceFlag = false;
+
+        const result = checkEligibility({ ...BASE_PARAMS, env: 'DEMO' });
+
+        expect(result.eligible).toBe(false);
+        expect(result.reason).toBe('influence_disabled_for_env');
+        expect(result.env).toBe('DEMO');
+        expect(result.observationCount).toBe(0);
+    });
+
+    // ── Test 6: shadow=true + DEMO + ML_DEMO_INFLUENCE_ENABLED=true → falls through to insufficient_observations ──
+    test('ML_PIPELINE_SHADOW=true + env DEMO + ML_DEMO_INFLUENCE_ENABLED=true → falls through to insufficient_observations', () => {
+        mockShadowFlag = true;
+        mockDemoInfluenceFlag = true;
+
+        const result = checkEligibility({ ...BASE_PARAMS, env: 'DEMO' });
+
+        expect(result.eligible).toBe(false);
+        expect(result.reason).toBe('insufficient_observations');
+        expect(result.observationCount).toBe(0);
+    });
+});

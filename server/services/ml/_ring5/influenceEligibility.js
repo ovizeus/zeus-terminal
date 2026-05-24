@@ -17,6 +17,7 @@
 const bp = require('./banditPosteriors');
 const versionRegistry = require('../R5B_governance/versionRegistry');
 const preRegistration = require('../R5B_governance/preRegistration');
+const MF = require('../../../migrationFlags');
 
 const MIN_OBSERVATIONS = 30;
 const INFLUENCE_COMPONENT_TYPE = 'model';
@@ -34,6 +35,32 @@ function checkEligibility(params) {
     const symbol = _required(params, 'symbol');
     const regime = _required(params, 'regime');
     const nowTs = _required(params, 'nowTs');
+
+    if (!MF.ML_PIPELINE_SHADOW) {
+        return {
+            eligible: false,
+            reason: 'ml_pipeline_shadow_disabled',
+            observationCount: 0,
+            preRegStatus: null,
+            versionId: null,
+        };
+    }
+
+    const envUpper = (env || '').toUpperCase();
+    const envAllowed =
+        (envUpper === 'DEMO' && MF.ML_DEMO_INFLUENCE_ENABLED) ||
+        (envUpper === 'TESTNET' && MF.ML_TESTNET_INFLUENCE_ENABLED) ||
+        (envUpper === 'REAL' && MF.ML_LIVE_INFLUENCE_ENABLED);
+    if (!envAllowed) {
+        return {
+            eligible: false,
+            reason: 'influence_disabled_for_env',
+            observationCount: 0,
+            preRegStatus: null,
+            versionId: null,
+            env: envUpper,
+        };
+    }
 
     const cellKey = `${userId}:${env}:${symbol}:${regime}`;
     const l4 = bp.getPosterior({ level: 4, cellKey });
