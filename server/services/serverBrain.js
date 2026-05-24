@@ -1285,6 +1285,35 @@ function _runCycle() {
                                 enforcementMode: 'advisory',
                             });
                         }
+
+                        // [Wave 2] R1 charter layer — record constitutional classification.
+                        try {
+                            const _charter = require('./ml/R1_constitution/constitutionalCharterLayer');
+                            // Map enforcement principle IDs to charter kinds (all R1 principles are safety-tier).
+                            // Violations filtered here mirror _r1Filtered (NO_LIVE_WITHOUT_SL already excluded).
+                            const _R1_KIND_MAP = {
+                                MAX_POSITION_SIZE_PCT: 'safety',
+                                MAX_LEVERAGE: 'safety',
+                                NO_REVENGE_TRADE: 'safety',
+                                NO_OPPOSITE_ENTRY_ON_OPEN: 'safety',
+                                MAX_CORRELATED_EXPOSURE: 'safety',
+                                MIN_REFLECTION_CONFIDENCE: 'integrity',
+                                NO_LIVE_WITHOUT_SL: 'safety',
+                            };
+                            const _r1Kinds = _r1Filtered.map(v => _R1_KIND_MAP[v.id] || 'safety');
+                            if (_r1Kinds.length > 0) {
+                                const _resolvedEnv = (serverAT.getMode(userId) || 'demo').toUpperCase();
+                                _charter.recordCharterDecision({
+                                    userId,
+                                    resolvedEnv: _resolvedEnv,
+                                    decisionId: `brain_${userId}_${symbol}_${Date.now()}`,
+                                    actionSummary: `${fusion.dir} ${symbol} conf=${fusion.confidence}`,
+                                    conflictingPrinciples: _r1Kinds,
+                                    charterStatus: !_r1Result.allowed ? 'CONSTITUTIONALLY_BLOCKED' : 'CONSTITUTIONALLY_DEGRADED',
+                                    utilityScore: fusion.confidence,
+                                });
+                            }
+                        } catch (_) { /* never block brain on charter audit */ }
                     } catch (_) { /* never block brain flow */ }
 
                     // [2G] Pending Entry System — wait for pullback instead of instant entry

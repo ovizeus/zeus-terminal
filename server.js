@@ -1523,6 +1523,24 @@ require('./server/cron/omegaMemoryCleanup').schedule();
 // [Wave 1] R0 substrate cron — DR heartbeat every 60s
 try { require('./server/cron/r0SubstrateCron').schedule(); } catch (_) {}
 
+// [Wave 2] R1 Constitution — seed canonical principles (idempotent)
+try {
+    const charter = require('./server/services/ml/R1_constitution/constitutionalCharterLayer');
+    const CANONICAL = [
+        { principleId: 'canon_safety', kind: 'safety', description: 'Position sizing, SL, max leverage — never compromise' },
+        { principleId: 'canon_truth', kind: 'truth', description: 'No false signals, no self-deception in metrics' },
+        { principleId: 'canon_compliance', kind: 'compliance', description: 'Exchange rules, API limits, legal constraints' },
+        { principleId: 'canon_integrity', kind: 'integrity', description: 'Consistent behavior across environments' },
+        { principleId: 'canon_survivability', kind: 'long_term_survivability', description: 'Capital preservation over profit maximization' },
+        { principleId: 'canon_profit', kind: 'profit', description: 'Generate returns within safety constraints' },
+    ];
+    for (const p of CANONICAL) {
+        try {
+            charter.registerPrinciple({ userId: 0, resolvedEnv: 'SYSTEM', ...p });
+        } catch (_) { /* idempotent — ignore duplicate */ }
+    }
+} catch (_) {}
+
 // ─── WebSocket Sync (real-time cross-device push) ───
 const wss = new WebSocket.Server({ noServer: true, maxPayload: 64 * 1024 });
 const _wsClients = new Map(); // userId -> Set<ws>
