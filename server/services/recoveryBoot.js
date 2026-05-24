@@ -113,10 +113,16 @@ async function _reconcileUser(uid, exchange) {
         throw new Error(`getPositions failed: ${err.message}`);
     }
 
-    // 2. Read DB positions (OPEN + OPENING)
-    const dbPositions = db.prepare(
+    // 2. Read DB positions (OPEN + OPENING) — exclude DEMO (never on exchange)
+    const dbPositionsRaw = db.prepare(
         `SELECT seq, data, status FROM at_positions WHERE user_id = ? AND status IN ('OPEN', 'OPENING')`
     ).all(uid);
+    const dbPositions = dbPositionsRaw.filter(dp => {
+        try {
+            const d = JSON.parse(dp.data);
+            return d.mode !== 'demo';
+        } catch (_) { return true; }
+    });
 
     // Build lookup maps keyed by symbol
     const exchangeBySymbol = new Map();
