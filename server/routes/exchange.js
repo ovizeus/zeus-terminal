@@ -187,7 +187,7 @@ router.post('/save', async (req, res) => {
         balanceInfo = await _testKeys(exName, cleanKey, cleanSecret, safeMode);
     } catch (err) {
         db.auditLog(req.user.id, 'EXCHANGE_VERIFY_FAILED', { exchange: exName, mode: safeMode, error: err.message }, req.ip);
-        return res.status(400).json({ ok: false, error: err.message || 'API key verification failed — verifică cheile' });
+        return res.status(400).json({ ok: false, error: err.message || 'API key verification failed — check your API keys' });
     }
 
     const encKey = encrypt(cleanKey);
@@ -248,7 +248,7 @@ router.post('/disconnect', (req, res) => {
     if (!exName) return res.status(400).json({ ok: false, error: 'Exchange invalid' });
 
     const account = db.getExchangeByName(uid, exName);
-    if (!account) return res.status(404).json({ ok: false, error: `Nicio conexiune ${exName} activă` });
+    if (!account) return res.status(404).json({ ok: false, error: `No active ${exName} connection` });
 
     // [Task 48] Query DB for open positions on this exchange (exclude DEMO — not on exchange)
     const rawDb = db.db;
@@ -318,14 +318,14 @@ router.post('/verify', async (req, res) => {
     if (!exName) return res.status(400).json({ ok: false, error: 'Exchange invalid' });
 
     const account = db.getExchangeByName(req.user.id, exName);
-    if (!account) return res.status(404).json({ ok: false, error: `Nicio conexiune ${exName} activă` });
+    if (!account) return res.status(404).json({ ok: false, error: `No active ${exName} connection` });
 
     let plainKey, plainSecret;
     try {
         plainKey = decrypt(account.api_key_encrypted);
         plainSecret = decrypt(account.api_secret_encrypted);
     } catch (_) {
-        return res.status(500).json({ ok: false, error: 'Eroare la decriptare — reconectează exchange' });
+        return res.status(500).json({ ok: false, error: 'Decryption failed — reconnect exchange in Settings' });
     }
 
     try {
@@ -348,7 +348,7 @@ router.post('/verify', async (req, res) => {
         });
     } catch (err) {
         db.auditLog(req.user.id, 'EXCHANGE_VERIFY_FAILED', { exchange: exName, error: err.message }, req.ip);
-        res.status(400).json({ ok: false, error: err.message || 'Re-verificare eșuată — verifică cheile' });
+        res.status(400).json({ ok: false, error: err.message || 'Re-verification failed — check your API keys' });
     }
 });
 
@@ -491,7 +491,7 @@ async function _runApiKeyHealthCheck() {
                     logger.warn('EXCHANGE', `Key health FAIL uid=${u.id} ${acc.exchange}/${acc.mode}: ${errMsg}`);
                     try {
                         require('../services/telegram').sendToUser(u.id,
-                            `⚠️ Zeus: cheile ${acc.exchange.toUpperCase()} (${acc.mode}) au eșuat verificarea zilnică. Verifică cheile pe exchange — pot fi revocate sau expirate.`);
+                            `⚠️ Zeus: ${acc.exchange.toUpperCase()} (${acc.mode}) API keys failed daily verification. Check your exchange API keys — they may be revoked or expired.`);
                     } catch (_) { /* Telegram optional */ }
                 }
             }

@@ -96,11 +96,11 @@ function _generateCode() {
 
 // Password policy — 12 chars min, uppercase + lowercase + digit
 function _validatePassword(pw) {
-    if (!pw || pw.length < 12) return 'Parola trebuie să aibă minim 12 caractere';
-    if (pw.length > 128) return 'Parola nu poate depăși 128 de caractere';
-    if (!/[a-z]/.test(pw)) return 'Parola trebuie să conțină cel puțin o literă mică';
-    if (!/[A-Z]/.test(pw)) return 'Parola trebuie să conțină cel puțin o literă mare';
-    if (!/\d/.test(pw)) return 'Parola trebuie să conțină cel puțin o cifră';
+    if (!pw || pw.length < 12) return 'Password must be at least 12 characters';
+    if (pw.length > 128) return 'Password cannot exceed 128 characters';
+    if (!/[a-z]/.test(pw)) return 'Password must contain at least one lowercase letter';
+    if (!/[A-Z]/.test(pw)) return 'Password must contain at least one uppercase letter';
+    if (!/\d/.test(pw)) return 'Password must contain at least one digit';
     return null;
 }
 
@@ -115,14 +115,14 @@ async function _sendCode(email, code) {
         await mailer.sendMail({
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to: email,
-            subject: '🔐 Zeus Terminal — Cod de verificare',
-            text: `Codul tău de verificare: ${code}\n\nAcest cod expiră în 5 minute.\nDacă nu ai solicitat acest cod, ignoră acest email.`,
+            subject: '🔐 Zeus Terminal — Verification Code',
+            text: `Your verification code: ${code}\n\nThis code expires in 5 minutes.\nIf you did not request this code, ignore this email.`,
             html: `
                 <div style="font-family:sans-serif;background:#0a0f16;color:#e0e0e0;padding:30px;border-radius:12px;max-width:400px;margin:0 auto">
                     <h2 style="color:#00afff;margin:0 0 16px">⚡ Zeus Terminal</h2>
-                    <p style="margin:0 0 20px;color:#999">Cod de verificare login:</p>
+                    <p style="margin:0 0 20px;color:#999">Login verification code:</p>
                     <div style="background:#111a28;border:1px solid #00afff44;border-radius:8px;padding:20px;text-align:center;font-size:32px;letter-spacing:8px;font-weight:700;color:#00ff88">${code}</div>
-                    <p style="margin:16px 0 0;color:#556;font-size:12px">Codul expiră în 5 minute.</p>
+                    <p style="margin:16px 0 0;color:#556;font-size:12px">Code expires in 5 minutes.</p>
                 </div>`
         });
         logger.info('AUTH', '2FA code sent', { to: _mask(email) });
@@ -181,11 +181,11 @@ function _setAuthCookie(res, token, userId) {
 
 // ─── POST /auth/register ───
 router.post('/register', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     try {
         const { email, password, termsAcceptedAt, termsVersion } = req.body;
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email și parola sunt obligatorii' });
+            return res.status(400).json({ error: 'Email and password are required' });
         }
 
         // [LEGAL-1] Require explicit acceptance of Terms / Privacy / Cookie policies (GDPR Art. 7)
@@ -197,7 +197,7 @@ router.post('/register', async (req, res) => {
 
         // Validate email format
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalEmail)) {
-            return res.status(400).json({ error: 'Email invalid' });
+            return res.status(400).json({ error: 'Invalid email format' });
         }
 
         // [S3B3] Uniform password policy
@@ -208,14 +208,14 @@ router.post('/register', async (req, res) => {
 
         // Check if user exists — generic response to prevent email enumeration
         if (db.findUserByEmail(normalEmail)) {
-            return res.json({ ok: true, pending: true, message: 'Contul a fost creat. Așteaptă aprobarea administratorului.' });
+            return res.json({ ok: true, pending: true, message: 'Account created. Waiting for admin approval.' });
         }
 
         // Limit max users (security — prevent mass registration)
         const MAX_USERS = parseInt(process.env.MAX_USERS, 10) || 10;
         const currentCount = db.countUsers();
         if (currentCount >= MAX_USERS) {
-            return res.status(403).json({ error: 'Numărul maxim de conturi a fost atins' });
+            return res.status(403).json({ error: 'Maximum number of accounts reached' });
         }
 
         // First user = admin (auto-approved), rest need approval
@@ -241,10 +241,10 @@ router.post('/register', async (req, res) => {
 
         // Non-admin: registered but pending approval
         logger.info('AUTH', 'User registered (pending)', { email: _mask(normalEmail) });
-        res.json({ ok: true, pending: true, message: 'Contul a fost creat. Așteaptă aprobarea administratorului.' });
+        res.json({ ok: true, pending: true, message: 'Account created. Waiting for admin approval.' });
     } catch (err) {
         logger.error('AUTH', 'Register error', { error: err.message });
-        res.status(500).json({ error: 'Eroare internă' });
+        res.status(500).json({ error: 'Internal error' });
     }
 });
 
@@ -253,12 +253,12 @@ router.post('/login', async (req, res) => {
     try {
         // Rate limit by IP
         if (!_checkLoginRate(req.ip)) {
-            return res.status(429).json({ error: 'Prea multe încercări de login. Așteaptă 15 minute.' });
+            return res.status(429).json({ error: 'Too many login attempts. Wait 15 minutes.' });
         }
 
         const { email, password } = req.body;
         if (!email || !password) {
-            return res.status(400).json({ error: 'Email și parola sunt obligatorii' });
+            return res.status(400).json({ error: 'Email and password are required' });
         }
 
         const normalEmail = email.toLowerCase().trim();
@@ -276,7 +276,7 @@ router.post('/login', async (req, res) => {
             // authenticates). Per-email rate bucket isn't hit on this path
             // (intentional — see SEC-2/AUTH-2 reasoning în bug book).
             try { await bcrypt.compare(password || '', '$2a$12$0000000000000000000000.0000000000000000000000000000000'); } catch (_) {}
-            return res.status(401).json({ error: 'Email sau parolă incorectă' });
+            return res.status(401).json({ error: 'Incorrect email or password' });
         }
 
         // Check account status (blocked?)
@@ -305,7 +305,7 @@ router.post('/login', async (req, res) => {
             db.auditLog(user.id, 'LOGIN_FAILED', { reason: 'wrong_password' }, req.ip);
             // [SEC-2] IP-tagged log so fail2ban can ban brute-forcers
             logger.warn('AUTH', 'LOGIN_FAILED wrong_password ip=' + req.ip, { email: _mask(normalEmail), ip: req.ip });
-            return res.status(401).json({ error: 'Email sau parolă incorectă' });
+            return res.status(401).json({ error: 'Incorrect email or password' });
         }
 
         // Reject expired temporary password (set by admin reset)
@@ -392,7 +392,7 @@ router.post('/login', async (req, res) => {
         res.json({ ok: true, needsCode: true, message: 'Cod de verificare trimis pe email.' });
     } catch (err) {
         console.error('[AUTH] Login error:', err.message);
-        res.status(500).json({ error: 'Eroare internă' });
+        res.status(500).json({ error: 'Internal error' });
     }
 });
 
@@ -454,7 +454,7 @@ router.post('/verify-code', (req, res) => {
         res.json({ ok: true, email: normalEmail, role: pending.role });
     } catch (err) {
         console.error('[AUTH] Verify-code error:', err.message);
-        res.status(500).json({ error: 'Eroare internă' });
+        res.status(500).json({ error: 'Internal error' });
     }
 });
 
@@ -1004,7 +1004,7 @@ router.post('/admin/flags', (req, res) => {
 
 // ─── CHANGE PASSWORD: Step 1 — request code ───
 router.post('/change-password/request', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {
@@ -1044,7 +1044,7 @@ router.post('/change-password/request', async (req, res) => {
 
 // ─── CHANGE PASSWORD: Step 2 — verify code & update ───
 router.post('/change-password/confirm', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {
@@ -1110,7 +1110,7 @@ router.post('/change-password/confirm', async (req, res) => {
 
 // ─── CHANGE EMAIL: Step 1 — request code ───
 router.post('/change-email/request', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {
@@ -1162,7 +1162,7 @@ router.post('/change-email/request', async (req, res) => {
 
 // ─── CHANGE EMAIL: Step 2 — verify code & update ───
 router.post('/change-email/confirm', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {
@@ -1214,9 +1214,9 @@ router.post('/change-email/confirm', async (req, res) => {
             _oldMailer.sendMail({
                 from: process.env.SMTP_FROM || process.env.SMTP_USER,
                 to: decoded.email,
-                subject: '⚠️ Zeus Terminal — Adresa de email a fost schimbată',
-                text: 'Adresa de email asociată contului tău Zeus Terminal a fost schimbată.\nDacă nu ai solicitat această schimbare, contactează imediat administratorul.',
-                html: '<div style="font-family:sans-serif;background:#0a0f16;color:#e0e0e0;padding:30px;border-radius:12px;max-width:400px;margin:0 auto"><h2 style="color:#ff6600;margin:0 0 16px">⚠️ Zeus Terminal</h2><p>Adresa de email asociată contului tău a fost schimbată.</p><p style="margin:16px 0 0;color:#ff4444;font-size:13px">Dacă nu ai solicitat această schimbare, contactează imediat administratorul.</p></div>'
+                subject: '⚠️ Zeus Terminal — Email address changed',
+                text: 'The email address associated with your Zeus Terminal account has been changed.\nIf you did not request this change, contact the administrator immediately.',
+                html: '<div style="font-family:sans-serif;background:#0a0f16;color:#e0e0e0;padding:30px;border-radius:12px;max-width:400px;margin:0 auto"><h2 style="color:#ff6600;margin:0 0 16px">⚠️ Zeus Terminal</h2><p>The email address associated with your account has been changed.</p><p style="margin:16px 0 0;color:#ff4444;font-size:13px">If you did not request this change, contact the administrator immediately.</p></div>'
             }).catch(err => logger.error('AUTH', 'Old email notification failed', { error: err.message }));
         }
 
@@ -1230,7 +1230,7 @@ router.post('/change-email/confirm', async (req, res) => {
 
 // ─── FORGOT PASSWORD: Step 1 — request code (no login needed) ───
 router.post('/forgot-password/request', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const email = (req.body.email || '').toLowerCase().trim(); // [S13] normalize
     if (!email) return res.status(400).json({ error: 'Emailul este necesar' });
 
@@ -1263,7 +1263,7 @@ router.post('/forgot-password/request', async (req, res) => {
 
 // ─── FORGOT PASSWORD: Step 2 — verify code & set new password ───
 router.post('/forgot-password/confirm', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const { email, code, newPassword } = req.body;
     if (!email || !code || !newPassword) return res.status(400).json({ error: 'Email, cod și parola nouă sunt necesare' });
     var _pwErr3 = _validatePassword(newPassword);
@@ -1309,7 +1309,7 @@ router.post('/forgot-password/confirm', async (req, res) => {
 
 // ─── CLOSE ACCOUNT: Step 1 — request code ───
 router.post('/close-account/request', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {
@@ -1353,7 +1353,7 @@ router.post('/close-account/request', async (req, res) => {
 
 // ─── CLOSE ACCOUNT: Step 2 — verify code & delete ───
 router.post('/close-account/confirm', async (req, res) => {
-    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Prea multe cereri. Încearcă peste câteva minute.' });
+    if (!_checkLoginRate(req.ip)) return res.status(429).json({ error: 'Too many requests. Try again in a few minutes.' });
     const token = req.cookies && req.cookies.zeus_token;
     if (!token) return res.status(401).json({ error: 'Not authenticated' });
     try {

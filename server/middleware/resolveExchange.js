@@ -33,7 +33,7 @@ function resolveExchange(req, res, next) {
     } catch (err) {
         console.error(`[EXCHANGE] Decryption failed for user ${req.user.id}:`, err.message);
         return res.status(500).json({
-            error: 'Eroare la decriptare credențiale — reconectează exchange în Settings'
+            error: 'Credential decryption failed — reconnect exchange in Settings'
         });
     }
 }
