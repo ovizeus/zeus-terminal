@@ -98,15 +98,6 @@
 .j-pg-btn:disabled { color: #334 !important; cursor: default; }
 .j-pg-info { color: #889; font-size: 11px; letter-spacing: 1px; font-family: var(--ff, 'Orbitron', monospace); }
 
-/* Fixed back button (always visible at bottom) */
-.j-back-fixed {
-  position: fixed; bottom: 0; left: 0; right: 0; z-index: 999;
-  display: block; text-align: center;
-  padding: 14px 0; font-size: 13px; font-weight: 700; letter-spacing: 1.5px;
-  background: var(--gold); color: var(--bg); text-decoration: none;
-  font-family: var(--ff);
-}
-.j-back-fixed:active { opacity: 0.8; }
 
 /* Responsive */
 @media (max-width: 768px) {
