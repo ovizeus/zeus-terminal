@@ -409,12 +409,20 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       lastValueVisible: false,
       crosshairMarkerVisible: false
     });
-    // Set the 2 data points
+    // Set data points + forward projection so line extends beyond last candle
+    var tMin = Math.min(p1.time, p2.time);
+    var tMax = Math.max(p1.time, p2.time);
+    var vMin = (p1.time <= p2.time) ? p1.price : p2.price;
+    var vMax = (p1.time <= p2.time) ? p2.price : p1.price;
+    var dt = tMax - tMin || 1;
+    var slope = (vMax - vMin) / dt;
+    var ext = dt * 3;
     var data = [
-      { time: Math.min(p1.time, p2.time), value: (p1.time <= p2.time) ? p1.price : p2.price },
-      { time: Math.max(p1.time, p2.time), value: (p1.time <= p2.time) ? p2.price : p1.price }
+      { time: tMin, value: vMin },
+      { time: tMax, value: vMax },
+      { time: tMax + ext, value: vMax + slope * ext }
     ];
-    lineSeries.setData(data);
+    lineSeries.setData(data as any);
 
     _ensureHandleContainer();
     var h1 = _createHandle(id, 0, color);
@@ -435,8 +443,11 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var t2 = Math.max(line.p1.time, line.p2.time);
     var v1 = (line.p1.time <= line.p2.time) ? line.p1.price : line.p2.price;
     var v2 = (line.p1.time <= line.p2.time) ? line.p2.price : line.p1.price;
-    if (t1 === t2) t2 = t1 + 1; // avoid zero-length
-    try { line.lwcSeries.setData([{ time:t1, value:v1 }, { time:t2, value:v2 }]); } catch(_) {}
+    if (t1 === t2) t2 = t1 + 1;
+    var dt = t2 - t1;
+    var slope = (v2 - v1) / dt;
+    var ext = dt * 3;
+    try { line.lwcSeries.setData([{ time:t1, value:v1 }, { time:t2, value:v2 }, { time:t2 + ext, value:v2 + slope * ext }] as any); } catch(_) {}
   }
 
   // ── Remove ──
