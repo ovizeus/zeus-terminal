@@ -683,6 +683,8 @@ const SETTINGS_WHITELIST = new Set([
   'manualLive', 'ptLevDemo', 'ptLevLive', 'ptMarginMode',
   // DSL
   'dslSettings',
+  // Radar Lens (D4 persistence)
+  'radarLens',
 ]);
 
 router.post('/user/settings', validateSettingsBody, (req, res) => {

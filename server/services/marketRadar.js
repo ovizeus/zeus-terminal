@@ -126,14 +126,38 @@ function _bumpStreak(symbol, category, now) {
     return 1;
 }
 
+// [D2] Per-timeframe real kline metrics from serverState
+const TF_LIST = ['5m', '15m', '30m', '1h', '4h'];
+function _computePerTfMetrics(symbol) {
+    const result = {};
+    try {
+        const ss = require('./serverState');
+        for (const tf of TF_LIST) {
+            const bars = ss.getBarsForSymbol(symbol, tf);
+            if (bars && bars.length >= 2) {
+                const cur = bars[bars.length - 1];
+                const prev = bars[bars.length - 2];
+                if (cur && prev && prev.close > 0) {
+                    result[tf] = +((cur.close - prev.close) / prev.close * 100).toFixed(2);
+                } else { result[tf] = null; }
+            } else { result[tf] = null; }
+        }
+    } catch (_) {}
+    return result;
+}
+
 function _emit(event) {
     // Attach enrichment fields to every event so the client can render:
     //   - btcDelta: BTCUSDT's 24h % at emit time (context for altcoin moves)
     //   - streakCount: consecutive fires of (symbol, category) within 15 min
+    //   - tfMetrics: per-timeframe change % from real klines (D2)
     if (event && typeof event === 'object') {
         if (event.btcDelta === undefined) event.btcDelta = _btcDelta;
         if (event.streakCount === undefined && event.symbol && event.category) {
             event.streakCount = _bumpStreak(event.symbol, event.category, event.ts || Date.now());
+        }
+        if (event.tfMetrics === undefined && event.symbol) {
+            try { event.tfMetrics = _computePerTfMetrics(event.symbol); } catch (_) {}
         }
     }
     // [Phase 11.7] Push to shared cache BEFORE broadcasting so a client that
