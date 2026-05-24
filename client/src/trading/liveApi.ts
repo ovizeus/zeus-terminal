@@ -297,8 +297,14 @@ export async function liveApiSyncState(): Promise<any> {
         var _cacheLen = Array.isArray(w._lastServerPositions) ? w._lastServerPositions.length : -1
         if (Array.isArray(w._lastServerPositions)) {
           _isServerAT = w._lastServerPositions.some(function(sp: any) {
-            return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade !== false
+            return sp.symbol === p.symbol && sp.side === p.side && sp.autoTrade === true
           })
+        }
+        // [FIX] If _lastServerPositions empty (boot race), check AT state directly
+        if (!_isServerAT && _cacheLen <= 0 && w.AT && typeof w.AT._serverMode === 'string') {
+          // Server AT is active — new positions on testnet/live are likely AT, not manual
+          // Only mark as AT if AT is actively running (SERVER_AT_DEMO or SERVER_AT_TESTNET)
+          if (w.AT._atActive === true) _isServerAT = true
         }
         var _tpMatchFound = false
         if (!_isServerAT && Array.isArray(w.TP.livePositions)) {
