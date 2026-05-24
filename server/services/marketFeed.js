@@ -44,7 +44,7 @@ let _timeframes = [];   // active timeframes ['5m', '1h', '4h']
 // When the primary lane (kline / markPrice / aggTrade) is dead, we poll klines
 // via REST at ALT_KLINE_POLL_MS and derive price + kline events locally.
 // bookTicker/trade streams take over price + aggTrade emission.
-const ALT_KLINE_POLL_MS = 10000;    // 10s — balances freshness vs weight limits
+const ALT_KLINE_POLL_MS = 30000;    // 30s — Binance kline WS blocked on this IP; REST polls at 30s = 24 req/min (120 weight/min, safe)
 const _altKlinePollers = {};        // { 'BTCUSDT|5m': { timer, lastOpenTs } }
 
 // [BIN-TELEM Phase B 2026-05-19] Ref-counting for symbol subscriptions.
@@ -297,6 +297,7 @@ let _combinedWs = null;
 let _combinedReconnects = 0;
 let _combinedTimer = null;
 let _combinedPending = [];  // streams queued before WS opens
+let _combinedLastMessageTs = 0;
 
 function _connectCombinedStream() {
     if (_combinedWs?.readyState === WebSocket.OPEN || _combinedWs?.readyState === WebSocket.CONNECTING) return;
@@ -329,6 +330,7 @@ function _connectCombinedStream() {
 
         ws.on('message', (raw) => {
             try {
+                _combinedLastMessageTs = Date.now();
                 const msg = JSON.parse(raw.toString());
                 // Combined stream format: { stream: "btcusdt@trade", data: {...} }
                 if (msg.stream && msg.data) {
@@ -713,6 +715,7 @@ function getHealth() {
         timeframes: _timeframes,
         streamCount: Object.keys(_streams).length,
         streams,
+        lastMessageTs: _combinedLastMessageTs,
         combinedStream: {
             connected: _combinedWs?.readyState === WebSocket.OPEN,
             streamCount: _combinedHandlers.size,

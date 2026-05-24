@@ -45,9 +45,11 @@ function off(event, handler) {
 
 function getConnectionState() {
     const health = mf.getHealth();
-    // Derive top-level `connected` from streams: connected if any stream is open.
-    const connected = Object.values(health.streams || {}).some(s => s.connected === true);
-    return { connected, ...health };
+    const streamConnected = Object.values(health.streams || {}).some(s => s.connected === true);
+    const combinedConnected = !!(health.combinedStream && health.combinedStream.connected);
+    const connected = streamConnected || combinedConnected;
+    const lastMessageTs = health.lastMessageTs || 0;
+    return { connected, lastMessageTs, ...health };
 }
 
 module.exports = Object.assign({}, mf, {

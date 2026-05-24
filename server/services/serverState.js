@@ -48,14 +48,16 @@ function forExchange(exchange) {
 
         getBarsForSymbol(symbol, tf) {
             const sd = map.get(symbol ? symbol.toUpperCase() : '');
-            if (!sd || !sd.bars) return null;
-            return tf ? sd.bars[tf] : sd.bars;
+            const k = sd && (sd.bars || sd.klines);
+            if (!k) return [];
+            return k[tf || sd.chartTf] || [];
         },
 
         getReadySymbols() {
             const ready = [];
             for (const [sym, sd] of map.entries()) {
-                if (sd && sd.price > 0 && sd.bars && Object.keys(sd.bars).length > 0) {
+                const k = sd && (sd.bars || sd.klines);
+                if (sd && sd.price > 0 && k && Object.keys(k).length > 0) {
                     ready.push(sym);
                 }
             }
@@ -64,7 +66,8 @@ function forExchange(exchange) {
 
         isDataReadyForSymbol(symbol) {
             const sd = map.get(symbol ? symbol.toUpperCase() : '');
-            return !!(sd && sd.price > 0 && sd.bars && Object.keys(sd.bars).length > 0);
+            const k = sd && (sd.bars || sd.klines);
+            return !!(sd && sd.price > 0 && k && Object.keys(k).length > 0);
         },
 
         _getMap() {
