@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { TheOrb } from './TheOrb'
 import { TheVoice } from './TheVoice'
 import { TalkWithMe } from './TalkWithMe'
@@ -10,6 +10,8 @@ import { useATStore, useUiStore } from '../../stores'
 import { useAuthStore } from '../../stores/authStore'
 import type { Utterance, Mood, HealthState } from './omegaApi'
 import { fetchVoice, fetchMood, fetchHealth } from './omegaApi'
+import * as omegaTts from '../../audio/omegaTts'
+import * as omegaAmbient from '../../audio/omegaAmbient'
 
 /**
  * OMEGA Page — dedicated dock view for the ML system.
@@ -36,6 +38,9 @@ export function OmegaPage() {
     const [voiceLoading, setVoiceLoading] = useState(true)
     const [health, setHealth] = useState<HealthState | null>(null)
     const [voiceOn, setVoiceOn] = useState(false)
+    const [ttsSpeed, setTtsSpeed] = useState(omegaTts.getSpeed())
+    const [ttsVol, setTtsVol] = useState(omegaTts.getVolume())
+    const prevUtterancesRef = useRef<number>(0)
     const [refreshTick, setRefreshTick] = useState(0)
     const role = useAuthStore((s) => s.role)
     const isAdmin = role === 'admin'
@@ -50,6 +55,27 @@ export function OmegaPage() {
         : modeLabel === 'TESTNET' ? 'omega-mode-testnet'
         : modeLabel === 'REAL' ? 'omega-mode-real'
         : 'omega-mode-locked'
+
+    // [Voice TTS] Ambient start/stop on voiceOn toggle
+    useEffect(() => {
+        if (voiceOn) { omegaAmbient.startAmbient() } else { omegaAmbient.stopAmbient(); omegaTts.stop() }
+        return () => { omegaAmbient.stopAmbient() }
+    }, [voiceOn])
+
+    // [Voice TTS] Auto-read new thoughts from TheVoice stream
+    useEffect(() => {
+        if (!voiceOn || utterances.length === 0) return
+        const newCount = utterances.length
+        if (prevUtterancesRef.current > 0 && newCount > prevUtterancesRef.current) {
+            const newest = utterances[0]
+            if (newest && newest.text && (Date.now() - (newest.created_at || 0)) < 30000) {
+                const priority = ['ALERT', 'CAUTIOUS', 'NERVOUS'].includes(newest.mood)
+                omegaTts.speak(newest.text, priority)
+                omegaAmbient.pulseDecision()
+            }
+        }
+        prevUtterancesRef.current = newCount
+    }, [utterances, voiceOn])
 
     // Mood polling — fast cadence so orb feels alive
     useEffect(() => {
@@ -212,8 +238,18 @@ export function OmegaPage() {
                         aria-label="toggle TTS voice"
                         title={voiceOn ? 'Voice ON — click to mute' : 'Voice OFF — click to enable TTS'}
                     >
-                        {voiceOn ? '🔊 VOICE ON' : '🔇 VOICE OFF'}
+                        {voiceOn ? '🔊 ON' : '🔇 OFF'}
                     </button>
+                    {voiceOn && (
+                        <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center', fontSize: '9px', color: '#889' }}>
+                            <label title="Speed">⚡<input type="range" min="0.5" max="2" step="0.1" value={ttsSpeed}
+                                onChange={e => { const v = parseFloat(e.target.value); setTtsSpeed(v); omegaTts.setSpeed(v) }}
+                                style={{ width: '40px', verticalAlign: 'middle' }} />{ttsSpeed.toFixed(1)}x</label>
+                            <label title="Volume">🔈<input type="range" min="0" max="1" step="0.05" value={ttsVol}
+                                onChange={e => { const v = parseFloat(e.target.value); setTtsVol(v); omegaTts.setVolume(v); omegaAmbient.setAmbientVolume(v) }}
+                                style={{ width: '40px', verticalAlign: 'middle' }} />{Math.round(ttsVol * 100)}%</label>
+                        </span>
+                    )}
                 </div>
             </div>
 
