@@ -158,6 +158,22 @@ function logDecision(fields) {
                     finalAction,
                     ts
                 );
+
+                // [Wave 1] R0 point-in-time store — full decision snapshot for deterministic replay.
+                try {
+                    const pit = require('./ml/R0_substrate/pointInTimeStore');
+                    pit.recordSnapshot({
+                        userId: fields.userId,
+                        resolvedEnv: fields.resolvedEnv || 'DEMO',
+                        snapshotType: 'decision',
+                        ts: fields.ts || Date.now(),
+                        marketState: { symbol: fields.symbol, price: fields.price, regime: fields.regime },
+                        featureState: fields.indicators ? { indicators: fields.indicators } : null,
+                        modelOutput: { score: fields.score, dir: fields.dir, tier: fields.finalTier, action: fields.finalAction },
+                        scores: fields.scores || null,
+                        orderIntent: fields.orderIntent || null,
+                    });
+                } catch (_) { /* never block brain logger on PIT store */ }
             } catch (mlErr) {
                 // ML write failure must NEVER crash Brain — silently swallow
                 try { logger.error('BRAIN_LOG', 'ML_INGEST write failed: ' + mlErr.message); } catch (_) {}
