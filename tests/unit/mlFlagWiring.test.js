@@ -311,3 +311,15 @@ describe('influenceEligibility flag gates', () => {
         expect(result.observationCount).toBe(0);
     });
 });
+
+// ══════════════════════════════════════════════════════════════════
+// serverBrain Ring5 gate tests (Task 3)
+// ══════════════════════════════════════════════════════════════════
+describe('serverBrain Ring5 gate (Task 3)', () => {
+    it('ML_PIPELINE_SHADOW flag is accessible from migrationFlags', () => {
+        // Verifies the flag exists and is boolean (real module, no mock)
+        jest.resetModules();
+        const MF = require('../../server/migrationFlags');
+        expect(typeof MF.ML_PIPELINE_SHADOW).toBe('boolean');
+    });
+});

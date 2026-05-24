@@ -1055,39 +1055,43 @@ function _runCycle() {
                 //
                 // Day 7+8 invariants preserved: try/catch isolation, error swallow.
                 const _ring5MarketCtx = _buildMarketContext(snap, bars, userId);
-                try {
-                    const _execEnv = serverAT._resolveExecutionEnv(userId);
-                    if (_execEnv && _execEnv.env) {
-                        const _ring5Wrap = ring5LearningService.wrap({
-                            userId,
-                            resolvedEnv: _execEnv.env,
-                            symbol: snap.symbol,
-                            phase2Decision: fusion,
-                            // [Day 13] R5A modifiers + fusion score components.
-                            // Proposer requires sumContribution >= 0.10 (boost) or
-                            // <= -0.10 (cut), AND bandit sample to confirm.
-                            mlBrainProInputs: mlInputsBuilder.build(fusion),
-                            mode: 'influence',
-                            regime: regime.regime,
-                            marketContext: _ring5MarketCtx,
-                            nowTs: Date.now()
-                        });
-                        if (_ring5Wrap && _ring5Wrap.layeredBy === 'ring5-influence-applied') {
-                            fusion.confidence = _ring5Wrap.confidence;
-                            if (Array.isArray(_ring5Wrap.reasons)) fusion.reasons = _ring5Wrap.reasons;
-                            fusion.layeredBy = 'ring5-influence-applied';
-                            // Tier re-eval on cut. Boost never upgrades tier (sizing
-                            // stays at Phase 2 authoritative level for safety).
-                            if (fusion.confidence < 62 && fusion.decision !== 'NO_TRADE') {
-                                fusion.decision = 'NO_TRADE';
-                            } else if (fusion.confidence < 72 &&
-                                       (fusion.decision === 'MEDIUM' || fusion.decision === 'LARGE')) {
-                                fusion.decision = 'SMALL';
+                // [Task 3] Outer gate: skip Ring5 entirely when ML_PIPELINE_SHADOW=false.
+                // Eliminates useless audit rows + CPU cost when pipeline is off.
+                if (MF.ML_PIPELINE_SHADOW) {
+                    try {
+                        const _execEnv = serverAT._resolveExecutionEnv(userId);
+                        if (_execEnv && _execEnv.env) {
+                            const _ring5Wrap = ring5LearningService.wrap({
+                                userId,
+                                resolvedEnv: _execEnv.env,
+                                symbol: snap.symbol,
+                                phase2Decision: fusion,
+                                // [Day 13] R5A modifiers + fusion score components.
+                                // Proposer requires sumContribution >= 0.10 (boost) or
+                                // <= -0.10 (cut), AND bandit sample to confirm.
+                                mlBrainProInputs: mlInputsBuilder.build(fusion),
+                                mode: 'influence',
+                                regime: regime.regime,
+                                marketContext: _ring5MarketCtx,
+                                nowTs: Date.now()
+                            });
+                            if (_ring5Wrap && _ring5Wrap.layeredBy === 'ring5-influence-applied') {
+                                fusion.confidence = _ring5Wrap.confidence;
+                                if (Array.isArray(_ring5Wrap.reasons)) fusion.reasons = _ring5Wrap.reasons;
+                                fusion.layeredBy = 'ring5-influence-applied';
+                                // Tier re-eval on cut. Boost never upgrades tier (sizing
+                                // stays at Phase 2 authoritative level for safety).
+                                if (fusion.confidence < 62 && fusion.decision !== 'NO_TRADE') {
+                                    fusion.decision = 'NO_TRADE';
+                                } else if (fusion.confidence < 72 &&
+                                           (fusion.decision === 'MEDIUM' || fusion.decision === 'LARGE')) {
+                                    fusion.decision = 'SMALL';
+                                }
                             }
                         }
+                    } catch (_ring5Err) {
+                        // Ring5 influence must NEVER affect brain flow — swallow any error.
                     }
-                } catch (_ring5Err) {
-                    // Ring5 influence must NEVER affect brain flow — swallow any error.
                 }
 
                 if (fusion.decision !== 'NO_TRADE') {
