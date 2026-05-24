@@ -339,9 +339,13 @@ function _shouldRunMainCycle() {
 // mode trăiește în engine state, NOT în trading config).
 function _isServerAuthoritativeForUser(userId) {
     if (MF.SERVER_AT === true) return true;
-    if (MF.SERVER_AT_DEMO === true) {
-        const userMode = serverAT.getMode(userId);
-        if (userMode === 'demo') return true;
+    const userMode = serverAT.getMode(userId);
+    if (MF.SERVER_AT_DEMO === true && userMode === 'demo') return true;
+    if (MF.SERVER_AT_TESTNET === true && userMode === 'live') {
+        try {
+            const execEnv = serverAT._resolveExecutionEnv(userId);
+            if (execEnv && execEnv.env === 'TESTNET') return true;
+        } catch (_) {}
     }
     return false;
 }

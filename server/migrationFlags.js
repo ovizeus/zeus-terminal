@@ -95,6 +95,10 @@ const DEFAULTS = {
     // BYBIT_LIVE_ENABLED=false (TESTNET/REAL safety — DEMO carve-out must
     // never accidentally route to a real exchange).
     SERVER_AT_DEMO: false,
+    // SERVER_AT_TESTNET — when true, brain dispatches AT for users in
+    // engineMode='live' + exchangeMode='testnet'. REAL stays blocked.
+    // Separate from SERVER_AT to prevent accidental real-money AT.
+    SERVER_AT_TESTNET: false,
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path (registerManualPosition
     // delegates la _executeLiveEntryCore + hard SafetyAssertionError pre-fill).
@@ -313,6 +317,7 @@ module.exports = {
     // S6-B1..B6 ship.
     get SERVER_BRAIN_DEMO() { return flags.SERVER_BRAIN_DEMO; },
     get SERVER_AT_DEMO() { return flags.SERVER_AT_DEMO; },
+    get SERVER_AT_TESTNET() { return flags.SERVER_AT_TESTNET; },
     // [M1.2 Cat C 2026-05-14] LIVE_ENTRY_UNIFIED — controls Path A/B unification
     // burn-in per ADR-001 Decision 3.1. Default TRUE = safe path.
     get LIVE_ENTRY_UNIFIED() { return flags.LIVE_ENTRY_UNIFIED; },
