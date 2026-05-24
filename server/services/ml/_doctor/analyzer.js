@@ -261,6 +261,11 @@ function analyze(params) {
                     _lastAutoRestoreTs = _nowRe;
                 }
             }
+            // [A-Z N] Critical Telegram push on P0 state
+            try {
+                const cp = require('../_voice/criticalPush');
+                cp.pushCritical({ userId: 0, eventType: 'COGNITIVE_' + state, severity: 'P0', message: 'Brain state: ' + state });
+            } catch (_) {}
         } else if (state !== 'DEGRADED') {
             _compromisedSinceTs = 0;
         }
