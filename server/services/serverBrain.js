@@ -1071,6 +1071,35 @@ function _runCycle() {
                     });
                 } catch (_) {}
 
+                // [Wave 4] R3A black swan advisory — observe extreme market conditions.
+                try {
+                    const _bsa = require('./ml/R3A_safety/blackSwanAbstention');
+                    const _bsResult = _bsa.evaluateBlackSwan({
+                        signals: {
+                            volatility_ratio: ind.atr && snap.price ? ind.atr / snap.price : 0,
+                            liquidity_drop: 0,
+                            price_gap_pct: 0,
+                            correlation_delta: 0,
+                            funding_rate: 0,
+                        },
+                    });
+                    if (_bsResult && _bsResult.severity !== 'NONE' && _bsResult.triggered_conditions.length > 0) {
+                        try {
+                            _bsa.recordEvent({
+                                userId,
+                                resolvedEnv: (serverAT.getMode(userId) || 'demo').toUpperCase(),
+                                symbol: snap.symbol,
+                                signals: {
+                                    volatility_ratio: ind.atr && snap.price ? ind.atr / snap.price : 0,
+                                },
+                                severity: _bsResult.severity,
+                                triggers: _bsResult.triggered_conditions,
+                                actor: 'brain_cycle',
+                            });
+                        } catch (_) {}
+                    }
+                } catch (_) {}
+
                 // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
                 // applied downstream when layeredBy='ring5-influence-applied' (i.e.
                 // eligibility passed AND proposer fired AND reflectionGate accepted).
