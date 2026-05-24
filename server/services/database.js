@@ -11049,6 +11049,16 @@ function queryDslParityReport(opts) {
     };
 }
 
+// [Wave 1] R0 DB contention monitor — records slow operations for diagnostics.
+let _contentionMonitor = null;
+function recordSlowQuery(userId, resolvedEnv, operation, durationMs) {
+    if (durationMs < 100) return; // only log slow ops (>100ms threshold)
+    try {
+        if (!_contentionMonitor) _contentionMonitor = require('./ml/R0_substrate/dbContentionMonitor');
+        _contentionMonitor.recordOperation({ userId, resolvedEnv, operation, durationMs });
+    } catch (_) { /* never block on contention telemetry */ }
+}
+
 module.exports = {
     db,
     USER_STATUS, // [M6]
@@ -11274,4 +11284,6 @@ module.exports = {
     loginAttemptUpsert: (kind, key, count, resetAt) => _stmts.loginAttemptUpsert.run(kind, key, count, resetAt),
     loginAttemptDelete: (kind, key) => _stmts.loginAttemptDelete.run(kind, key),
     loginAttemptPruneExpired: (now) => _stmts.loginAttemptPruneExpired.run(now).changes,
+    // [Wave 1] R0 DB contention monitor — records slow operations for diagnostics.
+    recordSlowQuery,
 };

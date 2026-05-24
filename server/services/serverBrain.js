@@ -1380,6 +1380,11 @@ function _runCycle() {
                 _dms.emitHeartbeat({ userId: _uid, resolvedEnv: (serverAT.getMode(_uid) || 'demo').toUpperCase() });
             }
         } catch (_) { /* never block brain cycle on telemetry */ }
+        // [Wave 1] R0 DB contention — record brain cycle duration as a write op sample.
+        try {
+            const _cycleDuration = Date.now() - _cycleStartTs;
+            db.recordSlowQuery(0, 'SYSTEM', 'brain_cycle', _cycleDuration);
+        } catch (_) { /* never block brain on contention telemetry */ }
         _running = false;
         brainLock.release('brainCycle');
     }
