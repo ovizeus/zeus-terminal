@@ -250,4 +250,66 @@ router.get('/overrides', _requireAdmin, (req, res) => {
     });
 });
 
+// ─── D-6: Cognitive Snapshots ──────────────────────────────────────────────
+router.post('/snapshots', _requireAdmin, (req, res) => {
+    try {
+        const cs = require('../services/ml/_doctor/cognitiveSnapshot');
+        const result = cs.captureSnapshot({ triggerType: 'manual' });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.get('/snapshots', _requireAdmin, (req, res) => {
+    try {
+        const cs = require('../services/ml/_doctor/cognitiveSnapshot');
+        const since = req.query.since ? Number(req.query.since) : undefined;
+        const limit = req.query.limit ? Math.min(Number(req.query.limit), 100) : 50;
+        res.json({ ok: true, snapshots: cs.listSnapshots({ since, limit }) });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.get('/snapshots/:id', _requireAdmin, (req, res) => {
+    try {
+        const cs = require('../services/ml/_doctor/cognitiveSnapshot');
+        const snap = cs.getSnapshot(Number(req.params.id));
+        if (!snap) return res.status(404).json({ ok: false, error: 'Snapshot not found' });
+        res.json({ ok: true, snapshot: snap });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ─── D-6: Causal Blame Tree ───────────────────────────────────────────────
+router.get('/causal-chain/:moduleId', _requireAdmin, (req, res) => {
+    try {
+        const cc = require('../services/ml/_doctor/causalChain');
+        const tree = cc.buildBlameTree({
+            moduleId: req.params.moduleId,
+            maxDepth: req.query.maxDepth ? Number(req.query.maxDepth) : undefined,
+        });
+        res.json({ ok: true, ...tree });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+// ─── D-6: Semantic Conflict Map ───────────────────────────────────────────
+router.get('/conflict-map', _requireAdmin, (req, res) => {
+    try {
+        const cm = require('../services/ml/_doctor/conflictMap');
+        const result = cm.compareSnapshots({
+            fromId: Number(req.query.from),
+            toId: req.query.to ? Number(req.query.to) : undefined,
+        });
+        if (result.error) return res.status(400).json({ ok: false, error: result.error });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;

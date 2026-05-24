@@ -208,17 +208,25 @@ function analyze(params) {
 
     // Emit state_change event when transition occurs (skip on first run).
     if (_lastState !== null && _lastState !== state) {
-        eventBus.emit({
-            eventType: 'state_change',
-            moduleId: '_doctor_analyzer',
-            severity: state === 'HEALTHY' ? 'P3'
+        const emittedSeverity = state === 'HEALTHY' ? 'P3'
                     : state === 'DEGRADED' ? 'P2'
                     : state === 'COMPROMISED' ? 'P0'
                     : state === 'SAFE_MODE' ? 'P0'
-                    : 'P0',  // DEAD
+                    : 'P0';  // DEAD
+        eventBus.emit({
+            eventType: 'state_change',
+            moduleId: '_doctor_analyzer',
+            severity: emittedSeverity,
             payload: { from: _lastState, to: state, reason },
             ts: nowTs
         });
+        // [D-6] Auto-snapshot on P0 event
+        if (emittedSeverity === 'P0') {
+            try {
+                const cogSnap = require('./cognitiveSnapshot');
+                cogSnap.captureSnapshot({ triggerType: 'auto_p0', triggerEventId: null });
+            } catch (_) { /* never block analyzer on snapshot */ }
+        }
     }
     _lastState = state;
 
