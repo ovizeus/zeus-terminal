@@ -10109,6 +10109,19 @@ migrate('402_ml_cognitive_checkpoints', () => {
     `);
 });
 
+migrate('403_ml_voice_feedback', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_voice_feedback (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            voice_log_id INTEGER NOT NULL UNIQUE,
+            user_id INTEGER NOT NULL,
+            feedback TEXT NOT NULL CHECK(feedback IN ('up', 'down')),
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_voice_fb_user ON ml_voice_feedback(user_id, created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {

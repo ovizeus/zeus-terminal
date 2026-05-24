@@ -829,6 +829,17 @@ router.get('/memory/health', async (req, res) => {
     }
 });
 
+// ─── A-Z Raid F: Voice Feedback ───────────────────────────────────────────
+router.post('/feedback', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const vf = require('../services/ml/_voice/voiceFeedback');
+        const result = vf.submitFeedback({ voiceLogId: req.body.voiceLogId, userId, feedback: req.body.feedback });
+        res.json(result);
+    } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 module.exports = router;
 module.exports._resetRateLimitForTest = _resetRateLimitForTest;
 module.exports._resetDeleteMemoryRateLimitForTest = _resetDeleteMemoryRateLimitForTest;
