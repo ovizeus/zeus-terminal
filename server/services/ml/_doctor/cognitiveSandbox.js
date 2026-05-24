@@ -62,7 +62,7 @@ function _decodeModuleId(storedName) {
  * @param {string} [params.actor]          — who created this experiment
  * @returns {Promise<{experimentId: number}>}
  */
-async function createExperiment(params) {
+function createExperiment(params) {
     const moduleId = params && params.moduleId;
     const name = params && params.name;
     const variantAConfig = (params && params.variantAConfig) || {};
@@ -141,7 +141,7 @@ async function createExperiment(params) {
  * @param {number} params.experimentId
  * @returns {Promise<{experimentId, state, moduleId, metrics}>}
  */
-async function getExperimentStatus(params) {
+function getExperimentStatus(params) {
     const experimentId = params && params.experimentId;
     if (!experimentId) throw new Error('cognitiveSandbox.getExperimentStatus: missing experimentId');
 
@@ -184,7 +184,7 @@ async function getExperimentStatus(params) {
  * @param {string} [params.state] — filter by EXPERIMENT_STATES value
  * @returns {Promise<Array>}
  */
-async function listExperiments(params) {
+function listExperiments(params) {
     const state = params && params.state;
 
     let rows;
@@ -228,7 +228,7 @@ async function listExperiments(params) {
  * @param {string} [params.reason]
  * @returns {Promise<{completed: boolean, experimentId, snapshotId}>}
  */
-async function completeExperiment(params) {
+function completeExperiment(params) {
     const experimentId = params && params.experimentId;
     const actor = (params && params.actor) || DEFAULT_ACTOR;
     const reason = (params && params.reason) || 'D-7 sandbox experiment completed';
@@ -246,7 +246,7 @@ async function completeExperiment(params) {
     try {
         const cognitiveSnapshot = require('./cognitiveSnapshot');
         const snap = cognitiveSnapshot.captureSnapshot({
-            triggerType: 'manual',
+            triggerType: 'scheduled',
             triggerEventId: String(experimentId),
         });
         snapshotId = snap.id;

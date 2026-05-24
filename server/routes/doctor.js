@@ -312,4 +312,44 @@ router.get('/conflict-map', _requireAdmin, (req, res) => {
     }
 });
 
+// ─── D-7: Cognitive Sandbox ───────────────────────────────────────────────
+router.post('/sandbox/create', _requireAdmin, (req, res) => {
+    try {
+        const sb = require('../services/ml/_doctor/cognitiveSandbox');
+        const result = sb.createExperiment({
+            moduleId: req.body.moduleId,
+            name: req.body.name,
+            variantAConfig: req.body.variantAConfig || {},
+            variantBConfig: req.body.variantBConfig || {},
+            allocationPctB: req.body.allocationPctB,
+            actor: 'admin',
+        });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.get('/sandbox/:id', _requireAdmin, (req, res) => {
+    try {
+        const sb = require('../services/ml/_doctor/cognitiveSandbox');
+        const status = sb.getExperimentStatus({ experimentId: Number(req.params.id) });
+        if (status.error) return res.status(400).json({ ok: false, error: status.error });
+        res.json({ ok: true, ...status });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/sandbox/:id/complete', _requireAdmin, (req, res) => {
+    try {
+        const sb = require('../services/ml/_doctor/cognitiveSandbox');
+        const result = sb.completeExperiment({ experimentId: Number(req.params.id) });
+        if (result.error) return res.status(400).json({ ok: false, error: result.error });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;
