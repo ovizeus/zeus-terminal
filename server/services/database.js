@@ -10185,6 +10185,7 @@ const _stmts = {
     bdGetBySeq: db.prepare('SELECT snap_id, data FROM brain_decisions WHERE linked_seq = ?'),
     bdPruneNoTrade: db.prepare("DELETE FROM brain_decisions WHERE final_tier = 'NO_TRADE' AND linked_seq IS NULL AND ts < ?"),
     bdPruneBlocked: db.prepare("DELETE FROM brain_decisions WHERE final_action LIKE 'blocked_%' AND ts < ?"),
+    bdPruneTrade: db.prepare("DELETE FROM brain_decisions WHERE final_action = 'entry' AND ts < ?"),
     bdCount: db.prepare('SELECT COUNT(*) as cnt, final_action FROM brain_decisions GROUP BY final_action'),
     // Missed trades
     missedInsert: db.prepare('INSERT INTO missed_trades (user_id, symbol, side, reason, price, confidence, tier, regime, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
@@ -11330,8 +11331,10 @@ module.exports = {
         const now = Date.now();
         const d30 = now - 30 * 86400000;
         const d90 = now - 90 * 86400000;
+        const d365 = now - 365 * 86400000;
         _stmts.bdPruneNoTrade.run(d30);
         _stmts.bdPruneBlocked.run(d90);
+        _stmts.bdPruneTrade.run(d365);
     },
     bdCount: () => _stmts.bdCount.all(),
     // [SEC-1] Login attempts

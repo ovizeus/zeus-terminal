@@ -572,9 +572,15 @@ function _reflectionCycle() {
     }
 
     // ── Decay old rules — per user ──
+    // [BUG-R3-F2] Added 7d absolute TTL. Old logic required hitCount===0 AND 14d age,
+    // but hitCount increments on every match → blocking rules never expired.
+    const MAX_RULE_AGE_MS = 7 * 86400000; // 7 days absolute max
     for (const [uid, rules] of _learnedRules) {
         for (const rule of rules) {
-            if (rule.hitCount === 0 && (Date.now() - rule.createdAt) > 14 * 86400000) {
+            const age = Date.now() - rule.createdAt;
+            if (age > MAX_RULE_AGE_MS) {
+                rule.active = false;
+            } else if (rule.hitCount === 0 && age > 14 * 86400000) {
                 rule.active = false;
             }
         }
