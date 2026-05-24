@@ -829,6 +829,25 @@ router.get('/memory/health', async (req, res) => {
     }
 });
 
+// ─── A-Z Raid H: Voice History ────────────────────────────────────────────
+router.get('/voice-history', (req, res) => {
+    const userId = _requireUser(req, res);
+    if (!userId) return;
+    try {
+        const limit = Math.min(Number(req.query.limit) || 50, 100);
+        const since = req.query.since ? Number(req.query.since) : 0;
+        let sql = 'SELECT id, user_id, mood, text, template_id, context_json, created_at FROM ml_voice_log WHERE user_id = ? AND created_at > ?';
+        const params = [userId, since];
+        if (req.query.mood) { sql += ' AND mood = ?'; params.push(req.query.mood); }
+        if (req.query.templateId) { sql += ' AND template_id = ?'; params.push(req.query.templateId); }
+        sql += ' ORDER BY created_at DESC LIMIT ?';
+        params.push(limit);
+        const { db: rawDb } = require('../services/database');
+        const rows = rawDb.prepare(sql).all(...params);
+        res.json({ ok: true, thoughts: rows });
+    } catch (err) { res.status(500).json({ ok: false, error: err.message }); }
+});
+
 // ─── A-Z Raid F: Voice Feedback ───────────────────────────────────────────
 router.post('/feedback', (req, res) => {
     const userId = _requireUser(req, res);
