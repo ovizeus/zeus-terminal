@@ -10078,6 +10078,22 @@ migrate('400_brain_decisions_resolved_env', () => {
     } catch (_) {}
 });
 
+migrate('401_ml_cognitive_snapshots', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_cognitive_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            trigger_type TEXT NOT NULL CHECK(trigger_type IN ('auto_p0', 'manual', 'scheduled')),
+            trigger_event_id INTEGER,
+            cognitive_state TEXT NOT NULL,
+            snapshot_json TEXT NOT NULL,
+            modules_involved_json TEXT,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_cog_snap_ts ON ml_cognitive_snapshots(created_at);
+        CREATE INDEX IF NOT EXISTS idx_cog_snap_trigger ON ml_cognitive_snapshots(trigger_type, created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
