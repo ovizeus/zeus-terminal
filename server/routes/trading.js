@@ -241,7 +241,8 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
   } catch (_) {
     _actualEngineMode = req.body.mode || 'demo';
   }
-  if (_actualEngineMode === 'live') {
+  const _isTestnet = req.exchangeMode === 'testnet';
+  if (_actualEngineMode === 'live' && !_isTestnet) {
     const _slCheck = req.body.sl;
     if (_slCheck === undefined || _slCheck === null || _slCheck === '' ||
         typeof _slCheck === 'object' || typeof _slCheck === 'boolean') {
