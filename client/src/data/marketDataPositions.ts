@@ -231,11 +231,11 @@ export function renderDemoPositions(): void {
   // Stats
   let _statsWins = 0, _statsLosses = 0, _statsPnl = 0, _statsTrades = 0
   if (_gMode === 'live') {
-    const _openManualLive = (TP.livePositions || []).filter(function (p: any) { return !p.closed && !p.autoTrade })
-    _openManualLive.forEach(function (p: any) { const _cur = getSymPrice(p); const _pnl = (_cur && _cur > 0) ? calcPosPnL(p, _cur) : (Number.isFinite(p.pnl) ? p.pnl : 0); _statsPnl += _pnl })
-    const _jManualLive = (Array.isArray(TP.journal) ? TP.journal : []).filter(function (j: any) { return j.mode === 'live' && !j.autoTrade })
-    _jManualLive.forEach(function (j: any) { const _jp = Number(j.pnl) || 0; _statsPnl += _jp; if (_jp >= 0) _statsWins++; else _statsLosses++ })
-    _statsTrades = _openManualLive.length + _jManualLive.length
+    const _openLive = (TP.livePositions || []).filter(function (p: any) { return !p.closed })
+    _openLive.forEach(function (p: any) { const _cur = getSymPrice(p); const _pnl = (_cur && _cur > 0) ? calcPosPnL(p, _cur) : (Number.isFinite(p.pnl) ? p.pnl : 0); _statsPnl += _pnl })
+    const _jLive = (Array.isArray(TP.journal) ? TP.journal : []).filter(function (j: any) { return j.mode === 'live' })
+    _jLive.forEach(function (j: any) { const _jp = Number(j.pnl) || 0; _statsPnl += _jp; if (_jp >= 0) _statsWins++; else _statsLosses++ })
+    _statsTrades = _openLive.length + _jLive.length
   } else { _statsWins = TP.demoWins || 0; _statsLosses = TP.demoLosses || 0; _statsPnl = totalPnL; _statsTrades = _statsWins + _statsLosses }
   const _pnlClass = _statsPnl > 0 ? 'pos' : _statsPnl < 0 ? 'neg' : 'neut'
   const _wrText = _statsTrades ? Math.round(_statsWins / _statsTrades * 100) + '%' : '0%'
