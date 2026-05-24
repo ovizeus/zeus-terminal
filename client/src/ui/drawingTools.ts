@@ -409,21 +409,12 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
       lastValueVisible: false,
       crosshairMarkerVisible: false
     });
-    // Set 2 data points: p1 stays, p2 extended 20 candles forward on same slope
-    // This way line is perfectly straight (only 2 points = no bend)
-    var tA = Math.min(p1.time, p2.time);
-    var tB = Math.max(p1.time, p2.time);
-    var vA = (p1.time <= p2.time) ? p1.price : p2.price;
-    var vB = (p1.time <= p2.time) ? p2.price : p1.price;
-    var dt = tB - tA || 1;
-    var slope = (vB - vA) / dt;
-    var candleSec = (window as any).S && (window as any).S.chartTf === '1h' ? 3600 : (window as any).S && (window as any).S.chartTf === '4h' ? 14400 : (window as any).S && (window as any).S.chartTf === '15m' ? 900 : 300;
-    var extTime = candleSec * 20;
+    // Set the 2 data points
     var data = [
-      { time: tA, value: vA },
-      { time: tB + extTime, value: vB + slope * extTime }
+      { time: Math.min(p1.time, p2.time), value: (p1.time <= p2.time) ? p1.price : p2.price },
+      { time: Math.max(p1.time, p2.time), value: (p1.time <= p2.time) ? p2.price : p1.price }
     ];
-    lineSeries.setData(data as any);
+    lineSeries.setData(data);
 
     _ensureHandleContainer();
     var h1 = _createHandle(id, 0, color);
@@ -445,11 +436,7 @@ export function drawToolToggleVis(): void { w.drawToolToggleVis(); }
     var v1 = (line.p1.time <= line.p2.time) ? line.p1.price : line.p2.price;
     var v2 = (line.p1.time <= line.p2.time) ? line.p2.price : line.p1.price;
     if (t1 === t2) t2 = t1 + 1;
-    var dt = t2 - t1;
-    var slope = (v2 - v1) / dt;
-    var candleSec = (window as any).S && (window as any).S.chartTf === '1h' ? 3600 : (window as any).S && (window as any).S.chartTf === '4h' ? 14400 : (window as any).S && (window as any).S.chartTf === '15m' ? 900 : 300;
-    var extTime = candleSec * 20;
-    try { line.lwcSeries.setData([{ time:t1, value:v1 }, { time:t2 + extTime, value:v2 + slope * extTime }] as any); } catch(_) {}
+    try { line.lwcSeries.setData([{ time:t1, value:v1 }, { time:t2, value:v2 }]); } catch(_) {}
   }
 
   // ── Remove ──
