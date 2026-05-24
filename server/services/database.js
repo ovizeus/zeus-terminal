@@ -10094,6 +10094,21 @@ migrate('401_ml_cognitive_snapshots', () => {
     `);
 });
 
+migrate('402_ml_cognitive_checkpoints', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_cognitive_checkpoints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            label TEXT NOT NULL,
+            cognitive_state TEXT NOT NULL,
+            checkpoint_json TEXT NOT NULL,
+            auto_created INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_cog_ckpt_ts ON ml_cognitive_checkpoints(created_at);
+        CREATE INDEX IF NOT EXISTS idx_cog_ckpt_auto ON ml_cognitive_checkpoints(auto_created, cognitive_state);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
