@@ -1966,6 +1966,15 @@ function _closePosition(idx, pos, exitType, price, pnl) {
         } catch (_) { /* never block close flow */ }
     }
 
+    // [A-Z R] OMEGA reaction on manual trade
+    if (exitType === 'MANUAL_CLIENT') {
+        try {
+            const tr = require('./ml/_voice/tradeReaction');
+            const _rMood = (() => { try { return require('./ml/_crosscutting/moodEmaTracker').getCurrentMood(); } catch(_) { return 'CALM'; } })();
+            tr.reactToTrade({ userId, symbol: pos.symbol, side: pos.side, action: pnl > 0 ? 'win' : 'loss', pnl, mood: _rMood });
+        } catch (_) {}
+    }
+
     // [Wave 7b] Tamper-evident audit — every position close appended to
     // chained hash trail. Operator can verify entire chain via
     // /api/omega/audit/chain/verify; any tampering breaks subsequent links.
