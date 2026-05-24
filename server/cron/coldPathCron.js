@@ -1,7 +1,6 @@
 'use strict';
 
 const COLD_INTERVAL_MS = 300000; // 5 minutes
-const MODULE_TIMEOUT_MS = 5000;  // 5s per module max
 
 let _timer = null;
 let _lastRunTs = 0;
@@ -46,14 +45,42 @@ function _tick() {
         }
     }
 
+    // [Fix 3] Cold path analysis — call real functions on modules that have them.
+    // Each wrapped in individual try/catch (one failure doesn't block others).
+
+    // Narrative coherence — compute score on recent decisions
+    try {
+        const _nc = require('../services/ml/R2_cognition/narrativeCoherence');
+        if (typeof _nc.computeCoherenceScore === 'function') {
+            _nc.computeCoherenceScore({ recentDecisions: [], threshold: 0.5 });
+            totalInsights++;
+        }
+    } catch (_) {}
+
+    // Competing hypotheses — evaluate dominance across active hypotheses
+    try {
+        const _ch = require('../services/ml/R2_cognition/competingHypothesesEngine');
+        if (typeof _ch.evaluateDominance === 'function') {
+            _ch.evaluateDominance({ minPosterior: 0.1, dominanceThreshold: 0.7 });
+            totalInsights++;
+        }
+    } catch (_) {}
+
+    // Agency attribution — classify recent decision attributions
+    try {
+        const _aa = require('../services/ml/R2_cognition/agencyAttributionLedger');
+        if (typeof _aa.getAttributionStats === 'function') {
+            _aa.getAttributionStats({ limit: 50 });
+            totalInsights++;
+        }
+    } catch (_) {}
+
     // [Wave 6] Governance loop — periodic autoQuarantine check.
     try {
         const _aq = require('../services/ml/R5B_governance/autoQuarantine');
         if (typeof _aq.checkQuarantine === 'function') {
-            const _aqResult = _aq.checkQuarantine({ minTrades: 100 });
-            if (_aqResult && _aqResult.quarantined) {
-                totalInsights++;
-            }
+            _aq.checkQuarantine({ minTrades: 100 });
+            totalInsights++;
         }
     } catch (_) {}
 

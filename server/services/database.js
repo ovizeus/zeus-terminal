@@ -10048,6 +10048,30 @@ migrate('398_ml_reflection_tables', () => {
     `);
 });
 
+migrate('399_ml_charter_system_env', () => {
+    try {
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS ml_charter_principles_v2 (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id           INTEGER NOT NULL,
+                resolved_env      TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL','SYSTEM')),
+                principle_id      TEXT NOT NULL UNIQUE,
+                kind              TEXT NOT NULL CHECK(kind IN
+                                  ('profit','safety','truth','compliance',
+                                   'integrity','long_term_survivability')),
+                priority_rank     INTEGER NOT NULL CHECK(priority_rank >= 1),
+                description       TEXT NOT NULL,
+                is_active         INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+                ts_created        INTEGER NOT NULL,
+                ts_last_updated   INTEGER NOT NULL
+            );
+            INSERT OR IGNORE INTO ml_charter_principles_v2 SELECT * FROM ml_charter_principles;
+            DROP TABLE IF EXISTS ml_charter_principles;
+            ALTER TABLE ml_charter_principles_v2 RENAME TO ml_charter_principles;
+        `);
+    } catch (_) {}
+});
+
 // ─── User methods ───
 
 const _stmts = {

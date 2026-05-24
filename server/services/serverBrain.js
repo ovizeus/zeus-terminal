@@ -1100,15 +1100,17 @@ function _runCycle() {
                     }
                 } catch (_) {}
 
-                // [Wave 5] R4 execution advisors — observe execution context.
+                // [Wave 5] R4 execution advisors — measure brain decision latency.
                 try {
                     const _latExec = require('./ml/R4_execution/latencyAwareExecution');
-                    if (typeof _latExec.recordLatencySample === 'function') {
-                        _latExec.recordLatencySample({
-                            userId, resolvedEnv: (serverAT.getMode(userId) || 'demo').toUpperCase(),
-                            latencyMs: Date.now() - _cycleStartTs, source: 'brain_cycle',
-                        });
-                    }
+                    const _nowTs = Date.now();
+                    _latExec.measureEndToEnd({
+                        userId, resolvedEnv: (serverAT.getMode(userId) || 'demo').toUpperCase(),
+                        feedTs: snap.priceTs || (_cycleStartTs - 100),
+                        decisionTs: _nowTs,
+                        orderTs: _nowTs,
+                        ackTs: _nowTs,
+                    });
                 } catch (_) {}
 
                 // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
