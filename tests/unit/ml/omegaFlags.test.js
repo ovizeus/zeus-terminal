@@ -22,7 +22,14 @@ describe('OMEGA Wave 1A — Migration Flags', () => {
         expect(MF).toHaveProperty(flagName);
     });
 
-    test.each(EXPECTED_FLAGS)('flag %s defaults to false', (flagName) => {
+    const ACTIVATED_FLAGS = ['ML_INGEST_ENABLED', 'ML_PIPELINE_SHADOW', 'ML_DEMO_INFLUENCE_ENABLED'];
+    const INACTIVE_FLAGS = EXPECTED_FLAGS.filter(f => !ACTIVATED_FLAGS.includes(f));
+
+    test.each(ACTIVATED_FLAGS)('flag %s is active (Stage 1-3 flipped)', (flagName) => {
+        expect(MF[flagName]).toBe(true);
+    });
+
+    test.each(INACTIVE_FLAGS)('flag %s defaults to false', (flagName) => {
         expect(MF[flagName]).toBe(false);
     });
 
