@@ -12,6 +12,10 @@ const COLD_MODULES = [
     { id: 'causalDiscoveryEngine', path: '../services/ml/R2_cognition/causalDiscoveryEngine' },
     { id: 'competingHypothesesEngine', path: '../services/ml/R2_cognition/competingHypothesesEngine' },
     { id: 'agencyAttributionLedger', path: '../services/ml/R2_cognition/agencyAttributionLedger' },
+    { id: 'autoQuarantine', path: '../services/ml/R5B_governance/autoQuarantine' },
+    { id: 'autoResumeDD', path: '../services/ml/R5B_governance/autoResumeDD' },
+    { id: 'competenceMap', path: '../services/ml/R5B_governance/competenceMap' },
+    { id: 'counterfactualPortfolio', path: '../services/ml/R5A_learning/counterfactualPortfolio' },
 ];
 
 function _tick() {
@@ -39,6 +43,17 @@ function _tick() {
             modulesFailed++;
         }
     }
+
+    // [Wave 6] Governance loop — periodic autoQuarantine check.
+    try {
+        const _aq = require('../services/ml/R5B_governance/autoQuarantine');
+        if (typeof _aq.checkQuarantine === 'function') {
+            const _aqResult = _aq.checkQuarantine({ minTrades: 100 });
+            if (_aqResult && _aqResult.quarantined) {
+                totalInsights++;
+            }
+        }
+    } catch (_) {}
 
     const finishedAt = Date.now();
     try {
