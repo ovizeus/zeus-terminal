@@ -10017,6 +10017,37 @@ migrate('397_ml_config_rollback_system_env', () => {
     `);
 });
 
+migrate('398_ml_reflection_tables', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS ml_reflection_runs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            started_at INTEGER NOT NULL,
+            finished_at INTEGER NOT NULL,
+            decisions_processed INTEGER NOT NULL DEFAULT 0,
+            modules_run INTEGER NOT NULL DEFAULT 0,
+            modules_failed INTEGER NOT NULL DEFAULT 0,
+            total_insights INTEGER NOT NULL DEFAULT 0,
+            duration_ms INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS ml_reflection_insights (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            ts INTEGER NOT NULL,
+            module_id TEXT NOT NULL,
+            decision_id INTEGER NOT NULL DEFAULT 0,
+            insight_type TEXT NOT NULL DEFAULT 'observation',
+            severity TEXT NOT NULL DEFAULT 'low',
+            insight_text TEXT NOT NULL DEFAULT '',
+            metadata_json TEXT,
+            surfaced_in_voice INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_refl_insights_ts ON ml_reflection_insights(ts);
+        CREATE INDEX IF NOT EXISTS idx_refl_insights_module ON ml_reflection_insights(module_id, ts);
+        CREATE INDEX IF NOT EXISTS idx_refl_insights_severity ON ml_reflection_insights(severity, ts);
+        CREATE INDEX IF NOT EXISTS idx_refl_insights_voice ON ml_reflection_insights(surfaced_in_voice, ts);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {

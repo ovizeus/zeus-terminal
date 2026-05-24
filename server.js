@@ -1523,6 +1523,9 @@ require('./server/cron/omegaMemoryCleanup').schedule();
 // [Wave 1] R0 substrate cron — DR heartbeat every 60s
 try { require('./server/cron/r0SubstrateCron').schedule(); } catch (_) {}
 
+// [Wave 3] Cold path reflection cron — 5min retrospective analysis
+try { require('./server/cron/coldPathCron').schedule(); } catch (_) {}
+
 // [Wave 2] R1 Constitution — seed canonical principles (idempotent)
 try {
     const charter = require('./server/services/ml/R1_constitution/constitutionalCharterLayer');
