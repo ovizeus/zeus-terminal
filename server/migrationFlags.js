@@ -271,6 +271,20 @@ function set(key, value) {
     flags[key] = value;
     save();
     console.log(`[MF] ${key} = ${flags[key]}`);
+    // [Wave 1] R0 config rollback — snapshot every flag change for <60s rollback.
+    try {
+        const cr = require('./services/ml/R0_substrate/configRollback');
+        const { db: _db } = require('./services/database');
+        const currentVersion = _db.prepare(
+            "SELECT MAX(version) as v FROM ml_config_snapshots WHERE config_key = ?"
+        ).get(key);
+        const nextVersion = (currentVersion && currentVersion.v ? currentVersion.v : 0) + 1;
+        cr.snapshotConfig({
+            userId: 0, resolvedEnv: 'SYSTEM',
+            configKey: key, value, version: nextVersion,
+            actor: 'migrationFlags.set', reason: 'flag_change',
+        });
+    } catch (_) { /* never block flag set on rollback snapshot */ }
     return Object.assign({}, flags);
 }
 

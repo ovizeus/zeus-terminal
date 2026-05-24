@@ -9972,6 +9972,51 @@ migrate('374_trader_profile_preferences', () => {
     `);
 });
 
+// [Wave 1 2026-05-24] Extend ml_config_snapshots resolved_env CHECK to include 'SYSTEM'
+// so migrationFlags.set() wiring can snapshot system-level flag changes without
+// forcing them into a user/env-specific bucket (userId=0, resolvedEnv='SYSTEM').
+// SQLite cannot ALTER CHECK constraints — must recreate tables via RENAME+INSERT+DROP.
+migrate('397_ml_config_rollback_system_env', () => {
+    db.exec(`
+        ALTER TABLE ml_config_snapshots RENAME TO ml_config_snapshots_old;
+        CREATE TABLE ml_config_snapshots (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL','SYSTEM')),
+            config_key      TEXT NOT NULL,
+            value_json      TEXT NOT NULL,
+            version         INTEGER NOT NULL,
+            is_active       INTEGER NOT NULL DEFAULT 1 CHECK(is_active IN (0,1)),
+            actor           TEXT NOT NULL,
+            reason          TEXT,
+            created_at      INTEGER NOT NULL
+        );
+        INSERT INTO ml_config_snapshots SELECT * FROM ml_config_snapshots_old;
+        DROP TABLE ml_config_snapshots_old;
+
+        ALTER TABLE ml_config_rollback_log RENAME TO ml_config_rollback_log_old;
+        CREATE TABLE ml_config_rollback_log (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id         INTEGER NOT NULL,
+            resolved_env    TEXT NOT NULL CHECK(resolved_env IN ('DEMO','TESTNET','REAL','SYSTEM')),
+            config_key      TEXT NOT NULL,
+            from_version    INTEGER,
+            to_version      INTEGER NOT NULL,
+            reason          TEXT NOT NULL,
+            actor           TEXT NOT NULL,
+            duration_ms     INTEGER,
+            created_at      INTEGER NOT NULL
+        );
+        INSERT INTO ml_config_rollback_log SELECT * FROM ml_config_rollback_log_old;
+        DROP TABLE ml_config_rollback_log_old;
+
+        CREATE INDEX IF NOT EXISTS idx_mlcs_user_env_key_active
+            ON ml_config_snapshots(user_id, resolved_env, config_key, is_active);
+        CREATE INDEX IF NOT EXISTS idx_mlcrl_user_env_ts
+            ON ml_config_rollback_log(user_id, resolved_env, created_at);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {
