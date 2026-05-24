@@ -1143,6 +1143,16 @@ function processBrainDecision(decision, stc, userId, userIntent) {
     _persistState(userId);
     _persistPosition(entry);
 
+    // [Wave 3] R2 confidence decay — track thesis from entry.
+    try {
+        const _cd = require('./ml/R2_cognition/confidenceDecay');
+        _cd.initializeThesis({
+            userId, resolvedEnv: (us.engineMode || 'demo').toUpperCase(),
+            posId: String(entry.seq), symbol: entry.symbol,
+            entryConfidence: (fusion && fusion.confidence || 70) / 100,
+        });
+    } catch (_) {}
+
     // ── Log ──
     _pushLog(userId, 'ENTRY', entry);
     logger.info('AT_ENGINE',

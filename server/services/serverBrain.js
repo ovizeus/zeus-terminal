@@ -1043,6 +1043,34 @@ function _runCycle() {
                 }
                 _lastRegime.set(_regKey, regime.regime);
 
+                // [Wave 3] R2 HOT PATH — temporal context + thinking trace.
+                let _temporalCtx = null;
+                try {
+                    const _tp = require('./ml/R2_cognition/temporalPatterns');
+                    _temporalCtx = _tp.getCurrentTemporalContext({ timestampMs: Date.now() });
+                    if (_temporalCtx && _temporalCtx.activePatterns.length > 0) {
+                        _tp.recordTemporalObservation({
+                            userId, resolvedEnv: (serverAT.getMode(userId) || 'demo').toUpperCase(),
+                            pattern: _temporalCtx.activePatterns[0],
+                            outcome: fusion.confidence / 100,
+                            regime: regime.regime,
+                        });
+                    }
+                } catch (_) {}
+
+                // [Wave 3] R2 thinking trace — record decision step.
+                try {
+                    const _think = require('./ml/R2_cognition/thinkingPipeline');
+                    const _decId = `brain_${userId}_${symbol}_${_cycleCount}`;
+                    _think.executeStep({
+                        userId, resolvedEnv: (serverAT.getMode(userId) || 'demo').toUpperCase(),
+                        decisionId: _decId, step: 'DECIDE_SAU_STA', stepIndex: 9,
+                        status: fusion.decision === 'NO_TRADE' ? 'SKIPPED' : 'OK',
+                        output: { dir: fusion.dir, conf: fusion.confidence, tier: fusion.decision, regime: regime.regime, session: _temporalCtx ? _temporalCtx.session : null },
+                        durationMs: Date.now() - _cycleStartTs,
+                    });
+                } catch (_) {}
+
                 // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
                 // applied downstream when layeredBy='ring5-influence-applied' (i.e.
                 // eligibility passed AND proposer fired AND reflectionGate accepted).
