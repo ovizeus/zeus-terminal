@@ -1100,6 +1100,17 @@ function _runCycle() {
                     }
                 } catch (_) {}
 
+                // [Wave 5] R4 execution advisors — observe execution context.
+                try {
+                    const _latExec = require('./ml/R4_execution/latencyAwareExecution');
+                    if (typeof _latExec.recordLatencySample === 'function') {
+                        _latExec.recordLatencySample({
+                            userId, resolvedEnv: (serverAT.getMode(userId) || 'demo').toUpperCase(),
+                            latencyMs: Date.now() - _cycleStartTs, source: 'brain_cycle',
+                        });
+                    }
+                } catch (_) {}
+
                 // [ML Phase B Day 9] Ring5 influence ACTIVATED. wrap output now
                 // applied downstream when layeredBy='ring5-influence-applied' (i.e.
                 // eligibility passed AND proposer fired AND reflectionGate accepted).

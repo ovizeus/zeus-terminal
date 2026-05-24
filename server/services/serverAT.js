@@ -1973,6 +1973,26 @@ function _closePosition(idx, pos, exitType, price, pnl) {
         });
     } catch (_) { /* never block close flow */ }
 
+    // [Wave 5] R4 funding-aware exit advisory — log funding context at exit.
+    try {
+        const _fae = require('./ml/R4_execution/fundingAwareExit');
+        if (typeof _fae.recordFundingEvaluation === 'function') {
+            _fae.recordFundingEvaluation({
+                userId,
+                resolvedEnv: (us.engineMode || 'demo').toUpperCase(),
+                posId: String(pos.seq || ''),
+                evaluation: {
+                    recommendation: 'HOLD',
+                    shouldExit: false,
+                    reason: 'exit_telemetry_' + (exitType || 'unknown'),
+                    currentFundingRate: 0,
+                    timeToFundingMs: 0,
+                    estimatedCostUsd: 0,
+                },
+            });
+        }
+    } catch (_) { /* never block close flow */ }
+
     // Entry/Exit quality scoring (MAE/MFE)
     if (pos.price > 0 && price > 0) {
         const minP = pos._minPrice || pos.price;
