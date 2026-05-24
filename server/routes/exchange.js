@@ -250,11 +250,12 @@ router.post('/disconnect', (req, res) => {
     const account = db.getExchangeByName(uid, exName);
     if (!account) return res.status(404).json({ ok: false, error: `Nicio conexiune ${exName} activă` });
 
-    // [Task 48] Query DB for open positions on this exchange
+    // [Task 48] Query DB for open positions on this exchange (exclude DEMO — not on exchange)
     const rawDb = db.db;
     const openPositions = rawDb.prepare(
         `SELECT seq, data, status, user_id, exchange FROM at_positions
-         WHERE user_id = ? AND exchange = ? AND status IN ('OPEN','OPENING','CLOSING')`
+         WHERE user_id = ? AND exchange = ? AND status IN ('OPEN','OPENING','CLOSING')
+         AND json_extract(data, '$.mode') != 'demo'`
     ).all(uid, exName);
 
     if (openPositions.length > 0) {
@@ -399,9 +400,10 @@ router.post('/switch', (req, res) => {
         });
     }
 
-    // Step 4: Check open positions (OPEN / OPENING / CLOSING)
+    // Step 4: Check open positions (OPEN / OPENING / CLOSING) — exclude DEMO
     const openPos = rawDb.prepare(
-        `SELECT seq FROM at_positions WHERE user_id = ? AND status IN ('OPEN','OPENING','CLOSING') LIMIT 1`
+        `SELECT seq FROM at_positions WHERE user_id = ? AND status IN ('OPEN','OPENING','CLOSING')
+         AND json_extract(data, '$.mode') != 'demo' LIMIT 1`
     ).get(uid);
     if (openPos) {
         rawDb.prepare(
