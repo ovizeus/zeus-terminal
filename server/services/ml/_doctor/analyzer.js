@@ -61,6 +61,11 @@ let _lastState = null;
 let _running = false;
 let _timer = null;
 
+// [D-8 §240] Auto-checkpoint + auto-restore state
+let _lastAutoCheckpointTs = 0;
+let _lastAutoRestoreTs = 0;
+let _compromisedSinceTs = 0;
+
 function _required(p, k) {
     if (p == null || p[k] == null) {
         throw new Error(`analyzer: missing required field ${k}`);
@@ -229,6 +234,37 @@ function analyze(params) {
         }
     }
     _lastState = state;
+
+    // [D-8 §240] Auto-checkpoint when HEALTHY — max 1 per hour
+    try {
+        if (state === 'HEALTHY') {
+            const _nowCk = Date.now();
+            if (_nowCk - _lastAutoCheckpointTs > 3600000) {
+                const ckpt = require('./cognitiveCheckpoint');
+                ckpt.saveCheckpoint({ label: 'auto_healthy', auto: true });
+                _lastAutoCheckpointTs = _nowCk;
+            }
+            _compromisedSinceTs = 0;
+        }
+    } catch (_) {}
+
+    // [D-8 §240] Auto-restore on sustained COMPROMISED/DEAD (5 min) — max 1 per 24h
+    try {
+        if (state === 'COMPROMISED' || state === 'DEAD') {
+            const _nowRe = Date.now();
+            if (!_compromisedSinceTs) _compromisedSinceTs = _nowRe;
+            if ((_nowRe - _compromisedSinceTs) > 300000 && (_nowRe - _lastAutoRestoreTs) > 86400000) {
+                const ckpt = require('./cognitiveCheckpoint');
+                const lastHealthy = ckpt.getLastHealthy();
+                if (lastHealthy) {
+                    ckpt.restoreCheckpoint({ checkpointId: lastHealthy.id });
+                    _lastAutoRestoreTs = _nowRe;
+                }
+            }
+        } else if (state !== 'DEGRADED') {
+            _compromisedSinceTs = 0;
+        }
+    } catch (_) {}
 
     return {
         state,
