@@ -190,13 +190,15 @@ function renderPagination(total) {
     var pages = Math.ceil(total / _perPage);
     if (pages <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
     var html = '';
-    for (var p = 0; p < pages; p++) {
-        html += '<button class="j-btn' + (p === _page ? '' : '--dim') + ' j-btn" onclick="goPage(' + p + ')">' + (p + 1) + '</button>';
-    }
+    html += '<button class="j-btn' + (_page === 0 ? '--dim' : '') + ' j-btn j-pg-btn" onclick="goPage(0)" ' + (_page === 0 ? 'disabled' : '') + '>« 1</button>';
+    html += '<button class="j-btn' + (_page === 0 ? '--dim' : '') + ' j-btn j-pg-btn" onclick="goPage(' + Math.max(0, _page - 1) + ')" ' + (_page === 0 ? 'disabled' : '') + '>← PREV</button>';
+    html += '<span class="j-pg-info">' + (_page + 1) + ' / ' + pages + '</span>';
+    html += '<button class="j-btn' + (_page >= pages - 1 ? '--dim' : '') + ' j-btn j-pg-btn" onclick="goPage(' + Math.min(pages - 1, _page + 1) + ')" ' + (_page >= pages - 1 ? 'disabled' : '') + '>NEXT →</button>';
+    html += '<button class="j-btn' + (_page >= pages - 1 ? '--dim' : '') + ' j-btn j-pg-btn" onclick="goPage(' + (pages - 1) + ')" ' + (_page >= pages - 1 ? 'disabled' : '') + '>' + pages + ' »</button>';
     document.getElementById('pagination').innerHTML = html;
 }
 
-function goPage(p) { _page = p; renderTable(_filtered); }
+function goPage(p) { _page = p; renderTable(_filtered); window.scrollTo(0, 0); }
 
 // ── Chart (Canvas) ──
 function renderChart(trades) {

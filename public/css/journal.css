@@ -93,7 +93,10 @@
 .j-empty { text-align: center; padding: 60px 20px; color: var(--dim); font-size: 14px; }
 
 /* Pagination */
-.j-pagination { display: flex; justify-content: center; gap: 8px; margin-top: 16px; padding-bottom: 60px; }
+.j-pagination { display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 16px; padding-bottom: 60px; }
+.j-pg-btn { font-size: 11px !important; letter-spacing: 1px; border: 1px solid #00aaff44 !important; color: #00d4ff !important; padding: 5px 12px !important; }
+.j-pg-btn:disabled { color: #334 !important; cursor: default; }
+.j-pg-info { color: #889; font-size: 11px; letter-spacing: 1px; font-family: var(--ff, 'Orbitron', monospace); }
 
 /* Fixed back button (always visible at bottom) */
 .j-back-fixed {
