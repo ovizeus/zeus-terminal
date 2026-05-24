@@ -352,4 +352,38 @@ router.post('/sandbox/:id/complete', _requireAdmin, (req, res) => {
     }
 });
 
+// ─── D-8: Cognitive Checkpoints ───────────────────────────────────────────
+router.post('/checkpoints', _requireAdmin, (req, res) => {
+    try {
+        const ck = require('../services/ml/_doctor/cognitiveCheckpoint');
+        const result = ck.saveCheckpoint({
+            label: req.body.label || 'manual_' + Date.now(),
+        });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.get('/checkpoints', _requireAdmin, (req, res) => {
+    try {
+        const ck = require('../services/ml/_doctor/cognitiveCheckpoint');
+        const limit = req.query.limit ? Math.min(Number(req.query.limit), 100) : 50;
+        res.json({ ok: true, checkpoints: ck.listCheckpoints({ limit }) });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
+router.post('/checkpoints/:id/restore', _requireAdmin, (req, res) => {
+    try {
+        const ck = require('../services/ml/_doctor/cognitiveCheckpoint');
+        const result = ck.restoreCheckpoint({ checkpointId: Number(req.params.id) });
+        if (!result.restored) return res.status(400).json({ ok: false, error: result.error || 'Restore failed' });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: err.message });
+    }
+});
+
 module.exports = router;
