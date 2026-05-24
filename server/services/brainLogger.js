@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const logger = require('./logger');
 const db = require('./database');
+const MF = require('../migrationFlags');
 
 // ── No-trade dedup state (per symbol) ──
 const _lastNoTrade = new Map(); // symbol → { ts, confScore, regime, gateKey, ddTier }
@@ -96,6 +97,72 @@ function logDecision(fields) {
             fields.linkedSeq || null,
             fields  // full snapshot as JSON blob
         );
+
+        // ── ML Ingest: write to ml_decision_snapshots + ml_decision_light ──
+        // Gated by ML_INGEST_ENABLED flag. Never crashes brain — fully isolated try/catch.
+        if (MF.ML_INGEST_ENABLED) {
+            try {
+                const ts = fields.ts || Date.now();
+                const userId = fields.userId;
+                const symbol = fields.symbol;
+
+                // decision_digest: MD5 of userId:symbol:cycle:ts
+                const digest = crypto
+                    .createHash('md5')
+                    .update(`${userId}:${symbol}:${cycle}:${ts}`)
+                    .digest('hex');
+
+                // Resolve env: prefer fields.resolvedEnv, fall back to 'DEMO'
+                const resolvedEnv = (fields.resolvedEnv === 'TESTNET' || fields.resolvedEnv === 'REAL')
+                    ? fields.resolvedEnv
+                    : 'DEMO';
+
+                // Map finalTier to a valid snapshot_event_type
+                let eventType;
+                if (finalTier === 'NO_TRADE' || finalAction.startsWith('blocked_')) {
+                    eventType = 'ABSTAIN_CRITIC';
+                } else if (fields.finalConfidence >= 50 && fields.finalConfidence < 60) {
+                    eventType = 'NEAR_THRESHOLD';
+                } else {
+                    eventType = 'TRADE';
+                }
+
+                // ml_decision_snapshots
+                db.db.prepare(
+                    'INSERT OR IGNORE INTO ml_decision_snapshots ' +
+                    '(user_id, resolved_env, symbol, snapshot_event_type, decision_digest, ' +
+                    'snapshot_json, registry_digest, created_at) ' +
+                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                ).run(
+                    userId,
+                    resolvedEnv,
+                    symbol,
+                    eventType,
+                    digest,
+                    JSON.stringify(fields),
+                    snapId,   // use snapId as registry_digest placeholder
+                    ts
+                );
+
+                // ml_decision_light
+                db.db.prepare(
+                    'INSERT OR IGNORE INTO ml_decision_light ' +
+                    '(user_id, resolved_env, symbol, decision_digest, score, reason_code, created_at) ' +
+                    'VALUES (?, ?, ?, ?, ?, ?, ?)'
+                ).run(
+                    userId,
+                    resolvedEnv,
+                    symbol,
+                    digest,
+                    fields.finalConfidence || 0,
+                    finalAction,
+                    ts
+                );
+            } catch (mlErr) {
+                // ML write failure must NEVER crash Brain — silently swallow
+                try { logger.error('BRAIN_LOG', 'ML_INGEST write failed: ' + mlErr.message); } catch (_) {}
+            }
+        }
 
         return snapId;
     } catch (err) {
