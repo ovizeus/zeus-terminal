@@ -137,7 +137,7 @@ describe('SRV-POS shadow mode + seq reset', () => {
         expect(_writeDropCount).toBe(1);
     });
 
-    test('shadow comparison detects autoTrade divergence', () => {
+    test('shadow comparison detects autoTrade divergence with _classifySource', () => {
         const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 };
 
         const shadowPositions = [
@@ -145,8 +145,8 @@ describe('SRV-POS shadow mode + seq reset', () => {
             { sym: 'ETHUSDT', side: 'SHORT', mode: 'demo', autoTrade: false },
         ];
         const legacyPositions = [
-            { sym: 'BTCUSDT', side: 'LONG', mode: 'demo', autoTrade: false }, // DIVERGENCE
-            { sym: 'ETHUSDT', side: 'SHORT', mode: 'demo', autoTrade: false }, // match
+            { sym: 'BTCUSDT', side: 'LONG', mode: 'demo', autoTrade: false, _classifySource: 'sync_merge' },
+            { sym: 'ETHUSDT', side: 'SHORT', mode: 'demo', autoTrade: false, _classifySource: 'ws_push' },
         ];
 
         let divergences = 0;
@@ -160,27 +160,52 @@ describe('SRV-POS shadow mode + seq reset', () => {
             if (!sp) return;
             if (!!p.autoTrade !== !!sp.autoTrade) {
                 divergences++;
-                if (p.autoTrade === undefined || p.autoTrade === null) _vectorHits.v1++;
+                const source = p._classifySource || 'unknown';
+                if (source === 'sync_merge') _vectorHits.v3++;
+                else if (source === 'boot_resume') _vectorHits.v4++;
+                else if (source === 'ws_push') _vectorHits.v2++;
+                else if (p.autoTrade === undefined || p.autoTrade === null) _vectorHits.v1++;
                 else _vectorHits.v5++;
             }
         });
 
         expect(divergences).toBe(1);
-        expect(_vectorHits.v5).toBe(1);
+        expect(_vectorHits.v3).toBe(1); // sync_merge vector
     });
 
-    test('vector counter tracks v1 (undefined autoTrade)', () => {
+    test('vector counter tracks v1 (undefined autoTrade, no source)', () => {
         const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 };
 
-        const legacyPos = { sym: 'BTCUSDT', side: 'LONG', autoTrade: undefined };
+        const legacyPos = { sym: 'BTCUSDT', side: 'LONG', autoTrade: undefined, _classifySource: undefined };
         const shadowPos = { sym: 'BTCUSDT', side: 'LONG', autoTrade: true };
 
         if (!!legacyPos.autoTrade !== !!shadowPos.autoTrade) {
-            if (legacyPos.autoTrade === undefined || legacyPos.autoTrade === null) {
-                _vectorHits.v1++;
-            }
+            const source = legacyPos._classifySource || 'unknown';
+            if (source === 'sync_merge') _vectorHits.v3++;
+            else if (source === 'boot_resume') _vectorHits.v4++;
+            else if (source === 'ws_push') _vectorHits.v2++;
+            else if (legacyPos.autoTrade === undefined || legacyPos.autoTrade === null) _vectorHits.v1++;
+            else _vectorHits.v5++;
         }
 
         expect(_vectorHits.v1).toBe(1);
+    });
+
+    test('vector counter tracks boot_resume source', () => {
+        const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 };
+
+        const legacyPos = { sym: 'BTCUSDT', side: 'LONG', autoTrade: false, _classifySource: 'boot_resume' };
+        const shadowPos = { sym: 'BTCUSDT', side: 'LONG', autoTrade: true };
+
+        if (!!legacyPos.autoTrade !== !!shadowPos.autoTrade) {
+            const source = legacyPos._classifySource || 'unknown';
+            if (source === 'sync_merge') _vectorHits.v3++;
+            else if (source === 'boot_resume') _vectorHits.v4++;
+            else if (source === 'ws_push') _vectorHits.v2++;
+            else if (legacyPos.autoTrade === undefined || legacyPos.autoTrade === null) _vectorHits.v1++;
+            else _vectorHits.v5++;
+        }
+
+        expect(_vectorHits.v4).toBe(1);
     });
 });

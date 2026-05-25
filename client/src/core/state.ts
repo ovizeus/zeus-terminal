@@ -622,7 +622,7 @@ export const ZState = (() => {
             return
           }
           if (!existing.has(String(p.id))) {
-            const _restoredPos = { ...p, _restored: true }
+            const _restoredPos = { ...p, _restored: true, _classifySource: 'boot_resume' }
             TP.demoPositions.push(_restoredPos)
             console.log('[ZState] Restored pos:', p.id, p.side, p.sym)
             if (p.dsl && typeof DSL !== 'undefined') {
@@ -656,7 +656,7 @@ export const ZState = (() => {
         const _existLive = new Set(TP.livePositions.map(function (p: any) { return String(p.id) }))
         snap.liveManualPositions.forEach(function (p: any) {
           if (p.closed || _existLive.has(String(p.id))) return
-          const _restoredLive = Object.assign({}, p, { _restored: true })
+          const _restoredLive = Object.assign({}, p, { _restored: true, _classifySource: 'boot_resume' })
           TP.livePositions.push(_restoredLive)
           if (p.dsl && typeof DSL !== 'undefined') {
             DSL.positions = DSL.positions || {}
@@ -969,7 +969,8 @@ export const ZState = (() => {
       closed: sp.status ? sp.status !== 'OPEN' : !!sp.closed,
       _serverSeq: sp.seq,
       _serverMode: sp.mode,
-      _dsl: sp.dsl || null
+      _dsl: sp.dsl || null,
+      _classifySource: 'ws_push',
     }
   }
 
@@ -1010,6 +1011,7 @@ export const ZState = (() => {
     const shadowAll = _shadowDemoPositions.concat(_shadowLivePositions)
     const legacyAll = legacyDemo.concat(legacyLive)
     let divergences = 0
+    const divergenceDetails: any[] = []
     const shadowMap = new Map<string, any>()
     shadowAll.forEach((p: any) => {
       const key = `${p.sym || p.symbol}/${p.side}/${p.mode || 'demo'}`
@@ -1023,20 +1025,44 @@ export const ZState = (() => {
       const shadowAT = !!sp.autoTrade
       if (legacyAT !== shadowAT) {
         divergences++
-        // Detect which vector caused it
-        if (p.autoTrade === undefined || p.autoTrade === null) _vectorHits.v1++
-        else if (p._wsReconnected) _vectorHits.v2++
-        else if (!p._serverSeq && sp._serverSeq) _vectorHits.v3++
-        else if (p._bootRace) _vectorHits.v4++
+        // Vector detection based on _classifySource marker
+        const source = p._classifySource || 'unknown'
+        if (source === 'sync_merge') _vectorHits.v3++
+        else if (source === 'boot_resume') _vectorHits.v4++
+        else if (source === 'ws_push') _vectorHits.v2++
+        else if (p.autoTrade === undefined || p.autoTrade === null) _vectorHits.v1++
         else _vectorHits.v5++
 
-        console.warn(`[SRV-POS SHADOW] DIVERGENCE ${key}: legacy autoTrade=${legacyAT} shadow=${shadowAT} vectors=${JSON.stringify(_vectorHits)}`)
+        const detail = { key, legacyAT, shadowAT, source, id: p.id }
+        divergenceDetails.push(detail)
+        console.warn(`[SRV-POS SHADOW] DIVERGENCE ${key}: legacy=${legacyAT} shadow=${shadowAT} source=${source}`)
       }
       shadowMap.delete(key)
     })
     if (divergences > 0) {
-      console.warn(`[SRV-POS SHADOW] ${divergences} divergences total. vectors=${JSON.stringify(_vectorHits)} writeDrops=${_writeDropCount}`)
+      console.warn(`[SRV-POS SHADOW] ${divergences} divergences. vectors=${JSON.stringify(_vectorHits)} writeDrops=${_writeDropCount}`)
+      // Report to server for operator visibility
+      _reportDivergence(divergences, divergenceDetails)
     }
+  }
+
+  let _lastDivergenceReport = 0
+  function _reportDivergence(count: number, details: any[]) {
+    if (Date.now() - _lastDivergenceReport < 60000) return // rate limit 1/60s
+    _lastDivergenceReport = Date.now()
+    try {
+      fetch('/api/srv-pos/shadow-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ts: Date.now(),
+          count,
+          vectors: { ..._vectorHits },
+          writeDrops: _writeDropCount,
+          details: details.slice(0, 10),
+        }),
+      }).catch(() => {})
+    } catch (_) {}
   }
 
   // Compare every 10s

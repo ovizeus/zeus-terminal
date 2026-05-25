@@ -217,6 +217,7 @@ export async function liveApiSyncState(): Promise<any> {
         fromExchange: true,
         mode: 'live',
         openTs: p.updateTime || Date.now(),
+        _classifySource: 'sync_merge',
       }
       if (existing) {
         // [FIX R7] If ID changed, re-attach DSL state.

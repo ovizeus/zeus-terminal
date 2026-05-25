@@ -1151,6 +1151,7 @@ app.use('/api/health', healthRoutes);
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
 app.use('/api/market', require('./server/routes/market'));
+app.use('/api/srv-pos', require('./server/routes/srvPos'));
 
 // ─── [C7] Client Error Forwarding (+ Sentry) ───
 app.post('/api/client-error', (req, res) => {
