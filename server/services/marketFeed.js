@@ -44,7 +44,7 @@ let _timeframes = [];   // active timeframes ['5m', '1h', '4h']
 // When the primary lane (kline / markPrice / aggTrade) is dead, we poll klines
 // via REST at ALT_KLINE_POLL_MS and derive price + kline events locally.
 // bookTicker/trade streams take over price + aggTrade emission.
-const ALT_KLINE_POLL_MS = 30000;    // 30s — Binance kline WS blocked on this IP; REST polls at 30s = 24 req/min (120 weight/min, safe)
+const ALT_KLINE_POLL_MS = 60000;    // 60s — Binance kline WS blocked on this IP; REST polls at 60s = 12 req/min (was 30s=24, caused 418 IP ban cycle)
 const _altKlinePollers = {};        // { 'BTCUSDT|5m': { timer, lastOpenTs } }
 
 // [BIN-TELEM Phase B 2026-05-19] Ref-counting for symbol subscriptions.

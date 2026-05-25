@@ -72,7 +72,7 @@ const TICKS_4H = 240;               // offset to look back for 4h delta
 const VOL_BASELINE_WINDOW = 20;     // volume avg over last 20 ticks
 const DEDUPE_WINDOW_MS = 300000;    // 1 event / symbol / category / 5 min
 const STREAK_WINDOW_MS = DEDUPE_WINDOW_MS * 3;  // streak continues if re-fires within 15 min
-const OI_TOP_N = 50;                // poll OI only for the deepest-liquidity 50 symbols
+const OI_TOP_N = 10;                // poll OI only for top 10 symbols (was 50 — caused 418 IP bans)
 const THRESH = {
     spike1h: 5,      // ±5 %
     spike4h: 10,     // ±10 %
