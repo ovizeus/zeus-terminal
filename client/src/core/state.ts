@@ -21,6 +21,7 @@ import { PROFILE_TF } from './config'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
 import { useBrainStore } from '../stores/brainStore'
 import { acquirePositionWrite, releasePositionWrite, getDropCount, getLockHeld } from '../utils/positionMutex'
+import { shouldSkipFrameForExchange } from '../utils/exchangeGuard'
 import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
@@ -1090,8 +1091,7 @@ export const ZState = (() => {
 
   function _applyServerATState(state: any) {
     if (!state) return
-    // [SRV-POS H2] Multi-exchange guard: skip frames from different exchange context
-    if (state.exchange && w._activeExchange && state.exchange !== w._activeExchange) {
+    if (shouldSkipFrameForExchange(state.exchange, w._activeExchange)) {
       console.warn(`[SRV-POS] frame for ${state.exchange}, active=${w._activeExchange}, skipped`)
       return
     }
