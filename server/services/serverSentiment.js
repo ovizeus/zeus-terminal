@@ -58,13 +58,25 @@ async function _pollSymbol(symbol) {
     const period = '5m';
     const limit = 5; // last 5 data points
 
-    // Fetch in parallel
-    const [lsGlobal, lsTop, takerRatio, fundingHist] = await Promise.allSettled([
+    // Fetch LS ratios in parallel — funding from cache (marketRadar is owner)
+    const [lsGlobal, lsTop, takerRatio] = await Promise.allSettled([
         _fetchJson(`${BASE_URL}/futures/data/globalLongShortAccountRatio?symbol=${symbol}&period=${period}&limit=${limit}`),
         _fetchJson(`${BASE_URL}/futures/data/topLongShortPositionRatio?symbol=${symbol}&period=${period}&limit=${limit}`),
         _fetchJson(`${BASE_URL}/futures/data/takerlongshortRatio?symbol=${symbol}&period=${period}&limit=${limit}`),
-        _fetchJson(`${BASE_URL}/fapi/v1/fundingRate?symbol=${symbol}&limit=8`),
     ]);
+    // [T2 Gateway] Read funding from cache instead of direct Binance call
+    let fundingHist;
+    try {
+        const mc = require('./marketCache');
+        const cached = mc.get('funding', 'binance:' + symbol);
+        if (cached && cached.rate != null) {
+            fundingHist = { status: 'fulfilled', value: [{ fundingRate: String(cached.rate) }] };
+        } else {
+            fundingHist = { status: 'fulfilled', value: [] };
+        }
+    } catch (_) {
+        fundingHist = { status: 'fulfilled', value: [] };
+    }
 
     let crowdBullish = 0; // -1 to +1 (positive = crowd is bullish)
     let dataPoints = 0;

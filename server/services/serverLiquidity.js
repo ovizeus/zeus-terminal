@@ -140,11 +140,14 @@ async function _pollDepth(symbol) {
     const data = await res.json();
     if (!data.bids || !data.asks) return;
 
-    _depthCache.set(symbol, {
+    const parsedDepth = {
         bids: data.bids.map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) })),
         asks: data.asks.map(([p, q]) => ({ price: parseFloat(p), qty: parseFloat(q) })),
         ts: Date.now(),
-    });
+    };
+    _depthCache.set(symbol, parsedDepth);
+    // [T2 Gateway] Write depth to central cache
+    try { require('./marketCache').set('depth', 'binance:' + symbol, parsedDepth, { caller: 'serverLiquidity' }); } catch (_) {}
 }
 
 /**

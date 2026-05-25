@@ -259,6 +259,13 @@ async function fetchKlines(symbol, interval, limit) {
 // REST — Fetch funding rate
 // ══════════════════════════════════════════════════════════════════
 async function fetchFundingRate(symbol) {
+    // [T2 Gateway] Read from cache first (marketRadar is owner)
+    try {
+        const mc = require('./marketCache');
+        const cached = mc.get('funding', 'binance:' + symbol);
+        if (cached && cached.rate != null) return cached.rate;
+    } catch (_) {}
+    // Fallback: direct fetch (only if cache miss — e.g. radar hasn't polled yet)
     const url = `${BINANCE_REST}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`;
     try {
         const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketFeed:funding', __weight: 1 });
@@ -275,6 +282,13 @@ async function fetchFundingRate(symbol) {
 // REST — Fetch open interest
 // ══════════════════════════════════════════════════════════════════
 async function fetchOpenInterest(symbol) {
+    // [T2 Gateway] Read from cache first (marketRadar is owner)
+    try {
+        const mc = require('./marketCache');
+        const cached = mc.get('oi', 'binance:' + symbol);
+        if (cached != null) return cached;
+    } catch (_) {}
+    // Fallback: direct fetch (only if cache miss)
     const url = `${BINANCE_REST}/fapi/v1/openInterest?symbol=${encodeURIComponent(symbol)}`;
     try {
         const res = await _telemFetch(url, { signal: AbortSignal.timeout(8000), __src: 'marketFeed:oi', __weight: 1 });

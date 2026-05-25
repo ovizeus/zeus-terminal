@@ -258,6 +258,17 @@ async function _pollOnce() {
     // already aligns with the polled order.
     _setSnapshot(top);
 
+    // [T2 Gateway] Write ticker data to central cache — other modules read from here
+    try {
+        const mc = require('./marketCache');
+        for (const t of top) {
+            mc.set('ticker', 'binance:' + t.symbol, {
+                price: t.price, quoteVolume: t.quoteVolume,
+                priceChangePercent24h: t.priceChangePercent24h,
+            }, { caller: 'marketRadar' });
+        }
+    } catch (_) {}
+
     // Per-symbol detection
     for (let i = 0; i < top.length; i++) {
         const t = top[i];
@@ -410,6 +421,21 @@ async function _pollFunding(top, currentTopSet, now) {
     const rows = await res.json();
     if (!Array.isArray(rows)) return;
 
+    // [T2 Gateway] Write ALL funding data to cache — sentiment/feed read from here
+    try {
+        const mc = require('./marketCache');
+        for (const r of rows) {
+            if (r.symbol && r.lastFundingRate != null) {
+                mc.set('funding', 'binance:' + r.symbol, {
+                    rate: parseFloat(r.lastFundingRate),
+                    markPrice: parseFloat(r.markPrice) || 0,
+                    indexPrice: parseFloat(r.indexPrice) || 0,
+                    ts: Date.now(),
+                }, { caller: 'marketRadar' });
+            }
+        }
+    } catch (_) {}
+
     // Index price/rank for O(1) enrichment lookup
     const ix = new Map();
     top.forEach((t, i) => ix.set(t.symbol, { rank: i + 1, price: t.price, qv: t.quoteVolume, pct24: t.priceChangePercent24h }));
@@ -446,7 +472,10 @@ async function _fetchOI(symbol) {
     if (!res.ok) return null;
     const data = await res.json();
     const oi = parseFloat(data.openInterest);
-    return isFinite(oi) ? oi : null;
+    if (!isFinite(oi)) return null;
+    // [T2 Gateway] Write OI to cache
+    try { require('./marketCache').set('oi', 'binance:' + symbol, oi, { caller: 'marketRadar' }); } catch (_) {}
+    return oi;
 }
 
 async function _pollOpenInterest(topSubset, now) {
