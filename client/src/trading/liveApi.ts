@@ -176,6 +176,9 @@ export async function liveApiSyncState(): Promise<any> {
       availableBalance: bal.availableBalance || 0,
       unrealizedPnL: bal.unrealizedPnL || 0,
     })
+    // [SRV-POS] Cache exchange positions for shadow comparison (both paths use this)
+    w._lastExchangePositions = positions
+
     // [SRV-POS 4.3] Flag-gated: when ON, server positions are canonical.
     // liveApi only updates prices on existing positions + detects orphans.
     const _srvPosActive = resolveEffectiveFlag(w._srvPosFlags, w._executionEnv === 'REAL' ? 'real' : (w._executionEnv === 'TESTNET' ? 'testnet' : 'demo'))
@@ -189,6 +192,7 @@ export async function liveApiSyncState(): Promise<any> {
           if (update) {
             pos.pnl = update.pnl
             pos.liqPrice = update.liqPrice
+            if (update.markPrice !== undefined) pos.markPrice = update.markPrice
           }
         }
       }

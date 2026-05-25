@@ -1012,10 +1012,25 @@ export const ZState = (() => {
   function _shadowCompare() {
     const TP = w.TP
     if (typeof TP === 'undefined') return
-    const legacyDemo = (TP.demoPositions || [])
-    const legacyLive = (TP.livePositions || [])
+    const _srvPosMode = (w._executionEnv === 'REAL') ? 'real' : (w._executionEnv === 'TESTNET') ? 'testnet' : 'demo'
+    const _flagOn = resolveEffectiveFlag(w._srvPosFlags, _srvPosMode)
+
+    // Shadow = server positions. Compare target depends on flag state:
+    // Flag OFF: compare server vs TP (detects classification drift)
+    // Flag ON: compare server vs EXCHANGE (detects server-exchange drift, since TP = server)
+    let compareAll: any[]
+    if (_flagOn) {
+      const exPositions = w._lastExchangePositions
+      if (!Array.isArray(exPositions) || exPositions.length === 0) return
+      compareAll = exPositions.map((p: any) => ({
+        sym: p.symbol, side: p.side, mode: 'live',
+        autoTrade: null, _classifySource: 'exchange_raw',
+      }))
+    } else {
+      compareAll = (TP.demoPositions || []).concat(TP.livePositions || [])
+    }
+
     const shadowAll = _shadowDemoPositions.concat(_shadowLivePositions)
-    const legacyAll = legacyDemo.concat(legacyLive)
     let divergences = 0
     const divergenceDetails: any[] = []
     const shadowMap = new Map<string, any>()
@@ -1023,7 +1038,7 @@ export const ZState = (() => {
       const key = `${p.sym || p.symbol}/${p.side}/${p.mode || 'demo'}`
       shadowMap.set(key, p)
     })
-    legacyAll.forEach((p: any) => {
+    compareAll.forEach((p: any) => {
       const key = `${p.sym || p.symbol}/${p.side}/${p.mode || 'demo'}`
       const sp = shadowMap.get(key)
       if (!sp) return
