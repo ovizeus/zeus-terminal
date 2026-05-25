@@ -10122,6 +10122,26 @@ migrate('403_ml_voice_feedback', () => {
     `);
 });
 
+migrate('404_position_classifications', () => {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS position_classifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts INTEGER NOT NULL,
+            pos_seq INTEGER,
+            symbol TEXT,
+            side TEXT,
+            classified_as TEXT NOT NULL CHECK(classified_as IN ('AT', 'MANUAL', 'UNKNOWN')),
+            vector TEXT,
+            old_said TEXT,
+            new_said TEXT,
+            flag_state TEXT NOT NULL CHECK(flag_state IN ('legacy', 'shadow', 'authoritative')),
+            ws_frame_age_ms INTEGER,
+            source TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_pos_class_ts ON position_classifications(ts);
+    `);
+});
+
 // ─── User methods ───
 
 const _stmts = {

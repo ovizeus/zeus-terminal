@@ -158,6 +158,9 @@ const DEFAULTS = {
     // to compute effective feature status per (scope → cell → registry).
     // Default OFF until R5B governance facade ships.
     ML_OVERRIDE_RESOLVER_ENABLED: false,
+    SERVER_AUTHORITATIVE_POSITIONS: false,
+    _SRV_POS_TESTNET_ENABLED: false,
+    _SRV_POS_REAL_ENABLED: false,
 };
 
 // ── Load persisted flags (survives restarts) ──
@@ -335,6 +338,9 @@ module.exports = {
     get ML_BANDIT_AUTO_APPLY_MINOR() { return flags.ML_BANDIT_AUTO_APPLY_MINOR; },
     get ML_HYBRID_POOLING_ENABLED() { return flags.ML_HYBRID_POOLING_ENABLED; },
     get ML_OVERRIDE_RESOLVER_ENABLED() { return flags.ML_OVERRIDE_RESOLVER_ENABLED; },
+    get SERVER_AUTHORITATIVE_POSITIONS() { return flags.SERVER_AUTHORITATIVE_POSITIONS; },
+    get _SRV_POS_TESTNET_ENABLED() { return flags._SRV_POS_TESTNET_ENABLED; },
+    get _SRV_POS_REAL_ENABLED() { return flags._SRV_POS_REAL_ENABLED; },
     // Methods
     set,
     getAll,
