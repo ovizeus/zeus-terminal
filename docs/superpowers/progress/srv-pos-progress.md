@@ -95,9 +95,35 @@ sqlite3 /root/zeus-terminal/data/zeus.db "SELECT COUNT(*) FROM position_classifi
 pm2 logs zeus --lines 50 --nostream 2>&1 | grep "brain.*cycle\|BRAIN" | tail -5
 ```
 
+## Step 4: liveApi.ts position source flag-gated — DONE
+- **Commits:** `65d1152` → `67edb71` (8 commits total)
+- **Tag:** `s2-step4-DONE`
+- **Files modified:**
+  - `server/services/serverAT.js` — srvPosFlags in WS frame
+  - `client/src/utils/positionSource.ts` — NEW: resolveEffectiveFlag + buildPriceUpdateMap + detectOrphans
+  - `client/src/trading/liveApi.ts` — flag-gated: price-only + orphan detect when ON, legacy when OFF
+  - `client/src/core/state.ts` — flag-gated canonical write + dynamic shadow source + flag cache
+  - `server/routes/srvPos.js` — POST /orphan-report with threshold alerts + AT suspend
+  - `client/src/components/PositionOrphanBadge.tsx` — NEW: orphan UI badge
+  - `client/src/components/trading/PositionTable.tsx` — orphan badge wire
+- **Tests:** 73 SRV-POS + 7975 total (21 pre-existing failures unchanged)
+- **Verify:**
+  - Vite build PASS
+  - 0 TS errors in touched files
+  - PM2 online, 0 SRV-POS errors in logs (flag OFF = inert)
+  - shadow-report returns 0 divergences
+  - orphan-report rejects without auth (401)
+- **Behavior at flag OFF (current):** zero runtime change, legacy path untouched
+- **Behavior at flag ON (Step 6a canary):** server positions canonical, exchange for prices only, orphan alerts active
+
+### TODOs (non-blocking, post-soak):
+- [ ] DB orphan INSERT: batch instead of loop (multi-user optimization)
+- [ ] Telegram symbols truncate at 5 + "... and N more"
+- [ ] Telegram sendToUser wrap in try/catch (prevent 500 on TG down)
+- [ ] _orphanWindows persist across restart (DB if deploy frequency increases)
+
 ---
 
-## ⚠️ CONTEXT GATE
-Steps 1-3 done in current session.
-**Before Step 4 → /clear or new session. PROGRESS.md + plan ensure recovery.**
-Step 4 touches `liveApi.ts` (HIGH risk) — FRESH CONTEXT MANDATORY.
+## ⚠️ NEXT: Step 5 — Deploy flag OFF + verify shadow clean
+Step 5 = PM2 reload with Step 4 code, verify 1h soak with flag OFF.
+Shadow should report 0 divergences. Then → Step 6a canary DEMO.
