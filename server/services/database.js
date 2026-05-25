@@ -10142,6 +10142,10 @@ migrate('404_position_classifications', () => {
     `);
 });
 
+migrate('405_position_classifications_exchange', () => {
+    db.exec(`ALTER TABLE position_classifications ADD COLUMN exchange TEXT DEFAULT 'binance'`);
+});
+
 // ─── User methods ───
 
 const _stmts = {

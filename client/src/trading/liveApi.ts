@@ -225,6 +225,7 @@ export async function liveApiSyncState(): Promise<any> {
         mode: 'live',
         openTs: p.updateTime || Date.now(),
         _classifySource: 'sync_merge',
+        _classifyExchange: 'binance',
       }
       if (existing) {
         // [FIX R7] If ID changed, re-attach DSL state.

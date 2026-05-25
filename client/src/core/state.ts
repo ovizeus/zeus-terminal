@@ -595,9 +595,6 @@ export const ZState = (() => {
 
       // [SRV-POS] Boot restore mutex — prevents race with first WS push / liveApi sync
       const _bootSeq = acquirePositionWrite()
-      if (_bootSeq === 0) {
-        console.warn('[ZState] Boot restore skipped — WS push already populated positions')
-      } else {
       try {
       if (snap.positions?.length && typeof TP !== 'undefined' && snap.at?.mode !== 'live') {
         const existing = new Set((TP.demoPositions || []).map((p: any) => String(p.id)))
@@ -629,7 +626,7 @@ export const ZState = (() => {
             return
           }
           if (!existing.has(String(p.id))) {
-            const _restoredPos = { ...p, _restored: true, _classifySource: 'boot_resume' }
+            const _restoredPos = { ...p, _restored: true, _classifySource: 'boot_resume', _classifyExchange: 'binance' }
             TP.demoPositions.push(_restoredPos)
             console.log('[ZState] Restored pos:', p.id, p.side, p.sym)
             if (p.dsl && typeof DSL !== 'undefined') {
@@ -663,7 +660,7 @@ export const ZState = (() => {
         const _existLive = new Set(TP.livePositions.map(function (p: any) { return String(p.id) }))
         snap.liveManualPositions.forEach(function (p: any) {
           if (p.closed || _existLive.has(String(p.id))) return
-          const _restoredLive = Object.assign({}, p, { _restored: true, _classifySource: 'boot_resume' })
+          const _restoredLive = Object.assign({}, p, { _restored: true, _classifySource: 'boot_resume', _classifyExchange: 'binance' })
           TP.livePositions.push(_restoredLive)
           if (p.dsl && typeof DSL !== 'undefined') {
             DSL.positions = DSL.positions || {}
@@ -686,7 +683,6 @@ export const ZState = (() => {
         console.log('[ZState] Restored', snap.liveManualPositions.length, 'live manual position(s)')
       }
       } finally { releasePositionWrite(_bootSeq) }
-      } // end _bootSeq > 0 guard
 
       // Restore pending orders
       if (Array.isArray(snap.pendingOrders) && snap.pendingOrders.length && typeof TP !== 'undefined') {
@@ -980,6 +976,7 @@ export const ZState = (() => {
       _serverMode: sp.mode,
       _dsl: sp.dsl || null,
       _classifySource: 'ws_push',
+      _classifyExchange: sp.exchange || 'binance',
     }
   }
 
@@ -1088,8 +1085,8 @@ export const ZState = (() => {
       writeLockHeld: getLockHeld(),
     }
   }
-  w.acquirePositionWrite = acquirePositionWrite
-  w.releasePositionWrite = releasePositionWrite
+  w._acquirePositionWrite = acquirePositionWrite
+  w._releasePositionWrite = releasePositionWrite
 
   function _applyServerATState(state: any) {
     if (!state) return

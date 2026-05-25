@@ -30,3 +30,7 @@ export function _resetForTest(): void {
   _positionWriteLock = 0
   _writeDropCount = 0
 }
+
+export function _setCounterForTest(val: number): void {
+  _writeSeqCounter = val
+}
