@@ -1812,16 +1812,17 @@ export function _usSave() {
     USER_SETTINGS.chart.tf = S.chartTf || '5m'
     USER_SETTINGS.chart.tz = S.tz || 'Europe/Bucharest'
     USER_SETTINGS.chart.heatmap = S.heatmapSettings ? Object.assign({}, S.heatmapSettings) : null
-    const _cv = (id: string, def: string) => { const e = document.getElementById(id) as any; return (e && e.value) ? e.value : def }
+    const _prev = USER_SETTINGS.chart.colors || {}
+    const _cv = (id: string, key: string, def: string) => { const e = document.getElementById(id) as any; return (e && e.value) ? e.value : (_prev as any)[key] || def }
     USER_SETTINGS.chart.colors = {
-      bull: _cv('ccBull', '#00d97a'),
-      bear: _cv('ccBear', '#ff3355'),
-      bullW: _cv('ccBullW', '#00d97a'),
-      bearW: _cv('ccBearW', '#ff3355'),
-      priceText: _cv('ccPriceText', '#7a9ab8'),
-      priceBg: _cv('ccPriceBg', '#0a0f16'),
-      gridH: _cv('ccGridH', '#1a2530'),
-      gridV: _cv('ccGridV', '#1a2530'),
+      bull: _cv('ccBull', 'bull', '#00d97a'),
+      bear: _cv('ccBear', 'bear', '#ff3355'),
+      bullW: _cv('ccBullW', 'bullW', '#00d97a'),
+      bearW: _cv('ccBearW', 'bearW', '#ff3355'),
+      priceText: _cv('ccPriceText', 'priceText', '#7a9ab8'),
+      priceBg: _cv('ccPriceBg', 'priceBg', '#0a0f16'),
+      gridH: _cv('ccGridH', 'gridH', '#1a2530'),
+      gridV: _cv('ccGridV', 'gridV', '#1a2530'),
     }
     if (typeof USER_SETTINGS.chart.axisWidth !== 'number') {
       USER_SETTINGS.chart.axisWidth = 60
