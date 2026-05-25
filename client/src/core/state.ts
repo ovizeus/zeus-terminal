@@ -999,7 +999,24 @@ export const ZState = (() => {
   let _shadowLivePositions: any[] = []
   const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 }
   let _writeDropCount = 0
-  // _writeSeqCounter + _positionWriteLock: declared in Step 4 when mutex is wired into liveApi path
+  let _writeSeqCounter = 0
+  let _positionWriteLock = 0 // 0 = free, >0 = held by writeSeq
+
+  // Newer-wins mutex: prevents WS push + liveApi sync from both writing TP positions simultaneously.
+  // Older writer yields to newer (stale data has no value), every drop is logged.
+  function _acquirePositionWrite(): number {
+    const mySeq = ++_writeSeqCounter
+    if (_positionWriteLock === 0 || mySeq > _positionWriteLock) {
+      _positionWriteLock = mySeq
+      return mySeq
+    }
+    _writeDropCount++
+    console.warn(`[SRV-POS] write dropped (stale seq=${mySeq}, current=${_positionWriteLock}), total drops=${_writeDropCount}`)
+    return 0
+  }
+  function _releasePositionWrite(seq: number) {
+    if (_positionWriteLock === seq) _positionWriteLock = 0
+  }
 
   function _shadowCompare() {
     const TP = w.TP
@@ -1077,8 +1094,11 @@ export const ZState = (() => {
       shadowDemo: _shadowDemoPositions.length,
       shadowLive: _shadowLivePositions.length,
       lastFrameSeq: _lastAppliedFrameSeq,
+      writeLockHeld: _positionWriteLock,
     }
   }
+  w._acquirePositionWrite = _acquirePositionWrite
+  w._releasePositionWrite = _releasePositionWrite
 
   function _applyServerATState(state: any) {
     if (!state) return
@@ -1260,6 +1280,11 @@ export const ZState = (() => {
       _shadowLivePositions = serverATLive.slice()
 
       // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
+      // [SRV-POS] Newer-wins mutex: protects against WS push + liveApi sync racing.
+      const _writeSeq = _acquirePositionWrite()
+      if (_writeSeq === 0) {
+        // Stale writer — drop silently (logged in _acquirePositionWrite)
+      } else {
       const _prevMerging = _merging
       _merging = true
       try {
@@ -1272,6 +1297,8 @@ export const ZState = (() => {
         }
       } finally {
         _merging = _prevMerging
+        _releasePositionWrite(_writeSeq)
+      }
       }
       // [Phase 8B1] Render AFTER the atomic mutation block.
       if (typeof renderLivePositions === 'function') renderLivePositions()

@@ -15,15 +15,26 @@ function _isLocalhost(req) {
     return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
 }
 
-router.post('/shadow-report', express.json(), (req, res) => {
-    const origin = req.headers['origin'] || '';
-    const host = req.headers['host'] || '';
-    const isLocal = _isLocalhost(req);
-    if (!isLocal) {
-        const validOrigin = origin === ('https://' + host) || origin === ('http://' + host);
-        if (!validOrigin) {
-            return res.status(403).json({ ok: false, error: 'origin rejected' });
+// Prune empty IP entries from rate limit map to prevent unbounded growth
+let _cleanupTimer = setInterval(() => {
+    for (const [ip, ts] of _postTimestamps) {
+        // Remove entries with no timestamps or all timestamps expired
+        if (ts.length === 0) {
+            _postTimestamps.delete(ip);
+        } else {
+            const now = Date.now();
+            while (ts.length > 0 && now - ts[0] > POST_RATE_WINDOW_MS) ts.shift();
+            if (ts.length === 0) _postTimestamps.delete(ip);
         }
+    }
+}, 300000);
+
+router.post('/shadow-report', express.json(), (req, res) => {
+    // Auth: localhost always allowed (curl diagnostics).
+    // Remote: require x-zeus-request header (custom header = CSRF proof, browser won't
+    // send it cross-origin without preflight which server doesn't allow).
+    if (!_isLocalhost(req) && req.headers['x-zeus-request'] !== '1') {
+        return res.status(403).json({ ok: false, error: 'missing x-zeus-request header' });
     }
 
     const ip = req.ip || '0.0.0.0';
@@ -87,7 +98,11 @@ router.get('/status', (req, res) => {
 });
 
 module.exports = router;
-module.exports._resetForTest = () => { _reports = []; _postTimestamps.clear(); };
+module.exports._resetForTest = () => {
+    _reports = [];
+    _postTimestamps.clear();
+};
+module.exports._getTimestampMapSize = () => _postTimestamps.size;
 module.exports._getReportCount = () => _reports.length;
 module.exports._insertDirect = (entry) => {
     _reports.push(entry);

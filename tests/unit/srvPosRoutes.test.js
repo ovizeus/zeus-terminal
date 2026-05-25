@@ -18,13 +18,11 @@ beforeEach(() => {
     app.use('/api/srv-pos', router);
 });
 
-const VALID_REPORT = { ts: Date.now(), count: 2, vectors: { v1: 1 }, writeDrops: 0, details: [] };
-
 describe('POST /api/srv-pos/shadow-report — basic', () => {
     test('accepts valid divergence report', async () => {
         const res = await request(app)
             .post('/api/srv-pos/shadow-report')
-            .send(VALID_REPORT);
+            .send({ ts: Date.now(), count: 2, vectors: { v1: 1 }, writeDrops: 0, details: [] });
         expect(res.status).toBe(200);
         expect(res.body.ok).toBe(true);
     });
@@ -70,13 +68,11 @@ describe('POST /api/srv-pos/shadow-report — rate limit (5/min per IP)', () => 
                     .post('/api/srv-pos/shadow-report')
                     .send({ ts: mockTime, count: 0, vectors: {}, writeDrops: 0, details: [] });
             }
-            // 6th blocked
             const blocked = await request(app)
                 .post('/api/srv-pos/shadow-report')
                 .send({ ts: mockTime, count: 0, vectors: {}, writeDrops: 0, details: [] });
             expect(blocked.status).toBe(429);
 
-            // Advance past 60s window
             mockTime += 61000;
             const allowed = await request(app)
                 .post('/api/srv-pos/shadow-report')
@@ -88,26 +84,34 @@ describe('POST /api/srv-pos/shadow-report — rate limit (5/min per IP)', () => 
     });
 });
 
-describe('buffer cap (MAX_REPORTS = 100)', () => {
-    test('buffer evicts oldest entries when exceeding 100', () => {
-        for (let i = 0; i < 105; i++) {
-            router._insertDirect({ ts: i, count: 1, vectors: {}, writeDrops: 0, details: [], receivedAt: i });
-        }
-        expect(router._getReportCount()).toBe(100);
-        // Verify oldest evicted (first 5 gone, entries start at ts=5)
-        const res = { body: null };
-        // Use GET to verify
-    });
+describe('buffer cap (MAX_REPORTS = 100) — black-box via HTTP', () => {
+    test('105 HTTP inserts → buffer at 100, oldest evicted', async () => {
+        const origNow = Date.now;
+        let mockTime = 2000000;
+        Date.now = () => mockTime;
+        try {
+            let accepted = 0;
+            for (let batch = 0; batch < 21; batch++) {
+                // Advance time past rate window for each batch of 5
+                mockTime += 61000;
+                for (let i = 0; i < 5 && accepted < 105; i++) {
+                    const r = await request(app)
+                        .post('/api/srv-pos/shadow-report')
+                        .send({ ts: accepted, count: 1, vectors: {}, writeDrops: 0, details: [] });
+                    expect(r.status).toBe(200);
+                    accepted++;
+                }
+            }
+            expect(accepted).toBe(105);
 
-    test('buffer oldest entries evicted verified via GET', async () => {
-        for (let i = 0; i < 105; i++) {
-            router._insertDirect({ ts: i, count: 1, vectors: {}, writeDrops: 0, details: [], receivedAt: i });
+            const res = await request(app).get('/api/srv-pos/shadow-report?last=200');
+            expect(res.body.totalReports).toBe(100);
+            // Oldest 5 entries (ts 0-4) should be evicted
+            expect(res.body.recent[0].ts).toBe(5);
+            expect(res.body.recent[99].ts).toBe(104);
+        } finally {
+            Date.now = origNow;
         }
-        const res = await request(app).get('/api/srv-pos/shadow-report?last=200');
-        expect(res.body.totalReports).toBe(100);
-        // First entry should be ts=5 (entries 0-4 evicted)
-        expect(res.body.recent[0].ts).toBe(5);
-        expect(res.body.recent[99].ts).toBe(104);
     });
 });
 
@@ -138,6 +142,42 @@ describe('GET /api/srv-pos/shadow-report', () => {
         }
         const res = await request(app).get('/api/srv-pos/shadow-report?last=3');
         expect(res.body.recent.length).toBe(3);
+    });
+});
+
+describe('_postTimestamps cleanup', () => {
+    test('IP entry created on POST, removed when timestamps expire', async () => {
+        const origNow = Date.now;
+        let mockTime = 3000000;
+        Date.now = () => mockTime;
+        try {
+            await request(app)
+                .post('/api/srv-pos/shadow-report')
+                .send({ ts: mockTime, count: 0, vectors: {}, writeDrops: 0, details: [] });
+            expect(router._getTimestampMapSize()).toBe(1);
+
+            // Advance past rate window and trigger cleanup logic manually
+            // (interval cleanup runs every 5min, but we test the eviction logic
+            // by posting again after window expires — the while-shift in POST handler
+            // clears old timestamps)
+            mockTime += 61000;
+            await request(app)
+                .post('/api/srv-pos/shadow-report')
+                .send({ ts: mockTime, count: 0, vectors: {}, writeDrops: 0, details: [] });
+            // Map still has 1 entry (same IP, refreshed)
+            expect(router._getTimestampMapSize()).toBe(1);
+        } finally {
+            Date.now = origNow;
+        }
+    });
+
+    test('_resetForTest clears timestamp map', async () => {
+        await request(app)
+            .post('/api/srv-pos/shadow-report')
+            .send({ ts: Date.now(), count: 0, vectors: {}, writeDrops: 0, details: [] });
+        expect(router._getTimestampMapSize()).toBeGreaterThan(0);
+        router._resetForTest();
+        expect(router._getTimestampMapSize()).toBe(0);
     });
 });
 

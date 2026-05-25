@@ -209,7 +209,7 @@ Each step:
 - [ ] PROGRESS.md update
 
 ### Step 1: Feature flag + migration + audit retention cron (LOW risk)
-### Step 2: Shadow mode (state.ts) — READ-ONLY diagnostic + seq reset detection (MEDIUM risk)
+### Step 2: Shadow mode (state.ts) — READ-ONLY diagnostic + seq reset detection + newer-wins mutex (MEDIUM risk)
 ### Step 3: Deploy shadow, monitor divergences 1h
 
 ⚠️ **CONTEXT GATE:** Steps 1-3 safe in current session. Before Step 4 → /clear or new session. PROGRESS.md + plan ensure context recovery.
