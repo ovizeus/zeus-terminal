@@ -32,4 +32,73 @@ router.get('/symbol/:symbol', (req, res) => {
     res.json({ ok: true, ts: Date.now(), ...entry });
 });
 
+// ═══════════════════════════════════════════════════════════════════
+// [T3 Gateway] Proxy endpoints — client reads from marketCache, NOT Binance
+// ═══════════════════════════════════════════════════════════════════
+const mc = require('../services/marketCache');
+
+router.get('/ticker', (req, res) => {
+    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    const exch = req.query.exchange || 'binance';
+    const data = mc.get('ticker', exch + ':' + sym);
+    res.json({ ok: true, data: data || null, cached: !!data });
+});
+
+router.get('/ticker/all', (req, res) => {
+    const exch = req.query.exchange || 'binance';
+    const all = mc.getAll('ticker');
+    const filtered = {};
+    for (const [k, v] of Object.entries(all)) {
+        if (k.startsWith(exch + ':')) filtered[k.split(':')[1]] = v;
+    }
+    res.json({ ok: true, data: filtered, count: Object.keys(filtered).length });
+});
+
+router.get('/funding', (req, res) => {
+    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    const exch = req.query.exchange || 'binance';
+    res.json({ ok: true, data: mc.get('funding', exch + ':' + sym) || null });
+});
+
+router.get('/oi', (req, res) => {
+    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    const exch = req.query.exchange || 'binance';
+    res.json({ ok: true, data: mc.get('oi', exch + ':' + sym) || null });
+});
+
+router.get('/depth', (req, res) => {
+    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    const exch = req.query.exchange || 'binance';
+    res.json({ ok: true, data: mc.get('depth', exch + ':' + sym) || null });
+});
+
+router.get('/sentiment', (req, res) => {
+    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    const exch = req.query.exchange || 'binance';
+    res.json({ ok: true, data: mc.get('sentiment', exch + ':' + sym) || null });
+});
+
+router.get('/time', (req, res) => {
+    res.json({ ok: true, serverTime: Date.now() });
+});
+
+router.get('/klines', (req, res) => {
+    const sym = (req.query.symbol || 'BTCUSDT').toUpperCase();
+    const tf = req.query.tf || '5m';
+    const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+    try {
+        const serverState = require('../services/serverState');
+        const bars = serverState.getBarsForSymbol(sym, tf);
+        res.json({ ok: true, data: (bars || []).slice(-limit) });
+    } catch (_) { res.json({ ok: true, data: [] }); }
+});
+
+router.get('/cache/stats', (req, res) => {
+    res.json({ ok: true, ...mc.getStats() });
+});
+
+router.get('/cache/health', (req, res) => {
+    res.json({ ok: true, ...mc.health() });
+});
+
 module.exports = router;
