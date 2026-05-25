@@ -88,10 +88,10 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       {/* CANDLES TAB */}
       <div className={`mbody${tab === 'csm' ? ' act' : ''}`} id="csm" style={{ display: tab === 'csm' ? 'block' : 'none' }}>
         <div className="msec">CANDLE COLORS</div>
-        <div className="mrow"><span className="mlbl">Bull candle color</span><input type="color" defaultValue="#00d97a" id="ccBull" /></div>
-        <div className="mrow"><span className="mlbl">Bear candle color</span><input type="color" defaultValue="#ff3355" id="ccBear" /></div>
-        <div className="mrow"><span className="mlbl">Bull wick color</span><input type="color" defaultValue="#00d97a" id="ccBullW" /></div>
-        <div className="mrow"><span className="mlbl">Bear wick color</span><input type="color" defaultValue="#ff3355" id="ccBearW" /></div>
+        <div className="mrow"><span className="mlbl">Bull candle color</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.bull || '#00d97a'} id="ccBull" /></div>
+        <div className="mrow"><span className="mlbl">Bear candle color</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.bear || '#ff3355'} id="ccBear" /></div>
+        <div className="mrow"><span className="mlbl">Bull wick color</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.bullW || '#00d97a'} id="ccBullW" /></div>
+        <div className="mrow"><span className="mlbl">Bear wick color</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.bearW || '#ff3355'} id="ccBearW" /></div>
         <div className="msec">CANDLE STYLE</div>
         <div className="qbs">
           {['Candlestick', 'Bar', 'Hollow'].map(s => (
@@ -127,15 +127,15 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       {/* HEATMAP TAB */}
       <div className="mbody" id="csh" style={{ display: tab === 'csh' ? 'block' : 'none' }}>
         <div className="msec">LIQUIDATION HEATMAP SETTINGS</div>
-        <div className="mrow"><span className="mlbl">Lookback Bars</span><input type="number" defaultValue={400} min={100} max={1200} id="hmLookback" /></div>
-        <div className="mrow"><span className="mlbl">Swing Width (pivot)</span><input type="number" defaultValue={1} min={1} max={10} id="hmPivotW" /></div>
-        <div className="mrow"><span className="mlbl">ATR Length</span><input type="number" defaultValue={121} min={5} max={500} id="hmAtrLen" /></div>
-        <div className="mrow"><span className="mlbl">ATR Band %</span><input type="number" defaultValue={0.05} min={0.01} max={1} step={0.01} id="hmAtrBand" /></div>
-        <div className="mrow"><span className="mlbl">Extend Unhit Bars</span><input type="number" defaultValue={30} min={0} max={200} id="hmExtend" /></div>
-        <div className="mrow"><span className="mlbl">Heat Contrast</span><input type="number" defaultValue={0.3} min={0.1} max={5} step={0.1} id="hmContrast" /></div>
-        <div className="mrow"><span className="mlbl">Long Liq Color</span><input type="color" defaultValue="#01c4fe" id="hmLongCol" /></div>
-        <div className="mrow"><span className="mlbl">Short Liq Color</span><input type="color" defaultValue="#ffe400" id="hmShortCol" /></div>
-        <label className="mchk"><input type="checkbox" defaultChecked id="hmKeepTouched" /> Keep Touched Pockets</label>
+        <div className="mrow"><span className="mlbl">Lookback Bars</span><input type="number" defaultValue={w.S?.heatmapSettings?.lookback || 400} min={100} max={1200} id="hmLookback" /></div>
+        <div className="mrow"><span className="mlbl">Swing Width (pivot)</span><input type="number" defaultValue={w.S?.heatmapSettings?.pivotWidth || 1} min={1} max={10} id="hmPivotW" /></div>
+        <div className="mrow"><span className="mlbl">ATR Length</span><input type="number" defaultValue={w.S?.heatmapSettings?.atrLen || 121} min={5} max={500} id="hmAtrLen" /></div>
+        <div className="mrow"><span className="mlbl">ATR Band %</span><input type="number" defaultValue={w.S?.heatmapSettings?.atrBandPct || 0.05} min={0.01} max={1} step={0.01} id="hmAtrBand" /></div>
+        <div className="mrow"><span className="mlbl">Extend Unhit Bars</span><input type="number" defaultValue={w.S?.heatmapSettings?.extendUnhit || 30} min={0} max={200} id="hmExtend" /></div>
+        <div className="mrow"><span className="mlbl">Heat Contrast</span><input type="number" defaultValue={w.S?.heatmapSettings?.heatContrast || 0.3} min={0.1} max={5} step={0.1} id="hmContrast" /></div>
+        <div className="mrow"><span className="mlbl">Long Liq Color</span><input type="color" defaultValue={w.S?.heatmapSettings?.longCol || '#01c4fe'} id="hmLongCol" /></div>
+        <div className="mrow"><span className="mlbl">Short Liq Color</span><input type="color" defaultValue={w.S?.heatmapSettings?.shortCol || '#ffe400'} id="hmShortCol" /></div>
+        <label className="mchk"><input type="checkbox" defaultChecked={w.S?.heatmapSettings?.keepTouched !== false} id="hmKeepTouched" /> Keep Touched Pockets</label>
         <div className="srow">
           <button className="sbtn2 pri" onClick={applyHeatmap}><svg className="z-i" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4V2zm5 0v3h3M6 9h4m-4 2h3" /></svg> APPLY &amp; REDRAW</button>
           <button className="sbtn2 sec" onClick={onClose}>CLOSE</button>
@@ -145,10 +145,10 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
       {/* PRICE AXIS TAB */}
       <div className="mbody" id="csc" style={{ display: tab === 'csc' ? 'block' : 'none' }}>
         <div className="msec">PRICE AXIS COLORS</div>
-        <div className="mrow"><span className="mlbl">Price text color</span><input type="color" defaultValue="#7a9ab8" id="ccPriceText" /></div>
-        <div className="mrow"><span className="mlbl">Chart background</span><input type="color" defaultValue="#0a0f16" id="ccPriceBg" /></div>
-        <div className="mrow"><span className="mlbl">Horizontal grid</span><input type="color" defaultValue="#1a2530" id="ccGridH" /></div>
-        <div className="mrow"><span className="mlbl">Vertical grid</span><input type="color" defaultValue="#1a2530" id="ccGridV" /></div>
+        <div className="mrow"><span className="mlbl">Price text color</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.priceText || '#7a9ab8'} id="ccPriceText" /></div>
+        <div className="mrow"><span className="mlbl">Chart background</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.priceBg || '#0a0f16'} id="ccPriceBg" /></div>
+        <div className="mrow"><span className="mlbl">Horizontal grid</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.gridH || '#1a2530'} id="ccGridH" /></div>
+        <div className="mrow"><span className="mlbl">Vertical grid</span><input type="color" defaultValue={USER_SETTINGS?.chart?.colors?.gridV || '#1a2530'} id="ccGridV" /></div>
         <div className="msec">PRICE AXIS WIDTH</div>
         <div className="mrow">
           <span className="mlbl">Width: <b style={{ color: 'var(--gold)' }}>{axisWidth}px</b></span>
