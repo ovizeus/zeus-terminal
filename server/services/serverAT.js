@@ -2910,6 +2910,7 @@ function getFullState(userId) {
         dailyPnLLive: us.dailyPnLLive || 0,
         pnlAtReset: us.pnlAtReset || 0,
         ts: Date.now(),
+        exchange: us.exchange || 'binance',
         // [WS-1] Monotonic per-server-process frame sequence number. `ts` alone
         // can collide when two getFullState calls happen în same ms (warm-start
         // + onChange near-concurrent path) — clients have no way to order them.
