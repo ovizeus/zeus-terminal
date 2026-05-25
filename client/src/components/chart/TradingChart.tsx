@@ -143,6 +143,20 @@ export function TradingChart() {
       wickDownColor: COLORS.bearWick,
     })
 
+    // [FIX] Apply saved chart colors AFTER chart creation (COLORS constant is stale at module load)
+    const _uc = (window as any).USER_SETTINGS?.chart?.colors
+    if (_uc && _uc.bull) {
+      candleRef.current.applyOptions({
+        upColor: _uc.bull, downColor: _uc.bear,
+        borderUpColor: _uc.bull, borderDownColor: _uc.bear,
+        wickUpColor: (_uc.bullW || _uc.bull) + '77', wickDownColor: (_uc.bearW || _uc.bear) + '77',
+      })
+      chart.applyOptions({
+        layout: { background: { color: _uc.priceBg || '#0a0f16' }, textColor: _uc.priceText || '#7a9ab8' },
+        grid: { horzLines: { color: _uc.gridH || '#1a2530' }, vertLines: { color: _uc.gridV || '#1a2530' } },
+      })
+    }
+
     // Volume histogram
     volRef.current = chart.addHistogramSeries({
       color: COLORS.volume,
