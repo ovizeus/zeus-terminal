@@ -58,15 +58,16 @@
   - Mutex acquire moved to function START (before any TP writes)
   - Return null on drop — callers receive null safely, TP values unchanged
 - [x] **CORS preflight verified:** No Access-Control-Allow-* → cross-origin POST blocked
-- [x] **10 mutex unit tests against REAL module** (not copy — refactor-safe)
-- [x] **TP.livePositions mutation audit:** .push/.splice on ARRAY only (shadow safe), autoTrade never mutated on existing refs
-- [x] **Mutex extracted to positionMutex.ts** — state.ts + liveApi.ts import directly, tests import CJS mirror
-- [x] **Boot restore wrapped in mutex** — demo + live restore guarded, skip if WS already populated
-- [x] **liveApi mutex moved to function START** — before any TP writes, return null on drop (was return {balance:0} = false data)
+- [x] **11 mutex tests import REAL positionMutex.ts** (ts-jest, CJS mirror deleted, zero duplicate code)
+- [x] **Zero fake tests** (_setCounterForTest for real interleave simulation, no expect(true))
+- [x] **TS errors verified per-file** — 0 errors in state.ts/liveApi.ts/positionMutex.ts
+- [x] **Window exports consistent** — all underscore prefix (_srvPosDiagnostics, _acquirePositionWrite)
+- [x] **Boot mutex always-acquire** — no skip scenario, user always sees restored positions
+- [x] **liveApi mutex at function START** — return null on drop (was {balance:0} = false data BUG)
+- [x] **Multi-exchange forward-compat** — migration 405 (exchange column), _classifyExchange marker on all paths
 - [ ] **Operator browser monitoring: 1h, 0 divergences** — WAITING FOR OPERATOR
-  - T+0 (20:01 UTC): 0 divergences, 0 errors, system clean
-  - HEAD at `f079288` — all fixes deployed
-  - 43 SRV-POS tests PASS
+  - HEAD at `eac5a36` / tag `s2-step3-FINAL-clean`
+  - 44 SRV-POS tests PASS, Vite PASS, 0 TS errors
 
 ### Monitoring checklist (operator can run any time):
 ```bash
