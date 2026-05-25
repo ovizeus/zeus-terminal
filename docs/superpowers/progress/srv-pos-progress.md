@@ -58,13 +58,15 @@
   - Mutex acquire moved to function START (before any TP writes)
   - Return null on drop — callers receive null safely, TP values unchanged
 - [x] **CORS preflight verified:** No Access-Control-Allow-* → cross-origin POST blocked
-- [x] **8 mutex unit tests** (acquire/release/newer-wins/interleave/drop-counter/null-return)
+- [x] **10 mutex unit tests against REAL module** (not copy — refactor-safe)
 - [x] **TP.livePositions mutation audit:** .push/.splice on ARRAY only (shadow safe), autoTrade never mutated on existing refs
+- [x] **Mutex extracted to positionMutex.ts** — state.ts + liveApi.ts import directly, tests import CJS mirror
+- [x] **Boot restore wrapped in mutex** — demo + live restore guarded, skip if WS already populated
+- [x] **liveApi mutex moved to function START** — before any TP writes, return null on drop (was return {balance:0} = false data)
 - [ ] **Operator browser monitoring: 1h, 0 divergences** — WAITING FOR OPERATOR
   - T+0 (20:01 UTC): 0 divergences, 0 errors, system clean
-  - HEAD at `7e56645` — all critical fixes deployed
-  - Ovi monitors Chrome F12 Console filter "SRV-POS"
-  - Confirmare operator: "0 divergences" SAU plan de acțiune
+  - HEAD at `f079288` — all fixes deployed
+  - 43 SRV-POS tests PASS
 
 ### Monitoring checklist (operator can run any time):
 ```bash
