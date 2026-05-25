@@ -8,6 +8,7 @@ import { onPositionOpened } from './positions'
 import { addTradeToJournal } from '../services/storage'
 import { atLog } from './autotrade'
 import { usePositionsStore } from '../stores/positionsStore'
+import { acquirePositionWrite, releasePositionWrite } from '../utils/positionMutex'
 
 const w = window as any
 
@@ -157,7 +158,7 @@ export async function liveApiSyncState(): Promise<any> {
   try {
     // [SRV-POS] Newer-wins mutex — acquire BEFORE any TP writes.
     // If lock held by newer writer (WS push), skip entire sync cycle (data would be stale anyway).
-    var _wSeq = (typeof w._acquirePositionWrite === 'function') ? w._acquirePositionWrite() : 1
+    var _wSeq = acquirePositionWrite()
     if (_wSeq === 0) {
       return null
     }
@@ -360,7 +361,7 @@ export async function liveApiSyncState(): Promise<any> {
       return fresh
     })
     // [SRV-POS] Release write lock after position array is built
-    if (typeof w._releasePositionWrite === 'function') w._releasePositionWrite(_wSeq)
+    releasePositionWrite(_wSeq)
     // Update UI
     if (typeof updateLiveBalance === 'function') updateLiveBalance()
     if (typeof renderLivePositions === 'function') renderLivePositions()

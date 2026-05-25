@@ -20,6 +20,7 @@ import { runAutoTradeCheck } from '../trading/autotrade'
 import { PROFILE_TF } from './config'
 import { _applyGlobalModeUI } from '../data/marketDataTrading'
 import { useBrainStore } from '../stores/brainStore'
+import { acquirePositionWrite, releasePositionWrite, getDropCount, getLockHeld } from '../utils/positionMutex'
 import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
@@ -592,6 +593,12 @@ export const ZState = (() => {
         }
       }
 
+      // [SRV-POS] Boot restore mutex — prevents race with first WS push / liveApi sync
+      const _bootSeq = acquirePositionWrite()
+      if (_bootSeq === 0) {
+        console.warn('[ZState] Boot restore skipped — WS push already populated positions')
+      } else {
+      try {
       if (snap.positions?.length && typeof TP !== 'undefined' && snap.at?.mode !== 'live') {
         const existing = new Set((TP.demoPositions || []).map((p: any) => String(p.id)))
         let closedPosIds = new Set<string>()
@@ -678,6 +685,8 @@ export const ZState = (() => {
         if (typeof renderLivePositions === 'function') setTimeout(renderLivePositions, 500)
         console.log('[ZState] Restored', snap.liveManualPositions.length, 'live manual position(s)')
       }
+      } finally { releasePositionWrite(_bootSeq) }
+      } // end _bootSeq > 0 guard
 
       // Restore pending orders
       if (Array.isArray(snap.pendingOrders) && snap.pendingOrders.length && typeof TP !== 'undefined') {
@@ -998,25 +1007,7 @@ export const ZState = (() => {
   let _shadowDemoPositions: any[] = []
   let _shadowLivePositions: any[] = []
   const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 }
-  let _writeDropCount = 0
-  let _writeSeqCounter = 0
-  let _positionWriteLock = 0 // 0 = free, >0 = held by writeSeq
-
-  // Newer-wins mutex: prevents WS push + liveApi sync from both writing TP positions simultaneously.
-  // Older writer yields to newer (stale data has no value), every drop is logged.
-  function _acquirePositionWrite(): number {
-    const mySeq = ++_writeSeqCounter
-    if (_positionWriteLock === 0 || mySeq > _positionWriteLock) {
-      _positionWriteLock = mySeq
-      return mySeq
-    }
-    _writeDropCount++
-    console.warn(`[SRV-POS] write dropped (stale seq=${mySeq}, current=${_positionWriteLock}), total drops=${_writeDropCount}`)
-    return 0
-  }
-  function _releasePositionWrite(seq: number) {
-    if (_positionWriteLock === seq) _positionWriteLock = 0
-  }
+  // Mutex imported from ../utils/positionMutex (acquirePositionWrite, releasePositionWrite)
 
   function _shadowCompare() {
     const TP = w.TP
@@ -1055,7 +1046,7 @@ export const ZState = (() => {
       shadowMap.delete(key)
     })
     if (divergences > 0) {
-      console.warn(`[SRV-POS SHADOW] ${divergences} divergences. vectors=${JSON.stringify(_vectorHits)} writeDrops=${_writeDropCount}`)
+      console.warn(`[SRV-POS SHADOW] ${divergences} divergences. vectors=${JSON.stringify(_vectorHits)} writeDrops=${getDropCount()}`)
       // Report to server for operator visibility
       _reportDivergence(divergences, divergenceDetails)
     }
@@ -1076,7 +1067,7 @@ export const ZState = (() => {
           ts: Date.now(),
           count,
           vectors: { ..._vectorHits },
-          writeDrops: _writeDropCount,
+          writeDrops: getDropCount(),
           details: details.slice(0, 10),
         }),
       }).catch(() => {})
@@ -1090,15 +1081,15 @@ export const ZState = (() => {
   w._srvPosDiagnostics = function () {
     return {
       vectorHits: { ..._vectorHits },
-      writeDropCount: _writeDropCount,
+      writeDropCount: getDropCount(),
       shadowDemo: _shadowDemoPositions.length,
       shadowLive: _shadowLivePositions.length,
       lastFrameSeq: _lastAppliedFrameSeq,
-      writeLockHeld: _positionWriteLock,
+      writeLockHeld: getLockHeld(),
     }
   }
-  w._acquirePositionWrite = _acquirePositionWrite
-  w._releasePositionWrite = _releasePositionWrite
+  w.acquirePositionWrite = acquirePositionWrite
+  w.releasePositionWrite = releasePositionWrite
 
   function _applyServerATState(state: any) {
     if (!state) return
@@ -1281,9 +1272,9 @@ export const ZState = (() => {
 
       // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
       // [SRV-POS] Newer-wins mutex: protects against WS push + liveApi sync racing.
-      const _writeSeq = _acquirePositionWrite()
+      const _writeSeq = acquirePositionWrite()
       if (_writeSeq === 0) {
-        // Stale writer — drop silently (logged in _acquirePositionWrite)
+        // Stale writer — drop silently (logged in acquirePositionWrite)
       } else {
       const _prevMerging = _merging
       _merging = true
@@ -1297,7 +1288,7 @@ export const ZState = (() => {
         }
       } finally {
         _merging = _prevMerging
-        _releasePositionWrite(_writeSeq)
+        releasePositionWrite(_writeSeq)
       }
       }
       // [Phase 8B1] Render AFTER the atomic mutation block.
