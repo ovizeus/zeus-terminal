@@ -143,9 +143,14 @@ export function TradingChart() {
       wickDownColor: COLORS.bearWick,
     })
 
-    // [FIX] Apply saved chart colors AFTER chart creation (COLORS constant is stale at module load)
-    const _uc = (window as any).USER_SETTINGS?.chart?.colors
-    if (_uc && _uc.bull) {
+    // [FIX] Apply saved chart colors — poll until settings load from server
+    // USER_SETTINGS.chart.colors is populated async by _usApplyFlatToUserSettings
+    // after GET /api/user/settings completes. Chart mounts before that.
+    let _colorApplied = false
+    const _applyColors = () => {
+      if (_colorApplied) return
+      const _uc = (window as any).USER_SETTINGS?.chart?.colors
+      if (!_uc || !_uc.bull || !candleRef.current) return
       candleRef.current.applyOptions({
         upColor: _uc.bull, downColor: _uc.bear,
         borderUpColor: _uc.bull, borderDownColor: _uc.bear,
@@ -155,7 +160,11 @@ export function TradingChart() {
         layout: { background: { color: _uc.priceBg || '#0a0f16' }, textColor: _uc.priceText || '#7a9ab8' },
         grid: { horzLines: { color: _uc.gridH || '#1a2530' }, vertLines: { color: _uc.gridV || '#1a2530' } },
       })
+      _colorApplied = true
     }
+    _applyColors()
+    const _colorTimer = setInterval(_applyColors, 300)
+    setTimeout(() => clearInterval(_colorTimer), 10000)
 
     // Volume histogram
     volRef.current = chart.addHistogramSeries({
