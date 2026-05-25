@@ -990,6 +990,69 @@ export const ZState = (() => {
   // last-applied frame seq lets us skip stale frames last-write-wins style
   // without trusting timestamps. Per-tab counter (resets on reload).
   let _lastAppliedFrameSeq = 0
+
+  // ── [SRV-POS] Shadow mode — READ-ONLY diagnostic ──
+  // Stores server positions separately; compares with legacy TP positions every 10s.
+  // Zero state mutation — purely observational.
+  let _shadowPositions: any[] = []
+  let _shadowDemoPositions: any[] = []
+  let _shadowLivePositions: any[] = []
+  const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 }
+  let _writeDropCount = 0
+  let _writeSeqCounter = 0
+  let _positionWriteLock = 0 // 0 = free, >0 = held by writeSeq
+
+  function _shadowCompare() {
+    const TP = w.TP
+    if (typeof TP === 'undefined') return
+    const legacyDemo = (TP.demoPositions || [])
+    const legacyLive = (TP.livePositions || [])
+    const shadowAll = _shadowDemoPositions.concat(_shadowLivePositions)
+    const legacyAll = legacyDemo.concat(legacyLive)
+    let divergences = 0
+    const shadowMap = new Map<string, any>()
+    shadowAll.forEach((p: any) => {
+      const key = `${p.sym || p.symbol}/${p.side}/${p.mode || 'demo'}`
+      shadowMap.set(key, p)
+    })
+    legacyAll.forEach((p: any) => {
+      const key = `${p.sym || p.symbol}/${p.side}/${p.mode || 'demo'}`
+      const sp = shadowMap.get(key)
+      if (!sp) return
+      const legacyAT = !!p.autoTrade
+      const shadowAT = !!sp.autoTrade
+      if (legacyAT !== shadowAT) {
+        divergences++
+        // Detect which vector caused it
+        if (p.autoTrade === undefined || p.autoTrade === null) _vectorHits.v1++
+        else if (p._wsReconnected) _vectorHits.v2++
+        else if (!p._serverSeq && sp._serverSeq) _vectorHits.v3++
+        else if (p._bootRace) _vectorHits.v4++
+        else _vectorHits.v5++
+
+        console.warn(`[SRV-POS SHADOW] DIVERGENCE ${key}: legacy autoTrade=${legacyAT} shadow=${shadowAT} vectors=${JSON.stringify(_vectorHits)}`)
+      }
+      shadowMap.delete(key)
+    })
+    if (divergences > 0) {
+      console.warn(`[SRV-POS SHADOW] ${divergences} divergences total. vectors=${JSON.stringify(_vectorHits)} writeDrops=${_writeDropCount}`)
+    }
+  }
+
+  // Compare every 10s
+  setInterval(_shadowCompare, 10000)
+
+  // Expose diagnostics for /api/market/cache/health
+  w._srvPosDiagnostics = function () {
+    return {
+      vectorHits: { ..._vectorHits },
+      writeDropCount: _writeDropCount,
+      shadowDemo: _shadowDemoPositions.length,
+      shadowLive: _shadowLivePositions.length,
+      lastFrameSeq: _lastAppliedFrameSeq,
+    }
+  }
+
   function _applyServerATState(state: any) {
     if (!state) return
     // [WS-2] dedup gate — skip if frame seq is not strictly newer than last
@@ -997,7 +1060,16 @@ export const ZState = (() => {
     // onChange race în the same RAF). Lenient: missing seq still applies
     // (legacy server payloads pre-WS-1).
     if (typeof state.seq === 'number' && state.seq > 0) {
-      if (state.seq <= _lastAppliedFrameSeq) return
+      // [SRV-POS] SEQ RESET detection: PM2 reload → server seq restarts at 1.
+      // If new seq is less than 50% of tracked seq, it's a server restart, not a stale frame.
+      if (state.seq <= _lastAppliedFrameSeq) {
+        if (_lastAppliedFrameSeq > 10 && state.seq < _lastAppliedFrameSeq * 0.5) {
+          console.warn(`[SRV-POS] seq reset detected (old=${_lastAppliedFrameSeq}, new=${state.seq}), tracker reset`)
+          _lastAppliedFrameSeq = 0
+        } else {
+          return
+        }
+      }
       _lastAppliedFrameSeq = state.seq
     }
     const TP = w.TP
@@ -1156,6 +1228,11 @@ export const ZState = (() => {
         }
         return true
       })
+      // [SRV-POS] Shadow update — READ-ONLY, never touches TP
+      _shadowDemoPositions = serverATDemo.slice()
+      _shadowLivePositions = serverATLive.slice()
+      _shadowPositions = _shadowDemoPositions.concat(_shadowLivePositions)
+
       // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
       const _prevMerging = _merging
       _merging = true
