@@ -23,7 +23,11 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
     if (w.cSeries) {
       w.cSeries.applyOptions({ upColor: bull, downColor: bear, borderUpColor: bull, borderDownColor: bear, wickUpColor: bullW, wickDownColor: bearW })
     }
-    try { _usSave() } catch (_) { }
+    try {
+      const prev = USER_SETTINGS.chart.colors || {}
+      USER_SETTINGS.chart.colors = { ...prev, bull, bear, bullW, bearW }
+      _usSave()
+    } catch (_) { }
     toast('Candle colors applied')
   }
 
@@ -67,8 +71,8 @@ export function ChartSettingsModal({ visible, onClose }: Props) {
     if (w.cvdChart) w.cvdChart.applyOptions({ rightPriceScale: { minimumWidth: axisWidth } })
     try {
       USER_SETTINGS.chart.axisWidth = axisWidth
-      USER_SETTINGS.chart.gridH = gridH
-      USER_SETTINGS.chart.gridV = gridV
+      const prev = USER_SETTINGS.chart.colors || {}
+      USER_SETTINGS.chart.colors = { ...prev, priceText: textCol, priceBg: bgCol, gridH, gridV }
       _usSave()
     } catch (_) { }
     toast('Price axis applied')
