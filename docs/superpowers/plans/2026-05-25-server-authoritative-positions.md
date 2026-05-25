@@ -1,8 +1,20 @@
 # Server-Authoritative Positions — Eliminate AT/Manual Misclassification
 
-> **Status:** PLAN v2 (enterprise additions) — awaiting operator approval
+> **Status:** PLAN v3 (7 operator corrections applied) — APPROVED
 > **Priority:** HIGH — bug reported 3+ times, 5 loss vectors identified
 > **Risk:** Real money misclassification if done wrong
+
+## Context Management Protocol
+
+| Steps | Risk | Context Rule |
+|-------|------|-------------|
+| 1-3 | LOW/MEDIUM | OK in current session |
+| 4 | HIGH (liveApi.ts) | **/clear or new session MANDATORY** |
+| 5-7 | MEDIUM | Fresh session recommended |
+| 8 | HIGH | Separate spec + separate session |
+
+PROGRESS.md (`docs/superpowers/progress/srv-pos-progress.md`) tracks state across sessions.
+Plan file is the canonical reference for context recovery.
 
 ## Problem
 
@@ -49,10 +61,20 @@ When `false`: client position list = legacy liveApi merge (current behavior)
 IF divergence_rate > 20% in ANY 5-minute window THEN:
   1. Log CRITICAL alert
   2. Auto-flip SERVER_AUTHORITATIVE_POSITIONS = false (runtime only, no file write)
-  3. Push Telegram alert to operator
+  3. Push Telegram alert to operator (rate-limited: max 1/60s, grouped)
   4. Resume legacy path
   5. NEVER auto-flip back to true — operator must manually re-enable
 ```
+
+**Telegram alert template:**
+```
+🚨 SRV-POS AUTO-ROLLBACK
+{N} divergences in last 60s
+Top vector: v{X} ({pct}%)
+Symbols: {sym1}, {sym2}
+Flag auto-flipped to FALSE
+```
+Rate limit: max 1 alert per 60s. Batch divergences into single message.
 
 ## WS Frame Versioning
 
@@ -62,6 +84,11 @@ Client tracks `_lastAppliedFrameSeq` (state.ts line 1000).
 Rule: **only apply frame if `frame.seq > _lastAppliedFrameSeq`**. Already implemented.
 
 In-flight old frames: if client receives frame with lower seq → SKIP (dedup gate at line 1000).
+
+**SEQ RESET on PM2 reload:**
+Server restarts → seq=1. Client has seq=50000 → ALL new frames SKIP-ed.
+Fix: client detects "seq dropped by >50%" → reset `_lastAppliedFrameSeq = 0` + log `SRV-POS: seq reset detected (old={N}, new={M}), tracker reset`.
+This handles PM2 reload, server crash, cluster worker replacement.
 
 ## In-Flight Positions (already classified)
 
@@ -94,6 +121,9 @@ CREATE INDEX idx_pos_class_ts ON position_classifications(ts);
 
 Written on EVERY classification change (not on stable reads — only transitions).
 
+**Retention cron:** Weekly `DELETE FROM position_classifications WHERE ts < strftime('%s','now','-30 days') * 1000`.
+Registered in `server/cron/` alongside existing cleanup jobs. Keeps table bounded (~30d window).
+
 ## Shadow Mode = READ-ONLY
 
 Shadow path:
@@ -102,7 +132,12 @@ Shadow path:
 3. Every 10s: compare shadow vs legacy, log divergences
 4. Shadow data is READ-ONLY diagnostic — zero state mutation
 
-Mutex: `_positionWriteLock` boolean flag — prevents simultaneous WS callback + liveApi sync from both writing `TP.livePositions`. If lock held, second writer queues and retries after 100ms (max 3 retries).
+Mutex: `_positionWriteLock` with **newer-wins** strategy:
+- Each writer carries a monotonic `writeSeq` (++counter on each attempt)
+- If lock held by older writer → older writer yields, newer writer proceeds
+- If lock held by newer writer → current writer drops (stale data, no point)
+- Dropped writes logged with count: `SRV-POS: write dropped (stale seq={N}, current={M})`
+- **NEVER drop silently** — every drop increments `_writeDropCount` counter exposed in diagnostics
 
 ## Metric Counters Per Vector
 
@@ -142,12 +177,18 @@ Shows which vectors fire most in production — validates the fix targets the ri
 ## Canary Cutover Schedule
 
 ```
-Step 6a: Flag ON — DEMO only         → 1h soak
-Step 6b: Flag ON — DEMO + TESTNET    → 2h soak  
-Step 6c: Flag ON — ALL (incl REAL)   → 4h+ soak
+Step 6a: Flag ON — DEMO only         → 1h soak  (shadow stays active as observer)
+Step 6b: Flag ON — DEMO + TESTNET    → 2h soak  (shadow stays active as observer)
+Step 6c: Flag ON — ALL (incl REAL)   → 4h+ soak (shadow stays active as observer)
 ```
 
 **NU flip direct REAL.** DEMO → TESTNET → REAL incrementally.
+
+**Shadow stays 24h post-cutover:**
+After each canary step, shadow comparison continues running for 24h as observer.
+This ensures auto-rollback detector has data even after flag is ON.
+Shadow reads server positions + legacy path in parallel, compares, logs divergences.
+Without this, auto-rollback is blind exactly when it's needed most.
 
 Implementation: flag check includes mode comparison:
 ```javascript
@@ -167,16 +208,26 @@ Each step:
 - [ ] Git tag `s2-stepN`
 - [ ] PROGRESS.md update
 
-### Step 1: Feature flag + migration
-### Step 2: Shadow mode (state.ts) — READ-ONLY diagnostic
+### Step 1: Feature flag + migration + audit retention cron (LOW risk)
+### Step 2: Shadow mode (state.ts) — READ-ONLY diagnostic + seq reset detection (MEDIUM risk)
 ### Step 3: Deploy shadow, monitor divergences 1h
-### Step 4: liveApi.ts position source (flag-gated)
+
+⚠️ **CONTEXT GATE:** Steps 1-3 safe in current session. Before Step 4 → /clear or new session. PROGRESS.md + plan ensure context recovery.
+
+### Step 4: liveApi.ts position source (flag-gated) — HIGH risk, FRESH CONTEXT MANDATORY
 ### Step 5: Deploy flag OFF, verify shadow clean
-### Step 6a: Canary DEMO — flag ON demo only, 1h soak
-### Step 6b: Canary TESTNET — flag ON demo+testnet, 2h soak
-### Step 6c: Canary REAL — flag ON all, 4h+ soak
-### Step 7: Monitor 48h
-### Step 8: Cleanup legacy path + shadow mode
+### Step 6a: Canary DEMO — flag ON demo only, 1h soak (shadow observer active)
+### Step 6b: Canary TESTNET — flag ON demo+testnet, 2h soak (shadow observer active)
+### Step 6c: Canary REAL — flag ON all, 4h+ soak (shadow observer active)
+### Step 7: Monitor 48h (shadow observer 24h post-cutover)
+### Step 8: Legacy cleanup — SEPARATE SPEC REQUIRED
+
+**Step 8 is its own project.** Removing legacy position merge is a HIGH risk change that touches every file Step 4 touched, plus ManualTradePanel, plus stores. Treat as:
+- Own spec document (what exactly to remove, what to keep)
+- Own test plan (regression for all 8 test scenarios above)
+- Own soak (24h minimum after cleanup)
+- Own rollback (ability to restore legacy path from git tag)
+- Gate: Step 7 passes 48h soak with 0 divergences
 
 ## PROGRESS.md Protocol
 
@@ -207,7 +258,6 @@ git push --tags
 
 ## TODO (separate, post-soak)
 
-- [ ] Cleanup gateway fallback paths in marketFeed.js + marketRadar.js
-- [ ] Remove shadow mode after 48h soak green
-- [ ] Remove legacy liveApi position merge after confirmed stable
-- [ ] Remove canary sub-flags after REAL confirmed
+- [ ] Cleanup gateway fallback paths in marketFeed.js + marketRadar.js (48h soak passed)
+- [ ] Step 8 legacy cleanup — requires own spec, own tests, own soak (see Step 8 above)
+- [ ] Remove canary sub-flags after REAL confirmed + 48h green
