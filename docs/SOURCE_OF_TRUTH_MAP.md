@@ -41,6 +41,50 @@
 
 **TOTAL: 7 callers. No exceptions. Client = ZERO.**
 
+## Transport (WS vs REST)
+
+| Data | Transport | Notes |
+|------|-----------|-------|
+| klines | WS (blocked on Hetzner IP) → REST fallback 60s | ALT_WS_FEEDS=true |
+| ticker24h | REST (no WS equivalent for all 300) | Single call, weight 40 |
+| funding | REST via premiumIndex | Embedded in markPrice WS but REST more reliable |
+| oi | REST only (no WS stream for OI) | Batch top 10 |
+| depth | REST /depth (WS depth available but high traffic) | 4 symbols only |
+| sentiment | REST /futures/data/* (no WS) | 4 symbols, 5min |
+| price | WS bookTicker (works on Hetzner) | Real-time, weight 0 |
+| trades | WS trade (works on Hetzner) | Real-time, weight 0 |
+
+## Exchange Capabilities
+
+| Exchange | WS | Weight Pool | Symbol Format | Status |
+|----------|-----|------------|---------------|--------|
+| Binance | ✅ (partial — kline/aggTrade/markPrice blocked on Hetzner) | futures: 2400/min, spot: 1200/min | BTCUSDT | ACTIVE |
+| Bybit | ✅ | v5: 120/10s per category | BTCUSDT (category: linear) | TESTNET |
+| OKX | ✅ | TBD | BTC-USDT-SWAP | PLANNED |
+| Bitget | ✅ | TBD | BTCUSDT_UMCBL | PLANNED |
+| MEXC | ✅ | TBD | BTC_USDT | PLANNED |
+| HTX | ✅ | TBD | BTC-USDT | PLANNED |
+| Hyperliquid | ✅ | TBD | BTC | PLANNED |
+
+## Fallback Chain (read-only market data)
+
+| Data | Primary | Fallback 1 | Fallback 2 | Notes |
+|------|---------|-----------|-----------|-------|
+| ticker BTC | binance | bybit | okx | Read-only display, NOT for order execution |
+| funding | Exchange-specific | — | — | NO fallback (exchange-bound) |
+| depth | Exchange-specific | — | — | NO fallback (exchange-bound) |
+| sentiment | binance | — | — | Binance-only data source |
+
+## Gateway Infrastructure Modules
+
+| Module | Purpose | Tests |
+|--------|---------|-------|
+| `marketCache.js` | Central cache with TTL + ownership + dedup | 26 |
+| `exchangeAdapter.js` | Symbol normalize + capabilities per exchange | 22 |
+| `rateLimiter.js` | Token bucket + real header parsing per pool | 12 |
+| `circuitBreaker.js` | Per-exchange/endpoint halt + backoff + jitter | 13 |
+| `wsRegistry.js` | WS dedup multiplexing + dead detection | 14 |
+
 ## Request Budget
 
 | Caller | Requests/min | Weight/min |
