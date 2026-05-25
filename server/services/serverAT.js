@@ -2909,6 +2909,11 @@ function getFullState(userId) {
         dailyPnLDemo: us.dailyPnLDemo || 0,
         dailyPnLLive: us.dailyPnLLive || 0,
         pnlAtReset: us.pnlAtReset || 0,
+        srvPosFlags: {
+            master: !!(MF && MF.SERVER_AUTHORITATIVE_POSITIONS),
+            testnet: !!(MF && MF._SRV_POS_TESTNET_ENABLED),
+            real: !!(MF && MF._SRV_POS_REAL_ENABLED),
+        },
         ts: Date.now(),
         exchange: us.exchange || 'binance',
         // [WS-1] Monotonic per-server-process frame sequence number. `ts` alone

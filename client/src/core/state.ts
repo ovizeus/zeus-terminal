@@ -840,6 +840,7 @@ export const ZState = (() => {
   // S6-B5 will wire the client AT engine gate against these flags.
   w._serverATDemoEnabled = false
   w._serverBrainDemoEnabled = false
+  w._srvPosFlags = { master: false, testnet: false, real: false }
   let _atPollTimer: any = null
 
   function _mapServerPos(sp: any) {
@@ -1143,6 +1144,9 @@ export const ZState = (() => {
     }
     if ('serverBrainDemoEnabled' in state) {
       w._serverBrainDemoEnabled = !!state.serverBrainDemoEnabled
+    }
+    if (state.srvPosFlags) {
+      w._srvPosFlags = state.srvPosFlags
     }
     const _now = Date.now()
     Object.keys(_pendingServerCloses).forEach(function (k) {
