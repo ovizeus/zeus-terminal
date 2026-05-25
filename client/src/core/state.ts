@@ -995,13 +995,11 @@ export const ZState = (() => {
   // ── [SRV-POS] Shadow mode — READ-ONLY diagnostic ──
   // Stores server positions separately; compares with legacy TP positions every 10s.
   // Zero state mutation — purely observational.
-  let _shadowPositions: any[] = []
   let _shadowDemoPositions: any[] = []
   let _shadowLivePositions: any[] = []
   const _vectorHits = { v1: 0, v2: 0, v3: 0, v4: 0, v5: 0 }
   let _writeDropCount = 0
-  let _writeSeqCounter = 0
-  let _positionWriteLock = 0 // 0 = free, >0 = held by writeSeq
+  // _writeSeqCounter + _positionWriteLock: declared in Step 4 when mutex is wired into liveApi path
 
   function _shadowCompare() {
     const TP = w.TP
@@ -1046,9 +1044,12 @@ export const ZState = (() => {
     }
   }
 
+  // Per-tab cooldown — multi-tab scenario (3 tabs × 1/min = 3/min) is acceptable:
+  // server buffer is 100 entries and server rate limit is 5/min per IP, so 3 tabs
+  // give ~33min of data before eviction. Not worth localStorage coordination overhead.
   let _lastDivergenceReport = 0
   function _reportDivergence(count: number, details: any[]) {
-    if (Date.now() - _lastDivergenceReport < 60000) return // rate limit 1/60s
+    if (Date.now() - _lastDivergenceReport < 60000) return
     _lastDivergenceReport = Date.now()
     try {
       fetch('/api/srv-pos/shadow-report', {
@@ -1257,7 +1258,6 @@ export const ZState = (() => {
       // [SRV-POS] Shadow update — READ-ONLY, never touches TP
       _shadowDemoPositions = serverATDemo.slice()
       _shadowLivePositions = serverATLive.slice()
-      _shadowPositions = _shadowDemoPositions.concat(_shadowLivePositions)
 
       // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
       const _prevMerging = _merging
