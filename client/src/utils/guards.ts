@@ -106,9 +106,10 @@ export async function _syncServerTime(): Promise<void> {
       setTimeout(() => _ctrl.abort(), 5000)
       _signal = _ctrl.signal
     }
-    const r = await fetch('https://fapi.binance.com/fapi/v1/time', { signal: _signal })
+    // [T4 Gateway] Use server proxy instead of direct Binance
+    const r = await fetch('/api/market/time', { signal: _signal, credentials: 'include' })
     const d = await r.json()
-    const st = +d.serverTime
+    const st = +(d.serverTime || d.data)
     if (!Number.isFinite(st) || st <= 0) return
     _SAFETY.serverNow = st
     _SAFETY.lastServerSync = Date.now()

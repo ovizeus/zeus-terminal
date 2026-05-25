@@ -203,28 +203,38 @@ export async function fetchATR(): Promise<void> {
 export async function fetchOI(): Promise<void> {
   try {
     const sym = w.S.symbol || 'BTCUSDT'
-    const d = await safeFetch(`https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`)
-    if (!d.openInterest) throw new Error('Date OI invalide')
-    w.S.oiPrev = w.S.oi; w.S.oi = +d.openInterest * (w.S.price || 1)
-    w.S.oiTs = Date.now()
-    updateMetrics(); throttledMainMetrics()
+    // [T4 Gateway] Read from server cache proxy — NOT direct Binance
+    const r = await fetch('/api/market/oi?symbol=' + sym, { credentials: 'include' })
+    const j = await r.json()
+    if (j.ok && j.data != null) {
+      w.S.oiPrev = w.S.oi; w.S.oi = +j.data * (w.S.price || 1)
+      w.S.oiTs = Date.now()
+      updateMetrics(); throttledMainMetrics()
+    }
   } catch (e: any) { console.warn('[fetchOI]', e.message) }
 }
 
 export async function fetchLS(): Promise<void> {
   try {
     const sym = w.S.symbol || 'BTCUSDT'
-    const d = await safeFetch(`https://fapi.binance.com/futures/data/globalLongShortAccountRatio?symbol=${sym}&period=5m&limit=1`)
-    if (Array.isArray(d) && d[0]) { w.S.ls = { l: +d[0].longAccount, s: +d[0].shortAccount }; updateMetrics(); updateMainMetrics() }
+    // [T4 Gateway] Read from server cache proxy
+    const r = await fetch('/api/market/sentiment?symbol=' + sym, { credentials: 'include' })
+    const j = await r.json()
+    if (j.ok && j.data && j.data.ls != null) {
+      w.S.ls = { l: j.data.ls, s: 1 / j.data.ls }; updateMetrics(); updateMainMetrics()
+    }
   } catch (e: any) { console.warn('[fetchLS]', e.message) }
 }
 
 export async function fetch24h(): Promise<void> {
   try {
     const sym = w.S.symbol || 'BTCUSDT'
-    const d = await safeFetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=${sym}`)
-    if (!d.highPrice) throw new Error('Date 24h invalide')
-    w.S.high = +d.highPrice; w.S.low = +d.lowPrice
+    // [T4 Gateway] Read from server cache proxy
+    const r = await fetch('/api/market/ticker?symbol=' + sym, { credentials: 'include' })
+    const j = await r.json()
+    if (!j.ok || !j.data) throw new Error('No cached ticker')
+    const d = j.data
+    w.S.high = d.highPrice || w.S.high; w.S.low = d.lowPrice || w.S.low
     const h = el('d24h'); const l = el('d24l')
     if (h) h.textContent = 'H: $' + fP(w.S.high)
     if (l) l.textContent = 'L: $' + fP(w.S.low)
