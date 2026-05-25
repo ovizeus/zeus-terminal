@@ -1090,6 +1090,11 @@ export const ZState = (() => {
 
   function _applyServerATState(state: any) {
     if (!state) return
+    // [SRV-POS H2] Multi-exchange guard: skip frames from different exchange context
+    if (state.exchange && w._activeExchange && state.exchange !== w._activeExchange) {
+      console.warn(`[SRV-POS] frame for ${state.exchange}, active=${w._activeExchange}, skipped`)
+      return
+    }
     // [WS-2] dedup gate — skip if frame seq is not strictly newer than last
     // applied (handles reconnect duplicate scenarios where warm-start +
     // onChange race în the same RAF). Lenient: missing seq still applies
