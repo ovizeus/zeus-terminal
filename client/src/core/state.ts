@@ -1053,7 +1053,7 @@ export const ZState = (() => {
     try {
       fetch('/api/srv-pos/shadow-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
         body: JSON.stringify({
           ts: Date.now(),
           count,
