@@ -214,6 +214,24 @@ Each step:
 
 ⚠️ **CONTEXT GATE:** Steps 1-3 safe in current session. Before Step 4 → /clear or new session. PROGRESS.md + plan ensure context recovery.
 
+### Step 3.5: Multi-Exchange Forward-Compat Hooks (added 2026-05-25)
+
+Hooks shipped pre-Step 4 (low-risk preparation for Bybit Jun 2026):
+- **H1:** Migration 405 — position_classifications + exchange column DEFAULT 'binance'
+- **H2:** Server getFullState() returns frame.exchange field
+- **H2b:** Client _applyServerATState guard skips frames from different exchange (inert until w._activeExchange set)
+- **H3:** _classifyExchange marker on ws_push/sync_merge/boot_resume paths
+
+Multi-exchange roadmap (decided by operator Ovi 2026-05-25):
+1. NOW — SRV-POS Steps 4-8 (Binance bug fix)
+2. Jun 2026 — Foundation multi-exchange (CEX abstraction)
+3. Jun 2026 — Bybit (CEX)
+4. Jul 2026 — OKX + Bitget
+5. Jul-Aug 2026 — MEXC + HTX
+6. Aug-Sep 2026 — **Hyperliquid (DEX, ULTIMUL)** — wallet sig EIP-712, asset index symbols, 1h funding, ADL on-chain, ethers.js. Zero CEX reuse → CEX architecture matures first.
+
+Full spec: `docs/superpowers/specs/2026-06-XX-multi-exchange-srv-pos.md` (post-Step 7)
+
 ### Step 4: liveApi.ts position source (flag-gated) — HIGH risk, FRESH CONTEXT MANDATORY
 ### Step 5: Deploy flag OFF, verify shadow clean
 ### Step 6a: Canary DEMO — flag ON demo only, 1h soak (shadow observer active)
