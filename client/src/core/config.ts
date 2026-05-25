@@ -1812,17 +1812,20 @@ export function _usSave() {
     USER_SETTINGS.chart.tf = S.chartTf || '5m'
     USER_SETTINGS.chart.tz = S.tz || 'Europe/Bucharest'
     USER_SETTINGS.chart.heatmap = S.heatmapSettings ? Object.assign({}, S.heatmapSettings) : null
-    const _prev = USER_SETTINGS.chart.colors || {}
-    const _cv = (id: string, key: string, def: string) => { const e = document.getElementById(id) as any; return (e && e.value) ? e.value : (_prev as any)[key] || def }
-    USER_SETTINGS.chart.colors = {
-      bull: _cv('ccBull', 'bull', '#00d97a'),
-      bear: _cv('ccBear', 'bear', '#ff3355'),
-      bullW: _cv('ccBullW', 'bullW', '#00d97a'),
-      bearW: _cv('ccBearW', 'bearW', '#ff3355'),
-      priceText: _cv('ccPriceText', 'priceText', '#7a9ab8'),
-      priceBg: _cv('ccPriceBg', 'priceBg', '#0a0f16'),
-      gridH: _cv('ccGridH', 'gridH', '#1a2530'),
-      gridV: _cv('ccGridV', 'gridV', '#1a2530'),
+    // Only update chart.colors if color inputs are in DOM (modal open).
+    // Otherwise preserve whatever was loaded from server — NEVER overwrite
+    // server-saved colors with hardcoded defaults.
+    if (document.getElementById('ccBull')) {
+      USER_SETTINGS.chart.colors = {
+        bull: (document.getElementById('ccBull') as any)?.value || '#00d97a',
+        bear: (document.getElementById('ccBear') as any)?.value || '#ff3355',
+        bullW: (document.getElementById('ccBullW') as any)?.value || '#00d97a',
+        bearW: (document.getElementById('ccBearW') as any)?.value || '#ff3355',
+        priceText: (document.getElementById('ccPriceText') as any)?.value || '#7a9ab8',
+        priceBg: (document.getElementById('ccPriceBg') as any)?.value || '#0a0f16',
+        gridH: (document.getElementById('ccGridH') as any)?.value || '#1a2530',
+        gridV: (document.getElementById('ccGridV') as any)?.value || '#1a2530',
+      }
     }
     if (typeof USER_SETTINGS.chart.axisWidth !== 'number') {
       USER_SETTINGS.chart.axisWidth = 60
