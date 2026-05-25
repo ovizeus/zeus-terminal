@@ -51,12 +51,18 @@
 - [x] **Multi-tab decision (A.2):** Option C accepted, documented in code
 - [x] **Rate limit tests (A.3):** black-box HTTP buffer cap + rate limit + window reset (12 tests)
 - [x] **_postTimestamps leak (fix 3):** 5min cleanup interval prevents Map growth
-- [x] **Mutex (fix 4):** Newer-wins live on BOTH paths (state.ts WS + liveApi.ts sync). Race protected NOW, not just after Step 4
+- [x] **Mutex (fix 4):** Newer-wins live on BOTH paths (state.ts WS + liveApi.ts sync). Race protected NOW
 - [x] **Shallow copy (fix 5):** _mapServerPos returns new objects, .slice() safe
 - [x] **Deep look (C):** 0 real issues, dead code cleaned, plan updated
+- [x] **CRITICAL FIX: liveApi mutex return null (was balance:0 = false data)**
+  - Mutex acquire moved to function START (before any TP writes)
+  - Return null on drop — callers receive null safely, TP values unchanged
+- [x] **CORS preflight verified:** No Access-Control-Allow-* → cross-origin POST blocked
+- [x] **8 mutex unit tests** (acquire/release/newer-wins/interleave/drop-counter/null-return)
+- [x] **TP.livePositions mutation audit:** .push/.splice on ARRAY only (shadow safe), autoTrade never mutated on existing refs
 - [ ] **Operator browser monitoring: 1h, 0 divergences** — WAITING FOR OPERATOR
   - T+0 (20:01 UTC): 0 divergences, 0 errors, system clean
-  - HEAD at `b12a712` — all hardening deployed
+  - HEAD at `7e56645` — all critical fixes deployed
   - Ovi monitors Chrome F12 Console filter "SRV-POS"
   - Confirmare operator: "0 divergences" SAU plan de acțiune
 
