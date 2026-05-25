@@ -37,16 +37,23 @@
 - **Tag:** `s2-step2` (base), head at `a9cd5f4`
 
 ## Step 3: Deploy shadow, monitor divergences — IN PROGRESS
-- **Deployed:** PM2 reload `a9cd5f4`, PID 297379, uptime OK
+- **Deployed:** PM2 reload `9fc0a15` (security-hardened), uptime OK
 - **Cron registered:** posClassRetention weekly Sunday 03:00 UTC (confirmed in logs)
+- **Security added:** POST rate limit 5/min per IP + origin validation
+- **Dead code cleaned:** _shadowPositions, _writeSeqCounter, _positionWriteLock removed (Step 4 re-adds)
+- **Deep look C result:** 0 real issues found (6 items checked, all safe)
 
 ### Step 3 blocking gates for Step 4:
-- [ ] **Pre-existing failures = exactly 21** — CONFIRMED ✅ (3 suites, 21 tests)
-- [ ] **Vector detection instrumented with real markers** — CONFIRMED ✅ (_classifySource on all 3 paths)
-- [ ] **/api/srv-pos/shadow-report endpoint live** — CONFIRMED ✅ (GET returns data, POST accepts from client)
+- [x] **Pre-existing failures = exactly 21** — CONFIRMED (3 suites: executeLiveEntryCore, exchangeRoutes, order-place-flow)
+- [x] **Vector detection instrumented with real markers** — CONFIRMED (_classifySource on ws_push/sync_merge/boot_resume)
+- [x] **/api/srv-pos/shadow-report endpoint live** — CONFIRMED (rate-limited, origin-checked)
+- [x] **Security review (A.1):** POST rate limited 5/min + origin check
+- [x] **Multi-tab decision (A.2):** Option C accepted, documented in code
+- [x] **Rate limit tests (A.3):** 3 explicit tests (429, window reset, buffer cap)
+- [x] **Deep look (C):** 0 issues, dead code cleaned
 - [ ] **Operator browser monitoring: 1h, 0 divergences** — WAITING FOR OPERATOR
-  - Ovi deschide Chrome → F12 → Console → filter "SRV-POS"
-  - Verifică la 15min: `curl http://127.0.0.1:3000/api/srv-pos/shadow-report`
+  - T+0 (20:01 UTC): 0 divergences, 0 errors, system clean
+  - Ovi monitors Chrome F12 Console filter "SRV-POS"
   - Confirmare operator: "0 divergences" SAU plan de acțiune
 
 ### Monitoring checklist (operator can run any time):
