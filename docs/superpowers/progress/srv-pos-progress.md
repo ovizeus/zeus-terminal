@@ -64,9 +64,14 @@
 - [x] **Window exports consistent** — all underscore prefix (_srvPosDiagnostics, _acquirePositionWrite)
 - [x] **Boot mutex always-acquire** — no skip scenario, user always sees restored positions
 - [x] **liveApi mutex at function START** — return null on drop (was {balance:0} = false data BUG)
-- [x] **Multi-exchange forward-compat** — migration 405 (exchange column), _classifyExchange marker on all paths
+- [x] **Multi-exchange forward-compat — ALL 3 hooks shipped:**
+  - H1: migration 405 (exchange column DEFAULT 'binance')
+  - H2: server getFullState() returns `exchange: us.exchange || 'binance'`
+  - H2b: client guard skips frames from different exchange (inert until multi-ex)
+  - H3: _classifyExchange marker on ws_push/sync_merge/boot_resume
+- [x] **Multi-exchange timeline memorized** — Bybit Jun, OKX Jul, Hyper Aug-Sep (DEX last)
 - [ ] **Operator browser monitoring: 1h, 0 divergences** — WAITING FOR OPERATOR
-  - HEAD at `eac5a36` / tag `s2-step3-FINAL-clean`
+  - HEAD at `1ffcc11` / tag `s2-step3-FINAL-clean`
   - 44 SRV-POS tests PASS, Vite PASS, 0 TS errors
 
 ### Monitoring checklist (operator can run any time):
