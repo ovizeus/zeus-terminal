@@ -47,12 +47,16 @@
 - [x] **Pre-existing failures = exactly 21** — CONFIRMED (3 suites: executeLiveEntryCore, exchangeRoutes, order-place-flow)
 - [x] **Vector detection instrumented with real markers** — CONFIRMED (_classifySource on ws_push/sync_merge/boot_resume)
 - [x] **/api/srv-pos/shadow-report endpoint live** — CONFIRMED (rate-limited, origin-checked)
-- [x] **Security review (A.1):** POST rate limited 5/min + origin check
+- [x] **Security review (A.1):** x-zeus-request custom header (CSRF-proof, no Host injection vuln)
 - [x] **Multi-tab decision (A.2):** Option C accepted, documented in code
-- [x] **Rate limit tests (A.3):** 3 explicit tests (429, window reset, buffer cap)
-- [x] **Deep look (C):** 0 issues, dead code cleaned
+- [x] **Rate limit tests (A.3):** black-box HTTP buffer cap + rate limit + window reset (12 tests)
+- [x] **_postTimestamps leak (fix 3):** 5min cleanup interval prevents Map growth
+- [x] **Mutex (fix 4):** Newer-wins live on BOTH paths (state.ts WS + liveApi.ts sync). Race protected NOW, not just after Step 4
+- [x] **Shallow copy (fix 5):** _mapServerPos returns new objects, .slice() safe
+- [x] **Deep look (C):** 0 real issues, dead code cleaned, plan updated
 - [ ] **Operator browser monitoring: 1h, 0 divergences** — WAITING FOR OPERATOR
   - T+0 (20:01 UTC): 0 divergences, 0 errors, system clean
+  - HEAD at `b12a712` — all hardening deployed
   - Ovi monitors Chrome F12 Console filter "SRV-POS"
   - Confirmare operator: "0 divergences" SAU plan de acțiune
 
