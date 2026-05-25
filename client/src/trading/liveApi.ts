@@ -9,6 +9,7 @@ import { addTradeToJournal } from '../services/storage'
 import { atLog } from './autotrade'
 import { usePositionsStore } from '../stores/positionsStore'
 import { acquirePositionWrite, releasePositionWrite } from '../utils/positionMutex'
+import { resolveEffectiveFlag, buildPriceUpdateMap, detectOrphans } from '../utils/positionSource'
 
 const w = window as any
 
@@ -175,6 +176,44 @@ export async function liveApiSyncState(): Promise<any> {
       availableBalance: bal.availableBalance || 0,
       unrealizedPnL: bal.unrealizedPnL || 0,
     })
+    // [SRV-POS 4.3] Flag-gated: when ON, server positions are canonical.
+    // liveApi only updates prices on existing positions + detects orphans.
+    const _srvPosActive = resolveEffectiveFlag(w._srvPosFlags, w._executionEnv === 'REAL' ? 'real' : (w._executionEnv === 'TESTNET' ? 'testnet' : 'demo'))
+    if (_srvPosActive) {
+      // Price-only update: apply mark price + uPnL + liqPrice to existing TP positions
+      const priceMap = buildPriceUpdateMap(positions)
+      if (Array.isArray(w.TP.livePositions)) {
+        for (const pos of w.TP.livePositions) {
+          const key = `${pos.sym || ''}/${pos.side || ''}`
+          const update = priceMap.get(key)
+          if (update) {
+            pos.pnl = update.pnl
+            pos.liqPrice = update.liqPrice
+          }
+        }
+      }
+      // Orphan detection: exchange has position server doesn't know about
+      const serverPositions = w._lastServerPositions || []
+      const orphans = detectOrphans(serverPositions, positions)
+      if (orphans.length > 0) {
+        console.warn(`[SRV-POS] ${orphans.length} ORPHAN positions detected:`, orphans.map(o => `${o.sym}/${o.side}`))
+        try {
+          fetch('/api/srv-pos/orphan-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-zeus-request': '1' },
+            body: JSON.stringify({ orphans, ts: Date.now() }),
+          }).catch(() => {})
+        } catch (_) {}
+      }
+      // Release mutex (no position list write happened)
+      releasePositionWrite(_wSeq)
+      // Render price updates
+      if (typeof renderLivePositions === 'function') renderLivePositions()
+      try { usePositionsStore.getState().syncSnapshot({ livePositions: w.TP.livePositions.slice(), source: 'bridge' }) } catch (_) {}
+      return { balance: bal, positions: positions }
+    }
+
+    // ═══ LEGACY PATH (flag OFF) — full position list rebuild ═══
     // [P0-B6] Merge exchange data into existing positions to preserve runtime DSL state
     var _existingById: any = {}
     if (Array.isArray(w.TP.livePositions)) {
