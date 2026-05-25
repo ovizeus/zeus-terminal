@@ -1,4 +1,5 @@
 import { usePositionsStore, useMarketStore } from '../../stores'
+import { PositionOrphanBadge } from '../PositionOrphanBadge'
 import type { Position } from '../../types'
 
 function calcPnl(pos: Position, currentPrice: number): number {
@@ -40,6 +41,7 @@ function PositionRow({ pos, currentPrice }: { pos: Position; currentPrice: numbe
       </td>
       <td className="zr-pos-cell zr-pos-cell--center">
         {pos.autoTrade ? 'AT' : 'Manual'}
+        {(pos as any)._isOrphan && <PositionOrphanBadge />}
       </td>
     </tr>
   )

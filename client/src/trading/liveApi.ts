@@ -201,6 +201,13 @@ export async function liveApiSyncState(): Promise<any> {
       const orphans = detectOrphans(serverPositions, positions)
       if (orphans.length > 0) {
         console.warn(`[SRV-POS] ${orphans.length} ORPHAN positions detected:`, orphans.map(o => `${o.sym}/${o.side}`))
+        // Mark orphan positions in TP for UI badge display
+        const orphanKeys = new Set(orphans.map(o => `${o.sym}/${o.side}`))
+        if (Array.isArray(w.TP.livePositions)) {
+          for (const pos of w.TP.livePositions) {
+            pos._isOrphan = orphanKeys.has(`${pos.sym || ''}/${pos.side || ''}`)
+          }
+        }
         try {
           fetch('/api/srv-pos/orphan-report', {
             method: 'POST',
@@ -208,6 +215,8 @@ export async function liveApiSyncState(): Promise<any> {
             body: JSON.stringify({ orphans, ts: Date.now() }),
           }).catch(() => {})
         } catch (_) {}
+      } else if (Array.isArray(w.TP.livePositions)) {
+        for (const pos of w.TP.livePositions) { pos._isOrphan = false }
       }
       // Release mutex (no position list write happened)
       releasePositionWrite(_wSeq)
