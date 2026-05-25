@@ -208,9 +208,9 @@ function _getTelem() {
     return _telem || null;
 }
 async function _telemFetch(url, opts) {
-    const t = _getTelem();
-    if (!t) return fetch(url, opts);
-    try { return await t.wrapFetch(fetch, url, opts); } catch (e) { throw e; }
+    // [Phase 2] Route through gateway (rateLimiter + circuitBreaker integrated)
+    try { return await require('./binanceGateway').fetch(url, opts); }
+    catch (_gw) { const t = _getTelem(); return t ? t.wrapFetch(fetch, url, opts) : fetch(url, opts); }
 }
 
 async function _pollOnce() {

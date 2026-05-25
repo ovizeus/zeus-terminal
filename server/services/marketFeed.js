@@ -30,9 +30,9 @@ function _getTelem() {
     return _telem || null;
 }
 async function _telemFetch(url, opts) {
-    const t = _getTelem();
-    if (!t) return fetch(url, opts);
-    return t.wrapFetch(fetch, url, opts);
+    // [Phase 2] Route through gateway (rateLimiter + circuitBreaker integrated)
+    try { return await require('./binanceGateway').fetch(url, opts); }
+    catch (_) { return fetch(url, opts); }
 }
 
 // ── Active streams ──
