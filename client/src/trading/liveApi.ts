@@ -155,6 +155,12 @@ export async function liveApiClosePosition(pos: any): Promise<any> {
  */
 export async function liveApiSyncState(): Promise<any> {
   try {
+    // [SRV-POS] Newer-wins mutex — acquire BEFORE any TP writes.
+    // If lock held by newer writer (WS push), skip entire sync cycle (data would be stale anyway).
+    var _wSeq = (typeof w._acquirePositionWrite === 'function') ? w._acquirePositionWrite() : 1
+    if (_wSeq === 0) {
+      return null
+    }
     const [bal, positions] = await Promise.all([
       liveApiGetBalance(),
       liveApiGetPositions(),
@@ -191,12 +197,6 @@ export async function liveApiSyncState(): Promise<any> {
         addTradeToJournal({ id: gone.id, time: fmtNow(), side: gone.side, sym: (gone.sym || '').replace('USDT', ''), entry: gone.entry, exit: _exitPrice, pnl: _gPnl, reason: 'Exchange-closed (sync/fallback)', lev: gone.lev, autoTrade: !!gone.autoTrade, journalEvent: 'CLOSE', openTs: gone.openTs || gone.id, closedAt: Date.now(), mode: 'live' })
       }
     })
-    // [SRV-POS] Newer-wins mutex — prevent WS push from clobbering mid-write
-    var _wSeq = (typeof w._acquirePositionWrite === 'function') ? w._acquirePositionWrite() : 1
-    if (_wSeq === 0) {
-      // Stale writer — newer WS frame already applied, skip this sync cycle
-      return { balance: { totalBalance: 0 }, positions: [] }
-    }
     w.TP.livePositions = positions.map(function (p: any) {
       var id = p.symbol + '_' + p.side + '_' + (p.positionAmt || p.size || '')
       var existing = _existingById[id]
