@@ -22,6 +22,7 @@ import { _applyGlobalModeUI } from '../data/marketDataTrading'
 import { useBrainStore } from '../stores/brainStore'
 import { acquirePositionWrite, releasePositionWrite, getDropCount, getLockHeld } from '../utils/positionMutex'
 import { shouldSkipFrameForExchange } from '../utils/exchangeGuard'
+import { resolveEffectiveFlag } from '../utils/positionSource'
 import type { ATConfig } from '../types'
 const w = window as any // this file CREATES w.S, w.TP, w.TC, w.CORE_STATE, w.BlockReason, w.ZState — circular reads remain on w
 
@@ -1276,6 +1277,10 @@ export const ZState = (() => {
       _shadowDemoPositions = serverATDemo.slice()
       _shadowLivePositions = serverATLive.slice()
 
+      // [SRV-POS 4.4] Flag-gated TP write
+      const _srvPosMode = (w._executionEnv === 'REAL') ? 'real' : (w._executionEnv === 'TESTNET') ? 'testnet' : 'demo'
+      const _srvPosActive = resolveEffectiveFlag(w._srvPosFlags, _srvPosMode)
+
       // [Phase 8B1] Single atomic TP mutation — no function calls between writes.
       // [SRV-POS] Newer-wins mutex: protects against WS push + liveApi sync racing.
       const _writeSeq = acquirePositionWrite()
@@ -1285,8 +1290,15 @@ export const ZState = (() => {
       const _prevMerging = _merging
       _merging = true
       try {
-        TP.demoPositions = _nextDemoPositions
-        TP.livePositions = _nextLivePositions
+        if (_srvPosActive) {
+          // Flag ON: server positions are CANONICAL — no clientOnly merge
+          TP.demoPositions = serverATDemo
+          TP.livePositions = serverATLive
+        } else {
+          // Flag OFF: legacy merge (server + clientOnly)
+          TP.demoPositions = _nextDemoPositions
+          TP.livePositions = _nextLivePositions
+        }
         if (state.demoBalance) {
           TP.demoBalance = state.demoBalance.balance || TP.demoBalance
           TP.demoPnL = state.demoBalance.pnl || 0
