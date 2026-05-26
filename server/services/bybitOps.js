@@ -37,9 +37,12 @@ function _resetSyntheticQueue() {
 }
 
 async function _dispatchRequest(method, path, params, creds) {
-    // In test environment, use synthetic queue if available
     if (_syntheticQueue.length > 0) {
         return _syntheticQueue.shift();
+    }
+    const flags = require('./migrationFlags').flags;
+    if (flags.BYBIT_DRY_RUN_ONLY) {
+        throw new Error('BYBIT_DRY_RUN_ONLY=true — real HTTP dispatch blocked');
     }
     return bybitSigner.sendSignedRequest(method, path, params, creds);
 }
@@ -307,7 +310,7 @@ async function closePosition(uid, params, creds) {
 
         if (!_isOk(closeResp)) {
             const err = bybitSigner.parseBybitError(closeResp) || canonicalErrors.create('ErrUnknown', 'close rejected');
-            db.prepare(`UPDATE at_positions SET status='OPEN' WHERE seq=?`).run(params.seq);
+            db.prepare(`UPDATE at_positions SET status='OPEN', updated_at=datetime('now') WHERE seq=?`).run(params.seq);
             positionEvents.append({
                 position_seq: params.seq, user_id: uid, exchange: 'bybit',
                 event_type: 'CLOSE_REJECTED_REVERT',
@@ -327,7 +330,11 @@ async function closePosition(uid, params, creds) {
             const closedData = { ...positionData, closeOrderId: closeResp.result.orderId, closePrice: closeResp.result.avgPrice, source: params.source };
             db.prepare(`INSERT INTO at_closed (seq, data, closed_at, user_id, exchange) VALUES (?, ?, datetime('now'), ?, 'bybit')`).run(params.seq, JSON.stringify(closedData), uid);
             db.prepare(`DELETE FROM at_positions WHERE seq=?`).run(params.seq);
-        } catch (_) {}
+        } catch (err) {
+            if (typeof logger !== 'undefined' && logger && logger.warn) {
+                logger.warn('BYBIT', `[closePosition] at_closed INSERT/DELETE failed seq=${params.seq}: ${err.message}`);
+            }
+        }
 
         positionEvents.append({
             position_seq: params.seq, user_id: uid, exchange: 'bybit',

@@ -73,7 +73,7 @@ const DEFAULTS = {
     // LIVE_ENABLED cannot be true while DRY_RUN_ONLY is true. Default ON
     // (true); only flipped to false in S4-B5+ once integration tests prove
     // the signer matches Bybit V5 contract on a vector basis.
-    BYBIT_DRY_RUN_ONLY: false,
+    BYBIT_DRY_RUN_ONLY: true,
     // [Phase 2 S6-B0] DEMO server-authority carve-out flags — INERT BY DESIGN.
     // S6-B0 introduces ONLY the flag surface and mutex carve-out rules; no
     // dispatch logic, no client gating, no execution path. Every code path
