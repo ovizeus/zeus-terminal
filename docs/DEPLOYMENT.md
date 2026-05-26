@@ -31,3 +31,5 @@ but PM2 (Node 22) required MODULE_VERSION 127 — crash-loop (65 restarts).
 Recovery: `pm2 kill` + `pm2 resurrect` (under Node 20) + `npm rebuild better-sqlite3`.
 
 Prevention: interpreter pinned in ecosystem.config.js + .nvmrc + package.json engines.
+
+Note: current better-sqlite3 prebuilt binary loads on both Node 20 + 22 — but treat as Node 20-only for upgrade decisions.
