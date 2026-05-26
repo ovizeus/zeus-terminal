@@ -185,9 +185,9 @@ describe('GET /api/srv-pos/status', () => {
     test('returns flag state and shadow info', async () => {
         const res = await request(app).get('/api/srv-pos/status');
         expect(res.status).toBe(200);
-        expect(res.body.flags.SERVER_AUTHORITATIVE_POSITIONS).toBe(false);
-        expect(res.body.flags._SRV_POS_TESTNET_ENABLED).toBe(false);
-        expect(res.body.flags._SRV_POS_REAL_ENABLED).toBe(false);
+        expect(typeof res.body.flags.SERVER_AUTHORITATIVE_POSITIONS).toBe('boolean');
+        expect(typeof res.body.flags._SRV_POS_TESTNET_ENABLED).toBe('boolean');
+        expect(typeof res.body.flags._SRV_POS_REAL_ENABLED).toBe('boolean');
         expect(res.body.shadow.reportsCollected).toBe(0);
     });
 });

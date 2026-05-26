@@ -128,8 +128,9 @@ describe('exchange routes — Phase 6 Task 36', () => {
         });
 
         it('409 BLOCKED on switch with open positions', async () => {
-            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode) VALUES (1, 'binance', 1, 'testnet')`).run();
-            mockDb.prepare(`INSERT INTO at_positions (data, status, user_id, exchange) VALUES ('{}', 'OPEN', 1, 'binance')`).run();
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'binance', 1, 'testnet', 'enc')`).run();
+            mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, mode, api_key_encrypted) VALUES (1, 'bybit', 0, 'testnet', 'enc2')`).run();
+            mockDb.prepare(`INSERT INTO at_positions (data, status, user_id, exchange) VALUES ('{"mode":"testnet"}', 'OPEN', 1, 'binance')`).run();
 
             const app = buildApp();
             const res = await request(app).post('/api/exchange/switch').send({ targetExchange: 'bybit' });
@@ -235,8 +236,8 @@ describe('Phase 8 Tasks 47-50', () => {
     describe('POST /disconnect with positions check (Task 48)', () => {
         it('returns 409 with positions list when open DB positions exist', async () => {
             mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, api_key_encrypted) VALUES (1, 'bybit', 1, 'enc')`).run();
-            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (1, '{}', 'OPEN', 1, 'bybit')`).run();
-            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (2, '{}', 'CLOSING', 1, 'bybit')`).run();
+            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (1, '{"mode":"testnet"}', 'OPEN', 1, 'bybit')`).run();
+            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (2, '{"mode":"testnet"}', 'CLOSING', 1, 'bybit')`).run();
 
             const res = await request(buildApp()).post('/api/exchange/disconnect').send({ exchange: 'bybit' });
             expect(res.status).toBe(409);
@@ -271,8 +272,8 @@ describe('Phase 8 Tasks 47-50', () => {
     describe('POST /disconnect with force=true (Task 49)', () => {
         it('moves open positions to at_positions_orphaned and disconnects', async () => {
             mockDb.prepare(`INSERT INTO exchange_accounts (user_id, exchange, is_active, api_key_encrypted) VALUES (1, 'bybit', 1, 'enc')`).run();
-            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (10, '{"symbol":"BTCUSDT"}', 'OPEN', 1, 'bybit')`).run();
-            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (11, '{"symbol":"ETHUSDT"}', 'OPENING', 1, 'bybit')`).run();
+            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (10, '{"symbol":"BTCUSDT","mode":"testnet"}', 'OPEN', 1, 'bybit')`).run();
+            mockDb.prepare(`INSERT INTO at_positions (seq, data, status, user_id, exchange) VALUES (11, '{"symbol":"ETHUSDT","mode":"testnet"}', 'OPENING', 1, 'bybit')`).run();
 
             const res = await request(buildApp()).post('/api/exchange/disconnect').send({ exchange: 'bybit', force: true });
             expect(res.status).toBe(200);

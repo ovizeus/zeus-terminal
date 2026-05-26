@@ -166,6 +166,22 @@ describe('POST /api/order/place E2E (M1.1 Cat D)', () => {
     });
 
     describe('[Fix #1 2026-05-20] BUG-T2c Path B regression — server-resolved engineMode', () => {
+        beforeEach(() => {
+            // SL guard fires only when NOT testnet — use real/live creds
+            const credStore = require('../../server/services/credentialStore');
+            credStore.getExchangeCreds.mockReturnValue({
+                apiKey: 'test-key', apiSecret: 'test-secret',
+                baseUrl: 'https://fapi.binance.com', mode: 'real',
+            });
+        });
+        afterEach(() => {
+            const credStore = require('../../server/services/credentialStore');
+            credStore.getExchangeCreds.mockReturnValue({
+                apiKey: 'test-key', apiSecret: 'test-secret',
+                baseUrl: 'https://testnet.binancefuture.com', mode: 'testnet',
+            });
+        });
+
         // Scenario: client sends NO `mode` field (historical client behavior).
         // validateOrderBody's mode==='live' guard at middleware doesn't fire.
         // trading.js then routes through the live path because server-side
