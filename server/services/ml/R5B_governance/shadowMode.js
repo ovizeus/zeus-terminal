@@ -150,9 +150,21 @@ function advanceStage(params) {
         throw new Error(`advanceStage: version ${versionId} at last stage (${current.stage}), cannot advance further`);
     }
     const nextStage = STAGES[currentIdx + 1];
+    if (!hasMinDuration({ versionId, stage: current.stage })) {
+        const minDays = MIN_DURATION_DAYS_PER_STAGE[current.stage] || 0;
+        const elapsedMs = Date.now() - current.started_at;
+        const elapsedDays = Math.floor(elapsedMs / (86400 * 1000));
+        return {
+            promoted: false,
+            reason: `Min soak not met: ${elapsedDays}d/${minDays}d in ${current.stage}`,
+            blocked_by: 'min_duration',
+            current_stage: current.stage,
+            target_stage: nextStage
+        };
+    }
     exitStage({ versionId, stage: current.stage, actor, reason: `auto-exit on advance to ${nextStage}` });
     const enter = enterStage({ versionId, stage: nextStage, actor, reason });
-    return { logId: enter.logId, new_stage: nextStage, previous_stage: current.stage };
+    return { promoted: true, logId: enter.logId, new_stage: nextStage, previous_stage: current.stage };
 }
 
 // ── degrade ────────────────────────────────────────────────────────

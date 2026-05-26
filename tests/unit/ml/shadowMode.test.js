@@ -182,11 +182,35 @@ describe('R5B — shadowMode (canonical §18)', () => {
 
     // ── advanceStage ───────────────────────────────────────────────
     describe('advanceStage', () => {
-        test('moves to next stage in STAGES order', () => {
+        test('moves to next stage in STAGES order (no min duration on paper)', () => {
             const versionId = makeVersion('adv1')
             enterStage({ versionId, stage: 'paper', actor: 't', reason: 'r' })
             const result = advanceStage({ versionId, actor: 't', reason: 'advance' })
+            expect(result.promoted).toBe(true)
             expect(result.new_stage).toBe('shadow_live')
+        })
+
+        test('blocks advance when min soak duration not met on shadow_live', () => {
+            const versionId = makeVersion('adv_min_block')
+            enterStage({ versionId, stage: 'shadow_live', actor: 't', reason: 'r' })
+            const result = advanceStage({ versionId, actor: 't', reason: 'try advance' })
+            expect(result.promoted).toBe(false)
+            expect(result.blocked_by).toBe('min_duration')
+            expect(result.current_stage).toBe('shadow_live')
+            expect(result.target_stage).toBe('limited_probation')
+        })
+
+        test('allows advance when min soak duration met on shadow_live', () => {
+            const versionId = makeVersion('adv_min_pass')
+            enterStage({ versionId, stage: 'shadow_live', actor: 't', reason: 'r' })
+            const entryRow = db.prepare(
+                `SELECT id FROM ml_shadow_stage_log WHERE version_id = ? AND stage = 'shadow_live' AND transition_type = 'ENTER' ORDER BY id DESC LIMIT 1`
+            ).get(versionId)
+            db.prepare(`UPDATE ml_shadow_stage_log SET started_at = ? WHERE id = ?`)
+                .run(Date.now() - 29 * 86400 * 1000, entryRow.id)
+            const result = advanceStage({ versionId, actor: 't', reason: 'soak complete' })
+            expect(result.promoted).toBe(true)
+            expect(result.new_stage).toBe('limited_probation')
         })
 
         test('throws if at last stage (normal_live)', () => {
