@@ -2767,7 +2767,7 @@ export function adaptAutoTradeParams(): void {
   if (BR._lastAdaptTs && now - BR._lastAdaptTs < 300000) return
   BR._lastAdaptTs = now
 
-  const recentTrades = getJournal().filter((t: any) => t.reason?.includes('AUTO')).slice(-6)
+  const recentTrades = getJournal().filter((t: any) => (t.exitReason || t.reason || '').includes('AUTO')).slice(-6)
   if (recentTrades.length < 3) return
 
   const wins = recentTrades.filter((t: any) => t.pnl > 0).length

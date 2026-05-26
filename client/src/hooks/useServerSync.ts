@@ -145,7 +145,7 @@ async function pullJournal() {
           entryPrice: Number(row.price || row.entryPrice || 0),
           exitPrice: Number(row.exitPrice || row.closePrice || 0),
           pnl: Number(row.closePnl || row.pnl || 0),
-          reason: String(row.closeReason || row.reason || ''),
+          exitReason: String(row.closeReason || row.reason || ''),
           openTs: Number(row.ts || row.openTs || 0),
           closeTs: Number(row.closeTs || 0),
           mode: String(row.mode || 'demo') as 'demo' | 'live',

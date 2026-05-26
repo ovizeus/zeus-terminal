@@ -15,7 +15,7 @@ describe('JournalPanel', () => {
       entries: [{
         id: 'j1', side: 'LONG', symbol: 'BTCUSDT',
         entryPrice: 60000, exitPrice: 61000,
-        pnl: 100, reason: 'TP',
+        pnl: 100, exitReason: 'TP',
         openTs: Date.now() - 60000, closeTs: Date.now(),
         mode: 'demo',
       }],

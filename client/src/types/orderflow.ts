@@ -90,7 +90,7 @@ export interface JournalEntry {
   entryPrice: number
   exitPrice: number
   pnl: number
-  reason: string
+  exitReason: string
   openTs: number
   closeTs: number
   mode: 'demo' | 'live'
