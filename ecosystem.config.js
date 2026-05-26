@@ -5,6 +5,7 @@ module.exports = {
     apps: [{
         name: 'zeus',
         script: 'server.js',
+        interpreter: '/root/.nvm/versions/node/v20.20.2/bin/node',
         cwd: path.resolve(__dirname),
         instances: 1,
         autorestart: true,
