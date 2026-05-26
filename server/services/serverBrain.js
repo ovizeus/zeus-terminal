@@ -1403,17 +1403,19 @@ function _runCycle() {
                         if (_snapId && pending) pending._snapId = _snapId; // carry for Phase 2 linkage
                         logger.info(`[BRAIN] Pending entry created for user ${userId} ${decision.symbol} (${volAdjustedStc.cooldownMs}ms cooldown)`);
                     } else {
-                        // Fallback: if pending creation failed (e.g., already pending), execute directly
-                        const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
-                            Object.assign({}, _mlExtra, { sourcePath: 'direct', finalAction: 'entry' })
-                        ));
-                        // [BUG-O7 S2] Pass raw TC.size as userIntent so serverAT enforces max-cap (TC.size = absolute margin ceiling per autotrade.ts canonical semantic). Use raw _stcMap value, NOT volAdjustedStc/sizingStc which are already pipeline-modified.
+                        // [DD2 FIX 1] Execute FIRST, then log — prevents phantom 'entry' records when AT blocks
                         const _userIntent = Number((_stcMap.get(userId) || DEFAULT_STC).size);
                         const entry = serverAT.processBrainDecision(decision, sizingStc, userId, _userIntent);
+                        const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
+                            Object.assign({}, _mlExtra, {
+                                sourcePath: 'direct',
+                                finalAction: entry ? 'entry' : 'entry_blocked',
+                                linkedSeq: entry ? entry.seq : null,
+                                blockedReason: entry ? null : 'at_rejected',
+                            })
+                        ));
                         if (entry) {
-                            // [S5] Same deadline-based cooldown set as the pending branch.
                             _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
-                            if (_snapId && entry.seq) brainLogger.linkSeq(_snapId, entry.seq);
                             logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);
                         }
                     }
