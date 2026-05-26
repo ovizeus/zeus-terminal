@@ -10259,7 +10259,7 @@ const _stmts = {
     bdGetBySeq: db.prepare('SELECT snap_id, data FROM brain_decisions WHERE linked_seq = ?'),
     bdPruneNoTrade: db.prepare("DELETE FROM brain_decisions WHERE final_tier = 'NO_TRADE' AND linked_seq IS NULL AND ts < ?"),
     bdPruneBlocked: db.prepare("DELETE FROM brain_decisions WHERE final_action LIKE 'blocked_%' AND ts < ?"),
-    bdPruneTrade: db.prepare("DELETE FROM brain_decisions WHERE final_action = 'entry' AND ts < ?"),
+    bdPruneTrade: db.prepare("DELETE FROM brain_decisions WHERE final_action = 'entry' AND ts < ? AND linked_seq IS NULL"),
     bdCount: db.prepare('SELECT COUNT(*) as cnt, final_action FROM brain_decisions GROUP BY final_action'),
     // Missed trades
     missedInsert: db.prepare('INSERT INTO missed_trades (user_id, symbol, side, reason, price, confidence, tier, regime, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'),
