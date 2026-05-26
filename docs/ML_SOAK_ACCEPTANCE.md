@@ -1,11 +1,11 @@
 # ML Stage Promotion — Soak Acceptance Criteria
 
-> **Status:** DRAFT — awaiting operator review of proposed numbers.
-> **Created:** 2026-05-26 | **DD3 Sub-task 3**
+> **Status:** DRAFT v2 — Phone Claude reviewed, awaiting operator final approval.
+> **Created:** 2026-05-26 | **DD3 Sub-task 3** | **Revised:** 2026-05-26
 
 ## Overview
 
-OMEGA ML uses a 5-stage flag-gated promotion ladder. Each stage must pass acceptance criteria before the next flag is flipped. All promotions are operator-initiated (manual flag flip + PM2 reload).
+OMEGA ML uses a 5-stage flag-gated promotion ladder. Each stage must pass acceptance criteria before the next flag is flipped. All promotions are operator-initiated (manual flag flip + PM2 reload) with sign-off audit trail.
 
 | Stage | Flag | What It Does |
 |-------|------|-------------|
@@ -21,8 +21,8 @@ OMEGA ML uses a 5-stage flag-gated promotion ladder. Each stage must pass accept
 
 | Criterion | Value | Source |
 |-----------|-------|--------|
-| Minimum soak | **7 days** `⚠️ REVIEW` | proposed |
-| Data volume | **100+ ml_decision_snapshots** | proposed |
+| Minimum soak | **7 days** | data integrity test |
+| Data volume | **100+ ml_decision_snapshots** | `SELECT COUNT(*) FROM ml_decision_snapshots` |
 | Schema errors | 0 | PM2 logs grep `ML_INGEST` |
 | brain_decisions flowing | >0 rows/hour | `SELECT COUNT(*) FROM brain_decisions WHERE ts > ?` |
 
@@ -34,9 +34,10 @@ OMEGA ML uses a 5-stage flag-gated promotion ladder. Each stage must pass accept
 
 | Criterion | Value | Source |
 |-----------|-------|--------|
-| Minimum soak | **14 days** `⚠️ REVIEW` | proposed |
-| Data volume | **500+ ml_decision_snapshots** | proposed |
+| Minimum soak | **21 days** | extended for multiple market regime coverage |
+| Data volume | **500+ ml_decision_snapshots** | |
 | Bandit cells seeded | Version active + preReg registered | `/api/ring5/influence/status` |
+| Bandit posteriors | ≥30 obs per cell in **≥70% of active cells** | `/api/ring5/cells` |
 | Influence audit | All entries = `skipped/not_eligible` (not errors) | `/api/ring5/audit` |
 | Auto-quarantines | 0 triggered in last 7 days | mlScanCron logs |
 
@@ -48,10 +49,12 @@ OMEGA ML uses a 5-stage flag-gated promotion ladder. Each stage must pass accept
 
 | Criterion | Value | Source |
 |-----------|-------|--------|
-| Minimum soak | **30 days** `⚠️ REVIEW` | proposed |
+| Minimum soak | **30 days** | |
 | DEMO trades influenced | **1000+** | `SELECT COUNT(*) FROM ml_influence_audit WHERE status='accepted'` |
-| Bandit posteriors | ≥30 obs in **50%+ of active cells** | `/api/ring5/cells` |
-| Hit rate (DEMO) | **≥ 0.50** `⚠️ REVIEW` | ml_attribution_events (REQUIRES DD2 FIX) |
+| Bandit posteriors | ≥30 obs in **≥70% of active cells** | `/api/ring5/cells` |
+| Hit rate minimum (DEMO) | **≥ 0.52** | ml_attribution_events (REQUIRES DD2 FIX) |
+| Hit rate target (DEMO) | **≥ 0.55** (recommended go-ahead) | |
+| Attribution linkage | **≥ 80%** brain entries linked to trades | REQUIRES DD2 FIX |
 | Calibration quality | ≥ 0.6 | `shadowMode.evaluatePerformance` |
 | Drift score | ≤ 0.25 | `shadowMode.evaluatePerformance` |
 | Auto-quarantines | 0 in last 14 days | mlScanCron logs |
@@ -69,11 +72,12 @@ OMEGA ML uses a 5-stage flag-gated promotion ladder. Each stage must pass accept
 
 | Criterion | Value | Source |
 |-----------|-------|--------|
-| Minimum soak | **60 days** `⚠️ REVIEW` | proposed |
-| TESTNET trades influenced | **2000+** | ml_influence_audit |
-| Hit rate (TESTNET) | **≥ 0.55** `⚠️ REVIEW` | ml_attribution_events |
-| Max drawdown (TESTNET) | **< 15%** `⚠️ REVIEW` | at_closed PnL analysis |
-| Bandit posterior stability | Changed < 10% in last 30 days | posterior alpha/beta delta |
+| Minimum soak | **90 days** | extended — real money requires high confidence |
+| TESTNET trades influenced | **3000+** | ml_influence_audit |
+| Hit rate (TESTNET) | **≥ 0.58** | ml_attribution_events |
+| Max drawdown (TESTNET) | **< 7%** | at_closed PnL analysis |
+| Bandit posterior stability | Changed **< 5%** in last 30 days | posterior alpha/beta delta |
+| 7-day stability window | No major events/anomalies before flip | operator judgment |
 | shadowMode stage | ≥ `limited_probation` with 28-day min met | `shadowMode.hasMinDuration` |
 | Auto-quarantines | 0 in last 30 days | mlScanCron |
 | PM2 stability | 0 crash-restarts during soak | PM2 restart count delta |
@@ -91,6 +95,7 @@ These triggers exist in code and are checked by crons:
 | Hit rate drop | < 0.45 | Auto-degrade 1 stage | `shadowMode.DEFAULT_DEGRADE_THRESHOLDS.hit_rate_min` |
 | Calibration drop | < 0.6 | Auto-degrade 1 stage | `shadowMode.DEFAULT_DEGRADE_THRESHOLDS.calibration_quality_min` |
 | Drift spike | > 0.25 | Auto-degrade 1 stage | `shadowMode.DEFAULT_DEGRADE_THRESHOLDS.drift_max` |
+| Drawdown spike | > 10% in 24h | AUTO halt + Telegram alert | NEW — to be wired |
 | Feature bad performance | 100+ trades, Brier > null, p<0.01, 2+ bad regimes | Auto-quarantine feature | `autoQuarantine.THRESHOLDS` |
 | Shadow/probation min | 28 days each | Block advance if not met | `shadowMode.MIN_DURATION_DAYS_PER_STAGE` |
 
@@ -105,6 +110,23 @@ These triggers exist in code and are checked by crons:
 | CRITICAL | ≥ 0.20 or charter/risk_config | Operator approval + 24h cooldown | Operator approval + 24h cooldown |
 
 Source: `tieredPromotion.js` lines 38-40.
+
+---
+
+## Sign-Off Process
+
+Each stage promotion requires an audit trail entry:
+
+| Field | Description |
+|-------|-------------|
+| operator_user_id | Who authorized the promotion |
+| timestamp_utc | When |
+| stage_from | Previous stage |
+| stage_to | New stage |
+| spec_version | Which version of this spec was reviewed |
+| criteria_met | JSON snapshot of all criteria values at promotion time |
+
+Implementation: future `/api/ml/stage-promote` endpoint (after DD2 fix). Until then, manual flag flip + operator confirms in chat/Telegram.
 
 ---
 
@@ -134,17 +156,18 @@ Operator can halt ML at any time:
 - [ ] DD2 attribution digest fix (BLOCKING Stage 3→4 gate)
 - [ ] `evaluatePerformance` cron wiring (DEFERRED until metrics source)
 - [ ] Automated soak validation script (equivalent to S7's s7-sanity.sh)
-- [ ] Operator sign-off process for each stage promotion
+- [ ] `/api/ml/stage-promote` sign-off endpoint
+- [ ] Drawdown spike >10%/24h degrade trigger wiring
 
 ---
 
-## Proposed Numbers Summary — `⚠️ OPERATOR REVIEW`
+## Numbers Summary — FINAL PROPOSED
 
-| Gate | Min Days | Min Trades | Hit Rate | Notes |
-|------|----------|------------|----------|-------|
-| 1→2 | 7 | 100 snapshots | N/A | Data collection only |
-| 2→3 | 14 | 500 snapshots | N/A | Shadow mode, no influence |
-| 3→4 | 30 | 1000 influenced | ≥ 0.50 | DEMO influence, virtual money |
-| 4→5 | 60 | 2000 influenced | ≥ 0.55 | TESTNET, real exchange but testnet funds |
+| Gate | Min Days | Min Trades | Hit Rate | Drawdown | Notes |
+|------|----------|------------|----------|----------|-------|
+| 1→2 | 7 | 100 snapshots | N/A | N/A | Data collection only |
+| 2→3 | 21 | 500 snapshots | N/A | N/A | Shadow, multiple market regimes |
+| 3→4 | 30 | 1000 influenced | ≥ 0.52 (min) / 0.55 (target) | N/A | DEMO, virtual money |
+| 4→5 | 90 | 3000 influenced | ≥ 0.58 | < 7% | TESTNET → REAL, high confidence |
 
-These numbers are proposed based on crypto trading ML industry practice. Operator decides final values.
+Operator decides final values. These are Phone Claude recommended + operator reviewed.
