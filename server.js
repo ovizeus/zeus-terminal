@@ -1532,6 +1532,9 @@ try { require('./server/cron/coldPathCron').schedule(); } catch (_) {}
 // [SRV-POS] Position classifications audit table retention — weekly 30d prune
 try { require('./server/cron/posClassRetention').schedule(); } catch (_) {}
 
+// [DD3] ML bandit feature scan — 4h auto-quarantine check
+try { require('./server/cron/mlScanCron').schedule(); } catch (_) {}
+
 // [Wave 2] R1 Constitution — seed canonical principles (idempotent)
 try {
     const charter = require('./server/services/ml/R1_constitution/constitutionalCharterLayer');
