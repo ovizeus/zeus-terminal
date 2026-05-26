@@ -1417,7 +1417,6 @@ function _runCycle() {
                                 blockedReason: entry ? null : 'at_rejected',
                             })
                         ));
-                        const _decisionDigest = _logResult ? _logResult.digest : null;
                         if (entry) {
                             _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
                             logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);

@@ -130,6 +130,24 @@ Implementation: future `/api/ml/stage-promote` endpoint (after DD2 fix). Until t
 
 ---
 
+## DD2 Attribution Fix — COMPLETED 2026-05-26
+
+Stage 3→4 promotion blocker RESOLVED via 3 commits:
+
+| Fix | Commit | Impact |
+|-----|--------|--------|
+| Phantom entries | `0711b35` | logDecision after AT execution — no more false 'entry' records |
+| Attribution digest | `d2153c6` | MD5 hash threads decision→close via ml_decision_snapshots |
+| Pruning protection | `932b51e` | linked_seq records preserved from pruning |
+
+**Baseline pre-fix:** 699/721 phantom entries (96.9%), 0.05% attribution linkage.
+
+**Expected post-fix:** Phantom rate <5%, attribution linkage >80% (via decision_digest).
+
+**Known limitation:** Digest lookup uses `ORDER BY created_at DESC LIMIT 1` — approximation acceptable for Stage 3-4. Refinement needed for Stage 5 REAL (thread digest through position data).
+
+---
+
 ## Rollback Procedure
 
 If post-promotion metrics degrade:
@@ -153,8 +171,10 @@ Operator can halt ML at any time:
 
 ## Open Items
 
-- [ ] DD2 attribution digest fix (BLOCKING Stage 3→4 gate)
-- [ ] `evaluatePerformance` cron wiring (DEFERRED until metrics source)
+- [x] DD2 attribution digest fix — RESOLVED 2026-05-26 (3 commits: 0711b35, d2153c6, 932b51e)
+- [ ] DD2 dedicated tests (phantom + digest + prune guard) — ~1h
+- [ ] DD2 digest lookup refinement for Stage 5 REAL (thread through position data)
+- [ ] `evaluatePerformance` cron wiring (DEFERRED until metrics accumulate post-DD2)
 - [ ] Automated soak validation script (equivalent to S7's s7-sanity.sh)
 - [ ] `/api/ml/stage-promote` sign-off endpoint
 - [ ] Drawdown spike >10%/24h degrade trigger wiring
