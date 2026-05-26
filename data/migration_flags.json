@@ -10,7 +10,7 @@
   "BYBIT_TESTNET_ENABLED": false,
   "BYBIT_LIVE_ENABLED": false,
   "BYBIT_PARITY_ENABLED": false,
-  "BYBIT_DRY_RUN_ONLY": false,
+  "BYBIT_DRY_RUN_ONLY": true,
   "SERVER_BRAIN_DEMO": true,
   "SERVER_AT_DEMO": true,
   "SERVER_AT_TESTNET": true,
