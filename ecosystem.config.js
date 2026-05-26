@@ -8,6 +8,7 @@ module.exports = {
         interpreter: '/root/.nvm/versions/node/v20.20.2/bin/node',
         cwd: path.resolve(__dirname),
         instances: 1,
+        exec_mode: 'fork',
         autorestart: true,
         watch: false,
         max_memory_restart: '512M',
