@@ -1397,16 +1397,19 @@ function _runCycle() {
                         // (volAdjustedStc.cooldownMs ⇒ stc.cooldownMs at gate time). Persist
                         // immediately so a crash/reload can not drop the deadline.
                         _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
-                        const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
+                        const _logResult = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
                             Object.assign({}, _mlExtra, { sourcePath: 'pending_created', finalAction: 'pending_created' })
                         ));
-                        if (_snapId && pending) pending._snapId = _snapId; // carry for Phase 2 linkage
+                        if (_logResult && pending) {
+                            pending._snapId = _logResult.snapId;
+                            pending._decisionDigest = _logResult.digest;
+                        }
                         logger.info(`[BRAIN] Pending entry created for user ${userId} ${decision.symbol} (${volAdjustedStc.cooldownMs}ms cooldown)`);
                     } else {
                         // [DD2 FIX 1] Execute FIRST, then log — prevents phantom 'entry' records when AT blocks
                         const _userIntent = Number((_stcMap.get(userId) || DEFAULT_STC).size);
                         const entry = serverAT.processBrainDecision(decision, sizingStc, userId, _userIntent);
-                        const _snapId = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
+                        const _logResult = brainLogger.logDecision(_buildSnapshot(userId, symbol, snap, ind, confluence, regime, gates, fusion,
                             Object.assign({}, _mlExtra, {
                                 sourcePath: 'direct',
                                 finalAction: entry ? 'entry' : 'entry_blocked',
@@ -1414,6 +1417,7 @@ function _runCycle() {
                                 blockedReason: entry ? null : 'at_rejected',
                             })
                         ));
+                        const _decisionDigest = _logResult ? _logResult.digest : null;
                         if (entry) {
                             _setCooldownDeadline(userId, decision.symbol, volAdjustedStc.cooldownMs);
                             logger.info(`[BRAIN] Direct entry for user ${userId} ${decision.symbol}`);

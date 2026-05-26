@@ -1908,6 +1908,13 @@ function _closePosition(idx, pos, exitType, price, pnl) {
             const attrib = _getR5AAttribution();
             if (attrib && attrib.recordAttribution) {
                 const pnlPct = (pnl / pos.size) * 100;
+                let _attrDigest = null;
+                try {
+                    const snapRow = db.db.prepare(
+                        'SELECT decision_digest FROM ml_decision_snapshots WHERE user_id = ? AND symbol = ? ORDER BY created_at DESC LIMIT 1'
+                    ).get(userId, pos.symbol);
+                    if (snapRow && snapRow.decision_digest) _attrDigest = snapRow.decision_digest;
+                } catch (_) {}
                 attrib.recordAttribution({
                     userId,
                     resolvedEnv: pos.env,
@@ -1915,6 +1922,7 @@ function _closePosition(idx, pos, exitType, price, pnl) {
                         symbol: pos.symbol,
                         pos_id: String(pos.seq || ''),
                         side: pos.side,
+                        decision_digest: _attrDigest,
                         closed_by: exitType === 'MANUAL_CLIENT' ? 'manual'
                                   : exitType === 'HIT_TP' ? 'tp'
                                   : exitType === 'HIT_SL' ? 'sl'

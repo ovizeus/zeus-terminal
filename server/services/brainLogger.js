@@ -99,6 +99,8 @@ function logDecision(fields) {
             fields.resolvedEnv || 'DEMO'
         );
 
+        let _decisionDigest = null;
+
         // ── ML Ingest: write to ml_decision_snapshots + ml_decision_light ──
         // Gated by ML_INGEST_ENABLED flag. Never crashes brain — fully isolated try/catch.
         if (MF.ML_INGEST_ENABLED) {
@@ -112,6 +114,7 @@ function logDecision(fields) {
                     .createHash('md5')
                     .update(`${userId}:${symbol}:${cycle}:${ts}`)
                     .digest('hex');
+                _decisionDigest = digest;
 
                 // Resolve env: prefer fields.resolvedEnv, fall back to 'DEMO'
                 const resolvedEnv = (fields.resolvedEnv === 'TESTNET' || fields.resolvedEnv === 'REAL')
@@ -181,7 +184,7 @@ function logDecision(fields) {
             }
         }
 
-        return snapId;
+        return { snapId, digest: _decisionDigest };
     } catch (err) {
         // Logger failure must NEVER crash Brain
         try { logger.error('BRAIN_LOG', 'logDecision failed: ' + err.message); } catch (_) {}
