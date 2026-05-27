@@ -4773,9 +4773,10 @@ function onUserDataEvent(userId, event) {
 
             for (const p of parsed.positions) {
                 const side = p.positionAmt > 0 ? 'LONG' : p.positionAmt < 0 ? 'SHORT' : null;
+                // Find ANY open position for this symbol (live OR recent registration)
                 const existingIdx = _positions.findIndex(pos =>
                     pos.userId === userId && pos.symbol === p.symbol &&
-                    pos.status === 'OPEN' && pos.mode === 'live'
+                    pos.status === 'OPEN'
                 );
                 const existing = existingIdx >= 0 ? _positions[existingIdx] : null;
 
@@ -4789,14 +4790,23 @@ function onUserDataEvent(userId, event) {
                         _handleLiveExit(existing, 'EXTERNAL_CLOSE', exitPrice, +pnl.toFixed(2)).catch(_ => {});
                     }
                 } else if (!existing) {
-                    // Position OPENED externally (on Binance UI)
-                    logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — opened externally`);
-                    _syncExternalPosition({
-                        userId, symbol: p.symbol, side,
-                        entryPrice: p.entryPrice,
-                        qty: Math.abs(p.positionAmt),
-                    });
-                    _broadcastPositions(userId);
+                    // Position OPENED externally — but skip if Zeus JUST registered one
+                    // (race: ACCOUNT_UPDATE arrives before registerManualPosition completes)
+                    const _recentReg = _positions.find(pos =>
+                        pos.userId === userId && pos.symbol === p.symbol &&
+                        pos.ts && (Date.now() - pos.ts) < 15000
+                    );
+                    if (_recentReg) {
+                        logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} — skipped (recent registration ${_recentReg.seq})`);
+                    } else {
+                        logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — opened externally`);
+                        _syncExternalPosition({
+                            userId, symbol: p.symbol, side,
+                            entryPrice: p.entryPrice,
+                            qty: Math.abs(p.positionAmt),
+                        });
+                        _broadcastPositions(userId);
+                    }
                 } else {
                     // Position MODIFIED (partial fill, scale in/out)
                     const newQty = Math.abs(p.positionAmt);
