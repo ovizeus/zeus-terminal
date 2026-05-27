@@ -1353,6 +1353,15 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   } catch (err) {
     console.error('[OPS-5] Failed to persist SERVER_BOOT audit:', err && err.message);
   }
+  try {
+    const rateState = require('./server/services/binanceRateState');
+    const bootResult = rateState.resetOnCleanBoot({ now: Date.now() });
+    if (bootResult.reset) {
+      console.log(`[RATE-STATE] Clean boot reset: ${bootResult.reason}`);
+    }
+  } catch (err) {
+    console.error('[RATE-STATE] Boot reset failed (non-fatal):', err && err.message);
+  }
   telegram.alertServerStart();
   telegramBot.start();
   // Position reconciliation handled internally by serverAT._runReconciliation (60s + startup)

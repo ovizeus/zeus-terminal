@@ -520,3 +520,117 @@ describe('binanceRateState anti-flap (MIN_STATE_DURATION_MS)', () => {
     expect(rateState.MIN_STATE_DURATION_MS).toBe(20_000);
   });
 });
+
+describe('binanceRateState.resetOnCleanBoot', () => {
+  test('resets consecutive_ban_count when mode=NORMAL and last_ban_at > 4h ago', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: 0,
+      warm_until: 0,
+      consecutive_ban_count: 51,
+      last_ban_at: now - 5 * 3600 * 1000, // 5h ago
+      used_weight_1m: 6062,
+      used_weight_ts: now - 300_000,
+    });
+
+    const result = rateState.resetOnCleanBoot({ now });
+
+    const s = rateState.load();
+    expect(s.consecutive_ban_count).toBe(0);
+    expect(s.used_weight_1m).toBe(0);
+    expect(result.reset).toBe(true);
+  });
+
+  test('does NOT reset when ban is still active (SUPPRESSED)', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: now + 60_000,
+      consecutive_ban_count: 10,
+      last_ban_at: now - 1_000,
+    });
+
+    const result = rateState.resetOnCleanBoot({ now });
+
+    const s = rateState.load();
+    expect(s.consecutive_ban_count).toBe(10);
+    expect(s.banned_until).toBe(now + 60_000);
+    expect(result.reset).toBe(false);
+  });
+
+  test('does NOT reset when warm is still active', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: 0,
+      warm_until: now + 60_000,
+      consecutive_ban_count: 5,
+      last_ban_at: now - 5 * 3600 * 1000,
+    });
+
+    const result = rateState.resetOnCleanBoot({ now });
+
+    const s = rateState.load();
+    expect(s.consecutive_ban_count).toBe(5);
+    expect(result.reset).toBe(false);
+  });
+
+  test('does NOT reset when last_ban_at within 4h (recent trouble)', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: 0,
+      warm_until: 0,
+      consecutive_ban_count: 3,
+      last_ban_at: now - 2 * 3600 * 1000, // 2h ago — within 4h window
+    });
+
+    const result = rateState.resetOnCleanBoot({ now });
+
+    const s = rateState.load();
+    expect(s.consecutive_ban_count).toBe(3);
+    expect(result.reset).toBe(false);
+  });
+
+  test('resets to clean state on fresh DB (no prior bans)', () => {
+    const now = Date.now();
+    const result = rateState.resetOnCleanBoot({ now });
+
+    expect(result.reset).toBe(false);
+    expect(result.reason).toMatch(/already clean/i);
+  });
+
+  test('clears stale used_weight and burst counters on reset', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: 0,
+      warm_until: 0,
+      consecutive_ban_count: 20,
+      last_ban_at: now - 6 * 3600 * 1000,
+      used_weight_1m: 5834,
+      burst_calls_10s: 42,
+    });
+
+    rateState.resetOnCleanBoot({ now });
+
+    const s = rateState.load();
+    expect(s.used_weight_1m).toBe(0);
+    expect(s.burst_calls_10s).toBe(0);
+    expect(s.consecutive_ban_count).toBe(0);
+  });
+
+  test('logs transition on reset', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: 0,
+      warm_until: 0,
+      consecutive_ban_count: 51,
+      last_ban_at: now - 5 * 3600 * 1000,
+    });
+
+    rateState.resetOnCleanBoot({ now });
+
+    const rows = db.prepare(`SELECT event_json FROM binance_rate_state_log ORDER BY id DESC LIMIT 1`).all();
+    expect(rows.length).toBeGreaterThanOrEqual(1);
+    const event = JSON.parse(rows[0].event_json);
+    expect(event.reason).toMatch(/clean.boot/i);
+    expect(event.prev_consecutive_ban_count).toBe(51);
+  });
+});

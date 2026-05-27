@@ -404,6 +404,60 @@ function appendTransitionLog(event) {
   }
 }
 
+// ─── Clean boot reset ─────────────────────────────────────────────────────
+//
+// On PM2 restart/reload, if the system is NORMAL (no active ban, no active
+// warm) AND the last ban was more than STRIKE_RESET_AFTER_MS ago, reset the
+// accumulated consecutive_ban_count and stale weight counters.
+//
+// Without this, a server that experienced many bans (e.g. 51 strikes) would
+// carry that count forever, causing 30-min warm periods on any future hiccup.
+
+/**
+ * Reset stale rate state on clean server boot.
+ *
+ * @param {object} opts — { now }
+ * @returns {{ reset: boolean, reason: string }}
+ */
+function resetOnCleanBoot({ now }) {
+  const s = load();
+  const mode = computeCurrentMode(s, now);
+
+  if (mode !== 'NORMAL') {
+    return { reset: false, reason: `mode=${mode}, not resetting active state` };
+  }
+
+  if (s.consecutive_ban_count === 0 && s.used_weight_1m === 0) {
+    return { reset: false, reason: 'already clean — no stale state' };
+  }
+
+  if (s.last_ban_at && (now - s.last_ban_at) < STRIKE_RESET_AFTER_MS) {
+    return { reset: false, reason: `last ban ${Math.round((now - s.last_ban_at) / 60000)}min ago, within 4h window` };
+  }
+
+  const prevStrikes = s.consecutive_ban_count;
+  save({
+    consecutive_ban_count: 0,
+    used_weight_1m: 0,
+    used_weight_ts: null,
+    burst_calls_10s: 0,
+    burst_window_start: null,
+    banned_until: 0,
+    ban_reason: null,
+    warm_until: 0,
+  });
+
+  appendTransitionLog({
+    from: 'STALE',
+    to: 'NORMAL',
+    reason: 'clean boot reset — stale state cleared',
+    ts: now,
+    prev_consecutive_ban_count: prevStrikes,
+  });
+
+  return { reset: true, reason: `reset ${prevStrikes} strikes + stale counters` };
+}
+
 module.exports = {
   DEFAULT_STATE,
   WARM_DURATION_BASE_MS,
@@ -426,4 +480,5 @@ module.exports = {
   classifyEndpoint,
   shouldAllowDuringWarm,
   appendTransitionLog,
+  resetOnCleanBoot,
 };
