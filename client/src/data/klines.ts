@@ -197,7 +197,7 @@ export async function fetchSymbolKlines(sym: string, tf = '5m', limit = 100) {
     const _cacheKey = sym + '_' + tf + '_' + limit
     const _cached = _klineCache[_cacheKey]
     if (_cached && (Date.now() - _cached.ts) < _KLINE_CACHE_TTL) return _cached.data
-    const url = `https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(tf)}&limit=${encodeURIComponent(limit)}`
+    const url = `/api/market/klines?symbol=${encodeURIComponent(sym)}&interval=${encodeURIComponent(tf)}&limit=${encodeURIComponent(limit)}`
     const _ac = new AbortController()
     const _t = setTimeout(() => _ac.abort(), 8000)
     let r

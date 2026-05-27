@@ -61,7 +61,7 @@ export function buildLiqEstimate(): void {
 export async function fetchTopTraderPositionRatio(): Promise<void> {
   const c = w.S; if (!c) return
   try {
-    const tp = await (await fetch('https://fapi.binance.com/futures/data/topLongShortPositionRatio?symbol=BTCUSDT&period=5m&limit=1')).json()
+    const tp = await (await fetch('/api/market/topLongShort?symbol=BTCUSDT&period=5m&limit=1')).json()
     if (tp.length) { c._qmPosLongRatio = +tp[0].longAccount; c._qmPosShortRatio = +tp[0].shortAccount }
   } catch (_) { c._qmPosLongRatio = c.ls || 0.5; c._qmPosShortRatio = 1 - (c.ls || 0.5) }
 }

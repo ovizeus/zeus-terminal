@@ -18,18 +18,17 @@ describe('rateLimiter', () => {
   });
 
   test('canFetch returns false when adding weight would exceed halt', () => {
-    // Simulate headers setting used to 2300 (95.8%)
-    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '2300' });
+    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '5800' });
     expect(rl.canFetch('binance:futures', 40)).toBe(false);
   });
 
   test('isThrottled true at 80%+', () => {
-    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '1920' });
+    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '4900' });
     expect(rl.isThrottled('binance:futures')).toBe(true);
   });
 
   test('isHalted true at 95%+', () => {
-    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '2300' });
+    rl.parseHeaders('binance', { 'x-mbx-used-weight-1m': '5800' });
     expect(rl.isHalted('binance:futures')).toBe(true);
   });
 
@@ -65,7 +64,7 @@ describe('rateLimiter', () => {
   });
 
   test('reserve returns false when would exceed halt', () => {
-    rl.reserve('binance:futures', 2200);
+    rl.reserve('binance:futures', 5600);
     expect(rl.reserve('binance:futures', 200)).toBe(false);
   });
 

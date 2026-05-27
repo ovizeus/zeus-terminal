@@ -10,7 +10,7 @@ const w = window as any
 
 // Single page fetch (max 1500 per Binance docs, we use 1000)
 export async function _teacherFetchPage(tf: any, startTime: any, endTime: any): Promise<any> {
-  let url = 'https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=' + tf + '&limit=1000'
+  let url = '/api/market/klines?symbol=BTCUSDT&interval=' + tf + '&limit=1000'
   if (startTime) url += '&startTime=' + startTime
   if (endTime) url += '&endTime=' + endTime
 

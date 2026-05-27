@@ -106,7 +106,7 @@ export async function fetchKlines(tf: any): Promise<void> {
     const _ac = new AbortController()
     const _acTimer = setTimeout(() => _ac.abort(), 10000)
     let r: Response
-    try { r = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=1000`, { signal: _ac.signal }) }
+    try { r = await fetch(`/api/market/klines?symbol=${sym}&interval=${tf}&limit=1000`, { signal: _ac.signal }) }
     catch (fetchErr: any) { clearTimeout(_acTimer); if (fetchErr.name === 'AbortError') throw new Error('Timeout fetch klines (>10s)'); throw fetchErr }
     clearTimeout(_acTimer)
     if (!r || !r.ok) throw new Error(`HTTP ${r ? r.status : 'no response'}`)
@@ -147,7 +147,7 @@ export async function fetchKlines(tf: any): Promise<void> {
         if (w.__wsGen !== _klineGen) return
         if (w.S.symbol !== sym) return
         try {
-          const _pr = await fetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${tf}&limit=1`, { signal: AbortSignal.timeout(8000) })
+          const _pr = await fetch(`/api/market/klines?symbol=${sym}&interval=${tf}&limit=1`, { signal: AbortSignal.timeout(8000) })
           if (!_pr || !_pr.ok) return
           const _pd = await _pr.json()
           if (!Array.isArray(_pd) || !_pd.length) return

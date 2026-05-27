@@ -149,7 +149,7 @@ export async function fetchRSI(tf: string): Promise<void> {
     const sym = w.S.symbol || 'BTCUSDT'
     const map: any = { '5m': '5m', '15m': '15m', '1h': '1h', '3h': '4h', '4h': '4h', '1d': '1d' }
     const itf = map[tf] || tf
-    const d = await safeFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=${itf}&limit=50`)
+    const d = await safeFetch(`/api/market/klines?symbol=${sym}&interval=${itf}&limit=50`)
     if (!Array.isArray(d)) throw new Error('Invalid RSI response')
     const closes = d.map((k: any) => +k[4])
     const rsi = calcRSI(closes)
@@ -189,7 +189,7 @@ export async function fetchFG(): Promise<void> {
 export async function fetchATR(): Promise<void> {
   try {
     const sym = w.S.symbol || 'BTCUSDT'
-    const d = await safeFetch(`https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=1h&limit=32`)
+    const d = await safeFetch(`/api/market/klines?symbol=${sym}&interval=1h&limit=32`)
     if (!Array.isArray(d) || d.length < 16) throw new Error('Date ATR insuficiente')
     const klinesForATR = d.map((k: any) => ({ high: +k[2], low: +k[3], close: +k[4] }))
     const atrRes = _calcATRSeries(klinesForATR, 14, 'wilder')

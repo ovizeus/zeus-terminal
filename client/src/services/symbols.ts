@@ -40,7 +40,7 @@ async function _pollWatchlist24hr(): Promise<void> {
     const syms: string[] = (w.WL_SYMS || []).map((s: string) => s.toUpperCase())
     if (syms.length === 0) return
     const q = encodeURIComponent(JSON.stringify(syms))
-    const r = await fetch(`https://fapi.binance.com/fapi/v1/ticker/24hr?symbols=${q}`, { signal: AbortSignal.timeout(8000) })
+    const r = await fetch(`/api/market/ticker24hr?symbols=${q}`, { signal: AbortSignal.timeout(8000) })
     if (!r.ok) return
     const arr = await r.json()
     if (!Array.isArray(arr)) return

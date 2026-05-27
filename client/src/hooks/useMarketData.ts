@@ -5,7 +5,7 @@
 import { useEffect, useRef } from 'react'
 import { useMarketStore } from '../stores'
 
-const BINANCE_REST = 'https://fapi.binance.com'
+const BINANCE_REST = ''
 
 
 export interface Kline {
@@ -48,7 +48,7 @@ export function useMarketData(
     // No React WS — eliminates duplicate Binance kline connections.
     async function fetchInitial() {
       try {
-        const url = `${BINANCE_REST}/fapi/v1/klines?symbol=${symbol}&interval=${chartTf}&limit=1000`
+        const url = `/api/market/klines?symbol=${symbol}&interval=${chartTf}&limit=1000`
         const res = await fetch(url, { signal: AbortSignal.timeout(10000) })
         if (!res.ok || gen !== genRef.current) return
         const raw = await res.json()

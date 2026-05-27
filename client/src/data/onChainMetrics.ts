@@ -5,7 +5,7 @@ const w = window as any
 // ── Weekly klines for 200WMA ──
 export async function fetchWeeklyKlines(): Promise<void> {
   try {
-    const r = await (await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=210')).json()
+    const r = await (await fetch('/api/market/spot/klines?symbol=BTCUSDT&interval=1w&limit=210')).json()
     if (!w.S) return
     w.S._weeklyKlines = r.map((x: any) => ({ o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5], t: x[0] }))
     calc200WMA()
@@ -15,7 +15,7 @@ export async function fetchWeeklyKlines(): Promise<void> {
 // ── Daily klines for Pi Cycle, Puell, Mayer, NUPL, RHODL ──
 export async function fetchDailyKlines(): Promise<void> {
   try {
-    const r = await (await fetch('https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1d&limit=500')).json()
+    const r = await (await fetch('/api/market/spot/klines?symbol=BTCUSDT&interval=1d&limit=500')).json()
     if (!w.S) return
     w.S._dailyKlines = r.map((x: any) => ({ o: +x[1], h: +x[2], l: +x[3], c: +x[4], v: +x[5], t: x[0] }))
     calcPiCycle()
