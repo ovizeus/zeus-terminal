@@ -566,6 +566,46 @@ describe('wsMarketProxy auth + rate limits', () => {
         expect(proxy.getActiveSymbols().length).toBe(0);
     });
 
+});
+
+describe('wsMarketProxy fallback REST', () => {
+    test('_checkFallbackNeeded returns false when stream LIVE', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        expect(proxy._checkFallbackNeeded('BTCUSDT')).toBe(false);
+    });
+
+    test('_checkFallbackNeeded returns true when stream OFFLINE', () => {
+        const now = Date.now();
+        proxy._recordEventAt('BTCUSDT', 'price', 75000, now - 65000, now - 65000);
+        expect(proxy._checkFallbackNeeded('BTCUSDT')).toBe(true);
+    });
+
+    test('_startFallbackPolling sets fallback active', () => {
+        proxy._startFallbackPolling('BTCUSDT');
+        expect(proxy.isFallbackActive('BTCUSDT')).toBe(true);
+    });
+
+    test('_stopFallbackPolling clears fallback', () => {
+        proxy._startFallbackPolling('BTCUSDT');
+        proxy._stopFallbackPolling('BTCUSDT');
+        expect(proxy.isFallbackActive('BTCUSDT')).toBe(false);
+    });
+
+    test('_startFallbackPolling is idempotent', () => {
+        proxy._startFallbackPolling('BTCUSDT');
+        proxy._startFallbackPolling('BTCUSDT');
+        expect(proxy.isFallbackActive('BTCUSDT')).toBe(true);
+    });
+
+    test('getFallbackStatus returns per-symbol state', () => {
+        proxy._startFallbackPolling('BTCUSDT');
+        const status = proxy.getFallbackStatus();
+        expect(status['BTCUSDT']).toBe(true);
+        expect(status['ETHUSDT']).toBeUndefined();
+    });
+});
+
+describe('wsMarketProxy auth + rate limits continued', () => {
     test('unsubscribeAll cleanup restores quota', () => {
         const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
         jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});

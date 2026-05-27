@@ -100,6 +100,10 @@ function _connectSymbol(symbol, timeframes) {
         conn.state = 'OPEN';
         conn.reconnects = 0;
         _clearReconnectFailures(sym);
+        if (isFallbackActive(sym)) {
+            _stopFallbackPolling(sym);
+            _broadcastAll({ type: 'market.recovered', symbol: sym, mode: 'WS', ts: Date.now() });
+        }
         conn.pingTimer = setInterval(() => {
             try { if (ws.readyState === WebSocket.OPEN) ws.ping(); } catch (_) {}
         }, PING_INTERVAL_MS);
@@ -118,6 +122,7 @@ function _connectSymbol(symbol, timeframes) {
         if (_subs.has(sym) && _subs.get(sym).size > 0) {
             _recordReconnectFailure(sym);
             if (_isCircuitOpen(sym)) {
+                if (!isFallbackActive(sym)) _startFallbackPolling(sym);
                 conn._reconnectTimer = setTimeout(() => {
                     _connections.delete(sym);
                     _connectSymbol(sym, conn.timeframes);
@@ -375,6 +380,63 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Fallback REST polling ═══
+
+const FALLBACK_POLL_MS = 5000;
+const _fallbackTimers = new Map(); // symbol → intervalId
+
+function _checkFallbackNeeded(symbol) {
+    const status = _computeStatus(symbol.toUpperCase());
+    return status === 'OFFLINE' || status === 'DEGRADED';
+}
+
+function _startFallbackPolling(symbol) {
+    const sym = symbol.toUpperCase();
+    if (_fallbackTimers.has(sym)) return;
+
+    const poll = async () => {
+        try {
+            const gateway = require('./binanceGateway');
+            const klineRes = await gateway.fetch(
+                `https://fapi.binance.com/fapi/v1/klines?symbol=${sym}&interval=5m&limit=1`,
+                { __weight: 1, __src: 'wsFallback' }
+            );
+            if (klineRes && klineRes.ok) {
+                const data = await klineRes.json();
+                if (Array.isArray(data) && data.length) {
+                    const k = data[0];
+                    _broadcast(sym, {
+                        type: 'market.kline', symbol: sym, tf: '5m',
+                        bar: { time: Math.floor(k[0] / 1000), open: +k[1], high: +k[2], low: +k[3], close: +k[4], volume: +k[5] },
+                        closed: false, ts: Date.now(), _fallback: true,
+                    });
+                    _recordEvent(sym, 'price', +k[4]);
+                }
+            }
+        } catch (_) {}
+    };
+
+    _fallbackTimers.set(sym, setInterval(poll, FALLBACK_POLL_MS));
+    poll();
+    _broadcastAll({ type: 'market.degraded', symbol: sym, mode: 'REST', reason: 'WS offline >60s', ts: Date.now() });
+}
+
+function _stopFallbackPolling(symbol) {
+    const sym = symbol.toUpperCase();
+    const timer = _fallbackTimers.get(sym);
+    if (timer) { clearInterval(timer); _fallbackTimers.delete(sym); }
+}
+
+function isFallbackActive(symbol) {
+    return _fallbackTimers.has(symbol.toUpperCase());
+}
+
+function getFallbackStatus() {
+    const out = {};
+    for (const sym of _fallbackTimers.keys()) out[sym] = true;
+    return out;
+}
+
 // ═══ Rate limiting + quotas ═══
 
 const MAX_SUBSCRIBES_PER_SEC = 10;
@@ -500,6 +562,8 @@ function _resetForTest() {
     _cbFailures.clear();
     _healthState.clear();
     _rateCounters.clear();
+    for (const timer of _fallbackTimers.values()) clearInterval(timer);
+    _fallbackTimers.clear();
     stopWatchlist();
 }
 
@@ -527,6 +591,11 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    _checkFallbackNeeded,
+    _startFallbackPolling,
+    _stopFallbackPolling,
+    isFallbackActive,
+    getFallbackStatus,
     getClientSymbolCount,
     _resetRateLimit,
     handleClientMessage,
