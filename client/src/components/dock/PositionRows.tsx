@@ -354,12 +354,12 @@ export const JournalRow = memo(function JournalRow({ trade }: { trade: any }) {
   const pnlStr = (win ? '+' : '') + '$' + pnl.toFixed(2)
   const ep = '$' + fP(trade.entry || 0) + '→$' + fP(trade.exit || 0)
   return (
-    <div className={`journal-row ${win ? 'win' : 'loss'}`}>
-      <span style={{ color: 'var(--dim)' }}>{escHtml(trade.time || '')}</span>
-      <span style={{ color: trade.side === 'LONG' ? 'var(--grn)' : 'var(--red)' }}>{escHtml(trade.side || '')}</span>
-      <span style={{ color: 'var(--dim)', fontSize: 11 }}>{ep}</span>
-      <span style={{ color: win ? 'var(--grn)' : 'var(--red)', fontWeight: 700 }}>{pnlStr}</span>
-      <span style={{ color: 'var(--dim)', fontSize: 11 }}>{escHtml(trade.reason || '—')}</span>
+    <div className={`journal-row ${win ? 'win' : 'loss'}`} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '3px 6px' }}>
+      <span style={{ color: 'var(--dim)', flexShrink: 0, minWidth: 36, fontSize: 10 }}>{escHtml(trade.time || '')}</span>
+      <span style={{ color: trade.side === 'LONG' ? 'var(--grn)' : 'var(--red)', flexShrink: 0, minWidth: 38, fontSize: 10 }}>{escHtml(trade.side || '')}</span>
+      <span style={{ color: 'var(--dim)', fontSize: 10, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ep}</span>
+      <span style={{ color: win ? 'var(--grn)' : 'var(--red)', fontWeight: 700, fontSize: 10, flexShrink: 0, minWidth: 55, textAlign: 'right' as const }}>{pnlStr}</span>
+      <span style={{ color: 'var(--dim)', fontSize: 9, flexShrink: 0, maxWidth: 60, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{escHtml(trade.reason || '—')}</span>
     </div>
   )
 })
