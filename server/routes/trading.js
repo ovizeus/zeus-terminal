@@ -680,8 +680,8 @@ const SETTINGS_WHITELIST = new Set([
   'profile', 'bmMode', 'assistArmed',
   // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace ({live:{profile,bmMode},demo:{...}})
   'brain',
-  // Manual live defaults + per-account leverage
-  'manualLive', 'ptLevDemo', 'ptLevLive', 'ptMarginMode',
+  // Manual live/testnet defaults + per-account leverage
+  'manualLive', 'manualTestnet', 'ptLevDemo', 'ptLevLive', 'ptMarginMode',
   // DSL
   'dslSettings',
   // Radar Lens (D4 persistence)

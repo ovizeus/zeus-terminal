@@ -332,6 +332,7 @@ function _projectFromLegacy(): Partial<SettingsPayload> {
     brain: us.brain as SettingsPayload['brain'],
     assistArmed: us.assistArmed,
     manualLive: us.manualLive as Record<string, unknown> | null | undefined,
+    manualTestnet: (us as any).manualTestnet,
     ptLevDemo: us.ptLevDemo,
     ptLevLive: us.ptLevLive,
     ptMarginMode: us.ptMarginMode,
@@ -407,6 +408,7 @@ function _projectToLegacy(settings: SettingsPayload): void {
   }
   if (settings.assistArmed !== undefined) us.assistArmed = settings.assistArmed
   if (settings.manualLive !== undefined) (us as any).manualLive = settings.manualLive
+  if ((settings as any).manualTestnet !== undefined) (us as any).manualTestnet = (settings as any).manualTestnet
   if (settings.ptLevDemo !== undefined) (us as any).ptLevDemo = settings.ptLevDemo
   if (settings.ptLevLive !== undefined) (us as any).ptLevLive = settings.ptLevLive
   if (settings.ptMarginMode !== undefined) (us as any).ptMarginMode = settings.ptMarginMode

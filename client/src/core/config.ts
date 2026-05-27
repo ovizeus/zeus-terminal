@@ -1705,6 +1705,7 @@ function _usApplyFlatToUserSettings(flat: Record<string, any>): void {
     'riskPct', 'maxDay', 'lossStreak', 'maxAddon', 'adaptEnabled', 'adaptLive', 'smartExitEnabled']
   for (const k of atKeys) if (flat[k] !== undefined) USER_SETTINGS.autoTrade[k] = flat[k]
   if (flat.manualLive !== undefined) USER_SETTINGS.manualLive = flat.manualLive
+  if (flat.manualTestnet !== undefined) USER_SETTINGS.manualTestnet = flat.manualTestnet
   if (flat.ptLevDemo !== undefined) USER_SETTINGS.ptLevDemo = flat.ptLevDemo
   if (flat.ptLevLive !== undefined) USER_SETTINGS.ptLevLive = flat.ptLevLive
   if (flat.ptMarginMode !== undefined) USER_SETTINGS.ptMarginMode = flat.ptMarginMode

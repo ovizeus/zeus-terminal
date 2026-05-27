@@ -155,7 +155,7 @@ const SETTINGS_SHAPE = {
   candleColors: 'object', heatmapSettings: 'object',
   indSettings: 'object', liqSettings: 'object', llvSettings: 'object',
   zsSettings: 'object', srSettings: 'object', alertSettings: 'object',
-  manualLive: 'object', dslSettings: 'object',
+  manualLive: 'object', manualTestnet: 'object', dslSettings: 'object',
   // [BRAIN-MODE-SPLIT b74] per-AT-mode brain namespace — nested { live, demo }
   brain: 'object',
 };
