@@ -109,3 +109,168 @@ describe('wsMarketProxy Binance connection', () => {
         spy.mockRestore();
     });
 });
+
+describe('wsMarketProxy broadcast + cache', () => {
+    test('broadcast sends JSON to all subscribers of a symbol', () => {
+        const ws1 = { readyState: 1, send: jest.fn() };
+        const ws2 = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws1, 'BTCUSDT');
+        proxy.subscribe(ws2, 'BTCUSDT');
+
+        proxy._broadcast('BTCUSDT', { type: 'market.price', symbol: 'BTCUSDT', price: 75000 });
+
+        expect(ws1.send).toHaveBeenCalledTimes(1);
+        expect(ws2.send).toHaveBeenCalledTimes(1);
+        const parsed = JSON.parse(ws1.send.mock.calls[0][0]);
+        expect(parsed.type).toBe('market.price');
+        expect(parsed.price).toBe(75000);
+    });
+
+    test('broadcast skips closed clients', () => {
+        const wsOpen = { readyState: 1, send: jest.fn() };
+        const wsClosed = { readyState: 3, send: jest.fn() };
+        proxy.subscribe(wsOpen, 'BTCUSDT');
+        proxy.subscribe(wsClosed, 'BTCUSDT');
+
+        proxy._broadcast('BTCUSDT', { type: 'market.price', symbol: 'BTCUSDT', price: 75000 });
+
+        expect(wsOpen.send).toHaveBeenCalled();
+        expect(wsClosed.send).not.toHaveBeenCalled();
+    });
+
+    test('broadcast does not send to subscribers of different symbol', () => {
+        const wsBtc = { readyState: 1, send: jest.fn() };
+        const wsEth = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(wsBtc, 'BTCUSDT');
+        proxy.subscribe(wsEth, 'ETHUSDT');
+
+        proxy._broadcast('BTCUSDT', { type: 'market.price', symbol: 'BTCUSDT', price: 75000 });
+
+        expect(wsBtc.send).toHaveBeenCalled();
+        expect(wsEth.send).not.toHaveBeenCalled();
+    });
+
+    test('last value cache updated on broadcast', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._broadcast('BTCUSDT', { type: 'market.price', symbol: 'BTCUSDT', price: 75000 });
+
+        const cached = proxy.getLastValue('BTCUSDT', 'market.price');
+        expect(cached).not.toBeNull();
+        expect(cached.price).toBe(75000);
+    });
+
+    test('getLastValue returns null for unknown', () => {
+        expect(proxy.getLastValue('XYZUSDT', 'market.price')).toBeNull();
+    });
+
+    test('new subscriber receives last cached values immediately', () => {
+        const ws1 = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws1, 'BTCUSDT');
+        proxy._broadcast('BTCUSDT', { type: 'market.price', symbol: 'BTCUSDT', price: 75000 });
+        proxy._broadcast('BTCUSDT', { type: 'market.depth', symbol: 'BTCUSDT', bids: [], asks: [] });
+        ws1.send.mockClear();
+
+        const ws2 = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws2, 'BTCUSDT');
+
+        // ws2 should get cached price + depth immediately
+        expect(ws2.send).toHaveBeenCalledTimes(2);
+        // ws1 should NOT get them again
+        expect(ws1.send).not.toHaveBeenCalled();
+    });
+});
+
+describe('wsMarketProxy _handleBinanceMessage', () => {
+    test('markPrice stream → market.price broadcast', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@markPrice@1s',
+            data: { p: '75000.50', r: '0.0001', T: 1779900000000 }
+        });
+
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.type).toBe('market.price');
+        expect(msg.price).toBe(75000.50);
+        expect(msg.fr).toBe(0.0001);
+    });
+
+    test('depth20 stream → market.depth broadcast', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@depth20@500ms',
+            data: { b: [['74999', '1.5']], a: [['75001', '2.0']] }
+        });
+
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.type).toBe('market.depth');
+        expect(msg.bids[0]).toEqual({ p: 74999, q: 1.5 });
+        expect(msg.asks[0]).toEqual({ p: 75001, q: 2.0 });
+    });
+
+    test('kline stream → market.kline broadcast', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@kline_5m',
+            data: { k: { i: '5m', t: 1779900000000, o: '75000', h: '75100', l: '74900', c: '75050', v: '100', x: false } }
+        });
+
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.type).toBe('market.kline');
+        expect(msg.tf).toBe('5m');
+        expect(msg.bar.close).toBe(75050);
+        expect(msg.closed).toBe(false);
+    });
+
+    test('aggTrade stream → market.aggTrade broadcast', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: 'btcusdt@aggTrade',
+            data: { p: '75000', q: '0.5', m: true, T: 1779900000000 }
+        });
+
+        const msg = JSON.parse(ws.send.mock.calls[0][0]);
+        expect(msg.type).toBe('market.aggTrade');
+        expect(msg.p).toBe(75000);
+        expect(msg.q).toBe(0.5);
+        expect(msg.m).toBe(true);
+    });
+
+    test('forceOrder stream → market.liq broadcast to ALL subscribers', () => {
+        const wsBtc = { readyState: 1, send: jest.fn() };
+        const wsEth = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(wsBtc, 'BTCUSDT');
+        proxy.subscribe(wsEth, 'ETHUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', {
+            stream: '!forceOrder@arr',
+            data: { o: { s: 'BTCUSDT', S: 'SELL', q: '1.5', p: '74500' } }
+        });
+
+        // Liquidation broadcasts to ALL (not just BTCUSDT subscribers)
+        expect(wsBtc.send).toHaveBeenCalled();
+        expect(wsEth.send).toHaveBeenCalled();
+        const msg = JSON.parse(wsBtc.send.mock.calls[0][0]);
+        expect(msg.type).toBe('market.liq');
+        expect(msg.side).toBe('SELL');
+    });
+
+    test('ignores message without stream/data', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        proxy.subscribe(ws, 'BTCUSDT');
+
+        proxy._handleBinanceMessage('BTCUSDT', { result: null });
+        proxy._handleBinanceMessage('BTCUSDT', {});
+
+        expect(ws.send).not.toHaveBeenCalled();
+    });
+});

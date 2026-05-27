@@ -14,9 +14,11 @@ function subscribe(ws, symbol) {
     const sym = symbol.toUpperCase();
     if (!_subs.has(sym)) _subs.set(sym, new Set());
     const wasEmpty = _subs.get(sym).size === 0;
+    const isNew = !_subs.get(sym).has(ws);
     _subs.get(sym).add(ws);
     if (!_clientSyms.has(ws)) _clientSyms.set(ws, new Set());
     _clientSyms.get(ws).add(sym);
+    if (isNew) _sendCachedValues(ws, sym);
     return { isNewSymbol: wasEmpty };
 }
 
@@ -143,8 +145,93 @@ function getConnectionState(symbol) {
     return conn ? conn.state : 'CLOSED';
 }
 
-function _handleBinanceMessage(_symbol, _msg) {
-    // Task 3 implements full routing
+// ═══ Broadcast engine + last value cache ═══
+
+function _broadcast(symbol, payload) {
+    const sym = symbol.toUpperCase();
+    const json = JSON.stringify(payload);
+    _lastValues.set(`${sym}:${payload.type}`, payload);
+    const subs = _subs.get(sym);
+    if (!subs) return;
+    for (const ws of subs) {
+        try { if (ws.readyState === 1) ws.send(json); } catch (_) {}
+    }
+}
+
+function _broadcastAll(payload) {
+    const json = JSON.stringify(payload);
+    if (payload.symbol) _lastValues.set(`${payload.symbol.toUpperCase()}:${payload.type}`, payload);
+    for (const [, subs] of _subs) {
+        for (const ws of subs) {
+            try { if (ws.readyState === 1) ws.send(json); } catch (_) {}
+        }
+    }
+}
+
+function getLastValue(symbol, type) {
+    return _lastValues.get(`${symbol.toUpperCase()}:${type}`) || null;
+}
+
+function _sendCachedValues(ws, symbol) {
+    const sym = symbol.toUpperCase();
+    const types = ['market.price', 'market.depth', 'market.wl'];
+    for (const type of types) {
+        const cached = _lastValues.get(`${sym}:${type}`);
+        if (cached) {
+            try { if (ws.readyState === 1) ws.send(JSON.stringify(cached)); } catch (_) {}
+        }
+    }
+}
+
+// ═══ Binance message handler ═══
+
+function _handleBinanceMessage(symbol, msg) {
+    if (!msg || (!msg.stream && !msg.data)) return;
+    const d = msg.data;
+    if (!d) return;
+    const stream = msg.stream || '';
+
+    if (stream.includes('markPrice')) {
+        _broadcast(symbol, {
+            type: 'market.price', symbol,
+            price: +d.p, fr: +d.r, frCd: +d.T, ts: Date.now(),
+        });
+    } else if (stream.includes('depth20')) {
+        _broadcast(symbol, {
+            type: 'market.depth', symbol,
+            bids: (d.b || []).map(([p, q]) => ({ p: +p, q: +q })),
+            asks: (d.a || []).map(([p, q]) => ({ p: +p, q: +q })),
+            ts: Date.now(),
+        });
+    } else if (stream.includes('kline_')) {
+        const k = d.k;
+        if (!k) return;
+        _broadcast(symbol, {
+            type: 'market.kline', symbol,
+            tf: k.i,
+            bar: { time: Math.floor(k.t / 1000), open: +k.o, high: +k.h, low: +k.l, close: +k.c, volume: +k.v },
+            closed: !!k.x, ts: Date.now(),
+        });
+    } else if (stream.includes('aggTrade') || stream.includes('@trade')) {
+        _broadcast(symbol, {
+            type: 'market.aggTrade', symbol,
+            p: +d.p, q: +d.q, m: !!d.m, T: d.T, ts: Date.now(),
+        });
+    } else if (stream.includes('forceOrder')) {
+        const o = d.o || d;
+        _broadcastAll({
+            type: 'market.liq', symbol: o.s || symbol,
+            side: o.S, qty: +o.q, price: +o.p, exchange: 'binance', ts: Date.now(),
+        });
+    } else if (stream.includes('miniTicker') || stream.includes('bookTicker')) {
+        const sym = d.s || symbol;
+        const price = stream.includes('bookTicker') ? (+d.b + +d.a) / 2 : +d.c;
+        const chg = stream.includes('bookTicker') ? 0 : ((+d.c - +d.o) / +d.o * 100);
+        _broadcastAll({
+            type: 'market.wl', symbol: sym,
+            price, chg, ts: Date.now(),
+        });
+    }
 }
 
 function _resetForTest() {
@@ -166,9 +253,14 @@ module.exports = {
     getSubscribers,
     getActiveSymbols,
     getConnectionState,
+    getLastValue,
     _buildStreamUrl,
     _createBinanceWs,
     _connectSymbol,
     _disconnectSymbol,
+    _broadcast,
+    _broadcastAll,
+    _handleBinanceMessage,
+    _sendCachedValues,
     _resetForTest,
 };
