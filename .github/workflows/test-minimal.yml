@@ -1,0 +1,9 @@
+name: Minimal Smoke Test
+on: push
+jobs:
+  smoke:
+    runs-on: ubuntu-22.04
+    steps:
+      - run: echo "Runner alive"
+      - run: node --version
+      - run: uname -a
