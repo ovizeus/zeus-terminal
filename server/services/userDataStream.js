@@ -5,7 +5,13 @@ const { sendSignedRequest } = require('./binanceSigner');
 const logger = require('./logger');
 const MF = require('../migrationFlags');
 
-const WS_BASE = 'wss://fstream.binance.com/ws/';
+const WS_BASE_PROD = 'wss://fstream.binance.com/ws/';
+const WS_BASE_TESTNET = 'wss://stream.binancefuture.com/ws/';
+
+function _wsBase(creds) {
+    if (creds && creds.baseUrl && creds.baseUrl.includes('testnet')) return WS_BASE_TESTNET;
+    return WS_BASE_PROD;
+}
 const REFRESH_INTERVAL_MS = 25 * 60 * 1000;
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 30000;
@@ -105,7 +111,9 @@ async function connect(userId, creds, onEvent) {
         return;
     }
 
-    _ws = new WebSocket(WS_BASE + _listenKey);
+    const wsUrl = _wsBase(creds) + _listenKey;
+    logger.info('USERDATA', `connecting WS uid=${userId} url=${wsUrl.replace(_listenKey, '***')}`);
+    _ws = new WebSocket(wsUrl);
 
     _ws.on('open', () => {
         _health.connected = true;
