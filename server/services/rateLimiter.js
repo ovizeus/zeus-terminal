@@ -10,7 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const POOLS = {
-    'binance:futures': { capacity: 2400, windowMs: 60000, throttlePct: 80, haltPct: 95 },
+    'binance:futures': { capacity: 6000, windowMs: 60000, throttlePct: 80, haltPct: 95 },
     'binance:spot':    { capacity: 1200, windowMs: 60000, throttlePct: 80, haltPct: 95 },
     'bybit:v5':        { capacity: 120,  windowMs: 10000, throttlePct: 80, haltPct: 95 },
 };
