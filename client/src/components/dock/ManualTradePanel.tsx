@@ -93,9 +93,11 @@ export function ManualTradePanel() {
     setTimeout(() => onDemoOrdTypeChange(), 0)
   }, [])
 
-  // Sync leverage to TP + call onDemoLevChange
+  // Sync leverage to TP + call onDemoLevChange + persist
   const handleLevChange = useCallback((val: string) => {
     setLev(val)
+    const numLev = [1,2,3,5,10,15,20,25,50,75,100,125].includes(+val) ? +val : null
+    if (numLev && w.USER_SETTINGS) { w.USER_SETTINGS.ptLevDemo = numLev; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
     if (typeof onDemoLevChange === 'function') {
       setTimeout(() => onDemoLevChange(), 0)
     }
@@ -103,9 +105,16 @@ export function ManualTradePanel() {
 
   const handleCustomLevChange = useCallback((val: number) => {
     setCustomLev(val)
+    if (Number.isFinite(val) && val > 0 && w.USER_SETTINGS) { w.USER_SETTINGS.ptLevDemo = val; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
     if (typeof w.updateDemoLiqPrice === 'function') {
       setTimeout(() => w.updateDemoLiqPrice(), 0)
     }
+  }, [])
+
+  const handleSizeChange = useCallback((val: string) => {
+    setSize(val)
+    const n = +val
+    if (Number.isFinite(n) && n > 0 && w.USER_SETTINGS?.autoTrade) { w.USER_SETTINGS.autoTrade.size = n; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
   }, [])
 
   // Balance now from positionsStore (reactive, no polling needed)
@@ -130,7 +139,7 @@ export function ManualTradePanel() {
 
   function setPct(pct: number) {
     const bal = isLiveMode ? liveBalanceTotal : demoBalance
-    setSize((bal * pct / 100).toFixed(0))
+    handleSizeChange((bal * pct / 100).toFixed(0))
   }
 
   // Attach confirm-close pattern on CLOSE ALL button
@@ -240,7 +249,7 @@ export function ManualTradePanel() {
           </div>
           <div className="tp-field">
             <div className="tp-lbl">SIZE (USDT)</div>
-            <input type="number" id="demoSize" className="tp-inp" value={size} onChange={e => setSize(e.target.value)} step={10} />
+            <input type="number" id="demoSize" className="tp-inp" value={size} onChange={e => handleSizeChange(e.target.value)} step={10} />
           </div>
         </div>
 
