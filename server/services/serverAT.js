@@ -238,9 +238,8 @@ function setGlobalHalt(active, byUserId, reason) {
     db.atSetState('global:halt', payload, byUserId);
     logger.warn('AT_ENGINE', `GLOBAL_HALT ${active ? 'ARMED' : 'DISARMED'} by uid=${byUserId}` + (reason ? ' — ' + reason : ''));
     try { audit.record('GLOBAL_HALT_TOGGLE', { active: !!active, by: byUserId, reason: reason || null }, 'SERVER_AT'); } catch (_) { /* best-effort */ }
-    // [Day 20] Doctor P0 alert pe GLOBAL HALT toggle (operator panic = critical event).
     _emitDoctor({
-        eventType: 'alert', severity: 'P0',
+        eventType: 'alert', severity: active ? 'P0' : 'P3',
         moduleId: 'serverAT.globalHalt', ts: Date.now(),
         payload: { active: !!active, by: byUserId, reason: reason || null }
     });
