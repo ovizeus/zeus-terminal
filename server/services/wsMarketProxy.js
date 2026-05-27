@@ -183,6 +183,64 @@ function _sendCachedValues(ws, symbol) {
     }
 }
 
+// ═══ Watchlist always-on stream ═══
+
+const WATCHLIST_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'ADAUSDT', 'ZECUSDT'];
+let _wlWs = null;
+let _wlPingTimer = null;
+let _wlReconnectTimer = null;
+
+function _buildWatchlistUrl(symbols) {
+    const syms = symbols || WATCHLIST_SYMBOLS;
+    const streams = syms.map(s => s.toLowerCase() + '@miniTicker').join('/');
+    return `${BINANCE_STREAM_BASE}/stream?streams=${streams}`;
+}
+
+function startWatchlist(symbols) {
+    if (_wlWs) return;
+    const url = _buildWatchlistUrl(symbols);
+    const ws = module.exports._createBinanceWs(url);
+    _wlWs = ws;
+
+    ws.on('open', () => {
+        _wlPingTimer = setInterval(() => {
+            try { if (ws.readyState === 1) ws.ping(); } catch (_) {}
+        }, PING_INTERVAL_MS);
+    });
+
+    ws.on('message', (raw) => {
+        try {
+            const msg = JSON.parse(raw);
+            if (msg.data) {
+                const d = msg.data;
+                const sym = d.s;
+                if (!sym) return;
+                const price = +d.c;
+                const chg = d.o && +d.o > 0 ? ((+d.c - +d.o) / +d.o * 100) : 0;
+                _broadcastAll({ type: 'market.wl', symbol: sym, price, chg, ts: Date.now() });
+            }
+        } catch (_) {}
+    });
+
+    ws.on('close', () => {
+        if (_wlPingTimer) { clearInterval(_wlPingTimer); _wlPingTimer = null; }
+        _wlWs = null;
+        _wlReconnectTimer = setTimeout(() => startWatchlist(symbols), 5000);
+    });
+
+    ws.on('error', () => {});
+}
+
+function stopWatchlist() {
+    if (_wlPingTimer) { clearInterval(_wlPingTimer); _wlPingTimer = null; }
+    if (_wlReconnectTimer) { clearTimeout(_wlReconnectTimer); _wlReconnectTimer = null; }
+    if (_wlWs) { try { _wlWs.close(); } catch (_) {} _wlWs = null; }
+}
+
+function isWatchlistActive() {
+    return _wlWs !== null;
+}
+
 // ═══ Client message handler (from /ws/sync) ═══
 
 const DEFAULT_TIMEFRAMES = ['5m', '1h', '4h'];
@@ -270,13 +328,14 @@ function _handleBinanceMessage(symbol, msg) {
 function _resetForTest() {
     _subs.clear();
     _clientSyms.clear();
-    for (const [sym, conn] of _connections) {
+    for (const [, conn] of _connections) {
         if (conn.pingTimer) clearInterval(conn.pingTimer);
         if (conn._reconnectTimer) clearTimeout(conn._reconnectTimer);
         try { conn.ws.close(); } catch (_) {}
     }
     _connections.clear();
     _lastValues.clear();
+    stopWatchlist();
 }
 
 module.exports = {
@@ -291,6 +350,10 @@ module.exports = {
     _createBinanceWs,
     _connectSymbol,
     _disconnectSymbol,
+    startWatchlist,
+    stopWatchlist,
+    isWatchlistActive,
+    _buildWatchlistUrl,
     handleClientMessage,
     handleClientDisconnect,
     _broadcast,

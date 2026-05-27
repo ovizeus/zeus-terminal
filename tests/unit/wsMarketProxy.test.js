@@ -339,3 +339,42 @@ describe('wsMarketProxy handleClientMessage', () => {
         expect(proxy.getSubscribers('SOLUSDT').size).toBe(1);
     });
 });
+
+describe('wsMarketProxy watchlist', () => {
+    test('buildWatchlistUrl creates combined miniTicker URL for symbols', () => {
+        const url = proxy._buildWatchlistUrl(['BTCUSDT', 'ETHUSDT']);
+        expect(url).toContain('fstream.binance.com/stream?streams=');
+        expect(url).toContain('btcusdt@miniTicker');
+        expect(url).toContain('ethusdt@miniTicker');
+    });
+
+    test('buildWatchlistUrl uses default 8 symbols when none provided', () => {
+        const url = proxy._buildWatchlistUrl();
+        expect(url).toContain('btcusdt@miniTicker');
+        expect(url).toContain('ethusdt@miniTicker');
+        expect(url).toContain('solusdt@miniTicker');
+        expect(url).toContain('bnbusdt@miniTicker');
+    });
+
+    test('startWatchlist opens WS to Binance', () => {
+        const mockWs = { on: jest.fn(), send: jest.fn(), close: jest.fn(), ping: jest.fn(), readyState: 0 };
+        jest.spyOn(proxy, '_createBinanceWs').mockReturnValue(mockWs);
+
+        proxy.startWatchlist();
+        expect(proxy._createBinanceWs).toHaveBeenCalledWith(expect.stringContaining('miniTicker'));
+        expect(proxy.isWatchlistActive()).toBe(true);
+
+        proxy._createBinanceWs.mockRestore();
+    });
+
+    test('startWatchlist is idempotent — second call does nothing', () => {
+        const mockWs = { on: jest.fn(), send: jest.fn(), close: jest.fn(), ping: jest.fn(), readyState: 0 };
+        const spy = jest.spyOn(proxy, '_createBinanceWs').mockReturnValue(mockWs);
+
+        proxy.startWatchlist();
+        proxy.startWatchlist();
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        spy.mockRestore();
+    });
+});
