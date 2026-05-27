@@ -154,22 +154,33 @@ router.get('/audit/me', (req, res) => {
 });
 
 // ─── GET /api/balance ───
+// [FIX 2026-05-27] Cache last known-good balance per user so UI never shows $0
+// during temporary Binance unavailability (ban, rate limit, network).
+const _balanceCache = new Map();
 router.get('/balance', async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
+  const uid = req.user && req.user.id;
   try {
     const data = await sendSignedRequest('GET', '/fapi/v2/balance', {}, req.exchangeCreds);
     const usdt = data.find(a => a.asset === 'USDT') || {};
-    res.json({
+    const result = {
       totalBalance: parseFloat(usdt.balance || 0),
       availableBalance: parseFloat(usdt.availableBalance || 0),
       unrealizedPnL: parseFloat(usdt.crossUnPnl || 0),
-    });
+    };
+    if (uid && result.totalBalance > 0) _balanceCache.set(uid, { ...result, cachedAt: Date.now() });
+    res.json(result);
   } catch (err) {
     console.error('[API] balance error:', err.message);
     logger.error('API', 'balance error', { error: err.message });
-    res.status(err.status || 500).json({ error: _safeError(err) });
+    const cached = uid && _balanceCache.get(uid);
+    if (cached) {
+      res.json({ ...cached, _cached: true, _reason: err.message });
+    } else {
+      res.status(err.status || 500).json({ error: _safeError(err) });
+    }
   }
 });
 

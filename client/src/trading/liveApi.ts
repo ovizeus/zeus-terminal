@@ -167,15 +167,19 @@ export async function liveApiSyncState(): Promise<any> {
       liveApiGetBalance(),
       liveApiGetPositions(),
     ])
-    // Update balance
-    w.TP.liveBalance = bal.totalBalance || 0
-    w.TP.liveAvailableBalance = bal.availableBalance || 0
-    w.TP.liveUnrealizedPnL = bal.unrealizedPnL || 0
-    usePositionsStore.getState().setLiveBalance({
-      totalBalance: bal.totalBalance || 0,
-      availableBalance: bal.availableBalance || 0,
-      unrealizedPnL: bal.unrealizedPnL || 0,
-    })
+    // Update balance — never overwrite with 0 when existing balance is known
+    const _newBal = bal.totalBalance || 0
+    const _prevBal = w.TP.liveBalance || 0
+    if (_newBal > 0 || _prevBal <= 0) {
+      w.TP.liveBalance = _newBal
+      w.TP.liveAvailableBalance = bal.availableBalance || 0
+      w.TP.liveUnrealizedPnL = bal.unrealizedPnL || 0
+      usePositionsStore.getState().setLiveBalance({
+        totalBalance: _newBal,
+        availableBalance: bal.availableBalance || 0,
+        unrealizedPnL: bal.unrealizedPnL || 0,
+      })
+    }
     // [SRV-POS] Cache exchange positions for shadow comparison (both paths use this)
     w._lastExchangePositions = positions
 
