@@ -466,6 +466,30 @@ describe('binanceRateState.advanceState — auto SUPPRESSED→WARM on natural ba
     expect(advanced).toBe(false);
   });
 
+  test('clears banned_until after promoting to WARM (prevents re-warm loop)', () => {
+    const now = Date.now();
+    rateState.save({
+      banned_until: now - 1_000,
+      warm_until: 0,
+      consecutive_ban_count: 2,
+      last_ban_at: now - 60_000,
+    });
+
+    rateState.advanceState({ now });
+    const s1 = rateState.load();
+    expect(s1.warm_until).toBeGreaterThan(now);
+    expect(s1.banned_until).toBe(0);
+
+    // Simulate warm expiry — advanceState must NOT re-trigger warm
+    const afterWarm = s1.warm_until + 1000;
+    const advanced2 = rateState.advanceState({ now: afterWarm });
+    expect(advanced2).toBe(false);
+
+    // Mode should be NORMAL, not WARM again
+    const s2 = rateState.load();
+    expect(rateState.computeCurrentMode(s2, afterWarm)).toBe('NORMAL');
+  });
+
   test('writes SUPPRESSED→WARM transition log entry', () => {
     const now = Date.now();
     rateState.save({

@@ -338,6 +338,7 @@ function advanceState({ now }) {
   //       AND ban now expired (banned_until <= now)
   //       AND not already in warm (warm_until <= now)
   if (s.banned_until > 0 && s.banned_until <= now && (s.warm_until || 0) <= now) {
+    save({ banned_until: 0 });
     startWarmResume({ now });
     appendTransitionLog({
       from: 'SUPPRESSED',
