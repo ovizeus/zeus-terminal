@@ -4573,9 +4573,10 @@ async function _runReconciliation(isStartup) {
                                     }
                                 } catch (_) {}
                             }
-                            // If no open orders but orphan confirmed, also treat as Zeus-created
-                            // (SL/TP may have been cancelled already by V5.3)
-                            if (!isZeusCreated && openOrders.length === 0) isZeusCreated = true;
+                            // [FIX 2026-05-27] Removed false positive: zero open orders does NOT
+                            // imply Zeus-created. External positions (manual Binance UI trades)
+                            // also have zero SAT_ orders. Old logic auto-closed these → orphan
+                            // loop → rate-limit ban cascade on testnet.
                         } catch (oErr) {
                             logger.warn(label, `Open orders check failed for ${symbol}: ${oErr.message}`);
                         }
