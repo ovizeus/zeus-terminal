@@ -643,7 +643,18 @@ async function subscribe(symbol, timeframes) {
         // 4) Connect mark price stream (via combined WS)
         _addToCombinedStream(`${symLower}@markPrice@1s`, (data) => {
             if (data.p) _emit('price', { symbol: symUpper, price: +data.p });
-            if (data.r) _emit('fundingRate', { symbol: symUpper, rate: +data.r });
+            if (data.r) {
+                _emit('fundingRate', { symbol: symUpper, rate: +data.r });
+                try {
+                    const mc = require('./marketCache');
+                    mc.set('funding', 'binance:' + symUpper, {
+                        rate: +data.r,
+                        markPrice: data.p ? +data.p : 0,
+                        indexPrice: data.i ? +data.i : 0,
+                        ts: Date.now(),
+                    }, { caller: 'marketFeed:ws' });
+                } catch (_) {}
+            }
         });
 
         // 5) [BRAIN-V2] aggTrade stream for order flow analysis (via combined WS)

@@ -398,8 +398,10 @@ async function _pollOnce() {
     const streakCutoff = now - STREAK_WINDOW_MS * 4;
     for (const [k, v] of _streaks) if (v.lastTs < streakCutoff) _streaks.delete(k);
 
-    // ── funding-rate sub-poll (piggyback on the same tick) ──
-    if (FUNDING_ENABLED) {
+    // ── funding-rate sub-poll (every 5th tick = ~5 min, not every 60s) ──
+    // WS @markPrice@1s populates marketCache for tracked symbols in real-time.
+    // REST poll only needed for full top-300 fundingExtreme radar detection.
+    if (FUNDING_ENABLED && _tickCount % 5 === 0) {
         try { await _pollFunding(top, currentTopSet, now); }
         catch (err) { logger.error('RADAR', `funding sub-poll failed: ${err.message}`); }
     }
