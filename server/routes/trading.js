@@ -393,9 +393,10 @@ router.post('/order/place', validateOrderBody, async (req, res) => {
     if (newClientOrderId) {
       params.newClientOrderId = newClientOrderId;
     }
-    // [CLOSE-FIX] MARKET close: reduceOnly + exact quantity (no rounding, no dust)
+    // [CLOSE-FIX] MARKET close: reduceOnly + rounded to exchange stepSize
     if (closePosition === true && type === 'MARKET') {
-      params.quantity = String(quantity); // exact exchange qty, skip roundOrderParams
+      const _closRound = roundOrderParams(symbol, parseFloat(quantity));
+      params.quantity = String(_closRound.quantity || quantity);
       params.reduceOnly = 'true';
     }
     // [ALGO-FIX] Route STOP_MARKET/TAKE_PROFIT_MARKET to algo endpoint (Binance Dec 2025)
