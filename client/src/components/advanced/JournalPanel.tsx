@@ -78,10 +78,10 @@ export function JournalPanel() {
                   {t.side === 'LONG' ? 'L' : 'S'}
                 </span>
                 <span className="zr-journal__sym">{t.symbol.replace('USDT', '')}</span>
-                <span className="zr-journal__prices">
-                  {t.entryPrice?.toFixed(2) ?? '—'} → {t.exitPrice?.toFixed(2) ?? '—'}
+                <span className="zr-journal__prices" style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  ${t.entryPrice?.toFixed(2) ?? '—'}→${t.exitPrice?.toFixed(2) ?? '—'}
                 </span>
-                <span className={`zr-journal__pnl ${isWin ? 'zr-kv__value--grn' : 'zr-kv__value--red'}`}>
+                <span className={`zr-journal__pnl ${isWin ? 'zr-kv__value--grn' : 'zr-kv__value--red'}`} style={{ flexShrink: 0, minWidth: 65, textAlign: 'right' }}>
                   ${t.pnl.toFixed(2)}
                 </span>
                 <span className="zr-journal__reason">{t.exitReason}</span>
