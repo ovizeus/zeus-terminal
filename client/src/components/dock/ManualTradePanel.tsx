@@ -26,12 +26,12 @@ export function ManualTradePanel() {
   const [side, setSideLocal] = useState<'LONG' | 'SHORT'>(() => w.TP?.demoSide || 'LONG')
   const [ordType, setOrdType] = useState('market')
   const [marginMode, setMarginMode] = useState('cross')
-  const _savedLev = (() => { try { const v = (window as any).USER_SETTINGS?.ptLevDemo; if (v && Number.isFinite(+v)) { return [1,2,3,5,10,15,20,25,50,75,100,125].includes(+v) ? String(+v) : 'custom' } } catch(_){} return '5' })()
-  const _savedCustom = (() => { try { const v = (window as any).USER_SETTINGS?.ptLevDemo; if (v && Number.isFinite(+v) && ![1,2,3,5,10,15,20,25,50,75,100,125].includes(+v)) return +v } catch(_){} return 20 })()
+  const _savedLev = (() => { try { const v = w.USER_SETTINGS?.manualTestnet?.leverage ?? w.USER_SETTINGS?.ptLevDemo; if (v && Number.isFinite(+v)) { return [1,2,3,5,10,15,20,25,50,75,100,125].includes(+v) ? String(+v) : 'custom' } } catch(_){} return '5' })()
+  const _savedCustom = (() => { try { const v = w.USER_SETTINGS?.manualTestnet?.leverage ?? w.USER_SETTINGS?.ptLevDemo; if (v && Number.isFinite(+v) && ![1,2,3,5,10,15,20,25,50,75,100,125].includes(+v)) return +v } catch(_){} return 20 })()
   const [lev, setLev] = useState(_savedLev)
   const [customLev, setCustomLev] = useState(_savedCustom)
   const [entry, setEntry] = useState('')
-  const [size, setSize] = useState((() => { try { const v = (window as any).USER_SETTINGS?.autoTrade?.size; if (v && Number.isFinite(+v)) return String(+v) } catch(_){} return '100' })())
+  const [size, setSize] = useState((() => { try { const v = w.USER_SETTINGS?.manualTestnet?.size; if (v && Number.isFinite(+v)) return String(+v) } catch(_){} return '100' })())
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
   const demoBalance = usePositionsStore((s) => s.demoBalance)
@@ -93,11 +93,15 @@ export function ManualTradePanel() {
     setTimeout(() => onDemoOrdTypeChange(), 0)
   }, [])
 
-  // Sync leverage to TP + call onDemoLevChange + persist
+  // Sync leverage to TP + call onDemoLevChange + persist to manualTestnet
   const handleLevChange = useCallback((val: string) => {
     setLev(val)
     const numLev = [1,2,3,5,10,15,20,25,50,75,100,125].includes(+val) ? +val : null
-    if (numLev && w.USER_SETTINGS) { w.USER_SETTINGS.ptLevDemo = numLev; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+    if (numLev && w.USER_SETTINGS) {
+      w.USER_SETTINGS.manualTestnet = w.USER_SETTINGS.manualTestnet || {}
+      w.USER_SETTINGS.manualTestnet.leverage = numLev
+      if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
+    }
     if (typeof onDemoLevChange === 'function') {
       setTimeout(() => onDemoLevChange(), 0)
     }
@@ -105,7 +109,11 @@ export function ManualTradePanel() {
 
   const handleCustomLevChange = useCallback((val: number) => {
     setCustomLev(val)
-    if (Number.isFinite(val) && val > 0 && w.USER_SETTINGS) { w.USER_SETTINGS.ptLevDemo = val; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+    if (Number.isFinite(val) && val > 0 && w.USER_SETTINGS) {
+      w.USER_SETTINGS.manualTestnet = w.USER_SETTINGS.manualTestnet || {}
+      w.USER_SETTINGS.manualTestnet.leverage = val
+      if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
+    }
     if (typeof w.updateDemoLiqPrice === 'function') {
       setTimeout(() => w.updateDemoLiqPrice(), 0)
     }
@@ -114,7 +122,11 @@ export function ManualTradePanel() {
   const handleSizeChange = useCallback((val: string) => {
     setSize(val)
     const n = +val
-    if (Number.isFinite(n) && n > 0 && w.USER_SETTINGS?.autoTrade) { w.USER_SETTINGS.autoTrade.size = n; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() }
+    if (Number.isFinite(n) && n > 0 && w.USER_SETTINGS) {
+      w.USER_SETTINGS.manualTestnet = w.USER_SETTINGS.manualTestnet || {}
+      w.USER_SETTINGS.manualTestnet.size = n
+      if (typeof w._usScheduleSave === 'function') w._usScheduleSave()
+    }
   }, [])
 
   // Balance now from positionsStore (reactive, no polling needed)
