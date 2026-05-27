@@ -239,10 +239,10 @@ On `setSymbol(newSym)`:
 
 | Phase | Scope | Est. |
 |-------|-------|------|
-| B.13 | Dark launch flag (WS_PROXY_ENABLED with instant rollback) | 1h |
-| B.14 | Replay buffer (100 events/stream for reconnect gap fill) | 2h |
-| B.15 | Protocol versioning + structured correlation IDs | 1.5h |
-| B.16 | Cross-exchange sanity check (Binance vs Bybit price divergence) | 1.5h |
+| B.13 | Shadow validation: 1% client sample dual-stream XOR check, log divergence_ms/pct, 48h clean → deprecate old path | 1h |
+| B.14 | Cross-exchange sanity: Binance vs Bybit markPrice divergence (>0.5% warn, >2% STALE+trade block). Feasible post-Val1 because Bybit WS now proxied too | 1.5h |
+| B.15 | Replay buffer (100 events/stream for reconnect gap fill, kline+aggTrade only) | 2h |
+| B.16 | Protocol versioning + structured correlation IDs | 1.5h |
 | B.17 | Per-IP pre-auth limits + message size enforcement | 0.5h |
 | | **VAL 2 TOTAL** | **~6.5h** |
 
