@@ -59,3 +59,53 @@ describe('wsMarketProxy subscription registry', () => {
         expect(proxy.getActiveSymbols()).toEqual(['BTCUSDT']);
     });
 });
+
+describe('wsMarketProxy Binance connection', () => {
+    test('buildStreamUrl creates correct combined stream URL', () => {
+        const url = proxy._buildStreamUrl('BTCUSDT', ['5m', '1h']);
+        expect(url).toContain('fstream.binance.com/stream?streams=');
+        expect(url).toContain('btcusdt@markPrice@1s');
+        expect(url).toContain('btcusdt@depth20@500ms');
+        expect(url).toContain('btcusdt@kline_5m');
+        expect(url).toContain('btcusdt@kline_1h');
+        expect(url).toContain('btcusdt@aggTrade');
+        expect(url).toContain('!forceOrder@arr');
+    });
+
+    test('connectSymbol sets state to CONNECTING', () => {
+        const mockWs = { on: jest.fn(), send: jest.fn(), close: jest.fn(), ping: jest.fn(), readyState: 0 };
+        jest.spyOn(proxy, '_createBinanceWs').mockReturnValue(mockWs);
+
+        proxy._connectSymbol('BTCUSDT', ['5m']);
+        expect(proxy.getConnectionState('BTCUSDT')).toBe('CONNECTING');
+
+        proxy._createBinanceWs.mockRestore();
+    });
+
+    test('disconnectSymbol closes WS and sets state CLOSED', () => {
+        const mockWs = { on: jest.fn(), send: jest.fn(), close: jest.fn(), ping: jest.fn(), readyState: 1 };
+        jest.spyOn(proxy, '_createBinanceWs').mockReturnValue(mockWs);
+
+        proxy._connectSymbol('BTCUSDT', ['5m']);
+        proxy._disconnectSymbol('BTCUSDT');
+        expect(mockWs.close).toHaveBeenCalled();
+        expect(proxy.getConnectionState('BTCUSDT')).toBe('CLOSED');
+
+        proxy._createBinanceWs.mockRestore();
+    });
+
+    test('getConnectionState returns CLOSED for unknown symbol', () => {
+        expect(proxy.getConnectionState('XYZUSDT')).toBe('CLOSED');
+    });
+
+    test('connectSymbol is idempotent — second call does nothing', () => {
+        const mockWs = { on: jest.fn(), send: jest.fn(), close: jest.fn(), ping: jest.fn(), readyState: 0 };
+        const spy = jest.spyOn(proxy, '_createBinanceWs').mockReturnValue(mockWs);
+
+        proxy._connectSymbol('BTCUSDT', ['5m']);
+        proxy._connectSymbol('BTCUSDT', ['5m']);
+        expect(spy).toHaveBeenCalledTimes(1);
+
+        spy.mockRestore();
+    });
+});
