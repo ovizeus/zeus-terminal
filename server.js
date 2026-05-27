@@ -129,6 +129,13 @@ app.use((req, res, next) => {
 // ─── Global API rate limit (200 req/min per IP — catches abuse on all routes) ───
 app.use('/api', globalApiLimit);
 
+app.get('/api/userdatastream/health', (_req, res) => {
+  try {
+    const uds = require('./server/services/userDataStream');
+    res.json({ ok: true, ...uds.getHealthStatus() });
+  } catch (err) { res.json({ ok: false, error: err.message }); }
+});
+
 app.get('/health', (_req, res) => {
   const mem = process.memoryUsage();
   let dbOk = false;
@@ -1404,6 +1411,32 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     logger.info('SERVER', '[R0] substrate ring initialized → OK');
   } catch (err) {
     logger.error('SERVER', `[R0] init failed: ${err.message}`);
+  }
+
+  // [USERDATA] Per-user WebSocket stream for real-time position/order/balance updates.
+  // Replaces 60s REST poll with <100ms WS events when enabled.
+  try {
+    const uds = require('./server/services/userDataStream');
+    const serverAT = require('./server/services/serverAT');
+    const credStore = require('./server/services/credentialStore');
+    const MF = require('./server/migrationFlags');
+    if (MF.USERDATA_STREAM_ENABLED) {
+        const users = db.listUsers ? db.listUsers() : [];
+        for (const u of users) {
+            try {
+                const creds = credStore.getExchangeCreds(u.id);
+                if (creds && creds.apiKey) {
+                    const mode = serverAT.getMode(u.id) || 'demo';
+                    if (uds.resolveStreamFlag(mode)) {
+                        uds.connect(u.id, creds, (event) => serverAT.onUserDataEvent(u.id, event));
+                        logger.info('SERVER', `[USERDATA] stream started uid=${u.id} mode=${mode}`);
+                    }
+                }
+            } catch (_) {}
+        }
+    }
+  } catch (err) {
+    logger.error('SERVER', `[USERDATA] boot failed: ${err.message}`);
   }
 
   // [RADAR] Market Radar scanner — polls Binance top-300 USDT perps once/min

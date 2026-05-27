@@ -4247,7 +4247,8 @@ function updateDslParams(userId, seq, dslParams) {
 // [FULL-LIVE] Position Reconciliation + Order Health Monitor
 // Periodic check: Binance real state vs server tracked state
 // ══════════════════════════════════════════════════════════════════
-const RECON_INTERVAL_MS = 60000; // 60s
+const RECON_INTERVAL_MS = 60000; // 60s (reduced to 300s when userDataStream active)
+const RECON_INTERVAL_STREAM_MS = 300000; // 5 min safety net when WS provides real-time
 let _reconTimer = null;
 let _reconRunning = false;
 // [AUDIT] Per-user recon alert deduplication — prevents Telegram spam for recurring issues
@@ -4750,6 +4751,41 @@ async function _checkOrderHealth(pos, creds, label) {
     }
 }
 
+function onUserDataEvent(userId, event) {
+    if (!event || !event.e) return;
+    try {
+        const uds = require('./userDataStream');
+        if (event.e === 'ACCOUNT_UPDATE') {
+            const parsed = uds.parseAccountUpdate(event);
+            if (!parsed) return;
+            for (const p of parsed.positions) {
+                if (Math.abs(p.positionAmt) < 1e-10) continue;
+                logger.info('USERDATA', `[ACCOUNT_UPDATE] uid=${userId} ${p.symbol} amt=${p.positionAmt} entry=${p.entryPrice} upnl=${p.unrealizedPnL}`);
+            }
+            for (const b of parsed.balances) {
+                if (b.asset === 'USDT') {
+                    const us = _uState(userId);
+                    if (us) us.balance = b.walletBalance;
+                }
+            }
+        } else if (event.e === 'ORDER_TRADE_UPDATE') {
+            const parsed = uds.parseOrderUpdate(event);
+            if (!parsed) return;
+            if (parsed.executionType === 'TRADE' && parsed.orderStatus === 'FILLED') {
+                logger.info('USERDATA', `[ORDER_FILL] uid=${userId} ${parsed.side} ${parsed.symbol} qty=${parsed.filledQty} avgPx=${parsed.avgPrice} orderId=${parsed.orderId}`);
+            }
+        } else if (event.e === 'MARGIN_CALL') {
+            logger.warn('USERDATA', `[MARGIN_CALL] uid=${userId} — Telegram alert sent`);
+            try {
+                const tg = require('./telegram');
+                tg.sendToUser(userId, '🚨 *MARGIN CALL* — Check positions immediately!');
+            } catch (_) {}
+        }
+    } catch (err) {
+        logger.error('USERDATA', `onUserDataEvent failed uid=${userId}: ${err.message}`);
+    }
+}
+
 // Start periodic reconciliation (called once after module init)
 function _startReconciliation() {
     if (_reconTimer) return;
@@ -4896,6 +4932,7 @@ module.exports = {
     getDslEnabled,
     // Reconciliation (for manual trigger / testing)
     _runReconciliation,
+    onUserDataEvent,
     // Watchdog (for manual trigger / testing)
     _watchdogLiveNoSL,
     // [S5] Test-only hooks. Exposed via require but never called by any
