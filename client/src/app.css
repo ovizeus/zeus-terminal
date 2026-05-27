@@ -2029,11 +2029,16 @@ select.zac-select optgroup {
 .zr-journal__prices {
   color: var(--dim);
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .zr-journal__pnl {
   font-weight: 700;
-  min-width: 60px;
+  min-width: 65px;
   text-align: right;
+  flex-shrink: 0;
 }
 .zr-journal__reason {
   color: var(--dim);
