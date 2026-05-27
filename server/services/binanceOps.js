@@ -326,21 +326,18 @@ async function closePosition(uid, params, creds) {
         }
 
         // Cancel SL + TP (parallel, non-blocking on failure)
+        // [ORPHAN-FIX] Route through cancelOrder which handles algo+regular endpoints
         const cancelTasks = [];
         if (positionData.slOrderId) {
             cancelTasks.push(
-                sendSignedRequest('DELETE', '/fapi/v1/order', {
-                    symbol: params.symbol, orderId: positionData.slOrderId, recvWindow: 5000,
-                }, creds).catch(err => {
+                cancelOrder(uid, { symbol: params.symbol, orderId: positionData.slOrderId }, creds).catch(err => {
                     try { require('./logger').warn('BINANCE_OPS', `SL cancel failed seq=${params.seq}: ${err.message}`); } catch (_) {}
                 })
             );
         }
         if (positionData.tpOrderId) {
             cancelTasks.push(
-                sendSignedRequest('DELETE', '/fapi/v1/order', {
-                    symbol: params.symbol, orderId: positionData.tpOrderId, recvWindow: 5000,
-                }, creds).catch(err => {
+                cancelOrder(uid, { symbol: params.symbol, orderId: positionData.tpOrderId }, creds).catch(err => {
                     try { require('./logger').warn('BINANCE_OPS', `TP cancel failed seq=${params.seq}: ${err.message}`); } catch (_) {}
                 })
             );
@@ -525,7 +522,22 @@ async function ping(uid, creds) {
 }
 
 async function cancelOrder(uid, params, creds) {
-    const query = { symbol: params.symbol, recvWindow: 5000 };
+    const symbol = params.symbol;
+    const orderId = params.orderId || params.origClientOrderId;
+
+    // [ORPHAN-FIX] Try algo order cancel first (SL/TP moved to /algoOrder since Dec 2025),
+    // then fall back to regular order cancel. Without this, algo SL/TP orders are left
+    // on Binance after position close — consuming margin and blocking leverage changes.
+    try {
+        const algoResp = await sendSignedRequest('DELETE', '/fapi/v1/algoOrder', {
+            symbol, algoId: orderId, recvWindow: 5000,
+        }, creds);
+        if (algoResp && !algoResp.code) {
+            return { ok: true, orderId, status: 'CANCELLED', ts: Date.now(), rawExchange: 'binance' };
+        }
+    } catch (_) {}
+
+    const query = { symbol, recvWindow: 5000 };
     if (params.orderId) query.orderId = params.orderId;
     else if (params.origClientOrderId) query.origClientOrderId = params.origClientOrderId;
 
@@ -535,8 +547,8 @@ async function cancelOrder(uid, params, creds) {
     }
     return {
         ok: true,
-        orderId: resp.orderId,
-        status: resp.status,
+        orderId: resp.orderId || orderId,
+        status: resp.status || 'CANCELLED',
         ts: Date.now(),
         rawExchange: 'binance',
     };
