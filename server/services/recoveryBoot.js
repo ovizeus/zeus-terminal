@@ -154,6 +154,22 @@ async function _reconcileUser(uid, exchange) {
                     : Number(exchPos.entryPrice) * 0.95;
                 const stopPrice = String(Math.round(rawStop * 100) / 100);
 
+                // [FIX 2026-05-27] Skip SL if it would immediately trigger at current mark price.
+                // "Order would immediately trigger" = LONG SL above markPrice or SHORT SL below markPrice.
+                const mark = Number(exchPos.markPrice);
+                const stop = Number(stopPrice);
+                const wouldTrigger = (exchPos.side === 'LONG' && stop >= mark) || (exchPos.side === 'SHORT' && stop <= mark);
+                if (wouldTrigger) {
+                    _logWarn('RECOVERY_BOOT',
+                        `uid=${uid} ${symbol} ${exchPos.side}: SL $${stopPrice} would immediately trigger (mark=$${mark.toFixed(2)}) — skipping SL placement`);
+                    _positionEvents().append({
+                        position_seq: dbPos.seq, user_id: uid, exchange,
+                        event_type: 'RECOVERY_SL_SKIP_WOULD_TRIGGER',
+                        payload: { stopPrice, markPrice: mark, side: exchPos.side },
+                    });
+                    continue;
+                }
+
                 try {
                     const slResult = await exchangeOps.placeStopLoss(uid, {
                         symbol,
