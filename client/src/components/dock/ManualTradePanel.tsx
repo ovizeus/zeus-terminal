@@ -26,12 +26,31 @@ export function ManualTradePanel() {
   const [side, setSideLocal] = useState<'LONG' | 'SHORT'>(() => w.TP?.demoSide || 'LONG')
   const [ordType, setOrdType] = useState('market')
   const [marginMode, setMarginMode] = useState('cross')
-  const _savedLev = (() => { try { const v = w.USER_SETTINGS?.manualTestnet?.leverage ?? w.USER_SETTINGS?.ptLevDemo; if (v && Number.isFinite(+v)) { return [1,2,3,5,10,15,20,25,50,75,100,125].includes(+v) ? String(+v) : 'custom' } } catch(_){} return '5' })()
-  const _savedCustom = (() => { try { const v = w.USER_SETTINGS?.manualTestnet?.leverage ?? w.USER_SETTINGS?.ptLevDemo; if (v && Number.isFinite(+v) && ![1,2,3,5,10,15,20,25,50,75,100,125].includes(+v)) return +v } catch(_){} return 20 })()
-  const [lev, setLev] = useState(_savedLev)
-  const [customLev, setCustomLev] = useState(_savedCustom)
+  const [lev, setLev] = useState('5')
+  const [customLev, setCustomLev] = useState(20)
   const [entry, setEntry] = useState('')
-  const [size, setSize] = useState((() => { try { const v = w.USER_SETTINGS?.manualTestnet?.size; if (v && Number.isFinite(+v)) return String(+v) } catch(_){} return '100' })())
+  const [size, setSize] = useState('100')
+
+  // Sync from server-persisted manualTestnet after settings load (async race fix)
+  const _settingsApplied = useRef(false)
+  useEffect(() => {
+    const mt = w.USER_SETTINGS?.manualTestnet
+    if (!mt || _settingsApplied.current) return
+    _settingsApplied.current = true
+    if (mt.size && Number.isFinite(+mt.size)) setSize(String(mt.size))
+    if (mt.leverage && Number.isFinite(+mt.leverage)) {
+      const v = +mt.leverage
+      setLev([1,2,3,5,10,15,20,25,50,75,100,125].includes(v) ? String(v) : 'custom')
+      if (![1,2,3,5,10,15,20,25,50,75,100,125].includes(v)) setCustomLev(v)
+    }
+    if (mt.marginMode) setMarginMode(mt.marginMode)
+  })
+  // Also re-sync on zeus:settingsLoaded event (fired after GET /api/user/settings)
+  useEffect(() => {
+    const handler = () => { _settingsApplied.current = false }
+    window.addEventListener('zeus:settingsLoaded', handler)
+    return () => window.removeEventListener('zeus:settingsLoaded', handler)
+  }, [])
   const [tp, setTp] = useState('')
   const [sl, setSl] = useState('')
   const demoBalance = usePositionsStore((s) => s.demoBalance)
@@ -223,7 +242,7 @@ export function ManualTradePanel() {
           </div>
           <div className="tp-field">
             <div className="tp-lbl">MARGIN MODE</div>
-            <select id="demoMarginMode" className="tp-sel" value={marginMode} onChange={e => setMarginMode(e.target.value)}>
+            <select id="demoMarginMode" className="tp-sel" value={marginMode} onChange={e => { setMarginMode(e.target.value); if (w.USER_SETTINGS) { w.USER_SETTINGS.manualTestnet = w.USER_SETTINGS.manualTestnet || {}; w.USER_SETTINGS.manualTestnet.marginMode = e.target.value; if (typeof w._usScheduleSave === 'function') w._usScheduleSave() } }}>
               <option value="cross">CROSS</option>
               <option value="isolated">ISOLATED</option>
             </select>
