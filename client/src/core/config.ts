@@ -1872,17 +1872,8 @@ export function _usSave() {
       sl: _iv('liveSL', null),
       tp: _iv('liveTP', null),
     }
-    // Manual testnet panel — only overwrite from DOM when panel is visible
-    const _demoSizeEl = document.getElementById('demoSize') as any
-    if (_demoSizeEl) {
-      USER_SETTINGS.manualTestnet = USER_SETTINGS.manualTestnet || {}
-      USER_SETTINGS.manualTestnet.size = parseFloat(_demoSizeEl.value) || USER_SETTINGS.manualTestnet.size || 100
-    }
-    const _demoLevEl = document.getElementById('demoLev') as any
-    if (_demoLevEl) {
-      USER_SETTINGS.manualTestnet = USER_SETTINGS.manualTestnet || {}
-      USER_SETTINGS.manualTestnet.leverage = parseFloat(_demoLevEl.value) || USER_SETTINGS.manualTestnet.leverage || 5
-    }
+    // Manual testnet panel — preserved as-is (written by ManualTradePanel React handlers).
+    // Do NOT read from DOM here — React controlled inputs and _iv helper race.
     USER_SETTINGS.ptLevDemo = (typeof w.getDemoLev === 'function') ? w.getDemoLev() : null
     USER_SETTINGS.ptLevLive = getLiveLev()
     const _dmm = document.getElementById('demoMarginMode') as any
