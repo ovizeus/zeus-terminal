@@ -27,6 +27,9 @@ import { usePositionsStore } from '../stores/positionsStore'
 
 let _started = false
 let _unsub: (() => void) | null = null
+let _lastReceivedTs = 0
+let _stalenessTimer: ReturnType<typeof setInterval> | null = null
+const STALENESS_MS = 120000
 
 export function startPositionsRealtime(): void {
   if (_started) return
@@ -35,9 +38,6 @@ export function startPositionsRealtime(): void {
   _unsub = wsService.subscribe((msg: WsMessage) => {
     if (msg.type !== 'positions.changed') return
 
-    // Defensive shape check — the WsMessage union narrows msg here, but the
-    // runtime payload ultimately comes from the wire. A malformed frame must
-    // not crash the subscriber or reach the store.
     const snap = msg.snapshot
     if (
       !snap ||
@@ -48,15 +48,29 @@ export function startPositionsRealtime(): void {
       return
     }
 
+    // [FLICKER-FIX] Mark WS positions as active — state.ts REST poll defers to WS
+    _lastReceivedTs = Date.now()
+    ;(window as any)._positionsChangedActive = true
+
     try {
       usePositionsStore.getState().applyDelta(snap)
     } catch {
-      /* store handles dedup + validation silently; swallow any unforeseen throw */
+      /* store handles dedup + validation silently */
     }
   })
+
+  // [FLICKER-FIX] Staleness check — if no positions.changed for 120s, fall back to REST
+  _stalenessTimer = setInterval(() => {
+    if (_lastReceivedTs > 0 && Date.now() - _lastReceivedTs > STALENESS_MS) {
+      ;(window as any)._positionsChangedActive = false
+    }
+  }, 30000)
 }
 
 export function stopPositionsRealtime(): void {
   if (_unsub) { _unsub(); _unsub = null }
+  if (_stalenessTimer) { clearInterval(_stalenessTimer); _stalenessTimer = null }
+  ;(window as any)._positionsChangedActive = false
   _started = false
+  _lastReceivedTs = 0
 }

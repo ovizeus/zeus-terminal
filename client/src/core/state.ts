@@ -1307,8 +1307,14 @@ export const ZState = (() => {
       try {
         if (_srvPosActive) {
           // Flag ON: server positions are CANONICAL — no clientOnly merge
-          TP.demoPositions = serverATDemo
-          TP.livePositions = serverATLive
+          // [FLICKER-FIX] When WS positions.changed is active, skip REST overwrite.
+          // WS is real-time; REST poll is stale by up to 10s and causes flicker
+          // by replacing positions with a snapshot that may be missing newly opened ones.
+          const _wsActive = (w as any)._positionsChangedActive === true
+          if (!_wsActive) {
+            TP.demoPositions = serverATDemo
+            TP.livePositions = serverATLive
+          }
         } else {
           // Flag OFF: legacy merge (server + clientOnly)
           TP.demoPositions = _nextDemoPositions
@@ -1416,7 +1422,7 @@ export const ZState = (() => {
   function _startATPolling() {
     if (_atPollTimer) return
     _atPollOnce()
-    _atPollTimer = w.Intervals.set('atPoll', _atPollOnce, 10000)
+    _atPollTimer = w.Intervals.set('atPoll', _atPollOnce, 30000)
   }
 
   function _retryFailedCloses() {

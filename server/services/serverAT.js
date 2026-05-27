@@ -4251,6 +4251,7 @@ const RECON_INTERVAL_MS = 60000; // 60s (reduced to 300s when userDataStream act
 const RECON_INTERVAL_STREAM_MS = 300000; // 5 min safety net when WS provides real-time
 let _reconTimer = null;
 let _reconRunning = false;
+let _phantomCandidates = null;
 // [AUDIT] Per-user recon alert deduplication — prevents Telegram spam for recurring issues
 // [batch2-M1] Maps with 24h TTL, not Sets — previously alerts for the same key were
 // suppressed forever, so a repeating SL failure on an unprotected position went silent
@@ -4429,6 +4430,17 @@ async function _runReconciliation(isStartup) {
                 // Note: side check redundant post-T2a (key includes side) dar
                 // kept as belt-and-suspenders pentru defensive coding.
                 if (!bpos || bpos.side !== pos.side) {
+                    // [FLICKER-FIX] 2-tick confirmation — don't close phantom on first detection.
+                    // Testnet API latency/timeouts can cause false phantom for 1 tick.
+                    if (!_phantomCandidates) _phantomCandidates = new Map();
+                    const _pk = `${pos.seq}_${pos.symbol}`;
+                    const _prevCount = _phantomCandidates.get(_pk) || 0;
+                    if (_prevCount < 1) {
+                        _phantomCandidates.set(_pk, _prevCount + 1);
+                        logger.info(label, `[${pos.seq}] phantom candidate ${pos.side} ${pos.symbol} — ${_prevCount + 1}/2 confirmations (deferring close)`);
+                        continue;
+                    }
+                    _phantomCandidates.delete(_pk);
                     logger.warn(label, `[${pos.seq}] PHANTOM DETECTED uid=${userId}: ${pos.side} ${pos.symbol} not found on Binance — closing locally`);
 
                     // Query userTrades for real fill price (best-effort)
