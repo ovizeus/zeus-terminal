@@ -378,3 +378,69 @@ describe('wsMarketProxy watchlist', () => {
         spy.mockRestore();
     });
 });
+
+describe('wsMarketProxy circuit breaker', () => {
+    test('recordReconnectFailure increments failure count', () => {
+        proxy._recordReconnectFailure('BTCUSDT');
+        proxy._recordReconnectFailure('BTCUSDT');
+        const health = proxy.getStreamHealth('BTCUSDT');
+        expect(health.reconnectFailures).toBe(2);
+    });
+
+    test('circuit opens after 5 failures within 60s', () => {
+        for (let i = 0; i < 5; i++) proxy._recordReconnectFailure('BTCUSDT');
+        const health = proxy.getStreamHealth('BTCUSDT');
+        expect(health.circuitState).toBe('OPEN');
+    });
+
+    test('circuit stays CLOSED under 5 failures', () => {
+        for (let i = 0; i < 4; i++) proxy._recordReconnectFailure('BTCUSDT');
+        const health = proxy.getStreamHealth('BTCUSDT');
+        expect(health.circuitState).toBe('CLOSED');
+    });
+
+    test('clearReconnectFailures resets circuit to CLOSED', () => {
+        for (let i = 0; i < 5; i++) proxy._recordReconnectFailure('BTCUSDT');
+        expect(proxy.getStreamHealth('BTCUSDT').circuitState).toBe('OPEN');
+        proxy._clearReconnectFailures('BTCUSDT');
+        expect(proxy.getStreamHealth('BTCUSDT').circuitState).toBe('CLOSED');
+    });
+
+    test('isCircuitOpen returns true when OPEN', () => {
+        for (let i = 0; i < 5; i++) proxy._recordReconnectFailure('BTCUSDT');
+        expect(proxy._isCircuitOpen('BTCUSDT')).toBe(true);
+    });
+
+    test('isCircuitOpen returns false when CLOSED', () => {
+        expect(proxy._isCircuitOpen('BTCUSDT')).toBe(false);
+    });
+});
+
+describe('wsMarketProxy backpressure', () => {
+    test('_safeSend delivers to healthy client', () => {
+        const ws = { readyState: 1, send: jest.fn(), bufferedAmount: 0 };
+        const result = proxy._safeSend(ws, '{"test":1}');
+        expect(result).toBe(true);
+        expect(ws.send).toHaveBeenCalled();
+    });
+
+    test('_safeSend skips closed client', () => {
+        const ws = { readyState: 3, send: jest.fn(), bufferedAmount: 0 };
+        const result = proxy._safeSend(ws, '{"test":1}');
+        expect(result).toBe(false);
+        expect(ws.send).not.toHaveBeenCalled();
+    });
+
+    test('_safeSend skips when bufferedAmount exceeds threshold', () => {
+        const ws = { readyState: 1, send: jest.fn(), bufferedAmount: 200000 };
+        const result = proxy._safeSend(ws, '{"test":1}');
+        expect(result).toBe(false);
+        expect(ws.send).not.toHaveBeenCalled();
+    });
+
+    test('_safeSend handles send exception gracefully', () => {
+        const ws = { readyState: 1, send: jest.fn(() => { throw new Error('write fail'); }), bufferedAmount: 0 };
+        const result = proxy._safeSend(ws, '{"test":1}');
+        expect(result).toBe(false);
+    });
+});

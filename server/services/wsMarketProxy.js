@@ -99,6 +99,7 @@ function _connectSymbol(symbol, timeframes) {
     ws.on('open', () => {
         conn.state = 'OPEN';
         conn.reconnects = 0;
+        _clearReconnectFailures(sym);
         conn.pingTimer = setInterval(() => {
             try { if (ws.readyState === WebSocket.OPEN) ws.ping(); } catch (_) {}
         }, PING_INTERVAL_MS);
@@ -115,12 +116,20 @@ function _connectSymbol(symbol, timeframes) {
         conn.state = 'CLOSED';
         if (conn.pingTimer) { clearInterval(conn.pingTimer); conn.pingTimer = null; }
         if (_subs.has(sym) && _subs.get(sym).size > 0) {
-            const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * Math.pow(2, conn.reconnects));
-            conn.reconnects++;
-            conn._reconnectTimer = setTimeout(() => {
-                _connections.delete(sym);
-                _connectSymbol(sym, conn.timeframes);
-            }, delay + Math.random() * 1000);
+            _recordReconnectFailure(sym);
+            if (_isCircuitOpen(sym)) {
+                conn._reconnectTimer = setTimeout(() => {
+                    _connections.delete(sym);
+                    _connectSymbol(sym, conn.timeframes);
+                }, CB_PAUSE_MS + Math.random() * 3000);
+            } else {
+                const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * Math.pow(2, conn.reconnects));
+                conn.reconnects++;
+                conn._reconnectTimer = setTimeout(() => {
+                    _connections.delete(sym);
+                    _connectSymbol(sym, conn.timeframes);
+                }, delay + Math.random() * 1000);
+            }
         } else {
             _connections.delete(sym);
         }
@@ -153,18 +162,14 @@ function _broadcast(symbol, payload) {
     _lastValues.set(`${sym}:${payload.type}`, payload);
     const subs = _subs.get(sym);
     if (!subs) return;
-    for (const ws of subs) {
-        try { if (ws.readyState === 1) ws.send(json); } catch (_) {}
-    }
+    for (const ws of subs) _safeSend(ws, json);
 }
 
 function _broadcastAll(payload) {
     const json = JSON.stringify(payload);
     if (payload.symbol) _lastValues.set(`${payload.symbol.toUpperCase()}:${payload.type}`, payload);
     for (const [, subs] of _subs) {
-        for (const ws of subs) {
-            try { if (ws.readyState === 1) ws.send(json); } catch (_) {}
-        }
+        for (const ws of subs) _safeSend(ws, json);
     }
 }
 
@@ -180,6 +185,60 @@ function _sendCachedValues(ws, symbol) {
         if (cached) {
             try { if (ws.readyState === 1) ws.send(JSON.stringify(cached)); } catch (_) {}
         }
+    }
+}
+
+// ═══ Circuit breaker per stream ═══
+
+const CB_TRIP_THRESHOLD = 5;
+const CB_WINDOW_MS = 60_000;
+const CB_PAUSE_MS = 30_000;
+const _cbFailures = new Map(); // symbol → [{ ts }]
+
+function _recordReconnectFailure(symbol) {
+    const sym = symbol.toUpperCase();
+    if (!_cbFailures.has(sym)) _cbFailures.set(sym, []);
+    _cbFailures.get(sym).push({ ts: Date.now() });
+    const cutoff = Date.now() - CB_WINDOW_MS;
+    _cbFailures.set(sym, _cbFailures.get(sym).filter(f => f.ts > cutoff));
+}
+
+function _clearReconnectFailures(symbol) {
+    _cbFailures.delete(symbol.toUpperCase());
+}
+
+function _isCircuitOpen(symbol) {
+    const sym = symbol.toUpperCase();
+    const failures = _cbFailures.get(sym);
+    if (!failures) return false;
+    const cutoff = Date.now() - CB_WINDOW_MS;
+    const recent = failures.filter(f => f.ts > cutoff);
+    return recent.length >= CB_TRIP_THRESHOLD;
+}
+
+function getStreamHealth(symbol) {
+    const sym = symbol.toUpperCase();
+    const failures = _cbFailures.get(sym) || [];
+    const cutoff = Date.now() - CB_WINDOW_MS;
+    const recent = failures.filter(f => f.ts > cutoff);
+    return {
+        reconnectFailures: recent.length,
+        circuitState: recent.length >= CB_TRIP_THRESHOLD ? 'OPEN' : 'CLOSED',
+    };
+}
+
+// ═══ Backpressure — safe send with buffer check ═══
+
+const BACKPRESSURE_THRESHOLD = 128 * 1024; // 128KB buffered = skip
+
+function _safeSend(ws, json) {
+    try {
+        if (!ws || ws.readyState !== 1) return false;
+        if (ws.bufferedAmount > BACKPRESSURE_THRESHOLD) return false;
+        ws.send(json);
+        return true;
+    } catch (_) {
+        return false;
     }
 }
 
@@ -335,6 +394,7 @@ function _resetForTest() {
     }
     _connections.clear();
     _lastValues.clear();
+    _cbFailures.clear();
     stopWatchlist();
 }
 
@@ -350,6 +410,11 @@ module.exports = {
     _createBinanceWs,
     _connectSymbol,
     _disconnectSymbol,
+    getStreamHealth,
+    _recordReconnectFailure,
+    _clearReconnectFailures,
+    _isCircuitOpen,
+    _safeSend,
     startWatchlist,
     stopWatchlist,
     isWatchlistActive,
