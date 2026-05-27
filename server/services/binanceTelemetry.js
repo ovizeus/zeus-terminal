@@ -36,7 +36,7 @@ function recordCall(entry) {
         weight: typeof entry.weight === 'number' ? entry.weight : 0,
         status: typeof entry.status === 'number' ? entry.status : 0,
         latencyMs: typeof entry.latencyMs === 'number' ? entry.latencyMs : 0,
-        usedWeight: typeof entry.usedWeight === 'number' ? entry.usedWeight : null,
+        usedWeight: entry.blockedByPressure ? null : (typeof entry.usedWeight === 'number' ? entry.usedWeight : null),
         networkError: !!entry.networkError,
         blockedByPressure: !!entry.blockedByPressure,
         rejectedByScheduler: !!entry.rejectedByScheduler,

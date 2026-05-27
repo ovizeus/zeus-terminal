@@ -423,3 +423,84 @@ describe('binanceTelemetry — scheduler integration (Phase A.2)', () => {
         expect(snap.schedulerStats.totalDecisions).toBeGreaterThanOrEqual(0);
     });
 });
+
+describe('binanceTelemetry — synthetic 429 must NOT poison lastUsedWeight', () => {
+    test('synthetic 429 (blockedByPressure) does NOT update lastUsedWeight in ring', () => {
+        // Only a synthetic 429 — no real call before it
+        telemetry.recordCall({
+            host: 'fapi.binance.com',
+            path: '/fapi/v1/klines',
+            source: 'marketProxy',
+            weight: 0,
+            status: 429,
+            latencyMs: 0,
+            usedWeight: 5834,
+            blockedByPressure: true,
+        });
+
+        const snap = telemetry.getSnapshot();
+        // Synthetic should NOT set lastUsedWeight — stale data must not poison the ring
+        expect(snap.byHost['fapi.binance.com'].lastUsedWeight).toBeNull();
+    });
+
+    test('real call after synthetic properly updates lastUsedWeight', () => {
+        // Synthetic first (stale 5834)
+        telemetry.recordCall({
+            host: 'fapi.binance.com',
+            path: '/fapi/v1/klines',
+            source: 'marketProxy',
+            weight: 0,
+            status: 429,
+            latencyMs: 0,
+            usedWeight: 5834,
+            blockedByPressure: true,
+        });
+
+        // Real call with fresh weight from Binance
+        telemetry.recordCall({
+            host: 'fapi.binance.com',
+            path: '/fapi/v1/ticker/24hr',
+            source: 'marketProxy',
+            weight: 40,
+            status: 200,
+            latencyMs: 80,
+            usedWeight: 137,
+        });
+
+        const snap = telemetry.getSnapshot();
+        expect(snap.byHost['fapi.binance.com'].lastUsedWeight).toBe(137);
+    });
+
+    test('quota pressure is 0 when only synthetic 429s exist in ring', () => {
+        telemetry.recordCall({
+            host: 'fapi.binance.com',
+            path: '/fapi/v1/klines',
+            source: 'marketProxy',
+            weight: 0,
+            status: 429,
+            latencyMs: 0,
+            usedWeight: 5834,
+            blockedByPressure: true,
+        });
+
+        expect(telemetry.getQuotaPressure('fapi.binance.com')).toBe(0);
+    });
+
+    test('after stale weight expires from ring, pressure drops to 0', () => {
+        telemetry._setNowForTest(Date.now() - 3700_000);
+        telemetry.recordCall({
+            host: 'fapi.binance.com',
+            path: '/fapi/v1/klines',
+            source: 'signer:recon',
+            weight: 5,
+            status: 200,
+            latencyMs: 50,
+            usedWeight: 5834,
+        });
+
+        telemetry._setNowForTest(null);
+        const snap = telemetry.getSnapshot();
+        expect(snap.byHost['fapi.binance.com']).toBeUndefined();
+        expect(telemetry.getQuotaPressure('fapi.binance.com')).toBe(0);
+    });
+});
