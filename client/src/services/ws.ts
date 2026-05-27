@@ -106,4 +106,9 @@ export function isConnected(): boolean {
   return _ws !== null && _ws.readyState === WebSocket.OPEN
 }
 
-export const wsService = { connect, disconnect, subscribe, isConnected }
+export function send(msg: Record<string, unknown>): boolean {
+  if (!_ws || _ws.readyState !== WebSocket.OPEN) return false
+  try { _ws.send(JSON.stringify(msg)); return true } catch { return false }
+}
+
+export const wsService = { connect, disconnect, subscribe, isConnected, send }

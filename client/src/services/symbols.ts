@@ -53,6 +53,25 @@ async function _pollWatchlist24hr(): Promise<void> {
 }
 
 export function connectWatchlist(): void {
+  // [WS-PROXY B.6] Server proxy handles watchlist — skip direct WS
+  if (w.__MF && w.__MF.WS_PROXY_ENABLED === true) {
+    const { on } = require('./wsMarketBridge')
+    on('market.wl', (msg: any) => {
+      if (!msg.symbol) return
+      const sym = msg.symbol as string
+      w.wlPrices[sym] = { price: msg.price, chg: msg.chg || 0, ts: Date.now() }
+      w.allPrices[sym] = msg.price
+      const pe = document.getElementById('wlp-' + sym)
+      const ce = document.getElementById('wlc-' + sym)
+      if (pe) pe.textContent = msg.price >= 1000 ? '$' + Math.round(msg.price).toLocaleString() : '$' + (+msg.price).toFixed(msg.price >= 1 ? 3 : 4)
+      if (ce) { ce.textContent = (msg.chg >= 0 ? '+' : '') + msg.chg.toFixed(2) + '%'; ce.style.color = msg.chg >= 0 ? 'var(--grn)' : 'var(--red)' }
+      try { window.dispatchEvent(new CustomEvent('zeus:wlPrice', { detail: { sym, price: msg.price, chg: msg.chg || 0 } })) } catch (_) {}
+      if (typeof onNeuronScanUpdate === 'function') onNeuronScanUpdate()
+    })
+    console.log('[connectWatchlist] WS_PROXY mode — server handles watchlist stream')
+    return
+  }
+  // ── Legacy direct path ──
   const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
   // [Phase 2 S3.1d] ALT_WS_FEEDS — swap @miniTicker (throttled) for
   // @bookTicker (alive) and derive price from mid(bid,ask). % change comes

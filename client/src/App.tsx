@@ -41,6 +41,8 @@ export function App() {
   useEffect(() => {
     if (authenticated) {
       wsService.connect()
+      // [WS-PROXY B.6] Install market bridge listener on /ws/sync
+      try { require('./services/wsMarketBridge').install() } catch (_) {}
       // [MIGRATION-F0] settings cross-device sync subscriber (reuses /ws/sync)
       startSettingsRealtime()
       // [MIGRATION-F5 commit 4] positions cross-device sync subscriber

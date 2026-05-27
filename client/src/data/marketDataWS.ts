@@ -45,11 +45,49 @@ function _setWsDiag(name: string, patch: any) {
   w.S._wsDiag[name] = Object.assign({}, w.S._wsDiag[name] || {}, patch, { ts: Date.now() })
 }
 
+// [WS-PROXY B.6] Server proxy path — receives market.* from /ws/sync
+let _proxyUnsubs: Array<() => void> = []
+function _connectBNBProxy(): void {
+  const sym = (w.S.symbol || 'BTCUSDT').toUpperCase()
+  const { on, subscribeSymbol } = require('../services/wsMarketBridge')
+  _proxyUnsubs.forEach(fn => fn()); _proxyUnsubs = []
+  _proxyUnsubs.push(on('market.price', (msg: any) => {
+    if (msg.symbol !== sym) return
+    if (w.ingestPrice(String(msg.price), 'BNB')) {
+      w.S.fr = msg.fr || 0; w.S.frCd = msg.frCd || 0
+      updatePriceDisplay(); updateMainMetrics()
+      if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
+    }
+  }))
+  _proxyUnsubs.push(on('market.depth', (msg: any) => {
+    if (msg.symbol !== sym) return
+    w.S.bids = msg.bids || []; w.S.asks = msg.asks || []
+    renderOB()
+  }))
+  _proxyUnsubs.push(on('market.liq', (msg: any) => {
+    if (msg.exchange !== 'binance') return
+    procLiq({ s: msg.symbol, S: msg.side, q: msg.qty, p: msg.price }, 'bnb')
+  }))
+  _proxyUnsubs.push(on('market.health', (msg: any) => {
+    if (msg.symbol !== sym) return
+    const ok = msg.status === 'LIVE'
+    w.S.bnbOk = ok
+    _setWsDiag('bnb', { state: ok ? 'OPEN' : 'DEGRADED', err: ok ? '' : msg.status })
+    updConn()
+  }))
+  w.S.bnbOk = true; _setWsDiag('bnb', { state: 'OPEN', err: '' }); updConn()
+  subscribeSymbol(sym)
+  console.log(`[connectBNB] WS_PROXY mode | sym=${sym}`)
+}
+
 export function connectBNB(): void {
+  // [WS-PROXY B.6] Flag-gated: server proxy vs direct Binance WS
+  if (w.__MF && w.__MF.WS_PROXY_ENABLED === true) {
+    _connectBNBProxy()
+    return
+  }
+  // ── Legacy direct path (fallback) ──
   const sym = (w.S.symbol || 'BTCUSDT').toLowerCase()
-  // [Phase 2 S3.1d] ALT_WS_FEEDS workaround — when markPrice@1s is silently
-  // throttled by Binance, route price updates through bookTicker (mid of
-  // best bid/ask). depth20 + forceOrder still work on the normal lane.
   const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
   const _priceStream = _altFeeds ? `${sym}@bookTicker` : `${sym}@markPrice@1s`
   const url = `wss://fstream.binance.com/stream?streams=${_priceStream}/${sym}@depth20@500ms/!forceOrder@arr`
@@ -66,16 +104,12 @@ export function connectBNB(): void {
       if (j.stream) {
         const d = j.data; const st = j.stream
         if (st.includes('markPrice')) {
-          // Primary-lane path: markPrice delivers mark price + funding rate
           if (w.ingestPrice(d.p, 'BNB')) {
             w.S.fr = w._safe.num(d.r, 'fr', 0); w.S.frCd = +d.T
             updatePriceDisplay(); updateMainMetrics()
             if (getTPObject().demoPositions?.some((p: any) => p.autoTrade)) renderATPositions()
           }
         } else if (st.includes('bookTicker')) {
-          // [ALT_WS_FEEDS] bookTicker path — mid of best bid/ask stands in
-          // for mark price. Funding rate is not live here; stays cached
-          // until REST or markPrice lane recovers.
           const _bid = +d.b, _ask = +d.a
           if (_bid > 0 && _ask > 0) {
             const _mid = ((_bid + _ask) / 2).toString()

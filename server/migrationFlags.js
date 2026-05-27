@@ -143,6 +143,9 @@ const DEFAULTS = {
     // When true (default), user MUST acknowledge ML influence before R4 may
     // use bandit on REAL trades, even if ML_LIVE_INFLUENCE_ENABLED is true.
     ML_LIVE_OPTIN_REQUIRED: false,
+    // WS_PROXY_ENABLED — route client Binance WS through server proxy.
+    // Phase B.6: client checks this flag to decide direct vs proxy path.
+    WS_PROXY_ENABLED: false,
     // ML_BANDIT_AUTO_APPLY_MINOR — auto-apply MINOR proposals without
     // operator approval (per spec point 252* tiered authority). MAJOR
     // and CRITICAL always require operator decision. Default OFF until
@@ -338,6 +341,7 @@ module.exports = {
     get ML_DEMO_INFLUENCE_ENABLED() { return flags.ML_DEMO_INFLUENCE_ENABLED; },
     get ML_TESTNET_INFLUENCE_ENABLED() { return flags.ML_TESTNET_INFLUENCE_ENABLED; },
     get ML_LIVE_INFLUENCE_ENABLED() { return flags.ML_LIVE_INFLUENCE_ENABLED; },
+    get WS_PROXY_ENABLED() { return flags.WS_PROXY_ENABLED; },
     get ML_LIVE_OPTIN_REQUIRED() { return flags.ML_LIVE_OPTIN_REQUIRED; },
     get ML_BANDIT_AUTO_APPLY_MINOR() { return flags.ML_BANDIT_AUTO_APPLY_MINOR; },
     get ML_HYBRID_POOLING_ENABLED() { return flags.ML_HYBRID_POOLING_ENABLED; },

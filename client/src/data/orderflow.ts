@@ -448,9 +448,20 @@ export function _initOrderflowP1() {
     RF.buf = []
     RF.dropped = 0
 
-    // [Phase 2 S3.1d] ALT_WS_FEEDS — when @aggTrade is throttled by Binance,
-    // @trade (raw) still delivers; shape-compatible for our consumer (uses
-    // d.p, d.q, d.T, d.m) so the downstream flow engine sees no difference.
+    // [WS-PROXY B.6] Server proxy path for aggTrade
+    if (w.__MF && w.__MF.WS_PROXY_ENABLED === true) {
+      if (w._wsProxyOfUnsub) { w._wsProxyOfUnsub(); w._wsProxyOfUnsub = null }
+      const { on } = require('../services/wsMarketBridge')
+      w._wsProxyOfUnsub = on('market.aggTrade', function (msg: any) {
+        if (msg.symbol !== sym.toUpperCase()) return
+        RF.buf.push({ ts: msg.T, p: msg.p, q: msg.q, isBuyerMaker: msg.m })
+        _prune()
+      })
+      try { if (typeof w.ZLOG !== 'undefined') w.ZLOG.push('INFO', '[OF v121] WS_PROXY aggTrade: ' + sym) } catch (_) { }
+      return
+    }
+
+    // ── Legacy direct path ──
     const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
     const _streamName = _altFeeds ? '@trade' : '@aggTrade'
     const url = 'wss://fstream.binance.com/ws/' + sym.toLowerCase() + _streamName

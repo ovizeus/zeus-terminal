@@ -32,10 +32,22 @@ export default function WatchlistBar() {
   const setWlPrice = useMarketStore((s) => s.setWlPrice)
   const wsRef = useRef<WebSocket | null>(null)
 
-  // Connect to Binance miniTicker for watchlist symbols (1:1 with connectWatchlist in symbols.js)
-  // When the bridge is active, it opens its own WS via connectWatchlist() and emits
-  // 'zeus:wlPrice' events. In that case we close our raw WS to avoid double connections.
+  // [WS-PROXY B.6] Server proxy path for watchlist — or legacy direct WS
   useEffect(() => {
+    const w = window as any
+    const _useProxy = w.__MF && w.__MF.WS_PROXY_ENABLED === true
+
+    if (_useProxy) {
+      // Proxy path: listen market.wl from server /ws/sync
+      const { on, subscribeWatchlist } = require('../../services/wsMarketBridge')
+      const unsub = on('market.wl', (msg: any) => {
+        if (msg.symbol && msg.price) setWlPrice(msg.symbol, msg.price, msg.chg || 0)
+      })
+      subscribeWatchlist(WATCHLIST_SYMBOLS.slice() as string[])
+      return () => { unsub() }
+    }
+
+    // ── Legacy direct path ──
     const streams = WATCHLIST_SYMBOLS.map(s => s.toLowerCase() + '@miniTicker').join('/')
     const url = `wss://fstream.binance.com/stream?streams=${streams}`
 
@@ -46,52 +58,30 @@ export default function WatchlistBar() {
     function closeRawWs() {
       clearTimeout(reconnectTimer)
       if (ws) {
-        ws.onclose = null
-        ws.onerror = null
-        ws.close()
-        ws = null
-        wsRef.current = null
+        ws.onclose = null; ws.onerror = null; ws.close(); ws = null; wsRef.current = null
       }
     }
 
     function connect() {
       if (bridgeActive) return
       const _ws = new WebSocket(url)
-      ws = _ws
-      wsRef.current = _ws
-
+      ws = _ws; wsRef.current = _ws
       _ws.onmessage = (e) => {
         try {
           const j = JSON.parse(e.data)
           if (!j.data) return
           const d = j.data
-          const sym: string = d.s
-          const price = +d.c
-          const open = +d.o
-          const chg = (price - open) / open * 100
-          setWlPrice(sym, price, chg)
-        } catch { /* ignore parse errors */ }
+          setWlPrice(d.s, +d.c, (+d.c - +d.o) / +d.o * 100)
+        } catch { /* ignore */ }
       }
-
-      _ws.onclose = () => {
-        if (!bridgeActive) reconnectTimer = setTimeout(connect, 5000)
-      }
-
+      _ws.onclose = () => { if (!bridgeActive) reconnectTimer = setTimeout(connect, 5000) }
       _ws.onerror = () => { _ws.close() }
     }
 
-    // When bridge WS (connectWatchlist) starts sending data it emits 'zeus:wlPrice'.
-    // On first such event: close our raw WS (no more duplicate), keep listening to events.
-    // We do NOT close on zeus:bridgeReady because connectWatchlist() runs 1500ms later
-    // (inside startApp phase-3 setTimeout), so bridgeReady fires too early.
     function onWlPrice(e: Event) {
       const { sym, price, chg } = (e as CustomEvent).detail
       setWlPrice(sym, price, chg)
-      if (!bridgeActive) {
-        // First event from bridge WS → close raw WS to eliminate duplicate connection
-        bridgeActive = true
-        closeRawWs()
-      }
+      if (!bridgeActive) { bridgeActive = true; closeRawWs() }
     }
 
     window.addEventListener('zeus:wlPrice', onWlPrice)

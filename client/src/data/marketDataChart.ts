@@ -130,6 +130,26 @@ export async function fetchKlines(tf: any): Promise<void> {
     // REST every 10s. Chart updates are ~10s slower but correct; on 5m/1h/4h
     // timeframes this is imperceptible. Reverts automatically when flag is
     // flipped OFF (next fetchKlines call opens a live WS again).
+    // [WS-PROXY B.6] Server proxy path for kline — no direct Binance WS
+    if (w.__MF && w.__MF.WS_PROXY_ENABLED === true) {
+      if (w._wsProxyKlineUnsub) { w._wsProxyKlineUnsub(); w._wsProxyKlineUnsub = null }
+      const { on } = require('../services/wsMarketBridge')
+      const _applyBarProxy = (bar: any) => {
+        const last = w.S.klines?.[w.S.klines.length - 1]
+        if (last && last.time === bar.time) w.S.klines[w.S.klines.length - 1] = bar
+        else { w.S.klines.push(bar); if (w.S.klines.length > 1500) w.S.klines = w.S.klines.slice(-1200) }
+        _resetKlineWatchdog()
+        try { if (typeof w._applyLatestBar === 'function') { w._applyLatestBar(bar) } else { w.cSeries.update(bar) } } catch (_) { }
+        if (typeof updOvrs === 'function') updOvrs()
+        if (!w._tmThrottle) { w._tmThrottle = setTimeout(function () { w._tmThrottle = null; if (typeof renderTradeMarkers === 'function') renderTradeMarkers() }, 5000) }
+      }
+      w._wsProxyKlineUnsub = on('market.kline', (msg: any) => {
+        if (msg.symbol !== sym || msg.tf !== tf) return
+        _applyBarProxy(msg.bar)
+      })
+      console.log(`[fetchKlines] WS_PROXY mode | sym=${sym} tf=${tf}`)
+    } else {
+    // ── Legacy paths (ALT_WS_FEEDS or direct WS) ──
     const _altFeeds = w.__MF && w.__MF.ALT_WS_FEEDS === true
     // Clear any previous poll timer from a prior fetchKlines call
     try { if (w.S._altKlinePollTimer) { clearInterval(w.S._altKlinePollTimer); w.S._altKlinePollTimer = null } } catch (_) {}
@@ -176,6 +196,7 @@ export async function fetchKlines(tf: any): Promise<void> {
         }
       })
     }
+    } // end legacy else
   } catch (e: any) {
     console.error('[fetchKlines]', e.message)
     toast(`Chart: cannot load data (${e.message})`)
