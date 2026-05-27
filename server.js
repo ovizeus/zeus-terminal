@@ -1693,8 +1693,19 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     const set = _wsClients.get(uid);
     if (set) { set.delete(ws); if (set.size === 0) _wsClients.delete(uid); }
+    try { require('./server/services/wsMarketProxy').handleClientDisconnect(ws); } catch (_) {}
   });
   ws.on('error', () => { try { ws.close(); } catch (_) { } });
+
+  // WS Market Proxy — route market.* subscribe/unsubscribe from clients
+  ws.on('message', (raw) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg && msg.type && msg.type.startsWith('market.')) {
+        require('./server/services/wsMarketProxy').handleClientMessage(ws, msg);
+      }
+    } catch (_) {}
+  });
 
   // [Phase 11.7] Market Radar warm-start — replay cached events so a new or
   // reconnecting session sees the same radar state as everyone else. Safe

@@ -183,6 +183,39 @@ function _sendCachedValues(ws, symbol) {
     }
 }
 
+// ═══ Client message handler (from /ws/sync) ═══
+
+const DEFAULT_TIMEFRAMES = ['5m', '1h', '4h'];
+
+function handleClientMessage(ws, msg) {
+    if (!msg || !msg.type) return;
+    const self = module.exports;
+    if (msg.type === 'market.subscribe') {
+        if (!msg.symbol) return;
+        const result = subscribe(ws, msg.symbol);
+        if (result.isNewSymbol) {
+            self._connectSymbol(msg.symbol, msg.timeframes || DEFAULT_TIMEFRAMES);
+        }
+    } else if (msg.type === 'market.unsubscribe') {
+        if (!msg.symbol) return;
+        const result = unsubscribe(ws, msg.symbol);
+        if (result.isLastSubscriber) {
+            self._disconnectSymbol(msg.symbol);
+        }
+    } else if (msg.type === 'market.subscribe.wl') {
+        const symbols = msg.symbols || [];
+        for (const sym of symbols) subscribe(ws, sym);
+    }
+}
+
+function handleClientDisconnect(ws) {
+    const self = module.exports;
+    const removedSymbols = unsubscribeAll(ws);
+    for (const sym of removedSymbols) {
+        self._disconnectSymbol(sym);
+    }
+}
+
 // ═══ Binance message handler ═══
 
 function _handleBinanceMessage(symbol, msg) {
@@ -258,6 +291,8 @@ module.exports = {
     _createBinanceWs,
     _connectSymbol,
     _disconnectSymbol,
+    handleClientMessage,
+    handleClientDisconnect,
     _broadcast,
     _broadcastAll,
     _handleBinanceMessage,

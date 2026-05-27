@@ -274,3 +274,68 @@ describe('wsMarketProxy _handleBinanceMessage', () => {
         expect(ws.send).not.toHaveBeenCalled();
     });
 });
+
+describe('wsMarketProxy handleClientMessage', () => {
+    test('market.subscribe adds client + returns isNewSymbol', () => {
+        const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
+        jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});
+
+        proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: 'BTCUSDT' });
+
+        expect(proxy.getSubscribers('BTCUSDT').size).toBe(1);
+        expect(proxy._connectSymbol).toHaveBeenCalledWith('BTCUSDT', expect.any(Array));
+
+        proxy._connectSymbol.mockRestore();
+    });
+
+    test('market.unsubscribe removes client + disconnects if last', () => {
+        const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
+        jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});
+        jest.spyOn(proxy, '_disconnectSymbol').mockImplementation(() => {});
+
+        proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: 'BTCUSDT' });
+        proxy.handleClientMessage(ws, { type: 'market.unsubscribe', symbol: 'BTCUSDT' });
+
+        expect(proxy.getSubscribers('BTCUSDT').size).toBe(0);
+        expect(proxy._disconnectSymbol).toHaveBeenCalledWith('BTCUSDT');
+
+        proxy._connectSymbol.mockRestore();
+        proxy._disconnectSymbol.mockRestore();
+    });
+
+    test('handleClientDisconnect cleans all subscriptions', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});
+        jest.spyOn(proxy, '_disconnectSymbol').mockImplementation(() => {});
+
+        proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: 'BTCUSDT' });
+        proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: 'ETHUSDT' });
+        proxy.handleClientDisconnect(ws);
+
+        expect(proxy.getSubscribers('BTCUSDT').size).toBe(0);
+        expect(proxy.getSubscribers('ETHUSDT').size).toBe(0);
+        expect(proxy._disconnectSymbol).toHaveBeenCalledTimes(2);
+
+        proxy._connectSymbol.mockRestore();
+        proxy._disconnectSymbol.mockRestore();
+    });
+
+    test('ignores unknown message types', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+        expect(() => {
+            proxy.handleClientMessage(ws, { type: 'random.thing' });
+            proxy.handleClientMessage(ws, null);
+            proxy.handleClientMessage(ws, {});
+        }).not.toThrow();
+    });
+
+    test('market.subscribe.wl subscribes to multiple symbols', () => {
+        const ws = { readyState: 1, send: jest.fn() };
+
+        proxy.handleClientMessage(ws, { type: 'market.subscribe.wl', symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'] });
+
+        expect(proxy.getSubscribers('BTCUSDT').size).toBe(1);
+        expect(proxy.getSubscribers('ETHUSDT').size).toBe(1);
+        expect(proxy.getSubscribers('SOLUSDT').size).toBe(1);
+    });
+});
