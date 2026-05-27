@@ -518,3 +518,68 @@ describe('wsMarketProxy health monitor', () => {
         expect(snap.overall).toBe('DEGRADED');
     });
 });
+
+describe('wsMarketProxy auth + rate limits', () => {
+    test('subscribe rate limit — blocks after 10 subscribes/sec', () => {
+        const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
+        jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});
+
+        for (let i = 0; i < 10; i++) {
+            proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: `SYM${i}USDT` });
+        }
+        expect(proxy.getActiveSymbols().length).toBe(10);
+
+        // 11th should be rejected
+        const result = proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: 'SYM10USDT' });
+        expect(result).toEqual({ ok: false, reason: 'rate_limited' });
+        expect(proxy.getSubscribers('SYM10USDT').size).toBe(0);
+
+        proxy._connectSymbol.mockRestore();
+    });
+
+    test('max 20 concurrent symbols per client', () => {
+        const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
+        jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});
+
+        // Subscribe 20 symbols (across multiple seconds to avoid rate limit)
+        proxy._resetRateLimit(ws);
+        for (let i = 0; i < 20; i++) {
+            proxy._resetRateLimit(ws);
+            proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: `T${i}USDT` });
+        }
+
+        // 21st should be rejected
+        proxy._resetRateLimit(ws);
+        const result = proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: 'T20USDT' });
+        expect(result).toEqual({ ok: false, reason: 'max_symbols_exceeded' });
+
+        proxy._connectSymbol.mockRestore();
+    });
+
+    test('symbol validation — rejects empty/null', () => {
+        const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
+
+        const r1 = proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: '' });
+        const r2 = proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: null });
+        const r3 = proxy.handleClientMessage(ws, { type: 'market.subscribe' });
+
+        expect(proxy.getActiveSymbols().length).toBe(0);
+    });
+
+    test('unsubscribeAll cleanup restores quota', () => {
+        const ws = { readyState: 1, send: jest.fn(), _uid: 1 };
+        jest.spyOn(proxy, '_connectSymbol').mockImplementation(() => {});
+
+        proxy._resetRateLimit(ws);
+        for (let i = 0; i < 5; i++) {
+            proxy._resetRateLimit(ws);
+            proxy.handleClientMessage(ws, { type: 'market.subscribe', symbol: `Q${i}USDT` });
+        }
+        expect(proxy.getClientSymbolCount(ws)).toBe(5);
+
+        proxy.unsubscribeAll(ws);
+        expect(proxy.getClientSymbolCount(ws)).toBe(0);
+
+        proxy._connectSymbol.mockRestore();
+    });
+});

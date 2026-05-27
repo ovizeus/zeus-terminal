@@ -375,6 +375,30 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Rate limiting + quotas ═══
+
+const MAX_SUBSCRIBES_PER_SEC = 10;
+const MAX_SYMBOLS_PER_CLIENT = 20;
+const _rateCounters = new Map(); // ws → { count, resetTs }
+
+function _checkRateLimit(ws) {
+    const now = Date.now();
+    if (!_rateCounters.has(ws)) _rateCounters.set(ws, { count: 0, resetTs: now + 1000 });
+    const rc = _rateCounters.get(ws);
+    if (now > rc.resetTs) { rc.count = 0; rc.resetTs = now + 1000; }
+    rc.count++;
+    return rc.count <= MAX_SUBSCRIBES_PER_SEC;
+}
+
+function _resetRateLimit(ws) {
+    _rateCounters.delete(ws);
+}
+
+function getClientSymbolCount(ws) {
+    const syms = _clientSyms.get(ws);
+    return syms ? syms.size : 0;
+}
+
 // ═══ Client message handler (from /ws/sync) ═══
 
 const DEFAULT_TIMEFRAMES = ['5m', '1h', '4h'];
@@ -384,6 +408,8 @@ function handleClientMessage(ws, msg) {
     const self = module.exports;
     if (msg.type === 'market.subscribe') {
         if (!msg.symbol) return;
+        if (!_checkRateLimit(ws)) return { ok: false, reason: 'rate_limited' };
+        if (getClientSymbolCount(ws) >= MAX_SYMBOLS_PER_CLIENT) return { ok: false, reason: 'max_symbols_exceeded' };
         const result = subscribe(ws, msg.symbol);
         if (result.isNewSymbol) {
             self._connectSymbol(msg.symbol, msg.timeframes || DEFAULT_TIMEFRAMES);
@@ -473,6 +499,7 @@ function _resetForTest() {
     _lastValues.clear();
     _cbFailures.clear();
     _healthState.clear();
+    _rateCounters.clear();
     stopWatchlist();
 }
 
@@ -500,6 +527,8 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    getClientSymbolCount,
+    _resetRateLimit,
     handleClientMessage,
     handleClientDisconnect,
     _broadcast,
