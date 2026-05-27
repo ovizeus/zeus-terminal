@@ -4770,14 +4770,54 @@ function onUserDataEvent(userId, event) {
         if (event.e === 'ACCOUNT_UPDATE') {
             const parsed = uds.parseAccountUpdate(event);
             if (!parsed) return;
+
             for (const p of parsed.positions) {
-                if (Math.abs(p.positionAmt) < 1e-10) continue;
-                logger.info('USERDATA', `[ACCOUNT_UPDATE] uid=${userId} ${p.symbol} amt=${p.positionAmt} entry=${p.entryPrice} upnl=${p.unrealizedPnL}`);
+                const side = p.positionAmt > 0 ? 'LONG' : p.positionAmt < 0 ? 'SHORT' : null;
+                const existingIdx = _positions.findIndex(pos =>
+                    pos.userId === userId && pos.symbol === p.symbol &&
+                    pos.status === 'OPEN' && pos.mode === 'live'
+                );
+                const existing = existingIdx >= 0 ? _positions[existingIdx] : null;
+
+                if (Math.abs(p.positionAmt) < 1e-10) {
+                    // Position CLOSED (amt → 0)
+                    if (existing) {
+                        const pnl = p.unrealizedPnL || 0;
+                        const exitPrice = p.entryPrice || existing.entry || existing.price || 0;
+                        logger.info('USERDATA', `[POSITION_CLOSED] uid=${userId} ${p.symbol} ${existing.side} — closed externally, PnL=${pnl}`);
+                        _closePosition(existingIdx, existing, 'EXTERNAL_CLOSE', exitPrice, +pnl.toFixed(2));
+                        _handleLiveExit(existing, 'EXTERNAL_CLOSE', exitPrice, +pnl.toFixed(2)).catch(_ => {});
+                    }
+                } else if (!existing) {
+                    // Position OPENED externally (on Binance UI)
+                    logger.info('USERDATA', `[POSITION_OPENED] uid=${userId} ${p.symbol} ${side} amt=${p.positionAmt} — opened externally`);
+                    _syncExternalPosition({
+                        userId, symbol: p.symbol, side,
+                        entryPrice: p.entryPrice,
+                        qty: Math.abs(p.positionAmt),
+                    });
+                    _broadcastPositions(userId);
+                } else {
+                    // Position MODIFIED (partial fill, scale in/out)
+                    const newQty = Math.abs(p.positionAmt);
+                    if (existing.live) existing.live.executedQty = newQty;
+                    existing.qty = newQty;
+                    existing.entry = p.entryPrice || existing.entry;
+                    existing.price = p.entryPrice || existing.price;
+                    existing.unrealizedPnL = p.unrealizedPnL;
+                    logger.info('USERDATA', `[POSITION_MODIFIED] uid=${userId} ${p.symbol} amt=${p.positionAmt} entry=${p.entryPrice}`);
+                    try { _persistState(userId); } catch (_) {}
+                    _broadcastPositions(userId);
+                }
             }
+
             for (const b of parsed.balances) {
                 if (b.asset === 'USDT') {
                     const us = _uState(userId);
-                    if (us) us.balance = b.walletBalance;
+                    if (us) {
+                        us.balance = b.walletBalance;
+                        us.crossWalletBalance = b.crossWalletBalance;
+                    }
                 }
             }
         } else if (event.e === 'ORDER_TRADE_UPDATE') {
@@ -4785,6 +4825,8 @@ function onUserDataEvent(userId, event) {
             if (!parsed) return;
             if (parsed.executionType === 'TRADE' && parsed.orderStatus === 'FILLED') {
                 logger.info('USERDATA', `[ORDER_FILL] uid=${userId} ${parsed.side} ${parsed.symbol} qty=${parsed.filledQty} avgPx=${parsed.avgPrice} orderId=${parsed.orderId}`);
+            } else if (parsed.orderStatus === 'CANCELED' || parsed.orderStatus === 'EXPIRED') {
+                logger.info('USERDATA', `[ORDER_${parsed.orderStatus}] uid=${userId} ${parsed.symbol} orderId=${parsed.orderId}`);
             }
         } else if (event.e === 'MARGIN_CALL') {
             logger.warn('USERDATA', `[MARGIN_CALL] uid=${userId} — Telegram alert sent`);
