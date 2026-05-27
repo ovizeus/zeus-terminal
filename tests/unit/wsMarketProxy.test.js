@@ -444,3 +444,77 @@ describe('wsMarketProxy backpressure', () => {
         expect(result).toBe(false);
     });
 });
+
+describe('wsMarketProxy health monitor', () => {
+    test('_recordEvent updates lastEventTs and eventsCount', () => {
+        proxy._recordEvent('BTCUSDT', 'price');
+        const h = proxy.getStreamHealth('BTCUSDT');
+        expect(h.lastEventTs).toBeGreaterThan(0);
+        expect(h.eventsCount).toBe(1);
+    });
+
+    test('_recordEvent with new value updates lastChangeTs', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        const h1 = proxy.getStreamHealth('BTCUSDT');
+        expect(h1.lastChangeTs).toBeGreaterThan(0);
+        expect(h1.lastValue).toBe(75000);
+    });
+
+    test('same value repeated does NOT update lastChangeTs', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        const h1 = proxy.getStreamHealth('BTCUSDT');
+        const changeTs1 = h1.lastChangeTs;
+
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        const h2 = proxy.getStreamHealth('BTCUSDT');
+        expect(h2.lastChangeTs).toBe(changeTs1);
+        expect(h2.eventsCount).toBe(2);
+    });
+
+    test('different value updates lastChangeTs', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        const changeTs1 = proxy.getStreamHealth('BTCUSDT').lastChangeTs;
+
+        proxy._recordEvent('BTCUSDT', 'price', 75100);
+        const changeTs2 = proxy.getStreamHealth('BTCUSDT').lastChangeTs;
+        expect(changeTs2).toBeGreaterThanOrEqual(changeTs1);
+        expect(proxy.getStreamHealth('BTCUSDT').lastValue).toBe(75100);
+    });
+
+    test('computeStatus returns LIVE when event <10s old', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        const h = proxy.getStreamHealth('BTCUSDT');
+        expect(h.status).toBe('LIVE');
+    });
+
+    test('computeStatus returns OFFLINE when no events ever', () => {
+        const h = proxy.getStreamHealth('NEVERUSDT');
+        expect(h.status).toBe('OFFLINE');
+    });
+
+    test('computeStatus returns STUCK when same value >30s', () => {
+        const now = Date.now();
+        proxy._recordEventAt('BTCUSDT', 'price', 75000, now - 35000, now - 35000);
+        proxy._recordEventAt('BTCUSDT', 'price', 75000, now - 1000, null);
+        const h = proxy.getStreamHealth('BTCUSDT');
+        expect(h.status).toBe('STUCK');
+    });
+
+    test('getHealthSnapshot returns all tracked symbols', () => {
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        proxy._recordEvent('ETHUSDT', 'price', 2050);
+        const snap = proxy.getHealthSnapshot();
+        expect(snap.streams['BTCUSDT']).toBeDefined();
+        expect(snap.streams['ETHUSDT']).toBeDefined();
+        expect(snap.overall).toBe('HEALTHY');
+    });
+
+    test('overall DEGRADED when any stream is STUCK or DEGRADED', () => {
+        const now = Date.now();
+        proxy._recordEvent('BTCUSDT', 'price', 75000);
+        proxy._recordEventAt('ETHUSDT', 'price', 2050, now - 35000, now - 35000);
+        proxy._recordEventAt('ETHUSDT', 'price', 2050, now - 1000, null);
+        const snap = proxy.getHealthSnapshot();
+        expect(snap.overall).toBe('DEGRADED');
+    });
+});

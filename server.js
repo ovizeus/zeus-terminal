@@ -132,6 +132,13 @@ app.use('/api', globalApiLimit);
 // [GATEWAY] Market data proxy — public, no auth required. Must be before auth middleware.
 app.use('/api/market', require('./server/routes/marketProxy'));
 
+app.get('/api/ws/health', (_req, res) => {
+  try {
+    const wsProxy = require('./server/services/wsMarketProxy');
+    res.json(wsProxy.getHealthSnapshot());
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/userdatastream/health', (_req, res) => {
   try {
     const uds = require('./server/services/userDataStream');

@@ -188,6 +188,74 @@ function _sendCachedValues(ws, symbol) {
     }
 }
 
+// ═══ Health monitor — per-symbol event tracking + staleness ═══
+
+const HEALTH_LIVE_THRESHOLD_MS = 10_000;
+const HEALTH_DEGRADED_THRESHOLD_MS = 60_000;
+const HEALTH_STUCK_THRESHOLD_MS = 30_000;
+const _healthState = new Map(); // symbol → { lastEventTs, lastChangeTs, lastValue, eventsCount }
+
+function _recordEvent(symbol, streamType, value) {
+    const sym = symbol.toUpperCase();
+    const now = Date.now();
+    if (!_healthState.has(sym)) {
+        _healthState.set(sym, { lastEventTs: now, lastChangeTs: now, lastValue: value, eventsCount: 1 });
+        return;
+    }
+    const h = _healthState.get(sym);
+    h.lastEventTs = now;
+    h.eventsCount++;
+    if (value !== undefined && value !== h.lastValue) {
+        h.lastChangeTs = now;
+        h.lastValue = value;
+    }
+}
+
+function _recordEventAt(symbol, streamType, value, eventTs, changeTs) {
+    const sym = symbol.toUpperCase();
+    if (!_healthState.has(sym)) {
+        _healthState.set(sym, { lastEventTs: eventTs, lastChangeTs: changeTs || eventTs, lastValue: value, eventsCount: 1 });
+        return;
+    }
+    const h = _healthState.get(sym);
+    h.lastEventTs = eventTs;
+    h.eventsCount++;
+    if (changeTs !== null && changeTs !== undefined) {
+        h.lastChangeTs = changeTs;
+    }
+    if (value !== undefined) h.lastValue = value;
+}
+
+function _computeStatus(symbol) {
+    const sym = symbol.toUpperCase();
+    const h = _healthState.get(sym);
+    if (!h) return 'OFFLINE';
+    const now = Date.now();
+    const age = now - h.lastEventTs;
+    if (age > HEALTH_DEGRADED_THRESHOLD_MS) return 'OFFLINE';
+    const stuckAge = now - (h.lastChangeTs || 0);
+    if (stuckAge > HEALTH_STUCK_THRESHOLD_MS && age < HEALTH_LIVE_THRESHOLD_MS) return 'STUCK';
+    if (age > HEALTH_LIVE_THRESHOLD_MS) return 'DEGRADED';
+    return 'LIVE';
+}
+
+function getHealthSnapshot() {
+    const streams = {};
+    let hasNonLive = false;
+    for (const [sym, h] of _healthState) {
+        const status = _computeStatus(sym);
+        if (status !== 'LIVE') hasNonLive = true;
+        streams[sym] = {
+            status,
+            lastEventTs: h.lastEventTs,
+            lastChangeTs: h.lastChangeTs,
+            eventsCount: h.eventsCount,
+            subscribers: (_subs.get(sym) || new Set()).size,
+        };
+    }
+    return { streams, overall: hasNonLive ? 'DEGRADED' : 'HEALTHY' };
+}
+
 // ═══ Circuit breaker per stream ═══
 
 const CB_TRIP_THRESHOLD = 5;
@@ -221,9 +289,16 @@ function getStreamHealth(symbol) {
     const failures = _cbFailures.get(sym) || [];
     const cutoff = Date.now() - CB_WINDOW_MS;
     const recent = failures.filter(f => f.ts > cutoff);
+    const h = _healthState.get(sym) || {};
     return {
         reconnectFailures: recent.length,
         circuitState: recent.length >= CB_TRIP_THRESHOLD ? 'OPEN' : 'CLOSED',
+        status: _computeStatus(sym),
+        lastEventTs: h.lastEventTs || 0,
+        lastChangeTs: h.lastChangeTs || 0,
+        lastValue: h.lastValue !== undefined ? h.lastValue : null,
+        eventsCount: h.eventsCount || 0,
+        subscribers: (_subs.get(sym) || new Set()).size,
     };
 }
 
@@ -342,9 +417,11 @@ function _handleBinanceMessage(symbol, msg) {
     const stream = msg.stream || '';
 
     if (stream.includes('markPrice')) {
+        const price = +d.p;
+        _recordEvent(symbol, 'price', price);
         _broadcast(symbol, {
             type: 'market.price', symbol,
-            price: +d.p, fr: +d.r, frCd: +d.T, ts: Date.now(),
+            price, fr: +d.r, frCd: +d.T, ts: Date.now(),
         });
     } else if (stream.includes('depth20')) {
         _broadcast(symbol, {
@@ -395,6 +472,7 @@ function _resetForTest() {
     _connections.clear();
     _lastValues.clear();
     _cbFailures.clear();
+    _healthState.clear();
     stopWatchlist();
 }
 
@@ -411,6 +489,9 @@ module.exports = {
     _connectSymbol,
     _disconnectSymbol,
     getStreamHealth,
+    getHealthSnapshot,
+    _recordEvent,
+    _recordEventAt,
     _recordReconnectFailure,
     _clearReconnectFailures,
     _isCircuitOpen,
