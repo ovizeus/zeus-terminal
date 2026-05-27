@@ -129,6 +129,9 @@ app.use((req, res, next) => {
 // ─── Global API rate limit (200 req/min per IP — catches abuse on all routes) ───
 app.use('/api', globalApiLimit);
 
+// [GATEWAY] Market data proxy — public, no auth required. Must be before auth middleware.
+app.use('/api/market', require('./server/routes/marketProxy'));
+
 app.get('/api/userdatastream/health', (_req, res) => {
   try {
     const uds = require('./server/services/userDataStream');
@@ -1161,7 +1164,6 @@ app.use('/api/health', healthRoutes);
 app.use('/api', tradingRoutes);
 app.use('/api/exchange', exchangeRoutes);
 app.use('/api/market', require('./server/routes/market'));
-app.use('/api/market', require('./server/routes/marketProxy'));
 
 // ─── [C7] Client Error Forwarding (+ Sentry) ───
 app.post('/api/client-error', (req, res) => {
