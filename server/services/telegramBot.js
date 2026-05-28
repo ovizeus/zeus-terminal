@@ -323,9 +323,23 @@ async function cmdKill(bot, args) {
 
     if (args === 'on') {
         _riskGuard.setEmergencyKill(true, userId);
-        return _reply(bot.token, bot.chatId, '🛑 *EMERGENCY KILL ACTIVATED*\nAll trading blocked.');
+        // [Task A 2026-05-28] Also arm global halt so server brain stops too.
+        // riskGuard.setEmergencyKill blocks manual orders; setGlobalHalt blocks brain entries.
+        try {
+            const serverAT = require('./serverAT');
+            serverAT.setGlobalHalt(true, userId, 'telegram_kill');
+        } catch (err) {
+            console.error('[TELEGRAM] setGlobalHalt failed:', err.message);
+        }
+        return _reply(bot.token, bot.chatId, '🛑 *EMERGENCY KILL ACTIVATED*\nAll trading blocked (manual + brain).');
     } else if (args === 'off') {
         _riskGuard.setEmergencyKill(false, userId);
+        try {
+            const serverAT = require('./serverAT');
+            serverAT.setGlobalHalt(false, userId, 'telegram_unkill');
+        } catch (err) {
+            console.error('[TELEGRAM] setGlobalHalt disarm failed:', err.message);
+        }
         return _reply(bot.token, bot.chatId, '🟢 *Kill switch deactivated*\nTrading resumed.');
     }
 
@@ -511,3 +525,5 @@ function stop() {
 }
 
 module.exports = { start, stop };
+// [Task A 2026-05-28] Test-only exports for verifying cmdKill wiring
+module.exports._testExports = { cmdKill };
