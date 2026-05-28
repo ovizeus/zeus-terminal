@@ -1614,6 +1614,11 @@ const wss = new WebSocket.Server({
 const _wsClients = new Map(); // userId -> Set<ws>
 
 // Handle upgrade manually — prevents "Invalid Upgrade header" crash from Cloudflare/proxies
+// [B.17] Per-IP pre-auth WS connection limits + handshake timeout
+const _wsIpPending = new Map(); // ip → count
+const WS_MAX_PENDING_PER_IP = 10;
+const WS_HANDSHAKE_TIMEOUT_MS = 5000;
+
 server.on('upgrade', (req, socket, head) => {
   // Only accept /ws/sync path
   if (req.url !== '/ws/sync') {
@@ -1621,6 +1626,19 @@ server.on('upgrade', (req, socket, head) => {
     socket.destroy();
     return;
   }
+  // [B.17] Per-IP rate guard — slowloris / connection flood protection
+  const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+  const pending = _wsIpPending.get(ip) || 0;
+  if (pending >= WS_MAX_PENDING_PER_IP) {
+    socket.write('HTTP/1.1 429 Too Many Requests\r\n\r\n');
+    socket.destroy();
+    return;
+  }
+  _wsIpPending.set(ip, pending + 1);
+  const _ipCleanup = () => { const c = _wsIpPending.get(ip) || 0; if (c <= 1) _wsIpPending.delete(ip); else _wsIpPending.set(ip, c - 1); };
+  // Handshake timeout — 5s to complete auth or get dropped
+  const _hsTimeout = setTimeout(() => { _ipCleanup(); socket.destroy(); }, WS_HANDSHAKE_TIMEOUT_MS);
+  socket.on('close', () => { clearTimeout(_hsTimeout); _ipCleanup(); });
   // [SEC-20] Origin allowlist on WS upgrade — defense-in-depth vs cross-site
   // WebSocket hijacking. SameSite=lax cookie already prevents browser cross-
   // origin cookie attach (primary defense), but absent Origin or unknown
