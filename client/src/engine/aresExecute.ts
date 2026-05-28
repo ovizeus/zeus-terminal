@@ -7,10 +7,18 @@ import { aresSetTakeProfit, aresPlaceOrder, aresSetStopLoss } from '../trading/l
 import { ARES_JOURNAL } from './aresJournal'
 import { ARES_DECISION } from './aresDecision'
 import { _aresRender } from './aresUI'
+import { serverOwnsAT } from './lockoutGate'
 
 const w = window as any
 
 export async function ARES_EXECUTE(decision: any): Promise<any> {
+  // [Task S8-P0-2 2026-05-28] Hard lockout — when the server is authoritative
+  // for AT (SERVER_AT / SERVER_AT_TESTNET), the client must NOT place trades.
+  // ARES has its own tick loop independent of autotrade.ts, so it needs its
+  // own gate. This is the execution-path defense (mirrors autotrade.ts:907);
+  // the ares.ts tick loop also short-circuits earlier. Must be the FIRST line
+  // so no order logic runs under server authority.
+  if (serverOwnsAT()) return null
   if (!decision || !decision.shouldTrade || !decision.side) return null
   if (typeof w.ARES === 'undefined') return null
   if (typeof aresPlaceOrder !== 'function') { console.error('[ARES_EXECUTE] aresPlaceOrder not available'); return null }

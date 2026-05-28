@@ -7,6 +7,7 @@ import { safeLastKline } from '../utils/dom'
 import { _ZI } from '../constants/icons'
 import { ARES_EXECUTE } from './aresExecute'
 import { ARES_DECISION } from './aresDecision'
+import { serverOwnsAT } from './lockoutGate'
 import { _bmResetDailyIfNeeded } from '../trading/orders'
 import { liveApiGetPositions } from '../trading/liveApi'
 import { PM } from './postMortem'
@@ -413,7 +414,12 @@ function tick() {
     } catch (monErr: any) { console.warn('[ARES] monitor error:', monErr.message) }
 
     try {
-      if (typeof ARES_DECISION !== 'undefined' && typeof ARES_EXECUTE === 'function') {
+      // [Task S8-P0-2 2026-05-28] Skip ARES decision+execution entirely when
+      // the server owns AT. Short-circuits the loop early (saves computation);
+      // ARES_EXECUTE also guards as the hard execution gate (defense in depth).
+      if (serverOwnsAT()) {
+        // server authoritative \u2014 client ARES is observation-only
+      } else if (typeof ARES_DECISION !== 'undefined' && typeof ARES_EXECUTE === 'function') {
         const decision = ARES_DECISION.evaluate()
         if (decision.shouldTrade) {
           _push('[DECISION] GO ' + decision.side + ' \u2014 ' + decision.reasons.join(', '))
