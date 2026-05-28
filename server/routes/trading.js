@@ -962,31 +962,43 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
   if (!newPrice || isNaN(np) || np <= 0) {
     return res.status(400).json({ error: 'Invalid newPrice' });
   }
+  // [BUG-5 FIX 2026-05-28] Cancel-then-replace with partial failure recovery.
+  // If step-1 (cancel) succeeds but step-2 (replace) fails, the original order
+  // is gone and position is unprotected. We now: (a) audit cancel separately,
+  // (b) attempt to re-place original on step-2 failure, (c) Telegram alert if
+  // recovery also fails, (d) return structured error to UI for actionable display.
+  let cancelData = null;
   try {
-    // Step 1: Cancel existing order
-    const cancelData = await sendSignedRequest('DELETE', '/fapi/v1/order', {
+    cancelData = await sendSignedRequest('DELETE', '/fapi/v1/order', {
       symbol, orderId,
     }, req.exchangeCreds);
-    // Step 2: Re-place with new price
-    const side = cancelData.side || req.body.side;
-    let qty = newQuantity ? parseFloat(newQuantity) : parseFloat(cancelData.origQty);
-    if (!Number.isFinite(qty) || qty <= 0) {
-      return res.status(400).json({ error: 'Invalid newQuantity' });
-    }
-    const _rounded = roundOrderParams(symbol, qty);
-    const placeParams = {
-      symbol,
-      side,
-      type: 'LIMIT',
-      quantity: String(_rounded.quantity || qty),
-      price: String(np),
-      timeInForce: 'GTC',
-    };
-    if (req.body.newClientOrderId) placeParams.newClientOrderId = req.body.newClientOrderId;
+    audit.record('ORDER_MODIFY_CANCELLED', { userId: req.user.id, symbol, orderId, side: cancelData.side, qty: cancelData.origQty, price: cancelData.price }, 'MANUAL', req.ip);
+  } catch (cancelErr) {
+    console.error('[API] order/modify cancel failed:', cancelErr.message);
+    logger.error('ORDER', 'order/modify cancel failed', { symbol, orderId, error: cancelErr.message });
+    return res.status(cancelErr.status || 500).json({ error: _safeError(cancelErr), stage: 'cancel' });
+  }
+
+  // Step 2: Re-place with new price
+  const side = cancelData.side || req.body.side;
+  let qty = newQuantity ? parseFloat(newQuantity) : parseFloat(cancelData.origQty);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return res.status(400).json({ error: 'Invalid newQuantity', stage: 'replace', _cancelled: true });
+  }
+  const _rounded = roundOrderParams(symbol, qty);
+  const placeParams = {
+    symbol, side, type: 'LIMIT',
+    quantity: String(_rounded.quantity || qty),
+    price: String(np),
+    timeInForce: 'GTC',
+  };
+  if (req.body.newClientOrderId) placeParams.newClientOrderId = req.body.newClientOrderId;
+
+  try {
     const placeData = await sendSignedRequest('POST', '/fapi/v1/order', placeParams, req.exchangeCreds);
     logger.info('ORDER', `MODIFY LIMIT ${symbol} old=${orderId} new=${placeData.orderId} price=${np}`);
     audit.record('ORDER_MODIFIED', { userId: req.user.id, symbol, oldOrderId: orderId, newOrderId: placeData.orderId, newPrice: np }, 'MANUAL', req.ip);
-    res.json({
+    return res.json({
       cancelledOrderId: cancelData.orderId,
       orderId: placeData.orderId,
       status: placeData.status,
@@ -995,10 +1007,42 @@ router.post('/order/modify', validateCancelBody, async (req, res) => {
       side: placeData.side,
       origQty: parseFloat(placeData.origQty || qty),
     });
-  } catch (err) {
-    console.error('[API] order/modify error:', err.message);
-    logger.error('ORDER', 'order/modify failed', { symbol, orderId, error: err.message });
-    res.status(err.status || 500).json({ error: _safeError(err) });
+  } catch (placeErr) {
+    console.error('[API] order/modify replace failed:', placeErr.message);
+    logger.error('ORDER', 'order/modify replace failed — attempting recovery', { symbol, orderId, error: placeErr.message });
+    audit.record('ORDER_MODIFY_REPLACE_FAILED', { userId: req.user.id, symbol, orderId, error: placeErr.message }, 'MANUAL', req.ip);
+
+    // Recovery attempt: re-place original (no price change) so position stays protected
+    try {
+      const origPrice = cancelData.price && parseFloat(cancelData.price) > 0 ? parseFloat(cancelData.price) : null;
+      if (origPrice) {
+        const recoveryParams = {
+          symbol, side, type: 'LIMIT',
+          quantity: String(_rounded.quantity || qty),
+          price: String(origPrice),
+          timeInForce: 'GTC',
+        };
+        const recoveryData = await sendSignedRequest('POST', '/fapi/v1/order', recoveryParams, req.exchangeCreds);
+        logger.warn('ORDER', `MODIFY recovery: re-placed original ${symbol} @ $${origPrice} → ${recoveryData.orderId}`);
+        audit.record('ORDER_MODIFY_RECOVERY_OK', { userId: req.user.id, symbol, originalOrderId: orderId, recoveryOrderId: recoveryData.orderId, recoveredPrice: origPrice }, 'MANUAL', req.ip);
+        return res.status(502).json({
+          error: 'Modify failed but original order recovered',
+          stage: 'replace',
+          _cancelled: true,
+          _recovered: true,
+          recoveryOrderId: recoveryData.orderId,
+          detail: placeErr.message,
+        });
+      }
+    } catch (recoveryErr) {
+      logger.error('ORDER', `MODIFY recovery FAILED — position unprotected: ${recoveryErr.message}`);
+      audit.record('ORDER_MODIFY_RECOVERY_FAILED', { userId: req.user.id, symbol, orderId, replaceError: placeErr.message, recoveryError: recoveryErr.message }, 'MANUAL', req.ip);
+      try {
+        const telegram = require('../services/telegram');
+        telegram.sendToUser(req.user.id, `🚨 *ORDER MODIFY CRITICAL*\n${side} ${symbol}\nOriginal order ${orderId} cancelled BUT replace AND recovery failed.\n*Position may be unprotected — verify on exchange immediately.*\nReplace err: ${placeErr.message}\nRecovery err: ${recoveryErr.message}`);
+      } catch (_) {}
+    }
+    return res.status(placeErr.status || 500).json({ error: _safeError(placeErr), stage: 'replace', _cancelled: true, _recovered: false });
   }
 });
 
