@@ -27,7 +27,10 @@ function resolveExchange(req, res, next) {
                 error: 'No exchange connected — configurează API keys în Settings → Exchange API'
             });
         }
-        req.exchangeCreds = { apiKey: creds.apiKey, apiSecret: creds.apiSecret, baseUrl: creds.baseUrl };
+        // [BUG-1 FIX 2026-05-28] Add userId for per-user circuit breaker key —
+        // without it, CB falls back to apiKey and multi-user same-key shares one CB.
+        // Also prevents apiKey leak into critical_section logs.
+        req.exchangeCreds = { userId: req.user.id, exchange: creds.exchange, apiKey: creds.apiKey, apiSecret: creds.apiSecret, baseUrl: creds.baseUrl };
         req.exchangeMode = creds.mode;
         next();
     } catch (err) {
