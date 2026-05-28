@@ -157,6 +157,8 @@ router.get('/audit/me', (req, res) => {
 // [FIX 2026-05-27] Cache last known-good balance per user so UI never shows $0
 // during temporary Binance unavailability (ban, rate limit, network).
 // [BUG-3 FIX 2026-05-28] TTL 30min — stale entries evicted on read/write.
+// [BUG-4 FIX 2026-05-28] Route through exchangeOps (Binance OR Bybit) instead
+// of hardcoded /fapi/v2/balance — Bybit users were getting 500 errors.
 const _balanceCache = new Map();
 const BALANCE_CACHE_TTL_MS = 30 * 60 * 1000;
 router.get('/balance', async (req, res) => {
@@ -165,12 +167,13 @@ router.get('/balance', async (req, res) => {
   }
   const uid = req.user && req.user.id;
   try {
-    const data = await sendSignedRequest('GET', '/fapi/v2/balance', {}, req.exchangeCreds);
-    const usdt = data.find(a => a.asset === 'USDT') || {};
+    const exchangeOps = require('../services/exchangeOps');
+    const bal = await exchangeOps.getBalance(uid);
     const result = {
-      totalBalance: parseFloat(usdt.balance || 0),
-      availableBalance: parseFloat(usdt.availableBalance || 0),
-      unrealizedPnL: parseFloat(usdt.crossUnPnl || 0),
+      totalBalance: parseFloat(bal.walletBalance || 0),
+      availableBalance: parseFloat(bal.availableBalance || 0),
+      unrealizedPnL: parseFloat(bal.totalUnrealizedPnL || 0),
+      exchange: bal.rawExchange || 'unknown',
     };
     if (uid && result.totalBalance > 0) _balanceCache.set(uid, { ...result, cachedAt: Date.now() });
     res.json(result);
@@ -188,23 +191,25 @@ router.get('/balance', async (req, res) => {
 });
 
 // ─── GET /api/positions ───
+// [BUG-4 FIX 2026-05-28] Route through exchangeOps (Binance OR Bybit) —
+// hardcoded /fapi/v2/positionRisk broke for Bybit users.
 router.get('/positions', async (req, res) => {
   if (!config.tradingEnabled) {
     return res.status(403).json({ error: 'Trading disabled' });
   }
   try {
-    const data = await sendSignedRequest('GET', '/fapi/v2/positionRisk', {}, req.exchangeCreds);
-    const active = data
-      .filter(p => parseFloat(p.positionAmt) !== 0)
-      .map(p => ({
-        symbol: p.symbol,
-        side: parseFloat(p.positionAmt) > 0 ? 'LONG' : 'SHORT',
-        size: Math.abs(parseFloat(p.positionAmt)),
-        entryPrice: parseFloat(p.entryPrice),
-        unrealizedPnL: parseFloat(p.unRealizedProfit),
-        leverage: parseInt(p.leverage, 10),
-        liquidationPrice: parseFloat(p.liquidationPrice),
-      }));
+    const exchangeOps = require('../services/exchangeOps');
+    const positions = await exchangeOps.getPositions(req.user.id);
+    const active = (positions || []).map(p => ({
+      symbol: p.symbol,
+      side: p.side,
+      size: Math.abs(parseFloat(p.qty || 0)),
+      entryPrice: parseFloat(p.entryPrice || 0),
+      unrealizedPnL: parseFloat(p.unrealizedPnl || 0),
+      leverage: parseInt(p.leverage, 10) || 0,
+      liquidationPrice: parseFloat(p.liquidationPrice || 0),
+      exchange: p.rawExchange || 'unknown',
+    }));
     res.json(active);
   } catch (err) {
     console.error('[API] positions error:', err.message);
