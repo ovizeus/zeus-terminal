@@ -1346,6 +1346,17 @@ async function _executeLiveEntry(entry, stc) {
         err.code = 'LIVE_ENTRY_REQUIRES_FULL_SERVER_AT';
         throw err;
     }
+    // [S8.1 hard real-block — LAYER 2] Independent defense-in-depth gate. Even if
+    // a REAL-stamped entry reaches here (stamped before flag flip, or any bypass
+    // of layer 1), refuse it unless _SRV_POS_REAL_ENABLED is strictly true.
+    // Fires before _incPending / any state mutation / any signed exchange request.
+    if (_realBlocked(entry && entry.env, MF._SRV_POS_REAL_ENABLED)) {
+        try { logger.error('AT_LIVE', `[${entry && entry.seq}] REAL_EXECUTION_DISABLED — refusing REAL entry uid=${entry && entry.userId} sym=${entry && entry.symbol} (_SRV_POS_REAL_ENABLED not true)`); } catch (_) {}
+        try { audit.record('REAL_EXECUTION_BLOCKED', { userId: entry && entry.userId, seq: entry && entry.seq, symbol: entry && entry.symbol, side: entry && entry.side, env: entry && entry.env }, 'SERVER_AT'); } catch (_) {}
+        const err = new Error('REAL_EXECUTION_DISABLED');
+        err.code = 'REAL_EXECUTION_DISABLED';
+        throw err;
+    }
     // [Task G 2026-05-28] Track this call for graceful shutdown drain.
     // Increment AFTER the gate check so refused entries don't count.
     _incPending();
@@ -2996,6 +3007,16 @@ function getDemoPositions(userId) {
 //   non-demo + valid creds (live)     → { env: 'REAL',    blockedReason: null }
 //   non-demo + no row                 → { env: null, blockedReason: 'NO_ACTIVE_API_CREDENTIALS' }
 //   non-demo + row exists but invalid → { env: null, blockedReason: 'INVALID_ACTIVE_API_CONFIGURATION' }
+// [S8.1 hard real-block 2026-05-28] Defense-in-depth predicate: is a REAL-money
+// execution forbidden under the current _SRV_POS_REAL_ENABLED flag? FAIL-CLOSED —
+// real is permitted ONLY when the flag is STRICTLY true; any other value (false,
+// undefined, null, truthy-but-not-true) BLOCKS. Non-REAL envs are never blocked here.
+// Pure function — same predicate used by layer 1 (_resolveExecutionEnv) and
+// layer 2 (_executeLiveEntry) so a single bypass cannot reach a real exchange.
+function _realBlocked(env, realEnabledFlag) {
+    return env === 'REAL' && realEnabledFlag !== true;
+}
+
 function _resolveExecutionEnv(userId) {
     const us = _uState(userId);
     if (us.engineMode === 'demo') {
@@ -3004,7 +3025,14 @@ function _resolveExecutionEnv(userId) {
     const creds = getExchangeCreds(userId);
     if (creds) {
         // creds.mode is strictly 'testnet' or 'live' (enforced by credentialStore hotfix).
-        return { env: creds.mode === 'testnet' ? 'TESTNET' : 'REAL', blockedReason: null };
+        const _resolved = creds.mode === 'testnet' ? 'TESTNET' : 'REAL';
+        // [S8.1 hard real-block — LAYER 1] Refuse REAL unless _SRV_POS_REAL_ENABLED
+        // is strictly true. env=null + stable reason blocks the entry upstream
+        // (build path stamps null; brain facade sees null → no dispatch).
+        if (_realBlocked(_resolved, MF._SRV_POS_REAL_ENABLED)) {
+            return { env: null, blockedReason: 'REAL_EXECUTION_DISABLED' };
+        }
+        return { env: _resolved, blockedReason: null };
     }
     // No valid creds. Distinguish "no row" vs "row present but invalid".
     let reason = 'NO_ACTIVE_API_CREDENTIALS';
@@ -5213,6 +5241,10 @@ module.exports = {
     // [Task S8-P1-4 2026-05-28] Pure streak-counter logic for unit testing.
     _s8p1TestHooks: Object.freeze({
         updateStreakCounters: _updateStreakCounters,
+    }),
+    // [S8.1 hard real-block 2026-05-28] Pure fail-closed real-money predicate.
+    _s8realBlockTestHooks: Object.freeze({
+        realBlocked: _realBlocked,
     }),
     // [Phase 2 S6-B2] Test-only hooks for the paranoid live execution gate
     // probe. Two pure flag readers + the actual _executeLiveEntry function
