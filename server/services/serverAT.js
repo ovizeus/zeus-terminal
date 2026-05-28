@@ -1471,6 +1471,16 @@ async function _executeLiveEntry(entry, stc) {
             syntheticErr.code = errCode;
             Sentry.captureException(syntheticErr, { tags: { module: 'AT', action: 'live_entry', symbol: entry.symbol, side: entry.side }, user: { id: String(userId) } });
             telegram.alertOrderFailed(entry.symbol, entry.side, errMsg, userId);
+            // [Task D 2026-05-28] Autonomous-specific alert with seq + sizeUsd
+            // for operator triage. Distinguishes brain-driven failures from
+            // manual order failures (telegram.alertOrderFailed above is generic).
+            try {
+                const _tb = require('./telegramBot');
+                _tb.notifyEntryFailed(userId, {
+                    symbol: entry.symbol, side: entry.side, sizeUsd: entry.sizeUsd,
+                    error: errMsg + ' [' + errCode + ']', seq: entry.seq,
+                });
+            } catch (_) { /* best-effort */ }
             audit.record('SAT_ENTRY_FAILED', { userId, seq: entry.seq, symbol: entry.symbol, side: entry.side, error: errMsg }, 'SERVER_AT');
         }
         metrics.recordOrder('failed');

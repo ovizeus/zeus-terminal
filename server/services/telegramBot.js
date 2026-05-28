@@ -524,6 +524,27 @@ function stop() {
     console.log('[TG-BOT] All bot polling stopped');
 }
 
-module.exports = { start, stop };
+// [Task D 2026-05-28] Notify user when an AUTONOMOUS (brain-driven) entry fails.
+// Distinguishes from telegram.alertOrderFailed (manual orders) by including
+// seq number + sizeUsd + autonomous wording. Called from serverAT._executeLiveEntry
+// catch block. Best-effort — never throws.
+async function notifyEntryFailed(userId, info) {
+    if (!userId || !info) return;
+    try {
+        const _telegram = require('./telegram');
+        const sym = info.symbol || '?';
+        const side = info.side || '?';
+        const sizeUsd = info.sizeUsd != null ? Number(info.sizeUsd).toFixed(2) : '?';
+        const seq = info.seq != null ? '#' + info.seq : '';
+        const err = String(info.error || 'unknown').slice(0, 300);
+        const msg = '🔴 *AUTONOMOUS ENTRY FAILED* ' + seq + '\n'
+            + '`' + sym + '` ' + side + ' $' + sizeUsd + '\n'
+            + 'Error: ' + err + '\n'
+            + '_Brain attempted entry; exchange rejected. Position NOT opened._';
+        await _telegram.sendToUser(userId, msg);
+    } catch (_) { /* best-effort */ }
+}
+
+module.exports = { start, stop, notifyEntryFailed };
 // [Task A 2026-05-28] Test-only exports for verifying cmdKill wiring
 module.exports._testExports = { cmdKill };
