@@ -393,6 +393,67 @@ function isWatchlistActive() {
     return _wlWs !== null;
 }
 
+// ═══ Quant data poller — funding + OI via REST into cache ═══
+
+const QUANT_POLL_MS = 60_000;
+const QUANT_SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT'];
+let _quantPollTimer = null;
+
+async function _pollQuantData() {
+    try {
+        const mc = require('./marketCache');
+
+        for (const sym of QUANT_SYMBOLS) {
+            try {
+                const frRes = await fetch(
+                    `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${sym}`,
+                    { signal: AbortSignal.timeout(8000) }
+                );
+                if (frRes && frRes.ok) {
+                    const d = await frRes.json();
+                    if (d && d.lastFundingRate) {
+                        mc.set('funding', 'binance:' + sym, {
+                            rate: +d.lastFundingRate,
+                            markPrice: d.markPrice ? +d.markPrice : 0,
+                            indexPrice: d.indexPrice ? +d.indexPrice : 0,
+                            nextFundingTime: d.nextFundingTime || 0,
+                            ts: Date.now(),
+                        }, { caller: 'marketRadar' });
+                        recordCrossExchangePrice(sym, 'binance', +d.markPrice);
+                    }
+                }
+            } catch (_) {}
+
+            try {
+                const oiRes = await fetch(
+                    `https://fapi.binance.com/fapi/v1/openInterest?symbol=${sym}`,
+                    { signal: AbortSignal.timeout(8000) }
+                );
+                if (oiRes && oiRes.ok) {
+                    const d = await oiRes.json();
+                    if (d && d.openInterest) {
+                        mc.set('oi', 'binance:' + sym, {
+                            value: +d.openInterest,
+                            ts: Date.now(),
+                        }, { caller: 'marketRadar' });
+                    }
+                }
+            } catch (_) {}
+        }
+    } catch (_) {}
+}
+
+function startQuantPoller() {
+    if (_quantPollTimer) return;
+    console.log('[WS_PROXY] Quant poller started — funding+OI every 60s for', QUANT_SYMBOLS.join(','));
+    _pollQuantData().then(() => console.log('[WS_PROXY] Quant first poll complete')).catch(e => console.error('[WS_PROXY] Quant first poll error:', e.message));
+    _quantPollTimer = setInterval(_pollQuantData, QUANT_POLL_MS);
+}
+
+function stopQuantPoller() {
+    if (_quantPollTimer) { clearInterval(_quantPollTimer); _quantPollTimer = null; }
+}
+
 // ═══ Protocol versioning + correlation IDs (B.16) ═══
 
 const PROTOCOL_VERSION = '1.0';
@@ -824,6 +885,7 @@ function _resetForTest() {
     _replayBuffers.clear();
     for (const timer of _fallbackTimers.values()) clearInterval(timer);
     _fallbackTimers.clear();
+    stopQuantPoller();
     stopWatchlist();
 }
 
@@ -851,6 +913,8 @@ module.exports = {
     stopWatchlist,
     isWatchlistActive,
     _buildWatchlistUrl,
+    startQuantPoller,
+    stopQuantPoller,
     PROTOCOL_VERSION,
     generateCorrId,
     handleHello,

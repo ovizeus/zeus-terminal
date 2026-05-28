@@ -1391,6 +1391,8 @@ const server = app.listen(PORT, '0.0.0.0', () => {
     }).catch(err => {
       logger.error('SERVER', '[P2] Market feed failed:', err.message);
     });
+    // [WS-PROXY] Start quant data poller (funding + OI via REST → cache)
+    try { require('./server/services/wsMarketProxy').startQuantPoller(); } catch (_) {}
     // [MULTI-SYM] Expose configured symbols for API
     app._sdSymbols = SD_SYMBOLS;
   } else {
